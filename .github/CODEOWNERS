@@ -1,13 +1,20 @@
 # CODEOWNERS - Bichu
 #
-# Revisao por caminho. Enquanto a conta `lpanegassi` for a unica com escrita no
-# repositorio, este arquivo e ADVISORY: ele pede revisao automaticamente no PR,
-# mas nao e imposto pela protecao de branch (`require_code_owner_reviews` esta
-# desligado, porque um repositorio de um unico membro nao consegue satisfazer a
-# propria exigencia e todo PR ficaria sem caminho de merge).
+# Revisao por caminho. Este arquivo e ADVISORY: ele pede revisao
+# automaticamente no PR, mas nao e imposto pela protecao de branch. Dois
+# motivos, independentes, e os dois estao detalhados em docs/07-devops.md:
+#
+#   1. Nao ha protecao de branch. Repositorio privado em plano gratuito nao
+#      a oferece, e o cliente decidiu nao contratar. Ver secao 13.
+#   2. Existe uma unica identidade com escrita aqui (lpanegassi), e com ela
+#      todos os agentes commitam. Quem abre o PR nao pode aprova-lo, entao
+#      `require_code_owner_reviews` e `required_approving_review_count`
+#      precisam ficar desligados ou nenhum PR teria caminho de merge.
 #
 # Gatilho para ligar a imposicao: uma segunda identidade com escrita no
-# repositorio (segunda conta ou GitHub App do squad).
+# repositorio (usuario de servico para os agentes, ou GitHub App do squad).
+# A ordem exata do que muda nesse dia esta em docs/07-devops.md secao 13.6.
+# Criar a segunda identidade e gratuito e independe do plano pago.
 
 *                       @lpanegassi
 
@@ -23,6 +30,10 @@
 
 # Migracoes de banco - irreversiveis sobre base povoada
 /migrations/            @lpanegassi
+
+# Fonte unica dos tokens de design e as iscas dos portoes
+/design/                @lpanegassi
+/tools/                 @lpanegassi
 
 # Suite de testes
 /tests/                 @lpanegassi
