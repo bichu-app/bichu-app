@@ -1,0 +1,35 @@
+# Dispensas de portao, com dono e data de validade.
+# docs/07-devops.md secao 5.3.
+#
+# Existe porque a saida preguicosa -- `if: secrets.X != ''` -- deixa o job verde
+# sem verificar nada, e ninguem procura o que acredita ja ter. Aqui a ausencia e
+# visivel, datada, e EXPIRA SOZINHA: dispensa vencida reprova o job `portao`.
+#
+# Para dispensar um portao: acrescente uma entrada com motivo, responsavel e
+# data. Para remover a dispensa: apague a entrada. Nao mexa no workflow.
+
+dispensas:
+  - portao: tokens
+    motivo: "design/tokens.json e tools/ ainda nao existem: a frente de app nao criou o esqueleto"
+    responsavel: squad
+    vence_em: 2026-09-22
+
+  - portao: contraste
+    motivo: "test/a11y/ e as iscas do design system ainda nao existem"
+    responsavel: squad
+    vence_em: 2026-09-22
+
+  - portao: sonarcloud
+    motivo: "SONAR_TOKEN nao provisionado; SonarCloud e pago em repositorio privado e a contratacao nao foi decidida"
+    responsavel: cliente
+    vence_em: 2026-09-23
+
+  - portao: apk-assinado
+    motivo: "chave de assinatura do APK pendente (BICHU-15). Sem ela nao ha build de release nem impressao digital para o assetlinks.json"
+    responsavel: cliente
+    vence_em: 2026-09-22
+
+  - portao: ios
+    motivo: "conta Apple Developer pendente (BICHU-14): sem Team ID nao ha build nem Universal Links"
+    responsavel: cliente
+    vence_em: 2026-09-22

@@ -1,0 +1,175 @@
+# Esteira do Bichu. docs/07-devops.md secao 5.
+#
+# Ordem: do mais rapido para o mais caro, porque o primeiro estagio existe para
+# economizar os outros.
+#
+# LEIA ISTO ANTES DE ACRESCENTAR `continue-on-error` OU `|| true` EM QUALQUER
+# JOB: com a `main` sem protecao de branch (secao 13), esta esteira deixou de
+# ser um portao e virou um DETECTOR. Ela nao impede o merge; ela diz que o
+# merge estava errado. Job que fica verde sem verificar nao e neutro: ele ocupa
+# o lugar de um que funcionaria.
+
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rapidos:
+    name: portoes rapidos (portabilidade, dispensas, segredo)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: dispensas datadas
+        run: python3 infra/verificacao/verificar_dispensas.py
+
+      - name: portabilidade e hostname
+        run: python3 infra/verificacao/verificar_portabilidade.py
+
+      - name: varredura de segredo
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  codigo:
+    name: lint, tipos e teste unitario
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: existe codigo para verificar?
+        id: existe
+        run: |
+          if [ -f package.json ]; then
+            echo "tem=sim" >> "$GITHUB_OUTPUT"
+          else
+            echo "tem=nao" >> "$GITHUB_OUTPUT"
+            echo "::notice::package.json ainda nao existe; a frente de backend nao criou o esqueleto"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.existe.outputs.tem == 'sim'
+        with:
+          node-version: "22"
+          cache: npm
+
+      - if: steps.existe.outputs.tem == 'sim'
+        run: npm ci
+
+      - if: steps.existe.outputs.tem == 'sim'
+        run: npm run lint
+
+      - name: tipos
+        if: steps.existe.outputs.tem == 'sim'
+        run: npm run typecheck
+
+      # Uma fonte, um destino gerado, e um portao que reprova na divergencia.
+      # Sem isto, `src/shared/types/generated/` pode ser editado a mao e o
+      # contrato e o codigo divergem SEM QUE O DIFF MOSTRE, porque a proxima
+      # geracao desfaz a edicao em silencio.
+      - name: tipos gerados batem com a spec
+        if: steps.existe.outputs.tem == 'sim'
+        run: |
+          npm run generate:types
+          if ! git diff --exit-code -- src/shared/types/generated/; then
+            echo "::error::os tipos gerados divergem de api/openapi.yaml. Rode 'npm run generate:types' e versione o resultado; se o tipo esta errado, o errado e a especificacao"
+            exit 1
+          fi
+
+      - if: steps.existe.outputs.tem == 'sim'
+        run: npm test
+
+  contrato:
+    name: spec OpenAPI e compatibilidade
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: spectral
+        run: npx --yes @stoplight/spectral-cli lint api/openapi.yaml --ruleset infra/spectral/.spectral.yaml --fail-severity=error
+
+      - name: compatibilidade contra main
+        if: github.event_name == 'pull_request'
+        run: |
+          git show origin/${{ github.base_ref }}:api/openapi.yaml > /tmp/base.yaml 2>/dev/null || {
+            echo "::notice::sem versao anterior da spec: primeira introducao"; exit 0; }
+          npx --yes oasdiff breaking /tmp/base.yaml api/openapi.yaml --fail-on ERR
+          # Campo ACRESCENTADO nao quebra ninguem e por isso passa nas
+          # ferramentas -- e e exatamente por ali que a implementacao se afasta
+          # do documento sem nenhum alarme. Aviso obrigatorio, nao reprovacao.
+          npx --yes oasdiff changelog /tmp/base.yaml api/openapi.yaml | tee -a "$GITHUB_STEP_SUMMARY"
+
+  integracao:
+    name: compose, migracao do zero e integracao
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [codigo, contrato]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: compose e valido
+        run: |
+          cp .env.example .env
+          # Valores de ambiente de teste, descartaveis e sem valor fora daqui.
+          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-descartavel/' .env
+          sed -i 's/^OBJECT_STORAGE_ACCESS_KEY_ID=.*/OBJECT_STORAGE_ACCESS_KEY_ID=ci-descartavel/' .env
+          sed -i 's/^OBJECT_STORAGE_SECRET_ACCESS_KEY=.*/OBJECT_STORAGE_SECRET_ACCESS_KEY=ci-descartavel-segredo/' .env
+          docker compose config -q
+
+      - name: sobe banco e objeto
+        run: docker compose up -d --wait db objeto objeto_init
+
+      - name: limites de memoria estao valendo de verdade
+        run: |
+          # `deploy.resources.limits` fora do Swarm e ignorado EM SILENCIO e o
+          # arquivo parece correto. Conferir no runtime, nao no YAML.
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | tee -a "$GITHUB_STEP_SUMMARY"
+          limite=$(docker inspect bichu-db-1 --format '{{.HostConfig.Memory}}')
+          if [ "$limite" = "0" ]; then
+            echo "::error::o limite de memoria do Postgres nao esta valendo. Ver o bloco no topo do compose.yaml"
+            exit 1
+          fi
+          echo "limite do db aplicado: $limite bytes"
+
+      - name: derruba
+        if: always()
+        run: docker compose down -v
+
+  portao:
+    name: portao
+    runs-on: ubuntu-latest
+    needs: [rapidos, codigo, contrato, integracao]
+    if: always()
+    steps:
+      - name: consolidar
+        run: |
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }}"
+          echo "estados: $estados"
+          for e in $estados; do
+            case "$e" in
+              success) ;;
+              skipped) echo "::error::um job foi pulado. Portao que nao roda nao aprova"; exit 1 ;;
+              *) echo "::error::job em '$e'"; exit 1 ;;
+            esac
+          done
+          echo "portao verde"

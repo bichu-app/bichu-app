@@ -1,0 +1,86 @@
+# Borda local. Duas origens distintas desde o dia um (ADR-0007).
+# Em producao o mesmo arquivo serve bichu.app e img.bichu.app trocando as
+# variaveis; o Caddy emite o certificado sozinho.
+
+{
+	admin off
+	auto_https disable_redirects
+}
+
+# --------------------------------------------------------------------------
+# Origem da aplicacao
+# --------------------------------------------------------------------------
+{$PUBLIC_BASE_URL} {
+	encode zstd gzip
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+
+	# Os arquivos de associacao de deep link. Servidos ESTATICOS, com tipo
+	# exato e SEM redirecionamento: o Android e a Apple exigem 200 direto e
+	# application/json, e quem busca e o sistema operacional, nao o navegador.
+	# Um redirecionamento aqui invalida o deep link nas duas plataformas sem
+	# produzir erro em lugar nenhum. Ver docs/07-devops.md 7 e 16.12.
+	handle /.well-known/assetlinks.json {
+		header Content-Type application/json
+		header Cache-Control "public, max-age=3600"
+		root * /srv/well-known
+		rewrite * /assetlinks.json
+		file_server
+	}
+	handle /.well-known/apple-app-site-association {
+		header Content-Type application/json
+		header Cache-Control "public, max-age=3600"
+		root * /srv/well-known
+		rewrite * /apple-app-site-association
+		file_server
+	}
+
+	# A rota publica do QR. O codigo viaja na URL porque isso e inevitavel num
+	# QR, entao o caminho completo nao entra no log em claro (ADR-0004).
+	handle /t/* {
+		header {
+			X-Robots-Tag "noindex, nofollow"
+			Cache-Control no-store
+		}
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy api:3000
+	}
+}
+
+# --------------------------------------------------------------------------
+# Origem de midia
+# --------------------------------------------------------------------------
+# INVARIANTE, e quem mexer aqui precisa saber: esta origem serve APENAS
+# derivada publica, imutavel, sem assinatura. Se alguem rotear URL assinada por
+# aqui, a primeira requisicao popula o cache e as seguintes entregam o objeto
+# SEM apresentar assinatura nenhuma -- por um ano. O controle de acesso deixa de
+# existir em silencio.
+#
+# A protecao real e este roteamento: aponta para o bucket PUBLICO e nao tem
+# caminho ate o privado. Os cabecalhos sao a segunda camada, nao a primeira.
+{$MEDIA_PUBLIC_BASE_URL} {
+	encode zstd gzip
+
+	header {
+		-Server
+		-Set-Cookie
+		Cache-Control "public, max-age=31536000, immutable"
+		X-Content-Type-Options nosniff
+		Cross-Origin-Resource-Policy cross-origin
+	}
+
+	handle /{$OBJECT_BUCKET_PUBLIC}/* {
+		reverse_proxy objeto:9000
+	}
+
+	handle {
+		respond "nao encontrado" 404
+	}
+}

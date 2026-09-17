@@ -1,0 +1,30 @@
+{
+  "name": "bichu",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Identidade digital do pet com QR na coleira, alerta local e contato mediado.",
+  "type": "module",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --experimental-test-coverage",
+    "test:integration": "node --test tests/integration",
+    "build": "tsc -p tsconfig.build.json",
+    "generate:types": "openapi-typescript api/openapi.yaml -o src/shared/types/generated/api.ts",
+    "verify:types": "npm run generate:types && git diff --exit-code -- src/shared/types/generated/",
+    "verify:portabilidade": "python3 infra/verificacao/verificar_portabilidade.py",
+    "verify:dispensas": "python3 infra/verificacao/verificar_dispensas.py",
+    "verify:associacao": "python3 infra/verificacao/verificar_associacao.py"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.12.0",
+    "@types/node": "^22.7.0",
+    "eslint": "^9.12.0",
+    "openapi-typescript": "^7.4.0",
+    "typescript": "^5.9.0",
+    "typescript-eslint": "^8.8.0"
+  }
+}

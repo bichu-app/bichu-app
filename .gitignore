@@ -1,0 +1,102 @@
+# .gitignore - Bichu
+#
+# ATENCAO, leia antes de mexer: ate 17/09/2026 esta pasta estava protegida por
+# acidente, porque o repositorio da plataforma ignorava `workspace/` inteiro.
+# A partir do momento em que ela virou repositorio proprio, essa protecao
+# deixou de existir e passou a depender exclusivamente deste arquivo.
+#
+# O `.env` desta pasta contem token do Postmark, credencial do Atlassian e do
+# GitHub. Remover uma linha daqui expoe segredo real, nao hipotetico.
+
+# ---------------------------------------------------------------------------
+# Segredo. Nenhuma excecao, nenhuma variacao.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# Material de assinatura e credencial de provedor
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.p8
+*.pem
+*.key
+*.cer
+*.mobileprovision
+*.provisionprofile
+key.properties
+service-account*.json
+*-service-account*.json
+gha-creds-*.json
+**/secrets/
+**/*secret*.yaml
+**/*secret*.yml
+
+# Infraestrutura com valor preenchido
+infra/**/*.tfvars
+infra/**/*.tfstate
+infra/**/*.tfstate.*
+infra/**/.terraform/
+infra/**/terraform.tfvars
+infra/local/
+
+# ---------------------------------------------------------------------------
+# Processo do squad e insumo da plataforma: nao sao produto.
+# `docs/` publica no Confluence; `.jarvis/` nao vai a lugar nenhum.
+# ---------------------------------------------------------------------------
+.jarvis/
+# docs/ fora do git por decisao do cliente em 17/09/2026: o repositorio guarda
+# codigo, e a documentacao vive no Confluence, publicada por `make publish`.
+# Os ADRs continuam versionados, porque sao decisao e nao prosa.
+docs/
+especialista.md
+BRIEFING.md
+app.yaml
+AGENTS.md
+
+# ---------------------------------------------------------------------------
+# Artefato de build
+# ---------------------------------------------------------------------------
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.npm/
+.pnpm-store/
+
+# Flutter e Android
+app/.dart_tool/
+app/build/
+app/.flutter-plugins
+app/.flutter-plugins-dependencies
+app/android/.gradle/
+app/android/local.properties
+app/ios/Pods/
+app/ios/.symlinks/
+*.iml
+
+# Volumes e dados locais
+.data/
+tmp/
+*.dump
+*.sql.gz
+
+# Sistema e editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Segredos dentro de pastas versionadas. infra/ vai para o git (Caddyfile,
+# scripts de verificacao, regras do Spectral), mas credencial nao.
+infra/maps-keys.txt
+infra/*-keys.txt
+infra/*.key
+infra/*secret*
+infra/google-services.json
+infra/GoogleService-Info.plist

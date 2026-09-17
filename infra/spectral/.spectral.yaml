@@ -1,0 +1,24 @@
+# Regras da spec do Bichu. docs/07-devops.md secao 5.
+extends: ["spectral:oas"]
+
+rules:
+  # Toda operacao que declara efeito colateral precisa declarar limite de
+  # chamada. Operacao com efeito e sem teto e o vetor de abuso barato: emitir
+  # tag em massa, disparar alerta em massa, enumerar codigo de QR.
+  bichu-efeito-exige-limite:
+    description: "operacao com `x-effects` nao vazio precisa de `x-rate-limit`"
+    severity: error
+    given: "$.paths[*][get,post,put,patch,delete]"
+    then:
+      function: schema
+      functionOptions:
+        schema:
+          type: object
+          if:
+            properties:
+              x-effects:
+                type: array
+                minItems: 1
+            required: ["x-effects"]
+          then:
+            required: ["x-rate-limit"]

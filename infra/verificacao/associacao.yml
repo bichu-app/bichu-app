@@ -1,0 +1,27 @@
+# Expectativa da verificacao externa dos arquivos de associacao de deep link.
+# Lida por infra/verificacao/verificar_associacao.py. Ver docs/07-devops.md 16.12.
+#
+# Enquanto `esperado_a_partir_de` estiver no futuro, o alvo NAO precisa existir,
+# mas tambem nao pode responder qualquer coisa: um 200 que nao seja JSON valido
+# reprova, porque significa que outra coisa esta ocupando o endereco.
+#
+# `ip_esperado` vazio significa "ainda nao provisionado". Enquanto vazio, a
+# assercao de IP nao roda e o relatorio diz isso em voz alta. Preencher no dia
+# em que a VM existir - e esse dia e o mesmo em que os quatro registros A do
+# Squarespace saem da zona.
+
+dominio: bichu.app
+ip_esperado: ""
+
+alvos:
+  - url: https://bichu.app/.well-known/assetlinks.json
+    esperado_a_partir_de: 2026-09-20
+    content_type: application/json
+  - url: https://bichu.app/.well-known/apple-app-site-association
+    esperado_a_partir_de: 2026-09-20
+    content_type: application/json
+
+# Asercao negativa: caminho do bucket privado pedido pela origem de midia
+# precisa responder 404. Se responder 200, nao e erro de configuracao, e
+# vazamento. Vazio desliga a checagem (com aviso no relatorio).
+bucket_privado_url: ""

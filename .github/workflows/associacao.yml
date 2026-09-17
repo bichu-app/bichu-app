@@ -1,0 +1,47 @@
+# Verificacao externa dos arquivos de associacao de deep link.
+# docs/07-devops.md secao 16.12.
+#
+# Por que agendado e nao no deploy: a quebra que este monitor existe para pegar
+# nao vem de commit, vem de um clique no painel de DNS num dia em que ninguem
+# mexeu no codigo. Amarrar isto a um deploy seria procurar a falha no unico
+# lugar onde ela nao nasce.
+#
+# Em 17/09/2026 este monitor foi visto reprovando por motivo real: o apex ainda
+# servia uma pagina do Squarespace, com 200 e `text/html`, nos dois caminhos.
+
+name: associacao
+
+on:
+  schedule:
+    # A cada 30 minutos. O agendador do GitHub atrasa sob carga e meia hora
+    # vira uma hora sem aviso; e tolerado aqui.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "infra/verificacao/**"
+      - ".github/workflows/associacao.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: associacao
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    name: arquivos de associacao respondem como o sistema operacional exige
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: verificar
+        run: python3 infra/verificacao/verificar_associacao.py
+
+      # Sem `continue-on-error` e sem `|| true` em lugar nenhum deste arquivo:
+      # o script reprova quando nao consegue verificar, e essa reprovacao
+      # precisa chegar ate aqui. Monitor que fica verde porque a consulta
+      # falhou e pior que monitor nenhum, porque ocupa o lugar de um que
+      # funcionaria.

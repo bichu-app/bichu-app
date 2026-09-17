@@ -1,0 +1,31 @@
+#!/bin/sh
+# Recusa push direto na branch principal.
+#
+# Por que ele existe: o repositorio e privado em plano gratuito, entao NAO ha
+# protecao de branch nem ruleset (HTTP 403 "Upgrade to GitHub Pro"), e o cliente
+# decidiu nao contratar. Este gancho e o unico controle preventivo que resta.
+# docs/07-devops.md secao 13.
+#
+# Ele e contornavel de proposito (`--no-verify`): existe para impedir o ENGANO,
+# que e o caso comum, nao a decisao deliberada. Decisao deliberada aparece em
+# vermelho no job `auditoria-main`, que roda depois.
+#
+# Versionado e ligado por `core.hooksPath` (ver `make setup`), para que
+# corrigi-lo seja um PR e nao um recado para cada pessoa copiar um arquivo.
+
+protegida="main"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+	case "$remote_ref" in
+	"refs/heads/$protegida")
+		echo "pre-push: push direto em '$protegida' recusado." >&2
+		echo "" >&2
+		echo "  Abra um PR:  git switch -c <tipo>/BICHU-<n>-<slug-curto>" >&2
+		echo "  Regra do que vale como pronto: docs/07-devops.md secao 13.3" >&2
+		echo "" >&2
+		exit 1
+		;;
+	esac
+done
+
+exit 0
