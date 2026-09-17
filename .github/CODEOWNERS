@@ -1,0 +1,28 @@
+# CODEOWNERS - Bichu
+#
+# Revisao por caminho. Enquanto a conta `lpanegassi` for a unica com escrita no
+# repositorio, este arquivo e ADVISORY: ele pede revisao automaticamente no PR,
+# mas nao e imposto pela protecao de branch (`require_code_owner_reviews` esta
+# desligado, porque um repositorio de um unico membro nao consegue satisfazer a
+# propria exigencia e todo PR ficaria sem caminho de merge).
+#
+# Gatilho para ligar a imposicao: uma segunda identidade com escrita no
+# repositorio (segunda conta ou GitHub App do squad).
+
+*                       @lpanegassi
+
+# Esteira e infraestrutura
+/.github/               @lpanegassi
+/infra/                 @lpanegassi
+/Dockerfile             @lpanegassi
+/compose.yaml           @lpanegassi
+/Makefile               @lpanegassi
+
+# Contrato de API - muda antes do codigo, nunca depois
+/api/                   @lpanegassi
+
+# Migracoes de banco - irreversiveis sobre base povoada
+/migrations/            @lpanegassi
+
+# Suite de testes
+/tests/                 @lpanegassi
