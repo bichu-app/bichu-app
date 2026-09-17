@@ -21,6 +21,14 @@ export interface paths {
          *
          *     Responde ja com o par de tokens, porque a intencao pendente do usuario
          *     precisa ser executada logo apos o cadastro.
+         *
+         *     **A sessao que nasce aqui tem prazo, e quem escolhe o prazo e a
+         *     pessoa.** `stay_signed_in` vale no cadastro pelo mesmo motivo que vale
+         *     no login, e o ADR-0019 registra por que: este e um app de uso raro e
+         *     urgencia maxima, e a conta recem-criada e justamente a que passa mais
+         *     tempo sem ser aberta. Sem o campo aqui, a caixa "Continuar conectado
+         *     neste aparelho" da tela `F1.1` existe, a pessoa a marca, e a escolha
+         *     morre no aparelho.
          */
         post: operations["registerUser"];
         delete?: never;
@@ -38,7 +46,27 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Abre sessao */
+        /**
+         * Abre sessao
+         * @description **Esta operacao nao pode ter porta unica.** O desafio antiabuso e um
+         *     servico de terceiro, e ele falha para uma fatia previsivel de gente
+         *     legitima: rede que bloqueia o dominio do provedor, aparelho sem os
+         *     servicos do Google, extensao de privacidade. Se a ausencia do token
+         *     recusasse, essa fatia **nao entraria nunca**, e entrar e o unico
+         *     caminho para o tutor chegar ao pet perdido.
+         *
+         *     O desenho esta no ADR-0020, e sao tres camadas:
+         *
+         *     1. **Sem `X-Captcha-Token` o pedido e atendido**, avaliado pela senha,
+         *        com a ausencia registrada na trilha como sinal de moderacao;
+         *     2. **`challenge` degenera em `deny_429` com `Retry-After`** para o
+         *        pedido sem token, porque desafiar quem nao tem como responder e
+         *        recusar sem dizer quando voltar;
+         *     3. **a segunda saida da tela e `POST /auth/password-reset`**, que e o
+         *        link por e-mail que ja existe, e que a camada 1 torna alcancavel
+         *        para a mesma pessoa. Nao ha operacao nova de entrada por link: o
+         *        ADR-0020 diz por que ela foi recusada e qual gatilho a traz de volta.
+         */
         post: operations["login"];
         delete?: never;
         options?: never;
@@ -97,6 +125,10 @@ export interface paths {
         /**
          * Reenvia o e-mail de verificacao
          * @description Responde sempre 202, exista ou nao a conta.
+         *
+         *     Leva `X-Captcha-Token` porque **dispara envio pago** (secao 18.5 de
+         *     `docs/04-seguranca.md`). A ausencia do cabecalho nao recusa: vale a
+         *     degradacao descrita em `info.description`.
          */
         post: operations["requestEmailVerification"];
         delete?: never;
@@ -135,6 +167,15 @@ export interface paths {
          * Pede o e-mail de redefinicao de senha
          * @description Responde **sempre** 202 com o mesmo corpo, exista ou nao a conta. Pedir
          *     de novo invalida o token anterior.
+         *
+         *     **Esta e a segunda saida de `C.2 Entrar`.** Quem nao consegue concluir o
+         *     desafio antiabuso chega aqui pelo botao "Receber um link por e-mail", e
+         *     o link o devolve a conta. A operacao so cumpre esse papel por causa da
+         *     regra de degradacao de `info.description`: se a ausencia de
+         *     `X-Captcha-Token` recusasse aqui tambem, a saida apontaria para a mesma
+         *     porta fechada e nao seria saida nenhuma. O ADR-0020 registra a decisao
+         *     e o que ela custa: a pessoa define uma senha nova e as sessoes ativas
+         *     caem, que e o preco de nao criar uma segunda classe de credencial.
          */
         post: operations["requestPasswordReset"];
         delete?: never;
@@ -1734,17 +1775,38 @@ export interface components {
             password: components["schemas"]["Password"];
             display_name?: string;
             accepted_terms_version?: string;
+            stay_signed_in?: components["schemas"]["StaySignedIn"];
         };
+        /**
+         * @description Escolha explicita da pessoa, **desmarcada por padrao**, com o efeito
+         *     dito em texto na tela. Ela governa a **janela de inatividade** do
+         *     refresh, e so ela (secao 7.5 de `docs/04-seguranca.md`):
+         *
+         *     | | Inatividade | Teto absoluto desde a autenticacao com senha |
+         *     |---|---|---|
+         *     | `false` | **30 dias** | **180 dias** |
+         *     | `true` | **180 dias** | **180 dias** |
+         *
+         *     Tres coisas que este campo **nao** faz, e que e o que torna aceitavel
+         *     alonga-lo: nao mexe no token de acesso, que continua com 15 minutos;
+         *     nao move o teto absoluto, que vale igual nos dois casos e existe
+         *     justamente para que a rotacao a cada uso nao transforme um refresh
+         *     roubado em acesso permanente; e nao dispensa a reautenticacao com senha
+         *     das seis acoes sensiveis. A conveniencia fica na navegacao e o custo
+         *     fica no ato destrutivo.
+         *
+         *     Vale nas duas operacoes que abrem sessao, cadastro e login. **No
+         *     cadastro ela e mais decisiva que no login**, e o ADR-0019 registra por
+         *     que: a conta recem-criada e a que passa mais tempo sem ser aberta, e o
+         *     dia em que ela e aberta de novo costuma ser o dia do sumico.
+         * @default false
+         */
+        StaySignedIn: boolean;
         LoginRequest: {
             /** Format: email */
             email: string;
             password: string;
-            /**
-             * @description Escolha explicita, desmarcada por padrao. Falso: refresh de 7 dias.
-             *     Verdadeiro: 90 dias, sempre com rotacao.
-             * @default false
-             */
-            stay_signed_in: boolean;
+            stay_signed_in?: components["schemas"]["StaySignedIn"];
         };
         SessionResponse: {
             access_token: string;
@@ -1753,7 +1815,15 @@ export interface components {
             /** @example 900 */
             expires_in: number;
             refresh_token: string;
-            /** @example 604800 */
+            /**
+             * @description Janela de **inatividade** do refresh, em segundos, decidida por
+             *     `stay_signed_in`: 2592000 (30 dias) quando falso, 15552000 (180
+             *     dias) quando verdadeiro. Como o token e rotacionado a cada uso,
+             *     este numero e janela, nao teto. O teto absoluto, de 180 dias desde
+             *     a autenticacao com senha, vale nos dois casos e **nao** aparece
+             *     aqui: o cliente nao o administra, o servidor o aplica.
+             * @example 2592000
+             */
             refresh_expires_in?: number;
             user: components["schemas"]["Me"];
         };
@@ -2913,6 +2983,32 @@ export interface components {
         ShareToken: string;
         Cursor: string;
         Limit: number;
+        /**
+         * @description Token do reCAPTCHA Enterprise, verificado **no servidor** contra o
+         *     provedor. Limiar 0,5, com a faixa de 0,3 a 0,5 prosseguindo e entrando
+         *     na fila de revisao (secao 18.6 de `docs/04-seguranca.md`). Token
+         *     validado no cliente nao vale nada.
+         *
+         *     Declarado nas quatro operacoes de `auth` que a politica nomeia:
+         *     cadastro, login, pedido de redefinicao de senha e reenvio de
+         *     verificacao. Sao as que **disparam envio pago** ou **verificam um
+         *     segredo por tentativa**. A operacao que **consome** um token de alta
+         *     entropia (`/auth/password-reset/confirm`,
+         *     `/auth/email-verification/confirm`) nao leva desafio, e isso e decisao:
+         *     ali os 256 bits ja sao o controle, e o desafio so acrescenta uma forma
+         *     de falhar para quem ja esta trancado do lado de fora.
+         *
+         *     **`required: false` e a parte que faz trabalho.** O cliente manda o
+         *     cabecalho em toda chamada a essas quatro operacoes e o omite
+         *     **somente** quando nao conseguiu obter um token: SDK que nao
+         *     inicializa, rede que bloqueia o dominio do provedor, aparelho sem os
+         *     servicos do Google, extensao de privacidade. Nesse caso o servidor
+         *     atende assim mesmo, pela regra de degradacao descrita em
+         *     `info.description`. Marcar este cabecalho como obrigatorio
+         *     transformaria a disponibilidade de um terceiro na porta de entrada do
+         *     produto, e e exatamente o que o ADR-0020 recusa.
+         */
+        CaptchaToken: string;
         /** @description Repetir a mesma chave em 24 h devolve a resposta original. */
         IdempotencyKey: string;
         /**
@@ -2930,7 +3026,34 @@ export interface operations {
     registerUser: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Token do reCAPTCHA Enterprise, verificado **no servidor** contra o
+                 *     provedor. Limiar 0,5, com a faixa de 0,3 a 0,5 prosseguindo e entrando
+                 *     na fila de revisao (secao 18.6 de `docs/04-seguranca.md`). Token
+                 *     validado no cliente nao vale nada.
+                 *
+                 *     Declarado nas quatro operacoes de `auth` que a politica nomeia:
+                 *     cadastro, login, pedido de redefinicao de senha e reenvio de
+                 *     verificacao. Sao as que **disparam envio pago** ou **verificam um
+                 *     segredo por tentativa**. A operacao que **consome** um token de alta
+                 *     entropia (`/auth/password-reset/confirm`,
+                 *     `/auth/email-verification/confirm`) nao leva desafio, e isso e decisao:
+                 *     ali os 256 bits ja sao o controle, e o desafio so acrescenta uma forma
+                 *     de falhar para quem ja esta trancado do lado de fora.
+                 *
+                 *     **`required: false` e a parte que faz trabalho.** O cliente manda o
+                 *     cabecalho em toda chamada a essas quatro operacoes e o omite
+                 *     **somente** quando nao conseguiu obter um token: SDK que nao
+                 *     inicializa, rede que bloqueia o dominio do provedor, aparelho sem os
+                 *     servicos do Google, extensao de privacidade. Nesse caso o servidor
+                 *     atende assim mesmo, pela regra de degradacao descrita em
+                 *     `info.description`. Marcar este cabecalho como obrigatorio
+                 *     transformaria a disponibilidade de um terceiro na porta de entrada do
+                 *     produto, e e exatamente o que o ADR-0020 recusa.
+                 */
+                "X-Captcha-Token"?: components["parameters"]["CaptchaToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -2970,6 +3093,27 @@ export interface operations {
              *     distintos por origem em 24 h sao contados, com alerta acima de 50 e
              *     bloqueio da origem acima de 200.
              *
+             *     **O que o ADR-0020 muda aqui, e eu escrevo em vez de deixar
+             *     implicito.** Como pedido sem `X-Captcha-Token` passa a ser atendido,
+             *     a primeira das tres coisas acima deixa de valer para ele: quem omite
+             *     o cabecalho chega ao 409 sem ter passado por desafio nenhum. Duas
+             *     razoes pelas quais isso nao e uma protecao perdida, e sim uma que
+             *     nunca existiu contra este atacante:
+             *
+             *     - **o enumerador ja chamava esta operacao sem token**, porque nunca
+             *       carregou a pagina que geraria um (secao 18.1). O desafio antes da
+             *       consulta de unicidade so barrava quem carregava a pagina, isto e,
+             *       gente legitima;
+             *     - **as outras duas continuam inteiras**, e sao as que enxergam
+             *       volume: 30 por /24 por hora, e e-mails distintos por origem em
+             *       24 h com alerta em 50 e bloqueio em 200. E o pedido sem token
+             *       perde o acesso a `challenge`: o estouro recusa com `Retry-After`,
+             *       que e mais duro que desafiar, nao menos.
+             *
+             *     Fica o risco residual de enumeracao de baixo volume, abaixo dos
+             *     tetos, por quem omite o cabecalho. **O remedio ja esta escrito e e o
+             *     gatilho abaixo**, e ele nao precisa de mecanismo novo.
+             *
              *     **Gatilho para inverter:** duas disparadas do detector nos primeiros
              *     30 dias e o cadastro passa a 202 sempre, com a experiencia mudando
              *     junto.
@@ -2993,7 +3137,34 @@ export interface operations {
     login: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Token do reCAPTCHA Enterprise, verificado **no servidor** contra o
+                 *     provedor. Limiar 0,5, com a faixa de 0,3 a 0,5 prosseguindo e entrando
+                 *     na fila de revisao (secao 18.6 de `docs/04-seguranca.md`). Token
+                 *     validado no cliente nao vale nada.
+                 *
+                 *     Declarado nas quatro operacoes de `auth` que a politica nomeia:
+                 *     cadastro, login, pedido de redefinicao de senha e reenvio de
+                 *     verificacao. Sao as que **disparam envio pago** ou **verificam um
+                 *     segredo por tentativa**. A operacao que **consome** um token de alta
+                 *     entropia (`/auth/password-reset/confirm`,
+                 *     `/auth/email-verification/confirm`) nao leva desafio, e isso e decisao:
+                 *     ali os 256 bits ja sao o controle, e o desafio so acrescenta uma forma
+                 *     de falhar para quem ja esta trancado do lado de fora.
+                 *
+                 *     **`required: false` e a parte que faz trabalho.** O cliente manda o
+                 *     cabecalho em toda chamada a essas quatro operacoes e o omite
+                 *     **somente** quando nao conseguiu obter um token: SDK que nao
+                 *     inicializa, rede que bloqueia o dominio do provedor, aparelho sem os
+                 *     servicos do Google, extensao de privacidade. Nesse caso o servidor
+                 *     atende assim mesmo, pela regra de degradacao descrita em
+                 *     `info.description`. Marcar este cabecalho como obrigatorio
+                 *     transformaria a disponibilidade de um terceiro na porta de entrada do
+                 *     produto, e e exatamente o que o ADR-0020 recusa.
+                 */
+                "X-Captcha-Token"?: components["parameters"]["CaptchaToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3084,7 +3255,34 @@ export interface operations {
     requestEmailVerification: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Token do reCAPTCHA Enterprise, verificado **no servidor** contra o
+                 *     provedor. Limiar 0,5, com a faixa de 0,3 a 0,5 prosseguindo e entrando
+                 *     na fila de revisao (secao 18.6 de `docs/04-seguranca.md`). Token
+                 *     validado no cliente nao vale nada.
+                 *
+                 *     Declarado nas quatro operacoes de `auth` que a politica nomeia:
+                 *     cadastro, login, pedido de redefinicao de senha e reenvio de
+                 *     verificacao. Sao as que **disparam envio pago** ou **verificam um
+                 *     segredo por tentativa**. A operacao que **consome** um token de alta
+                 *     entropia (`/auth/password-reset/confirm`,
+                 *     `/auth/email-verification/confirm`) nao leva desafio, e isso e decisao:
+                 *     ali os 256 bits ja sao o controle, e o desafio so acrescenta uma forma
+                 *     de falhar para quem ja esta trancado do lado de fora.
+                 *
+                 *     **`required: false` e a parte que faz trabalho.** O cliente manda o
+                 *     cabecalho em toda chamada a essas quatro operacoes e o omite
+                 *     **somente** quando nao conseguiu obter um token: SDK que nao
+                 *     inicializa, rede que bloqueia o dominio do provedor, aparelho sem os
+                 *     servicos do Google, extensao de privacidade. Nesse caso o servidor
+                 *     atende assim mesmo, pela regra de degradacao descrita em
+                 *     `info.description`. Marcar este cabecalho como obrigatorio
+                 *     transformaria a disponibilidade de um terceiro na porta de entrada do
+                 *     produto, e e exatamente o que o ADR-0020 recusa.
+                 */
+                "X-Captcha-Token"?: components["parameters"]["CaptchaToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -3142,7 +3340,34 @@ export interface operations {
     requestPasswordReset: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /**
+                 * @description Token do reCAPTCHA Enterprise, verificado **no servidor** contra o
+                 *     provedor. Limiar 0,5, com a faixa de 0,3 a 0,5 prosseguindo e entrando
+                 *     na fila de revisao (secao 18.6 de `docs/04-seguranca.md`). Token
+                 *     validado no cliente nao vale nada.
+                 *
+                 *     Declarado nas quatro operacoes de `auth` que a politica nomeia:
+                 *     cadastro, login, pedido de redefinicao de senha e reenvio de
+                 *     verificacao. Sao as que **disparam envio pago** ou **verificam um
+                 *     segredo por tentativa**. A operacao que **consome** um token de alta
+                 *     entropia (`/auth/password-reset/confirm`,
+                 *     `/auth/email-verification/confirm`) nao leva desafio, e isso e decisao:
+                 *     ali os 256 bits ja sao o controle, e o desafio so acrescenta uma forma
+                 *     de falhar para quem ja esta trancado do lado de fora.
+                 *
+                 *     **`required: false` e a parte que faz trabalho.** O cliente manda o
+                 *     cabecalho em toda chamada a essas quatro operacoes e o omite
+                 *     **somente** quando nao conseguiu obter um token: SDK que nao
+                 *     inicializa, rede que bloqueia o dominio do provedor, aparelho sem os
+                 *     servicos do Google, extensao de privacidade. Nesse caso o servidor
+                 *     atende assim mesmo, pela regra de degradacao descrita em
+                 *     `info.description`. Marcar este cabecalho como obrigatorio
+                 *     transformaria a disponibilidade de um terceiro na porta de entrada do
+                 *     produto, e e exatamente o que o ADR-0020 recusa.
+                 */
+                "X-Captcha-Token"?: components["parameters"]["CaptchaToken"];
+            };
             path?: never;
             cookie?: never;
         };

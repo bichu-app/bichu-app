@@ -13,6 +13,7 @@
 import { assertSafeBoot, optionalEnv } from '../shared/config/env.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
 import { createDb } from '../shared/db/pool.js';
+import { manterProcessoVivo } from '../shared/process/vida-do-processo.js';
 import { systemClock } from '../shared/time/clock.js';
 import { expurgarEventosVencidos } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 
@@ -23,7 +24,10 @@ export async function main(): Promise<void> {
   const config = loadAppConfig();
   const banco = createDb(config.databaseUrl);
 
-  let rodando = true;
+  // Declarado ANTES de qualquer trabalho. Entre o fim do primeiro expurgo e o
+  // agendamento do próximo não pode existir um instante em que o laço de
+  // eventos esteja vazio: é nesse instante que o processo sai com 0.
+  const vida = manterProcessoVivo();
 
   const rodarExpurgo = async (): Promise<void> => {
     const resultado = await expurgarEventosVencidos(banco.db, systemClock.now());
@@ -36,33 +40,35 @@ export async function main(): Promise<void> {
     );
   };
 
-  const encerrar = async (sinal: string): Promise<void> => {
-    rodando = false;
+  const encerrar = (sinal: string): void => {
+    if (vida.estaEncerrando) return;
     console.info(JSON.stringify({ evento: 'worker.shutdown', sinal }));
-    await banco.close();
-    process.exit(0);
+    vida.encerrar();
   };
-  process.once('SIGTERM', () => void encerrar('SIGTERM'));
-  process.once('SIGINT', () => void encerrar('SIGINT'));
+  process.once('SIGTERM', () => { encerrar('SIGTERM'); });
+  process.once('SIGINT', () => { encerrar('SIGINT'); });
 
   await rodarExpurgo();
   const temporizador = setInterval(() => {
-    if (!rodando) return;
+    if (vida.estaEncerrando) return;
     // Falha no expurgo não derruba o worker, e também não some: sai no log e a
     // próxima janela tenta de novo.
     rodarExpurgo().catch((erro: unknown) => {
       console.error(JSON.stringify({ evento: 'audit.purge_failed', erro: String(erro) }));
     });
   }, INTERVALO_DO_EXPURGO_EM_MILISSEGUNDOS);
-  // O temporizador não segura o processo aberto sozinho: quem decide o
-  // encerramento é o sinal do orquestrador.
+  // Sem referência: quem responde pelo tempo de vida do processo é `vida`, um
+  // lugar só. Temporizador de trabalho segurando o processo por efeito colateral
+  // é como o defeito anterior se escondeu.
   temporizador.unref();
 
-  await new Promise<void>(() => {
-    // Processo de vida longa. A plataforma orientada a requisição congela o
-    // processo fora do ciclo de uma requisição, e é por isso que o worker é um
-    // processo separado e não uma thread de fundo da API.
-  });
+  // Processo de vida longa. A plataforma orientada a requisição congela o
+  // processo fora do ciclo de uma requisição, e é por isso que o worker é um
+  // processo separado e não uma thread de fundo da API.
+  await vida.encerrado;
+
+  clearInterval(temporizador);
+  await banco.close();
 }
 
 if (optionalEnv('BICHU_SUPRESS_AUTOSTART') === undefined) {
