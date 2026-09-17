@@ -10,18 +10,27 @@ import 'bichu_tokens.g.dart';
 /// (docs/06-design-system.md secao 18.3).
 ///
 /// **A trava A do sistema vive aqui** (secao 18.2.1). A manteiga `#E7B93E` da
-/// 1.73:1 contra a superficie marfim, entao ela nunca pode ser texto. Esta
-/// extensao **nao expoe o preenchimento como `Color` solto**: ela entrega o
-/// que ja vem montado ([filledButtonStyle], [actionFillBox], [onActionFill]).
-/// Quem precisar do valor bruto usa o unico campo que o entrega, e o nome dele
-/// e feio de proposito: [actionFillRawDoNotUseAsText]. Nome feio no ponto de
-/// uso e uma revisao de codigo que se faz sozinha, e e greppavel.
+/// 1.76:1 contra a superficie off-white `#FAFAF8`, entao ela nunca pode ser
+/// texto. Esta extensao **nao expoe o preenchimento como `Color` solto**: ela
+/// entrega o que ja vem montado ([filledButtonStyle], [actionFillBox],
+/// [onActionFill]). Quem precisar do valor bruto usa o unico campo que o
+/// entrega, e o nome dele e feio de proposito:
+/// [actionFillRawDoNotUseAsText]. Nome feio no ponto de uso e uma revisao de
+/// codigo que se faz sozinha, e e greppavel.
 ///
 /// Os papeis nunca-texto sao **quatro** na identidade Framboesa, nao um:
 /// `action-fill`, `action-fill-pressed`, `community-fill` e `accent-fill`,
 /// declarados em `\$extensions.bichu.nunca-texto` de `design/tokens.json`. Os
 /// quatro chegam de [BichuCores] com o nome feio, porque o gerador le aquele
 /// contrato em vez de carregar uma lista propria.
+///
+/// **Os quatro precisam de caminho montado, nao so de nome feio.** O nome feio
+/// e a segunda metade do mecanismo; a primeira e existir um caminho pronto que
+/// dispense o valor bruto. Enquanto so `action-fill` tinha [actionFillBox], a
+/// primeira tela de comunidade ia alcancar o verde suave pelo unico jeito
+/// disponivel, que era o campo bruto, e o nome feio viraria ruido que se
+/// aprende a ignorar. Por isso [communityFillBox] e [accentFillBox] existem
+/// antes da tela que vai usa-los.
 @immutable
 class BichuColors extends ThemeExtension<BichuColors> {
   const BichuColors({required this.cores, required this.escuro});
@@ -67,6 +76,42 @@ class BichuColors extends ThemeExtension<BichuColors> {
   BoxDecoration actionFillBox({double radius = BichuRaio.md}) {
     return BoxDecoration(
       color: cores.actionFillRawDoNotUseAsText,
+      borderRadius: BorderRadius.circular(radius),
+    );
+  }
+
+  // -- Os outros dois preenchimentos de marca, pelo mesmo caminho ----------
+
+  /// Texto e icone sobre o Verde suave. 10.10:1 nos dois temas.
+  ///
+  /// A framboesa aqui da 4.60:1 e nao entra: o cartao de comunidade escreve em
+  /// neutro, mesmo quando o instinto pede a cor da marca.
+  Color get onCommunityFill => cores.onCommunityFill;
+
+  /// Texto e icone sobre a Goiaba suave. 8.58:1 nos dois temas.
+  ///
+  /// A framboesa aqui da 3.90:1, que e o defeito do cartao "Evento no bairro"
+  /// da arte de referencia (design/tokens.json, `cor.claro.on-accent-fill`).
+  Color get onAccentFill => cores.onAccentFill;
+
+  /// Preenchimento Verde suave pronto para um `Container`.
+  ///
+  /// `community-fill` da 1.63:1 contra a superficie: ele preenche forma, nunca
+  /// pinta glifo. Use [onCommunityFill] no que for por cima.
+  BoxDecoration communityFillBox({double radius = BichuRaio.lg}) {
+    return BoxDecoration(
+      color: cores.communityFillRawDoNotUseAsText,
+      borderRadius: BorderRadius.circular(radius),
+    );
+  }
+
+  /// Preenchimento Goiaba suave pronto para um `Container`.
+  ///
+  /// `accent-fill` da 1.92:1 contra a superficie. Mesma regra do verde: forma,
+  /// nao glifo. Use [onAccentFill] no que for por cima.
+  BoxDecoration accentFillBox({double radius = BichuRaio.lg}) {
+    return BoxDecoration(
+      color: cores.accentFillRawDoNotUseAsText,
       borderRadius: BorderRadius.circular(radius),
     );
   }

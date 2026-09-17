@@ -38,19 +38,26 @@ e um arquivo novo pedido ao cliente, nunca um PNG mexido por cima.
 | Manteiga | `#E7B93E` | Destaques, ações | `butter/400` | `action-fill` |
 | Verde suave | `#A9CFBB` | Informação, comunidade | `sage/300` | `community-fill` |
 | Goiaba suave | `#E8A7A0` | Apoio, ilustrações | `guava/300` | `accent-fill` |
-| Marfim quente | `#FFF7E8` | Fundo | `sand/0` | `surface`, `on-primary` |
+| Marfim quente | `#FFF7E8` | Fundo | — | **só material de marca** (ver abaixo) |
 
-Os cinco hexes são **literais do cliente** e não podem ser ajustados. Os demais
+Os hexes são **literais do cliente** e não podem ser ajustados. Os demais
 degraus das rampas foram derivados deles em HSL (§6.2 do design system).
 
-Medido contra o fundo Marfim, pela fórmula de luminância relativa da WCAG 2.1:
+> **O Marfim saiu do app em 17/09/2026.** O cliente olhou o produto renderizado e
+> achou "meio tosco, apagado"; escolheu o neutro `#FAFAF8` entre quatro opções.
+> **O fundo do app é `#FAFAF8`; o fundo do cartaz, da tag, das peças e do e-mail
+> continua o Marfim `#FFF7E8`.** Isso é decisão dele, tomada sabendo, e está no
+> §6.8 do design system. Não "conserte" o app de volta para o Marfim achando que
+> é erro.
 
-| Cor | Razão | Pode ser texto? |
-|---|---:|---|
-| Framboesa | **7.36:1** | sim, inclusive em superfície crítica (AAA) |
-| Goiaba suave | 1.88:1 | **não** |
-| Manteiga | 1.73:1 | **não** |
-| Verde suave | 1.60:1 | **não** |
+Medido pela fórmula de luminância relativa da WCAG 2.1, contra os dois fundos:
+
+| Cor | sobre o app `#FAFAF8` | sobre o Marfim `#FFF7E8` | Pode ser texto? |
+|---|---:|---:|---|
+| Framboesa | **7.49:1** | 7.36:1 | sim, inclusive em superfície crítica (AAA) |
+| Goiaba suave | 1.92:1 | 1.88:1 | **não** |
+| Manteiga | 1.76:1 | 1.73:1 | **não** |
+| Verde suave | 1.63:1 | 1.60:1 | **não** |
 
 ## 3. As quatro regras de uso que saem daí
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 
 import 'api/api_client.dart';
@@ -69,6 +70,13 @@ class _BichuAppState extends State<BichuApp> {
         // A preferencia de tema e do sistema. A tela do achador e a pagina do
         // QR respeitam essa preferencia, com o ajuste de borda da secao 6.6.
         themeMode: ThemeMode.system,
+        // O app e escrito em portugues do Brasil e nao oferece troca de
+        // idioma. Sem estes dois campos o Flutter cai no ingles para o que ELE
+        // desenha: o tooltip de voltar, o menu de colar do campo de texto e os
+        // rotulos que o VoiceOver e o TalkBack leem em Scaffold e Dialog. A
+        // tela ficava bilingue e so quem usa leitor de tela percebia.
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
+        supportedLocales: const <Locale>[Locale('pt', 'BR')],
         routerConfig: _roteador,
         builder: (context, filho) {
           // Escala de fonte do sistema respeitada ate 200% (SC 1.4.4). O teto

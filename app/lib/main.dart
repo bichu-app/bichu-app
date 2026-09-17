@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'app.dart';
 import 'config/app_config.dart';
@@ -40,6 +41,10 @@ class TelaDeConfiguracaoAusente extends StatelessWidget {
       title: 'Bichu',
       debugShowCheckedModeBanner: false,
       theme: BichuTheme.claro,
+      // A tela de build incompleto tambem e portugues. Ela e a unica tela que
+      // aparece quando a configuracao falta, e quem homologa le ela.
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const <Locale>[Locale('pt', 'BR')],
       home: Scaffold(
         body: SafeArea(
           child: Padding(

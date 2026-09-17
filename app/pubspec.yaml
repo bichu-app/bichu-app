@@ -13,6 +13,21 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # Strings do proprio Flutter em pt-BR: tooltip de voltar, rotulo do menu de
+  # colar, meses do seletor de data, rotulo que o VoiceOver e o TalkBack leem
+  # em Scaffold, Dialog e DatePicker. Sem isto o app fala portugues e o sistema
+  # operacional responde em ingles na mesma tela, e quem usa leitor de tela
+  # ouve a mistura.
+  #
+  # EFEITO COLATERAL NO pubspec: `flutter_localizations` vem do SDK e traz o
+  # `intl` que a versao do Flutter fixa. A partir daqui o app nao escolhe mais
+  # a versao de `intl` livremente -- quem declarar `intl` como dependencia
+  # direta tem de casar com o que o SDK pinou, ou o `pub get` reprova. E o
+  # preco de usar o pacote do SDK em vez de um de terceiros, e ele e o certo:
+  # as strings tem de vir da mesma versao do framework que as consome.
+  flutter_localizations:
+    sdk: flutter
+
   cupertino_icons: ^1.0.8
 
   # Navegacao declarativa. Escolhida por causa do F5: App Links e Universal

@@ -29,6 +29,26 @@ void main() {
     expect(find.widgetWithText(NavigationDestination, 'Perfil'), findsOne);
   });
 
+  testWidgets('o app fala pt-BR, e o Flutter tambem', (tester) async {
+    // O app sempre foi escrito em portugues; o que saia em ingles era o que o
+    // FRAMEWORK desenha. Isso nao aparece lendo a tela: aparece no tooltip de
+    // voltar, no menu de colar e, principalmente, no que o VoiceOver e o
+    // TalkBack leem. O teste olha para o delegate resolvido, e nao para uma
+    // string traduzida qualquer, porque e a resolucao do locale que quebra
+    // quando alguem remove `supportedLocales` achando que e enfeite.
+    await abrirOApp(tester);
+
+    final contexto = tester.element(find.byType(Scaffold).first);
+    expect(Localizations.localeOf(contexto), const Locale('pt', 'BR'));
+
+    final materiais = MaterialLocalizations.of(contexto);
+    expect(materiais.backButtonTooltip, 'Voltar');
+    expect(materiais.pasteButtonLabel, 'Colar');
+
+    // O leitor de tela le este rotulo em toda gaveta do app.
+    expect(materiais.drawerLabel, isNotEmpty);
+  });
+
   testWidgets('as quatro abas abrem sem conta', (tester) async {
     await abrirOApp(tester);
 
