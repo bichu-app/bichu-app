@@ -49,7 +49,8 @@ foi eliminado em vez de proibido:
 | URL absoluta não é persistida | `ObjectKey` e `AbsoluteUrl` são tipos distintos; a porta de persistência não aceita o segundo |
 | Código de tag só entra normalizado | `TagCodeCanonical` não aceita `string` cru |
 | UUID interno não sai em resposta anônima | `UserId` e afins são marcados; a projeção pública tem tipo próprio |
-| Tipo de erro inventado no meio do código | `ProblemType` é união fechada |
+| Tipo de erro inventado no meio do código | `ProblemType` é união fechada, **gerada** de `x-problem-types` do contrato |
+| Tipo de erro com o status errado (`forbidden` em 401) | o status não é argumento: sai de `STATUS_DO_PROBLEMA`, que vem do contrato |
 | Mecanismo de teste ativo em produção | a aplicação **recusa subir** (`assertSafeBoot`) |
 | Limite em memória com mais de uma instância | a aplicação **recusa subir** |
 

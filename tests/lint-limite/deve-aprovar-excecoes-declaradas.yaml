@@ -1,0 +1,92 @@
+# CONTRAPROVA. Este arquivo EXISTE PARA SER APROVADO pelo lint de limite de
+# chamada (BICHUS-25). Ele não é o contrato do produto.
+#
+# A isca ao lado prova que o lint acusa. Este prova que ele não acusa tudo:
+# lint que reprova qualquer coisa é tão inútil quanto lint que aprova qualquer
+# coisa, e o segundo defeito só aparece quando alguém tenta passar uma exceção
+# legítima. Se o lint reprovar alguma operação deste arquivo, a esteira reprova
+# o próprio lint.
+#
+# As quatro situações abaixo são as exceções escritas da história, cada uma com
+# o motivo junto:
+#
+#   1. GET /health sem limite — quem chama é a sonda do balanceador. Limitar a
+#      sonda tira o serviço de rotação exatamente sob carga, que é o oposto do
+#      que o limite existe para fazer.
+#   2. Arquivos de associação e JWKS — com limite, mas com
+#      `on_exceed: log_and_alert`, nunca `challenge` nem `deny_429`: quem busca
+#      esses arquivos é o sistema operacional ou uma biblioteca de validação de
+#      token, que não resolve desafio e não repete depois de um 429. Recusar
+#      ali quebraria a verificação de domínio em silêncio.
+openapi: 3.1.0
+info:
+  title: contraprova do lint de limite de chamada
+  version: '0'
+
+paths:
+  /health:
+    get:
+      operationId: health
+      summary: sonda do balanceador; exceção escrita e única da lista
+      security: []
+      responses:
+        '200':
+          description: ok
+
+  /.well-known/assetlinks.json:
+    get:
+      operationId: androidAssetLinks
+      security: []
+      x-no-challenge: true
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 600
+          window: 1m
+          on_exceed: log_and_alert
+      responses:
+        '200':
+          description: ok
+
+  /.well-known/apple-app-site-association:
+    get:
+      operationId: appleAppSiteAssociation
+      security: []
+      x-no-challenge: true
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 600
+          window: 1m
+          on_exceed: log_and_alert
+      responses:
+        '200':
+          description: ok
+
+  /.well-known/jwks.json:
+    get:
+      operationId: jwks
+      security: []
+      x-no-challenge: true
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 600
+          window: 1m
+          on_exceed: log_and_alert
+      responses:
+        '200':
+          description: ok
+
+  /isca/publica-com-limite:
+    post:
+      operationId: publicaComLimite
+      summary: rota pública com teto declarado, do jeito que o contrato pede
+      security: []
+      x-rate-limit:
+        - dimension: [ip, code]
+          limit: 5
+          window: 10m
+          counts: distinct_identities
+          applies_to: invalid_attempts
+          on_exceed: deny_429
+      responses:
+        '200':
+          description: ok

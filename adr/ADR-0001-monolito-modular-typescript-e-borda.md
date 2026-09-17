@@ -1,15 +1,21 @@
 # ADR-0001: Monólito modular em TypeScript, sem BFF, com borda única
 
-**Status:** aceito
+**Status:** aceito, com as seções "Sem BFF" e "Borda" substituídas pelo ADR-0016
 **Data:** 2026-09-17
 **Revisado em:** 2026-09-17 — a nuvem deixou de ser AWS e passou a ser decisao
 adiada (ADR-0012). A decisao de monolito modular, de contrato e de ausencia de
 BFF nao muda; a descricao da borda deixou de nomear servico de provedor.
+**Revisado em:** 2026-09-17 — o cliente decidiu implementar uma camada de
+gateway em `/v1`. A borda descrita aqui era um proxy reverso cego; ela passa a
+conhecer caminho, e a decisão vigente sobre ela é o **ADR-0016**. Este ADR
+continua valendo para tudo o mais: monólito modular, limites entre módulos,
+persistência, contrato e revalidação no serviço.
 
 ## Contexto
 
 Treze dias de desenvolvimento, um squad de agentes, um único cliente móvel
-(Flutter) e uma superfície pública em HTML servida pelo mesmo produto. A stack
+(Flutter) e uma superfície pública em HTML servida pelo mesmo produto (ela saiu
+daqui em 17/09/2026, pelo ADR-0017). A stack
 está fixada: TypeScript, PostgreSQL, armazenamento de objeto, GitHub Actions,
 sem Python. **A nuvem não está escolhida** (ADR-0012): o desenvolvimento roda em
 Docker local e o provedor será decidido depois.
@@ -27,6 +33,13 @@ importam entre si diretamente:
 ```
 identity · pets · tags · lostfound · messaging · professionals · notifications · media · audit
 ```
+
+A primeira fronteira extraível é `media`, e ela só é extraível de verdade
+depois do ADR-0016: até 17/09/2026 as operações de mídia estavam espalhadas por
+três prefixos (`/pets`, `/found-reports`, `/finder`), o que tornava impossível
+roteá-la para fora sem uma lista de caminhos à mão. O ADR-0016 move as três
+operações de mídia pura para `/v1/media/` e registra o limite: as duas operações
+de foto que pertencem a `pets` **não** saem junto.
 
 Dependência aponta para dentro. O domínio não conhece Fastify, S3, FCM nem
 Postgres. Módulo fala com módulo por porta declarada no módulo consumidor, nunca
@@ -49,17 +62,39 @@ pública consome uma projeção que o próprio serviço já produz, e não exist
 segundo cliente com forma diferente do mesmo dado. Um BFF aqui seria uma segunda
 superfície de deriva sem nada em troca.
 
-**Borda.** Um **proxy reverso na frente do serviço**, e não um produto de
-nuvem: hoje é um container (Caddy ou Nginx) no `compose.yaml` e no mínimo
-hospedado, com TLS, limite por IP, tamanho máximo de requisição, CORS e
+> **Continua valendo, e não é o que foi pedido depois.** O cliente pediu uma
+> *camada de gateway*, que é outra coisa: borda genérica que roteia e protege,
+> proibida de conhecer o produto. BFF é uma camada **por cliente**, que conhece
+> as telas daquele cliente e devolve a tela pronta. O ADR-0016 constrói o
+> gateway; nenhum BFF foi criado, e a recusa acima segue de pé pelos mesmos
+> motivos. Se algum dia a resposta de uma operação for moldada a uma tela
+> específica na borda, esta seção foi violada.
+
+**Borda — substituída pelo ADR-0016.** O que está descrito abaixo foi o desenho
+até 17/09/2026 e ficou pequeno: era um `reverse_proxy` catch-all, que não
+conhecia `/v1` nem caminho nenhum, e por isso não havia onde apoiar a extração de
+um módulo. **Leia o ADR-0016 para o desenho vigente**, inclusive para onde o
+`/v1` passa a viver, por que a borda não reescreve caminho, por que ela não
+valida token, e por que o teto por operação continua sendo do contrato.
+
+O desenho anterior, para registro: um **proxy reverso na frente do serviço**, e
+não um produto de nuvem: um container (Caddy ou Nginx) no `compose.yaml` e no
+mínimo hospedado, com TLS, limite por IP, tamanho máximo de requisição, CORS e
 propagação de `X-Correlation-Id`. Quando a nuvem for escolhida, o papel pode
 passar para o gateway ou a CDN do provedor sem que a aplicação mude, **porque
-nada do que a borda faz é exclusivo dela**.
+nada do que a borda faz é exclusivo dela** — e essa substituibilidade é
+justamente o que o ADR-0016 preserva ao recusar plugin e validação de token na
+borda.
 
 **O serviço revalida tudo**: limite por código de tag, limite por conta e
 validação de token acontecem também dentro, porque basta um job ou uma rota
 interna nova para a borda ser contornada. Essa duplicação, que em outro desenho
 seria desperdício, é o que torna a borda substituível.
+
+**Sem HTML, desde o ADR-0017.** As oito rotas públicas em página saíram para um
+front web de outro time; o que fica aqui é a mesma lógica exposta em JSON. Os
+módulos e os limites entre eles não mudam, e a superfície pública em HTML citada
+no Contexto deixou de ser servida por este produto.
 
 **Limite de chamadas no MVP roda em processo**, com o serviço em uma única
 tarefa. Quando passar de uma tarefa, o contador precisa sair para um armazenamento

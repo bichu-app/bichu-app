@@ -6,6 +6,8 @@
 // confinamento de SDK de provedor e proibicao de `Date.now()`. Regra que
 // depende de disciplina humana nao e regra: e torcida. docs/07-devops.md 5.
 
+import path from 'node:path';
+
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import regras from './src/architecture.rules.mjs';
@@ -18,35 +20,116 @@ const {
   injectableClock,
 } = regras;
 
+const RAIZ_DOS_MODULOS = path.resolve(import.meta.dirname, moduleBoundaries.root);
+
+/**
+ * Onde um caminho ABSOLUTO mora: `{ modulo, camada }`, ou `null` se ele nao
+ * esta sob `src/modules/`.
+ *
+ * Esta funcao e o ponto inteiro da regra. A versao anterior usava
+ * `no-restricted-imports`, que casa o TEXTO do import contra um glob. O texto
+ * que alguem escreve de verdade saindo de `pets/adapters/` e
+ * `../../identity/domain/x.js`, sem a palavra `modules` em lugar nenhum, entao
+ * o glob `**\/modules/identity/domain/**` nao casava e a fronteira so pegava a
+ * forma que ninguem escreve. Aqui o caminho e resolvido primeiro e comparado
+ * por componente, nunca por prefixo de texto.
+ */
+function localizar(absoluto) {
+  const relativo = path.relative(RAIZ_DOS_MODULOS, absoluto);
+  if (relativo === '' || relativo.startsWith('..') || path.isAbsolute(relativo)) {
+    return null;
+  }
+  const partes = relativo.split(path.sep);
+  if (partes.length < 2) return null;
+  return { modulo: partes[0], camada: partes[1] };
+}
+
 /**
  * Fronteira de modulo: um modulo so enxerga `ports/` de outro.
  *
- * Gera um bloco por modulo em vez de uma regra generica porque o ESLint nao
- * expressa "qualquer modulo menos o meu" num padrao so. A lista vem de
- * `MODULES`, entao acrescentar um modulo la basta: esta fiacao acompanha.
+ * Uma regra so, sem gerar um bloco por modulo: o modulo de origem sai do
+ * caminho do arquivo, e nao de uma lista de padroes. `MODULES` continua
+ * carregando peso, como catalogo do que a arquitetura reconhece - diretorio
+ * novo sob `src/modules/` reprova ate ser declarado la, porque fronteira que
+ * nao sabe quem sao os modulos nao vigia os que aparecem depois dela.
  */
-const fronteiraDeModulo = MODULES.map((mod) => ({
-  files: [`src/modules/${mod}/**/*.ts`],
+const arquitetura = {
   rules: {
-    'no-restricted-imports': ['error', {
-      patterns: MODULES.filter((outro) => outro !== mod).flatMap((outro) => [
-        {
-          group: [
-            `**/modules/${outro}/domain/**`,
-            `**/modules/${outro}/application/**`,
-            `**/modules/${outro}/adapters/**`,
-            `**/modules/${outro}/persistence/**`,
-          ],
-          message: moduleBoundaries.message,
+    'fronteira-de-modulo': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'Um modulo so importa `ports/` de outro modulo.' },
+        schema: [],
+        messages: {
+          fronteira: `Import de '{{origem}}' para '{{alvo}}/{{camada}}'. ${moduleBoundaries.message}`,
+          naoDeclarado: `'{{modulo}}'. ${moduleBoundaries.undeclaredMessage}`,
         },
-      ]),
-    }],
+      },
+      create(context) {
+        const origem = localizar(context.filename);
+        if (!origem) return {};
+        const diretorio = path.dirname(context.filename);
+
+        function verificar(no, valor) {
+          if (typeof valor !== 'string' || valor === '') return;
+
+          // Especificador nao-relativo. Nao ha alias de caminho no
+          // tsconfig.json, entao um pacote que cite `modules/` e caminho
+          // disfarcado: reprova em vez de deixar passar por nao saber resolver.
+          if (!valor.startsWith('.')) {
+            if (valor.includes('modules/')) {
+              context.report({
+                node: no,
+                messageId: 'fronteira',
+                data: { origem: origem.modulo, alvo: valor, camada: '?' },
+              });
+            }
+            return;
+          }
+
+          const alvo = localizar(path.resolve(diretorio, valor));
+          if (!alvo) return;
+          if (alvo.modulo === origem.modulo) return;
+          if (alvo.camada === moduleBoundaries.publicLayer) return;
+
+          context.report({
+            node: no,
+            messageId: 'fronteira',
+            data: { origem: origem.modulo, alvo: alvo.modulo, camada: alvo.camada },
+          });
+        }
+
+        return {
+          Program(no) {
+            if (MODULES.includes(origem.modulo)) return;
+            context.report({
+              node: no,
+              messageId: 'naoDeclarado',
+              data: { modulo: origem.modulo },
+            });
+          },
+          ImportDeclaration: (no) => verificar(no.source, no.source.value),
+          ExportNamedDeclaration: (no) => no.source && verificar(no.source, no.source.value),
+          ExportAllDeclaration: (no) => no.source && verificar(no.source, no.source.value),
+          ImportExpression: (no) => verificar(no.source, no.source.value),
+        };
+      },
+    },
   },
-}));
+};
 
 export default tseslint.config(
   {
-    ignores: ['dist/**', 'node_modules/**', 'coverage/**', 'src/shared/types/generated/**'],
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'coverage/**',
+      'src/shared/types/generated/**',
+      // Saida de build do app iOS/Flutter: dependencia de terceiro vendorizada
+      // pelo SwiftPM, nao codigo deste repositorio. Ja esta no .gitignore; o
+      // ESLint nao le .gitignore, entao precisa ser dito aqui tambem.
+      'app/build/**',
+    ],
   },
 
   js.configs.recommended,
@@ -56,6 +139,16 @@ export default tseslint.config(
     languageOptions: {
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
+  },
+
+  // --- Arquivos de configuracao em .mjs -----------------------------------
+  // Este arquivo e `src/architecture.rules.mjs` nao sao TypeScript e nao estao
+  // no `tsconfig.json`, entao o servico de projeto nao os encontra e o parser
+  // falha antes de qualquer regra rodar. Eles continuam lintados; o que sai e
+  // a analise com tipos, que nao se aplica a eles.
+  {
+    ...tseslint.configs.disableTypeChecked,
+    files: ['**/*.mjs'],
   },
 
   // --- Confinamento de SDK de provedor -----------------------------------
@@ -77,7 +170,15 @@ export default tseslint.config(
   },
 
   // --- Fronteira entre modulos -------------------------------------------
-  ...fronteiraDeModulo,
+  // Regra propria, e nao `no-restricted-imports`, por dois motivos: ela resolve
+  // o caminho em vez de casar texto, e ocupa um nome de regra separado - o
+  // arranjo anterior, por sobrepor `no-restricted-imports`, apagava dentro de
+  // `src/modules/` o confinamento de SDK declarado logo acima.
+  {
+    files: ['src/modules/**/*.ts'],
+    plugins: { arquitetura },
+    rules: { 'arquitetura/fronteira-de-modulo': 'error' },
+  },
 
   // --- Pureza do dominio --------------------------------------------------
   // O dominio nao conhece framework, banco, HTTP nem nuvem. `import` de ORM

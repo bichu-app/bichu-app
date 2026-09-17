@@ -1,0 +1,75 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO pelo lint de limite de chamada
+# (BICHUS-25). Ele não é o contrato do produto e nunca deve ser mesclado nele.
+#
+# Não corrija este arquivo. Corrigi-lo cega o lint: a partir daí ele passa a
+# valer por confiança na data em que foi escrito, e ninguém sabe se ele ainda
+# enxerga. Mesma regra das iscas de `tests/portabilidade/`.
+#
+# O lint precisa acusar, nominalmente, as quatro operações abaixo. Se ele
+# aprovar qualquer uma delas, a esteira reprova o próprio lint.
+#
+#   1. publicaSemLimite         — `security: []` e nenhum `x-rate-limit`
+#   2. opcionalSemLimite        — autenticação opcional e nenhum `x-rate-limit`
+#   3. limiteComPalavraInventada— `on_exceed` fora do vocabulário do contrato
+#   4. limiteComCountsInventado — `counts` fora dos valores declarados
+openapi: 3.1.0
+info:
+  title: isca do lint de limite de chamada
+  version: '0'
+
+paths:
+  /isca/publica-sem-limite:
+    get:
+      operationId: publicaSemLimite
+      summary: rota pública nascida sem teto, que é o caso que o lint existe para pegar
+      security: []
+      responses:
+        '200':
+          description: ok
+
+  /isca/opcional-sem-limite:
+    get:
+      operationId: opcionalSemLimite
+      summary: autenticação opcional, que tem um caminho sem conta e também precisa de teto
+      security:
+        - bearerAuth: []
+        - {}
+      responses:
+        '200':
+          description: ok
+
+  /isca/palavra-inventada:
+    post:
+      operationId: limiteComPalavraInventada
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 10
+          window: 1m
+          # `endurecer` não está na tabela de `on_exceed` do contrato. Palavra
+          # fora do vocabulário não tem comportamento definido, e por isso
+          # reprova em vez de ser tratada como sinônimo de alguma outra.
+          on_exceed: endurecer
+      responses:
+        '200':
+          description: ok
+
+  /isca/counts-inventado:
+    post:
+      operationId: limiteComCountsInventado
+      security: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 3
+          window: 24h
+          counts: distinct_bichos
+          on_exceed: deny_429
+      responses:
+        '200':
+          description: ok
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

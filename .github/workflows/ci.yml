@@ -155,15 +155,113 @@ jobs:
         if: always()
         run: docker compose down -v
 
+  app:
+    name: app Flutter (analise e teste)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+
+      # Versao fixa de proposito. `stable` faz a esteira mudar de compilador
+      # num dia em que ninguem tocou no codigo, e a primeira suspeita passa a
+      # ser o commit errado.
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.4"
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+        working-directory: app
+
+      - run: flutter analyze
+        working-directory: app
+
+      # `flutter test` puro so enxerga test/a11y por causa da ponte
+      # app/test/a11y_suite_test.dart. Se a ponte sumir, o teste de guarda
+      # dentro dela reprova -- em vez de a suite desaparecer em silencio.
+      - run: flutter test
+        working-directory: app
+
+  tokens:
+    name: tokens
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.4"
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+        working-directory: app
+
+      # Uma fonte (design/tokens.json), um destino gerado, e um portao que
+      # reprova na divergencia -- mesma forma do portao de tipos do contrato.
+      # Sem isto, bichu_tokens.g.dart pode ser editado a mao e o token e o
+      # codigo divergem SEM QUE O DIFF MOSTRE, porque a proxima geracao desfaz
+      # a edicao em silencio.
+      - name: o Dart gerado bate com design/tokens.json
+        working-directory: app
+        run: |
+          dart run tool/gen_tokens.dart
+          if ! git diff --exit-code -- lib/theme/bichu_tokens.g.dart; then
+            echo "::error::lib/theme/bichu_tokens.g.dart divergiu de design/tokens.json. Rode 'dart run tool/gen_tokens.dart' de dentro de app/ e versione o resultado; se o valor gerado esta errado, o errado e o token"
+            exit 1
+          fi
+
+  contraste:
+    name: contraste
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.4"
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+        working-directory: app
+
+      # CAMINHO EXPLICITO, e nao `flutter test`, de proposito: este portao nao
+      # pode depender da descoberta automatica. A suite mora em test/a11y/ na
+      # raiz e chega aqui por link simbolico, e a descoberta do Flutter nao
+      # atravessa link simbolico -- um job que confiasse nela ficaria verde sem
+      # nunca ter olhado para acessibilidade.
+      #
+      # Dentro rodam as iscas: fixtures erradas de proposito que o verificador
+      # PRECISA reprovar. Isca que passa derruba o job com "o verificador parou
+      # de verificar", porque a partir dali todo o resto esta verde por nao
+      # estar olhando para nada (docs/06-design-system.md 18.2.1).
+      - name: suite de acessibilidade e iscas
+        working-directory: app
+        run: flutter test test/a11y
+
+      # O verificador do tema mede os mesmos pares por outro angulo: piso e
+      # isencao, em vez da razao publicada. Os dois existem e por ora
+      # concordam; quando divergirem, um dos dois esta errado e este job diz.
+      - name: verificador de contraste do tema
+        working-directory: app
+        run: flutter test test/tema
+
   portao:
     name: portao
     runs-on: ubuntu-latest
-    needs: [rapidos, codigo, contrato, integracao]
+    needs: [rapidos, codigo, contrato, integracao, app, tokens, contraste]
     if: always()
     steps:
       - name: consolidar
         run: |
-          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }}"
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.app.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }}"
           echo "estados: $estados"
           for e in $estados; do
             case "$e" in

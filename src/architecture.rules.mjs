@@ -21,11 +21,16 @@ export const MODULES = [
  * docs/03-arquitetura.md §6.
  */
 export const moduleBoundaries = {
-  from: 'src/modules/(?<mod>[^/]+)/',
-  forbidden: 'src/modules/(?!\\k<mod>)[^/]+/(?!ports/)',
+  /** Raiz dos módulos, relativa à raiz do projeto. */
+  root: 'src/modules',
+  /** A única camada de um módulo que outro módulo enxerga. */
+  publicLayer: 'ports',
   message:
     'Módulo só conversa com módulo por porta. Importe de modules/<outro>/ports/, ' +
     'ou declare a porta no módulo que precisa dela.',
+  undeclaredMessage:
+    'Módulo não declarado em MODULES. Acrescente-o à lista ou mova o arquivo: ' +
+    'a fronteira não sabe vigiar módulo que a arquitetura não reconhece.',
 };
 
 /**

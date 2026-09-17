@@ -11,25 +11,45 @@ info:
   version: 1.0.0-rc.1
   summary: Identidade digital do pet, tag QR e rede local de perdido e achado.
   description: |
-    Contrato unico entre o app Flutter, a rota publica HTML e o backend.
+    Contrato unico entre o app Flutter, o front web que serve as paginas
+    publicas (de outro time, desde o ADR-0017) e este backend.
+
+    **Este servico nao renderiza HTML.** Toda resposta e JSON ou
+    `application/problem+json`; as oito paginas publicas sairam daqui e sao
+    montadas pelo front web a partir destas mesmas operacoes. Nao ha um segundo
+    contrato para a web: o 410 com `next_action` chega la do mesmo jeito que
+    chega ao app, e as duas pontas decidem pelo `type`, nunca pelo texto.
 
     ## Regra de acesso
 
-    O app e navegavel deslogado; as **acoes** e que exigem conta. Cada operacao
-    declara `security` explicitamente:
+    O app e navegavel deslogado; as **acoes** e que exigem conta. **Todas as 79
+    operacoes declaram `security` explicitamente** — nenhuma herda o padrao da
+    raiz, que existe so como rede de falha fechada. Rota sem `security`
+    declarado nao sobe: a aplicacao derruba na carga do contrato.
 
     - `security: []` — publica, sem token.
     - `bearerAuth` — exige conta.
     - `bearerAuth` + `[]` — autenticacao **opcional**: a resposta muda se houver
       token (por exemplo, o dono da tag ve o modo dono).
-    - `tagCode` — a posse do codigo impresso na tag e a credencial. Nao exige
-      conta. E a excecao permanente: quem esta com a plaquinha na mao esta com
-      o animal.
+    - `x-credential: tag_code_in_path` — **a posse do codigo impresso na tag e
+      a credencial**, e ela viaja no caminho. Nao exige conta. E a excecao
+      permanente: quem esta com a plaquinha na mao esta com o animal.
+
+      Isso NAO e um `securityScheme`, e a ausencia e tecnica, nao descuido:
+      OpenAPI so admite credencial em cabecalho, consulta ou cookie, e um
+      `apiKey` com `in: path` e recusado pelo validador — era o que este
+      contrato declarava, e era um dos dois erros que reprovavam o lint. Em
+      termos de HTTP a operacao e **publica com autenticacao opcional**
+      (`bearerAuth` + `{}`), e o marcador `x-credential` e o que preserva, de
+      forma legivel por maquina, a informacao que o `security` nao consegue
+      carregar: existe uma credencial, ela e o codigo, e ela esta no caminho.
+      Sem o marcador, a revisao de seguranca leria "publica" e pararia ai.
     - `finderToken` — token opaco entregue a quem avisou o tutor sem ter conta,
       para voltar a mesma conversa. Escopo de uma conversa so.
 
-    **Regra que vale para toda resposta a chamador com `tagCode` ou
-    `finderToken`: nenhum UUID interno sai** (SEC-001). Nesses contextos os
+    **Regra que vale para toda resposta a quem chega pelo codigo da tag
+    (`x-credential: tag_code_in_path`) ou por `finderToken`: nenhum UUID interno
+    sai** (SEC-001). Nesses contextos os
     campos `id` sao omitidos, e o endereco e o token. UUIDv7 e ordenavel e
     carrega o instante de criacao em milissegundos: publicar dois deles entrega
     de graca a taxa de criacao de registros da plataforma inteira. As rotas do
@@ -71,10 +91,20 @@ info:
       mede o que interessa, que e a mesma pessoa insistindo no mesmo pet, e e
       imune ao CGNAT.
     - `limit` e `window`.
-    - `counts`: **o que** e contado. `requests` (padrao),
-      `distinct_identities`, `distinct_cases`, `distinct_emails`. Sem este
-      campo, `limit: 3` numa dimensao de conta se leria como tres mensagens
-      quando o que a politica quer dizer e tres **casos distintos**.
+    - `counts`: **o que** e contado **dentro do balde**. Sao quatro valores, e
+      nao ha um quinto: `requests` (padrao), `distinct_identities`,
+      `distinct_cases`, `distinct_emails`. Sem este campo, `limit: 3` numa
+      dimensao de conta se leria como tres mensagens quando o que a politica
+      quer dizer e tres **casos distintos**.
+
+      `counts` sempre nomeia um atributo **de quem chama ou do que a chamada
+      carrega**, nunca da chave do balde. Em `dimension: [report_target]`,
+      `counts: distinct_identities` conta **denunciantes distintos contra o
+      mesmo alvo** — o alvo e a chave, a identidade e o que se conta. Sinonimo
+      por contexto (`distinct_reporters` e o que estava escrito aqui) e o
+      caminho pelo qual um vocabulario fechado deixa de ser fechado: o lint
+      passa a precisar saber que duas palavras significam a mesma coisa, e a
+      terceira palavra entra sem ninguem notar.
     - `applies_to`: **quais** requisicoes entram na conta. Padrao, todas;
       `invalid_attempts` conta so as que falharam.
     - `on_exceed`: o que acontece ao estourar. **E este campo que separa
@@ -171,8 +201,115 @@ tags:
   - name: ops
     description: Saude, versao e metadados de identidade.
 
+# Padrao de falha fechada. **Toda** operacao declara `security` explicitamente
+# (o portao de contrato reprova a que nao declarar), entao este bloco nunca e
+# usado em operacao nenhuma hoje. Ele fica como rede: se o portao for contornado
+# e uma operacao nova subir sem declaracao, ela nasce exigindo token em vez de
+# nascer aberta, que e o que aconteceria se a raiz estivesse vazia.
 security:
   - bearerAuth: []
+
+# ==========================================================================
+# Vocabularios fechados, em forma legivel por maquina
+# ==========================================================================
+#
+# Existem porque um vocabulario que so vive em prosa (aqui, ou na 4.10 de
+# `docs/04-seguranca.md`, ou no criterio de uma historia) tem tantas versoes
+# quantos forem os lugares onde foi escrito, e elas divergem sem nenhum sinal.
+# Foi o que aconteceu: a historia falava em 8 valores de `on_exceed`, a 4.10 em
+# 9, e este contrato usa 11.
+#
+# A partir daqui o contrato e a fonte unica, e ele e verificavel: o lint le
+# estas listas e reprova qualquer valor fora delas, em vez de carregar uma copia
+# propria que envelhece. Documento que declare valores diferentes destes esta
+# errado por definicao, e a correcao e no documento.
+
+x-rate-limit-vocabulary:
+  counts:
+    - requests
+    - distinct_identities
+    - distinct_cases
+    - distinct_emails
+  applies_to:
+    - all
+    - invalid_attempts
+  when:
+    - pet_lost
+    - pet_not_lost
+  on_exceed:
+    # A semantica de cada um esta na tabela de `info.description`. Aqui fica a
+    # linha que o lint precisa e a que separa os pares que ja foram confundidos.
+    serve_cache: responde do cache, sem consultar o banco e sem nova linha de trilha
+    challenge: aceita, com desafio reCAPTCHA v3 na proxima carga. So onde ha pessoa diante da tela
+    log_and_alert: aceita e notifica normal, e alerta o plantao
+    group_notification: aceita e AGRUPA a notificacao ao aviso ou a conversa existente. Sem revisao humana
+    notify_once_and_review: aceita, notifica UMA vez em resumo, e abre revisao humana
+    notify_owner: aceita e avisa o tutor, com a opcao de revogar o codigo. Sem revisao
+    hold_for_review: aceita, NAO notifica ninguem, e abre revisao humana
+    accept_and_deduplicate: aceita, a tela confirma normalmente, e a revisao e anexada ao item de fila ja aberto
+    accept_and_defer_dispatch: aceita e cria o recurso, RETEM o disparo, a tela diz isso, e abre revisao
+    raise_queue_priority: aceita, eleva a prioridade na fila de revisao, e NUNCA age sobre o alvo
+    deny_429: recusa com `Retry-After`. Unico valor que nao aceita
+
+x-problem-types:
+  # `type` e sempre `https://{dominio}/problems/<slug>` e o cliente decide por
+  # ele, nunca pelo texto. Esta lista e fechada: tipo novo entra aqui antes de
+  # existir no codigo, e o tipo do backend e gerado daqui.
+  #
+  # `status` e o unico status HTTP com que o tipo pode sair. Tres dos 401 do
+  # produto significam coisas diferentes e a tela reage diferente a cada um, por
+  # isso sao tres tipos e nao um: `invalid-credentials` mantem a pessoa na tela
+  # de entrada, `token-expired` renova em silencio ou manda entrar de novo, e
+  # `unauthenticated` manda entrar. `forbidden` NAO serve para nenhum dos tres:
+  # ele e 403, e usa-lo em 401 faz o app tratar "sua senha nao confere" com o
+  # mesmo caminho de "este recurso nao e seu".
+  - { slug: validation-failed,             status: 400 }
+  - { slug: unauthenticated,               status: 401, note: "sem token, token ausente ou assinatura invalida" }
+  - { slug: invalid-credentials,           status: 401, note: "e-mail ou senha nao conferem. Corpo IDENTICO para conta inexistente e senha errada" }
+  - { slug: token-expired,                 status: 401, note: "token de acesso, de renovacao ou de uso unico expirado, ja usado ou revogado" }
+  - { slug: reauthentication-required,     status: 401, note: "a sessao continua valida; falta a janela de reautenticacao" }
+  - { slug: forbidden,                     status: 403, note: "SOMENTE 403. Recurso de outro tutor responde 404, nao 403" }
+  - { slug: not-found,                     status: 404 }
+  - { slug: email-already-registered,      status: 409 }
+  - { slug: slug-taken,                    status: 409 }
+  - { slug: pet-already-lost,              status: 409 }
+  - { slug: pet-limit-reached,             status: 409 }
+  - { slug: contact-channel-unverified,    status: 409 }
+  - { slug: pet-photo-missing,             status: 409 }
+  - { slug: transfer-not-for-this-account, status: 409 }
+  - { slug: conversation-closed,           status: 410 }
+  - { slug: tag-revoked,                   status: 410, note: "tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)" }
+  - { slug: tag-code-not-found,            status: 404 }
+  - { slug: tag-code-malformed,            status: 400 }
+  - { slug: weak-password,                 status: 422 }
+  - { slug: rate-limited,                  status: 429 }
+  - { slug: internal,                      status: 500 }
+
+x-edge-limits:
+  # A protecao GROSSA que a borda aplica (ADR-0016, item 4). Ela esta declarada
+  # aqui, e nao so no `infra/caddy/Caddyfile`, porque numero que vive apenas num
+  # arquivo de configuracao e numero sem dono: ninguem o revisa como contrato e
+  # ninguem percebe quando ele muda.
+  #
+  # A esteira confere estes valores contra o Caddyfile e **reprova quando
+  # diferirem**. Se o teste nao achar o bloco em um dos dois arquivos, ele falha
+  # com o motivo — verificacao que nao consegue verificar precisa reprovar.
+  #
+  # O que NAO esta aqui, e a ausencia e deliberada: **teto de requisicoes por
+  # IP na borda**. O Caddy, sem plugin, nao tem limitador de taxa, e plugin
+  # significa imagem propria na borda — que e onde a substituibilidade
+  # conquistada pelo ADR-0001 comeca a ser gasta. Os tetos por IP existem, e
+  # estao em `x-rate-limit`, aplicados no servico, que e onde eles podem ser
+  # aplicados com a dimensao certa. Declarar aqui um teto que a borda nao impoe
+  # seria pior que nao ter: alguem leria a declaracao e pararia de procurar.
+  max_request_body_bytes: 12582912   # 12 MiB. O maior upload aceito e de 10 MiB
+                                     # (`UploadIntentInput.byte_size`); a folga
+                                     # cobre envelope e cabecalho. O upload de
+                                     # bytes nao passa por aqui: ele vai direto
+                                     # para o armazenamento, assinado.
+  max_request_header_bytes: 16384    # 16 KiB
+  read_timeout_seconds: 30
+  write_timeout_seconds: 30
 
 paths:
 
@@ -227,7 +364,33 @@ paths:
               schema: { $ref: '#/components/schemas/SessionResponse' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '409':
-          description: Ja existe conta com este e-mail.
+          description: |
+            Ja existe conta com este e-mail.
+
+            **Esta resposta revela que o endereco tem conta, e isso e
+            deliberado** (SEC-003). O login e a recuperacao de senha respondem
+            de forma opaca; o cadastro, nao. A decisao foi tomada e esta
+            registrada: a experiencia esta fechada em cima do 409 ("Este e-mail
+            ja tem conta no Bichu. Entrar com este e-mail"), e leva-lo a 202
+            obrigaria a um e-mail do tipo "alguem tentou criar uma conta com o
+            seu endereco", que e mais superficie e mais confusao para quem nem
+            pediu nada.
+
+            O que torna a decisao sustentavel sao tres coisas que o
+            `x-rate-limit` acima declara, e **sem as tres o 409 e um oraculo de
+            enumeracao**: o desafio reCAPTCHA v3 e verificado **antes** da
+            consulta de unicidade, de modo que o 409 so existe para quem passou;
+            ha teto de 30 por /24 por hora, contra pool de proxies; e e-mails
+            distintos por origem em 24 h sao contados, com alerta acima de 50 e
+            bloqueio da origem acima de 200.
+
+            **Gatilho para inverter:** duas disparadas do detector nos primeiros
+            30 dias e o cadastro passa a 202 sempre, com a experiencia mudando
+            junto.
+
+            `PATCH /v1/me` **nao aceita** `email`, e `POST /v1/me/email-change`
+            responde 202 sempre: e a outra metade do SEC-003, e ela ja esta
+            fechada.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -280,6 +443,13 @@ paths:
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                naoConfere:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/invalid-credentials
+                    title: E-mail ou senha nao conferem
+                    status: 401
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/refresh:
@@ -336,6 +506,8 @@ paths:
   /auth/logout:
     post:
       operationId: logout
+      security:
+        - bearerAuth: []
       tags: [auth]
       x-effects: []
       x-rate-limit:
@@ -499,6 +671,8 @@ paths:
   /auth/reauth:
     post:
       operationId: reauthenticate
+      security:
+        - bearerAuth: []
       tags: [auth]
       x-effects: [verifies_secret]
       summary: Reautentica com a senha e abre a janela de operacao destrutiva
@@ -563,6 +737,8 @@ paths:
   /auth/password:
     put:
       operationId: changePassword
+      security:
+        - bearerAuth: []
       tags: [auth]
       x-effects: [verifies_secret, notifies]
       x-rate-limit:
@@ -599,6 +775,8 @@ paths:
   /me:
     get:
       operationId: getMe
+      security:
+        - bearerAuth: []
       tags: [me]
       x-effects: []
       summary: Perfil do usuario autenticado
@@ -615,6 +793,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     patch:
       operationId: updateMe
+      security:
+        - bearerAuth: []
       tags: [me]
       x-effects: []
       x-rate-limit:
@@ -660,6 +840,10 @@ paths:
   /me/email-change:
     post:
       operationId: requestEmailChange
+      security:
+        - bearerAuth: []
+          reauth: []
+      x-reauth-scope: email_change
       tags: [me]
       x-effects: [notifies]
       summary: Pede a troca do e-mail da conta
@@ -711,6 +895,8 @@ paths:
   /me/devices:
     get:
       operationId: listDevices
+      security:
+        - bearerAuth: []
       tags: [me]
       x-effects: []
       summary: Aparelhos registrados para push
@@ -729,6 +915,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       operationId: registerDevice
+      security:
+        - bearerAuth: []
       tags: [me]
       x-effects: []
       x-rate-limit:
@@ -759,6 +947,8 @@ paths:
   /me/devices/{deviceId}:
     delete:
       operationId: deleteDevice
+      security:
+        - bearerAuth: []
       tags: [me]
       x-effects: []
       x-rate-limit:
@@ -777,6 +967,8 @@ paths:
   /me/location:
     get:
       operationId: getMyLocation
+      security:
+        - bearerAuth: []
       tags: [me]
       x-effects: []
       summary: Ultima localizacao de referencia conhecida
@@ -791,6 +983,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     put:
       operationId: putMyLocation
+      security:
+        - bearerAuth: []
       tags: [me]
       x-effects: []
       x-rate-limit:
@@ -819,6 +1013,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     delete:
       operationId: deleteMyLocation
+      security:
+        - bearerAuth: []
       tags: [me]
       x-effects: []
       x-rate-limit:
@@ -839,6 +1035,8 @@ paths:
   /pets:
     get:
       operationId: listMyPets
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: []
       summary: Meus pets
@@ -857,6 +1055,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     post:
       operationId: createPet
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: []
       x-rate-limit:
@@ -899,6 +1099,8 @@ paths:
       - $ref: '#/components/parameters/PetId'
     get:
       operationId: getPet
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: []
       summary: Detalhe do pet (visao do dono)
@@ -913,6 +1115,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       operationId: updatePet
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: []
       x-rate-limit:
@@ -937,6 +1141,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     delete:
       operationId: deletePet
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: [irreversible_write]
       x-rate-limit:
@@ -959,6 +1165,8 @@ paths:
       - $ref: '#/components/parameters/PetId'
     post:
       operationId: confirmPetPhoto
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: [irreversible_write]
       x-rate-limit:
@@ -997,11 +1205,30 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
 
-  /pets/{petId}/photo-upload-intent:
-    parameters:
-      - $ref: '#/components/parameters/PetId'
+  # ----------------------------------------------------------------------
+  # Midia: o unico prefixo que existe para ser extraido (ADR-0016)
+  # ----------------------------------------------------------------------
+  #
+  # As tres operacoes abaixo sao midia PURA: emitir credencial de upload
+  # assinada, e nada alem disso. Elas moram sob `/v1/media/` para que a borda
+  # possa rotea-las por prefixo no dia em que o modulo for extraido — trocar um
+  # upstream numa linha do Caddyfile, sem versao nova do app.
+  #
+  # O que NAO esta aqui, de proposito: `POST /v1/pets/{petId}/photos` e
+  # `DELETE /v1/pets/{petId}/photos/{photoId}`. Elas sao a lista de fotos de um
+  # pet, que e trabalho do dominio `pets`, e nao saem com o servico de midia.
+  # Quem ler "media e a primeira fronteira extraivel" e imaginar que todo o
+  # assunto foto sai daqui vai se surpreender, entao esta escrito.
+  #
+  # O id do alvo esta no CORPO e nao no caminho. Nao e estilo: e o que permite
+  # o prefixo unico. A autorizacao (esta conta e dona deste pet?) acontece no
+  # servico, exatamente como aconteceria com o id no caminho.
+
+  /media/pet-photo-intents:
     post:
       operationId: createPetPhotoUploadIntent
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: [irreversible_write]
       summary: Pede as credenciais de upload direto para o armazenamento
@@ -1022,7 +1249,13 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UploadIntentInput' }
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/UploadIntentInput'
+                - type: object
+                  required: [pet_id]
+                  properties:
+                    pet_id: { type: string, format: uuid }
       responses:
         '201':
           description: Credenciais de upload, validas por 10 minutos.
@@ -1038,6 +1271,8 @@ paths:
       - $ref: '#/components/parameters/PhotoId'
     delete:
       operationId: deletePetPhoto
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: [irreversible_write]
       x-rate-limit:
@@ -1063,6 +1298,8 @@ paths:
       - $ref: '#/components/parameters/PetId'
     put:
       operationId: updatePetPublicProfile
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: []
       x-rate-limit:
@@ -1174,6 +1411,8 @@ paths:
         schema: { type: string, format: uuid }
     post:
       operationId: cancelPetTransfer
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: [notifies]
       summary: Cancela a transferencia antes de ela se consumar
@@ -1202,6 +1441,8 @@ paths:
   /pets/transfers/accept:
     post:
       operationId: acceptPetTransfer
+      security:
+        - bearerAuth: []
       tags: [pets]
       x-effects: [verifies_secret, notifies]
       x-rate-limit:
@@ -1261,6 +1502,8 @@ paths:
       - $ref: '#/components/parameters/PetId'
     get:
       operationId: listPetTags
+      security:
+        - bearerAuth: []
       tags: [tags]
       x-effects: []
       summary: Tags do pet
@@ -1283,6 +1526,8 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: issuePetTag
+      security:
+        - bearerAuth: []
       tags: [tags]
       x-effects: [reveals_credential, irreversible_write]
       summary: Emite um codigo de tag novo
@@ -1314,6 +1559,8 @@ paths:
       - $ref: '#/components/parameters/TagId'
     get:
       operationId: getPetTagQrImage
+      security:
+        - bearerAuth: []
       tags: [tags]
       x-effects: [reveals_credential]
       x-rate-limit:
@@ -1515,8 +1762,9 @@ paths:
         por fila do service worker quando a rede cai, e o tutor nao pode
         receber o mesmo aviso tres vezes.
       security:
-        - tagCode: []
         - bearerAuth: []
+        - {}
+      x-credential: tag_code_in_path
       x-rate-limit:
         - dimension: [code, finder_identity]
           limit: 1
@@ -1542,7 +1790,6 @@ paths:
           when: pet_lost
           on_exceed: notify_once_and_review
           note: "PET PERDIDO: onze pessoas escaneando a coleira de um cao solto num bairro movimentado e a rede funcionando, nao abuso. Reter ai faz o tutor receber um resumo em vez de saber que ha gente em cima do animal dele, no momento de maior chance de reencontro, e o comportamento e indistinguivel de uma protecao funcionando"
-          note: "o tutor recebe UM alerta em vez de dez, e o codigo entra em revisao. Muita gente avisando sobre o mesmo pet costuma significar que o animal apareceu"
         - dimension: [ip, code]
           limit: 5
           window: 1h
@@ -1591,6 +1838,8 @@ paths:
   /found-reports:
     post:
       operationId: createStrayFoundReport
+      security:
+        - bearerAuth: []
       tags: [found]
       x-effects: [notifies, human_work, expensive_query]
       x-rate-limit:
@@ -1624,6 +1873,8 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
     get:
       operationId: listMyFoundReports
+      security:
+        - bearerAuth: []
       tags: [found]
       x-effects: []
       summary: Achados que eu registrei
@@ -1690,9 +1941,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
-  /found-reports/{foundReportId}/photo-upload-intent:
-    parameters:
-      - $ref: '#/components/parameters/FoundReportId'
+  /media/found-report-photo-intents:
     post:
       operationId: createFoundReportPhotoUploadIntent
       tags: [found]
@@ -1713,7 +1962,13 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/UploadIntentInput' }
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/UploadIntentInput'
+                - type: object
+                  required: [found_report_id]
+                  properties:
+                    found_report_id: { type: string, format: uuid }
       responses:
         '201':
           description: Credenciais de upload.
@@ -1767,7 +2022,7 @@ paths:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
 
-  /finder/found-report/photo-upload-intent:
+  /media/finder-photo-intents:
     post:
       operationId: createFinderPhotoUploadIntent
       tags: [found]
@@ -1804,7 +2059,7 @@ paths:
           description: Credenciais de upload.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/UploadIntent' }
+              schema: { $ref: '#/components/schemas/FinderUploadIntent' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
 
@@ -1829,7 +2084,7 @@ paths:
           description: Conversa.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Conversation' }
+              schema: { $ref: '#/components/schemas/FinderConversation' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '410':
           description: |
@@ -1873,7 +2128,7 @@ paths:
           description: Mensagem enviada.
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Message' }
+              schema: { $ref: '#/components/schemas/FinderMessage' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '410':
           description: Conversa encerrada ou bloqueada.
@@ -1911,10 +2166,11 @@ paths:
           on_exceed: accept_and_deduplicate
           note: "mesma razao do lado autenticado: a tela confirma normal, e acima do teto a denuncia e anexada ao item de fila ja aberto"
         - dimension: [report_target]
-          counts: distinct_reporters
+          counts: distinct_identities
           limit: 3
           window: 24h
           on_exceed: raise_queue_priority
+          note: "mesma dimensao do lado autenticado: conta denunciantes distintos contra o mesmo alvo, que e a forma da denuncia em laco. Eleva prioridade na fila e NUNCA age sobre o alvo"
       summary: Denuncia abuso
       security:
         - finderToken: []
@@ -1943,6 +2199,8 @@ paths:
       - $ref: '#/components/parameters/PetId'
     get:
       operationId: previewLostCaseReach
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: [expensive_query]
       x-rate-limit:
@@ -2011,6 +2269,8 @@ paths:
       - $ref: '#/components/parameters/PetId'
     post:
       operationId: openLostCase
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: [notifies, expensive_query, human_work]
       x-rate-limit:
@@ -2058,6 +2318,8 @@ paths:
       - $ref: '#/components/parameters/CaseId'
     get:
       operationId: getLostCase
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: []
       summary: Detalhe do caso
@@ -2071,6 +2333,8 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       operationId: updateLostCase
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: []
       x-rate-limit:
@@ -2097,6 +2361,8 @@ paths:
       - $ref: '#/components/parameters/CaseId'
     post:
       operationId: resendLostCaseAlert
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: [notifies, expensive_query]
       x-rate-limit:
@@ -2121,6 +2387,8 @@ paths:
       - $ref: '#/components/parameters/CaseId'
     get:
       operationId: listLostCaseCandidates
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: []
       x-rate-limit:
@@ -2161,6 +2429,8 @@ paths:
       - $ref: '#/components/parameters/CandidateId'
     post:
       operationId: decideLostCaseCandidate
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: [notifies]
       x-rate-limit:
@@ -2192,6 +2462,8 @@ paths:
       - $ref: '#/components/parameters/CaseId'
     post:
       operationId: closeLostCase
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: [notifies]
       x-rate-limit:
@@ -2224,6 +2496,8 @@ paths:
       - $ref: '#/components/parameters/CaseId'
     post:
       operationId: reopenLostCase
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: [notifies]
       x-rate-limit:
@@ -2251,6 +2525,8 @@ paths:
       - $ref: '#/components/parameters/CaseId'
     post:
       operationId: snoozeLostCaseReminder
+      security:
+        - bearerAuth: []
       tags: [lost]
       x-effects: []
       x-rate-limit:
@@ -2271,6 +2547,8 @@ paths:
   /conversations:
     get:
       operationId: listConversations
+      security:
+        - bearerAuth: []
       tags: [conversations]
       x-effects: []
       summary: Minhas conversas
@@ -2398,7 +2676,7 @@ paths:
           on_exceed: accept_and_deduplicate
           note: "a denuncia carrega a conversa inteira, entao a quarta nao acrescenta prova. Mas RECUSAR e inaceitavel: quem toca em Denunciar a cada mensagem esta com medo, e responder com texto sobre limite de chamadas a quem pede ajuda e o pior erro possivel desta tela"
         - dimension: [report_target]
-          counts: distinct_reporters
+          counts: distinct_identities
           limit: 3
           window: 24h
           on_exceed: raise_queue_priority
@@ -2546,7 +2824,7 @@ paths:
         data. Nunca contato, endereco, ponto exato nem UUID interno.
       security:
         - bearerAuth: []
-        - []
+        - {}
       x-rate-limit:
         - dimension: [ip]
           limit: 120
@@ -2560,6 +2838,182 @@ paths:
               schema: { $ref: '#/components/schemas/PublicLostCase' }
         '410':
           description: Caso encerrado.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  # ----------------------------------------------------------------------
+  # As quatro que o front web de outro time passou a precisar (ADR-0017)
+  # ----------------------------------------------------------------------
+  #
+  # As oito paginas publicas em HTML sairam deste servico. A maior parte delas
+  # sempre foi uma casca sobre uma operacao que ja existia (a pagina da tag sobre
+  # `GET /v1/tags/{code}`, a do caso sobre `GET /v1/public/lost-cases/...`), mas
+  # quatro nao tinham equivalente em JSON. Sao estas.
+  #
+  # Todas respondem `application/problem+json` no caminho de erro, e o front web
+  # decide pelo `type` e pelo `next_action`, exatamente como o app. Nao ha um
+  # segundo contrato para a web.
+
+  /public/lost-cases/{shareToken}/poster:
+    parameters:
+      - $ref: '#/components/parameters/ShareToken'
+    get:
+      operationId: getLostCasePoster
+      tags: [public]
+      x-effects: []
+      summary: Os dados do cartaz do pet perdido
+      description: |
+        O cartaz **nao e a pagina do caso**. Ele e feito para ser impresso em
+        uma folha e colado em poste, e lido de longe por quem esta passando:
+        traz o que cabe nesse formato e traz o link curto que vira o QR do papel.
+
+        Existe separado por isso, e nao por organizacao: a pagina do caso pode
+        ganhar campo sem que o cartaz caiba em uma folha, e o dia em que os dois
+        forem o mesmo recurso, um dos dois vai piorar.
+
+        Nunca traz contato, endereco, ponto exato nem UUID interno — a mesma
+        regra da projecao publica.
+      security:
+        - bearerAuth: []
+        - {}
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 60
+          window: 1h
+          on_exceed: serve_cache
+      responses:
+        '200':
+          description: Dados do cartaz.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LostCasePoster' }
+        '410':
+          description: Caso encerrado.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /public/password-reset/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: checkPasswordResetToken
+      tags: [auth]
+      x-effects: []
+      summary: Diz se o link de redefinicao ainda vale
+      description: |
+        Existe para a tela saber **antes** de a pessoa digitar a senha nova.
+        Sem esta operacao, quem clica num link vencido escolhe uma senha,
+        confirma, e so entao descobre que precisa pedir outro link — que e o
+        pior momento possivel para dar essa noticia, e o momento em que a pessoa
+        desiste.
+
+        Nao revela nada sobre a conta: 200 com `{ "valid": true }` ou 410. Nao
+        diz de quem e o link, nem se existe conta com aquele e-mail.
+      security: []
+      x-no-challenge: true
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 30
+          window: 1h
+          on_exceed: log_and_alert
+          note: "chamada ao abrir a pagina, sem ninguem para responder a um desafio; teto existe para o laco, e o alerta e o que importa"
+      responses:
+        '200':
+          description: O link vale.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid]
+                properties:
+                  valid: { type: boolean, enum: [true] }
+        '410': { $ref: '#/components/responses/TokenExpired' }
+
+  /public/transfers/{cancelToken}:
+    parameters:
+      - name: cancelToken
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getTransferByCancelToken
+      tags: [pets]
+      x-effects: []
+      summary: A transferencia pendente, pelo token que chegou por e-mail
+      description: |
+        O tutor atual tem 24 h para cancelar depois do aceite, e o caminho e um
+        link no e-mail. Ele pode estar em outro aparelho, deslogado, com o app
+        desinstalado — e este e o momento em que **nao** se pede que ele entre
+        na conta: a operacao existe para desfazer a coisa mais destrutiva do
+        produto, e um obstaculo aqui e um pet transferido por engano.
+
+        `POST /v1/pets/transfers/{transferId}/cancel` continua existindo e
+        continua exigindo conta: e o caminho de dentro do app.
+
+        Devolve o minimo para a tela dizer o que sera desfeito: o nome do pet e
+        quando a transferencia se consuma. Nunca o e-mail do destinatario nem
+        UUID interno.
+      security: []
+      x-no-challenge: true
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 30
+          window: 1h
+          on_exceed: log_and_alert
+      responses:
+        '200':
+          description: A transferencia pendente.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TransferCancelView' }
+        '410':
+          description: |
+            Ja consumada, ja cancelada, ou o token nao vale mais. O corpo e o
+            mesmo nos tres casos: dizer qual deles ocorreu entregaria a quem
+            tem um token velho o estado atual de uma transferencia alheia.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /public/transfers/{cancelToken}/cancel:
+    parameters:
+      - name: cancelToken
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: cancelTransferByToken
+      tags: [pets]
+      x-effects: [irreversible_write, notifies]
+      summary: Cancela a transferencia pelo token do e-mail, sem conta
+      description: |
+        Desfaz a transferencia dentro da janela de 24 h. O token e de uso unico
+        e e consumido aqui.
+
+        **Nao exige reautenticacao**, e e deliberado: as quatro camadas que
+        protegem a transferencia (reautenticacao com senha, vinculo com o e-mail
+        verificado do destinatario, token de 256 bits so por e-mail, e esta
+        janela de 24 h) protegem o ato de TRANSFERIR. Cancelar e a operacao
+        segura: ela devolve ao estado anterior. Exigir credencial para desfazer
+        e o desenho que faz a protecao trabalhar contra quem ela protege.
+      security: []
+      x-no-challenge: true
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 10
+          window: 1h
+          on_exceed: log_and_alert
+      responses:
+        '204': { description: Transferencia cancelada. O pet continua com o tutor atual. }
+        '410':
+          description: Ja consumada, ja cancelada, ou o token nao vale mais.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -2594,504 +3048,6 @@ paths:
   # ----------------------------------------------------------------------
   # Rotas HTML servidas pelo backend (fora do prefixo /v1)
   # ----------------------------------------------------------------------
-
-  /t/{code}:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: dominio-a-definir.com.br } }
-    parameters:
-      - $ref: '#/components/parameters/TagCode'
-    get:
-      operationId: webTagPage
-      tags: [web]
-      x-effects: [irreversible_write]
-      summary: "Pagina publica da tag: achei este pet"
-      description: |
-        HTML renderizado pelo backend, com o conteudo critico embutido para
-        carregar no primeiro pacote util. Sem dependencia de JavaScript para o
-        botao funcionar.
-
-        Cabecalhos obrigatorios: `X-Robots-Tag: noindex, nofollow`,
-        `Referrer-Policy: no-referrer`, `Cache-Control: no-store`. O codigo e
-        uma credencial ao portador: ele nao vai para indice de busca, nao vaza
-        pelo referenciador e o caminho completo nao entra no log de acesso em
-        claro.
-      security: []
-      x-rate-limit:
-        - dimension: [ip, code]
-          limit: 30
-          window: 1h
-          on_exceed: serve_cache
-          note: "par: imune ao CGNAT"
-        - dimension: [ip]
-          limit: 300
-          window: 1h
-          on_exceed: challenge
-          note: "nunca 429 para codigo valido"
-        - dimension: [ip_24]
-          limit: 2000
-          window: 1h
-          on_exceed: log_and_alert
-        - dimension: [code]
-          limit: 100
-          window: 24h
-          on_exceed: notify_owner
-        - dimension: [finder_identity]
-          limit: 5
-          window: 10m
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-          note: "adivinhacao de codigo: unica recusa do fluxo. Retry-After 600, e a tela oferece o achado avulso"
-        - dimension: [ip]
-          limit: 20
-          window: 1h
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-      responses:
-        '200':
-          description: Pagina do pet em modo achado.
-          content:
-            text/html: { schema: { type: string } }
-        '404':
-          description: Codigo inexistente (tela com campo para digitar de novo).
-          content:
-            text/html: { schema: { type: string } }
-        '410':
-          description: Tag desativada (tela com o caminho do achado avulso).
-          content:
-            text/html: { schema: { type: string } }
-
-  /t/{code}/avisar:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: dominio-a-definir.com.br } }
-    parameters:
-      - $ref: '#/components/parameters/TagCode'
-    post:
-      operationId: webNotifyOwner
-      tags: [web]
-      x-effects: [notifies, irreversible_write]
-      summary: Envio do aviso pelo formulario HTML, sem JavaScript
-      x-rate-limit:
-        - dimension: [code, finder_identity]
-          limit: 1
-          window: 6h
-          on_exceed: group_notification
-        - dimension: [code]
-          counts: distinct_identities
-          limit: 3
-          window: 1h
-          on_exceed: group_notification
-        - dimension: [code]
-          counts: distinct_identities
-          limit: 10
-          window: 24h
-          when: pet_not_lost
-          on_exceed: notify_once_and_review
-          note: "dez pessoas escaneando a plaquinha de um pet que ninguem deu por falta e a plaquinha circulando sem o animal"
-        - dimension: [code]
-          counts: distinct_identities
-          limit: 30
-          window: 24h
-          when: pet_lost
-          on_exceed: notify_once_and_review
-          note: "PET PERDIDO: onze pessoas escaneando a coleira de um cao solto num bairro movimentado e a rede funcionando, nao abuso. Reter ai faz o tutor receber um resumo em vez de saber que ha gente em cima do animal dele, no momento de maior chance de reencontro, e o comportamento e indistinguivel de uma protecao funcionando"
-        - dimension: [ip, code]
-          limit: 5
-          window: 1h
-          on_exceed: challenge
-        - dimension: [ip]
-          limit: 40
-          window: 1h
-          on_exceed: challenge
-        - dimension: [ip_24]
-          limit: 200
-          window: 1h
-          on_exceed: log_and_alert
-          note: "identico a POST /v1/tags/{code}/found-reports: e o mesmo aviso, e esta e a rota que o achador sem app usa de verdade"
-      description: |
-        `application/x-www-form-urlencoded` vindo de um `<form method="post">`.
-        O campo oculto `nonce`, emitido na pagina, serve de protecao contra
-        falsificacao de requisicao e de chave de idempotencia.
-        Responde 303 para `/c/{finderToken}`.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              type: object
-              required: [nonce]
-              properties:
-                nonce: { type: string }
-      responses:
-        '303':
-          description: Aviso enviado; redireciona para a conversa do achador.
-          headers:
-            Location: { schema: { type: string, format: uri-reference } }
-
-  /transferencia/{cancelToken}:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
-    parameters:
-      - name: cancelToken
-        in: path
-        required: true
-        schema: { type: string, minLength: 20, maxLength: 256 }
-    get:
-      operationId: webTransferCancelPage
-      tags: [web]
-      x-effects: [verifies_secret]
-      x-rate-limit:
-        - dimension: [ip]
-          limit: 30
-          window: 1h
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-      summary: Pagina de cancelamento da transferencia, sem login
-      description: |
-        **Precisa funcionar sem conta, e o motivo e o cenario de uso.** O e-mail
-        que avisa "voce transferiu o Thor" e lido justamente por quem talvez
-        tenha **perdido o acesso a conta** — se cancelar exigisse login, a defesa
-        nao existiria na unica situacao em que ela importa.
-
-        O link vai nos dois e-mails da janela de 24 h (aviso de inicio e aviso de
-        aceite), com token assinado de 256 bits, uso unico, valido ate
-        `effective_at`. Confirma por `POST`, nunca por `GET`, pela mesma razao do
-        SEC-005: varredor de link consumiria o cancelamento antes da pessoa.
-      security: []
-      responses:
-        '200':
-          description: Pagina com o botao de cancelar.
-          content:
-            text/html: { schema: { type: string } }
-        '410':
-          description: Ja consumada, ja cancelada, ou token expirado.
-          content:
-            text/html: { schema: { type: string } }
-    post:
-      operationId: webCancelTransfer
-      tags: [web]
-      x-effects: [verifies_secret, notifies]
-      x-rate-limit:
-        - dimension: [ip]
-          limit: 30
-          window: 1h
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-      summary: Cancela a transferencia pelo link do e-mail
-      description: |
-        Cancela e avisa os dois lados. **Nao exige senha**: cancelar e a direcao
-        segura, e quem chegou aqui tem a caixa de entrada do tutor, que e a mesma
-        prova que a recuperacao de senha aceita.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              type: object
-              required: [token]
-              properties:
-                token: { type: string }
-      responses:
-        '303':
-          description: Cancelada. Nenhuma tag foi revogada.
-          headers:
-            Location: { schema: { type: string, format: uri-reference } }
-        '410':
-          description: Ja consumada ou token invalido.
-          content:
-            text/html: { schema: { type: string } }
-
-  /c/{finderToken}:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: dominio-a-definir.com.br } }
-    parameters:
-      - name: finderToken
-        in: path
-        required: true
-        schema: { type: string, minLength: 20, maxLength: 128 }
-    get:
-      operationId: webFinderConversation
-      tags: [web]
-      x-effects: [verifies_secret]
-      summary: Conversa do achador sem conta
-      security: []
-      x-rate-limit:
-        - dimension: [finder_token]
-          limit: 120
-          window: 1h
-          on_exceed: serve_cache
-        - dimension: [ip]
-          limit: 30
-          window: 1h
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-      responses:
-        '200':
-          description: Conversa.
-          content:
-            text/html: { schema: { type: string } }
-        '410':
-          description: Caso encerrado. A tela diz o desfecho a quem ajudou.
-          content:
-            text/html: { schema: { type: string } }
-
-  /cartaz/{shareToken}:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: dominio-a-definir.com.br } }
-    parameters:
-      - name: shareToken
-        in: path
-        required: true
-        schema: { type: string, minLength: 20, maxLength: 128 }
-    get:
-      operationId: webPoster
-      tags: [web]
-      x-effects: []
-      summary: Cartaz do pet perdido, pronto para imprimir e compartilhar
-      x-rate-limit:
-        - dimension: [share_token]
-          limit: 300
-          window: 1h
-          on_exceed: serve_cache
-          note: "mesmo limite de /p/{shareToken}: as duas circulam pelo mesmo grupo de WhatsApp"
-      description: |
-        HTML com folha de estilo de impressao, sem PDF e sem navegador sem
-        cabeca no servidor. Mostra foto, nome, sinais, bairro e o endereco
-        curto do caso. **Nunca** telefone, e-mail, endereco nem ponto exato.
-      security: []
-      responses:
-        '200':
-          description: Cartaz.
-          content:
-            text/html: { schema: { type: string } }
-        '410':
-          description: Caso encerrado.
-          content:
-            text/html: { schema: { type: string } }
-
-  /p/{shareToken}:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
-    parameters:
-      - $ref: '#/components/parameters/ShareToken'
-    get:
-      operationId: webLostCasePage
-      tags: [web]
-      x-effects: []
-      summary: Pagina publica do caso, para compartilhar
-      description: |
-        E o destino do link que o tutor manda no WhatsApp e do `share_url`.
-        Mostra foto, nome, sinais, **bairro** e a data; nunca contato, endereco
-        nem ponto exato. Carrega as marcacoes de previsualizacao (Open Graph),
-        porque o compartilhamento em mensageiro e o canal real deste link.
-        Indexavel: diferente da rota da tag, este link existe para circular.
-      security: []
-      x-rate-limit:
-        - dimension: [share_token]
-          limit: 300
-          window: 1h
-          on_exceed: serve_cache
-      responses:
-        '200':
-          description: Pagina do caso.
-          content:
-            text/html: { schema: { type: string } }
-        '410':
-          description: Caso encerrado. Mostra o desfecho, sem os sinais do pet.
-          content:
-            text/html: { schema: { type: string } }
-
-  /@{slug}:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
-    parameters:
-      - name: slug
-        in: path
-        required: true
-        schema: { $ref: '#/components/schemas/Slug' }
-    get:
-      operationId: webPetProfilePage
-      tags: [web]
-      x-effects: []
-      summary: Perfil publico do pet por endereco
-      description: |
-        A outra porta da mesma pagina (ADR-0005). Responde 404 quando o tutor
-        nao ligou o perfil publico, e **301** para o endereco atual quando o
-        slug foi trocado. Indexavel, ao contrario de `/t/{code}`: o perfil
-        publico e opt-in e existe para ser encontrado.
-      security: []
-      x-rate-limit:
-        - dimension: [ip]
-          limit: 60
-          window: 1h
-          on_exceed: challenge
-      responses:
-        '200':
-          description: Perfil publico.
-          content:
-            text/html: { schema: { type: string } }
-        '301': { description: Slug trocado. `Location` aponta para o atual. }
-        '404':
-          description: Nao existe, ou o perfil publico esta desligado.
-          content:
-            text/html: { schema: { type: string } }
-
-  /verificar-email:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
-    get:
-      operationId: webEmailVerificationPage
-      tags: [web]
-      x-effects: [verifies_secret]
-      x-rate-limit:
-        - dimension: [ip]
-          limit: 30
-          window: 1h
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-      summary: Pagina que confirma o e-mail, aberta pelo link da mensagem
-      description: |
-        **Existe porque o SEC-005 proibe confirmar por `GET` na URL do e-mail.**
-        Varredor de link de antivirus corporativo e previsualizacao de
-        mensageiro consomem o token antes da pessoa, e ela recebe "expirado" sem
-        entender por que. Entao o link abre uma pagina com um **botao**, e a
-        confirmacao acontece no `POST`.
-
-        Cabecalhos obrigatorios: `Referrer-Policy: no-referrer`,
-        `Cache-Control: no-store`, e **nenhum recurso de terceiro**, para que o
-        token nao vaze pelo referenciador nem por requisicao externa.
-      security: []
-      parameters:
-        - name: token
-          in: query
-          required: true
-          schema: { type: string, minLength: 20, maxLength: 256 }
-      responses:
-        '200':
-          description: Pagina com o botao de confirmar.
-          content:
-            text/html: { schema: { type: string } }
-        '410':
-          description: Token expirado, ja usado ou invalido. Oferece reenviar.
-          content:
-            text/html: { schema: { type: string } }
-    post:
-      operationId: webConfirmEmailVerification
-      tags: [web]
-      x-effects: [verifies_secret]
-      x-rate-limit:
-        - dimension: [ip]
-          limit: 30
-          window: 1h
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-      summary: Confirma o e-mail pelo formulario
-      description: Formulario sem JavaScript. Responde 303 para o app ou para a confirmacao.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              type: object
-              required: [token]
-              properties:
-                token: { type: string }
-      responses:
-        '303':
-          description: Confirmado.
-          headers:
-            Location: { schema: { type: string, format: uri-reference } }
-        '410':
-          description: Token expirado ou ja usado.
-          content:
-            text/html: { schema: { type: string } }
-
-  /redefinir-senha:
-    servers:
-      - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
-    get:
-      operationId: webPasswordResetPage
-      tags: [web]
-      x-effects: [verifies_secret]
-      x-rate-limit:
-        - dimension: [ip]
-          limit: 30
-          window: 1h
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-      summary: Pagina de redefinicao de senha, aberta pelo link da mensagem
-      description: |
-        Mesma razao da pagina de verificacao (SEC-005): o link do e-mail nunca
-        consome o token por `GET`. Aqui ele abre o formulario de nova senha, e o
-        token viaja em campo oculto.
-
-        `Referrer-Policy: no-referrer`, `Cache-Control: no-store`, sem recurso de
-        terceiro. A pagina mostra a politica de senha antes de a pessoa digitar,
-        e nao depois de recusar.
-      security: []
-      parameters:
-        - name: token
-          in: query
-          required: true
-          schema: { type: string, minLength: 20, maxLength: 256 }
-      responses:
-        '200':
-          description: Formulario de nova senha.
-          content:
-            text/html: { schema: { type: string } }
-        '410':
-          description: Token expirado, ja usado ou invalido. Oferece pedir outro.
-          content:
-            text/html: { schema: { type: string } }
-    post:
-      operationId: webConfirmPasswordReset
-      tags: [web]
-      x-effects: [verifies_secret, notifies, irreversible_write]
-      x-rate-limit:
-        - dimension: [ip]
-          limit: 30
-          window: 1h
-          on_exceed: deny_429
-          applies_to: invalid_attempts
-      summary: Grava a nova senha
-      description: |
-        Invalida **todas** as sessoes em menos de um segundo (SEC-006) e dispara
-        o e-mail de aviso para o endereco da conta.
-      security: []
-      requestBody:
-        required: true
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              type: object
-              required: [token, new_password]
-              properties:
-                token: { type: string }
-                new_password: { type: string }
-      responses:
-        '303':
-          description: Senha alterada.
-          headers:
-            Location: { schema: { type: string, format: uri-reference } }
-        '410':
-          description: Token expirado ou ja usado.
-          content:
-            text/html: { schema: { type: string } }
-        '422':
-          description: Senha fora da politica. Reapresenta o formulario.
-          content:
-            text/html: { schema: { type: string } }
 
   /.well-known/assetlinks.json:
     servers:
@@ -3388,13 +3344,6 @@ components:
         Access token JWT assinado em RS256, 15 minutos de validade. `sub` e o
         UUID interno do usuario. A chave publica vem de
         `/.well-known/jwks.json`, selecionada pelo `kid` do cabecalho.
-    tagCode:
-      type: apiKey
-      in: path
-      name: code
-      description: |
-        A posse do codigo impresso na tag e a credencial. Nao exige conta e nao
-        concede nada alem do pet daquele codigo.
     reauth:
       type: apiKey
       in: header
@@ -3568,10 +3517,34 @@ components:
                 detail: Esta acao nao pode ser desfeita, entao pedimos a senha de novo.
                 correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
     Unauthorized:
-      description: Sem token valido.
+      description: |
+        Sem token valido. Dois tipos possiveis, e o app reage diferente a cada
+        um: `unauthenticated` (nao ha token, ou a assinatura nao confere) manda
+        entrar; `token-expired` renova em silencio e so manda entrar se a
+        renovacao falhar.
+
+        **Nenhum 401 sai com `forbidden`.** `forbidden` e 403 e significa outra
+        coisa: autenticado, sem permissao sobre aquele recurso. Um app que trata
+        "sua senha nao confere", "seu token venceu" e "este recurso nao e seu"
+        pelo mesmo caminho ou desloga quem nao precisava, ou deixa de deslogar
+        quem precisava.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            semToken:
+              value:
+                type: https://dominio-a-definir.com.br/problems/unauthenticated
+                title: Entre para continuar
+                status: 401
+                next_action: sign_in
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+            tokenVencido:
+              value:
+                type: https://dominio-a-definir.com.br/problems/token-expired
+                title: Entre de novo
+                status: 401
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
     Forbidden:
       description: |
         Autenticado, mas sem permissao sobre este recurso. Para recurso de
@@ -3866,7 +3839,49 @@ components:
         breed_code:
           type: string
           maxLength: 40
-          description: Codigo vindo de `reference-data`, nunca texto livre.
+          description: |
+            Codigo de `GET /v1/public/reference-data`, **sempre**. E a unica
+            coisa que o cruzamento de perdido e achado le, e por isso ele
+            precisa ser um valor comparavel: "vira-lata", "vira lata", "SRD" e
+            "sem raca definida" sao quatro textos para um animal so, e texto
+            livre como chave de cruzamento significa que o cruzamento nao
+            acontece exatamente no caso mais comum do Brasil.
+
+            Quando a raca nao esta na lista, o codigo e `outro_dog`,
+            `outro_cat` ou `outro_other`, e o nome vai em `breed_free_text`.
+        breed_free_text:
+          type: string
+          maxLength: 40
+          nullable: true
+          description: |
+            A raca como a pessoa escreveu, **aceita e guardada** (BICHUS-90,
+            criterio 3). Aparece na ficha, no cartaz e no perfil publico.
+
+            **Nao entra no cruzamento e nao e filtro em lugar nenhum.** Ela
+            descreve; quem compara e `breed_code`. Sao dois campos porque sao
+            duas funcoes, e junta-las obriga a escolher entre uma lista que
+            mente ("Akita" virando "SRD") e um cruzamento que nao cruza.
+
+            **So e aceita com `breed_code` em `outro_dog`/`outro_cat`/
+            `outro_other`.** Enviada junto de uma raca da lista, a resposta e
+            `validation-failed`: "Shih Tzu" no codigo e "poodle" no texto sao
+            duas respostas para uma pergunta, e a divergencia nao tem como ser
+            resolvida depois.
+        ref_data_version:
+          type: string
+          nullable: true
+          description: |
+            A `version` da lista que o cliente tinha em maos quando a pessoa
+            escolheu (o campo `version` de `reference-data`). Gravada junto do
+            registro (BICHUS-90, criterio 5).
+
+            `ref_data_versions` guarda uma versao corrente **global**, que
+            responde "qual e a lista de hoje" e nao responde "de qual lista
+            este pet foi escolhido" — e e a segunda pergunta que importa
+            quando um codigo sai da lista ou muda de rotulo. O cliente pode
+            estar com uma copia antiga em cache, entao quem sabe a versao usada
+            e ele; sem o campo, o servidor grava a corrente no momento da
+            escrita, que e uma aproximacao e nao o fato.
         size: { $ref: '#/components/schemas/PetSize' }
         primary_color_code: { type: string, maxLength: 30 }
         secondary_color_code: { type: string, maxLength: 30 }
@@ -3922,6 +3937,14 @@ components:
           required: [id, status, created_at]
           properties:
             id: { type: string, format: uuid }
+            breed_label:
+              type: string
+              nullable: true
+              description: |
+                O rotulo pronto para a tela, resolvido pelo servidor: o `label`
+                de `ref_breeds` quando `breed_code` esta na lista, e
+                `breed_free_text` quando o codigo e `outro_*`. O cliente exibe
+                este campo e nao precisa saber qual dos dois caminhos gerou.
             status:
               type: string
               enum: [active, lost, deceased, archived]
@@ -4120,7 +4143,13 @@ components:
       type: object
       properties:
         message: { type: string, maxLength: 1000 }
-        photo_upload_id: { type: string, format: uuid }
+        photo_upload_ref:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{22}$'
+          description: |
+            O `upload_ref` devolvido por
+            `POST /v1/finder/found-report/photo-upload-intent`. Opaco de
+            proposito: este corpo vem de quem nao tem conta (SEC-001).
         location:
           type: object
           properties:
@@ -4153,7 +4182,21 @@ components:
         - required: [area]
       properties:
         species: { $ref: '#/components/schemas/Species' }
-        breed_code: { type: string, maxLength: 40 }
+        breed_code:
+          type: string
+          maxLength: 40
+          description: |
+            Mesma regra do pet: codigo de `reference-data`, e e ele que o
+            cruzamento le. Quem acha um animal na rua raramente sabe a raca, e
+            e por isso que este campo nao e obrigatorio aqui.
+        breed_free_text:
+          type: string
+          maxLength: 40
+          nullable: true
+          description: |
+            A raca como o achador escreveu. Descreve, nao cruza. So com
+            `breed_code` em `outro_*`, pela mesma razao de `PetInput`.
+        ref_data_version: { type: string, nullable: true }
         size: { $ref: '#/components/schemas/PetSize' }
         primary_color_code: { type: string, maxLength: 30 }
         sex: { $ref: '#/components/schemas/Sex' }
@@ -4202,6 +4245,107 @@ components:
         message: { type: string, nullable: true }
         pet_display_name: { type: string }
         conversation_url: { type: string, format: uri }
+
+    # ----------------------------------------------------------------------
+    # As tres vistas do achador sem conta (SEC-001)
+    # ----------------------------------------------------------------------
+    #
+    # A prosa deste contrato diz, desde o inicio, que nenhum UUID interno sai
+    # para quem chega pelo codigo da tag ou por `finderToken`. As tres de
+    # `finderToken` devolviam `Conversation`, `Message` e `UploadIntent`, que
+    # sao os schemas do lado autenticado e declaram `id`, `case_id` e
+    # `upload_id`. Uma descricao dizendo "omitido nas respostas ao achador" nao
+    # e contrato: nenhum gerador de tipo, nenhum mock e nenhum teste de contrato
+    # le prosa, e o cliente gerado nasce com o campo. Schema separado e a unica
+    # forma de a regra existir para a maquina.
+    #
+    # O que se perde publicando um UUIDv7: ele e ordenavel e carrega o instante
+    # de criacao em milissegundos. Dois deles entregam a taxa de criacao de
+    # registros da plataforma inteira, de graca, a qualquer pessoa com um
+    # celular e uma plaquinha na mao.
+
+    FinderConversation:
+      type: object
+      description: |
+        A conversa como o achador sem conta a ve. Sem `id` e sem `case_id`: o
+        endereco e o token, e a rota nao tem id no caminho.
+      required: [status, participants, messages]
+      properties:
+        pet_display_name: { type: string }
+        status: { type: string, enum: [open, blocked, closed] }
+        participants:
+          type: array
+          items:
+            type: object
+            required: [role, display_name]
+            properties:
+              role: { type: string, enum: [tutor, finder, system] }
+              display_name:
+                type: string
+                description: |
+                  Primeiro nome ou apelido. **Nunca** sobrenome completo,
+                  telefone, e-mail nem foto de perfil.
+        messages:
+          type: array
+          items: { $ref: '#/components/schemas/FinderMessage' }
+        next_cursor: { type: string, nullable: true }
+
+    FinderMessage:
+      type: object
+      description: |
+        Mensagem sem `id`. O achador nao precisa dele: ele nao edita, nao apaga
+        e nao responde a uma mensagem especifica. A ordem e `created_at` e a
+        paginacao e `next_cursor`.
+      required: [sender_role, body, created_at]
+      properties:
+        sender_role: { type: string, enum: [tutor, finder, system] }
+        body: { type: string }
+        redactions:
+          type: array
+          description: |
+            O que foi retirado do texto antes de entregar, para que a interface
+            explique em vez de o remetente achar que foi censurado sem motivo.
+            Telefone e e-mail trocados em claro sao a porta do golpe.
+          items:
+            type: object
+            properties:
+              kind: { type: string, enum: [phone, email, address, external_link] }
+              hint: { type: string }
+        photo_url: { type: string, format: uri, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    FinderUploadIntent:
+      type: object
+      description: |
+        Credenciais de upload para quem nao tem conta. O identificador do
+        upload existe, porque o achador precisa devolve-lo em
+        `PATCH /v1/finder/found-report`, mas ele e **opaco**: 128 bits
+        aleatorios em base64url, sem ordem e sem instante de criacao dentro.
+      required: [upload_ref, method, url, expires_at]
+      properties:
+        upload_ref:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{22}$'
+          description: |
+            Referencia opaca do upload. **Nao e UUID e nao substitui um**: e
+            uma etiqueta sem informacao, que o servidor resolve para o upload
+            real. Trocar um caractere leva a `validation-failed`; nao ha o que
+            enumerar.
+        method: { type: string, enum: [POST, PUT], default: POST }
+        url: { type: string, format: uri }
+        fields:
+          type: object
+          additionalProperties: { type: string }
+          description: Campos do formulario assinado. Presente quando `method` e POST.
+        headers:
+          type: object
+          additionalProperties: { type: string }
+          description: |
+            Cabecalhos assinados que o cliente precisa enviar sem alterar
+            (inclusive `Content-Type` e `Content-Length`). Presente quando
+            `method` e PUT.
+        expires_at: { type: string, format: date-time }
+        max_bytes: { type: integer }
 
     FoundReportPage:
       type: object
@@ -4411,9 +4555,11 @@ components:
       type: object
       required: [status, participants, messages]
       description: |
-        `id` e `case_id` sao devolvidos **apenas ao chamador autenticado**. Para
-        quem chega por `finderToken` eles sao omitidos, porque a rota do achador
-        nao precisa de id e UUID interno nao sai para quem nao tem conta.
+        Vista do chamador **autenticado**. O achador sem conta recebe
+        `FinderConversation`, que e outro schema e nao tem `id` nem `case_id`
+        (SEC-001). A omissao e por schema, nao por comportamento em tempo de
+        execucao: campo que so some quando o codigo lembra de tira-lo volta na
+        primeira refatoracao.
       properties:
         id: { type: string, format: uuid }
         case_id: { type: string, format: uuid, nullable: true }
@@ -4452,7 +4598,9 @@ components:
         id:
           type: string
           format: uuid
-          description: Omitido nas respostas ao achador por token (SEC-001).
+          description: |
+            Existe apenas nesta vista, a do chamador autenticado. A do achador
+            e `FinderMessage`, sem `id` (SEC-001).
         sender_role: { type: string, enum: [tutor, finder, system] }
         body: { type: string }
         redactions:
@@ -4492,6 +4640,69 @@ components:
           description: Bairro e cidade. Este e o nivel maximo de precisao publica.
         photo_url: { type: string, format: uri, nullable: true }
         share_url: { type: string, format: uri }
+
+    LostCasePoster:
+      type: object
+      description: |
+        O cartaz. Mesma regra de privacidade da projecao publica (SEC-002): sem
+        `pet_id`, sem `case_id`, sem coordenada, sem dado do tutor e sem
+        endereco. O contato acontece pelo canal mediado, e o papel so carrega o
+        endereco curto que leva ate ele.
+      required: [pet_display_name, species, size, area_label, lost_since, short_url]
+      properties:
+        pet_display_name: { type: string }
+        species: { $ref: '#/components/schemas/Species' }
+        breed_label: { type: string, nullable: true }
+        size: { $ref: '#/components/schemas/PetSize' }
+        primary_color: { type: string, nullable: true }
+        distinctive_marks: { type: string, nullable: true }
+        lost_since: { type: string, format: date-time }
+        area_label:
+          type: string
+          description: Bairro e cidade. Nivel maximo de precisao publica.
+        photo_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            Derivada em resolucao de **impressao**, maior que a da listagem. Um
+            cartaz e visto a dois metros de distancia; a miniatura da lista
+            impressa vira uma mancha, e o cartaz deixa de servir para a unica
+            coisa que ele faz.
+        reward_note:
+          type: string
+          nullable: true
+          maxLength: 120
+          description: |
+            Texto livre curto do tutor, se houver. Passa pela mesma redacao de
+            contato das mensagens: telefone ou e-mail escritos aqui sao
+            retirados, porque o cartaz e publico e um numero em poste e a porta
+            do golpe do falso achador.
+        short_url:
+          type: string
+          format: uri
+          description: |
+            O endereco curto que vira o QR do papel. E por ele que quem viu o
+            animal chega ao canal mediado, sem telefone e sem endereco no
+            cartaz.
+
+    TransferCancelView:
+      type: object
+      description: |
+        O minimo para a tela dizer o que sera desfeito. Sem `pet_id`, sem
+        `transfer_id` e **sem o e-mail do destinatario**: quem tem o link e o
+        tutor atual, que ja sabe para quem transferiu, e imprimir o endereco de
+        outra pessoa numa pagina publica nao acrescenta nada a decisao dele.
+      required: [pet_display_name, effective_at]
+      properties:
+        pet_display_name: { type: string }
+        effective_at:
+          type: string
+          format: date-time
+          description: |
+            Quando a transferencia se consuma, se ninguem cancelar. E o unico
+            numero que a tela precisa: ate aqui da para desfazer.
+        requested_at: { type: string, format: date-time }
 
     PublicLostCase:
       allOf:

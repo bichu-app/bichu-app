@@ -2,32 +2,17 @@
  * Resposta de erro no formato Problem Details (RFC 9457).
  *
  * Regra de contrato: **o cliente decide por `type`, nunca pelo texto de `title`
- * ou `detail`.** Por isso `type` é uma união fechada e não uma string livre:
- * inventar um tipo novo no meio do código não compila, e todo tipo novo passa
- * pela especificação primeiro.
+ * ou `detail`.** Por isso `type` é uma união fechada e não uma string livre.
+ *
+ * A união **não é escrita aqui**. Ela é gerada de `x-problem-types` de
+ * `api/openapi.yaml` (`src/tools/gerar-tipos-de-problema.mjs`) e chega junto do
+ * status de cada tipo. Escrever a lista à mão ao lado do contrato era duas
+ * fontes para a mesma coisa, e foi assim que `forbidden` acabou saindo com 401.
  */
 import type { AbsoluteUrl } from '../types/brands.js';
 
-export type ProblemType =
-  | 'validation-failed'
-  | 'email-already-registered'
-  | 'weak-password'
-  | 'token-expired'
-  | 'reauthentication-required'
-  | 'contact-channel-unverified'
-  | 'pet-photo-missing'
-  | 'pet-already-lost'
-  | 'pet-limit-reached'
-  | 'tag-revoked'
-  | 'tag-code-malformed'
-  | 'tag-code-not-found'
-  | 'slug-taken'
-  | 'conversation-closed'
-  | 'transfer-not-for-this-account'
-  | 'rate-limited'
-  | 'forbidden'
-  | 'not-found'
-  | 'internal';
+export { STATUS_DO_PROBLEMA } from '../types/generated/problem-types.js';
+export type { ProblemType } from '../types/generated/problem-types.js';
 
 /** Caminho alternativo, quando existe um. Nunca deixa ninguém sem saída. */
 export type NextAction =

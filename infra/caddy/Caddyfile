@@ -1,10 +1,41 @@
 # Borda local. Duas origens distintas desde o dia um (ADR-0007).
-# Em producao o mesmo arquivo serve bichu.app e img.bichu.app trocando as
-# variaveis; o Caddy emite o certificado sozinho.
-
+# Em producao o mesmo arquivo serve os dominios trocando as variaveis; o Caddy
+# emite o certificado sozinho.
+#
+# ATENCAO, quem for mexer: este arquivo deixou de ser so encanamento. Desde o
+# ADR-0016 ele e a CAMADA DE GATEWAY do produto, e tem duas regras que valem
+# sobre qualquer alteracao:
+#
+#   1. A BORDA NAO REESCREVE CAMINHO. O caminho que o app envia e o que o
+#      servico recebe e o que `api/openapi.yaml` declara. Use `handle`, nunca
+#      `handle_path` (que remove o prefixo), e nao use `rewrite` no trafego de
+#      API. Com reescrita, o contrato deixa de descrever o que o servico ve, e
+#      reproduzir uma chamada sem a borda passa a exigir saber de cor o que ela
+#      tira.
+#
+#   2. A BORDA NAO APLICA `x-rate-limit`. Os tetos por operacao sao do contrato
+#      e da aplicacao (ADR-0016, item 4). Aqui so existe protecao grossa, e os
+#      numeros dela estao declarados em `x-edge-limits` no proprio contrato: a
+#      esteira confere os dois e reprova quando diferirem. Numero novo aqui sem
+#      numero correspondente la e divergencia silenciosa.
+#
+#      O motivo concreto de nao aplicar teto de operacao aqui: a unica acao que
+#      o Caddy saberia tomar e recusar com 429, e 429 no aviso do achador viola
+#      o invariante nº 1 do contrato ("nenhum aviso ao tutor e descartado por
+#      limite"). A borda derrubaria justamente o toque que o produto existe para
+#      receber.
 {
 	admin off
 	auto_https disable_redirects
+
+	# Espelha `x-edge-limits` do contrato. A esteira confere os dois.
+	servers {
+		max_header_size 16KiB
+		timeouts {
+			read_body 30s
+			write 30s
+		}
+	}
 }
 
 # --------------------------------------------------------------------------
@@ -24,6 +55,15 @@
 	# application/json, e quem busca e o sistema operacional, nao o navegador.
 	# Um redirecionamento aqui invalida o deep link nas duas plataformas sem
 	# produzir erro em lugar nenhum. Ver docs/07-devops.md 7 e 16.12.
+	#
+	# EM PRODUCAO ESTES DOIS BLOCOS NAO SAO NOSSOS (ADR-0017). Eles precisam
+	# ser servidos no host do deep link, que e o host da plaquinha
+	# (TAG_BASE_URL = WEB_BASE_URL), e esse host passou a ser do time web. O
+	# conteudo continua nosso (identificador do app e impressao digital da
+	# chave do APK); a hospedagem e deles, com os mesmos tres requisitos:
+	# HTTPS, 200 direto com application/json, e zero redirecionamento.
+	# Aqui os blocos ficam para o ambiente LOCAL, onde tudo mora no mesmo
+	# host e o deep link precisa continuar exercitado.
 	handle /.well-known/assetlinks.json {
 		header Content-Type application/json
 		header Cache-Control "public, max-age=3600"
@@ -39,18 +79,72 @@
 		file_server
 	}
 
-	# A rota publica do QR. O codigo viaja na URL porque isso e inevitavel num
-	# QR, entao o caminho completo nao entra no log em claro (ADR-0004).
-	handle /t/* {
-		header {
-			X-Robots-Tag "noindex, nofollow"
-			Cache-Control no-store
+	# ------------------------------------------------------------------
+	# A tabela de roteamento do gateway (ADR-0016)
+	# ------------------------------------------------------------------
+
+	# Protecao GROSSA, e so ela. Espelha `x-edge-limits` do contrato.
+	#
+	# NAO HA TETO DE REQUISICOES POR IP AQUI, e a ausencia e decisao: o Caddy
+	# sem plugin nao tem limitador de taxa, e plugin significa imagem propria
+	# na borda. Os tetos por IP existem e estao em `x-rate-limit`, aplicados
+	# no servico, que e o unico lugar que sabe o que e um `code` e o que e
+	# uma `finder_identity`. Quem procurar protecao de taxa aqui nao vai
+	# achar, e e por isso que esta escrito.
+	#
+	# 12 MiB: o maior upload aceito pelo contrato e 10 MiB, e o resto e
+	# folga de envelope. Os bytes da imagem nao passam por aqui de qualquer
+	# forma — vao direto para o armazenamento, com URL assinada.
+	request_body {
+		max_size 12MiB
+	}
+
+	# Cabecalho que a borda preencheria e que um cliente NAO pode forjar.
+	# Hoje a lista tem um item so; ela existe desde hoje para que o dia em
+	# que alguem introduzir um `X-Bichu-User` nao seja o dia em que alguem
+	# descobre que da para envia-lo de fora.
+	request_header -X-Internal-*
+
+	# `media` ja tem bloco proprio, apontando para o MESMO upstream. Ele nao
+	# faz nada hoje, e e esse o ponto: extrair o modulo `media` passa a ser
+	# trocar `api:3000` por `media:3000` NESTA LINHA, sem versao nova do app
+	# e sem mudanca no contrato. Costura escrita no dia da extracao e costura
+	# inventada sob pressao, com o app ja publicado em loja.
+	# Swagger UI (ADR-0018). Fechada por credencial NA BORDA, e ausente em
+	# producao. Este bloco e a metade "autenticacao"; a metade "so fora de
+	# producao" e a variavel: em producao o `docs_upstream` aponta para
+	# lugar nenhum e o caminho responde 404, sem 401 e sem 403 -- o caminho
+	# nao existe la.
+	#
+	# Que ela esta fechada NAO e garantido por este arquivo: e verificado de
+	# fora, por job agendado, que reprova quando nao consegue verificar.
+	# Configuracao certa no dia da implantacao e a garantia que se perde em
+	# silencio na primeira mudanca de ambiente.
+	@docs path /v1/docs /v1/docs/* /v1/openapi.yaml
+	handle @docs {
+		basic_auth {
+			{$DOCS_USER} {$DOCS_PASSWORD_HASH}
 		}
 		reverse_proxy api:3000
 	}
 
-	handle {
+	handle /v1/media/* {
 		reverse_proxy api:3000
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+
+	# Fechado de proposito (ADR-0017). As oito rotas publicas em HTML sairam
+	# deste servico e sao servidas pelo front web de outro time, no host de
+	# WEB_BASE_URL. O catch-all que existia aqui entregava QUALQUER caminho ao
+	# back-end, o que fazia uma rota removida do contrato continuar
+	# respondendo enquanto o codigo dela existisse, sem ninguem perceber.
+	# Com a borda fechada, o que nao e /v1 nao chega, e a remocao e
+	# verificavel de fora.
+	handle {
+		respond "nao encontrado" 404
 	}
 }
 

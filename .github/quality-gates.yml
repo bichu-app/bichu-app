@@ -9,16 +9,6 @@
 # data. Para remover a dispensa: apague a entrada. Nao mexa no workflow.
 
 dispensas:
-  - portao: tokens
-    motivo: "design/tokens.json e tools/ ainda nao existem: a frente de app nao criou o esqueleto"
-    responsavel: squad
-    vence_em: 2026-09-22
-
-  - portao: contraste
-    motivo: "test/a11y/ e as iscas do design system ainda nao existem"
-    responsavel: squad
-    vence_em: 2026-09-22
-
   - portao: sonarcloud
     motivo: "SONAR_TOKEN nao provisionado; SonarCloud e pago em repositorio privado e a contratacao nao foi decidida"
     responsavel: cliente

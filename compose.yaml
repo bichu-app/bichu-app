@@ -138,9 +138,15 @@ services:
       db: {condition: service_healthy}
       objeto: {condition: service_healthy}
     healthcheck:
-      # /ready toca banco e armazenamento de verdade. Sonda que nao sonda nada
-      # sempre responde que esta tudo bem.
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      # A sonda e /v1/health, sob o prefixo de versao: /ready nao existe no
+      # contrato e nunca existiu, entao a sonda antiga reprovava com 404 e o
+      # servico nunca ficava saudavel.
+      #
+      # /v1/health toca o banco de verdade -- sonda que nao sonda nada sempre
+      # responde que esta tudo bem. Ainda NAO toca o armazenamento de objeto:
+      # `verificacoes` em src/bin/api.ts tem so `database`. Enquanto for assim,
+      # MinIO fora do ar deixa esta sonda verde.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 5s
       retries: 12

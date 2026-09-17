@@ -1,0 +1,53 @@
+{
+  "$description": "ISCA. Copia reduzida de design/contrast-pairs.json com pares rebaixados de proposito. O paragrafo 18.2.2, item 4, exige que o verificador seja apontado para uma pasta-isca e que a reprovacao seja EXIGIDA, nomeando qual. Quem le isto por engano: este arquivo esta errado a proposito e nao deve ser corrigido nem copiado. Os numeros foram remedidos em 17/09/2026 sobre a paleta Framboesa; a isca continua sendo a mesma.",
+  "$o_que_cada_isca_exercita": {
+    "ISCA-piso": "Par abaixo do piso declarado. Pega a regra 'par que reprova nao entra no sistema'.",
+    "ISCA-tabela-nao-regerada": "Par cuja razao calculada nao bate com a publicada. Pega o caso real: alguem mexeu num token e a tabela do paragrafo 7 ficou para tras. Este e o mais importante dos tres, porque o par continua passando no piso e nenhuma ferramenta de contraste reclamaria dele. Foi exatamente esta a fresta que a troca de identidade de 17/09/2026 teria aberto se a tabela nao fosse regerada inteira.",
+    "ISCA-isencao-sem-motivo": "Isencao sem motivo nomeado. Pega a isencao implicita, que e como uma excecao temporaria vira permanente.",
+    "CONTROLE-passa": "Par integro. Se ele reprovar junto com os outros tres, o verificador nao esta medindo: esta reprovando tudo, e um portao assim e removido do CI na primeira semana."
+  },
+  "pares": [
+    {
+      "id": "CONTROLE-passa",
+      "tema": "claro",
+      "uso": "Controle: texto de corpo / superficie, integro",
+      "frente": "{cor.claro.text-primary}",
+      "fundo": "{cor.claro.surface}",
+      "piso": 7.0,
+      "razao_esperada": 16.47,
+      "veredito": "passa"
+    },
+    {
+      "id": "ISCA-piso",
+      "tema": "claro",
+      "uso": "Texto apagado cobrado no piso de tela critica",
+      "frente": "{cor.claro.text-muted}",
+      "fundo": "{cor.claro.surface}",
+      "piso": 7.0,
+      "razao_esperada": 5.59,
+      "veredito": "passa",
+      "nota": "5.59 e o valor verdadeiro deste par na paleta Framboesa; o erro esta em cobra-lo com piso 7.0, que e o que aconteceria se text-muted fosse usado numa tela critica. O verificador precisa reprovar por piso, nao por divergencia de tabela: por isso a razao publicada aqui PRECISA ser a medida."
+    },
+    {
+      "id": "ISCA-tabela-nao-regerada",
+      "tema": "claro",
+      "uso": "CTA com a razao publicada desatualizada",
+      "frente": "{cor.claro.on-action-fill}",
+      "fundo": "{cor.claro.action-fill}",
+      "piso": 7.0,
+      "razao_esperada": 8.1,
+      "veredito": "passa",
+      "nota": "O par real da 9.35:1 (neutro escuro sobre a Manteiga) e passaria no piso com folga. A razao publicada aqui e 8.10, que seria o que a tabela diria se a Manteiga tivesse mudado de tom e ninguem tivesse regerado o paragrafo 7."
+    },
+    {
+      "id": "ISCA-isencao-sem-motivo",
+      "tema": "escuro",
+      "uso": "Anel de foco sobre o preenchimento Manteiga, isento sem justificativa",
+      "frente": "{cor.escuro.focus-ring}",
+      "fundo": "{cor.escuro.action-fill}",
+      "piso": 3.0,
+      "razao_esperada": 1.15,
+      "veredito": "isento"
+    }
+  ]
+}
