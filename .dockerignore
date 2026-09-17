@@ -1,0 +1,44 @@
+# O contexto de build carrega SO o que entra na imagem. `app/` (Flutter) e
+# `node_modules/` sozinhos passam de 1 GB, e contexto grande nao apenas demora:
+# qualquer alteracao neles invalida o cache de camada sem motivo.
+
+# Dependencia e artefato sao reconstruidos DENTRO da imagem. Copiar o
+# node_modules do laptop levaria binario compilado para a arquitetura errada.
+node_modules
+dist
+build
+
+# Historico e ferramenta de repositorio
+.git
+.gitignore
+.githooks
+.github
+
+# Documento e processo. Vao para Confluence e para o Jira, nunca para a imagem.
+docs
+adr
+design
+.jarvis
+*.md
+!README.md
+
+# Aplicativo Flutter: outro artefato, outra esteira.
+app
+
+# Testes de acessibilidade rodam no navegador, fora desta imagem.
+test
+
+# SEGREDO. `.env` e credencial e NAO entra em imagem, em nenhum alvo: camada
+# de imagem e publica para quem tem a imagem, inclusive depois de removida em
+# camada seguinte. O compose injeta por `env_file` em tempo de execucao.
+.env
+.env.*
+!.env.example
+infra/maps-keys.txt
+
+# Ruido local
+.DS_Store
+**/.DS_Store
+backup
+coverage
+*.log

@@ -120,40 +120,135 @@ jobs:
           npx --yes oasdiff changelog /tmp/base.yaml api/openapi.yaml | tee -a "$GITHUB_STEP_SUMMARY"
 
   integracao:
-    name: compose, migracao do zero e integracao
+    name: compose, migracao do zero e pilha de pe
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: [codigo, contrato]
     steps:
       - uses: actions/checkout@v4
 
-      - name: compose e valido
+      - name: ambiente de teste
         run: |
           cp .env.example .env
           # Valores de ambiente de teste, descartaveis e sem valor fora daqui.
-          sed -i 's/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=ci-descartavel/' .env
+          senha=ci-descartavel
+          sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$senha/" .env
+          # DATABASE_URL CARREGA A SENHA. Trocar so POSTGRES_PASSWORD deixava a
+          # url com senha vazia, e a api subia e falhava na primeira consulta
+          # com "password authentication failed" -- erro de credencial num job
+          # que ninguem associa a credencial.
+          sed -i "s#^DATABASE_URL=.*#DATABASE_URL=postgres://bichu:$senha@db:5432/bichu#" .env
           sed -i 's/^OBJECT_STORAGE_ACCESS_KEY_ID=.*/OBJECT_STORAGE_ACCESS_KEY_ID=ci-descartavel/' .env
           sed -i 's/^OBJECT_STORAGE_SECRET_ACCESS_KEY=.*/OBJECT_STORAGE_SECRET_ACCESS_KEY=ci-descartavel-segredo/' .env
+          # Chaves geradas NO JOB e jogadas fora com o runner: chave de
+          # assinatura de verdade nunca entra em repositorio nem em log.
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ativa.pem 2>/dev/null
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/rotacao.pem 2>/dev/null
+          python3 - <<'FIM'
+          import base64, pathlib, re
+          env = pathlib.Path('.env')
+          texto = env.read_text()
+          def trocar(chave, valor):
+              global texto
+              texto = re.sub(rf'^{chave}=.*$', f'{chave}={valor}', texto, flags=re.M)
+          trocar('JWT_ACTIVE_PRIVATE_KEY', base64.b64encode(pathlib.Path('/tmp/ativa.pem').read_bytes()).decode())
+          trocar('JWT_NEXT_PRIVATE_KEY', base64.b64encode(pathlib.Path('/tmp/rotacao.pem').read_bytes()).decode())
+          trocar('IP_HMAC_KEY', base64.b64encode(b'ci-descartavel-de-32-bytes-no-min').decode())
+          env.write_text(texto)
+          FIM
           docker compose config -q
 
-      - name: sobe banco e objeto
-        run: docker compose up -d --wait db objeto objeto_init
+      - name: constroi a imagem (dev) e o migrador
+        run: docker compose --profile dev build
+
+      - name: sobe a pilha inteira, do zero
+        # `--wait` e o que torna este passo uma verificacao: ele so devolve 0
+        # quando toda sonda passou. Sem ele, o job ficaria verde com a api
+        # morta e a falha apareceria no `curl` de baixo sem dizer qual servico
+        # nao subiu.
+        run: docker compose --profile dev up -d --wait
+
+      - name: as seis migracoes rodaram em banco vazio
+        # O volume nasce vazio no runner, entao este passo prova o que
+        # `make reset` prova na maquina de quem desenvolve. Compara com a
+        # CONTAGEM DE ARQUIVOS: numero fixo aqui vira mentira na proxima
+        # migracao e ninguem percebe, porque o job continua verde.
+        run: |
+          esperado=$(find migrations -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
+          aplicadas=$(docker compose exec -T db psql -U bichu -d bichu -t -A -c 'select count(*) from pgmigrations')
+          echo "migracoes em disco: $esperado / aplicadas: $aplicadas"
+          if [ "$esperado" != "$aplicadas" ]; then
+            echo "::error::migracao nao aplicada. Ver o servico \`migracao\` no compose"
+            docker compose logs migracao
+            exit 1
+          fi
+
+      - name: a sonda responde PELA BORDA, e nao so por dentro
+        # Pela porta publicada, atravessando o Caddy: sonda batida de dentro do
+        # container passa com BIND_HOST errado, que e justamente o defeito que
+        # deixa o servico inalcancavel de fora.
+        run: |
+          corpo=$(curl -sS --fail --max-time 10 http://localhost:3000/v1/health)
+          echo "$corpo"
+          echo "$corpo" | grep -q '"status":"ok"'
+          echo "$corpo" | grep -q '"database":"ok"'
+
+      - name: api e worker rodam a MESMA imagem
+        # A frase "uma imagem, dois pontos de entrada" (ADR-0001) so vale
+        # enquanto for verdade no runtime. Aqui ela vira verificacao.
+        run: |
+          imagem_api=$(docker inspect bichu-api-1 --format '{{.Image}}')
+          imagem_worker=$(docker inspect bichu-worker-1 --format '{{.Image}}')
+          echo "api=$imagem_api worker=$imagem_worker"
+          if [ "$imagem_api" != "$imagem_worker" ]; then
+            echo "::error::api e worker estao em imagens diferentes. Ver o campo \`image\` nos dois servicos"
+            exit 1
+          fi
 
       - name: limites de memoria estao valendo de verdade
         run: |
           # `deploy.resources.limits` fora do Swarm e ignorado EM SILENCIO e o
           # arquivo parece correto. Conferir no runtime, nao no YAML.
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | tee -a "$GITHUB_STEP_SUMMARY"
-          limite=$(docker inspect bichu-db-1 --format '{{.HostConfig.Memory}}')
-          if [ "$limite" = "0" ]; then
-            echo "::error::o limite de memoria do Postgres nao esta valendo. Ver o bloco no topo do compose.yaml"
-            exit 1
-          fi
-          echo "limite do db aplicado: $limite bytes"
+          for c in bichu-db-1 bichu-api-1 bichu-worker-1; do
+            limite=$(docker inspect "$c" --format '{{.HostConfig.Memory}}')
+            if [ "$limite" = "0" ]; then
+              echo "::error::o limite de memoria de $c nao esta valendo. Ver o bloco no topo do compose.yaml"
+              exit 1
+            fi
+            echo "limite de $c aplicado: $limite bytes"
+          done
+
+      - name: o alvo de producao tambem constroi e sobe
+        # A variavel BUILD_TARGET existe para trocar de alvo; um alvo `prod`
+        # que ninguem constroi quebra no dia da implantacao, que e o pior dia
+        # para descobrir. Aqui ele e construido e o processo e posto de pe.
+        env:
+          BUILD_TARGET: prod
+          IMAGE_TAG: prod
+        run: |
+          docker compose build api
+          docker run -d --name prova-prod --network bichu_default --env-file .env \
+            -e NODE_ENV=production -e BIND_HOST=0.0.0.0 -e PORT=3000 bichu-app:prod
+          for _ in $(seq 1 20); do
+            if docker exec prova-prod node -e "fetch('http://127.0.0.1:3000/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
+              echo "alvo prod respondeu a sonda"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::a imagem do alvo prod nao ficou saudavel"
+          docker logs prova-prod
+          exit 1
+
+      - name: diagnostico quando falha
+        if: failure()
+        run: docker compose --profile dev logs --tail=200
 
       - name: derruba
         if: always()
-        run: docker compose down -v
+        run: |
+          docker rm -f prova-prod 2>/dev/null || true
+          docker compose --profile dev down -v
 
   app:
     name: app Flutter (analise e teste)

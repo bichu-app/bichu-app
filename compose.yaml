@@ -125,7 +125,38 @@ services:
         echo "buckets prontos: privado sem acesso anonimo, publico somente leitura"
     restart: "no"
 
+  migracao:
+    # As migracoes rodam AQUI, num job proprio, e nao no boot da api.
+    #
+    # O motivo esta no Dockerfile (alvo `migrador`), em duas linhas: migrar no
+    # boot faz N replicas concorrerem e uma migracao ruim derrubar todas de uma
+    # vez; e `node-pg-migrate` e devDependency, que no alvo `prod` significaria
+    # carregar tsc no runtime.
+    #
+    # `target` fixo em `migrador` DE PROPOSITO: nao segue BUILD_TARGET, porque
+    # a migracao nao muda de forma entre dev e producao. Trocar isso por
+    # `${BUILD_TARGET}` faria o alvo `prod` subir sem a ferramenta e o job
+    # falhar so no ambiente onde ele importa.
+    image: bichu-migrador:${IMAGE_TAG:-local}
+    build:
+      context: .
+      target: migrador
+    mem_limit: 256m
+    env_file: [.env]
+    depends_on:
+      db:
+        condition: service_healthy
+    # `up` e idempotente: aplica o que falta e sai 0 quando nao falta nada.
+    # Pode rodar em toda subida, inclusive com o banco ja migrado.
+    command: ["up"]
+    restart: "no"
+
   api:
+    # `image` com o MESMO nome nos dois servicos, e nao dois nomes: sem isto o
+    # compose constroi `bichu-api` e `bichu-worker` separados, e a frase "a
+    # mesma imagem" passa a depender de os dois builds coincidirem. Com um nome
+    # so, `docker image ls` mostra UM artefato e a afirmacao vira verificavel.
+    image: bichu-app:${IMAGE_TAG:-local}
     build:
       context: .
       target: ${BUILD_TARGET:-dev}
@@ -134,9 +165,31 @@ services:
     env_file: [.env]
     environment:
       PORT: "3000"
+      # Dentro do container, ouvir em todas as interfaces. O padrao do codigo e
+      # 127.0.0.1 (correto para processo no laptop, errado dentro de container):
+      # a borda nao alcancaria a api, e a sonda -- que bate em 127.0.0.1 de
+      # DENTRO -- ficaria verde com o servico inalcancavel de fora. O que limita
+      # a exposicao real e o mapeamento de porta da borda, nao este valor.
+      BIND_HOST: "0.0.0.0"
+      # Vem do .env por padrao; `make up PORTA=<n>` sobrescreve pelo ambiente do
+      # shell, e as duas pontas (borda e aplicacao) mudam juntas.
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
+      MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
     depends_on:
       db: {condition: service_healthy}
       objeto: {condition: service_healthy}
+      # A api so comeca com o esquema aplicado. Sem isto ela sobe, responde a
+      # sonda (que so faz `select 1`) e so quebra na primeira consulta a
+      # `users` -- erro de tabela inexistente a dez minutos da subida, sem
+      # nenhuma relacao aparente com implantacao.
+      migracao: {condition: service_completed_successfully}
+      # Os buckets precisam existir antes de alguem tentar escrever neles. E
+      # ha um efeito colateral que vale registrar: sem esta linha, `up --wait`
+      # ve o `objeto_init` SAIR em vez de ficar de pe e devolve erro -- "exited
+      # (0)" derrubando um `make up` em que tudo subiu certo. Declarar a
+      # dependencia e o que diz ao compose que essa saida e o fim esperado.
+      objeto_init: {condition: service_completed_successfully}
     healthcheck:
       # A sonda e /v1/health, sob o prefixo de versao: /ready nao existe no
       # contrato e nunca existiu, entao a sonda antiga reprovava com 404 e o
@@ -156,6 +209,7 @@ services:
   worker:
     # A MESMA imagem da api, outro ponto de entrada. Nao e outro servico: e o
     # mesmo codigo, o que mantem uma implantacao so e um contrato so.
+    image: bichu-app:${IMAGE_TAG:-local}
     build:
       context: .
       target: ${BUILD_TARGET:-dev}
@@ -170,6 +224,29 @@ services:
     depends_on:
       db: {condition: service_healthy}
       objeto: {condition: service_healthy}
+      migracao: {condition: service_completed_successfully}
+      # Os buckets precisam existir antes de alguem tentar escrever neles. E
+      # ha um efeito colateral que vale registrar: sem esta linha, `up --wait`
+      # ve o `objeto_init` SAIR em vez de ficar de pe e devolve erro -- "exited
+      # (0)" derrubando um `make up` em que tudo subiu certo. Declarar a
+      # dependencia e o que diz ao compose que essa saida e o fim esperado.
+      objeto_init: {condition: service_completed_successfully}
+    # O QUE ESTA SONDA PROVA, E O QUE ELA NAO PROVA.
+    #
+    # Prova: o processo esta vivo (ele e o PID 1 -- se morrer, o container
+    # morre) e o banco esta alcancavel de dentro deste container.
+    #
+    # NAO prova que o laco de expurgo esta progredindo. Para isso o worker
+    # precisaria gravar um batimento (ultima execucao bem-sucedida) que a sonda
+    # lesse, e isso e codigo em `src/`. Enquanto nao existir, um worker que
+    # pare de trabalhar sem morrer aparece saudavel aqui. Esta escrito para que
+    # ninguem confunda "saudavel" com "trabalhando".
+    healthcheck:
+      test: ["CMD", "node", "-e", "const{Client}=require('pg');const c=new Client({connectionString:process.env.DATABASE_URL});c.connect().then(()=>c.query('select 1')).then(()=>c.end()).then(()=>process.exit(0)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
     restart: unless-stopped
 
   mail:
@@ -193,9 +270,16 @@ services:
     # segundo aparelho depende disso (secao 3.10).
     image: caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
     mem_limit: 64m
+    # Porta do hospedeiro IGUAL a porta de dentro, e nao um mapeamento cruzado:
+    # o Caddy escuta na porta que esta em PUBLIC_BASE_URL, entao 3100:3000
+    # publicaria um endereco que o proprio servidor nao atende.
+    #
+    # O numero e variavel porque em maquina compartilhada a 3000 e disputada.
+    # `make up PORTA=3100` troca porta e URL base juntas -- trocar so uma faz o
+    # app gerar link para uma porta que nao responde.
     ports:
-      - "${BIND_HOST:-127.0.0.1}:3000:3000"
-      - "${BIND_HOST:-127.0.0.1}:3001:3001"
+      - "${BIND_HOST:-127.0.0.1}:${PORTA_APP:-3000}:${PORTA_APP:-3000}"
+      - "${BIND_HOST:-127.0.0.1}:${PORTA_MIDIA:-3001}:${PORTA_MIDIA:-3001}"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_dados:/data
