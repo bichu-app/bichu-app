@@ -23,6 +23,7 @@ import 'dart:convert';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
+import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -136,21 +137,33 @@ Map<String, dynamic> referenciaDeTeste() {
 }
 
 /// Monta o app com a rede e a camera que o caso pedir.
-Future<void> abrirOApp(
+Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
   CameraEGaleria? camera,
+  DepositoDeIntencaoEmMemoria? envelope,
 }) async {
   AppConfig.limparParaTeste();
+  // O envelope de intencao vai EM MEMORIA aqui, sempre.
+  //
+  // O padrao do app e `DepositoDeIntencaoEmArquivo`, que chama
+  // `getApplicationDocumentsDirectory()` -- um canal de plataforma que nao
+  // existe em teste de widget. Sem esta injecao, qualquer teste que faca a tela
+  // GUARDAR uma intencao trava para sempre, sem mensagem: o `pumpAndSettle`
+  // espera um Future que nunca resolve. Custou uma execucao travada para
+  // descobrir, e o sintoma nao aponta para a causa.
+  final deposito = envelope ?? DepositoDeIntencaoEmMemoria();
   await tester.pumpWidget(
     BichuApp(
       config: AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste),
       deposito: DepositoEmMemoria(),
+      depositoDeIntencao: deposito,
       clienteHttp: MockClient(rede),
       camera: camera ?? const CameraNaoEmbarcada(),
     ),
   );
   await tester.pumpAndSettle();
+  return deposito;
 }
 
 /// Navega pelo roteador de verdade, com o `extra` que a rota espera.

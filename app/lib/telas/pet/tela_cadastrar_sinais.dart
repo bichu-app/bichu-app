@@ -7,6 +7,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
+import '../../intencao/cadastro_de_pet_como_intencao.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -156,6 +157,35 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
       );
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
+
+      // **A SESSÃO CAIU NO MEIO DA AÇÃO** (critério 6 de BICHUS-15).
+      //
+      // É o caso da tutora que não abre o app há quatro meses: o refresh dela
+      // venceu, e ela descobre isso só agora, com o cadastro inteiro
+      // preenchido. Sem isto ela veria "entre de novo", perderia os três
+      // passos, e refaria tudo — ou desistiria, que é o desfecho mais provável
+      // de quem já estava com pressa.
+      //
+      // O envelope guarda o rascunho INTEIRO (campos, foto por caminho de
+      // arquivo, passo e rolagem) e a guarda executa o cadastro assim que o
+      // login terminar. Ela cai em F1.6 com o pet criado, e não no formulário
+      // de novo — a diferença que a seção 8.3 do UX chama de meia-entrega.
+      if (falha is FalhaDaApi && _sessaoAcabou(falha)) {
+        await Escopo.of(context).guarda.guardar(
+              intencaoDeCadastrarPet(
+                rascunho,
+                // A hora real, e não uma injetada: a validade de 24 h do
+                // envelope é sobre o relógio do aparelho, que é o único que
+                // existe quando o app está sem sessão.
+                criadaEm: DateTime.now(),
+                passo: 3,
+              ),
+            );
+        if (!mounted) return;
+        context.push(Rotas.entrar);
+        return;
+      }
+
       setState(() => _faixa = _mensagem(falha));
     } finally {
       if (mounted) setState(() => _enviando = false);
@@ -168,6 +198,17 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
   /// servidor nomeou, com a mensagem daquele campo. Se o servidor nao nomear
   /// campo nenhum, e defeito nosso, e a tela diz isso sem acusar um campo que
   /// ninguem apontou.
+  /// A sessão acabou, e por isso a ação não pôde acontecer.
+  ///
+  /// **Decide por `type`, nunca por status.** O contrato declara quatro tipos
+  /// com status 401, e dois deles não são "a sessão acabou": `invalid-credentials`
+  /// é senha errada e `reauthentication-required` é sessão válida pedindo
+  /// confirmação. Capturar a intenção nesses dois mandaria a pessoa para o
+  /// login sem motivo, com um rascunho guardado que ela não pediu.
+  bool _sessaoAcabou(FalhaDaApi falha) =>
+      falha.problem.tipo == ProblemTipo.naoAutenticado ||
+      falha.problem.tipo == ProblemTipo.tokenExpirado;
+
   MensagemDeErro _mensagem(FalhaDeChamada falha) {
     if (falha is FalhaDeConexao) {
       // O cadastro e acao que o produto consegue guardar: a fila local e de
