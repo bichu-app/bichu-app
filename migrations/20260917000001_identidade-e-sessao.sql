@@ -12,6 +12,33 @@
 
 -- Up Migration
 
+-- A EXTENSAO GEOESPACIAL E CRIADA AQUI, pela migracao, e nunca pelo script de
+-- initdb da imagem do banco (ADR-0006, criterio 2 da BICHUS-13). Nenhuma
+-- coluna `geography` existe ainda: o PostGIS e pre-requisito do BANCO, nao
+-- desta ou daquela tabela, e por isso abre a primeira migracao.
+--
+-- O que esta linha compra: hoje o PostGIS so esta la porque a imagem
+-- `postgis/postgis:16-3.4` o instala sozinha. Nesse arranjo, trocar a imagem
+-- base ou apontar para um Postgres gerenciado tira a extensao sem que nada
+-- acuse, e a falta aparece na primeira consulta de raio, ja com o produto no
+-- ar. Com o CREATE aqui, o mesmo destino falha no JOB DE MIGRACAO, que roda
+-- antes da api subir: onde a extensao nao esta instalada no servidor, o
+-- Postgres nao acha o arquivo de controle e interrompe a migracao com o nome
+-- do que falta. Falha ruidosa na subida no lugar de defeito silencioso em
+-- producao.
+--
+-- `IF NOT EXISTS` por dois motivos: o banco de desenvolvimento ja recebeu a
+-- extensao da imagem, e em servico gerenciado quem executa `CREATE EXTENSION`
+-- pode ser um papel diferente do papel da aplicacao (ADR-0013 R1), caso em que
+-- a extensao ja vem criada e esta linha e um no-op.
+--
+-- Sobre editar uma migracao ja aplicada, que em geral e proibido: aqui vale
+-- porque a instrucao nao cria objeto nenhum que as migracoes 2 a 6
+-- referenciem, e e idempotente. Banco ja migrado e banco novo terminam no
+-- mesmo estado. Isso NAO abre precedente para as proximas: qualquer mudanca
+-- que crie, altere ou apague objeto vai em migracao nova.
+CREATE EXTENSION IF NOT EXISTS postgis;
+
 CREATE EXTENSION IF NOT EXISTS citext;
 
 CREATE TABLE users (
@@ -176,5 +203,8 @@ DROP TABLE IF EXISTS user_roles;
 DROP TABLE IF EXISTS local_credentials;
 DROP TABLE IF EXISTS user_identities;
 DROP TABLE IF EXISTS users;
--- `citext` nao e removida: outras migracoes podem depender dela e extensao e
--- estado do banco, nao desta migracao.
+-- Nem `citext` nem `postgis` sao removidas: extensao e estado do banco, nao
+-- desta migracao, e outras migracoes dependem das duas. No caso do PostGIS a
+-- remocao tambem seria destrutiva no futuro, porque `DROP EXTENSION` em
+-- CASCADE leva junto toda coluna `geography`; sem CASCADE ele recusa, que e o
+-- comportamento correto e mais uma razao para nao tentar.

@@ -23,7 +23,7 @@ import { parse as parseYaml } from 'yaml';
 import { readFileSync } from 'node:fs';
 import { carregarContrato, type OperacaoDoContrato } from '../shared/http/contract.js';
 
-export const VERSAO_DO_PORTAO = '1.0.0';
+export const VERSAO_DO_PORTAO = '1.1.0';
 
 /**
  * Nomes proibidos em resposta a quem não tem conta. Comparação por nome exato:
@@ -205,12 +205,17 @@ export function inspecionarCamposPublicos(
 /**
  * Cabeçalhos exigidos nas páginas HTML públicas (critério 5).
  *
- * `noindex`, `no-referrer` e `no-store` estão declarados na especificação e são
- * conferidos contra ela. **CSP, `nosniff` e o `og:` genérico não estão
- * declaradas em lugar nenhum do contrato**, e por isso este bloco reprova: o
- * portão lê o contrato, e o contrato não responde por três dos seis itens que a
- * história manda verificar. Silenciar aqui seria o portão terminar verde sem ter
- * conseguido olhar, que é pior do que não existir.
+ * Desde o ADR-0017 o contrato não tem mais nenhuma resposta `text/html`: as 12
+ * operações que renderizavam página saíram, e a renderização foi para outro
+ * time. Este bloco continua aqui, e continua armado, porque a decisão foi tirar
+ * as páginas DESTE serviço, não decidir que página pública dispensa cabeçalho.
+ *
+ * A distinção que o relatório precisa fazer, e que é o defeito que este projeto
+ * mais persegue: **"não havia o que conferir" não pode sair igual a "conferi e
+ * está certo"**. Ausência de página é dita com essas palavras e não reprova;
+ * página presente sem cabeçalho reprova como sempre reprovou. Quem garante que
+ * a segunda metade continua enxergando é a isca do autoteste, que roda a cada
+ * execução com uma página nua e exige os seis achados de volta.
  */
 const CABECALHOS_EXIGIDOS: readonly { readonly rotulo: string; readonly agulha: RegExp }[] = [
   { rotulo: 'X-Robots-Tag: noindex', agulha: /noindex/i },
@@ -221,21 +226,20 @@ const CABECALHOS_EXIGIDOS: readonly { readonly rotulo: string; readonly agulha: 
   { rotulo: 'og: genérico', agulha: /\bog:/i },
 ];
 
-export function inspecionarCabecalhos(operacoes: readonly OperacaoDoContrato[]): Achado[] {
+/** O que a conferência de cabeçalhos conseguiu olhar, além do que ela achou. */
+export interface ResultadoDosCabecalhos {
+  readonly achados: readonly Achado[];
+  /** Zero significa que não havia página para conferir, e NÃO que passou. */
+  readonly paginasConferidas: number;
+}
+
+export function inspecionarCabecalhos(
+  operacoes: readonly OperacaoDoContrato[],
+): ResultadoDosCabecalhos {
   const achados: Achado[] = [];
   const paginasPublicas = operacoes.filter(
     (operacao) => ehOperacaoSemConta(operacao) && declaraHtml(operacao),
   );
-
-  if (paginasPublicas.length === 0) {
-    achados.push({
-      operationId: '(nenhuma)',
-      onde: 'cabeçalhos',
-      campo: '-',
-      motivo: 'nenhuma página HTML pública encontrada para conferir',
-    });
-    return achados;
-  }
 
   for (const operacao of paginasPublicas) {
     const declarado = JSON.stringify(operacao.raw);
@@ -250,7 +254,7 @@ export function inspecionarCabecalhos(operacoes: readonly OperacaoDoContrato[]):
       }
     }
   }
-  return achados;
+  return { achados, paginasConferidas: paginasPublicas.length };
 }
 
 function declaraHtml(operacao: OperacaoDoContrato): boolean {
@@ -284,6 +288,15 @@ paths:
                 properties:
                   lat: { type: number }
                   pet_id: { type: string, format: uuid }
+  /isca-html:
+    get:
+      operationId: iscaDePaginaNua
+      security: []
+      responses:
+        '200':
+          content:
+            text/html:
+              schema: { type: string }
 `;
 
 function autoTeste(): string[] {
@@ -308,6 +321,35 @@ function autoTeste(): string[] {
   }
   if (!achados.some((a) => a.campo === 'pet_id')) {
     falhas.push('a isca com `pet_id` de UUID passou: o portão parou de enxergar id interno');
+  }
+
+  // A isca de cabeçalho existe por causa do ADR-0017. O contrato real não tem
+  // mais página HTML, então a conferência de cabeçalho deixou de ser exercitada
+  // por ele: sem esta isca, ela poderia quebrar e ninguém saberia, porque o
+  // relatório continuaria dizendo o mesmo. Aqui ela é obrigada a acusar, a cada
+  // execução, uma página pública sem nenhum dos seis itens.
+  const paginaNua: OperacaoDoContrato = {
+    operationId: 'iscaDePaginaNua',
+    method: 'get',
+    path: '/isca-html',
+    security: [],
+    securitySchemes: [],
+    effects: [],
+    hasRateLimit: false,
+    raw: paths['/isca-html']?.['get'] ?? {},
+  };
+  const cabecalhos = inspecionarCabecalhos([paginaNua]);
+  if (cabecalhos.paginasConferidas !== 1) {
+    falhas.push('a isca de página HTML não foi reconhecida como página: o portão parou de enxergar `text/html`');
+  }
+  const faltando = CABECALHOS_EXIGIDOS.filter(
+    (exigido) => !cabecalhos.achados.some((achado) => achado.campo === exigido.rotulo),
+  );
+  if (faltando.length > 0) {
+    falhas.push(
+      `a isca de página nua passou em ${faltando.map((e) => e.rotulo).join(', ')}: ` +
+        'a conferência de cabeçalho parou de cobrar o que o critério 5 manda cobrar',
+    );
   }
   return falhas;
 }
@@ -370,9 +412,24 @@ export function executar(caminhoDaSpec: string): number {
   }
   console.info(`operações percorridas de fato: ${semConta.length - dispensadas.length}`);
 
+  const cabecalhos = inspecionarCabecalhos(semConta);
+  if (cabecalhos.paginasConferidas === 0) {
+    // Dito com estas palavras de propósito. "Conferi e está certo" e "não havia
+    // o que conferir" são desfechos diferentes, e o relatório que os funde é o
+    // que faz uma verificação morrer sem ninguém notar. A capacidade de acusar
+    // continua provada pela isca de página nua, logo acima.
+    console.info(
+      'cabeçalhos: NÃO HAVIA O QUE CONFERIR — nenhuma página HTML pública no contrato. ' +
+        'É o esperado desde o ADR-0017, que tirou as respostas `text/html` deste serviço. ' +
+        'A conferência segue armada: a isca de página nua foi reprovada no autoteste.',
+    );
+  } else {
+    console.info(`cabeçalhos: ${cabecalhos.paginasConferidas} página(s) HTML pública(s) conferida(s).`);
+  }
+
   const achados = [
     ...inspecionarCamposPublicos(contrato.spec, semConta),
-    ...inspecionarCabecalhos(semConta),
+    ...cabecalhos.achados,
   ];
 
   if (achados.length === 0) {

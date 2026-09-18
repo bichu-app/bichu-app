@@ -18,6 +18,7 @@ import { criarIdGenerator } from '../shared/id/uuidv7.js';
 import { systemClock } from '../shared/time/clock.js';
 import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
+import { vigiarIdempotenciaDasRotas } from '../shared/http/idempotency.js';
 import { registrarSaude } from '../shared/http/health.js';
 import { criarTrilhaDeAuditoria } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarTokenSigner } from '../modules/identity/adapters/external/rs256-token-signer.js';
@@ -90,6 +91,11 @@ export async function main(): Promise<void> {
     apiBaseUrl: config.apiBaseUrl,
   };
 
+  // Precisa vir ANTES do registro das rotas: o gancho `onRoute` só enxerga o
+  // que for registrado depois dele. A conferência em si roda no fim, quando
+  // todas as rotas já existem.
+  const conferirIdempotencia = vigiarIdempotenciaDasRotas(app, contrato, PREFIXO_DA_API);
+
   // Descoberta fica na RAIZ do host da API, fora de `/v1`: quem a consulta é o
   // sistema operacional ou uma biblioteca, e o contrato declara servidor próprio
   // para essas duas operações.
@@ -110,6 +116,11 @@ export async function main(): Promise<void> {
     },
     { prefix: PREFIXO_DA_API },
   );
+
+  // Rota que o contrato declara idempotente e que não passa pela idempotência
+  // derruba a subida aqui, e não no segundo envio de um cliente offline, que é
+  // onde o defeito apareceria sozinho.
+  conferirIdempotencia();
 
   const encerrar = async (sinal: string): Promise<void> => {
     app.log.info({ sinal }, 'encerrando');

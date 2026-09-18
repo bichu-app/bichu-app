@@ -159,15 +159,19 @@ responses:
   });
 });
 
-void describe('ausência de alvo é reprovação, nunca aprovação', () => {
-  void it('reprova quando não há página HTML pública para conferir cabeçalho', () => {
-    // Critério 2: filtro que não filtra termina verde e ninguém desconfia.
-    const achados = inspecionarCabecalhos([]);
-    assert.equal(achados.length, 1);
-    assert.match(achados[0]?.motivo ?? '', /nenhuma página HTML pública/);
+void describe('ausência de alvo não é aprovação, e continua não sendo', () => {
+  void it('sem página HTML, a conferência devolve zero páginas conferidas e nenhum achado', () => {
+    // Desde o ADR-0017 o contrato não tem resposta `text/html`, e reprovar por
+    // isso seria o portão cobrar uma coisa que foi removida por decisão. O que
+    // NÃO pode acontecer é a ausência virar aprovação: quem lê o resultado
+    // precisa conseguir separar os dois casos, e por isso a contagem sai junto
+    // com os achados em vez de um `Achado[]` que some com a informação.
+    const resultado = inspecionarCabecalhos([]);
+    assert.deepEqual(resultado.achados, []);
+    assert.equal(resultado.paginasConferidas, 0);
   });
 
-  void it('reprova a página HTML pública que não declara os cabeçalhos exigidos', () => {
+  void it('a capacidade de acusar não depende do contrato real: página nua ainda reprova', () => {
     const paginaSemCabecalho = `
 description: pagina sem nenhuma exigencia declarada
 responses:
@@ -176,11 +180,12 @@ responses:
       text/html: { schema: { type: string } }
 `;
     const { operacao } = operacaoDe('paginaNua', paginaSemCabecalho, []);
-    const achados = inspecionarCabecalhos([operacao]);
+    const resultado = inspecionarCabecalhos([operacao]);
 
-    assert.equal(achados.length, 6, 'os seis itens do critério 5 precisam ser cobrados');
+    assert.equal(resultado.paginasConferidas, 1);
+    assert.equal(resultado.achados.length, 6, 'os seis itens do critério 5 precisam ser cobrados');
     assert.deepEqual(
-      achados.map((achado) => achado.campo).sort(),
+      resultado.achados.map((achado) => achado.campo).sort(),
       [
         'Cache-Control: no-store',
         'Content-Security-Policy',
