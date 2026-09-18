@@ -286,7 +286,8 @@ x-problem-types:
   - { slug: email-already-registered,      status: 409 }
   - { slug: slug-taken,                    status: 409 }
   - { slug: pet-already-lost,              status: 409 }
-  - { slug: pet-limit-reached,             status: 409 }
+  - { slug: pet-limit-reached,             status: 409, note: "teto de pets DA CONTA" }
+  - { slug: tag-limit-reached,             status: 409, note: "teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada" }
   - { slug: contact-channel-unverified,    status: 409 }
   - { slug: pet-photo-missing,             status: 409 }
   - { slug: transfer-not-for-this-account, status: 409 }

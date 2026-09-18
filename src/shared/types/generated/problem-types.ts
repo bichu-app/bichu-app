@@ -18,7 +18,8 @@ export const STATUS_DO_PROBLEMA = {
   'email-already-registered':       409,
   'slug-taken':                     409,
   'pet-already-lost':               409,
-  'pet-limit-reached':              409,
+  'pet-limit-reached':              409, // teto de pets DA CONTA
+  'tag-limit-reached':              409, // teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada
   'contact-channel-unverified':     409,
   'pet-photo-missing':              409,
   'transfer-not-for-this-account':  409,
@@ -31,7 +32,7 @@ export const STATUS_DO_PROBLEMA = {
   'internal':                       500,
 } as const;
 
-/** União fechada dos 21 tipos declarados no contrato. */
+/** União fechada dos 22 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

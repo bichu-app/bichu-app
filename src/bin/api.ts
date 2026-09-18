@@ -30,6 +30,9 @@ import {
 import { criarAuthService } from '../modules/identity/application/auth-service.js';
 import { criarReferenceDataRepository } from '../modules/pets/adapters/persistence/kysely-reference-data-repository.js';
 import { registrarRotasDeReferencia } from '../modules/pets/adapters/http/reference-data-routes.js';
+import { criarPetRepository } from '../modules/pets/adapters/persistence/kysely-pet-repository.js';
+import { PetService } from '../modules/pets/application/pet-service.js';
+import { registrarRotasDePets } from '../modules/pets/adapters/http/pet-routes.js';
 import { criarIdempotencia } from '../shared/http/idempotency.js';
 import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
@@ -110,6 +113,21 @@ export async function main(): Promise<void> {
     baseDaWeb: config.publicBaseUrl,
   });
 
+  const dependenciasDasRotasDePet = {
+    pets: new PetService({
+      repositorio: criarPetRepository(db),
+      ids,
+      clock: systemClock,
+      trilha,
+    }),
+    // Mesma ligação de `tags`: o módulo do cadastro recebe uma porta que só
+    // sabe dizer de quem é a sessão, e nunca o serviço de identidade inteiro.
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
   const dependenciasDasRotasDeTag = {
     tags,
     // A porta é de `tags` e quem a liga ao serviço de identidade é esta linha: é
@@ -139,6 +157,7 @@ export async function main(): Promise<void> {
     (escopo, _opcoes, pronto) => {
       registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
       registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
+      registrarRotasDePets(escopo, dependenciasDasRotasDePet);
       registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
       registrarSaude(escopo, {
         version: config.version,

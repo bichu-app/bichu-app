@@ -145,21 +145,34 @@ export const problemas = {
     }),
 
   /**
+   * Teto de pets por conta. É o sentido verdadeiro de `pet-limit-reached`, que
+   * até 18/09 era emprestado pelo teto de tags — ver `tetoDeTagsAtivas` logo
+   * abaixo, que agora tem tipo próprio.
+   *
+   * O texto não oferece "apague um pet para caber outro": excluir um cadastro
+   * para criar outro é um conselho ruim, e quem tem vinte animais de verdade
+   * (protetor independente, lar temporário) precisa de atendimento, não de uma
+   * escolha entre dois animais.
+   */
+  tetoDePetsDaConta: (): AppError =>
+    new AppError('pet-limit-reached', 'Você chegou ao limite de pets desta conta', {
+      detail: 'São 20 por conta. Se você cuida de mais que isso, fale com a gente.',
+    }),
+
+  /**
    * Teto de cinco tags ativas por pet (ADR-0004). O tutor revoga uma e emite
    * outra; não há caminho de aumento por autoatendimento.
    *
-   * **O tipo está errado e a divergência é conhecida.** `x-problem-types` é uma
-   * lista fechada e não tem nenhum slug para o teto de tags: dos sete tipos de
-   * 409 declarados, `pet-limit-reached` é o único que significa "um teto foi
-   * atingido", e o slug dele fala de pets, não de plaquinhas. Um app que decida
-   * por `type` vai tratar isto como "limite de pets da conta", que é outra
-   * coisa. O texto abaixo diz a verdade; o `type` não. Isso se corrige no
-   * contrato, com um slug `tag-limit-reached` de status 409, e não aqui —
-   * inventar o tipo no código faria o backend declarar sozinho um valor que o
-   * contrato não conhece, que é exatamente o que a lista fechada impede.
+   * O tipo próprio foi criado no contrato em 18/09, que é onde a correção
+   * pertencia: até ali este teto respondia `pet-limit-reached`, e um app que
+   * decidisse por `type` tratava "cinco plaquinhas neste pet" como "limite de
+   * pets da conta" — dois tetos diferentes, com saídas diferentes, e a saída
+   * oferecida era a errada. A divergência estava documentada aqui e virou
+   * urgente quando `createPet` passou a usar `pet-limit-reached` no sentido
+   * verdadeiro: os dois responderiam o mesmo tipo.
    */
   tetoDeTagsAtivas: (): AppError =>
-    new AppError('pet-limit-reached', 'Você já tem cinco plaquinhas ativas', {
+    new AppError('tag-limit-reached', 'Você já tem cinco plaquinhas ativas', {
       detail: 'São cinco por pet. Desative uma que não usa mais para emitir outra.',
     }),
 

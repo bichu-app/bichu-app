@@ -35,6 +35,10 @@ export type AuditAction =
   | 'auth.email_verified'
   // Autorização
   | 'authz.denied'
+  // Cadastro do pet
+  | 'pet.created'
+  | 'pet.updated'
+  | 'pet.deleted'
   // Tag, caso, conversa e moderação entram com as histórias que as criam.
   | 'tag.issued'
   | 'tag.revoked'

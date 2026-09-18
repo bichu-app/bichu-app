@@ -200,11 +200,24 @@ jobs:
         run: |
           git show origin/${{ github.base_ref }}:api/openapi.yaml > /tmp/base.yaml 2>/dev/null || {
             echo "::notice::sem versao anterior da spec: primeira introducao"; exit 0; }
-          npx --yes oasdiff breaking /tmp/base.yaml api/openapi.yaml --fail-on ERR
+          # `oasdiff` e um binario Go. O pacote npm de mesmo nome NAO declara
+          # executavel, e `npx --yes oasdiff` morre com "could not determine
+          # executable to run" -- o passo reprovava por ferramenta ausente, e
+          # nao por incompatibilidade, que e a pior forma de portao vermelho.
+          #
+          # O passo inteiro so roda em `pull_request`, entao ele estreou no
+          # PRIMEIRO PR deste repositorio, meses depois de escrito. E o mesmo
+          # padrao do gitleaks e do TAG_CODE_KEY na mesma esteira: passo que
+          # nunca executou nao esta funcionando, esta sem noticia.
+          #
+          # Versao fixada pelo mesmo motivo do spectral acima.
+          docker run --rm -v /tmp:/tmp -v "$PWD:/repo" -w /repo tufin/oasdiff:v1.32.1 \
+            breaking /tmp/base.yaml api/openapi.yaml --fail-on ERR
           # Campo ACRESCENTADO nao quebra ninguem e por isso passa nas
           # ferramentas -- e e exatamente por ali que a implementacao se afasta
           # do documento sem nenhum alarme. Aviso obrigatorio, nao reprovacao.
-          npx --yes oasdiff changelog /tmp/base.yaml api/openapi.yaml | tee -a "$GITHUB_STEP_SUMMARY"
+          docker run --rm -v /tmp:/tmp -v "$PWD:/repo" -w /repo tufin/oasdiff:v1.32.1 \
+            changelog /tmp/base.yaml api/openapi.yaml | tee -a "$GITHUB_STEP_SUMMARY"
 
   integracao:
     name: compose, migracao do zero e pilha de pe
