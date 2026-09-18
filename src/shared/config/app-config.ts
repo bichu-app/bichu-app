@@ -168,10 +168,59 @@ function carregarChave(sufixo: string, obrigatoria: boolean): SigningKey | undef
   return { kid, privateKey, publicKey: createPublicKey(privateKey) };
 }
 
-function carregarToken(): TokenConfig {
+/**
+ * Onde a chave de rotação deixa de ser conveniência e passa a ser obrigação.
+ *
+ * O critério é **o mesmo que `src/bin/seed.ts` já usa** para recusar semear:
+ * `NODE_ENV=production` (o que os estágios de produção do `Dockerfile` definem)
+ * ou `ENVIRONMENT` em `prod`/`preprod`. Reusar a definição que já existe é de
+ * propósito — duas respostas diferentes para "estou num ambiente de gente de
+ * verdade?" viram duas verdades, e a que fica para trás é sempre a que protege.
+ *
+ * `preprod` entra junto com `prod` porque quem consome o JWKS **não é este
+ * serviço**: é terceiro, que cacheia. Homologação é o ambiente que o time web
+ * consome (`infra/verificacao/docs-fechada.yml`) e é onde a rotação vai ser
+ * exercitada pela primeira vez (dívida 9.10). Descobrir lá que a segunda chave
+ * nunca esteve publicada é descobrir no dia da rotação, que é tarde.
+ *
+ * `dev` e teste ficam de fora de propósito: ninguém cacheia o JWKS de
+ * `localhost`, e exigir a segunda chave para rodar `npm test` ou subir o compose
+ * seria atrito novo sem risco atrás dele.
+ */
+function exigeChaveDeRotacao(environment: string): boolean {
+  return (
+    process.env['NODE_ENV'] === 'production' ||
+    environment === 'prod' ||
+    environment === 'preprod'
+  );
+}
+
+function carregarToken(environment: string): TokenConfig {
   const issuer = requireEnv('TOKEN_ISSUER');
   const activeKey = carregarChave('ACTIVE', true);
   if (activeKey === undefined) throw new Error('JWT_ACTIVE_KID e JWT_ACTIVE_PRIVATE_KEY são obrigatórias.');
+
+  // O contrato promete **"Sempre duas chaves"** em `GET /.well-known/jwks.json`
+  // (api/openapi.yaml), e até aqui isso era comentário no `.env.example` — não
+  // guarda. A aplicação subia com uma chave só e o JWKS respondia 200 com um
+  // `kid` sozinho: falha silenciosa onde a regra do projeto é falha ruidosa.
+  // O estrago não aparece na subida, e sim no dia da rotação, quando rotacionar
+  // sem a próxima chave já publicada derruba toda sessão de quem cacheou o
+  // arquivo antigo.
+  //
+  // As duas chamadas são `requireEnv` com o nome LITERAL, e não um `if` sobre
+  // `nextKey`, por dois motivos: a mensagem morre citando a variável exata que
+  // falta, e o passo "nenhuma variavel exigida ficou vazia" da esteira
+  // (.github/workflows/ci.yml) lê os `requireEnv('X')` de `src/` e `bin/` por
+  // texto — escrito assim, variável esquecida no workflow reprova em segundos
+  // com o nome dela, em vez de matar a subida de um ambiente hospedado. O valor
+  // devolvido é descartado porque quem o lê é o `carregarChave` logo abaixo; o
+  // que interessa aqui é a recusa.
+  if (exigeChaveDeRotacao(environment)) {
+    requireEnv('JWT_NEXT_KID');
+    requireEnv('JWT_NEXT_PRIVATE_KEY');
+  }
+
   const nextKey = carregarChave('NEXT', false);
 
   if (nextKey !== undefined && nextKey.kid === activeKey.kid) {
@@ -265,7 +314,7 @@ export function loadAppConfig(): AppConfig {
     // ambiente: hostname literal em `src/` é reprovado pelo portão de
     // portabilidade, e com razão — trocar o domínio precisa ser uma linha.
     problemBaseUrl: `${publicBaseUrl}/problems` as AbsoluteUrl,
-    token: carregarToken(),
+    token: carregarToken(environment),
     session: {
       idleTtlSeconds: TTL_INATIVIDADE_PADRAO,
       staySignedInIdleTtlSeconds: TTL_INATIVIDADE_CONTINUAR_CONECTADO,
