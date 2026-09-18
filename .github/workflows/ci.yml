@@ -240,6 +240,17 @@ jobs:
           sed -i "s#^DATABASE_URL=.*#DATABASE_URL=postgres://bichu:$senha@db:5432/bichu#" .env
           sed -i 's/^OBJECT_STORAGE_ACCESS_KEY_ID=.*/OBJECT_STORAGE_ACCESS_KEY_ID=ci-descartavel/' .env
           sed -i 's/^OBJECT_STORAGE_SECRET_ACCESS_KEY=.*/OBJECT_STORAGE_SECRET_ACCESS_KEY=ci-descartavel-segredo/' .env
+          # O MinIO exige esta chave para cifrar no servidor, e a politica de
+          # upload assinada manda `x-amz-server-side-encryption` (BICHUS-87,
+          # criterio 22). Sem ela o `compose.yaml` nem valida -- ele usa
+          # `${OBJECT_STORAGE_KMS_KEY:?}`.
+          #
+          # NAO e coberta pela guarda `nenhuma variavel exigida ficou vazia`: a
+          # guarda le os `requireEnv()` do codigo da APLICACAO, e esta variavel
+          # e exigida pelo COMPOSE. A guarda continua valendo para o que ela
+          # cobre; este comentario existe para a proxima pessoa nao concluir que
+          # ela cobre tudo.
+          sed -i "s|^OBJECT_STORAGE_KMS_KEY=.*|OBJECT_STORAGE_KMS_KEY=ci-descartavel:$(openssl rand -base64 32)|" .env
           # Chaves geradas NO JOB e jogadas fora com o runner: chave de
           # assinatura de verdade nunca entra em repositorio nem em log.
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ativa.pem 2>/dev/null

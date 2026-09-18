@@ -152,10 +152,23 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
           // Chave EXATA, não prefixo: com prefixo, quem recebe a autorização de
           // uma foto pode sobrescrever qualquer outra abaixo dele.
           { key: pedido.chave },
+          // Igualdade, NUNCA `starts-with: image/` (critério 22): o prefixo
+          // aceitaria `image/svg+xml`, que é documento com script.
           { 'Content-Type': pedido.contentType },
           // O teto de tamanho vive AQUI e não na aplicação: o backend nunca vê
           // os bytes, então recusar depois seria recusar o que já foi gravado.
-          ['content-length-range', 0, pedido.maxBytes],
+          // O piso é 1 e não 0: objeto de zero byte é upload que falhou e
+          // passou, e ele chega ao worker como imagem corrompida.
+          ['content-length-range', 1, pedido.maxBytes],
+          // Criptografia no servidor, obrigatória pelo critério 22.
+          //
+          // **Ela precisa estar na POLÍTICA e no formulário, e a assimetria não
+          // perdoa:** o campo sem a condição faz o armazenamento recusar o envio
+          // inteiro com `AccessDenied` ("each form field must appear in the list
+          // of policy conditions"), e a condição sem o campo faz o cliente ser
+          // recusado por omitir. Foi assim que esta linha nasceu — o campo entrou
+          // primeiro, a condição não, e o upload voltou 403.
+          { 'x-amz-server-side-encryption': 'AES256' },
           { 'x-amz-algorithm': ALGORITMO },
           { 'x-amz-credential': credencial },
           { 'x-amz-date': longo },

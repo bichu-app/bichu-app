@@ -18,6 +18,7 @@ import type { Db } from '../../../../shared/db/pool.js';
 import type { JobKind } from '../../../../shared/ports/index.js';
 import type {
   FotoDoPet,
+  FotoParaProcessar,
   IntencaoDeEnvio,
   MediaRepository,
   NovaIntencao,
@@ -228,6 +229,49 @@ export function criarMediaRepository(db: Db): MediaRepository {
         .where('pet_photos.deleted_at', 'is', null)
         .executeTakeFirst();
       return linha === undefined ? null : comoFoto(linha);
+    },
+
+    async buscarParaProcessar(foto: string): Promise<FotoParaProcessar | null> {
+      const linha = await db
+        .selectFrom('pet_photos')
+        .select(['id', 'pet_id', 'status', 'original_key'])
+        .where('id', '=', foto)
+        .where('deleted_at', 'is', null)
+        .executeTakeFirst();
+      if (linha === undefined) return null;
+      return {
+        id: linha.id,
+        petId: linha.pet_id as PetId,
+        status: linha.status,
+        originalKey: linha.original_key as ObjectKey,
+      };
+    },
+
+    async marcarPronta(entrada): Promise<void> {
+      await db
+        .updateTable('pet_photos')
+        .set({
+          status: 'ready',
+          thumb_key: entrada.thumbKey,
+          card_key: entrada.cardKey,
+          processed_at: new Date(Number(entrada.agora)),
+        })
+        .where('id', '=', entrada.fotoId)
+        // Só sai de `processing`. Uma foto já `ready` ou `rejected` não volta:
+        // o trabalho pode ser reentregue pela fila depois de um reinício, e
+        // reprocessar geraria derivadas novas com chaves novas, deixando as
+        // antigas órfãs no bucket público e ainda servindo.
+        .where('status', '=', 'processing')
+        .execute();
+    },
+
+    async marcarRecusada(foto: string, motivo: string, agora: Instant): Promise<void> {
+      await db
+        .updateTable('pet_photos')
+        .set({ status: 'rejected', rejection_reason: motivo, processed_at: new Date(Number(agora)) })
+        .where('id', '=', foto)
+        .where('status', '=', 'processing')
+        .execute();
     },
 
     async excluirFoto(pet: PetId, foto: string, dono: UserId, agora: Instant): Promise<boolean> {

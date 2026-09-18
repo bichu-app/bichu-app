@@ -89,6 +89,18 @@ services:
       # homologacao atras de tunel ou de IP de rede local.
       MINIO_SERVER_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       MINIO_BROWSER_REDIRECT_URL: ${MINIO_CONSOLE_URL:-http://localhost:9001}
+      # CRIPTOGRAFIA NO SERVIDOR. O criterio 22 de BICHUS-87 a exige, e a
+      # politica de upload assinada manda `x-amz-server-side-encryption: AES256`.
+      #
+      # Sem esta variavel o MinIO responde **501 Not Implemented** ao envio -- e
+      # nao 400: ele entende o pedido e nao sabe atende-lo, porque SSE-S3 exige
+      # um KMS. O KMS embutido (`MINIO_KMS_SECRET_KEY`) atende, e e o caminho
+      # que o proprio MinIO documenta para ambiente sem KMS externo.
+      #
+      # Chave de DESENVOLVIMENTO, descartavel, com valor no `.env`. Em producao
+      # isto vira o KMS do provedor, que e configuracao e nao codigo -- o
+      # cabecalho que a aplicacao envia e o mesmo nos dois.
+      MINIO_KMS_SECRET_KEY: ${OBJECT_STORAGE_KMS_KEY:?defina no .env}
     volumes:
       - dados_objeto:/data
     healthcheck:

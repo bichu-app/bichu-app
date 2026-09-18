@@ -87,4 +87,29 @@ export interface MediaRepository {
   buscarFoto(pet: PetId, foto: string, dono: UserId): Promise<FotoDoPet | null>;
 
   excluirFoto(pet: PetId, foto: string, dono: UserId, agora: Instant): Promise<boolean>;
+
+  /**
+   * A foto como o WORKER precisa dela: sem dono, porque quem chama é o processo
+   * de trabalho e não uma requisição de usuário. É o único método desta porta
+   * que não recebe o tutor, e a exceção é deliberada e limitada — ele devolve
+   * chave de objeto e nada mais que sirva para montar uma resposta.
+   */
+  buscarParaProcessar(foto: string): Promise<FotoParaProcessar | null>;
+
+  marcarPronta(entrada: {
+    readonly fotoId: string;
+    readonly thumbKey: ObjectKey;
+    readonly cardKey: ObjectKey;
+    readonly agora: Instant;
+  }): Promise<void>;
+
+  /** Estado FINAL (critério 19): não volta para a fila. */
+  marcarRecusada(foto: string, motivo: string, agora: Instant): Promise<void>;
+}
+
+export interface FotoParaProcessar {
+  readonly id: string;
+  readonly petId: PetId;
+  readonly status: StatusDaFoto;
+  readonly originalKey: ObjectKey;
 }
