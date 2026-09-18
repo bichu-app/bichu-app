@@ -753,13 +753,100 @@ export interface paths {
          * @description **Publica.** A posse do codigo e a credencial. Com token de acesso do
          *     dono, devolve `viewer: owner` e o app abre o modo dono.
          *
-         *     O corpo devolvido e a visao publica minima: nada de telefone, e-mail,
-         *     endereco, CEP, sobrenome do tutor, ponto exato, id interno do pet ou
-         *     lista dos outros pets do mesmo tutor.
+         *     **O corpo e o mesmo nos tres valores de `viewer`.** Ele e a visao
+         *     publica minima: nada de telefone, e-mail, endereco, CEP, sobrenome do
+         *     tutor, ponto exato, id interno de pet ou de tag, nem lista dos outros
+         *     pets do mesmo tutor. `viewer` diz ao app **qual tela abrir** e nao
+         *     acrescenta campo nenhum a resposta.
+         *
+         *     O modo dono precisa de `pet_id` e `tag_id`, e eles **nao saem por
+         *     aqui**: estao em `GET /tags/{code}/owner-context`, que exige
+         *     `bearerAuth` e nao tem caminho anonimo. Um corpo que crescesse na
+         *     presenca de token colocaria UUID do banco na resposta declarada de uma
+         *     operacao alcancavel sem conta, o que o item 6 do ADR-0010 proibe **sem
+         *     excecao** para esta rota e para qualquer JSON que a sirva. A condicao
+         *     "so quando `viewer` e `owner`" so pode ser escrita em prosa: validador,
+         *     cliente gerado, simulador e portao leem o campo como presente, e nenhum
+         *     deles cumpre a frase. Ver SEC-001.
          *
          *     O acesso e registrado com o IP **hasheado**, nunca em claro.
          */
         get: operations["resolveTagCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tags/{code}/owner-context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
+                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
+                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *
+                 *     **O que o servidor aceita na entrada e mais largo do que a forma
+                 *     canonica**, porque existe um caminho em que a pessoa digita em vez de
+                 *     escanear: sem sinal, QR danificado, impressao ruim, ou lendo da URL
+                 *     legivel impressa na plaquinha. A normalizacao e parte do contrato, nao
+                 *     decisao de quem implementa, e a ordem dos passos importa:
+                 *
+                 *     1. remover tudo que nao for letra ou digito (hifen **em qualquer
+                 *        posicao**, espaco, ponto);
+                 *     2. passar para maiusculas;
+                 *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
+                 *        `1`**, **`O` vira `0`**;
+                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
+                 *     5. buscar pelo SHA-256 desse resultado.
+                 *
+                 *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
+                 *     codigo emitido normaliza para ele mesmo.
+                 *
+                 *     **Nenhuma outra substituicao e aceita, e isso e decisao, nao omissao.**
+                 *     Confusoes de leitura como `5`/`S`, `8`/`B` e `2`/`Z` **nao** sao
+                 *     corrigidas: o alfabeto de Crockford foi desenhado justamente para
+                 *     excluir os pares ambiguos, e acrescentar substituicao mapearia dois
+                 *     codigos validos e distintos um no outro. O resultado nao seria "nao
+                 *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
+                 *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
+                 *     invalido.
+                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 */
+                code: components["parameters"]["TagCode"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Identificadores da propria tag, para o dono
+         * @description **Exige conta e nao tem caminho anonimo.** Responde 200 apenas a quem e
+         *     tutor do pet a que esta tag pertence. E a contrapartida autenticada de
+         *     `viewer: owner` em `GET /tags/{code}`.
+         *
+         *     Existe porque o modo dono precisa de `pet_id` e `tag_id` para chamar as
+         *     operacoes do tutor, que sao enderecadas por UUID, e porque esses dois
+         *     valores **nao podem viajar no corpo de uma operacao alcancavel sem
+         *     conta** (ADR-0010 item 6; SEC-001). Separar a operacao troca uma
+         *     condicao que so existia em prosa por uma que o `security` declara e que
+         *     qualquer portao consegue conferir.
+         *
+         *     O app nao resolve isso sozinho: `GET /pets/{petId}/tags` devolve apenas
+         *     os quatro ultimos caracteres do codigo, de proposito, e
+         *     `POST /pets/{petId}/tags` e a unica resposta que traz o codigo em claro,
+         *     valor que o cliente nao persiste. Sem esta operacao, o unico caminho
+         *     seria varrer os pets e as tags do tutor comparando quatro caracteres,
+         *     que colidem.
+         *
+         *     Custa uma ida a mais **so no caminho do dono**, que e o raro: quem
+         *     escaneia a plaquinha na rua e um estranho, e para ele nada muda.
+         */
+        get: operations["getTagOwnerContext"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2147,6 +2234,11 @@ export interface components {
             /**
              * @description `owner` faz o app abrir o modo dono. Os outros dois veem a mesma
              *     coisa: a excecao permanente nao distingue quem esta logado.
+             *
+             *     **E sinal de navegacao, nao chave que destranca campo.** O corpo e
+             *     identico nos tres casos. Com `owner`, o app busca os
+             *     identificadores em `GET /tags/{code}/owner-context`, que exige
+             *     `bearerAuth`.
              * @enum {string}
              */
             viewer: "owner" | "authenticated_other" | "anonymous";
@@ -2180,13 +2272,19 @@ export interface components {
              *     Muda o texto do botao; nao impede avisar de novo.
              */
             already_notified?: boolean;
-            /** @description Presente apenas quando `viewer` e `owner`. */
-            owner_view?: {
-                /** Format: uuid */
-                pet_id?: string;
-                /** Format: uuid */
-                tag_id?: string;
-            } | null;
+        };
+        /**
+         * @description Os identificadores internos da tag e do pet dela. **So sai por
+         *     `bearerAuth`**, e por isso vive num schema proprio: enquanto estes dois
+         *     campos moraram dentro de `TagResolution`, eles estavam no corpo
+         *     declarado de uma operacao com caminho anonimo, protegidos apenas por
+         *     uma frase de descricao.
+         */
+        TagOwnerContext: {
+            /** Format: uuid */
+            pet_id: string;
+            /** Format: uuid */
+            tag_id: string;
         };
         /** @description Todos os campos opcionais. Corpo vazio e o caminho principal. */
         FoundReportFromTagInput: {
@@ -4333,6 +4431,81 @@ export interface operations {
                 };
             };
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getTagOwnerContext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
+                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
+                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *
+                 *     **O que o servidor aceita na entrada e mais largo do que a forma
+                 *     canonica**, porque existe um caminho em que a pessoa digita em vez de
+                 *     escanear: sem sinal, QR danificado, impressao ruim, ou lendo da URL
+                 *     legivel impressa na plaquinha. A normalizacao e parte do contrato, nao
+                 *     decisao de quem implementa, e a ordem dos passos importa:
+                 *
+                 *     1. remover tudo que nao for letra ou digito (hifen **em qualquer
+                 *        posicao**, espaco, ponto);
+                 *     2. passar para maiusculas;
+                 *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
+                 *        `1`**, **`O` vira `0`**;
+                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
+                 *     5. buscar pelo SHA-256 desse resultado.
+                 *
+                 *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
+                 *     codigo emitido normaliza para ele mesmo.
+                 *
+                 *     **Nenhuma outra substituicao e aceita, e isso e decisao, nao omissao.**
+                 *     Confusoes de leitura como `5`/`S`, `8`/`B` e `2`/`Z` **nao** sao
+                 *     corrigidas: o alfabeto de Crockford foi desenhado justamente para
+                 *     excluir os pares ambiguos, e acrescentar substituicao mapearia dois
+                 *     codigos validos e distintos um no outro. O resultado nao seria "nao
+                 *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
+                 *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
+                 *     invalido.
+                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 */
+                code: components["parameters"]["TagCode"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A tag pertence a um pet deste tutor. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TagOwnerContext"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description **Um 404 para tres casos**: o codigo nao existe, existe e foi
+             *     revogado, ou existe e e de outro tutor. Distinguir confirmaria a
+             *     existencia de tag alheia a qualquer pessoa com conta (item 9 da
+             *     lista do ADR-0010) e transformaria esta rota num oraculo de
+             *     enumeracao de codigo com um cadastro gratuito na frente. Quem
+             *     precisa da diferenca entre invalido (404) e revogado (410) e o
+             *     achador, e ele a recebe em `GET /tags/{code}`.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     createFoundReportFromTag: {
