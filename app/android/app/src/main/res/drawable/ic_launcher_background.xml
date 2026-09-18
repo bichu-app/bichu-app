@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    CAMADA DE FUNDO DO ICONE ADAPTATIVO. PROVISORIA, ATE A ARTE CHEGAR.
+
+    Quadrado chapado em Framboesa `#FF922C4A`, que e o fundo declarado do icone
+    do app em `design/marca/referencia/03-icone-do-app.png` e em
+    `docs/06-design-system.md` paragrafo 3.10 (simbolo em Marfim sobre quadrado
+    Framboesa). A cor vem de `design/tokens.json`, primitivo `raspberry.700`;
+    a procedencia completa esta em `values-v31/styles.xml`.
+
+    Isto existe por um motivo so: `mipmap-anydpi-v26/ic_launcher.xml` referencia
+    esta camada, e referencia que nao resolve quebra o build do Android. Nao e
+    arte, e um andaime.
+
+    SAI QUANDO A ARTE CHEGAR. `dart run flutter_launcher_icons` escreve
+    `drawable-mdpi/ic_launcher_background.png` ate `drawable-xxxhdpi/`, e este
+    XML vira sobra. O comando de fechamento inclui apaga-lo.
+-->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="#FF922C4A" />
+</shape>

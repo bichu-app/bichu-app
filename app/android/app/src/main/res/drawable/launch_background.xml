@@ -1,12 +1,42 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Modify this file to customize your launch splash screen -->
-<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@android:color/white" />
+<!--
+    SPLASH DO ANDROID ATE A API 30. Da API 31 em diante quem manda e
+    `values-v31/styles.xml` e `values-night-v31/styles.xml`, porque o sistema
+    passou a desenhar a splash pela SplashScreen API e ignora
+    `android:windowBackground`.
 
-    <!-- You can insert your own image assets here -->
-    <!-- <item>
-        <bitmap
-            android:gravity="center"
-            android:src="@mipmap/launch_image" />
-    </item> -->
+    A COR: Framboesa `#FF922C4A`, ou seja `#922C4A` opaco.
+    DE ONDE VEM: `design/tokens.json`, primitivo `raspberry.700`. E o mesmo
+    valor que e `ColorScheme.primary` no tema claro. Decisao do cliente de
+    17/09/2026. NAO e o fundo neutro do app (`#FAFAF8`).
+    POR QUE ESTA LITERAL AQUI: recurso XML de Android e lido pelo sistema antes
+    de existir processo Dart e nao consegue ler `design/tokens.json`. A
+    duplicacao e imposicao de plataforma.
+
+    O REGISTRO COMPLETO (os quatro pontos duplicados e como manter) esta em
+    `values-v31/styles.xml`. Ele mora la, e nao aqui, por um motivo concreto:
+    `dart run flutter_native_splash:create` REESCREVE ESTE ARQUIVO INTEIRO e
+    apaga este comentario junto, enquanto apenas EDITA o `styles.xml` e
+    preserva o dele. Comentario que some na proxima regeracao nao e registro.
+
+    A fonte do valor, quando o gerador roda, e o bloco `flutter_native_splash`
+    do `pubspec.yaml`. Mude la, nao aqui.
+
+    O item de bitmap com o simbolo entra sozinho quando o gerador rodar com a
+    arte em `design/marca/app/splash-simbolo.png`. Ate la o splash e a cor
+    chapada, que ja e o comportamento correto: a marca aparece, o azul padrao
+    do Flutter nao.
+-->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        `<color>` aninhado, e nao `android:drawable="#FF922C4A"` no item: o
+        atributo `drawable` exige REFERENCIA a um drawable, e o aapt reprova o
+        literal de cor com "incompatible with attribute drawable (attr)
+        reference". O erro so aparece no `assembleDebug`; o XML e valido, o
+        analisador do Flutter nao olha para ca, e o app compila ate o
+        empacotamento de recursos.
+    -->
+    <item>
+        <color android:color="#FF922C4A" />
+    </item>
 </layer-list>

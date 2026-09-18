@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SPLASH DO ANDROID 12 EM DIANTE (API 31). Tema escuro.
+
+    A cor e a MESMA do tema claro: Framboesa `#922C4A`, de `design/tokens.json`
+    primitivo `raspberry.700`. A procedencia completa e o motivo de o valor
+    estar literal aqui estao em `values-v31/styles.xml`, que e o registro deste
+    conjunto. Nao repita a explicacao; mantenha os dois iguais.
+
+    O cliente decidiu UM splash, nao dois: a marca abre em Framboesa
+    independentemente do tema do sistema.
+
+    POR QUE ESTE ARQUIVO PRECISA EXISTIR SEPARADO: na tabela de precedencia de
+    qualificadores de recurso do Android, o qualificador de modo noturno vem
+    ANTES do de versao de plataforma. Num aparelho API 33 com tema escuro,
+    `values-night/styles.xml` vence `values-v31/styles.xml`. Se so existisse o
+    `values-v31`, quem usa tema escuro, que e a maioria, abriria o app no
+    fundo padrao e ninguem veria a Framboesa. O defeito nao aparece em teste
+    feito no tema claro.
+-->
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <!-- Framboesa. Ver values-v31/styles.xml para a procedencia. -->
+        <item name="android:windowSplashScreenBackground">#FF922C4A</item>
+        <item name="android:forceDarkAllowed">false</item>
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>

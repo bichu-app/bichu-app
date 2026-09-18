@@ -1,9 +1,12 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/problem.dart';
+import '../../config/app_config.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -80,6 +83,17 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
         email: _email.text.trim(),
         senha: _senha.text,
         nome: _nome.text.trim().isEmpty ? null : _nome.text.trim(),
+        // A versao dos termos aceitos, que e prova juridica e nao dado de
+        // tela: sem ela o backend nao grava `accepted_terms_at` e nao ha como
+        // demonstrar o que a pessoa aceitou (docs/04-seguranca.md secao 6.6).
+        // Vem do build por `--dart-define=TERMS_VERSION`; enquanto o documento
+        // versionado nao existir, chega nulo, e essa ausencia agora esta
+        // escrita aqui em vez de acontecer sozinha.
+        versaoDosTermos: AppConfig.instancia.versaoDosTermos,
+        // A escolha da caixa agora chega ao servidor. Ate 17/09/2026
+        // `RegisterRequest` nao tinha o campo e esta linha era uma lacuna
+        // registrada em comentario; ADR-0019 a fechou.
+        continuarConectado: _continuarConectado,
       );
       await escopo.sessao.abrir(sessao);
       if (!mounted) return;
@@ -137,9 +151,6 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
     return Scaffold(
       appBar: const BarraDeConta(
         titulo: 'Criar conta',
@@ -200,11 +211,12 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
               ),
             ),
             const SizedBox(height: BichuEspaco.e6),
-            // LACUNA REGISTRADA: a F1.1 do UX pede esta caixa, e o
-            // `RegisterRequest` do contrato nao tem campo para ela — so o
-            // `LoginRequest` tem `stay_signed_in`. Enquanto o contrato nao
-            // fecha, a escolha nao chega ao servidor no cadastro. Nao invento
-            // campo fora da especificacao.
+            // LACUNA FECHADA em 17/09/2026 por ADR-0019: `RegisterRequest`
+            // passou a ter `stay_signed_in`, com a mesma forma e o mesmo
+            // padrao do `LoginRequest`, e a escolha desta caixa chega ao
+            // servidor. Ela governa a janela de inatividade do refresh: 30
+            // dias desmarcada, 180 marcada. Desmarcada por padrao, com o
+            // efeito dito em texto.
             _CaixaDeContinuarConectado(
               marcada: _continuarConectado,
               aoMudar: (v) => setState(() => _continuarConectado = v),
@@ -213,7 +225,13 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
               const SizedBox(height: BichuEspaco.e6),
               FaixaDeAviso(texto: _faixa!.texto),
             ],
-            const SizedBox(height: BichuEspaco.e8),
+            const SizedBox(height: BichuEspaco.e6),
+            // A linha de termos fica **acima** do botao, e nao no fim da tela:
+            // uma regra que se aceita ao apertar um botao precisa estar legivel
+            // antes do aperto, e nao abaixo da dobra (UX F1.1). Ela estava
+            // depois do botao e depois de "Ja tenho conta".
+            const _LinhaDeTermos(),
+            const SizedBox(height: BichuEspaco.e6),
             BotaoPrimario(
               rotulo: 'Criar conta',
               carregando: _enviando,
@@ -228,14 +246,100 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
                 child: const Text('Já tenho conta'),
               ),
             ),
-            const SizedBox(height: BichuEspaco.e4),
-            Text(
-              'Ao criar a conta você aceita os termos de uso e a política de '
-              'privacidade.',
-              style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-            ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// A linha de termos da F1.1, com as duas expressoes como links.
+///
+/// Antes esta frase era texto corrido: a pessoa aceitava dois documentos que
+/// nao tinha como abrir. Nao e acabamento, e a diferenca entre um aceite e uma
+/// afirmacao de que houve aceite.
+///
+/// **Divergencia que eu declaro.** O UX pede alvo de toque de 48 dp para os
+/// dois links. Link dentro de frase nao tem como ter 48 dp de altura sem
+/// espacar as linhas do paragrafo a ponto de ele deixar de parecer uma frase, e
+/// a alternativa (dois botoes soltos abaixo do texto) perde a ligacao entre a
+/// expressao e o documento, que e justamente o que faz o aceite valer. Fiquei
+/// com o link em linha e compensei onde da: nome acessivel proprio em cada um
+/// ("Termos de uso", "Politica de privacidade", nunca "aqui"), sublinhado
+/// alem da cor (SC 1.4.1: cor nao pode ser o unico indicador), e a frase
+/// inteira acima do botao.
+///
+/// **Quando a URL nao esta configurada a expressao nao vira link.** Link que
+/// nao abre nada e pior que texto: parece que funcionou. As duas URLs entram
+/// por `--dart-define` (`TERMS_URL`, `PRIVACY_URL`) e as paginas sao superficie
+/// web, de outro time.
+class _LinhaDeTermos extends StatefulWidget {
+  const _LinhaDeTermos();
+
+  @override
+  State<_LinhaDeTermos> createState() => _LinhaDeTermosState();
+}
+
+class _LinhaDeTermosState extends State<_LinhaDeTermos> {
+  final List<TapGestureRecognizer> _gestos = <TapGestureRecognizer>[];
+
+  @override
+  void dispose() {
+    for (final gesto in _gestos) {
+      gesto.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _abrir(Uri destino) async {
+    // Navegador do sistema, e nao WebView: documento juridico se le, se guarda
+    // e se imprime fora do app.
+    await launchUrl(destino, mode: LaunchMode.externalApplication);
+  }
+
+  TextSpan _link(String texto, Uri? destino, TextStyle estilo, Color cor) {
+    if (destino == null) return TextSpan(text: texto, style: estilo);
+
+    final gesto = TapGestureRecognizer()..onTap = () => _abrir(destino);
+    _gestos.add(gesto);
+    return TextSpan(
+      text: texto,
+      // O nome acessivel e a propria expressao, e nunca "aqui" nem "leia
+      // mais": quem navega por lista de links do leitor de tela ouve so o
+      // nome, fora da frase.
+      semanticsLabel: texto,
+      recognizer: gesto,
+      style: estilo.copyWith(
+        color: cor,
+        decoration: TextDecoration.underline,
+        decorationColor: cor,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final config = AppConfig.instancia;
+
+    final base = textos.bodyMedium?.copyWith(color: cores.textSecondary) ??
+        const TextStyle();
+
+    return Text.rich(
+      TextSpan(
+        children: <InlineSpan>[
+          TextSpan(text: 'Ao criar a conta, você aceita os ', style: base),
+          _link('termos de uso', config.urlDosTermos, base, cores.primary),
+          TextSpan(text: ' e a ', style: base),
+          _link(
+            'política de privacidade',
+            config.urlDaPrivacidade,
+            base,
+            cores.primary,
+          ),
+          TextSpan(text: '.', style: base),
+        ],
       ),
     );
   }

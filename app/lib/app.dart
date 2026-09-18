@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
@@ -13,12 +14,25 @@ import 'theme/bichu_theme.dart';
 
 /// A raiz do app.
 class BichuApp extends StatefulWidget {
-  const BichuApp({required this.config, super.key, this.deposito});
+  const BichuApp({
+    required this.config,
+    super.key,
+    this.deposito,
+    this.clienteHttp,
+  });
 
   final AppConfig config;
 
   /// Injetavel para teste. Em producao e o chaveiro do sistema.
   final DepositoDeSessao? deposito;
+
+  /// Injetavel para teste. Em producao e o cliente HTTP do proprio pacote.
+  ///
+  /// Existe para que o teste de widget exercite o caminho inteiro: tela,
+  /// `AuthApi`, `ApiClient` e a traducao de `Problem`. Um teste que so chama a
+  /// funcao de mensagem nao pega o defeito de a tela **parar de usa-la**, e e
+  /// esse defeito que volta calado numa refatoracao.
+  final http.Client? clienteHttp;
 
   @override
   State<BichuApp> createState() => _BichuAppState();
@@ -38,6 +52,7 @@ class _BichuAppState extends State<BichuApp> {
     // ninguem precisar reconstruir o cliente.
     _api = ApiClient(
       config: widget.config,
+      cliente: widget.clienteHttp,
       tokenDeAcesso: () => _sessao.tokenValido(),
     );
     _auth = AuthApi(_api);

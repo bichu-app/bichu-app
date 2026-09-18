@@ -44,20 +44,77 @@ class _TelaEntrarState extends State<TelaEntrar> {
       TextEditingController(text: widget.emailInicial ?? '');
   final TextEditingController _senha = TextEditingController();
 
+  final FocusNode _focoDoEmail = FocusNode();
+  final FocusNode _focoDaSenha = FocusNode();
+
   bool _senhaVisivel = false;
   bool _continuarConectado = false;
   bool _enviando = false;
   MensagemDeErro? _faixa;
+  String? _erroDoEmail;
+  String? _erroDaSenha;
 
   @override
   void dispose() {
     _email.dispose();
     _senha.dispose();
+    _focoDoEmail.dispose();
+    _focoDaSenha.dispose();
     super.dispose();
   }
 
+  /// Validacao local, antes de gastar uma ida a rede.
+  ///
+  /// Nao e zelo de formulario: enviar campo vazio devolve o 401 de credencial
+  /// recusada, que e **falso** (a credencial nao foi recusada, ela nao foi
+  /// escrita) e ainda **queima uma das cinco tentativas por e-mail** antes de o
+  /// desafio antiabuso aparecer. A pessoa paga duas vezes por um campo que ela
+  /// nem preencheu (UX 8.2.2).
+  ///
+  /// A autoridade continua no servidor: isto e conveniencia, e o servidor
+  /// recusa de novo o que for o caso.
+  bool _camposPreenchidos() {
+    final email = _email.text.trim();
+    final senha = _senha.text;
+
+    String? erroDoEmail;
+    if (email.isEmpty) {
+      erroDoEmail = MensagensDeErro.digiteSeuEmail;
+    } else if (!_emailPlausivel(email)) {
+      // Validacao tolerante (UX 13): recusa o obviamente errado, aceita o
+      // incomum. Endereco real e mais estranho que a maioria das expressoes.
+      erroDoEmail = MensagensDeErro.confiraOEmail;
+    }
+    final erroDaSenha = senha.isEmpty ? MensagensDeErro.digiteSuaSenha : null;
+
+    if (erroDoEmail == null && erroDaSenha == null) return true;
+
+    setState(() {
+      _erroDoEmail = erroDoEmail;
+      _erroDaSenha = erroDaSenha;
+    });
+    // O foco vai para o primeiro campo com erro. Aqui sabemos qual e, ao
+    // contrario da credencial recusada, em que nao se sabe e o foco vai para a
+    // mensagem.
+    (erroDoEmail != null ? _focoDoEmail : _focoDaSenha).requestFocus();
+    return false;
+  }
+
+  static bool _emailPlausivel(String valor) {
+    final v = valor.trim();
+    final arroba = v.indexOf('@');
+    return arroba > 0 && v.indexOf('.', arroba) > arroba + 1;
+  }
+
   Future<void> _entrar() async {
-    setState(() => _faixa = null);
+    setState(() {
+      _faixa = null;
+      _erroDoEmail = null;
+      _erroDaSenha = null;
+    });
+
+    if (!_camposPreenchidos()) return;
+
     setState(() => _enviando = true);
 
     final escopo = Escopo.of(context);
@@ -77,19 +134,19 @@ class _TelaEntrarState extends State<TelaEntrar> {
       // `go` tambem limpa o desvio da pilha, entao nenhuma tela de conta fica
       // pendurada atras do Inicio.
       context.go(Rotas.inicio);
-    } on FalhaDaApi catch (falha) {
-      if (!mounted) return;
-      setState(() {
-        _faixa = falha.problem.status == 401
-            ? const MensagemDeErro(
-                texto: MensagensDeErro.credencialNaoConfere,
-                acao: 'Esqueci minha senha',
-              )
-            : MensagensDeErro.de(falha);
-      });
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
-      setState(() => _faixa = MensagensDeErro.de(falha));
+      // **A decisao e por `type`, nunca pelo status.** O contrato declara
+      // QUATRO tipos com status 401 (`invalid-credentials`, `unauthenticated`,
+      // `token-expired`, `reauthentication-required`). Um `if (status == 401)`
+      // acerta hoje por sorte, porque so o primeiro chega a esta tela, e erra
+      // calado no dia em que outro chegar: a tela diria a pessoa que a senha
+      // esta errada e ela trocaria uma senha que estava certa. O mapa dos
+      // quatro esta em `MensagensDeErro.deEntrar`, e ha teste que cobra cada um.
+      //
+      // Nada e apagado: nem o e-mail, nem a senha. O caso dominante e um
+      // caractere trocado, e quem digita de novo do zero erra de novo.
+      setState(() => _faixa = MensagensDeErro.deEntrar(falha));
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
@@ -112,15 +169,27 @@ class _TelaEntrarState extends State<TelaEntrar> {
             BichuField(
               rotulo: 'E-mail',
               controlador: _email,
+              foco: _focoDoEmail,
+              erro: _erroDoEmail,
               tipoDeTeclado: TextInputType.emailAddress,
               autofill: const <String>[AutofillHints.email],
               correcaoAutomatica: false,
               acaoDeTeclado: TextInputAction.next,
+              // Depois que o campo errou uma vez, revalidar enquanto digita,
+              // para o erro sumir assim que for corrigido (UX 13).
+              aoMudar: _erroDoEmail == null
+                  ? null
+                  : (_) => setState(() => _erroDoEmail = null),
             ),
             const SizedBox(height: BichuEspaco.e6),
             BichuField(
               rotulo: 'Senha',
               controlador: _senha,
+              foco: _focoDaSenha,
+              erro: _erroDaSenha,
+              aoMudar: _erroDaSenha == null
+                  ? null
+                  : (_) => setState(() => _erroDaSenha = null),
               obscurecer: !_senhaVisivel,
               autofill: const <String>[AutofillHints.password],
               correcaoAutomatica: false,

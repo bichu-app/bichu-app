@@ -16,11 +16,43 @@ class AuthApi {
   /// A conta nasce incompleta de proposito: e-mail ainda nao verificado. A
   /// resposta ja traz o par de tokens porque a intencao pendente da pessoa
   /// precisa executar logo em seguida.
+  ///
+  /// [versaoDosTermos] e **obrigatorio, e nulavel**, e a combinacao e o ponto:
+  /// o tipo admite "nao tenho o valor", e o `required` obriga cada chamador a
+  /// **dizer isso**. Enquanto o parametro era opcional, nenhum chamador o
+  /// passava, a chave saia do corpo pelo `?` da linha abaixo e ninguem via: a
+  /// pessoa aceitava os termos e nao ficava registro de qual versao. O backend
+  /// so grava `accepted_terms_at` quando o campo chega
+  /// (`kysely-identity-repository.ts`), entao omitir e nao registrar aceite
+  /// nenhum, o que e onus da prova e nao detalhe de tela
+  /// (docs/04-seguranca.md secao 6.6).
+  ///
+  /// Passar nulo continua permitido porque o identificador da versao ainda nao
+  /// existe: a secao 6.6 exige o identificador do arquivo versionado no
+  /// repositorio, e esse arquivo nao foi escrito. Inventar um numero gravaria
+  /// prova de aceite a um documento inexistente. O que mudou e que agora a
+  /// omissao e uma decisao escrita no ponto de chamada, e nao um esquecimento.
+  ///
+  /// [continuarConectado] entrou no contrato em 17/09/2026 (ADR-0019) e fecha
+  /// a lacuna que este arquivo carregava: a caixa existia na tela, a pessoa
+  /// marcava, e a escolha morria no aparelho porque `RegisterRequest` nao
+  /// tinha o campo. Ela governa **so** a janela de inatividade do refresh (30
+  /// dias quando falso, 180 quando verdadeiro); nao mexe no token de acesso de
+  /// 15 minutos, nao move o teto absoluto de 180 dias e nao dispensa a
+  /// reautenticacao com senha das seis acoes sensiveis.
+  ///
+  /// `POST /auth/register` ja responde 201 com o par de tokens, entao **nao
+  /// existia a opcao de nao decidir**: a janela se aplicava de qualquer jeito,
+  /// e antes disto aplicava-se a padrao em silencio, descartando a escolha
+  /// explicita. E a conta recem-criada e justamente a que passa mais tempo sem
+  /// ser aberta, porque a pessoa cadastra o pet, prende a plaquinha e so volta
+  /// no dia em que o animal some.
   Future<Sessao> criarConta({
     required String email,
     required String senha,
+    required String? versaoDosTermos,
     String? nome,
-    String? versaoDosTermos,
+    bool continuarConectado = false,
   }) async {
     final json = await _api.post(
       '/auth/register',
@@ -30,6 +62,10 @@ class AuthApi {
         'password': senha,
         if (nome != null && nome.isNotEmpty) 'display_name': nome,
         'accepted_terms_version': ?versaoDosTermos,
+        // Enviado sempre, inclusive quando falso: e o padrao do contrato, e
+        // mandar explicitamente evita que a omissao e a escolha "nao" fiquem
+        // indistinguiveis no servidor.
+        'stay_signed_in': continuarConectado,
       },
     );
     return Sessao.doJson(json);

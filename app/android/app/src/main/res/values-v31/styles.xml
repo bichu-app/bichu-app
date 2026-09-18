@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    SPLASH DO ANDROID 12 EM DIANTE (API 31). Tema claro.
+
+    ========================= A COR =========================
+    Framboesa `#922C4A`.
+
+    DE ONDE ELA VEM: `design/tokens.json`, na raiz do repositorio, primitivo
+    `raspberry.700`. E o mesmo valor que vira `ColorScheme.primary` do tema
+    claro em `lib/theme/bichu_tokens.g.dart`, gerado por
+    `app/tool/gen_tokens.dart`. Decisao do cliente de 17/09/2026: o splash abre
+    em cor de marca preenchida, e NAO no fundo neutro do app (`#FAFAF8`,
+    `neutral.25`).
+
+    POR QUE ELA ESTA ESCRITA A MAO AQUI, se o projeto tem fonte unica de cor:
+    este arquivo e lido pelo sistema operacional antes de existir processo
+    Dart. Recurso XML de Android nao le `design/tokens.json`, nao le
+    `bichu_tokens.g.dart` e nao le nada em tempo de execucao do app. O valor
+    precisa estar literal no APK. A duplicacao e imposicao de plataforma, nao
+    cor solta que alguem digitou.
+
+    OS QUATRO PONTOS DUPLICADOS, que mudam juntos ou nao mudam:
+      1. android/app/src/main/res/values-v31/styles.xml        (este arquivo)
+      2. android/app/src/main/res/values-night-v31/styles.xml  (tema escuro)
+      3. android/app/src/main/res/drawable/launch_background.xml
+         e drawable-v21/launch_background.xml                  (Android 11-)
+      4. ios/Runner/Base.lproj/LaunchScreen.storyboard         (em sRGB 0..1)
+    A quinta copia, que e a FONTE das outras quatro quando o gerador roda,
+    esta em `app/pubspec.yaml`, bloco `flutter_native_splash`.
+
+    ==================== MANUTENCAO ====================
+    Estes arquivos sao SAIDA de `dart run flutter_native_splash:create`, que le
+    o bloco `flutter_native_splash` do `pubspec.yaml`. Para mudar a cor, mude
+    la e rode o comando; nao edite este arquivo a mao.
+
+    O gerador edita este arquivo em vez de reescreve-lo, entao ESTE COMENTARIO
+    SOBREVIVE a regeracao. O de `launch_background.xml`, nao: aquele arquivo e
+    substituido inteiro. Por isso o registro completo esta aqui.
+
+    ==================== POR QUE ESTE ARQUIVO EXISTE ====================
+    A partir do Android 12 o sistema desenha a splash pela SplashScreen API e
+    IGNORA `android:windowBackground`. Sem `values-v31`, o `launch_background`
+    dos arquivos antigos nao e usado e o aparelho abre no fundo do tema, que e
+    branco. Como quase todo aparelho em campo hoje e API 31+, a ausencia deste
+    arquivo significaria splash branco para quase todo mundo, e um teste em
+    emulador de Android 11 passaria sem acusar nada.
+-->
+<resources>
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <!-- Framboesa. Ver o cabecalho deste arquivo para a procedencia. -->
+        <item name="android:windowSplashScreenBackground">#FF922C4A</item>
+        <!-- O sistema nao pode escurecer a cor de marca por conta propria. -->
+        <item name="android:forceDarkAllowed">false</item>
+        <!-- Compatibilidade com o caminho pre-API 31, que continua valendo em
+             aparelho antigo. -->
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+    <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">?android:colorBackground</item>
+    </style>
+</resources>

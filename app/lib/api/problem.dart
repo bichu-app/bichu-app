@@ -16,6 +16,31 @@ library;
 enum ProblemTipo {
   validacaoFalhou('validation-failed'),
   emailJaCadastrado('email-already-registered'),
+
+  // Os QUATRO 401 do contrato (api/openapi.yaml, `x-problem-types`). Eles sao
+  // quatro tipos e nao um porque significam coisas diferentes e a tela reage
+  // diferente a cada um. Decidir pelo status 401 acerta hoje por sorte, porque
+  // so `invalid-credentials` chega a C.2, e erra calado no dia em que outro
+  // chegar: a tela diria a pessoa que a senha esta errada e ela trocaria uma
+  // senha que estava certa (UX 8.2.2).
+  //
+  // `forbidden` NAO entra nesta lista de 401: ele e 403, e usa-lo aqui faria o
+  // app tratar "sua senha nao confere" pelo mesmo caminho de "este recurso nao
+  // e seu".
+
+  /// Sem token, token ausente ou assinatura invalida. 401.
+  naoAutenticado('unauthenticated'),
+
+  /// E-mail ou senha nao conferem. 401. So aparece em C.2.
+  ///
+  /// O corpo e **identico** para conta inexistente e senha errada, por decisao
+  /// de seguranca: distinguir os dois transformaria a tela de entrar num
+  /// verificador de quem tem conta.
+  credencialInvalida('invalid-credentials'),
+
+  /// Token expirado, ja usado ou revogado. 401.
+  tokenExpirado('token-expired'),
+
   reautenticacaoNecessaria('reauthentication-required'),
   canalDeContatoNaoVerificado('contact-channel-unverified'),
   petSemFoto('pet-photo-missing'),

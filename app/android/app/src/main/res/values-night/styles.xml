@@ -4,7 +4,13 @@
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
         <!-- Show a splash screen on the activity. Automatically removed when
              the Flutter engine draws its first frame -->
+        <!-- `@drawable/launch_background` e o mesmo do tema claro: o cliente
+             decidiu UM splash em Framboesa, nao dois. A procedencia da cor
+             esta em `values-v31/styles.xml`. -->
         <item name="android:windowBackground">@drawable/launch_background</item>
+        <!-- Sem isto o sistema pode escurecer a cor de marca por conta
+             propria no tema escuro, e a Framboesa chega adulterada. -->
+        <item name="android:forceDarkAllowed">false</item>
     </style>
     <!-- Theme applied to the Android Window as soon as the process has started.
          This theme determines the color of the Android Window while your

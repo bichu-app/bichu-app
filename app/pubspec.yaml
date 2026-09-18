@@ -47,12 +47,35 @@ dependencies:
   # projeto bichu-app-508914. `firebase_messaging` entra com a historia de
   # push: a dependencia do envio de notificacao nao e do esqueleto.
   firebase_core: ^4.3.0
+  # Abre os termos de uso e a politica de privacidade no navegador do sistema.
+  # Eles sao superficie web, de outro time, e nao telas deste app: embuti-los
+  # num WebView colocaria o app na fronteira de "site embrulhado" da revisao da
+  # App Store, e obrigaria este binario a acompanhar mudanca de documento
+  # juridico. O navegador do sistema e tambem onde a pessoa consegue guardar,
+  # imprimir e compartilhar o que aceitou.
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+
+  # Geradores de icone e de splash. Rodam em tempo de desenvolvimento, escrevem
+  # arquivo nativo no disco e NAO entram no binario -- por isso `dev_`.
+  #
+  # Por que estes dois, e nao mao livre: icone de loja e splash sao quinze
+  # arquivos por plataforma, em densidades que precisam bater exatamente. Feito
+  # a mao, a divergencia entre densidades so aparece no aparelho de outra
+  # pessoa. Feito por gerador, a fonte e um arquivo de arte e o resto e saida.
+  # Sao tambem os dois pacotes que o proprio time do Flutter aponta na
+  # documentacao de deployment, o que importa aqui porque o formato de icone
+  # adaptativo e o da splash de Android 12 mudam com a plataforma e quem
+  # acompanha a mudanca e o pacote, nao este repositorio.
+  #
+  # A configuracao dos dois esta no fim deste arquivo.
+  flutter_launcher_icons: ^0.14.4
+  flutter_native_splash: ^2.4.8
 
 flutter:
   uses-material-design: true
@@ -81,3 +104,121 @@ flutter:
 
   assets:
     - assets/fonts/OFL.txt
+
+# ---------------------------------------------------------------------------
+# Icone do app (flutter_launcher_icons)
+# ---------------------------------------------------------------------------
+#
+# Fonte da arte: `design/marca/app/`, na RAIZ do repositorio, fora deste
+# pacote. E o mesmo arranjo de `tool/gen_tokens.dart`, que le
+# `../design/tokens.json`: a marca tem uma fonte so, e ela nao mora dentro do
+# app. Copiar os PNG para `app/assets/` criaria a segunda fonte da verdade que
+# docs/06-design-system.md paragrafo 18.2.2 existe para impedir.
+#
+# Os quatro arquivos sao entrega da designer. Enquanto nao estiverem la, o
+# comando abaixo FALHA dizendo qual arquivo faltou, que e o comportamento certo:
+# gerador que nao acha a arte precisa parar, nao emitir icone em branco.
+#
+#   cd app && dart run flutter_launcher_icons
+#
+flutter_launcher_icons:
+  # iOS: quadrado de 1024x1024 sem transparencia. A App Store recusa icone com
+  # canal alfa (App Store Review Guidelines, secao de metadados; o proprio
+  # Transporter barra no upload). `remove_alpha_ios` achata o alfa contra o
+  # fundo em vez de deixar o build chegar ate a loja para descobrir la.
+  ios: true
+  image_path: "../design/marca/app/icone-ios-1024.png"
+  remove_alpha_ios: true
+
+  # Android. `android: true` sobrescreve o `ic_launcher` legado nas cinco
+  # densidades (mipmap-mdpi a xxxhdpi) e reescreve
+  # `mipmap-anydpi-v26/ic_launcher.xml` com as camadas declaradas abaixo.
+  android: true
+
+  # Icone adaptativo (Android 8.0 / API 26 em diante). Duas camadas separadas,
+  # porque o sistema recorta a mascara do fabricante -- circulo, quadrado
+  # arredondado, gota -- e desloca as camadas no parallax da tela inicial. Uma
+  # imagem chapada unica fica cortada em aparelho que usa mascara redonda.
+  #
+  # As duas camadas sao 108x108 dp; so os 72dp centrais sao garantidos visiveis
+  # (a "safe zone" do Material Design). O simbolo precisa caber ali.
+  adaptive_icon_foreground: "../design/marca/app/icone-android-foreground.png"
+  adaptive_icon_background: "../design/marca/app/icone-android-background.png"
+  adaptive_icon_foreground_inset: 16
+
+  # ICONE MONOCROMATICO (Android 13 / API 33, "themed icons"): DELIBERADAMENTE
+  # VAZIO. Nao e esquecimento.
+  #
+  # O campo pede uma silhueta de uma cor so, que o sistema repinta com a cor do
+  # papel de parede. Derivar essa silhueta do PNG colorido seria eu redesenhar
+  # a marca do cliente por conta propria, e a regua de reducao de
+  # docs/06-design-system.md paragrafo 3.10 mede o simbolo REPROVANDO abaixo de
+  # 48px -- ou seja, a silhueta que eu inventasse sairia errada justamente no
+  # tamanho em que ela e usada. Falta o VETOR da marca, que e item do cliente
+  # (design/marca/README.md, pendencia 3).
+  #
+  # Sem este campo o Android 13+ usa o icone adaptativo colorido normal. Isso e
+  # degradacao correta, nao defeito.
+  # adaptive_icon_monochrome: "../design/marca/app/icone-android-monocromatico.png"
+
+  # Piso declarado no gradle do Flutter. Abaixo de 26 o sistema ignora o
+  # adaptativo e cai no `ic_launcher.png` legado, que continua sendo gerado.
+  min_sdk_android: 21
+
+# ---------------------------------------------------------------------------
+# Splash (flutter_native_splash)
+# ---------------------------------------------------------------------------
+#
+# FUNDO FRAMBOESA `#922C4A`. Decisao do cliente, tomada em 17/09/2026.
+#
+# DE ONDE VEM O VALOR: `design/tokens.json`, primitivo `raspberry.700`, que e o
+# `primary` do tema claro (`lib/theme/bichu_tokens.g.dart`). NAO e o fundo
+# neutro do app (`#FAFAF8`, neutral.25) -- o splash e a unica superficie do
+# produto que abre em cor de marca preenchida.
+#
+# ESTE VALOR ESTA DUPLICADO DE PROPOSITO. O XML de recurso do Android e o
+# catalogo de assets do iOS sao lidos pelo sistema operacional antes de existir
+# processo Dart: nenhum dos dois consegue ler `design/tokens.json`. A
+# duplicacao e imposicao de plataforma, nao cor solta. Os pontos duplicados
+# estao listados em `android/app/src/main/res/values-v31/styles.xml`, que e o
+# unico deles que o gerador preserva comentario.
+#
+# Quem mudar a cor do splash precisa mudar, no mesmo commit:
+#   1. `color` e `color_dark` aqui, e os mesmos dois dentro de `android_12`;
+#   2. rodar o comando abaixo, que reescreve os arquivos nativos;
+#   3. conferir que o valor continua igual a `raspberry.700` de
+#      `design/tokens.json` -- se divergiu, o errado e aqui.
+#
+#   cd app && dart run flutter_native_splash:create
+#
+flutter_native_splash:
+  color: "#922C4A"
+  # Mesmo valor no tema escuro: o cliente decidiu UM splash, nao dois. Sem esta
+  # linha o Android usaria o branco do `values-night` e o app abriria branco
+  # para quem esta no tema escuro, que e a maioria.
+  color_dark: "#922C4A"
+
+  # Simbolo da marca, centrado, em Marfim sobre a Framboesa
+  # (design/marca/referencia/03-icone-do-app.png). Arte da designer.
+  image: "../design/marca/app/splash-simbolo.png"
+  android_gravity: center
+  ios_content_mode: center
+
+  android: true
+  ios: true
+  # O produto nao tem alvo web. Deixar `true` faria o gerador escrever em
+  # `web/`, que nao existe neste pacote.
+  web: false
+
+  # Android 12 (API 31) trocou o mecanismo: o sistema desenha a splash pela
+  # SplashScreen API e IGNORA `android:windowBackground`. Sem este bloco o
+  # aparelho de qualquer pessoa hoje abriria no fundo do tema, e nao na
+  # Framboesa -- e o teste em emulador antigo nao acusaria.
+  #
+  # O icone desta splash e recortado num circulo pelo sistema: a arte precisa
+  # ser 1152x1152 com o desenho dentro dos 768px centrais, senao as bordas
+  # entram no corte.
+  android_12:
+    color: "#922C4A"
+    color_dark: "#922C4A"
+    image: "../design/marca/app/splash-simbolo.png"

@@ -25,6 +25,34 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- ICONE DE NOTIFICACAO DO ANDROID: AUSENTE DE PROPOSITO.
+
+             O lugar dele e uma meta-data
+             `com.google.firebase.messaging.default_notification_icon`
+             apontando para um drawable. Ela nao esta aqui, e nao e
+             esquecimento.
+
+             A partir do Android 5.0 o sistema descarta a cor do icone de
+             notificacao e renderiza so o canal alfa: o que aparece na barra de
+             status e uma SILHUETA branca de 24dp. Colorido vira quadrado
+             branco solido, que e o defeito classico.
+
+             Nao ha silhueta para colocar aqui. A regua de reducao de
+             `docs/06-design-system.md` paragrafo 3.10 REPROVA o simbolo abaixo
+             de 48px: em 32px "olho e lingua viram mancha", em 24px "o simbolo
+             e um borrao". Derivar uma silhueta do PNG colorido seria redesenhar
+             a marca do cliente, e justamente no tamanho em que ela ja foi
+             medida reprovando. Falta o VETOR, que e item do cliente
+             (`design/marca/README.md`, pendencia 3).
+
+             Ate o vetor chegar, o Firebase cai no icone do app, que e o
+             comportamento padrao. Nao preencha este campo com um PNG colorido
+             nem com uma silhueta improvisada.
+
+             (O app ainda nao tem `firebase_messaging`: a dependencia entra com
+             a historia de push. Este comentario existe para que ela nao entre
+             junto com um icone inventado.) -->
+
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
