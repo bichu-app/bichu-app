@@ -629,7 +629,22 @@ jobs:
 
       - name: veredito do portao de qualidade
         id: veredito
-        continue-on-error: ${{ steps.modo.outputs.bloqueante == 'nao' }}
+        # `true` SEMPRE, e isto NAO afrouxa o portao: quem decide reprovar e o
+        # passo seguinte, que le `steps.veredito.outcome` e sai com 1 quando a
+        # dispensa nao existe. O bloqueio continua inteiro; o que muda e QUEM o
+        # aplica.
+        #
+        # Era `${{ steps.modo.outputs.bloqueante == 'nao' }}`, e nao funcionava:
+        # medido em 18/09, com o `modo` tendo dito "informativo" no log, o passo
+        # terminou `failure` e o passo do veredito foi **pulado** -- a dispensa
+        # estava escrita e era INERTE. Expressao condicional aqui depende de o
+        # `steps` context estar resolvido no momento em que a acao composta
+        # falha por dentro, e ele nao estava.
+        #
+        # Com `true` fixo, os dois caminhos ficam no passo de baixo, onde sao
+        # legiveis e testaveis: sem dispensa -> `::error::` e exit 1; com
+        # dispensa -> `::warning::` e o job segue.
+        continue-on-error: true
         uses: SonarSource/sonarqube-quality-gate-action@v1.2.1
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
