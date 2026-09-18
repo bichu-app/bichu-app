@@ -36,7 +36,7 @@ import { PetService } from '../modules/pets/application/pet-service.js';
 import { registrarRotasDePets } from '../modules/pets/adapters/http/pet-routes.js';
 import { criarMediaRepository } from '../modules/media/adapters/persistence/kysely-media-repository.js';
 import type { FotoResumida } from '../modules/pets/ports/fotos-do-pet.js';
-import type { PetId } from '../shared/types/brands.js';
+import type { PetId, UserId } from '../shared/types/brands.js';
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { MediaService } from '../modules/media/application/media-service.js';
 import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
@@ -81,24 +81,49 @@ export async function main(): Promise<void> {
     },
   });
 
+  // Declarados antes do serviço: `avisarTitular` precisa dos dois, e ela é
+  // passada para dentro dele.
+  const repositorioDeIdentidade = criarIdentityRepository(db, ids);
+  const mailer = criarMailer(config.mail);
+
   const auth = criarAuthService({
-    repositorio: criarIdentityRepository(db, ids),
+    repositorio: repositorioDeIdentidade,
     assinador,
     trilha,
     ids,
     clock: systemClock,
     janelas: config.session,
     hmacDeIp: (ip) => hmacDeEnderecoIp(ip, config.ipHmacKey),
-    mailer: criarMailer(config.mail),
+    mailer,
     // O link do e-mail aponta para a PÁGINA do time web, não para a API: quem
     // abre é uma pessoa num navegador, e o ADR-0017 tirou HTML deste serviço.
     baseDaWeb: config.publicBaseUrl,
     avisarTitular: async (aviso) => {
-      // O envio de e-mail pertence ao módulo `notifications`, que não existe
-      // nesta entrega. Registrar aqui é o mínimo honesto: a detecção fica
-      // visível em vez de parecer implementada.
-      app.log.warn({ aviso }, 'aviso ao titular pendente de canal de envio');
-      await Promise.resolve();
+      // Critério 10 de BICHUS-15: **a vítima é avisada por e-mail**. Até
+      // 18/09 isto só registrava no log, esperando um módulo `notifications`
+      // que não existe — e a própria história diz por que isso não bastava:
+      // "detecção silenciosa não protege ninguém". Quem teve a sessão roubada
+      // interpreta a revogação como "o app me deslogou" e faz login de novo,
+      // sem nunca saber que alguém entrou.
+      //
+      // O log continua, porque ele serve a outra pessoa: quem investiga depois.
+      app.log.warn({ tipo: aviso.tipo, correlationId: aviso.correlationId }, 'reuso de refresh detectado');
+
+      const conta = await repositorioDeIdentidade.buscarContaPorId(aviso.userId as UserId);
+      // Conta apagada entre a detecção e o aviso: não há para quem escrever.
+      if (conta === undefined) return;
+
+      await mailer.enviar({
+        para: conta.email,
+        assunto: 'Encerramos as sessões da sua conta no Bichu',
+        corpo:
+          'Detectamos um sinal de que alguém pode ter copiado o acesso da sua conta, ' +
+          'e encerramos todas as sessões por precaução.\n\n' +
+          'Entre de novo no aplicativo. Se você não reconhece nenhuma atividade estranha, ' +
+          'não precisa fazer mais nada.\n\n' +
+          'Se desconfiar de alguma coisa, troque a sua senha: isso derruba qualquer acesso ' +
+          'que não seja o seu.',
+      });
     },
   });
 
