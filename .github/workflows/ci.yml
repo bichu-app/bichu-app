@@ -64,6 +64,18 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No evento `pull_request` a acao tenta COMENTAR no PR, e o token do
+          # workflow so tem `contents: read` -- ela morria com "Resource not
+          # accessible by integration" e derrubava o portao rapido, que e o
+          # primeiro: os outros 7 jobs nem chegavam a rodar.
+          #
+          # A correcao natural seria conceder `pull-requests: write`. Nao e a
+          # certa: o comentario do gitleaks cita o TRECHO do segredo achado, e
+          # comentario de PR e publico e permanente. Um vazamento viraria dois.
+          # Desligar o comentario mantem a varredura (que e o que importa: ela
+          # reprova o job do mesmo jeito) e o token sem escopo de escrita.
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          GITLEAKS_ENABLE_SUMMARY: 'true'
 
   codigo:
     name: lint, tipos e teste unitario
