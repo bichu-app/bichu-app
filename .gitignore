@@ -106,3 +106,10 @@ infra/GoogleService-Info.plist
 cypress/screenshots/
 cypress/videos/
 cypress/downloads/
+
+# Link para a squad de agentes, que mora na plataforma Jarvis (jarvis-ai/.claude/
+# agents/) e nao neste repositorio. O link aponta para FORA da arvore do git:
+# commitado, ele viraria um caminho quebrado em qualquer outro clone. Quem for
+# trabalhar neste produto com a squad refaz o link localmente, ou abre a sessao
+# direto em jarvis-ai/.
+.claude/agents
