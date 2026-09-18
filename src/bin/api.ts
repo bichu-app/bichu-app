@@ -33,6 +33,10 @@ import { registrarRotasDeReferencia } from '../modules/pets/adapters/http/refere
 import { criarPetRepository } from '../modules/pets/adapters/persistence/kysely-pet-repository.js';
 import { PetService } from '../modules/pets/application/pet-service.js';
 import { registrarRotasDePets } from '../modules/pets/adapters/http/pet-routes.js';
+import { criarMediaRepository } from '../modules/media/adapters/persistence/kysely-media-repository.js';
+import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
+import { MediaService } from '../modules/media/application/media-service.js';
+import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
 import { criarIdempotencia } from '../shared/http/idempotency.js';
 import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
@@ -130,6 +134,23 @@ export async function main(): Promise<void> {
     clock: systemClock,
   };
 
+  const dependenciasDasRotasDeMidia = {
+    midia: new MediaService({
+      repositorio: criarMediaRepository(db),
+      // O ÚNICO lugar do sistema que instancia algo que sabe o que é S3.
+      armazenamento: criarObjectStorage(config.objectStorage),
+      ids,
+      clock: systemClock,
+    }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+    // Hostname separado da origem da aplicação, desde o desenvolvimento: mídia
+    // de usuário servida na mesma origem é XSS com acesso à sessão (ADR-0007).
+    baseDeMidia: config.mediaPublicBaseUrl,
+  };
+
   const dependenciasDasRotasDeTag = {
     tags,
     // A porta é de `tags` e quem a liga ao serviço de identidade é esta linha: é
@@ -160,6 +181,7 @@ export async function main(): Promise<void> {
       registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
       registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
       registrarRotasDePets(escopo, dependenciasDasRotasDePet);
+      registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
       registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
       registrarSaude(escopo, {
         version: config.version,

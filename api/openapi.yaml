@@ -295,6 +295,8 @@ x-problem-types:
   - { slug: tag-revoked,                   status: 410, note: "tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)" }
   - { slug: tag-code-not-found,            status: 404 }
   - { slug: tag-code-malformed,            status: 400 }
+  - { slug: unsupported-media-type,        status: 415, note: "quatro operacoes ja respondiam 415 e nenhum slug significava isso: o corpo do problema saia com um `type` fora desta lista fechada, que e exatamente o que ela existe para impedir" }
+  - { slug: upload-not-received,           status: 409, note: "o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar" }
   - { slug: weak-password,                 status: 422 }
   - { slug: rate-limited,                  status: 429 }
   - { slug: internal,                      status: 500 }
@@ -1297,6 +1299,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PetPhoto' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/UploadNotReceived' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
 
   # ----------------------------------------------------------------------
@@ -3781,6 +3784,15 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     TokenExpired:
       description: Token de uso unico expirado, ja usado ou invalido.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UploadNotReceived:
+      description: |
+        O envio foi confirmado, mas os bytes nao estao no armazenamento.
+        Acontece quando a rede cai no meio do envio: o cliente chega a confirmar
+        e o objeto nunca chegou. Sem este estado a foto nasceria `processing`
+        para sempre.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }

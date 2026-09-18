@@ -160,6 +160,36 @@ export const problemas = {
     }),
 
   /**
+   * 415. Tipo de arquivo que não abrimos.
+   *
+   * Existe como tipo próprio desde 18/09: quatro operações já respondiam 415 e
+   * a lista fechada não tinha nenhum slug com esse significado, então o corpo do
+   * problema saía com um `type` fora da lista — exatamente o que ela existe para
+   * impedir.
+   *
+   * O texto não lista os formatos aceitos de propósito: quem chegou aqui
+   * escolheu um arquivo no próprio aparelho, e "converta para JPEG" não é uma
+   * instrução que se cumpra com o animal no colo. A tela oferece escolher outra.
+   */
+  tipoDeMidiaNaoAceito: (): AppError =>
+    new AppError('unsupported-media-type', 'Esse arquivo a gente não abre', {
+      detail: 'Escolha outra foto, tirada pela câmera ou salva na galeria.',
+    }),
+
+  /**
+   * 409. O cliente confirmou um envio cujos bytes nunca chegaram.
+   *
+   * O caso real é a rede caindo no meio do envio de 10 MB, que é a rede de quem
+   * está na rua procurando o próprio animal. Sem este estado, a confirmação
+   * criaria uma foto `processing` que nunca sai de lá: um cartão de pet
+   * carregando para sempre, que ninguém sabe explicar nem consertar.
+   */
+  envioNaoChegou: (): AppError =>
+    new AppError('upload-not-received', 'A foto não chegou', {
+      detail: 'O envio não completou. Tente de novo — o cadastro não se perde.',
+    }),
+
+  /**
    * Teto de cinco tags ativas por pet (ADR-0004). O tutor revoga uma e emite
    * outra; não há caminho de aumento por autoatendimento.
    *

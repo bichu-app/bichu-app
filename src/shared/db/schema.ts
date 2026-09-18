@@ -293,6 +293,67 @@ export interface AuditEventsTable {
   metadata: unknown;
 }
 
+/** O que o cliente vai enviar direto ao armazenamento (ADR-0007, BICHUS-87). */
+export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
+
+export interface UploadIntentsTable {
+  id: string;
+  user_id: string;
+  /** Nulo para o achador sem pet: o vínculo dele é com o aviso. */
+  pet_id: string | null;
+  kind: TipoDeEnvio;
+  /** Chave no armazenamento privado. **Nunca** uma URL. */
+  object_key: string;
+  /** O que o cliente DECLAROU. Diagnóstico, nunca verdade. */
+  declared_type: string;
+  max_bytes: number;
+  expires_at: Date;
+  confirmed_at: Date | null;
+  created_at: CriadoEm;
+}
+
+/** `processing` → `ready` ou `rejected`. Nunca volta. */
+export type StatusDaFoto = 'processing' | 'ready' | 'rejected';
+
+export interface PetPhotosTable {
+  id: string;
+  pet_id: string;
+  upload_intent_id: string;
+  status: Generated<StatusDaFoto>;
+  rejection_reason: string | null;
+  /** Original, bucket privado. Só o dono, e só por URL assinada curta. */
+  original_key: string;
+  /** Derivadas no bucket público, chave com 128 bits aleatórios. Nulas até o worker. */
+  thumb_key: string | null;
+  card_key: string | null;
+  is_primary: Generated<boolean>;
+  created_at: CriadoEm;
+  processed_at: Date | null;
+  deleted_at: Date | null;
+}
+
+export type StatusDoTrabalho = 'pending' | 'running' | 'done' | 'failed';
+
+/**
+ * A fila, no próprio Postgres.
+ *
+ * `SELECT ... FOR UPDATE SKIP LOCKED` atende a ordem de grandeza deste produto
+ * por muito tempo, e uma fila dedicada seria mais um serviço para operar,
+ * monitorar e migrar de nuvem (ADR-0012).
+ */
+export interface JobsTable {
+  id: string;
+  kind: string;
+  payload: ColumnType<Record<string, unknown>, string, string>;
+  status: Generated<StatusDoTrabalho>;
+  attempts: Generated<number>;
+  last_error: string | null;
+  run_after: Generated<Date>;
+  locked_at: Date | null;
+  created_at: CriadoEm;
+  finished_at: Date | null;
+}
+
 export interface Database {
   users: UsersTable;
   user_identities: UserIdentitiesTable;
@@ -311,6 +372,9 @@ export interface Database {
   pet_tags: PetTagsTable;
   tag_scans: TagScansTable;
   found_reports: FoundReportsTable;
+  upload_intents: UploadIntentsTable;
+  pet_photos: PetPhotosTable;
+  jobs: JobsTable;
   'audit.events': AuditEventsTable;
 }
 

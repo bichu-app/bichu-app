@@ -2991,6 +2991,20 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description O envio foi confirmado, mas os bytes nao estao no armazenamento.
+         *     Acontece quando a rede cai no meio do envio: o cliente chega a confirmar
+         *     e o objeto nunca chegou. Sem este estado a foto nasceria `processing`
+         *     para sempre.
+         */
+        UploadNotReceived: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Tipo de arquivo nao aceito. */
         UnsupportedMedia: {
             headers: {
@@ -3983,6 +3997,7 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["UploadNotReceived"];
             415: components["responses"]["UnsupportedMedia"];
         };
     };
