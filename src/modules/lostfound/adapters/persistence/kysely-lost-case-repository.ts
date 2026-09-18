@@ -185,10 +185,23 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
                closure_outcome = ${entrada.desfecho},
                closure_channel = ${entrada.canal ?? null},
                closure_note = ${entrada.nota ?? null},
-               -- 30 dias para reabrir: o animal que "voltou" e sumiu de novo na
-               -- mesma semana é caso comum, e reabrir preserva o histórico da
-               -- conversa com quem já estava ajudando.
-               reopen_deadline = ${new Date(Number(entrada.agora) + 30 * 24 * 3600 * 1000)}
+               -- 7 DIAS, e nao 30. O comentario que estava aqui defendia 30 com
+               -- um argumento razoavel -- o animal que "voltou" e sumiu de novo
+               -- na mesma semana e caso comum. So que o contrato promete 7
+               -- (openapi.yaml: "Encerrar e reversivel por 7 dias", e o 410 de
+               -- reopenLostCase diz "Passou dos 7 dias"), a tela promete 7, e a
+               -- historia BICHUS-78 se chama "Reabrir o caso por 7 dias".
+               --
+               -- O banco guardando 30 nao e ser generoso: e a tela dizer uma
+               -- coisa e o sistema fazer outra, nos dois sentidos. Quem leu
+               -- "7 dias" e perdeu o prazo nao tenta no oitavo, e a generosidade
+               -- nao serve para ninguem; quem tentasse no vigesimo receberia um
+               -- 410 que o banco nao sustenta. Numero de produto se muda na
+               -- historia, com quem promete, nao num comentario de adaptador.
+               --
+               -- (Sem crase neste bloco de proposito: ele vive dentro de um
+               -- template literal, e uma crase aqui fecha a string.)
+               reopen_deadline = ${new Date(Number(entrada.agora) + 7 * 24 * 3600 * 1000)}
          WHERE id = ${entrada.caso}
            AND owner_user_id = ${entrada.dono}
            AND status = 'open'
