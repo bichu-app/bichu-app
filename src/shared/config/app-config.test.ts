@@ -35,22 +35,30 @@ const PEM_ROTACAO = gerarPem();
  * Ambiente mínimo para `loadAppConfig()` chegar até a leitura das chaves. Os
  * valores não são segredo de lugar nenhum: são descartáveis e existem só para
  * que a primeira coisa a faltar seja a que o teste quer ver faltar.
+ *
+ * **Nenhum `localhost` e nenhum nome de região de provedor aqui, de propósito.**
+ * O portão de portabilidade (`infra/verificacao/verificar_portabilidade.py`)
+ * varre `src/` inteiro, e arquivo de teste não é exceção — e não deve ser. Um
+ * `us-east-1` escrito num teste hoje é o `us-east-1` que alguém copia para o
+ * código amanhã, e o ADR-0007 existe para que a nuvem continue sendo escolha e
+ * não fato consumado. `.invalid` é reservado por RFC 2606 justamente para isto:
+ * nunca resolve, em lugar nenhum.
  */
 function ambienteCompleto(): Record<string, string> {
   return {
     ENVIRONMENT: 'dev',
-    DATABASE_URL: 'postgres://bichu:descartavel@localhost:5432/bichu',
-    PUBLIC_BASE_URL: 'http://localhost:3000',
-    API_BASE_URL: 'http://localhost:3000',
-    MEDIA_PUBLIC_BASE_URL: 'http://localhost:9000',
-    TOKEN_ISSUER: 'http://localhost:3000',
+    DATABASE_URL: 'postgres://bichu:descartavel@db.exemplo.invalid:5432/bichu',
+    PUBLIC_BASE_URL: 'http://api.exemplo.invalid:3000',
+    API_BASE_URL: 'http://api.exemplo.invalid:3000',
+    MEDIA_PUBLIC_BASE_URL: 'http://midia.exemplo.invalid:9000',
+    TOKEN_ISSUER: 'http://api.exemplo.invalid:3000',
     JWT_ACTIVE_KID: 'teste-ativa',
     JWT_ACTIVE_PRIVATE_KEY: PEM_ATIVA,
     JWT_NEXT_KID: 'teste-rotacao',
     JWT_NEXT_PRIVATE_KEY: PEM_ROTACAO,
     IP_HMAC_KEY: Buffer.alloc(32, 7).toString('base64'),
     TAG_CODE_KEY: 'c1'.repeat(32),
-    OBJECT_STORAGE_REGION: 'us-east-1',
+    OBJECT_STORAGE_REGION: 'regiao-de-teste',
     OBJECT_STORAGE_ACCESS_KEY_ID: 'descartavel',
     OBJECT_STORAGE_SECRET_ACCESS_KEY: 'descartavel-segredo',
     OBJECT_BUCKET_PRIVATE: 'bichu-privado',
