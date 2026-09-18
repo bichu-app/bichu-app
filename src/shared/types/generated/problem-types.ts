@@ -17,7 +17,8 @@ export const STATUS_DO_PROBLEMA = {
   'not-found':                      404,
   'email-already-registered':       409,
   'slug-taken':                     409,
-  'pet-already-lost':               409,
+  'pet-already-lost':               409, // este pet ja tem caso aberto. O banco impoe (indice unico parcial), e o tipo existe para a tela dizer 'voce ja marcou' em vez de 'erro'
+  'open-case-limit-reached':        409, // teto de 3 casos ABERTOS SIMULTANEOS por conta (BICHUS-21 criterio 8). Separado de `pet-already-lost`: um diz 'este pet ja esta perdido' e o outro 'voce ja tem tres animais perdidos'. A saida e diferente -- no primeiro a pessoa abre o caso que ja existe, no segundo ela precisa encerrar um. Alem de produto, e privacidade: a lista publica mostra bairro e data, e sem teto uma conta entregaria uma SERIE de pontos no tempo e no espaco da mesma pessoa
   'pet-limit-reached':              409, // teto de pets DA CONTA
   'tag-limit-reached':              409, // teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada
   'contact-channel-unverified':     409,
@@ -35,7 +36,7 @@ export const STATUS_DO_PROBLEMA = {
   'internal':                       500,
 } as const;
 
-/** União fechada dos 25 tipos declarados no contrato. */
+/** União fechada dos 26 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

@@ -160,6 +160,71 @@ export const problemas = {
     }),
 
   /**
+   * 409. Nenhum canal de contato verificado.
+   *
+   * O bloqueio existe porque um caso sem canal alcançável produz **movimento e
+   * nenhum reencontro**: o alerta sai para os vizinhos, o animal entra na lista
+   * pública, quem o acha avisa — e o aviso cai no vazio. É pior que não ter
+   * aberto, porque gastou a atenção de dezenas de pessoas.
+   *
+   * O `next_action` é o que salva a tela: sem ele, a pessoa em pânico leria
+   * "verifique seu e-mail" sem um caminho para fazer isso agora.
+   */
+  canalDeContatoNaoVerificado: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail para avisar a vizinhança', {
+      detail: 'Sem um contato confirmado, quem achar seu pet não consegue falar com você.',
+      nextAction: 'verify_email',
+    }),
+
+  /**
+   * 409. O pet não tem foto pronta.
+   *
+   * A foto é o que faz alguém reconhecer o animal na rua. Um alerta sem foto
+   * pede que o vizinho reconheça "um cachorro caramelo de porte médio", que é
+   * metade dos cachorros do Brasil.
+   *
+   * Vale também para a foto em `processing`: ela existe e ainda não serve — e
+   * mandar o alerta antes de a derivada existir publicaria um cartaz sem
+   * imagem.
+   */
+  petSemFoto: (): AppError =>
+    new AppError('pet-photo-missing', 'Seu pet precisa de uma foto', {
+      detail: 'É pela foto que alguém reconhece ele na rua. Escolha uma em que o rosto apareça bem.',
+      nextAction: 'upload_pet_photo',
+    }),
+
+  /**
+   * 409. Este pet já tem um caso de perdido aberto.
+   *
+   * O índice único parcial do banco (`lost_cases_um_aberto_por_pet`) é quem
+   * impõe; este tipo existe para a tela dizer **"você já marcou"** com o
+   * caminho para o caso que existe, em vez de "erro". Quem toca no botão duas
+   * vezes é alguém em pânico, e a segunda vez costuma ser porque a primeira
+   * pareceu não ter funcionado.
+   */
+  petJaEstaPerdido: (): AppError =>
+    new AppError('pet-already-lost', 'Este pet já está marcado como perdido', {
+      detail: 'O caso continua aberto. Abra ele para ver o alcance e as mensagens.',
+    }),
+
+  /**
+   * 409. Teto de três casos abertos simultâneos na conta.
+   *
+   * Separado de `pet-already-lost` porque a **saída é diferente**: lá a pessoa
+   * abre o caso que já existe; aqui ela precisa encerrar um. Um app que
+   * decidisse por `type` e tratasse os dois igual mandaria a pessoa para o
+   * lugar errado.
+   *
+   * O teto tem razão de privacidade além de produto: a lista pública mostra
+   * bairro e data, e uma conta sem limite entregaria a um observador uma série
+   * de pontos no tempo e no espaço da mesma pessoa.
+   */
+  tetoDeCasosAbertos: (): AppError =>
+    new AppError('open-case-limit-reached', 'Você já tem três casos abertos', {
+      detail: 'Encerre um caso para abrir outro. Se um pet já voltou, marque o reencontro.',
+    }),
+
+  /**
    * 410. Token de uso único expirado, já usado ou que nunca existiu.
    *
    * **Os três casos são a mesma resposta, e isso é a regra.** Distinguir

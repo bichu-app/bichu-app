@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../escopo.dart';
+import '../../intencao/ir_para_o_destino.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -125,15 +126,20 @@ class _TelaEntrarState extends State<TelaEntrar> {
         continuarConectado: _continuarConectado,
       );
       await escopo.sessao.abrir(sessao);
+      // O destino depois do login e a intencao pendente (UX 8.3), e nao a
+      // home. **A acao guardada e executada aqui**, antes de qualquer
+      // navegacao: a regra 3 diz "executar, nao apenas navegar", e devolver a
+      // pessoa ao formulario preenchido para que ela toque no botao de novo e
+      // a meia-entrega que a propria secao nomeia. Quem tocou em `Registrar
+      // achado` antes do login nao toca de novo depois dele.
+      //
+      // O Inicio continua sendo um destino possivel, e so um caso chega la:
+      // nao havia intencao, ou ela passou das 24 horas e foi descartada em
+      // silencio (regra 2). Falha de execucao **nao** vai para a home: vai
+      // para a tela de retorno, com o rascunho e o erro (regra 4).
+      final destino = await escopo.guarda.executarDepoisDoLogin();
       if (!mounted) return;
-      // O destino depois do login bem-sucedido **nao** muda aqui. A secao 8.3
-      // da pesquisa de UX ("nunca a home") o resolve pelo envelope de intencao
-      // pendente: a acao que a pessoa tentou e executada e ela chega na tela de
-      // resultado. Esse envelope ainda nao existe, e substituir `go` por um
-      // `pop` agora seria escolher meio caminho sem a especificacao inteira.
-      // `go` tambem limpa o desvio da pilha, entao nenhuma tela de conta fica
-      // pendurada atras do Inicio.
-      context.go(Rotas.inicio);
+      irParaODestinoDoLogin(context, destino);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       // **A decisao e por `type`, nunca pelo status.** O contrato declara

@@ -37,9 +37,22 @@ import 'textos_do_cadastro.dart';
 /// unica protecao que a pessoa tem, e ele precisa ser lido **antes** de ela
 /// digitar.
 class TelaCadastrarSinais extends StatefulWidget {
-  const TelaCadastrarSinais({required this.rascunho, super.key});
+  const TelaCadastrarSinais({
+    required this.rascunho,
+    super.key,
+    this.erroInicial,
+  });
 
   final RascunhoDePet rascunho;
+
+  /// A faixa que a tela ja abre mostrando.
+  ///
+  /// Existe por causa da regra 4 de UX 8.3: quando a acao guardada e executada
+  /// depois do login e o servidor recusa, a pessoa volta para **esta** tela
+  /// com o rascunho carregado **e o erro explicado**. E estado de chegada, e
+  /// nao resposta a um toque -- por isso ele ja esta na tela antes do primeiro
+  /// toque, como a faixa de sessao expirada de C.2.
+  final MensagemDeErro? erroInicial;
 
   @override
   State<TelaCadastrarSinais> createState() => _TelaCadastrarSinaisState();
@@ -59,7 +72,7 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
 
   DadosDeReferencia? _referencia;
   bool _enviando = false;
-  MensagemDeErro? _faixa;
+  late MensagemDeErro? _faixa = widget.erroInicial;
 
   /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
   ///

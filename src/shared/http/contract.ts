@@ -151,6 +151,7 @@ export function carregarContrato(caminho: string): Contrato {
 
   const operacoes = new Map<string, OperacaoDoContrato>();
   const semSecurity: string[] = [];
+  const securityMalformado: string[] = [];
 
   for (const [caminhoDaRota, item] of Object.entries(paths)) {
     if (!ehObjeto(item)) continue;
@@ -167,7 +168,22 @@ export function carregarContrato(caminho: string): Contrato {
         semSecurity.push(operationId);
         continue;
       }
+      // `security` DECLARADO mas malformado é tão perigoso quanto ausente, e
+      // mais traiçoeiro: `security: [bearerAuth]` — sem os dois-pontos e as
+      // chaves — é o erro mais natural do arquivo, porque `tags` e `x-effects`
+      // logo ao lado são listas de texto. `Array.isArray` passa, o filtro
+      // esvazia, e o resultado é `security: []`, que este módulo documenta como
+      // **pública**. Uma rota escrita para exigir conta vira pública em
+      // silêncio, e o portão que existe para pegar isso é o mesmo que foi
+      // enganado.
+      //
+      // Por isso: lista não vazia que não tem NENHUM mapa não carrega. A lista
+      // vazia continua valendo, porque ela é a forma correta de dizer "pública".
       const entradas = security.filter(ehObjeto);
+      if (security.length > 0 && entradas.length === 0) {
+        securityMalformado.push(operationId);
+        continue;
+      }
       const efeitos = operacao['x-effects'];
 
       operacoes.set(operationId, {
@@ -183,6 +199,14 @@ export function carregarContrato(caminho: string): Contrato {
     }
   }
 
+  if (securityMalformado.length > 0) {
+    throw new Error(
+      'Operações com `security` declarado em forma que não é mapa — provavelmente ' +
+        '`security: [bearerAuth]` em vez de `security: [{ bearerAuth: [] }]`. ' +
+        'Isso seria lido como rota PÚBLICA, que é o contrário do que foi escrito: ' +
+        `${securityMalformado.join(', ')}`,
+    );
+  }
   if (semSecurity.length > 0) {
     // Negar por padrão, e falhar na subida em vez de na primeira requisição:
     // especificação sem `security` não carrega.

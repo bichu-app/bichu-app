@@ -40,6 +40,9 @@ import type { PetId, UserId } from '../shared/types/brands.js';
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { MediaService } from '../modules/media/application/media-service.js';
 import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
+import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
+import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
+import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
 import { criarIdempotencia } from '../shared/http/idempotency.js';
 import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
@@ -219,6 +222,25 @@ export async function main(): Promise<void> {
     baseDeMidia: config.mediaPublicBaseUrl,
   };
 
+  const dependenciasDasRotasDeCaso = {
+    casos: new LostCaseService({
+      repositorio: criarLostCaseRepository(db),
+      ids,
+      clock: systemClock,
+      trilha,
+    }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    idempotencia: criarIdempotencia(db),
+    contrato,
+    clock: systemClock,
+    // De onde saem o link de compartilhar e o cartaz. Montados na leitura, e
+    // nunca guardados: um link gravado carrega o domínio do dia em que foi
+    // escrito, e o cartaz é impresso e colado num poste.
+    baseDaWeb: config.publicBaseUrl,
+  };
+
   const dependenciasDasRotasDeTag = {
     tags,
     // A porta é de `tags` e quem a liga ao serviço de identidade é esta linha: é
@@ -250,6 +272,7 @@ export async function main(): Promise<void> {
       registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
       registrarRotasDePets(escopo, dependenciasDasRotasDePet);
       registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
+      registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
       registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
       registrarSaude(escopo, {
         version: config.version,

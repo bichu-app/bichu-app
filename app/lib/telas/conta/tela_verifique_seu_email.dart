@@ -7,6 +7,7 @@ import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../escopo.dart';
+import '../../intencao/ir_para_o_destino.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -108,6 +109,25 @@ class _TelaVerifiqueSeuEmailState extends State<TelaVerifiqueSeuEmail> {
     }
   }
 
+  /// `Continuar`: o fim do caminho de quem acabou de criar a conta.
+  ///
+  /// **E aqui que o exemplo de aceite de 8.3 acontece.** Camila preencheu o
+  /// achado deslogada, criou a conta, "verifica nada" e toca em `Continuar`: o
+  /// app registra o achado e abre a tela do achado registrado. Ela nao ve a
+  /// home em nenhum momento. Enquanto esta tela mandava para o Inicio, a
+  /// intencao guardada morria de velha sem nunca executar -- e o rascunho
+  /// dela, junto.
+  ///
+  /// Continua valendo que `Continuar` **nao depende de rede**: sem intencao
+  /// pendente, o destino e o Inicio, sem ida ao servidor. Quando ha intencao,
+  /// a acao e tentada, e a falha leva a tela de retorno com o rascunho e o
+  /// erro -- nunca a um beco.
+  Future<void> _continuar() async {
+    final destino = await Escopo.of(context).guarda.executarDepoisDoLogin();
+    if (!mounted) return;
+    irParaODestinoDoLogin(context, destino);
+  }
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -136,7 +156,7 @@ class _TelaVerifiqueSeuEmailState extends State<TelaVerifiqueSeuEmail> {
               rotulo: 'Continuar',
               // Sem `carregando` e sem condicao: `Continuar` nao depende de
               // rede nem do resultado do reenvio.
-              aoTocar: () => context.go(Rotas.inicio),
+              aoTocar: _continuar,
             ),
             const SizedBox(height: BichuEspaco.e4),
             BotaoSecundario(

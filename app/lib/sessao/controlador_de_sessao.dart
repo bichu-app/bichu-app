@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../api/auth_api.dart';
 import '../api/falhas.dart';
 import '../api/modelos.dart';
+import '../intencao/guarda_de_acao.dart';
 import 'deposito_de_sessao.dart';
 
 /// Em que ponto do arranque e da autenticacao o app esta.
@@ -30,13 +31,20 @@ class ControladorDeSessao extends ChangeNotifier {
   ControladorDeSessao({
     required AuthApi auth,
     required DepositoDeSessao deposito,
+    GuardaDeAcao? guardaDeAcao,
     // ignore: prefer_initializing_formals
   })  : _auth = auth,
         // ignore: prefer_initializing_formals
-        _deposito = deposito;
+        _deposito = deposito,
+        // ignore: prefer_initializing_formals
+        _guardaDeAcao = guardaDeAcao;
 
   final AuthApi _auth;
   final DepositoDeSessao _deposito;
+
+  /// A guarda da intencao pendente (UX 8.3). Opcional porque nem todo teste de
+  /// sessao tem uma; em producao ela existe sempre.
+  final GuardaDeAcao? _guardaDeAcao;
 
   EstadoDaSessao _estado = EstadoDaSessao.carregando;
   Sessao? _sessao;
@@ -82,6 +90,12 @@ class ControladorDeSessao extends ChangeNotifier {
       // Sem rede ou token ja invalido: nada a fazer do lado do servidor.
     }
     await _deposito.apagar();
+    // A intencao pendente morre junto (regra 7 de UX 8.3). Ela e o rascunho de
+    // quem estava na conta que acabou de sair; deixa-la no disco faria a
+    // proxima pessoa a entrar neste aparelho -- o filho, o outro tutor da casa,
+    // quem comprou o celular usado -- publicar um caso que nao e dela assim
+    // que o login terminasse.
+    await _guardaDeAcao?.descartar();
     _mudar(EstadoDaSessao.deslogado, null);
   }
 

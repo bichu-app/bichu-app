@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../intencao/cadastro_de_pet_como_intencao.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../telas/abas.dart';
 import '../telas/casca_com_abas.dart';
@@ -45,6 +46,42 @@ abstract final class Rotas {
   static const String cadastrarPetFoto = '/pets/novo/foto';
   static const String cadastrarPetSinais = '/pets/novo/sinais';
   static const String petCadastrado = '/pets/cadastrado';
+
+  /// O endereco da tela de retorno de um envelope de intencao (UX 8.3).
+  ///
+  /// O envelope guarda `telaDeRetorno` como **ID de tela da pesquisa**
+  /// (`F1.5`), e nao como rota: e o documento de UX que nomeia as telas, e um
+  /// envelope gravado hoje precisa continuar legivel depois de a rota mudar de
+  /// caminho. A traducao mora aqui, num lugar so.
+  ///
+  /// Devolve nulo para a tela que **este build nao tem**. Nao e caso teorico:
+  /// o app se atualiza com um envelope ja gravado no disco, e uma versao pode
+  /// ter removido ou renomeado a tela daquele fluxo. A guarda trata o nulo
+  /// descartando o envelope em silencio -- a pessoa entra na conta dela, que e
+  /// o que ela pediu, em vez de cair num endereco que nao existe.
+  static String? rotaDaTelaDeUx(String telaDeUx) {
+    return switch (telaDeUx.toUpperCase()) {
+      'F1.3' => cadastrarPet,
+      'F1.4' => cadastrarPetFoto,
+      'F1.5' => cadastrarPetSinais,
+      'F1.6' => petCadastrado,
+      _ => null,
+    };
+  }
+}
+
+/// O rascunho que vem no `extra`, venha ele do assistente ou de um envelope.
+///
+/// As telas do assistente recebem `RascunhoDePet`; a volta de uma intencao que
+/// falhou recebe `RetomadaDoCadastro`, que e o rascunho **mais** o erro. Sem
+/// esta funcao, o `as RascunhoDePet?` de cada rota estouraria em tempo de
+/// execucao justamente no caminho de erro -- o menos exercitado a mao.
+RascunhoDePet? _rascunhoDoExtra(Object? extra) {
+  return switch (extra) {
+    RascunhoDePet rascunho => rascunho,
+    RetomadaDoCadastro retomada => retomada.rascunho,
+    _ => null,
+  };
 }
 
 final GlobalKey<NavigatorState> _navegadorRaiz =
@@ -114,13 +151,13 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         builder: (context, estado) => TelaCadastrarIdentificacao(
           // Nulo faz a tela criar um rascunho novo: e o que faz o link direto
           // para `/pets/novo` abrir uma tela util em vez de estourar.
-          rascunhoExistente: estado.extra as RascunhoDePet?,
+          rascunhoExistente: _rascunhoDoExtra(estado.extra),
         ),
       ),
       GoRoute(
         path: Rotas.cadastrarPetFoto,
         builder: (context, estado) {
-          final rascunho = estado.extra as RascunhoDePet?;
+          final rascunho = _rascunhoDoExtra(estado.extra);
           // Passo intermediario alcancado sem o passo anterior: volta ao
           // comeco em vez de abrir um formulario que nao sabe de qual pet
           // fala.
@@ -131,9 +168,18 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       GoRoute(
         path: Rotas.cadastrarPetSinais,
         builder: (context, estado) {
-          final rascunho = estado.extra as RascunhoDePet?;
+          final extra = estado.extra;
+          final rascunho = _rascunhoDoExtra(extra);
           if (rascunho == null) return const TelaCadastrarIdentificacao();
-          return TelaCadastrarSinais(rascunho: rascunho);
+          return TelaCadastrarSinais(
+            rascunho: rascunho,
+            // A volta de uma intencao que falhou (UX 8.3, regra 4) traz o
+            // erro **junto** com o rascunho: a pessoa entrou na conta, a acao
+            // dela nao aconteceu, e uma tela que reabre preenchida e calada
+            // deixaria a falha invisivel -- ela tocaria em `Cadastrar` de novo
+            // sem saber o que houve da primeira vez.
+            erroInicial: extra is RetomadaDoCadastro ? extra.erro : null,
+          );
         },
       ),
       GoRoute(

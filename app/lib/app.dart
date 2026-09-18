@@ -9,6 +9,10 @@ import 'api/pets_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'escopo.dart';
+import 'intencao/cadastro_de_pet_como_intencao.dart';
+import 'intencao/deposito_de_intencao.dart';
+import 'intencao/guarda_de_acao.dart';
+import 'intencao/intencao_pendente.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
 import 'sessao/deposito_de_sessao.dart';
@@ -22,6 +26,7 @@ class BichuApp extends StatefulWidget {
     this.deposito,
     this.clienteHttp,
     this.camera,
+    this.depositoDeIntencao,
   });
 
   final AppConfig config;
@@ -42,6 +47,14 @@ class BichuApp extends StatefulWidget {
   /// entrou.
   final CameraEGaleria? camera;
 
+  /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
+  ///
+  /// O envelope de intencao (UX 8.3) precisa sobreviver ao app ser **encerrado
+  /// pelo sistema**, e por isso mora em disco. O teste de widget nao tem disco
+  /// de aparelho, e por isso ele entra por aqui -- do mesmo jeito que o
+  /// deposito de sessao.
+  final DepositoDaIntencao? depositoDeIntencao;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -53,6 +66,7 @@ class _BichuAppState extends State<BichuApp> {
   late final TagsApi _tags;
   late final CameraEGaleria _camera;
   late final ControladorDeSessao _sessao;
+  late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
 
   @override
@@ -70,9 +84,22 @@ class _BichuAppState extends State<BichuApp> {
     _pets = PetsApi(_api);
     _tags = TagsApi(_api);
     _camera = widget.camera ?? const CameraNaoEmbarcada();
+    _guarda = GuardaDeAcao(
+      deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
+      rotaDaTela: Rotas.rotaDaTelaDeUx,
+      // O registro das acoes executaveis. Hoje ha uma: `cadastrar_pet` e a
+      // unica das seis de 8.3 cujo fluxo inteiro existe neste build. As outras
+      // entram aqui junto com as telas delas -- e, ate entrarem, uma intencao
+      // guardada para elas volta para a tela de retorno em vez de sumir.
+      acoes: <AcaoDeIntencao, AcaoExecutavel>{
+        AcaoDeIntencao.cadastrarPet: cadastroDePetExecutavel(_pets),
+      },
+    );
     _sessao = ControladorDeSessao(
       auth: _auth,
       deposito: widget.deposito ?? DepositoNoChaveiro(),
+      // Sair da conta apaga o envelope (regra 7 de 8.3).
+      guardaDeAcao: _guarda,
     );
     _roteador = criarRoteador(_sessao);
     _sessao.iniciar();
@@ -94,6 +121,7 @@ class _BichuAppState extends State<BichuApp> {
       tags: _tags,
       camera: _camera,
       sessao: _sessao,
+      guarda: _guarda,
       child: MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,

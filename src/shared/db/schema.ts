@@ -355,6 +355,32 @@ export interface JobsTable {
   finished_at: Date | null;
 }
 
+export type StatusDoCaso = 'open' | 'closed_reunited' | 'closed_not_found' | 'closed_false_alarm';
+
+export interface LostCasesTable {
+  id: string;
+  pet_id: string;
+  /** Desnormalizado de `pets.owner_user_id`: sustenta o teto de 3 por conta sem junção. */
+  owner_user_id: string;
+  status: Generated<StatusDoCaso>;
+  last_seen_at: Date;
+  /** `geography(Point,4326)`. **Anulável**: área sozinha abre o caso. */
+  last_seen_point: ColumnType<string | null, never, never>;
+  last_seen_city: string | null;
+  last_seen_neighborhood: string | null;
+  last_seen_state: string | null;
+  description: string | null;
+  share_to_public_list: Generated<boolean>;
+  /** A única chave do caso em superfície pública. `case_id` nunca sai de lá. */
+  share_token: string;
+  opened_at: Generated<Date>;
+  closed_at: Date | null;
+  closure_outcome: 'reunited' | 'not_found' | 'false_alarm' | null;
+  closure_channel: 'tag_scan' | 'bichu_alert' | 'poster_or_link' | 'on_my_own' | 'other' | null;
+  closure_note: string | null;
+  reopen_deadline: Date | null;
+}
+
 export interface Database {
   users: UsersTable;
   user_identities: UserIdentitiesTable;
@@ -376,6 +402,7 @@ export interface Database {
   upload_intents: UploadIntentsTable;
   pet_photos: PetPhotosTable;
   jobs: JobsTable;
+  lost_cases: LostCasesTable;
   'audit.events': AuditEventsTable;
 }
 

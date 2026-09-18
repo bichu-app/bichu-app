@@ -4,6 +4,7 @@ import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/camera_e_galeria.dart';
+import 'intencao/guarda_de_acao.dart';
 import 'sessao/controlador_de_sessao.dart';
 
 /// As dependencias do app, entregues pela arvore de widgets.
@@ -20,6 +21,7 @@ class Escopo extends InheritedWidget {
     required this.tags,
     required this.camera,
     required this.sessao,
+    required this.guarda,
     required super.child,
     super.key,
   });
@@ -34,6 +36,12 @@ class Escopo extends InheritedWidget {
   final CameraEGaleria camera;
 
   final ControladorDeSessao sessao;
+
+  /// A guarda de acao (UX 8.3): o envelope de intencao pendente e a execucao
+  /// dele depois do login. Fica no escopo porque quem precisa dela e a tela de
+  /// entrar, que nao pode monta-la: o envelope e um so no app inteiro, e duas
+  /// instancias sobre o mesmo arquivo perderiam uma da outra.
+  final GuardaDeAcao guarda;
 
   static Escopo of(BuildContext context) {
     final escopo = context.dependOnInheritedWidgetOfExactType<Escopo>();
@@ -53,5 +61,6 @@ class Escopo extends InheritedWidget {
       pets != anterior.pets ||
       tags != anterior.tags ||
       camera != anterior.camera ||
-      sessao != anterior.sessao;
+      sessao != anterior.sessao ||
+      guarda != anterior.guarda;
 }
