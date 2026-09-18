@@ -7,11 +7,19 @@
  * compartilhadas em cartaz e em conversa mediada. Um cartaz impresso e colado num
  * poste continua apontando para a chave de hoje.
  *
- * ## Privada: previsível, porque ninguém a alcança sem assinatura
+ * ## Privada: 128 bits aleatórios também, e o critério 21 é explícito
  *
- * `pets/{petId}/original/{fotoId}` — legível para quem opera, e não precisa ser
- * secreta: o bucket privado nasce sem leitura anônima, e cada leitura é uma URL
- * assinada de minutos.
+ * `pets/{petId}/original/{128 bits}`. A primeira versão deste arquivo usava o
+ * UUIDv7 da intenção, e estava **errada**: UUIDv7 carrega carimbo de tempo no
+ * prefixo e tem bem menos entropia que 128 bits — quem conhece o `petId` e a
+ * janela de tempo enumera as chaves.
+ *
+ * O bucket privado não tem leitura anônima, então a chave adivinhável não abre
+ * o objeto sozinha. Ela abre uma **escrita**: a política assinada restringe a
+ * chave por igualdade, mas uma chave previsível é o que permite mirar o prefixo
+ * de outro pet caso qualquer outra defesa ceda. O critério 21 fecha isso na
+ * origem — e é pelo mesmo motivo que **nome de arquivo do cliente nunca é
+ * aceito nem derivado**.
  *
  * ## Pública: 128 bits aleatórios, porque não há assinatura para protegê-la
  *
@@ -39,8 +47,13 @@ export function ehTipoAceito(tipo: string): tipo is TipoAceito {
 
 export const TETO_DE_BYTES = 10 * 1024 * 1024;
 
-export function chaveDoOriginal(petId: string, fotoId: string): ObjectKey {
-  return `pets/${petId}/original/${fotoId}` as ObjectKey;
+export function chaveDoOriginal(petId: string, aleatorio: Uint8Array): ObjectKey {
+  if (aleatorio.length < 16) {
+    // Falha ruidosa: uma chave com menos entropia que o critério exige passaria
+    // em todo teste de "a foto sobe" e só seria descoberta por quem a explorasse.
+    throw new Error('A chave do original exige 128 bits (16 bytes) de aleatório.');
+  }
+  return `pets/${petId}/original/${Buffer.from(aleatorio).toString('base64url')}` as ObjectKey;
 }
 
 /**

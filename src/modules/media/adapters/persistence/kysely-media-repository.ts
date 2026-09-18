@@ -15,6 +15,7 @@
  * que não existe; duas principais violam o índice e derrubam a próxima escrita.
  */
 import type { Db } from '../../../../shared/db/pool.js';
+import type { JobKind } from '../../../../shared/ports/index.js';
 import type {
   FotoDoPet,
   IntencaoDeEnvio,
@@ -24,8 +25,16 @@ import type {
 } from '../../ports/media-repository.js';
 import type { Instant, ObjectKey, PetId, UserId } from '../../../../shared/types/brands.js';
 
-/** O nome do trabalho na fila. O worker casa por este valor. */
-export const TRABALHO_DE_PROCESSAR_FOTO = 'media.process_pet_photo';
+/**
+ * O nome do trabalho na fila, **tirado da porta** e não inventado aqui.
+ *
+ * `JobKind` é uma união fechada em `shared/ports/job-queue.ts`, e eu tinha
+ * escrito `media.process_pet_photo` neste arquivo — um valor que a união não
+ * conhece. O worker casa por este nome: um adaptador que enfileira um `kind`
+ * fora da união produz trabalho que ninguém nunca pega, e a foto ficaria
+ * `processing` para sempre sem nenhum erro em lugar nenhum.
+ */
+export const TRABALHO_DE_PROCESSAR_FOTO: JobKind = 'media.process_upload';
 
 interface LinhaDaFoto {
   id: string;

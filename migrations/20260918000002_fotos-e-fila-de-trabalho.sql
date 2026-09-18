@@ -110,6 +110,10 @@ CREATE TABLE jobs (
   status        text        NOT NULL DEFAULT 'pending'
                             CHECK (status IN ('pending', 'running', 'done', 'failed')),
   attempts      integer     NOT NULL DEFAULT 0,
+  -- O teto vive na LINHA, e nao numa constante do worker: trabalho de e-mail e
+  -- trabalho de imagem nao merecem o mesmo numero de tentativas, e descobrir
+  -- isso depois nao pode exigir migracao.
+  max_attempts  integer     NOT NULL DEFAULT 5 CHECK (max_attempts > 0),
   last_error    text,
 
   -- Quando o trabalho pode ser pego. Adiar uma tentativa e mexer nesta coluna.

@@ -48,8 +48,23 @@ void describe('chave da derivada pública', () => {
 });
 
 void describe('chave do original', () => {
-  void it('é previsível de propósito: o bucket privado não tem leitura anônima', () => {
-    assert.equal(chaveDoOriginal(PET, FOTO), `pets/${PET}/original/${FOTO}`);
+  void it('carrega o petId no prefixo e 128 bits de aleatório no nome', () => {
+    const chave = chaveDoOriginal(PET, new Uint8Array(16).fill(9));
+    assert.ok(chave.startsWith(`pets/${PET}/original/`), chave);
+    assert.equal(chave.slice(`pets/${PET}/original/`.length).length, 22);
+  });
+
+  void it('RECUSA aleatório curto, em vez de gerar chave fraca em silêncio', () => {
+    // Uma chave com menos entropia que o critério 21 exige passaria em todo
+    // teste de "a foto sobe" e só apareceria para quem a explorasse.
+    assert.throws(() => chaveDoOriginal(PET, new Uint8Array(8)), /128 bits/);
+  });
+
+  void it('NÃO deriva do identificador da intenção, que é enumerável', () => {
+    // UUIDv7 tem carimbo de tempo no prefixo: quem conhece o petId e a janela
+    // de tempo enumera as chaves. Foi o erro da primeira versão deste arquivo.
+    const chave = chaveDoOriginal(PET, new Uint8Array(16).fill(3));
+    assert.ok(!chave.includes(FOTO), chave);
   });
 });
 

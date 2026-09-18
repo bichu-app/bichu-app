@@ -176,6 +176,7 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
           'x-amz-algorithm': ALGORITMO,
           'x-amz-credential': credencial,
           'x-amz-date': longo,
+          'x-amz-server-side-encryption': 'AES256',
           policy: politicaB64,
           'x-amz-signature': assinatura,
         },

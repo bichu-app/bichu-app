@@ -347,6 +347,7 @@ export interface JobsTable {
   payload: ColumnType<Record<string, unknown>, string, string>;
   status: Generated<StatusDoTrabalho>;
   attempts: Generated<number>;
+  max_attempts: Generated<number>;
   last_error: string | null;
   run_after: Generated<Date>;
   locked_at: Date | null;

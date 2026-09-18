@@ -35,13 +35,15 @@ import type { AutorizacaoDeEnvio, ObjectStorage } from '../ports/object-storage.
 import type { PetId, UserId } from '../../../shared/types/brands.js';
 
 /**
- * Dez minutos para enviar.
+ * Cinco minutos para enviar, e o número vem do critério 22 de `BICHUS-87`.
  *
- * Curto o bastante para que uma autorização vazada não valha nada amanhã, longo
- * o bastante para uma foto de 10 MB numa rede móvel ruim — que é a rede de quem
- * está na rua procurando o próprio animal.
+ * Eu tinha escrito 600 s com um comentário convincente sobre rede móvel ruim, e
+ * o convincente não torna o número certo: a história especifica 5 minutos, e
+ * autorização de escrita é credencial — o tempo dela é decisão de segurança
+ * tomada na história, não no arquivo que a implementa. Se 5 minutos não bastar
+ * para uma foto de 10 MB em rede ruim, quem muda é a história.
  */
-const VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS = 600;
+const VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS = 300;
 
 export interface DependenciasDeMidia {
   readonly repositorio: MediaRepository;
@@ -76,7 +78,10 @@ export class MediaService {
     if (!(await this.deps.repositorio.petEhDoTutor(pet, dono))) throw problemas.naoEncontrado();
 
     const uploadId = this.deps.ids.uuidv7();
-    const chave = chaveDoOriginal(pet, uploadId);
+    // A CHAVE É ESCOLHIDA PELO SERVIDOR e carrega 128 bits de CSPRNG (critério
+    // 21). O `uploadId` identifica a intenção no nosso banco; ele não serve de
+    // chave, porque UUIDv7 tem carimbo de tempo e é enumerável.
+    const chave = chaveDoOriginal(pet, this.deps.ids.random128());
 
     const autorizacao = await this.deps.armazenamento.createUploadIntent({
       classe: 'privado',
