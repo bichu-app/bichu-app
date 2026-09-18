@@ -54,6 +54,10 @@ dependencies:
   # juridico. O navegador do sistema e tambem onde a pessoa consegue guardar,
   # imprimir e compartilhar o que aceitou.
   url_launcher: ^6.3.2
+  # Unica forma de achar o diretorio do app sem escrever codigo por plataforma.
+  # Entra pela fila offline da BICHUS-31, que precisa sobreviver ao app ser
+  # encerrado pelo sistema -- e memoria nao sobrevive a isso.
+  path_provider: ^2.1.5
 
 dev_dependencies:
   flutter_test:
