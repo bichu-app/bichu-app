@@ -35,6 +35,7 @@ export type AuditAction =
   | 'auth.email_verified'
   // Autorização
   | 'authz.denied'
+  | 'profile.updated'
   // Cadastro do pet
   | 'pet.created'
   | 'pet.updated'

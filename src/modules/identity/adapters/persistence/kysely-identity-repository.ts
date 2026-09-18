@@ -180,6 +180,40 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
     },
 
+    async atualizarPerfil(id: UserId, campos, agora): Promise<Conta | undefined> {
+      // Só entra no `SET` o que veio no corpo. `undefined` é "não mexer" e
+      // `null` é "apagar": montar o objeto com todos os campos transformaria um
+      // `PATCH` de um campo numa limpeza silenciosa dos outros cinco.
+      const mudancas: Record<string, unknown> = { updated_at: new Date(Number(agora)) };
+      const mapa = {
+        displayName: 'display_name',
+        phoneE164: 'phone_e164',
+        referencePostalCode: 'reference_postal_code',
+        referenceNeighborhood: 'reference_neighborhood',
+        referenceCity: 'reference_city',
+        referenceState: 'reference_state',
+      } as const;
+
+      for (const [campo, coluna] of Object.entries(mapa)) {
+        const valor = (campos as Record<string, unknown>)[campo];
+        if (valor !== undefined) mudancas[coluna] = valor;
+      }
+
+      // Trocar o telefone invalida a verificação anterior: o número novo não
+      // herda a confiança do antigo, e `can_open_lost_case` precisa cair junto.
+      if (mudancas['phone_e164'] !== undefined) mudancas['phone_verified_at'] = null;
+
+      const linha = await db
+        .updateTable('users')
+        .set(mudancas)
+        .where('id', '=', id)
+        .where('deleted_at', 'is', null)
+        .returning(COLUNAS_DA_CONTA)
+        .executeTakeFirst();
+
+      return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+    },
+
     async buscarContaPorEmail(email: string): Promise<Conta | undefined> {
       const linha = await db
         .selectFrom('users')

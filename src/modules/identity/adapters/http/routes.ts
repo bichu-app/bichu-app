@@ -12,6 +12,11 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import {
+  camposPendentesDoPerfil,
+  podeAbrirCasoDePerdido,
+} from '../../domain/completude-do-perfil.js';
+import type { Conta } from '../../ports/identity-repository.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { AuthService, Autenticado } from '../../application/auth-service.js';
@@ -81,6 +86,21 @@ export const rotaDeLogout = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
+export const rotaDoMeuPerfil = defineRoute({
+  operationId: 'getMe',
+  method: 'get',
+  path: '/me',
+  effects: [],
+});
+
+export const rotaDeEdicaoDoPerfil = defineRoute({
+  operationId: 'updateMe',
+  method: 'patch',
+  path: '/me',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
 export const rotaDoJwks = defineRoute({
   operationId: 'jwks',
   method: 'get',
@@ -145,6 +165,91 @@ export function registrarRotasDeIdentidade(
   app: FastifyInstance,
   deps: DependenciasDasRotas,
 ): void {
+  /**
+   * O perfil como o contrato o declara, campo a campo.
+   *
+   * `pending_profile_fields` e `can_open_lost_case` são calculados na leitura, e
+   * não guardados: são função do estado da conta. Uma coluna que os guardasse
+   * seria uma segunda fonte, e ela envelheceria na primeira verificação de
+   * e-mail que alguém esquecesse de propagar.
+   *
+   * `reference_area` sai **nula inteira** quando nenhum dos campos existe, em
+   * vez de um objeto com quatro nulos: a tela distingue "não informou" de
+   * "informou parcialmente", e quatro nulos dentro de um objeto parecem a
+   * segunda coisa.
+   */
+  const comoRespostaDoPerfil = (conta: Conta): Record<string, unknown> => {
+    const temArea =
+      conta.referencePostalCode !== null ||
+      conta.referenceNeighborhood !== null ||
+      conta.referenceCity !== null ||
+      conta.referenceState !== null;
+
+    return {
+      id: conta.id,
+      email: conta.email,
+      email_verified: conta.emailVerifiedAt !== null,
+      pending_email: conta.pendingEmail,
+      email_deliverable: conta.emailDeliverable,
+      display_name: conta.displayName,
+      phone_e164: conta.phoneE164,
+      phone_verified: conta.phoneVerifiedAt !== null,
+      reference_area: temArea
+        ? {
+            postal_code: conta.referencePostalCode,
+            neighborhood: conta.referenceNeighborhood,
+            city: conta.referenceCity,
+            state: conta.referenceState,
+          }
+        : null,
+      pending_profile_fields: camposPendentesDoPerfil(conta),
+      can_open_lost_case: podeAbrirCasoDePerdido(conta),
+      created_at: conta.createdAt.toISOString(),
+    };
+  };
+
+  app.get(rotaDoMeuPerfil.path, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { conta } = await deps.auth.autenticar(tokenDoCabecalho(request));
+    return reply.status(200).send(comoRespostaDoPerfil(await deps.auth.meuPerfil(conta.id)));
+  });
+
+  app.patch(
+    rotaDeEdicaoDoPerfil.path,
+    { schema: { body: corpoDe(deps.contrato, rotaDeEdicaoDoPerfil.operationId) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { conta } = await deps.auth.autenticar(tokenDoCabecalho(request));
+      const corpo = request.body as {
+        display_name?: string;
+        phone_e164?: string;
+        reference_area?: {
+          postal_code?: string;
+          neighborhood?: string;
+          city?: string;
+          state?: string;
+        };
+      };
+
+      // `undefined` é "não mexer". A área vem aninhada no contrato e achatada no
+      // banco, e é aqui que a tradução acontece — o repositório não conhece a
+      // forma do JSON e o contrato não conhece a forma da tabela.
+      const area = corpo.reference_area;
+      const atualizada = await deps.auth.atualizarMeuPerfil(
+        conta.id,
+        {
+          ...(corpo.display_name === undefined ? {} : { displayName: corpo.display_name }),
+          ...(corpo.phone_e164 === undefined ? {} : { phoneE164: corpo.phone_e164 }),
+          ...(area?.postal_code === undefined ? {} : { referencePostalCode: area.postal_code }),
+          ...(area?.neighborhood === undefined ? {} : { referenceNeighborhood: area.neighborhood }),
+          ...(area?.city === undefined ? {} : { referenceCity: area.city }),
+          ...(area?.state === undefined ? {} : { referenceState: area.state }),
+        },
+        contextoDe(request),
+      );
+
+      return reply.status(200).send(comoRespostaDoPerfil(atualizada));
+    },
+  );
+
   app.post(
     rotaDeCadastro.path,
     { schema: { body: corpoDe(deps.contrato, rotaDeCadastro.operationId) } },

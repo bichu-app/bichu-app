@@ -22,7 +22,7 @@ import {
   segundosRestantes,
   tokenFoiRevogado,
 } from '../domain/session.js';
-import type { Conta } from '../ports/identity-repository.js';
+import type { CamposDoPerfil, Conta } from '../ports/identity-repository.js';
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
 
@@ -364,6 +364,53 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       }
 
       return { conta, jti: resultado.claims.jti };
+    },
+
+    /**
+     * O perfil da conta, com o que falta e o que isso impede.
+     *
+     * `pending_profile_fields` e `can_open_lost_case` são **derivados aqui** e
+     * não guardados: são função do estado da conta, e uma coluna que os
+     * guardasse seria uma segunda fonte que envelhece na primeira verificação
+     * de e-mail que alguém esquecer de propagar.
+     */
+    async meuPerfil(userId: UserId): Promise<Conta> {
+      const conta = await deps.repositorio.buscarContaPorId(userId);
+      if (conta === undefined) throw problemas.naoAutenticado();
+      return conta;
+    },
+
+    /**
+     * Atualiza o perfil. **Não aceita e-mail** (SEC-003).
+     *
+     * A ausência não é esquecimento: aceitar `email` aqui faria a resposta
+     * revelar se um endereço já tem conta — o erro de unicidade viraria um
+     * oráculo de existência consultável por qualquer pessoa logada, que é
+     * exatamente o que o fluxo separado de troca de e-mail evita.
+     */
+    async atualizarMeuPerfil(
+      userId: UserId,
+      campos: CamposDoPerfil,
+      contexto: ContextoDaRequisicao,
+    ): Promise<Conta> {
+      const agora = deps.clock.now();
+      const conta = await deps.repositorio.atualizarPerfil(userId, campos, agora);
+      if (conta === undefined) throw problemas.naoAutenticado();
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'profile.updated',
+        resourceKind: 'user',
+        resourceId: userId,
+        // O QUE mudou, nunca o valor: telefone e endereço são justamente o que a
+        // trilha não pode guardar (docs/04-seguranca.md 9).
+        metadata: { campos: Object.keys(campos).filter((c) => campos[c as keyof CamposDoPerfil] !== undefined) },
+      });
+
+      return conta;
     },
 
     /** Empurra `sessions_invalid_before`. Usada pelos cinco gatilhos do SEC-006. */

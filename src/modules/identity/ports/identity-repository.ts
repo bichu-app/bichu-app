@@ -25,6 +25,15 @@ export interface Conta {
   readonly createdAt: Date;
 }
 
+export interface CamposDoPerfil {
+  readonly displayName?: string | null | undefined;
+  readonly phoneE164?: string | null | undefined;
+  readonly referencePostalCode?: string | null | undefined;
+  readonly referenceNeighborhood?: string | null | undefined;
+  readonly referenceCity?: string | null | undefined;
+  readonly referenceState?: string | null | undefined;
+}
+
 export interface CredencialLocal {
   readonly identityId: string;
   readonly userId: UserId;
@@ -79,6 +88,19 @@ export interface IdentityRepository {
   criarContaLocal(nova: NovaConta): Promise<Conta | undefined>;
 
   buscarContaPorId(id: UserId): Promise<Conta | undefined>;
+
+  /**
+   * Atualiza o perfil e devolve a conta já atualizada.
+   *
+   * **Não aceita `email`** (SEC-003), e a ausência é a regra: trocar o e-mail é
+   * operação própria e assíncrona. Aceitar aqui faria a resposta revelar se um
+   * endereço já tem conta — o erro de unicidade viraria um oráculo de
+   * existência, consultável por qualquer pessoa logada.
+   *
+   * `undefined` em um campo significa "não mexer"; `null` significa "apagar".
+   * São coisas diferentes e o `PATCH` precisa das duas.
+   */
+  atualizarPerfil(id: UserId, campos: CamposDoPerfil, agora: Instant): Promise<Conta | undefined>;
   buscarContaPorEmail(email: string): Promise<Conta | undefined>;
   buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined>;
 
