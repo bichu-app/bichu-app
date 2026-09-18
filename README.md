@@ -48,9 +48,32 @@ Leia nesta ordem. São quatro arquivos, e eles respondem quase tudo:
 
 ## Rodando
 
-O ambiente inteiro sobe em containers, sem conta em nuvem nenhuma. As instruções
-estão em `docs/07-devops.md`; o `compose.yaml` traz aplicação, PostgreSQL com
-PostGIS, armazenamento de objeto compatível com S3 e um receptor de e-mail local.
+O ambiente inteiro sobe em containers, sem conta em nuvem nenhuma.
+
+```sh
+cp .env.example .env     # preencha os valores vazios (chaves de dev, senhas)
+make up                  # constrói a imagem, aplica as migrações e sobe tudo
+curl http://localhost:3000/v1/health
+```
+
+`make up` é o comando único: `compose.yaml` traz a aplicação, PostgreSQL com
+PostGIS, armazenamento de objeto compatível com S3, um receptor de e-mail local
+e a borda. As migrações são aplicadas antes de a aplicação subir, por um job
+próprio; `make reset` apaga o volume e repete tudo do zero, que é o que prova a
+migração em banco vazio.
+
+Se a porta 3000 da sua máquina já é de outro projeto, `make up PORTA=3100` troca
+porta publicada e URL base juntas. `make ajuda` lista o resto dos alvos.
+
+| Comando | O que faz |
+|---|---|
+| `make up` | sobe dev, aplicando as migrações |
+| `make reset` | derruba apagando o volume e sobe do zero |
+| `make test` | testes unitários, dentro da imagem |
+| `make logs` | tail agregado dos serviços |
+| `make down` | derruba preservando o volume |
+
+O detalhe de cada um, e o porquê das decisões, está em `docs/07-devops.md`.
 
 ## Configuração que ainda não existe
 
