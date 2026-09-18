@@ -15,6 +15,7 @@ import { loadAppConfig } from '../shared/config/app-config.js';
 import { createDb } from '../shared/db/pool.js';
 import { hmacDeEnderecoIp } from '../shared/crypto/digest.js';
 import { criarIdGenerator } from '../shared/id/uuidv7.js';
+import { criarMailer } from '../modules/identity/adapters/external/smtp-mailer.js';
 import { systemClock } from '../shared/time/clock.js';
 import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
@@ -88,6 +89,10 @@ export async function main(): Promise<void> {
     clock: systemClock,
     janelas: config.session,
     hmacDeIp: (ip) => hmacDeEnderecoIp(ip, config.ipHmacKey),
+    mailer: criarMailer(config.mail),
+    // O link do e-mail aponta para a PÁGINA do time web, não para a API: quem
+    // abre é uma pessoa num navegador, e o ADR-0017 tirou HTML deste serviço.
+    baseDaWeb: config.publicBaseUrl,
     avisarTitular: async (aviso) => {
       // O envio de e-mail pertence ao módulo `notifications`, que não existe
       // nesta entrega. Registrar aqui é o mínimo honesto: a detecção fica

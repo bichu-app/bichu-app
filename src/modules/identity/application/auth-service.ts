@@ -48,7 +48,73 @@ function comoTokenHash(valor: string): TokenHash {
   return hashDeToken(valor).toString('base64') as TokenHash;
 }
 
+/** Quanto vale cada token. Os números vêm das histórias, não daqui. */
+const VALIDADE_EM_MS: Record<'email_verify' | 'password_reset', number> = {
+  // 24 h (BICHUS-79 critério 6): o e-mail pode ser lido no dia seguinte.
+  email_verify: 24 * 60 * 60 * 1000,
+  // 30 min (BICHUS-77 critério 4): é uma credencial de troca de senha, e a
+  // janela curta é a diferença entre uma caixa de entrada vazada ontem servir
+  // ou não servir hoje.
+  password_reset: 30 * 60 * 1000,
+};
+
 export function criarAuthService(deps: DependenciasDeIdentidade) {
+  /**
+   * Gera o token, guarda o HASH, e manda o valor em claro pelo e-mail.
+   *
+   * O valor em claro existe **só nesta função e no corpo da mensagem**. Ele não
+   * é devolvido, não é registrado, não vai para a trilha e não passa pela fila
+   * — é o critério 11 das duas histórias, e é por isso que o envio acontece
+   * aqui dentro e não depois.
+   *
+   * O link é montado na hora do envio a partir de `baseDaWeb`, e nunca
+   * guardado: um link gravado carrega o domínio do dia em que foi escrito, e
+   * este e-mail é lido horas depois (§11.1 proibição 9).
+   */
+  async function emitirEEnviarToken(
+    userId: UserId,
+    email: string,
+    proposito: 'email_verify' | 'password_reset',
+    contexto: ContextoDaRequisicao,
+  ): Promise<void> {
+    const agora = deps.clock.now();
+    // 256 bits de CSPRNG.
+    const tokenBruto = deps.ids.opaqueToken();
+
+    await deps.repositorio.criarTokenDeVerificacao({
+      id: deps.ids.uuidv7(),
+      userId,
+      proposito,
+      tokenHash: comoTokenHash(tokenBruto),
+      enviadoPara: email,
+      expiraEm: (agora + VALIDADE_EM_MS[proposito]) as Instant,
+      ipHmac: deps.hmacDeIp(contexto.ip),
+    });
+
+    const base = deps.baseDaWeb.replace(/\/$/, '');
+    const mensagem =
+      proposito === 'email_verify'
+        ? {
+            para: email,
+            assunto: 'Confirme seu e-mail no Bichu',
+            corpo:
+              `Confirme seu e-mail para liberar o aviso de pet perdido:\n\n` +
+              `${base}/verificar-email?token=${tokenBruto}\n\n` +
+              `O link vale por 24 horas. Se você não criou uma conta no Bichu, ignore esta mensagem.`,
+          }
+        : {
+            para: email,
+            assunto: 'Redefinir sua senha do Bichu',
+            corpo:
+              `Para escolher uma senha nova, abra:\n\n` +
+              `${base}/redefinir-senha?token=${tokenBruto}\n\n` +
+              `O link vale por 30 minutos e só pode ser usado uma vez.\n` +
+              `Se não foi você que pediu, ignore — a sua senha continua a mesma.`,
+          };
+
+    await deps.mailer.enviar(mensagem);
+  }
+
   /**
    * Emite o par de tokens de uma **família nova**. Usado no cadastro e no login,
    * que são os dois momentos em que a senha foi de fato verificada — e é dessa
@@ -411,6 +477,152 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       });
 
       return conta;
+    },
+
+    // --- Verificação de e-mail e redefinição de senha --------------------
+
+    /**
+     * Pede o link de verificação. Responde **sempre** 202.
+     *
+     * Conta inexistente, conta já verificada e conta de outra pessoa produzem a
+     * mesma resposta: qualquer diferença aqui é um oráculo de existência de
+     * e-mail, consultável sem conta nenhuma.
+     */
+    async solicitarVerificacaoDeEmail(
+      email: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const conta = await deps.repositorio.buscarContaPorEmail(normalizarEmail(email));
+      // Sai em silêncio: não existe, ou já está verificada. As duas viram 202.
+      if (conta === undefined || conta.emailVerifiedAt !== null) return;
+
+      await emitirEEnviarToken(conta.id, conta.email, 'email_verify', contexto);
+    },
+
+    /**
+     * Confirma o e-mail. O token é consumido **atomicamente**.
+     *
+     * `undefined` cobre inexistente, expirado e já consumido, e os três viram
+     * 410 — distinguir contaria a um estranho se aquele token existiu.
+     */
+    async confirmarVerificacaoDeEmail(
+      tokenBruto: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<UserId> {
+      const agora = deps.clock.now();
+      const consumido = await deps.repositorio.consumirTokenDeVerificacao(
+        comoTokenHash(tokenBruto),
+        'email_verify',
+        agora,
+      );
+      if (consumido === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+      await deps.repositorio.marcarEmailVerificado(consumido.userId, agora);
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: consumido.userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.email_verified',
+        resourceKind: 'user',
+        resourceId: consumido.userId,
+      });
+      return consumido.userId;
+    },
+
+    /**
+     * Pede o link de redefinição. Responde **sempre** 202 (critério 2).
+     *
+     * Funciona inclusive com a conta em bloqueio temporário por falhas de login
+     * (critério 10): recusar aqui trancaria para fora justamente o titular que
+     * está tentando recuperar o acesso — e quem causou o bloqueio foi o
+     * atacante.
+     */
+    async solicitarRedefinicaoDeSenha(
+      email: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const conta = await deps.repositorio.buscarContaPorEmail(normalizarEmail(email));
+      if (conta === undefined) return;
+      await emitirEEnviarToken(conta.id, conta.email, 'password_reset', contexto);
+    },
+
+    /** Só confere, sem consumir. Serve à página antes do formulário. */
+    async conferirTokenDeRedefinicao(tokenBruto: string): Promise<void> {
+      const valido = await deps.repositorio.conferirTokenDeVerificacao(
+        comoTokenHash(tokenBruto),
+        'password_reset',
+        deps.clock.now(),
+      );
+      if (valido === undefined) throw problemas.tokenDeVerificacaoVencido();
+    },
+
+    /**
+     * Redefine a senha.
+     *
+     * **A ordem das três primeiras linhas é o critério 12**, e não estilo: a
+     * senha é validada ANTES de o token ser consumido. Consumir primeiro
+     * gastaria o único link que a pessoa tem porque ela digitou uma senha curta
+     * — e ela teria que pedir outro e-mail para tentar de novo.
+     */
+    async confirmarRedefinicaoDeSenha(
+      tokenBruto: string,
+      senhaNova: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const hash = comoTokenHash(tokenBruto);
+
+      // 1. O token existe? (sem consumir)
+      const pendente = await deps.repositorio.conferirTokenDeVerificacao(hash, 'password_reset', agora);
+      if (pendente === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+      // 2. A senha serve? Recusar aqui NÃO gasta o token.
+      const problemasDaSenha = validarSenha(senhaNova, { email: pendente.enviadoPara });
+      if (problemasDaSenha.length > 0) throw problemas.senhaFraca(problemasDaSenha);
+
+      // 3. Agora sim, atomicamente. Entre 1 e 3 outra requisição pode ter
+      //    consumido, e é por isso que 3 confere de novo em vez de confiar em 1.
+      const consumido = await deps.repositorio.consumirTokenDeVerificacao(hash, 'password_reset', agora);
+      if (consumido === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+      const credencial = await deps.repositorio.buscarCredencialLocalPorEmail(consumido.enviadoPara);
+      if (credencial === undefined) throw problemas.tokenDeVerificacaoVencido();
+      await deps.repositorio.regravarCredencial(
+        credencial.identityId,
+        await gerarHashDeSenha(senhaNova),
+        agora,
+      );
+
+      // Critério 9: TODO token pendente cai junto. Um link de redefinição
+      // emitido antes da troca continuaria valendo depois dela, e é por ele
+      // que quem tomou a conta volta.
+      await deps.repositorio.invalidarTokensPendentes(consumido.userId, agora);
+      // Critério 5: todas as sessões e todos os refresh. Efeito em menos de um
+      // segundo, e não nos até 15 minutos de validade do JWT.
+      await deps.repositorio.invalidarSessoes(consumido.userId, agora);
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: consumido.userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.password_reset_completed',
+        resourceKind: 'user',
+        resourceId: consumido.userId,
+      });
+
+      // Critério 7: avisar o endereço da conta. Se a troca não foi o titular,
+      // este e-mail é a única chance dele de descobrir hoje.
+      await deps.mailer.enviar({
+        para: consumido.enviadoPara,
+        assunto: 'Sua senha do Bichu foi alterada',
+        corpo:
+          'A senha da sua conta no Bichu acabou de ser alterada.\n\n' +
+          'Se foi você, não precisa fazer nada.\n\n' +
+          'Se não foi, peça uma nova senha agora mesmo pelo aplicativo: ' +
+          'quem fez isso entrou com um link enviado para este endereço.',
+      });
     },
 
     /** Empurra `sessions_invalid_before`. Usada pelos cinco gatilhos do SEC-006. */

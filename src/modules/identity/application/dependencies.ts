@@ -6,6 +6,8 @@
  * revisão de segurança.
  */
 import type { Instant } from '../../../shared/types/brands.js';
+import type { Mailer } from '../ports/mailer.js';
+import type { AbsoluteUrl } from '../../../shared/types/brands.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import type { JanelasDeSessao } from '../domain/session.js';
 import type { Clock } from '../../../shared/time/clock.js';
@@ -34,6 +36,14 @@ export interface DependenciasDeIdentidade {
    * (docs/04-seguranca.md 7.9).
    */
   readonly avisarTitular: (aviso: AvisoAoTitular) => Promise<void>;
+  readonly mailer: Mailer;
+  /**
+   * Base das páginas públicas do time web. É daqui que saem os links de
+   * verificação e de redefinição — montados na HORA DO ENVIO, nunca guardados
+   * (§11.1 proibição 9): um link gravado carrega o domínio do dia em que foi
+   * escrito, e o e-mail é lido horas depois.
+   */
+  readonly baseDaWeb: AbsoluteUrl;
 }
 
 export interface AvisoAoTitular {

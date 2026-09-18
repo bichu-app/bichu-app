@@ -28,13 +28,14 @@ export const STATUS_DO_PROBLEMA = {
   'tag-code-not-found':             404,
   'tag-code-malformed':             400,
   'unsupported-media-type':         415, // quatro operacoes ja respondiam 415 e nenhum slug significava isso: o corpo do problema saia com um `type` fora desta lista fechada, que e exatamente o que ela existe para impedir
+  'verification-token-expired':     410, // token de USO UNICO (verificacao de e-mail, redefinicao de senha) expirado, ja usado ou inexistente. Separado de `token-expired`, que e 401: as duas operacoes declaram 410 e o slug de 401 nao podia responder por elas. Os tres casos sao a MESMA resposta de proposito -- distinguir contaria a um estranho se aquele token existiu
   'upload-not-received':            409, // o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar
   'weak-password':                  422,
   'rate-limited':                   429,
   'internal':                       500,
 } as const;
 
-/** União fechada dos 24 tipos declarados no contrato. */
+/** União fechada dos 25 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

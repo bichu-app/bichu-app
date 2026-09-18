@@ -296,6 +296,7 @@ x-problem-types:
   - { slug: tag-code-not-found,            status: 404 }
   - { slug: tag-code-malformed,            status: 400 }
   - { slug: unsupported-media-type,        status: 415, note: "quatro operacoes ja respondiam 415 e nenhum slug significava isso: o corpo do problema saia com um `type` fora desta lista fechada, que e exatamente o que ela existe para impedir" }
+  - { slug: verification-token-expired,    status: 410, note: "token de USO UNICO (verificacao de e-mail, redefinicao de senha) expirado, ja usado ou inexistente. Separado de `token-expired`, que e 401: as duas operacoes declaram 410 e o slug de 401 nao podia responder por elas. Os tres casos sao a MESMA resposta de proposito -- distinguir contaria a um estranho se aquele token existiu" }
   - { slug: upload-not-received,           status: 409, note: "o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar" }
   - { slug: weak-password,                 status: 422 }
   - { slug: rate-limited,                  status: 429 }

@@ -26,6 +26,8 @@ import type {
   MotivoDeRevogacao,
   NovaConta,
   NovoRefresh,
+  NovoTokenDeVerificacao,
+  TokenConsumido,
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
 
@@ -385,6 +387,79 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       await db
         .updateTable('users')
         .set({ sessions_invalid_before: new Date(agora), updated_at: new Date(agora) })
+        .where('id', '=', userId)
+        .execute();
+    },
+
+    async criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
+      await db
+        .insertInto('verification_tokens')
+        .values({
+          id: novo.id,
+          user_id: novo.userId,
+          purpose: novo.proposito,
+          token_hash: Buffer.from(novo.tokenHash),
+          sent_to: novo.enviadoPara,
+          expires_at: new Date(novo.expiraEm),
+          created_ip_hmac: novo.ipHmac === null ? null : Buffer.from(novo.ipHmac),
+        })
+        .execute();
+    },
+
+    async consumirTokenDeVerificacao(hash, proposito, agora): Promise<TokenConsumido | undefined> {
+      // UMA instrução. As três condições no `WHERE` e a marcação no `SET` são
+      // avaliadas sob a mesma trava de linha: duas aberturas simultâneas do
+      // mesmo link disputam a linha, e só uma sai com `RETURNING`.
+      const linha = await db
+        .updateTable('verification_tokens')
+        .set({ consumed_at: new Date(agora) })
+        .where('token_hash', '=', Buffer.from(hash))
+        .where('purpose', '=', proposito)
+        .where('consumed_at', 'is', null)
+        .where('expires_at', '>', new Date(agora))
+        .returning(['user_id', 'sent_to'])
+        .executeTakeFirst();
+
+      return linha === undefined
+        ? undefined
+        : { userId: linha.user_id as UserId, enviadoPara: linha.sent_to };
+    },
+
+    async conferirTokenDeVerificacao(hash, proposito, agora): Promise<TokenConsumido | undefined> {
+      const linha = await db
+        .selectFrom('verification_tokens')
+        .select(['user_id', 'sent_to'])
+        .where('token_hash', '=', Buffer.from(hash))
+        .where('purpose', '=', proposito)
+        .where('consumed_at', 'is', null)
+        .where('expires_at', '>', new Date(agora))
+        .executeTakeFirst();
+
+      return linha === undefined
+        ? undefined
+        : { userId: linha.user_id as UserId, enviadoPara: linha.sent_to };
+    },
+
+    async invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
+      const r = await db
+        .updateTable('verification_tokens')
+        .set({ consumed_at: new Date(agora) })
+        .where('user_id', '=', userId)
+        .where('consumed_at', 'is', null)
+        .executeTakeFirst();
+      return Number(r.numUpdatedRows);
+    },
+
+    async marcarEmailVerificado(userId: UserId, agora: Instant): Promise<void> {
+      await db
+        .updateTable('users')
+        .set({
+          email_verified_at: new Date(agora),
+          // Verificar o e-mail prova que ele entrega. Uma devolução antiga não
+          // pode continuar marcando a conta como inalcançável depois disso.
+          email_deliverable: true,
+          updated_at: new Date(agora),
+        })
         .where('id', '=', userId)
         .execute();
     },

@@ -34,6 +34,24 @@ export interface CamposDoPerfil {
   readonly referenceState?: string | null | undefined;
 }
 
+export type PropositoDoToken = 'email_verify' | 'password_reset' | 'email_change';
+
+export interface NovoTokenDeVerificacao {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly proposito: PropositoDoToken;
+  /** SHA-256 de 256 bits de CSPRNG. O valor em claro não é guardado. */
+  readonly tokenHash: TokenHash;
+  readonly enviadoPara: string;
+  readonly expiraEm: Instant;
+  readonly ipHmac: Uint8Array | null;
+}
+
+export interface TokenConsumido {
+  readonly userId: UserId;
+  readonly enviadoPara: string;
+}
+
 export interface CredencialLocal {
   readonly identityId: string;
   readonly userId: UserId;
@@ -124,4 +142,52 @@ export interface IdentityRepository {
 
   /** SEC-006: empurra `sessions_invalid_before` para agora. */
   invalidarSessoes(userId: UserId, agora: Instant): Promise<void>;
+
+  // --- Tokens de verificação e de redefinição -----------------------------
+
+  /** Grava o HASH. O valor em claro nunca chega a esta porta. */
+  criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void>;
+
+  /**
+   * Consome o token em **UMA instrução**, e devolve a quem ele pertencia.
+   *
+   * `UPDATE ... SET consumed_at = now() WHERE token_hash = $1 AND consumed_at
+   * IS NULL AND expires_at > now() RETURNING user_id`.
+   *
+   * Conferir e depois atualizar em dois passos permite corrida: duas aberturas
+   * simultâneas do mesmo link — que é o caso REAL, porque cliente de e-mail
+   * pré-carrega o link e a pessoa clica em seguida — passariam as duas pela
+   * conferência antes de qualquer uma marcar. Numa redefinição de senha, isso é
+   * duas trocas de senha a partir de um token de uso único.
+   *
+   * `undefined` cobre inexistente, expirado e já consumido. São a mesma
+   * resposta (410) de propósito: distinguir contaria a um estranho se aquele
+   * token existiu.
+   */
+  consumirTokenDeVerificacao(
+    hash: TokenHash,
+    proposito: PropositoDoToken,
+    agora: Instant,
+  ): Promise<TokenConsumido | undefined>;
+
+  /**
+   * Só confere, sem consumir. Serve à página que o time web renderiza antes do
+   * formulário, e à recusa de senha fraca **sem gastar o token** (critério 12).
+   */
+  conferirTokenDeVerificacao(
+    hash: TokenHash,
+    proposito: PropositoDoToken,
+    agora: Instant,
+  ): Promise<TokenConsumido | undefined>;
+
+  /**
+   * Invalida todos os tokens pendentes de uma conta.
+   *
+   * Chamada em toda troca de senha, por qualquer caminho (critério 9 de
+   * BICHUS-77): um link de redefinição emitido antes da troca continuaria
+   * valendo depois dela, e é exatamente por ele que quem tomou a conta volta.
+   */
+  invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number>;
+
+  marcarEmailVerificado(userId: UserId, agora: Instant): Promise<void>;
 }

@@ -74,6 +74,30 @@ export interface AppConfig {
   readonly openapiSpecPath: string;
   readonly version: string;
   readonly objectStorage: ObjectStorageConfig;
+  readonly mail: MailConfig;
+}
+
+/**
+ * E-mail transacional.
+ *
+ * `transport` segue a convenção de `PUSH_TRANSPORT` e `KMS_TRANSPORT`: o
+ * comportamento é escolhido por ambiente, não por `if (isProduction)` espalhado
+ * no código. `log` existe para teste e para a esteira — ele **prova o disparo**
+ * sem provar a entrega, e a diferença entre as duas coisas precisa ficar
+ * visível no nome.
+ */
+export interface MailConfig {
+  readonly transport: 'smtp' | 'log';
+  readonly host: string;
+  readonly port: number;
+  /**
+   * Precisa ser em `@mail.<domínio>`, não no apex. O DMARC do apex está em
+   * `p=reject` com `adkim=s`: um remetente no apex quebra o alinhamento estrito
+   * e o e-mail é **descartado em silêncio** — sem devolução, sem erro, sem nada.
+   */
+  readonly from: string;
+  readonly fromName: string;
+  readonly replyTo: string;
 }
 
 /**
@@ -219,6 +243,15 @@ export function loadAppConfig(): AppConfig {
     bucketPublic: requireEnv('OBJECT_BUCKET_PUBLIC'),
   };
 
+  const mail: MailConfig = {
+    transport: optionalEnv('MAIL_TRANSPORT') === 'log' ? 'log' : 'smtp',
+    host: optionalEnv('MAIL_HOST') ?? 'mail',
+    port: Number.parseInt(optionalEnv('MAIL_PORT') ?? '1025', 10),
+    from: requireEnv('MAIL_FROM'),
+    fromName: optionalEnv('MAIL_FROM_NAME') ?? 'Bichu',
+    replyTo: optionalEnv('MAIL_REPLY_TO') ?? requireEnv('MAIL_FROM'),
+  };
+
   return {
     environment,
     isProduction: process.env['NODE_ENV'] === 'production',
@@ -241,6 +274,7 @@ export function loadAppConfig(): AppConfig {
     ipHmacKey,
     tagCodeKey,
     objectStorage,
+    mail,
     openapiSpecPath: optionalEnv('OPENAPI_SPEC_PATH') ?? 'api/openapi.yaml',
     version: optionalEnv('APP_VERSION') ?? '0.1.0',
   };

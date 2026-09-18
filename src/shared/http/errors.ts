@@ -160,6 +160,25 @@ export const problemas = {
     }),
 
   /**
+   * 410. Token de uso único expirado, já usado ou que nunca existiu.
+   *
+   * **Os três casos são a mesma resposta, e isso é a regra.** Distinguir
+   * "expirou" de "não existe" contaria a um estranho que aquele token existiu —
+   * e quem está tentando adivinhar token é justamente quem se beneficia de
+   * saber quando chegou perto.
+   *
+   * Tipo próprio desde 18/09: as duas operações declaram **410** no contrato e
+   * o único slug parecido (`token-expired`) é **401**, de token de acesso. Um
+   * app que decidisse por `type` trataria "o link do e-mail venceu" como "sua
+   * sessão caiu" e mandaria a pessoa fazer login — que é exatamente o que ela
+   * não consegue, porque está tentando recuperar a senha.
+   */
+  tokenDeVerificacaoVencido: (): AppError =>
+    new AppError('verification-token-expired', 'Este link não vale mais', {
+      detail: 'Ele pode ter expirado ou já ter sido usado. Peça um novo.',
+    }),
+
+  /**
    * 415. Tipo de arquivo que não abrimos.
    *
    * Existe como tipo próprio desde 18/09: quatro operações já respondiam 415 e

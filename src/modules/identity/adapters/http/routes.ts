@@ -101,6 +101,54 @@ export const rotaDeEdicaoDoPerfil = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
+export const rotaDePedidoDeVerificacao = defineRoute({
+  operationId: 'requestEmailVerification',
+  method: 'post',
+  path: '/auth/email-verification',
+  effects: ['notifies'],
+  rateLimit: [
+    { dimension: ['account'], limit: 3, window: '1h', onExceed: 'deny_429' },
+    { dimension: ['ip'], limit: 10, window: '1h', onExceed: 'challenge' },
+  ],
+});
+
+export const rotaDeConfirmacaoDeEmail = defineRoute({
+  operationId: 'confirmEmailVerification',
+  method: 'post',
+  path: '/auth/email-verification/confirm',
+  effects: ['verifies_secret'],
+  rateLimit: [{ dimension: ['ip'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDePedidoDeRedefinicao = defineRoute({
+  operationId: 'requestPasswordReset',
+  method: 'post',
+  path: '/auth/password-reset',
+  effects: ['notifies'],
+  rateLimit: [
+    { dimension: ['email'], limit: 3, window: '1h', onExceed: 'deny_429' },
+    { dimension: ['ip'], limit: 10, window: '1h', onExceed: 'challenge' },
+  ],
+});
+
+export const rotaDeConfirmacaoDeRedefinicao = defineRoute({
+  operationId: 'confirmPasswordReset',
+  method: 'post',
+  path: '/auth/password-reset/confirm',
+  effects: ['verifies_secret', 'notifies', 'irreversible_write'],
+  rateLimit: [{ dimension: ['ip'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDeConferenciaDeRedefinicao = defineRoute({
+  operationId: 'checkPasswordResetToken',
+  method: 'get',
+  path: '/public/password-reset/:token',
+  // Só lê. É a página do time web perguntando "vale a pena mostrar o
+  // formulário?" antes de a pessoa digitar uma senha para um link morto.
+  effects: [],
+  rateLimit: [{ dimension: ['ip'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
 export const rotaDoJwks = defineRoute({
   operationId: 'jwks',
   method: 'get',
@@ -125,6 +173,21 @@ export interface DependenciasDasRotas {
   readonly contrato: Contrato;
   readonly issuer: string;
   readonly apiBaseUrl: string;
+}
+
+/**
+ * Higiene da rota que carrega token na URL.
+ *
+ * O token de redefinição viaja no caminho porque ele vem de um link de e-mail,
+ * e isso é inevitável. O que dá para impedir é que ele seja indexado, que vaze
+ * pelo cabeçalho `Referer` para todo terceiro que a página carregar, e que
+ * fique guardado em cache intermediário (critério 11: o token não aparece em
+ * registro nenhum).
+ */
+function aplicarHigieneDeTokenNaUrl(reply: FastifyReply): void {
+  void reply.header('X-Robots-Tag', 'noindex, nofollow');
+  void reply.header('Referrer-Policy', 'no-referrer');
+  void reply.header('Cache-Control', 'no-store');
 }
 
 function contextoDe(request: FastifyRequest): ContextoDaRequisicao {
@@ -207,6 +270,73 @@ export function registrarRotasDeIdentidade(
       created_at: conta.createdAt.toISOString(),
     };
   };
+
+  app.post(
+    rotaDePedidoDeVerificacao.path,
+    { schema: { body: corpoDe(deps.contrato, rotaDePedidoDeVerificacao.operationId) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const corpo = (request.body ?? {}) as { email?: string };
+      const cabecalho = request.headers.authorization;
+
+      // A operação aceita conta OU e-mail no corpo. Com conta, o endereço vem
+      // da sessão e o do corpo é ignorado: aceitar o do corpo deixaria alguém
+      // logado disparar e-mail nosso para um endereço qualquer.
+      let email = corpo.email;
+      if (typeof cabecalho === 'string' && cabecalho.startsWith('Bearer ')) {
+        const { conta } = await deps.auth.autenticar(tokenDoCabecalho(request));
+        email = conta.email;
+      }
+
+      // 202 mesmo sem e-mail nenhum: a resposta não varia com a entrada.
+      if (email !== undefined && email !== '') {
+        await deps.auth.solicitarVerificacaoDeEmail(email, contextoDe(request));
+      }
+      return reply.status(202).send();
+    },
+  );
+
+  app.post(
+    rotaDeConfirmacaoDeEmail.path,
+    { schema: { body: corpoDe(deps.contrato, rotaDeConfirmacaoDeEmail.operationId) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { token } = request.body as { token: string };
+      const userId = await deps.auth.confirmarVerificacaoDeEmail(token, contextoDe(request));
+      const conta = await deps.auth.meuPerfil(userId);
+      return reply.status(200).send(comoRespostaDoPerfil(conta));
+    },
+  );
+
+  app.post(
+    rotaDePedidoDeRedefinicao.path,
+    { schema: { body: corpoDe(deps.contrato, rotaDePedidoDeRedefinicao.operationId) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { email } = request.body as { email: string };
+      await deps.auth.solicitarRedefinicaoDeSenha(email, contextoDe(request));
+      // SEMPRE 202, exista a conta ou não (critério 2). Qualquer diferença aqui
+      // é um oráculo de existência de e-mail, consultável sem conta nenhuma.
+      return reply.status(202).send();
+    },
+  );
+
+  app.get(rotaDeConferenciaDeRedefinicao.path, async (request: FastifyRequest, reply: FastifyReply) => {
+    aplicarHigieneDeTokenNaUrl(reply);
+    const { token } = request.params as { token: string };
+    await deps.auth.conferirTokenDeRedefinicao(token);
+    // Corpo vazio de propósito: a página só precisa saber se vale mostrar o
+    // formulário. Devolver o e-mail aqui entregaria o endereço a quem tivesse o
+    // link — que é exatamente quem pode não ser o titular.
+    return reply.status(200).send({ valid: true });
+  });
+
+  app.post(
+    rotaDeConfirmacaoDeRedefinicao.path,
+    { schema: { body: corpoDe(deps.contrato, rotaDeConfirmacaoDeRedefinicao.operationId) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const corpo = request.body as { token: string; new_password: string };
+      await deps.auth.confirmarRedefinicaoDeSenha(corpo.token, corpo.new_password, contextoDe(request));
+      return reply.status(204).send();
+    },
+  );
 
   app.get(rotaDoMeuPerfil.path, async (request: FastifyRequest, reply: FastifyReply) => {
     const { conta } = await deps.auth.autenticar(tokenDoCabecalho(request));
