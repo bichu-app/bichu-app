@@ -2,6 +2,8 @@ import 'package:flutter/widgets.dart';
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/pets_api.dart';
+import 'dispositivo/camera_e_galeria.dart';
 import 'sessao/controlador_de_sessao.dart';
 
 /// As dependencias do app, entregues pela arvore de widgets.
@@ -14,6 +16,9 @@ class Escopo extends InheritedWidget {
   const Escopo({
     required this.api,
     required this.auth,
+    required this.pets,
+    required this.tags,
+    required this.camera,
     required this.sessao,
     required super.child,
     super.key,
@@ -21,6 +26,13 @@ class Escopo extends InheritedWidget {
 
   final ApiClient api;
   final AuthApi auth;
+  final PetsApi pets;
+  final TagsApi tags;
+
+  /// A fronteira com o aparelho. Injetavel para que o teste de widget
+  /// exercite os tres estados de permissao sem aparelho.
+  final CameraEGaleria camera;
+
   final ControladorDeSessao sessao;
 
   static Escopo of(BuildContext context) {
@@ -38,5 +50,8 @@ class Escopo extends InheritedWidget {
   bool updateShouldNotify(Escopo anterior) =>
       api != anterior.api ||
       auth != anterior.auth ||
+      pets != anterior.pets ||
+      tags != anterior.tags ||
+      camera != anterior.camera ||
       sessao != anterior.sessao;
 }

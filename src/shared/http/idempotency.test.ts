@@ -13,12 +13,22 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { hashDeCorpo, iguaisEmTempoConstante } from '../crypto/digest.js';
+import {
+  DummyDriver,
+  Kysely,
+  PostgresAdapter,
+  PostgresIntrospector,
+  PostgresQueryCompiler,
+} from 'kysely';
+import type { Database } from '../db/schema.js';
+import type { Db } from '../db/pool.js';
 import { carregarContrato } from './contract.js';
 import { AppError } from './errors.js';
 import {
   canonicalizarCorpo,
   executarComIdempotencia,
   exigenciaDeIdempotencia,
+  montarReservaDeIdempotencia,
   operacoesComIdempotencia,
   type EntradaDeIdempotencia,
   type Idempotencia,
@@ -28,13 +38,37 @@ import {
 const CHAVE = '018f3a2b-0000-7000-8000-000000000001';
 const OUTRA_CHAVE = '018f3a2b-0000-7000-8000-000000000002';
 const DONO = '018f3a2b-0000-7000-8000-00000000000a';
-const STATUS_RESERVADO = 0;
+/**
+ * Reservada é **ausência de status**, e não um status inventado.
+ *
+ * Aqui estava um `0`, espelhando o que o adaptador gravava. `0` não é status
+ * HTTP, a coluna do banco tem `CHECK (response_status BETWEEN 100 AND 599)`, e a
+ * primeira rota idempotente de verdade terminou em 500 na reserva. O dobre
+ * aceitava porque dobre não tem restrição — e é essa a lição: quando o dobre é
+ * mais permissivo que a tabela, ele deixa de ser um dobre e passa a ser um
+ * lugar onde o defeito se esconde.
+ *
+ * `guardarStatus` abaixo é a restrição do banco trazida para cá. Ela não tem
+ * teste próprio: ela existe para reprovar o dia em que alguém reintroduzir um
+ * valor de fora do domínio da coluna.
+ */
+const RESERVADA = null;
+
+function guardarStatus(status: number | null): number | null {
+  if (status !== null && (status < 100 || status > 599)) {
+    throw new Error(
+      `status ${String(status)} está fora de 100..599, e a coluna do banco o ` +
+        'recusaria. Reservada é NULL (migração 20260917000008).',
+    );
+  }
+  return status;
+}
 
 interface Linha {
   donoOuToken: string;
   endpoint: string;
   requestHash: Buffer;
-  status: number;
+  status: number | null;
   corpo: unknown;
   expiraEm: number;
 }
@@ -51,7 +85,7 @@ function memoria(): Idempotencia {
           donoOuToken: entrada.donoOuToken,
           endpoint: entrada.endpoint,
           requestHash,
-          status: STATUS_RESERVADO,
+          status: guardarStatus(RESERVADA),
           corpo: null,
           expiraEm: entrada.agoraEmMilissegundos + 24 * 3600 * 1000,
         });
@@ -64,7 +98,7 @@ function memoria(): Idempotencia {
       ) {
         return Promise.reject(new AppError('validation-failed', 'Chave reaproveitada'));
       }
-      if (existente.status === STATUS_RESERVADO) {
+      if (existente.status === RESERVADA) {
         return Promise.reject(new AppError('rate-limited', 'Primeira tentativa em curso'));
       }
       return Promise.resolve({ status: existente.status, body: existente.corpo });
@@ -72,14 +106,14 @@ function memoria(): Idempotencia {
     concluir(chave: string, status: number, corpo: unknown): Promise<void> {
       const linha = linhas.get(chave);
       if (linha !== undefined) {
-        linha.status = status;
+        linha.status = guardarStatus(status);
         linha.corpo = corpo;
       }
       return Promise.resolve();
     },
     liberar(chave: string): Promise<void> {
       const linha = linhas.get(chave);
-      if (linha !== undefined && linha.status === STATUS_RESERVADO) linhas.delete(chave);
+      if (linha !== undefined && linha.status === RESERVADA) linhas.delete(chave);
       return Promise.resolve();
     },
   };
@@ -253,5 +287,78 @@ void describe('quem é idempotente sai do contrato, não do julgamento de quem c
 
   void it('`operationId` fora do contrato falha, em vez de responder "não declara"', () => {
     assert.throws(() => exigenciaDeIdempotencia(contrato, 'operacaoQueNaoExiste'));
+  });
+});
+
+/**
+ * O SQL da reserva, conferido sem banco.
+ *
+ * Este bloco existe por um defeito real: a reserva era escrita com `.where()`
+ * ANTES de `.doUpdateSet()`, o que gera `on conflict ("key") where ... do
+ * update` — predicado de índice, e não condição do `UPDATE`. O Postgres aceita,
+ * a linha viva é sobrescrita, e **toda segunda tentativa executa o efeito de
+ * novo**. Com uma rota idempotente ligada, isso é o tutor recebendo dois avisos
+ * do mesmo achador.
+ *
+ * Nenhum teste de comportamento pegava: o dobre acima não gera SQL. Por isso a
+ * asserção é sobre o texto compilado, e ela tem as duas metades — a forma certa
+ * precisa estar lá, e a errada precisa não estar.
+ */
+void describe('SQL da reserva', () => {
+  function bancoDeMentira(): Db {
+    return new Kysely<Database>({
+      dialect: {
+        createAdapter: () => new PostgresAdapter(),
+        createDriver: () => new DummyDriver(),
+        createIntrospector: (db) => new PostgresIntrospector(db),
+        createQueryCompiler: () => new PostgresQueryCompiler(),
+      },
+    });
+  }
+
+  function sqlDaReserva(): string {
+    return montarReservaDeIdempotencia(
+      bancoDeMentira(),
+      {
+        chave: CHAVE,
+        donoOuToken: DONO,
+        endpoint: 'POST /v1/tags/:code/found-reports',
+        corpoCanonico: '{}',
+        agoraEmMilissegundos: 0,
+      },
+      hashDeCorpo('{}'),
+      new Date(0),
+    ).compile().sql;
+  }
+
+  void it('a validade restringe o UPDATE, e não o alvo do conflito', () => {
+    assert.match(sqlDaReserva(), /do update set .* where idempotency_keys\.expires_at <= now\(\)/);
+  });
+
+  void it('NÃO gera o predicado de índice, que desligaria a idempotência em silêncio', () => {
+    // Esta é a forma que o Postgres aceita e que não restringe nada. Se ela
+    // voltar, este teste é o único lugar do projeto que acusa sem subir banco.
+    assert.doesNotMatch(sqlDaReserva(), /on conflict \("key"\) where/);
+  });
+
+  void it('a reserva grava ausência de status, e não um status fora de 100..599', () => {
+    // `response_status` entra por parâmetro, então o valor não aparece no texto.
+    // O que se confere é que a coluna está na inserção e que o valor ligado é
+    // nulo — que é o que a restrição do banco exige.
+    const consulta = montarReservaDeIdempotencia(
+      bancoDeMentira(),
+      {
+        chave: CHAVE,
+        donoOuToken: DONO,
+        endpoint: 'POST /v1/tags/:code/found-reports',
+        corpoCanonico: '{}',
+        agoraEmMilissegundos: 0,
+      },
+      hashDeCorpo('{}'),
+      new Date(0),
+    ).compile();
+    assert.match(consulta.sql, /"response_status"/);
+    assert.equal(consulta.parameters.includes(0), false);
+    assert.equal(consulta.parameters.includes(null), true);
   });
 });

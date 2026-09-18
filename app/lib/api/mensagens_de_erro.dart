@@ -72,6 +72,35 @@ abstract final class MensagensDeErro {
 
   static const String esqueciMinhaSenha = 'Esqueci minha senha';
 
+  /// A saida comum as quatro telas de falha do codigo da tag (UX 12.4).
+  static const String registrarAchado = 'Registrar que achei um pet';
+
+  /// `tag-code-malformed`, 400 (UX 12.6).
+  static const String codigoMalformado =
+      'Confira o código. Parece que faltou alguma coisa, ou entrou um '
+      'caractere a mais. O código está impresso embaixo do QR, na plaquinha.';
+
+  /// `tag-code-not-found`, 404 (UX 12.6).
+  static const String codigoNaoEncontrado =
+      'Esse código não é de nenhuma tag do Bichu. Confira se a plaquinha é do '
+      'Bichu.';
+
+  /// A ajuda do campo de digitacao do codigo (UX 12.4).
+  ///
+  /// Sem esta linha a tolerancia do contrato existe e ninguem usa: o campo
+  /// continua parecendo exigir transcricao exata de 26 caracteres.
+  static const String ajudaDoCampoDeCodigo =
+      'Pode digitar com ou sem hífen, em maiúscula ou minúscula. Se confundir '
+      'I com 1 ou O com 0, a gente entende.';
+
+  /// `validation-failed` que chegou **sem nomear campo nenhum** (UX 12.6).
+  ///
+  /// O contrato manda o servidor nomear o campo em `errors[]`, e quando ele
+  /// nao nomeia o defeito e nosso. A tela nao pode ficar muda, mas tambem nao
+  /// pode acusar um campo que ninguem apontou.
+  static const String naoConseguimosSalvar =
+      'Não conseguimos salvar. Confira o que você preencheu e tente de novo.';
+
   /// A mensagem de uma falha qualquer, fora do contexto de um formulario.
   ///
   /// [podeEnfileirar] separa as duas linhas de "sem conexao" da tabela 12.4:
@@ -141,6 +170,28 @@ abstract final class MensagensDeErro {
       ProblemTipo.credencialInvalida => const MensagemDeErro(
           texto: credencialNaoConfere,
           acao: esqueciMinhaSenha,
+        ),
+      // Os quatro desfechos de `GET /v1/tags/{code}` (F2.1 e F4.5). As quatro
+      // mensagens carregam **a mesma saida**, com o mesmo texto e o mesmo
+      // botao, e e isso que impede o beco sem saida: quem esta com um animal
+      // no colo nao precisa do codigo para registrar o achado (UX 12.4 e F4.5).
+      ProblemTipo.codigoDeTagMalformado => const MensagemDeErro(
+          texto: codigoMalformado,
+          acao: registrarAchado,
+          proximaAcao: ProximaAcao.registrarAchadoAvulso,
+        ),
+      ProblemTipo.codigoDeTagNaoEncontrado => const MensagemDeErro(
+          texto: codigoNaoEncontrado,
+          acao: registrarAchado,
+          proximaAcao: ProximaAcao.registrarAchadoAvulso,
+        ),
+      ProblemTipo.naoEncontrado => const MensagemDeErro(
+          texto: 'Isso não está mais aqui.',
+          acao: 'Ver meus pets',
+        ),
+      ProblemTipo.limiteDePetsAtingido => _limiteDePets(problem),
+      ProblemTipo.limiteDeTentativas => MensagemDeErro(
+          texto: _muitasTentativas(problem.tenteDepoisDe),
         ),
       ProblemTipo.validacaoFalhou || ProblemTipo.desconhecido => null,
     };
@@ -221,6 +272,26 @@ abstract final class MensagensDeErro {
     // Tipo que este build nao conhece, ou 500. O catalogo geral resolve, e
     // nenhum caminho daqui afirma que a credencial nao confere.
     return de(falha);
+  }
+
+  /// `pet-limit-reached`, 409 (UX 12.6).
+  ///
+  /// **O numero vem da resposta, nunca escrito na frase.** O esquema `Problem`
+  /// de `api/openapi.yaml` nao declara campo nenhum que o carregue hoje; se um
+  /// dia declarar, e so ele chegar, esta funcao passa a dizer o teto. Enquanto
+  /// nao chega, a tela diz que o limite foi atingido **sem numero**, em vez de
+  /// escrever "20" no binario: uma versao antiga do app continua instalada por
+  /// semanas depois de o servidor mudar o teto, e ela repetiria o numero
+  /// errado com a mesma confianca.
+  static MensagemDeErro _limiteDePets(Problem problem) {
+    final limite = problem.inteiro('limit') ?? problem.inteiro('pet_limit');
+    final abertura = limite == null
+        ? 'Você chegou ao limite de pets nesta conta.'
+        : 'Você chegou ao limite de $limite pets nesta conta.';
+    return MensagemDeErro(
+      texto: '$abertura Se precisar de mais, fale com a gente.',
+      acao: 'Ver meus pets',
+    );
   }
 
   static String _muitasTentativas(Duration? esperar) {

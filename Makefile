@@ -35,7 +35,7 @@ export BIND_HOST := 0.0.0.0
 endif
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup up down reset migrar migrar-baixo seed logs test test-int e2e verificar verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-docs-fechada backup restore pin-digests
+.PHONY: ajuda setup up down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-docs-fechada backup restore pin-digests
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -86,6 +86,26 @@ e2e: ## Cypress contra o ambiente de qa
 	$(COMPOSE) --profile qa up -d --wait
 	npx cypress run --record
 
+# A mesma invocacao do job `sonar` da esteira, para conferir na maquina antes
+# de abrir PR. Roda fora do compose de proposito: e o caminho que o runner do
+# GitHub usa, e o objetivo aqui e reproduzir esse caminho, nao um parecido.
+#
+# `--enable-source-maps` nao e opcional: sem ela o lcov aponta para o
+# JavaScript de `dist/`, o Sonar nao casa nada e publica 0% sem reclamar.
+cobertura: ## gera coverage/lcov.info no formato que o SonarCloud le
+	@mkdir -p coverage
+	npx tsc -p tsconfig.json --outDir dist/_tests
+	node --enable-source-maps --test --experimental-test-coverage \
+	  --test-reporter=spec --test-reporter-destination=stdout \
+	  --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \
+	  "dist/_tests/src/**/*.test.js"
+
+verificar-cobertura: cobertura ## o lcov fala de src/**/*.ts? Com as quatro iscas
+	node infra/verificacao/verificar-cobertura-lcov.mjs coverage/lcov.info
+
+verificar-dispensas: ## dispensa de portao vencida reprova (secao 5.3)
+	python3 infra/verificacao/verificar_dispensas.py
+
 verificar-portabilidade: ## portao de portabilidade: provedor, hostname e as duas iscas
 	python3 infra/verificacao/verificar_portabilidade.py
 
@@ -110,7 +130,7 @@ verificar-docs-fechada: ## ADR-0018: a Swagger UI fechada, visto de fora (autote
 
 # Tudo que nao precisa de nuvem nem de segredo, na ordem da esteira. E o que
 # `make up` seguido de `make verificar` responde antes de abrir um PR.
-verificar: verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-dispensas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
 	@mkdir -p backup

@@ -22,6 +22,7 @@ import Fastify, {
 import { randomUUID } from 'node:crypto';
 import type { AbsoluteUrl } from '../types/brands.js';
 import { AppError, problemas } from './errors.js';
+import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 import {
   montarProblema,
   TIPO_DE_CONTEUDO_DO_PROBLEMA,
@@ -86,7 +87,15 @@ export function responderProblema(
   erro: AppError,
   problemBaseUrl: AbsoluteUrl,
 ): FastifyReply {
-  const corpo: ProblemBody = montarProblema(erro, problemBaseUrl, request.id, request.url);
+  // `instance` também carrega o caminho, e o caminho da rota pública carrega o
+  // código da tag. Quem recebe o corpo já tem o código, mas o corpo de erro é
+  // justamente o que acaba colado em chamado de suporte e em relato de defeito.
+  const corpo: ProblemBody = montarProblema(
+    erro,
+    problemBaseUrl,
+    request.id,
+    ocultarCodigoDaTagNaUrl(request.url),
+  );
   if (erro.retryAfterSeconds !== undefined) {
     // A RFC 9110 exige `Retry-After` no 429, e o cliente offline precisa dele
     // para decidir quando reenviar a fila em vez de martelar.
@@ -125,6 +134,17 @@ export function criarServidor(opcoes: OpcoesDoServidor): FastifyInstance {
           'req.body.token',
         ],
         censor: '[removido]',
+      },
+      serializers: {
+        // `redact` não alcança a URL: ela não é um campo, é parte do caminho. O
+        // código da tag é uma credencial ao portador e entraria em claro em toda
+        // linha de log de acesso da rota mais pública do produto (ADR-0004).
+        req: (request) => ({
+          method: request.method,
+          url: ocultarCodigoDaTagNaUrl(request.url),
+          host: request.host,
+          remoteAddress: request.ip,
+        }),
       },
     },
   });

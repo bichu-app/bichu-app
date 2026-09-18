@@ -11,11 +11,17 @@
 
 name: ci
 
+# A BRANCH PADRAO DO REPOSITORIO E `development`, e nao `main` (17/09/2026,
+# repositorio novo `bichu-app/bichu-app`). Um gatilho so em `main` deixaria
+# esta esteira sem disparar em nenhum PR do fluxo real de trabalho, que abre
+# contra `development`: o arquivo existiria, os jobs estariam escritos, e nada
+# rodaria. Portao que nao dispara nem chega a ficar verde sem verificar -- ele
+# so consta.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, development]
   push:
-    branches: [main]
+    branches: [main, development]
 
 permissions:
   contents: read
@@ -435,15 +441,164 @@ jobs:
         working-directory: app
         run: flutter test test/tema
 
+  # SonarCloud. docs/07-devops.md secao 8.4.
+  #
+  # O cliente contratou o plano em 17/09/2026 e provisionou `SONAR_TOKEN`. Com
+  # o insumo na mao, a dispensa `sonarcloud` saiu de `.github/quality-gates.yml`
+  # e este job passou a ser o portao de verdade.
+  #
+  # Duas coisas sao verificadas aqui, e elas sao diferentes:
+  #
+  #   1. O RELATORIO DE COBERTURA SERVE? Bloqueante hoje, sem excecao. O
+  #      SonarCloud aceita em silencio um lcov que nao casa com arquivo nenhum
+  #      e publica 0% como se fosse medicao. Esta e a falha que este job existe
+  #      para nao deixar passar.
+  #   2. O VEREDITO DO PORTAO DE QUALIDADE. Informativo enquanto houver a
+  #      dispensa datada `sonarcloud-veredito` no quality-gates.yml; bloqueante
+  #      no instante em que ela for apagada. O motivo esta na secao 8.4: na
+  #      PRIMEIRA analise o SonarCloud trata o repositorio inteiro como "codigo
+  #      novo", entao os 74% de linha medidos hoje vao de encontro ao piso de
+  #      80% do perfil `Sonar way` e o portao reprova -- um veredito sobre
+  #      treze dias de codigo acumulado, cobrado de quem abriu o PR. Portao que
+  #      reprova tudo no primeiro dia e desligado na primeira semana, e o
+  #      desligamento e definitivo. Uma semana de linha de base, e ele passa a
+  #      julgar o diff, que e o que ele sabe julgar.
+  sonar:
+    name: SonarCloud (analise estatica e cobertura)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: codigo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # O Sonar usa o blame do Git para atribuir "codigo novo". Checkout
+          # raso faz todo o repositorio parecer novo em toda analise, e o
+          # portao passa a cobrar de cada PR o acumulado do projeto.
+          fetch-depth: 0
+
+      # SEM `if:`, DE PROPOSITO. `if: secrets.SONAR_TOKEN != ''` e a saida
+      # preguicosa que a secao 5.3 proibe: o job sumiria da lista, o `portao`
+      # veria apenas "skipped", e a ausencia da analise viraria silencio. Aqui
+      # a ausencia do token REPROVA, com o nome da credencial na mensagem.
+      - name: o token existe?
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "::error::SONAR_TOKEN ausente. A dispensa \`sonarcloud\` saiu de .github/quality-gates.yml quando o plano foi contratado: este portao existe e nao tem como ficar verde sem o token. Ou o segredo volta para Settings > Secrets do repositorio, ou a dispensa volta para o arquivo com motivo, responsavel e data"
+            exit 1
+          fi
+          echo "SONAR_TOKEN presente (o valor nunca e impresso)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # A cobertura e gerada AQUI, e nao herdada do job `codigo`, porque
+      # `npm test` nao emite lcov e `package.json` e da frente de backend.
+      # Chamar o `node` direto com os mesmos argumentos do script `test` custa
+      # os poucos segundos da suite e nao mexe em arquivo de outra frente.
+      #
+      # CONSEQUENCIA A VIGIAR: se o script `test` do package.json mudar de
+      # forma (outro diretorio de saida, outro padrao de arquivo), esta linha
+      # fica medindo outra coisa. O passo seguinte acusa quando isso esvaziar o
+      # relatorio, mas nao acusa se ele continuar cheio e errado.
+      #
+      # `--enable-source-maps` NAO E OPCIONAL. Sem ela o reporter lcov grava o
+      # caminho do JavaScript compilado (`dist/_tests/**/*.js`), o Sonar nao
+      # casa nenhum arquivo, nao reclama, e publica 0% de cobertura. Uma flag,
+      # e a diferenca entre medir e fingir que mediu.
+      - name: cobertura em lcov
+        run: |
+          mkdir -p coverage
+          npx tsc -p tsconfig.json --outDir dist/_tests
+          node --enable-source-maps --test --experimental-test-coverage \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \
+            "dist/_tests/src/**/*.test.js"
+
+      # As quatro iscas de infra/verificacao/iscas/lcov-* rodam ANTES do
+      # relatorio real, e tres delas precisam reprovar nominalmente. Isca que
+      # passa derruba o job com "o verificador de cobertura parou de verificar".
+      - name: o relatorio de cobertura fala de src/**/*.ts, iscas primeiro
+        run: node infra/verificacao/verificar-cobertura-lcov.mjs coverage/lcov.info
+
+      # O modo vem do quality-gates.yml, e nao de um `if` escrito aqui.
+      # Secao 5.3: "Para remover a dispensa: apague a entrada. Nao mexa no
+      # workflow." Apagar `sonarcloud-veredito` torna o veredito bloqueante, e
+      # a data da dispensa faz o job `rapidos` reprovar sozinho se ninguem
+      # apagar. Nao existe caminho em que isto seja esquecido em silencio.
+      - name: o veredito bloqueia ou informa?
+        id: modo
+        run: |
+          if grep -qE '^[[:space:]]*-[[:space:]]*portao:[[:space:]]*sonarcloud-veredito[[:space:]]*$' .github/quality-gates.yml; then
+            echo "bloqueante=nao" >> "$GITHUB_OUTPUT"
+            echo "::notice::veredito do SonarCloud em modo informativo, por dispensa datada em .github/quality-gates.yml"
+          else
+            echo "bloqueante=sim" >> "$GITHUB_OUTPUT"
+            echo "veredito do SonarCloud em modo bloqueante"
+          fi
+
+      # As chaves de organizacao e de projeto, os caminhos de fonte e as
+      # exclusoes estao em `sonar-project.properties`, na raiz. Nada de branch
+      # nem de PR e passado aqui: o scanner le isso do ambiente do GitHub
+      # Actions sozinho, e um valor fixo transformaria toda analise de PR em
+      # analise da mesma branch.
+      - name: scanner
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: veredito do portao de qualidade
+        id: veredito
+        continue-on-error: ${{ steps.modo.outputs.bloqueante == 'nao' }}
+        uses: SonarSource/sonarqube-quality-gate-action@v1.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # ESTE PASSO NAO E `continue-on-error` DISFARCADO. Ele existe para que
+      # um veredito vermelho apareca como vermelho no resumo da execucao mesmo
+      # durante a janela informativa. Reprovacao registrada com prazo nao e a
+      # mesma coisa que job verde.
+      - name: o veredito, dito em voz alta
+        run: |
+          estado='${{ steps.veredito.outcome }}'
+          bloqueante='${{ steps.modo.outputs.bloqueante }}'
+          echo "veredito=$estado bloqueante=$bloqueante"
+          case "$estado" in
+            success)
+              echo 'SonarCloud: portao de qualidade verde.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            failure)
+              if [ "$bloqueante" = 'sim' ]; then
+                echo '::error::o portao de qualidade do SonarCloud reprovou'
+                exit 1
+              fi
+              echo '::warning::o portao de qualidade do SonarCloud REPROVOU e nao esta bloqueando, por dispensa datada (sonarcloud-veredito) em .github/quality-gates.yml. Isto nao e um job verde: e uma reprovacao registrada com prazo'
+              {
+                echo '### SonarCloud: portao de qualidade REPROVADO'
+                echo 'Informativo ate a dispensa sonarcloud-veredito de .github/quality-gates.yml vencer ou ser apagada.'
+                echo 'A partir dai, este mesmo veredito derruba o PR.'
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::nao foi possivel obter o veredito do SonarCloud (passo em '$estado'). Verificacao que nao consegue verificar reprova, nunca aprova"
+              exit 1
+              ;;
+          esac
+
   portao:
     name: portao
     runs-on: ubuntu-latest
-    needs: [rapidos, codigo, contrato, integracao, app, tokens, contraste]
+    needs: [rapidos, codigo, contrato, integracao, app, tokens, contraste, sonar]
     if: always()
     steps:
       - name: consolidar
         run: |
-          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.app.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }}"
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.app.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
           echo "estados: $estados"
           for e in $estados; do
             case "$e" in

@@ -9,10 +9,29 @@
 # data. Para remover a dispensa: apague a entrada. Nao mexa no workflow.
 
 dispensas:
-  - portao: sonarcloud
-    motivo: "SONAR_TOKEN nao provisionado; SonarCloud e pago em repositorio privado e a contratacao nao foi decidida"
-    responsavel: cliente
-    vence_em: 2026-09-23
+  # A dispensa `sonarcloud` saiu em 17/09/2026: o cliente contratou o plano e
+  # provisionou SONAR_TOKEN. O job `sonar` da esteira passou a existir de
+  # verdade, e sem o token ele REPROVA nomeando a credencial.
+  #
+  # O que continua dispensado e so o VEREDITO do portao de qualidade, e por um
+  # motivo estreito: na primeira analise o SonarCloud trata o repositorio
+  # inteiro como codigo novo, entao os 74% de linha medidos hoje batem no piso
+  # de 80% do perfil `Sonar way` e o portao reprova de saida. Isso e um
+  # veredito sobre treze dias de codigo acumulado, cobrado de quem abrir o
+  # proximo PR. Portao que reprova tudo no primeiro dia e desligado na
+  # primeira semana, e o desligamento nao volta atras.
+  #
+  # Uma semana depois existe linha de base em `development`, "codigo novo"
+  # passa a significar o diff do PR, e o piso de 80% vira uma exigencia sobre
+  # o que a pessoa acabou de escrever -- que e o que ele sabe cobrar.
+  #
+  # Enquanto esta entrada existir, o job `sonar` publica o veredito vermelho
+  # no resumo da execucao com `::warning::` e nao derruba o PR. Apagar esta
+  # entrada torna o veredito bloqueante, sem tocar no workflow.
+  - portao: sonarcloud-veredito
+    motivo: "primeira analise trata o repositorio inteiro como codigo novo e reprova os 74% contra o piso de 80% do Sonar way; a janela existe para criar linha de base em development"
+    responsavel: squad
+    vence_em: 2026-09-24
 
   - portao: apk-assinado
     motivo: "chave de assinatura do APK pendente (BICHU-15). Sem ela nao ha build de release nem impressao digital para o assetlinks.json"

@@ -1,0 +1,23 @@
+# ISCA. PRECISA REPROVAR.
+#
+# Este e o formato que o reporter `lcov` do Node produz quando o teste roda SEM
+# `--enable-source-maps`: o caminho e o do JavaScript compilado em `dist/`, e
+# nao o do TypeScript de origem. O SonarCloud nao casa nenhum arquivo com isto,
+# nao reclama, e publica 0% de cobertura como se fosse medicao.
+#
+# A acusacao precisa citar `enable-source-maps`, porque reprovar sem dizer o
+# que fazer devolve o problema sem a solucao.
+TN:
+SF:dist/_tests/src/shared/id/uuidv7.js
+FNF:2
+FNH:2
+LF:40
+LH:40
+end_of_record
+TN:
+SF:dist/_tests/src/shared/crypto/digest.js
+FNF:5
+FNH:4
+LF:59
+LH:57
+end_of_record

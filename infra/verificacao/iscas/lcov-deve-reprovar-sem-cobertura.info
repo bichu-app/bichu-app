@@ -1,0 +1,9 @@
+# ISCA. PRECISA REPROVAR.
+#
+# Relatorio gerado e vazio: o arquivo existe, tem cabecalho, e nao declara
+# nenhum `SF:`. E o que sai quando o comando de teste roda mas a instrumentacao
+# nao liga -- `--experimental-test-coverage` esquecido, por exemplo.
+#
+# Relatorio vazio e pior que relatorio ausente: a ausencia pelo menos assusta
+# quem procura o arquivo, e o vazio publica 0% com cara de numero medido.
+TN:

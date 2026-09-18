@@ -30,6 +30,11 @@ import {
 import { criarAuthService } from '../modules/identity/application/auth-service.js';
 import { criarReferenceDataRepository } from '../modules/pets/adapters/persistence/kysely-reference-data-repository.js';
 import { registrarRotasDeReferencia } from '../modules/pets/adapters/http/reference-data-routes.js';
+import { criarIdempotencia } from '../shared/http/idempotency.js';
+import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
+import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
+import { criarTagService } from '../modules/tags/application/tag-service.js';
+import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -91,6 +96,35 @@ export async function main(): Promise<void> {
     apiBaseUrl: config.apiBaseUrl,
   };
 
+  const tags = criarTagService({
+    repositorio: criarTagRepository(db),
+    cifra: criarSecretCipher(config.tagCodeKey),
+    ids,
+    clock: systemClock,
+    trilha,
+    // `TAG_BASE_URL` e `WEB_BASE_URL` ainda são a mesma variável (ADR-0017 item
+    // 2 as separa, e a separação não chegou à configuração). Enquanto forem uma
+    // só, apontar as duas para ela é o estado verdadeiro; o que a separação
+    // registra é qual delas é a irreversível, e essa é a da plaquinha.
+    baseDaTag: config.publicBaseUrl,
+    baseDaWeb: config.publicBaseUrl,
+  });
+
+  const dependenciasDasRotasDeTag = {
+    tags,
+    // A porta é de `tags` e quem a liga ao serviço de identidade é esta linha: é
+    // o único lugar do sistema que conhece os dois lados. `tags` recebe de uma
+    // sessão apenas de quem ela é, e por isso não tem como devolver dado de
+    // conta por engano.
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    idempotencia: criarIdempotencia(db),
+    contrato,
+    clock: systemClock,
+    ipHmacKey: config.ipHmacKey,
+  };
+
   // Precisa vir ANTES do registro das rotas: o gancho `onRoute` só enxerga o
   // que for registrado depois dele. A conferência em si roda no fim, quando
   // todas as rotas já existem.
@@ -105,6 +139,7 @@ export async function main(): Promise<void> {
     (escopo, _opcoes, pronto) => {
       registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
       registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
+      registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
       registrarSaude(escopo, {
         version: config.version,
         problemBaseUrl: config.problemBaseUrl,

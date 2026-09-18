@@ -63,6 +63,14 @@ export interface AppConfig {
   readonly session: SessionConfig;
   /** Chave do HMAC de endereço IP (SEC-010). Nunca hash sem chave. */
   readonly ipHmacKey: Buffer;
+  /**
+   * Chave da cifra do código da tag, 32 bytes em hexadecimal (`TAG_CODE_KEY`).
+   *
+   * Ela abre o `code_ciphertext`, que existe para **reimprimir o QR** e nada
+   * mais: a resolução pública busca por `code_hash` e nunca decifra. A validação
+   * do tamanho está no adaptador, junto do algoritmo que a exige.
+   */
+  readonly tagCodeKey: Buffer;
   readonly openapiSpecPath: string;
   readonly version: string;
 }
@@ -160,6 +168,17 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
+  // 32 bytes exatos: AES-256 com chave curta não é uma cifra mais fraca, é uma
+  // chamada que falha. E falhar aqui, com o nome da variável e o comando para
+  // gerar, é melhor do que falhar na primeira emissão de tag.
+  const tagCodeKey = Buffer.from(requireEnv('TAG_CODE_KEY').trim(), 'hex');
+  if (tagCodeKey.length !== 32) {
+    throw new Error(
+      'TAG_CODE_KEY precisa ter 32 bytes em hexadecimal (64 caracteres) e tem ' +
+        `${String(tagCodeKey.length)}. Gere com: openssl rand -hex 32`,
+    );
+  }
+
   return {
     environment,
     isProduction: process.env['NODE_ENV'] === 'production',
@@ -180,6 +199,7 @@ export function loadAppConfig(): AppConfig {
       absoluteTtlSeconds: TTL_ABSOLUTO,
     },
     ipHmacKey,
+    tagCodeKey,
     openapiSpecPath: optionalEnv('OPENAPI_SPEC_PATH') ?? 'api/openapi.yaml',
     version: optionalEnv('APP_VERSION') ?? '0.1.0',
   };

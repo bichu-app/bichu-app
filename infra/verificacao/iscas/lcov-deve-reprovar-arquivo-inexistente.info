@@ -1,0 +1,13 @@
+# ISCA. PRECISA REPROVAR.
+#
+# Caminho com a forma certa -- relativo, dentro de `src`, terminado em `.ts` --
+# e que nao existe no disco. E o que sobra depois de um arquivo ser renomeado
+# ou movido com o relatorio antigo em cache: passa em toda conferencia de
+# formato e o Sonar descarta em silencio.
+TN:
+SF:src/modulo-que-nunca-existiu/nada.ts
+FNF:1
+FNH:1
+LF:10
+LH:9
+end_of_record

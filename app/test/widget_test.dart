@@ -52,7 +52,16 @@ void main() {
   testWidgets('as quatro abas abrem sem conta', (tester) async {
     await abrirOApp(tester);
 
-    for (final aba in <String>['Perdidos', 'Escanear', 'Perfil', 'Início']) {
+    // TRES das quatro abrem com barra de topo. A quarta e Escanear, e a
+    // ausencia dela ali e desenho: F2.1 e o visor de camera, que ocupa a tela
+    // inteira e cuja navegacao e a propria barra inferior. Uma barra de topo
+    // ali seria uma segunda navegacao concorrendo com a primeira.
+    //
+    // Este caso ja afirmou "as quatro tem AppBar" e passava porque a aba
+    // Escanear era um estado vazio provisorio. Quando a tela de verdade
+    // chegou, ele reprovou -- que e o comportamento certo de um teste que
+    // media a coisa errada, e nao motivo para a tela voltar a ter a barra.
+    for (final aba in <String>['Perdidos', 'Perfil', 'Início']) {
       await tester.tap(find.widgetWithText(NavigationDestination, aba));
       await tester.pumpAndSettle();
       expect(
@@ -61,6 +70,19 @@ void main() {
         reason: 'A aba $aba precisa abrir deslogada.',
       );
     }
+
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Escanear'));
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(AppBar),
+      findsNothing,
+      reason: 'F2.1 e a aba Escanear e nao leva barra de topo.',
+    );
+    expect(
+      find.widgetWithText(NavigationDestination, 'Escanear'),
+      findsOne,
+      reason: 'A barra inferior e a navegacao desta tela, e ela fica.',
+    );
   });
 
   testWidgets('deslogado, o caminho para criar conta esta na tela',

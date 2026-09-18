@@ -100,3 +100,9 @@ infra/*.key
 infra/*secret*
 infra/google-services.json
 infra/GoogleService-Info.plist
+
+# Cypress: capturas e videos de execucao. Cada falha gera um PNG, e uma suite
+# vermelha por desenho gera dezenas. O painel ja guarda tudo isso.
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/

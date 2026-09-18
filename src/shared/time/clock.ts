@@ -27,3 +27,24 @@ export interface Clock {
 export const systemClock: Clock = {
   now: () => Date.now() as Instant,
 };
+
+/**
+ * Converte um instante para `Date`, e mora aqui pelo mesmo motivo do relógio.
+ *
+ * A regra de lint proíbe `new Date()` em `domain/` e `application/`, e a
+ * proibição é boa: é ela que impede o relógio de parede de voltar por uma porta
+ * lateral. Mas ela também alcança `new Date(instante)`, que **não** lê relógio
+ * nenhum — é conversão de um valor que já veio de `Clock`.
+ *
+ * Sem um caminho declarado, cada lugar que precisar disso vai inventar o seu, e
+ * o que se inventa nessas horas é uma supressão de lint — que o formatador move
+ * e que para de cobrir o que deveria. O caminho declarado é esta função.
+ */
+export function comoData(instante: Instant): Date {
+  return new Date(instante);
+}
+
+/** O mesmo, para o formato que o contrato usa no fio (`format: date-time`). */
+export function comoIso(instante: Instant): string {
+  return new Date(instante).toISOString();
+}

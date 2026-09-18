@@ -146,6 +146,16 @@ export default tseslint.config(
   // no `tsconfig.json`, entao o servico de projeto nao os encontra e o parser
   // falha antes de qualquer regra rodar. Eles continuam lintados; o que sai e
   // a analise com tipos, que nao se aplica a eles.
+  // `cypress.config.ts` mora na raiz por exigencia do Cypress, que so procura ali.
+  // Ele nao entra no `tsconfig.json` do backend de proposito: `include` e
+  // `src/**` e `tests/**`, e puxar a raiz para dentro arrastaria todo arquivo de
+  // configuracao para a analise com tipos. Os specs tem `cypress/tsconfig.json`
+  // proprio; sobra este, que vai sem analise de tipo pelo mesmo motivo dos .mjs.
+  {
+    ...tseslint.configs.disableTypeChecked,
+    files: ['cypress.config.ts'],
+  },
+
   {
     ...tseslint.configs.disableTypeChecked,
     files: ['**/*.mjs'],

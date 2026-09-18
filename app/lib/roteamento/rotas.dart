@@ -8,6 +8,12 @@ import '../telas/conta/tela_criar_conta.dart';
 import '../telas/conta/tela_entrar.dart';
 import '../telas/conta/tela_esqueci_minha_senha.dart';
 import '../telas/conta/tela_verifique_seu_email.dart';
+import '../telas/pet/rascunho_de_pet.dart';
+import '../telas/pet/resultado_do_cadastro.dart';
+import '../telas/pet/tela_cadastrar_foto.dart';
+import '../telas/pet/tela_cadastrar_identificacao.dart';
+import '../telas/pet/tela_cadastrar_sinais.dart';
+import '../telas/pet/tela_pet_cadastrado.dart';
 import '../telas/tela_de_abertura.dart';
 
 /// Os enderecos do app.
@@ -26,6 +32,19 @@ abstract final class Rotas {
   static const String criarConta = '/criar-conta';
   static const String verifiqueSeuEmail = '/verifique-seu-email';
   static const String esqueciMinhaSenha = '/esqueci-minha-senha';
+
+  /// Os tres passos do cadastro de pet (F1.3, F1.4, F1.5) e a confirmacao
+  /// (F1.6).
+  ///
+  /// Sao enderecos, e nao uma navegacao imperativa paralela, pela mesma razao
+  /// das telas de conta: estado que merece link tem endereco. O que **nao**
+  /// atravessa o endereco e o rascunho: ele vai em `extra`, porque um passo
+  /// intermediario de assistente alcancado por link direto nasceria sem os
+  /// campos do passo anterior. Quem chega assim cai no primeiro passo.
+  static const String cadastrarPet = '/pets/novo';
+  static const String cadastrarPetFoto = '/pets/novo/foto';
+  static const String cadastrarPetSinais = '/pets/novo/sinais';
+  static const String petCadastrado = '/pets/cadastrado';
 }
 
 final GlobalKey<NavigatorState> _navegadorRaiz =
@@ -87,6 +106,43 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         builder: (context, estado) => TelaEsqueciMinhaSenha(
           emailInicial: estado.extra as String?,
         ),
+      ),
+      // O assistente de cadastro de pet. As quatro telas cobrem a casca de
+      // abas, como as de conta, e por isso cada uma tem saida propria.
+      GoRoute(
+        path: Rotas.cadastrarPet,
+        builder: (context, estado) => TelaCadastrarIdentificacao(
+          // Nulo faz a tela criar um rascunho novo: e o que faz o link direto
+          // para `/pets/novo` abrir uma tela util em vez de estourar.
+          rascunhoExistente: estado.extra as RascunhoDePet?,
+        ),
+      ),
+      GoRoute(
+        path: Rotas.cadastrarPetFoto,
+        builder: (context, estado) {
+          final rascunho = estado.extra as RascunhoDePet?;
+          // Passo intermediario alcancado sem o passo anterior: volta ao
+          // comeco em vez de abrir um formulario que nao sabe de qual pet
+          // fala.
+          if (rascunho == null) return const TelaCadastrarIdentificacao();
+          return TelaCadastrarFoto(rascunho: rascunho);
+        },
+      ),
+      GoRoute(
+        path: Rotas.cadastrarPetSinais,
+        builder: (context, estado) {
+          final rascunho = estado.extra as RascunhoDePet?;
+          if (rascunho == null) return const TelaCadastrarIdentificacao();
+          return TelaCadastrarSinais(rascunho: rascunho);
+        },
+      ),
+      GoRoute(
+        path: Rotas.petCadastrado,
+        builder: (context, estado) {
+          final resultado = estado.extra as ResultadoDoCadastro?;
+          if (resultado == null) return const TelaCadastrarIdentificacao();
+          return TelaPetCadastrado(resultado: resultado);
+        },
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, estado, navegacao) =>

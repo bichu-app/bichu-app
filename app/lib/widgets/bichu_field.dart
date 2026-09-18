@@ -36,6 +36,9 @@ class BichuField extends StatelessWidget {
     this.acaoDeTeclado,
     this.capitalizacao = TextCapitalization.none,
     this.correcaoAutomatica = true,
+    this.limite,
+    this.linhas = 1,
+    this.exemplo,
   });
 
   final String rotulo;
@@ -60,6 +63,22 @@ class BichuField extends StatelessWidget {
   final TextInputAction? acaoDeTeclado;
   final TextCapitalization capitalizacao;
   final bool correcaoAutomatica;
+
+  /// O teto de caracteres do contrato, com contador visivel.
+  ///
+  /// **O contador e prevencao, e nao punicao** (UX F1.3 e F1.5): ele existe
+  /// para o limite ser sabido **antes** da tentativa, que e a regra da secao
+  /// 13. O campo para de aceitar no teto em vez de deixar o servidor recusar
+  /// depois, porque o limite e do contrato e nao ha ambiguidade a resolver.
+  final int? limite;
+
+  /// Quantas linhas o campo mostra. Acima de uma, ele e de texto corrido.
+  final int linhas;
+
+  /// Um exemplo dentro do campo. **Nao e rotulo:** o rotulo fica acima e
+  /// persiste. O exemplo existe onde a especificacao pede um ("coleira
+  /// vermelha, mancha branca no peito, rabo curto").
+  final String? exemplo;
 
   @override
   Widget build(BuildContext context) {
@@ -86,6 +105,9 @@ class BichuField extends StatelessWidget {
           controller: controlador,
           focusNode: foco,
           enabled: habilitado,
+          maxLength: limite,
+          maxLines: obscurecer ? 1 : linhas,
+          minLines: obscurecer ? 1 : linhas,
           keyboardType: tipoDeTeclado,
           autofillHints: autofill,
           obscureText: obscurecer,
@@ -101,11 +123,40 @@ class BichuField extends StatelessWidget {
           decoration: InputDecoration(
             suffixIcon: sufixo,
             errorText: temErro ? erro : null,
+            hintText: exemplo,
             // O rotulo ja esta acima. Repeti-lo aqui produziria dois rotulos
             // para o leitor de tela.
             labelText: null,
+            // O contador do M3 e desenhado dentro da decoracao; o do produto e
+            // uma linha propria abaixo, alinhada a direita, porque a
+            // especificacao a escreve assim ("Contador: 0/280") e porque o
+            // contador do M3 some quando ha `errorText`, que e justamente
+            // quando a pessoa precisa dele.
+            counterText: '',
           ),
         ),
+        if (limite != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e1),
+          Align(
+            alignment: Alignment.centerRight,
+            child: ValueListenableBuilder<TextEditingValue>(
+              valueListenable: controlador,
+              builder: (context, valor, _) {
+                return Semantics(
+                  // Anunciado como estado, e nao como conteudo: o contador
+                  // mudando a cada tecla nao pode interromper a fala.
+                  label: '${valor.text.characters.length} de $limite '
+                      'caracteres',
+                  excludeSemantics: true,
+                  child: Text(
+                    '${valor.text.characters.length}/$limite',
+                    style: textos.bodySmall?.copyWith(color: cores.textMuted),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ],
     );
   }

@@ -5,7 +5,9 @@ import 'package:http/http.dart' as http;
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/pets_api.dart';
 import 'config/app_config.dart';
+import 'dispositivo/camera_e_galeria.dart';
 import 'escopo.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
@@ -19,6 +21,7 @@ class BichuApp extends StatefulWidget {
     super.key,
     this.deposito,
     this.clienteHttp,
+    this.camera,
   });
 
   final AppConfig config;
@@ -34,6 +37,11 @@ class BichuApp extends StatefulWidget {
   /// esse defeito que volta calado numa refatoracao.
   final http.Client? clienteHttp;
 
+  /// Injetavel para teste. Em producao e [CameraNaoEmbarcada], porque nenhum
+  /// plugin de camera entrou no `pubspec.yaml` ainda -- e ela nao finge que
+  /// entrou.
+  final CameraEGaleria? camera;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -41,6 +49,9 @@ class BichuApp extends StatefulWidget {
 class _BichuAppState extends State<BichuApp> {
   late final ApiClient _api;
   late final AuthApi _auth;
+  late final PetsApi _pets;
+  late final TagsApi _tags;
+  late final CameraEGaleria _camera;
   late final ControladorDeSessao _sessao;
   late final GoRouter _roteador;
 
@@ -56,6 +67,9 @@ class _BichuAppState extends State<BichuApp> {
       tokenDeAcesso: () => _sessao.tokenValido(),
     );
     _auth = AuthApi(_api);
+    _pets = PetsApi(_api);
+    _tags = TagsApi(_api);
+    _camera = widget.camera ?? const CameraNaoEmbarcada();
     _sessao = ControladorDeSessao(
       auth: _auth,
       deposito: widget.deposito ?? DepositoNoChaveiro(),
@@ -76,6 +90,9 @@ class _BichuAppState extends State<BichuApp> {
     return Escopo(
       api: _api,
       auth: _auth,
+      pets: _pets,
+      tags: _tags,
+      camera: _camera,
       sessao: _sessao,
       child: MaterialApp.router(
         title: 'Bichu',

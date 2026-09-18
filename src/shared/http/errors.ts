@@ -129,6 +129,62 @@ export const problemas = {
 
   naoEncontrado: (): AppError => new AppError('not-found', 'Não encontramos isso'),
 
+  /**
+   * O texto **não normaliza para um código**: tamanho diferente de 26 depois da
+   * normalização, ou caractere fora do alfabeto de Crockford. É erro de
+   * digitação, e a tela pede para conferir e digitar de novo.
+   *
+   * Separado de `tagCodeNaoEncontrado` de propósito. Para quem está na rua com
+   * um animal no colo, a diferença entre "confira o que você digitou" e "não
+   * encontramos este código" é útil, e não vaza nada: os dois casos contam
+   * igualmente para o limite de tentativas inválidas.
+   */
+  tagCodeMalformado: (): AppError =>
+    new AppError('tag-code-malformed', 'Confira o código da plaquinha', {
+      detail: 'O código tem 26 caracteres. Confira e digite de novo, com ou sem os hífens.',
+    }),
+
+  /**
+   * Teto de cinco tags ativas por pet (ADR-0004). O tutor revoga uma e emite
+   * outra; não há caminho de aumento por autoatendimento.
+   *
+   * **O tipo está errado e a divergência é conhecida.** `x-problem-types` é uma
+   * lista fechada e não tem nenhum slug para o teto de tags: dos sete tipos de
+   * 409 declarados, `pet-limit-reached` é o único que significa "um teto foi
+   * atingido", e o slug dele fala de pets, não de plaquinhas. Um app que decida
+   * por `type` vai tratar isto como "limite de pets da conta", que é outra
+   * coisa. O texto abaixo diz a verdade; o `type` não. Isso se corrige no
+   * contrato, com um slug `tag-limit-reached` de status 409, e não aqui —
+   * inventar o tipo no código faria o backend declarar sozinho um valor que o
+   * contrato não conhece, que é exatamente o que a lista fechada impede.
+   */
+  tetoDeTagsAtivas: (): AppError =>
+    new AppError('pet-limit-reached', 'Você já tem cinco plaquinhas ativas', {
+      detail: 'São cinco por pet. Desative uma que não usa mais para emitir outra.',
+    }),
+
+  /** Normalizou para um código bem formado que não existe. Diferente de revogado. */
+  tagCodeNaoEncontrado: (): AppError =>
+    new AppError('tag-code-not-found', 'Não encontramos este código', {
+      detail: 'Não há plaquinha com este código. Confira os caracteres e tente de novo.',
+    }),
+
+  /**
+   * **Tag revogada responde 410, nunca 404** (ADR-0004). São duas telas porque
+   * são dois problemas, e quem está com um animal no colo não pode chegar a um
+   * beco sem saída: o `next_action` é o caminho alternativo, e ele é o motivo
+   * pelo qual este tipo existe separado de `not-found`.
+   *
+   * O texto é o mesmo para todos os motivos de revogação, inclusive óbito e
+   * exclusão. Ninguém precisa descobrir a morte de um animal por uma página web,
+   * e distinguir os motivos entregaria estado de conta alheia a um estranho.
+   */
+  tagRevogada: (): AppError =>
+    new AppError('tag-revoked', 'Tag desativada', {
+      detail: 'Esta tag foi desativada pelo tutor.',
+      nextAction: 'register_stray_found_report',
+    }),
+
   limiteDeChamadas: (retryAfterSeconds: number): AppError =>
     new AppError('rate-limited', 'Tente de novo em instantes', {
       detail: 'Recebemos muitos pedidos deste aparelho em pouco tempo.',

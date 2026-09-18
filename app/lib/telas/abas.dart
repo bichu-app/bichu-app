@@ -9,6 +9,7 @@ import '../theme/bichu_tokens.g.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
 import 'casca_com_abas.dart';
+import 'escanear/tela_leitor_de_qr.dart';
 
 /// Aba Inicio.
 ///
@@ -90,9 +91,9 @@ class AbaInicio extends StatelessWidget {
                   'na rede de quem procura e de quem encontra.',
               acao: BotaoPrimario(
                 rotulo: 'Cadastrar meu pet',
-                // A tela de cadastro de pet e de outra historia. Ate ela
-                // existir, o botao nao finge que funciona.
-                aoTocar: null,
+                // F1.3 existe agora. `push` e nao `go`: o assistente cobre a
+                // casca de abas e e um desvio, como as telas de conta.
+                aoTocar: () => context.push(Rotas.cadastrarPet),
               ),
             ),
             const SizedBox(height: BichuEspaco.e6),
@@ -131,27 +132,14 @@ class AbaPerdidos extends StatelessWidget {
 
 /// Aba Escanear. Visivel e funcional deslogado.
 ///
-/// O leitor de QR em si e da historia do scan (F2), junto com os tres estados
-/// de permissao de camera e com a entrada manual do codigo, que e caminho de
-/// igual valor e nao plano B.
+/// A tela e `TelaLeitorDeQr` (F2.1), e ela **nao usa `TelaDeAba`**: a casca
+/// visual comum traz uma `AppBar`, e F2.1 e a unica aba sem barra de topo. O
+/// visor ocupa a tela inteira e a navegacao dela e a barra inferior da casca.
 class AbaEscanear extends StatelessWidget {
   const AbaEscanear({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    return const TelaDeAba(
-      titulo: 'Escanear',
-      filhos: <Widget>[
-        EstadoVazio(
-          titulo: 'O leitor de QR chega na próxima entrega',
-          explicacao: 'Aqui vai ficar o leitor da tag, com a digitação do '
-              'código como caminho de igual valor: quando o scan falha, a '
-              'impressão sai borrada ou o sol atrapalha, o código impresso '
-              'embaixo do QR resolve.',
-        ),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => const TelaLeitorDeQr();
 }
 
 /// Aba Perfil. Navegavel deslogado.

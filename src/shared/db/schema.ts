@@ -110,7 +110,12 @@ export interface IdempotencyKeysTable {
   user_or_token_ref: string;
   endpoint: string;
   request_hash: Buffer;
-  response_status: number;
+  /**
+   * `NULL` enquanto a chave está **reservada** e a execução em curso; o status
+   * HTTP depois disso. A ausência de resposta é escrita como ausência de valor,
+   * e não como um `0` que a coluna recusa (migração 20260917000008).
+   */
+  response_status: number | null;
   response_body: unknown;
   created_at: CriadoEm;
   expires_at: Date;
@@ -209,6 +214,69 @@ export interface PetsTable {
   deleted_at: Date | null;
 }
 
+/** Dois valores, e só dois (ADR-0004). Não há tag suspensa nem tag fabricada. */
+export type StatusDaTag = 'active' | 'revoked';
+
+export type MotivoDeRevogacaoDaTag =
+  | 'lost_tag'
+  | 'suspected_clone'
+  | 'owner_request'
+  | 'pet_transferred'
+  | 'pet_deceased'
+  | 'pet_deleted';
+
+export interface PetTagsTable {
+  /** UUIDv7 gerado pela aplicação. Sem `DEFAULT` no banco, como em `pets`. */
+  id: string;
+  pet_id: string;
+  /** SHA-256 do código normalizado. O código em claro não existe em coluna nenhuma. */
+  code_hash: Buffer;
+  /** AES-256-GCM do código. Só serve para reimprimir, e é apagado na revogação. */
+  code_ciphertext: Buffer | null;
+  /** `char(4)`: volta do banco com preenchimento à direita. Sempre `trim` na leitura. */
+  code_suffix: string;
+  label: string | null;
+  status: Generated<StatusDaTag>;
+  revoked_at: Date | null;
+  revocation_reason: MotivoDeRevogacaoDaTag | null;
+  scan_count: Generated<number>;
+  last_scanned_at: Date | null;
+  created_at: CriadoEm;
+}
+
+/** Apenas inserção. Retenção de 90 dias. */
+export interface TagScansTable {
+  id: string;
+  tag_id: string;
+  scanned_at: Generated<Date>;
+  /** HMAC com chave, nunca o endereço em claro e nunca hash puro (SEC-010). */
+  ip_hmac: Buffer | null;
+  user_agent_hash: Buffer | null;
+  area_label: string | null;
+  resulted_in_found_report: Generated<boolean>;
+}
+
+/**
+ * O subconjunto de `found_reports` que o caminho da tag preenche. Caso, ponto,
+ * foto e atributos de cruzamento entram com `lostfound`.
+ */
+export interface FoundReportsTable {
+  id: string;
+  origin: 'tag_scan' | 'stray_report';
+  tag_id: string | null;
+  pet_id: string | null;
+  reporter_user_id: string | null;
+  /** Identidade derivada do achador sem conta. Sustenta a dimensão `finder_identity`. */
+  finder_identity_hash: Buffer | null;
+  finder_display_name: string | null;
+  finder_email: string | null;
+  finder_token_hash: Buffer;
+  finder_token_expires_at: Date;
+  found_at: Date;
+  notes: string | null;
+  created_at: CriadoEm;
+}
+
 /** Esquema `audit`, separado e com papel próprio (BICHUS-56). */
 export interface AuditEventsTable {
   id: string;
@@ -240,6 +308,9 @@ export interface Database {
   ref_colors: RefColorsTable;
   ref_breeds: RefBreedsTable;
   pets: PetsTable;
+  pet_tags: PetTagsTable;
+  tag_scans: TagScansTable;
+  found_reports: FoundReportsTable;
   'audit.events': AuditEventsTable;
 }
 

@@ -23,7 +23,19 @@ import { ehObjetoDoContrato, resolverRefDoContrato } from './contract.js';
 import { AppError, problemas } from './errors.js';
 
 const VALIDADE_EM_HORAS = 24;
-const STATUS_RESERVADO = 0;
+
+/**
+ * A reserva grava `response_status = NULL`, e não um número de fora do domínio
+ * da coluna.
+ *
+ * A versão anterior usava `0` como "ainda não há resposta". Zero não é status
+ * HTTP, a coluna tem `CHECK (response_status BETWEEN 100 AND 599)`, e toda
+ * chamada a uma rota idempotente terminava em 500 na reserva — antes de chegar
+ * ao efeito. O defeito atravessou a suíte porque ela exercita esta camada contra
+ * um dobre em memória, que não tem restrição nenhuma (migração
+ * 20260917000008).
+ */
+const RESERVADA = null;
 
 export interface RespostaGravada {
   readonly status: number;
@@ -58,40 +70,73 @@ function conflitoDeChave(): AppError {
   );
 }
 
+/**
+ * A consulta da reserva, isolada para que o **SQL gerado** possa ser conferido
+ * sem banco.
+ *
+ * Existe porque o defeito que ela carrega não aparece em nenhum outro lugar: a
+ * ordem de `.where()` e `.doUpdateSet()` muda o SQL de `do update ... where`
+ * para `on conflict (key) where ... do update`, o Postgres aceita as duas
+ * formas, e só a primeira restringe o `UPDATE`. Com a segunda, toda segunda
+ * tentativa executa o efeito de novo — e nada acusa, porque o dobre em memória
+ * da suíte não gera SQL nenhum.
+ */
+export function montarReservaDeIdempotencia(
+  db: Db,
+  entrada: EntradaDeIdempotencia,
+  requestHash: Buffer,
+  expiresAt: Date,
+) {
+  return db
+    .insertInto('idempotency_keys')
+    .values({
+      key: entrada.chave,
+      user_or_token_ref: entrada.donoOuToken,
+      endpoint: entrada.endpoint,
+      request_hash: requestHash,
+      response_status: RESERVADA,
+      response_body: null,
+      expires_at: expiresAt,
+    })
+    .onConflict((oc) =>
+      // Reaproveita a linha quando ela já venceu: a validade é de 24 h, e uma
+      // chave vencida é uma chave livre.
+      //
+      // **A ordem das chamadas decide o SQL, e a errada desliga a idempotência
+      // inteira em silêncio.** `.where()` ANTES de `.doUpdateSet()` vira o
+      // predicado de índice do `ON CONFLICT`, que é outra coisa: o Postgres
+      // aceita, a condição deixa de restringir o `UPDATE`, e a linha é
+      // sobrescrita mesmo com a chave viva e já concluída. O efeito observável é
+      // a fila offline avisando o tutor duas vezes. DEPOIS de `.doUpdateSet()`,
+      // a mesma chamada vira `do update set ... where ...`, que é o que se quer.
+      // Conferido por `idempotency.test.ts`, sobre o SQL compilado.
+      oc
+        .column('key')
+        .doUpdateSet({
+          user_or_token_ref: entrada.donoOuToken,
+          endpoint: entrada.endpoint,
+          request_hash: requestHash,
+          response_status: RESERVADA,
+          response_body: null,
+          expires_at: expiresAt,
+        })
+        .where(sql<boolean>`idempotency_keys.expires_at <= now()`),
+    )
+    .returning('key');
+}
+
 export function criarIdempotencia(db: Db): Idempotencia {
   return {
     async reservar(entrada) {
       const requestHash = hashDeCorpo(entrada.corpoCanonico);
       const expiresAt = new Date(entrada.agoraEmMilissegundos + VALIDADE_EM_HORAS * 3600 * 1000);
 
-      const reserva = await db
-        .insertInto('idempotency_keys')
-        .values({
-          key: entrada.chave,
-          user_or_token_ref: entrada.donoOuToken,
-          endpoint: entrada.endpoint,
-          request_hash: requestHash,
-          response_status: STATUS_RESERVADO,
-          response_body: null,
-          expires_at: expiresAt,
-        })
-        .onConflict((oc) =>
-          // Reaproveita a linha quando ela já venceu: a validade é de 24 h, e
-          // uma chave vencida é uma chave livre.
-          oc
-            .column('key')
-            .where(sql<boolean>`idempotency_keys.expires_at <= now()`)
-            .doUpdateSet({
-              user_or_token_ref: entrada.donoOuToken,
-              endpoint: entrada.endpoint,
-              request_hash: requestHash,
-              response_status: STATUS_RESERVADO,
-              response_body: null,
-              expires_at: expiresAt,
-            }),
-        )
-        .returning('key')
-        .executeTakeFirst();
+      const reserva = await montarReservaDeIdempotencia(
+        db,
+        entrada,
+        requestHash,
+        expiresAt,
+      ).executeTakeFirst();
 
       if (reserva !== undefined) return undefined;
 
@@ -113,7 +158,7 @@ export function criarIdempotencia(db: Db): Idempotencia {
       ) {
         throw conflitoDeChave();
       }
-      if (existente.response_status === STATUS_RESERVADO) {
+      if (existente.response_status === RESERVADA) {
         // A primeira tentativa ainda está em curso. Recusar é melhor do que
         // executar em paralelo: o efeito duplicado é justamente o que a chave
         // existe para impedir.
@@ -134,7 +179,10 @@ export function criarIdempotencia(db: Db): Idempotencia {
       await db
         .deleteFrom('idempotency_keys')
         .where('key', '=', chave)
-        .where('response_status', '=', STATUS_RESERVADO)
+        // Só apaga o que ainda está reservado. Uma chave já concluída não pode
+        // ser liberada por um `catch`: apagá-la faria o reenvio executar de novo
+        // o efeito que ela existe para não repetir.
+        .where('response_status', 'is', null)
         .execute();
     },
   };
