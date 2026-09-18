@@ -83,3 +83,34 @@ export function segundosRestantes(agora: Instant, ate: Instant): number {
 export function tokenFoiRevogado(iatEmSegundos: number, sessionsInvalidBefore: Instant): boolean {
   return iatEmSegundos * 1000 < Math.ceil(sessionsInvalidBefore / 1000) * 1000;
 }
+
+/**
+ * A barreira do SEC-006 para uma conta **recém-criada**, truncada ao segundo.
+ *
+ * Criar conta não é revogar sessão, e tratar as duas do mesmo jeito produzia um
+ * defeito de 100% de reprodução na PRIMEIRA TELA DO PRODUTO: `POST
+ * /v1/auth/register` devolvia um `access_token` que **nunca funcionava**.
+ *
+ * A aritmética, com números reais medidos em 18/09:
+ *
+ * ```
+ * conta criada em          1789734320,734 s
+ * sessions_invalid_before  1789734320734 ms  -> arredonda para 1789734321000
+ * iat do token emitido     1789734320   s    -> vira        1789734320000
+ * 1789734320000 < 1789734321000  ->  REVOGADO
+ * ```
+ *
+ * O arredondamento para cima em `tokenFoiRevogado` está **certo** e continua:
+ * ele fecha a janela de um segundo que quem tomou a conta usaria, renovando em
+ * laço no momento em que a vítima troca a senha. O erro era a conta nascer com
+ * uma marca de revogação de precisão de milissegundo, quando o `iat` que ela vai
+ * comparar tem precisão de segundo. Truncar para baixo iguala as duas escalas.
+ *
+ * A garantia original não se perde: continua impossível existir token anterior
+ * à criação da conta, porque antes daquele segundo a conta não existia — e
+ * revogação de verdade (`invalidarTodasAsSessoes`) mantém a precisão cheia, com
+ * o empate caindo do lado revogado, como o SEC-006 exige.
+ */
+export function barreiraDeContaNova(agora: Instant): Instant {
+  return (Math.floor(agora / 1000) * 1000) as Instant;
+}

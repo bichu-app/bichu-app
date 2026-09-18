@@ -10,6 +10,14 @@
  * - **O corpo é validado pelo schema da própria especificação.** OpenAPI 3.1 é
  *   JSON Schema, e o Fastify valida com JSON Schema: escrever validação à mão
  *   em paralelo criaria a segunda definição, que diverge na primeira mudança.
+ * - **`createPet` passa por `executarComIdempotencia`.** O contrato declara
+ *   `Idempotency-Key` na operação, e o portão de subida derruba a aplicação se
+ *   a rota registrada divergir do contrato — nos dois sentidos. Foi ele que
+ *   pegou esta rota na primeira subida: eu a registrei sem a máquina, e o
+ *   serviço se recusou a subir em vez de aceitar cadastro duplicado da fila
+ *   offline de um cliente sem rede. O defeito que ele evita é caro e silencioso:
+ *   o reenvio criaria um SEGUNDO pet, com outro id, e o tutor veria o animal
+ *   duplicado sem entender por quê.
  * - **A resposta é montada campo a campo, e não por espalhamento do objeto do
  *   domínio.** `PetGravado` carrega `careNotesRedactions` e, amanhã, o que mais
  *   o domínio precisar; um `...pet` publicaria cada campo novo por omissão. A
@@ -18,7 +26,13 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { problemas } from '../../../../shared/http/errors.js';
+import {
+  executarComIdempotencia,
+  exigenciaDeIdempotencia,
+  type Idempotencia,
+} from '../../../../shared/http/idempotency.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
+import type { Clock } from '../../../../shared/ports/index.js';
 import type { PetService, EntradaDoPet } from '../../application/pet-service.js';
 import type { PetGravado } from '../../ports/pet-repository.js';
 import type { PetId, UserId } from '../../../../shared/types/brands.js';
@@ -71,7 +85,9 @@ export interface Autenticador {
 export interface DependenciasDasRotasDePet {
   readonly pets: PetService;
   readonly autenticador: Autenticador;
+  readonly idempotencia: Idempotencia;
   readonly contrato: Contrato;
+  readonly clock: Clock;
 }
 
 interface CorpoDoPet {
@@ -197,11 +213,37 @@ export function registrarRotasDePets(
 
   app.post(
     rotaDeCadastroDePet.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDeCadastroDePet.operationId) } },
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeCadastroDePet.operationId) },
+      // A marca que o portão de subida confere contra o contrato. Ela não faz a
+      // idempotência acontecer — quem faz é `executarComIdempotencia`, abaixo —,
+      // ela faz a divergência entre os dois ser impossível de passar batida.
+      config: { idempotencia: true },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await donoAutenticado(request, deps);
-      const pet = await deps.pets.criar(comoEntrada(request.body as CorpoDoPet), chamador);
-      return reply.status(201).send(comoRespostaDoPet(pet));
+      const corpo = request.body as CorpoDoPet;
+
+      const resposta = await executarComIdempotencia(
+        deps.idempotencia,
+        {
+          exigencia: exigenciaDeIdempotencia(deps.contrato, rotaDeCadastroDePet.operationId),
+          chaveDoCabecalho: request.headers['idempotency-key'],
+          // Sempre há conta aqui: `donoAutenticado` já recusou quem não tem. A
+          // chave é escopada pelo tutor, então a chave de um não devolve nunca
+          // o pet de outro.
+          donoOuToken: chamador.userId,
+          endpoint: `${rotaDeCadastroDePet.method.toUpperCase()} ${rotaDeCadastroDePet.path}`,
+          corpo,
+          agoraEmMilissegundos: deps.clock.now(),
+        },
+        async () => ({
+          status: 201,
+          body: comoRespostaDoPet(await deps.pets.criar(comoEntrada(corpo), chamador)),
+        }),
+      );
+
+      return reply.status(resposta.status).send(resposta.body);
     },
   );
 

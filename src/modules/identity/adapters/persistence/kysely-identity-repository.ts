@@ -16,6 +16,7 @@
 import type { Insertable } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import type { UsersTable } from '../../../../shared/db/schema.js';
+import { barreiraDeContaNova } from '../../domain/session.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
 import type { Instant, TokenHash, UserId } from '../../../../shared/types/brands.js';
 import type {
@@ -114,9 +115,13 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         display_name: nova.displayName ?? null,
         accepted_terms_version: nova.acceptedTermsVersion ?? null,
         accepted_terms_at: nova.acceptedTermsVersion === undefined ? null : agora,
-        // A conta nasce com a barreira do SEC-006 no instante da criação: assim
+        // A conta nasce com a barreira do SEC-006 no segundo da criação: assim
         // nenhum token anterior a ela pode existir, nem por relógio adiantado.
-        sessions_invalid_before: agora,
+        // TRUNCADA AO SEGUNDO de propósito — ver `barreiraDeContaNova`: com a
+        // precisão de milissegundo, o token que o próprio cadastro devolve
+        // nascia revogado, e `POST /v1/auth/register` entregava uma sessão que
+        // não abria nenhuma tela.
+        sessions_invalid_before: new Date(barreiraDeContaNova(nova.agora)),
         created_at: agora,
         updated_at: agora,
       };

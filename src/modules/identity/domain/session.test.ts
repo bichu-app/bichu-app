@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import type { Instant } from '../../../shared/types/brands.js';
 import {
+  barreiraDeContaNova,
   prazosDeNovaFamilia,
   prazosDeRotacao,
   segundosRestantes,
@@ -94,5 +95,46 @@ void describe('revogação imediata por sessions_invalid_before (SEC-006)', () =
     // porque ele está renovando em laço quando a vítima troca a senha.
     const revogadoEm = (AGORA + 500) as Instant;
     assert.equal(tokenFoiRevogado(emSegundos(AGORA), revogadoEm), true);
+  });
+});
+
+/**
+ * A barreira da conta recém-criada.
+ *
+ * Estes casos existem por causa de um defeito medido em 18/09, subindo a pilha
+ * de verdade: `POST /v1/auth/register` devolvia um `access_token` que respondia
+ * 401 em toda rota autenticada, **sempre**. Não era intermitente e não dependia
+ * de carga — era a primeira tela do produto entregando uma sessão morta.
+ *
+ * O primeiro caso é o que reprova com o código antigo instalado.
+ */
+void describe('barreira de sessão da conta recém-criada', () => {
+  void it('o token emitido NO MESMO SEGUNDO da criação vale', () => {
+    // Criação em 20,734 s; o token sai no mesmo segundo, com `iat` = 20.
+    const criacao = 1_789_734_320_734 as Instant;
+    const iat = Math.floor(criacao / 1000);
+    assert.equal(tokenFoiRevogado(iat, barreiraDeContaNova(criacao)), false);
+  });
+
+  void it('continua impossível existir token ANTERIOR à criação', () => {
+    const criacao = 1_789_734_320_734 as Instant;
+    const iatAnterior = Math.floor(criacao / 1000) - 1;
+    assert.equal(tokenFoiRevogado(iatAnterior, barreiraDeContaNova(criacao)), true);
+  });
+
+  void it('REVOGAÇÃO de verdade continua varrendo o mesmo segundo', () => {
+    // A janela de um segundo do SEC-006 não pode reabrir: quem tomou a conta
+    // renova em laço no instante em que a vítima troca a senha.
+    const revogacao = 1_789_734_320_734 as Instant;
+    const iatNoMesmoSegundo = Math.floor(revogacao / 1000);
+    assert.equal(tokenFoiRevogado(iatNoMesmoSegundo, revogacao), true);
+  });
+
+  void it('truncar é idempotente e nunca sobe o instante', () => {
+    for (const ms of [0, 1, 999, 1000, 1001, 1_789_734_320_734]) {
+      const uma = barreiraDeContaNova(ms as Instant);
+      assert.ok(uma <= ms);
+      assert.equal(barreiraDeContaNova(uma), uma);
+    }
   });
 });

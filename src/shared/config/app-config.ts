@@ -73,6 +73,29 @@ export interface AppConfig {
   readonly tagCodeKey: Buffer;
   readonly openapiSpecPath: string;
   readonly version: string;
+  readonly objectStorage: ObjectStorageConfig;
+}
+
+/**
+ * Armazenamento de objeto compatível com S3 (ADR-0007).
+ *
+ * **Nenhum valor aqui tem padrão que aponte para provedor**, e nenhum nome
+ * carrega marca: o ADR trata o armazenamento como interface, não como produto.
+ * Trocar MinIO por S3, GCS, R2 ou Spaces é mexer nestas variáveis e no DNS de
+ * mídia — nenhuma linha de código.
+ */
+export interface ObjectStorageConfig {
+  /** Vazio significa o endpoint padrão do provedor, e é um valor legítimo. */
+  readonly endpoint: string | undefined;
+  readonly region: string;
+  readonly accessKeyId: string;
+  readonly secretAccessKey: string;
+  /** `true` no MinIO, `false` na maioria dos gerenciados. */
+  readonly forcePathStyle: boolean;
+  /** Originais e derivadas privadas. Nasce sem leitura anônima. */
+  readonly bucketPrivate: string;
+  /** SÓ as derivadas que a rota pública mostra, servidas pelo domínio de mídia. */
+  readonly bucketPublic: string;
 }
 
 const SEGUNDO = 1;
@@ -179,6 +202,23 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
+  // As duas credenciais são exigidas juntas: uma sozinha assina requisição que
+  // o armazenamento recusa, e a falha aparece no primeiro envio de foto de um
+  // usuário real, e não na subida.
+  const objectStorage: ObjectStorageConfig = {
+    endpoint: optionalEnv('OBJECT_STORAGE_ENDPOINT'),
+    // SEM padrão embutido. Região é obrigatória na assinatura V4 e o valor
+    // varia por provedor; um padrão aqui seria marca de provedor em código, que
+    // o ADR-0007 proíbe e o portão de portabilidade reprova — foi ele que pegou
+    // esta linha.
+    region: requireEnv('OBJECT_STORAGE_REGION'),
+    accessKeyId: requireEnv('OBJECT_STORAGE_ACCESS_KEY_ID'),
+    secretAccessKey: requireEnv('OBJECT_STORAGE_SECRET_ACCESS_KEY'),
+    forcePathStyle: boolEnv('OBJECT_STORAGE_FORCE_PATH_STYLE', true),
+    bucketPrivate: requireEnv('OBJECT_BUCKET_PRIVATE'),
+    bucketPublic: requireEnv('OBJECT_BUCKET_PUBLIC'),
+  };
+
   return {
     environment,
     isProduction: process.env['NODE_ENV'] === 'production',
@@ -200,6 +240,7 @@ export function loadAppConfig(): AppConfig {
     },
     ipHmacKey,
     tagCodeKey,
+    objectStorage,
     openapiSpecPath: optionalEnv('OPENAPI_SPEC_PATH') ?? 'api/openapi.yaml',
     version: optionalEnv('APP_VERSION') ?? '0.1.0',
   };

@@ -125,7 +125,9 @@ export async function main(): Promise<void> {
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
     },
+    idempotencia: criarIdempotencia(db),
     contrato,
+    clock: systemClock,
   };
 
   const dependenciasDasRotasDeTag = {
