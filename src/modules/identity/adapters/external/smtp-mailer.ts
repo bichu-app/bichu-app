@@ -47,12 +47,26 @@ async function dizer(
  * um corpo que contivesse `\n.\n` terminaria a mensagem ali e o resto viraria
  * comandos de protocolo — que é injeção de SMTP, a versão de 1982 da injeção de
  * cabeçalho.
+ *
+ * Exportada só para o teste: ela é pura e é a defesa inteira. Enquanto ficou
+ * privada, ninguém conseguia provar que ela existe — e uma refatoração que a
+ * apagasse não deixaria nenhuma linha vermelha, só e-mails cortados ao meio.
  */
-function escaparPontos(corpo: string): string {
+export function escaparPontos(corpo: string): string {
   return corpo.replace(/\r?\n/g, '\r\n').replace(/^\./gm, '..');
 }
 
-function montarMensagem(config: MailConfig, m: Mensagem): string {
+/**
+ * Monta o bloco de DATA inteiro: cabeçalhos, corpo escapado e o terminador.
+ *
+ * Exportada pelo mesmo motivo de `escaparPontos`: a limpeza do assunto aqui
+ * dentro é o que impede injeção de cabeçalho, e falha de escape **não levanta
+ * erro** — ela entrega com sucesso a mensagem errada. Sem poder olhar o texto
+ * montado, o teste só conseguiria afirmar que o envio não explodiu, que é
+ * exatamente o que um atacante que recebeu cópia do aviso de segurança da
+ * vítima também observaria.
+ */
+export function montarMensagem(config: MailConfig, m: Mensagem): string {
   // `\r\n` em todo lugar: o protocolo exige, e um `\n` solitário faz servidores
   // estritos recusarem a mensagem inteira.
   const cabecalhos = [
