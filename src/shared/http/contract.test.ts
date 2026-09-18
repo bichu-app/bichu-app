@@ -535,6 +535,91 @@ properties:
   });
 });
 
+void describe('palavra-chave de OpenAPI x NOME de campo', () => {
+  // O CASO QUE ESTE BLOCO GUARDA, e que nao e hipotetico por muito tempo:
+  // `CHAVES_DESCARTADAS` e o corte de `x-` se aplicavam em TODO nivel do
+  // documento, inclusive dentro de `properties` -- onde a chave nao e palavra
+  // de OpenAPI, e sim o NOME DO CAMPO que a pessoa escolheu.
+  //
+  // O estrago era mudo e total: o campo sumia de `properties`, continuava em
+  // `required`, e com `additionalProperties: false` a rota passava a recusar
+  // TODA requisicao, para sempre. A especificacao continuaria parecendo certa
+  // para quem a lesse, porque ela ESTAVA certa; quem estava errado era o
+  // conversor. Nenhum campo do contrato de hoje tem esses nomes -- e por isso
+  // que o defeito precisava de teste antes de alguem esbarrar nele.
+  const contrato = carregarTexto(
+    specComRequestBody(
+      `type: object
+additionalProperties: false
+required: [example, deprecated, readOnly, x-origem, $ref]
+properties:
+  example:
+    type: string
+  deprecated:
+    type: boolean
+  readOnly:
+    type: string
+  x-origem:
+    type: string
+  $ref:
+    type: string`,
+    ),
+  );
+
+  const schema = contrato.requestBodySchema('criarPet');
+
+  void it('campo chamado como palavra-chave de OpenAPI sobrevive em `properties`', () => {
+    const propriedades = comoObjeto(comoObjeto(schema)['properties']);
+    for (const nome of ['example', 'deprecated', 'readOnly']) {
+      assert.ok(
+        nome in propriedades,
+        `REPROVA: o campo '${nome}' sumiu de properties. Ele continua em ` +
+          '`required` e `additionalProperties` e false, entao a rota recusa ' +
+          'toda requisicao -- inclusive a correta.',
+      );
+    }
+  });
+
+  void it('campo com nome comecando em `x-` tambem sobrevive', () => {
+    // O corte de `x-` existe para EXTENSAO de OpenAPI. `x-origem` como nome de
+    // campo de corpo e um nome como outro qualquer, e o contrato ja usa
+    // prefixo `x-` no topo (`x-problem-types`), entao a confusao e plausivel.
+    const propriedades = comoObjeto(comoObjeto(schema)['properties']);
+    assert.ok('x-origem' in propriedades, 'REPROVA: campo `x-origem` descartado como extensao.');
+  });
+
+  void it('campo chamado `$ref` e nome, e nao referencia a resolver', () => {
+    // Sem a separacao, `properties: { $ref: {...} }` seria lido como "este
+    // objeto inteiro e uma referencia", e o schema do corpo viraria outra
+    // coisa em silencio.
+    const propriedades = comoObjeto(comoObjeto(schema)['properties']);
+    assert.ok('$ref' in propriedades, 'REPROVA: campo `$ref` tratado como referencia.');
+    assert.equal(comoObjeto(propriedades['$ref'])['type'], 'string');
+  });
+
+  void it('e dentro do campo as palavras-chave CONTINUAM sendo descartadas', () => {
+    // A correcao nao pode virar o oposto: um nivel abaixo do nome, `example` e
+    // `deprecated` voltam a ser vocabulario de OpenAPI e precisam sair, senao o
+    // validador de JSON Schema recusa o documento que o proprio contrato gera.
+    const comAnotacao = carregarTexto(
+      specComRequestBody(
+        `type: object
+properties:
+  example:
+    type: string
+    example: abacaxi
+    deprecated: true`,
+      ),
+    );
+    const campo = comoObjeto(
+      comoObjeto(comoObjeto(comAnotacao.requestBodySchema('criarPet'))['properties'])['example'],
+    );
+    assert.equal(campo['type'], 'string');
+    assert.ok(!('example' in campo), 'REPROVA: anotacao `example` sobreviveu dentro do campo.');
+    assert.ok(!('deprecated' in campo), 'REPROVA: anotacao `deprecated` sobreviveu.');
+  });
+});
+
 void describe('schema de corpo de requisição', () => {
   const contrato = carregarTexto(`${CABECALHO}paths:
   /pets:

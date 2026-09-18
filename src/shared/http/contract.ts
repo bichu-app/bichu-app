@@ -76,15 +76,49 @@ const CHAVES_DESCARTADAS = new Set([
   'writeOnly',
 ]);
 
+/**
+ * Palavras-chave cujo VALOR e um mapa de nomes escolhidos por quem escreveu o
+ * contrato, e nao mais um schema com palavras-chave de OpenAPI.
+ *
+ * Esta distincao nao e detalhe: sem ela, `CHAVES_DESCARTADAS` e o corte de
+ * `x-` se aplicavam dentro de `properties`, onde a chave e o NOME DO CAMPO. Um
+ * corpo com um campo chamado `example`, `deprecated`, `readOnly` ou qualquer um
+ * comecando com `x-` perdia esse campo de `properties` e o mantinha em
+ * `required`; com `additionalProperties: false` a rota passava a recusar
+ * **toda** requisicao, para sempre, sem que nada no contrato parecesse errado.
+ *
+ * Nenhum campo do contrato de hoje tem esses nomes -- o defeito era latente, e
+ * e exatamente por isso que ele merecia teste antes de alguem bater nele.
+ */
+const MAPAS_DE_NOMES = new Set([
+  'properties',
+  'patternProperties',
+  'dependentSchemas',
+  '$defs',
+  'definitions',
+]);
+
 function paraJsonSchema(
   valor: unknown,
   spec: Record<string, unknown>,
   refsNoCaminho: ReadonlySet<string>,
+  /** O objeto recebido e um mapa de NOMES (ver `MAPAS_DE_NOMES`), nao um schema. */
+  mapaDeNomes = false,
 ): unknown {
   if (Array.isArray(valor)) {
     return valor.map((item) => paraJsonSchema(item, spec, refsNoCaminho));
   }
   if (!ehObjeto(valor)) return valor;
+
+  // Antes de qualquer outra coisa: num mapa de nomes nenhuma chave e palavra
+  // de OpenAPI. Nem `$ref`, que aqui seria um campo chamado `$ref`.
+  if (mapaDeNomes) {
+    const porNome: Record<string, unknown> = {};
+    for (const [nome, item] of Object.entries(valor)) {
+      porNome[nome] = paraJsonSchema(item, spec, refsNoCaminho);
+    }
+    return porNome;
+  }
 
   const ref = valor['$ref'];
   if (typeof ref === 'string') {
@@ -103,7 +137,7 @@ function paraJsonSchema(
   for (const [chave, item] of Object.entries(valor)) {
     if (CHAVES_DESCARTADAS.has(chave) || chave.startsWith('x-')) continue;
     if (chave === 'nullable') continue;
-    saida[chave] = paraJsonSchema(item, spec, refsNoCaminho);
+    saida[chave] = paraJsonSchema(item, spec, refsNoCaminho, MAPAS_DE_NOMES.has(chave));
   }
 
   // `nullable: true` é forma de OpenAPI 3.0 e aparece neste contrato. Em 3.1 o
