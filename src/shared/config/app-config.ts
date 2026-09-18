@@ -151,17 +151,31 @@ function lerPem(bruto: string, nomeDaVariavel: string): string {
   return texto;
 }
 
-function carregarChave(sufixo: string, obrigatoria: boolean): SigningKey | undefined {
-  const kid = obrigatoria ? requireEnv(`JWT_${sufixo}_KID`) : optionalEnv(`JWT_${sufixo}_KID`);
-  const pem = obrigatoria
-    ? requireEnv(`JWT_${sufixo}_PRIVATE_KEY`)
-    : optionalEnv(`JWT_${sufixo}_PRIVATE_KEY`);
+/**
+ * Recebe o `kid` e o PEM ja lidos, e nao o sufixo para monta-los.
+ *
+ * O arranjo anterior montava os nomes com template literal
+ * (`JWT_${sufixo}_KID`), e isso tinha um custo que so apareceu em 18/09: a
+ * guarda da esteira le `requireEnv('NOME')` por TEXTO, entao ela nunca viu
+ * `JWT_ACTIVE_KID` -- uma variavel sem a qual a API nao sobe -- e mesmo assim
+ * imprimia "todas preenchidas". Guarda com ponto cego e pior que guarda
+ * nenhuma, porque a nenhuma ninguem confia.
+ *
+ * `nomeDoPem` continua entrando porque as mensagens de erro citam a variavel
+ * pelo nome, e erro de subida que nao diz QUAL variavel esta errada e o defeito
+ * que esta guarda inteira existe para evitar.
+ */
+function carregarChave(
+  kid: string | undefined,
+  pem: string | undefined,
+  nomeDoPem: string,
+): SigningKey | undefined {
   if (kid === undefined || pem === undefined) return undefined;
 
-  const privateKey = createPrivateKey(lerPem(pem, `JWT_${sufixo}_PRIVATE_KEY`));
+  const privateKey = createPrivateKey(lerPem(pem, nomeDoPem));
   if (privateKey.asymmetricKeyType !== 'rsa') {
     throw new Error(
-      `JWT_${sufixo}_PRIVATE_KEY não é RSA. O contrato fixa RS256, e HS256 ` +
+      `${nomeDoPem} não é RSA. O contrato fixa RS256, e HS256 ` +
         `fecharia a porta do Keycloak (ADR-0002).`,
     );
   }
@@ -197,7 +211,17 @@ function exigeChaveDeRotacao(environment: string): boolean {
 
 function carregarToken(environment: string): TokenConfig {
   const issuer = requireEnv('TOKEN_ISSUER');
-  const activeKey = carregarChave('ACTIVE', true);
+  const activeKey = carregarChave(
+    requireEnv('JWT_ACTIVE_KID'),
+    requireEnv('JWT_ACTIVE_PRIVATE_KEY'),
+    'JWT_ACTIVE_PRIVATE_KEY',
+  );
+  // `activeKey` nao pode ser `undefined` aqui: os dois `requireEnv` acima ja
+  // morreram citando a variavel exata, que e uma mensagem melhor do que esta
+  // linha daria. A checagem fica mesmo assim, e nao e redundancia inutil --
+  // `carregarChave` devolve `undefined` por contrato de tipo, e tirar isto
+  // trocaria a falha ruidosa por um `SigningKey | undefined` vazando para o
+  // resto da configuracao no dia em que alguem afrouxar o carregamento.
   if (activeKey === undefined) throw new Error('JWT_ACTIVE_KID e JWT_ACTIVE_PRIVATE_KEY são obrigatórias.');
 
   // O contrato promete **"Sempre duas chaves"** em `GET /.well-known/jwks.json`
@@ -221,7 +245,11 @@ function carregarToken(environment: string): TokenConfig {
     requireEnv('JWT_NEXT_PRIVATE_KEY');
   }
 
-  const nextKey = carregarChave('NEXT', false);
+  const nextKey = carregarChave(
+    optionalEnv('JWT_NEXT_KID'),
+    optionalEnv('JWT_NEXT_PRIVATE_KEY'),
+    'JWT_NEXT_PRIVATE_KEY',
+  );
 
   if (nextKey !== undefined && nextKey.kid === activeKey.kid) {
     throw new Error(
@@ -247,14 +275,21 @@ function carregarToken(environment: string): TokenConfig {
   };
 }
 
-function urlAbsoluta(nome: string): AbsoluteUrl {
-  const valor = requireEnv(nome).replace(/\/+$/, '');
-  return valor as AbsoluteUrl;
+/**
+ * Recebe o VALOR ja exigido, e nao o nome da variavel.
+ *
+ * A diferenca nao e estilo: a guarda da esteira le `requireEnv('NOME')` por
+ * texto, e `requireEnv(nome)` escondia o nome atras de um parametro. Variavel
+ * que a guarda nao enxerga e variavel que ela jura estar conferindo e nao
+ * confere -- foi assim que `JWT_ACTIVE_KID` passou despercebida.
+ */
+function urlAbsoluta(valor: string): AbsoluteUrl {
+  return valor.replace(/\/+$/, '') as AbsoluteUrl;
 }
 
 export function loadAppConfig(): AppConfig {
   const environment = optionalEnv('ENVIRONMENT') ?? 'dev';
-  const publicBaseUrl = urlAbsoluta('PUBLIC_BASE_URL');
+  const publicBaseUrl = urlAbsoluta(requireEnv('PUBLIC_BASE_URL'));
   const ipHmacKeyBruta = requireEnv('IP_HMAC_KEY');
   const ipHmacKey = Buffer.from(ipHmacKeyBruta, 'base64');
   if (ipHmacKey.length < 32) {
@@ -308,8 +343,8 @@ export function loadAppConfig(): AppConfig {
     bindHost: optionalEnv('BIND_HOST') ?? '127.0.0.1',
     databaseUrl: requireEnv('DATABASE_URL'),
     publicBaseUrl,
-    apiBaseUrl: urlAbsoluta('API_BASE_URL'),
-    mediaPublicBaseUrl: urlAbsoluta('MEDIA_PUBLIC_BASE_URL'),
+    apiBaseUrl: urlAbsoluta(requireEnv('API_BASE_URL')),
+    mediaPublicBaseUrl: urlAbsoluta(requireEnv('MEDIA_PUBLIC_BASE_URL')),
     // O contrato fixa `type` sob `<domínio>/problems/`. O domínio vem de
     // ambiente: hostname literal em `src/` é reprovado pelo portão de
     // portabilidade, e com razão — trocar o domínio precisa ser uma linha.

@@ -282,8 +282,39 @@ jobs:
           python3 - <<'FIM'
           import pathlib, re, sys
           exigidas = set()
+          # Toda chamada, e nao so as que sabemos ler. A diferenca entre as duas
+          # listas e o ponto cego desta guarda, e ele precisa ser ruidoso: em
+          # 18/09 descobrimos que `carregarChave` monta o nome com template
+          # literal (`JWT_${sufixo}_KID`), entao nem `JWT_ACTIVE_KID` -- que e
+          # obrigatoria para a API subir -- estava sendo conferida aqui. A
+          # guarda dizia "todas preenchidas" sem nunca ter olhado para ela.
+          todas = re.compile(r'requireEnv\(')
+          literal = re.compile(r"requireEnv\(\s*'([A-Z0-9_]+)'\s*\)")
+          opacas = []
           for arquivo in list(pathlib.Path('src').rglob('*.ts')) + list(pathlib.Path('bin').rglob('*.ts')):
-              exigidas |= set(re.findall(r"requireEnv\(\s*'([A-Z0-9_]+)'", arquivo.read_text()))
+              texto = arquivo.read_text()
+              # Comentario nao e chamada. Sem isto, um comentario que CITA
+              # `requireEnv(nome)` -- e ha um, explicando justamente este ponto
+              # cego -- faz a guarda reprovar a si mesma.
+              texto = re.sub(r'/\*.*?\*/', '', texto, flags=re.S)
+              texto = re.sub(r'(?m)^\s*//.*$', '', texto)
+              # A definicao da propria funcao nao e chamada.
+              if arquivo.name == 'env.ts':
+                  texto = re.sub(r'export function requireEnv[^\n]*', '', texto)
+              nomes = set(literal.findall(texto))
+              exigidas |= nomes
+              # `requireEnv(nome)` com variavel, ou com template literal: o nome
+              # so existe em tempo de execucao. Contamos e reprovamos, em vez de
+              # pular calado -- pular calado foi o defeito.
+              vistas = len(todas.findall(texto))
+              if vistas > len(literal.findall(texto)):
+                  opacas.append(f'{arquivo}: {vistas - len(literal.findall(texto))}')
+          if opacas:
+              print('::error::ha chamada de requireEnv cujo nome esta fora do alcance desta '
+                    'guarda (variavel ou template literal). Ela NAO esta sendo conferida. '
+                    'Passe o nome literal, ou acrescente a variavel a lista explicita deste '
+                    'passo: ' + '; '.join(opacas))
+              sys.exit(1)
           env = dict(
               linha.split('=', 1)
               for linha in pathlib.Path('.env').read_text().splitlines()
