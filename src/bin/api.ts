@@ -29,6 +29,7 @@ import {
   registrarRotasDeIdentidade,
 } from '../modules/identity/adapters/http/routes.js';
 import { criarAuthService } from '../modules/identity/application/auth-service.js';
+import { criarAvisoDeReusoAoTitular } from '../modules/identity/application/aviso-de-reuso.js';
 import { criarReferenceDataRepository } from '../modules/pets/adapters/persistence/kysely-reference-data-repository.js';
 import { registrarRotasDeReferencia } from '../modules/pets/adapters/http/reference-data-routes.js';
 import { criarPetRepository } from '../modules/pets/adapters/persistence/kysely-pet-repository.js';
@@ -36,7 +37,7 @@ import { PetService } from '../modules/pets/application/pet-service.js';
 import { registrarRotasDePets } from '../modules/pets/adapters/http/pet-routes.js';
 import { criarMediaRepository } from '../modules/media/adapters/persistence/kysely-media-repository.js';
 import type { FotoResumida } from '../modules/pets/ports/fotos-do-pet.js';
-import type { PetId, UserId } from '../shared/types/brands.js';
+import type { PetId } from '../shared/types/brands.js';
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { MediaService } from '../modules/media/application/media-service.js';
 import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
@@ -101,33 +102,22 @@ export async function main(): Promise<void> {
     // O link do e-mail aponta para a PÁGINA do time web, não para a API: quem
     // abre é uma pessoa num navegador, e o ADR-0017 tirou HTML deste serviço.
     baseDaWeb: config.publicBaseUrl,
-    avisarTitular: async (aviso) => {
-      // Critério 10 de BICHUS-15: **a vítima é avisada por e-mail**. Até
-      // 18/09 isto só registrava no log, esperando um módulo `notifications`
-      // que não existe — e a própria história diz por que isso não bastava:
-      // "detecção silenciosa não protege ninguém". Quem teve a sessão roubada
-      // interpreta a revogação como "o app me deslogou" e faz login de novo,
-      // sem nunca saber que alguém entrou.
-      //
-      // O log continua, porque ele serve a outra pessoa: quem investiga depois.
-      app.log.warn({ tipo: aviso.tipo, correlationId: aviso.correlationId }, 'reuso de refresh detectado');
-
-      const conta = await repositorioDeIdentidade.buscarContaPorId(aviso.userId as UserId);
-      // Conta apagada entre a detecção e o aviso: não há para quem escrever.
-      if (conta === undefined) return;
-
-      await mailer.enviar({
-        para: conta.email,
-        assunto: 'Encerramos as sessões da sua conta no Bichu',
-        corpo:
-          'Detectamos um sinal de que alguém pode ter copiado o acesso da sua conta, ' +
-          'e encerramos todas as sessões por precaução.\n\n' +
-          'Entre de novo no aplicativo. Se você não reconhece nenhuma atividade estranha, ' +
-          'não precisa fazer mais nada.\n\n' +
-          'Se desconfiar de alguma coisa, troque a sua senha: isso derruba qualquer acesso ' +
-          'que não seja o seu.',
-      });
-    },
+    // O corpo desta função morava aqui dentro, como lambda. Ele saiu para
+    // `identity/application/aviso-de-reuso.ts` por um motivo só: nada neste
+    // arquivo é carregado por teste — `main()` abre porta, banco e SMTP —, e
+    // enquanto a montagem do aviso estivesse aqui ela ficava em 0% de
+    // cobertura. Inverter o `if (conta === undefined)` não reprovava nada, e o
+    // efeito em produção é a detecção de reuso voltar a ser silenciosa, que é
+    // exatamente o que o critério 10 de BICHUS-15 proíbe (BICHUS-129).
+    // O que ficou aqui é a fiação; a decisão de para quem escrever e o que
+    // dizer está do outro lado, onde um teste alcança.
+    avisarTitular: criarAvisoDeReusoAoTitular({
+      repositorio: repositorioDeIdentidade,
+      mailer,
+      registrarOcorrencia: (dados, mensagem) => {
+        app.log.warn(dados, mensagem);
+      },
+    }),
   });
 
   const dependenciasDasRotas = {
