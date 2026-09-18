@@ -219,9 +219,38 @@ jobs:
           trocar('JWT_ACTIVE_PRIVATE_KEY', base64.b64encode(pathlib.Path('/tmp/ativa.pem').read_bytes()).decode())
           trocar('JWT_NEXT_PRIVATE_KEY', base64.b64encode(pathlib.Path('/tmp/rotacao.pem').read_bytes()).decode())
           trocar('IP_HMAC_KEY', base64.b64encode(b'ci-descartavel-de-32-bytes-no-min').decode())
+          # Hex de 64 caracteres: app-config.ts recusa qualquer outro tamanho.
+          trocar('TAG_CODE_KEY', 'c1' * 32)
           env.write_text(texto)
           FIM
           docker compose config -q
+
+      - name: nenhuma variavel exigida ficou vazia
+        # A ausencia de TAG_CODE_KEY quebrou este job em 17/09 e a causa so
+        # aparecia no log da api em loop de restart, dezenas de linhas abaixo
+        # do passo que realmente falhou. O passo acima nomeia cada segredo a
+        # mao, entao TODA variavel nova quebra a pilha ate alguem lembrar de
+        # edita-lo. Esta guarda le as exigencias do PROPRIO CODIGO e falha em
+        # segundos com o nome da variavel, em vez de deixar a pilha morrer.
+        run: |
+          python3 - <<'FIM'
+          import pathlib, re, sys
+          exigidas = set()
+          for arquivo in list(pathlib.Path('src').rglob('*.ts')) + list(pathlib.Path('bin').rglob('*.ts')):
+              exigidas |= set(re.findall(r"requireEnv\(\s*'([A-Z0-9_]+)'", arquivo.read_text()))
+          env = dict(
+              linha.split('=', 1)
+              for linha in pathlib.Path('.env').read_text().splitlines()
+              if '=' in linha and not linha.lstrip().startswith('#')
+          )
+          faltando = sorted(v for v in exigidas if not env.get(v, '').strip())
+          if faltando:
+              print('::error::o .env deste job nao preenche variavel exigida pelo codigo: '
+                    + ', '.join(faltando)
+                    + ' -- acrescente um valor descartavel no passo "ambiente de teste"')
+              sys.exit(1)
+          print(f'{len(exigidas)} variaveis exigidas pelo codigo, todas preenchidas')
+          FIM
 
       - name: constroi a imagem (dev) e o migrador
         run: docker compose --profile dev build
