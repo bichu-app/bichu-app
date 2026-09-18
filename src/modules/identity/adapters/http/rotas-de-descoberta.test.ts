@@ -69,11 +69,21 @@ const PEM_ROTACAO = gerarPem();
  */
 function ambiente(): Record<string, string> {
   return {
+    // Nada de `localhost` nem de nome de regiao de provedor nesta bancada.
+    // O portao de portabilidade varre `src/` e SO abre excecao para
+    // `adapters/external/`, que e onde o ADR-0007 permite falar com provedor.
+    // Este arquivo esta em `adapters/http/`, entao vale a regra cheia -- e ja
+    // reprovou a esteira uma vez por isso. `.invalid` e reservado por RFC 2606
+    // e nunca resolve, em lugar nenhum.
+    //
+    // Esta e a TERCEIRA copia desta bancada (as outras estao em
+    // `app-config.test.ts` e em `rs256-token-signer.test.ts`). Vale extrair
+    // quando aparecer a quarta.
     ENVIRONMENT: 'dev',
-    DATABASE_URL: 'postgres://bichu:descartavel@localhost:5432/bichu',
-    PUBLIC_BASE_URL: 'http://localhost:3000',
+    DATABASE_URL: 'postgres://bichu:descartavel@db.exemplo.invalid:5432/bichu',
+    PUBLIC_BASE_URL: 'http://api.exemplo.invalid:3000',
     API_BASE_URL: 'https://api.bichu.test',
-    MEDIA_PUBLIC_BASE_URL: 'http://localhost:9000',
+    MEDIA_PUBLIC_BASE_URL: 'http://midia.exemplo.invalid:9000',
     TOKEN_ISSUER: 'https://api.bichu.test',
     JWT_ACTIVE_KID: 'teste-ativa',
     JWT_ACTIVE_PRIVATE_KEY: PEM_ATIVA,
@@ -81,7 +91,7 @@ function ambiente(): Record<string, string> {
     JWT_NEXT_PRIVATE_KEY: PEM_ROTACAO,
     IP_HMAC_KEY: Buffer.alloc(32, 7).toString('base64'),
     TAG_CODE_KEY: 'c1'.repeat(32),
-    OBJECT_STORAGE_REGION: 'us-east-1',
+    OBJECT_STORAGE_REGION: 'regiao-de-teste',
     OBJECT_STORAGE_ACCESS_KEY_ID: 'descartavel',
     OBJECT_STORAGE_SECRET_ACCESS_KEY: 'descartavel-segredo',
     OBJECT_BUCKET_PRIVATE: 'bichu-privado',
