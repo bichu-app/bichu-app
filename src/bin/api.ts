@@ -34,6 +34,8 @@ import { criarPetRepository } from '../modules/pets/adapters/persistence/kysely-
 import { PetService } from '../modules/pets/application/pet-service.js';
 import { registrarRotasDePets } from '../modules/pets/adapters/http/pet-routes.js';
 import { criarMediaRepository } from '../modules/media/adapters/persistence/kysely-media-repository.js';
+import type { FotoResumida } from '../modules/pets/ports/fotos-do-pet.js';
+import type { PetId } from '../shared/types/brands.js';
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { MediaService } from '../modules/media/application/media-service.js';
 import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
@@ -117,6 +119,16 @@ export async function main(): Promise<void> {
     baseDaWeb: config.publicBaseUrl,
   });
 
+  // Declarado ANTES do cadastro porque o cadastro depende dele: a ficha do pet
+  // mostra o estado da foto. Uma instância só, usada pelas rotas de mídia e pela
+  // porta estreita que o cadastro enxerga — duas seriam duas conexões para o
+  // mesmo dado.
+  const repositorioDeMidia = criarMediaRepository(db);
+
+  /** A URL da derivada pública, montada na leitura. O banco guarda só a chave. */
+  const urlDeMidia = (chave: string): string =>
+    `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`;
+
   const dependenciasDasRotasDePet = {
     pets: new PetService({
       repositorio: criarPetRepository(db),
@@ -132,11 +144,37 @@ export async function main(): Promise<void> {
     idempotencia: criarIdempotencia(db),
     contrato,
     clock: systemClock,
+    // ESTA LINHA é a ligação entre cadastro e mídia, e é o único lugar do
+    // sistema que conhece os dois lados. O cadastro enxerga uma porta de um
+    // método só; o dia em que a foto vier de outro serviço, muda aqui.
+    fotos: {
+      porPets: async (pets: readonly PetId[]) => {
+        const doBanco = await repositorioDeMidia.porPets(pets);
+        const saida = new Map<string, FotoResumida[]>();
+        for (const [petId, fotos] of doBanco) {
+          saida.set(
+            petId,
+            fotos.map((f) => ({
+              id: f.id,
+              status: f.status,
+              isPrimary: f.isPrimary,
+              // Nulas enquanto o worker não gerou as derivadas, e a ausência é
+              // o valor honesto: a tela diz "enviando" em vez de mostrar um
+              // espaço vazio que o tutor não sabe se é erro dele.
+              thumbUrl: f.thumbKey === null ? null : urlDeMidia(f.thumbKey),
+              cardUrl: f.cardKey === null ? null : urlDeMidia(f.cardKey),
+              createdAt: f.createdAt,
+            })),
+          );
+        }
+        return saida;
+      },
+    },
   };
 
   const dependenciasDasRotasDeMidia = {
     midia: new MediaService({
-      repositorio: criarMediaRepository(db),
+      repositorio: repositorioDeMidia,
       // O ÚNICO lugar do sistema que instancia algo que sabe o que é S3.
       armazenamento: criarObjectStorage(config.objectStorage),
       ids,

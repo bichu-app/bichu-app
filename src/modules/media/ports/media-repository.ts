@@ -73,6 +73,16 @@ export interface MediaRepository {
 
   listarDoPet(pet: PetId, dono: UserId): Promise<readonly FotoDoPet[]>;
 
+  /**
+   * As fotos de VÁRIOS pets numa consulta só.
+   *
+   * Existe por causa de `listMyPets`, que devolve a lista inteira do tutor: uma
+   * consulta por pet transformaria a tela inicial do app em N+1 no caminho mais
+   * percorrido que existe. Não recebe dono porque quem chama já provou a posse
+   * ao carregar os pets — e a lista de ids vem dessa mesma leitura.
+   */
+  porPets(pets: readonly PetId[]): Promise<ReadonlyMap<string, readonly FotoDoPet[]>>;
+
   /** `null` quando não existe ou não é do chamador. */
   buscarFoto(pet: PetId, foto: string, dono: UserId): Promise<FotoDoPet | null>;
 

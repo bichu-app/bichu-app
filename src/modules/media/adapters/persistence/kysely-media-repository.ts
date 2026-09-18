@@ -187,6 +187,27 @@ export function criarMediaRepository(db: Db): MediaRepository {
       return linhas.map((l) => comoFoto(l));
     },
 
+    async porPets(pets: readonly PetId[]): Promise<ReadonlyMap<string, readonly FotoDoPet[]>> {
+      const mapa = new Map<string, FotoDoPet[]>();
+      if (pets.length === 0) return mapa;
+
+      const linhas = await db
+        .selectFrom('pet_photos')
+        .select([...COLUNAS_DA_FOTO, 'pet_photos.pet_id'])
+        .where('pet_photos.pet_id', 'in', [...pets])
+        .where('pet_photos.deleted_at', 'is', null)
+        .orderBy('pet_photos.is_primary', 'desc')
+        .orderBy('pet_photos.created_at', 'desc')
+        .execute();
+
+      for (const linha of linhas) {
+        const lista = mapa.get(linha.pet_id) ?? [];
+        lista.push(comoFoto(linha));
+        mapa.set(linha.pet_id, lista);
+      }
+      return mapa;
+    },
+
     async buscarFoto(pet: PetId, foto: string, dono: UserId): Promise<FotoDoPet | null> {
       const linha = await db
         .selectFrom('pet_photos')

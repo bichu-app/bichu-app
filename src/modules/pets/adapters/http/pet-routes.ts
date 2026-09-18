@@ -35,6 +35,7 @@ import type { Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { PetService, EntradaDoPet } from '../../application/pet-service.js';
 import type { PetGravado } from '../../ports/pet-repository.js';
+import type { FotoResumida, FotosDoPet } from '../../ports/fotos-do-pet.js';
 import type { PetId, UserId } from '../../../../shared/types/brands.js';
 
 export const rotaDeListagemDePets = defineRoute({
@@ -88,6 +89,7 @@ export interface DependenciasDasRotasDePet {
   readonly idempotencia: Idempotencia;
   readonly contrato: Contrato;
   readonly clock: Clock;
+  readonly fotos: FotosDoPet;
 }
 
 interface CorpoDoPet {
@@ -136,12 +138,19 @@ function comoEntrada(corpo: CorpoDoPet): EntradaDoPet {
 /**
  * A visão do dono, campo a campo.
  *
- * `photos` sai vazio e `open_case_id` sai nulo porque `media` e `lostfound` não
- * existem nesta entrega. Ausência é o valor verdadeiro; devolver o endereço de
- * uma foto que ninguém guardou, ou um identificador de caso inventado, seria
- * uma promessa que o cliente descobre quebrada na tela.
+ * `open_case_id` sai nulo porque `lostfound` não existe nesta entrega. Ausência
+ * é o valor verdadeiro; um identificador de caso inventado seria uma promessa
+ * que o cliente descobre quebrada na tela.
+ *
+ * `photos` traz o ESTADO de cada foto, e não só as prontas. É o que sustenta o
+ * cartão do pet dizendo "enviando" em vez de mostrar um espaço vazio que o
+ * tutor não sabe se é erro dele: uma foto `processing` existe, aparece na lista
+ * e tem as duas URLs nulas.
  */
-function comoRespostaDoPet(pet: PetGravado): Record<string, unknown> {
+function comoRespostaDoPet(
+  pet: PetGravado,
+  fotos: readonly FotoResumida[],
+): Record<string, unknown> {
   return {
     id: pet.id,
     name: pet.name,
@@ -162,7 +171,14 @@ function comoRespostaDoPet(pet: PetGravado): Record<string, unknown> {
     status: pet.status,
     slug: pet.slug,
     public_profile_enabled: pet.publicProfileEnabled,
-    photos: [],
+    photos: fotos.map((f) => ({
+      id: f.id,
+      status: f.status,
+      is_primary: f.isPrimary,
+      thumb_url: f.thumbUrl,
+      card_url: f.cardUrl,
+      created_at: f.createdAt.toISOString(),
+    })),
     active_tag_count: pet.activeTagCount,
     open_case_id: pet.openCaseId,
     created_at: pet.createdAt.toISOString(),
@@ -208,7 +224,13 @@ export function registrarRotasDePets(
   app.get(rotaDeListagemDePets.path, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await donoAutenticado(request, deps);
     const pets = await deps.pets.listar(chamador);
-    return reply.status(200).send({ items: pets.map(comoRespostaDoPet) });
+    // UMA consulta para as fotos de todos os pets: a lista do tutor é a tela
+    // inicial do app, e uma leitura por pet aqui seria N+1 no caminho mais
+    // percorrido do produto.
+    const fotos = await deps.fotos.porPets(pets.map((p) => p.id));
+    return reply.status(200).send({
+      items: pets.map((p) => comoRespostaDoPet(p, fotos.get(p.id) ?? [])),
+    });
   });
 
   app.post(
@@ -239,7 +261,8 @@ export function registrarRotasDePets(
         },
         async () => ({
           status: 201,
-          body: comoRespostaDoPet(await deps.pets.criar(comoEntrada(corpo), chamador)),
+          // Pet recém-criado não tem foto, e `[]` aqui é o fato, não um atalho.
+          body: comoRespostaDoPet(await deps.pets.criar(comoEntrada(corpo), chamador), []),
         }),
       );
 
@@ -250,7 +273,8 @@ export function registrarRotasDePets(
   app.get(rotaDeDetalheDoPet.path, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await donoAutenticado(request, deps);
     const pet = await deps.pets.buscar(petIdDoCaminho(request), chamador);
-    return reply.status(200).send(comoRespostaDoPet(pet));
+    const fotos = await deps.fotos.porPets([pet.id]);
+    return reply.status(200).send(comoRespostaDoPet(pet, fotos.get(pet.id) ?? []));
   });
 
   app.patch(
@@ -269,7 +293,8 @@ export function registrarRotasDePets(
       const fundido = comoEntrada({ ...comoCorpo(atual), ...parcial });
 
       const pet = await deps.pets.atualizar(petId, fundido, chamador);
-      return reply.status(200).send(comoRespostaDoPet(pet));
+      const fotos = await deps.fotos.porPets([petId]);
+      return reply.status(200).send(comoRespostaDoPet(pet, fotos.get(petId) ?? []));
     },
   );
 
