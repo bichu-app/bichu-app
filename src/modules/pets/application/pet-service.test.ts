@@ -168,6 +168,126 @@ void describe('cadastro do pet', () => {
   });
 });
 
+void describe('códigos de referência inválidos', () => {
+  /**
+   * Cada ramo destes existe para que o erro seja `validation-failed` **com o
+   * nome do campo**, e não a violação de `CHECK` que o banco devolveria como
+   * 500. A pessoa que digitou um código inválido precisa saber qual campo
+   * recusar, e "erro interno" não diz nada a ninguém.
+   */
+  const casos: { nome: string; ausente: string; campo: string }[] = [
+    { nome: 'espécie desconhecida', ausente: 'especieExiste', campo: 'species' },
+    { nome: 'porte desconhecido', ausente: 'porteExiste', campo: 'size' },
+    { nome: 'raça de outra espécie', ausente: 'racaExisteNaEspecie', campo: 'breed_code' },
+    { nome: 'cor primária desconhecida', ausente: 'corPrimariaExiste', campo: 'primary_color_code' },
+    { nome: 'cor secundária desconhecida', ausente: 'corSecundariaExiste', campo: 'secondary_color_code' },
+    { nome: 'versão de lista desconhecida', ausente: 'versaoExiste', campo: 'ref_data_version' },
+  ];
+
+  for (const caso of casos) {
+    void it(`${caso.nome} nomeia o campo ${caso.campo}`, async () => {
+      const { servico, repo } = montar();
+      repo.conferirCodigos = () =>
+        Promise.resolve({
+          especieExiste: true,
+          porteExiste: true,
+          racaExisteNaEspecie: true,
+          corPrimariaExiste: true,
+          corSecundariaExiste: true,
+          versaoExiste: true,
+          [caso.ausente]: false,
+        } as never);
+
+      await assert.rejects(
+        () => servico.criar(entradaBase, chamador),
+        (e: Error & { problemType?: string; errors?: { field: string }[] }) => {
+          assert.equal(e.problemType, 'validation-failed');
+          assert.ok(
+            e.errors?.some((x) => x.field === caso.campo),
+            `o campo ${caso.campo} não foi nomeado`,
+          );
+          return true;
+        },
+      );
+      assert.equal(repo.criados.length, 0, 'gravou apesar do código inválido');
+    });
+  }
+
+  void it('vários inválidos de uma vez saem JUNTOS, e não um por vez', async () => {
+    // Devolver o primeiro e esconder os outros faz a pessoa corrigir, reenviar,
+    // e descobrir o próximo — uma vez por campo.
+    const s = montar();
+    s.repo.conferirCodigos = () =>
+      Promise.resolve({
+        especieExiste: false,
+        porteExiste: false,
+        racaExisteNaEspecie: true,
+        corPrimariaExiste: true,
+        corSecundariaExiste: true,
+        versaoExiste: true,
+      });
+
+    await assert.rejects(
+      () => s.servico.criar(entradaBase, chamador),
+      (e: Error & { errors?: { field: string }[] }) => {
+        assert.equal(e.errors?.length, 2);
+        return true;
+      },
+    );
+  });
+});
+
+void describe('listar e excluir', () => {
+  void it('listar devolve o que o repositório tem', async () => {
+    const { servico } = montar();
+    assert.deepEqual(await servico.listar(chamador), []);
+  });
+
+  void it('excluir o próprio pet registra a trilha', async () => {
+    const { servico, repo, eventos } = montar();
+    await servico.excluir('p-1' as PetId, chamador);
+    assert.equal(repo.excluiu, true);
+    assert.equal(eventos[0]?.action, 'pet.deleted');
+  });
+
+  void it('atualizar o próprio pet registra a trilha', async () => {
+    const { servico, repo, eventos } = montar();
+    repo.guardado = {
+      ...entradaBase,
+      id: 'p-1' as PetId,
+      careNotesRedactions: [],
+      breedLabel: 'SRD',
+      status: 'active',
+      slug: null,
+      publicProfileEnabled: false,
+      activeTagCount: 0,
+      openCaseId: null,
+      createdAt: dataFixa(),
+      updatedAt: dataFixa(),
+    };
+    await servico.atualizar('p-1' as PetId, entradaBase, chamador);
+    assert.equal(eventos[0]?.action, 'pet.updated');
+  });
+
+  void it('buscar o próprio pet devolve o que está gravado', async () => {
+    const { servico, repo } = montar();
+    repo.guardado = {
+      ...entradaBase,
+      id: 'p-1' as PetId,
+      careNotesRedactions: [],
+      breedLabel: 'SRD',
+      status: 'active',
+      slug: null,
+      publicProfileEnabled: false,
+      activeTagCount: 0,
+      openCaseId: null,
+      createdAt: dataFixa(),
+      updatedAt: dataFixa(),
+    };
+    assert.equal((await servico.buscar('p-1' as PetId, chamador)).id, 'p-1');
+  });
+});
+
 void describe('cadastro do pet — pet de outro tutor', () => {
   void it('BUSCAR responde 404, e não 403', async () => {
     const { servico, repo } = montar();
