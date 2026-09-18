@@ -31,9 +31,19 @@ import 'textos_do_cadastro.dart';
 /// **A lista que nao carrega nao trava o cadastro.** Raca e opcional no
 /// contrato (`PetInput` exige `name`, `species` e `size`), e perder o pet por
 /// causa de um campo que ninguem precisa preencher e o pior desfecho possivel.
-/// O que **nao** pode acontecer e a lista virar campo de texto livre como
-/// plano B: ai o codigo de cruzamento nasce sujo, que e exatamente o que os
-/// dois campos existem para evitar.
+///
+/// **Sem a lista, a pessoa pode DIGITAR a raca** (criterio 6 de BICHUS-90), e
+/// isso nao contradiz o paragrafo acima: o que nao pode acontecer e o texto
+/// livre virar o codigo de cruzamento. Aqui ele nao vira -- digitar escolhe
+/// `outro_<especie>`, que e um codigo LIMPO da lista fechada, significando
+/// "nao esta na lista", e o texto vai para `breed_free_text`, que descreve e
+/// nunca cruza. E exatamente o arranjo que o criterio 3 da mesma historia
+/// descreve: "o texto e aceito e guardado, E o cruzamento continua funcionando
+/// pelos atributos que vieram da lista".
+///
+/// A primeira versao desta tela nao oferecia esse caminho e o cadastro seguia
+/// sem raca nenhuma. Funcionava, e perdia a informacao: `outro_dog` + "Akita"
+/// aparece na ficha, no cartaz e no perfil publico; nada nao aparece.
 class TelaCadastrarIdentificacao extends StatefulWidget {
   const TelaCadastrarIdentificacao({super.key, this.rascunhoExistente});
 
@@ -164,6 +174,20 @@ class _TelaCadastrarIdentificacaoState
       _erroDaEspecie = null;
       _erroDaRacaLivre = null;
     });
+  }
+
+  /// A saída do critério 6: sem a lista, a pessoa digita a raça.
+  ///
+  /// Reusa `_escolherRaca` com o código `outro_<espécie>` em vez de abrir um
+  /// caminho paralelo. Isso importa mais do que parece: `_escolherRaca` já
+  /// anuncia o aparecimento do campo para o leitor de tela e já cuida de não
+  /// roubar o foco. Um caminho novo precisaria repetir as duas coisas, e a
+  /// repetição é onde a acessibilidade se perde primeiro.
+  void _digitarARaca() {
+    final especie = _rascunho.especie;
+    if (especie == null) return;
+    setState(() => _seguiuSemRaca = true);
+    _escolherRaca(especie.codigoDeOutraRaca);
   }
 
   void _escolherRaca(String? codigo) {
@@ -312,9 +336,22 @@ class _TelaCadastrarIdentificacaoState
               const SizedBox(height: BichuEspaco.e2),
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => setState(() => _seguiuSemRaca = true),
-                  child: const Text(TextosDoCadastro.continuarSemARaca),
+                child: Wrap(
+                  spacing: BichuEspaco.e4,
+                  children: <Widget>[
+                    // Primeiro a saida que PRESERVA a informacao. "Continuar
+                    // sem a raca" continua existindo e vem depois, porque
+                    // perder o campo e a segunda melhor opcao, nao a primeira.
+                    if (_rascunho.especie != null)
+                      TextButton(
+                        onPressed: _digitarARaca,
+                        child: const Text(TextosDoCadastro.digitarARaca),
+                      ),
+                    TextButton(
+                      onPressed: () => setState(() => _seguiuSemRaca = true),
+                      child: const Text(TextosDoCadastro.continuarSemARaca),
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: BichuEspaco.e6),

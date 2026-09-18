@@ -185,21 +185,90 @@ void main() {
     await rolarAte(tester, find.text(TextosDoCadastro.continuarSemARaca));
     expect(find.text(TextosDoCadastro.continuarSemARaca), findsOne);
 
-    // O que NAO pode acontecer: a lista virar campo de texto livre como plano
-    // B. Ai o codigo de cruzamento nasce sujo, que e exatamente o que os dois
-    // campos existem para evitar.
+    // O campo livre NAO aparece sozinho, e a distincao e fina: o problema
+    // nunca foi a pessoa digitar -- foi o texto digitado virar a chave de
+    // cruzamento. Aparecer sozinho faria o texto substituir a lista. Aparecer
+    // depois de `Digitar a raca` faz ele acompanhar o codigo `outro_<especie>`,
+    // que e limpo. Ver o caso seguinte.
     expect(
       find.text('${TextosDoCadastro.rotuloDaRacaLivre} (opcional)'),
       findsNothing,
-      reason: 'REPROVA: a falha da lista abriu um campo de texto livre. '
-          'Cadastrar sem raca e escolher depois em `Editar` e a saida certa; '
-          'texto livre como plano B suja a chave de cruzamento.',
+      reason: 'REPROVA: a falha da lista abriu o campo de texto livre SOZINHA. '
+          'Ele existe, mas atras de uma escolha explicita.',
     );
     // E o cadastro segue: raca e opcional no contrato.
     expect(
       find.widgetWithText(BotaoPrimario, TextosDoCadastro.continuar),
       findsOne,
     );
+  });
+
+  testWidgets(
+      'CRITERIO 6 de BICHUS-90: sem a lista, `Digitar a raca` abre o texto '
+      'livre com o codigo outro_<especie>, que e LIMPO', (tester) async {
+    await abrirF13(
+      tester,
+      rede: (_) async => http.Response('', 503),
+    );
+    // A espécie primeiro: a lista de raças é POR espécie, e sem ela não existe
+    // `outro_<espécie>` para escolher.
+    await tocar(tester, find.text('Cão'));
+
+    await rolarAte(tester, find.text(TextosDoCadastro.digitarARaca));
+    await tester.tap(find.text(TextosDoCadastro.digitarARaca));
+    await tester.pumpAndSettle();
+
+    // O campo existe agora, e existe porque a pessoa pediu.
+    expect(
+      find.text('${TextosDoCadastro.rotuloDaRacaLivre} (opcional)'),
+      findsOne,
+      reason: 'sem este campo, a raca se perde quando a lista nao carrega, e '
+          '`outro_dog` + "Akita" aparece na ficha, no cartaz e no perfil '
+          'publico -- nada nao aparece',
+    );
+
+    await tester.ensureVisible(find.byType(TextField).last);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Akita');
+    await tester.pumpAndSettle();
+    expect(find.text('Akita'), findsOne);
+
+    // E o cadastro segue, com o texto guardado.
+    expect(
+      find.widgetWithText(BotaoPrimario, TextosDoCadastro.continuar),
+      findsOne,
+    );
+  });
+
+  testWidgets(
+      'o texto digitado sem lista NAO vira a chave de cruzamento', (tester) async {
+    // Este e o medo que a primeira versao desta tela tinha, e ele continua
+    // valendo: o que nao pode e o texto livre SUBSTITUIR o codigo. Aqui ele
+    // acompanha `outro_<especie>`, que e um codigo da lista fechada
+    // significando "nao esta na lista" -- e o cruzamento continua olhando o
+    // codigo, nunca o texto.
+    await abrirF13(
+      tester,
+      rede: (_) async => http.Response('', 503),
+    );
+    // A espécie primeiro: a lista de raças é POR espécie, e sem ela não existe
+    // `outro_<espécie>` para escolher.
+    await tocar(tester, find.text('Cão'));
+
+    await rolarAte(tester, find.text(TextosDoCadastro.digitarARaca));
+    await tester.tap(find.text(TextosDoCadastro.digitarARaca));
+    await tester.pumpAndSettle();
+
+    // A lista SEGUE desabilitada: ela nao carregou, e fingir que carregou
+    // seria pior que o campo livre.
+    //
+    // Rola ate ela antes de ler: o `ListView` so constroi o que cabe na tela, e
+    // depois de o campo livre aparecer o seletor pode ter saido da dobra.
+    await rolarAte(tester, find.byType(SeletorDeLista), passo: -120);
+    final seletor = tester.widget<SeletorDeLista>(find.byType(SeletorDeLista).first);
+    expect(seletor.habilitado, isFalse);
+    expect(seletor.selecionado, 'outro_dog',
+        reason: 'o codigo precisa ser o `outro_<especie>` da lista fechada');
   });
 
   testWidgets('Continuar tem alvo critico de 64 dp e rotulo anunciavel',

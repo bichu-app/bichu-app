@@ -78,6 +78,12 @@ abstract final class TextosDoCadastro {
 
   static const String continuarSemARaca = 'Continuar sem a raça';
 
+  /// A saída do critério 6 de BICHUS-90: sem a lista, a pessoa digita.
+  ///
+  /// O texto diz "digitar" e não "escolher" de propósito — a lista não está
+  /// disponível, e oferecer "escolher" seria prometer o que não há.
+  static const String digitarARaca = 'Digitar a raça';
+
   static const String continuar = 'Continuar';
 
   // -- F1.4, foto -----------------------------------------------------------
