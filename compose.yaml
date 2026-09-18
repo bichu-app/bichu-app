@@ -62,7 +62,19 @@ services:
     volumes:
       - dados_db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bichu} -d ${POSTGRES_DB:-bichu}"]
+      # `-h 127.0.0.1` NAO e enfeite: sem ele, `pg_isready` conecta pelo SOCKET
+      # UNIX, e a imagem do Postgres sobe um servidor temporario que escuta so
+      # no socket (`listen_addresses=''`) enquanto roda a inicializacao, antes
+      # de reiniciar ouvindo em TCP.
+      #
+      # A sonda passava naquele servidor temporario, o compose dava o `db` como
+      # saudavel, a migracao partia para o TCP e levava ECONNREFUSED. Falha
+      # intermitente e do pior tipo: verde na maioria das vezes, e quando
+      # reprova todo mundo aprende a mandar rodar de novo -- que e como um
+      # portao para de valer sem ninguem decidir desliga-lo.
+      #
+      # Sondar por TCP e sondar o que o cliente usa.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-bichu} -d ${POSTGRES_DB:-bichu}"]
       interval: 5s
       timeout: 3s
       retries: 20
