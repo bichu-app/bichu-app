@@ -25,6 +25,16 @@ on:
 
 permissions:
   contents: read
+  # LEITURA, e so. O gitleaks chama `GET /repos/{dono}/{repo}/pulls/{n}/commits`
+  # no evento `pull_request` para saber o intervalo que precisa varrer, e o
+  # padrao `contents: read` responde 403 nesse endpoint -- o portao rapido caia,
+  # e com ele os outros 7 jobs, que dependem dele.
+  #
+  # `write` faria a acao tambem comentar o achado no PR, e nao e o que queremos:
+  # o comentario cita o TRECHO do segredo, em lugar publico e permanente. Um
+  # vazamento viraria dois, e o segundo sobrevive ao rebase que apagar o
+  # primeiro. Por isso o escopo para em `read` e o comentario segue desligado.
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.ref }}
