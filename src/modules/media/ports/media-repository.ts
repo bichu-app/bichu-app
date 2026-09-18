@@ -105,6 +105,24 @@ export interface MediaRepository {
 
   /** Estado FINAL (critério 19): não volta para a fila. */
   marcarRecusada(foto: string, motivo: string, agora: Instant): Promise<void>;
+
+  /**
+   * As intenções vencidas que ninguém confirmou (critério 13).
+   *
+   * Existem porque o envio direto ao armazenamento **não passa por nós**: o
+   * cliente pede a autorização, some, e o objeto pode ou não estar lá. Sem esta
+   * varredura, cada desistência deixa um arquivo pago e invisível no bucket
+   * privado — invisível porque nenhuma linha de `pet_photos` aponta para ele.
+   */
+  listarIntencoesVencidas(agora: Instant, limite: number): Promise<readonly IntencaoVencida[]>;
+
+  /** Some com a linha depois que o objeto saiu. Nesta ordem, nunca na inversa. */
+  descartarIntencao(id: string): Promise<void>;
+}
+
+export interface IntencaoVencida {
+  readonly id: string;
+  readonly objectKey: ObjectKey;
 }
 
 export interface FotoParaProcessar {

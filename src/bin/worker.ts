@@ -27,8 +27,19 @@ import { criarMediaRepository } from '../modules/media/adapters/persistence/kyse
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { criarImageProcessor } from '../modules/media/adapters/external/sharp-image-processor.js';
 import { processarFoto, type CargaDoTrabalho } from '../modules/media/application/processar-foto.js';
+import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
 
 const INTERVALO_DO_EXPURGO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
+
+/**
+ * De quanto em quanto tempo os envios vencidos são varridos.
+ *
+ * Quinze minutos. A autorização vale 5, então isso dá no máximo 20 minutos entre
+ * o vencimento e a limpeza — folgado de sobra para lixo que ninguém vê, e raro o
+ * bastante para não competir com o processamento de foto, que é o trabalho que
+ * alguém está esperando.
+ */
+const INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS = 15 * 60 * 1000;
 
 /**
  * Quanto o worker espera entre duas passadas na fila.
@@ -99,6 +110,19 @@ export async function main(): Promise<void> {
     }
   };
 
+  const rodarVarredura = async (): Promise<void> => {
+    const r = await varrerEnviosVencidos({
+      repositorio: dependenciasDaFoto.repositorio,
+      armazenamento: dependenciasDaFoto.armazenamento,
+      clock: systemClock,
+    });
+    // Silêncio quando não há nada: uma linha de log a cada 15 minutos dizendo
+    // "zero" afoga o log em que alguém vai procurar um problema de verdade.
+    if (r.examinadas > 0) {
+      console.info(JSON.stringify({ evento: 'media.purge_expired', ...r }));
+    }
+  };
+
   const rodarExpurgo = async (): Promise<void> => {
     const resultado = await expurgarEventosVencidos(banco.db, systemClock.now());
     console.info(
@@ -119,6 +143,14 @@ export async function main(): Promise<void> {
   process.once('SIGINT', () => { encerrar('SIGINT'); });
 
   await rodarExpurgo();
+
+  const temporizadorDaVarredura = setInterval(() => {
+    if (vida.estaEncerrando) return;
+    rodarVarredura().catch((erro: unknown) => {
+      console.error(JSON.stringify({ evento: 'media.purge_failed', erro: String(erro) }));
+    });
+  }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
+  temporizadorDaVarredura.unref();
 
   const temporizadorDaFila = setInterval(() => {
     if (vida.estaEncerrando) return;
@@ -148,6 +180,7 @@ export async function main(): Promise<void> {
 
   clearInterval(temporizador);
   clearInterval(temporizadorDaFila);
+  clearInterval(temporizadorDaVarredura);
   await banco.close();
 }
 

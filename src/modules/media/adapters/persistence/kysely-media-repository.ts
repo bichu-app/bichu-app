@@ -19,6 +19,7 @@ import type { JobKind } from '../../../../shared/ports/index.js';
 import type {
   FotoDoPet,
   FotoParaProcessar,
+  IntencaoVencida,
   IntencaoDeEnvio,
   MediaRepository,
   NovaIntencao,
@@ -272,6 +273,25 @@ export function criarMediaRepository(db: Db): MediaRepository {
         .where('id', '=', foto)
         .where('status', '=', 'processing')
         .execute();
+    },
+
+    async listarIntencoesVencidas(agora: Instant, limite: number): Promise<readonly IntencaoVencida[]> {
+      const linhas = await db
+        .selectFrom('upload_intents')
+        .select(['id', 'object_key'])
+        .where('confirmed_at', 'is', null)
+        .where('expires_at', '<', new Date(Number(agora)))
+        // Uma intenção confirmada vira `pet_photos`; esta consulta só enxerga as
+        // que nunca viraram, e por isso não há risco de apagar o original de
+        // uma foto viva.
+        .orderBy('expires_at')
+        .limit(limite)
+        .execute();
+      return linhas.map((l) => ({ id: l.id, objectKey: l.object_key as ObjectKey }));
+    },
+
+    async descartarIntencao(id: string): Promise<void> {
+      await db.deleteFrom('upload_intents').where('id', '=', id).where('confirmed_at', 'is', null).execute();
     },
 
     async excluirFoto(pet: PetId, foto: string, dono: UserId, agora: Instant): Promise<boolean> {
