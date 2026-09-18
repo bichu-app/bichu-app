@@ -18,14 +18,23 @@ import { describe, it } from 'node:test';
 
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import { AppError } from '../../../shared/http/errors.js';
-import type { AbsoluteUrl, Instant, OpaqueToken, UserId } from '../../../shared/types/brands.js';
+import type {
+  AbsoluteUrl,
+  Instant,
+  OpaqueToken,
+  TokenHash,
+  UserId,
+} from '../../../shared/types/brands.js';
 import { dataFixa, INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import type {
   Conta,
+  CredencialLocal,
   IdentityRepository,
   MotivoDeRevogacao,
   NovoRefresh,
+  PropositoDoToken,
   RefreshArmazenado,
+  TokenConsumido,
 } from '../ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
 import type { ResultadoDaVerificacao, TokenSigner } from '../ports/token-signer.js';
@@ -67,13 +76,40 @@ function contaAtiva(sessionsInvalidBefore: Instant): Conta {
   };
 }
 
+/**
+ * O que a redefinição de senha encontra do outro lado da porta (BICHUS-126).
+ *
+ * `pendente` é o que a conferência sem consumo acha, e `consumido` é o que a
+ * transação devolve. São campos separados de propósito: entre os dois passos
+ * outra requisição pode ter gasto o mesmo link, e é esse caso que a
+ * implementação confere de novo em vez de confiar na primeira leitura.
+ */
+interface RedefinicaoPendente {
+  readonly pendente: TokenConsumido | undefined;
+  readonly consumido: TokenConsumido | undefined;
+  readonly credencial: CredencialLocal | undefined;
+}
+
 class RepositorioFalso implements IdentityRepository {
   public readonly revogacoes: { familyId: string; motivo: MotivoDeRevogacao; agora: Instant }[] = [];
   public readonly rotacoes: NovoRefresh[] = [];
 
+  /**
+   * BICHUS-126: esta porta era `naoUsado('invalidarSessoes')`, e um dublê que
+   * só grita quando é chamado não reprova quem DEIXA de chamar. Era por aqui
+   * que a redefinição de senha podia parar de empurrar `sessions_invalid_before`
+   * com os 375 casos verdes.
+   */
+  public readonly invalidacoesDeSessao: { userId: UserId; agora: Instant }[] = [];
+  public readonly invalidacoesDeTokens: { userId: UserId; agora: Instant }[] = [];
+  public readonly credenciaisRegravadas: { identityId: string; agora: Instant }[] = [];
+  /** Quantas vezes o link foi GASTO. O critério 12 vive nesta contagem. */
+  public readonly consumosDeToken: Instant[] = [];
+
   constructor(
     private readonly refresh: RefreshArmazenado | undefined,
     private readonly conta: Conta | undefined,
+    private readonly redefinicao: RedefinicaoPendente | undefined = undefined,
   ) {}
 
   buscarRefreshPorHash(): Promise<RefreshArmazenado | undefined> {
@@ -103,11 +139,15 @@ class RepositorioFalso implements IdentityRepository {
   buscarContaPorEmail(): Promise<Conta | undefined> {
     return naoUsado('buscarContaPorEmail');
   }
-  buscarCredencialLocalPorEmail(): never {
-    return naoUsado('buscarCredencialLocalPorEmail');
+  buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined> {
+    if (this.redefinicao === undefined) return naoUsado('buscarCredencialLocalPorEmail');
+    const dono = this.redefinicao.consumido?.enviadoPara;
+    return Promise.resolve(email === dono ? this.redefinicao.credencial : undefined);
   }
-  regravarCredencial(): Promise<void> {
-    return naoUsado('regravarCredencial');
+  regravarCredencial(identityId: string, _phc: string, agora: Instant): Promise<void> {
+    if (this.redefinicao === undefined) return naoUsado('regravarCredencial');
+    this.credenciaisRegravadas.push({ identityId, agora });
+    return Promise.resolve();
   }
   registrarLogin(): Promise<void> {
     return naoUsado('registrarLogin');
@@ -115,20 +155,30 @@ class RepositorioFalso implements IdentityRepository {
   gravarRefresh(): Promise<void> {
     return naoUsado('gravarRefresh');
   }
-  invalidarSessoes(): Promise<void> {
-    return naoUsado('invalidarSessoes');
+  invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
+    this.invalidacoesDeSessao.push({ userId, agora });
+    return Promise.resolve();
   }
   criarTokenDeVerificacao(): Promise<void> {
     return naoUsado('criarTokenDeVerificacao');
   }
-  consumirTokenDeVerificacao(): never {
-    return naoUsado('consumirTokenDeVerificacao');
+  consumirTokenDeVerificacao(
+    _hash: TokenHash,
+    _proposito: PropositoDoToken,
+    agora: Instant,
+  ): Promise<TokenConsumido | undefined> {
+    if (this.redefinicao === undefined) return naoUsado('consumirTokenDeVerificacao');
+    this.consumosDeToken.push(agora);
+    return Promise.resolve(this.redefinicao.consumido);
   }
-  conferirTokenDeVerificacao(): never {
-    return naoUsado('conferirTokenDeVerificacao');
+  conferirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
+    if (this.redefinicao === undefined) return naoUsado('conferirTokenDeVerificacao');
+    return Promise.resolve(this.redefinicao.pendente);
   }
-  invalidarTokensPendentes(): Promise<number> {
-    return naoUsado('invalidarTokensPendentes');
+  invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
+    if (this.redefinicao === undefined) return naoUsado('invalidarTokensPendentes');
+    this.invalidacoesDeTokens.push({ userId, agora });
+    return Promise.resolve(1);
   }
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
@@ -147,8 +197,9 @@ function montar(opcoes: {
   refresh?: RefreshArmazenado | undefined;
   conta?: Conta | undefined;
   verificacao?: ResultadoDaVerificacao | undefined;
+  redefinicao?: RedefinicaoPendente | undefined;
 }): Bancada {
-  const repo = new RepositorioFalso(opcoes.refresh, opcoes.conta);
+  const repo = new RepositorioFalso(opcoes.refresh, opcoes.conta, opcoes.redefinicao);
   const eventos: AuditEvent[] = [];
   const avisos: AvisoAoTitular[] = [];
   const mensagens: Mensagem[] = [];
@@ -368,5 +419,112 @@ void describe('autenticar(): a barreira do SEC-006 (BICHUS-15, critério 8)', ()
     const erro = await capturar(bancada.servico.autenticar('token-de-outro-emissor'));
     assert.equal(erro.status, 401);
     assert.equal(erro.problemType, 'unauthenticated');
+  });
+});
+
+void describe('confirmarRedefinicaoDeSenha(): o gatilho que sobrou do critério 7 (BICHUS-126)', () => {
+  // O e-mail da conta e a senha nova não podem se parecer: a política recusa
+  // senha derivada do endereço, e um caso que tropeçasse nisso provaria a
+  // política em vez do que está sendo testado aqui.
+  const EMAIL_DA_CONTA = 'tutora@exemplo.test';
+  const LINK_DO_EMAIL = 'token-que-chegou-no-e-mail';
+  const SENHA_NOVA = 'chuva-de-marco-no-quintal';
+
+  const DONO: TokenConsumido = { userId: VITIMA, enviadoPara: EMAIL_DA_CONTA };
+  const CREDENCIAL: CredencialLocal = {
+    identityId: 'identidade-local-1',
+    userId: VITIMA,
+    passwordPhc: '$pbkdf2-sha512$i=210000$c2FsLWFudGlnbw$aGFzaC1hbnRpZ28',
+    mustChange: false,
+  };
+
+  /** O caminho feliz inteiro: link vale, senha serve, credencial existe. */
+  const redefinicaoQueCompleta = () =>
+    montar({
+      conta: contaAtiva(0 as Instant),
+      redefinicao: { pendente: DONO, consumido: DONO, credencial: CREDENCIAL },
+    });
+
+  void it('empurra sessions_invalid_before pela porta, com o dono e o instante da troca', async () => {
+    const bancada = redefinicaoQueCompleta();
+    await bancada.servico.confirmarRedefinicaoDeSenha(LINK_DO_EMAIL, SENHA_NOVA, CONTEXTO);
+
+    // Este é o caso que BICHUS-126 pede, e ele afirma o EFEITO NA PORTA porque
+    // a função não devolve nada: um teste que só olhasse "não lançou" passaria
+    // com a chamada arrancada. Quem troca a senha faz isso com medo de que
+    // tomaram a conta; sem esta linha o token de acesso de quem tomou continua
+    // assinado e válido por até 15 minutos, e a troca de senha só impede o
+    // PRÓXIMO login em vez de derrubar o que já está dentro.
+    //
+    // O `userId` tem que ser o do token consumido, e não o do formulário: é o
+    // link do e-mail que diz de quem é a conta. O instante tem que ser o do
+    // relógio da operação, porque `sessions_invalid_before` é comparado com o
+    // `iat` do JWT — empurrar para um instante anterior à emissão do token do
+    // invasor deixaria o token dele passar pela barreira.
+    assert.deepEqual(bancada.repo.invalidacoesDeSessao, [{ userId: VITIMA, agora: AGORA }]);
+  });
+
+  void it('derruba junto os links de redefinição pendentes e regrava a credencial', async () => {
+    const bancada = redefinicaoQueCompleta();
+    await bancada.servico.confirmarRedefinicaoDeSenha(LINK_DO_EMAIL, SENHA_NOVA, CONTEXTO);
+
+    // Critério 9, e ele é irmão do de cima: derrubar as sessões e deixar de pé
+    // um link de redefinição emitido antes da troca é exatamente por onde quem
+    // tomou a conta volta, um minuto depois, com uma senha escolhida por ele.
+    assert.deepEqual(bancada.repo.invalidacoesDeTokens, [{ userId: VITIMA, agora: AGORA }]);
+    assert.deepEqual(bancada.repo.credenciaisRegravadas, [
+      { identityId: CREDENCIAL.identityId, agora: AGORA },
+    ]);
+  });
+
+  void it('deixa a troca na trilha, com a conta como ator e como recurso', async () => {
+    const bancada = redefinicaoQueCompleta();
+    await bancada.servico.confirmarRedefinicaoDeSenha(LINK_DO_EMAIL, SENHA_NOVA, CONTEXTO);
+
+    // Quem atende a tutora que liga dizendo "não fui eu" precisa achar a hora
+    // da troca e de qual IP ela saiu. Sem `resourceId`, a investigação vira
+    // cruzamento manual de horários.
+    const trocas = bancada.eventos.filter((e) => e.action === 'auth.password_reset_completed');
+    assert.equal(trocas.length, 1);
+    assert.equal(trocas[0]?.actorUserId, VITIMA);
+    assert.equal(trocas[0]?.resourceId, VITIMA);
+    assert.equal(trocas[0]?.correlationId, CONTEXTO.correlationId);
+  });
+
+  void it('senha fraca: não gasta o link, não troca nada e não mexe nas sessões', async () => {
+    // Primeiro contrapeso, e é o critério 12. Sem ele, "invalide sempre, logo
+    // na entrada" passaria nos casos acima. A consequência de gastar o token
+    // aqui é concreta: a pessoa digitou uma senha curta e perderia o único link
+    // que tem, tendo que pedir outro e-mail para tentar de novo.
+    const bancada = redefinicaoQueCompleta();
+    const erro = await capturar(
+      bancada.servico.confirmarRedefinicaoDeSenha(LINK_DO_EMAIL, 'curta', CONTEXTO),
+    );
+
+    assert.equal(erro.problemType, 'weak-password');
+    assert.deepEqual(bancada.repo.consumosDeToken, [], 'senha recusada NÃO gasta o link');
+    assert.deepEqual(bancada.repo.invalidacoesDeSessao, []);
+    assert.deepEqual(bancada.repo.credenciaisRegravadas, []);
+  });
+
+  void it('link já gasto entre a conferência e a transação: nada de sessão é tocado', async () => {
+    // Segundo contrapeso, e é o caso REAL da corrida: o cliente de e-mail
+    // pré-carrega o link e a pessoa clica em seguida. A conferência acha o
+    // token, a transação não acha mais. Derrubar as sessões de alguém a partir
+    // de um link que não foi consumido por esta requisição é dar a qualquer
+    // link velho o poder de deslogar a conta.
+    const bancada = montar({
+      conta: contaAtiva(0 as Instant),
+      redefinicao: { pendente: DONO, consumido: undefined, credencial: CREDENCIAL },
+    });
+
+    const erro = await capturar(
+      bancada.servico.confirmarRedefinicaoDeSenha(LINK_DO_EMAIL, SENHA_NOVA, CONTEXTO),
+    );
+
+    assert.equal(erro.problemType, 'verification-token-expired');
+    assert.deepEqual(bancada.repo.invalidacoesDeSessao, []);
+    assert.deepEqual(bancada.repo.credenciaisRegravadas, []);
+    assert.deepEqual(bancada.eventos, [], 'nada aconteceu, nada é registrado');
   });
 });
