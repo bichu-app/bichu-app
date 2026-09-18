@@ -1,0 +1,35 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO pelo portao de contrato publico
+# (BICHUS-55, criterio 3): operacao sem `security` declarado nao carrega.
+#
+# Nao corrija este arquivo.
+#
+# O defeito que ela guarda e o mais silencioso dos tres: a operacao abaixo NAO
+# esta errada de forma visivel -- ela so omite `security` e herda o padrao
+# global. Herdando, ela some da conferencia de rota publica, porque quem varre
+# procura `security: []` e nao acha. E a rota que precisava ser olhada
+# desaparecendo justamente da varredura que existia para olha-la.
+#
+# O portao precisa recusar o documento inteiro, com o nome da operacao na
+# mensagem, e nunca varrer o resto como se estivesse tudo bem.
+openapi: 3.1.0
+info:
+  title: isca de operacao sem security
+  version: '0'
+
+paths:
+  /isca/herda-o-padrao-global:
+    get:
+      operationId: iscaSemSecurity
+      summary: sem bloco `security`, some da conferencia sem produzir erro nenhum
+      responses:
+        '200':
+          description: ok
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer

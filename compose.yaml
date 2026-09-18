@@ -282,6 +282,13 @@ services:
       - "${BIND_HOST:-127.0.0.1}:${PORTA_MIDIA:-3001}:${PORTA_MIDIA:-3001}"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Os arquivos de associacao de deep link. O Caddyfile ja tinha os dois
+      # blocos apontando para `/srv/well-known` e este diretorio NAO ESTAVA
+      # MONTADO: a regra estava escrita e nao estava valendo, e o `file_server`
+      # respondia 404 com `Content-Type: application/json` -- um 404 que parece
+      # um arquivo, que e o jeito mais dificil de perceber que falta alguma
+      # coisa. Ver infra/caddy/well-known/LEIA-ME.md.
+      - ./infra/caddy/well-known:/srv/well-known:ro
       - caddy_dados:/data
       - caddy_config:/config
     environment:

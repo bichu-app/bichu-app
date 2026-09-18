@@ -1,0 +1,23 @@
+# Expectativa da verificacao externa da Swagger UI (ADR-0018, 2.1).
+# Lida por infra/verificacao/verificar_docs_fechada.py.
+#
+# Enquanto `esperado_a_partir_de` estiver no futuro, um ambiente sem `base_url`
+# real produz AVISO. A partir dessa data, reprova: nao ter o que consultar deixa
+# de ser "ainda nao" e passa a ser "o monitor nao esta monitorando".
+#
+# As datas seguem a mesma regra do ADR-0017: o dominio depende da decisao do
+# cliente sobre o subdominio do time web, prevista para 22/09. `preprod` precisa
+# existir antes de `prod` porque e ela que o outro time consome.
+#
+# `DOCS_USER` e `DOCS_PASSWORD` NAO moram aqui: sao credencial e vem do
+# ambiente do job (segredo do repositorio). Sem eles a assercao 3 do ADR-0018
+# nao roda, e isso e dito em voz alta -- e reprova a partir da data.
+
+ambientes:
+  - nome: preprod
+    base_url: "https://api.hml.dominio-a-definir.com.br"
+    esperado_a_partir_de: 2026-09-25
+
+  - nome: prod
+    base_url: "https://api.dominio-a-definir.com.br"
+    esperado_a_partir_de: 2026-09-30

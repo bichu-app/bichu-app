@@ -79,6 +79,23 @@
 		file_server
 	}
 
+	# JWKS e a descoberta OIDC. Servidos PELO SERVICO, e nao estaticos: as
+	# chaves rodam, e um arquivo estatico com chave rotacionada e uma chave
+	# que deixou de valer sem que nada acuse.
+	#
+	# Sem `rewrite`, e nao por descuido: o servico serve estes dois caminhos
+	# NA RAIZ, fora de `/v1` (o prefixo da API nao se aplica a caminho que o
+	# padrao fixa). Reescrever para `/v1/...` devolve 404, que foi o que a
+	# borda respondeu durante o dia inteiro de 17/09: o servico servia, a
+	# borda nao roteava, e o 404 chegava ao consumidor externo sem nenhuma
+	# linha de erro em lugar nenhum.
+	handle /.well-known/jwks.json {
+		reverse_proxy api:3000
+	}
+	handle /.well-known/openid-configuration {
+		reverse_proxy api:3000
+	}
+
 	# ------------------------------------------------------------------
 	# A tabela de roteamento do gateway (ADR-0016)
 	# ------------------------------------------------------------------

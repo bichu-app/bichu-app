@@ -1,0 +1,5 @@
+# Trechos que a saida do portao PRECISA conter ao reprovar esta isca.
+# Ver o cabecalho do arquivo `.esperado` ao lado para o motivo de conferir o
+# texto e nao so o codigo de saida.
+iscaSemSecurity
+especificação não carrega

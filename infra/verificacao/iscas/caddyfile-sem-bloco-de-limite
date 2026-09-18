@@ -1,0 +1,36 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO por
+# `infra/verificacao/verificar_borda.py`. Nao e a borda do produto.
+#
+# Nao corrija este arquivo.
+#
+# O defeito nao e um numero errado: e a AUSENCIA dos numeros. Uma borda sem
+# `max_size`, sem `max_header_size` e sem `timeouts` nao tem protecao grossa
+# nenhuma, e um comparador ingenuo -- que so reclamasse quando os dois lados
+# existem e diferem -- passaria verde justamente aqui, porque nao ha o que
+# comparar. Verificacao que nao consegue verificar precisa reprovar.
+{
+	admin off
+}
+
+{$PUBLIC_BASE_URL} {
+	handle /.well-known/assetlinks.json {
+		root * /srv/well-known
+		file_server
+	}
+	handle /.well-known/apple-app-site-association {
+		root * /srv/well-known
+		file_server
+	}
+	handle /.well-known/jwks.json {
+		reverse_proxy api:3000
+	}
+	handle /.well-known/openid-configuration {
+		reverse_proxy api:3000
+	}
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		respond "nao encontrado" 404
+	}
+}

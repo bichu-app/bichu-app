@@ -1,0 +1,15 @@
+# Trechos que a saida do portao PRECISA conter ao reprovar esta isca, um por
+# linha. Linha em branco e linha com `#` sao ignoradas.
+#
+# Conferir so o codigo de saida nao basta, e o motivo e concreto: hoje o portao
+# reprova QUALQUER documento, porque a assercao de cabecalhos do criterio 5
+# ficou sem alvo depois que o ADR-0017 tirou as paginas HTML deste servico. Um
+# passo de esteira que so perguntasse "reprovou?" ficaria verde com o portao
+# cego para vazamento de campo -- que e a unica coisa que ele existe para ver.
+iscaCoordenada
+lat
+lon
+owner_id
+iscaContato
+phone
+email

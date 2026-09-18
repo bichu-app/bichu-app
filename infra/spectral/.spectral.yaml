@@ -1,10 +1,35 @@
 # Regras da spec do Bichu. docs/07-devops.md secao 5.
+#
+# Rodado pelo job `contrato` do ci.yml, com VERSAO FIXA da ferramenta
+# (@stoplight/spectral-cli@6.15.0). Regra de lint testada numa versao e pinada
+# em outra ja foi declarada funcionando sendo cega, justamente no caso que ela
+# existia para pegar.
+#
+# ONDE ESTA O RESTO DO LINT DE LIMITE DE CHAMADA (BICHUS-25)
+# -----------------------------------------------------------------------
+# A metade que cobre SUPERFICIE PUBLICA e o vocabulario de `on_exceed` mora em
+# `infra/verificacao/verificar-limite-de-chamada.mjs`, e nao aqui. Dois motivos,
+# nesta ordem:
+#
+#   1. Ela precisa LER `x-rate-limit-vocabulary` da raiz do contrato, em vez de
+#      carregar uma lista propria. Um ruleset declarativo do Spectral nao le
+#      outro ponto do documento: isso exige funcao JS propria.
+#   2. Funcao propria do Spectral tem que ser `.js` (o carregador acrescenta a
+#      extensao sozinho), e `.js` fora de `src/` nao passa no ESLint deste
+#      repositorio, cuja configuracao nao e do DevOps. Com `.mjs` passa, e por
+#      isso o verificador e um script proprio.
+#
+# A regra abaixo continua aqui porque ela e declarativa e nao precisa de nada
+# fora da operacao que esta olhando.
 extends: ["spectral:oas"]
 
 rules:
   # Toda operacao que declara efeito colateral precisa declarar limite de
   # chamada. Operacao com efeito e sem teto e o vetor de abuso barato: emitir
   # tag em massa, disparar alerta em massa, enumerar codigo de QR.
+  #
+  # Ela NAO cobre a rota publica de LEITURA: leitura tem `x-effects: []` e passa
+  # batido por aqui. Esse buraco e o que o verificador de BICHUS-25 fecha.
   bichu-efeito-exige-limite:
     description: "operacao com `x-effects` nao vazio precisa de `x-rate-limit`"
     severity: error

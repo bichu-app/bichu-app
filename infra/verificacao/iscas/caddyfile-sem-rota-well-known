@@ -1,0 +1,48 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO por
+# `infra/verificacao/verificar_borda.py`. Nao e a borda do produto.
+#
+# Nao corrija este arquivo.
+#
+# Este e o defeito REAL de 17/09, guardado. Os numeros grossos estao todos
+# certos, o `/v1` roteia, a Swagger UI esta fechada -- e `/.well-known/jwks.json`
+# e `/.well-known/openid-configuration` nao tem bloco nenhum. Eles caem no
+# catch-all e respondem 404.
+#
+# O que torna este defeito caro e quem o sofre: ninguem que consiga reclamar. O
+# Android e a Apple buscam o arquivo de associacao sem navegador e sem log
+# nosso; uma biblioteca de validacao de token busca o JWKS do mesmo jeito. O
+# sintoma e "o deep link nao abre o app" e "o token nao valida", semanas depois,
+# sem nenhuma linha de erro que aponte para a borda.
+{
+	admin off
+
+	servers {
+		max_header_size 16KiB
+		timeouts {
+			read_body 30s
+			write 30s
+		}
+	}
+}
+
+{$PUBLIC_BASE_URL} {
+	request_body {
+		max_size 12MiB
+	}
+
+	handle /.well-known/assetlinks.json {
+		root * /srv/well-known
+		file_server
+	}
+	handle /.well-known/apple-app-site-association {
+		root * /srv/well-known
+		file_server
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		respond "nao encontrado" 404
+	}
+}

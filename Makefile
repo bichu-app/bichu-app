@@ -35,7 +35,7 @@ export BIND_HOST := 0.0.0.0
 endif
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup up down reset migrar migrar-baixo seed logs test test-int e2e verificar-portabilidade verificar-associacao backup restore pin-digests
+.PHONY: ajuda setup up down reset migrar migrar-baixo seed logs test test-int e2e verificar verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-docs-fechada backup restore pin-digests
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -91,6 +91,26 @@ verificar-portabilidade: ## portao de portabilidade: provedor, hostname e as dua
 
 verificar-associacao: ## roda o monitor dos arquivos de deep link (secao 16.12)
 	python3 infra/verificacao/verificar_associacao.py
+
+verificar-limite: ## BICHUS-25: lint de limite de chamada, com as duas iscas do QA
+	node infra/verificacao/verificar-limite-de-chamada.mjs api/openapi.yaml
+
+verificar-contrato-publico: ## BICHUS-55: portao de contrato publico, iscas primeiro
+	npm run build
+	sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
+
+verificar-borda: ## ADR-0016: x-edge-limits, prefixo e rota de /.well-known, por leitura
+	python3 infra/verificacao/verificar_borda.py
+
+verificar-borda-local: ## a borda de pe responde o que o contrato promete, pela porta publicada
+	python3 infra/verificacao/verificar_borda_local.py $${PUBLIC_BASE_URL:-http://localhost:3000} .
+
+verificar-docs-fechada: ## ADR-0018: a Swagger UI fechada, visto de fora (autoteste roda sem rede)
+	python3 infra/verificacao/verificar_docs_fechada.py
+
+# Tudo que nao precisa de nuvem nem de segredo, na ordem da esteira. E o que
+# `make up` seguido de `make verificar` responde antes de abrir um PR.
+verificar: verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
 	@mkdir -p backup

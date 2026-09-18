@@ -1,0 +1,65 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO pelo portao de contrato publico
+# (`src/tools/portao-contrato-publico.ts`, BICHUS-55). Ele nao e o contrato do
+# produto e nunca deve ser mesclado nele.
+#
+# Nao corrija este arquivo. Corrigi-lo cega o portao: a partir dai ele passa a
+# valer pela confianca do dia em que foi escrito, e ninguem sabe se ele ainda
+# enxerga. Mesma regra das iscas de `tests/portabilidade/` e de
+# `tests/lint-limite/`.
+#
+# O portao carrega uma isca INTERNA, que roda a cada execucao. Esta e a segunda
+# camada, e ela existe por um motivo que a interna nao cobre: a isca interna
+# mora no mesmo arquivo da regra, entao quem apagar a regra apaga a isca junto e
+# o portao continua verde. Esta aqui e independente, e a esteira exige a
+# reprovacao dela.
+#
+# O portao precisa acusar, nominalmente:
+#   1. `lat` e `lon` em resposta a chamador com `tagCode`
+#   2. `phone` e `email` em resposta a chamador com `security: []`
+#   3. `owner_id`, UUID interno, em resposta sem conta
+openapi: 3.1.0
+info:
+  title: isca do portao de contrato publico
+  version: '0'
+
+paths:
+  /isca/coordenada-para-quem-tem-so-a-plaquinha:
+    get:
+      operationId: iscaCoordenada
+      summary: quem lê o QR não pode receber onde o pet mora
+      security:
+        - tagCode: []
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  lat: { type: number }
+                  lon: { type: number }
+                  owner_id: { type: string, format: uuid }
+
+  /isca/contato-do-tutor-em-rota-aberta:
+    get:
+      operationId: iscaContato
+      summary: rota sem credencial nenhuma devolvendo telefone e e-mail do tutor
+      security: []
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  phone: { type: string }
+                  email: { type: string }
+
+components:
+  securitySchemes:
+    tagCode:
+      type: apiKey
+      in: header
+      name: X-Tag-Code

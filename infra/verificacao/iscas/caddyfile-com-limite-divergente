@@ -1,0 +1,48 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO por
+# `infra/verificacao/verificar_borda.py`. Nao e a borda do produto.
+#
+# Nao corrija este arquivo. Corrigi-lo cega o portao.
+#
+# O defeito: os quatro numeros grossos estao aqui, legiveis, plausiveis, e
+# DIFERENTES dos de `x-edge-limits` no contrato. E a divergencia que o ADR-0016
+# chama de silenciosa: ninguem revisa um arquivo de configuracao como contrato,
+# entao 8 MiB no lugar de 12 MiB passa num PR sem uma pergunta, e o upload que o
+# contrato promete aceitar comeca a ser recusado na borda.
+{
+	admin off
+
+	servers {
+		max_header_size 8KiB
+		timeouts {
+			read_body 10s
+			write 10s
+		}
+	}
+}
+
+{$PUBLIC_BASE_URL} {
+	request_body {
+		max_size 8MiB
+	}
+
+	handle /.well-known/assetlinks.json {
+		root * /srv/well-known
+		file_server
+	}
+	handle /.well-known/apple-app-site-association {
+		root * /srv/well-known
+		file_server
+	}
+	handle /.well-known/jwks.json {
+		reverse_proxy api:3000
+	}
+	handle /.well-known/openid-configuration {
+		reverse_proxy api:3000
+	}
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		respond "nao encontrado" 404
+	}
+}

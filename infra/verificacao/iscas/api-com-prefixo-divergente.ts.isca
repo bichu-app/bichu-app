@@ -1,0 +1,16 @@
+// ISCA. Este arquivo EXISTE PARA SER REPROVADO por
+// `infra/verificacao/verificar_borda.py`. Nao e codigo do produto, e a
+// extensao `.ts.isca` e deliberada: com `.ts` ele entraria no `tsc` e no
+// ESLint e reprovaria pelo motivo errado, e uma isca que reprova pelo motivo
+// errado nao prova nada sobre o portao.
+//
+// Nao corrija este arquivo.
+//
+// O defeito: o Fastify monta a API em `/api` e o contrato declara `servers` em
+// `/v1`. O servico sobe, responde, e a sonda de dentro do container passa --
+// enquanto TODA chamada vinda da borda cai em 404, porque a borda encaminha o
+// caminho do contrato sem reescrever (ADR-0016, item 1). O prefixo existe em
+// tres lugares e este e o unico teste que os compara.
+const PREFIXO_DA_API = '/api';
+
+export { PREFIXO_DA_API };

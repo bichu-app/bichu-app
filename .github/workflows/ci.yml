@@ -40,6 +40,20 @@ jobs:
       - name: portabilidade e hostname
         run: python3 infra/verificacao/verificar_portabilidade.py
 
+      # ADR-0016 (itens 4 e 6) e o defeito de 17/09. Tres conferencias num
+      # script so, todas por leitura de arquivo, todas com isca guardada em
+      # `infra/verificacao/iscas/`:
+      #   - `x-edge-limits` do contrato contra os numeros do Caddyfile;
+      #   - `PREFIXO_DA_API` do Fastify contra o caminho dos `servers`;
+      #   - caminho que o contrato declara fora de `/v1` (os quatro
+      #     `/.well-known/`) contra as rotas da borda.
+      #
+      # A terceira existe porque a segunda-feira 17/09 terminou com
+      # `/.well-known/jwks.json` respondendo 404 pela borda enquanto o servico
+      # o servia com 200 por dentro. Nada acusou: nao havia nada olhando.
+      - name: a borda concorda com o contrato
+        run: python3 infra/verificacao/verificar_borda.py
+
       - name: varredura de segredo
         uses: gitleaks/gitleaks-action@v2
         env:
@@ -105,8 +119,53 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: spectral
-        run: npx --yes @stoplight/spectral-cli lint api/openapi.yaml --ruleset infra/spectral/.spectral.yaml --fail-severity=error
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # VERSAO FIXA. `npx --yes @stoplight/spectral-cli` sem versao traz a
+      # ultima do dia, e a esteira muda de comportamento num dia em que
+      # ninguem tocou em nada. Uma regra de lint ja foi declarada funcionando
+      # sendo cega por ter sido provada numa versao e rodada em outra.
+      - name: spectral (6.15.0)
+        run: npx --yes @stoplight/spectral-cli@6.15.0 lint api/openapi.yaml --ruleset infra/spectral/.spectral.yaml --fail-severity=error
+
+      # BICHUS-25. O lint le `x-rate-limit-vocabulary` da raiz do contrato em
+      # vez de carregar uma lista propria -- lista no lint e a segunda fonte da
+      # verdade que faz o portao reprovar o documento que ele protege.
+      #
+      # As duas iscas do QA em `tests/lint-limite/` rodam DENTRO deste comando,
+      # antes do contrato: a primeira precisa reprovar nas quatro operacoes,
+      # nominalmente, e a segunda precisa passar. Se qualquer uma der o
+      # resultado errado, o script falha com "o lint parou de enxergar" e nem
+      # avalia o contrato.
+      - name: lint de limite de chamada, com as iscas
+        run: node infra/verificacao/verificar-limite-de-chamada.mjs api/openapi.yaml
+
+      - run: npm run build
+
+      # BICHUS-55. O portao existia, com teste ao lado, e NENHUM job o
+      # executava: nem script no package.json, nem passo aqui. Portao que
+      # ninguem roda e a versao pior de um job que fica verde sem verificar --
+      # ele nem chega a ocupar o lugar, so consta.
+      #
+      # O script roda as iscas ANTES do contrato, e nao se contenta com o
+      # codigo de saida: cada isca declara no `.esperado` ao lado o que precisa
+      # aparecer na saida. O motivo e concreto -- enquanto a assercao de
+      # cabecalhos do criterio 5 estiver sem alvo (o ADR-0017 tirou as paginas
+      # HTML deste servico), o portao reprova QUALQUER documento, e um passo
+      # que so perguntasse "reprovou?" ficaria verde com ele cego para
+      # vazamento de campo.
+      #
+      # ESTE PASSO REPROVA HOJE, e a reprovacao e o portao funcionando: e o
+      # achado de escopo do criterio 5, descrito em docs/07-devops.md 5.7.2.
+      # Ele nao se conserta em `.github/`, e nao se conserta com
+      # `continue-on-error`.
+      - name: portao de contrato publico, iscas primeiro
+        run: sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
 
       - name: compatibilidade contra main
         if: github.event_name == 'pull_request'
@@ -193,6 +252,15 @@ jobs:
           echo "$corpo" | grep -q '"status":"ok"'
           echo "$corpo" | grep -q '"database":"ok"'
 
+      # A borda responde o que o contrato promete, PELA PORTA PUBLICADA.
+      # `verificar_borda.py` le arquivo; este bate na borda de verdade, e e o
+      # unico que pega a regra escrita e nao valendo: em 17/09 o Caddyfile
+      # tinha os dois blocos de `/.well-known/` e `/srv/well-known` nao estava
+      # montado -- 404 com `Content-Type: application/json`, um 404 que parece
+      # um arquivo.
+      - name: os quatro /.well-known respondem pela borda, sem redirecionamento
+        run: python3 infra/verificacao/verificar_borda_local.py http://localhost:3000 .
+
       - name: api e worker rodam a MESMA imagem
         # A frase "uma imagem, dois pontos de entrada" (ADR-0001) so vale
         # enquanto for verdade no runtime. Aqui ela vira verificacao.
@@ -239,6 +307,25 @@ jobs:
           echo "::error::a imagem do alvo prod nao ficou saudavel"
           docker logs prova-prod
           exit 1
+
+      # Os 17 casos de `tests/integration/` provam BICHUS-19 e BICHUS-56 por
+      # consulta ao catalogo do Postgres -- inclusive o banco recusando de fato
+      # `UPDATE` e `DELETE` na trilha de auditoria. Eles existiam e rodavam
+      # SO quando alguem digitava o comando: `test:integration` nao aparecia em
+      # `.github/` em lugar nenhum.
+      #
+      # Aqui, e nao num job proprio, porque eles precisam de banco com as
+      # migracoes aplicadas e este job ja subiu exatamente isso, do zero, no
+      # passo acima. Job separado subiria a mesma pilha de novo para provar a
+      # mesma coisa.
+      #
+      # `docker compose run --rm api` e o mesmo caminho de `make test-int`: a
+      # imagem `dev` carrega `tests/`, os tsconfig e o node_modules completo.
+      # Rodar do runner exigiria publicar a porta do banco, que hoje nao e
+      # publicada -- e publicar porta para poder testar e trocar a topologia
+      # pelo teste.
+      - name: suite de integracao (17 casos, BICHUS-19 e BICHUS-56)
+        run: docker compose run --rm api npm run test:integration
 
       - name: diagnostico quando falha
         if: failure()

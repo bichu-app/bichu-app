@@ -1,0 +1,60 @@
+# Verificacao externa de que a Swagger UI esta fechada. ADR-0018, item 2.1.
+# docs/07-devops.md secao 16.13.
+#
+# Por que agendado e nao no deploy, no mesmo molde de `associacao.yml`: a quebra
+# que este monitor existe para pegar nao vem de commit. Ela vem de uma variavel
+# de ambiente trocada numa implantacao, ou de um ambiente recriado com a
+# configuracao de outro, num dia em que ninguem mexeu no codigo. Amarrar isto a
+# um deploy seria procurar a falha no unico lugar onde ela nao nasce.
+#
+# Por que de fora, sem acesso privilegiado: o ponto de vista que importa e o de
+# quem esta na internet. Uma conferencia feita de dentro da rede do ambiente
+# responderia sobre outra coisa.
+
+name: docs-fechada
+
+on:
+  schedule:
+    # De hora em hora. O agendador do GitHub atrasa sob carga e uma hora vira
+    # duas sem aviso; e tolerado aqui, porque a janela que importa e "antes de
+    # alguem encontrar", e nao "em segundos".
+    - cron: "17 * * * *"
+  workflow_dispatch:
+  push:
+    paths:
+      - "infra/verificacao/verificar_docs_fechada.py"
+      - "infra/verificacao/docs-fechada.yml"
+      - "infra/verificacao/iscas/docs-fechada-casos-que-precisam-reprovar.yml"
+      - ".github/workflows/docs-fechada.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-fechada
+  cancel-in-progress: false
+
+jobs:
+  verificar:
+    name: a Swagger UI responde 404 em producao e 401 em homologacao
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: verificar
+        env:
+          # Sem eles, a terceira assercao do ADR-0018 (com credencial responde
+          # 200) NAO RODA, e o script diz isso em voz alta -- e passa a reprovar
+          # a partir da data em `docs-fechada.yml`. Protecao que tambem barra
+          # quem deveria entrar seria descoberta pelo outro time, no pior
+          # momento, e nao por nos.
+          DOCS_USER: ${{ secrets.DOCS_USER }}
+          DOCS_PASSWORD: ${{ secrets.DOCS_PASSWORD }}
+        run: python3 infra/verificacao/verificar_docs_fechada.py
+
+      # Sem `continue-on-error` e sem `|| true` em lugar nenhum deste arquivo:
+      # o script reprova quando nao consegue verificar, e essa reprovacao
+      # precisa chegar ate aqui. Monitor que fica verde porque a consulta
+      # falhou e pior que monitor nenhum, porque ocupa o lugar de um que
+      # funcionaria.

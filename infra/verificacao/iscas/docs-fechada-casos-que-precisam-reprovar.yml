@@ -1,0 +1,48 @@
+# ISCA. Estes casos EXISTEM PARA SER REPROVADOS por
+# `infra/verificacao/verificar_docs_fechada.py` (ADR-0018, 2.1: "o caso que essa
+# verificacao precisa reprovar vai junto no repositorio, e a esteira exige a
+# reprovacao dele").
+#
+# Nao corrija este arquivo. Se um caso daqui passar, o monitor falha com "o
+# monitor parou de enxergar" e NAO consulta ambiente nenhum: a partir dali um
+# verde dele nao diria nada.
+#
+# Eles rodam contra as funcoes de assercao, sem tocar a rede. E de proposito:
+# prova negativa que depende de um ambiente de pe so roda quando o ambiente esta
+# de pe -- ou seja, nao roda.
+
+casos:
+  - ambiente: prod
+    credencial: nao
+    status: 200
+    porque: "a Swagger UI publicada em producao entrega o mapa da superficie inteira, com exemplos"
+
+  - ambiente: prod
+    credencial: nao
+    status: 401
+    porque: "401 em producao confirma a quem procura que a UI esta ali atras de uma senha, e o ADR-0018 quer que o caminho NAO EXISTA"
+
+  - ambiente: prod
+    credencial: nao
+    status: 403
+    porque: "mesmo motivo do 401: 403 tambem confirma a existencia do caminho"
+
+  - ambiente: preprod
+    credencial: nao
+    status: 200
+    porque: "200 sem credencial em homologacao significa que a exigencia de credencial caiu"
+
+  - ambiente: preprod
+    credencial: nao
+    status: 404
+    porque: "404 em homologacao significa que a UI sumiu, e o outro time volta a pedir uma copia do YAML, que envelhece na primeira mudanca do contrato"
+
+  - ambiente: preprod
+    credencial: sim
+    status: 401
+    porque: "protecao que barra quem deveria entrar seria descoberta pelo outro time, no pior momento, e nao por nos"
+
+  - ambiente: preprod
+    credencial: sim
+    status: 403
+    porque: "mesmo motivo do 401 com credencial"
