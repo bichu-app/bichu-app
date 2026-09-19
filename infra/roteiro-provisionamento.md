@@ -1,0 +1,592 @@
+> **Status:** pronto para aplicar
+> **Atualizado:** 2026-09-19
+> **Issue:** BICHUS-135 (destrava BICHUS-13, critérios 3, 6, 7, 8, 9, 10 e 12)
+> **Decisão que este roteiro executa:** `docs/07-devops.md` 16.1, 16.2 e 16.3 — ADR-0013.
+
+# Roteiro de provisionamento do host de homologação
+
+Este arquivo existe para que **o dia 1 seja aplicar e não decidir**. Tudo que é
+escolha já foi decidido em 16.3 e não se reabre aqui: `e2-small` no Compute
+Engine, região `southamerica-east1`, rodando o `compose.yaml` inteiro, sem
+nenhum serviço gerenciado no caminho da aplicação.
+
+Citar GCP e `southamerica-east1` aqui é o certo: este é o lugar do nome do
+provedor. O ADR-0007 proíbe nome de provedor em `src/`, `migrations/`,
+`app/lib/` e `web/`, e o portão `infra/verificacao/verificar_portabilidade.py`
+varre exatamente essas quatro raízes. `infra/` fica de fora de propósito — é
+para cá que o nome deve ser empurrado, e um portão que varresse configuração
+acusaria o próprio remédio.
+
+---
+
+## As três regras que governam o roteiro inteiro
+
+**1. Passo sem verificação não é passo, é desejo.** Cada item abaixo tem um
+comando que **prova** que ele funcionou. Um roteiro em que os passos só dizem o
+que digitar produz a pior forma de erro de infraestrutura: a que aparece três
+passos depois, com sintoma que não se parece com a causa.
+
+**2. O servidor sobe e é testado POR IP antes de o DNS apontar (16.1).** Não é
+preferência de estilo. O TLD `.app` inteiro está na lista de pré-carregamento
+de HSTS: **não existe `http://bichu.app` em hipótese nenhuma**, nem para teste.
+Errar a emissão do certificado com o domínio já apontado deixa o domínio sem
+responder a nada em navegador — erro de TLS, sem página, sem `http://` para
+diagnosticar, sem caminho de diagnóstico pelo próprio domínio. E há um segundo
+efeito, pior de desfazer: cada tentativa falha de emissão consome o limite do
+emissor por hora, e o castigo é ficar sem poder emitir justamente quando tudo
+já estiver pronto.
+
+**3. Todo comando `gcloud` leva `--project=bichu-app-508914` escrito (16.3).**
+Nesta máquina a configuração ativa aponta para `leega-digital-prd-linkedin-ce`,
+projeto de outra empresa com `prd` no nome. A assimetria é o que torna a regra
+inegociável: esquecer `--account` **falha** (a conta da Leega não tem acesso ao
+nosso projeto), esquecer `--project` **funciona, no lugar errado**. O erro que
+dá certo é o que machuca.
+
+```bash
+gcloud config configurations create bichu
+gcloud config set account leandro@tecla.consulting
+gcloud config set project bichu-app-508914
+gcloud config set compute/region southamerica-east1
+export CLOUDSDK_ACTIVE_CONFIG_NAME=bichu
+```
+
+**Verificação:** a configuração ativa é a nossa, e não a `default`.
+
+```bash
+gcloud config configurations list
+# bichu  True  leandro@tecla.consulting  bichu-app-508914
+```
+
+---
+
+## Passo 0 — Pré-requisitos que são do cliente, e sem os quais nada roda
+
+Não crio conta em nuvem nem provisiono recurso. Estes quatro são dele:
+
+| O que | Por que trava tudo |
+|---|---|
+| Projeto `bichu-app-508914` criado no GCP | não há onde criar a VM |
+| **Faturamento vinculado ao projeto** | sem faturamento a `e2-small` não sobe. E, pior que falhar: **o Maps não falha — ele renderiza o mapa com marca d'água de erro**, que passa por defeito visual e some no relatório de homologação |
+| `gcloud auth login` feito nesta máquina | o sintoma da ausência é erro de credencial, não de permissão, e leva meia hora para ser lido como o que é |
+| Nenhum serviço gerenciado habilitado | ressalva explícita do cliente: nada de Cloud SQL, GCS no caminho da aplicação, CDN ou Secret Manager |
+
+**Verificação, antes de digitar qualquer outra coisa:**
+
+```bash
+gcloud auth list --project=bichu-app-508914
+gcloud beta billing projects describe bichu-app-508914 \
+  --format='value(billingEnabled)'          # precisa imprimir: True
+```
+
+Se `billingEnabled` imprimir `False`, **pare aqui**. Seguir a partir daqui
+produz uma sequência de erros que não mencionam faturamento.
+
+---
+
+## Parte A — A máquina, sem DNS nenhum apontando para ela
+
+### Passo 1 — Alerta de orçamento, ANTES da primeira máquina (16.2)
+
+Este passo vem primeiro de propósito, e não por zelo burocrático. A decisão de
+usar GCP criou um risco que ela mesma trouxe: **um console cheio de botões que
+ligam serviço com um clique e aparecem na fatura no mês seguinte.** O crédito
+inicial esconde o custo unitário por meses, e quando a primeira fatura real
+chega o desenho já está tomado.
+
+Orçamento mensal de **US$ 50**, alertas em 50%, 90% e 100%, notificando um
+endereço real do Workspace. US$ 50 é cerca de 60% acima da estimativa de
+US$ 28 a 32: perto o bastante para acusar cedo, longe o bastante para não virar
+ruído que se aprende a ignorar.
+
+**O detalhe que faz o alerta funcionar de verdade: exclua os créditos do
+cálculo.** Orçamento que conta o custo líquido fica perto de zero enquanto
+houver crédito, dispara o alerta no dia em que o crédito acaba, e informa
+exatamente quando já não adianta.
+
+```bash
+CONTA=$(gcloud beta billing projects describe bichu-app-508914 \
+  --format='value(billingAccountName)')
+
+gcloud billing budgets create \
+  --billing-account="${CONTA##*/}" \
+  --display-name="bichu - teto mensal" \
+  --budget-amount=50USD \
+  --threshold-rule=percent=0.5 \
+  --threshold-rule=percent=0.9 \
+  --threshold-rule=percent=1.0 \
+  --filter-projects="projects/bichu-app-508914" \
+  --credit-types-treatment=exclude-all-credits
+```
+
+**Verificação:** o orçamento existe **e** está com os créditos excluídos. As
+duas coisas, porque um orçamento criado sem a exclusão parece idêntico na
+listagem resumida.
+
+```bash
+gcloud billing budgets list --billing-account="${CONTA##*/}" \
+  --format='table(displayName, amount.specifiedAmount.units, budgetFilter.creditTypesTreatment)'
+# bichu - teto mensal  50  EXCLUDE_ALL_CREDITS
+```
+
+Se a coluna vier vazia ou com `INCLUDE_ALL_CREDITS`, o alerta está ligado e
+**não vai avisar nada** enquanto houver crédito.
+
+---
+
+### Passo 2 — IP externo estático, reservado ANTES de criar a VM
+
+```bash
+gcloud compute addresses create bichu-ip \
+  --project=bichu-app-508914 --region=southamerica-east1
+```
+
+O IP efêmero, que é o padrão, **muda quando a máquina é parada e religada**.
+Num site comum isso custaria um susto. Aqui é pior e vale soletrar: o registro
+`A` passaria a apontar para o vazio e, como `.app` é HSTS pré-carregado, o
+navegador **recusa a conexão sem carregar nada** — sem página de erro nossa,
+sem `http://` para diagnosticar, e com o cliente vendo um site que sumiu.
+
+E há o motivo de ser *antes*: o IP é o valor que o cliente precisa receber de
+nós para publicar o DNS. Reservá-lo depois de a VM existir significa descobrir,
+no meio do dia 1, que o número que você mandou já não é o número que atende.
+
+**Verificação:** guarde o endereço; ele é usado em todos os passos seguintes.
+
+```bash
+IP=$(gcloud compute addresses describe bichu-ip \
+  --project=bichu-app-508914 --region=southamerica-east1 \
+  --format='value(address)')
+echo "$IP"    # precisa imprimir um IPv4, e o status precisa ser RESERVED
+gcloud compute addresses describe bichu-ip --project=bichu-app-508914 \
+  --region=southamerica-east1 --format='value(status)'
+```
+
+---
+
+### Passo 3 — Regra de firewall, porque o GCP nega tudo por padrão
+
+Num VPS comum este passo não existe, e é exatamente por isso que ele é pulado:
+ninguém o executa por hábito. A VM sobe sem nada aberto, e o sintoma de
+esquecer é tempo esgotado na conexão, que se parece com "a pilha não subiu".
+
+```bash
+gcloud compute firewall-rules create bichu-web \
+  --project=bichu-app-508914 \
+  --network=default --direction=INGRESS --action=ALLOW \
+  --rules=tcp:80,tcp:443 --source-ranges=0.0.0.0/0 \
+  --target-tags=bichu-web
+```
+
+A porta 80 fica aberta mesmo com `.app` sendo HTTPS obrigatório: ela serve o
+redirecionamento permanente e o desafio de emissão do certificado, e **nenhum
+dos dois é navegador** — o pré-carregamento de HSTS vale para navegador e só.
+
+**A 22 não entra nessa regra.** SSH por encaminhamento IAP dispensa porta
+aberta e registra quem entrou:
+
+```bash
+gcloud compute ssh bichu-hml --project=bichu-app-508914 \
+  --zone=southamerica-east1-a --tunnel-through-iap
+```
+
+**Verificação:** a regra existe, com as duas portas e a etiqueta certa.
+
+```bash
+gcloud compute firewall-rules describe bichu-web --project=bichu-app-508914 \
+  --format='value(allowed, targetTags, sourceRanges)'
+# tcp:80,tcp:443   bichu-web   0.0.0.0/0
+```
+
+---
+
+### Passo 4 — Conta de serviço com o mínimo, porque o padrão é generoso demais
+
+A VM, por omissão, recebe a conta de serviço padrão do Compute Engine, **que
+tem papel de Editor no projeto inteiro**. Uma aplicação exposta à internet
+rodando com permissão de editar o projeto é exagero que ninguém escolheria
+conscientemente: acontece por não escolher.
+
+```bash
+gcloud iam service-accounts create bichu-vm \
+  --project=bichu-app-508914 --display-name="VM Bichu"
+
+SA=bichu-vm@bichu-app-508914.iam.gserviceaccount.com
+
+gcloud projects add-iam-policy-binding bichu-app-508914 \
+  --member="serviceAccount:$SA" --role=roles/logging.logWriter
+gcloud projects add-iam-policy-binding bichu-app-508914 \
+  --member="serviceAccount:$SA" --role=roles/monitoring.metricWriter
+```
+
+O papel de escrita no bucket de backup vem no passo 11, **no bucket e não no
+projeto**, e é `objectCreator` e não `objectAdmin`: a VM escreve backup e **não
+consegue apagar backup**. Se a máquina for comprometida, o atacante não apaga o
+que restaria para restaurar.
+
+**Verificação:** a conta não tem papel amplo nenhum.
+
+```bash
+gcloud projects get-iam-policy bichu-app-508914 \
+  --flatten='bindings[].members' \
+  --filter="bindings.members:$SA" \
+  --format='value(bindings.role)'
+# esperado: logging.logWriter e monitoring.metricWriter. NADA de roles/editor
+```
+
+Se `roles/editor` aparecer nesta saída, a VM está rodando com permissão de
+editar o projeto e o passo falhou.
+
+---
+
+### Passo 5 — A `e2-small`
+
+```bash
+gcloud compute instances create bichu-hml \
+  --project=bichu-app-508914 \
+  --zone=southamerica-east1-a \
+  --machine-type=e2-small \
+  --address="$IP" \
+  --tags=bichu-web \
+  --service-account="$SA" \
+  --scopes=cloud-platform \
+  --boot-disk-size=30GB \
+  --boot-disk-type=pd-balanced \
+  --image-family=debian-12 --image-project=debian-cloud
+```
+
+**Verificação:** a máquina está de pé, com o IP reservado e a etiqueta.
+
+```bash
+gcloud compute instances describe bichu-hml --project=bichu-app-508914 \
+  --zone=southamerica-east1-a \
+  --format='value(status, machineType.basename(), tags.items, networkInterfaces[0].accessConfigs[0].natIP)'
+# RUNNING  e2-small  ['bichu-web']  <o mesmo $IP do passo 2>
+```
+
+Se o `natIP` for diferente de `$IP`, a VM subiu com IP efêmero: ela funciona
+hoje e **troca de endereço no primeiro religamento**, que é o modo de falha do
+passo 2 chegando pela porta dos fundos.
+
+---
+
+### Passo 6 — Docker na máquina
+
+```bash
+gcloud compute ssh bichu-hml --project=bichu-app-508914 \
+  --zone=southamerica-east1-a --tunnel-through-iap --command '
+    curl -fsSL https://get.docker.com | sudo sh &&
+    sudo usermod -aG docker "$USER"
+  '
+```
+
+**Verificação:** o compose v2 existe (o roteiro inteiro depende dele, e a
+versão antiga `docker-compose` não entende `mem_limit` junto de perfis):
+
+```bash
+gcloud compute ssh bichu-hml --project=bichu-app-508914 \
+  --zone=southamerica-east1-a --tunnel-through-iap \
+  --command 'docker compose version && docker run --rm hello-world >/dev/null && echo docker-ok'
+```
+
+---
+
+### Passo 7 — O artefato e o ambiente de homologação
+
+O `compose.yaml` é o artefato, e é o **mesmo** dos dois destinos. O que muda é
+o arquivo de ambiente — é isso que torna a portabilidade do critério 12 um fato
+verificável em vez de uma frase.
+
+```bash
+gcloud compute scp --project=bichu-app-508914 --zone=southamerica-east1-a \
+  --tunnel-through-iap --recurse \
+  ./compose.yaml ./Dockerfile ./Makefile ./migrations ./infra ./api \
+  bichu-hml:~/bichu/
+```
+
+No host, o `.env` de homologação a partir do `.env.example`, com as diferenças
+que importam:
+
+| Variável | Valor na VM | Por quê |
+|---|---|---|
+| `ENVIRONMENT` | `homolog` | `make reset` se recusa a rodar com este valor: apagar volume aqui apaga a massa de teste do QA |
+| `PUBLIC_BASE_URL` | `https://bichu.app` | o Caddy escuta na porta que está aqui; é também o que o QR codifica e o que o cartaz imprime |
+| `MEDIA_PUBLIC_BASE_URL` | `https://img.bichu.app` | o MinIO **assina a URL com o host pelo qual ele se conhece**. Divergir daqui quebra TODA URL assinada, com erro de assinatura que não diz que é de host |
+| `MAIL_TRANSPORT` | `postmark` | o Mailpit tem `profiles: [dev, qa]` e não sobe aqui. Ele nunca provou entregabilidade de qualquer forma |
+| `PORTA_APP` / `PORTA_MIDIA` | `80` e a porta da mídia | ver o passo 8 |
+
+**Verificação — e esta é a que já pegou defeito real:** a pilha falha
+ruidosamente quando falta variável, com o nome dela na mensagem (critérios 5 e
+11). Provoque a falha de propósito **antes** de subir para valer:
+
+```bash
+docker compose config -q && echo "compose válido"
+docker compose run --rm --no-deps -e TAG_CODE_KEY= api node dist/bin/api.js
+# precisa falhar assim, nomeando a variável, e não subir degradado:
+#   Error: Variável de ambiente obrigatória ausente: TAG_CODE_KEY.
+```
+
+---
+
+### Passo 8 — Subir a pilha e testar **POR IP**, com o certificado ainda desligado
+
+Esta é a linha que a ordem de 16.1 protege, e a razão de o roteiro existir.
+
+Na VM, com o `PUBLIC_BASE_URL` apontando para o **IP**, e não para o domínio:
+
+```bash
+PUBLIC_BASE_URL="http://$IP" MEDIA_PUBLIC_BASE_URL="http://$IP:3001" \
+  docker compose up -d --wait
+```
+
+Repare que `up` sem `--profile dev` já exclui o Mailpit, e que `depends_on` de
+`objeto_init` com `service_completed_successfully` é o que impede `--wait` de
+ler a saída esperada daquele contêiner como erro.
+
+**Verificação em três camadas, porque elas falham de jeitos diferentes:**
+
+```bash
+# 1. os limites de memória VALEM. `deploy.resources` fora do Swarm é ignorado
+#    em silêncio, e o arquivo parece correto do mesmo jeito.
+docker stats --no-stream --format 'table {{.Name}}\t{{.MemUsage}}'
+# a coluna de limite precisa mostrar 640MiB no db e 448MiB no worker,
+# e NÃO a memória total da máquina
+
+# 2. as migrações aplicadas batem com as que existem em disco
+docker compose logs migracao | tail -5
+esperado=$(find migrations -maxdepth 1 -name '*.sql' | wc -l | tr -d ' ')
+aplicadas=$(docker compose exec -T db psql -U bichu -d bichu -tAc 'select count(*) from pgmigrations')
+test "$esperado" = "$aplicadas" || echo "REPROVA: $esperado em disco, $aplicadas aplicadas"
+# a comparação é com a CONTAGEM DE ARQUIVOS: número fixo aqui vira mentira na
+# próxima migração, e ninguém percebe porque a conferência continua verde
+
+# 3. a borda responde o que o contrato promete, PELA PORTA PUBLICADA
+python3 infra/verificacao/verificar_borda_local.py "http://$IP" .
+```
+
+A terceira é a que pega a família de defeito que nenhuma leitura de arquivo
+pega: **a regra escrita e não valendo**. Foi exatamente o que houve em 17/09 —
+o `Caddyfile` tinha os dois blocos de associação e `/srv/well-known` não estava
+montado, e o `file_server` respondia 404 com `Content-Type: application/json`,
+um 404 que parece um arquivo. Sonda batida de dentro do contêiner não pega
+isso: por dentro o serviço servia `/.well-known/jwks.json` com 200 o tempo
+inteiro.
+
+**Não siga para a Parte B enquanto esta terceira verificação não imprimir
+`APROVADO`.** Os dois avisos sobre lista vazia são esperados até os insumos da
+Apple e do APK chegarem (ver adiante); qualquer `REPROVA` não é.
+
+---
+
+## Parte B — Só agora o DNS
+
+### Passo 9 — Devolver o IP ao cliente e substituir os registros
+
+O cliente publica. É dele o DNS, e é o único valor que ele precisa receber de
+nós.
+
+**Substituir, nunca acrescentar.** Os quatro `A` do Squarespace saem **no mesmo
+momento** em que o `A` do apex com o nosso IP entra. Acrescentar deixa a
+resolução sorteando entre a nossa origem e a página de estacionamento, e o
+sintoma é "às vezes funciona", que é o mais caro de diagnosticar.
+
+**Sem `www` e sem redirecionamento na raiz.** Um redirecionamento de raiz para
+`www`, mesmo perfeito para pessoas, **quebra o deep link nas duas plataformas**,
+e o sintoma é o link abrindo no navegador em vez do app, sem erro em lugar
+nenhum. E mantenha os registros do host em **modo somente DNS (nuvem cinza)**,
+não em modo proxy: o proxy põe um intermediário na frente dos arquivos de
+associação e a verificação do sistema operacional falha sem aparecer em log
+nenhum.
+
+**Verificação — antes de ligar o certificado:**
+
+```bash
+dig +short bichu.app        # = $IP, e SÓ ele. Nenhum 198.185.159.x sobrando
+dig +short api.bichu.app
+dig +short img.bichu.app
+dig +short AAAA bichu.app   # precisa vir VAZIO: AAAA órfão leva o cliente
+                            # IPv6 para lugar nenhum e o IPv4 nunca é tentado
+```
+
+---
+
+### Passo 10 — Ligar a emissão do certificado, e só então a primeira carga pelo domínio
+
+Com o nome resolvendo para nós, o `PUBLIC_BASE_URL` passa a ser o domínio e o
+Caddy emite sozinho.
+
+**Não crie o registro CAA antes deste passo.** O CAA é bom e deve existir —
+depois. Um valor errado impede a emissão e, com `.app` pré-carregado, o domínio
+fica completamente inacessível em navegador, sem página de erro nossa e sem
+`http://` para diagnosticar. É um tiro no pé com o pé preso.
+
+**Verificação:**
+
+```bash
+docker compose logs edge | grep -i 'certificate obtained'
+python3 infra/verificacao/verificar_borda_local.py https://bichu.app .
+curl -sI http://bichu.app/v1/health | head -1   # 301/308 para https, e não 200
+```
+
+---
+
+### Passo 11 — Os arquivos de associação pelo domínio, e o portão externo
+
+Só aqui, e nesta ordem: TLS conferido primeiro, associação depois.
+
+Preencha `ip_esperado` em `infra/verificacao/associacao.yml` com o IP do passo
+2. Enquanto ele está vazio a asserção mais direta contra proxy ligado por
+engano está desligada, e o próprio script diz isso em voz alta e reprova a
+partir de `esperado_a_partir_de`.
+
+**Não mexa nas datas de `esperado_a_partir_de` para calar o portão.** Ele
+reprova hoje porque a página de estacionamento do Squarespace responde **200
+com `text/html`** naqueles dois caminhos — o que é pior que 404, porque o
+sistema operacional recebe sucesso com o conteúdo errado. Essa reprovação é o
+portão funcionando. Empurrar a data para o futuro transformaria "estamos
+atrasados" em "está tudo bem", que é a única saída de que este repositório não
+abre mão.
+
+**Verificação:**
+
+```bash
+python3 infra/verificacao/verificar_associacao.py     # precisa imprimir APROVADO
+curl -sI https://bichu.app/.well-known/apple-app-site-association \
+  | grep -i 'content-type\|location\|^HTTP'
+# HTTP/2 200, content-type: application/json, e NENHUM location
+```
+
+---
+
+## Parte C — O que precisa existir antes de a máquina receber o primeiro dado
+
+### Passo 12 — `pg_dump` diário guardado FORA do host (critério 10 de BICHUS-13)
+
+**Numa VM, backup é responsabilidade nossa e de mais ninguém.** Não há serviço
+gerenciado, então não há nada acontecendo sozinho. Duas camadas, porque falham
+de jeitos diferentes:
+
+| Camada | O quê | Frequência | Recupera |
+|---|---|---|---|
+| Snapshot do disco | política de recurso do Compute Engine | diário, retenção de 7 dias | a máquina inteira, inclusive os objetos do MinIO e a configuração |
+| `pg_dump` para bucket | tarefa diária na VM | diário, retenção de 14 dias | só o banco, mas é restaurável em outro lugar e legível |
+
+O snapshot sozinho não basta: recupera a máquina, não o dado, e restaurar um
+snapshot para conferir uma tabela é caro demais para ser feito de verdade. O
+`pg_dump` sozinho também não: não traz os objetos do MinIO.
+
+**Sobre o bucket, e é honesto dizer em voz alta:** guardar o dump num bucket é
+a única forma de ele estar *fora do host*, que é o que o critério 10 pede —
+dump no disco da própria VM morre junto com a VM, e aí nunca houve backup. Isso
+**não** reabre a ressalva do cliente contra serviço gerenciado: a aplicação
+nunca lê desse bucket, nenhuma porta do domínio o conhece, e tirá-lo do desenho
+não muda uma linha de `src/`. É destino de arquivo, não dependência de produto;
+o dump é um `.sql.gz` que restaura em qualquer Postgres, em qualquer lugar.
+
+```bash
+gcloud storage buckets create gs://bichu-backup-hml \
+  --project=bichu-app-508914 --location=southamerica-east1 \
+  --uniform-bucket-level-access
+
+# escreve e NÃO apaga, e o escopo é o bucket e não o projeto
+gcloud storage buckets add-iam-policy-binding gs://bichu-backup-hml \
+  --project=bichu-app-508914 \
+  --member="serviceAccount:$SA" --role=roles/storage.objectCreator
+
+# quem envelhece o que envelheceu é a regra de ciclo de vida, do lado de lá,
+# porque a VM não tem permissão de apagar — e essa é a ideia
+printf '{"rule":[{"action":{"type":"Delete"},"condition":{"age":14}}]}' > ciclo.json
+gcloud storage buckets update gs://bichu-backup-hml \
+  --project=bichu-app-508914 --lifecycle-file=ciclo.json
+
+# snapshot diário do disco
+gcloud compute resource-policies create snapshot-schedule bichu-snap-diario \
+  --project=bichu-app-508914 --region=southamerica-east1 \
+  --max-retention-days=7 --daily-schedule --start-time=06:00
+gcloud compute disks add-resource-policies bichu-hml \
+  --project=bichu-app-508914 --zone=southamerica-east1-a \
+  --resource-policies=bichu-snap-diario
+```
+
+A tarefa diária na VM, às 05:00, reusando o alvo que já existe no `Makefile`:
+
+```bash
+sudo tee /etc/cron.d/bichu-backup >/dev/null <<'CRON'
+0 5 * * * bichu cd /home/bichu/bichu && \
+  docker compose exec -T db pg_dump -U bichu bichu | gzip \
+  | gcloud storage cp - "gs://bichu-backup-hml/bichu-$(date +\%Y\%m\%d).sql.gz"
+CRON
+```
+
+**Verificação — e é a parte que costuma faltar: quem confere que o backup
+existe.** Backup que ninguém confere é o jeito mais comum de descobrir que não
+havia backup, e a descoberta acontece no pior dia possível. A conferência roda
+**na esteira e não na VM**, porque uma VM morta não reclama de si mesma:
+
+```bash
+# 1. o dump mais recente tem menos de 26 horas. 26 e não 24, para tolerar
+#    variação de horário sem tolerar um dia inteiro perdido
+gcloud storage ls -l gs://bichu-backup-hml/ --project=bichu-app-508914 | tail -3
+
+# 2. e tem tamanho plausível: dump vazio tem SUCESSO e ocupa 20 bytes
+gcloud storage ls -l gs://bichu-backup-hml/ --project=bichu-app-508914 \
+  | awk '$1 < 10000 {print "REPROVA: dump suspeito de vazio: " $0}'
+
+# 3. o snapshot do disco também existe
+gcloud compute snapshots list --project=bichu-app-508914 \
+  --filter='sourceDisk~bichu-hml' --format='table(name, creationTimestamp)'
+```
+
+**E uma restauração exercitada de verdade, uma vez, antes de 30/09.** Backup
+nunca restaurado não é backup:
+
+```bash
+make restore   # contra uma cópia, e conferindo a contagem de uma tabela depois
+```
+
+---
+
+### Passo 13 — Está escrito que isto é homologação, e não produção
+
+Critério 10 de BICHUS-13, e é texto e não comando porque o que ele protege é o
+que as pessoas acreditam sobre a máquina:
+
+> Esta máquina é **ambiente de homologação e não produção**. Ela **não deve
+> receber dado de usuário real**. Ela tem `pg_dump` diário guardado fora do
+> host (passo 12) e snapshot diário do disco.
+
+**Verificação:** a própria pilha diz isso, para quem chegar pela porta em vez
+de pelo documento.
+
+```bash
+docker compose exec -T api printenv ENVIRONMENT      # homolog
+make reset                                           # precisa RECUSAR, e não apagar
+# "recusado: reset no perfil de homologacao apaga a massa de teste"
+```
+
+A segunda linha é a verificação que importa: a recusa do `make reset` é a única
+proteção automática entre um comando de hábito e a massa de teste do QA. Se ela
+não recusar, o `ENVIRONMENT` do host ficou em `dev` e o passo 7 falhou em
+silêncio.
+
+---
+
+## O que este roteiro NÃO resolve, e continua dependendo exclusivamente do cliente
+
+| Pendência | Sem ela | Prazo |
+|---|---|---|
+| Conta e projeto no GCP, faturamento vinculado, `gcloud auth login` | nada da Parte A roda | passo 0 |
+| Publicar os registros de DNS | nada da Parte B roda | dia 1 |
+| **Impressão digital SHA-256 da chave de assinatura do APK** | `assetlinks.json` sobe com a lista vazia e o deep link **não abre o app** no Android | 22/09, dispensa `apk-assinado` |
+| **Team ID da conta Apple Developer** | `apple-app-site-association` sobe com `details` vazio e o Universal Link **não abre o app** no iOS | 22/09, dispensa `ios` |
+| Chave do Postmark, seletor e chave DKIM | o e-mail sai sem assinatura válida de um domínio com reputação zero, e a recuperação leva semanas | antes do primeiro envio |
+| BICHUS-112: máquina sempre ligada ou janela anunciada | decide se a homologação tem horário | 24/09 |
+
+As duas do meio são as que mais enganam, e por isso estão detalhadas em
+`infra/caddy/well-known/LEIA-ME.md`: os arquivos existem, respondem **200 com
+JSON válido**, e as listas estão **vazias de propósito**. Lista vazia é recusa
+honesta — o sistema operacional não encontra correspondência e não abre o app,
+que é exatamente o que acontece na realidade. Preencher com valor de exemplo
+seria pior que o 404 que havia antes: qualquer conferência superficial ficaria
+verde e a falha só apareceria no aparelho de um usuário, **depois de a plaquinha
+ter sido impressa com o domínio**.
