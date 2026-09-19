@@ -276,6 +276,19 @@ jobs:
           # Valor descartavel, jamais usado: nenhum segredo e buscado em `dev`.
           sed -i 's|^SECRET_STORE_PROJECT=.*|SECRET_STORE_PROJECT=projeto-de-ci-descartavel|' .env
           grep -q '^SECRET_STORE_PROJECT=' .env || echo 'SECRET_STORE_PROJECT=projeto-de-ci-descartavel' >> .env
+          # `FCM_PROJECT` so e EXIGIDA com `PUSH_TRANSPORT=fcm` (ADR-0008). Este
+          # job roda em `log`, que e o padrao do .env.example, e nunca a le --
+          # com `log` nada sai do processo. Ela esta aqui pelo MESMO motivo de
+          # `SECRET_STORE_PROJECT` logo acima: a guarda seguinte conta
+          # `requireEnv('NOME')` por TEXTO e nao conhece condicional, e isso e
+          # de proposito. Sem esta linha a guarda reprova o job citando
+          # FCM_PROJECT, que foi como ela reprovou hoje.
+          #
+          # Valor descartavel e que NAO PARECE um projeto de verdade: se um dia
+          # este job passar a rodar com `fcm`, o envio precisa falhar dizendo
+          # que o projeto nao existe -- e nao acertar um projeto de alguem.
+          sed -i 's|^FCM_PROJECT=.*|FCM_PROJECT=projeto-de-ci-que-nao-existe|' .env
+          grep -q '^FCM_PROJECT=' .env || echo 'FCM_PROJECT=projeto-de-ci-que-nao-existe' >> .env
           # Chaves geradas NO JOB e jogadas fora com o runner: chave de
           # assinatura de verdade nunca entra em repositorio nem em log.
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ativa.pem 2>/dev/null

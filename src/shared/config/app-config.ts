@@ -105,6 +105,33 @@ export interface AppConfig {
   readonly version: string;
   readonly objectStorage: ObjectStorageConfig;
   readonly mail: MailConfig;
+  readonly push: PushConfig;
+}
+
+/**
+ * Push (ADR-0008).
+ *
+ * Mesma convenção de `MailConfig`: o comportamento é escolhido por ambiente e
+ * não por `if (isProduction)` espalhado pelo código. `log` existe para o
+ * desenvolvimento e para a esteira — ele **prova o disparo**, e o ADR-0008 é
+ * explícito sobre o que ele não prova: que o telefone vibra.
+ *
+ * Quem lê isto para escolher o adaptador é `criarPushSender`, em
+ * `modules/notifications/adapters/external/`. A escolha mora lá pelo mesmo
+ * motivo de `criarSecretProvider`: o `import` do arquivo do FCM carrega o nome
+ * do provedor no caminho, e nome de provedor não entra em `config/`.
+ */
+export interface PushConfig {
+  readonly transport: 'fcm' | 'log';
+  /**
+   * O projeto para onde o envio vai: o endereço do HTTP v1 é
+   * `/v1/projects/{projeto}/messages:send`.
+   *
+   * `undefined` com `log`, e é assim que se lê, do próprio tipo, que **ninguém
+   * envia nada** — e não um projeto vazio que viraria um endereço de envio sem
+   * projeto no meio. Com `fcm` ele é obrigatório; ver `exigeProjetoDoFcm`.
+   */
+  readonly projeto: string | undefined;
 }
 
 /**
@@ -387,6 +414,81 @@ function dominioRegistravel(host: string): string {
   return rotulos.length <= 2 ? host : rotulos.slice(-2).join('.');
 }
 
+/**
+ * Onde o projeto do FCM deixa de ser conveniência e passa a ser obrigação.
+ *
+ * O critério é **o transporte, e não o ambiente**, e a diferença é deliberada.
+ * `exigeChaveDeRotacao` pergunta "estou num ambiente de gente de verdade?"
+ * porque quem consome o JWKS é terceiro e cacheia — a obrigação nasce do
+ * ambiente. Aqui a obrigação nasce de outro lugar: quem **usa** o projeto é o
+ * adaptador do FCM, e ele só existe quando `PUSH_TRANSPORT=fcm`. Com `log`
+ * ninguém envia nada, e exigir o projeto para rodar `npm test` ou subir o
+ * compose seria atrito novo sem risco atrás dele — a mesma frase que o
+ * `.env.example` já usa para `SECRET_STORE_PROJECT`.
+ *
+ * E há uma razão concreta para NÃO reusar `ehAmbienteHospedado` aqui, apesar de
+ * a forma ser a mesma: **homologação roda em `log` hoje**, de propósito
+ * (docs/07-devops.md 4.1 — o projeto Firebase com o app registrado é pendência
+ * do cliente, ADR-0008). Amarrar a exigência ao ambiente recusaria subir
+ * justamente o ambiente que a decisão do cliente ainda não desbloqueou, e a
+ * saída de quem estivesse às onze da noite seria inventar um valor — que é o
+ * pior desfecho possível, porque projeto errado não dá erro de configuração:
+ * dá `SENDER_ID_MISMATCH` por aparelho, que parece token inválido.
+ *
+ * Função nomeada, e não um `if` solto, pelo mesmo motivo do original: a
+ * pergunta tem resposta única e o raciocínio precisa morar ao lado dela.
+ */
+function exigeProjetoDoFcm(transporte: 'fcm' | 'log'): boolean {
+  return transporte === 'fcm';
+}
+
+/**
+ * O transporte do push, e o projeto quando ele for usado.
+ *
+ * **O padrão é `log`, e não `fcm`.** A assimetria é a mesma da porteira de
+ * `conteudo-do-push.ts`: push que não sai é barulhento (o log registra, o teste
+ * reprova, a fila acusa) e push que sai sem ninguém ter pedido é irreversível —
+ * o telefone de um tutor toca uma vez só, e a bandeja de notificação não tem
+ * `UPDATE`. Um padrão que enviasse de verdade transformaria "esqueci de definir
+ * a variável" em alerta real na tela de bloqueio de alguém.
+ *
+ * O valor desconhecido **derruba a subida citando o que veio e os aceitos**, e
+ * isso não é preciosismo: é literalmente a família de `MAIL_TRANSPORT`, que até
+ * 19/09 era `=== 'log' ? 'log' : 'smtp'` e mandava e-mail de verdade para
+ * QUALQUER valor fora dos dois. Escrito frouxo aqui, `PUSH_TRANSPORT=logs`,
+ * `PUSH_TRANSPORT=local` ou um valor herdado de outro ambiente viraria envio
+ * real em silêncio — com a agravante de que push não tem receptor local
+ * nenhum para segurar o estrago, como o mailpit segurou aquele.
+ */
+function carregarPush(): PushConfig {
+  const transporteBruto = optionalEnv('PUSH_TRANSPORT') ?? 'log';
+  if (transporteBruto !== 'fcm' && transporteBruto !== 'log') {
+    throw new Error(
+      `PUSH_TRANSPORT="${transporteBruto}" não é um transporte conhecido. ` +
+        'Os aceitos são "log" (escreve o payload e o destinatário no log, e ' +
+        'nada sai deste processo) e "fcm" (envia de verdade, pelo FCM HTTP ' +
+        'v1). Valor desconhecido não vira `fcm` por omissão e não vira `log` ' +
+        'por otimismo: o primeiro toca o telefone de um tutor sem ninguém ter ' +
+        'pedido, e o segundo desliga o alerta de pet perdido em silêncio. ' +
+        'Foi assim que MAIL_TRANSPORT mandava e-mail de verdade até 19/09.',
+    );
+  }
+
+  // `requireEnv` com o nome LITERAL, e dentro do ramo — igual ao
+  // `requireEnv('SECRET_STORE_PROJECT')` de `criarSecretProvider`. A guarda da
+  // esteira lê `requireEnv('X')` por TEXTO e não conhece condicional, então
+  // `FCM_PROJECT` precisa de um valor descartável no passo "ambiente de teste"
+  // do workflow mesmo sem nunca ser lida em `dev`. Isso é o ponto cego
+  // conhecido da guarda, e ele é de propósito: ensiná-la a entender `if` faria
+  // dela uma análise de fluxo, e análise de fluxo incompleta aprova o que não
+  // entende.
+  const projeto = exigeProjetoDoFcm(transporteBruto)
+    ? requireEnv('FCM_PROJECT')
+    : optionalEnv('FCM_PROJECT');
+
+  return { transport: transporteBruto, projeto };
+}
+
 export function loadAppConfig(): AppConfig {
   const environment = optionalEnv('ENVIRONMENT') ?? 'dev';
   const publicBaseUrl = urlAbsoluta(requireEnv('PUBLIC_BASE_URL'));
@@ -569,6 +671,7 @@ export function loadAppConfig(): AppConfig {
     tagCodeKey,
     objectStorage,
     mail,
+    push: carregarPush(),
     openapiSpecPath: optionalEnv('OPENAPI_SPEC_PATH') ?? 'api/openapi.yaml',
     version: optionalEnv('APP_VERSION') ?? '0.1.0',
   };

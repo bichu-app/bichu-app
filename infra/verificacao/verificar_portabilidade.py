@@ -47,6 +47,20 @@ REGRAS_PROVEDOR = [
     # `.com` qualquer, que e a familia errada de achado e a mensagem errada para
     # quem le. Ver a isca em tests/portabilidade/deve-reprovar-provedor.ts.
     (re.compile(r"\bsecretmanager\.googleapis\.com\b"), "dominio de provedor (Secret Manager)"),
+    # O FCM e o transporte do push (ADR-0008) e ele estava sem regra propria.
+    # Duas consequencias, e nenhuma das duas e "o portao pegava do mesmo jeito":
+    #   - escrito COM esquema, `https://fcm.googleapis.com/...` caia na regra
+    #     generica de hostname, que e a familia errada de achado e a mensagem
+    #     errada para quem le -- ela manda empurrar o host para configuracao, e
+    #     o que este caso pede e o contrario: confinar o PROVEDOR no adaptador,
+    #     porque o endereco do FCM nao e configuravel, e o transporte;
+    #   - escrito SEM esquema (`fcm.googleapis.com`, num comentario, num
+    #     `.env` de exemplo copiado para dentro de `src/`, numa constante
+    #     montada por concatenacao) nao casava com nada. Ninguem via.
+    # A excecao vale para `src/*/adapters/external/`, como a do Secret Manager:
+    # e la que `fcm-http-v1.ts` mora, e e o unico arquivo do sistema que pode
+    # saber que o FCM existe.
+    (re.compile(r"\bfcm\.googleapis\.com\b"), "dominio de provedor (FCM)"),
     (re.compile(r"\b[\w.-]*\.blob\.core\.windows\.net\b"), "dominio de provedor (Azure)"),
     (re.compile(r"\b[\w.-]*\.r2\.cloudflarestorage\.com\b"), "dominio de provedor (R2)"),
     (re.compile(r"[\"'](?:us|eu|ap|sa)-(?:east|west|north|south|central|northeast|southeast)-\d[\"']"),

@@ -77,6 +77,13 @@ function ambienteCompleto(): Record<string, string> {
     // da variavel, que e o comportamento pedido pelos criterios 5 e 11.
     MAIL_WEBHOOK_SECRET: 'segredo-de-teste-com-32-bytes!!!',
     MAIL_TRANSPORT: 'smtp',
+    // O padrão local do push, declarado aqui em vez de herdado do processo: um
+    // `PUSH_TRANSPORT` de fora entrando na bancada faria os casos abaixo medir
+    // o ambiente de quem roda o teste, e não o código.
+    PUSH_TRANSPORT: 'log',
+    // Preenchido na bancada para que os casos possam APAGÁ-LO de propósito. Ele
+    // não é lido com `log`, e é isso que o último caso do bloco de push afirma.
+    FCM_PROJECT: 'projeto-de-teste',
   };
 }
 
@@ -202,6 +209,103 @@ void describe('MAIL_TRANSPORT: valor desconhecido nao vira envio real', () => {
     }
     aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: undefined });
     assert.equal(loadAppConfig().mail.transport, 'smtp');
+  });
+});
+
+/**
+ * `PUSH_TRANSPORT` e `FCM_PROJECT` (ADR-0008).
+ *
+ * Mesma família do bloco acima, e é por isso que ele vem logo depois: até
+ * 19/09 `MAIL_TRANSPORT` aceitava qualquer valor e mandava e-mail de verdade em
+ * silêncio. Push é pior nesse ponto e melhor em nenhum: não existe mailpit para
+ * segurar o estrago, o aviso aparece na tela de bloqueio de um tutor, e ele não
+ * se desfaz.
+ *
+ * Cada caso é uma isca. Um teste que só conferisse `config.push.transport ===
+ * 'log'` passaria com a recusa inteira arrancada, porque o valor estaria lá de
+ * qualquer jeito. O que prova a guarda é a SUBIDA QUE MORRE — citando o valor
+ * visto e os aceitos, que é o que o operador lê às onze da noite.
+ */
+void describe('PUSH_TRANSPORT: valor desconhecido não sobe, e `log` não vira envio real', () => {
+  void it('recusa na subida, citando o valor visto E os dois aceitos', () => {
+    aplicar({ ...ambienteCompleto(), PUSH_TRANSPORT: 'firebase' });
+    assert.throws(
+      () => loadAppConfig(),
+      (erro: unknown) =>
+        erro instanceof Error &&
+        erro.message.includes('firebase') &&
+        erro.message.includes('PUSH_TRANSPORT') &&
+        erro.message.includes('"log"') &&
+        erro.message.includes('"fcm"'),
+      'REPROVA: valor desconhecido passou. Passar aqui é o defeito de MAIL_TRANSPORT ' +
+        'repetido num canal que toca o telefone de um tutor e não desfaz.',
+    );
+  });
+
+  void it('um erro de digitação no valor certo também morre, e não vira o outro', () => {
+    // `logs`, `Log`, `fcm ` com espaço: é assim que a forma frouxa
+    // (`=== 'log' ? 'log' : 'fcm'`) manda push de verdade sem ninguém decidir.
+    for (const valor of ['logs', 'Log', 'FCM', 'log ']) {
+      aplicar({ ...ambienteCompleto(), PUSH_TRANSPORT: valor });
+      assert.throws(() => loadAppConfig(), /PUSH_TRANSPORT/, `"${valor}" subiu`);
+    }
+  });
+
+  void it('`fcm` sem FCM_PROJECT: a subida morre citando FCM_PROJECT', () => {
+    // Sem o projeto não existe endereço de envio: o HTTP v1 é
+    // `/v1/projects/{projeto}/messages:send`. Morrer aqui, com o nome da
+    // variável, é melhor do que morrer por aparelho com um erro do transporte
+    // que não fala de variável de ambiente nenhuma.
+    aplicar({ ...ambienteCompleto(), PUSH_TRANSPORT: 'fcm', FCM_PROJECT: undefined });
+    assert.throws(loadAppConfig, /FCM_PROJECT/);
+  });
+
+  void it('`fcm` com o projeto sobe, e o projeto chega à configuração', () => {
+    aplicar({ ...ambienteCompleto(), PUSH_TRANSPORT: 'fcm' });
+    const config = loadAppConfig();
+    assert.equal(config.push.transport, 'fcm');
+    assert.equal(config.push.projeto, 'projeto-de-teste');
+  });
+
+  // Contrapesos. Sem eles, uma implementação que recusasse TUDO passaria nos
+  // casos acima — e recusar tudo também derruba a subida.
+  void it('`log` e `fcm` sobem, e ausente vale `log`', () => {
+    aplicar({ ...ambienteCompleto(), PUSH_TRANSPORT: 'log' });
+    assert.equal(loadAppConfig().push.transport, 'log');
+
+    // O padrão é `log`, e não `fcm`: "esqueci de definir a variável" não pode
+    // virar alerta real na tela de bloqueio de alguém. Push que não sai é
+    // barulhento; push que sai sem ninguém pedir é irreversível.
+    aplicar({ ...ambienteCompleto(), PUSH_TRANSPORT: undefined });
+    assert.equal(loadAppConfig().push.transport, 'log');
+  });
+
+  void it('`log` não exige o projeto: rodar `npm test` não depende de conta do Firebase', () => {
+    // A exigência é do TRANSPORTE e não do ambiente, de propósito. Exigir o
+    // projeto para rodar a suíte ou subir o compose seria atrito novo sem
+    // risco atrás dele — com `log`, ninguém envia nada.
+    aplicar({ ...ambienteCompleto(), PUSH_TRANSPORT: 'log', FCM_PROJECT: undefined });
+    const config = loadAppConfig();
+    assert.equal(config.push.transport, 'log');
+    assert.equal(config.push.projeto, undefined);
+  });
+
+  void it('ambiente hospedado com `log` continua subindo: é o estado de homologação hoje', () => {
+    // O projeto Firebase com o app registrado é pendência do cliente
+    // (ADR-0008, prazo 22/09) e homologação roda em `log` até ele existir
+    // (docs/07-devops.md 4.1). Uma guarda por ambiente — como a da chave de
+    // rotação — recusaria subir justamente o ambiente que a decisão do cliente
+    // ainda não desbloqueou, e a saída de quem estivesse de plantão seria
+    // inventar um valor de projeto. Projeto errado não dá erro de
+    // configuração: dá SENDER_ID_MISMATCH por aparelho, que parece token
+    // inválido e faz alguém apagar o registro do aparelho de um tutor.
+    aplicar({
+      ...ambienteCompleto(),
+      ENVIRONMENT: 'preprod',
+      PUSH_TRANSPORT: 'log',
+      FCM_PROJECT: undefined,
+    });
+    assert.doesNotThrow(loadAppConfig);
   });
 });
 

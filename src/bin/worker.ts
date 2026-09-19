@@ -28,6 +28,7 @@ import { criarIdGenerator } from '../shared/id/uuidv7.js';
 import { criarMediaRepository } from '../modules/media/adapters/persistence/kysely-media-repository.js';
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { criarImageProcessor } from '../modules/media/adapters/external/sharp-image-processor.js';
+import { criarPushSender } from '../modules/notifications/adapters/external/log-push-sender.js';
 import { processarFoto, type CargaDoTrabalho } from '../modules/media/application/processar-foto.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
 
@@ -89,6 +90,33 @@ export async function main(): Promise<void> {
   // relógio para o prefixo ordenável, e dois geradores são dois relógios.
   const ids = criarIdGenerator(() => systemClock.now());
   const fila = criarJobQueue(banco.db, ids);
+
+  // O remetente de push é montado AQUI, e não em `api.ts`, porque é aqui que o
+  // envio acontece: a API **enfileira** (`push.send`, `alert.dispatch`) e o
+  // worker envia. A métrica do ADR de arquitetura diz isso com todas as letras
+  // — "da abertura ao último push ENFILEIRADO, ≤ 60 s" —, o ADR-0008 e
+  // docs/07-devops.md 4.1 descrevem o log do alerta como saída DO WORKER, e o
+  // cabeçalho deste arquivo já prevê que "alerta, lembrete e e-mail entram com
+  // as histórias que os criam". Um remetente montado na API seria um segundo
+  // caminho de envio que ninguém escolheu.
+  //
+  // Montar aqui não é detalhe: sem esta linha, a porta, os dois adaptadores e a
+  // porteira do payload seriam código morto — a mesma família de
+  // `invalidarTodasAsSessoes` e da rota do webhook de entrega, que este
+  // repositório já registrou duas vezes hoje.
+  //
+  // O que AINDA não existe, e é honesto dizer onde para: o tratador de
+  // `push.send` na fila. Ele depende da tabela `user_devices`
+  // (docs/03-arquitetura.md), que não tem migração, e de quem decide QUEM
+  // recebe — o raio de 5 km e o teto de fadiga, que são de outra camada e de
+  // outra história. Quando ele chegar, ele recebe este `push` e mais nada muda.
+  const push = criarPushSender(config.push);
+  // O transporte no log de subida, antes de qualquer trabalho: "por onde este
+  // processo manda push?" é a primeira pergunta de todo incidente de
+  // notificação, e é para ela que a porta declara `transporte`. Responder isso
+  // olhando para `ENVIRONMENT` é deduzir em vez de ler — e com `log` a resposta
+  // certa é "por lugar nenhum", que ninguém adivinha.
+  console.info(JSON.stringify({ evento: 'push.transporte', transporte: push.transporte }));
 
   const dependenciasDaFoto = {
     repositorio: criarMediaRepository(banco.db),
