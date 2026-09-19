@@ -57,6 +57,36 @@ export function escaparPontos(corpo: string): string {
 }
 
 /**
+ * Recusa destinatário que carregue quebra de linha, em vez de limpá-lo.
+ *
+ * O endereço é interpolado cru em dois lugares — `To: ${m.para}` no cabeçalho e
+ * `RCPT TO:<${m.para}>` no diálogo do protocolo. Um `\r\n` no meio dele fecha a
+ * linha e o que vem depois vira **cabeçalho novo** ou **comando SMTP novo**:
+ * exatamente a porta que BICHUS-130 fechou no assunto, uma linha acima. Um
+ * `Bcc:` enxertado assim entrega ao atacante cópia integral do aviso de
+ * segurança da vítima, com o link de redefinição de senha dentro.
+ *
+ * **Recusa, e não limpeza** — aqui a decisão é o contrário da do assunto de
+ * propósito. Assunto com quebra continua sendo o assunto que a pessoa escreveu,
+ * só que numa linha; endereço com CRLF não é endereço mal formatado, é
+ * tentativa. Limpar entregaria a mensagem, em silêncio, a um endereço que
+ * ninguém escreveu — e o remetente continuaria achando que ela chegou a quem
+ * devia.
+ *
+ * O endereço NÃO entra na mensagem de erro, pelo mesmo motivo do `dizer` acima:
+ * endereço de usuário é dado pessoal e mensagem de erro vai para o log.
+ *
+ * Exportada pelo mesmo motivo de `escaparPontos`: é a defesa inteira, e defesa
+ * que não dá para olhar de fora é defesa que uma refatoração apaga sem deixar
+ * linha vermelha.
+ */
+export function conferirDestinatario(para: string): void {
+  if (/[\r\n]/.test(para)) {
+    throw new Error('destinatário recusado: endereço com quebra de linha');
+  }
+}
+
+/**
  * Monta o bloco de DATA inteiro: cabeçalhos, corpo escapado e o terminador.
  *
  * Exportada pelo mesmo motivo de `escaparPontos`: a limpeza do assunto aqui
@@ -67,6 +97,7 @@ export function escaparPontos(corpo: string): string {
  * vítima também observaria.
  */
 export function montarMensagem(config: MailConfig, m: Mensagem): string {
+  conferirDestinatario(m.para);
   // `\r\n` em todo lugar: o protocolo exige, e um `\n` solitário faz servidores
   // estritos recusarem a mensagem inteira.
   const cabecalhos = [
@@ -87,11 +118,17 @@ export function criarMailer(config: MailConfig): Mailer {
   if (config.transport === 'log') {
     return {
       enviar(m: Mensagem): Promise<void> {
-        // Prova o DISPARO, não a entrega — e o corpo sai junto porque em
-        // desenvolvimento é assim que se pega o link. Este transporte nunca
-        // pode ser o de produção, e o nome dele diz isso.
-        console.info(JSON.stringify({ evento: 'email.send', para: m.para, assunto: m.assunto, corpo: m.corpo }));
-        return Promise.resolve();
+        return new Promise<void>((resolver) => {
+          // Recusa igual à do transporte de produção: um transporte de
+          // desenvolvimento que aceitasse o que o outro recusa ensinaria a
+          // regra errada a quem testa contra ele.
+          conferirDestinatario(m.para);
+          // Prova o DISPARO, não a entrega — e o corpo sai junto porque em
+          // desenvolvimento é assim que se pega o link. Este transporte nunca
+          // pode ser o de produção, e o nome dele diz isso.
+          console.info(JSON.stringify({ evento: 'email.send', para: m.para, assunto: m.assunto, corpo: m.corpo }));
+          resolver();
+        });
       },
     };
   }
@@ -99,6 +136,14 @@ export function criarMailer(config: MailConfig): Mailer {
   return {
     enviar(m: Mensagem): Promise<void> {
       return new Promise<void>((resolver, recusar) => {
+        // Antes do socket, e não dentro do diálogo: `RCPT TO:` vai para a rede
+        // ANTES de `montarMensagem` ser chamado, então a conferência lá dentro
+        // chegaria tarde — o comando enxertado já teria sido escrito.
+        //
+        // Dentro do executor, e não acima dele, para a recusa sair como
+        // promessa REJEITADA: a porta promete `Promise<void>`, e um `throw`
+        // síncrono aqui escaparia de qualquer `.catch()` de quem chama.
+        conferirDestinatario(m.para);
         const socket = createConnection({ host: config.host, port: config.port });
         socket.setEncoding('utf8');
         socket.setTimeout(10_000);
