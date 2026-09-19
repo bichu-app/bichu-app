@@ -306,6 +306,22 @@ services:
     ports:
       - "${BIND_HOST:-127.0.0.1}:${PORTA_APP:-3000}:${PORTA_APP:-3000}"
       - "${BIND_HOST:-127.0.0.1}:${PORTA_MIDIA:-3001}:${PORTA_MIDIA:-3001}"
+      # A 443 PRECISA estar aqui, e a falta dela derrubou a primeira subida do
+      # minimo hospedado em 19/09 de um jeito que engana: com `PUBLIC_BASE_URL`
+      # em https, o Caddy EMITE o certificado normalmente -- o desafio ACME usa
+      # a 80, que esta publicada -- e o log diz "certificate obtained". So que
+      # emitir nao e servir: ele passa a escutar TLS na 443, que ninguem
+      # publicava, e a maquina recusa conexao em https com todos os certificados
+      # no lugar.
+      #
+      # `PORTA_APP` sozinha nao resolve: em ambiente hospedado sao DUAS portas,
+      # 80 para o redirecionamento e o desafio, 443 para o trafego. Com uma
+      # variavel so, escolher 443 tira a 80 e a emissao para de funcionar.
+      #
+      # O padrao e 8443 e nao 443 de proposito: em `localhost` o Caddy nao faz
+      # TLS e a porta fica sem uso, entao mapear 443 seria pedir privilegio que
+      # o desenvolvimento nao precisa. Em homologacao o `.env` poe 443.
+      - "${BIND_HOST:-127.0.0.1}:${PORTA_TLS:-8443}:443"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Os arquivos de associacao de deep link. O Caddyfile ja tinha os dois
