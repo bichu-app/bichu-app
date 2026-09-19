@@ -4,14 +4,29 @@
 # Enquanto `esperado_a_partir_de` estiver no futuro, o alvo NAO precisa existir,
 # mas tambem nao pode responder qualquer coisa: um 200 que nao seja JSON valido
 # reprova, porque significa que outra coisa esta ocupando o endereco.
-#
-# `ip_esperado` vazio significa "ainda nao provisionado". Enquanto vazio, a
-# assercao de IP nao roda e o relatorio diz isso em voz alta. Preencher no dia
-# em que a VM existir - e esse dia e o mesmo em que os quatro registros A do
-# Squarespace saem da zona.
 
 dominio: bichu.app
-ip_esperado: ""
+
+# IP externo estatico da VM `bichu-hml` (passos 2 e 5 do roteiro), conferido em
+# 19/09: a maquina existe, o endereco e reservado, e `hml.bichu.app` e
+# `img-hml.bichu.app` ja resolvem para ele.
+#
+# ATENCAO ao que este campo declara, porque ele engana quem le rapido: ele NAO
+# diz "o apex ja aponta para ca". Ele diz para onde `bichu.app` PRECISA apontar
+# depois do passo 9. Hoje o apex continua nos quatro registros A da Squarespace,
+# e e exatamente isso que a assercao 1 da secao 16.12 existe para dizer em voz
+# alta.
+#
+# Por que preencher agora nao cria falso verde: a assercao de IP so ACRESCENTA
+# achado, nunca transforma reprovacao em aprovacao, e so e avaliada a partir de
+# `esperado_a_partir_de` (20/09). O que muda e a qualidade do motivo. Vazia, a
+# partir de amanha o relatorio reclama da propria configuracao -- "a assercao
+# esta desligada, preencha" -- que e um achado sobre nos e nao sobre o mundo.
+# Preenchida, ele nomeia o bloqueio real: `bichu.app` resolve para os quatro
+# enderecos da Squarespace, esperado 35.247.247.16; ou seja, o passo 9 do
+# roteiro nao aconteceu. Reprova nos dois casos; so um dos dois diz a verdade
+# util para quem for destravar.
+ip_esperado: "35.247.247.16"
 
 alvos:
   - url: https://bichu.app/.well-known/assetlinks.json
@@ -23,5 +38,15 @@ alvos:
 
 # Asercao negativa: caminho do bucket privado pedido pela origem de midia
 # precisa responder 404. Se responder 200, nao e erro de configuracao, e
-# vazamento. Vazio desliga a checagem (com aviso no relatorio).
-bucket_privado_url: ""
+# vazamento.
+#
+# Preenchida em 19/09 com a origem de midia que existe hoje, e nao com
+# `img.bichu.app`, que ainda nao e servido por nos. Conferido no mesmo dia:
+# `/bichu-media-private/` responde 404 e `/bichu-media-public/` responde 403 --
+# o 403 importa tanto quanto o 404, porque prova que a origem esta de pe e
+# roteando. Uma origem morta responderia 404 a tudo e esta assercao passaria
+# sem ter verificado nada.
+#
+# Trocar para `https://img.bichu.app/bichu-media-private/` no dia em que o
+# apex sair da Squarespace e a origem definitiva existir.
+bucket_privado_url: "https://img-hml.bichu.app/bichu-media-private/"

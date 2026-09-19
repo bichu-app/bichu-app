@@ -75,6 +75,34 @@ porta publicada e URL base juntas. `make ajuda` lista o resto dos alvos.
 
 O detalhe de cada um, e o porquê das decisões, está em `docs/07-devops.md`.
 
+## Homologação
+
+Existe um ambiente de homologação de pé, e ele **não** é `bichu.app`:
+
+| Para que | Endereço |
+|---|---|
+| API | `https://hml.bichu.app` (health em `/v1/health`) |
+| Contrato, atrás de credencial | `https://hml.bichu.app/v1/docs` |
+| Mídia pública | `https://img-hml.bichu.app` |
+
+Build para instalar no aparelho Android apontando para lá:
+
+```sh
+flutter build apk --debug --dart-define=API_BASE_URL=https://hml.bichu.app
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+```
+
+**Sem `/v1` no valor**: o `ApiClient` acrescenta a versão em cada chamada, e
+`.../v1` no build produz requisições para `/v1/v1/...` e um 404 que parece
+defeito de servidor.
+
+É **homologação e não produção**, e ela **não deve receber dado de usuário
+real** — o apex `bichu.app` ainda nem é nosso, o push não está configurado, o
+deep link sobe com as listas vazias e o e-mail não sai do log. O endereço, o que
+funciona, o que não funciona e o backup estão na seção 9.0 de
+`docs/07-devops.md`; como a máquina foi montada, em
+`infra/roteiro-provisionamento.md`.
+
 ## Configuração que ainda não existe
 
 Estes pontos estão declarados e **não têm valor definido**. Onde aparecerem, é
@@ -83,11 +111,19 @@ mensagem, em vez de usar um exemplo que alguém confunda com o real.
 
 | O que falta | Onde entra |
 |---|---|
-| Nome do pacote do aplicativo | manifesto Android e projeto iOS |
 | Team ID da conta Apple | `apple-app-site-association` |
 | Impressão digital SHA-256 da chave de assinatura do APK | `assetlinks.json` |
 | Chaves do Google Maps | configuração do app |
 
-Enquanto faltarem, as rotas dos dois arquivos de associação respondem **503**, e
-não um arquivo vazio: arquivo válido e errado faz o sistema operacional cachear
-uma associação quebrada, e o deep link passa a falhar em silêncio.
+O nome do pacote saiu desta tabela em 19/09 porque ele foi decidido:
+`app.bichu` nas duas plataformas, e é esse valor que o `assetlinks.json` servido
+em homologação já carrega.
+
+Enquanto os outros três faltarem, os dois arquivos de associação sobem **com as
+listas vazias** — conferido em 19/09: `200` com `application/json` e
+`sha256_cert_fingerprints` e `applinks.details` vazios. Lista vazia é recusa
+honesta: o sistema operacional não encontra correspondência, não abre o app, e é
+exatamente isso que acontece na realidade. Preencher com valor de exemplo seria
+pior, porque qualquer conferência superficial ficaria verde e a falha só
+apareceria no aparelho de um usuário — depois de a plaquinha ter sido impressa
+com o domínio. O raciocínio inteiro está em `infra/caddy/well-known/LEIA-ME.md`.

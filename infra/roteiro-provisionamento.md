@@ -368,10 +368,25 @@ que importam:
 | Variável | Valor na VM | Por quê |
 |---|---|---|
 | `ENVIRONMENT` | `homolog` | `make reset` se recusa a rodar com este valor: apagar volume aqui apaga a massa de teste do QA |
-| `PUBLIC_BASE_URL` | `https://bichu.app` | o Caddy escuta na porta que está aqui; é também o que o QR codifica e o que o cartaz imprime |
+| `PUBLIC_BASE_URL` | `https://hml.bichu.app` | o Caddy escuta na porta que está aqui; é também **o que o QR codifica e o que o cartaz imprime**. Este campo dizia `https://bichu.app` até 19/09, e estava errado de um jeito perigoso: o apex serve a página da Squarespace, então uma tag gerada aqui apontaria para uma página que não é nossa — e o ADR-0004 torna a plaquinha **irreversível**. Com `hml.` a tag pelo menos declara que é de homologação. **Ainda assim, não imprima tag a partir deste ambiente:** o endereço definitivo é decisão pendente (`TAG_BASE_URL`, ADR-0017), e tag impressa não se corrige. Confira o valor efetivo antes de gerar qualquer código: `docker compose exec -T api printenv PUBLIC_BASE_URL` |
 | `MEDIA_PUBLIC_BASE_URL` | `https://img.bichu.app` | o MinIO **assina a URL com o host pelo qual ele se conhece**. Divergir daqui quebra TODA URL assinada, com erro de assinatura que não diz que é de host |
 | `MAIL_TRANSPORT` | `log` | o Mailpit tem `profiles: [dev, qa]` e não sobe aqui, e ele nunca provou entregabilidade de qualquer forma. **Não use `postmark`:** a chave de HML já está no cofre, mas o adaptador do Postmark não existe (ADR-0009), e `app-config.ts` recusa o valor na subida. Com `log` o e-mail é escrito no log e nada sai — que é a verdade do estado de hoje |
 | `PORTA_APP` / `PORTA_MIDIA` | `80` e a porta da mídia | ver o passo 8 |
+
+**Correção de estado em 19/09, e ela é importante o bastante para parar aqui.**
+A tabela acima prescreve `https://bichu.app` e `https://img.bichu.app`, que é o
+destino depois do passo 9. **Hoje o passo 9 não aconteceu:** o apex continua nos
+quatro registros A da Squarespace, e o que a VM atende de fato é
+`https://hml.bichu.app` e `https://img-hml.bichu.app`, conferido por `curl` na
+mesma data. Enquanto for assim, `PUBLIC_BASE_URL=https://bichu.app` na VM faz o
+QR codificar e o cartaz imprimir um endereço que serve a página de
+estacionamento de outra empresa — e isso é irreversível no instante em que a
+primeira plaquinha for prensada (ADR-0004). Antes de gerar **qualquer** tag de
+teste, conferir o valor no host:
+
+```bash
+docker compose exec -T api printenv PUBLIC_BASE_URL MEDIA_PUBLIC_BASE_URL
+```
 
 **Verificação — e esta é a que já pegou defeito real:** a pilha falha
 ruidosamente quando falta variável, com o nome dela na mensagem (critérios 5 e
@@ -497,6 +512,16 @@ Preencha `ip_esperado` em `infra/verificacao/associacao.yml` com o IP do passo
 engano está desligada, e o próprio script diz isso em voz alta e reprova a
 partir de `esperado_a_partir_de`.
 
+**Feito em 19/09:** `ip_esperado: "35.247.247.16"` e
+`bucket_privado_url: "https://img-hml.bichu.app/bichu-media-private/"`. O
+segundo já passa — o prefixo privado responde `404` e o público `403`, o que
+prova que a origem está de pé e roteando, e não que ela está morta respondendo
+`404` a tudo. O primeiro ainda reprova, e **é para reprovar**: ele agora diz
+"`bichu.app` resolve para os quatro endereços da Squarespace, esperado
+35.247.247.16", que nomeia o bloqueio real, em vez de reclamar da própria
+configuração. Preencher não criou falso verde: a asserção de IP só acrescenta
+achado, nunca transforma reprovação em aprovação.
+
 **Não mexa nas datas de `esperado_a_partir_de` para calar o portão.** Ele
 reprova hoje porque a página de estacionamento do Squarespace responde **200
 com `text/html`** naqueles dois caminhos — o que é pior que 404, porque o
@@ -612,6 +637,20 @@ que as pessoas acreditam sobre a máquina:
 > Esta máquina é **ambiente de homologação e não produção**. Ela **não deve
 > receber dado de usuário real**. Ela tem `pg_dump` diário guardado fora do
 > host (passo 12) e snapshot diário do disco.
+
+Esse texto passou a existir também onde o QA lê, e não só onde o DevOps executa:
+seção 9.0 de `docs/07-devops.md` e a seção "Homologação" do `README.md`. Regra
+escrita num roteiro de provisionamento é lida uma vez, por uma pessoa, no dia em
+que a máquina nasce; quem manda dado real para lá é alguém que nunca abriu este
+arquivo.
+
+**E uma pendência declarada em 19/09, porque o texto acima afirma no presente
+uma coisa que eu não consegui conferir:** que o `pg_dump` diário está de fato
+rodando e que existe dump recente no bucket. Isso não se confere de fora — só
+com `gcloud storage ls -l gs://bichu-backup-hml/`, credencial que tem quem
+montou a máquina. **Dono: DevOps. Até 24/09**, junto com a restauração
+exercitada, porque conferir que o backup existe e conferir que ele restaura são
+a mesma tarefa feita pela metade quando se faz só uma.
 
 **Verificação:** a própria pilha diz isso, para quem chegar pela porta em vez
 de pelo documento.

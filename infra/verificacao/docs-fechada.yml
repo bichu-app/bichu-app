@@ -5,19 +5,33 @@
 # real produz AVISO. A partir dessa data, reprova: nao ter o que consultar deixa
 # de ser "ainda nao" e passa a ser "o monitor nao esta monitorando".
 #
-# As datas seguem a mesma regra do ADR-0017: o dominio depende da decisao do
-# cliente sobre o subdominio do time web, prevista para 22/09. `preprod` precisa
-# existir antes de `prod` porque e ela que o outro time consome.
-#
 # `DOCS_USER` e `DOCS_PASSWORD` NAO moram aqui: sao credencial e vem do
 # ambiente do job (segredo do repositorio). Sem eles a assercao 3 do ADR-0018
 # nao roda, e isso e dito em voz alta -- e reprova a partir da data.
 
 ambientes:
+  # Corrigido em 19/09. Ate hoje este campo era
+  # `https://api.hml.dominio-a-definir.com.br`, endereco que nunca existiu, e o
+  # monitor passava por aviso gracas ao gatilho de `a-definir`. A partir de
+  # 25/09 ele reprovaria -- e reprovaria pelo motivo errado: "o dominio nao foi
+  # decidido", quando o ambiente esta de pe desde antes e a UI ja esta fechada
+  # como o ADR-0018 exige. Monitor que reprova pelo motivo errado ensina o time
+  # a ignorar a reprovacao, e e assim que a reprovacao certa passa despercebida.
+  #
+  # Conferido em 19/09 contra o ambiente real: `/v1/docs` e `/v1/openapi.yaml`
+  # respondem 401 sem credencial, e `http://` promove para `https://` com 308.
+  #
+  # Repare que NAO ha subdominio `api.`: a API e servida na raiz do host, sob
+  # `/v1`. `https://api.hml.bichu.app` nao resolve.
   - nome: preprod
-    base_url: "https://api.hml.dominio-a-definir.com.br"
+    base_url: "https://hml.bichu.app"
     esperado_a_partir_de: 2026-09-25
 
+  # `prod` continua sem endereco de proposito, e a data fica onde esta. Producao
+  # nao existe (docs/07-devops.md secao 1) e a escolha de dominio dela nao foi
+  # tomada. Se em 30/09 continuar assim, a reprovacao e legitima: significa que
+  # prometemos producao para o dia 30 e nao entregamos. Empurrar a data aqui
+  # trocaria "estamos atrasados" por "esta tudo bem".
   - nome: prod
     base_url: "https://api.dominio-a-definir.com.br"
     esperado_a_partir_de: 2026-09-30
