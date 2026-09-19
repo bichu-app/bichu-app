@@ -13,6 +13,14 @@
  * quebrado que ninguém consegue diagnosticar depois — foto sem trabalho fica
  * `processing` para sempre; trabalho sem foto falha em laço procurando uma linha
  * que não existe; duas principais violam o índice e derrubam a próxima escrita.
+ *
+ * **Toda chave que sai daqui passa por `comoObjectKey`.** Ela vinha marcada por
+ * `as ObjectKey`, que não confere nada: promete ao compilador que alguém já
+ * validou. Quem escreve hoje é só o domínio — mas essa garantia não está em
+ * contrato nenhum, e importação, migração ou correção manual em produção
+ * escrevem nesta tabela sem passar por ele. A chave daqui vai para o `pathname`
+ * da URL do objeto, e o parser de URL resolve `..`: uma linha com
+ * `card/../../x` lê de fora do bucket (BICHUS-134).
  */
 import type { Db } from '../../../../shared/db/pool.js';
 import type { JobKind } from '../../../../shared/ports/index.js';
@@ -25,7 +33,8 @@ import type {
   NovaIntencao,
   StatusDaFoto,
 } from '../../ports/media-repository.js';
-import type { Instant, ObjectKey, PetId, UserId } from '../../../../shared/types/brands.js';
+import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js';
+import { comoObjectKey } from '../../domain/chave-de-objeto.js';
 
 /**
  * O nome do trabalho na fila, **tirado da porta** e não inventado aqui.
@@ -53,9 +62,9 @@ function comoFoto(l: LinhaDaFoto): FotoDoPet {
     id: l.id,
     status: l.status,
     isPrimary: l.is_primary,
-    originalKey: l.original_key as ObjectKey,
-    thumbKey: l.thumb_key as ObjectKey | null,
-    cardKey: l.card_key as ObjectKey | null,
+    originalKey: comoObjectKey(l.original_key),
+    thumbKey: l.thumb_key === null ? null : comoObjectKey(l.thumb_key),
+    cardKey: l.card_key === null ? null : comoObjectKey(l.card_key),
     createdAt: l.created_at,
   };
 }
@@ -121,7 +130,7 @@ export function criarMediaRepository(db: Db): MediaRepository {
         id: linha.id,
         userId: linha.user_id as UserId,
         petId: linha.pet_id as PetId | null,
-        objectKey: linha.object_key as ObjectKey,
+        objectKey: comoObjectKey(linha.object_key),
         declaredType: linha.declared_type,
         maxBytes: linha.max_bytes,
         expiresAt: linha.expires_at,
@@ -244,7 +253,7 @@ export function criarMediaRepository(db: Db): MediaRepository {
         id: linha.id,
         petId: linha.pet_id as PetId,
         status: linha.status,
-        originalKey: linha.original_key as ObjectKey,
+        originalKey: comoObjectKey(linha.original_key),
       };
     },
 
@@ -287,7 +296,7 @@ export function criarMediaRepository(db: Db): MediaRepository {
         .orderBy('expires_at')
         .limit(limite)
         .execute();
-      return linhas.map((l) => ({ id: l.id, objectKey: l.object_key as ObjectKey }));
+      return linhas.map((l) => ({ id: l.id, objectKey: comoObjectKey(l.object_key) }));
     },
 
     async descartarIntencao(id: string): Promise<void> {

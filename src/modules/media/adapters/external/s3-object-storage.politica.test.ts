@@ -124,3 +124,79 @@ void describe('política assinada — o que ela limita', () => {
     assert.notEqual(a.campos['x-amz-signature'], b.campos['x-amz-signature']);
   });
 });
+
+/**
+ * O `contentType` que ENTRA na política, e que estava sem exigência na porta
+ * (BICHUS-134 item 3).
+ *
+ * O que se prova aqui não é a mensagem do erro: é que **nenhum tipo fora da
+ * lista chega a ser assinado**. Assinado, ele vira permissão — o armazenamento
+ * aceita o envio porque a nossa assinatura disse que estava certo, e não tem
+ * como recusar depois.
+ */
+async function politicaOuNada(contentType: string): Promise<Record<string, string> | null> {
+  try {
+    const a = await armazenamento.createUploadIntent({
+      classe: 'privado',
+      chave: 'pets/p/original/abc' as ObjectKey,
+      contentType,
+      maxBytes: TETO_DE_BYTES,
+      validadeEmSegundos: 300,
+    });
+    return a.campos ?? {};
+  } catch {
+    return null;
+  }
+}
+
+const TIPOS_HOSTIS = [
+  // O do critério 22: documento com script servido como imagem. A entrada já o
+  // recusava; a autorização assinada, não.
+  'image/svg+xml',
+  'text/html',
+  // Prefixo NÃO é critério: a lista é por igualdade.
+  'image/',
+  'image/jpeg; charset=utf-8',
+  'IMAGE/JPEG',
+  // Derivada não é entrada: `image/webp` está nas duas listas, mas um tipo que
+  // só a gravação produz não vira autorização de envio.
+  'application/octet-stream',
+  '',
+];
+
+void describe('content-type do pedido de envio — recusado ANTES de assinar', () => {
+  void it('nenhum tipo hostil sai assinado na política nem no formulário', async () => {
+    for (const hostil of TIPOS_HOSTIS) {
+      const campos = await politicaOuNada(hostil);
+      assert.equal(
+        campos,
+        null,
+        `assinou content-type fora da lista: ${JSON.stringify(hostil)} -> ${JSON.stringify(campos)}`,
+      );
+    }
+  });
+
+  void it('RECUSA com o tipo no texto, para o defeito aparecer no log', async () => {
+    await assert.rejects(
+      () =>
+        armazenamento.createUploadIntent({
+          classe: 'privado',
+          chave: 'pets/p/original/abc' as ObjectKey,
+          contentType: 'image/svg+xml',
+          maxBytes: TETO_DE_BYTES,
+          validadeEmSegundos: 300,
+        }),
+      /Autorização de envio recusada.*svg/s,
+    );
+  });
+
+  void it('os quatro tipos do contrato continuam sendo autorizados', async () => {
+    // O contrapeso. Sem ele, uma implementação que recusasse todo tipo passaria
+    // nos casos acima e impediria toda tutora de enviar a foto do pet dela.
+    for (const bom of ['image/jpeg', 'image/png', 'image/heic', 'image/webp']) {
+      const campos = await politicaOuNada(bom);
+      assert.ok(campos !== null, `recusou tipo aceito: ${bom}`);
+      assert.equal(campos['Content-Type'], bom);
+    }
+  });
+});

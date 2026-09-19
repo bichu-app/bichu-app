@@ -33,7 +33,7 @@ import type {
   ObjectStorage,
   PedidoDeEnvio,
 } from '../../ports/object-storage.js';
-import { ehTipoDeDerivada } from '../../domain/chave-de-objeto.js';
+import { ehTipoAceito, ehTipoDeDerivada } from '../../domain/chave-de-objeto.js';
 import type { ObjectStorageConfig } from '../../../../shared/config/app-config.js';
 import type { AbsoluteUrl, ObjectKey } from '../../../../shared/types/brands.js';
 
@@ -139,6 +139,30 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
 
   return {
     createUploadIntent(pedido: PedidoDeEnvio): Promise<AutorizacaoDeEnvio> {
+      // O `contentType` entra na POLÍTICA ASSINADA algumas linhas abaixo, como
+      // condição e como campo do formulário. Assinado, ele deixa de ser um
+      // valor e vira PERMISSÃO: o armazenamento aceita o envio porque a nossa
+      // assinatura disse que estava certo, e não tem como recusar depois.
+      //
+      // A conferência existia só em `media-service.ts`, o único chamador de
+      // hoje. Defesa em um call site vale enquanto ninguém escreve o segundo —
+      // e um `image/svg+xml` que chegasse por ele seria documento com script
+      // hospedado por nós, que é exatamente o que o critério 22 proíbe na
+      // entrada. É a mesma recusa que o `put` já faz do lado da gravação
+      // (BICHUS-133), por IGUALDADE e nunca por prefixo.
+      //
+      // REJEITA em vez de lançar: a porta declara `Promise`, e um método que
+      // devolve promessa mas lança de forma síncrona escapa do `.catch()` de
+      // quem o chamar sem `await`. A recusa precisa chegar pelo caminho que o
+      // contrato promete.
+      if (!ehTipoAceito(pedido.contentType)) {
+        return Promise.reject(
+          new Error(
+            `Autorização de envio recusada: content-type ` +
+              `${JSON.stringify(pedido.contentType)} não é tipo aceito.`,
+          ),
+        );
+      }
       const agora = new Date();
       const { longo, curto } = carimbos(agora);
       const expiraEm = new Date(agora.getTime() + pedido.validadeEmSegundos * 1000);

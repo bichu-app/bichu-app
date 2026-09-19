@@ -52,6 +52,26 @@ export interface AutorizacaoDeEnvio {
 export interface PedidoDeEnvio {
   readonly classe: Classe;
   readonly chave: ObjectKey;
+  /**
+   * EXIGÊNCIA: um de `TIPOS_ACEITOS` (`image/jpeg`, `image/png`, `image/heic`
+   * ou `image/webp`).
+   *
+   * Ela está escrita aqui porque quem escrever o próximo chamador não tem como
+   * adivinhá-la lendo o tipo: o campo é `string`, e ele sai daqui direto para
+   * dentro da **política assinada** — condição `Content-Type` por igualdade e
+   * campo do formulário. Assinado, ele vira permissão: o armazenamento aceita
+   * o envio porque a nossa assinatura disse que estava certo, e não tem como
+   * recusar depois.
+   *
+   * Hoje `media-service.ts` é o único call site e confere antes de chamar. É só
+   * isso que segura, e a garantia "nenhum caminho novo aparece" não está em
+   * contrato nenhum (BICHUS-133 item 3, BICHUS-134 item 3).
+   *
+   * `createUploadIntent` RECUSA o que estiver fora da lista, por IGUALDADE e
+   * nunca por prefixo: `image/` aceitaria `image/svg+xml`, que é documento com
+   * script — e o domínio de mídia é separado da origem do app justamente para
+   * conter isso. É a mesma recusa que o `put` faz do lado da gravação.
+   */
   readonly contentType: string;
   readonly maxBytes: number;
   readonly validadeEmSegundos: number;
@@ -82,7 +102,14 @@ export interface ObjectStorage {
   /** Só o worker. A rota HTTP não lê bytes de foto. */
   get(classe: Classe, chave: ObjectKey): Promise<Buffer>;
 
-  /** Só o worker, para gravar as derivadas. */
+  /**
+   * Só o worker, para gravar as derivadas.
+   *
+   * EXIGÊNCIA: `contentType` é um de `TIPOS_DE_DERIVADA` (`image/webp` ou
+   * `image/jpeg`), e a gravação recusa o resto. Ele vira o `Content-Type` do
+   * objeto, que é o que o armazenamento devolve para quem baixar depois
+   * (BICHUS-133).
+   */
   put(classe: Classe, chave: ObjectKey, bytes: Buffer, contentType: string): Promise<void>;
 
   delete(classe: Classe, chave: ObjectKey): Promise<void>;
