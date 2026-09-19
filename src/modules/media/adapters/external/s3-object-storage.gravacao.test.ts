@@ -14,7 +14,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { criarObjectStorage } from './s3-object-storage.js';
-import type { ObjectKey } from '../../../../shared/types/brands.js';
+import { comoObjectKey } from '../../domain/chave-de-objeto.js';
 
 const armazenamento = criarObjectStorage({
   endpoint: 'http://objeto:9000',
@@ -26,7 +26,7 @@ const armazenamento = criarObjectStorage({
   bucketPublic: 'publico-de-teste',
 });
 
-const CHAVE = 'card/abcdefghijklmnopqrstuv.webp' as ObjectKey;
+const CHAVE = comoObjectKey('card/abcdefghijklmnopqrstuv.webp');
 const BYTES = Buffer.from('bytes da derivada');
 
 const originalFetch = globalThis.fetch;

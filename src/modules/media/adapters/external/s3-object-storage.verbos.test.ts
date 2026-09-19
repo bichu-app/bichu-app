@@ -13,7 +13,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, describe, it } from 'node:test';
 import { criarObjectStorage } from './s3-object-storage.js';
-import type { ObjectKey } from '../../../../shared/types/brands.js';
+import { comoObjectKey } from '../../domain/chave-de-objeto.js';
 
 const armazenamento = criarObjectStorage({
   endpoint: 'http://objeto:9000',
@@ -25,7 +25,7 @@ const armazenamento = criarObjectStorage({
   bucketPublic: 'publico-de-teste',
 });
 
-const CHAVE = 'pets/p/original/abc' as ObjectKey;
+const CHAVE = comoObjectKey('pets/p/original/abc');
 
 interface PedidoCapturado {
   url: string;
@@ -123,7 +123,7 @@ void describe('get e put — só o worker', () => {
 
   void it('put manda o content-type e assina o CORPO', async () => {
     dublarFetch({ status: 200 });
-    await armazenamento.put('publico', 'card/xyz.webp' as ObjectKey, Buffer.from('bytes'), 'image/webp');
+    await armazenamento.put('publico', comoObjectKey('card/xyz.webp'), Buffer.from('bytes'), 'image/webp');
 
     assert.equal(capturado?.metodo, 'PUT');
     assert.equal(capturado?.cabecalhos['content-type'], 'image/webp');

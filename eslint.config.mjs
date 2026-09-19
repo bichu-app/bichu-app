@@ -20,7 +20,35 @@ const {
   injectableClock,
 } = regras;
 
-const RAIZ_DOS_MODULOS = path.resolve(import.meta.dirname, moduleBoundaries.root);
+const RAIZ_DO_PROJETO = path.resolve(import.meta.dirname);
+const RAIZ_DOS_MODULOS = path.resolve(RAIZ_DO_PROJETO, moduleBoundaries.root);
+
+/**
+ * As marcas de tipo que têm PORTA, e onde a porta mora.
+ *
+ * Uma marca (`Brand<string, 'ObjectKey'>`) some na compilação: em tempo de
+ * execução ela é `string`. O que a torna verdadeira é a função que confere o
+ * valor antes de devolvê-lo marcado. `as` não é essa função — ele só promete ao
+ * compilador que alguém já conferiu, e quando esse alguém não existe a marca
+ * vira documentação falsa.
+ *
+ * Esta tabela devia morar em `src/architecture.rules.mjs`, junto do resto do
+ * CONTEÚDO da arquitetura. Ficou aqui porque este trabalho estava confinado a
+ * `src/modules/media/` e a este arquivo; mover é uma linha e não muda a regra.
+ */
+const MARCAS_COM_PORTA = [
+  {
+    marca: 'ObjectKey',
+    porta: 'comoObjectKey',
+    dominio: 'src/modules/media/domain',
+  },
+];
+
+/** `absoluto` está dentro de `relativoDaRaiz`? Por componente, nunca por texto. */
+function dentroDe(absoluto, relativoDaRaiz) {
+  const relativo = path.relative(path.resolve(RAIZ_DO_PROJETO, relativoDaRaiz), absoluto);
+  return relativo !== '' && !relativo.startsWith('..') && !path.isAbsolute(relativo);
+}
 
 /**
  * Onde um caminho ABSOLUTO mora: `{ modulo, camada }`, ou `null` se ele nao
@@ -115,6 +143,57 @@ const arquitetura = {
         };
       },
     },
+
+    /**
+     * Marca de tipo só pela porta que valida — nunca por `as`.
+     *
+     * O BICHUS-134 fechou `ObjectKey` atrás de `comoObjectKey`, e o QA reabriu
+     * o buraco inteiro desfazendo seis linhas e repondo um `import type`:
+     * `npm test` continuou verde e o lint não tinha nada a dizer. Uma porta
+     * única que depende de ninguém escrever `as` não é porta: é convenção. É o
+     * mesmo motivo de `fronteira-de-modulo` existir, e o desenho é o dele —
+     * caminho resolvido e comparado por componente, nunca glob de texto.
+     *
+     * A regra pega `x as ObjectKey` e `<ObjectKey>x`. Ela NÃO pega
+     * `x as unknown as string as ObjectKey`? Pega: o `as` de fora é o que ela
+     * inspeciona, e ele cita a marca. O que ela não alcança é um apelido
+     * (`type Chave = ObjectKey`) ou um genérico que devolva a marca sem citá-la
+     * — ambos precisariam de informação de tipos, que esta regra não usa de
+     * propósito, para continuar rodando sobre qualquer arquivo. O teste de
+     * persistência é o outro lado: ele exige que a conferência ACONTEÇA, e não
+     * só que o `as` não esteja escrito.
+     */
+    'marca-so-pela-porta': {
+      meta: {
+        type: 'problem',
+        docs: { description: 'Marca de tipo só se obtém pela função que valida, nunca por `as`.' },
+        schema: [],
+        messages: {
+          foraDaPorta:
+            '`as {{marca}}` fora de {{dominio}}/. `as` não confere nada: promete ao ' +
+            'compilador que alguém já validou, e quando esse alguém não existe a marca ' +
+            'é documentação falsa. Use `{{porta}}(...)`, que é a única porta (BICHUS-134).',
+        },
+      },
+      create(context) {
+        // Uma marca por vez: o arquivo pode ser o domínio de uma e não o de outra.
+        const proibidas = MARCAS_COM_PORTA.filter((m) => !dentroDe(context.filename, m.dominio));
+        if (proibidas.length === 0) return {};
+
+        function verificar(no, anotacao) {
+          if (anotacao?.type !== 'TSTypeReference') return;
+          if (anotacao.typeName?.type !== 'Identifier') return;
+          const alvo = proibidas.find((m) => m.marca === anotacao.typeName.name);
+          if (alvo === undefined) return;
+          context.report({ node: no, messageId: 'foraDaPorta', data: alvo });
+        }
+
+        return {
+          TSAsExpression: (no) => verificar(no, no.typeAnnotation),
+          TSTypeAssertion: (no) => verificar(no, no.typeAnnotation),
+        };
+      },
+    },
   },
 };
 
@@ -188,6 +267,17 @@ export default tseslint.config(
     files: ['src/modules/**/*.ts'],
     plugins: { arquitetura },
     rules: { 'arquitetura/fronteira-de-modulo': 'error' },
+  },
+
+  // --- Marca de tipo só pela porta ---------------------------------------
+  // Escopo largo de propósito: a porta única não vale só dentro do módulo de
+  // mídia. Teste e teste de integração entram também — foi um teste que o QA
+  // usou para mostrar que dava para reverter tudo com a suíte verde, e uma
+  // regra que parasse em `src/` deixaria `tests/` recriar a marca falsa.
+  {
+    files: ['src/**/*.ts', 'tests/**/*.ts'],
+    plugins: { arquitetura },
+    rules: { 'arquitetura/marca-so-pela-porta': 'error' },
   },
 
   // --- Pureza do dominio --------------------------------------------------

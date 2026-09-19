@@ -15,8 +15,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { criarObjectStorage } from './s3-object-storage.js';
-import { TETO_DE_BYTES } from '../../domain/chave-de-objeto.js';
-import type { ObjectKey } from '../../../../shared/types/brands.js';
+import { TETO_DE_BYTES, comoObjectKey } from '../../domain/chave-de-objeto.js';
 
 const armazenamento = criarObjectStorage({
   endpoint: 'http://objeto:9000',
@@ -35,7 +34,7 @@ async function politicaDe(maxBytes = TETO_DE_BYTES): Promise<{
 }> {
   const a = await armazenamento.createUploadIntent({
     classe: 'privado',
-    chave: 'pets/p/original/abc' as ObjectKey,
+    chave: comoObjectKey('pets/p/original/abc'),
     contentType: 'image/jpeg',
     maxBytes,
     validadeEmSegundos: 300,
@@ -138,7 +137,7 @@ async function politicaOuNada(contentType: string): Promise<Record<string, strin
   try {
     const a = await armazenamento.createUploadIntent({
       classe: 'privado',
-      chave: 'pets/p/original/abc' as ObjectKey,
+      chave: comoObjectKey('pets/p/original/abc'),
       contentType,
       maxBytes: TETO_DE_BYTES,
       validadeEmSegundos: 300,
@@ -181,7 +180,7 @@ void describe('content-type do pedido de envio — recusado ANTES de assinar', (
       () =>
         armazenamento.createUploadIntent({
           classe: 'privado',
-          chave: 'pets/p/original/abc' as ObjectKey,
+          chave: comoObjectKey('pets/p/original/abc'),
           contentType: 'image/svg+xml',
           maxBytes: TETO_DE_BYTES,
           validadeEmSegundos: 300,

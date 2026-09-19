@@ -13,11 +13,12 @@ import { varrerEnviosVencidos } from './varrer-envios-vencidos.js';
 import type { IntencaoVencida, MediaRepository } from '../ports/media-repository.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 import type { ObjectKey } from '../../../shared/types/brands.js';
+import { comoObjectKey } from '../domain/chave-de-objeto.js';
 import { relogioParado } from '../../../shared/time/relogio-de-teste.js';
 
 const vencidas: IntencaoVencida[] = [
-  { id: 'i-1', objectKey: 'pets/p/original/aaa' as ObjectKey },
-  { id: 'i-2', objectKey: 'pets/p/original/bbb' as ObjectKey },
+  { id: 'i-1', objectKey: comoObjectKey('pets/p/original/aaa') },
+  { id: 'i-2', objectKey: comoObjectKey('pets/p/original/bbb') },
 ];
 
 function montar(opcoes: { falhaAoApagar?: string } = {}): {

@@ -322,7 +322,49 @@ void describe('comoObjectKey — a marca que agora exige forma', () => {
   void it('é a porta por onde a própria geração passa', () => {
     // Se a geração continuasse usando `as`, a marca teria duas portas e a
     // conferência valeria só para metade das chaves.
-    assert.equal(chaveDaDerivada('card', ALEATORIO, 'webp'), comoObjectKey(String(chaveDaDerivada('card', ALEATORIO, 'webp'))));
-    assert.throws(() => chaveDoOriginal('../outro', new Uint8Array(16)), /Chave de objeto recusada/);
+    //
+    // A primeira versão deste caso comparava `chaveDaDerivada(...)` com
+    // `comoObjectKey(String(chaveDaDerivada(...)))` — e `comoObjectKey` é
+    // IDENTIDADE na entrada válida, então a afirmação era `X === X` e passava
+    // com a geração marcando por `as`. O QA mostrou com isca (BICHUS-134).
+    //
+    // O que morde é o contrário: pedir uma chave que a PORTA recusa, e exigir
+    // que a geração recuse junto. Se ela não passar pela porta, a chave sai.
+
+    // O original: `petId` chega como `string` e é interpolado no caminho.
+    assert.throws(() => chaveDoOriginal('../outro', ALEATORIO), /Chave de objeto recusada/);
+    // Um `/` dentro do `petId` monta um segmento a mais: `pets/a/b/original/x`
+    // não é a forma que este sistema escreve, e sai do prefixo do pet.
+    assert.throws(() => chaveDoOriginal('a/b', ALEATORIO), /Chave de objeto recusada/);
+
+    // A derivada: `variante` é união de dois literais **no compilador**, e o
+    // compilador não roda em produção. JavaScript chamando daqui, um valor
+    // desserializado ou um `as` em outro arquivo passam o que quiserem — e é
+    // exatamente essa a tese do BICHUS-134 sobre `as`. Só a porta barra.
+    const varianteTorta = 'card/../..' as unknown as 'card';
+    assert.throws(
+      () => chaveDaDerivada(varianteTorta, ALEATORIO, 'webp'),
+      /Chave de objeto recusada/,
+    );
+
+    // Contrapeso: as duas continuam gerando com entrada boa. Sem ele, uma
+    // geração que lançasse sempre passaria nas três afirmações acima.
+    assert.ok(String(chaveDaDerivada('card', ALEATORIO, 'webp')).startsWith('card/'));
+    assert.ok(String(chaveDoOriginal(PET, ALEATORIO)).startsWith(`pets/${PET}/original/`));
+  });
+
+  void it('o TETO de 1024 é o do armazenamento, e ele recusa', () => {
+    // Chave acima do teto não é chave: é linha corrompida chegando do banco.
+    // A isca I21 do QA passou verde porque nada exercitava este limite.
+    const noTeto = `card/${'a'.repeat(1024 - 'card/'.length - '.webp'.length)}.webp`;
+    assert.equal(noTeto.length, 1024);
+    assert.equal(comoObjectKey(noTeto), noTeto);
+
+    const umAcima = `card/${'a'.repeat(1025 - 'card/'.length - '.webp'.length)}.webp`;
+    assert.equal(umAcima.length, 1025);
+    assert.throws(() => comoObjectKey(umAcima), /recusada \(tamanho\)/);
+
+    // O outro extremo do mesmo `if`: vazio também não é chave.
+    assert.throws(() => comoObjectKey(''), /recusada \(tamanho\)/);
   });
 });

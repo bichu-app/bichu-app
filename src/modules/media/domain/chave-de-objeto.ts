@@ -137,6 +137,28 @@ function recusarChave(valor: string, motivo: string): never {
  *
  * Quando a forma nova aparecer (foto de aviso do achador, por exemplo), o que
  * falha é o teste, no dia de escrever o código — e não a leitura em produção.
+ *
+ * ## A DEPENDÊNCIA entre as duas partes, que é o que segura o arranjo
+ *
+ * A leitura é deliberadamente mais frouxa que a escrita, e isso só é seguro por
+ * um motivo, que precisa estar escrito porque ninguém o deduz lendo a parte 2:
+ *
+ * > **A parte 2 pode ser frouxa PORQUE a parte 1 é fechada. A parte 1 não pode
+ * > afrouxar porque a parte 2 já é frouxa.** A implicação vale numa direção só.
+ *
+ * O que impede a travessia é a parte 1 — conjunto de caracteres fechado,
+ * nenhum segmento vazio, nenhum `.` e nenhum `..`. A parte 2 não é defesa: ela
+ * é o formato de hoje, e existe para a marca não valer para qualquer caminho
+ * bem-comportado. Se um dia a parte 2 precisar aceitar uma forma nova, ela
+ * afrouxa e a parte 1 continua segurando. Se a parte 1 afrouxar, **não há mais
+ * nada embaixo** — a parte 2 aceita `{thumb|card}/{nome}.{ext}` e um `nome`
+ * como `..%2fx` ou `a/../../b` passaria a montar um caminho que sai do prefixo,
+ * e daí para o `pathname` da URL é direto.
+ *
+ * Então: relaxar a parte 1 "porque a parte 2 já é frouxa" inverte o argumento e
+ * abre exatamente o buraco do BICHUS-133 e do BICHUS-134. Se a parte 1 tiver
+ * mesmo de mudar, a conferência inteira volta para a mesa — não é ajuste de
+ * regex.
  */
 export function comoObjectKey(valor: string): ObjectKey {
   if (valor.length === 0 || valor.length > LIMITE_DA_CHAVE) {
@@ -151,6 +173,11 @@ export function comoObjectKey(valor: string): ObjectKey {
   // são a travessia propriamente dita. RECUSA e não normalização: normalizar
   // aqui devolveria uma chave diferente da que está gravada, e a foto passaria
   // a ser lida de um lugar onde ninguém a escreveu.
+  //
+  // ESTA CONFERÊNCIA E A DE CARACTERES ACIMA SÃO A PARTE 1. Nada abaixo delas
+  // impede travessia — a forma (parte 2) é o formato de hoje, não uma defesa.
+  // Afrouxar aqui "porque a parte 2 já é frouxa" inverte a dependência e abre o
+  // buraco. Ver a seção sobre isso no comentário desta função.
   if (segmentos.some((s) => s === '' || s === '.' || s === '..')) {
     recusarChave(valor, 'segmento que atravessa o caminho');
   }
