@@ -12,6 +12,8 @@
  */
 import { assertSafeBoot, optionalEnv } from '../shared/config/env.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
+import { resolverSegredos } from '../shared/config/segredos.js';
+import { criarSecretProvider } from '../shared/adapters/external/env-var-secret-provider.js';
 import { createDb } from '../shared/db/pool.js';
 import { hmacDeEnderecoIp } from '../shared/crypto/digest.js';
 import { criarIdGenerator } from '../shared/id/uuidv7.js';
@@ -55,6 +57,17 @@ const PREFIXO_DA_API = '/v1';
 export async function main(): Promise<void> {
   // Primeira coisa, antes de ouvir qualquer porta: as travas da §11.2.
   assertSafeBoot();
+
+  // Os segredos vêm ANTES de `loadAppConfig()` porque é ela que os lê. Em
+  // `dev` isto é o `env_file` de sempre; em `prod`/`preprod` vem do gerenciador
+  // (ADR-0022), e nos dois casos o valor chega em `process.env` com o MESMO
+  // nome — é o que mantém os `requireEnv('NOME')` literais visíveis para a
+  // guarda da esteira e as validações de forma valendo sem uma linha nova.
+  //
+  // Ligar aqui não é detalhe: sem esta chamada a porta inteira seria código
+  // morto, que foi exatamente o defeito que o QA achou em
+  // `invalidarTodasAsSessoes` — mecanismo escrito, testado, e sem chamador.
+  await resolverSegredos(criarSecretProvider(optionalEnv('ENVIRONMENT') ?? 'dev'));
 
   const config = loadAppConfig();
   // O contrato é carregado na subida, e não na primeira requisição: operação sem

@@ -13,6 +13,7 @@
  */
 import { createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
 import { boolEnv, optionalEnv, requireEnv } from './env.js';
+import { ehAmbienteHospedado } from './ambiente-hospedado.js';
 import type { AbsoluteUrl } from '../types/brands.js';
 
 export interface SigningKey {
@@ -202,11 +203,11 @@ function carregarChave(
  * seria atrito novo sem risco atrás dele.
  */
 function exigeChaveDeRotacao(environment: string): boolean {
-  return (
-    process.env['NODE_ENV'] === 'production' ||
-    environment === 'prod' ||
-    environment === 'preprod'
-  );
+  // O predicado saiu daqui para `ambiente-hospedado.ts` quando o ADR-0022
+  // precisou da MESMA pergunta para decidir de onde vêm os segredos. Delegar,
+  // e não copiar, é o que o parágrafo acima exige: duas respostas viram duas
+  // verdades, e a que fica para trás é sempre a que protege.
+  return ehAmbienteHospedado(environment);
 }
 
 function carregarToken(environment: string): TokenConfig {

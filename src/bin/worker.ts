@@ -17,6 +17,8 @@
  */
 import { assertSafeBoot, optionalEnv } from '../shared/config/env.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
+import { resolverSegredos } from '../shared/config/segredos.js';
+import { criarSecretProvider } from '../shared/adapters/external/env-var-secret-provider.js';
 import { createDb } from '../shared/db/pool.js';
 import { manterProcessoVivo } from '../shared/process/vida-do-processo.js';
 import { systemClock } from '../shared/time/clock.js';
@@ -64,6 +66,17 @@ const TRABALHOS_POR_PASSADA = 1;
 
 export async function main(): Promise<void> {
   assertSafeBoot();
+  // Os segredos vêm ANTES de `loadAppConfig()` porque é ela que os lê. Em
+  // `dev` isto é o `env_file` de sempre; em `prod`/`preprod` vem do gerenciador
+  // (ADR-0022), e nos dois casos o valor chega em `process.env` com o MESMO
+  // nome — é o que mantém os `requireEnv('NOME')` literais visíveis para a
+  // guarda da esteira e as validações de forma valendo sem uma linha nova.
+  //
+  // Ligar aqui não é detalhe: sem esta chamada a porta inteira seria código
+  // morto, que foi exatamente o defeito que o QA achou em
+  // `invalidarTodasAsSessoes` — mecanismo escrito, testado, e sem chamador.
+  await resolverSegredos(criarSecretProvider(optionalEnv('ENVIRONMENT') ?? 'dev'));
+
   const config = loadAppConfig();
   const banco = createDb(config.databaseUrl);
 

@@ -41,6 +41,12 @@ EXTENSOES = {".ts", ".tsx", ".js", ".mjs", ".dart", ".sql", ".yaml", ".yml", ".j
 REGRAS_PROVEDOR = [
     (re.compile(r"\b[\w.-]*\.amazonaws\.com\b"), "dominio de provedor (AWS)"),
     (re.compile(r"\bstorage\.googleapis\.com\b"), "dominio de provedor (GCS)"),
+    # O ADR-0022 trouxe o PRIMEIRO servico gerenciado para o caminho de runtime.
+    # A excecao vale para o adaptador e para mais nada: sem esta regra, o nome do
+    # gerenciador podia aparecer em `config/` e o portao so reclamaria por ser um
+    # `.com` qualquer, que e a familia errada de achado e a mensagem errada para
+    # quem le. Ver a isca em tests/portabilidade/deve-reprovar-provedor.ts.
+    (re.compile(r"\bsecretmanager\.googleapis\.com\b"), "dominio de provedor (Secret Manager)"),
     (re.compile(r"\b[\w.-]*\.blob\.core\.windows\.net\b"), "dominio de provedor (Azure)"),
     (re.compile(r"\b[\w.-]*\.r2\.cloudflarestorage\.com\b"), "dominio de provedor (R2)"),
     (re.compile(r"[\"'](?:us|eu|ap|sa)-(?:east|west|north|south|central|northeast|southeast)-\d[\"']"),

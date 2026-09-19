@@ -69,7 +69,7 @@ Não crio conta em nuvem nem provisiono recurso. Estes quatro são dele:
 | Projeto `bichu-app-508914` criado no GCP | não há onde criar a VM |
 | **Faturamento vinculado ao projeto** | sem faturamento a `e2-small` não sobe. E, pior que falhar: **o Maps não falha — ele renderiza o mapa com marca d'água de erro**, que passa por defeito visual e some no relatório de homologação |
 | `gcloud auth login` feito nesta máquina | o sintoma da ausência é erro de credencial, não de permissão, e leva meia hora para ser lido como o que é |
-| Nenhum serviço gerenciado habilitado | ressalva explícita do cliente: nada de Cloud SQL, GCS no caminho da aplicação, CDN ou Secret Manager |
+| Nenhum serviço gerenciado habilitado, **com uma exceção** | ressalva explícita do cliente: nada de Cloud SQL, GCS no caminho da aplicação nem CDN. **O Secret Manager saiu desta lista em 19/09 pelo ADR-0022** e é o único gerenciado autorizado; a API já está habilitada no projeto. Os segredos e o papel `roles/secretmanager.secretAccessor` **por segredo** são criados pelo cliente, e nada neste roteiro os cria |
 
 **Verificação, antes de digitar qualquer outra coisa:**
 
@@ -104,6 +104,22 @@ cálculo.** Orçamento que conta o custo líquido fica perto de zero enquanto
 houver crédito, dispara o alerta no dia em que o crédito acaba, e informa
 exatamente quando já não adianta.
 
+**A conta de faturamento do Bichu e em BRL** (conferido em 19/09:
+`gcloud beta billing accounts describe` devolve `currencyCode: BRL`). O valor do
+orcamento precisa estar na moeda da CONTA -- `50USD` devolve
+`INVALID_ARGUMENT: Request contains an invalid argument`, sem dizer qual
+argumento, que foi meia hora de diagnostico. Confira a moeda antes:
+
+```bash
+gcloud beta billing accounts describe 010D34-805F24-7B501C \
+  --format='value(currencyCode)'
+```
+
+**Este passo ja estava cumprido em 19/09**: existe o orcamento `bichu-app-200`,
+de R$ 200, com os tres limiares e `EXCLUDE_ALL_CREDITS`. Nao crie um segundo --
+dois alertas sobre a mesma conta ensinam a ignorar os dois. O comando abaixo
+fica para quem for montar isto de novo do zero.
+
 ```bash
 CONTA=$(gcloud beta billing projects describe bichu-app-508914 \
   --format='value(billingAccountName)')
@@ -111,7 +127,7 @@ CONTA=$(gcloud beta billing projects describe bichu-app-508914 \
 gcloud billing budgets create \
   --billing-account="${CONTA##*/}" \
   --display-name="bichu - teto mensal" \
-  --budget-amount=50USD \
+  --budget-amount=200BRL \
   --threshold-rule=percent=0.5 \
   --threshold-rule=percent=0.9 \
   --threshold-rule=percent=1.0 \
@@ -126,7 +142,7 @@ listagem resumida.
 ```bash
 gcloud billing budgets list --billing-account="${CONTA##*/}" \
   --format='table(displayName, amount.specifiedAmount.units, budgetFilter.creditTypesTreatment)'
-# bichu - teto mensal  50  EXCLUDE_ALL_CREDITS
+# bichu-app-200  200  BRL  EXCLUDE_ALL_CREDITS
 ```
 
 Se a coluna vier vazia ou com `INCLUDE_ALL_CREDITS`, o alerta está ligado e
@@ -236,6 +252,48 @@ gcloud projects get-iam-policy bichu-app-508914 \
 
 Se `roles/editor` aparecer nesta saída, a VM está rodando com permissão de
 editar o projeto e o passo falhou.
+
+---
+
+### Passo 4.1 — Os segredos de runtime (ADR-0022)
+
+**Nada deste passo foi executado, e ele não é para eu executar.** Criar segredo e
+conceder papel é do cliente, e está aqui como proposta a conferir junto com o
+desenho — que é o que o ADR-0022 entrega.
+
+Vale só para `prod` e `preprod`. Em `dev`, `qa` e `homolog` os segredos continuam
+no arquivo de ambiente, e a aplicação sobe sem falar com o GCP.
+
+**O identificador do segredo é o nome da variável, sem tradução.** É contrato da
+porta `SecretProvider`, e é o que faz a §6 de `docs/07-devops.md` continuar
+verdadeira. Os sete de hoje estão em `SEGREDOS_DE_RUNTIME`
+(`src/shared/config/segredos.ts`): `DATABASE_URL`, `IP_HMAC_KEY`, `TAG_CODE_KEY`,
+`JWT_ACTIVE_PRIVATE_KEY`, `JWT_NEXT_PRIVATE_KEY`,
+`OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`.
+
+```bash
+# `printf %s`, NUNCA `echo`. `echo` acrescenta \n ao final, e o adaptador
+# devolve os bytes como foram gravados, de proposito -- ele nao apara nada,
+# porque um PEM PRECISA da quebra final e uma chave hexadecimal nao pode ter
+# nenhuma. Um `\n` grudado numa chave de 32 bytes vira chave de 33 e a falha
+# aparece longe daqui.
+printf %s "$VALOR" | gcloud secrets create TAG_CODE_KEY \
+  --project=bichu-app-508914 --replication-policy=automatic --data-file=-
+
+# Papel POR SEGREDO, nunca no projeto: e a mesma regra do bucket de backup no
+# passo 11. `secretAccessor` le versao; ele nao lista, nao cria e nao apaga.
+gcloud secrets add-iam-policy-binding TAG_CODE_KEY \
+  --project=bichu-app-508914 \
+  --member="serviceAccount:$SA" --role=roles/secretmanager.secretAccessor
+```
+
+**Verificação, e ela importa mais que o comando:** a mensagem de falha da
+aplicação precisa citar o segredo. Subir com um segredo faltando tem que
+imprimir o NOME dele — se imprimir `permission denied` cru, alguma coisa
+contornou o adaptador, e o defeito é esse, não o IAM.
+
+Rotacionar é `gcloud secrets versions add <NOME> --data-file=-` e reiniciar o
+processo: o adaptador lê `latest`. Não passa por deploy, de propósito.
 
 ---
 

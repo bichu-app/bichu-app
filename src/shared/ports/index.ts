@@ -14,4 +14,8 @@ export type { Clock } from '../time/clock.js';
 export type { JobQueue, JobKind, JobRecord } from './job-queue.js';
 export type { RateLimitStore } from './rate-limit-store.js';
 export type { SecretCipher } from './secret-cipher.js';
+export type { SecretProvider, NomeDeSegredo } from './secret-provider.js';
+// Classe, e nao tipo: quem trata a falha precisa do `instanceof` em tempo de
+// execucao para saber QUAL segredo faltou (ADR-0022).
+export { SegredoIndisponivelError } from './secret-provider.js';
 export type { IdGenerator } from './id-generator.js';
