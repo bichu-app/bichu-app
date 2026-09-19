@@ -47,6 +47,40 @@ export function ehTipoAceito(tipo: string): tipo is TipoAceito {
 
 export const TETO_DE_BYTES = 10 * 1024 * 1024;
 
+/**
+ * O que uma DERIVADA pode ser, e por que a lista não é a da entrada.
+ *
+ * `TIPOS_ACEITOS` é o que o tutor pode enviar; estas duas listas são o que o
+ * worker pode gravar. Elas são separadas porque a derivada não é o arquivo que
+ * chegou: o critério 14 manda reescrever a imagem em WebP com alternativa
+ * JPEG, então HEIC entra e nunca sai. Gravar aceitando a lista da entrada
+ * permitiria escrever um `image/heic` que derivada nenhuma produz — e a lista
+ * larga é justamente o que não se percebe no dia em que ela deixa de valer.
+ *
+ * As duas andam juntas: extensão e tipo descrevem o mesmo arquivo, e mexer em
+ * uma sem mexer na outra grava `.jpg` servido como `image/webp`.
+ */
+export const EXTENSOES_DE_DERIVADA = ['webp', 'jpg', 'jpeg'] as const;
+
+export type ExtensaoDeDerivada = (typeof EXTENSOES_DE_DERIVADA)[number];
+
+export function ehExtensaoDeDerivada(extensao: string): extensao is ExtensaoDeDerivada {
+  return (EXTENSOES_DE_DERIVADA as readonly string[]).includes(extensao);
+}
+
+export const TIPOS_DE_DERIVADA = ['image/webp', 'image/jpeg'] as const;
+
+export type TipoDeDerivada = (typeof TIPOS_DE_DERIVADA)[number];
+
+/**
+ * Por IGUALDADE, nunca por prefixo — o mesmo desenho do critério 22 na entrada.
+ * `startsWith('image/')` aceitaria `image/svg+xml`, que é documento com script,
+ * e o domínio de mídia é separado da origem do app exatamente para conter isso.
+ */
+export function ehTipoDeDerivada(tipo: string): tipo is TipoDeDerivada {
+  return (TIPOS_DE_DERIVADA as readonly string[]).includes(tipo);
+}
+
 export function chaveDoOriginal(petId: string, aleatorio: Uint8Array): ObjectKey {
   if (aleatorio.length < 16) {
     // Falha ruidosa: uma chave com menos entropia que o critério exige passaria
@@ -68,6 +102,22 @@ export function chaveDaDerivada(
   aleatorio: Uint8Array,
   extensao: string,
 ): ObjectKey {
+  // A extensão vem do adaptador de imagem e é INTERPOLADA NO CAMINHO uma linha
+  // abaixo. `webp/../../../publico/card/x.webp` não é extensão mal formatada: é
+  // uma chave que sai do prefixo da variante e pode atravessar do bucket
+  // privado para o público. O agravante é a ordem — a assinatura V4 é calculada
+  // DEPOIS desta chave existir, então a gravação sairia assinada e válida para
+  // o lugar errado, e o armazenamento não teria como recusar.
+  //
+  // RECUSA, e não saneamento: saneando em silêncio a foto vai parar num caminho
+  // que ninguém escreveu, o log registra sucesso, e a chave gravada no banco
+  // deixa de ser a chave que o adaptador pediu.
+  if (!ehExtensaoDeDerivada(extensao)) {
+    throw new Error(
+      `Extensão de derivada recusada: ${JSON.stringify(extensao)}. ` +
+        `As únicas aceitas são ${EXTENSOES_DE_DERIVADA.join(', ')}.`,
+    );
+  }
   const nome = Buffer.from(aleatorio).toString('base64url');
   return `${variante}/${nome}.${extensao}` as ObjectKey;
 }

@@ -32,9 +32,40 @@ export type MotivoDeRecusa =
   /** O cabeçalho não pôde ser lido: arquivo truncado ou corrompido. */
   | 'imagem_ilegivel';
 
+/**
+ * O resultado de `derivar`, e as DUAS exigências que o adaptador precisa cumprir.
+ *
+ * Elas estão escritas aqui porque quem implementar a próxima versão desta porta
+ * não tem como adivinhá-las lendo o tipo: os dois campos são `string`, e os dois
+ * saem daqui direto para um lugar onde `string` qualquer faz estrago. Hoje o
+ * único adaptador devolve literais seguros — e é só isso que segura (BICHUS-133).
+ */
 export interface Derivada {
   readonly bytes: Buffer;
+  /**
+   * EXIGÊNCIA: um de `TIPOS_DE_DERIVADA` (`image/webp` ou `image/jpeg`).
+   *
+   * Ele vira o `Content-Type` do PUT sem passar por mais nada, e o
+   * armazenamento devolve depois o que recebeu. Um adaptador que devolvesse
+   * `text/html` faria o domínio de mídia servir HTML executável — e esse
+   * domínio é separado da origem do app justamente para conter XSS.
+   *
+   * A gravação recusa o que estiver fora da lista, por IGUALDADE e nunca por
+   * prefixo: `image/` aceitaria `image/svg+xml`, que é documento com script.
+   */
   readonly contentType: string;
+  /**
+   * EXIGÊNCIA: uma de `EXTENSOES_DE_DERIVADA` (`webp`, `jpg` ou `jpeg`), sem
+   * ponto e sem barra.
+   *
+   * Ela é INTERPOLADA NO CAMINHO da chave (`{variante}/{nome}.{extensao}`).
+   * Extensão com barra ou `..` escapa do prefixo da variante e pode atravessar
+   * do bucket privado para o público; como a assinatura V4 é calculada depois
+   * da chave existir, a gravação sairia assinada e válida para o lugar errado.
+   *
+   * `chaveDaDerivada` RECUSA o que estiver fora da lista, e não saneia: uma
+   * extensão com travessia não é formatação ruim, é tentativa.
+   */
   readonly extensao: string;
   readonly largura: number;
   readonly altura: number;

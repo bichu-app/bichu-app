@@ -9,11 +9,13 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
+import { posix } from 'node:path';
 import {
   TETO_DE_BYTES,
   chaveDaDerivada,
   chaveDoOriginal,
   ehTipoAceito,
+  ehTipoDeDerivada,
 } from './chave-de-objeto.js';
 
 const PET = '01a0b47d-ae11-7d5b-9b58-d77530774256';
@@ -85,5 +87,103 @@ void describe('tipos aceitos', () => {
 
   void it('o teto é o do contrato', () => {
     assert.equal(TETO_DE_BYTES, 10_485_760);
+  });
+});
+
+/**
+ * A extensão da derivada, que é o campo que VIRA CAMINHO (BICHUS-133).
+ *
+ * O que se prova aqui não é a mensagem do erro: é que **nenhuma chave sai do
+ * prefixo da variante**. A afirmação é sobre a chave e não sobre a exceção de
+ * propósito — uma implementação que saneasse a extensão em silêncio também não
+ * lançaria, e gravaria a foto num caminho que ninguém escreveu.
+ */
+const ALEATORIO = new Uint8Array(16).fill(42);
+
+/** A chave, ou `null` quando a geração recusou. */
+function chaveOuNada(variante: 'thumb' | 'card', extensao: string): string | null {
+  try {
+    return chaveDaDerivada(variante, ALEATORIO, extensao);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * O primeiro segmento DEPOIS de resolver `..`, que é onde o objeto grava de
+ * verdade. Comparar o texto cru diria "começa com `card/`" para uma chave que
+ * o armazenamento resolve para `publico/`.
+ */
+function prefixoEfetivo(chave: string): string {
+  return posix.normalize(chave).split('/')[0] ?? '';
+}
+
+const EXTENSOES_HOSTIS = [
+  // A do relato: escapa do prefixo da variante e do bucket privado para o
+  // público, com a assinatura V4 calculada depois — gravação válida no lugar
+  // errado, que o armazenamento não tem como recusar.
+  'webp/../../../publico/card/x.webp',
+  '../thumb/x.webp',
+  'webp/x.webp',
+  'webp/..',
+  '.webp',
+  '',
+  // Caixa alta: a lista é por IGUALDADE, e `WEBP` não é `webp`. Extensão que
+  // ninguém gera hoje não passa por ser parecida com uma que gera.
+  'WEBP',
+];
+
+void describe('extensão da derivada', () => {
+  void it('nenhuma extensão hostil produz chave fora do prefixo da variante', () => {
+    for (const hostil of EXTENSOES_HOSTIS) {
+      const chave = chaveOuNada('card', hostil);
+      assert.ok(
+        chave === null || prefixoEfetivo(chave) === 'card',
+        `a chave escapou do prefixo da variante: ${String(chave)}`,
+      );
+      assert.equal(chave, null, `saneou em silêncio em vez de recusar: ${String(chave)}`);
+    }
+  });
+
+  void it('RECUSA com a extensão no texto, para o defeito aparecer no log', () => {
+    assert.throws(
+      () => chaveDaDerivada('card', ALEATORIO, 'webp/../../../publico/card/x.webp'),
+      /Extensão de derivada recusada/,
+    );
+  });
+
+  void it('a extensão legítima continua passando — recusar tudo não é defesa', () => {
+    // O contrapeso. Sem ele, uma implementação que recusasse toda extensão
+    // passaria nos casos acima e quebraria o processamento inteiro em silêncio.
+    for (const boa of ['webp', 'jpg', 'jpeg']) {
+      const chave = chaveDaDerivada('card', ALEATORIO, boa);
+      assert.equal(prefixoEfetivo(chave), 'card', chave);
+      assert.ok(chave.endsWith(`.${boa}`), chave);
+    }
+    assert.equal(prefixoEfetivo(chaveDaDerivada('thumb', ALEATORIO, 'webp')), 'thumb');
+  });
+});
+
+void describe('tipo da derivada — o que pode ser GRAVADO', () => {
+  void it('aceita os dois que o worker produz', () => {
+    // Contrapeso do lado da gravação: o caminho feliz precisa continuar existindo.
+    assert.ok(ehTipoDeDerivada('image/webp'));
+    assert.ok(ehTipoDeDerivada('image/jpeg'));
+  });
+
+  void it('RECUSA por igualdade, e o prefixo `image/` não é critério', () => {
+    // `starts-with: image/` aceitaria `image/svg+xml`, que é documento com
+    // script servido pelo domínio de mídia — o mesmo erro que o critério 22
+    // proíbe na entrada.
+    for (const ruim of ['image/svg+xml', 'text/html', 'image/', 'image/webp; charset=utf-8', 'IMAGE/WEBP']) {
+      assert.ok(!ehTipoDeDerivada(ruim), ruim);
+    }
+  });
+
+  void it('RECUSA image/heic, que entra mas nunca sai', () => {
+    // Aceito no ENVIO e impossível como derivada: o worker reescreve tudo em
+    // WebP. Gravar HEIC seria a lista da entrada vazando para a saída.
+    assert.ok(ehTipoAceito('image/heic'));
+    assert.ok(!ehTipoDeDerivada('image/heic'));
   });
 });

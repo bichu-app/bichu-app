@@ -33,6 +33,7 @@ import type {
   ObjectStorage,
   PedidoDeEnvio,
 } from '../../ports/object-storage.js';
+import { ehTipoDeDerivada } from '../../domain/chave-de-objeto.js';
 import type { ObjectStorageConfig } from '../../../../shared/config/app-config.js';
 import type { AbsoluteUrl, ObjectKey } from '../../../../shared/types/brands.js';
 
@@ -249,6 +250,20 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
     },
 
     async put(classe, chave, bytes, contentType): Promise<void> {
+      // O `contentType` vira o cabeçalho do PUT três linhas abaixo, e é com ele
+      // que o armazenamento devolve o objeto para quem baixar depois. Um
+      // adaptador de imagem que devolvesse `text/html` gravaria uma página
+      // executável servida pelo domínio de mídia — que é separado da origem do
+      // app exatamente para conter XSS.
+      //
+      // A entrada já recusa tipo fora da lista (critério 22, por igualdade e
+      // nunca por prefixo); a gravação não recusava nada. A defesa de um lado
+      // só vale enquanto ninguém acrescenta um caminho do outro.
+      if (!ehTipoDeDerivada(contentType)) {
+        throw new Error(
+          `PUT recusado: content-type ${JSON.stringify(contentType)} não é tipo de derivada.`,
+        );
+      }
       const url = urlDoObjeto(classe, chave);
       const resposta = await fetch(url, {
         method: 'PUT',
