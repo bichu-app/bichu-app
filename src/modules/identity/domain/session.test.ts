@@ -10,6 +10,7 @@ import { describe, it } from 'node:test';
 import type { Instant } from '../../../shared/types/brands.js';
 import {
   barreiraDeContaNova,
+  instanteDeEmissaoDoAcesso,
   prazosDeNovaFamilia,
   prazosDeRotacao,
   segundosRestantes,
@@ -136,5 +137,84 @@ void describe('barreira de sessão da conta recém-criada', () => {
       assert.ok(uma <= ms);
       assert.equal(barreiraDeContaNova(uma), uma);
     }
+  });
+});
+
+/**
+ * A emissão que espera a virada do segundo (BICHUS-132).
+ *
+ * O defeito que estes casos travam tem vítima com nome: é a pessoa que acabou
+ * de recuperar uma conta tomada. Ela redefine a senha, entra no mesmo segundo,
+ * e a primeira tela responde "sua sessão terminou". Tenta de novo e funciona —
+ * mas já levou o susto exatamente no momento em que mais precisava acreditar
+ * que a conta voltou a ser dela.
+ *
+ * O primeiro caso é a isca: ele reprova com o código antigo instalado. Os
+ * outros são o contrapeso, e existem porque uma "correção" que simplesmente
+ * afrouxasse `tokenFoiRevogado` passaria no primeiro e devolveria ao invasor a
+ * janela de um segundo que o arredondamento existe para tirar.
+ */
+void describe('emissão que espera a virada do segundo (BICHUS-132)', () => {
+  const emSegundos = (instante: number): number => Math.floor(instante / 1000);
+
+  void it('o token emitido no MESMO SEGUNDO da redefinição nasce VALENDO', () => {
+    // Redefinição em 20,734 s; a pessoa entra 100 ms depois, no mesmo segundo.
+    const redefinidaEm = 1_789_734_320_734 as Instant;
+    const login = 1_789_734_320_834 as Instant;
+
+    const iat = emSegundos(instanteDeEmissaoDoAcesso(login, redefinidaEm));
+    assert.equal(
+      tokenFoiRevogado(iat, redefinidaEm),
+      false,
+      'a primeira tela depois da redefinição não pode responder 401',
+    );
+  });
+
+  void it('o empurrão é de no máximo um segundo, e para a virada exata', () => {
+    // O custo é o teto do que a pessoa espera: nunca mais do que a virada.
+    const redefinidaEm = 1_789_734_320_734 as Instant;
+    const login = 1_789_734_320_834 as Instant;
+
+    assert.equal(instanteDeEmissaoDoAcesso(login, redefinidaEm), 1_789_734_321_000);
+    assert.ok(instanteDeEmissaoDoAcesso(login, redefinidaEm) - login <= 1000);
+  });
+
+  void it('a REVOGAÇÃO não se move: o arredondamento para cima continua inteiro', () => {
+    // O contrapeso principal. Quem tomou a conta está renovando em laço no
+    // instante em que a vítima troca a senha; o token que ele recebeu no mesmo
+    // segundo da revogação continua caindo do lado revogado. É `tokenFoiRevogado`
+    // que garante isso, e ele não foi tocado.
+    const revogacao = 1_789_734_320_734 as Instant;
+    assert.equal(tokenFoiRevogado(emSegundos(revogacao), revogacao), true);
+    assert.equal(tokenFoiRevogado(emSegundos(revogacao) - 1, revogacao), true);
+  });
+
+  void it('nada de token ANTERIOR passa a valer por causa do empurrão', () => {
+    // O empurrão move a emissão, e só a emissão. Um `iat` que já existia — o do
+    // token que o invasor tem na mão — não ganha nada com ele.
+    const redefinidaEm = 1_789_734_320_734 as Instant;
+    const login = 1_789_734_320_834 as Instant;
+    const empurrado = instanteDeEmissaoDoAcesso(login, redefinidaEm);
+
+    for (const anterior of [
+      emSegundos(redefinidaEm),
+      emSegundos(redefinidaEm) - 1,
+      emSegundos(redefinidaEm) - 60,
+    ]) {
+      assert.ok(anterior < emSegundos(empurrado), 'o token velho segue em outro segundo');
+      assert.equal(tokenFoiRevogado(anterior, redefinidaEm), true);
+    }
+  });
+
+  void it('sem revogação recente, a emissão sai na hora — ninguém espera à toa', () => {
+    // O caso de todo dia: quem entra sem ter redefinido senha nenhuma não paga
+    // nem um milissegundo. Sem este caso, "some sempre um segundo" passaria.
+    const login = 1_789_734_320_834 as Instant;
+    const velha = (login - 60_000) as Instant;
+    assert.equal(instanteDeEmissaoDoAcesso(login, velha), login);
+
+    // E a conta recém-criada, cuja barreira já vem truncada ao segundo, também
+    // não paga: `barreiraDeContaNova` e este empurrão não se atropelam.
+    assert.equal(instanteDeEmissaoDoAcesso(login, barreiraDeContaNova(login)), login);
   });
 });

@@ -17,6 +17,7 @@ import {
 } from '../domain/password.js';
 import { validarSenha } from '../domain/password-policy.js';
 import {
+  instanteDeEmissaoDoAcesso,
   prazosDeNovaFamilia,
   prazosDeRotacao,
   segundosRestantes,
@@ -119,6 +120,18 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
    * Emite o par de tokens de uma **família nova**. Usado no cadastro e no login,
    * que são os dois momentos em que a senha foi de fato verificada — e é dessa
    * verificação que o teto absoluto de 180 dias começa a contar.
+   *
+   * É aqui, e **só aqui**, que a emissão do token de acesso espera a virada do
+   * segundo quando a conta acabou de ter as sessões invalidadas (BICHUS-132).
+   * A senha recém-verificada é o que justifica o empurrão: depois de uma
+   * redefinição, a senha nova só está na mão de quem a escolheu.
+   *
+   * `renovar` NÃO recebe o mesmo tratamento, e a ausência é a decisão. Lá o que
+   * se apresenta é um refresh, não a senha — e quem tomou a conta está
+   * justamente renovando em laço no instante em que a vítima troca a senha. Dar
+   * o empurrão ali devolveria a ele a janela de um segundo que o arredondamento
+   * de `tokenFoiRevogado` existe para tirar. Depois de uma redefinição a pessoa
+   * legítima não renova: a família dela caiu junto, e o caminho dela é entrar.
    */
   async function abrirSessao(
     conta: Conta,
@@ -142,7 +155,15 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       ipHmac: deps.hmacDeIp(contexto.ip),
     });
 
-    const acesso = deps.assinador.emitir(conta.id, agora, deps.ids.uuidv7());
+    // A espera da virada do segundo mora aqui, e não no domínio: quem sabe QUAL
+    // conta está entrando é o caso de uso. O domínio só faz a conta — ele não
+    // pode ler relógio, e não precisa: `agora` já chega injetado.
+    //
+    // Nada mais se move junto. Os prazos do refresh, a trilha e a projeção
+    // continuam em `agora`: o que muda é o `iat` de UM token, em até um segundo,
+    // e só no login logo depois de uma redefinição de senha.
+    const emitidoEm = instanteDeEmissaoDoAcesso(agora, conta.sessionsInvalidBefore);
+    const acesso = deps.assinador.emitir(conta.id, emitidoEm, deps.ids.uuidv7());
     return {
       accessToken: acesso.token,
       expiresInSeconds: acesso.expiresInSeconds,

@@ -114,3 +114,54 @@ export function tokenFoiRevogado(iatEmSegundos: number, sessionsInvalidBefore: I
 export function barreiraDeContaNova(agora: Instant): Instant {
   return (Math.floor(agora / 1000) * 1000) as Instant;
 }
+
+/**
+ * O instante com que o token de acesso deve ser EMITIDO para que ele não nasça
+ * recusado pela própria barreira do SEC-006 (BICHUS-132).
+ *
+ * Quem sofria é a pessoa que está recuperando uma conta tomada: ela redefine a
+ * senha, entra no mesmo segundo, e leva "sua sessão terminou" na primeira tela.
+ * Tenta de novo e funciona — mas já levou o susto no pior momento possível, e
+ * algumas concluem que a conta continua nas mãos de outra pessoa.
+ *
+ * A aritmética, com a redefinição caindo em 20,734 s:
+ *
+ * ```
+ * sessions_invalid_before  1789734320734 ms -> arredonda para 1789734321000
+ * iat do token emitido     1789734320    s  -> vira          1789734320000
+ * 1789734320000 < 1789734321000  ->  REVOGADO, recém-emitido
+ * ```
+ *
+ * Esta função é a **inversa exata** de {@link tokenFoiRevogado}: devolve o menor
+ * instante cujo `iat` (que é `floor(instante / 1000)`) sobrevive à barreira. Na
+ * prática, a emissão espera a virada do segundo — sem segurar a requisição, que
+ * é o que um `sleep` faria justamente na tela de recuperação de conta.
+ *
+ * O token sai, então, com `iat` até um segundo à frente do relógio. Isso só é
+ * possível porque a verificação tolera relógio adiantado (`clockToleranceSeconds`,
+ * hoje 60 s em `shared/config/app-config.ts`): com tolerância zero, o próprio
+ * emissor recusaria o token como `emitido_no_futuro` e o defeito voltaria com
+ * outro nome. Quem for mexer naquele número precisa passar por aqui.
+ *
+ * **O arredondamento para cima de `tokenFoiRevogado` continua intocado.** Ele é
+ * quem fecha a janela de um segundo que quem tomou a conta usaria, renovando em
+ * laço no momento em que a vítima troca a senha. Quem se move é a emissão, e só
+ * ela: o lado revogado não afrouxa em nada.
+ *
+ * **Não é o caso de `barreiraDeContaNova`, e copiar de lá seria um defeito.**
+ * Truncar para baixo é seguro na criação de conta porque antes daquele segundo
+ * a conta não existia, então não pode haver token anterior. Na redefinição pode
+ * haver: truncar devolveria ao invasor exatamente a janela que o arredondamento
+ * existe para tirar. Aqui nada é truncado — o que muda é de que lado da barreira
+ * o token NOVO nasce.
+ *
+ * Só deve ser usada onde a **senha acabou de ser verificada** (cadastro e
+ * login). Aplicar isto na rotação de refresh daria o empurrão a quem só
+ * apresentou um refresh, e não a senha nova — ver `abrirSessao`.
+ */
+export function instanteDeEmissaoDoAcesso(
+  agora: Instant,
+  sessionsInvalidBefore: Instant,
+): Instant {
+  return Math.max(agora, Math.ceil(sessionsInvalidBefore / 1000) * 1000) as Instant;
+}

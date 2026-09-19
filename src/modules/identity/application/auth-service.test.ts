@@ -26,6 +26,7 @@ import type {
   UserId,
 } from '../../../shared/types/brands.js';
 import { dataFixa, INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
+import { gerarHashDeSenha } from '../domain/password.js';
 import type {
   Conta,
   CredencialLocal,
@@ -105,12 +106,26 @@ class RepositorioFalso implements IdentityRepository {
   public readonly credenciaisRegravadas: { identityId: string; agora: Instant }[] = [];
   /** Quantas vezes o link foi GASTO. O critério 12 vive nesta contagem. */
   public readonly consumosDeToken: Instant[] = [];
+  public readonly familiasAbertas: NovoRefresh[] = [];
+  public readonly loginsRegistrados: { identityId: string; agora: Instant }[] = [];
+
+  /**
+   * A conta é MUTÁVEL de propósito (BICHUS-132): entre duas chamadas do mesmo
+   * caso de teste, a vítima redefine a senha e `sessions_invalid_before` anda.
+   * Um campo imutável obrigaria a montar duas bancadas, e aí o token do invasor
+   * e o token da vítima não estariam mais na mesma linha do tempo — que é
+   * exatamente o que o caso precisa provar.
+   */
+  public conta: Conta | undefined;
 
   constructor(
     private readonly refresh: RefreshArmazenado | undefined,
-    private readonly conta: Conta | undefined,
+    conta: Conta | undefined,
     private readonly redefinicao: RedefinicaoPendente | undefined = undefined,
-  ) {}
+    private readonly login: CredencialLocal | undefined = undefined,
+  ) {
+    this.conta = conta;
+  }
 
   buscarRefreshPorHash(): Promise<RefreshArmazenado | undefined> {
     return Promise.resolve(this.refresh);
@@ -140,20 +155,27 @@ class RepositorioFalso implements IdentityRepository {
     return naoUsado('buscarContaPorEmail');
   }
   buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined> {
-    if (this.redefinicao === undefined) return naoUsado('buscarCredencialLocalPorEmail');
-    const dono = this.redefinicao.consumido?.enviadoPara;
-    return Promise.resolve(email === dono ? this.redefinicao.credencial : undefined);
+    if (this.redefinicao !== undefined) {
+      const dono = this.redefinicao.consumido?.enviadoPara;
+      return Promise.resolve(email === dono ? this.redefinicao.credencial : undefined);
+    }
+    if (this.login === undefined) return naoUsado('buscarCredencialLocalPorEmail');
+    return Promise.resolve(this.login);
   }
   regravarCredencial(identityId: string, _phc: string, agora: Instant): Promise<void> {
     if (this.redefinicao === undefined) return naoUsado('regravarCredencial');
     this.credenciaisRegravadas.push({ identityId, agora });
     return Promise.resolve();
   }
-  registrarLogin(): Promise<void> {
-    return naoUsado('registrarLogin');
+  registrarLogin(identityId: string, agora: Instant): Promise<void> {
+    if (this.login === undefined) return naoUsado('registrarLogin');
+    this.loginsRegistrados.push({ identityId, agora });
+    return Promise.resolve();
   }
-  gravarRefresh(): Promise<void> {
-    return naoUsado('gravarRefresh');
+  gravarRefresh(novo: NovoRefresh): Promise<void> {
+    if (this.login === undefined) return naoUsado('gravarRefresh');
+    this.familiasAbertas.push(novo);
+    return Promise.resolve();
   }
   invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
     this.invalidacoesDeSessao.push({ userId, agora });
@@ -198,8 +220,16 @@ function montar(opcoes: {
   conta?: Conta | undefined;
   verificacao?: ResultadoDaVerificacao | undefined;
   redefinicao?: RedefinicaoPendente | undefined;
+  login?: CredencialLocal | undefined;
+  agora?: Instant | undefined;
 }): Bancada {
-  const repo = new RepositorioFalso(opcoes.refresh, opcoes.conta, opcoes.redefinicao);
+  const repo = new RepositorioFalso(
+    opcoes.refresh,
+    opcoes.conta,
+    opcoes.redefinicao,
+    opcoes.login,
+  );
+  const agoraDaBancada = opcoes.agora ?? AGORA;
   const eventos: AuditEvent[] = [];
   const avisos: AvisoAoTitular[] = [];
   const mensagens: Mensagem[] = [];
@@ -216,14 +246,40 @@ function montar(opcoes: {
       return Promise.resolve();
     },
   };
+  /**
+   * O dublê do assinador guarda o `iat` de cada token que emitiu e devolve o
+   * MESMO valor na verificação.
+   *
+   * Sem essa volta, `emitir` e `verificar` seriam dois dublês independentes e o
+   * caso de BICHUS-132 não teria como provar nada: o que o defeito faz é a
+   * emissão e a barreira discordarem sobre o mesmo token. O `Math.floor` é o do
+   * emissor real (`rs256-token-signer.ts`) — um dublê que arredondasse de outro
+   * jeito provaria a aritmética do dublê, e não a do produto.
+   */
+  const iatPorToken = new Map<string, number>();
   const assinador: TokenSigner = {
-    emitir: (sub, agora, jti) => ({
-      token: `token-de-${sub}`,
-      expiresInSeconds: 900,
-      issuedAt: Math.floor(agora / 1000),
-      jti,
-    }),
-    verificar: () => opcoes.verificacao ?? { ok: false, motivo: 'malformado' },
+    emitir: (sub, agora, jti) => {
+      const iat = Math.floor(agora / 1000);
+      const token = `token-de-${sub}#${String(iatPorToken.size + 1)}`;
+      iatPorToken.set(token, iat);
+      return { token, expiresInSeconds: 900, issuedAt: iat, jti };
+    },
+    verificar: (token) => {
+      if (opcoes.verificacao !== undefined) return opcoes.verificacao;
+      const iat = iatPorToken.get(token);
+      if (iat === undefined) return { ok: false, motivo: 'malformado' };
+      return {
+        ok: true,
+        claims: {
+          sub: VITIMA,
+          iss: 'https://api.bichu.test',
+          aud: 'https://api.bichu.test',
+          iat,
+          exp: iat + 900,
+          jti: 'jti-1',
+        },
+      };
+    },
     jwks: () => [],
   };
 
@@ -236,7 +292,7 @@ function montar(opcoes: {
       opaqueToken: () => 'refresh-novo' as OpaqueToken,
       random128: () => new Uint8Array(16),
     },
-    clock: relogioParado(AGORA),
+    clock: relogioParado(agoraDaBancada),
     janelas: {
       idleTtlSeconds: 30 * 86_400,
       staySignedInIdleTtlSeconds: 180 * 86_400,
@@ -526,5 +582,131 @@ void describe('confirmarRedefinicaoDeSenha(): o gatilho que sobrou do critério 
     assert.deepEqual(bancada.repo.invalidacoesDeSessao, []);
     assert.deepEqual(bancada.repo.credenciaisRegravadas, []);
     assert.deepEqual(bancada.eventos, [], 'nada aconteceu, nada é registrado');
+  });
+});
+
+/**
+ * Entrar no MESMO SEGUNDO em que a senha foi redefinida (BICHUS-132).
+ *
+ * Quem sofre o defeito é exatamente a pessoa que está recuperando uma conta
+ * tomada. Ela acabou de escolher a senha nova, entra, e a primeira tela responde
+ * "sua sessão terminou". Tenta de novo e funciona — mas já levou o susto no pior
+ * momento possível, e algumas concluem que a conta continua nas mãos de outra
+ * pessoa e desistem ali.
+ *
+ * Os casos sobem a pilha de verdade: `entrar()` emite, `autenticar()` verifica, e
+ * a barreira do SEC-006 no meio é a de produção. O único dublê da rodada é o
+ * assinador, e ele devolve na verificação o MESMO `iat` que gravou na emissão —
+ * porque o defeito é justamente emissão e barreira discordarem sobre um token.
+ *
+ * O primeiro caso é a ISCA: reprova com o código antigo instalado. Os outros são
+ * o CONTRAPESO, e existem porque uma "correção" que afrouxasse a comparação
+ * passaria na isca e devolveria ao invasor a janela de um segundo que o
+ * arredondamento de `tokenFoiRevogado` existe para tirar.
+ */
+void describe('entrar no mesmo segundo da redefinição de senha (BICHUS-132)', () => {
+  const EMAIL_DA_CONTA = 'tutora@exemplo.test';
+  // A política recusa senha derivada do endereço; uma senha que tropeçasse nisso
+  // provaria a política em vez do que está sendo testado aqui.
+  const SENHA_NOVA = 'chuva-de-marco-no-quintal';
+  const IDENTIDADE = 'identidade-local-1';
+
+  /** O relógio do login: 734 ms depois da virada do segundo. */
+  const LOGIN_EM = (INSTANTE_FIXO + 734) as Instant;
+  /** A redefinição caiu 234 ms antes — o MESMO segundo de relógio. */
+  const REDEFINIDA_EM = (INSTANTE_FIXO + 500) as Instant;
+  /** A marca que a conta tinha antes de a vítima trocar a senha. */
+  const ANTES_DA_TROCA = (INSTANTE_FIXO - 60_000) as Instant;
+
+  // Derivar PBKDF2 são 210.000 iterações. Uma vez para o arquivo inteiro: o
+  // custo é do algoritmo e não tem nada a ver com o que está sendo provado.
+  let phcGuardado: string | undefined;
+  async function phcDaSenhaNova(): Promise<string> {
+    phcGuardado ??= await gerarHashDeSenha(SENHA_NOVA);
+    return phcGuardado;
+  }
+
+  async function bancadaDeLogin(sessionsInvalidBefore: Instant): Promise<Bancada> {
+    return montar({
+      conta: contaAtiva(sessionsInvalidBefore),
+      agora: LOGIN_EM,
+      login: {
+        identityId: IDENTIDADE,
+        userId: VITIMA,
+        passwordPhc: await phcDaSenhaNova(),
+        mustChange: false,
+      },
+    });
+  }
+
+  const entrar = (bancada: Bancada): Promise<{ access_token: string }> =>
+    bancada.servico.entrar(
+      { email: EMAIL_DA_CONTA, password: SENHA_NOVA, staySignedIn: false },
+      CONTEXTO,
+    );
+
+  void it('A ISCA: a primeira tela depois de redefinir a senha FUNCIONA', async () => {
+    // O cenário inteiro, do jeito que a pessoa vive: a redefinição gravou
+    // `sessions_invalid_before` com precisão de milissegundo, ela entra no mesmo
+    // segundo, e o `iat` do token tem precisão de segundo. Sem a correção, o
+    // token nasce do lado revogado e esta chamada responde 401 `token-expired`
+    // — na PRIMEIRA requisição autenticada de quem acabou de retomar a conta.
+    const bancada = await bancadaDeLogin(REDEFINIDA_EM);
+    const sessao = await entrar(bancada);
+
+    const autenticado = await bancada.servico.autenticar(sessao.access_token);
+    assert.equal(autenticado.conta.id, VITIMA);
+  });
+
+  void it('O CONTRAPESO: o token do invasor, anterior à troca, continua recusado', async () => {
+    // A sessão que já estava aberta quando a vítima trocou a senha. Sem este
+    // caso, uma correção que simplesmente deixasse o empate passar em
+    // `tokenFoiRevogado` ficaria verde na isca — e a troca de senha deixaria de
+    // expulsar quem está dentro da conta, que é a única coisa que o produto pede
+    // que a vítima faça.
+    const bancada = await bancadaDeLogin(ANTES_DA_TROCA);
+    const doInvasor = await entrar(bancada);
+
+    // A vítima redefine a senha, 500 ms depois da virada.
+    bancada.repo.conta = contaAtiva(REDEFINIDA_EM);
+
+    const erro = await capturar(bancada.servico.autenticar(doInvasor.access_token));
+    assert.equal(erro.status, 401);
+    assert.equal(erro.problemType, 'token-expired');
+  });
+
+  void it('os dois no MESMO segundo: o do invasor cai, o da vítima passa', async () => {
+    // O par junto, na mesma linha do tempo e dentro do mesmo segundo de relógio
+    // — que é o que separa a correção certa da que só afrouxa a comparação. Os
+    // dois tokens têm `iat` diferente porque só a EMISSÃO se moveu; a barreira
+    // continua exatamente onde estava.
+    const bancada = await bancadaDeLogin(ANTES_DA_TROCA);
+    const doInvasor = await entrar(bancada);
+
+    bancada.repo.conta = contaAtiva(REDEFINIDA_EM);
+    const daVitima = await entrar(bancada);
+
+    const erro = await capturar(bancada.servico.autenticar(doInvasor.access_token));
+    assert.equal(erro.problemType, 'token-expired', 'quem estava dentro é expulso');
+
+    const autenticado = await bancada.servico.autenticar(daVitima.access_token);
+    assert.equal(autenticado.conta.id, VITIMA, 'quem acabou de retomar a conta entra');
+  });
+
+  void it('só o `iat` do token de acesso se move: refresh e trilha ficam em `agora`', async () => {
+    // O terceiro contrapeso. Empurrar `agora` inteiro para o segundo seguinte
+    // também faria a isca passar — e de quebra daria um segundo a mais de
+    // validade à família de refresh e deslocaria a trilha, que é por onde alguém
+    // reconstrói o que aconteceu quando a tutora liga dizendo "não fui eu".
+    const bancada = await bancadaDeLogin(REDEFINIDA_EM);
+    await entrar(bancada);
+
+    assert.deepEqual(bancada.repo.loginsRegistrados, [{ identityId: IDENTIDADE, agora: LOGIN_EM }]);
+    assert.equal(bancada.repo.familiasAbertas.length, 1);
+    assert.equal(
+      bancada.repo.familiasAbertas[0]?.expiresAt,
+      LOGIN_EM + 30 * 86_400_000,
+      'o prazo do refresh conta a partir do relógio da requisição, e não do empurrão',
+    );
   });
 });
