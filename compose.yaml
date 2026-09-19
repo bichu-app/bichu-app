@@ -144,9 +144,36 @@ services:
         mc alias set local http://objeto:9000 "$$CHAVE" "$$SEGREDO"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PRIVATE"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PUBLIC"
-        mc anonymous set none     "local/$$OBJECT_BUCKET_PRIVATE"
-        mc anonymous set download "local/$$OBJECT_BUCKET_PUBLIC"
-        echo "buckets prontos: privado sem acesso anonimo, publico somente leitura"
+        mc anonymous set none "local/$$OBJECT_BUCKET_PRIVATE"
+        # NAO use `mc anonymous set download`: o preset concede `s3:GetObject`
+        # E `s3:ListBucket`, e a listagem anula a unica protecao que a chave
+        # publica tem.
+        #
+        # A derivada e servida sem assinatura, e o que a protege e nao ser
+        # adivinhavel -- e por isso que `chaveDaDerivada` exige 128 bits de
+        # CSPRNG (BICHUS-134). Com `ListBucket` anonimo, qualquer um pede a
+        # lista e recebe TODAS as chaves: os 128 bits deixam de valer, e a foto
+        # do pet de qualquer pessoa fica a uma requisicao de distancia.
+        #
+        # Descoberto em 19/09 no minimo hospedado, com
+        # `GET https://img-hml.bichu.app/bichu-media-public/` devolvendo
+        # `ListBucketResult`. O bucket estava vazio; se houvesse foto, estaria
+        # tudo listado.
+        cat >/tmp/publico.json <<POLITICA
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "AWS": ["*"] },
+              "Action": ["s3:GetObject"],
+              "Resource": ["arn:aws:s3:::$$OBJECT_BUCKET_PUBLIC/*"]
+            }
+          ]
+        }
+        POLITICA
+        mc anonymous set-json /tmp/publico.json "local/$$OBJECT_BUCKET_PUBLIC"
+        echo "buckets prontos: privado sem acesso anonimo, publico so GetObject (sem listagem)"
     restart: "no"
 
   migracao:
