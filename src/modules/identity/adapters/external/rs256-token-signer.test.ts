@@ -52,6 +52,10 @@ function ambiente(): Record<string, string> {
     ENVIRONMENT: 'dev',
     DATABASE_URL: 'postgres://bichu:descartavel@localhost:5432/bichu',
     PUBLIC_BASE_URL: 'http://localhost:3000',
+    // Obrigatorias desde o ADR-0017 item 2. Aqui elas nao mudam nada do que
+    // este arquivo prova; existem porque sem elas a configuracao nao sobe.
+    TAG_BASE_URL: 'http://localhost:3000',
+    WEB_BASE_URL: 'http://localhost:3000',
     API_BASE_URL: EMISSOR,
     MEDIA_PUBLIC_BASE_URL: 'http://localhost:9000',
     TOKEN_ISSUER: EMISSOR,

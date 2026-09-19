@@ -174,7 +174,13 @@ function servico(estado: EstadoDoRepositorio) {
       ids,
       clock,
       trilha,
-      baseDaTag: 'https://exemplo.invalido' as AbsoluteUrl,
+      // As duas eram o MESMO valor aqui, e enquanto foram, este arquivo inteiro
+      // não conseguia acusar a troca de uma pela outra: `assert.equal` passava
+      // dos dois jeitos. Hosts diferentes -- o arranjo que o cliente decidiu em
+      // 19/09 -- são o que transforma a asserção da URL impressa em isca: trocar
+      // `baseDaTag` por `baseDaWeb` em `src/bin/api.ts` reprova aqui, e não na
+      // primeira leva de plaquinha prensada (ADR-0004).
+      baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
       baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
     }),
     contadores,
@@ -375,8 +381,23 @@ void describe('issuePetTag: a única resposta que traz o código em claro', () =
   void it('a URL impressa aponta para o código, e o código não vira URL no banco', async () => {
     const { tags, contadores } = servico({});
     const emitida = await tags.emitir(PET, DONO, null, chamador(DONO));
-    assert.equal(emitida.url, `https://exemplo.invalido/t/${emitida.codigo}`);
+    assert.equal(emitida.url, `https://tag.exemplo.invalido/t/${emitida.codigo}`);
     assert.doesNotMatch(JSON.stringify(contadores.tagsEmitidas[0]), /https?:/);
+  });
+
+  void it('o que o QR codifica vem da BASE DA TAG, e nunca da base da web', async () => {
+    const { tags } = servico({});
+    const emitida = await tags.emitir(PET, DONO, null, chamador(DONO));
+    // A asserção positiva acima já fixa o valor. Esta é a negativa, e ela é a
+    // que importa: ela reprova a troca silenciosa das duas bases. O endereço
+    // que sai daqui é prensado em plástico e não se corrige (ADR-0004), então
+    // a hora de descobrir que ele veio da variável errada é esta, e não a da
+    // primeira coleira na rua.
+    assert.ok(
+      emitida.url.startsWith('https://tag.exemplo.invalido/'),
+      `a URL da plaquinha saiu de outra base: ${emitida.url}`,
+    );
+    assert.doesNotMatch(emitida.url, /^https:\/\/exemplo\.invalido\//);
   });
 
   void it('a trilha registra a emissão sem o código', async () => {
@@ -416,6 +437,19 @@ void describe('createFoundReportFromTag: o aviso de quem achou', () => {
     assert.equal(contadores.avisosGravados.length, 1);
     assert.equal(criado.ownerNotified, true);
     assert.equal(criado.petDisplayName, 'Thor');
+  });
+
+  void it('a conversa do achador vem da BASE DA WEB: é página, não é plaquinha', async () => {
+    const { tags } = servico({ tag: tagAtiva() });
+    const criado = await tags.avisar(CODIGO, chamador(undefined), {});
+    // O contrário da isca da emissão, e pelo mesmo motivo: mandar o achador
+    // para o host da plaquinha entrega um endereço que o time web não serve, e
+    // quem paga é a pessoa que está com o animal na mão agora.
+    assert.ok(
+      criado.conversationUrl.startsWith('https://exemplo.invalido/c/'),
+      `a conversa do achador saiu de outra base: ${criado.conversationUrl}`,
+    );
+    assert.doesNotMatch(criado.conversationUrl, /tag\.exemplo\.invalido/);
   });
 
   void it('não devolve identificador interno a quem não tem conta', async () => {

@@ -49,6 +49,13 @@ function ambienteCompleto(): Record<string, string> {
     ENVIRONMENT: 'dev',
     DATABASE_URL: 'postgres://bichu:descartavel@db.exemplo.invalid:5432/bichu',
     PUBLIC_BASE_URL: 'http://api.exemplo.invalid:3000',
+    // Hosts DIFERENTES de propósito, e esse é o arranjo que o cliente decidiu
+    // em 19/09: a plaquinha num subdomínio, as páginas no domínio. Se a bancada
+    // apontasse as duas para o mesmo valor, nenhum teste daqui para baixo
+    // conseguiria distinguir "veio da base da tag" de "veio da base da web" —
+    // e é exatamente essa troca que ninguém percebe até a tag estar prensada.
+    TAG_BASE_URL: 'https://tag.exemplo.invalid',
+    WEB_BASE_URL: 'https://exemplo.invalid',
     API_BASE_URL: 'http://api.exemplo.invalid:3000',
     MEDIA_PUBLIC_BASE_URL: 'http://midia.exemplo.invalid:9000',
     TOKEN_ISSUER: 'http://api.exemplo.invalid:3000',
@@ -195,5 +202,76 @@ void describe('MAIL_TRANSPORT: valor desconhecido nao vira envio real', () => {
     }
     aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: undefined });
     assert.equal(loadAppConfig().mail.transport, 'smtp');
+  });
+});
+
+/**
+ * As bases que o ADR-0017 item 2 separou de `PUBLIC_BASE_URL`.
+ *
+ * Cada caso aqui é uma isca: ele existe para REPROVAR com a guarda arrancada.
+ * Um teste que só conferisse `config.tagBaseUrl` preenchido passaria com a
+ * validação inteira removida, porque o valor estaria lá de qualquer jeito. O
+ * que prova cada guarda é a subida que morre — e morre citando o nome da
+ * variável, que é o que o operador lê às onze da noite.
+ *
+ * O motivo de tanto cuidado com uma variável de configuração: `TAG_BASE_URL` é
+ * a única do sistema que vira plástico. Tag impressa não se corrige (ADR-0004),
+ * e uma configuração errada aqui não aparece em log nenhum — aparece no
+ * estranho que leu o QR da coleira e não chegou em lugar nenhum.
+ */
+void describe('TAG_BASE_URL e WEB_BASE_URL: a separação que registra o irreversível', () => {
+  void it('sem TAG_BASE_URL a subida morre citando TAG_BASE_URL', () => {
+    aplicar({ ...ambienteCompleto(), TAG_BASE_URL: undefined });
+    assert.throws(loadAppConfig, /TAG_BASE_URL/);
+  });
+
+  void it('sem WEB_BASE_URL a subida morre citando WEB_BASE_URL', () => {
+    aplicar({ ...ambienteCompleto(), WEB_BASE_URL: undefined });
+    assert.throws(loadAppConfig, /WEB_BASE_URL/);
+  });
+
+  void it('base sem esquema é recusada: `host/t/codigo` não é endereço que leitor de QR abra', () => {
+    aplicar({ ...ambienteCompleto(), TAG_BASE_URL: 'tag.exemplo.invalid' });
+    assert.throws(loadAppConfig, /TAG_BASE_URL/);
+  });
+
+  void it('base com consulta é recusada: o `?` engole o `/t/{código}` em silêncio', () => {
+    aplicar({ ...ambienteCompleto(), TAG_BASE_URL: 'https://tag.exemplo.invalid?de=cartaz' });
+    assert.throws(loadAppConfig, /TAG_BASE_URL/);
+  });
+
+  void it('domínios diferentes derrubam a subida: a plaquinha não aponta para casa de terceiro', () => {
+    aplicar({ ...ambienteCompleto(), WEB_BASE_URL: 'https://outra-casa.invalid' });
+    assert.throws(loadAppConfig, /TAG_BASE_URL|WEB_BASE_URL/);
+  });
+
+  void it('http na base da tag derruba ambiente hospedado: o esquema vai codificado junto', () => {
+    aplicar({
+      ...ambienteCompleto(),
+      ENVIRONMENT: 'preprod',
+      TAG_BASE_URL: 'http://tag.exemplo.invalid',
+    });
+    assert.throws(loadAppConfig, /TAG_BASE_URL/);
+  });
+
+  void it('http continua valendo em dev: guarda que atrapalha quem desenvolve vira contorno no .zshrc', () => {
+    aplicar({ ...ambienteCompleto(), TAG_BASE_URL: 'http://tag.exemplo.invalid' });
+    assert.doesNotThrow(loadAppConfig);
+  });
+
+  void it('hosts diferentes no mesmo domínio sobem, que é a decisão do cliente de 19/09', () => {
+    aplicar(ambienteCompleto());
+    const config = loadAppConfig();
+    // As três precisam continuar distintas depois da leitura. Colapsar duas
+    // delas em `publicBaseUrl` é justamente o estado de onde este trabalho
+    // saiu, e ele não dava sinal nenhum enquanto os três valores coincidiam.
+    assert.notEqual(config.tagBaseUrl, config.webBaseUrl);
+    assert.notEqual(config.tagBaseUrl, config.publicBaseUrl);
+    assert.notEqual(config.webBaseUrl, config.publicBaseUrl);
+  });
+
+  void it('a barra do fim é aparada: `base//t/codigo` é outro endereço', () => {
+    aplicar({ ...ambienteCompleto(), TAG_BASE_URL: 'https://tag.exemplo.invalid/' });
+    assert.equal(loadAppConfig().tagBaseUrl, 'https://tag.exemplo.invalid');
   });
 });

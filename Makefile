@@ -24,6 +24,12 @@ export PORTA_MIDIA
 BASE_HOST := $(if $(HOST),$(HOST),localhost)
 ifneq ($(HOST)$(PORTA),3000)
 export PUBLIC_BASE_URL := http://$(BASE_HOST):$(PORTA)
+# As duas que sairam de PUBLIC_BASE_URL (ADR-0017 item 2) acompanham o HOST.
+# Esquecer a de tag aqui faria `make up HOST=<ip>` emitir tag com `localhost`
+# dentro do QR, que e o endereco do proprio aparelho de quem le -- e o que o
+# QR guarda nao se corrige depois (ADR-0004).
+export TAG_BASE_URL := http://$(BASE_HOST):$(PORTA)
+export WEB_BASE_URL := http://$(BASE_HOST):$(PORTA)
 export API_BASE_URL := http://$(BASE_HOST):$(PORTA)
 export MEDIA_PUBLIC_BASE_URL := http://$(BASE_HOST):$(PORTA_MIDIA)
 export MINIO_CONSOLE_URL := http://$(BASE_HOST):9001

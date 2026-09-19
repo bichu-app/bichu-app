@@ -5,7 +5,21 @@
 # mas tambem nao pode responder qualquer coisa: um 200 que nao seja JSON valido
 # reprova, porque significa que outra coisa esta ocupando o endereco.
 
-dominio: bichu.app
+# O host da PLAQUINHA, e nao mais o apex. Decisao do cliente de 19/09
+# (`TAG_BASE_URL=tag.bichu.app`, ADR-0017 item 2).
+#
+# Por que a verificacao mudou de alvo junto: o sistema operacional busca o
+# arquivo de associacao NO HOST DO LINK, e o link da plaquinha passou a ser
+# `tag.bichu.app`. Verificar o apex continuaria dando um relatorio verde sobre
+# um endereco que nenhum QR vai abrir -- que e a unica coisa pior do que nao
+# verificar.
+#
+# **`tag.bichu.app` ainda nao existe no DNS em 19/09, e isto aqui vai REPROVAR
+# por ausencia. A reprovacao esta certa.** O que ela diz e verdade: tres dias
+# antes do prazo de 22/09 do ADR-0017, o host que vai impresso no plastico nao
+# resolve. Nao ha como o deep link funcionar, e nao ha como imprimir tag. Um
+# alvo que passasse hoje passaria mentindo.
+dominio: tag.bichu.app
 
 # IP externo estatico da VM `bichu-hml` (passos 2 e 5 do roteiro), conferido em
 # 19/09: a maquina existe, o endereco e reservado, e `hml.bichu.app` e
@@ -26,15 +40,44 @@ dominio: bichu.app
 # enderecos da Squarespace, esperado 35.247.247.16; ou seja, o passo 9 do
 # roteiro nao aconteceu. Reprova nos dois casos; so um dos dois diz a verdade
 # util para quem for destravar.
+#
+# ATENCAO, achado de 19/09 que ficou em aberto de proposito: este IP e da NOSSA
+# VM, e o ADR-0017 entrega o host das paginas e o host da plaquinha ao OUTRO
+# TIME. Enquanto `tag.bichu.app` nao resolve, a assercao nem e avaliada. No dia
+# em que resolver, se o host for deles, esta linha passa a reprovar com o motivo
+# ERRADO -- "resolve para X, esperado 35.247.247.16" quando a verdade e que a
+# expectativa e que esta velha. Nao foi corrigida aqui porque corrigir exige
+# saber para onde `tag.bichu.app` vai apontar, que e conversa com o time web e
+# nao chute nosso; e o parser deste arquivo so le `ip_esperado` global, entao
+# hospedagens diferentes por alvo pedem mudanca no script. Decidir ate 22/09,
+# junto com a data dos alvos.
 ip_esperado: "35.247.247.16"
 
+# `esperado_a_partir_de` e 22/09 e nao 20/09 porque a data mudou de dono: o
+# ADR-0017 amarra dominio, conta Apple e impressao digital da chave num prazo
+# unico de 22/09 (limite absoluto 25/09), "porque os tres juntos entregam o
+# deep link". Antes disso nao ha o que servir. Adiantar a data nao apressa
+# ninguem, e atrasa-la deixaria de cobrar no dia em que passa a caber cobranca.
+#
+# Repare que a data nao evita a reprovacao de hoje: quando o nome nao resolve, a
+# falha acontece antes de qualquer data ser consultada, e e assim que tem de
+# ser -- "nao consegui verificar" reprova, nunca vira "esta tudo bem".
 alvos:
-  - url: https://bichu.app/.well-known/assetlinks.json
-    esperado_a_partir_de: 2026-09-20
+  - url: https://tag.bichu.app/.well-known/assetlinks.json
+    esperado_a_partir_de: 2026-09-22
     content_type: application/json
-  - url: https://bichu.app/.well-known/apple-app-site-association
-    esperado_a_partir_de: 2026-09-20
+  - url: https://tag.bichu.app/.well-known/apple-app-site-association
+    esperado_a_partir_de: 2026-09-22
     content_type: application/json
+
+# O QUE ESTE ARQUIVO DELIBERADAMENTE NAO AFIRMA, para nao inventar cobranca:
+# `WEB_BASE_URL=bichu.app` tambem e destino de link nosso (e-mail, cartaz,
+# pagina do caso). Se esses links tiverem de abrir o app, o apex precisa da
+# propria copia dos dois arquivos -- mas isso ninguem decidiu ainda, e o
+# ADR-0017 so exige a associacao no host do deep link da plaquinha. Alvo
+# inventado aqui viraria reprovacao por algo que nao foi acordado com o time
+# web, e gate que reprova pelo que ninguem prometeu e gate que todo mundo
+# aprende a ignorar. Quando houver acordo, sao duas linhas.
 
 # Asercao negativa: caminho do bucket privado pedido pela origem de midia
 # precisa responder 404. Se responder 200, nao e erro de configuracao, e

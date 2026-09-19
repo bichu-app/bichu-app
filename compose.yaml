@@ -225,6 +225,14 @@ services:
       # Vem do .env por padrao; `make up PORTA=<n>` sobrescreve pelo ambiente do
       # shell, e as duas pontas (borda e aplicacao) mudam juntas.
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      # Separadas de PUBLIC_BASE_URL em 19/09 (ADR-0017 item 2). Precisam estar
+      # AQUI e nao so no `.env`: `make up HOST=<ip>` sobrescreve pelo ambiente do
+      # shell, e uma base de tag que nao acompanha o resto faz o QR do ambiente
+      # de rede local codificar `localhost` -- endereco que o telefone do outro
+      # lado da Wi-Fi resolve para ele mesmo. Para um link isso e um erro de
+      # teste; para plastico prensado nao ha conserto (ADR-0004).
+      TAG_BASE_URL: ${TAG_BASE_URL:-http://localhost:3000}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       # Commit DECLARADO por quem sobe a pilha, e aceito vazio de proposito:

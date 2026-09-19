@@ -82,6 +82,11 @@ function ambiente(): Record<string, string> {
     ENVIRONMENT: 'dev',
     DATABASE_URL: 'postgres://bichu:descartavel@db.exemplo.invalid:5432/bichu',
     PUBLIC_BASE_URL: 'http://api.exemplo.invalid:3000',
+    // Separadas de PUBLIC_BASE_URL pelo ADR-0017 item 2, e obrigatorias desde
+    // entao: a bancada precisa declara-las ou `loadAppConfig()` morre citando a
+    // que faltou, que e o comportamento pedido pelos criterios 5 e 11.
+    TAG_BASE_URL: 'https://tag.exemplo.invalid',
+    WEB_BASE_URL: 'https://exemplo.invalid',
     API_BASE_URL: 'https://api.bichu.test',
     MEDIA_PUBLIC_BASE_URL: 'http://midia.exemplo.invalid:9000',
     TOKEN_ISSUER: 'https://api.bichu.test',

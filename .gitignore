@@ -122,3 +122,4 @@ cypress/downloads/
 # trabalhar neste produto com a squad refaz o link localmente, ou abre a sessao
 # direto em jarvis-ai/.
 .claude/agents
+infra/verificacao/__pycache__/

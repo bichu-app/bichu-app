@@ -368,7 +368,9 @@ que importam:
 | Variável | Valor na VM | Por quê |
 |---|---|---|
 | `ENVIRONMENT` | `homolog` | `make reset` se recusa a rodar com este valor: apagar volume aqui apaga a massa de teste do QA |
-| `PUBLIC_BASE_URL` | `https://hml.bichu.app` | o Caddy escuta na porta que está aqui; é também **o que o QR codifica e o que o cartaz imprime**. Este campo dizia `https://bichu.app` até 19/09, e estava errado de um jeito perigoso: o apex serve a página da Squarespace, então uma tag gerada aqui apontaria para uma página que não é nossa — e o ADR-0004 torna a plaquinha **irreversível**. Com `hml.` a tag pelo menos declara que é de homologação. **Ainda assim, não imprima tag a partir deste ambiente:** o endereço definitivo é decisão pendente (`TAG_BASE_URL`, ADR-0017), e tag impressa não se corrige. Confira o valor efetivo antes de gerar qualquer código: `docker compose exec -T api printenv PUBLIC_BASE_URL` |
+| `PUBLIC_BASE_URL` | `https://hml.bichu.app` | o Caddy escuta na porta que está aqui, e daqui sai o `type` do `problem+json`. **Ele deixou de ser o que o QR codifica em 19/09**: as duas linhas abaixo tiraram esse papel dele (ADR-0017 item 2). Enquanto era um valor só, este campo dizia `https://bichu.app` e estava errado de um jeito perigoso — o apex serve a página da Squarespace, e uma tag gerada assim apontaria para uma página que não é nossa, de forma **irreversível** (ADR-0004) |
+| `TAG_BASE_URL` | `https://tag.bichu.app` | **o que o QR codifica e o que vai prensado na plaquinha.** Decisão do cliente de 19/09. É a única variável desta tabela que não se conserta depois: trocar o valor não muda nenhuma tag que já saiu. **`tag.bichu.app` ainda não resolve no DNS**, e enquanto não resolver, toda tag gerada aqui aponta para lugar nenhum. **NÃO IMPRIMA TAG A PARTIR DESTE AMBIENTE.** Confira o valor efetivo antes de gerar **qualquer** código: `docker compose exec -T api printenv TAG_BASE_URL` |
+| `WEB_BASE_URL` | `https://bichu.app` | onde o outro time web serve cartaz, página do caso, perfil, conversa do achador e as telas de e-mail e senha (ADR-0017). É a base dos links dos e-mails. Reversível: trocar aqui muda o link do próximo e-mail e nada mais. **Hoje o apex ainda é da Squarespace**, então um link de verificação enviado deste ambiente leva à página deles — motivo de sobra para conferir junto com a de cima: `docker compose exec -T api printenv WEB_BASE_URL`. A aplicação **recusa subir** se esta e a de cima estiverem em domínios diferentes |
 | `MEDIA_PUBLIC_BASE_URL` | `https://img.bichu.app` | o MinIO **assina a URL com o host pelo qual ele se conhece**. Divergir daqui quebra TODA URL assinada, com erro de assinatura que não diz que é de host |
 | `MAIL_TRANSPORT` | `log` | o Mailpit tem `profiles: [dev, qa]` e não sobe aqui, e ele nunca provou entregabilidade de qualquer forma. **Não use `postmark`:** a chave de HML já está no cofre, mas o adaptador do Postmark não existe (ADR-0009), e `app-config.ts` recusa o valor na subida. Com `log` o e-mail é escrito no log e nada sai — que é a verdade do estado de hoje |
 | `PORTA_APP` / `PORTA_MIDIA` | `80` e a porta da mídia | ver o passo 8 |
@@ -378,14 +380,20 @@ A tabela acima prescreve `https://bichu.app` e `https://img.bichu.app`, que é o
 destino depois do passo 9. **Hoje o passo 9 não aconteceu:** o apex continua nos
 quatro registros A da Squarespace, e o que a VM atende de fato é
 `https://hml.bichu.app` e `https://img-hml.bichu.app`, conferido por `curl` na
-mesma data. Enquanto for assim, `PUBLIC_BASE_URL=https://bichu.app` na VM faz o
-QR codificar e o cartaz imprimir um endereço que serve a página de
-estacionamento de outra empresa — e isso é irreversível no instante em que a
-primeira plaquinha for prensada (ADR-0004). Antes de gerar **qualquer** tag de
-teste, conferir o valor no host:
+mesma data. Enquanto for assim, uma base apontada para `https://bichu.app` na VM
+faz o cartaz e o link do e-mail levarem à página de estacionamento de outra
+empresa.
+
+**E `tag.bichu.app` é pior do que isso, porque nem existe.** O nome foi decidido
+em 19/09 e ainda não tem registro de DNS: um QR gerado com ele hoje não abre
+nada em telefone nenhum, e diferente de todo o resto desta tabela, isso não se
+conserta trocando uma variável depois — o que está prensado está prensado
+(ADR-0004). A regra, então, é de uma linha só: **nesta VM não se imprime tag.**
+Antes de gerar **qualquer** código, conferir os valores no host:
 
 ```bash
-docker compose exec -T api printenv PUBLIC_BASE_URL MEDIA_PUBLIC_BASE_URL
+docker compose exec -T api printenv TAG_BASE_URL WEB_BASE_URL \
+  PUBLIC_BASE_URL MEDIA_PUBLIC_BASE_URL
 ```
 
 **Verificação — e esta é a que já pegou defeito real:** a pilha falha
@@ -411,6 +419,13 @@ Na VM, com o `PUBLIC_BASE_URL` apontando para o **IP**, e não para o domínio:
 PUBLIC_BASE_URL="http://$IP" MEDIA_PUBLIC_BASE_URL="http://$IP:3001" \
   docker compose up -d --wait
 ```
+
+**`TAG_BASE_URL` e `WEB_BASE_URL` NÃO entram nesta linha, e isso é deliberado.**
+Testar a pilha por IP é legítimo; codificar um IP dentro de um QR não é — o
+endereço fica no plástico e a máquina troca de IP quando alguém a recria. As
+duas continuam com o valor do `.env`, e a aplicação recusa subir com elas em
+domínios diferentes um do outro (ADR-0017 item 2), o que também acusaria um
+`TAG_BASE_URL="http://$IP"` copiado para cá por distração.
 
 Repare que `up` sem `--profile dev` já exclui o Mailpit, e que `depends_on` de
 `objeto_init` com `service_completed_successfully` é o que impede `--wait` de

@@ -123,7 +123,9 @@ export async function main(): Promise<void> {
     mailer,
     // O link do e-mail aponta para a PÁGINA do time web, não para a API: quem
     // abre é uma pessoa num navegador, e o ADR-0017 tirou HTML deste serviço.
-    baseDaWeb: config.publicBaseUrl,
+    // Desde 19/09 isto é `WEB_BASE_URL` e não mais o endereço deste processo:
+    // apontar o link de verificação para a API mandaria o tutor para um JSON.
+    baseDaWeb: config.webBaseUrl,
     // O corpo desta função morava aqui dentro, como lambda. Ele saiu para
     // `identity/application/aviso-de-reuso.ts` por um motivo só: nada neste
     // arquivo é carregado por teste — `main()` abre porta, banco e SMTP —, e
@@ -156,12 +158,16 @@ export async function main(): Promise<void> {
     ids,
     clock: systemClock,
     trilha,
-    // `TAG_BASE_URL` e `WEB_BASE_URL` ainda são a mesma variável (ADR-0017 item
-    // 2 as separa, e a separação não chegou à configuração). Enquanto forem uma
-    // só, apontar as duas para ela é o estado verdadeiro; o que a separação
-    // registra é qual delas é a irreversível, e essa é a da plaquinha.
-    baseDaTag: config.publicBaseUrl,
-    baseDaWeb: config.publicBaseUrl,
+    // **Esta é a linha que vira plástico.** `baseDaTag` é o que o QR codifica
+    // (`{base}/t/{código}`) e o ADR-0004 torna irreversível no instante em que
+    // a primeira leva é prensada; `baseDaWeb` é a página do achador, que se
+    // conserta trocando uma variável. Elas eram a MESMA variável até 19/09, e
+    // com o cliente decidindo hosts diferentes para as duas, trocá-las aqui
+    // passou a ser um defeito que só aparece com o adesivo na coleira de
+    // alguém. `src/bin/fiacao-das-bases.test.ts` trava estas duas linhas por
+    // texto, porque nada deste arquivo é carregado por teste.
+    baseDaTag: config.tagBaseUrl,
+    baseDaWeb: config.webBaseUrl,
   });
 
   // Declarado ANTES do cadastro porque o cadastro depende dele: a ficha do pet
@@ -250,7 +256,11 @@ export async function main(): Promise<void> {
     // De onde saem o link de compartilhar e o cartaz. Montados na leitura, e
     // nunca guardados: um link gravado carrega o domínio do dia em que foi
     // escrito, e o cartaz é impresso e colado num poste.
-    baseDaWeb: config.publicBaseUrl,
+    //
+    // `WEB_BASE_URL` e não `TAG_BASE_URL`: o cartaz do caso é uma PÁGINA do
+    // time web (ADR-0017 item 1), e o papel colado no poste se arranca e se
+    // reimprime. Só a plaquinha da coleira é irreversível.
+    baseDaWeb: config.webBaseUrl,
   };
 
   const dependenciasDasRotasDeTag = {

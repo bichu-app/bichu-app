@@ -56,7 +56,36 @@ export interface AppConfig {
   readonly port: number;
   readonly bindHost: string;
   readonly databaseUrl: string;
+  /**
+   * Endereço público DESTE serviço, e nada mais desde 19/09.
+   *
+   * Ele carregava cinco coisas (ADR-0017 item 2): o que o QR codifica, o
+   * cartaz, o link do caso, os links dos e-mails e o destino do deep link.
+   * Duas delas saíram para `tagBaseUrl` e `webBaseUrl`, porque uma dessas
+   * cinco **não é reversível** e a variável única apagava justamente essa
+   * informação. O que sobrou aqui é o endereço que a borda atende e do qual
+   * sai o `type` do `application/problem+json` — quer dizer, a identidade
+   * deste processo, não a das páginas.
+   */
   readonly publicBaseUrl: AbsoluteUrl;
+  /**
+   * O que o QR da plaquinha codifica: `{TAG_BASE_URL}/t/{código}`.
+   *
+   * **É o único valor da configuração que vira plástico.** Depois de prensada,
+   * a plaquinha não se corrige (ADR-0004): trocar este valor não conserta tag
+   * nenhuma que já saiu, só muda as próximas. Toda guarda em volta dele existe
+   * por isso.
+   */
+  readonly tagBaseUrl: AbsoluteUrl;
+  /**
+   * Onde vivem as páginas públicas do time web (ADR-0017): cartaz, caso,
+   * perfil, conversa do achador, verificação de e-mail, redefinição de senha e
+   * cancelamento de transferência. É a base dos links dos e-mails.
+   *
+   * Reversível: trocar o valor troca o link do próximo e-mail enviado, e
+   * nenhum link já entregue deixa de ser um link que alguém tem.
+   */
+  readonly webBaseUrl: AbsoluteUrl;
   readonly apiBaseUrl: AbsoluteUrl;
   readonly mediaPublicBaseUrl: AbsoluteUrl;
   readonly problemBaseUrl: AbsoluteUrl;
@@ -300,9 +329,123 @@ function urlAbsoluta(valor: string): AbsoluteUrl {
   return valor.replace(/\/+$/, '') as AbsoluteUrl;
 }
 
+/**
+ * Base pública de página, conferida na FORMA e não só aparada.
+ *
+ * `urlAbsoluta` acima corta a barra final e acredita no resto, e isso bastava
+ * enquanto errar a base dava página errada — coisa que se conserta com um
+ * `docker compose up`. `TAG_BASE_URL` é de outra natureza: o valor é
+ * concatenado em `{base}/t/{código}` e o resultado sai **prensado no plástico**
+ * (ADR-0004). `bichu.app` sem esquema vira `bichu.app/t/ABC`, que leitor de QR
+ * nenhum abre como endereço; um `?` ou um `#` no fim viram um link que leva a
+ * lugar nenhum. A hora de descobrir isso é a subida, com o nome da variável na
+ * mensagem, e não a primeira leva impressa.
+ *
+ * Recebe o nome como SEGUNDO parâmetro, já literal na chamada: quem chama
+ * escreve `requireEnv('TAG_BASE_URL')` por extenso, que é o que a guarda da
+ * esteira lê por texto.
+ */
+function baseDePaginaPublica(valor: string, nome: string): AbsoluteUrl {
+  const aparada = valor.trim().replace(/\/+$/, '');
+  let url: URL;
+  try {
+    url = new URL(aparada);
+  } catch {
+    throw new Error(
+      `${nome}="${valor}" não é uma URL absoluta. Escreva esquema e host, ` +
+        'sem barra no fim — o valor é concatenado com `/t/{código}` e com ' +
+        '`/cartaz/{token}`, e o que sai daí é lido por gente e por leitor de QR.',
+    );
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(
+      `${nome}="${valor}" tem esquema \`${url.protocol}\`. Só http e https: ` +
+        'o que está aqui vira endereço que um estranho abre no telefone dele.',
+    );
+  }
+  if (url.search !== '' || url.hash !== '' || url.username !== '') {
+    throw new Error(
+      `${nome}="${valor}" traz consulta, fragmento ou credencial. A base é ` +
+        'esquema, host e no máximo caminho: o que vem depois é acrescentado ' +
+        'por quem monta o link, e um `?` aqui empurra o resto para dentro da ' +
+        'consulta em silêncio.',
+    );
+  }
+  return aparada as AbsoluteUrl;
+}
+
+/**
+ * Os dois últimos rótulos do host. Aproximação deliberada de "domínio
+ * registrável": não carrega lista pública de sufixos, e não precisa carregar —
+ * ela só decide se dois hosts NOSSOS são da mesma casa. Em `.com.br` a
+ * comparação fica mais frouxa (`com.br` dos dois lados), o que produz
+ * aprovação a mais e nunca reprovação a mais; para o que esta guarda protege,
+ * errar para o lado de deixar subir é o lado certo de errar.
+ */
+function dominioRegistravel(host: string): string {
+  const rotulos = host.split('.');
+  return rotulos.length <= 2 ? host : rotulos.slice(-2).join('.');
+}
+
 export function loadAppConfig(): AppConfig {
   const environment = optionalEnv('ENVIRONMENT') ?? 'dev';
   const publicBaseUrl = urlAbsoluta(requireEnv('PUBLIC_BASE_URL'));
+
+  // As duas bases que o ADR-0017 item 2 separou de `PUBLIC_BASE_URL`, e a
+  // separação inteira existe para registrar QUAL das cinco coisas que a
+  // variável única carregava é a irreversível: esta primeira.
+  //
+  // Obrigatórias e sem padrão embutido, como o resto do arquivo. Um padrão aqui
+  // seria pior do que a ausência: a aplicação subiria emitindo tag com o
+  // endereço da máquina de quem escreveu o padrão, e cada tag emitida assim é
+  // plástico que não volta atrás (ADR-0004).
+  const tagBaseUrl = baseDePaginaPublica(requireEnv('TAG_BASE_URL'), 'TAG_BASE_URL');
+  const webBaseUrl = baseDePaginaPublica(requireEnv('WEB_BASE_URL'), 'WEB_BASE_URL');
+
+  // `http` na base da tag é aceitável em desenvolvimento e inaceitável em
+  // ambiente de gente de verdade: o QR guarda o esquema junto com o host, e um
+  // `http://` prensado continua `http://` para sempre. Não há redirecionamento
+  // que conserte plaquinha — e no `.app`, que tem HSTS pré-carregado, o
+  // endereço em `http` nem chega a sair do telefone.
+  if (ehAmbienteHospedado(environment) && !tagBaseUrl.startsWith('https://')) {
+    throw new Error(
+      `TAG_BASE_URL="${tagBaseUrl}" não é https, e o ambiente é hospedado. ` +
+        'O esquema vai codificado no QR junto com o host: tag prensada em ' +
+        'http continua em http para sempre (ADR-0004).',
+    );
+  }
+
+  // O ADR-0017 item 2 exige que os dois hosts sejam O MESMO e manda a aplicação
+  // recusar subir se divergirem. **O cliente decidiu em 19/09 valores que
+  // divergem** -- `tag.<domínio>` para a plaquinha e o apex para as páginas --,
+  // e implementar a invariante ao pé da letra seria entregar uma aplicação que
+  // não sobe com a configuração que ela acabou de receber.
+  //
+  // Então a guarda protege o que continua valendo, e o que ela deixou de
+  // proteger está escrito aqui e no relato, em vez de sumir: a invariante
+  // servia aos arquivos de associação de deep link, que o sistema operacional
+  // busca NO HOST DO LINK. Com os hosts separados, o host da plaquinha precisa
+  // dos seus próprios `/.well-known/*` — e a falta deles não produz erro em
+  // lugar nenhum, só o link abrindo o navegador em vez do app (ADR-0017 item
+  // 3). Isso virou alvo de `infra/verificacao/associacao.yml`, que é onde dá
+  // para verificar de fora; aqui não dá.
+  //
+  // O que a subida ainda consegue afirmar é que as duas bases são da mesma
+  // casa. Divergir de domínio registrável é o erro que custa caro e é fácil de
+  // cometer com copiar e colar: a plaquinha apontaria para um domínio que não é
+  // nosso, e nenhuma tag já impressa voltaria atrás.
+  const hostDaTag = new URL(tagBaseUrl).hostname;
+  const hostDaWeb = new URL(webBaseUrl).hostname;
+  if (dominioRegistravel(hostDaTag) !== dominioRegistravel(hostDaWeb)) {
+    throw new Error(
+      `TAG_BASE_URL (${hostDaTag}) e WEB_BASE_URL (${hostDaWeb}) estão em ` +
+        'domínios diferentes. O ADR-0017 item 2 pede o mesmo host; o mínimo ' +
+        'que a subida aceita é o mesmo domínio: o que o QR codifica é ' +
+        'irreversível depois de impresso (ADR-0004), e uma plaquinha apontando ' +
+        'para domínio de terceiro não se corrige.',
+    );
+  }
+
   const ipHmacKeyBruta = requireEnv('IP_HMAC_KEY');
   const ipHmacKey = Buffer.from(ipHmacKeyBruta, 'base64');
   if (ipHmacKey.length < 32) {
@@ -408,6 +551,8 @@ export function loadAppConfig(): AppConfig {
     bindHost: optionalEnv('BIND_HOST') ?? '127.0.0.1',
     databaseUrl: requireEnv('DATABASE_URL'),
     publicBaseUrl,
+    tagBaseUrl,
+    webBaseUrl,
     apiBaseUrl: urlAbsoluta(requireEnv('API_BASE_URL')),
     mediaPublicBaseUrl: urlAbsoluta(requireEnv('MEDIA_PUBLIC_BASE_URL')),
     // O contrato fixa `type` sob `<domínio>/problems/`. O domínio vem de

@@ -3221,7 +3221,7 @@ paths:
   /.well-known/assetlinks.json:
     servers:
       - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
+        variables: { dominio: { default: TAG_BASE_URL } }
     get:
       operationId: wellKnownAssetLinks
       tags: [web]
@@ -3276,7 +3276,7 @@ paths:
   /.well-known/apple-app-site-association:
     servers:
       - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
+        variables: { dominio: { default: TAG_BASE_URL } }
     get:
       operationId: wellKnownAppleAppSiteAssociation
       tags: [web]
