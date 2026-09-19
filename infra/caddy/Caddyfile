@@ -26,7 +26,24 @@
 #      receber.
 {
 	admin off
-	auto_https disable_redirects
+
+	# `auto_https disable_redirects` esteve aqui do primeiro commit ate 19/09,
+	# sem motivo registrado: foi escolha de infraestrutura LOCAL que ninguem
+	# revisitou quando o ambiente hospedado passou a existir.
+	#
+	# O efeito dela so aparece com dominio de verdade: com o esquema `https://`
+	# no endereco do site, o Caddy deixava de abrir a porta 80 inteira. Nao era
+	# "sem redirecionamento" -- era CONEXAO RECUSADA em `http://`, sem pagina de
+	# erro nossa e sem caminho de diagnostico. Descoberto subindo o minimo
+	# hospedado.
+	#
+	# A promocao para HTTPS e responsabilidade DA BORDA, e nao da aplicacao:
+	# um redirecionamento feito depois que o app abre ja aconteceu em claro, e
+	# o que se queria proteger ja viajou. Aqui ela acontece antes de qualquer
+	# byte de conteudo.
+	#
+	# Em `localhost` nada muda: o endereco do site e `http://` explicito, e o
+	# Caddy nao faz promocao automatica para site declarado em http.
 
 	# Espelha `x-edge-limits` do contrato. A esteira confere os dois.
 	servers {
