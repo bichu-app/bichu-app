@@ -68,6 +68,20 @@ export const SEGREDOS_DE_RUNTIME: readonly NomeDeSegredo[] = [
    * armazenamento recusa, e a falha apareceria no primeiro envio de foto. */
   'OBJECT_STORAGE_ACCESS_KEY_ID',
   'OBJECT_STORAGE_SECRET_ACCESS_KEY',
+  /**
+   * Token do provedor de e-mail. Entrou aqui em 19/09, ao criar o cofre de HML:
+   * ele estava fora da lista e so seria lido do `.env`, que e exatamente o que
+   * o ADR-0022 tirou do disco. Sem ele aqui, o ambiente hospedado buscaria sete
+   * segredos no gerenciador e o oitavo no arquivo -- meia migracao, que e pior
+   * que nenhuma, porque da a impressao de estar resolvido.
+   *
+   * O nome do segredo e o mesmo nos dois ambientes; o que muda e o PROJETO
+   * apontado por `SECRET_STORE_PROJECT`. E por isso que nao existe
+   * `MAIL_API_TOKEN_HML`: nome diferente por ambiente reintroduziria a tabela
+   * de traducao que o ADR-0022 proibe, e cegaria a guarda da esteira que le os
+   * `requireEnv('NOME')` literais.
+   */
+  'MAIL_API_TOKEN',
 ];
 
 /**

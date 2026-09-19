@@ -328,8 +328,28 @@ export function loadAppConfig(): AppConfig {
     bucketPublic: requireEnv('OBJECT_BUCKET_PUBLIC'),
   };
 
+  // `MAIL_TRANSPORT` recusa valor desconhecido, e isso nao e preciosismo: a
+  // forma anterior era `=== 'log' ? 'log' : 'smtp'`, entao QUALQUER valor fora
+  // dos dois virava envio real em silencio. Achado em 19/09 com o `.env` desta
+  // maquina em `MAIL_TRANSPORT=mailpit` -- um valor que ninguem definiu, que
+  // parecia dizer "manda para o receptor local", e que na verdade dizia "manda
+  // para o mundo". A unica razao de nao ter doido e o host apontar para o
+  // mailpit; trocar o host sem trocar isto mandaria e-mail de verdade para
+  // endereco de teste.
+  //
+  // Falha ruidosa, como o resto da configuracao: morre citando o valor visto e
+  // os aceitos.
+  const transporteBruto = optionalEnv('MAIL_TRANSPORT') ?? 'smtp';
+  if (transporteBruto !== 'smtp' && transporteBruto !== 'log') {
+    throw new Error(
+      `MAIL_TRANSPORT="${transporteBruto}" nao e um transporte conhecido. ` +
+        'Use "smtp" (envia de verdade) ou "log" (so escreve no log). ' +
+        'Valor desconhecido virava envio real em silencio ate 19/09.',
+    );
+  }
+
   const mail: MailConfig = {
-    transport: optionalEnv('MAIL_TRANSPORT') === 'log' ? 'log' : 'smtp',
+    transport: transporteBruto,
     host: optionalEnv('MAIL_HOST') ?? 'mail',
     port: Number.parseInt(optionalEnv('MAIL_PORT') ?? '1025', 10),
     from: requireEnv('MAIL_FROM'),
