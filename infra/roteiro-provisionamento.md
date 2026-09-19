@@ -370,7 +370,7 @@ que importam:
 | `ENVIRONMENT` | `homolog` | `make reset` se recusa a rodar com este valor: apagar volume aqui apaga a massa de teste do QA |
 | `PUBLIC_BASE_URL` | `https://bichu.app` | o Caddy escuta na porta que está aqui; é também o que o QR codifica e o que o cartaz imprime |
 | `MEDIA_PUBLIC_BASE_URL` | `https://img.bichu.app` | o MinIO **assina a URL com o host pelo qual ele se conhece**. Divergir daqui quebra TODA URL assinada, com erro de assinatura que não diz que é de host |
-| `MAIL_TRANSPORT` | `postmark` | o Mailpit tem `profiles: [dev, qa]` e não sobe aqui. Ele nunca provou entregabilidade de qualquer forma |
+| `MAIL_TRANSPORT` | `log` | o Mailpit tem `profiles: [dev, qa]` e não sobe aqui, e ele nunca provou entregabilidade de qualquer forma. **Não use `postmark`:** a chave de HML já está no cofre, mas o adaptador do Postmark não existe (ADR-0009), e `app-config.ts` recusa o valor na subida. Com `log` o e-mail é escrito no log e nada sai — que é a verdade do estado de hoje |
 | `PORTA_APP` / `PORTA_MIDIA` | `80` e a porta da mídia | ver o passo 8 |
 
 **Verificação — e esta é a que já pegou defeito real:** a pilha falha

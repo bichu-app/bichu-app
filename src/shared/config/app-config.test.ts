@@ -64,6 +64,7 @@ function ambienteCompleto(): Record<string, string> {
     OBJECT_BUCKET_PRIVATE: 'bichu-privado',
     OBJECT_BUCKET_PUBLIC: 'bichu-publico',
     MAIL_FROM: 'nao-responda@mail.exemplo.test',
+    MAIL_TRANSPORT: 'smtp',
   };
 }
 
@@ -139,5 +140,55 @@ void describe('JWKS: o contrato promete duas chaves e a subida garante', () => {
     aplicar(semChaveDeRotacao({ ENVIRONMENT: 'dev', NODE_ENV: undefined }));
     const config = loadAppConfig();
     assert.equal(config.token.allKeys.length, 1);
+  });
+});
+
+void describe('MAIL_TRANSPORT: valor desconhecido nao vira envio real', () => {
+  // A forma anterior era `=== 'log' ? 'log' : 'smtp'`, entao TODO valor fora
+  // dos dois virava envio real em silencio. O `.env` desta maquina estava em
+  // `MAIL_TRANSPORT=mailpit` -- um valor que ninguem definiu, que parecia dizer
+  // "manda para o receptor local" e que dizia "manda para o mundo". So nao doeu
+  // porque o host apontava para o mailpit.
+  //
+  // Estes casos existem porque a correcao entrou SEM TESTE em 19/09, e o QA
+  // reprovou por isso. Conferir a mao nao e regressao: amanha ninguem confere.
+
+  void it('recusa na subida, citando o valor visto', () => {
+    aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: 'mailpit' });
+    assert.throws(
+      () => loadAppConfig(),
+      (erro: unknown) =>
+        erro instanceof Error &&
+        erro.message.includes('mailpit') &&
+        erro.message.includes('MAIL_TRANSPORT'),
+      'REPROVA: valor desconhecido passou, e passar aqui significa mandar e-mail de verdade.',
+    );
+  });
+
+  void it('`postmark` ganha mensagem propria, porque o roteiro mandava usa-lo', () => {
+    // O roteiro de provisionamento dizia `MAIL_TRANSPORT=postmark` para
+    // homologacao. Quem seguir uma versao antiga cai aqui, e uma mensagem
+    // generica o faria duvidar da instrucao em vez de entender o estado: a
+    // chave pode estar no cofre, mas o adaptador nao existe (ADR-0009).
+    aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: 'postmark' });
+    assert.throws(
+      () => loadAppConfig(),
+      (erro: unknown) => erro instanceof Error && erro.message.includes('ADR-0009'),
+      'REPROVA: `postmark` caiu na mensagem generica, e quem seguiu o roteiro fica sem saber por que.',
+    );
+  });
+
+  // Contrapesos. Sem eles, uma implementacao que recusasse TUDO passaria nos
+  // dois casos acima -- e recusar tudo tambem derruba a subida.
+  void it('`smtp` e `log` sobem, e ausente vale `smtp`', () => {
+    for (const [valor, esperado] of [
+      ['smtp', 'smtp'],
+      ['log', 'log'],
+    ] as const) {
+      aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: valor });
+      assert.equal(loadAppConfig().mail.transport, esperado);
+    }
+    aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: undefined });
+    assert.equal(loadAppConfig().mail.transport, 'smtp');
   });
 });

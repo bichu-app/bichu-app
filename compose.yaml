@@ -276,7 +276,9 @@ services:
   mail:
     # Captura SMTP em dev e qa. NAO prova entregabilidade: isso e reputacao de
     # dominio, SPF, DKIM e DMARC, e so existe com provedor real. No perfil de
-    # homologacao este servico nao sobe e MAIL_TRANSPORT vira `postmark`.
+    # homologacao este servico nao sobe e MAIL_TRANSPORT vira `log`, porque o
+    # adaptador do Postmark ainda nao existe (ADR-0009). Dizia `postmark` ate
+    # 19/09, e esse valor mata a subida desde que a validacao entrou.
     image: axllent/mailpit:v1.20@sha256:7eef0f38dbc85e4e264f2edf5d70fbb694826791e05cb2cae4fc9e3282f968f5
     mem_limit: 64m
     profiles: [dev, qa]

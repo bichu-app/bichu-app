@@ -341,10 +341,20 @@ export function loadAppConfig(): AppConfig {
   // os aceitos.
   const transporteBruto = optionalEnv('MAIL_TRANSPORT') ?? 'smtp';
   if (transporteBruto !== 'smtp' && transporteBruto !== 'log') {
+    // `postmark` ganha mensagem propria porque o roteiro de provisionamento
+    // mandava usar exatamente esse valor em homologacao, e quem seguir uma
+    // versao antiga dele vai cair aqui. Dizer so "valor desconhecido" mandaria
+    // a pessoa duvidar da propria instrucao em vez de entender o estado.
+    const explicacao =
+      transporteBruto === 'postmark'
+        ? 'O adaptador do Postmark ainda NAO existe (ADR-0009): a chave pode ja ' +
+          'estar no cofre, mas nao ha codigo que a use. Ate ele existir, use ' +
+          '"log" em homologacao -- o e-mail e escrito no log e nada sai.'
+        : 'Use "smtp" (envia de verdade) ou "log" (so escreve no log).';
     throw new Error(
       `MAIL_TRANSPORT="${transporteBruto}" nao e um transporte conhecido. ` +
-        'Use "smtp" (envia de verdade) ou "log" (so escreve no log). ' +
-        'Valor desconhecido virava envio real em silencio ate 19/09.',
+        explicacao +
+        ' Valor desconhecido virava envio real em silencio ate 19/09.',
     );
   }
 
