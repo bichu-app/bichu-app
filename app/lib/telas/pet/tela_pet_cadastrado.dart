@@ -7,6 +7,7 @@ import '../../api/api_client.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
+import '../../dispositivo/avisos.dart';
 import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
@@ -15,6 +16,7 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
+import '../avisos/antessala_de_aviso.dart';
 import 'resultado_do_cadastro.dart';
 import 'textos_do_cadastro.dart';
 
@@ -89,6 +91,18 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
         _tag = tag;
         _emitindo = false;
       });
+      // A antessala vem DEPOIS de o QR aparecer, e so quando ele aparece.
+      //
+      // UX 10.1 fixa o momento: "F1.6, imediatamente depois de o primeiro pet
+      // ser cadastrado e o QR aparecer -- e o primeiro instante em que a pessoa
+      // tem algo a perder". Pedir na abertura do app e o jeito mais rapido de
+      // a pessoa negar para sempre, e no iOS o dialogo do sistema e mostrado
+      // **uma vez**: gastar essa chance sem contexto queima a permissao.
+      //
+      // E so quando o QR apareceu: no ramo de falha abaixo a tela ja esta
+      // mostrando um problema, e empilhar um pedido de permissao em cima dele
+      // e pedir atencao para outra coisa no pior momento possivel.
+      await _resolverAviso();
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() {
@@ -103,6 +117,70 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
                 texto: TextosDoCadastro.tagNaoSaiu(_pet.nome),
                 acao: MensagensDeErro.tentarDeNovo,
               );
+      });
+    }
+  }
+
+  /// A antessala C.3, a captura do token e o registro do aparelho.
+  ///
+  /// Tres decisoes, e as tres estao em UX 10.1 e no ADR-0008:
+  ///
+  /// 1. **A antessala so aparece em [PermissaoDeAviso.naoPedida].** Depois que
+  ///    a pessoa respondeu, o dialogo do sistema nao abre mais, e uma antessala
+  ///    que leva a lugar nenhum e pior que nenhuma. O caminho de volta sao os
+  ///    ajustes do sistema, oferecidos em outras telas.
+  /// 2. **`Agora nao` nao dispara o dialogo.** A chance unica fica guardada
+  ///    para a segunda oportunidade (F3.2). "Duas oportunidades. Nao uma
+  ///    terceira dentro do mesmo fluxo."
+  /// 3. **O aparelho e registrado nos tres desfechos**, inclusive quando a
+  ///    pessoa recusou. E esse registro que permite contar quantos tutores sao
+  ///    de fato alcancaveis -- a metrica que decide se o alerta toca em alguem
+  ///    (ADR-0008 e a descricao de `POST /me/devices` no contrato).
+  Future<void> _resolverAviso() async {
+    // O escopo e lido ANTES do primeiro `await`: depois dele o `context` pode
+    // nao estar mais montado, e `Escopo.of` num elemento desmontado estoura.
+    final avisos = Escopo.of(context).avisos;
+    final devices = Escopo.of(context).devices;
+
+    final plataforma = avisos.plataforma;
+    // Sem plataforma nao ha push neste processo (Firebase nao subiu, ou nao e
+    // Android nem iOS). Registrar o aparelho aqui sujaria a contagem de
+    // alcance com um aparelho que nunca vai receber nada.
+    if (plataforma == null) return;
+
+    var permissao = await avisos.estado();
+    if (permissao == PermissaoDeAviso.indisponivel) return;
+
+    if (permissao == PermissaoDeAviso.naoPedida) {
+      if (!mounted) return;
+      final quer = await AntessalaDeAviso.mostrar(context, nomeDoPet: _pet.nome);
+      // `quer == false` mantem `naoPedida`, e e isso que vai para o servidor:
+      // `not_asked` e `denied` sao estados diferentes no contrato, e colapsar
+      // os dois faria o app abrir depois um dialogo que nao abre mais.
+      if (quer) permissao = await avisos.pedir();
+    }
+
+    // Token so existe com permissao concedida. `null` explicito no corpo diz
+    // "este aparelho nao tem token", que e o que o contrato espera.
+    final token =
+        permissao == PermissaoDeAviso.concedida ? await avisos.token() : null;
+
+    try {
+      await devices.registrar(
+        plataforma: plataforma,
+        permissao: permissao,
+        pushToken: token,
+      );
+    } on FalhaDeChamada {
+      // A falha NAO e engolida: a faixa diz que o aviso no celular nao ficou
+      // ligado e lembra que o caso proprio continua coberto por e-mail. O slot
+      // de faixa esta livre aqui -- so chegamos neste ponto quando a emissao
+      // da tag deu certo.
+      if (!mounted) return;
+      setState(() {
+        _faixa = MensagemDeErro(
+          texto: TextosDaAntessala.avisoNaoFicouLigado(_pet.nome),
+        );
       });
     }
   }

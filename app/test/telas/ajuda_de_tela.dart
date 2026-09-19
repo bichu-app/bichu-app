@@ -22,6 +22,7 @@ import 'dart:convert';
 
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
+import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
@@ -77,6 +78,57 @@ class CameraDeTeste implements CameraEGaleria {
 
   @override
   Future<FotoLocal?> escolherDaGaleria() async => foto;
+}
+
+/// Avisos que respondem o que o caso pedir, nos quatro estados.
+///
+/// Existe pelo mesmo motivo da [CameraDeTeste], com um agravante: o dialogo de
+/// notificacao do iOS e mostrado **uma unica vez**, entao o estado que mais
+/// importa aqui e `naoPedida` -- e a unica forma de verificar que o app nao
+/// gasta essa chance sozinho e um duble que CONTA quantas vezes foi pedido.
+class AvisosDeTeste implements Avisos {
+  AvisosDeTeste(
+    this.estadoAtual, {
+    this.plataforma = PlataformaDeAviso.android,
+    this.depoisDePedir,
+    this.tokenDoAparelho = 'token-fcm-descartavel',
+  });
+
+  /// Sem plataforma o app nao tem push: e o estado de um build em que o
+  /// Firebase nao inicializou.
+  @override
+  final PlataformaDeAviso? plataforma;
+
+  PermissaoDeAviso estadoAtual;
+
+  /// O que `pedir` devolve. Nulo mantem [estadoAtual].
+  final PermissaoDeAviso? depoisDePedir;
+
+  final String tokenDoAparelho;
+
+  /// **O contador que sustenta a isca.** Se ele passar de zero num caso em que
+  /// a pessoa nao pediu, o app queimou a chance unica do sistema.
+  int vezesQuePediu = 0;
+
+  /// Zero aqui prova que o arranque do app nao encosta na permissao.
+  int vezesQueConsultouEstado = 0;
+
+  @override
+  Future<PermissaoDeAviso> estado() async {
+    vezesQueConsultouEstado += 1;
+    return estadoAtual;
+  }
+
+  @override
+  Future<PermissaoDeAviso> pedir() async {
+    vezesQuePediu += 1;
+    estadoAtual = depoisDePedir ?? estadoAtual;
+    return estadoAtual;
+  }
+
+  @override
+  Future<String?> token() async =>
+      estadoAtual == PermissaoDeAviso.concedida ? tokenDoAparelho : null;
 }
 
 /// Uma resposta `application/problem+json` do contrato.
@@ -141,6 +193,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
   CameraEGaleria? camera,
+  Avisos? avisos,
   DepositoDeIntencaoEmMemoria? envelope,
 }) async {
   AppConfig.limparParaTeste();
@@ -160,6 +213,10 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
       depositoDeIntencao: deposito,
       clienteHttp: MockClient(rede),
       camera: camera ?? const CameraNaoEmbarcada(),
+      // O padrao e o mesmo do app quando o Firebase nao subiu: nenhum canal de
+      // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`
+      // de verdade travaria a suite num `Future` que nunca resolve.
+      avisos: avisos ?? const AvisosNaoEmbarcados(),
     ),
   );
   await tester.pumpAndSettle();

@@ -49,9 +49,12 @@
              comportamento padrao. Nao preencha este campo com um PNG colorido
              nem com uma silhueta improvisada.
 
-             (O app ainda nao tem `firebase_messaging`: a dependencia entra com
-             a historia de push. Este comentario existe para que ela nao entre
-             junto com um icone inventado.) -->
+             (`firebase_messaging` ENTROU em 19/09, com a historia de push, e
+             este campo continua vazio de proposito -- que e exatamente o que
+             este comentario existia para garantir. O plugin declara sozinho
+             POST_NOTIFICATIONS, os servicos e o receptor no manifesto dele, e
+             o merge do Gradle os traz: nao ha nada a acrescentar aqui alem do
+             icone, e o icone depende do vetor da marca.) -->
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -44,9 +44,24 @@ dependencies:
   flutter_secure_storage: ^9.2.4
 
   # Exigido por lib/firebase_options.dart, que ja veio configurado para o
-  # projeto bichu-app-508914. `firebase_messaging` entra com a historia de
-  # push: a dependencia do envio de notificacao nao e do esqueleto.
+  # projeto bichu-app-508914.
   firebase_core: ^4.3.0
+
+  # Push (BICHUS-13, criterio 3). A VERSAO NAO FOI ESCOLHIDA A MAO: saiu de
+  # `flutter pub add firebase_messaging`, e o resolvedor a casou com o
+  # `firebase_core: ^4.3.0` acima pelo `_flutterfire_internals` que os dois
+  # compartilham. Fixar um numero aqui a mao e o jeito conhecido de descobrir a
+  # incompatibilidade so no `pod install` ou no Gradle, que e longe daqui.
+  #
+  # O QUE ESTE PACOTE **NAO** TRAZ, e a fronteira do ADR-0008: nada de Firebase
+  # Auth, Analytics, Firestore ou Crashlytics. Identidade e nossa (ADR-0002) e
+  # observabilidade e Sentry. O Firebase entra como transporte de mensagem e
+  # nada mais -- a fronteira some sem ninguem decidir se o proximo pacote da
+  # familia entrar sem esta linha ser lida.
+  #
+  # iOS nao esta coberto: falta a chave APNs (`.p8`), que e da conta Apple e
+  # esta em BICHUS-136. O pacote entra igual, porque quem o usa e o Android.
+  firebase_messaging: ^16.7.0
   # Abre os termos de uso e a politica de privacidade no navegador do sistema.
   # Eles sao superficie web, de outro time, e nao telas deste app: embuti-los
   # num WebView colocaria o app na fronteira de "site embrulhado" da revisao da

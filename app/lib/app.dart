@@ -5,8 +5,10 @@ import 'package:http/http.dart' as http;
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/devices_api.dart';
 import 'api/pets_api.dart';
 import 'config/app_config.dart';
+import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
@@ -26,6 +28,7 @@ class BichuApp extends StatefulWidget {
     this.deposito,
     this.clienteHttp,
     this.camera,
+    this.avisos,
     this.depositoDeIntencao,
   });
 
@@ -47,6 +50,14 @@ class BichuApp extends StatefulWidget {
   /// entrou.
   final CameraEGaleria? camera;
 
+  /// Injetavel para teste. Em producao e [AvisosPorFirebase] quando o `main()`
+  /// conseguiu inicializar o Firebase, e [AvisosNaoEmbarcados] quando nao.
+  ///
+  /// O padrao aqui e [AvisosNaoEmbarcados] de proposito: teste de widget nao
+  /// tem canal de plataforma ligado, e um `FirebaseMessaging.instance` no
+  /// caminho travaria a suite inteira num `Future` que nunca resolve.
+  final Avisos? avisos;
+
   /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
   ///
   /// O envelope de intencao (UX 8.3) precisa sobreviver ao app ser **encerrado
@@ -64,7 +75,9 @@ class _BichuAppState extends State<BichuApp> {
   late final AuthApi _auth;
   late final PetsApi _pets;
   late final TagsApi _tags;
+  late final DevicesApi _devices;
   late final CameraEGaleria _camera;
+  late final Avisos _avisos;
   late final ControladorDeSessao _sessao;
   late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
@@ -83,7 +96,9 @@ class _BichuAppState extends State<BichuApp> {
     _auth = AuthApi(_api);
     _pets = PetsApi(_api);
     _tags = TagsApi(_api);
+    _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraNaoEmbarcada();
+    _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
@@ -119,7 +134,9 @@ class _BichuAppState extends State<BichuApp> {
       auth: _auth,
       pets: _pets,
       tags: _tags,
+      devices: _devices,
       camera: _camera,
+      avisos: _avisos,
       sessao: _sessao,
       guarda: _guarda,
       child: MaterialApp.router(

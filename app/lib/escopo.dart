@@ -2,7 +2,9 @@ import 'package:flutter/widgets.dart';
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/devices_api.dart';
 import 'api/pets_api.dart';
+import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'sessao/controlador_de_sessao.dart';
@@ -19,7 +21,9 @@ class Escopo extends InheritedWidget {
     required this.auth,
     required this.pets,
     required this.tags,
+    required this.devices,
     required this.camera,
+    required this.avisos,
     required this.sessao,
     required this.guarda,
     required super.child,
@@ -30,10 +34,16 @@ class Escopo extends InheritedWidget {
   final AuthApi auth;
   final PetsApi pets;
   final TagsApi tags;
+  final DevicesApi devices;
 
   /// A fronteira com o aparelho. Injetavel para que o teste de widget
   /// exercite os tres estados de permissao sem aparelho.
   final CameraEGaleria camera;
+
+  /// A fronteira com o servico de notificacao. Injetavel pelo mesmo motivo da
+  /// camera: notificacao nao se verifica em simulador, e o que o teste precisa
+  /// exercitar e a reacao da tela aos quatro estados.
+  final Avisos avisos;
 
   final ControladorDeSessao sessao;
 
@@ -60,7 +70,9 @@ class Escopo extends InheritedWidget {
       auth != anterior.auth ||
       pets != anterior.pets ||
       tags != anterior.tags ||
+      devices != anterior.devices ||
       camera != anterior.camera ||
+      avisos != anterior.avisos ||
       sessao != anterior.sessao ||
       guarda != anterior.guarda;
 }
