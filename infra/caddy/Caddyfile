@@ -113,6 +113,33 @@
 		reverse_proxy api:3000
 	}
 
+	# O webhook de entrega do provedor de e-mail (BICHUS-13, criterios 7 e 9).
+	#
+	# ESTE BLOCO E A METADE DA BORDA de um defeito que tinha DUAS metades: o
+	# handler nao existia em `src/`, e o caminho nao era roteado aqui. Sem esta
+	# rota, escrever o handler nao adianta nada -- a borda responde 404 pelo
+	# catch-all e o provedor nunca alcanca a aplicacao. E a mesma familia do
+	# defeito de 17/09, em que `/.well-known/jwks.json` estava no contrato, o
+	# servico o servia, e a borda nao o roteava.
+	#
+	# `handle`, NUNCA `handle_path`: a regra nº 1 do cabecalho deste arquivo. O
+	# caminho que o provedor envia e o que o servico recebe. `handle_path`
+	# removeria `/webhooks/postmark` e entregaria `/` ao Fastify, que responderia
+	# 404 -- e o provedor trata 404 como falha e REENVIA, entao o sintoma seria
+	# um laco de reentrega em vez de um erro parado.
+	#
+	# Fora de `/v1` porque o contrato o declara na raiz do host da API, com
+	# `servers` proprio: `handle /v1/*` nao alcanca este caminho.
+	#
+	# Sem `basic_auth` aqui, e a ausencia e decisao: a autenticacao deste
+	# caminho e o segredo em `X-Postmark-Signature`, conferido NA APLICACAO em
+	# tempo constante (`MAIL_WEBHOOK_SECRET`). Fechar tambem na borda com uma
+	# segunda credencial criaria um segredo a mais para girar, e o provedor so
+	# apresenta um.
+	handle /webhooks/postmark {
+		reverse_proxy api:3000
+	}
+
 	# ------------------------------------------------------------------
 	# A tabela de roteamento do gateway (ADR-0016)
 	# ------------------------------------------------------------------

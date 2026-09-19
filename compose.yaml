@@ -227,6 +227,18 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
+      # Commit DECLARADO por quem sobe a pilha, e aceito vazio de proposito:
+      # `BUILD_COMMIT=$(git rev-parse HEAD) make up` preenche, `make up` sozinho
+      # nao, e o padrao vazio e o que mantem a subida local funcionando sem
+      # ninguem precisar saber que esta variavel existe. Vazio vira `null` na
+      # resposta de /v1/health -- silencio honesto, e nao um valor inventado.
+      #
+      # ELE NAO VIAJA DENTRO DA IMAGEM. Para viajar seria preciso um `ARG` no
+      # Dockerfile, que hoje nao existe; enquanto nao existir, quem compara dois
+      # destinos compara `build.artifact`, que e calculado do disco de dentro do
+      # container e nao e declarado por ninguem. Ver
+      # src/shared/build/identidade-do-artefato.ts.
+      BUILD_COMMIT: ${BUILD_COMMIT:-}
     depends_on:
       db: {condition: service_healthy}
       objeto: {condition: service_healthy}

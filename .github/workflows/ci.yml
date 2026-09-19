@@ -195,6 +195,22 @@ jobs:
       - name: portao de contrato publico, iscas primeiro
         run: sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
 
+      # BICHUS-13 criterio 12, parte que NAO depende de rede. O comando roda o
+      # autoteste das iscas antes de qualquer outra coisa: se o comparador
+      # deixar de enxergar, ele falha dizendo isso.
+      #
+      # Sem destino nenhum de proposito. Num PR o destino hospedado ainda nao
+      # foi implantado com o codigo deste PR, e compara-lo aqui reprovaria por
+      # motivo errado -- que e como um portao vira ruido e depois vira
+      # `continue-on-error`. O que ESTE passo confere e a lista fechada: todo
+      # servico com `profiles:` no compose precisa estar declarado como ausente
+      # no destino hospedado, com motivo, e toda declaracao precisa corresponder
+      # ao arquivo. A comparacao entre os dois enderecos roda em
+      # `.github/workflows/dois-destinos.yml`, agendada, e o comando imprime em
+      # voz alta que ela NAO rodou aqui.
+      - name: a divergencia entre destinos esta declarada em lista fechada
+        run: node dist/tools/comparar-destinos.js
+
       - name: compatibilidade contra main
         if: github.event_name == 'pull_request'
         run: |
@@ -391,6 +407,43 @@ jobs:
           echo "api=$imagem_api worker=$imagem_worker"
           if [ "$imagem_api" != "$imagem_worker" ]; then
             echo "::error::api e worker estao em imagens diferentes. Ver o campo \`image\` nos dois servicos"
+            exit 1
+          fi
+
+      # BICHUS-13 criterio 12. `docker inspect` acima compara a IMAGEM dos dois
+      # containers; este passo compara o que cada PROCESSO calcula sobre si
+      # mesmo, lendo `dist/` e o contrato de dentro do container.
+      #
+      # Sao coisas diferentes e as duas importam: a imagem pode ser a mesma e um
+      # volume montado por cima trocar o codigo, e a imagem pode ser outra
+      # (construida noutro momento, noutro destino) com o mesmo codigo. Entre
+      # DESTINOS so a segunda comparacao e possivel sem publicar a imagem num
+      # registry, e e ela que viaja na resposta de `/v1/health`.
+      - name: a sonda diz QUAL artefato esta no ar
+        run: |
+          corpo=$(curl -sS --fail --max-time 10 http://localhost:3000/v1/health)
+          echo "$corpo"
+          artefato=$(printf '%s' "$corpo" | sed -n 's/.*"artifact":"\([0-9a-f]*\)".*/\1/p')
+          if [ -z "$artefato" ]; then
+            echo "::error::/v1/health respondeu sem \`build.artifact\`. Sem identificador de build na resposta, \"os dois destinos rodam a mesma coisa\" volta a ser palavra (BICHUS-13, criterio 12)"
+            exit 1
+          fi
+          case "$artefato" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+            *) echo "::error::\`build.artifact\` nao tem a forma esperada: $artefato"; exit 1 ;;
+          esac
+          echo "artefato no ar: $artefato" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: api e worker calculam o MESMO artefato, de dentro
+        # O worker nao fala HTTP, entao o valor e pedido ao modulo diretamente.
+        # E a mesma funcao que a api usa para responder a sonda.
+        run: |
+          calcular="import('/app/dist/shared/artefato/identidade-do-artefato.js').then(m=>console.log(m.resumirArtefato('/app')))"
+          artefato_api=$(docker compose exec -T api node -e "$calcular" | tr -d '\r')
+          artefato_worker=$(docker compose exec -T worker node -e "$calcular" | tr -d '\r')
+          echo "api=$artefato_api worker=$artefato_worker"
+          if [ "$artefato_api" != "$artefato_worker" ]; then
+            echo "::error::api e worker calculam artefatos diferentes. A imagem pode ser a mesma e o codigo nao: procure volume montado por cima de \`dist\` nos dois servicos"
             exit 1
           fi
 

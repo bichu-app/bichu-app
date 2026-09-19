@@ -67,6 +67,11 @@ function ambiente(): Record<string, string> {
     OBJECT_BUCKET_PRIVATE: 'bichu-privado',
     OBJECT_BUCKET_PUBLIC: 'bichu-publico',
     MAIL_FROM: 'nao-responda@mail.exemplo.test',
+    // 32 bytes: o piso que `app-config.ts` impoe ao segredo do webhook de
+    // entrega. Ele e obrigatorio e sem padrao embutido, entao a bancada
+    // precisa declara-lo -- a ausencia derruba `loadAppConfig()` com o nome
+    // da variavel, que e o comportamento pedido pelos criterios 5 e 11.
+    MAIL_WEBHOOK_SECRET: 'segredo-de-teste-com-32-bytes!!!',
   };
 }
 

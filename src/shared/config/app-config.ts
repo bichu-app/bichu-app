@@ -99,6 +99,18 @@ export interface MailConfig {
   readonly from: string;
   readonly fromName: string;
   readonly replyTo: string;
+  /**
+   * Segredo do webhook de entrega (`MAIL_WEBHOOK_SECRET`), o que `api/openapi.yaml`
+   * declara no esquema `webhookSignature`.
+   *
+   * **`Buffer` e não `string`, e isso não é estilo.** A comparação precisa ser
+   * em tempo constante (`iguaisEmTempoConstante`), que só opera sobre bytes.
+   * Deixar `string` aqui convidaria o `===` de volta na rota — e `===` sobre
+   * segredo vaza o tamanho do prefixo comum pelo tempo de resposta, que é
+   * medível de fora e transforma "adivinhar 32 bytes" em "adivinhar 32 vezes um
+   * byte".
+   */
+  readonly webhookSecret: Buffer;
 }
 
 /**
@@ -358,6 +370,27 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
+  // OBRIGATORIA, e sem padrao embutido, porque um padrao aqui seria pior do que
+  // a ausencia: o webhook de entrega e chamada DE ENTRADA, vinda da internet
+  // aberta, e o unico que separa o provedor de qualquer um e este segredo.
+  // Subir com um valor de exemplo daria um endpoint que aceita evento forjado e
+  // parece configurado -- quem quisesse marcar o e-mail de um tutor como nao
+  // entregavel so precisaria saber o `MessageID`, e o tutor pararia de receber
+  // aviso de pet perdido sem nada acusar. Falha ruidosa no start, §11.2.
+  //
+  // 32 bytes e o piso: o segredo e comparado byte a byte e nao deriva nada, e
+  // abaixo disso a forca bruta deixa de ser teorica.
+  const webhookSecret = Buffer.from(requireEnv('MAIL_WEBHOOK_SECRET').trim(), 'utf8');
+  if (webhookSecret.length < 32) {
+    throw new Error(
+      'MAIL_WEBHOOK_SECRET precisa ter ao menos 32 bytes e tem ' +
+        `${String(webhookSecret.length)}. Ele e a UNICA autenticacao do webhook de ` +
+        'entrega (api/openapi.yaml, esquema `webhookSignature`): com ele fraco, ' +
+        'qualquer um forja evento de devolucao e desliga o e-mail de um tutor. ' +
+        'Gere com: openssl rand -hex 32',
+    );
+  }
+
   const mail: MailConfig = {
     transport: transporteBruto,
     host: optionalEnv('MAIL_HOST') ?? 'mail',
@@ -365,6 +398,7 @@ export function loadAppConfig(): AppConfig {
     from: requireEnv('MAIL_FROM'),
     fromName: optionalEnv('MAIL_FROM_NAME') ?? 'Bichu',
     replyTo: optionalEnv('MAIL_REPLY_TO') ?? requireEnv('MAIL_FROM'),
+    webhookSecret,
   };
 
   return {

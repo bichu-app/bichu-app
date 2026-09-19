@@ -355,6 +355,37 @@ export interface JobsTable {
   finished_at: Date | null;
 }
 
+/** `RecordType` do corpo do webhook. Espelha o `enum` de `api/openapi.yaml`. */
+export type TipoDeEventoDeEntrega =
+  | 'Delivery'
+  | 'Bounce'
+  | 'SpamComplaint'
+  | 'Open'
+  | 'SubscriptionChange';
+
+/**
+ * Eventos de entrega vindos do provedor de e-mail (migração 20260919000001).
+ *
+ * **Não há coluna com o endereço do destinatário**, e a ausência é a decisão:
+ * o corpo do evento traz `Recipient` em claro, e gravá-lo aqui criaria uma
+ * segunda cópia do e-mail de todo mundo fora de `users`, sem caminho de
+ * exclusão quando a conta pedir remoção (ADR-0010 item 6). O endereço vive só
+ * dentro da requisição, o tempo de achar a conta e marcar `email_deliverable`.
+ */
+export interface NotificationDeliveriesTable {
+  id: string;
+  /** `MessageID` do provedor. Texto: o formato é dele, não nosso. */
+  message_id: string;
+  record_type: TipoDeEventoDeEntrega;
+  /** Subtipo da devolução (`HardBounce`, `Transient`, ...), quando vem. */
+  event_type: string | null;
+  description: string | null;
+  /** `DeliveredAt` do corpo. Anulável: nem todo tipo de evento traz. */
+  occurred_at: Date | null;
+  /** Quando NÓS recebemos. Distância para `occurred_at` denuncia reentrega. */
+  received_at: Generated<Date>;
+}
+
 export type StatusDoCaso = 'open' | 'closed_reunited' | 'closed_not_found' | 'closed_false_alarm';
 
 export interface LostCasesTable {
@@ -402,6 +433,7 @@ export interface Database {
   upload_intents: UploadIntentsTable;
   pet_photos: PetPhotosTable;
   jobs: JobsTable;
+  notification_deliveries: NotificationDeliveriesTable;
   lost_cases: LostCasesTable;
   'audit.events': AuditEventsTable;
 }

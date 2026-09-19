@@ -5798,6 +5798,45 @@ export interface operations {
                         /** @enum {string} */
                         status: "ok" | "degraded";
                         version: string;
+                        /**
+                         * @description Identidade do BUILD que esta respondendo. Ela existe para o
+                         *     criterio 12 de BICHUS-13: portabilidade **provada por
+                         *     execucao** nos dois destinos, e nao afirmada em documento.
+                         *
+                         *     `version` nao serve para isso -- ela vem do `package.json`
+                         *     e e o mesmo valor em qualquer build desde que alguem
+                         *     escreveu aquele numero.
+                         *
+                         *     Obrigatoria, e nao opcional: uma sonda que responde sem
+                         *     dizer qual artefato esta no ar e exatamente o estado que o
+                         *     QA reprovou. Campo opcional aqui deixaria o destino que o
+                         *     omitisse passar calado pela comparacao.
+                         */
+                        build: {
+                            /**
+                             * @description Resumo SHA-256 truncado sobre `dist/**\/*.js`, o proprio
+                             *     contrato e o `package.json`, CALCULADO NA SUBIDA a
+                             *     partir do disco de dentro do container. E evidencia, e
+                             *     nao afirmacao: ninguem o declara.
+                             *
+                             *     Dois destinos com o mesmo valor rodam o mesmo codigo
+                             *     compilado e o mesmo contrato. Ele NAO e o digest da
+                             *     imagem Docker -- base e `node_modules` ficam de fora --
+                             *     e por isso nao distingue o alvo `dev` do alvo `prod`,
+                             *     que copiam o mesmo `dist`.
+                             */
+                            artifact: string;
+                            /**
+                             * @description Commit DECLARADO por quem construiu, pela variavel
+                             *     `BUILD_COMMIT`. Vale o que vale uma afirmacao, e o nome
+                             *     do campo separa as duas coisas de proposito.
+                             *
+                             *     `null` quando ninguem declarou -- silencio honesto em
+                             *     vez de um valor inventado. Para o commit viajar dentro
+                             *     da imagem seria preciso um `ARG` no `Dockerfile`.
+                             */
+                            commit: string | null;
+                        };
                         checks?: {
                             [key: string]: "ok" | "fail";
                         };

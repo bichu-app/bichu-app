@@ -54,6 +54,10 @@ const CONFIG: MailConfig = {
   from: 'nao-responda@mail.exemplo.test',
   fromName: 'Bichu',
   replyTo: 'nao-responda@mail.exemplo.test',
+  // O envio por SMTP não usa este segredo: ele é do webhook de ENTRADA, que é
+  // o caminho oposto (`POST /webhooks/postmark`). Está aqui só porque
+  // `MailConfig` é um tipo só para os dois sentidos do e-mail.
+  webhookSecret: Buffer.from('segredo-de-teste-com-32-bytes!!!', 'utf8'),
 };
 
 const ENDERECO_DA_VITIMA = 'vitima@exemplo.test';

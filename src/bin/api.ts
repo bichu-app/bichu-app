@@ -12,6 +12,8 @@
  */
 import { assertSafeBoot, optionalEnv } from '../shared/config/env.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
+import { registrarRotaDoWebhookDeEntrega } from '../modules/notifications/adapters/http/webhook-de-entrega.js';
+import { criarRegistroDeEntregas } from '../modules/notifications/adapters/persistence/kysely-registro-de-entregas.js';
 import { resolverSegredos } from '../shared/config/segredos.js';
 import { criarSecretProvider } from '../shared/adapters/external/env-var-secret-provider.js';
 import { createDb } from '../shared/db/pool.js';
@@ -23,6 +25,7 @@ import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
 import { vigiarIdempotenciaDasRotas } from '../shared/http/idempotency.js';
 import { registrarSaude } from '../shared/http/health.js';
+import { identidadeDoArtefato } from '../shared/artefato/identidade-do-artefato.js';
 import { criarTrilhaDeAuditoria } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarTokenSigner } from '../modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../modules/identity/adapters/persistence/kysely-identity-repository.js';
@@ -70,6 +73,12 @@ export async function main(): Promise<void> {
   await resolverSegredos(criarSecretProvider(optionalEnv('ENVIRONMENT') ?? 'dev'));
 
   const config = loadAppConfig();
+  // Calculada AQUI, na subida, e não a cada requisição da sonda: ela lê `dist/`
+  // e o contrato do disco. Um artefato ilegível derruba o boot, com o motivo,
+  // em vez de a sonda passar a responder sem identificar o que está rodando —
+  // e uma sonda que não identifica o artefato é o estado que o critério 12 de
+  // BICHUS-13 reprovou.
+  const build = identidadeDoArtefato();
   // O contrato é carregado na subida, e não na primeira requisição: operação sem
   // `security` declarado derruba a aplicação aqui, que é onde alguém está
   // olhando, em vez de virar uma rota sem verificação em produção.
@@ -269,6 +278,20 @@ export async function main(): Promise<void> {
   // para essas duas operações.
   registrarRotasDeDescoberta(app, dependenciasDasRotas);
 
+  // O webhook de entrega tambem mora FORA de `/v1`, porque e assim que o
+  // contrato o declara (`servers:` proprio) e porque quem o chama e o provedor
+  // de e-mail, nao o nosso app.
+  //
+  // Ligar aqui nao e detalhe: sem esta chamada a rota inteira seria codigo
+  // morto -- a mesma familia de `invalidarTodasAsSessoes`, que este repositorio
+  // ja registra como defeito. A sonda de `verificar_borda_local.py` reprova
+  // enquanto a fiacao nao existir, entao o silencio nao era uma opcao.
+  registrarRotaDoWebhookDeEntrega(app, {
+    registro: criarRegistroDeEntregas(db, ids),
+    segredo: config.mail.webhookSecret,
+    contrato,
+  });
+
   await app.register(
     (escopo, _opcoes, pronto) => {
       registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
@@ -279,6 +302,10 @@ export async function main(): Promise<void> {
       registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
       registrarSaude(escopo, {
         version: config.version,
+        // `version` e o mesmo `0.1.0` em qualquer build; `build` e o que
+        // distingue um artefato do outro, e e por ele que os dois destinos sao
+        // comparados (src/tools/comparar-destinos.ts).
+        build,
         problemBaseUrl: config.problemBaseUrl,
         // A sonda toca o banco de verdade: sonda que nao sonda nada sempre
         // responde que esta tudo bem.

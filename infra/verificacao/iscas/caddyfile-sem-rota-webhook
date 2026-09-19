@@ -1,0 +1,66 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO por
+# `infra/verificacao/verificar_borda.py`. Nao e a borda do produto.
+#
+# Nao corrija este arquivo.
+#
+# Irma da `caddyfile-sem-rota-well-known`, e ela existe porque aquela sozinha
+# nao provava o suficiente. Aqui os QUATRO caminhos de `.well-known` tem bloco,
+# os numeros grossos estao certos, o `/v1` roteia -- e o unico que falta e
+# `/webhooks/postmark`.
+#
+# E este o estado real do repositorio em 19/09, e o portao APROVAVA. A funcao
+# `caminhos_fora_do_prefixo` coletava o webhook (ele tem `servers:` proprio,
+# como os quatro) e o jogava fora num filtro final `startswith("/.well-known/")`,
+# escrito quando os unicos caminhos na raiz eram aqueles quatro. O relatorio
+# dizia "rota na borda para os 4 caminho(s) do contrato fora de `/v1`" e ninguem
+# reparou que deviam ser cinco.
+#
+# Por isso a isca e ESTA e nao a outra: um Caddyfile sem NENHUMA rota de raiz
+# reprova por qualquer motivo, inclusive pelos quatro antigos, e passaria mesmo
+# com o filtro cego de volta no lugar. Este arquivo so reprova se o portao
+# enxergar o webhook especificamente.
+#
+# O defeito que ele guarda tem uma agravante em relacao ao de 17/09: o provedor
+# de e-mail trata 404 como falha de entrega e REENVIA. O sintoma nao e um
+# caminho mudo -- e um laco de reentrega contra a nossa borda, enquanto a lista
+# de supressao (quem marcou como spam, quem nao existe mais) nunca chega ate
+# nos e todo envio seguinte para aquele endereco falha em silencio.
+{
+	admin off
+
+	servers {
+		max_header_size 16KiB
+		timeouts {
+			read_body 30s
+			write 30s
+		}
+	}
+}
+
+{$PUBLIC_BASE_URL} {
+	request_body {
+		max_size 12MiB
+	}
+
+	handle /.well-known/assetlinks.json {
+		root * /srv/well-known
+		file_server
+	}
+	handle /.well-known/apple-app-site-association {
+		root * /srv/well-known
+		file_server
+	}
+	handle /.well-known/jwks.json {
+		reverse_proxy api:3000
+	}
+	handle /.well-known/openid-configuration {
+		reverse_proxy api:3000
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+	handle {
+		respond "nao encontrado" 404
+	}
+}

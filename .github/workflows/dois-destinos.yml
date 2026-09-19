@@ -1,0 +1,140 @@
+# Os DOIS destinos de BICHUS-13, vistos de fora, com os mesmos comandos.
+#
+# Criterio 12: portabilidade **provada por execucao** nos dois destinos, e nao
+# afirmada em documento. O que existia era: o mesmo fonte foi construido duas
+# vezes e as duas pilhas subiram. Isso nao e prova -- nada comparava os dois
+# artefatos, o artefato foi para a VM por `scp` (sem commit e sem digest), e
+# `/v1/health` devolvia `version: 0.1.0`, que e o `package.json` e nao distingue
+# nada.
+#
+# POR QUE AGENDADO, E NAO NA ESTEIRA DE PR
+# ------------------------------------------------------------------------
+# Num PR o destino hospedado ainda NAO foi implantado com o codigo daquele PR:
+# comparar os dois ali reprovaria todo PR por um motivo que nao e do PR. Portao
+# vermelho por motivo errado e o caminho mais curto para alguem escrever
+# `continue-on-error` -- e ai ele para de valer sem ninguem decidir desliga-lo.
+#
+# O que pertence ao PR ja roda em `ci.yml`, no job `integracao`, contra o
+# destino LOCAL: `verificar_borda_local.py`, a forma de `build.artifact` na
+# sonda, e api e worker calculando o mesmo artefato. Aqui roda a outra metade:
+# o MESMO `verificar_borda_local.py`, o mesmo comando, contra o OUTRO endereco.
+#
+# ESTE FLUXO REPROVA HOJE, E A REPROVACAO ESTA CORRETA
+# ------------------------------------------------------------------------
+# Em 19/09, `https://hml.bichu.app/v1/health` respondia
+# `{"status":"ok","version":"0.1.0","checks":{"database":"ok"}}` -- sem `build`.
+# A VM roda um artefato anterior a esta mudanca, entregue por copia de
+# diretorio. O passo 2 abaixo reprova nomeando exatamente isso.
+#
+# Ele fica verde quando a VM subir o artefato construido a partir deste
+# repositorio. Enquanto nao subir, o vermelho e a informacao: o destino
+# hospedado nao consegue dizer o que esta rodando, e portabilidade "provada"
+# contra um destino que nao se identifica e a mesma afirmacao de antes.
+#
+# Sem `continue-on-error` e sem `|| true` em lugar nenhum deste arquivo, pela
+# mesma razao escrita em `associacao.yml`: monitor que fica verde porque a
+# consulta falhou e pior que monitor nenhum.
+
+name: dois-destinos
+
+on:
+  schedule:
+    # De seis em seis horas. Nao e meia em meia hora como o `associacao`: o que
+    # este fluxo observa muda quando alguem implanta, e nao quando alguem clica
+    # num painel de DNS.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      url_hospedada:
+        description: "endereco do destino hospedado"
+        required: false
+        default: ""
+  push:
+    paths:
+      - ".github/workflows/dois-destinos.yml"
+      # Mudar o calculo do resumo muda o que este monitor afirma.
+      - "src/shared/artefato/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dois-destinos
+  cancel-in-progress: false
+
+env:
+  # O endereco de homologacao. Fica aqui, e nao em `src/`: o portao de
+  # portabilidade reprova hostname literal em codigo, e e justamente para a
+  # configuracao que ele deve ser empurrado.
+  URL_HOSPEDADA_PADRAO: https://hml.bichu.app
+
+jobs:
+  verificar:
+    name: o destino hospedado responde o mesmo que o local, e diz qual artefato roda
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - name: endereco do destino hospedado
+        id: destino
+        run: |
+          url="${{ inputs.url_hospedada }}"
+          [ -n "$url" ] || url="$URL_HOSPEDADA_PADRAO"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "destino hospedado: $url"
+
+      # 1. A MESMA verificacao, o mesmo comando, contra o OUTRO endereco.
+      #
+      # `ci.yml` roda esta linha, identica, contra `http://localhost:3000` com a
+      # pilha de pe no runner. Duas execucoes do mesmo arquivo contra dois
+      # enderecos e o que torna "a borda se comporta igual nos dois destinos"
+      # uma frase conferida em vez de uma frase escrita.
+      #
+      # Conferido a mao em 19/09 contra `hml.bichu.app`: APROVADO, com os dois
+      # avisos de lista vazia nos arquivos de associacao (dispensa valendo).
+      - name: a borda hospedada responde o que o contrato promete
+        run: python3 infra/verificacao/verificar_borda_local.py "${{ steps.destino.outputs.url }}" .
+
+      # 2. O destino hospedado precisa conseguir DIZER qual artefato ele roda.
+      #
+      # Sem isto, comparar os dois destinos e comparar uma medida com uma
+      # ausencia -- e ausencia nao reprova sozinha, ela some. Este passo existe
+      # para que ela nao suma.
+      - name: a sonda hospedada carrega a identidade do build
+        run: |
+          corpo=$(curl -sS --fail --max-time 20 "${{ steps.destino.outputs.url }}/v1/health")
+          echo "$corpo" | tee -a "$GITHUB_STEP_SUMMARY"
+          artefato=$(printf '%s' "$corpo" | sed -n 's/.*"artifact":"\([0-9a-f]*\)".*/\1/p')
+          if [ -z "$artefato" ]; then
+            echo "::error::o destino hospedado respondeu a sonda SEM \`build.artifact\`. Ele nao consegue dizer o que esta rodando, e enquanto for assim a portabilidade entre os dois destinos continua sendo afirmada e nao provada (BICHUS-13, criterio 12). Sai deste estado quando a VM subir o artefato construido a partir deste repositorio"
+            exit 1
+          fi
+          echo "artefato_hospedado=$artefato" >> "$GITHUB_ENV"
+
+      # 3. O artefato no ar contra o artefato DESTE commit.
+      #
+      # O resumo e calculado pelo MESMO modulo que a aplicacao usa para
+      # responder a sonda, sobre a arvore que acabou de ser compilada aqui. Se
+      # os dois baterem, o destino hospedado roda este codigo -- e isso e
+      # execucao, nao documento.
+      #
+      # Divergir NAO e defeito de codigo: e a VM atras do repositorio. A
+      # mensagem diz isso, com os dois valores, para que ninguem procure o
+      # defeito no lugar errado.
+      - name: o artefato no ar e o deste commit
+        run: |
+          npm run build
+          esperado=$(node -e "import('./dist/shared/artefato/identidade-do-artefato.js').then(m=>console.log(m.resumirArtefato(process.cwd())))")
+          echo "no ar: $artefato_hospedado | neste commit: $esperado" | tee -a "$GITHUB_STEP_SUMMARY"
+          if [ "$artefato_hospedado" != "$esperado" ]; then
+            echo "::error::o destino hospedado roda o artefato $artefato_hospedado e este commit produz $esperado. Nao e defeito de codigo: e implantacao. Hoje o artefato vai para a VM por copia de diretorio, sem registry e sem digest -- publicar a imagem e puxar por digest e o que fecha esta lacuna"
+            exit 1
+          fi
