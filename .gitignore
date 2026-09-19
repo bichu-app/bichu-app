@@ -61,7 +61,16 @@ AGENTS.md
 # ---------------------------------------------------------------------------
 node_modules/
 dist/
-build/
+# `/build/` ANCORADO na raiz, e nao `build/` solto. Sem a barra inicial, o git
+# ignora QUALQUER diretorio chamado `build` em qualquer profundidade -- e em
+# 19/09 isso quase custou um modulo: `src/shared/build/` foi criado, versionado
+# na cabeca de quem escreveu, e sumiria do commit sem o `git status` dizer uma
+# palavra. Arquivo ignorado nao aparece como nao rastreado; ele simplesmente
+# nao existe para o git, e o defeito so apareceria em outra maquina, como
+# "modulo nao encontrado".
+/build/
+# A saida do Flutter, que e o outro `build/` legitimo desta arvore.
+app/build/
 coverage/
 *.tsbuildinfo
 .npm/
