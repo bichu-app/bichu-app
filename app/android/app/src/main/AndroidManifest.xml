@@ -50,7 +50,7 @@
              nem com uma silhueta improvisada.
 
              (`firebase_messaging` ENTROU em 19/09, com a historia de push, e
-             este campo continua vazio de proposito -- que e exatamente o que
+             este campo continua vazio de proposito — que e exatamente o que
              este comentario existia para garantir. O plugin declara sozinho
              POST_NOTIFICATIONS, os servicos e o receptor no manifesto dele, e
              o merge do Gradle os traz: nao ha nada a acrescentar aqui alem do
