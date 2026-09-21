@@ -1,6 +1,10 @@
 # ADR-0016: Camada de gateway em `/v1` na borda, sem reescrita de caminho
 
 **Status:** aceito
+**Emenda 1, 21/09/2026:** a secao 4 recusou teto na borda apoiada na premissa
+de que o servico aplicava `x-rate-limit`. **Ele nao aplica.** A conclusao (aplicar
+no servico) fica; a premissa foi corrigida e a aplicacao passa a ser estrutural.
+Ver a emenda no fim do documento.
 **Data:** 2026-09-17
 **Revisa:** ADR-0001 (a seção "Borda" e a menção a `media` como primeira
 fronteira extraível)
@@ -276,3 +280,120 @@ numa tarefa só — quando passar de
 uma tarefa, o contador sai para armazenamento compartilhado, como já registrado
 em `docs/03-arquitetura.md`. Nenhum dos dois é resolvido pela borda, e o gateway
 não deve ser vendido internamente como se resolvesse.
+
+---
+
+# Emenda 1 (ACEITA) — 21/09/2026: a premissa da seção 4 era falsa
+
+**Status:** aceita. Corrige um erro deste documento, escrito por mim.
+
+## O fato
+
+**Nenhuma rota aplica `x-rate-limit`.** A porta `RateLimitStore`
+(`src/shared/ports/rate-limit-store.ts`) existe; as três implementações
+(`criarContadorEmMemoria`, `criarContadorEmPostgres`, `criarContadorDesligado`)
+existem; `defineRoute` obriga toda rota a declarar `rateLimit` sob pena de **erro
+de compilação**; o contrato declara os tetos em 80 operações. E **nada chama
+`hit()`** fora de teste. `src/shared/http/server.ts` não menciona limite de
+chamada em lugar nenhum: o contador nunca é construído, nunca é injetado, nunca é
+consultado.
+
+Conferido em 21/09 por busca direta em `src/`, com controle positivo para não
+repetir o engano de `--include` desta máquina.
+
+**O portão não pega, e é por desenho.**
+`infra/verificacao/verificar-limite-de-chamada.mjs` lê `api/openapi.yaml` e prova
+que o teto está **declarado** e que o vocabulário é reconhecido. Ele nunca abre
+`src/`. Passa com "80 operacoes, 0 achados" enquanto a aplicação não aplica nada.
+
+## Por que isto é erro deste ADR, e não só da implementação
+
+A seção 4 recusou teto na borda, e a recusa foi fundamentada assim:
+
+> "o ganho seria nenhum, porque os tetos por IP já existem em `x-rate-limit` e
+> são aplicados no serviço"
+
+**Essa oração subordinada é a premissa inteira da decisão, e ela é falsa.** O
+`infra/caddy/Caddyfile` repete a afirmação em duas linhas (16 e 170) e, com isso,
+a borda declina explicitamente de proteger apoiada numa proteção que não existe.
+O resultado é que **não há aplicação em lugar nenhum**, e cada um dos dois lados
+tem escrito que o outro cuida disso.
+
+É a família de defeito que este projeto já nomeou: **verde produzido por não
+verificar.** O agravante aqui é que o comentário de infraestrutura afirma o
+oposto do que o código faz, então quem lê para conferir encontra a garantia
+escrita e para de procurar.
+
+## A decisão
+
+**1. A aplicação continua no serviço.** A seção 4 estava certa na conclusão e
+errada na premissa. Os motivos, agora sem apoiar-se em algo inexistente:
+
+- **A borda não consegue expressar a política.** As dimensões declaradas incluem
+  `code`, `account`, `token_family`, `email`, `finder_identity` e o recorte
+  `applies_to: invalid_attempts`. O Caddy enxerga IP e caminho. Ele não sabe
+  contar por conta nem por família de token, e **não tem como saber se uma
+  tentativa foi inválida** — isso é juízo do serviço, depois de normalizar e
+  consultar. A maior parte da política é inexprimível na borda por construção,
+  não por configuração.
+- **O argumento do toque continua valendo e é de produto.** Achadores do mesmo
+  animal compartilham IP com frequência (mesma rede, e o CGNAT das operadoras
+  brasileiras agrupa muita gente atrás de poucos endereços). Teto por IP na borda
+  derrubaria o segundo achador, que é justamente o toque que o produto existe
+  para receber.
+
+**2. A aplicação passa a ser estrutural, não lembrada.** O defeito não é que
+alguém esqueceu de chamar `hit()`: é que **era possível esquecer**. `defineRoute`
+já torna a *omissão da declaração* um erro de compilação; o registro da rota
+passa a **aplicar** o que foi declarado, de modo que uma rota registrada sem os
+seus tetos deixe de ser exprimível. Portão que persegue esquecimento é inferior a
+desenho em que não há o que esquecer.
+
+**3. A subida recusa o limitador desligado fora de desenvolvimento.**
+`criarContadorDesligado` existe e é legítimo em teste. Com
+`RATE_LIMIT_DRIVER=disabled` em qualquer ambiente que não seja `dev`, a aplicação
+**não sobe**, com o motivo na mensagem. É o mesmo padrão da conferência de
+tamanho de chave da cifra: falha ruidosa onde o silêncio é caro.
+
+**4. A borda ganha um teto volumétrico grosso, e ele não substitui nada.** Um
+teto por IP **muito acima** do uso legítimo, dimensionado para proteger
+disponibilidade da origem e nunca para tocar um achador real. Ele existe porque a
+seção 4 deixou a origem sem nenhuma proteção volumétrica ao delegar tudo ao
+serviço, e porque defesa em profundidade não admite um único ponto. **O número
+tem de ser justificado contra o pico legítimo medido**, e enquanto não houver
+medição ele fica alto de propósito.
+
+**5. O portão passa a provar vigência, com isca.** Prova por declaração é o que
+falhou. O portão novo exerce o serviço em execução: ultrapassa o teto de uma rota
+real e exige o 429. E, pelo padrão desta casa, **a prova negativa mora no
+repositório**: o mesmo caso rodado com o limitador desligado **precisa
+reprovar**. Um teste de limite que passa com o limitador desligado não testa
+limite nenhum — e é exatamente o estado de hoje, em que o 429 só existe dentro do
+teste.
+
+O portão de declaração continua existindo. Ele responde outra pergunta e
+continua útil; o que ele não pode é seguir sendo lido como prova de vigência.
+
+## Consequências
+
+**A superfície mais exposta não é a plaquinha.** Ordem de gravidade, hoje:
+
+1. **`POST /webhooks/postmark`.** Internet aberta, sem `basic_auth` na borda (e a
+   ausência é decisão registrada), autenticado só pelo segredo, com conferência
+   de assinatura **em tempo constante**, que é deliberadamente cara. O teto de 20
+   inválidas por hora é descrito no próprio arquivo como a única defesa contra
+   transformar a rota num moedor de CPU. **Ele não é aplicado, e a borda também
+   não protege.** É a única rota do produto hoje sem nenhum freio em nenhuma
+   camada.
+2. **Identidade.** `token_family` 10/min na renovação (que é o freio de reuso de
+   token de renovação), `email` 3/h na recuperação de senha, `ip` 20/h no
+   cadastro — este último parte do que sustenta o argumento do SEC-003 e do
+   ADR-0020.
+3. **Resolução da plaquinha.** O que se perde aqui é disponibilidade e o
+   `notify_owner` de 100/24h por código, que é o sinal de suspeita de clonagem.
+   **O tamanho do código não depende disto**: ver ADR-0004, seção 14.
+
+**Dívida quitada e dívida que continua:** a "dívida aceita, com gatilho" da
+seção 6 registrava que o limite roda em processo e precisa trocar de driver antes
+da segunda instância. Essa continua. O que esta emenda acrescenta é que, antes
+dela, **existe o problema anterior de o limite não rodar**.
