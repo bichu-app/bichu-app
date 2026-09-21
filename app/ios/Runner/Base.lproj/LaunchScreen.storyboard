@@ -16,75 +16,19 @@
                     <view key="view" contentMode="scaleToFill" id="Ze5-6b-2t3">
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" image="LaunchImage" translatesAutoresizingMaskIntoConstraints="NO" id="YRO-k0-Ey4">
-                            </imageView>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" image="LaunchBackground" translatesAutoresizingMaskIntoConstraints="NO" id="tWc-Dq-wcI"/>
+                            <imageView opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" image="LaunchImage" translatesAutoresizingMaskIntoConstraints="NO" id="YRO-k0-Ey4"></imageView>
                         </subviews>
-                        <!--
-                            FUNDO DO SPLASH DO iOS: Framboesa #922C4A.
-
-                            DE ONDE VEM O VALOR: design/tokens.json, primitivo
-                            raspberry.700, que e o primary do tema claro
-                            (lib/theme/bichu_tokens.g.dart). Decisao do cliente
-                            de 17/09/2026. NAO e o fundo neutro do app
-                            (#FAFAF8).
-
-                            POR QUE ESTA LITERAL AQUI: o storyboard de launch e
-                            compilado e exibido pelo iOS antes de existir
-                            processo Dart, e nao le design/tokens.json. A
-                            duplicacao e imposicao de plataforma. O registro de
-                            todos os pontos duplicados esta em
-                            android/app/src/main/res/values-v31/styles.xml.
-
-                            OS NUMEROS: componente sRGB de 0 a 1. 0x92=146,
-                            0x2C=44, 0x4A=74, divididos por 255.
-
-                            ============================================
-                            PENDENCIA MEDIDA, E NAO RESOLVIDA. LEIA ANTES
-                            DE DAR ESTA TELA POR PRONTA.
-                            ============================================
-                            No simulador (iOS 27, iPhone 18 Pro) este fundo
-                            renderiza #9F2049, e nao #922C4A. E um vermelho mais
-                            saturado que a marca. Medido comparando, na MESMA
-                            captura de tela, com a borda do botao "Escanear uma
-                            tag", que o Flutter pinta a partir do mesmo token e
-                            que le #922C4A exato: os dois vermelhos ficam
-                            diferentes lado a lado.
-
-                            A conta aponta a causa: converter
-                            P3(0.5725, 0.1725, 0.2902) para sRGB da exatamente
-                            #9F2049. Ou seja, o sistema usa os componentes como
-                            se ja fossem Display P3.
-
-                            TRES SAIDAS TESTADAS, NENHUMA RESOLVEU, para
-                            ninguem refazer o caminho:
-                            1. Cor nomeada de catalogo (colorset): nao resolve
-                               em tela de lancamento, que e desenhada antes de o
-                               app carregar. Fundo saiu escuro.
-                            2. PNG chapado num imageset atras do simbolo: o
-                               imageView nao renderiza neste storyboard.
-                               Verificado trocando a imagem por azul puro, e o
-                               fundo continuou vermelho.
-                            3. colorSpace="displayP3" com os componentes P3
-                               equivalentes: continuou medindo #9F2049.
-
-                            O QUE FECHA ISTO: `dart run
-                            flutter_native_splash:create`, quando a arte chegar.
-                            O gerador resolve o fundo do iOS por PNG gerado num
-                            imageset, e PNG carrega perfil de cor. E o caminho
-                            que vai para a loja; este arquivo e o remendo de
-                            antes da arte. DEPOIS de rodar o gerador, meca de
-                            novo: se ainda sair #9F2049, o defeito e do gerador
-                            e nao deste arquivo.
-
-                            O LaunchImage do imageset e o SIMBOLO, nao o fundo,
-                            e continua o marcador transparente de 1x1 ate a
-                            designer entregar splash-simbolo.png. Por ele ser
-                            transparente, hoje o splash e esta cor chapada.
-                        -->
-                        <color key="backgroundColor" red="0.57254901960784310" green="0.17254901960784313" blue="0.29019607843137254" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
-                            <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerX" secondItem="Ze5-6b-2t3" secondAttribute="centerX" id="1a2-6s-vTC"/>
-                            <constraint firstItem="YRO-k0-Ey4" firstAttribute="centerY" secondItem="Ze5-6b-2t3" secondAttribute="centerY" id="4X2-HB-R7a"/>
+                            <constraint firstItem="YRO-k0-Ey4" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="3T2-ad-Qdv"/>
+                            <constraint firstItem="tWc-Dq-wcI" firstAttribute="bottom" secondItem="Ze5-6b-2t3" secondAttribute="bottom" id="RPx-PI-7Xg"/>
+                            <constraint firstItem="tWc-Dq-wcI" firstAttribute="top" secondItem="Ze5-6b-2t3" secondAttribute="top" id="SdS-ul-q2q"/>
+                            <constraint firstAttribute="trailing" secondItem="tWc-Dq-wcI" secondAttribute="trailing" id="Swv-Gf-Rwn"/>
+                            <constraint firstAttribute="trailing" secondItem="YRO-k0-Ey4" secondAttribute="trailing" id="TQA-XW-tRk"/>
+                            <constraint firstItem="YRO-k0-Ey4" firstAttribute="bottom" secondItem="Ze5-6b-2t3" secondAttribute="bottom" id="duK-uY-Gun"/>
+                            <constraint firstItem="tWc-Dq-wcI" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="kV7-tw-vXt"/>
+                            <constraint firstItem="YRO-k0-Ey4" firstAttribute="top" secondItem="Ze5-6b-2t3" secondAttribute="top" id="xPn-NY-SIU"/>
                         </constraints>
                     </view>
                 </viewController>
@@ -94,6 +38,7 @@
         </scene>
     </scenes>
     <resources>
-        <image name="LaunchImage" width="168" height="185"/>
+        <image name="LaunchImage" width="1152" height="1152"/>
+        <image name="LaunchBackground" width="1" height="1"/>
     </resources>
 </document>

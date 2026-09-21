@@ -159,8 +159,21 @@ flutter_launcher_icons:
   # arredondado, gota -- e desloca as camadas no parallax da tela inicial. Uma
   # imagem chapada unica fica cortada em aparelho que usa mascara redonda.
   #
-  # As duas camadas sao 108x108 dp; so os 72dp centrais sao garantidos visiveis
-  # (a "safe zone" do Material Design). O simbolo precisa caber ali.
+  # GEOMETRIA, que e a parte que costuma sair errada:
+  #   - cada camada e 108x108 dp;
+  #   - a mascara do fabricante fica sobre os 72x72 dp centrais;
+  #   - so os 66x66 dp centrais sao garantidos visiveis em TODA mascara
+  #     (a "safe zone" do Material Design);
+  #   - os 18 dp de cada borda existem para o parallax e SEMPRE somem.
+  # Ou seja: o simbolo precisa caber nos 66 dp centrais, e nao nos 72. Os 72 dp
+  # sao a MASCARA; a GARANTIA e 66, que e o numero mais restritivo e o que vale.
+  # Medido na arte em vigor: 62,4 dp de diametro circunscrito, 3,6 dp de folga.
+  #
+  # ESTE BLOCO E A FONTE DA GEOMETRIA, e esta aqui por um motivo mecanico:
+  # `mipmap-anydpi-v26/ic_launcher.xml` e SAIDA de `dart run
+  # flutter_launcher_icons` e e reescrito a cada geracao, junto com os drawables
+  # de camada. Qualquer explicacao que viva la se perde no proximo comando, sem
+  # ninguem perceber. Este arquivo nao e gerado, entao a explicacao mora aqui.
   adaptive_icon_foreground: "../design/marca/app/icone-android-foreground.png"
   adaptive_icon_background: "../design/marca/app/icone-android-background.png"
   adaptive_icon_foreground_inset: 16
@@ -183,6 +196,25 @@ flutter_launcher_icons:
   # Piso declarado no gradle do Flutter. Abaixo de 26 o sistema ignora o
   # adaptativo e cai no `ic_launcher.png` legado, que continua sendo gerado.
   min_sdk_android: 21
+
+# CONFIRA O `project.pbxproj` DEPOIS DE RODAR O GERADOR DE ICONE. A versao
+# 0.14.4 tem um defeito: ela quer garantir
+# `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;` em cada configuracao de build
+# e, nas configuracoes de NIVEL DE PROJETO (Debug e Release), onde essa chave
+# nao existe, ela sobrescreve o VALOR da primeira chave `ASSETCATALOG_COMPILER_*`
+# que encontra. Na pratica isso grava
+# `ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon`, que
+# o Xcode le como booleano: tudo que nao for `YES` vale `NO`. O efeito e desligar
+# a geracao de simbolos de asset em Swift, em silencio e sem ninguem pedir.
+#
+# Revertido a mao em 21/09/2026 (BICHUS-141): as duas voltaram para `YES`. As
+# configuracoes do ALVO Runner ja tem `ASSETCATALOG_COMPILER_APPICON_NAME` e
+# nao precisam da chave; as de projeto nunca precisaram.
+#
+# Quem rodar `dart run flutter_launcher_icons` de novo precisa conferir:
+#   git diff app/ios/Runner.xcodeproj/project.pbxproj
+# O diff esperado desse comando e VAZIO. Qualquer linha
+# `..._GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon` e o defeito voltando.
 
 # ---------------------------------------------------------------------------
 # Splash (flutter_native_splash)
