@@ -304,6 +304,10 @@ function montar(opcoes: {
       return Promise.resolve();
     },
     mailer,
+    registrarOcorrencia: () => {
+      // Nenhum caso deste arquivo afirma log. Os que afirmam estão em
+      // `cadastro-envia-verificacao.test.ts` (BICHUS-147).
+    },
     baseDaWeb: 'https://bichu.test' as AbsoluteUrl,
   });
 

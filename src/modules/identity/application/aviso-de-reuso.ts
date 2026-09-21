@@ -29,11 +29,13 @@ import type { UserId } from '../../../shared/types/brands.js';
 /**
  * O que esta função precisa de um registrador de log.
  *
- * Um tipo estrutural de duas linhas em vez do logger do Fastify: `application/`
- * não conhece framework (regra `domainPurity` do ESLint), e um teste não deve
- * precisar subir um servidor HTTP para conferir o texto de um e-mail.
+ * O tipo passou a morar em `dependencies.ts` com BICHUS-147, porque o serviço
+ * de identidade também registra ocorrência agora, e duas declarações do mesmo
+ * formato de log seriam duas fontes. O re-export mantém o nome onde quem já
+ * importava daqui espera encontrá-lo.
  */
-export type RegistrarOcorrencia = (dados: Record<string, unknown>, mensagem: string) => void;
+export type { RegistrarOcorrencia } from './dependencies.js';
+import type { RegistrarOcorrencia } from './dependencies.js';
 
 export interface DependenciasDoAvisoDeReuso {
   readonly repositorio: Pick<IdentityRepository, 'buscarContaPorId'>;

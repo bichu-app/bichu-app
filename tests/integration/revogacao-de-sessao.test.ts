@@ -238,6 +238,11 @@ before(async () => {
     janelas: config.session,
     hmacDeIp: (ip) => hmacDeEnderecoIp(ip, config.ipHmacKey),
     mailer,
+    // BICHUS-147: o serviço registra `email.send` e `email.send_failed`. Aqui
+    // o destino é o console, como no aviso de reuso logo abaixo.
+    registrarOcorrencia: (dados, mensagem) => {
+      console.info(mensagem, dados);
+    },
     baseDaWeb: config.publicBaseUrl,
     avisarTitular: criarAvisoDeReusoAoTitular({
       repositorio: repositorioCronometrado,

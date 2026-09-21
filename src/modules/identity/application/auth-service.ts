@@ -114,6 +114,66 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           };
 
     await deps.mailer.enviar(mensagem);
+
+    // O evento nasce AQUI, e não no transporte (BICHUS-147 critério 2). Foi a
+    // ausência dele em homologação, diante de um 201, que provou que o caminho
+    // nem tinha sido percorrido — e o transporte de log registrava, enquanto o
+    // de SMTP não registra nada. Prova de disparo que depende de qual
+    // transporte está ligado não prova disparo.
+    //
+    // `tokenBruto` NÃO entra aqui, e a ausência é o critério 7: o valor em
+    // claro existe nesta função e no corpo da mensagem, e em nenhum outro
+    // lugar. Registrar "o e-mail saiu" com o link dentro transformaria o log em
+    // cópia da credencial, legível por quem investiga qualquer outra coisa.
+    deps.registrarOcorrencia(
+      {
+        evento: 'email.send',
+        proposito,
+        userId,
+        correlationId: contexto.correlationId,
+      },
+      'e-mail transacional enviado',
+    );
+  }
+
+  /**
+   * O envio de verificação do CADASTRO, e o que ele engole.
+   *
+   * O envio é do servidor, dentro de `cadastrar` (BICHUS-147). Ele não é do
+   * app depois do 201: `registerUser` já declara `x-effects: [notifies]` no
+   * contrato, o reenvio tem teto de 3 por hora e gastá-lo na ida deixaria sem
+   * remédio justamente quem errou o endereço, e cliente novo não herda a
+   * memória de chamar.
+   *
+   * **A falha do envio não derruba a conta que nasceu** (critério 3). A conta
+   * existe, a sessão abre, o par de tokens volta — e a falha fica no log com o
+   * `correlation_id`, que é o que liga o 201 daquela pessoa ao e-mail que não
+   * saiu. Propagar aqui devolveria 500 para quem já tem conta criada e sessão
+   * aberta: o app mostraria erro de cadastro sobre um cadastro que deu certo, e
+   * a pessoa tentaria de novo para colher um 409.
+   *
+   * O `catch` engole o erro mas **não o silencia**: sem o registro, o e-mail
+   * que não sai vira exatamente o defeito que esta issue corrige, com a
+   * diferença de ninguém conseguir provar.
+   */
+  async function enviarVerificacaoDoCadastro(
+    conta: Conta,
+    contexto: ContextoDaRequisicao,
+  ): Promise<void> {
+    try {
+      await emitirEEnviarToken(conta.id, conta.email, 'email_verify', contexto);
+    } catch (erro) {
+      deps.registrarOcorrencia(
+        {
+          evento: 'email.send_failed',
+          proposito: 'email_verify',
+          userId: conta.id,
+          correlationId: contexto.correlationId,
+          motivo: erro instanceof Error ? erro.message : String(erro),
+        },
+        'o e-mail de verificação do cadastro não saiu; a conta e a sessão seguem de pé',
+      );
+    }
   }
 
   /**
@@ -218,6 +278,15 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         resourceKind: 'user',
         resourceId: conta.id,
       });
+
+      // O e-mail de verificação sai DAQUI, e depois da consulta de unicidade
+      // (critério 6): se o envio viesse antes de `criarContaLocal`, um POST com
+      // o endereço de outra pessoa faria este serviço mandar e-mail para ela.
+      // Sem esta linha a conta fica com `email_verified_at` nulo para sempre, e
+      // sem contato verificado o tutor não marca o pet como perdido
+      // (BICHUS-73) — era este o defeito de BICHUS-147.
+      await enviarVerificacaoDoCadastro(conta, contexto);
+
       return projetarSessao(conta, par, agora);
     },
 

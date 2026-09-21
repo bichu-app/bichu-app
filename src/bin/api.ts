@@ -126,6 +126,13 @@ export async function main(): Promise<void> {
     // Desde 19/09 isto é `WEB_BASE_URL` e não mais o endereço deste processo:
     // apontar o link de verificação para a API mandaria o tutor para um JSON.
     baseDaWeb: config.webBaseUrl,
+    // O log do serviço sai pelo logger do processo. O evento `email.send` do
+    // cadastro (BICHUS-147 critério 2) é o que prova, em homologação, que o
+    // caminho foi percorrido — e foi a ausência dele diante de um 201 que
+    // identificou o defeito.
+    registrarOcorrencia: (dados, mensagem) => {
+      app.log.info(dados, mensagem);
+    },
     // O corpo desta função morava aqui dentro, como lambda. Ele saiu para
     // `identity/application/aviso-de-reuso.ts` por um motivo só: nada neste
     // arquivo é carregado por teste — `main()` abre porta, banco e SMTP —, e
