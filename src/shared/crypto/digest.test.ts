@@ -8,8 +8,15 @@
  * minutos numa GPU comum.
  */
 import assert from 'node:assert/strict';
+import { createHash, createHmac } from 'node:crypto';
 import { describe, it } from 'node:test';
-import { hmacDeEnderecoIp, iguaisEmTempoConstante, reduzirEnderecoIp } from './digest.js';
+import {
+  hashDoCodigoDaTag,
+  hmacDeEnderecoIp,
+  iguaisEmTempoConstante,
+  reduzirEnderecoIp,
+} from './digest.js';
+import type { TagCodeCanonical } from '../types/brands.js';
 
 const CHAVE_A = Buffer.alloc(32, 1);
 const CHAVE_B = Buffer.alloc(32, 2);
@@ -69,5 +76,48 @@ void describe('comparação em tempo constante', () => {
     // `timingSafeEqual` lança com tamanhos diferentes; quem chama não deve
     // precisar saber disso para não derrubar o pedido.
     assert.equal(iguaisEmTempoConstante(Buffer.from('abc'), Buffer.from('abcd')), false);
+  });
+});
+
+/**
+ * Índice cego do código da tag (ADR-0004, Emenda 1, seção 3.1).
+ *
+ * O caso que fecha o critério 1 é negativo e tem que **reprovar com o mecanismo
+ * desligado**: trocar a chave e obter o mesmo resumo significa que a função
+ * voltou a ser `createHash('sha256')`, e um dump do banco volta a entregar a
+ * base inteira por enumeração. O teste de "resumos diferentes para códigos
+ * diferentes" passaria igual nos dois mundos, e é por isso que ele não basta.
+ */
+void describe('índice cego do código da tag', () => {
+  const CODIGO = '7K2F9QJB3XR05TWD8MNCVH1234' as TagCodeCanonical;
+
+  void it('depende da chave: chaves diferentes produzem resumos diferentes', () => {
+    const comA = hashDoCodigoDaTag(CODIGO, CHAVE_A);
+    const comB = hashDoCodigoDaTag(CODIGO, CHAVE_B);
+    assert.equal(comA.length, 32);
+    assert.equal(comB.length, 32);
+    assert.equal(iguaisEmTempoConstante(comA, comB), false);
+  });
+
+  void it('não é SHA-256 sem chave: o resumo sem chave não pode ser alcançável', () => {
+    // A prova direta de que a implementação trocou de função. Se alguém voltar
+    // para `createHash`, este caso reprova citando o valor exato.
+    const semChave = createHash('sha256').update(CODIGO, 'utf8').digest();
+    assert.equal(iguaisEmTempoConstante(hashDoCodigoDaTag(CODIGO, CHAVE_A), semChave), false);
+    assert.equal(iguaisEmTempoConstante(hashDoCodigoDaTag(CODIGO, CHAVE_B), semChave), false);
+  });
+
+  void it('é HMAC-SHA-256 do código canônico, e o vetor está escrito aqui', () => {
+    assert.equal(
+      hashDoCodigoDaTag(CODIGO, CHAVE_A).toString('hex'),
+      createHmac('sha256', CHAVE_A).update(CODIGO, 'utf8').digest('hex'),
+    );
+  });
+
+  void it('é estável com a mesma chave: a resolução depende da igualdade exata', () => {
+    assert.equal(
+      iguaisEmTempoConstante(hashDoCodigoDaTag(CODIGO, CHAVE_A), hashDoCodigoDaTag(CODIGO, CHAVE_A)),
+      true,
+    );
   });
 });

@@ -182,6 +182,7 @@ function servico(estado: EstadoDoRepositorio) {
       // primeira leva de plaquinha prensada (ADR-0004).
       baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
       baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
+      chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     }),
     contadores,
     eventos,

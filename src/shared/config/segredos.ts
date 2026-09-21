@@ -55,6 +55,18 @@ export const SEGREDOS_DE_RUNTIME: readonly NomeDeSegredo[] = [
   'IP_HMAC_KEY',
   /** Abre o `code_ciphertext`, que existe para reimprimir o QR (ADR-0004). */
   'TAG_CODE_KEY',
+  /**
+   * O indice cego de `code_hash` (ADR-0004, Emenda 1, §3.1). Entra nesta lista
+   * com o codigo que a le, e nao antes: `app-config.ts` ja tem o
+   * `requireEnv('TAG_CODE_INDEX_KEY')` e a recusa de subida por tamanho errado.
+   *
+   * **Ela nao e rotacionavel como as outras.** Acrescentar versao nova no cofre
+   * e reiniciar o processo, que e o procedimento do passo 4.1, faria TODA tag
+   * parar de resolver: o valor buscado depende da chave. Rotacionar exige
+   * recalcular `code_hash` da base a partir de `code_ciphertext`, e isso esta
+   * escrito no roteiro antes de a chave existir, de proposito.
+   */
+  'TAG_CODE_INDEX_KEY',
   /** Assina todo token de acesso em circulação (ADR-0002). */
   'JWT_ACTIVE_PRIVATE_KEY',
   /**

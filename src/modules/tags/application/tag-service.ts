@@ -73,6 +73,13 @@ export interface DependenciasDeTags {
   readonly baseDaTag: AbsoluteUrl;
   /** Base das páginas públicas, de onde sai `conversation_url`. */
   readonly baseDaWeb: AbsoluteUrl;
+  /**
+   * Chave do índice cego: `code_hash` é HMAC-SHA-256 do código canônico com ela
+   * (ADR-0004, Emenda 1, §3.1). Entra por dependência, e não por `import` de
+   * configuração, pelo mesmo motivo do relógio: domínio e aplicação não leem
+   * ambiente.
+   */
+  readonly chaveDoIndiceDoCodigo: Buffer;
 }
 
 /** A visão pública da tag, exatamente como `TagResolution` a declara. */
@@ -142,7 +149,7 @@ export function criarTagService(deps: DependenciasDeTags) {
      */
     async resolver(codigoBruto: string, chamador: Chamador): Promise<ResolucaoDaTag> {
       const codigo = exigirCodigoNormalizado(codigoBruto);
-      const tag = await deps.repositorio.resolverPorCodigo(hashDoCodigoDaTag(codigo));
+      const tag = await deps.repositorio.resolverPorCodigo(hashDoCodigoDaTag(codigo, deps.chaveDoIndiceDoCodigo));
       if (tag === undefined) throw problemas.tagCodeNaoEncontrado();
       recusarTagInativa(tag);
 
@@ -190,7 +197,7 @@ export function criarTagService(deps: DependenciasDeTags) {
      */
     async contextoDoDono(codigoBruto: string, dono: UserId): Promise<ContextoDoDono> {
       const codigo = exigirCodigoNormalizado(codigoBruto);
-      const contexto = await deps.repositorio.buscarContextoDoDono(hashDoCodigoDaTag(codigo), dono);
+      const contexto = await deps.repositorio.buscarContextoDoDono(hashDoCodigoDaTag(codigo, deps.chaveDoIndiceDoCodigo), dono);
       if (contexto === undefined) throw problemas.naoEncontrado();
       return contexto;
     },
@@ -218,7 +225,7 @@ export function criarTagService(deps: DependenciasDeTags) {
         {
           id: deps.ids.uuidv7() as TagId,
           petId,
-          codeHash: hashDoCodigoDaTag(codigo),
+          codeHash: hashDoCodigoDaTag(codigo, deps.chaveDoIndiceDoCodigo),
           codeCiphertext: await deps.cifra.encrypt(codigo),
           codeSuffix: sufixoDoCodigo(codigo),
           label,
@@ -272,7 +279,7 @@ export function criarTagService(deps: DependenciasDeTags) {
       entrada: { readonly foundAt?: string; readonly clientNote?: string },
     ): Promise<AvisoCriado> {
       const codigo = exigirCodigoNormalizado(codigoBruto);
-      const tag = await deps.repositorio.resolverPorCodigo(hashDoCodigoDaTag(codigo));
+      const tag = await deps.repositorio.resolverPorCodigo(hashDoCodigoDaTag(codigo, deps.chaveDoIndiceDoCodigo));
       if (tag === undefined) throw problemas.tagCodeNaoEncontrado();
       recusarTagInativa(tag);
 

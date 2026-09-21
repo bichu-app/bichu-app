@@ -305,6 +305,9 @@ jobs:
           trocar('IP_HMAC_KEY', base64.b64encode(b'ci-descartavel-de-32-bytes-no-min').decode())
           # Hex de 64 caracteres: app-config.ts recusa qualquer outro tamanho.
           trocar('TAG_CODE_KEY', 'c1' * 32)
+          # DIFERENTE da de cima, e nao por estetica: `app-config.ts` recusa
+          # subir com as duas iguais (ADR-0004, Emenda 1).
+          trocar('TAG_CODE_INDEX_KEY', 'd2' * 32)
           env.write_text(texto)
           FIM
           docker compose config -q

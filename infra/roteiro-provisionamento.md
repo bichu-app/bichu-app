@@ -266,10 +266,15 @@ no arquivo de ambiente, e a aplicação sobe sem falar com o GCP.
 
 **O identificador do segredo é o nome da variável, sem tradução.** É contrato da
 porta `SecretProvider`, e é o que faz a §6 de `docs/07-devops.md` continuar
-verdadeira. Os sete de hoje estão em `SEGREDOS_DE_RUNTIME`
+verdadeira. Os oito de hoje estão em `SEGREDOS_DE_RUNTIME`
 (`src/shared/config/segredos.ts`): `DATABASE_URL`, `IP_HMAC_KEY`, `TAG_CODE_KEY`,
-`JWT_ACTIVE_PRIVATE_KEY`, `JWT_NEXT_PRIVATE_KEY`,
+`TAG_CODE_INDEX_KEY`, `JWT_ACTIVE_PRIVATE_KEY`, `JWT_NEXT_PRIVATE_KEY`,
 `OBJECT_STORAGE_ACCESS_KEY_ID`, `OBJECT_STORAGE_SECRET_ACCESS_KEY`.
+
+`TAG_CODE_INDEX_KEY` e `TAG_CODE_KEY` **precisam ser valores diferentes**, e a
+aplicação recusa subir se forem iguais. Uma cifra o código para reimpressão, a
+outra o indexa; iguais, quem vazasse uma vazaria as duas e o índice cego deixaria
+de ser cego.
 
 ```bash
 # `printf %s`, NUNCA `echo`. `echo` acrescenta \n ao final, e o adaptador
@@ -294,6 +299,41 @@ contornou o adaptador, e o defeito é esse, não o IAM.
 
 Rotacionar é `gcloud secrets versions add <NOME> --data-file=-` e reiniciar o
 processo: o adaptador lê `latest`. Não passa por deploy, de propósito.
+
+#### `TAG_CODE_INDEX_KEY` é a exceção, e ela está escrita antes de a chave existir
+
+**Este parágrafo vale para uma chave só, e é o único lugar onde o procedimento
+acima está errado.** Ele está aqui antes de a chave ser criada, de propósito: é
+o tipo de coisa que, descoberta depois, é descoberta durante um incidente.
+
+`TAG_CODE_INDEX_KEY` **não é rotacionável.** `code_hash` é
+HMAC-SHA-256(chave, código) e é por ele que a resolução busca, numa igualdade
+sobre `pet_tags_code_hash_unico`. Publicar uma versão nova e reiniciar — que é o
+giro normal das outras sete — faz **toda tag do produto parar de resolver no
+mesmo instante**, porque o valor procurado passa a ser outro e nada no banco
+mudou. Não há degradação parcial e não há aviso: a plaquinha de todo mundo vira
+404 de uma vez.
+
+Trocá-la é uma **operação de manutenção**, com a aplicação no meio e janela
+combinada:
+
+1. Parar a emissão de tags (a rota de emissão, não a de resolução).
+2. Para cada tag `active`: decifrar `code_ciphertext` com `TAG_CODE_KEY`,
+   recalcular `code_hash` com a chave nova, gravar. É para isso que o cifrado
+   existe.
+3. Publicar a versão nova do segredo e reiniciar, **só depois** do passo 2.
+
+**Tags `revoked` não sobrevivem a essa operação, e isso não é defeito do
+procedimento.** A revogação apaga `code_ciphertext`
+(`pet_tags_revogada_nao_guarda_o_codigo`), então o código delas não é recuperável
+de lugar nenhum: elas passariam a responder 404 em vez do 410 que carrega o
+`next_action` de quem está com o animal no colo. Antes de rotacionar, conte
+quantas existem; se houver mais que zero, a decisão é de quem responde por
+produto, e a saída desenhada é a `code_hash_legacy` da seção 12.2 da Emenda 1 do
+ADR-0004.
+
+**Então a rotação desta chave é resposta a comprometimento, não higiene de
+calendário.** Não a coloque no mesmo ciclo das outras.
 
 ---
 
