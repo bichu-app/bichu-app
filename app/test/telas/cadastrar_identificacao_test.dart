@@ -13,7 +13,9 @@
 // so aparece meses depois, no dia em que um pet some e o cruzamento nao
 // acontece.
 
+import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/pet/rascunho_de_pet.dart';
 import 'package:bichu/telas/pet/textos_do_cadastro.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:bichu/widgets/seletor_de_lista.dart';
@@ -323,5 +325,210 @@ void main() {
     expect(find.text('Passo 2 de 3'), findsOne);
     // O nome atravessa o passo: a tela seguinte fala do pet pelo nome.
     expect(find.text('Uma foto de Nina'), findsOne);
+  });
+
+  // BICHUS-156 -------------------------------------------------------------
+  //
+  // A segunda ISCA deste arquivo, e ela e de CLASSE, nao de campo.
+  //
+  // `RascunhoDePet` e um `ChangeNotifier` e `atualizar` chama
+  // `notifyListeners()`. A tela nao o escutava, entao a notificacao nao
+  // chegava a ninguem: o campo que so chamava `atualizar` -- o sexo -- gravava
+  // o valor e **nao redesenhava**. A selecao so aparecia no toque seguinte,
+  // quando o `setState` do PORTE redesenhava a tela inteira, e era dai que
+  // vinha o relato do cliente de que "o sexo esta vinculado ao porte".
+  //
+  // Por isso um caso que tocasse no sexo e DEPOIS no porte antes de conferir
+  // ficaria verde com o defeito de pe. Os casos abaixo nao fazem isso.
+  group('BICHUS-156 — a tela escuta o rascunho', () {
+    /// Exige que o segmento com este rotulo esteja (ou nao esteja) marcado
+    /// como selecionado.
+    ///
+    /// Vai pelo `find.text` e sobe ate o no de acessibilidade: `_Segmento` usa
+    /// `excludeSemantics`, entao o no mais proximo acima do texto e o do
+    /// proprio segmento. O `selected` desse no e o mesmo bit que pinta a borda
+    /// e o preenchimento, entao conferir aqui confere o que a pessoa **ve** e
+    /// o que o leitor de tela **anuncia**, de uma vez.
+    ///
+    /// O handle sai no `finally`: a arvore de semantica so existe enquanto
+    /// alguem a segura, e um handle vivo no fim do caso reprova o caso por um
+    /// motivo que nao e o dele.
+    void exigirSegmento(
+      WidgetTester tester,
+      String rotulo, {
+      required bool selecionado,
+      String? porque,
+    }) {
+      final handle = tester.ensureSemantics();
+      try {
+        expect(
+          tester.getSemantics(find.text(rotulo)),
+          isSemantics(isSelected: selecionado),
+          reason: porque,
+        );
+      } finally {
+        handle.dispose();
+      }
+    }
+
+    testWidgets('A ISCA: tocar num sexo mostra a selecao, e nada mais e tocado',
+        (tester) async {
+      await abrirF13(tester);
+
+      // Rolar nao e tocar num campo: o grupo de sexo e o ultimo da tela, e
+      // ninguem toca no que esta fora da dobra. Nenhum OUTRO campo recebe
+      // toque neste caso, e e isso que faz dele isca.
+      await rolarAte(tester, find.text('Fêmea'));
+      await tocar(tester, find.text('Fêmea'));
+
+      exigirSegmento(
+        tester,
+        'Fêmea',
+        selecionado: true,
+        porque: 'REPROVA: o sexo foi escolhido e a tela nao redesenhou. O '
+            'valor vai para o rascunho, mas quem tocou nao ve resposta e toca '
+            'de novo -- e, palavra por palavra, o relato do cliente. Se este '
+            'caso reprovar, a tela parou de escutar o `RascunhoDePet`.',
+      );
+    });
+
+    testWidgets('tocar em outro sexo move a selecao, e nao acumula',
+        (tester) async {
+      await abrirF13(tester);
+      await rolarAte(tester, find.text('Fêmea'));
+      await tocar(tester, find.text('Fêmea'));
+      await tocar(tester, find.text('Macho'));
+
+      exigirSegmento(tester, 'Macho', selecionado: true);
+      exigirSegmento(
+        tester,
+        'Fêmea',
+        selecionado: false,
+        porque: 'REPROVA: os dois sexos ficaram selecionados. O grupo e '
+            'mutuamente exclusivo, e duas respostas para uma pergunta nao tem '
+            'como ser resolvidas depois.',
+      );
+    });
+
+    testWidgets('o sexo que a tela MOSTRAVA e o que atravessa o passo',
+        (tester) async {
+      final rascunho = RascunhoDePet();
+      await abrirOApp(tester, rede: comAListaDeRacas);
+      await irPara(tester, Rotas.cadastrarPet, extra: rascunho);
+
+      await tester.enterText(find.byType(TextField).first, 'Nina');
+      await tocar(tester, find.text('Cão'));
+      await rolarAte(tester, find.text('Médio'));
+      await tocar(tester, find.text('Médio'));
+      await tocar(tester, find.text('Fêmea'));
+      exigirSegmento(tester, 'Fêmea', selecionado: true);
+
+      await tocar(
+        tester,
+        find.widgetWithText(BotaoPrimario, TextosDoCadastro.continuar),
+      );
+
+      expect(find.text('Passo 2 de 3'), findsOne);
+      expect(
+        rascunho.sexo,
+        Sexo.femea,
+        reason: 'REPROVA: o sexo gravado nao e o que a tela mostrava.',
+      );
+    });
+
+    testWidgets(
+        'O CRITERIO QUE SEPARA A RAIZ DA ESTREITA: mudanca que so passa por '
+        '`atualizar`, sem `setState` nenhum, redesenha', (tester) async {
+      // O rascunho vem de FORA da tela, e a mudanca tambem. E o campo NOVO que
+      // alguem acrescentar amanha chamando so `atualizar`: aqui nao existe
+      // handler de campo, entao nao existe onde por um `setState`.
+      //
+      // Um `setState` no handler do sexo faria os casos de toque acima
+      // passarem e deixaria ESTE de pe. E o unico caso do arquivo que separa
+      // a correcao de raiz da correcao por campo, e sem ele a historia fecha
+      // com o defeito de classe intacto.
+      final rascunho = RascunhoDePet();
+      await abrirOApp(tester, rede: comAListaDeRacas);
+      await irPara(tester, Rotas.cadastrarPet, extra: rascunho);
+
+      await rolarAte(tester, find.text('Macho'));
+      exigirSegmento(tester, 'Macho', selecionado: false);
+
+      rascunho.atualizar(() => rascunho.sexo = Sexo.macho);
+      await tester.pump();
+
+      exigirSegmento(
+        tester,
+        'Macho',
+        selecionado: true,
+        porque: 'REPROVA: `atualizar` notificou e a tela nao redesenhou. A '
+            'tela precisa ESCUTAR o `RascunhoDePet` (`addListener` ou '
+            '`ListenableBuilder`); um `setState` ao lado de cada `atualizar` '
+            'nao satisfaz este caso, e e justamente a correcao que ja falhou '
+            'uma vez neste repositorio (ver o comentario de '
+            '`tela_cadastrar_sinais.dart`).',
+      );
+    });
+
+    testWidgets(
+        'o `setState` do handler do PORTE continua necessario: ele apaga a '
+        'cobranca do porte', (tester) async {
+      // A escuta do rascunho NAO torna aquele `setState` redundante, e este
+      // caso e a prova: `_erroDoPorte` e estado LOCAL da tela, o rascunho nao
+      // o conhece e nao notifica por ele. Remover o `setState` do handler do
+      // porte reprova AQUI -- e e por isso que ele nao deve ser removido como
+      // "limpeza" depois desta correcao.
+      await abrirF13(tester);
+      await tester.enterText(find.byType(TextField).first, 'Nina');
+      await tocar(tester, find.text('Cão'));
+      await tocar(
+        tester,
+        find.widgetWithText(BotaoPrimario, TextosDoCadastro.continuar),
+      );
+
+      await rolarAte(tester, find.text(TextosDoCadastro.escolhaOPorte));
+      expect(find.text(TextosDoCadastro.escolhaOPorte), findsOne);
+
+      await tocar(tester, find.text('Médio'));
+
+      expect(find.text('Médio'), findsOne);
+      expect(
+        find.text(TextosDoCadastro.escolhaOPorte),
+        findsNothing,
+        reason: 'REPROVA: o porte foi escolhido e a cobranca continuou na '
+            'tela. O `setState` do handler do porte foi removido, e ele '
+            'carrega o que o rascunho nao carrega.',
+      );
+    });
+
+    testWidgets('a digitacao na raca livre continua sobrevivendo ao redesenho',
+        (tester) async {
+      // O risco usual da correcao de raiz: a tela passa a reconstruir a cada
+      // notificacao e isso brigaria com os `TextEditingController`. Nao briga
+      // -- o `aoMudar` da raca livre ja chamava `setState` a cada tecla --,
+      // mas "nao briga" dito numa frase evapora. Fica como caso.
+      await abrirF13(tester);
+      await tester.enterText(find.byType(TextField).first, 'Nina');
+      await tocar(tester, find.text('Cão'));
+      await escolherRaca(tester, TextosDoCadastro.opcaoOutraRaca);
+
+      await tester.ensureVisible(find.byType(TextField).last);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'Akita');
+      await tester.pumpAndSettle();
+
+      await rolarAte(tester, find.text('Fêmea'));
+      await tocar(tester, find.text('Fêmea'));
+
+      await rolarAte(tester, find.text('Akita'), passo: -120);
+      expect(
+        find.text('Akita'),
+        findsOne,
+        reason: 'REPROVA: o redesenho disparado pelo rascunho apagou o que '
+            'estava digitado no campo livre.',
+      );
+      await rolarAte(tester, find.text('Nina'), passo: -120);
+      expect(find.text('Nina'), findsOne);
+    });
   });
 }

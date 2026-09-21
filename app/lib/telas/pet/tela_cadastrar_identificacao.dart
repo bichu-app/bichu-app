@@ -92,6 +92,40 @@ class _TelaCadastrarIdentificacaoState
   bool _iniciou = false;
 
   @override
+  void initState() {
+    super.initState();
+    // **A tela escuta o rascunho.** `RascunhoDePet` e um `ChangeNotifier` e
+    // `atualizar` chama `notifyListeners()`; sem ninguem escutando, a
+    // notificacao nao chegava a lugar nenhum e o campo que so chamava
+    // `atualizar` gravava o valor **sem redesenhar**. Era o defeito de
+    // BICHUS-156: tocar num sexo nao mostrava nada, e a selecao aparecia no
+    // toque seguinte, num outro campo -- daí o relato de que o sexo estava
+    // "vinculado ao porte".
+    //
+    // Escutar aqui e o que faz `atualizar` valer por si. A correcao por campo
+    // (um `setState` ao lado de cada `atualizar`) ja foi tentada neste
+    // repositorio, com o aviso escrito ao lado em
+    // `tela_cadastrar_sinais.dart`, e o aviso **nao viajou ate o campo
+    // seguinte**: sao 7 chamadas de `atualizar` so neste arquivo, cada uma
+    // dependendo de alguem lembrar. Campo novo agora redesenha sozinho.
+    //
+    // O `setState` que sobrou nos outros campos **nao e redundante**: ele
+    // carrega estado LOCAL da tela (as mensagens de erro, `_seguiuSemRaca`),
+    // que o rascunho nao conhece e nao notifica.
+    _rascunho.addListener(_oRascunhoMudou);
+  }
+
+  /// O rascunho mudou por qualquer caminho: redesenha.
+  ///
+  /// `mounted` porque `atualizar` pode ser chamado por quem tambem segura o
+  /// rascunho (ele atravessa os tres passos do assistente) depois de esta tela
+  /// sair da arvore.
+  void _oRascunhoMudou() {
+    if (!mounted) return;
+    setState(() {});
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (_iniciou) return;
@@ -101,6 +135,9 @@ class _TelaCadastrarIdentificacaoState
 
   @override
   void dispose() {
+    // Solta a escuta e **nao** descarta o rascunho: quando ele veio do
+    // `Voltar` de F1.4 o dono e quem navegou, e a tela seguinte ainda o usa.
+    _rascunho.removeListener(_oRascunhoMudou);
     _nome.dispose();
     _racaLivre.dispose();
     _focoDoNome.dispose();
