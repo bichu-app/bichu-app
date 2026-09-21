@@ -58,7 +58,26 @@
 # --------------------------------------------------------------------------
 # Origem da aplicacao
 # --------------------------------------------------------------------------
-{$PUBLIC_BASE_URL} {
+# `HOSTS_EXTRA_APP` existe para o corte de DNS da BICHUS-146, e a forma dele nao
+# e capricho: o apex precisa entrar SEM que `hml.bichu.app` saia.
+#
+# Trocar `PUBLIC_BASE_URL` de `hml` para o apex pareceria o caminho curto e
+# derrubaria o ambiente em que o cliente testa no aparelho dele -- o endereco
+# mudaria embaixo de quem esta usando. Entao o apex ENTRA AO LADO, como segundo
+# endereco do mesmo bloco, e o `hml` continua exatamente onde estava.
+#
+# Vazio em desenvolvimento, e por isso o valor ja comeca com a virgula: em
+# `localhost` a linha colapsa para `{$PUBLIC_BASE_URL} {` e nada muda.
+#
+# ORDEM QUE NAO PODE SER INVERTIDA: este bloco precisa conhecer o nome ANTES de
+# o DNS apontar para ca. O certificado sai por desafio HTTP-01 (a imagem e o
+# `caddy:2.8-alpine` de prateleira, sem plugin de DNS), entao a emissao exige
+# que o nome ja resolva para esta maquina -- mas o Caddy so TENTA emitir para
+# nome que esteja num endereco de site. Publicar o DNS primeiro deixa o apex em
+# falha de handshake TLS, que em dominio `.app` (pre-carregado em HSTS) e erro
+# duro de navegador, sem `http://` para diagnosticar. Config primeiro, DNS
+# depois.
+{$PUBLIC_BASE_URL}{$HOSTS_EXTRA_APP} {
 	encode zstd gzip
 
 	header {
@@ -220,7 +239,12 @@
 #
 # A protecao real e este roteamento: aponta para o bucket PUBLICO e nao tem
 # caminho ate o privado. Os cabecalhos sao a segunda camada, nao a primeira.
-{$MEDIA_PUBLIC_BASE_URL} {
+# `HOSTS_EXTRA_MIDIA` entra pelo mesmo motivo e com a mesma forma do bloco da
+# aplicacao: `img.bichu.app` passa a ser servido ao lado de `img-hml.bichu.app`,
+# sem que o segundo saia. O invariante acima vale igual nos dois nomes -- o que
+# muda e o endereco, nunca o roteamento, que continua apontando so para o
+# bucket publico.
+{$MEDIA_PUBLIC_BASE_URL}{$HOSTS_EXTRA_MIDIA} {
 	encode zstd gzip
 
 	header {

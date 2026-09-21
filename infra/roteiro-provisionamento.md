@@ -486,6 +486,36 @@ não em modo proxy: o proxy põe um intermediário na frente dos arquivos de
 associação e a verificação do sistema operacional falha sem aparecer em log
 nenhum.
 
+**A origem precisa estar de pé ANTES do corte, e isso se confere, não se
+supõe.** A regra 2 do preâmbulo existe por isto, e em 21/09 ela pegou o caso
+real: a VM `bichu-hml` estava `TERMINATED`, `hml.bichu.app` resolvia certo e
+respondia nada, e um corte feito naquele dia teria trocado uma página de
+estacionamento que responde 200 por uma recusa de conexão em domínio
+pré-carregado em HSTS — sem certificado, sem página de erro nossa e sem
+`http://` para diagnosticar. Antes de tocar em qualquer registro:
+
+```bash
+gcloud compute instances describe bichu-hml \
+  --project=bichu-app-508914 --zone=southamerica-east1-a \
+  --format='value(status)'                    # precisa imprimir RUNNING
+curl -sI --max-time 10 http://$IP/v1/health   # precisa responder, pelo IP
+```
+
+**Guarde os registros ANTES de mexer, e compare depois.** O corte mexe em `A` e
+em `www`; ele **não** pode mexer em `MX`, `TXT` (SPF) nem `DKIM`. As contas
+`oi@bichu.app` e `privacidade@bichu.app` dependem deles, e a segunda é o canal
+do encarregado de dados exigido pela LGPD (ADR-0010). Derrubar e-mail numa
+troca de `A` é o erro clássico desta operação, e ele não aparece em nenhuma
+verificação de HTTP.
+
+```bash
+# ANTES do corte
+for t in A AAAA MX TXT NS CAA; do echo "== $t"; dig +short $t bichu.app @1.1.1.1; done > /tmp/dns-antes.txt
+# DEPOIS do corte
+for t in A AAAA MX TXT NS CAA; do echo "== $t"; dig +short $t bichu.app @1.1.1.1; done > /tmp/dns-depois.txt
+diff /tmp/dns-antes.txt /tmp/dns-depois.txt   # só as linhas de A podem diferir
+```
+
 **Verificação — antes de ligar o certificado:**
 
 ```bash
@@ -494,7 +524,14 @@ dig +short api.bichu.app
 dig +short img.bichu.app
 dig +short AAAA bichu.app   # precisa vir VAZIO: AAAA órfão leva o cliente
                             # IPv6 para lugar nenhum e o IPv4 nunca é tentado
+dig +short MX bichu.app     # = 10 smtp.google.com. — idêntico ao de antes
+dig +short hml.bichu.app    # = $IP, intocado: é o ambiente de teste do cliente
 ```
+
+**Confira contra resolvedor público, nunca contra o cache do seu.** `@1.1.1.1`
+e `@8.8.8.8` dão respostas independentes; o resolvedor da sua máquina guarda o
+valor antigo pelo TTL e faz um corte recém-feito parecer não ter acontecido, ou
+o contrário.
 
 ---
 
