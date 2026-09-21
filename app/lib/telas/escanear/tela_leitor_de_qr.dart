@@ -15,6 +15,7 @@ import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../pet/textos_do_cadastro.dart';
+import 'mascara_do_codigo_da_tag.dart';
 
 /// Os estados desenhados de F2.1.
 enum EstadoDoLeitor {
@@ -562,6 +563,11 @@ class _Digitacao extends StatelessWidget {
             correcaoAutomatica: false,
             capitalizacao: TextCapitalization.characters,
             acaoDeTeclado: TextInputAction.done,
+            // A mascara `XXXX-XXXX-XXXX-XXXX` (ADR-0004, Emenda 1). Ela formata
+            // e nao valida: o simbolo de verificacao e conferido no servidor, e
+            // continua sendo, porque duas fontes para a mesma regra divergem.
+            formatadores: const <TextInputFormatter>[MascaraDoCodigoDaTag()],
+            exemplo: 'XXXX-XXXX-XXXX-XXXX',
           ),
           if (faixa != null) ...<Widget>[
             const SizedBox(height: BichuEspaco.e6),

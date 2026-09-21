@@ -12,7 +12,7 @@ import { criarSecretCipher } from './aes-gcm-secret-cipher.js';
 
 const CHAVE = Buffer.alloc(32, 7);
 const OUTRA_CHAVE = Buffer.alloc(32, 9);
-const CODIGO = '7K2F9QJB3XR05TWD8MNCVH1234';
+const CODIGO = 'GQSM0XHBT4D9G31S';
 
 void describe('cifra do código da tag', () => {
   void it('decifra o que cifrou', async () => {

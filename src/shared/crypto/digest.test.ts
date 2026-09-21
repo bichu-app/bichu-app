@@ -89,7 +89,7 @@ void describe('comparação em tempo constante', () => {
  * diferentes" passaria igual nos dois mundos, e é por isso que ele não basta.
  */
 void describe('índice cego do código da tag', () => {
-  const CODIGO = '7K2F9QJB3XR05TWD8MNCVH1234' as TagCodeCanonical;
+  const CODIGO = 'GQSM0XHBT4D9G31S' as TagCodeCanonical;
 
   void it('depende da chave: chaves diferentes produzem resumos diferentes', () => {
     const comA = hashDoCodigoDaTag(CODIGO, CHAVE_A);

@@ -201,6 +201,7 @@ function servico(estado: EstadoDoRepositorio = {}): {
     },
     opaqueToken: () => `token-${String(sequencia)}` as OpaqueToken,
     random128: () => new Uint8Array(16).fill(0x2b),
+    random80: () => new Uint8Array(10).fill(0x2b),
   };
 
   return { casos: new LostCaseService({ repositorio, ids, clock, trilha }), registro, eventos };

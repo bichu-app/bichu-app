@@ -81,6 +81,14 @@ abstract final class MensagensDeErro {
       'caractere a mais. O código está impresso embaixo do QR, na plaquinha.';
 
   /// `tag-code-not-found`, 404 (UX 12.6).
+  ///
+  /// **Este texto deixou de ser o destino de um erro de digitacao**, e era esse
+  /// o defeito dele. Ate a Emenda 1 do ADR-0004 o codigo nao tinha simbolo de
+  /// verificacao, entao um caractere trocado normalizava para um codigo bem
+  /// formado e inexistente e caia AQUI: a tela acusava a plaquinha ("nao e do
+  /// Bichu") quando o que houve foi um dedo no lugar errado. Com o simbolo de
+  /// verificacao, esse caso vira 400 e [codigoMalformado], e este texto passa a
+  /// dizer a verdade -- ele so aparece quando o codigo e mesmo de outra coisa.
   static const String codigoNaoEncontrado =
       'Esse código não é de nenhuma tag do Bichu. Confira se a plaquinha é do '
       'Bichu.';
@@ -88,10 +96,11 @@ abstract final class MensagensDeErro {
   /// A ajuda do campo de digitacao do codigo (UX 12.4).
   ///
   /// Sem esta linha a tolerancia do contrato existe e ninguem usa: o campo
-  /// continua parecendo exigir transcricao exata de 26 caracteres.
+  /// continua parecendo exigir transcricao exata dos 16 caracteres.
   static const String ajudaDoCampoDeCodigo =
-      'Pode digitar com ou sem hífen, em maiúscula ou minúscula. Se confundir '
-      'I com 1 ou O com 0, a gente entende.';
+      'São 16 caracteres, em quatro grupos de quatro. Pode digitar com ou sem '
+      'hífen, em maiúscula ou minúscula. Se confundir I com 1 ou O com 0, a '
+      'gente entende.';
 
   /// `validation-failed` que chegou **sem nomear campo nenhum** (UX 12.6).
   ///

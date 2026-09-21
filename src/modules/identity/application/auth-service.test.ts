@@ -291,6 +291,7 @@ function montar(opcoes: {
       uuidv7: () => 'id-novo',
       opaqueToken: () => 'refresh-novo' as OpaqueToken,
       random128: () => new Uint8Array(16),
+      random80: () => new Uint8Array(10),
     },
     clock: relogioParado(agoraDaBancada),
     janelas: {

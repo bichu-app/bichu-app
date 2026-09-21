@@ -10,8 +10,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 
-const CODIGO = '7K2F9QJB3XR05TWD8MNCVH1234';
-const IMPRESSO = '7K2F-9QJB-3XR0-5TWD-8MNC-VH12-34';
+const CODIGO = 'GQSM0XHBT4D9G31S';
+const IMPRESSO = 'GQSM-0XHB-T4D9-G31S';
+/** O formato anterior, de 26 caracteres. Não existe mais, e não é redigido. */
+const CODIGO_DO_FORMATO_ANTIGO = '7K2F9QJB3XR05TWD8MNCVH1234';
 
 void describe('o código da tag não entra no log em claro', () => {
   void it('some da rota de resolução', () => {
@@ -22,7 +24,7 @@ void describe('o código da tag não entra no log em claro', () => {
 
   void it('some também na forma impressa, com hífen', () => {
     const saida = ocultarCodigoDaTagNaUrl(`/v1/tags/${IMPRESSO}`);
-    assert.doesNotMatch(saida, /7K2F/);
+    assert.doesNotMatch(saida, /GQSM/);
   });
 
   void it('some nos caminhos que pendem dele, preservando o resto', () => {
@@ -52,7 +54,19 @@ void describe('o código da tag não entra no log em claro', () => {
   void it('códigos diferentes produzem resumos diferentes', () => {
     assert.notEqual(
       ocultarCodigoDaTagNaUrl(`/v1/tags/${CODIGO}`),
-      ocultarCodigoDaTagNaUrl('/v1/tags/ZZZZZZZZZZZZZZZZZZZZZZZZZZ'),
+      ocultarCodigoDaTagNaUrl('/v1/tags/ZZZZZZZZZZZZZZZN'),
+    );
+  });
+
+  void it('o intervalo do padrão acompanhou o contrato, e o de 26 não casa mais', () => {
+    // A isca do acoplamento: este arquivo carrega uma cópia do `pattern` do
+    // parâmetro `TagCode`. Se alguém encurtar o código e esquecer aqui, nada
+    // quebra — o código passa a viajar EM CLARO no log de acesso, em silêncio.
+    // O caso confere os dois lados: 16 é redigido, 26 não casa com o padrão.
+    assert.match(ocultarCodigoDaTagNaUrl(`/v1/tags/${CODIGO}`), /sha256:/);
+    assert.equal(
+      ocultarCodigoDaTagNaUrl(`/v1/tags/${CODIGO_DO_FORMATO_ANTIGO}`),
+      `/v1/tags/${CODIGO_DO_FORMATO_ANTIGO}`,
     );
   });
 

@@ -711,10 +711,13 @@ export interface paths {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -727,9 +730,17 @@ export interface paths {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -742,7 +753,7 @@ export interface paths {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -786,10 +797,13 @@ export interface paths {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -802,9 +816,17 @@ export interface paths {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -817,7 +839,7 @@ export interface paths {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -861,10 +883,13 @@ export interface paths {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -877,9 +902,17 @@ export interface paths {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -892,7 +925,7 @@ export interface paths {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -3057,10 +3090,13 @@ export interface components {
         ConversationId: string;
         DeviceId: string;
         /**
-         * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+         * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
          *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-         *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-         *     por hifen, porque digito agrupado se le e se confere melhor.
+         *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+         *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+         *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+         *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+         *     le e se confere melhor.
          *
          *     **O que o servidor aceita na entrada e mais largo do que a forma
          *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -3073,9 +3109,17 @@ export interface components {
          *     2. passar para maiusculas;
          *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
          *        `1`**, **`O` vira `0`**;
-         *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+         *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
          *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-         *     5. buscar pelo SHA-256 desse resultado.
+         *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+         *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+         *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+         *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+         *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+         *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+         *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+         *        e abriria a pagina do pet errado;
+         *     6. buscar pelo resumo desse resultado.
          *
          *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
          *     codigo emitido normaliza para ele mesmo.
@@ -3088,7 +3132,7 @@ export interface components {
          *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
          *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
          *     invalido.
-         * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+         * @example GQSM-0XHB-T4D9-G31S
          */
         TagCode: string;
         /** @description Token opaco do caso, o mesmo que o link compartilhavel carrega. */
@@ -4352,10 +4396,13 @@ export interface operations {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -4368,9 +4415,17 @@ export interface operations {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -4383,7 +4438,7 @@ export interface operations {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -4402,9 +4457,16 @@ export interface operations {
             };
             /**
              * @description O texto **nao normaliza para um codigo**: tem tamanho diferente de
-             *     26 depois da normalizacao, ou contem caractere fora do alfabeto
-             *     (`U`, por exemplo). E erro de digitacao, e a tela pede para conferir
-             *     e digitar de novo.
+             *     16 depois da normalizacao, contem caractere fora do alfabeto (`U`,
+             *     por exemplo), ou o **simbolo de verificacao nao bate**. E erro de
+             *     digitacao, e a tela pede para conferir e digitar de novo.
+             *
+             *     O terceiro caso e o que mudou: um unico caractere trocado e uma
+             *     transposicao de dois caracteres caem **aqui**, e nao no 404. Antes
+             *     do simbolo de verificacao eles viravam "esse codigo nao e de nenhuma
+             *     tag do Bichu", que acusava a plaquinha quando o que houve foi um
+             *     dedo no lugar errado. Um codigo de **26 caracteres**, do formato
+             *     anterior, tambem e 400: nao ha convivencia de dois tamanhos.
              */
             400: {
                 headers: {
@@ -4454,10 +4516,13 @@ export interface operations {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -4470,9 +4535,17 @@ export interface operations {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -4485,7 +4558,7 @@ export interface operations {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -4535,10 +4608,13 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -4551,9 +4627,17 @@ export interface operations {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -4566,7 +4650,7 @@ export interface operations {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };

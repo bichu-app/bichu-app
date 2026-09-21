@@ -220,7 +220,7 @@ export function criarTagService(deps: DependenciasDeTags) {
       label: string | null,
       chamador: Chamador,
     ): Promise<TagEmitida> {
-      const codigo = gerarCodigoDaTag(deps.ids.random128());
+      const codigo = gerarCodigoDaTag(deps.ids.random80());
       const resultado = await deps.repositorio.emitir(
         {
           id: deps.ids.uuidv7() as TagId,

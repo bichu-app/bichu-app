@@ -54,8 +54,13 @@ enum ProblemTipo {
   /// por versao antiga do app depois de o servidor ter mudado o valor.
   limiteDePetsAtingido('pet-limit-reached'),
 
-  /// O texto **nao normaliza para um codigo**: tamanho diferente de 26 depois
-  /// da normalizacao, ou caractere fora do alfabeto. 400.
+  /// O texto **nao normaliza para um codigo**: tamanho diferente de 16 depois
+  /// da normalizacao, caractere fora do alfabeto, ou **simbolo de verificacao
+  /// que nao bate**. 400.
+  ///
+  /// O terceiro caso e o que chegou com a Emenda 1 do ADR-0004, e e o que tira
+  /// o erro de digitacao do 404: um caractere trocado e uma transposicao caem
+  /// aqui, antes de o servidor tocar o banco.
   ///
   /// **Diferente de [codigoDeTagNaoEncontrado]**, e a diferenca e util para
   /// quem esta na rua: um diz "confira o que voce digitou", o outro diz "nao

@@ -32,7 +32,13 @@ const CARACTERES_DO_RESUMO = 12;
  * caminho que não é código não deve virar hash, porque aí o log deixa de dizer
  * o que aconteceu sem nenhum ganho.
  */
-const CAMINHO_DA_TAG = /(\/tags\/)([0-9A-Za-z][0-9A-Za-z-]{25,39})(?=$|[/?])/;
+// O intervalo espelha o `pattern` do parametro `TagCode` em `api/openapi.yaml`,
+// e os dois andam JUNTOS: eram `{25,39}` com 26 caracteres e passaram a
+// `{15,23}` com 16. Deixar o antigo aqui nao produziria erro nenhum visivel --
+// produziria o codigo VIAJANDO EM CLARO no log de acesso, que e exatamente o
+// que este arquivo existe para impedir, e ninguem olha um log para conferir se
+// ele esta redigido.
+const CAMINHO_DA_TAG = /(\/tags\/)([0-9A-Za-z][0-9A-Za-z-]{15,23})(?=$|[/?])/;
 
 export function ocultarCodigoDaTagNaUrl(url: string): string {
   return url.replace(CAMINHO_DA_TAG, (_inteiro, prefixo: string, codigo: string) => {
