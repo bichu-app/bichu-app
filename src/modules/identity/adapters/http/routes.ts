@@ -12,7 +12,13 @@
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
+import {
+  registrarRota,
+  CABECALHO_DE_REAUTENTICACAO,
+  type RegistradorDeRotas,
+  type VerificadorDeReautenticacao,
+} from '../../../../shared/http/registrar-rota.js';
+import type { ReauthScope } from '../../../../shared/http/route-definition.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import {
   camposPendentesDoPerfil,
@@ -106,6 +112,44 @@ export const rotaDeLogoutTotal = defineRoute({
   path: '/auth/logout-all',
   effects: ['notifies'],
   rateLimit: [{ dimension: ['account'], limit: 10, window: '1h', onExceed: 'deny_429' }],
+  // BICHUS-48. O escopo é próprio e não reaproveita nenhum dos outros: uma
+  // janela aberta para excluir a conta não derruba as sessões, e vice-versa.
+  // Declarar aqui é o que instala a conferência — ver `registrarRota`.
+  reauthScope: 'session_revocation',
+});
+
+/**
+ * A operação que abre a janela, e a única do sistema que confere a senha de
+ * alguém já autenticado (critério 10 da BICHUS-48).
+ *
+ * **Os dois tetos são do contrato, e o segundo é o que importa.** 10 por hora
+ * por conta limita o uso legítimo; 5 **inválidas** por hora por conta é a
+ * defesa contra força bruta, e ela existe porque reautenticação é oráculo de
+ * senha por construção: quem tomou a sessão pode testar senhas aqui sem
+ * disparar nada do login, que se defende por e-mail e por IP e não por conta.
+ *
+ * `deny_429` e não `challenge`: não há quem responda a um desafio nesta rota, e
+ * um desafio seria mais uma maneira de continuar tentando. Cinco erros fecham a
+ * porta destrutiva por uma hora **sem derrubar a sessão normal** — a pessoa
+ * continua usando o app, e só o ato destrutivo espera. E a recuperação de senha
+ * continua aberta pelo seu próprio caminho (critério 9), porque o teto é desta
+ * rota e não da conta.
+ */
+export const rotaDeReautenticacao = defineRoute({
+  operationId: 'reauthenticate',
+  method: 'post',
+  path: '/auth/reauth',
+  effects: ['verifies_secret'],
+  rateLimit: [
+    { dimension: ['account'], limit: 10, window: '1h', onExceed: 'deny_429' },
+    {
+      dimension: ['account'],
+      limit: 5,
+      window: '1h',
+      onExceed: 'deny_429',
+      appliesTo: 'invalid_attempts',
+    },
+  ],
 });
 
 export const rotaDeTrocaDeSenha = defineRoute({
@@ -151,12 +195,46 @@ export const rotaDePedidoDeVerificacao = defineRoute({
   ],
 });
 
+/**
+ * Confirmar o e-mail pelo token do link.
+ *
+ * **`appliesTo: 'invalid_attempts'` nao e detalhe de redacao: e o que decide
+ * quem paga o teto.** Sem a qualificacao, a entrada vai por `hit()`
+ * (`shared/http/aplicacao-de-teto.ts`) e conta TODA requisicao -- "20
+ * tentativas invalidas por hora" vira "20 requisicoes por hora". E a dimensao
+ * e `ip`: vinte e uma confirmacoes de boa-fe atras do mesmo endereco nao sao
+ * um ataque, sao vinte e uma pessoas no CGNAT de uma operadora movel ou na
+ * rede de um escritorio, e a vigesima primeira fica trancada para fora
+ * exatamente da confirmacao que estava tentando concluir. O proprio
+ * `aplicacao-de-teto.ts` ja escreve o argumento na justificativa de `ip_24`:
+ * teto por IP puro e armadilha no Brasil.
+ *
+ * A qualificacao nao afrouxa nada. O balde e CONSULTADO na chegada (`peek`) e
+ * so incrementado depois, em `onResponse`, quando a resposta foi recusa de
+ * credencial (`registrar-rota.ts`, `TIPOS_DE_TENTATIVA_INVALIDA`): quem varre
+ * token continua sendo recusado na 21a tentativa, e recusado ANTES de
+ * qualquer consulta ao banco. O que muda e que a pessoa que acertou o link
+ * deixa de gastar o teto de quem errou.
+ *
+ * O contrato sempre declarou `applies_to: invalid_attempts` aqui
+ * (`api/openapi.yaml`, `confirmEmailVerification`); era o codigo que tinha
+ * perdido a qualificacao. A prova do efeito, e nao da declaracao, esta em
+ * `tests/integration/teto-das-confirmacoes-por-link.test.ts`.
+ */
 export const rotaDeConfirmacaoDeEmail = defineRoute({
   operationId: 'confirmEmailVerification',
   method: 'post',
   path: '/auth/email-verification/confirm',
   effects: ['verifies_secret'],
-  rateLimit: [{ dimension: ['ip'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+  rateLimit: [
+    {
+      dimension: ['ip'],
+      limit: 20,
+      window: '1h',
+      onExceed: 'deny_429',
+      appliesTo: 'invalid_attempts',
+    },
+  ],
 });
 
 export const rotaDePedidoDeRedefinicao = defineRoute({
@@ -170,22 +248,106 @@ export const rotaDePedidoDeRedefinicao = defineRoute({
   ],
 });
 
+/**
+ * Definir a senha nova pelo token do link.
+ *
+ * Mesmo argumento de `rotaDeConfirmacaoDeEmail`, e aqui ele custa mais caro:
+ * sem `appliesTo: 'invalid_attempts'` a entrada conta toda requisicao, e a
+ * vigesima primeira pessoa que redefine a senha atras do mesmo IP recebe 429
+ * no meio de uma recuperacao de acesso -- que e o momento em que ela ja nao
+ * consegue entrar na conta e nao tem outro caminho. O teto vira o oposto do
+ * remedio.
+ *
+ * Com a qualificacao, o balde conta so o que saiu como recusa de credencial:
+ * varrer token de redefinicao continua parando na 21a tentativa, e quem abriu
+ * o proprio link nao entra na conta.
+ *
+ * Contrato: `api/openapi.yaml`, `confirmPasswordReset` (dimension [ip], limit
+ * 20, window 1h, on_exceed deny_429, applies_to invalid_attempts). Prova de
+ * efeito em `tests/integration/teto-das-confirmacoes-por-link.test.ts`.
+ */
 export const rotaDeConfirmacaoDeRedefinicao = defineRoute({
   operationId: 'confirmPasswordReset',
   method: 'post',
   path: '/auth/password-reset/confirm',
   effects: ['verifies_secret', 'notifies', 'irreversible_write'],
-  rateLimit: [{ dimension: ['ip'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+  rateLimit: [
+    {
+      dimension: ['ip'],
+      limit: 20,
+      window: '1h',
+      onExceed: 'deny_429',
+      appliesTo: 'invalid_attempts',
+    },
+  ],
 });
 
+/**
+ * Diz se o link de redefinição ainda vale.
+ *
+ * Só lê. É a página do time web perguntando "vale a pena mostrar o
+ * formulário?" antes de a pessoa digitar uma senha para um link morto.
+ *
+ * ## O teto: `log_and_alert`, e não `deny_429`. O argumento, medido
+ *
+ * Até 22/09/2026 esta rota declarava `60/1h deny_429` no código contra
+ * `30/1h log_and_alert` no contrato, e ninguém cruzava os dois. O código cedeu,
+ * nos dois campos, e a razão não é "o contrato manda":
+ *
+ * **1. O token não é adivinhável, então o teto não é a defesa.** São 256 bits
+ * de CSPRNG (`shared/id/uuidv7.ts`, `opaqueToken`), guardados só como SHA-256,
+ * uso único consumido atomicamente, validade de 30 minutos. Mesmo com um
+ * atacante de um milhão de endereços a 60 por hora cada, dentro da janela de
+ * meia hora, a chance de acertar um token vivo fica na ordem de 10^-64. Entre
+ * 30 e 60 não há diferença de segurança nenhuma contra enumeração.
+ *
+ * **2. Recusar aqui não fecha o oráculo, porque ele não é exclusivo desta
+ * rota.** `POST /auth/password-reset/confirm` também responde 410 para token
+ * que não vale, e já carrega `20/1h deny_429 applies_to invalid_attempts`.
+ * Quem for recusado aqui troca de verbo. O `deny_429` desta rota encarecia o
+ * caminho mais barato sem fechar caminho nenhum.
+ *
+ * **3. Recusar aqui quebra o remédio, e na hora pior.** A dimensão é `ip`, e o
+ * CGNAT das operadoras brasileiras agrupa muita gente atrás de poucos
+ * endereços — o argumento está escrito em `aplicacao-de-teto.ts` (justificativa
+ * de `ip_24`) e duas vezes no ADR-0016. Esta rota é chamada ao ABRIR o link do
+ * e-mail: recarregar a página, abrir no outro aparelho e o varredor de link do
+ * cliente de e-mail somam chamadas que a pessoa não fez conscientemente. Um 429
+ * aqui deixa a página sem mostrar o formulário, e a pessoa não entra na conta
+ * (é por isso que ela está redefinindo a senha) nem tem outro caminho. A
+ * operação existe para que ninguém chegue a um beco; recusar transforma a
+ * própria operação no beco, mais cedo. E o dia em que muita gente redefine a
+ * senha na mesma hora atrás do mesmo IP é o dia do incidente, que é exatamente
+ * quando o remédio precisa funcionar.
+ *
+ * **4. `challenge` não é opção**, e a rota declara `x-no-challenge`: não há
+ * ninguém para responder a um desafio numa chamada que a página faz ao carregar.
+ *
+ * **O que `log_and_alert` NÃO faz, dito por extenso:** ele não recusa. O balde
+ * continua contando (`hit()`) e o estouro continua virando linha de log em
+ * `aplicacao-de-teto.ts`, mas a requisição passa. A proteção volumétrica desta
+ * rota é da borda (ADR-0016, item 4), e hoje a borda só limita tamanho de
+ * corpo. Isso é lacuna conhecida e compartilhada com `jwks`,
+ * `openidConfiguration`, `resolveTag` e o webhook de entrega, que escolheram
+ * `log_and_alert` pelo mesmo motivo; não é lacuna criada aqui.
+ *
+ * **O número 30 é do contrato e está em aberto.** 30 por hora por IP, a 1–4
+ * chamadas por redefinição legítima, alerta a partir de 8 pessoas por hora
+ * atrás do mesmo endereço — pouco para um pool de CGNAT, e alerta que dispara
+ * em tráfego normal é alerta que alguém silencia. A pergunta fechada está em
+ * `.jarvis/PAUTA-DE-REFINAMENTO-22-09.md` ("O teto de `GET
+ * /public/password-reset/{token}`: 30 por hora por IP, ou 60?"). Enquanto ela não for
+ * respondida vale o contrato, que é a fonte declarada do número.
+ *
+ * A isca que impede este teto de ser "endurecido" de volta em silêncio está em
+ * `tests/integration/teto-da-conferencia-do-link.test.ts`.
+ */
 export const rotaDeConferenciaDeRedefinicao = defineRoute({
   operationId: 'checkPasswordResetToken',
   method: 'get',
   path: '/public/password-reset/:token',
-  // Só lê. É a página do time web perguntando "vale a pena mostrar o
-  // formulário?" antes de a pessoa digitar uma senha para um link morto.
   effects: [],
-  rateLimit: [{ dimension: ['ip'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+  rateLimit: [{ dimension: ['ip'], limit: 30, window: '1h', onExceed: 'log_and_alert' }],
 });
 
 export const rotaDoJwks = defineRoute({
@@ -617,6 +779,32 @@ export function registrarRotasDeIdentidade(
 
   registrarRota(
     app,
+    rotaDeReautenticacao,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeReautenticacao.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const sessao: Autenticado = await autenticado(request, deps);
+      const corpo = request.body as { password: string; scope: ReauthScope };
+      const janela = await deps.auth.reautenticar(
+        sessao,
+        corpo.password,
+        corpo.scope,
+        contextoDe(request),
+      );
+      // A janela em claro sai daqui e de lugar nenhum mais: `server.ts` já
+      // esconde `x-reauth-token` do log, e ela não vai para a trilha.
+      return reply.status(200).send({
+        reauth_token: janela.reauthToken,
+        expires_in: janela.expiresIn,
+        scope: janela.scope,
+      });
+    },
+  );
+
+  registrarRota(
+    app,
     rotaDeTrocaDeSenha,
     {
       schema: { body: corpoDe(deps.contrato, rotaDeTrocaDeSenha.operationId) },
@@ -634,6 +822,32 @@ export function registrarRotasDeIdentidade(
       return reply.status(204).send();
     },
   );
+}
+
+/**
+ * O verificador que `criarServidor` instala, e que `registrarRota` chama em toda
+ * rota que declara `reauthScope`.
+ *
+ * Ele mora aqui, e não em `shared/http`, porque conferir a janela exige o
+ * serviço de identidade. O que `shared/http` conhece é a **assinatura**, e é
+ * assim que a dependência anda na direção certa.
+ *
+ * `autenticado` é o memo por requisição: a conferência da janela precisa da
+ * conta e do `jti`, e o manipulador da rota vai precisar dos mesmos. Sem o
+ * memo, toda operação destrutiva verificaria RS256 e leria `users` duas vezes.
+ */
+export function criarVerificadorDeReautenticacao(
+  deps: DependenciasDasRotas,
+): VerificadorDeReautenticacao {
+  return async (request: FastifyRequest, escopo: ReauthScope): Promise<void> => {
+    const sessao: Autenticado = await autenticado(request, deps);
+    const cabecalho = request.headers[CABECALHO_DE_REAUTENTICACAO];
+    // Cabeçalho repetido chega como lista. Concatenar o que o cliente mandou
+    // duas vezes produziria um valor que não é nenhum dos dois; a primeira
+    // ocorrência é o que o resto da pilha também leria.
+    const apresentado = Array.isArray(cabecalho) ? cabecalho[0] : cabecalho;
+    await deps.auth.consumirReautenticacao(sessao, apresentado, escopo, contextoDe(request));
+  };
 }
 
 /**
