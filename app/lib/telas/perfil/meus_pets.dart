@@ -107,12 +107,86 @@ class _MeusPetsState extends State<MeusPets> {
   List<Pet> _pets = const <Pet>[];
   String? _textoDaFalha;
 
+  /// Se a tela estava visivel na ultima vez que as dependencias mudaram.
+  ///
+  /// E o que transforma um estado em **borda**: a recarga acontece na
+  /// passagem de escondida para visivel, e nao a cada reconstrucao. Sem ele,
+  /// trocar o tema do sistema ou girar o aparelho viraria uma chamada de rede.
+  bool _visivel = false;
+
+  bool _cargaAgendada = false;
+
+  /// O gatilho de recarga da BICHUS-220.
+  ///
+  /// **A escolha foi recarregar quando a tela volta a aparecer, e nao
+  /// invalidar o cache em cada ponto que escreve.** As duas fecham o defeito
+  /// relatado; a diferenca esta no que acontece depois.
+  ///
+  /// Invalidar ao escrever e uma lista de lugares que alguem precisa lembrar
+  /// de manter: hoje so `POST /pets` cria pet, e amanha editar, apagar,
+  /// vincular tag e confirmar foto mudam a mesma lista. Cada um desses e uma
+  /// chance nova de o sintoma voltar exatamente igual, e o portao que o
+  /// pegaria seria uma varredura enumerando as formas que alguem lembrou de
+  /// listar. Alem disso, ela so enxerga escrita **deste** aparelho: o pet
+  /// cadastrado no site, ou pela outra pessoa da casa, continuaria invisivel.
+  ///
+  /// Recarregar ao voltar e uma propriedade: a tela pergunta ao servidor toda
+  /// vez que volta a ser a tela que a pessoa esta vendo, sem saber quem
+  /// escreveu nem por onde. O custo e um `GET /pets` por visita, e a lista
+  /// tem teto de 20 itens por conta.
+  ///
+  /// **O cache por dono nao muda, e isso foi deliberado.** Este gatilho nao
+  /// encosta em [CacheDeMeusPets]: nao limpa, nao invalida e nao acrescenta
+  /// caminho de escrita nele. A trava de dono continua sendo a unica regra de
+  /// leitura, e a decisao de seguranca registrada no cabecalho da classe
+  /// continua aberta do mesmo jeito. Um mecanismo de invalidacao teria que
+  /// abrir um segundo caminho para dentro do cache, e seria ele a enfraquecer
+  /// a trava.
+  ///
+  /// **A visibilidade e lida de `TickerMode`, e a escolha nao e por economia
+  /// de codigo.** Ela e a unica pergunta do framework que responde as DUAS
+  /// maneiras diferentes de esta tela sumir da vista, sem que a tela precise
+  /// saber qual delas aconteceu:
+  ///
+  /// - trocar de aba. O `StatefulShellRoute.indexedStack` embrulha cada ramo
+  ///   num `TickerMode(enabled: isActive)` (`go_router/src/route.dart`), e
+  ///   trocar de aba nao desmonta nada;
+  /// - o assistente de cadastro, empurrado no navegador **raiz** por cima da
+  ///   casca inteira. O `Overlay` desliga o ticker das entradas cobertas por
+  ///   uma rota opaca, e a casca e uma delas. O `ModalRoute` que esta tela
+  ///   enxerga NAO serve para isso: e o do navegador do proprio ramo, onde a
+  ///   aba esta sempre no topo, com o assistente aberto ou sem ele.
+  ///
+  /// Escrever as duas causas na tela seria enumerar: a terceira apareceria
+  /// como defeito. `TickerMode` e a propriedade -- "este subarvore esta a
+  /// vista" --, e as duas causas estao medidas separadamente em
+  /// `test/telas/lista_relista_ao_voltar_test.dart`.
   @override
-  void initState() {
-    super.initState();
-    // `addPostFrameCallback` e nao chamada direta: `Escopo.of` depende do
-    // contexto herdado, que nao esta pronto em `initState`.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _carregar());
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!TickerMode.valuesOf(context).enabled) {
+      _visivel = false;
+      return;
+    }
+    if (_visivel) return;
+    _visivel = true;
+    _agendarCarga();
+  }
+
+  /// Carrega depois do quadro, e nunca duas vezes para o mesmo retorno.
+  ///
+  /// Depois do quadro porque [_carregar] chama `setState` de forma sincrona, e
+  /// [didChangeDependencies] roda dentro da construcao. Uma vez so porque a
+  /// visibilidade pode ir e voltar dentro do mesmo quadro: sair do assistente
+  /// pelo `Depois` de F1.6 e um `context.go(Rotas.perfil)`, que descobre a
+  /// casca e pode trocar o ramo na mesma passagem.
+  void _agendarCarga() {
+    if (_cargaAgendada) return;
+    _cargaAgendada = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cargaAgendada = false;
+      if (mounted) _carregar();
+    });
   }
 
   Future<void> _carregar() async {

@@ -129,10 +129,28 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `tela_criar_conta.dart` e de `conta/tela_entrar.dart`. Nenhuma delas
 /// encosta na porta `CameraEGaleria`, que e o que o criterio 10 protege.
 ///
+/// **Destravado uma sexta vez pela BICHUS-220**, pelos dois achados do cliente
+/// em aparelho fisico de 22/09:
+///
+/// - `perfil/meus_pets.dart` ganhou o gatilho de recarga por visibilidade. A
+///   tela carregava uma vez, em `initState`, e o pet cadastrado com ela ja
+///   montada nunca entrava na lista.
+/// - `escanear/tela_leitor_de_qr.dart` **parou de desenhar uma camera que nao
+///   existe**. Com a permissao concedida ela pintava fundo preto e uma moldura
+///   de 240 x 240 sem nenhum widget de camera na arvore. O leitor e a
+///   BICHUS-54, que esta em `To Do`; enquanto ela nao entra, a tela diz isso e
+///   oferece a digitacao do codigo, que a propria BICHUS-54 chama de caminho
+///   de igual valor.
+///
+/// Nenhuma das duas encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege. A segunda, alias, **tira** da tela a ultima leitura que ela
+/// fazia da porta: o leitor nao consulta mais permissao nenhuma, porque a
+/// resposta nao mudava nada do que ele consegue fazer.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = 'a78d53755b1783dd98c4bdf11b01bc68efac601e';
+const String _arvoreDasTelas = '073c5c3ead12c23a2f62c8957dd80537da37d78e';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
