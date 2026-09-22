@@ -382,6 +382,21 @@ jobs:
             console.log(exigidas.length + " variaveis exigidas pelo codigo, todas preenchidas");
           '
 
+      # BICHUS-210. O commit entra por ARGUMENTO DE BUILD e fica gravado na
+      # imagem; o Dockerfile REPROVA o build sem ele. Esta linha precisa vir
+      # antes de qualquer `docker compose build` deste job.
+      #
+      # `git rev-parse HEAD` e nao `github.sha`: os dois coincidem em `push`,
+      # mas em `pull_request` o `actions/checkout` posiciona o merge commit, e
+      # e ELE que esta sendo construido. Perguntar ao repositorio clonado
+      # responde sobre o que a imagem de fato carrega; `github.sha` responde
+      # sobre o evento, e sao coisas diferentes no dia em que divergem.
+      - name: o commit de que esta imagem vai sair
+        run: |
+          commit=$(git rev-parse HEAD)
+          echo "BUILD_COMMIT=$commit" >> "$GITHUB_ENV"
+          echo "construindo a partir de $commit"
+
       - name: constroi a imagem (dev) e o migrador
         run: docker compose --profile dev build
 
@@ -462,6 +477,23 @@ jobs:
           esac
           echo "artefato no ar: $artefato" | tee -a "$GITHUB_STEP_SUMMARY"
 
+      # BICHUS-210. A outra metade da pergunta: o artefato diz O QUE roda, o
+      # commit diz DE ONDE ele veio.
+      #
+      # POR QUE ESTE PASSO NAO E UM `grep '"commit"'`. O campo ja existia no
+      # contrato e vinha `null` nos dois ambientes: conferir a presenca ficaria
+      # verde com o defeito inteiro de pe. O verificador cobra o VALOR, e cobra
+      # que ele seja o commit de que a imagem foi construida -- sem a segunda
+      # metade, fixar uma string no codigo deixaria este portao verde
+      # reportando a mentira.
+      #
+      # As iscas rodam ANTES da rede, dentro do proprio script, e uma delas e
+      # exatamente o corpo que os dois ambientes respondiam em 22/09.
+      - name: a sonda diz de QUAL COMMIT o artefato saiu
+        run: |
+          node infra/verificacao/verificar-commit-no-health.mjs \
+            http://localhost:3000 "$BUILD_COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: api e worker calculam o MESMO artefato, de dentro
         # O worker nao fala HTTP, entao o valor e pedido ao modulo diretamente.
         # E a mesma funcao que a api usa para responder a sonda.
@@ -509,6 +541,36 @@ jobs:
           echo "::error::a imagem do alvo prod nao ficou saudavel"
           docker logs prova-prod
           exit 1
+
+      # BICHUS-210, nos alvos que a subida acima NAO exercita.
+      #
+      # O passo do `dev` cobra o commit pela SONDA, que e o caminho real. Aqui a
+      # leitura e da IMAGEM, e de proposito: `prod` e `migrador` sao artefatos
+      # como o `dev`, e cada um grava o commit pelo SEU proprio `ARG`/`ENV`. Um
+      # alvo pode carregar e o outro nao, e o que vai para a VM e justamente o
+      # `prod` -- conferir so o `dev` deixaria o defeito onde ele custa mais.
+      #
+      # Ler a imagem em vez de subir mais um processo tambem evita amarrar esta
+      # conferencia ao boot de `prod`, que em `NODE_ENV=production` busca os
+      # segredos no gerenciador (ADR-0022) e nao depende desta historia.
+      #
+      # Sao DUAS leituras por outro caminho cada: o `ENV`, que e o que a
+      # aplicacao le, e o arquivo que o estagio de conferencia gravou. Divergir
+      # entre os dois significa `ARG` passado em dois lugares com valores
+      # diferentes, que e um jeito de a imagem mentir sem ninguem notar.
+      - name: os alvos prod e migrador tambem sabem de qual commit sairam
+        run: |
+          falhou=0
+          for imagem in bichu-app:prod bichu-migrador:local; do
+            declarado=$(docker run --rm --entrypoint printenv "$imagem" BUILD_COMMIT)
+            gravado=$(docker run --rm --entrypoint cat "$imagem" /etc/bichu/commit)
+            echo "$imagem: ENV=$declarado arquivo=$gravado" | tee -a "$GITHUB_STEP_SUMMARY"
+            if [ "$declarado" != "$BUILD_COMMIT" ] || [ "$gravado" != "$BUILD_COMMIT" ]; then
+              echo "::error::$imagem foi construida de $BUILD_COMMIT e carrega ENV=$declarado, arquivo=$gravado. Um alvo que nao sabe de onde veio responde \`commit: null\` na sonda, e ai um servico rodando codigo antigo fica indistinguivel de um rodando o novo (BICHUS-210)"
+              falhou=1
+            fi
+          done
+          exit $falhou
 
       # Os 17 casos de `tests/integration/` provam BICHUS-19 e BICHUS-56 por
       # consulta ao catalogo do Postgres -- inclusive o banco recusando de fato

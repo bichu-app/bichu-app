@@ -33,11 +33,25 @@
  *    `src/tools/comparar-destinos.ts`, que é onde ela pode ser conferida.
  *
  * `commit` é outra coisa, e a diferença está no nome do campo: ele é
- * **declarado** por quem constrói, pela variável `BUILD_COMMIT`, e vale o que
- * vale uma afirmação. Ele é `null` quando ninguém declarou — silêncio honesto
- * em vez de um valor inventado. Para o commit VIAJAR dentro da imagem seria
- * preciso um `ARG` no `Dockerfile`; enquanto esse argumento não existir, quem
- * compara dois destinos compara `artifact`, não `commit`.
+ * **declarado** por quem constrói, pela variável `BUILD_COMMIT`. Ele não se
+ * calcula do disco porque `.git` está no `.dockerignore` e a imagem final não
+ * tem git — só pode ser dito por quem tem o repositório na mão. Era por isso
+ * que `artifact` funcionava e ele não: um é evidência, o outro depende de
+ * alguém fornecer, e ninguém fornecia.
+ *
+ * Desde a BICHUS-210 ele VIAJA DENTRO DA IMAGEM: o `Dockerfile` tem o `ARG
+ * BUILD_COMMIT`, grava o valor como `ENV` nos três alvos finais e **reprova o
+ * build** quando ele falta ou não tem forma de commit. Promover a imagem entre
+ * ambientes promove o commit junto, e é isso que torna `commit` comparável
+ * entre destinos — antes só `artifact` era.
+ *
+ * O que sobrou de `null` aqui, e por quê: fora de uma imagem construída não há
+ * `ARG` nenhum. `npm test`, `npm run dev` e qualquer execução direta de `dist/`
+ * no laptop caem nesse caso, e derrubar a subida ali trocaria um silêncio
+ * honesto por um obstáculo em quem desenvolve. **Numa imagem construída `null`
+ * não é estado alcançável**, e a esteira reprova se ele aparecer: ver
+ * `infra/verificacao/verificar-commit-no-health.mjs`, que roda contra a pilha
+ * de pé no job `integracao` e contra o destino hospedado em `dois-destinos`.
  */
 /*
  * POR QUE O DIRETORIO SE CHAMA `artefato` E NAO `build`

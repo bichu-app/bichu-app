@@ -64,15 +64,24 @@ export interface DivergenciaPermitida {
  * seja uma decisão que alguém vê. Sair dela é o objetivo.
  */
 export const DIVERGENCIAS_PERMITIDAS: readonly DivergenciaPermitida[] = [
-  {
-    campo: 'build.commit',
-    motivo:
-      'o commit é DECLARADO pela variável `BUILD_COMMIT` e não viaja dentro da imagem: ' +
-      'para viajar seria preciso um `ARG` no `Dockerfile`, que hoje não existe. Enquanto ' +
-      'for assim, um destino pode declarar e o outro não, e nenhum dos dois estaria ' +
-      'mentindo. Quem compara artefato compara `build.artifact`, que é evidência. Esta ' +
-      'linha sai da lista no dia em que o argumento de build entrar',
-  },
+  // A lista está VAZIA, e isso é o objetivo dela, não um esquecimento.
+  //
+  // `build.commit` morou aqui até a BICHUS-210, com o motivo escrito: o commit
+  // era declarado por variável de runtime e não viajava dentro da imagem, então
+  // um destino podia declarar e o outro não sem que nenhum dos dois estivesse
+  // mentindo. Aquela entrada terminava dizendo que sairia "no dia em que o
+  // argumento de build entrar". O argumento entrou: o `Dockerfile` tem
+  // `ARG BUILD_COMMIT`, grava o valor nos três alvos finais e reprova o build
+  // sem ele.
+  //
+  // Com o commit viajando na imagem, dois destinos que rodam o mesmo artefato
+  // precisam reportar o mesmo commit. Divergir deixou de ser uma diferença
+  // legítima de declaração e passou a ser uma das duas coisas que a BICHUS-210
+  // existe para pegar: imagem construída sem o argumento certo, ou valor fixado
+  // em algum lugar. Manter a entrada aqui faria este comparador aprovar
+  // exatamente isso.
+  //
+  // Entrada nova aqui é decisão, e precisa de motivo escrito — o teste cobra.
 ];
 
 /**
@@ -265,7 +274,10 @@ export function conferirTopologia(
 const SONDA_BASE = {
   status: 'ok',
   version: '0.1.0',
-  build: { artifact: '0123456789abcdef', commit: null },
+  // `commit: null` era o valor daqui até a BICHUS-210, e ele era o estado real
+  // dos dois ambientes. Uma base com `null` fazia as duas sondas concordarem em
+  // não saber de onde vieram, que é a concordância mais barata que existe.
+  build: { artifact: '0123456789abcdef', commit: '262cf1f8a1b2c3d4e5f60718293a4b5c6d7e8f90' },
   checks: { database: 'ok' },
 };
 
@@ -301,13 +313,40 @@ export function autoteste(): string[] {
     }
   }
 
+  // O commit deixou de ser divergência permitida na BICHUS-210, e essa saída da
+  // lista precisa de isca própria: ela é a que pega imagem construída sem o
+  // argumento certo, ou valor fixado em algum lugar.
+  const commitDiferente = compararRespostas(
+    par(comCampo('build.commit', 'b528bc8fedcba9876543210fedcba9876543210f')),
+  );
+  if (commitDiferente.falhas.length === 0) {
+    falhas.push(
+      'isca "commit diferente entre destinos" PASSOU: com o commit viajando dentro da imagem, ' +
+        'dois destinos com o mesmo artefato não podem reportar commits diferentes',
+    );
+  }
+  const commitNulo = compararRespostas(par(comCampo('build.commit', null)));
+  if (commitNulo.falhas.length === 0) {
+    falhas.push(
+      'isca "um destino com commit nulo" PASSOU: o destino que não sabe de onde veio some da ' +
+        'comparação em vez de reprovar',
+    );
+  }
+
   // Controle positivo: sem ele o autoteste ficaria verde com um comparador que
   // reprova tudo, que não compara nada — só reclama.
-  const soOCommit = compararRespostas(par(comCampo('build.commit', '1a4a3f7')));
-  if (soOCommit.falhas.length > 0) {
+  //
+  // A lista fechada real está VAZIA hoje (ver DIVERGENCIAS_PERMITIDAS), e é por
+  // isso que este controle passa uma lista PRÓPRIA: sem ela o mecanismo de
+  // exceção deixaria de ser exercitado, e pararia de funcionar sem ninguém
+  // perceber — no dia em que a primeira entrada nova chegasse.
+  const comExcecaoDeTeste = compararRespostas(par(comCampo('version', '0.2.0')), [
+    { campo: 'version', motivo: 'exceção só deste autoteste, nunca da lista real' },
+  ]);
+  if (comExcecaoDeTeste.falhas.length > 0) {
     falhas.push(
-      'a divergência PERMITIDA `build.commit` reprovou: a lista fechada não está sendo ' +
-        `consultada (${soOCommit.falhas.join('; ')})`,
+      'a divergência PERMITIDA por uma lista fechada reprovou: a lista não está sendo ' +
+        `consultada (${comExcecaoDeTeste.falhas.join('; ')})`,
     );
   }
   if (compararRespostas(par(structuredClone(SONDA_BASE))).falhas.length > 0) {
@@ -436,6 +475,12 @@ export async function main(argv: readonly string[]): Promise<number> {
     falhas.push(...resultado.falhas);
 
     console.log('\nDivergencias permitidas (lista fechada, impressa sempre):');
+    if (DIVERGENCIAS_PERMITIDAS.length === 0) {
+      console.log(
+        '  - nenhuma. Todo campo da sonda precisa bater nos dois destinos, `build.commit` ' +
+          'inclusive (BICHUS-210)',
+      );
+    }
     for (const permitida of DIVERGENCIAS_PERMITIDAS) {
       const usada = resultado.permitidas.find((p) => p.startsWith(`${permitida.campo}:`));
       const valores = usada === undefined ? 'nao divergiu' : usada.slice(permitida.campo.length + 2);
