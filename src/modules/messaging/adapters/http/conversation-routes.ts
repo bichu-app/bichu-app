@@ -38,6 +38,7 @@ import {
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
+import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
 import type {
   Chamador,
   ConversaVisivel,
@@ -182,6 +183,27 @@ async function contaDoTeto(
   }
 }
 
+/**
+ * Os resolvedores do envio, num lugar só.
+ *
+ * **Exportado para a bancada do teto usar ESTE, e não um dublê equivalente.**
+ * A primeira versão de `teto-da-rota-de-envio.test.ts` declarava o seu próprio
+ * resolvedor inline, e com isso provava que o mecanismo conta — não que a rota
+ * conta o que deve. Medido: trocar `${conversa}:${conta}` por `${conta}` na
+ * função de produção deixava a suíte inteira VERDE, 0 casos reprovados, com o
+ * balde errado de pé. É a mesma forma de "o dublê recusou" que este repositório
+ * já pagou duas vezes, uma camada acima.
+ */
+export function resolvedoresDoEnvio(deps: DependenciasDasRotasDeConversa): {
+  conversation_participant: ResolvedorDeDimensao;
+  account: ResolvedorDeDimensao;
+} {
+  return {
+    conversation_participant: (request) => participanteDoTeto(request, deps),
+    account: (request) => contaDoTeto(request, deps),
+  };
+}
+
 function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
   const schema = contrato.requestBodySchema(operationId);
   if (schema === undefined) {
@@ -268,10 +290,7 @@ export function registrarRotasDeConversas(
     rotaDeEnvioDeMensagem,
     {
       schema: { body: corpoDe(deps.contrato, rotaDeEnvioDeMensagem.operationId) },
-      resolvedores: {
-        conversation_participant: (request) => participanteDoTeto(request, deps),
-        account: (request) => contaDoTeto(request, deps),
-      },
+      resolvedores: resolvedoresDoEnvio(deps),
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);

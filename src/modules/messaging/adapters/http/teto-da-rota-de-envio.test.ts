@@ -23,6 +23,19 @@
  *    duas de `hold_for_review` são trabalho de domínio, e o perigo aqui não é
  *    elas não serem aplicadas: é elas sumirem em silêncio, que é a proteção que
  *    se acredita existir.
+ *
+ * ## O resolvedor é o DE PRODUÇÃO, e isso custou uma medição para virar regra
+ *
+ * A primeira versão deste arquivo declarava o resolvedor do balde inline, aqui
+ * dentro. Ele era equivalente ao de produção, e por isso mesmo não provava
+ * nada sobre ele: trocando `${conversa}:${conta}` por `${conta}` em
+ * `conversation-routes.ts`, a suíte inteira ficava VERDE — 0 casos reprovados,
+ * com as duas pessoas da conversa dividindo o mesmo balde e o falso achador
+ * podendo calar o tutor gastando as 30 mensagens dele.
+ *
+ * É a mesma armadilha do dublê que recusa, uma camada acima: o teste prova o
+ * mecanismo e deixa a fiação sem dono. Agora ele importa `resolvedoresDoEnvio`
+ * e registra a rota com ele.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -35,9 +48,13 @@ import {
 } from '../../../../shared/http/registrar-rota.js';
 import { criarContadorDesligado, criarContadorEmMemoria } from '../../../../shared/http/rate-limit.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
-import { rotaDeEnvioDeMensagem } from './conversation-routes.js';
+import {
+  resolvedoresDoEnvio,
+  rotaDeEnvioDeMensagem,
+  type DependenciasDasRotasDeConversa,
+} from './conversation-routes.js';
 import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.js';
-import type { AbsoluteUrl } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const CONVERSA = '018f3a2b-0000-7000-8000-0000000000cc';
@@ -54,29 +71,41 @@ function servidor(contador: RateLimitStore) {
     teto: tetoDeTeste(contador),
     bodyLimitBytes: 1_048_576,
   });
-  // A rota real, com os resolvedores reais na forma em que o registro os
-  // recebe: a conversa do caminho e a conta de quem chama.
+  // A rota real, com os resolvedores REAIS: `resolvedoresDoEnvio` é a mesma
+  // função que `registrarRotasDeConversas` usa. Ver o cabeçalho deste arquivo
+  // para o que um dublê equivalente aqui deixava passar.
   registrarRota(
     app,
     rotaDeEnvioDeMensagem,
-    {
-      resolvedores: {
-        conversation_participant: (request) => {
-          const { conversationId } = request.params as { conversationId?: string };
-          return conversationId === undefined ? undefined : `${conversationId}:${CONTA}`;
-        },
-        account: () => CONTA,
-      },
-    },
+    { resolvedores: resolvedoresDoEnvio(dependenciasDeTeste()) },
     (_request, reply) => Promise.resolve(reply.status(201).send({ ok: true })),
   );
   return app;
+}
+
+/**
+ * As dependências que os resolvedores de produção exigem.
+ *
+ * Só o autenticador é exercido: os dois resolvedores precisam do chamador e de
+ * mais nada. `conversas` e `contrato` não são tocados por eles, e um objeto
+ * vazio com a marca de tipo é mais honesto do que montar um serviço inteiro que
+ * este arquivo não usa.
+ */
+function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
+  return {
+    autenticador: { autenticar: () => Promise.resolve({ userId: CONTA as UserId }) },
+    conversas: undefined as unknown as DependenciasDasRotasDeConversa['conversas'],
+    contrato: undefined as unknown as DependenciasDasRotasDeConversa['contrato'],
+  };
 }
 
 async function enviar(app: ReturnType<typeof servidor>, conversa: string) {
   return app.inject({
     method: 'POST',
     url: `/conversations/${conversa}/messages`,
+    // O resolvedor de produção exige credencial: sem ela ele devolve
+    // `undefined`, a entrada é pulada e o teto não conta ninguém.
+    headers: { authorization: 'Bearer token-de-teste' },
     payload: { body: 'oi' },
   });
 }
