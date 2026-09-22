@@ -1,6 +1,6 @@
 # ADR-0017: O serviço Node não renderiza HTML, e quem serve o domínio da tag
 
-**Status:** aceito, com emenda 1
+**Status:** aceito, com emenda 1; emenda 2 proposta em 22/09/2026
 **Data:** 2026-09-17
 **Depende de:** ADR-0016 (a borda que torna a separação roteável)
 **Revisa:** ADR-0005 ("uma página, duas portas"), ADR-0004 (o que o QR codifica)
@@ -16,6 +16,13 @@ host e o que o item 3 diz sobre "o host, que é `TAG_BASE_URL` = `WEB_BASE_URL`"
 Todo o resto (zero `text/html`, as três variáveis, os três requisitos do arquivo
 de associação, o gatilho datado do item 4 e a borda fechada do item 5) continua
 valendo sem alteração.
+
+**Emenda 2, PROPOSTA em 22/09/2026, aguardando o cliente:** nada é revogado. A
+emenda registra que as oito rotas deste quadro respondem **404 em produção**
+(medido de fora em 21/09) e que o gatilho datado do item 4 cobre **uma** delas.
+Ela estende esse gatilho a `/verificar-email` e `/redefinir-senha`, cujos links
+o back-end **já emite** por e-mail, e deixa para o cliente a escolha de onde as
+páginas moram. Está no fim deste documento.
 
 ## Contexto
 
@@ -367,3 +374,147 @@ sustentava. Agora sustenta. O que travou a 146 de fato foram três coisas
 medidas, nenhuma delas documental: a VM `bichu-hml` desligada, a ausência de
 credencial de escrita no DNS, e a borda ainda não conhecer o apex. As três estão
 fechadas ou nomeadas na própria issue.
+
+
+---
+
+# Emenda 2 (PROPOSTA, aguarda o cliente) — 22/09/2026: o gatilho do item 4 cobre uma das oito páginas, e duas já estão sangrando
+
+**Provocação:** uma apuração de 21/09 constatou que o repositório não tem projeto
+web nenhum (`adr/ api/ app/ coverage/ cypress/ design/ dist/ docs/ infra/
+migrations/ node_modules/ src/ test/ tests/` — nenhum deles serve HTML), e
+perguntou se a superfície existe em algum lugar que ninguém viu.
+
+**Esta emenda não reabre a decisão do cliente e não decide onde as páginas
+moram.** Ela registra uma medição e nomeia um buraco que este documento deixou
+aberto sem dizer que estava aberto. A escolha que fecha o buraco está em
+`.jarvis/DECISOES-PARA-22-09.md`, seção 14, e é do cliente.
+
+## 1. A superfície web não existe em lugar nenhum — verificado, não suposto
+
+Quatro verificações, nesta ordem:
+
+| o que | como | resultado |
+|---|---|---|
+| outro projeto no repositório | `find` por diretório de front web | só `src/web/`, que tem um README e um `.gitkeep` |
+| submódulo | `.gitmodules`, `git submodule status` | **não existe** |
+| serviço na composição | `compose.yaml` | `db`, `objeto`, `objeto_init`, `migracao`, `api`, `worker`, `mail`, `edge`. **Nenhum serve página** |
+| rota na borda | `infra/caddy/Caddyfile` | as únicas origens são `api:3000` e `objeto:9000`. O item 5 desta ADR está implementado: `handle { respond "nao encontrado" 404 }`, linha 227 |
+
+E o comportamento observável em produção, medido de fora, sem alterar nada:
+
+```
+https://bichu.app/t/TESTE-...        404  text/plain  "nao encontrado"
+https://bichu.app/c/abc              404
+https://bichu.app/cartaz/x           404
+https://bichu.app/p/x                404
+https://bichu.app/@teste             404
+https://bichu.app/verificar-email    404
+https://bichu.app/redefinir-senha    404
+https://hml.bichu.app/t/x            404
+
+https://bichu.app/v1/health                       200  application/json
+https://bichu.app/.well-known/assetlinks.json     200  application/json
+```
+
+As **oito** rotas do quadro da seção *Contexto* respondem 404 de borda. O serviço
+está correto e a borda está correta: o 404 é o item 5 fazendo o que foi mandado
+fazer. O que não existe é o outro lado.
+
+`tag.bichu.app` **não resolve no DNS** (conferido em 21/09), o que quer dizer que
+o host que vai prensado na plaquinha ainda não existe em nenhuma forma.
+
+## 2. O buraco: o item 4 protege `/t/{code}` e mais nada
+
+O item 4 escreveu um gatilho datado, e ele é bom. Mas ele é explícito em cobrir
+**uma** página: *"este serviço volta a servir uma página mínima de `/t/{code}`
+como exceção temporária, com as outras sete permanecendo fora"*.
+
+Quando isso foi escrito, em 17/09, as outras sete eram todas páginas de produto,
+e deixar as sete de fora era a escolha certa: nenhuma delas tinha um mecanismo do
+back-end já em produção dependendo dela. **Isso deixou de ser verdade.** O
+back-end já emite, hoje, quatro endereços que caem nesses 404:
+
+| o que o back-end emite | arquivo e linha | para onde aponta |
+|---|---|---|
+| link do e-mail de verificação de conta | `src/modules/identity/application/auth-service.ts:103` | `{WEB_BASE_URL}/verificar-email?token=…` |
+| link do e-mail de recuperação de senha | `src/modules/identity/application/auth-service.ts:111` | `{WEB_BASE_URL}/redefinir-senha?token=…` |
+| `conversation_url`, campo do contrato na resposta 201 do aviso | `src/modules/tags/application/tag-service.ts:309` | `{WEB_BASE_URL}/c/{finderToken}` |
+| `poster_url`, campo do contrato na resposta do caso | `src/modules/lostfound/adapters/http/lost-case-routes.ts:151` | `{WEB_BASE_URL}/cartaz/{shareToken}` |
+
+Os dois primeiros são os que apertam, e por uma razão com data: a **BICHUS-147**
+está em QA agora, e ela é o conserto de *"o cadastro não dispara o e-mail de
+verificação"*. No dia em que ela for a produção, o produto passa a mandar, para
+pessoa de verdade, um e-mail cujo botão leva a 404. O defeito troca de forma —
+de "o e-mail não sai" para "o e-mail sai e não funciona" — e a segunda forma é
+pior, porque parece que funcionou.
+
+**Nomeando o buraco sem rodeio:** este documento tirou as páginas do back-end e
+deu um anteparo a uma delas. As duas páginas que fecham um mecanismo de
+segurança já implantado (confirmação de e-mail e redefinição de senha) ficaram
+sem anteparo nenhum, e ninguém decidiu que elas ficariam — elas caíram no "outras
+sete" de uma frase escrita quando o quadro era outro.
+
+## 3. O que esta emenda decide, e o que ela deixa para o cliente
+
+**Decide** (é a parte que é minha, porque o gatilho do item 4 é meu):
+
+> O gatilho do item 4 passa a cobrir **três** caminhos, não um: `/t/{code}`,
+> `/verificar-email` e `/redefinir-senha`. Os outros cinco (`/c/`, `/cartaz/`,
+> `/p/`, `/@slug`, `/transferencia/`) continuam fora, como o item 4 escreveu.
+>
+> E a data do gatilho, para as duas páginas de e-mail, deixa de ser 07/10 e passa
+> a ser **o dia em que a BICHUS-147 for para produção**. Não é prazo de
+> calendário: é precondição. Enquanto não houver onde o link do e-mail aterrissar,
+> ligar o envio de e-mail de verificação entrega ao usuário um caminho sem saída.
+
+A razão de a data mudar só para essas duas: o gatilho do item 4 foi calibrado por
+"quanto tempo ainda dá para escrever uma página" (duas semanas antes do fim).
+Para `/t/{code}` isso continua valendo, porque ela só precisa existir quando a
+plaquinha existir. Para as páginas de e-mail o relógio é outro, e ele não é o
+calendário: é o deploy de outra história.
+
+**Não decide**, de propósito, e está em `.jarvis/DECISOES-PARA-22-09.md` seção 14
+como pergunta fechada ao cliente:
+
+- se as três páginas voltam para o back-end como dívida com data de remoção
+  (a opção que eu recomendo), ou se elas nascem num projeto web nosso, ou se
+  esperamos o time web;
+- quem é o time web, quando ele começa e em qual ambiente de homologação. O
+  documento original já tinha deixado isso em aberto, na seção *Consequências*:
+  *"O que fica em aberto e não é meu: o contrato de entrega entre este squad e o
+  time web"*. Continua em aberto quatro dias depois, e agora com consequência
+  medida.
+
+## 4. Uma correção de registro, pequena e que evita um mal-entendido
+
+`src/web/README.md` é do primeiro commit (`5ece108`, Onda 0) e descreve, no
+presente, as páginas HTML servidas por este back-end e o orçamento de peso delas.
+Ele contradiz esta ADR inteira e sobreviveu à decisão de 17/09 por esquecimento,
+não por decisão. Ele é **documentação morta**, e quem o ler primeiro vai concluir
+que o back-end serve HTML.
+
+Não o apaguei: se o cliente escolher a opção (c) da seção 14, ele volta a ser o
+documento correto, e as três regras que ele registra (botão sem JavaScript, sem
+fonte de terceiro, conteúdo crítico embutido) continuam sendo as regras certas.
+Fica aqui a anotação de que, em 22/09, ele descreve um serviço que não existe.
+
+## 5. O mesmo mal-entendido está no Jira, e vale mais que uma nota
+
+O critério 1 da **BICHUS-59** diz, literalmente, *"o backend serve HTML
+renderizado no servidor com 200"*. Ela nunca foi relida depois desta ADR. Quem
+pegar essa história hoje vai implementar exatamente o que este documento proíbe,
+e vai passar em revisão contra o critério escrito.
+
+É a mesma família do achado de 21/09 ("critério que passa porque está escrito"):
+o critério não está errado, ele está **velho**, e ninguém carregou a decisão de
+17/09 até ele. Não alterei a história — ela não é minha, e o texto certo depende
+da escolha entre (a)–(d).
+
+## 6. O que virou trabalho
+
+A data de **07/10** do item 4 não estava em calendário nenhum e não tinha
+responsável, o que a deixava a caminho de ser descoberta em 21/10 — o desfecho
+que ela foi escrita para evitar. Virou a **BICHUS-197**, em `Tarefas pendentes`,
+com os critérios de medição e a regra de que verificação que não consegue
+verificar reprova.
