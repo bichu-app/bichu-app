@@ -206,6 +206,18 @@ class RepositorioDeCadastro implements IdentityRepository {
   expurgarConta(): Promise<boolean> {
     return naoUsado('expurgarConta');
   }
+
+  registrarPedidoDeTrocaDeEmail(): Promise<void> {
+    return naoUsado('registrarPedidoDeTrocaDeEmail');
+  }
+
+  concluirTrocaDeEmail(): Promise<Conta | undefined> {
+    return naoUsado('concluirTrocaDeEmail');
+  }
+
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return naoUsado('cancelarTrocaDeEmailPendente');
+  }
 }
 
 interface Bancada {

@@ -184,6 +184,35 @@ export const rotaDeEdicaoDoPerfil = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * O teto é de CONTA, 5 por 24 horas, e espelha `api/openapi.yaml`.
+ *
+ * A dimensão é `account` e não `ip` porque esta rota exige sessão: sem conta
+ * não há pedido, e um balde por IP puniria a rede do prédio pelo que uma
+ * pessoa fez. Cinco por dia é folgado para quem errou uma letra e apertado
+ * para quem quer usar a nossa saída de SMTP: cada pedido manda DUAS mensagens,
+ * uma ao endereço novo e outra ao antigo, e o endereço novo é escolhido por
+ * quem chama. Sem teto, uma sessão viraria um disparador de e-mail nosso
+ * contra endereço alheio, e um caminho de enumeração pelo tempo de resposta.
+ *
+ * `reauthScope` É declarado aqui, e a condição que o adiava caiu nesta
+ * integração. A autora escreveu que a ausência era deliberada porque «a
+ * maquinaria de reautenticação não existe em `src/` ainda» e «o tipo
+ * `ReauthScope` sequer carrega `'email_change'`»: as duas coisas passaram a
+ * existir com a BICHUS-48, e o portão de `rotas-registradas-contra-o-contrato`
+ * passou a cobrar contrato e código nos dois sentidos. Com a maquinaria na
+ * árvore, é a AUSÊNCIA que vira a divergência — operação destrutiva que o
+ * documento promete sob senha e o código serve sem ela.
+ */
+export const rotaDeTrocaDeEmail = defineRoute({
+  operationId: 'requestEmailChange',
+  method: 'post',
+  path: '/me/email-change',
+  effects: ['notifies'],
+  reauthScope: 'email_change',
+  rateLimit: [{ dimension: ['account'], limit: 5, window: '24h', onExceed: 'deny_429' }],
+});
+
 export const rotaDePedidoDeVerificacao = defineRoute({
   operationId: 'requestEmailVerification',
   method: 'post',
@@ -703,6 +732,27 @@ export function registrarRotasDeIdentidade(
       );
 
       return reply.status(200).send(comoRespostaDoPerfil(atualizada));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeTrocaDeEmail,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeTrocaDeEmail.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { conta } = await autenticado(request, deps);
+      const { new_email } = request.body as { new_email: string };
+
+      await deps.auth.solicitarTrocaDeEmail(conta.id, new_email, contextoDe(request));
+
+      // 202 SEMPRE, e o corpo é vazio nos dois ramos. Endereço livre, endereço
+      // que já tem dono e endereço igual ao atual produzem a mesma resposta: é
+      // o que impede esta rota de virar oráculo de existência de e-mail para
+      // qualquer pessoa com uma sessão.
+      return reply.status(202).send();
     },
   );
 

@@ -81,6 +81,9 @@ function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
     registrarPedidoDeExclusao: recusar('registrarPedidoDeExclusao'),
     contasAExpurgar: recusar('contasAExpurgar'),
     expurgarConta: recusar('expurgarConta'),
+    registrarPedidoDeTrocaDeEmail: recusar('registrarPedidoDeTrocaDeEmail'),
+    concluirTrocaDeEmail: recusar('concluirTrocaDeEmail'),
+    cancelarTrocaDeEmailPendente: recusar('cancelarTrocaDeEmailPendente'),
   };
 }
 

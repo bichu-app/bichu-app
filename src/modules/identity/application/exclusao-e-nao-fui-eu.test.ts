@@ -297,6 +297,19 @@ class BancoDeMentira implements IdentityRepository {
       'consumirJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui',
     );
   }
+  registrarPedidoDeTrocaDeEmail(): never {
+    throw new Error(
+      'registrarPedidoDeTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui',
+    );
+  }
+  concluirTrocaDeEmail(): never {
+    throw new Error('concluirTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui');
+  }
+  cancelarTrocaDeEmailPendente(): never {
+    throw new Error(
+      'cancelarTrocaDeEmailPendente: nenhum caso deste arquivo deveria chegar aqui',
+    );
+  }
 }
 
 interface Bancada {

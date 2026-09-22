@@ -337,6 +337,56 @@ export interface IdentityRepository {
    * sucesso: outra rodada pode ter chegado antes.
    */
   expurgarConta(userId: UserId): Promise<boolean>;
+  // --- Troca de e-mail ----------------------------------------------------
+
+  /**
+   * Guarda o endereço que a pessoa QUER, sem tocar no que a conta USA.
+   *
+   * Os dois endereços coexistem de propósito, e é essa coexistência que faz a
+   * troca valer só depois da confirmação: `users.email` continua sendo o
+   * endereço que entra, que recupera senha e que recebe aviso, e
+   * `pending_email` é só uma intenção declarada. Enquanto a confirmação não
+   * chega, quem tomou a sessão não ganhou canal nenhum.
+   *
+   * `pending_email` **não** tem índice único, e a ausência é decisão: duas
+   * contas podem querer o mesmo endereço ao mesmo tempo, e quem o leva é quem
+   * confirmar primeiro. Reservar o endereço no pedido deixaria qualquer pessoa
+   * logada bloquear o cadastro alheio escrevendo o endereço de outro.
+   */
+  registrarPedidoDeTrocaDeEmail(userId: UserId, novoEmail: string, agora: Instant): Promise<void>;
+
+  /**
+   * Efetiva a troca, e devolve `undefined` se o endereço deixou de estar livre.
+   *
+   * A conferência de unicidade é o índice `users_email_unico_ativo`, e não um
+   * `SELECT` antes do `UPDATE`: entre ler e escrever cabe o cadastro de outra
+   * pessoa, e o caso REAL é justamente esse, porque o link fica 24 horas
+   * parado numa caixa de entrada. Quem chama traduz `undefined` em 410 — o
+   * mesmo 410 do token vencido, porque distinguir os dois contaria a quem tem
+   * o link que aquele endereço passou a ter dono.
+   *
+   * Na mesma instrução o e-mail passa a valer como verificado e
+   * `email_deliverable` volta a `true`: a pessoa acabou de PROVAR que alcança
+   * o endereço, e uma devolução registrada contra o endereço ANTIGO não pode
+   * seguir marcando a conta como inalcançável depois disso.
+   */
+  concluirTrocaDeEmail(
+    userId: UserId,
+    novoEmail: string,
+    agora: Instant,
+  ): Promise<Conta | undefined>;
+
+  /**
+   * Apaga a intenção de troca, sem tocar no e-mail que a conta usa.
+   *
+   * É a outra metade do critério 9: trocar a senha por qualquer caminho
+   * invalida os pedidos de troca de e-mail pendentes. `invalidarTokensPendentes`
+   * mata o TOKEN, e isso já impede a troca de se concluir — mas `pending_email`
+   * sobreviveria, e a tela continuaria mostrando uma troca pendente que nenhum
+   * link consegue mais concluir. Aviso que não corresponde a nada é o que ensina
+   * a pessoa a ignorar aviso.
+   */
+  cancelarTrocaDeEmailPendente(userId: UserId, agora: Instant): Promise<void>;
 }
 
 export interface NovaJanelaDeReautenticacao {

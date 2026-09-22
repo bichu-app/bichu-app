@@ -755,6 +755,68 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         .executeTakeFirst();
       return (apagadas.numDeletedRows ?? 0n) > 0n;
     },
+
+    async registrarPedidoDeTrocaDeEmail(
+      userId: UserId,
+      novoEmail: string,
+      agora: Instant,
+    ): Promise<void> {
+      await db
+        .updateTable('users')
+        .set({ pending_email: novoEmail, updated_at: new Date(agora) })
+        .where('id', '=', userId)
+        .where('deleted_at', 'is', null)
+        .execute();
+    },
+
+    async concluirTrocaDeEmail(
+      userId: UserId,
+      novoEmail: string,
+      agora: Instant,
+    ): Promise<Conta | undefined> {
+      // `pending_email` entra no WHERE, e não só no SET. Ele é o que amarra o
+      // token ao ÚLTIMO pedido: quem pediu A, pediu B em seguida e então abriu
+      // o link de A não pode levar a conta para A. O token de A já teria sido
+      // invalidado no pedido de B, mas depender só disso deixaria a regra numa
+      // instrução distante desta, e esta é a que escreve.
+      try {
+        const linha = await db
+          .updateTable('users')
+          .set({
+            email: novoEmail,
+            pending_email: null,
+            // Abrir o link é a prova de alcance que a verificação pede. Exigir
+            // um segundo e-mail de verificação depois desta confirmação seria
+            // pedir duas vezes a mesma prova, e devolveria à conta o estado de
+            // e-mail não verificado que a troca existe para tirar dela.
+            email_verified_at: new Date(agora),
+            email_deliverable: true,
+            updated_at: new Date(agora),
+          })
+          .where('id', '=', userId)
+          .where('deleted_at', 'is', null)
+          .where('pending_email', '=', novoEmail)
+          .returning(COLUNAS_DA_CONTA)
+          .executeTakeFirst();
+
+        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+      } catch (erro) {
+        // O endereço ganhou dono entre o envio do link e a abertura dele. É
+        // resposta, não incidente: quem chama devolve o mesmo 410 do token
+        // vencido.
+        if (ehViolacaoDeUnicidade(erro)) return undefined;
+        throw erro;
+      }
+    },
+
+    async cancelarTrocaDeEmailPendente(userId: UserId, agora: Instant): Promise<void> {
+      await db
+        .updateTable('users')
+        .set({ pending_email: null, updated_at: new Date(agora) })
+        .where('id', '=', userId)
+        .where('pending_email', 'is not', null)
+        .execute();
+    },
   };
 }
 

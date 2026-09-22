@@ -84,6 +84,9 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     registrarPedidoDeExclusao: () => naoDeveriaTerChegado('registrarPedidoDeExclusao'),
     contasAExpurgar: () => naoDeveriaTerChegado('contasAExpurgar'),
     expurgarConta: () => naoDeveriaTerChegado('expurgarConta'),
+    registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
+    concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
+    cancelarTrocaDeEmailPendente: () => naoDeveriaTerChegado('cancelarTrocaDeEmailPendente'),
   };
 }
 
