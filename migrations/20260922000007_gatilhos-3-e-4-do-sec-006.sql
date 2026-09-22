@@ -50,13 +50,22 @@
 -- varredura sequencial da tabela de contas a cada rodada do worker.
 --
 -- ===========================================================================
--- POR QUE 000006 E NAO 000005
+-- POR QUE 000007, E O QUE ISSO EVITA
 -- ===========================================================================
--- `20260922000005` ja esta tomado duas vezes nesta arvore: por
--- `mensagem-cede-para-a-cascata-do-aviso` nesta base, e por
--- `reautenticacao-com-senha` na branch da BICHUS-48, que ainda nao foi mesclada.
--- Duas migracoes com o mesmo prefixo se ordenam por nome de arquivo, o que e
--- ordem arbitraria entre branches. 000006 nao colide com nenhuma das duas.
+-- Os dois prefixos anteriores ja estao tomados por branches que nao foram
+-- mescladas, e duas migracoes com o mesmo prefixo se ordenam por NOME DE
+-- ARQUIVO -- que e ordem arbitraria entre branches, decidida por quem escolheu
+-- o titulo. Conferido com `git ls-tree` em todas as branches:
+--
+--   20260922000005  `mensagem-cede-para-a-cascata-do-aviso`   (nesta base)
+--   20260922000005  `reautenticacao-com-senha`                (BICHUS-48)
+--   20260922000006  `localizacao-nao-sobrevive-a-exclusao-logica`
+--
+-- A terceira e vizinha desta: ela apaga `user_reference_locations` por gatilho
+-- no instante em que `deleted_at` deixa de ser nulo, e quem passa a escrever
+-- esse `deleted_at` e o `registrarPedidoDeExclusao` desta branch. As duas se
+-- compoem, e esta precisa vir DEPOIS para que o gatilho ja exista quando o
+-- primeiro pedido de exclusao rodar num banco migrado do zero.
 
 -- Up Migration
 
