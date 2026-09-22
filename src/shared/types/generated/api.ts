@@ -105,7 +105,33 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Encerra a sessao e revoga a familia de refresh */
+        /**
+         * Encerra a sessao e revoga a familia de refresh
+         * @description **Sair deste aparelho e revogacao no servidor, sempre** (ADR-0002,
+         *     emenda 1). O corpo e obrigatorio: sem o `refresh_token` nao ha o que
+         *     revogar, e a operacao recusa com **400** em vez de responder 204.
+         *     Enquanto o corpo era opcional, um cliente que seguisse este contrato ao
+         *     pe da letra saia sem revogar nada e recebia 204 — sucesso
+         *     indistinguivel do nada.
+         *
+         *     O que esta operacao **nao** faz: ela nao empurra
+         *     `users.sessions_invalid_before`. Essa coluna e por pessoa, e usa-la aqui
+         *     derrubaria os outros aparelhos da mesma conta, tornando `logout`
+         *     identico a "sair de todos os aparelhos" — que e OUTRO verbo, com outro
+         *     mecanismo, e que ainda **nao tem operacao declarada neste contrato**
+         *     (BICHUS-125). O alcance desta operacao e uma familia de refresh, quer
+         *     dizer, um aparelho.
+         *
+         *     **Janela residual declarada:** o token de acesso ja emitido continua
+         *     sendo aceito ate o `exp`, no maximo 15 minutos, e nao pode ser renovado
+         *     porque o refresh que o renovaria acabou de ser revogado. Fechar essa
+         *     janela em menos de um segundo e trabalho de "sair de todos os
+         *     aparelhos", que e o remedio de quem teve o aparelho levado.
+         *
+         *     **Idempotente:** chamada com uma familia ja revogada, responde 204 e nao
+         *     erra. O app que so consegue enviar a revogacao atrasada nao e punido por
+         *     isso.
+         */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -3352,14 +3378,40 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description O refresh da sessao **deste** aparelho. A familia dele e o
+                     *     que morre. Token que nao pertence a conta do `bearerAuth`
+                     *     nao revoga nada e recebe a mesma resposta de token
+                     *     inexistente, de proposito: distinguir os dois contaria a
+                     *     quem pergunta se aquele token existe.
+                     */
+                    refresh_token: string;
+                };
+            };
+        };
         responses: {
-            /** @description Sessao encerrada. */
+            /** @description Sessao encerrada e familia de refresh revogada. */
             204: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /**
+             * @description Sem `refresh_token`, ou com um que nao pertence a esta conta. **E
+             *     erro de proposito**: um logout que nao revogou nao pode se parecer
+             *     com um que revogou.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
             };
             401: components["responses"]["Unauthorized"];
         };

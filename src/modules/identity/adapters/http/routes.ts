@@ -431,12 +431,27 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.post(rotaDeLogout.path, async (request: FastifyRequest, reply: FastifyReply) => {
-    const autenticado: Autenticado = await deps.auth.autenticar(tokenDoCabecalho(request));
-    const corpo = (request.body ?? {}) as { refresh_token?: string };
-    await deps.auth.sair(autenticado, corpo.refresh_token, contextoDe(request));
-    return reply.status(204).send();
-  });
+  /**
+   * Sair **deste** aparelho (ADR-0002, emenda 1).
+   *
+   * O `schema` não é enfeite. Enquanto ele não estava aqui, o contrato declarava
+   * a operação sem corpo e este manipulador lia `corpo.refresh_token` assim
+   * mesmo: quem seguisse o contrato não mandava campo nenhum, nada era revogado,
+   * e a resposta era 204 — sucesso indistinguível do nada. Com `corpoDe`, o
+   * corpo vem da própria especificação, e o dia em que alguém apagar o
+   * `requestBody` de lá esta rota deixa de subir, com o motivo escrito, em vez
+   * de voltar a mentir em silêncio.
+   */
+  app.post(
+    rotaDeLogout.path,
+    { schema: { body: corpoDe(deps.contrato, rotaDeLogout.operationId) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const autenticado: Autenticado = await deps.auth.autenticar(tokenDoCabecalho(request));
+      const corpo = request.body as { refresh_token: string };
+      await deps.auth.sair(autenticado, corpo.refresh_token, contextoDe(request));
+      return reply.status(204).send();
+    },
+  );
 }
 
 /**

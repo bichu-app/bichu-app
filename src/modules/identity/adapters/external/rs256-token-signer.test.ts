@@ -16,7 +16,7 @@
  * produção carrega, não um número que este arquivo escolheu para si.
  */
 import assert from 'node:assert/strict';
-import { constants, createVerify, generateKeyPairSync } from 'node:crypto';
+import { constants, createSign, createVerify, generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, it } from 'node:test';
 
 import { loadAppConfig, type TokenConfig } from '../../../../shared/config/app-config.js';
@@ -117,10 +117,16 @@ function abrir(token: string): PartesDoToken {
   };
 }
 
+/**
+ * A familia de refresh que emitiu o token (ADR-0002, emenda 1). Entra no `sid`,
+ * e a barreira nao a le nesta rodada.
+ */
+const FAMILIA = 'fam-de-teste-0001';
+
 void describe('token de acesso emitido (BICHUS-15, critério 1)', () => {
   void it('o access token vale exatamente 15 minutos', () => {
     const config = configuracaoDoToken();
-    const emitido = criarTokenSigner(config).emitir(USUARIO, AGORA, 'jti-1');
+    const emitido = criarTokenSigner(config).emitir(USUARIO, AGORA, 'jti-1', FAMILIA);
     const { corpo } = abrir(emitido.token);
     const iat = corpo['iat'] as number;
     const exp = corpo['exp'] as number;
@@ -138,7 +144,7 @@ void describe('token de acesso emitido (BICHUS-15, critério 1)', () => {
 
   void it('o `sub` é o UUID interno do usuário, e não um apelido nem o e-mail', () => {
     const config = configuracaoDoToken();
-    const emitido = criarTokenSigner(config).emitir(USUARIO, AGORA, 'jti-2');
+    const emitido = criarTokenSigner(config).emitir(USUARIO, AGORA, 'jti-2', FAMILIA);
 
     // É este detalhe que compra a liberdade de trocar o emissor: no dia do
     // Keycloak, os usuários nascem lá com o `id` forçado igual ao nosso e o
@@ -149,7 +155,7 @@ void describe('token de acesso emitido (BICHUS-15, critério 1)', () => {
 
   void it('o cabeçalho diz RS256, e a assinatura é mesmo RSA da chave ativa', () => {
     const config = configuracaoDoToken();
-    const emitido = criarTokenSigner(config).emitir(USUARIO, AGORA, 'jti-3');
+    const emitido = criarTokenSigner(config).emitir(USUARIO, AGORA, 'jti-3', FAMILIA);
     const { cabecalho, dadosAssinados, assinatura } = abrir(emitido.token);
 
     // RS256 e nunca HS256: com chave simétrica, quem valida também emite — e
@@ -187,7 +193,7 @@ void describe('verificação do token de acesso (BICHUS-15, critério 5)', () =>
       ...config,
       issuer: 'https://keycloak.que-ninguem-configurou.test',
     });
-    const forjado = emissorEstranho.emitir(USUARIO, AGORA, 'jti-4');
+    const forjado = emissorEstranho.emitir(USUARIO, AGORA, 'jti-4', FAMILIA);
 
     const resultado = criarTokenSigner(config).verificar(forjado.token, AGORA);
     assert.equal(resultado.ok, false);
@@ -199,7 +205,7 @@ void describe('verificação do token de acesso (BICHUS-15, critério 5)', () =>
     // caso acima e ninguém conseguiria entrar no aplicativo.
     const config = configuracaoDoToken();
     const assinador = criarTokenSigner(config);
-    const emitido = assinador.emitir(USUARIO, AGORA, 'jti-5');
+    const emitido = assinador.emitir(USUARIO, AGORA, 'jti-5', FAMILIA);
 
     const resultado = assinador.verificar(emitido.token, AGORA);
     assert.equal(resultado.ok, true);
@@ -209,7 +215,7 @@ void describe('verificação do token de acesso (BICHUS-15, critério 5)', () =>
   void it('recusa o token cujo cabeçalho troca o algoritmo, mesmo com o resto intacto', () => {
     const config = configuracaoDoToken();
     const assinador = criarTokenSigner(config);
-    const emitido = assinador.emitir(USUARIO, AGORA, 'jti-6');
+    const emitido = assinador.emitir(USUARIO, AGORA, 'jti-6', FAMILIA);
     const { corpo, assinatura } = abrir(emitido.token);
 
     // Confusão de algoritmo: com o JWKS público, aceitar HS256 permite assinar
@@ -225,5 +231,55 @@ void describe('verificação do token de acesso (BICHUS-15, critério 5)', () =>
     const resultado = assinador.verificar(token, AGORA);
     assert.equal(resultado.ok, false);
     assert.equal(resultado.ok === false && resultado.motivo, 'algoritmo_nao_permitido');
+  });
+});
+
+/**
+ * `sid` no token de acesso (ADR-0002, emenda 1).
+ *
+ * A emenda decidiu acrescentar a família de refresh ao token **agora e sem
+ * uso**, e a razão é de compatibilidade: acrescentar campo a um token que já
+ * está em aparelho publicado é mudança de contrato com versão antiga em campo
+ * por meses, e o dia em que a revogação por sessão for necessária é o dia em
+ * que ela precisa já estar possível.
+ *
+ * Os dois casos abaixo cobrem as duas metades disso, e a segunda é a que
+ * importa mais: um campo novo que a verificação passasse a **exigir** derrubaria
+ * todo mundo que já tem sessão aberta, no momento da subida. É o tipo de
+ * estrago que não aparece em teste de caminho feliz, porque na bancada todo
+ * token nasce novo.
+ */
+void describe('`sid` no token de acesso (ADR-0002, emenda 1)', () => {
+  void it('todo token emitido carrega o `sid` da família que o emitiu', () => {
+    const config = configuracaoDoToken();
+    const emitido = criarTokenSigner(config).emitir(USUARIO, AGORA, 'jti-sid-1', FAMILIA);
+
+    assert.equal(abrir(emitido.token).corpo['sid'], FAMILIA);
+  });
+
+  void it('aceita o token SEM `sid`: é o que já está no aparelho das pessoas', () => {
+    const config = configuracaoDoToken();
+    const assinador = criarTokenSigner(config);
+    const emitido = assinador.emitir(USUARIO, AGORA, 'jti-sid-2', FAMILIA);
+    const { corpo } = abrir(emitido.token);
+
+    // Reemite o MESMO corpo sem o `sid`, assinado com a chave ativa de verdade:
+    // é exatamente a forma do token que saiu antes desta mudança.
+    const semSid = { ...corpo };
+    delete semSid['sid'];
+    const cabecalho = Buffer.from(
+      JSON.stringify({ alg: 'RS256', typ: 'JWT', kid: config.activeKey.kid }),
+    ).toString('base64url');
+    const corpoBruto = Buffer.from(JSON.stringify(semSid)).toString('base64url');
+    const dados = `${cabecalho}.${corpoBruto}`;
+    const assinatura = createSign('RSA-SHA256')
+      .update(dados)
+      .sign(config.activeKey.privateKey)
+      .toString('base64url');
+
+    const resultado = assinador.verificar(`${dados}.${assinatura}`, AGORA);
+
+    assert.equal(resultado.ok, true, 'token antigo, sem `sid`, continua valendo até o `exp`');
+    assert.equal(resultado.ok === true && resultado.claims.sid, undefined);
   });
 });

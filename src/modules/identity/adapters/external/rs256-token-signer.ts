@@ -73,7 +73,7 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
   const jwksPublicado = config.allKeys.map(paraJwk);
 
   return {
-    emitir(sub: UserId, agora: Instant, jti: string): TokenEmitido {
+    emitir(sub: UserId, agora: Instant, jti: string, sid: string): TokenEmitido {
       const iat = Math.floor(agora / 1000);
       const exp = iat + config.accessTokenTtlSeconds;
       const cabecalho = base64url(
@@ -82,8 +82,13 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
       // `sub` é o UUID interno. É este detalhe que compra a liberdade: quando o
       // Keycloak entrar, os usuários são criados nele com o `id` forçado igual
       // ao nosso, e o `sub` continua sendo o mesmo valor de sempre.
+      // `sid` e a familia de refresh que emitiu este token (ADR-0002, emenda
+      // 1). Ele entra no corpo agora e a barreira nao o le nesta rodada: o
+      // ganho e que, no dia em que a revogacao por sessao for necessaria, os
+      // tokens em campo ja a carregam. Campo novo em token publicado e mudanca
+      // de contrato com versao antiga em aparelho por meses.
       const corpo = base64url(
-        JSON.stringify({ iss: config.issuer, sub, aud: config.audience, iat, exp, jti }),
+        JSON.stringify({ iss: config.issuer, sub, aud: config.audience, iat, exp, jti, sid }),
       );
       const dados = `${cabecalho}.${corpo}`;
       return {
@@ -122,7 +127,7 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
         return { ok: false, motivo: 'assinatura_invalida' };
       }
 
-      const { iss, sub, aud, iat, exp, jti } = corpo;
+      const { iss, sub, aud, iat, exp, jti, sid } = corpo;
       if (
         typeof iss !== 'string' ||
         typeof sub !== 'string' ||
@@ -146,7 +151,19 @@ export function criarTokenSigner(config: TokenConfig): TokenSigner {
       if (exp + tolerancia <= agoraEmSegundos) return { ok: false, motivo: 'expirado' };
       if (iat - tolerancia > agoraEmSegundos) return { ok: false, motivo: 'emitido_no_futuro' };
 
-      const claims: ClaimsDoAcesso = { sub: sub as UserId, iss, aud, iat, exp, jti };
+      // `sid` NAO entra na conferencia de forma acima, e a ausencia dele nao
+      // recusa o token. Todo token emitido a partir desta mudanca o carrega; os
+      // que ja circulam, nao. Exigi-lo aqui deslogaria a base inteira na
+      // subida — o estrago exato que declarar o campo cedo existe para evitar.
+      const claims: ClaimsDoAcesso = {
+        sub: sub as UserId,
+        iss,
+        aud,
+        iat,
+        exp,
+        jti,
+        ...(typeof sid === 'string' ? { sid } : {}),
+      };
       return { ok: true, claims };
     },
 
