@@ -25,16 +25,37 @@
  * indentacao de um `describe`.
  *
  * =========================================================================
- * O CAMINHO INTEIRO, E POR QUE NAO SO O NOME DO CASO
+ * O ARQUIVO SAI DO `location:`, E NAO DA ARVORE DE SUBTESTES
  * =========================================================================
  * Dois arquivos diferentes tem casos com o mesmo nome (`'aprova'`, `'recusa'`,
  * `'o caso limpo passa'`). Um acumulado indexado so pelo nome do caso soma
  * piscada de arquivos diferentes na mesma linha, e quem for procurar nao acha.
- * A chave e `arquivo > describe > caso`, montada pela pilha de indentacao.
+ *
+ * O caminho natural seria a arvore de subtestes, mas ela NAO traz o arquivo
+ * quando os caminhos vao explicitos ao `node --test`, que e como as duas suites
+ * deste repositorio rodam. Medido no TAP real da suite de integracao (245
+ * casos): o topo da arvore e o primeiro `describe` de cada arquivo, e um `it`
+ * no topo do arquivo aparece sozinho, sem nenhum ancestral.
+ *
+ * O arquivo esta no campo `location:` do bloco YAML da reprovacao, e e de la
+ * que ele sai. A chave fica `arquivo > describe > caso`. Em caso PASSADO o
+ * campo nao vem, e nao faz falta: so a reprovacao entra no livro.
  */
 
 /** Indentacao de um nivel no TAP do `node --test`. */
 const NIVEL = 4;
+
+/**
+ * O `location:` traz o caminho do COMPILADO, absoluto dentro do container
+ * (`/app/dist/_tests/tests/integration/x.test.js`). Guardar isso no livro
+ * amarraria a chave ao ponto de montagem: o mesmo caso registrado do container
+ * e da maquina de quem desenvolve viraria duas linhas. Guarda-se o caminho da
+ * FONTE, relativo a raiz do repositorio.
+ */
+function normalizarArquivo(bruto) {
+  const semPrefixo = bruto.replace(/^.*?dist\/_tests\//, '');
+  return semPrefixo.replace(/\.js$/, '.ts');
+}
 
 /**
  * Casos que reprovaram, pelo caminho inteiro (`arquivo > grupo > caso`).
@@ -82,14 +103,19 @@ export function casosQueReprovaram(tap) {
     // descartar: perder a evidencia e o defeito que este arquivo existe para
     // impedir.
     let ehFolha = true;
+    let arquivo = '';
     for (let j = i + 1; j < linhas.length; j += 1) {
       const seguinte = linhas[j] ?? '';
       if (/^\s*\.\.\.\s*$/.test(seguinte)) break;
       if (/^\s*(not ok|ok) \d+ - /.test(seguinte)) break;
       if (/^\s*type: 'suite'\s*$/.test(seguinte)) ehFolha = false;
       if (/^\s*failureType: 'subtestsFailed'\s*$/.test(seguinte)) ehFolha = false;
+      const onde = /^\s*location: '(.+):\d+:\d+'\s*$/.exec(seguinte);
+      if (onde !== null) arquivo = normalizarArquivo(onde[1] ?? '');
     }
-    if (ehFolha) reprovados.push(pilha.slice(0, nivel + 1).join(' > '));
+    if (!ehFolha) continue;
+    const caminho = pilha.slice(0, nivel + 1);
+    reprovados.push([...(arquivo === '' ? [] : [arquivo]), ...caminho].join(' > '));
   }
 
   return reprovados;
@@ -117,10 +143,15 @@ export function placarDoTap(tap) {
  * @returns {number} 0 aprovado, 1 reprovado
  */
 export function autoteste() {
-  const TAP_COM_GRUPO = [
+  // As formas abaixo sao as do TAP REAL desta suite, conferidas contra
+  // `dist/_tests/integracao.tap` de uma execucao de 245 casos: com os caminhos
+  // explicitos no `node --test`, o topo da arvore e o primeiro `describe` de
+  // cada arquivo, e um `it` no topo do arquivo aparece sozinho na indentacao
+  // zero -- a MESMA de um `describe`. O arquivo so aparece no `location:`.
+  const TAP_ANINHADO = [
     'TAP version 13',
-    '# Subtest: dist/_tests/tests/integration/a.test.js',
-    '    # Subtest: um grupo',
+    '# Subtest: grupo de fora',
+    '    # Subtest: grupo de dentro',
     '        # Subtest: caso que passa',
     '        ok 1 - caso que passa',
     '          ---',
@@ -130,39 +161,35 @@ export function autoteste() {
     '        not ok 2 - caso que pisca',
     '          ---',
     "          type: 'test'",
+    "          location: '/app/dist/_tests/tests/integration/a.test.js:12:3'",
     "          failureType: 'testCodeFailure'",
     '          ...',
     '        1..2',
-    '    not ok 1 - um grupo',
+    '    not ok 1 - grupo de dentro',
     '      ---',
     "      type: 'suite'",
     "      failureType: 'subtestsFailed'",
     '      ...',
-    'not ok 1 - dist/_tests/tests/integration/a.test.js',
+    'not ok 1 - grupo de fora',
     '  ---',
     "  type: 'suite'",
     "  failureType: 'subtestsFailed'",
     '  ...',
-    '1..1',
     '# tests 2',
     '# pass 1',
     '# fail 1',
   ].join('\n');
 
-  // `it` no topo do arquivo: MESMA indentacao de um `describe`. E o caso que
-  // uma leitura por indentacao erra, e por isso ele esta aqui.
-  const TAP_SEM_GRUPO = [
+  // `it` no topo do arquivo: MESMA indentacao de um `describe`, e sem nenhum
+  // ancestral. Foi assim que a isca de prova apareceu no TAP de verdade.
+  const TAP_SOLTO = [
     'TAP version 13',
-    '# Subtest: dist/_tests/src/b.test.js',
-    '    # Subtest: caso solto que reprova',
-    '    not ok 1 - caso solto que reprova',
-    '      ---',
-    "      type: 'test'",
-    '      ...',
-    '    1..1',
-    'not ok 1 - dist/_tests/src/b.test.js',
+    '# Subtest: caso solto que reprova',
+    'not ok 1 - caso solto que reprova',
     '  ---',
-    "  type: 'suite'",
+    "  type: 'test'",
+    "  location: '/app/dist/_tests/src/b.test.js:7:1'",
+    "  failureType: 'testCodeFailure'",
     '  ...',
     '# tests 1',
     '# pass 0',
@@ -171,14 +198,14 @@ export function autoteste() {
 
   const TAP_VERDE = [
     'TAP version 13',
-    '# Subtest: dist/_tests/src/b.test.js',
+    '# Subtest: grupo de fora',
     '    # Subtest: caso que passa',
     '    ok 1 - caso que passa',
     '      ---',
     "      type: 'test'",
     '      ...',
     '    1..1',
-    'ok 1 - dist/_tests/src/b.test.js',
+    'ok 1 - grupo de fora',
     '# tests 1',
     '# pass 1',
     '# fail 0',
@@ -186,14 +213,19 @@ export function autoteste() {
 
   const casos = [
     [
-      'so a FOLHA: o describe e o arquivo tambem vem `not ok` e nao sao casos',
-      () => casosQueReprovaram(TAP_COM_GRUPO),
-      ['dist/_tests/tests/integration/a.test.js > um grupo > caso que pisca'],
+      'so a FOLHA: os dois `describe` tambem vem `not ok` e nao sao casos',
+      () => casosQueReprovaram(TAP_ANINHADO),
+      ['tests/integration/a.test.ts > grupo de fora > grupo de dentro > caso que pisca'],
     ],
     [
-      '`it` sem `describe` fica na indentacao de um grupo, e mesmo assim e caso',
-      () => casosQueReprovaram(TAP_SEM_GRUPO),
-      ['dist/_tests/src/b.test.js > caso solto que reprova'],
+      '`it` no topo do arquivo nao tem ancestral, e mesmo assim leva o arquivo',
+      () => casosQueReprovaram(TAP_SOLTO),
+      ['src/b.test.ts > caso solto que reprova'],
+    ],
+    [
+      'o arquivo vem do `location:`, ja como FONTE e relativo a raiz',
+      () => [normalizarArquivo('/app/dist/_tests/tests/integration/a.test.js')],
+      ['tests/integration/a.test.ts'],
     ],
     [
       'o lado permissivo: suite verde nao produz nome nenhum',
