@@ -1,0 +1,7 @@
+# Descoberta vazia REPROVA. Um portao que nao achou o que conferir e
+# indistinguivel de um portao que conferiu e aprovou.
+name: sem-passo-nenhum
+on: [push]
+jobs:
+  vazio:
+    runs-on: ubuntu-latest

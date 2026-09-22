@@ -1,0 +1,15 @@
+# ISOLA o `||` que declara sucesso no caminho de falha, na forma exata que o
+# `ci.yml` tinha: `{` numa linha e `exit 0; }` na seguinte. O passo NAO e
+# `if: always()` nem `if: failure()`, que e o que separa um teardown legitimo
+# de um portao que desiste.
+name: sucesso-no-caminho-de-falha
+on: [push]
+jobs:
+  contrato:
+    runs-on: ubuntu-latest
+    steps:
+      - name: compatibilidade contra a base
+        run: |
+          git show origin/main:api/openapi.yaml > /tmp/base.yaml 2>/dev/null || {
+            echo "::notice::sem versao anterior da spec: primeira introducao"; exit 0; }
+          oasdiff breaking /tmp/base.yaml api/openapi.yaml

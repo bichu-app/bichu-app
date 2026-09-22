@@ -1,0 +1,14 @@
+# A mencao ao mecanismo DENTRO DE UM COMENTARIO nao e uso dele. Esta isca existe
+# porque uma isca deste repositorio ja nasceu furada casando com a propria
+# explicacao: ela ficava verde por motivo errado.
+name: mencao-em-comentario
+on: [push]
+jobs:
+  explicar:
+    runs-on: ubuntu-latest
+    steps:
+      # Ate 22/09 este passo lia `steps.veredito.outcome`, e `continue-on-error: true`
+      # estava no passo acima. O texto abaixo cita `steps.busca.conclusion` de novo,
+      # de proposito, e nada disto pode reprovar.
+      - name: julga o envelope, e nao o destino do passo
+        run: python3 infra/verificacao/verificar_veredito_do_sonar.py --envelope /tmp/e.json

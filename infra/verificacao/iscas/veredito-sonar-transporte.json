@@ -1,0 +1,5 @@
+{
+  "obtido": false,
+  "motivo": "a consulta ao portao de qualidade falhou no transporte: URLError: <urlopen error [Errno -3] Temporary failure in name resolution>",
+  "painel": ""
+}

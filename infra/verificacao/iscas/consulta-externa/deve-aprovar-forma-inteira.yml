@@ -1,0 +1,50 @@
+# A forma inteira, e ela precisa APROVAR: busca separada de juizo, teardown com
+# `|| true` sob `if: always()`, padrao escolhido por atribuicao, e consolidacao
+# de `needs` num `case` com ramo padrao que reprova.
+name: forma-inteira
+on: [push]
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: endereco do destino
+        run: |
+          url="${{ inputs.url }}"
+          [ -n "$url" ] || url="https://exemplo.invalido"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: busca o veredito e grava o envelope
+        run: python3 infra/verificacao/buscar_veredito_do_sonar.py --envelope /tmp/e.json
+
+      - name: julga o envelope
+        run: python3 infra/verificacao/verificar_veredito_do_sonar.py --envelope /tmp/e.json
+
+      # `||` de dentro de um cabecalho de condicao e OU logico, nao caminho de
+      # falha. Sem esta forma o portao acusaria `ci.yml:781`, que compara duas
+      # leituras do mesmo commit.
+      - name: os dois valores batem
+        run: |
+          if [ "$declarado" != "$COMMIT" ] || [ "$gravado" != "$COMMIT" ]; then
+            echo "::error::a imagem nao sabe de onde veio"
+            exit 1
+          fi
+
+      - name: derruba
+        if: always()
+        run: docker rm -f prova 2>/dev/null || true
+
+  portao:
+    runs-on: ubuntu-latest
+    needs: [consultar]
+    if: always()
+    steps:
+      - name: consolidar
+        run: |
+          estados="${{ needs.consultar.result }}"
+          for e in $estados; do
+            case "$e" in
+              success) ;;
+              skipped) echo "::error::um job foi pulado"; exit 1 ;;
+              *) echo "::error::job em '$e'"; exit 1 ;;
+            esac
+          done

@@ -1,0 +1,13 @@
+# ISOLA a leitura de `steps.<id>.outcome`. O defeito medido no run 35750052587:
+# HTTP 403 e veredito negativo colapsam no mesmo `failure`. Sem
+# `continue-on-error` aqui, para reprovar por um motivo so.
+name: estado-de-passo
+on: [push]
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: o veredito, dito em voz alta
+        run: |
+          estado='${{ steps.veredito.outcome }}'
+          echo "veredito=$estado"
