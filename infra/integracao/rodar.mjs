@@ -59,10 +59,23 @@ process.chdir(raiz);
  */
 const projeto = `bichu-int-${createHash('sha1').update(raiz).digest('hex').slice(0, 10)}`;
 
+// O Dockerfile EXIGE `BUILD_COMMIT` em todo alvo (BICHUS-210), e o compose desta
+// pilha o declara como `${BUILD_COMMIT:-}`. Sem alguem fornecer, o build reprova --
+// que e o portao funcionando, mas transformava a suite de integracao num comando
+// que so rodava para quem lembrasse do prefixo. Quem sabe o commit e o executor.
+//
+// Nao entra no `.env.integracao` de proposito: aquele arquivo e derivado do
+// exemplo, e um dia alguem pode le-lo como fonte da verdade do valor que o portao
+// da BICHUS-216 existe para medir. Aqui ele e ambiente do processo, como no Makefile.
+const commitDeBuild =
+  process.env.BUILD_COMMIT?.trim() ||
+  execFileSync('git', ['rev-parse', '--verify', 'HEAD'], { encoding: 'utf8' }).trim();
+
 const compose = (args, opcoes = {}) =>
   spawnSync('docker', ['compose', '-p', projeto, '-f', ARQUIVO, '--env-file', ENV, ...args], {
     stdio: 'inherit',
     ...opcoes,
+    env: { ...process.env, BUILD_COMMIT: commitDeBuild, ...(opcoes.env ?? {}) },
   });
 
 function exigir(resultado, oque) {
