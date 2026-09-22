@@ -17,11 +17,12 @@
  * integração, contra o receptor local. Aqui a porta é um dublê.
  */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { describe, it } from 'node:test';
 
-import type { Instant, UserId } from '../../../shared/types/brands.js';
+import type { AbsoluteUrl, Instant, OpaqueToken, UserId } from '../../../shared/types/brands.js';
 import { dataFixa, INSTANTE_FIXO } from '../../../shared/time/relogio-de-teste.js';
-import type { Conta } from '../ports/identity-repository.js';
+import type { Conta, NovoTokenDeVerificacao } from '../ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
 import type { AvisoAoTitular } from './dependencies.js';
 import { criarAvisoDeReusoAoTitular } from './aviso-de-reuso.js';
@@ -34,6 +35,9 @@ const AVISO: AvisoAoTitular = {
   userId: VITIMA,
   ocorridoEm: INSTANTE_FIXO,
   correlationId: 'corr-do-reuso',
+  // De quem APRESENTOU o refresh reusado. O aviso o carrega para o token do
+  // "Nao fui eu" nascer com o unico rastro forense daquele instante.
+  ipHmac: Buffer.from('hmac-de-quem-reusou'.padEnd(32, '.')),
 };
 
 /**
@@ -69,12 +73,17 @@ interface Bancada {
   readonly enviadas: Mensagem[];
   readonly consultados: UserId[];
   readonly registros: { dados: Record<string, unknown>; mensagem: string }[];
+  readonly tokens: NovoTokenDeVerificacao[];
 }
+
+const TOKEN_EM_CLARO = 'tokenOpacoDeTrintaEDoisBytesEmBase64Url';
+const BASE_DA_WEB = 'https://bichu.exemplo.invalid/' as AbsoluteUrl;
 
 function montar(conta: Conta | undefined): Bancada {
   const enviadas: Mensagem[] = [];
   const consultados: UserId[] = [];
   const registros: { dados: Record<string, unknown>; mensagem: string }[] = [];
+  const tokens: NovoTokenDeVerificacao[] = [];
 
   const mailer: Mailer = {
     enviar(mensagem) {
@@ -89,14 +98,25 @@ function montar(conta: Conta | undefined): Bancada {
         consultados.push(id);
         return Promise.resolve(conta);
       },
+      criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
+        tokens.push(novo);
+        return Promise.resolve();
+      },
     },
     mailer,
     registrarOcorrencia: (dados, mensagem) => {
       registros.push({ dados, mensagem });
     },
+    ids: {
+      uuidv7: () => '0192f3a1-7c2b-7e3d-9a10-000000000001',
+      opaqueToken: () => TOKEN_EM_CLARO as OpaqueToken,
+      random128: () => { throw new Error('random128: o aviso de reuso nao usa'); },
+      random80: () => { throw new Error('random80: o aviso de reuso nao usa'); },
+    },
+    baseDaWeb: BASE_DA_WEB,
   });
 
-  return { avisar, enviadas, consultados, registros };
+  return { avisar, enviadas, consultados, registros, tokens };
 }
 
 /** A única mensagem enviada, ou uma falha dizendo quantas saíram. */
@@ -126,7 +146,7 @@ void describe('aviso de reuso de refresh: montagem da mensagem (BICHUS-15, crit�
     await bancada.avisar(AVISO);
 
     const corpo = unicaMensagem(bancada).corpo;
-    assert.match(corpo, /encerramos todas as sessões/i);
+    assert.match(corpo, /encerramos por precaução a sessão que apresentou/i);
     assert.match(corpo, /copiado o acesso da sua conta/i);
     assert.ok(corpo.trim().length > 0, 'corpo vazio é detecção silenciosa com selo de entregue');
   });
@@ -141,10 +161,12 @@ void describe('aviso de reuso de refresh: montagem da mensagem (BICHUS-15, crit�
     // trocar a senha se desconfiar. Um aviso que para em "detectamos atividade
     // suspeita" deixa a pessoa assustada e sem saída — é quase não avisar.
     assert.match(corpo, /entre de novo no aplicativo/i);
-    assert.match(corpo, /troque a sua senha/i);
-    // E o motivo de trocar a senha, que é o que faz a pessoa trocar: sem a
-    // consequência, a frase é burocracia e ela ignora.
-    assert.match(corpo, /derruba qualquer acesso/i);
+    assert.match(corpo, /se não foi você, abra este link/i);
+    // E a consequência do link, que é o que faz a pessoa clicar: sem ela, a
+    // frase é burocracia e ela ignora. "Não pede senha nem login" é a parte que
+    // importa para quem já não consegue entrar.
+    assert.match(corpo, /encerra TODAS as sessões/i);
+    assert.match(corpo, /não pede senha nem login/i);
   });
 
   void it('não carrega telefone, endereço nem UUID de banco (ADR-0010 item 6, contato mediado)', async () => {
@@ -174,6 +196,72 @@ void describe('aviso de reuso de refresh: montagem da mensagem (BICHUS-15, crit�
     }
     assert.doesNotMatch(tudo, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
   });
+
+void it('emite o token do "Não fui eu" e põe o LINK no corpo (BICHUS-215, critério 4)', async () => {
+    const bancada = montar(contaDaVitima());
+
+    await bancada.avisar(AVISO);
+
+    assert.equal(bancada.tokens.length, 1, 'um aviso, um link de uso único');
+    const token = bancada.tokens[0]!;
+    assert.equal(token.proposito, 'session_disavow');
+    assert.equal(token.userId, VITIMA);
+    assert.equal(token.enviadoPara, ENDERECO_DA_VITIMA);
+    // Sete dias a partir do instante da detecção. Mais longo que os outros dois
+    // links de propósito: quem lê este aviso pode estar sem o aparelho.
+    assert.equal(token.expiraEm, INSTANTE_FIXO + 7 * 24 * 60 * 60 * 1000);
+    // O HMAC é de quem APRESENTOU o refresh reusado, e não da vítima. É o único
+    // rastro forense daquele instante, e ele vem do aviso, não do relógio.
+    assert.deepEqual(token.ipHmac, AVISO.ipHmac);
+
+    assert.match(
+      unicaMensagem(bancada).corpo,
+      new RegExp(`https://bichu\\.exemplo\\.invalid/nao-fui-eu\\?token=${TOKEN_EM_CLARO}`),
+    );
+  });
+
+  void it('guarda o HASH do token, nunca o valor em claro', async () => {
+    const bancada = montar(contaDaVitima());
+
+    await bancada.avisar(AVISO);
+
+    const token = bancada.tokens[0]!;
+    // A porta recebe `tokenHash`, e o que vai para o banco é isso. Uma
+    // `verification_tokens` com o valor em claro transformaria um vazamento de
+    // leitura de banco numa revogação em massa disparável por qualquer um — e,
+    // pior, num rastro de quem teve a conta invadida.
+    assert.notEqual(token.tokenHash as string, TOKEN_EM_CLARO);
+    assert.equal(
+      token.tokenHash as string,
+      createHash('sha256').update(TOKEN_EM_CLARO, 'utf8').digest('base64'),
+    );
+  });
+
+  void it('o token em claro NÃO aparece em log nenhum (critério 11 das histórias de token)', async () => {
+    const bancada = montar(contaDaVitima());
+
+    await bancada.avisar(AVISO);
+
+    // O valor em claro existe na função e no corpo do e-mail, e em nenhum outro
+    // lugar. Registrar "o aviso saiu" com o link dentro transforma o log numa
+    // cópia da credencial, legível por quem investiga qualquer outra coisa.
+    const tudoQueFoiRegistrado = JSON.stringify(bancada.registros);
+    assert.ok(
+      !tudoQueFoiRegistrado.includes(TOKEN_EM_CLARO),
+      'o link do "Não fui eu" vazou para o log',
+    );
+  });
+
+  void it('conta apagada: não emite token nenhum', async () => {
+    const bancada = montar(undefined);
+
+    await bancada.avisar(AVISO);
+
+    // Sem conta não há para quem escrever, e um token emitido para ninguém é
+    // uma credencial viva sem destinatário — o pior estado possível.
+    assert.deepEqual(bancada.tokens, []);
+  });
+
 
   void it('conta apagada entre a detecção e o aviso: não envia nada', async () => {
     const bancada = montar(undefined);

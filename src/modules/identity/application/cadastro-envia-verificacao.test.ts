@@ -186,6 +186,18 @@ class RepositorioDeCadastro implements IdentityRepository {
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
   }
+
+  registrarPedidoDeExclusao(): Promise<undefined> {
+    return naoUsado('registrarPedidoDeExclusao');
+  }
+
+  contasAExpurgar(): Promise<readonly UserId[]> {
+    return naoUsado('contasAExpurgar');
+  }
+
+  expurgarConta(): Promise<boolean> {
+    return naoUsado('expurgarConta');
+  }
 }
 
 interface Bancada {

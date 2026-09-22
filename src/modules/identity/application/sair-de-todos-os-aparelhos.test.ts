@@ -273,6 +273,18 @@ class BancoDeMentira implements IdentityRepository {
   marcarEmailVerificado(): Promise<void> {
     throw new Error('marcarEmailVerificado: nenhum caso deste arquivo deveria chegar aqui');
   }
+
+  registrarPedidoDeExclusao(): Promise<undefined> {
+    throw new Error('registrarPedidoDeExclusao: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  contasAExpurgar(): Promise<readonly UserId[]> {
+    throw new Error('contasAExpurgar: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  expurgarConta(): Promise<boolean> {
+    throw new Error('expurgarConta: nenhum caso deste arquivo deveria chegar aqui');
+  }
 }
 
 interface Bancada {

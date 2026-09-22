@@ -76,6 +76,9 @@ function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
     conferirTokenDeVerificacao: recusar('conferirTokenDeVerificacao'),
     invalidarTokensPendentes: recusar('invalidarTokensPendentes'),
     marcarEmailVerificado: recusar('marcarEmailVerificado'),
+    registrarPedidoDeExclusao: recusar('registrarPedidoDeExclusao'),
+    contasAExpurgar: recusar('contasAExpurgar'),
+    expurgarConta: recusar('expurgarConta'),
   };
 }
 

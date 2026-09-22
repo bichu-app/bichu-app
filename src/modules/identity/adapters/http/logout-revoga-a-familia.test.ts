@@ -259,6 +259,18 @@ class RepositorioFalso implements IdentityRepository {
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
   }
+
+  registrarPedidoDeExclusao(): Promise<undefined> {
+    return naoUsado('registrarPedidoDeExclusao');
+  }
+
+  contasAExpurgar(): Promise<readonly UserId[]> {
+    return naoUsado('contasAExpurgar');
+  }
+
+  expurgarConta(): Promise<boolean> {
+    return naoUsado('expurgarConta');
+  }
 }
 
 const TOKEN_DE_ACESSO = 'acesso-da-tutora';

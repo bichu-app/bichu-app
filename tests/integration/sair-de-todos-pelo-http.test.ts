@@ -240,6 +240,8 @@ before(async () => {
     avisarTitular: criarAvisoDeReusoAoTitular({
       repositorio,
       mailer,
+      ids,
+      baseDaWeb: config.publicBaseUrl,
       registrarOcorrencia: (dados, mensagem) => {
         console.warn(mensagem, dados);
       },

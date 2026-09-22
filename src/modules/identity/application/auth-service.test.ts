@@ -263,6 +263,18 @@ class RepositorioFalso implements IdentityRepository {
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
   }
+
+  registrarPedidoDeExclusao(): Promise<undefined> {
+    return naoUsado('registrarPedidoDeExclusao');
+  }
+
+  contasAExpurgar(): Promise<readonly UserId[]> {
+    return naoUsado('contasAExpurgar');
+  }
+
+  expurgarConta(): Promise<boolean> {
+    return naoUsado('expurgarConta');
+  }
 }
 
 interface Bancada {
@@ -440,6 +452,10 @@ void describe('reuso de refresh token (BICHUS-15, critérios 4 e 10)', () => {
         userId: VITIMA,
         ocorridoEm: AGORA,
         correlationId: CONTEXTO.correlationId,
+        // BICHUS-215: o aviso carrega o HMAC de quem APRESENTOU o token
+        // reusado, e nao da vitima. E o unico rastro forense daquele instante,
+        // e ele so existe aqui -- a bancada nao configura HMAC, entao e nulo.
+        ipHmac: null,
       },
     ]);
 
