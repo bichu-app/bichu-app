@@ -102,6 +102,14 @@ function valoresDeIntegracao() {
 
     // Hex de 64 caracteres: app-config.ts recusa qualquer outro tamanho.
     TAG_CODE_KEY: randomBytes(32).toString('hex'),
+    // A chave do INDICE CEGO (ADR-0004, Emenda 1), exigida sem padrao desde a
+    // migracao 20260921000001. Ela faltava aqui, e a conferencia logo abaixo
+    // derrubava a geracao antes de a pilha subir -- reprovando, que e o
+    // comportamento certo, mas deixando a suite de integracao inalcancavel de
+    // dentro de worktree. Sorteada SEPARADAMENTE de `TAG_CODE_KEY`: app-config
+    // recusa a subida se as duas forem iguais, e tem razao, porque a mesma
+    // chave no indice e no envelope faria um dump entregar o codigo da tag.
+    TAG_CODE_INDEX_KEY: randomBytes(32).toString('hex'),
     IP_HMAC_KEY: randomBytes(32).toString('base64'),
     JWT_ACTIVE_KID: `${MARCA}-ativa`,
     JWT_NEXT_KID: `${MARCA}-rotacao`,

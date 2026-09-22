@@ -99,6 +99,16 @@ services:
     build:
       context: ../..
       target: migrador
+      # `BUILD_COMMIT` passou a ser EXIGIDO pelo Dockerfile em todo alvo, e sem
+      # ele o build reprova antes de qualquer coisa -- que e o portao fazendo o
+      # que deve. Faltava declarar o argumento aqui, e o resultado era a suite
+      # de integracao inalcancavel de dentro de worktree. Padrao vazio, como no
+      # `compose.yaml` da raiz: `:?` derrubaria tambem `down` e `config`, que
+      # nao constroem nada, e quem precisa reprovar e o build.
+      #
+      #   BUILD_COMMIT=$(git rev-parse HEAD) npm run test:integration
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 256m
     env_file: [../../.env.integracao]
     depends_on:
@@ -116,6 +126,16 @@ services:
     build:
       context: ../..
       target: dev
+      # `BUILD_COMMIT` passou a ser EXIGIDO pelo Dockerfile em todo alvo, e sem
+      # ele o build reprova antes de qualquer coisa -- que e o portao fazendo o
+      # que deve. Faltava declarar o argumento aqui, e o resultado era a suite
+      # de integracao inalcancavel de dentro de worktree. Padrao vazio, como no
+      # `compose.yaml` da raiz: `:?` derrubaria tambem `down` e `config`, que
+      # nao constroem nada, e quem precisa reprovar e o build.
+      #
+      #   BUILD_COMMIT=$(git rev-parse HEAD) npm run test:integration
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 1g
     env_file: [../../.env.integracao]
     environment:
