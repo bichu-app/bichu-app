@@ -155,15 +155,20 @@ passaram, porque `flutter analyze` e `flutter test` rodam na máquina virtual do
 Dart e nunca tocam no Gradle. A mesma classe já tinha sido corrigida no dia
 anterior e voltou.
 
-Custo medido nesta máquina, só da parte cara (`apk`):
+Custo medido em 22/09/2026, com `/usr/bin/time -p`, APK de 75,3 MB:
 
-| cenário | Gradle | ponta a ponta |
+| leg | estado dos caches | ponta a ponta |
 |---|---|---|
-| tudo frio | — | 4min20 |
-| distribuição quente, `build/` frio | 38,4 s | ~2 min |
-| tudo quente, sem mudança em Dart | 4,0 s | ~43 s |
+| `make apk` | `build/` frio, distribuição do Gradle quente | 35,6 s |
+| `make apk` | tudo quente, sem mudança em Dart | 7,6 s |
+| `make verificar-app` | `pub get` + `analyze` + 750 testes | 37,0 s |
+| o que este commit acrescentou a `make verificar` | — | 0,22 s |
 
-Contra uma rodada inteira de integração, é ruído.
+`make verificar` inteiro não foi cronometrado aqui: ele constrói imagens Docker
+e sonda uma pilha compartilhada. O número que sustenta a separação é o da última
+linha: o laço de quem desenvolve ficou 0,22 s mais lento, e nada mais.
+
+Contra uma rodada inteira de integração, `apk` é ruído.
 
 **O que faz a regra valer.** Duas camadas, e nenhuma delas é automática o
 bastante para dispensar a primeira:

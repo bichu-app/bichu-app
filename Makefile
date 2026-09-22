@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-app fechar-integracao verificar-recibo-de-fechamento-autoteste backup restore pin-digests
+.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-app fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -366,17 +366,24 @@ verificar-app: ## a metade Flutter: analise e suite de widget (job `app` da este
 #
 # `apk` precisa de JDK 17, do SDK do Android (`platforms;android-37.0`) e da
 # distribuicao do Gradle -- nada disso e premissa desta maquina, e nenhum deles
-# e necessario para escrever uma rota ou um widget. Medido nesta maquina:
+# e necessario para escrever uma rota ou um widget.
 #
-#   tudo frio                                  4min20 ponta a ponta
-#   distribuicao quente, `build/` frio         38,4 s de Gradle, ~2 min
-#   tudo quente, sem mudanca em Dart            4,0 s de Gradle, ~43 s
+# MEDIDO NESTE WORKTREE em 22/09/2026, com `/usr/bin/time -p`, APK de 75,3 MB:
 #
-# Contra uma rodada inteira de integracao, e ruido. Contra o ciclo de editar e
-# rodar teste, que e de segundos, e proibitivo. Por isso `verificar` continua
-# sem `apk` e este alvo existe separado. NAO MOVA `apk` PARA `verificar`: o
-# laco fica lento, e laco lento e desligado -- que e como a verificacao morre
-# de verdade, nao por alguem discordar dela.
+#   make apk, `build/` frio, distribuicao do Gradle quente    35,6 s
+#   make apk, tudo quente, sem mudanca em Dart                 7,6 s
+#   make verificar-app (pub get + analyze + 750 testes)       37,0 s
+#   os portoes que este commit acrescentou a `verificar`       0,22 s
+#
+# Nao medi `make verificar` inteiro: ele constroi imagens Docker e sonda uma
+# pilha que outros agentes estao usando agora. O numero que importa para o
+# argumento e o de cima: o que entrou no laco de quem desenvolve custa 0,22 s.
+#
+# Contra uma rodada inteira de integracao, `apk` e ruido. Contra o ciclo de
+# editar e rodar teste, que e de segundos, e proibitivo. Por isso `verificar`
+# continua sem `apk` e este alvo existe separado. NAO MOVA `apk` PARA
+# `verificar`: o laco fica lento, e laco lento e desligado -- que e como a
+# verificacao morre de verdade, nao por alguem discordar dela.
 #
 # COMO ELA SE FAZ CUMPRIR, e a resposta honesta e em duas camadas
 #
@@ -398,22 +405,34 @@ RECIBO_DE_FECHAMENTO := fechamento.local.txt
 fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + Flutter + APK de verdade
 	@echo "fechamento de integracao: verificar -> verificar-app -> apk."
 	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade."
-	@echo "  Medido nesta maquina: ~43 s tudo quente, 4min20 tudo frio."
+	@echo "  Medido neste worktree: apk em 7,6 s quente e 35,6 s com \`build/\` frio."
 	@rm -f $(RECIBO_DE_FECHAMENTO)
 	@$(MAKE) --no-print-directory verificar
 	@$(MAKE) --no-print-directory verificar-app
 	@$(MAKE) --no-print-directory apk
+	@$(MAKE) --no-print-directory carimbar-fechamento
+
+# O carimbo mora num alvo PROPRIO para poder ser exercitado sem compilar um APK
+# de 75 MB antes. Quem le o recibo tem as sete iscas de
+# `verificar-recibo-de-fechamento.sh`; quem o ESCREVE e esta receita, e uma
+# regra provada so de um lado e meia regra.
+#
+# NAO CHAME ESTE ALVO A MAO para pular o fechamento: carimbar sem ter rodado a
+# lista produz um recibo que afirma o que ninguem provou, que e pior que nao
+# ter recibo -- o gancho passa a aprovar em vez de calar.
+carimbar-fechamento: ## carimba o recibo do fechamento no commit atual (chamado por fechar-integracao)
 	@commit=$$(git rev-parse --verify HEAD 2>/dev/null); \
-	 test -n "$$commit" || { echo "fechamento: sem commit em HEAD; nao ha o que carimbar"; exit 1; }; \
-	 sujo=$$(git status --porcelain | head -1); \
+	 test -n "$$commit" || { echo "fechamento: sem commit em HEAD; nao ha o que carimbar" >&2; exit 1; }; \
+	 if [ -z "$$(git status --porcelain)" ]; then arvore=limpa; else arvore=suja; fi; \
 	 { echo "commit=$$commit"; \
-	   echo "arvore=$$(test -z "$$sujo" && echo limpa || echo suja)"; \
-	   echo "em=$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } > $(RECIBO_DE_FECHAMENTO)
-	@echo ""
-	@echo "FECHAMENTO VERDE. Recibo em $(RECIBO_DE_FECHAMENTO) (fora do git, por arvore)."
-	@grep -q '^arvore=suja$$' $(RECIBO_DE_FECHAMENTO) && \
-	   echo "  AVISO: a arvore estava suja. O que foi provado nao e o que esta commitado," && \
-	   echo "         e o gancho \`pre-push\` vai recusar este recibo." || true
+	   echo "arvore=$$arvore"; \
+	   echo "em=$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } > $(RECIBO_DE_FECHAMENTO); \
+	 echo ""; \
+	 echo "recibo em $(RECIBO_DE_FECHAMENTO) (fora do git, por arvore): $$commit, arvore $$arvore"; \
+	 if [ "$$arvore" = "suja" ]; then \
+	   echo "  AVISO: a arvore estava suja. O que foi provado nao e o que esta commitado,"; \
+	   echo "         e o gancho \`pre-push\` vai recusar este recibo."; \
+	 fi
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
 	@mkdir -p backup
