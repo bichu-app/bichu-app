@@ -942,3 +942,186 @@ void describe('o alerta nasce junto do caso, e diz a verdade desde o primeiro in
     assert.equal(estados.size, 4);
   });
 });
+
+/**
+ * A decisão humana sobre o candidato (BICHUS-86, critérios 4, 5 e 12).
+ *
+ * O que se prova aqui é **o efeito da decisão sobre a conversa**, que é a parte
+ * que nenhum banco pega: se `aoConfirmarCorrespondencia` sai do `if`, o Postgres
+ * continua feliz e o tutor passa a receber o canal aberto de alguém que ele
+ * acabou de dizer que não achou o pet dele.
+ *
+ * A autorização também está aqui, e é deliberadamente redundante com
+ * `autorizacao-do-decisor-na-clausula-where.test.ts` e com a integração: aquele
+ * lê o SQL, a integração o executa, e este cobra que a camada de cima **não
+ * invente um segundo caminho** — um `if` que devolvesse a linha do terceiro
+ * antes de o repositório recusar passaria nos outros dois.
+ */
+void describe('a decisão do candidato', () => {
+  const contextoDoDono = chamador(DONO);
+
+  function comCandidato(
+    extra: Partial<NonNullable<EstadoDoRepositorio['candidato']>> = {},
+  ): EstadoDoRepositorio {
+    return { candidato: { dono: DONO, status: 'suggested', ...extra } };
+  }
+
+  void it('confirmar abre a conversa mediada com quem registrou o achado', async () => {
+    const { casos, registro } = servico(comCandidato());
+
+    const decidido = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
+
+    assert.equal(decidido.status, 'confirmed');
+    assert.equal(registro.conversasAbertas.length, 1, 'confirmar não abriu a conversa');
+    const aberta = registro.conversasAbertas[0];
+    assert.equal(aberta?.foundReportId, ACHADO);
+    assert.equal(
+      aberta?.achadorComConta,
+      RELATOR,
+      'a conversa nasceu sem o lado de quem achou: sem token e sem `finder_user_id`, ' +
+        'quem registrou o achado não volta a ela nunca mais',
+    );
+    assert.equal(
+      aberta?.petId,
+      PET,
+      'o pet precisa vir do CASO que casou: o achado avulso não tem `pet_id`',
+    );
+    assert.equal(aberta?.nomeDoPet, 'Nina');
+    assert.equal(
+      aberta?.rotuloDaArea,
+      'Vila Madalena, São Paulo',
+      'a primeira mensagem do sistema precisa dizer ONDE, e o rótulo sai do achado',
+    );
+  });
+
+  void it('rejeitar NÃO abre conversa nenhuma', async () => {
+    const { casos, registro } = servico(comCandidato());
+
+    const decidido = await casos.decidirCandidato(CASO, CANDIDATO, 'rejected', contextoDoDono);
+
+    assert.equal(decidido.status, 'rejected');
+    assert.deepEqual(
+      registro.conversasAbertas,
+      [],
+      'rejeitar abriu o canal com quem o tutor acabou de dizer que não achou o pet dele',
+    );
+  });
+
+  void it('um TERCEIRO não decide, e recebe 404 e não 403', async () => {
+    const { casos, registro } = servico(comCandidato());
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', chamador(OUTRO_TUTOR)),
+    );
+
+    assert.equal(erro.status, 404);
+    assert.notEqual(
+      erro.status,
+      403,
+      'um 403 confirmaria a existência de uma correspondência entre o pet de outra ' +
+        'pessoa e um achado, que é exatamente o que a decisão humana existe para não ' +
+        'afirmar sozinha (ADR-0021)',
+    );
+    assert.deepEqual(registro.conversasAbertas, []);
+    // O dono viajou no argumento: um `decidirCandidato` que esquecesse de
+    // passá-lo passaria numa asserção de resultado e reprova nesta.
+    assert.equal(registro.decidiu[0]?.dono, OUTRO_TUTOR);
+  });
+
+  void it('o candidato de outro caso do MESMO tutor não é decidido por este endereço', async () => {
+    const { casos } = servico(comCandidato());
+    const outroCaso = '018f3a2b-0000-7000-8000-0000000000d9' as CaseId;
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(outroCaso, CANDIDATO, 'confirmed', contextoDoDono),
+    );
+
+    assert.equal(erro.status, 404);
+  });
+
+  void it('REJEITADO NÃO VOLTA: confirmar depois de rejeitar é recusado', async () => {
+    // Seção 4.10 de `docs/03-arquitetura.md` e critério 12 da BICHUS-86, com a
+    // mesma frase nos dois: "rejeitado não volta".
+    const { casos, registro } = servico(comCandidato({ status: 'rejected', decididoPor: DONO }));
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono),
+    );
+
+    assert.equal(erro.status, 404);
+    assert.deepEqual(
+      registro.conversasAbertas,
+      [],
+      'desfazer uma rejeição abriu a conversa que a rejeição existia para não abrir',
+    );
+  });
+
+  void it('o reenvio da MESMA decisão devolve o mesmo candidato, e não 404', async () => {
+    // Critério 7: sem conexão, a confirmação entra numa fila — e fila reenvia.
+    // Um 404 aqui diria "não encontramos isso" logo depois de a ação ter dado
+    // certo, que é a tela quebrada que a fila offline produz.
+    const { casos, registro } = servico(comCandidato());
+
+    const primeira = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
+    const reenvio = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
+
+    assert.equal(reenvio.id, primeira.id);
+    assert.equal(reenvio.status, 'confirmed');
+    assert.equal(
+      registro.conversasAbertas.length,
+      1,
+      'o reenvio abriu uma SEGUNDA conversa, e o tutor passou a ver duas linhas para a ' +
+        'mesma pessoa',
+    );
+  });
+
+  void it('o reenvio do TERCEIRO continua 404, e a leitura do já decidido não o relaxa', async () => {
+    const { casos } = servico(comCandidato({ status: 'confirmed', decididoPor: DONO }));
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', chamador(OUTRO_TUTOR)),
+    );
+
+    assert.equal(erro.status, 404);
+  });
+
+  void it('a decisão de caso já encerrado é recusada', async () => {
+    const { casos, registro } = servico(comCandidato({ casoAberto: false }));
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono),
+    );
+
+    assert.equal(erro.status, 404);
+    assert.deepEqual(registro.conversasAbertas, []);
+  });
+
+  void it('as DUAS decisões entram na trilha, com quem decidiu e o que decidiu', async () => {
+    // Rejeição é irreversível: ela precisa de autor e instante em lugar
+    // auditável, que é a mesma razão de `match_candidates_decisao_tem_autor`.
+    for (const decisao of ['confirmed', 'rejected'] as const) {
+      const { casos, eventos } = servico(comCandidato());
+      await casos.decidirCandidato(CASO, CANDIDATO, decisao, contextoDoDono);
+
+      const evento = eventos.find((e) => e.action === 'match.candidate_decided');
+      assert.ok(evento !== undefined, `a decisão \`${decisao}\` não entrou na trilha`);
+      assert.equal(evento.actorUserId, DONO);
+      assert.equal(evento.resourceId, CANDIDATO);
+      assert.equal((evento.metadata as { decision?: string }).decision, decisao);
+    }
+  });
+
+  void it('a resposta da decisão não carrega o dono do achado nem o id do caso do pet', async () => {
+    // O que sai é `MatchCandidate`. `pet_id` e o identificador de quem
+    // registrou o achado não estão no schema, e o portão de contrato só procura
+    // o que SUMIU — propriedade a mais passa por ele.
+    const { casos } = servico(comCandidato());
+    const decidido = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
+
+    // A camada de aplicação ainda os carrega, de propósito: é com eles que ela
+    // abre a conversa. Quem os deixa de fora é `comoRespostaDoCandidato`, e o
+    // que se cobra aqui é que eles CHEGUEM, para que a borda tenha o que omitir.
+    assert.equal(decidido.petId, PET);
+    assert.equal(decidido.relatorUserId, RELATOR);
+  });
+});
