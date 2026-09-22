@@ -148,6 +148,24 @@ o `DATABASE_URL` do ambiente está apontando para outro lugar.
 
 O caminho inteiro está em `infra/integracao/`, e cada arquivo explica o porquê.
 
+### `git stash` não é seguro neste repositório
+
+A pilha de stash mora no diretório git comum, não em cada worktree: os cerca de
+60 worktrees deste repositório compartilham uma pilha só. Dois agentes que
+empilham em paralelo dão `pop` no trabalho um do outro, e nada na saída do
+comando avisa. Já aconteceu: duas medições de base com 76 segundos de diferença
+terminaram com cada worktree segurando o trabalho do outro.
+
+Para medir a base, use `git worktree add` a partir de um ref limpo, ou meça num
+clone descartável.
+
+Se você já perdeu trabalho assim, ele não sumiu: o commit de stash vira objeto
+inalcançável. Ancore antes de qualquer outra coisa, com
+`git update-ref refs/resgate/<nome> <sha>`, e só depois mexa no worktree. Um
+stash feito com `-u` guarda os não rastreados num terceiro pai (`<sha>^3`);
+restaurar só a árvore principal perde esses arquivos.
+
+
 ## Homologação
 
 Existe um ambiente de homologação de pé, e ele **não** é `bichu.app`:
