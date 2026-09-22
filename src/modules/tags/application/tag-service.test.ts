@@ -31,6 +31,8 @@ import type {
 } from '../../../shared/types/brands.js';
 import { comoData, comoIso } from '../../../shared/time/clock.js';
 import { criarTagService, type Chamador } from './tag-service.js';
+import type { DesenhoDoQr } from '../domain/qr-da-tag.js';
+import type { RasterizadorDeQr } from '../ports/rasterizador-de-qr.js';
 import type {
   AvisoRecente,
   ContextoDoDono,
@@ -39,6 +41,7 @@ import type {
   NovoScan,
   ResultadoDaEmissao,
   TagDoTutor,
+  TagParaReimpressao,
   TagRepository,
   TagResolvida,
 } from '../ports/tag-repository.js';
@@ -54,6 +57,9 @@ const TAG = '018f3a2b-0000-7000-8000-0000000000dd' as TagId;
  * bancada exercita a volta da plaquinha digitada com hífen.
  */
 const CODIGO = 'GQSM-0XHB-T4D9-G31S';
+
+/** O mesmo código na forma canônica: é o que o cifrado guarda e o que o QR leva. */
+const CODIGO_CANONICO = 'GQSM0XHBT4D9G31S';
 const AGORA = 1_800_000_000_000;
 
 function petPadrao(): TagResolvida['pet'] {
@@ -75,6 +81,8 @@ interface EstadoDoRepositorio {
   avisoRecente?: AvisoRecente;
   jaAvisou?: boolean;
   emissao?: ResultadoDaEmissao;
+  /** A tag que a reimpressão do QR encontra, quando o dono e o par batem. */
+  reimpressao?: TagParaReimpressao;
 }
 
 interface Contadores {
@@ -84,6 +92,8 @@ interface Contadores {
   avisosGravados: NovoAviso[];
   tagsEmitidas: NovaTag[];
   donoUsadoNaBusca: (UserId | undefined)[];
+  /** Os argumentos de CADA chamada de `buscarParaReimpressao`, na ordem. */
+  buscasParaReimpressao: { petId: PetId; tagId: TagId; dono: UserId }[];
 }
 
 function repositorioDeMemoria(
@@ -96,6 +106,7 @@ function repositorioDeMemoria(
     avisosGravados: [],
     tagsEmitidas: [],
     donoUsadoNaBusca: [],
+    buscasParaReimpressao: [],
   };
 
   const repositorio: TagRepository = {
@@ -114,6 +125,16 @@ function repositorioDeMemoria(
     },
     listarTagsDoPet: (_petId, dono) =>
       Promise.resolve(dono === DONO ? ([] as readonly TagDoTutor[]) : undefined),
+    buscarParaReimpressao: (petId, tagId, dono) => {
+      contadores.buscasParaReimpressao.push({ petId, tagId, dono });
+      // O repositório de verdade resolve os TRÊS predicados no `WHERE`. Aqui o
+      // vínculo é reproduzido inteiro: pet errado, tag errada e tutor errado
+      // recebem o mesmo nada, e o `undefined` que sai daqui é indistinguível
+      // entre os três — que é a propriedade do ADR-0021.
+      if (estado.reimpressao === undefined) return Promise.resolve(undefined);
+      if (dono !== DONO || petId !== PET || tagId !== TAG) return Promise.resolve(undefined);
+      return Promise.resolve(estado.reimpressao);
+    },
     emitir: (nova) => {
       contadores.tagsEmitidas.push(nova);
       return Promise.resolve(
@@ -172,6 +193,19 @@ function servico(estado: EstadoDoRepositorio) {
     encrypt: (texto) => Promise.resolve(new TextEncoder().encode(texto)),
     decrypt: (bytes) => Promise.resolve(new TextDecoder().decode(bytes)),
   };
+  /**
+   * O rasterizador não é exercitado aqui: a prova de que o PNG decodifica mora
+   * em `adapters/external/png-do-qr.test.ts`, com um leitor de verdade. O que
+   * este dublê acrescenta é a contagem — ela é o que torna verificável a frase
+   * "quando a autorização recusa, **nada** chega a ser gerado".
+   */
+  const desenhosRasterizados: DesenhoDoQr[] = [];
+  const rasterizador: RasterizadorDeQr = {
+    paraPng: (desenho) => {
+      desenhosRasterizados.push(desenho);
+      return Promise.resolve(Buffer.from('png-de-teste'));
+    },
+  };
 
   return {
     tags: criarTagService({
@@ -189,9 +223,11 @@ function servico(estado: EstadoDoRepositorio) {
       baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
       baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
       chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
+      rasterizador,
     }),
     contadores,
     eventos,
+    desenhosRasterizados,
   };
 }
 
@@ -525,5 +561,154 @@ void describe('createFoundReportFromTag: o aviso de quem achou', () => {
     const { tags, contadores } = servico({ tag: tagAtiva() });
     await tags.avisar(CODIGO, chamador(undefined), {});
     assert.equal(contadores.avisosGravados[0]?.foundAt, AGORA);
+  });
+});
+
+/**
+ * ISCA 3: a autorização da reimpressão do QR mora na cláusula `WHERE`.
+ *
+ * `getPetTagQrImage` é a segunda superfície da API que revela o código em claro
+ * — e a única que o revela mais de uma vez. Ela é, por isso, o pior lugar do
+ * produto para um BOLA: o que vaza não é um registro, é a credencial impressa na
+ * coleira de um animal de outra pessoa, e ela é irrevogável sem reemitir a
+ * plaquinha.
+ *
+ * Os casos abaixo são escritos para que **sair do `WHERE` reprove**, e não para
+ * conferir que hoje está certo:
+ *
+ * - O serviço faz **uma** chamada ao repositório, e ela leva o dono. Duas
+ *   chamadas seriam "busca a tag e compara o tutor depois", que é a forma errada
+ *   que parece certa na revisão (ADR-0021, risco médio registrado).
+ * - O `dono` que chega ao repositório é o do chamador, e **nunca** um valor do
+ *   caminho. Um serviço que passasse o dono lido da própria linha encontrada
+ *   satisfaria "tem dono no WHERE" e não autorizaria nada.
+ * - Nada do PNG é gerado quando a busca vem vazia. Decifrar antes de autorizar
+ *   colocaria o código em claro na memória de uma requisição que não tinha
+ *   direito a ele.
+ */
+void describe('ISCA 3: reimprimir o QR autoriza pela consulta, não por comparação', () => {
+  const ATIVA: TagParaReimpressao = {
+    status: 'active',
+    codeCiphertext: new TextEncoder().encode(CODIGO_CANONICO),
+  };
+
+  void it('gera o arquivo para o dono, com o desenho da URL desta tag', async () => {
+    const { tags, desenhosRasterizados } = servico({ reimpressao: ATIVA });
+
+    const imagem = await tags.imagemDoQr(PET, TAG, DONO);
+
+    assert.equal(imagem.codeSuffix, CODIGO_CANONICO.slice(-4));
+    assert.equal(desenhosRasterizados.length, 1);
+    // O desenho é o da versão 4, que é a medida do código de 16 caracteres
+    // contra a base desta bancada. Ver `domain/qr-da-tag.test.ts`.
+    assert.equal(desenhosRasterizados[0]?.medida.versao, 4);
+  });
+
+  void it('faz UMA consulta, e o dono do chamador vai nela', async () => {
+    const { tags, contadores } = servico({ reimpressao: ATIVA });
+
+    await tags.imagemDoQr(PET, TAG, DONO);
+
+    assert.equal(
+      contadores.buscasParaReimpressao.length,
+      1,
+      'Mais de uma consulta é o sinal de "busca primeiro, compara o tutor depois".',
+    );
+    assert.deepEqual(contadores.buscasParaReimpressao[0], { petId: PET, tagId: TAG, dono: DONO });
+    assert.equal(
+      contadores.resolverPorCodigo,
+      0,
+      'A reimpressão não pode passar pela busca só por código: ela não leva dono.',
+    );
+  });
+
+  void it('tag de outro tutor é 404, e o arquivo nunca chega a ser gerado', async () => {
+    const { tags, contadores, desenhosRasterizados } = servico({ reimpressao: ATIVA });
+
+    const erro = await capturar(() => tags.imagemDoQr(PET, TAG, OUTRO_TUTOR));
+
+    assert.equal(erro.status, 404, 'Autorização recusada responde 404, nunca 403 (ADR-0021).');
+    assert.equal(contadores.buscasParaReimpressao[0]?.dono, OUTRO_TUTOR);
+    assert.equal(
+      desenhosRasterizados.length,
+      0,
+      'Decifrar ou desenhar antes de autorizar põe o código em claro na memória ' +
+        'de uma requisição que não tinha direito a ele.',
+    );
+  });
+
+  void it('tag inexistente e tag de outro tutor respondem o MESMO corpo', async () => {
+    const semNada = await capturar(() => servico({}).tags.imagemDoQr(PET, TAG, DONO));
+    const deOutro = await capturar(() =>
+      servico({ reimpressao: ATIVA }).tags.imagemDoQr(PET, TAG, OUTRO_TUTOR),
+    );
+
+    // A asserção não lê campo por campo: compara o problema inteiro. Um ramo
+    // que distinguisse os casos quebra aqui mesmo que quem o escreveu não
+    // conheça este teste.
+    const comoTexto = (erro: AppError): string =>
+      JSON.stringify({
+        type: erro.problemType,
+        status: erro.status,
+        title: erro.title,
+        detail: erro.detail,
+        nextAction: erro.nextAction,
+        errors: erro.errors,
+      });
+
+    assert.equal(comoTexto(semNada), comoTexto(deOutro));
+  });
+
+  void it('a tag certa sob o PET ERRADO é 404: o par inteiro entra na consulta', async () => {
+    const { tags } = servico({ reimpressao: ATIVA });
+    const outroPet = '018f3a2b-0000-7000-8000-0000000000ee' as PetId;
+
+    const erro = await capturar(() => tags.imagemDoQr(outroPet, TAG, DONO));
+
+    assert.equal(
+      erro.status,
+      404,
+      'Buscar só por `tagId` deixaria a tag de um pet responder sob o id de outro.',
+    );
+  });
+
+  void it('tag revogada é 410, e não 404: a plaquinha existe e está morta', async () => {
+    const { tags } = servico({
+      reimpressao: { status: 'revoked', codeCiphertext: null },
+    });
+
+    const erro = await capturar(() => tags.imagemDoQr(PET, TAG, DONO));
+
+    assert.equal(erro.status, 410);
+  });
+
+  void it('cifrado apagado numa tag ativa também é 410, e não um PNG de lixo', async () => {
+    // A revogação apaga `code_ciphertext` por restrição do ADR-0004. Se a linha
+    // chegar aqui ativa e sem cifrado, não há código para codificar: gerar um QR
+    // mesmo assim é o modo de falha caro desta história.
+    const { tags } = servico({ reimpressao: { status: 'active', codeCiphertext: null } });
+
+    const erro = await capturar(() => tags.imagemDoQr(PET, TAG, DONO));
+
+    assert.equal(erro.status, 410);
+  });
+
+  void it('código decifrado que não normaliza para ele mesmo falha ruidosamente', async () => {
+    // Critério 9 da história: a normalização da emissão e a da resolução são a
+    // mesma e são idempotentes. Um cifrado de formato anterior (26 caracteres,
+    // antes da BICHUS-154) produziria uma plaquinha impressa que a própria
+    // plataforma não resolve — e o formato impresso é irreversível.
+    const { tags } = servico({
+      reimpressao: {
+        status: 'active',
+        codeCiphertext: new TextEncoder().encode('7K2F9QJB3XR05TWD8MNCVH0000'),
+      },
+    });
+
+    await assert.rejects(
+      () => tags.imagemDoQr(PET, TAG, DONO),
+      /não normaliza para ele mesmo/u,
+      'Um código que a resolução recusaria precisa derrubar a geração, e não virar QR.',
+    );
   });
 });

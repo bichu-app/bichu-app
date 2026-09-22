@@ -1829,6 +1829,11 @@ paths:
           content:
             image/png:
               schema: { type: string, format: binary }
+        # `petId` e `tagId` declaram `format: uuid`, entao a borda PODE recusar o
+        # parametro -- e `vigiarParametrosDasRotas` derruba a subida quando uma
+        # operacao nessa situacao nao declara 400. Nao e escolha de estilo: sem
+        # esta linha a aplicacao nao sobe (BICHUS-63).
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '410':
           description: Tag revogada. O QR nao e reimpresso.
