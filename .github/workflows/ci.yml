@@ -76,6 +76,19 @@ jobs:
       - name: "`make up` sem argumento nao cai no bind havendo par livre"
         run: python3 infra/verificacao/verificar_escolha_de_portas.py
 
+      # BICHUS-213. O passo `o alvo de producao constroi, e morre
+      # pelo motivo certo`, la no job `integracao`, aprova UMA morte e precisa
+      # reprovar as outras -- um portao que aprova qualquer morte nao prova
+      # nada, e era exatamente esse o risco de trocar a sonda por uma
+      # conferencia de log.
+      #
+      # Aqui e nao la porque o juizo nao precisa de docker: ele le o log e a
+      # lista `SEGREDOS_DE_RUNTIME` do codigo. Cada isca esta em
+      # `iscas/boot-prod-*.log`, e a que precisa APROVAR foi capturada da
+      # execucao 35721851040, que e a vermelha de hoje.
+      - name: as iscas do juizo do alvo prod reprovam
+        run: python3 infra/verificacao/verificar_boot_do_alvo_prod.py --autoteste
+
       # Absorcao da BICHUS-210: o Dockerfile reprova o build sem `BUILD_COMMIT`
       # e o compose so repassa o que estiver no AMBIENTE, entao quem poe o valor
       # la e o Makefile. Este passo roda POR DENTRO do make de proposito -- ele
@@ -585,10 +598,43 @@ jobs:
             echo "limite de $c aplicado: $limite bytes"
           done
 
-      - name: o alvo de producao tambem constroi e sobe
-        # A variavel BUILD_TARGET existe para trocar de alvo; um alvo `prod`
-        # que ninguem constroi quebra no dia da implantacao, que e o pior dia
-        # para descobrir. Aqui ele e construido e o processo e posto de pe.
+      # BICHUS-213. ESTE PASSO MUDOU DE PROMESSA EM 22/09, E VALE LER O PORQUE.
+      #
+      # Ate 22/09 ele dizia "constroi e SOBE", e a sonda era a prova. Isso
+      # funcionou ate a ADR-0022 entrar na `development`: em
+      # `NODE_ENV=production` o boot busca oito segredos no Secret Manager, e
+      # num runner do GitHub nao ha metadata server nem projeto -- o `.env`
+      # deste job aponta para `projeto-de-ci-descartavel`, que nao existe de
+      # proposito. O processo morre antes de ouvir a porta, e nao ha conserto
+      # para isso DENTRO da esteira.
+      #
+      # Medido na execucao 35721851040. E nao foi surpresa de todo: o passo
+      # ficou verde pela ultima vez em 19/09 as 16h26, no commit 6b923e2, que
+      # e ANTERIOR a ADR-0022. Entre um e outro o job morria mais cedo, entao
+      # este passo simplesmente nao chegava a rodar.
+      #
+      # Tres saidas foram consideradas. Um provedor de segredos falso para
+      # `NODE_ENV=production` criaria um caminho que producao nao usa, e um dia
+      # alguem confiaria nele. Tirar o passo da esteira deixaria o alvo `prod`
+      # sem nenhuma conferencia entre commits. Fica a terceira: o passo
+      # exercita o que da para exercitar sem gerenciador, e diz em voz alta o
+      # que deixou de provar.
+      #
+      # O QUE ELE PROVA: que a imagem `prod` constroi, que o processo EXECUTA
+      # (carrega o codigo, chega a sequencia de subida) e que ele morre
+      # EXATAMENTE no gerenciador de segredos, nomeando a fonte, o projeto que
+      # o `.env` declarou e a lista inteira de `SEGREDOS_DE_RUNTIME`.
+      #
+      # O QUE ELE NAO PROVA MAIS: que o alvo `prod` atende requisicao. Isso
+      # passou a ser verificacao de IMPLANTACAO, onde existe gerenciador de
+      # verdade -- `infra/verificacao/verificar-commit-no-health.mjs` e
+      # `verificar_borda.py` ja batem na sonda do ambiente hospedado.
+      #
+      # O juizo NAO aprova qualquer morte: morte em outro ponto, morte no
+      # adaptador de ambiente, morte parcial, projeto divergente e boot que
+      # SOBE sao todos reprovacao. As iscas disso rodam no job `rapidos`, e cada
+      # regra tem a sua: desligar uma faz o autoteste cair nomeando o caso.
+      - name: o alvo de producao constroi, e morre pelo motivo certo
         env:
           BUILD_TARGET: prod
           IMAGE_TAG: prod
@@ -596,15 +642,35 @@ jobs:
           docker compose build api
           docker run -d --name prova-prod --network bichu_default --env-file .env \
             -e NODE_ENV=production -e BIND_HOST=0.0.0.0 -e PORT=3000 bichu-app:prod
-          for _ in $(seq 1 20); do
-            if docker exec prova-prod node -e "fetch('http://127.0.0.1:3000/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
-              echo "alvo prod respondeu a sonda"; exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::a imagem do alvo prod nao ficou saudavel"
-          docker logs prova-prod
-          exit 1
+
+          # `docker wait` devolve o codigo de saida do processo. O `timeout`
+          # existe porque um container que NAO morre tambem e reprovacao, e
+          # precisa ser dita com outras palavras: sem ele o passo ficaria
+          # pendurado ate o limite do job e a causa sairia como "cancelado".
+          if saida=$(timeout 60 docker wait prova-prod); then :; else saida=nenhuma; fi
+          docker logs prova-prod > /tmp/prova-prod.log 2>&1
+          echo "saida do processo: $saida"
+          cat /tmp/prova-prod.log
+
+          # Lido do `.env` e nao escrito a mao: o portao confere que o boot
+          # procurou no projeto que ESTE job declarou. Copiar o nome para ca
+          # faria as duas pontas divergirem em silencio no dia em que uma
+          # mudasse.
+          projeto=$(sed -n 's/^SECRET_STORE_PROJECT=//p' .env | head -1)
+          test -n "$projeto" || { echo "::error::SECRET_STORE_PROJECT vazia no .env deste job"; exit 1; }
+
+          python3 infra/verificacao/verificar_boot_do_alvo_prod.py \
+            --log /tmp/prova-prod.log --saida "$saida" --projeto "$projeto" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          veredito="${PIPESTATUS[0]}"
+
+          echo "Este passo NAO prova que o alvo \`prod\` atende requisicao: sem gerenciador de segredos no runner, essa prova e de implantacao (BICHUS-213)." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$veredito" != "0" ]; then
+            echo "::error::o alvo prod nao morreu pelo motivo certo. Ver o veredito acima e o log do container"
+          fi
+          exit "$veredito"
 
       # BICHUS-210, nos alvos que a subida acima NAO exercita.
       #

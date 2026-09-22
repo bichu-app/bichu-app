@@ -1,0 +1,13 @@
+Error: Não foi possível ler 8 segredo(s) de runtime em gerenciador de segredos (projeto projeto-de-ci-descartavel, versão latest). A aplicação NÃO sobe sem eles:
+  - DATABASE_URL: Não foi possível falar com o gerenciador: fetch failed.
+  - IP_HMAC_KEY: Não foi possível falar com o gerenciador: fetch failed.
+  - TAG_CODE_KEY: Não foi possível falar com o gerenciador: fetch failed.
+  - TAG_CODE_INDEX_KEY: Não foi possível falar com o gerenciador: fetch failed.
+  - JWT_ACTIVE_PRIVATE_KEY: Não foi possível falar com o gerenciador: fetch failed.
+  - JWT_NEXT_PRIVATE_KEY: Não foi possível falar com o gerenciador: fetch failed.
+  - OBJECT_STORAGE_ACCESS_KEY_ID: Não foi possível falar com o gerenciador: fetch failed.
+  - OBJECT_STORAGE_SECRET_ACCESS_KEY: Não foi possível falar com o gerenciador: fetch failed.
+Cada nome acima é, ao mesmo tempo, o nome da variável de ambiente e o identificador do segredo no gerenciador — eles são iguais de propósito (ADR-0022). Veja .env.example e docs/07-devops.md §6.
+    at resolverSegredos (file:///app/dist/shared/config/segredos.js:131:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async main (file:///app/dist/bin/api.js:71:5)
