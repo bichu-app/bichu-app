@@ -90,43 +90,66 @@ class AntessalaDeAviso extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
-    return Padding(
-      padding: const EdgeInsets.all(BichuEspaco.e6),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: <Widget>[
-          Semantics(
-            header: true,
-            child: Text(
-              TextosDaAntessala.titulo(nomeDoPet),
-              style: textos.headlineSmall?.copyWith(color: cores.primary),
+    // `SafeArea` inferior, e o motivo esta no que `useSafeArea` NAO faz.
+    //
+    // `showModalBottomSheet(useSafeArea: true)` monta
+    // `SafeArea(bottom: false, child: content)`
+    // (`material/bottom_sheet.dart`, `_ModalBottomSheetRoute.buildPage`): ele
+    // protege o **topo** e devolve a base ao conteudo de proposito, porque so
+    // o conteudo sabe se ele rola. O nome do parametro sugere as duas bordas e
+    // entrega uma.
+    //
+    // Sem isto, `Agora não` termina a 24 dp da borda inferior e a barra de
+    // gestos come o toque: no iPhone a area segura inferior e de 34 dp e no
+    // Android a barra de tres botoes tem 48. O alvo continua com 48 dp e
+    // passa em qualquer verificacao de tamanho -- o que falta nao e tamanho, e
+    // distancia ate a borda. A recusa e o lado seguro desta tela (UX 10), e
+    // era justamente ela que ficava fora do alcance.
+    //
+    // `top: false` porque a rota ja cuidou do topo, e aplicar duas vezes
+    // empurraria a folha para baixo sem motivo.
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.all(BichuEspaco.e6),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            Semantics(
+              header: true,
+              child: Text(
+                TextosDaAntessala.titulo(nomeDoPet),
+                style: textos.headlineSmall?.copyWith(color: cores.primary),
+              ),
             ),
-          ),
-          const SizedBox(height: BichuEspaco.e4),
-          Text(TextosDaAntessala.corpo, style: textos.bodyLarge),
-          const SizedBox(height: BichuEspaco.e6),
-          BotaoPrimario(
-            rotulo: TextosDaAntessala.sim,
-            aoTocar: () => Navigator.of(context).pop(true),
-          ),
-          // `gapConsequenciaAlta`: as duas acoes levam a lugares diferentes e
-          // nao podem ficar coladas sob o polegar.
-          const SizedBox(height: BichuAlvoDeToque.gapConsequenciaAlta),
-          // **Mesmo peso visual**, como UX 10 exige textualmente. Um `TextButton`
-          // aqui -- que e o padrao da secundaria em F1.6 -- transformaria a
-          // recusa num sussurro, e a antessala viraria coacao com duas saidas
-          // no papel e uma na pratica. Contorno, e nao preenchimento, para que
-          // continue havendo uma acao principal; altura identica a da primaria.
-          OutlinedButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
-              side: BorderSide(color: cores.outline, width: BichuBorda.hairline),
+            const SizedBox(height: BichuEspaco.e4),
+            Text(TextosDaAntessala.corpo, style: textos.bodyLarge),
+            const SizedBox(height: BichuEspaco.e6),
+            BotaoPrimario(
+              rotulo: TextosDaAntessala.sim,
+              aoTocar: () => Navigator.of(context).pop(true),
             ),
-            child: const Text(TextosDaAntessala.agoraNao),
-          ),
-        ],
+            // `gapConsequenciaAlta`: as duas acoes levam a lugares diferentes
+            // e nao podem ficar coladas sob o polegar.
+            const SizedBox(height: BichuAlvoDeToque.gapConsequenciaAlta),
+            // **Mesmo peso visual**, como UX 10 exige textualmente. Um
+            // `TextButton` aqui -- que e o padrao da secundaria em F1.6 --
+            // transformaria a recusa num sussurro, e a antessala viraria
+            // coacao com duas saidas no papel e uma na pratica. Contorno, e
+            // nao preenchimento, para que continue havendo uma acao
+            // principal; altura identica a da primaria.
+            OutlinedButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
+                side:
+                    BorderSide(color: cores.outline, width: BichuBorda.hairline),
+              ),
+              child: const Text(TextosDaAntessala.agoraNao),
+            ),
+          ],
+        ),
       ),
     );
   }
