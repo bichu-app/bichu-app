@@ -91,23 +91,46 @@ import type { Instant, UserId } from '../../src/shared/types/brands.js';
 import { criarTrilhaDeAuditoria } from '../../src/modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarTokenSigner } from '../../src/modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../../src/modules/identity/adapters/persistence/kysely-identity-repository.js';
-import { registrarRotasDeIdentidade } from '../../src/modules/identity/adapters/http/routes.js';
+import {
+  registrarRotasDeIdentidade,
+  rotaDePedidoDeRedefinicao,
+} from '../../src/modules/identity/adapters/http/routes.js';
 import { criarAuthService } from '../../src/modules/identity/application/auth-service.js';
 import { criarAvisoDeReusoAoTitular } from '../../src/modules/identity/application/aviso-de-reuso.js';
 import type { IdentityRepository } from '../../src/modules/identity/ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
 import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
+import type { RateLimitEntry } from '../../src/shared/http/route-definition.js';
 
 /** O número do critério 9. Não é meta de desempenho e não afrouxa. */
 const TETO_EM_MS = 1000;
 
 /**
  * Quantas revogações são cronometradas. Mais de uma porque o que se afirma é o
- * pior caso; cinco porque cada rodada custa duas derivações PBKDF2 de 210 mil
- * iterações (login e troca de senha) e a suíte precisa continuar rodável na
- * máquina de quem desenvolve.
+ * pior caso — um p50 bom com um p99 ruim não protege ninguém.
+ *
+ * O número **não é escolhido aqui**: ele sai do teto que a própria rota de
+ * pedido de redefinição declara (BICHUS-178), porque é ele o limite real de
+ * quantos links uma conta consegue pedir. Escrever `5` à mão fazia a rodada 4
+ * receber `429` e o arquivo reprovar por um limite que o produto quer ter.
+ *
+ * Deixar os dois amarrados é o ponto: quem mexer no teto da rota move este
+ * número junto, e nenhum dos dois passa a mentir em silêncio. Se o teto sumir
+ * da rota, este arquivo **recusa a rodar** em vez de escolher um número
+ * sozinho — verificação que não consegue verificar reprova, não aprova.
  */
-const REPETICOES = 5;
+const TETO_DE_PEDIDOS_POR_EMAIL = rotaDePedidoDeRedefinicao.rateLimit?.find(
+  (regra: RateLimitEntry) => regra.dimension.includes('email'),
+)?.limit;
+if (TETO_DE_PEDIDOS_POR_EMAIL === undefined) {
+  throw new Error(
+    'a rota `requestPasswordReset` não declara mais teto por e-mail. Este arquivo pede um ' +
+      'link de redefinição por rodada e derivava o número de rodadas daquele teto; sem ele ' +
+      'não há como saber quantas rodadas cabem, e escolher um número aqui faria a suíte ' +
+      'reprovar por `429` numa rodada qualquer.',
+  );
+}
+const REPETICOES = TETO_DE_PEDIDOS_POR_EMAIL;
 
 /**
  * Até quando o observador insiste antes de desistir.
@@ -221,8 +244,8 @@ before(async () => {
    */
   const repositorioCronometrado: IdentityRepository = {
     ...repositorio,
-    async invalidarSessoes(id: UserId, agora: Instant): Promise<void> {
-      await repositorio.invalidarSessoes(id, agora);
+    async invalidarSessoes(id: UserId, barreira: Instant, agora: Instant): Promise<void> {
+      await repositorio.invalidarSessoes(id, barreira, agora);
       commitDaRevogacao = process.hrtime.bigint();
     },
   };

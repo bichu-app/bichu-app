@@ -11,6 +11,7 @@ import type { Instant } from '../../../shared/types/brands.js';
 import {
   barreiraDeContaNova,
   instanteDeEmissaoDoAcesso,
+  instanteDeRevogacao,
   prazosDeNovaFamilia,
   prazosDeRotacao,
   segundosRestantes,
@@ -216,5 +217,70 @@ void describe('emissão que espera a virada do segundo (BICHUS-132)', () => {
     // E a conta recém-criada, cuja barreira já vem truncada ao segundo, também
     // não paga: `barreiraDeContaNova` e este empurrão não se atropelam.
     assert.equal(instanteDeEmissaoDoAcesso(login, barreiraDeContaNova(login)), login);
+  });
+});
+
+/**
+ * A barreira que a revogação grava (SEC-006, duas revogações no mesmo segundo).
+ *
+ * O primeiro caso é a ISCA em forma de aritmética: com a barreira gravada em
+ * `agora` cru — o que o produto fazia — o token que a emissão empurrou para a
+ * virada do segundo sobrevive à revogação seguinte. Os outros são o contrapeso:
+ * fora desse aperto, `instanteDeRevogacao` não pode mudar absolutamente nada,
+ * porque o que ela grava é lido também pelo lado do refresh.
+ */
+void describe('instanteDeRevogacao(): a barreira alcança o `iat` empurrado', () => {
+  const emSegundos = (instante: number): number => Math.floor(instante / 1000);
+
+  /** Virada exata, para a aritmética ficar legível. */
+  const VIRADA = 1_789_734_320_000 as Instant;
+  const PRIMEIRA = (VIRADA + 288) as Instant;
+  const LOGIN = (VIRADA + 400) as Instant;
+  const SEGUNDA = (VIRADA + 900) as Instant;
+
+  void it('A ISCA: o token emitido entre as duas revogações cai na segunda', () => {
+    // Com `agora` cru — `tokenFoiRevogado(iat, SEGUNDA)` — este `assert` é
+    // FALSO: as duas revogações arredondam para a mesma virada e o token passa.
+    const iat = emSegundos(instanteDeEmissaoDoAcesso(LOGIN, PRIMEIRA));
+    assert.equal(
+      tokenFoiRevogado(iat, instanteDeRevogacao(SEGUNDA, PRIMEIRA)),
+      true,
+      'a segunda revogação tem de alcançar o token emitido depois da primeira',
+    );
+  });
+
+  void it('e o token emitido DEPOIS da segunda continua valendo', () => {
+    // O contrapeso direto: uma barreira que recusasse tudo passaria na isca.
+    const barreira = instanteDeRevogacao(SEGUNDA, PRIMEIRA);
+    const iatNovo = emSegundos(instanteDeEmissaoDoAcesso((VIRADA + 950) as Instant, barreira));
+    assert.equal(tokenFoiRevogado(iatNovo, barreira), false);
+  });
+
+  void it('sem revogação recente, grava `agora` ao milissegundo e nada se move', () => {
+    // Este é o caso de toda revogação do produto, e ele NÃO pode mudar: o mesmo
+    // valor é lido pelo lado do refresh, onde a comparação é em milissegundo e
+    // o empate sobrevive de propósito (BICHUS-77). Um `agora + 1` genérico
+    // mataria esse empate sem ninguém ter decidido isso.
+    const velha = (VIRADA - 60_000) as Instant;
+    assert.equal(instanteDeRevogacao(SEGUNDA, velha), SEGUNDA);
+    assert.equal(instanteDeRevogacao(SEGUNDA, 0 as Instant), SEGUNDA);
+    assert.equal(instanteDeRevogacao(SEGUNDA, barreiraDeContaNova(velha)), SEGUNDA);
+  });
+
+  void it('o empurrão é de no máximo um segundo, e só quando aperta', () => {
+    const barreira = instanteDeRevogacao(SEGUNDA, PRIMEIRA);
+    assert.ok(barreira > SEGUNDA, 'precisa passar da virada que a emissão usou');
+    assert.ok(barreira - SEGUNDA <= 1000, 'e nunca mais do que a virada seguinte');
+    assert.equal(barreira, 1_789_734_321_001);
+  });
+
+  void it('nenhuma revogação afrouxa: o token anterior continua recusado', () => {
+    // O contrapeso de BICHUS-132 visto daqui. Empurrar a barreira para a frente
+    // não pode devolver validade a nada — e não devolve, porque ela só cresce.
+    const barreira = instanteDeRevogacao(SEGUNDA, PRIMEIRA);
+    for (const anterior of [emSegundos(VIRADA), emSegundos(VIRADA) - 1, emSegundos(VIRADA) - 3600]) {
+      assert.equal(tokenFoiRevogado(anterior, barreira), true);
+    }
+    assert.ok(barreira >= SEGUNDA, 'a barreira nunca anda para trás do relógio da revogação');
   });
 });

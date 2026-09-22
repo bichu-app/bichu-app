@@ -18,6 +18,7 @@ import {
 import { validarSenha } from '../domain/password-policy.js';
 import {
   instanteDeEmissaoDoAcesso,
+  instanteDeRevogacao,
   prazosDeNovaFamilia,
   prazosDeRotacao,
   segundosRestantes,
@@ -211,6 +212,20 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
    * de `tokenFoiRevogado` existe para tirar. Depois de uma redefinição a pessoa
    * legítima não renova: a família dela caiu junto, e o caminho dela é entrar.
    */
+  /**
+   * A barreira que a conta tem AGORA, que é o outro lado da conta de
+   * {@link instanteDeRevogacao}.
+   *
+   * Conta ausente devolve 0, e isso não é fallback silencioso: 0 faz o empurrão
+   * sumir e a revogação gravar `agora`, que é o comportamento de sempre. O único
+   * caminho que chega aqui sem conta é a exclusão de conta, em que a linha de
+   * `users` já saiu — e ali não há token novo para alcançar.
+   */
+  async function barreiraAtualDe(userId: UserId): Promise<Instant> {
+    const conta = await deps.repositorio.buscarContaPorId(userId);
+    return conta?.sessionsInvalidBefore ?? (0 as Instant);
+  }
+
   async function abrirSessao(
     conta: Conta,
     continuarConectado: boolean,
@@ -268,7 +283,18 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     agora: Instant,
   ): Promise<void> {
     const familiasCaidas = await deps.repositorio.revogarTodasAsFamilias(userId, motivo, agora);
-    await deps.repositorio.invalidarSessoes(userId, agora);
+    // A barreira sai de `instanteDeRevogacao` e não de `agora` cru (SEC-006):
+    // duas revogações dentro do MESMO segundo deixariam vivo exatamente o token
+    // emitido entre as duas, porque `instanteDeEmissaoDoAcesso` o datou na
+    // virada do segundo seguinte à primeira barreira. Esta é a única gravação
+    // de `sessions_invalid_before` em massa que existe, e é aqui que a conta é
+    // feita -- os quatro gatilhos da BICHUS-125 herdam a correção por passarem
+    // por este lugar.
+    await deps.repositorio.invalidarSessoes(
+      userId,
+      instanteDeRevogacao(agora, await barreiraAtualDe(userId)),
+      agora,
+    );
     await deps.trilha.record({
       actorKind: 'user',
       actorUserId: userId,
@@ -801,6 +827,11 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // segundo, e a revogação das famílias mata o refresh copiado antes da
       // troca. Até aqui só a barreira era empurrada, e as linhas de
       // `refresh_tokens` seguiam vivas até vencerem por inatividade.
+      //
+      // A barreira que `derrubarTodasAsSessoes` grava não é `agora` cru: ela
+      // passa por `instanteDeRevogacao` (SEC-006), que alcança também o token
+      // que `instanteDeEmissaoDoAcesso` datou à frente do relógio numa
+      // revogação anterior do MESMO segundo.
       await derrubarTodasAsSessoes(consumido.userId, 'password_changed', contexto, agora);
 
       await deps.trilha.record({

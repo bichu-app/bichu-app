@@ -165,3 +165,64 @@ export function instanteDeEmissaoDoAcesso(
 ): Instant {
   return Math.max(agora, Math.ceil(sessionsInvalidBefore / 1000) * 1000) as Instant;
 }
+
+/**
+ * O instante que a revogação deve GRAVAR em `sessions_invalid_before` para que
+ * ela alcance **todo** token de acesso já emitido — inclusive o que
+ * {@link instanteDeEmissaoDoAcesso} datou à frente do relógio.
+ *
+ * ## O defeito que esta função existe para fechar
+ *
+ * `instanteDeEmissaoDoAcesso` faz o token nascer com `iat` na virada do segundo
+ * seguinte à barreira. Um token assim é **imune a qualquer revogação que caia
+ * antes daquela virada**, porque `tokenFoiRevogado` compara segundo com segundo:
+ *
+ * ```
+ * revogação 1 em            1790046155288 ms -> barreira 1790046156000
+ * login no mesmo segundo    iat = 1790046156  (empurrado pela emissão)
+ * revogação 2 em            1790046155900 ms -> barreira 1790046156000
+ * 1790046156000 < 1790046156000  ->  FALSO: o token sobreviveu à revogação 2
+ * ```
+ *
+ * Quem paga é a pessoa cuja conta foi tomada. Ela clica em "não fui eu", o
+ * invasor entra de novo no mesmo segundo com a senha que ele já tinha, e a
+ * troca de senha que vem logo em seguida — o gesto que o produto oferece para
+ * expulsá-lo — **não o expulsa**. O token dele vale mais quinze minutos, que é
+ * tempo de sobra para transferir o pet e trocar o e-mail de contato.
+ *
+ * ## A conta
+ *
+ * O maior instante com que um token pôde ser emitido desde a última revogação é
+ * exatamente `instanteDeEmissaoDoAcesso(agora, barreiraAtual)`. Gravar **um
+ * milissegundo além dele** garante que a barreira arredondada para cima passe do
+ * `iat` daquele token, e a garantia vale para qualquer token emitido antes, que
+ * é mais velho ainda.
+ *
+ * ## Por que não é simplesmente `agora + 1`
+ *
+ * Porque no caso de todo dia não pode mudar nada. Quando a última revogação é
+ * antiga — a esmagadora maioria das contas nunca teve nenhuma — o empurrão fica
+ * abaixo de `agora`, e o que se grava é `agora`, ao milissegundo, exatamente
+ * como antes. Isso preserva duas coisas que não são desta correção:
+ *
+ * - **BICHUS-132.** A barreira da redefinição continua caindo no mesmo lugar, e
+ *   quem entra no mesmo segundo continua entrando.
+ * - **O empate do lado do refresh** (`refreshFoiRevogado`, BICHUS-77). Lá a
+ *   comparação é em milissegundo e estrita, e o refresh nascido no mesmo
+ *   milissegundo da barreira sobrevive. Gravar `agora + 1` por padrão mataria
+ *   esse empate sem que ninguém tivesse decidido isso.
+ *
+ * ## O que ela custa
+ *
+ * Cada revogação que cai **dentro do segundo já coberto** por outra empurra a
+ * barreira um segundo à frente do relógio. O custo é do mesmo tipo que o de
+ * `instanteDeEmissaoDoAcesso`, e tem o mesmo teto: `clockToleranceSeconds`
+ * (hoje 60 s). Passar dele exigiria sessenta revogações dentro de um segundo na
+ * MESMA conta — cada uma precisa de um link de redefinição enviado por e-mail —
+ * e o desfecho seria o emissor recusar os próprios tokens como
+ * `emitido_no_futuro`: **fecha, não abre**. Quem mexer naquele número passa
+ * aqui e em {@link instanteDeEmissaoDoAcesso}.
+ */
+export function instanteDeRevogacao(agora: Instant, barreiraAtual: Instant): Instant {
+  return Math.max(agora, Math.ceil(barreiraAtual / 1000) * 1000 + 1) as Instant;
+}
