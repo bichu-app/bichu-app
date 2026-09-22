@@ -34,7 +34,6 @@ import type {
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
 import { conferirJanela, type JanelaDeReautenticacao } from '../../domain/reautenticacao.js';
-import type { ReauthScope } from '../../../../shared/http/route-definition.js';
 
 const VIOLACAO_DE_UNICIDADE = '23505';
 
@@ -640,7 +639,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       const janela: JanelaDeReautenticacao = {
         id: bruta.id,
         userId: bruta.user_id,
-        escopo: bruta.scope as ReauthScope,
+        escopo: bruta.scope,
         acessoJti: bruta.access_jti,
         emitidaEm: bruta.issued_at.getTime() as Instant,
         expiraEm: bruta.expires_at.getTime() as Instant,
