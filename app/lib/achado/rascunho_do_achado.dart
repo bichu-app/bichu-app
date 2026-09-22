@@ -40,7 +40,6 @@ library;
 import '../api/modelos_localizacao.dart';
 import '../api/modelos_pet.dart';
 import '../dispositivo/camera_e_galeria.dart';
-import '../dispositivo/localizacao.dart';
 import '../perdido/quando_foi_visto.dart';
 
 /// O motivo pelo qual `Registrar` esta desabilitado, ou nulo quando ele nao
@@ -199,25 +198,42 @@ class RascunhoDoAchado {
         OndePorPonto() || null => false,
       };
 
+  /// O ponto capturado, decomposto em dois numeros. Nulo quando nao ha.
+  ///
+  /// Existe para o envelope de intencao: `LocalizacaoDaIntencao` guarda
+  /// latitude, longitude e **o carimbo de tempo**, e e ela que tem a regra de
+  /// 30 minutos (UX 8.3, regra 6). Coordenada gravada sem carimbo vira
+  /// coordenada de ontem passando por coordenada de agora, e o achado e
+  /// registrado no lugar errado -- que e pior que nao ter lugar nenhum,
+  /// porque a busca acontece em volta dele.
+  ///
+  /// **Por isso a coordenada NAO entra em [campos]**: la ela seria mais um par
+  /// de numeros sem hora, exatamente a forma que a regra 6 existe para
+  /// impedir.
+  ({double lat, double lon})? get coordenada => switch (onde) {
+        OndePorPonto(:final ponto) || OndeComPontoEArea(:final ponto) =>
+          (lat: ponto.lat, lon: ponto.lon),
+        OndePorArea() || null => null,
+      };
+
+  /// A area digitada, ou nula.
+  AreaDigitada? get areaDigitada => switch (onde) {
+        OndePorArea(:final area) || OndeComPontoEArea(:final area) => area,
+        OndePorPonto() || null => null,
+      };
+
   /// Os campos do rascunho como o envelope de intencao os guarda (UX 8.3).
   ///
   /// So texto, numero e booleano: `RascunhoDaIntencao` recusa o resto, e a
   /// recusa e o que impede alguem de enfiar os bytes de uma foto aqui.
   ///
-  /// **A coordenada vai como numero e a area como texto, separadas**, e as
-  /// duas nunca se convertem uma na outra. E o mesmo invariante de
-  /// `modelos_localizacao.dart`, atravessando o disco.
+  /// **A area vai como TEXTO e a coordenada nao vai.** Area e o que a pessoa
+  /// digitou; coordenada e medicao do aparelho, e ela tem lugar proprio no
+  /// envelope ([coordenada] e `LocalizacaoDaIntencao`), com o carimbo de tempo
+  /// que a regra 6 exige. As duas continuam sem se converter uma na outra,
+  /// atravessando o disco.
   Map<String, Object?> campos() {
-    final ponto = switch (onde) {
-      OndePorPonto(:final ponto) => ponto,
-      OndeComPontoEArea(:final ponto) => ponto,
-      OndePorArea() || null => null,
-    };
-    final area = switch (onde) {
-      OndePorArea(:final area) => area,
-      OndeComPontoEArea(:final area) => area,
-      OndePorPonto() || null => null,
-    };
+    final area = areaDigitada;
     return <String, Object?>{
       'especie': especie?.valor,
       'porte': porte?.valor,
@@ -227,9 +243,6 @@ class RascunhoDoAchado {
       'versao_da_referencia': versaoDaReferencia,
       'quando': quando?.name,
       'data_escolhida': dataEscolhida?.toIso8601String(),
-      'lat': ponto?.lat,
-      'lon': ponto?.lon,
-      'precisao': ponto?.precisaoEmMetros,
       'cidade': area?.cidade,
       'bairro': area?.bairro,
       'uf': area?.uf,
@@ -241,12 +254,18 @@ class RascunhoDoAchado {
   /// Reconstroi o rascunho a partir dos campos do envelope.
   ///
   /// **A foto nao volta por aqui**: o que o envelope guarda dela e o caminho
-  /// do arquivo, e quem o guarda e `IntencaoPendente.foto`. Ver
-  /// `achado_como_intencao.dart`.
-  static RascunhoDoAchado dosCampos(Map<String, Object?> campos) {
+  /// do arquivo, e quem o guarda e `RascunhoDaIntencao.fotos`.
+  ///
+  /// **A coordenada tambem nao**, e por [lat] e [lon]: ela mora em
+  /// `LocalizacaoDaIntencao`, com o carimbo de tempo, e quem decide se ela
+  /// ainda vale e quem executa. Um rascunho que a remontasse sozinho
+  /// devolveria a coordenada de tres horas atras sem ninguem perguntar.
+  static RascunhoDoAchado dosCampos(
+    Map<String, Object?> campos, {
+    double? lat,
+    double? lon,
+  }) {
     final bruto = campos['data_escolhida'] as String?;
-    final lat = (campos['lat'] as num?)?.toDouble();
-    final lon = (campos['lon'] as num?)?.toDouble();
     return RascunhoDoAchado(
       especie: Especie.de(campos['especie'] as String?),
       porte: Porte.de(campos['porte'] as String?),
@@ -256,19 +275,9 @@ class RascunhoDoAchado {
       versaoDaReferencia: campos['versao_da_referencia'] as String?,
       quando: _quandoPorNome(campos['quando'] as String?),
       dataEscolhida: bruto == null ? null : DateTime.tryParse(bruto),
-      onde: montarOnde(
-        ponto: (lat == null || lon == null)
-            ? null
-            : PontoCapturado(
-                lat: lat,
-                lon: lon,
-                precisaoEmMetros: (campos['precisao'] as num?)?.toDouble(),
-                // O envelope nao guarda a origem, e ela nao e reconstruivel:
-                // `deviceGps` e o unico caminho que este app tem para uma
-                // coordenada (nao ha pino no mapa em todo o produto), entao
-                // ele e o valor certo e nao um palpite.
-                origem: OrigemDoPonto.deviceGps,
-              ),
+      onde: ondeJaCapturado(
+        lat: lat,
+        lon: lon,
         area: AreaDigitada.montar(
           cidade: campos['cidade'] as String? ?? '',
           bairro: campos['bairro'] as String?,

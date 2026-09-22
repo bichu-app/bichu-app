@@ -62,6 +62,7 @@ IntencaoPendente intencaoDeRegistrarAchado(
   required DateTime criadaEm,
 }) {
   final foto = rascunho.foto;
+  final coordenada = rascunho.coordenada;
   return IntencaoPendente(
     acao: AcaoDeIntencao.registrarAchado,
     // Sem alvo: a ação é criar o achado. Ver o cabeçalho.
@@ -81,15 +82,34 @@ IntencaoPendente intencaoDeRegistrarAchado(
             tamanhoEmBytes: foto.tamanhoEmBytes,
           ),
       ],
+      // **A coordenada vai no lugar dela, com o carimbo de tempo.** Ela não
+      // entra em `campos` de propósito: lá seria mais um par de números sem
+      // hora, e a regra 6 de 8.3 existe exatamente contra isso — coordenada
+      // sem carimbo é coordenada de ontem passando por coordenada de agora, e
+      // o achado é registrado no lugar errado.
+      localizacao: coordenada == null
+          ? null
+          : LocalizacaoDaIntencao(
+              latitude: coordenada.lat,
+              longitude: coordenada.lon,
+              capturadaEm: criadaEm,
+            ),
     ),
   );
 }
 
 /// O que a tela de retorno recebe quando o registro falha (regra 4 de 8.3).
 class RetomadaDoAchado {
-  const RetomadaDoAchado({required this.campos, this.erro});
+  const RetomadaDoAchado({required this.campos, this.erro, this.lat, this.lon});
 
   final Map<String, Object?> campos;
+
+  /// A coordenada do envelope, **quando ela ainda valia** na hora da
+  /// execução. Nula quando não havia, ou quando a regra de 30 minutos a
+  /// descartou: nesses dois casos a tela reabre a captura, e a pessoa mede de
+  /// novo o lugar em que ela está agora.
+  final double? lat;
+  final double? lon;
 
   /// Nulo só quando o executor estourou fora de `FalhaDeChamada` — aí não há
   /// falha de chamada para traduzir, e inventar um texto de tela seria pior
@@ -97,7 +117,8 @@ class RetomadaDoAchado {
   final MensagemDeErro? erro;
 
   /// O rascunho recarregado, pronto para a tela.
-  RascunhoDoAchado get rascunho => RascunhoDoAchado.dosCampos(campos);
+  RascunhoDoAchado get rascunho =>
+      RascunhoDoAchado.dosCampos(campos, lat: lat, lon: lon);
 }
 
 /// A foto do envelope de volta na forma que a tela conhece.
@@ -127,7 +148,23 @@ AcaoExecutavel achadoExecutavel(AchadosApi achados) {
   return AcaoExecutavel(
     executar: (intencao) async {
       final campos = intencao.rascunho.campos;
-      final rascunho = RascunhoDoAchado.dosCampos(campos);
+      // **A coordenada só volta se ainda valer** (UX 8.3, regra 6). Meia hora
+      // é o tempo em que alguém andando com o animal no colo já saiu do
+      // quarteirão: registrar a coordenada velha calada põe o achado no lugar
+      // errado, e é o cruzamento por distância que vai ler esse ponto.
+      //
+      // Descartada, sobra a área digitada — e o achado existe do mesmo jeito,
+      // valendo na cidade em vez de no quarteirão (critério 6). Sem área
+      // nenhuma não há `onde`, e aí a execução para e devolve o formulário
+      // inteiro em vez de inventar um lugar.
+      final guardada = intencao.rascunho.localizacao;
+      final aindaVale =
+          guardada != null && !guardada.desatualizadaEm(DateTime.now());
+      final rascunho = RascunhoDoAchado.dosCampos(
+        campos,
+        lat: aindaVale ? guardada.latitude : null,
+        lon: aindaVale ? guardada.longitude : null,
+      );
       final especie = rascunho.especie;
       final porte = rascunho.porte;
       final onde = rascunho.onde;
@@ -178,9 +215,16 @@ AcaoExecutavel achadoExecutavel(AchadosApi achados) {
         ),
       );
     },
-    retomar: (intencao, erro) => RetomadaDoAchado(
-      campos: intencao.rascunho.campos,
-      erro: erro,
-    ),
+    retomar: (intencao, erro) {
+      final guardada = intencao.rascunho.localizacao;
+      final aindaVale =
+          guardada != null && !guardada.desatualizadaEm(DateTime.now());
+      return RetomadaDoAchado(
+        campos: intencao.rascunho.campos,
+        erro: erro,
+        lat: aindaVale ? guardada.latitude : null,
+        lon: aindaVale ? guardada.longitude : null,
+      );
+    },
   );
 }

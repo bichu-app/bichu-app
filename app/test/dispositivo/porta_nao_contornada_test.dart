@@ -281,7 +281,29 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
-const String _arvoreDasTelas = 'f14551245240f69cfb43cb67216e2682cdb7684c';
+/// **Destravado pela BICHUS-35**: a tela do achado avulso nasceu, e ela e uma
+/// pasta nova em `app/lib/telas` -- `telas/achado/`, com
+/// `tela_registrar_achado.dart` (F3.5), `tela_achado_registrado.dart` (o
+/// desfecho, nos dois estados), `tela_do_achado.dart` (o achado pelo endereco
+/// dele), `resultado_do_achado.dart` e `textos_do_achado.dart`.
+///
+/// Uma tela existente mudou, e a mudanca e **uma linha**:
+/// `escanear/tela_leitor_de_qr.dart` tinha a porta de F3.5 desabilitada, com
+/// o comentario "F3.5 e de outra historia" ao lado do `onPressed: null`. A
+/// historia chegou, e o `null` virou `context.push`. **Nenhum botao novo
+/// entrou na tela**, e isso foi escolha e nao sorte: a varredura de
+/// `test/a11y/acao_de_controle_test.dart` conta os controles de cada tela, e
+/// ela mora fora de `app/`.
+///
+/// Nenhuma das seis encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege: F3.5 pede foto **pela porta**, pelo escopo, do mesmo jeito que
+/// `pet/tela_cadastrar_foto.dart` -- e o portao de diretivas abaixo continua
+/// respondendo por isso, sem depender desta constante.
+///
+/// F3.5 tambem **nao** fala com a porta `Localizacao`: ela embute
+/// `CapturaDeLocalizacao`, que e quem fala, e
+/// `localizacao_no_ponto_de_uso_test.dart` cobra isso por lista de arquivos.
+const String _arvoreDasTelas = '4fc7e037e73949b31f8a5d76160172728813eb92';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
