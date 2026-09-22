@@ -57,6 +57,7 @@ import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-rout
 import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
 import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
+import { criarAlcanceAindaSemBase } from '../modules/lostfound/adapters/persistence/alcance-ainda-sem-base.js';
 import { criarIdempotencia } from '../shared/http/idempotency.js';
 import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
@@ -295,6 +296,12 @@ export async function main(): Promise<void> {
       ids,
       clock: systemClock,
       trilha,
+      // A contagem de tutores alcancaveis AINDA NAO E CALCULAVEL: o esquema nao
+      // tem localizacao de usuario nem permissao de push, que sao dois dos sete
+      // criterios do ADR-0006. Esta linha e o lugar onde isso e dito -- trocar
+      // por `criarAlcancePorPostGIS` no dia em que as tabelas existirem. Uma
+      // consulta escrita hoje devolveria zero, que e a resposta que o ADR proibe.
+      alcance: criarAlcanceAindaSemBase(),
     }),
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),

@@ -28,6 +28,7 @@ import type {
   CasoGravado,
   DesfechoDoCaso,
   EstadoDoPetParaAbertura,
+  EstadoDoPetParaPrevia,
   LostCaseRepository,
   NovoCaso,
   StatusDoCaso,
@@ -134,6 +135,67 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
         petJaTemCasoAberto: r.pet_ja_perdido,
         casosAbertosDaConta: Number(r.abertos_da_conta),
         temCanalVerificado: r.tem_canal,
+      };
+    },
+
+    async estadoParaPrevia(pet: PetId, dono: UserId): Promise<EstadoDoPetParaPrevia> {
+      // As cinco perguntas da abertura mais a área de referência do tutor, numa
+      // consulta só e pelo mesmo motivo: o toque que dispara esta rota é o toque
+      // ANTES de "Avisar agora", e a pessoa está esperando na tela.
+      //
+      // **A autorização está na cláusula WHERE, e não num `if` depois.** O
+      // `EXISTS` de `existe` carrega `owner_user_id = ${dono}`; tirá-lo daqui
+      // para conferir o dono no serviço faria a consulta passar a responder
+      // sobre pet alheio, que é exatamente o arranjo que o ADR-0021 elimina.
+      const linha = await sql<{
+        existe: boolean;
+        tem_foto_pronta: boolean;
+        pet_ja_perdido: boolean;
+        abertos_da_conta: number;
+        tem_canal: boolean;
+        ref_city: string | null;
+        ref_neighborhood: string | null;
+      }>`
+        SELECT
+          EXISTS (
+            SELECT 1 FROM pets p
+             WHERE p.id = ${pet} AND p.owner_user_id = ${dono} AND p.deleted_at IS NULL
+          ) AS existe,
+          EXISTS (
+            SELECT 1 FROM pet_photos f
+             WHERE f.pet_id = ${pet} AND f.status = 'ready' AND f.deleted_at IS NULL
+          ) AS tem_foto_pronta,
+          EXISTS (
+            SELECT 1 FROM lost_cases c WHERE c.pet_id = ${pet} AND c.status = 'open'
+          ) AS pet_ja_perdido,
+          (
+            SELECT count(*) FROM lost_cases c
+             WHERE c.owner_user_id = ${dono} AND c.status = 'open'
+          )::int AS abertos_da_conta,
+          EXISTS (
+            SELECT 1 FROM users u
+             WHERE u.id = ${dono}
+               AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)
+          ) AS tem_canal,
+          -- A area de referencia do PROPRIO chamador, em texto. Nada aqui
+          -- atravessa contas, e nada aqui enumera os outros pets dele: a
+          -- contagem de casos abertos e um numero, e numero nao agrupa
+          -- (ADR-0010, item 7). Ela tambem nao sai na resposta.
+          (SELECT u.reference_city FROM users u WHERE u.id = ${dono}) AS ref_city,
+          (SELECT u.reference_neighborhood FROM users u WHERE u.id = ${dono}) AS ref_neighborhood
+      `.execute(db);
+
+      const r = linha.rows[0]!;
+      return {
+        existeEhDoTutor: r.existe,
+        temFotoPronta: r.tem_foto_pronta,
+        petJaTemCasoAberto: r.pet_ja_perdido,
+        casosAbertosDaConta: Number(r.abertos_da_conta),
+        temCanalVerificado: r.tem_canal,
+        areaDeReferenciaDoTutor: {
+          city: r.ref_city ?? undefined,
+          neighborhood: r.ref_neighborhood ?? undefined,
+        },
       };
     },
 

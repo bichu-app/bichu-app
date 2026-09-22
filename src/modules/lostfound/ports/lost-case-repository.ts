@@ -27,6 +27,20 @@ export interface EstadoDoPetParaAbertura {
   readonly temCanalVerificado: boolean;
 }
 
+/**
+ * O que a prévia precisa, e que a abertura não precisava.
+ *
+ * A área de referência do tutor é **texto**, e é a única área que o servidor
+ * consegue nomear: não há geocodificação no MVP (ADR-0006), então uma coordenada
+ * recebida na consulta não vira nome de bairro.
+ */
+export interface EstadoDoPetParaPrevia extends EstadoDoPetParaAbertura {
+  readonly areaDeReferenciaDoTutor: {
+    readonly city: string | undefined;
+    readonly neighborhood: string | undefined;
+  };
+}
+
 export interface NovoCaso {
   readonly id: CaseId;
   readonly petId: PetId;
@@ -70,6 +84,18 @@ export interface LostCaseRepository {
    * bateria é latência que dá para não gastar.
    */
   estadoParaAbertura(pet: PetId, dono: UserId): Promise<EstadoDoPetParaAbertura>;
+
+  /**
+   * O mesmo estado, mais a área de referência do tutor. Uma consulta só.
+   *
+   * **`dono` é obrigatório aqui pelo mesmo motivo de todo o resto deste
+   * arquivo**, e não por simetria: `existeEhDoTutor` sai de um `EXISTS` com
+   * `owner_user_id = :dono` dentro. A consulta que responderia sobre o pet de
+   * outra pessoa não existe, então a prévia de pet alheio é indistinguível da
+   * prévia de pet inexistente — que é o 404 do ADR-0021, e aqui ele vale duas
+   * vezes: um 403 confirmaria a existência daquele pet a quem não é dono dele.
+   */
+  estadoParaPrevia(pet: PetId, dono: UserId): Promise<EstadoDoPetParaPrevia>;
 
   /**
    * Abre o caso.
