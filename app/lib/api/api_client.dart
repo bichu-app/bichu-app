@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -80,6 +81,75 @@ class ApiClient {
     bool exigeToken = true,
   }) {
     return _enviar('DELETE', caminho, exigeToken: exigeToken);
+  }
+
+  /// Baixa o corpo binario de uma rota **autenticada desta API**.
+  ///
+  /// Existe porque `Image.network` **nao manda cabecalho nenhum**: ele abre um
+  /// `HttpClient` proprio, por fora desta camada, e por ali nao passa
+  /// `Authorization`. A rota da imagem do QR e `bearerAuth` no contrato e esta
+  /// marcada `reveals_credential`; pela `Image.network` ela responde 401 e a
+  /// tela nao mostra QR algum.
+  ///
+  /// **O endereco vem do corpo de uma resposta, e por isso ele e conferido.**
+  /// `qr_png_url` e montado pelo servidor. Mandar o `Bearer` para qualquer host
+  /// que um campo de resposta nomear entrega a credencial da sessao no primeiro
+  /// dia em que esse campo apontar para outro lugar. So a **mesma origem** de
+  /// `API_BASE_URL` (esquema, host e porta) recebe o cabecalho; qualquer outra
+  /// e recusada com [FalhaDeEnderecoRecusado] **antes** de a requisicao sair.
+  ///
+  /// Recusa tambem resposta que nao seja imagem: um corpo JSON devolvido com
+  /// 200 por um portal cativo no meio do caminho viraria bytes quebrados no
+  /// decodificador, e o erro apareceria como falha de imagem e nao como falha
+  /// de rede.
+  Future<Uint8List> baixarImagem(String endereco) async {
+    final uri = Uri.tryParse(endereco);
+    final base = config.apiBaseUrl;
+    if (uri == null ||
+        !uri.hasScheme ||
+        uri.scheme != base.scheme ||
+        uri.host != base.host ||
+        uri.port != base.port) {
+      throw FalhaDeEnderecoRecusado(endereco);
+    }
+
+    final cabecalhos = <String, String>{
+      'Accept': 'image/png',
+      'X-Correlation-Id': _uuidV4(),
+    };
+    final token = await tokenDeAcesso?.call();
+    if (token != null && token.isNotEmpty) {
+      cabecalhos['Authorization'] = 'Bearer $token';
+    }
+
+    final requisicao = http.Request('GET', uri)..headers.addAll(cabecalhos);
+
+    late final http.Response resposta;
+    try {
+      final fluxo = await _cliente.send(requisicao).timeout(tempoLimite);
+      resposta = await http.Response.fromStream(fluxo);
+    } on TimeoutException {
+      throw FalhaDeTempo(tempoLimite);
+    } on SocketException catch (e) {
+      throw FalhaDeConexao(e);
+    } on http.ClientException catch (e) {
+      throw FalhaDeConexao(e);
+    } on HandshakeException catch (e) {
+      throw FalhaDeConexao(e);
+    }
+
+    final status = resposta.statusCode;
+    final esperar = _retryAfter(resposta.headers['retry-after']);
+    if (status < 200 || status >= 300) {
+      throw FalhaDaApi(_problem(resposta, status, esperar));
+    }
+
+    final tipo = resposta.headers['content-type'] ?? '';
+    if (!tipo.trim().toLowerCase().startsWith('image/') ||
+        resposta.bodyBytes.isEmpty) {
+      throw FalhaDaApi(Problem.semCorpo(status, tenteDepoisDe: esperar));
+    }
+    return resposta.bodyBytes;
   }
 
   /// Gera uma chave de idempotencia nova.

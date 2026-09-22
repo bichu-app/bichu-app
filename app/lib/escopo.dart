@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/devices_api.dart';
+import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
@@ -28,6 +29,7 @@ class Escopo extends InheritedWidget {
     required this.sessao,
     required this.guarda,
     required this.cacheDeMeusPets,
+    required this.cofreDoQr,
     required super.child,
     super.key,
   });
@@ -62,6 +64,15 @@ class Escopo extends InheritedWidget {
   /// memoria e por dono; ver [CacheDeMeusPets].
   final CacheDeMeusPets cacheDeMeusPets;
 
+  /// Onde a imagem do QR da tag fica depois de baixada (BICHUS-229).
+  ///
+  /// Fica no escopo pelo mesmo motivo do [cacheDeMeusPets], com um agravante:
+  /// a limpeza dele precisa estar registrada em `limpezasAoSair`, e quem monta
+  /// essa lista e o `app.dart`. Um cofre criado dentro da tela seria outro
+  /// objeto, e o `sair()` limparia um cofre vazio enquanto o QR do tutor
+  /// anterior continuaria no cache global de imagem.
+  final CofreDaImagemDoQr cofreDoQr;
+
   static Escopo of(BuildContext context) {
     final escopo = context.dependOnInheritedWidgetOfExactType<Escopo>();
     if (escopo == null) {
@@ -84,5 +95,6 @@ class Escopo extends InheritedWidget {
       avisos != anterior.avisos ||
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
-      cacheDeMeusPets != anterior.cacheDeMeusPets;
+      cacheDeMeusPets != anterior.cacheDeMeusPets ||
+      cofreDoQr != anterior.cofreDoQr;
 }

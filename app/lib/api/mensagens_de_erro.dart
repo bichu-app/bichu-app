@@ -156,6 +156,14 @@ abstract final class MensagensDeErro {
           acao: tentarDeNovo,
         ),
       FalhaDaApi(:final problem) => _daApi(problem),
+      // O endereco veio de um corpo de resposta e nao e desta API, entao a
+      // requisicao NAO saiu e o token NAO viajou. Para quem esta lendo a tela
+      // isso e indistinguivel de servidor fora, e o movimento util e o mesmo;
+      // o diagnostico de verdade esta no `type` da classe, nao no texto.
+      FalhaDeEnderecoRecusado() => const MensagemDeErro(
+          texto: servidorFora,
+          acao: tentarDeNovo,
+        ),
     };
   }
 
