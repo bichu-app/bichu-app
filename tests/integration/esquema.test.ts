@@ -49,6 +49,11 @@ const TABELAS_ESPERADAS = [
   'public.refresh_tokens',
   'public.verification_tokens',
   'audit.events',
+  // ADR-0011 emenda 1. Exigidas aqui de proposito: sem isto os casos de
+  // `professionals` abaixo passariam verdes numa base sem a migracao, que e o
+  // verde por nao ter olhado para nada.
+  'public.professionals',
+  'public.entity_verifications',
 ];
 
 /**
@@ -470,6 +475,197 @@ void describe('BICHUS-56 — a trilha de auditoria, conferida no catálogo', () 
       }
     } finally {
       await cliente.query('ROLLBACK');
+    }
+  });
+});
+
+void describe('ADR-0011 emenda 1 — o diretorio de profissionais, conferido no catalogo', () => {
+  void it('entity_verifications.entity_id NAO tem chave estrangeira, e isso e decisao', () => {
+    // A ISCA CENTRAL desta migracao. A tabela e polimorfica por desenho: ela foi
+    // generalizada em 17/09 justamente para que a primeira entidade
+    // nao-profissional (a ONG da parceria de adocao) nao obrigasse a refaze-la.
+    // Postgres nao expressa FK condicional ao valor de outra coluna.
+    //
+    // O modo de falhar que este caso existe para pegar e simpatico: alguem le
+    // `entity_id uuid NOT NULL` sem FK, acha que foi esquecimento, e "conserta".
+    // O conserto desfaz a generalizacao, e refazer verificacao com registro ja
+    // aprovado e migracao com consequencia juridica, nao so de dados.
+    const comFk = chavesEstrangeiras.filter(
+      (fk) => fk.tabela === 'entity_verifications' && fk.coluna === 'entity_id',
+    );
+    assert.deepEqual(
+      comFk.map((fk) => `${fk.nome}: entity_id -> ${fk.tabela_alvo}.${fk.coluna_alvo}`),
+      [],
+      'entity_id ganhou chave estrangeira: a generalizacao de 17/09 foi desfeita. ' +
+        'A integridade de entity_id fica na APLICACAO, e esta escrito no COMMENT da coluna.',
+    );
+  });
+
+  void it('entity_id existe e e uuid: o caso acima nao passa por a coluna ter sumido', () => {
+    // Sem isto, renomear `entity_id` deixaria o caso anterior verde para sempre,
+    // porque o filtro nao acharia nada e ausencia de achado tem a cor de
+    // aprovacao.
+    const coluna = colunasDe('public', 'entity_verifications').find(
+      (c) => c.coluna === 'entity_id',
+    );
+    assert.ok(coluna, 'entity_verifications.entity_id nao existe');
+    assert.equal(coluna.tipo, 'uuid');
+  });
+
+  void it('as duas tabelas novas so referenciam users.id, e mais nada', () => {
+    const das_novas = chavesEstrangeiras.filter((fk) =>
+      ['professionals', 'entity_verifications'].includes(fk.tabela),
+    );
+    assert.ok(
+      das_novas.length > 0,
+      'nenhuma chave estrangeira nas tabelas novas: nao ha o que conferir, e isso e reprovacao',
+    );
+    const fora = das_novas.filter(
+      (fk) => fk.tabela_alvo !== 'users' || fk.coluna_alvo !== 'id',
+    );
+    assert.deepEqual(
+      fora.map((fk) => `${fk.tabela}.${fk.coluna} -> ${fk.tabela_alvo}.${fk.coluna_alvo}`),
+      [],
+      'ADR-0002: users.id e a unica chave que o resto do sistema referencia',
+    );
+  });
+
+  void it('nenhuma superficie de profissional referencia pet nem tutor', () => {
+    // ADR-0011 secao 4 item 2, sobre o ADR-0010 item 7: o vetor de agrupamento
+    // que a BICHUS-174 descreve vale igual aqui. Um profissional que listasse os
+    // pets que atende entregaria o agrupamento pela TERCEIRA porta, depois de a
+    // pagina do tutor e o QR terem sido fechados no mesmo dia.
+    const paraPetOuTutor = chavesEstrangeiras.filter(
+      (fk) =>
+        ['professionals', 'entity_verifications'].includes(fk.tabela) &&
+        ['pets', 'lost_cases', 'pet_photos'].includes(fk.tabela_alvo),
+    );
+    assert.deepEqual(
+      paraPetOuTutor.map((fk) => `${fk.tabela}.${fk.coluna} -> ${fk.tabela_alvo}`),
+      [],
+      'o diretorio de profissionais ganhou vinculo com pet: a terceira porta do agrupamento',
+    );
+
+    const suspeitas = ['pet_id', 'owner_user_id', 'tutor_id', 'tutor_user_id', 'case_id'];
+    for (const tabela of ['professionals', 'entity_verifications']) {
+      const nomes = new Set(colunasDe('public', tabela).map((c) => c.coluna));
+      assert.deepEqual(
+        suspeitas.filter((n) => nomes.has(n)),
+        [],
+        `${tabela} carrega coluna de pet ou de tutor`,
+      );
+    }
+  });
+
+  void it("source perdeu 'community' e ganhou 'invited': a premissa foi NEGADA", async () => {
+    // O cliente respondeu NAO em 21/09. Reintroduzir 'community' aqui seria
+    // desfazer a decisao dele, e nao corrigir um esquecimento. O caso cobra os
+    // dois sentidos, porque so cobrar a ausencia deixaria passar uma migracao
+    // que apagasse a coluna inteira.
+    const r = await cliente.query<{ definicao: string }>(
+      `select pg_get_constraintdef(con.oid) as definicao
+         from pg_constraint con
+         join pg_class rel    on rel.oid = con.conrelid
+         join pg_namespace ns on ns.oid = rel.relnamespace
+        where con.contype = 'c' and ns.nspname = 'public'
+          and rel.relname = 'professionals'
+          and pg_get_constraintdef(con.oid) ilike '%source%'`,
+    );
+    const definicoes = r.rows.map((linha) => linha.definicao).join(' ');
+    assert.notEqual(definicoes, '', 'professionals.source nao tem CHECK nenhum');
+    assert.match(definicoes, /'invited'/, "source nao aceita 'invited'");
+    assert.match(definicoes, /'self'/, "source nao aceita 'self'");
+    assert.doesNotMatch(
+      definicoes,
+      /'community'/,
+      "source voltou a aceitar 'community': a emenda 1 do ADR-0011 foi desfeita",
+    );
+  });
+
+  void it('dominio fechado e CHECK, nunca enum nativo do Postgres', async () => {
+    // Acrescentar valor a um enum nativo e DDL, e o ponto inteiro desta migracao
+    // e nao precisar de DDL com produto no ar.
+    const r = await cliente.query<{ nome: string }>(
+      `select t.typname as nome
+         from pg_type t
+         join pg_namespace ns on ns.oid = t.typnamespace
+        where t.typtype = 'e' and ns.nspname = 'public'`,
+    );
+    assert.deepEqual(
+      r.rows.map((linha) => linha.nome),
+      [],
+      'existe enum nativo no esquema public: acrescentar um valor passou a exigir DDL',
+    );
+  });
+
+  void it('o banco RECUSA um perfil que nasce sem o aceite de quem ele descreve', async () => {
+    // A regra central da emenda, exercitada de verdade em vez de afirmada:
+    // "nenhum perfil nasce sem o aceite de quem ele descreve". 'self' e
+    // 'invited' passam por aceite; so 'import' admite 'unclaimed'.
+    //
+    // Tudo dentro de uma transacao que termina em ROLLBACK: nada sobrevive.
+    await cliente.query('BEGIN');
+    try {
+      await cliente.query('SAVEPOINT recusa');
+      await assert.rejects(
+        () =>
+          cliente.query(
+            `insert into professionals (id, kind, display_name, source, claim_status)
+             values (gen_random_uuid(), 'vet', 'Isca sem aceite', 'invited', 'unclaimed')`,
+          ),
+        (erro: unknown) => {
+          assert.equal(
+            (erro as { code?: string }).code,
+            '23514',
+            'esperava violacao de CHECK ao criar perfil convidado sem titular',
+          );
+          return true;
+        },
+        'o banco aceitou um perfil `invited` sem aceite: a regra central da emenda 1 nao vale',
+      );
+      await cliente.query('ROLLBACK TO SAVEPOINT recusa');
+
+      // O contraponto: o caminho legitimo precisa passar. Restricao que reprova
+      // tudo tambem "nunca deixa passar o errado", e nao vale nada.
+      await cliente.query('SAVEPOINT aceite');
+      await cliente.query(
+        `insert into professionals (id, kind, display_name, source, claim_status, claimed_at)
+         values (gen_random_uuid(), 'vet', 'Isca com aceite', 'invited', 'claimed', now())`,
+      );
+      await cliente.query('ROLLBACK TO SAVEPOINT aceite');
+    } finally {
+      await cliente.query('ROLLBACK');
+    }
+  });
+
+  void it('apagar a conta de quem convidou NAO apaga o perfil de quem aceitou', async () => {
+    // O perfil pertence a pessoa que ele descreve, nao a quem a indicou. CASCADE
+    // aqui faria a saida de um tutor derrubar o perfil de um profissional que
+    // nunca soube quem ele era.
+    const coluna = colunasDe('public', 'professionals').find(
+      (c) => c.coluna === 'created_by_user_id',
+    );
+    assert.ok(coluna, 'professionals.created_by_user_id nao existe');
+
+    const r = await cliente.query<{ coluna: string; acao: string }>(
+      `select att.attname::text as coluna, con.confdeltype::text as acao
+         from pg_constraint con
+         join pg_class rel    on rel.oid = con.conrelid
+         join pg_namespace ns on ns.oid = rel.relnamespace
+         join lateral unnest(con.conkey) with ordinality as k(attnum, ord) on true
+         join pg_attribute att on att.attrelid = con.conrelid and att.attnum = k.attnum
+        where con.contype = 'f' and ns.nspname = 'public'
+          and rel.relname = 'professionals'
+          and att.attname in ('created_by_user_id', 'claimed_by_user_id')`,
+    );
+    assert.equal(r.rows.length, 2, 'esperava as duas chaves de pessoa em professionals');
+    for (const linha of r.rows) {
+      // 'n' = SET NULL, 'c' = CASCADE, 'a' = NO ACTION, 'r' = RESTRICT.
+      assert.equal(
+        linha.acao,
+        'n',
+        `professionals.${linha.coluna} nao e ON DELETE SET NULL: apagar a conta levaria o perfil junto`,
+      );
     }
   });
 });

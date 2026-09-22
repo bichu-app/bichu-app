@@ -224,6 +224,29 @@ jobs:
       - name: portao de contrato publico, iscas primeiro
         run: sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
 
+      # BICHUS-188. Mesma historia do portao acima, e por isso o mesmo remedio:
+      # ele nasceu com teste ao lado e NENHUM job o executava. A entrega que o
+      # criou registrou a lacuna por escrito, e regra escrita com mecanismo
+      # ausente e a familia de defeito que este projeto passou o dia
+      # catalogando -- ninguem acusa, porque ninguem procura o que acredita ja
+      # ter.
+      #
+      # `created_by_user_id` e "quem convidou": vinculo entre duas pessoas, que
+      # o ADR-0011 secao 4 proibe expor. A proibicao valia "em revisao", e
+      # revisao humana esquece.
+      #
+      # ISCAS PRIMEIRO, e aqui elas nao sao zelo: as duas tabelas nasceram sem
+      # rota, entao o contrato tem ZERO ocorrencia das colunas marcadas e a
+      # varredura real nao tem o que achar. Sem as tres iscas este passo ficaria
+      # verde por nao ter olhado para nada -- e continuaria verde no dia em que
+      # quebrasse. Elas cobrem o vazamento no contrato, o vazamento em codigo, e
+      # o apagamento da marca no COMMENT ON COLUMN, que e o pior dos tres porque
+      # deixa o portao sem lista e ele passa a aprovar tudo calado.
+      #
+      # Sem `continue-on-error`: este passo REPROVA a esteira.
+      - name: portao de saida (colunas que nao saem), iscas primeiro
+        run: sh infra/verificacao/verificar-colunas-que-nao-saem.sh .
+
       # BICHUS-13 criterio 12, parte que NAO depende de rede. O comando roda o
       # autoteste das iscas antes de qualquer outra coisa: se o comparador
       # deixar de enxergar, ele falha dizendo isso.
