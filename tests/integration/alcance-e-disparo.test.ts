@@ -468,11 +468,23 @@ void describe('BICHUS-88: a conta logicamente excluída sai do alcance', () => {
     );
   });
 
-  void it('e a linha de localização dela CONTINUA casando com ST_DWithin', async () => {
-    // A outra metade da prova, e a razão de a junção com `users` existir. O
-    // defeito da BICHUS-88 é real e continua real: esta consulta não o
-    // conserta, ela só não cai nele. Qualquer outro caminho que leia
-    // `user_reference_locations` sem esta junção continua vendo a linha.
+  void it('e a linha de localização dela também não casa mais com ST_DWithin', async () => {
+    // ESTE CASO ESTAVA INVERTIDO ATÉ 22/09/2026, E DE PROPÓSITO. Ele exigia
+    // `count = '1'` e a mensagem dizia: "a linha de localização da conta
+    // excluída sumiu sozinha. Se isso mudou, a BICHUS-88 foi consertada em
+    // outro lugar e a junção com `users` desta consulta merece ser revisitada
+    // — mas não removida sem prova." Ele era o registro do defeito, não uma
+    // regra: quem o escreveu provou os dois lados e não consertou de lado.
+    //
+    // O defeito foi consertado, e em outro lugar mesmo: a migração
+    // `20260922000006` apaga a linha no instante da exclusão lógica, por
+    // gatilho em `users`. A prova pedida está em
+    // `tests/integration/localizacao-apos-exclusao-logica.test.ts`, que mede
+    // com consultas que NÃO juntam `users` e NÃO mencionam `deleted_at`.
+    //
+    // A junção com `users` desta consulta fica onde está. Ela deixou de ser a
+    // única defesa e virou a segunda; tirá-la agora trocaria duas camadas por
+    // uma, sem ganho nenhum.
     const saindo = await vizinhoEm(aNorteDoCentro(500));
     await cliente.query('UPDATE users SET deleted_at = now() WHERE id = $1', [saindo]);
 
@@ -486,10 +498,10 @@ void describe('BICHUS-88: a conta logicamente excluída sai do alcance', () => {
     );
     assert.equal(
       r.rows[0]?.n,
-      '1',
-      'a linha de localização da conta excluída sumiu sozinha. Se isso mudou, a ' +
-        'BICHUS-88 foi consertada em outro lugar e a junção com `users` desta ' +
-        'consulta merece ser revisitada — mas não removida sem prova.',
+      '0',
+      'a linha de localização sobreviveu à exclusão lógica. O gatilho da migração ' +
+        '`20260922000006` saiu, e a proteção voltou a morar na cláusula `u.deleted_at ' +
+        'IS NULL` da consulta de quem lê — que é o defeito da BICHUS-88 de volta.',
     );
   });
 });
