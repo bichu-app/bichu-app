@@ -1,0 +1,12 @@
+# ISOLA `set +e`. Sem nenhum `||` no corpo, para reprovar por um motivo so.
+name: set-mais-e
+on: [push]
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sonda do destino hospedado
+        run: |
+          set +e
+          curl -sS --fail --max-time 20 https://exemplo.invalido/v1/health
+          echo "segui em frente"

@@ -1,0 +1,6 @@
+{
+  "obtido": false,
+  "status_http": 403,
+  "motivo": "o portao de qualidade respondeu HTTP 403. Um 403 nao e um veredito: e a ausencia dele. Resposta: {\"errors\":[{\"msg\":\"Insufficient privileges\"}]}",
+  "painel": "https://sonarcloud.io/dashboard?id=bichu-app_bichu-app"
+}

@@ -1,0 +1,16 @@
+# ISOLA `needs.<job>.result` fora da forma reconhecida: sem `case` e sem ramo
+# padrao, o valor que ninguem previu escorre para o caminho do sucesso.
+name: resultado-de-job
+on: [push]
+jobs:
+  portao:
+    runs-on: ubuntu-latest
+    needs: [consultar]
+    steps:
+      - name: consolidar
+        run: |
+          estado="${{ needs.consultar.result }}"
+          if [ "$estado" = "failure" ]; then
+            echo "::error::job em failure"
+            exit 1
+          fi

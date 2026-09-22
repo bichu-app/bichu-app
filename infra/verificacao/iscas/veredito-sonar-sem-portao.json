@@ -1,0 +1,7 @@
+{
+  "obtido": true,
+  "status_http": 200,
+  "veredito": "NONE",
+  "condicoes": [],
+  "painel": "https://sonarcloud.io/dashboard?id=bichu-app_bichu-app"
+}

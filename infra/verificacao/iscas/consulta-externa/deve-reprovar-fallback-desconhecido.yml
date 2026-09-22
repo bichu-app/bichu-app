@@ -1,0 +1,12 @@
+# ISOLA a forma que o portao NAO reconhece do lado direito de `||`. Ela nao e
+# `exit 0` nem `true`: e um comando qualquer, e o portao nao tem como afirmar
+# que o passo reprova. Lista de permitidos recusa o que ninguem previu.
+name: fallback-desconhecido
+on: [push]
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sonda do destino hospedado
+        run: |
+          curl -sS --fail --max-time 20 https://exemplo.invalido/v1/health || logger "sonda falhou"

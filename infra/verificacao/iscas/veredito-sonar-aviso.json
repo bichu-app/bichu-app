@@ -1,0 +1,27 @@
+{
+  "_isca": "ISCA. Valores INVENTADOS para exercitar o juizo, NAO medidos no SonarCloud.",
+  "obtido": true,
+  "status_http": 200,
+  "veredito": "WARN",
+  "condicoes": [
+    {
+      "metrica": "new_duplicated_lines_density",
+      "valor": "3.4",
+      "comparador": "GT",
+      "piso": "3",
+      "estado": "WARN"
+    },
+    {
+      "metrica": "new_coverage",
+      "valor": "88.1",
+      "comparador": "LT",
+      "piso": "80",
+      "estado": "OK"
+    }
+  ],
+  "periodo_de_codigo_novo": {
+    "mode": "NUMBER_OF_DAYS",
+    "value": "30"
+  },
+  "painel": "https://sonarcloud.io/dashboard?id=bichu-app_bichu-app&branch=development"
+}

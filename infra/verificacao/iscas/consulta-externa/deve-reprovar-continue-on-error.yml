@@ -1,0 +1,12 @@
+# ISOLA `continue-on-error: true`, e so ele: o passo nao le estado nenhum e nao
+# tem `||`. Isca que reprova por dois motivos deixa o autoteste verde quando a
+# regra que ela testava e desligada.
+name: continue-on-error
+on: [push]
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: veredito do portao de qualidade
+        continue-on-error: true
+        uses: SonarSource/sonarqube-quality-gate-action@v1.2.1

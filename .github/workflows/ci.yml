@@ -115,6 +115,59 @@ jobs:
       - name: nenhum passo e pulado por premissa do proprio job, iscas primeiro
         run: python3 infra/verificacao/verificar_passos_condicionais.py
 
+      # BICHUS-236, e ele e o irmao do passo de cima: aquele cuida de passo que
+      # nao RODA, este cuida de passo que roda e fica verde SEM A RESPOSTA.
+      #
+      # O defeito medido hoje, no run 35750052587 da `main`: o passo do veredito
+      # do SonarCloud saiu com HTTP 403 -- o veredito nunca foi obtido -- e a
+      # dispensa datada `sonarcloud-veredito` engoliu a reprovacao. O job ficou
+      # verde com uma indisponibilidade do SonarCloud. O `ci.yml` tinha um ramo
+      # escrito contra isso, e o ramo era INALCANCAVEL: o destino de um passo so
+      # assume quatro valores, e "nao consegui perguntar" e "perguntei e a
+      # resposta e nao" tem o mesmo nome entre eles.
+      #
+      # Este passo fecha a CLASSE em vez do caso. Ele le todos os workflows e
+      # recusa os tres mecanismos que a plataforma oferece para ler o destino de
+      # um passo sem ler o que ele respondeu -- `continue-on-error: true`,
+      # `steps.<id>.outcome`/`.conclusion`, e `needs.<job>.result` fora do `case`
+      # com ramo padrao que reprova -- mais o shell declarando sucesso no
+      # caminho de falha. A lista e de PERMITIDOS: forma que ele nao reconhece
+      # REPROVA.
+      #
+      # A varredura de hoje achou TRES passos: os dois do SonarCloud e o
+      # `compatibilidade contra main`, que lia "a base nao existe neste clone"
+      # como "primeira introducao da spec". Os tres estao corrigidos neste
+      # commit; o portao existe para o quarto.
+      #
+      # As iscas de `iscas/consulta-externa/` rodam DENTRO deste comando, antes
+      # dos workflows de verdade, e cada uma isola UMA regra -- inclusive uma
+      # que CITA `steps.x.outcome` num comentario e precisa APROVAR, porque uma
+      # isca deste repositorio ja nasceu furada casando com a propria explicacao.
+      - name: nenhum passo trata "nao consegui perguntar" como resposta, iscas primeiro
+        run: python3 infra/verificacao/verificar_consulta_externa.py
+
+      # BICHUS-236, o caso concreto de que a classe acima saiu. AQUI, e nao no
+      # job `sonar`: os dois comandos levam milissegundos e nao precisam de
+      # `npm ci`, e o job `sonar` so comeca depois do `codigo`. Portao que so
+      # acusa vinte minutos adiante chega tarde.
+      #
+      # O primeiro sobe um SonarCloud de mentira em 127.0.0.1 e exige que 403,
+      # 500, analise em FAILED, corpo sem `projectStatus.status` e relatorio
+      # ausente virem `obtido: false` COM MOTIVO -- e nunca um veredito. Cada
+      # caso cobra o fragmento de motivo que so o caminho dele escreve, e isso
+      # foi medido: com a leitura do codigo HTTP desligada, o 403 escorre para
+      # a conferencia seguinte e produz um envelope de campos identicos. Sem a
+      # cobranca do motivo o autoteste ficava verde com a regra apagada.
+      #
+      # O segundo confere que "nao obtive" e "obtive e e negativo" continuam
+      # sendo desfechos distintos, e que a dispensa `sonarcloud-veredito` so
+      # cobre o segundo.
+      - name: a busca do veredito traduz HTTP em envelope, e nao em veredito
+        run: python3 infra/verificacao/buscar_veredito_do_sonar.py --autoteste
+
+      - name: as iscas do juizo do veredito do SonarCloud reprovam
+        run: python3 infra/verificacao/verificar_veredito_do_sonar.py --autoteste
+
       # Absorcao da BICHUS-210: o Dockerfile reprova o build sem `BUILD_COMMIT`
       # e o compose so repassa o que estiver no AMBIENTE, entao quem poe o valor
       # la e o Makefile. Este passo roda POR DENTRO do make de proposito -- ele
@@ -374,8 +427,35 @@ jobs:
       - name: compatibilidade contra main
         if: github.event_name == 'pull_request'
         run: |
-          git show origin/${{ github.base_ref }}:api/openapi.yaml > /tmp/base.yaml 2>/dev/null || {
-            echo "::notice::sem versao anterior da spec: primeira introducao"; exit 0; }
+          # ESTE TRECHO TINHA A MESMA FORMA DO DEFEITO DO SONARCLOUD, e por
+          # isso mudou em 22/09/2026. Ele era:
+          #
+          #     git show origin/<base>:api/openapi.yaml > /tmp/base.yaml 2>/dev/null || {
+          #       echo "::notice::sem versao anterior da spec"; exit 0; }
+          #
+          # "o arquivo nao existe na base" e "a base nao existe neste clone"
+          # colapsavam no mesmo codigo de saida, e os dois viravam APROVACAO: o
+          # portao inteiro de quebra de contrato saia pela porta do `exit 0`
+          # com um `::notice::`, que ninguem le. Uma base nao encontrada -- ref
+          # renomeada, `fetch-depth` alterado, fetch parcial -- lia-se como
+          # "primeira introducao da spec", e nenhuma quebra seria detectada.
+          #
+          # Agora sao DUAS perguntas, nesta ordem, e elas tem desfechos
+          # diferentes: a base existe? (nao existir REPROVA, nomeando a ref) e
+          # o arquivo existe nela? (nao existir e aprovacao legitima).
+          ref="origin/${{ github.base_ref }}"
+          if ! git rev-parse --verify --quiet "$ref^{commit}" > /dev/null; then
+            echo "::error::$ref nao existe neste clone. Sem a base NAO DA PARA SABER se esta spec quebra contrato -- e nao saber nao e o mesmo que nao quebrar. Ou o checkout parou de trazer a base (ver \`fetch-depth: 0\`), ou a branch de destino mudou de nome"
+            exit 1
+          fi
+          if git cat-file -e "$ref:api/openapi.yaml" 2> /tmp/cat-file.err; then
+            git show "$ref:api/openapi.yaml" > /tmp/base.yaml
+            test -s /tmp/base.yaml
+          else
+            echo "::notice::$ref existe e nao carrega api/openapi.yaml: primeira introducao da spec"
+            cat /tmp/cat-file.err
+            exit 0
+          fi
           # `oasdiff` e um binario Go. O pacote npm de mesmo nome NAO declara
           # executavel, e `npx --yes oasdiff` morre com "could not determine
           # executable to run" -- o passo reprovava por ferramenta ausente, e
@@ -1164,22 +1244,6 @@ jobs:
       - name: o relatorio de cobertura fala de src/**/*.ts, iscas primeiro
         run: node infra/verificacao/verificar-cobertura-lcov.mjs coverage/lcov.info
 
-      # O modo vem do quality-gates.yml, e nao de um `if` escrito aqui.
-      # Secao 5.3: "Para remover a dispensa: apague a entrada. Nao mexa no
-      # workflow." Apagar `sonarcloud-veredito` torna o veredito bloqueante, e
-      # a data da dispensa faz o job `rapidos` reprovar sozinho se ninguem
-      # apagar. Nao existe caminho em que isto seja esquecido em silencio.
-      - name: o veredito bloqueia ou informa?
-        id: modo
-        run: |
-          if grep -qE '^[[:space:]]*-[[:space:]]*portao:[[:space:]]*sonarcloud-veredito[[:space:]]*$' .github/quality-gates.yml; then
-            echo "bloqueante=nao" >> "$GITHUB_OUTPUT"
-            echo "::notice::veredito do SonarCloud em modo informativo, por dispensa datada em .github/quality-gates.yml"
-          else
-            echo "bloqueante=sim" >> "$GITHUB_OUTPUT"
-            echo "veredito do SonarCloud em modo bloqueante"
-          fi
-
       # As chaves de organizacao e de projeto, os caminhos de fonte e as
       # exclusoes estao em `sonar-project.properties`, na raiz. Nada de branch
       # nem de PR e passado aqui: o scanner le isso do ambiente do GitHub
@@ -1190,58 +1254,97 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
-      - name: veredito do portao de qualidade
-        id: veredito
-        # `true` SEMPRE, e isto NAO afrouxa o portao: quem decide reprovar e o
-        # passo seguinte, que le `steps.veredito.outcome` e sai com 1 quando a
-        # dispensa nao existe. O bloqueio continua inteiro; o que muda e QUEM o
-        # aplica.
-        #
-        # Era `${{ steps.modo.outputs.bloqueante == 'nao' }}`, e nao funcionava:
-        # medido em 18/09, com o `modo` tendo dito "informativo" no log, o passo
-        # terminou `failure` e o passo do veredito foi **pulado** -- a dispensa
-        # estava escrita e era INERTE. Expressao condicional aqui depende de o
-        # `steps` context estar resolvido no momento em que a acao composta
-        # falha por dentro, e ele nao estava.
-        #
-        # Com `true` fixo, os dois caminhos ficam no passo de baixo, onde sao
-        # legiveis e testaveis: sem dispensa -> `::error::` e exit 1; com
-        # dispensa -> `::warning::` e o job segue.
-        continue-on-error: true
-        uses: SonarSource/sonarqube-quality-gate-action@v1.2.1
+      # O QUE MUDOU EM 22/09/2026, E POR QUE.
+      #
+      # Ate hoje estes dois passos eram: a acao
+      # `SonarSource/sonarqube-quality-gate-action@v1.2.1`, marcada
+      # `continue-on-error: true`, e um passo de juizo que lia o DESTINO dela.
+      #
+      # Medido no run 35750052587 da `main`: a acao saiu com HTTP 403 -- o
+      # veredito NUNCA FOI OBTIDO -- e o juizo imprimiu "o portao de qualidade
+      # do SonarCloud REPROVOU" e deixou a dispensa `sonarcloud-veredito`
+      # engolir a reprovacao. O job ficou VERDE com uma indisponibilidade do
+      # SonarCloud.
+      #
+      # Este arquivo ja tinha o ramo escrito contra isso:
+      #
+      #     *) "nao foi possivel obter o veredito ... Verificacao que nao
+      #        consegue verificar reprova, nunca aprova"
+      #
+      # e ELE ERA INALCANCAVEL. O destino de um passo so assume `success`,
+      # `failure`, `skipped` e `cancelled`: "nao consegui falar com o Sonar" e
+      # "o portao reprovou de verdade" colapsavam no mesmo `failure`, e a
+      # dispensa -- escrita para o segundo -- cobria os dois. O ramo existia,
+      # estava certo, e nunca executou.
+      #
+      # A PROVA DEFINITIVA VEIO NO MESMO DIA, DE GRACA, e vale guardar porque
+      # ela e dificil de conseguir de novo. O cliente concedeu permissoes no
+      # SonarCloud no fim da tarde, e o MESMO passo, no MESMO commit, passou a
+      # obter resposta de verdade:
+      #
+      #   run 35750052821 (main, 15h57):  curl: (22) ... returned error: 403
+      #                                   -> exit 22, veredito NUNCA obtido
+      #   run 35750862380 (development, 16h30, reexecucao do mesmo job):
+      #                                   "Quality Gate has FAILED"
+      #                                   -> exit 1, veredito obtido e NEGATIVO
+      #
+      # Dois fatos completamente diferentes. E o passo do juizo imprimiu, nas
+      # duas execucoes, a MESMA LINHA, byte a byte:
+      #
+      #   veredito=failure bloqueante=nao
+      #   ##[warning]o portao de qualidade do SonarCloud REPROVOU e nao esta
+      #   bloqueando, por dispensa datada (sonarcloud-veredito) ...
+      #
+      # A indisponibilidade e a reprovacao legitima eram indistinguiveis na
+      # saida, e as duas foram dispensadas. Nao havia como alguem lendo o log
+      # perceber a diferenca, porque nao existia diferenca a ser lida.
+      #
+      # A correcao separa BUSCAR de JULGAR, que e o que torna os dois desfechos
+      # distinguiveis:
+      #
+      #   - a BUSCA consulta a fila de analise e o portao de qualidade e grava
+      #     um envelope JSON com o que aconteceu: `obtido`, `status_http`,
+      #     `motivo`, `veredito`. Ela nao decide nada, e por isso nao pode
+      #     reprovar por si -- se saisse com 1 no 403, o job cairia com uma
+      #     mensagem generica e o juizo, que e quem sabe dizer "o Sonar nao
+      #     disse nada" com o codigo HTTP na frase, nunca rodaria. Ela so sai
+      #     com codigo diferente de zero quando nem o envelope consegue gravar,
+      #     e ai o job cai, que e o desfecho correto;
+      #   - o JUIZO le o envelope, com vocabulario fechado (`OK`, `ERROR`,
+      #     `WARN`, `NONE`): palavra que ele nao reconhece REPROVA. E SO o
+      #     veredito negativo de verdade e dispensavel -- nao obter, `NONE`,
+      #     palavra nova e envelope fora de forma reprovam mesmo com a dispensa
+      #     escrita, e a mensagem diz por que ela nao cobre.
+      #
+      # Nao ha `continue-on-error` em passo nenhum desta esteira, e
+      # `verificar_consulta_externa.py` (job `rapidos`) impede que ele volte por
+      # qualquer workflow.
+      #
+      # O MODO continua vindo do `quality-gates.yml`, e nao de um `if:` escrito
+      # aqui -- agora lido pelo proprio juizo, e nao por um passo separado.
+      # Secao 5.3: "Para remover a dispensa: apague a entrada. Nao mexa no
+      # workflow." Apagar `sonarcloud-veredito` torna o veredito bloqueante, e
+      # a data da dispensa faz o job `rapidos` reprovar sozinho se ninguem
+      # apagar.
+      - name: busca o veredito do portao de qualidade
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-
-      # ESTE PASSO NAO E `continue-on-error` DISFARCADO. Ele existe para que
-      # um veredito vermelho apareca como vermelho no resumo da execucao mesmo
-      # durante a janela informativa. Reprovacao registrada com prazo nao e a
-      # mesma coisa que job verde.
-      - name: o veredito, dito em voz alta
         run: |
-          estado='${{ steps.veredito.outcome }}'
-          bloqueante='${{ steps.modo.outputs.bloqueante }}'
-          echo "veredito=$estado bloqueante=$bloqueante"
-          case "$estado" in
-            success)
-              echo 'SonarCloud: portao de qualidade verde.' >> "$GITHUB_STEP_SUMMARY"
-              ;;
-            failure)
-              if [ "$bloqueante" = 'sim' ]; then
-                echo '::error::o portao de qualidade do SonarCloud reprovou'
-                exit 1
-              fi
-              echo '::warning::o portao de qualidade do SonarCloud REPROVOU e nao esta bloqueando, por dispensa datada (sonarcloud-veredito) em .github/quality-gates.yml. Isto nao e um job verde: e uma reprovacao registrada com prazo'
-              {
-                echo '### SonarCloud: portao de qualidade REPROVADO'
-                echo 'Informativo ate a dispensa sonarcloud-veredito de .github/quality-gates.yml vencer ou ser apagada.'
-                echo 'A partir dai, este mesmo veredito derruba o PR.'
-              } >> "$GITHUB_STEP_SUMMARY"
-              ;;
-            *)
-              echo "::error::nao foi possivel obter o veredito do SonarCloud (passo em '$estado'). Verificacao que nao consegue verificar reprova, nunca aprova"
-              exit 1
-              ;;
-          esac
+          python3 infra/verificacao/buscar_veredito_do_sonar.py \
+            --token "$SONAR_TOKEN" --envelope /tmp/veredito-do-sonar.json
+
+      # As iscas rodam DENTRO deste comando, antes do envelope de verdade, e
+      # cada uma isola UMA regra: o autoteste compara CONJUNTOS de regras, e nao
+      # "reprovou / nao reprovou". A isca do 403 e a que prova o defeito de
+      # hoje: ela precisa reprovar E precisa nao ser coberta pela dispensa. Um
+      # autoteste que so olhasse "reprovou?" ficaria verde com o defeito inteiro
+      # de pe, porque hoje ele tambem reprova -- e e dispensado.
+      - name: o veredito, dito em voz alta, com o motivo
+        run: |
+          python3 infra/verificacao/verificar_veredito_do_sonar.py \
+            --envelope /tmp/veredito-do-sonar.json | tee -a "$GITHUB_STEP_SUMMARY"
+          # `tee` mascara o codigo de saida do python, e este passo E o veredito.
+          exit "${PIPESTATUS[0]}"
 
   portao:
     name: portao

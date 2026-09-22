@@ -1,0 +1,55 @@
+{
+  "_isca": "ISCA. Valores INVENTADOS para exercitar o juizo, NAO medidos no SonarCloud. Nao cite estes numeros como a cobertura do projeto.",
+  "obtido": true,
+  "status_http": 200,
+  "veredito": "ERROR",
+  "condicoes": [
+    {
+      "metrica": "new_coverage",
+      "valor": "67.84",
+      "comparador": "LT",
+      "piso": "80",
+      "estado": "ERROR"
+    },
+    {
+      "metrica": "new_duplicated_lines_density",
+      "valor": "0.9",
+      "comparador": "GT",
+      "piso": "3",
+      "estado": "OK"
+    },
+    {
+      "metrica": "new_violations",
+      "valor": "0",
+      "comparador": "GT",
+      "piso": "0",
+      "estado": "OK"
+    },
+    {
+      "metrica": "new_security_hotspots_reviewed",
+      "valor": "100.0",
+      "comparador": "LT",
+      "piso": "100",
+      "estado": "OK"
+    },
+    {
+      "metrica": "new_reliability_rating",
+      "valor": "1",
+      "comparador": "GT",
+      "piso": "1",
+      "estado": "OK"
+    },
+    {
+      "metrica": "new_maintainability_rating",
+      "valor": "1",
+      "comparador": "GT",
+      "piso": "1",
+      "estado": "OK"
+    }
+  ],
+  "periodo_de_codigo_novo": {
+    "mode": "PREVIOUS_VERSION",
+    "date": "2026-09-22T11:30:00+0000"
+  },
+  "painel": "https://sonarcloud.io/dashboard?id=bichu-app_bichu-app&branch=development"
+}

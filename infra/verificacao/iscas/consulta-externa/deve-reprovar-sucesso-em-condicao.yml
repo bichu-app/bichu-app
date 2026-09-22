@@ -1,0 +1,15 @@
+# ISOLA a forma de sucesso escondida DENTRO de um cabecalho de condicao.
+# `if consulta || true; then` torna a condicao sempre verdadeira: e o mesmo
+# defeito do `|| true` solto, com outra roupa, e o portao precisa ve-lo nas
+# duas. Nenhum outro `||` neste arquivo, para reprovar por um motivo so.
+name: sucesso-em-condicao
+on: [push]
+jobs:
+  consultar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sonda do destino hospedado
+        run: |
+          if curl -sS --fail --max-time 20 https://exemplo.invalido/v1/health || true; then
+            echo "o destino respondeu"
+          fi
