@@ -477,6 +477,28 @@ jobs:
       - name: constroi a imagem (dev) e o migrador
         run: docker compose --profile dev build
 
+      # BICHUS-215. ANTES de subir a pilha, de proposito: o defeito que este
+      # passo pega nao derruba servico nenhum -- a pilha sobe inteira, a sonda
+      # passa, as migracoes aplicam, e a reprovacao so chega no ULTIMO passo do
+      # job, `Cannot find module`, depois de dez minutos de runner.
+      #
+      # Em 22/09 foi exatamente assim (execucao 35725325183): o alvo `dev`
+      # copia diretorio NOME A NOME, a BICHUS-204 tinha movido o executor da
+      # suite para `infra/integracao/`, e nenhum `COPY` alcancava. O
+      # `.dockerignore` nunca teve culpa.
+      #
+      # O que este passo confere nao e uma lista: ele varre QUEM manda
+      # `npm run <script>` dentro de conteiner (esta esteira, o Makefile e
+      # `rodar.mjs`), resolve os arquivos que cada script abre -- importacao em
+      # cadeia inclusive -- e exige que estejam na imagem. Rodar a suite de um
+      # worktree nao substitui isto: `compose.integracao.yaml` monta a arvore
+      # por cima de `/app` e tudo aparece pelo volume, com a imagem vazia.
+      #
+      # As iscas rodam ANTES da imagem real, dentro do proprio script: duas
+      # imagens mutiladas derivadas desta, que PRECISAM reprovar.
+      - name: a imagem carrega o que a esteira manda rodar dentro dela
+        run: node infra/verificacao/verificar-arquivos-no-container.mjs bichu-app:local | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: sobe a pilha inteira, do zero
         # `--wait` e o que torna este passo uma verificacao: ele so devolve 0
         # quando toda sonda passou. Sem ele, o job ficaria verde com a api

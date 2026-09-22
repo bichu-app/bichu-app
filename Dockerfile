@@ -139,6 +139,25 @@ COPY --chown=node:node src ./src
 COPY --chown=node:node tests ./tests
 COPY --chown=node:node api ./api
 COPY --chown=node:node migrations ./migrations
+# `infra/integracao/` E CODIGO QUE RODA AQUI DENTRO, e nao ferramenta de
+# hospedeiro. `npm run test:integration:executar` -- o comando que a esteira
+# executa com `docker compose run --rm api` -- e
+# `node infra/integracao/executar-suite.mjs`, e o executor importa a guarda de
+# banco descartavel do lado dele.
+#
+# Ele faltou aqui de 22/09 ate a BICHUS-215 e a esteira reprovou com
+# `Cannot find module '/app/infra/integracao/executar-suite.mjs'`. O
+# `.dockerignore` nunca excluiu `infra/`: o que falta num `COPY` nome a nome e
+# tudo que ninguem nomeou.
+#
+# O defeito nao aparecia de um worktree porque `compose.integracao.yaml` monta
+# a arvore inteira por cima de `/app` (`- ../..:/app`) e o arquivo chegava pelo
+# volume. `infra/verificacao/verificar-arquivos-no-container.mjs` confere a
+# IMAGEM, que e o caminho que a esteira usa.
+#
+# So `integracao/`: `infra/caddy` e configuracao da borda, `infra/verificacao`
+# roda no hospedeiro, e imagem recebe o que ela executa.
+COPY --chown=node:node infra/integracao ./infra/integracao
 COPY --from=build --chown=node:node /app/dist ./dist
 # Ver o bloco "O COMMIT" acima. O COPY e o que poe o estagio `commit` -- e a
 # conferencia que ele carrega -- no grafo deste build.
