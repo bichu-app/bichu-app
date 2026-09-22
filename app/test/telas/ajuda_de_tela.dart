@@ -25,6 +25,7 @@ import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
+import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
@@ -78,11 +79,25 @@ class CameraDeTeste implements CameraEGaleria {
 
   bool abriuAjustes = false;
 
+  /// **O contador que sustenta a isca do dialogo do sistema** (BICHUS-54).
+  ///
+  /// No iOS o pedido de camera e mostrado **uma unica vez**: negado, so pelos
+  /// Ajustes. Um `pedirCamera()` na montagem da tela gasta essa chance sem a
+  /// pessoa ter tocado em nada, e nenhuma verificacao de texto ou de layout
+  /// enxerga isso. So um duble que CONTA.
+  int vezesQuePediu = 0;
+
+  int vezesQueConsultouEstado = 0;
+
   @override
-  Future<EstadoDaPermissao> estadoDaCamera() async => estado;
+  Future<EstadoDaPermissao> estadoDaCamera() async {
+    vezesQueConsultouEstado += 1;
+    return estado;
+  }
 
   @override
   Future<EstadoDaPermissao> pedirCamera() async {
+    vezesQuePediu += 1;
     estado = depoisDePedir ?? estado;
     return estado;
   }
@@ -95,6 +110,57 @@ class CameraDeTeste implements CameraEGaleria {
 
   @override
   Future<FotoLocal?> escolherDaGaleria() async => foto;
+}
+
+/// Um leitor de QR que le o que o caso mandar (BICHUS-54).
+///
+/// **Ele nao finge ser camera, e nao precisa.** Camera nao se verifica em
+/// teste de widget; o que se verifica e que a tela reage certo a cada
+/// desfecho, e que ela **pendura uma superficie de leitura viva** embaixo da
+/// moldura em vez de desenhar a moldura sozinha.
+///
+/// [embarcado] falso devolve o visor de [LeitorDeQrNaoEmbarcado], que
+/// **estoura**. Isso e proposital: quem chama `visor()` confere `embarcado`
+/// antes, e um caso que esqueca a conferencia reprova alto em vez de montar
+/// uma caixa vazia no lugar do visor.
+class LeitorDeQrDeTeste implements LeitorDeQr {
+  LeitorDeQrDeTeste({this.embarcado = true});
+
+  @override
+  final bool embarcado;
+
+  /// Quantas vezes a tela pediu o visor. Zero num estado que desenha moldura
+  /// significa moldura sem camera atras.
+  int vezesQuePediuOVisor = 0;
+
+  ValueChanged<LeituraDeQr>? _aoLer;
+
+  @override
+  Widget visor({required ValueChanged<LeituraDeQr> aoLer}) {
+    if (!embarcado) return const LeitorDeQrNaoEmbarcado().visor(aoLer: aoLer);
+    vezesQuePediuOVisor += 1;
+    _aoLer = aoLer;
+    // Cinza de camera apagada, e **nao** preto: o preto de borda a borda e o
+    // vocabulario de visor que a BICHUS-220 tirou da tela, e o duble nao pode
+    // ser quem o devolve por baixo. O escurecimento que da contraste a moldura
+    // e desenhado pela TELA, e e la que ele precisa ser medido.
+    return const SuperficieDeLeituraAoVivo(
+      embarcado: true,
+      child: ColoredBox(color: Color(0xFF3C4043)),
+    );
+  }
+
+  /// Entrega um simbolo a tela, como a camera faria.
+  void ler(String conteudo) {
+    final aoLer = _aoLer;
+    if (aoLer == null) {
+      fail(
+        'REPROVA: o caso mandou o leitor ler, e a tela nunca pediu o visor. '
+        'Nao ha camera na arvore, entao nao ha o que ler.',
+      );
+    }
+    aoLer(LeituraDeQr(conteudo));
+  }
 }
 
 /// Avisos que respondem o que o caso pedir, nos quatro estados.
@@ -238,6 +304,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   WidgetTester tester, {
   required Future<http.Response> Function(http.Request) rede,
   CameraEGaleria? camera,
+  LeitorDeQr? leitorDeQr,
   Avisos? avisos,
   DepositoDeIntencaoEmMemoria? envelope,
   DepositoDeSessao? deposito,
@@ -281,6 +348,10 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         cacheDeMeusPets: cacheDeMeusPets,
         cofreDoQr: cofreDoQr,
         camera: camera ?? const CameraNaoEmbarcada(),
+        // O padrao e o build SEM leitor, pelo mesmo motivo do da camera: o
+        // caso que nao fala de leitura nao deve ganhar uma camera de
+        // surpresa. Quem precisa de uma passa [LeitorDeQrDeTeste].
+        leitorDeQr: leitorDeQr ?? const LeitorDeQrNaoEmbarcado(),
         // O padrao e o mesmo do app quando o Firebase nao subiu: nenhum canal de
         // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`
         // de verdade travaria a suite num `Future` que nunca resolve.

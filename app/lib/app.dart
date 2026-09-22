@@ -11,6 +11,7 @@ import 'api/pets_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
+import 'dispositivo/leitor_de_qr.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
@@ -30,6 +31,7 @@ class BichuApp extends StatefulWidget {
     this.deposito,
     this.clienteHttp,
     this.camera,
+    this.leitorDeQr,
     this.avisos,
     this.depositoDeIntencao,
     this.cacheDeMeusPets,
@@ -64,6 +66,16 @@ class BichuApp extends StatefulWidget {
   /// implementacao real, que responde `indisponivel` sem canal -- e essa e a
   /// resposta certa num ambiente sem aparelho, nao um remendo.
   final CameraEGaleria? camera;
+
+  /// Injetavel para teste. Em producao e [LeitorDeQrDoAparelho] desde a
+  /// BICHUS-54.
+  ///
+  /// A troca acontece **aqui e em lugar nenhum mais**, igual a da camera na
+  /// BICHUS-161. Em teste de widget nao ha canal de plataforma, e a
+  /// implementacao real responde `embarcado == false` ali -- que e a resposta
+  /// certa, e nao um remendo. Os casos que precisam de uma leitura passam o
+  /// duble de `test/telas/ajuda_de_tela.dart`.
+  final LeitorDeQr? leitorDeQr;
 
   /// Injetavel para teste. Em producao e [AvisosPorFirebase] quando o `main()`
   /// conseguiu inicializar o Firebase, e [AvisosNaoEmbarcados] quando nao.
@@ -105,6 +117,7 @@ class _BichuAppState extends State<BichuApp> {
   late final TagsApi _tags;
   late final DevicesApi _devices;
   late final CameraEGaleria _camera;
+  late final LeitorDeQr _leitorDeQr;
   late final Avisos _avisos;
   late final ControladorDeSessao _sessao;
   late final GuardaDeAcao _guarda;
@@ -130,6 +143,7 @@ class _BichuAppState extends State<BichuApp> {
     _tags = TagsApi(_api);
     _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraDoAparelho();
+    _leitorDeQr = widget.leitorDeQr ?? const LeitorDeQrDoAparelho();
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
@@ -191,6 +205,7 @@ class _BichuAppState extends State<BichuApp> {
       tags: _tags,
       devices: _devices,
       camera: _camera,
+      leitorDeQr: _leitorDeQr,
       avisos: _avisos,
       sessao: _sessao,
       guarda: _guarda,

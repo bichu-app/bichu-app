@@ -54,8 +54,10 @@ class LeituraDeQr {
   final String conteudo;
 
   @override
-  bool operator ==(Object outro) =>
-      outro is LeituraDeQr && outro.conteudo == conteudo;
+  // `other`, e nao `outro`: `avoid_renaming_method_parameters` cobra o nome
+  // do metodo sobrescrito, e o resto do arquivo escreve em portugues.
+  bool operator ==(Object other) =>
+      other is LeituraDeQr && other.conteudo == conteudo;
 
   @override
   int get hashCode => conteudo.hashCode;

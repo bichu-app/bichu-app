@@ -7,6 +7,7 @@ import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
+import 'dispositivo/leitor_de_qr.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'telas/perfil/meus_pets.dart';
 import 'sessao/controlador_de_sessao.dart';
@@ -25,6 +26,7 @@ class Escopo extends InheritedWidget {
     required this.tags,
     required this.devices,
     required this.camera,
+    required this.leitorDeQr,
     required this.avisos,
     required this.sessao,
     required this.guarda,
@@ -43,6 +45,13 @@ class Escopo extends InheritedWidget {
   /// A fronteira com o aparelho. Injetavel para que o teste de widget
   /// exercite os tres estados de permissao sem aparelho.
   final CameraEGaleria camera;
+
+  /// A leitura de QR ao vivo (BICHUS-54). Injetavel pelo mesmo motivo da
+  /// [camera], com uma diferenca que vale dizer: ela nao pergunta permissao.
+  /// Quem pergunta e a [camera], porque e a MESMA permissao de sistema, e
+  /// duas portas consultando `Permission.camera` dariam duas respostas que
+  /// precisam ser iguais e um dia nao seriam.
+  final LeitorDeQr leitorDeQr;
 
   /// A fronteira com o servico de notificacao. Injetavel pelo mesmo motivo da
   /// camera: notificacao nao se verifica em simulador, e o que o teste precisa
@@ -92,6 +101,7 @@ class Escopo extends InheritedWidget {
       tags != anterior.tags ||
       devices != anterior.devices ||
       camera != anterior.camera ||
+      leitorDeQr != anterior.leitorDeQr ||
       avisos != anterior.avisos ||
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
