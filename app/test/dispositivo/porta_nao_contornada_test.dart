@@ -156,7 +156,15 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// tag nao tem imagem" de "nao consegui buscar". Nenhuma das duas encosta na
 /// porta `CameraEGaleria`, que e o que o criterio 10 protege.
 ///
-/// **Destravado uma oitava vez pela BICHUS-24**, "duas oportunidades e nao
+/// **Destravado uma oitava vez pela INTEGRACAO DE 22/09.** Seis historias
+/// mexeram em `app/lib/telas` no mesmo dia, e cada uma mediu o proprio hash
+/// a partir de `648b91a936...` achando que seria a proxima a entrar. Nenhum
+/// dos seis vale: o valor abaixo foi medido sobre a arvore com as seis
+/// juntas, pelo indice temporario que este portao usa, e nao copiado de
+/// nenhum relato. Os paragrafos a seguir sao o que cada autora escreveu, um
+/// por historia, porque o que cada uma protege continua sendo diferente.
+///
+/// **Destravado pela BICHUS-24**, "duas oportunidades e nao
 /// mais". A trava reprovou com `648b91a936...` contra o
 /// `3831b7207e32ae96a7ac40852e3681017eb81918` medido, que e o ato deliberado
 /// que ela cobra. Quatro arquivos, e nenhum deles encosta na porta
@@ -182,7 +190,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// notificacao continua atras da porta `Avisos`, em `lib/dispositivo/`, que e
 /// onde `openAppSettings()` passou a morar.
 ///
-/// **Destravado uma oitava vez pela BICHUS-54**: a leitura do QR pela camera
+/// **Destravado pela BICHUS-54**: a leitura do QR pela camera
 /// entrou, e `escanear/tela_leitor_de_qr.dart` foi reescrita inteira --
 /// desfazendo o que a BICHUS-220 tinha feito, que era a tela **dizer** que nao
 /// havia leitor. Agora ha: `mobile_scanner` atras da porta nova
@@ -201,7 +209,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `Permission.camera` dariam duas respostas que precisam ser iguais e um dia
 /// nao seriam.
 ///
-/// **Destravado uma oitava vez pelas BICHUS-60 e BICHUS-61**: entrou a tela de
+/// **Destravado pelas BICHUS-60 e BICHUS-61**: entrou a tela de
 /// detalhe do pet (T.1), que e a hospedeira que o criterio 1 das duas
 /// historias pressupoe, e com ela a tela de edicao. Os campos do pet sairam de
 /// dentro de `tela_cadastrar_identificacao.dart` e `tela_cadastrar_sinais.dart`
@@ -211,7 +219,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// codigo da tag nao volta. Nenhuma das telas encosta na porta
 /// `CameraEGaleria`, que e o que o criterio 10 protege -- a edicao **nao**
 /// embarca foto, e o motivo esta escrito em `tela_editar_pet.dart`.
-/// **Destravado uma oitava vez pela BICHUS-23**: a captura de localizacao no
+/// **Destravado pela BICHUS-23**: a captura de localizacao no
 /// ponto de uso nasceu, e ela e uma pasta nova em `app/lib/telas` --
 /// `telas/localizacao/`, com `captura_de_localizacao.dart`,
 /// `antessala_de_localizacao.dart` e `textos_da_localizacao.dart`.
@@ -225,7 +233,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// 10 protege, e ela fala com a porta `Localizacao` pelo escopo -- que e o
 /// arranjo que o portao estrutural abaixo exige, e que
 /// `localizacao_no_ponto_de_uso_test.dart` cobra por nome de arquivo.
-/// **Destravado uma oitava vez pelas BICHUS-232, BICHUS-233 e BICHUS-153**,
+/// **Destravado pelas BICHUS-232, BICHUS-233 e BICHUS-153**,
 /// os tres achados do cliente de 22/09/2026. Quatro arquivos, e nenhum deles
 /// encosta na porta `CameraEGaleria`:
 ///
@@ -256,7 +264,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-/// **Destravado uma oitava vez pela BICHUS-21**: o fluxo de marcar o pet como
+/// **Destravado pela BICHUS-21**: o fluxo de marcar o pet como
 /// perdido entrou, e ele e cinco arquivos novos em `perdido/` -- F3.0
 /// (`tela_de_quem_e_o_caso.dart`), F3.1 (`tela_onde_e_quando.dart`), F3.2
 /// (`tela_alcance_do_alerta.dart`), F3.3 (`resultado_da_abertura.dart`), a
@@ -273,7 +281,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
-const String _arvoreDasTelas = '3831b7207e32ae96a7ac40852e3681017eb81918';
+const String _arvoreDasTelas = 'f14551245240f69cfb43cb67216e2682cdb7684c';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
