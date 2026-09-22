@@ -12,10 +12,14 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import {
   camposPendentesDoPerfil,
   podeAbrirCasoDePerdido,
 } from '../../domain/completude-do-perfil.js';
+import { normalizarEmail } from '../../domain/email.js';
+import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
 import type { Conta } from '../../ports/identity-repository.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
@@ -224,6 +228,63 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
   return schema;
 }
 
+/**
+ * `email` para o teto, **resumido**, nunca em claro.
+ *
+ * O balde vai para `rate_limit_counters.bucket_key`, no Postgres: lido por quem
+ * opera o banco, exportado em despejo de diagnóstico e sobrevivente à exclusão
+ * da conta. Um endereço em claro ali é o mesmo problema que o SEC-010 descreve
+ * para o IP, num lugar onde ninguém vai procurá-lo — e aqui é pior, porque a
+ * lista de endereços que TENTARAM entrar inclui gente que nunca teve conta.
+ *
+ * A normalização vem do domínio (`normalizarEmail`) e não é escrita aqui: se o
+ * teto normalizasse diferente do login, `A@x.com` e `a@x.com` cairiam em baldes
+ * distintos e o teto de 5 por hora viraria 10 para quem alternasse a caixa.
+ */
+const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
+  const corpo = (request.body ?? {}) as { email?: unknown };
+  if (typeof corpo.email !== 'string' || corpo.email === '') return undefined;
+  const normalizado = normalizarEmail(corpo.email);
+  return normalizado === '' ? undefined : sigilo.hmac(`email:${normalizado}`);
+};
+
+/**
+ * Autenticação MEMOIZADA por requisição.
+ *
+ * O teto por `account` roda antes do handler e precisa saber de quem é a
+ * sessão; o handler precisa da mesma coisa. Sem a memória, toda rota
+ * autenticada passaria a verificar RS256 e ler `users` duas vezes — dobrar a
+ * carga do banco para aplicar um teto que existe para reduzir carga.
+ */
+function autenticado(request: FastifyRequest, deps: DependenciasDasRotas): Promise<Autenticado> {
+  return memoDaRequisicao(request, 'identity:autenticado', () =>
+    deps.auth.autenticar(tokenDoCabecalho(request)),
+  );
+}
+
+/**
+ * `account` para o teto: o id da conta, ou `undefined` para quem não apresentou
+ * credencial válida.
+ *
+ * Engolir a falha aqui é correto e não é atalho: quem não tem sessão não tem
+ * balde de conta, e a recusa dele é 401 do handler, não 429. O que sustenta o
+ * caso de quem martela sem credencial são as entradas por `ip` da mesma rota.
+ *
+ * O valor vai em claro na chave do balde, e essa é a exceção declarada do
+ * `Sigilo`: é UUID interno, `bucket_key` não sai em resposta nenhuma, e o
+ * resumo tornaria impossível responder "qual conta bateu no teto".
+ */
+async function contaDoTeto(
+  request: FastifyRequest,
+  deps: DependenciasDasRotas,
+): Promise<string | undefined> {
+  try {
+    return (await autenticado(request, deps)).conta.id;
+  } catch {
+    return undefined;
+  }
+}
+
 export function registrarRotasDeIdentidade(
   app: FastifyInstance,
   deps: DependenciasDasRotas,
@@ -271,9 +332,13 @@ export function registrarRotasDeIdentidade(
     };
   };
 
-  app.post(
-    rotaDePedidoDeVerificacao.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDePedidoDeVerificacao.operationId) } },
+  registrarRota(
+    app,
+    rotaDePedidoDeVerificacao,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDePedidoDeVerificacao.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const corpo = (request.body ?? {}) as { email?: string };
       const cabecalho = request.headers.authorization;
@@ -295,8 +360,9 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.post(
-    rotaDeConfirmacaoDeEmail.path,
+  registrarRota(
+    app,
+    rotaDeConfirmacaoDeEmail,
     { schema: { body: corpoDe(deps.contrato, rotaDeConfirmacaoDeEmail.operationId) } },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { token } = request.body as { token: string };
@@ -306,9 +372,13 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.post(
-    rotaDePedidoDeRedefinicao.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDePedidoDeRedefinicao.operationId) } },
+  registrarRota(
+    app,
+    rotaDePedidoDeRedefinicao,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDePedidoDeRedefinicao.operationId) },
+      resolvedores: { email: emailDoCorpo },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { email } = request.body as { email: string };
       await deps.auth.solicitarRedefinicaoDeSenha(email, contextoDe(request));
@@ -318,7 +388,7 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.get(rotaDeConferenciaDeRedefinicao.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDeConferenciaDeRedefinicao, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     aplicarHigieneDeTokenNaUrl(reply);
     const { token } = request.params as { token: string };
     await deps.auth.conferirTokenDeRedefinicao(token);
@@ -328,8 +398,9 @@ export function registrarRotasDeIdentidade(
     return reply.status(200).send({ valid: true });
   });
 
-  app.post(
-    rotaDeConfirmacaoDeRedefinicao.path,
+  registrarRota(
+    app,
+    rotaDeConfirmacaoDeRedefinicao,
     { schema: { body: corpoDe(deps.contrato, rotaDeConfirmacaoDeRedefinicao.operationId) } },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const corpo = request.body as { token: string; new_password: string };
@@ -338,16 +409,20 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.get(rotaDoMeuPerfil.path, async (request: FastifyRequest, reply: FastifyReply) => {
-    const { conta } = await deps.auth.autenticar(tokenDoCabecalho(request));
+  registrarRota(app, rotaDoMeuPerfil, {}, async (request: FastifyRequest, reply: FastifyReply) => {
+    const { conta } = await autenticado(request, deps);
     return reply.status(200).send(comoRespostaDoPerfil(await deps.auth.meuPerfil(conta.id)));
   });
 
-  app.patch(
-    rotaDeEdicaoDoPerfil.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDeEdicaoDoPerfil.operationId) } },
+  registrarRota(
+    app,
+    rotaDeEdicaoDoPerfil,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeEdicaoDoPerfil.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const { conta } = await deps.auth.autenticar(tokenDoCabecalho(request));
+      const { conta } = await autenticado(request, deps);
       const corpo = request.body as {
         display_name?: string;
         phone_e164?: string;
@@ -380,8 +455,9 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.post(
-    rotaDeCadastro.path,
+  registrarRota(
+    app,
+    rotaDeCadastro,
     { schema: { body: corpoDe(deps.contrato, rotaDeCadastro.operationId) } },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const corpo = request.body as {
@@ -403,9 +479,13 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.post(
-    rotaDeLogin.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDeLogin.operationId) } },
+  registrarRota(
+    app,
+    rotaDeLogin,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeLogin.operationId) },
+      resolvedores: { email: emailDoCorpo },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const corpo = request.body as { email: string; password: string; stay_signed_in?: boolean };
       const sessao = await deps.auth.entrar(
@@ -421,9 +501,21 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.post(
-    rotaDeRenovacao.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDeRenovacao.operationId) } },
+  registrarRota(
+    app,
+    rotaDeRenovacao,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeRenovacao.operationId) },
+      resolvedores: {
+        token_family: async (request) => {
+          const corpo = (request.body ?? {}) as { refresh_token?: string };
+          if (typeof corpo.refresh_token !== 'string' || corpo.refresh_token === '') {
+            return undefined;
+          }
+          return deps.auth.familiaDoRefresh(corpo.refresh_token);
+        },
+      },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const corpo = request.body as { refresh_token: string };
       const sessao = await deps.auth.renovar(corpo.refresh_token, contextoDe(request));
@@ -431,12 +523,17 @@ export function registrarRotasDeIdentidade(
     },
   );
 
-  app.post(rotaDeLogout.path, async (request: FastifyRequest, reply: FastifyReply) => {
-    const autenticado: Autenticado = await deps.auth.autenticar(tokenDoCabecalho(request));
-    const corpo = (request.body ?? {}) as { refresh_token?: string };
-    await deps.auth.sair(autenticado, corpo.refresh_token, contextoDe(request));
-    return reply.status(204).send();
-  });
+  registrarRota(
+    app,
+    rotaDeLogout,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const sessao: Autenticado = await autenticado(request, deps);
+      const corpo = (request.body ?? {}) as { refresh_token?: string };
+      await deps.auth.sair(sessao, corpo.refresh_token, contextoDe(request));
+      return reply.status(204).send();
+    },
+  );
 }
 
 /**
@@ -448,7 +545,7 @@ export function registrarRotasDeDescoberta(
   app: FastifyInstance,
   deps: DependenciasDasRotas,
 ): void {
-  app.get(rotaDoJwks.path, async (_request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDoJwks, {}, async (_request: FastifyRequest, reply: FastifyReply) => {
     // Cacheável por 1 hora, e quem consome deve rebuscar quando encontrar um
     // `kid` desconhecido, em vez de recusar.
     return reply
@@ -456,7 +553,7 @@ export function registrarRotasDeDescoberta(
       .send({ keys: deps.assinador.jwks() });
   });
 
-  app.get(rotaDeDescoberta.path, async (_request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDeDescoberta, {}, async (_request: FastifyRequest, reply: FastifyReply) => {
     return reply.header('Cache-Control', 'public, max-age=3600').send({
       issuer: deps.issuer,
       jwks_uri: `${deps.apiBaseUrl}${rotaDoJwks.path}`,

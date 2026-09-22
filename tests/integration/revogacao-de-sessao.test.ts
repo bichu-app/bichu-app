@@ -86,6 +86,7 @@ import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { systemClock } from '../../src/shared/time/clock.js';
 import { carregarContrato } from '../../src/shared/http/contract.js';
 import { criarServidor } from '../../src/shared/http/server.js';
+import { tetoDeTeste } from '../../src/shared/http/teto-de-teste.js';
 import type { Instant, UserId } from '../../src/shared/types/brands.js';
 import { criarTrilhaDeAuditoria } from '../../src/modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarTokenSigner } from '../../src/modules/identity/adapters/external/rs256-token-signer.js';
@@ -189,7 +190,11 @@ before(async () => {
   const ids = criarIdGenerator(() => systemClock.now());
   const assinador = criarTokenSigner(config.token);
 
-  app = criarServidor({ problemBaseUrl: config.problemBaseUrl, isProduction: config.isProduction });
+  app = criarServidor({
+    problemBaseUrl: config.problemBaseUrl,
+    isProduction: config.isProduction,
+    teto: tetoDeTeste(),
+  });
 
   const trilha = criarTrilhaDeAuditoria({
     db,

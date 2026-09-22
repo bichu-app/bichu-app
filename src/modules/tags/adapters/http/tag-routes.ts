@@ -19,6 +19,8 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import {
   executarComIdempotencia,
@@ -231,6 +233,43 @@ function comoPetTag(tag: TagDoTutor): Record<string, unknown> {
   };
 }
 
+/**
+ * Os resolvedores de dimensão desta rota pública, e a razão de cada resumo.
+ *
+ * - **`code`** é uma credencial ao portador. Ela viaja na URL porque um QR não
+ *   tem outro jeito, mas a chave do balde vai para `rate_limit_counters` e fica
+ *   lá depois que o pet foi encontrado. Código em claro ali é a plaquinha de
+ *   alguém guardada em texto puro numa tabela operacional. Vai resumida, e vem
+ *   do código **canônico**: sem normalizar, a mesma plaquinha digitada com e sem
+ *   hífen cairia em dois baldes e o teto de 30/h viraria 60.
+ * - **`finder_identity`** já nasce resumida no domínio
+ *   (`hmacDeIdentidadeDoAchador`), que é o mesmo valor que decide se um segundo
+ *   aviso anexa à conversa em vez de tocar o telefone do tutor de novo. Usar
+ *   outro cálculo aqui faria o teto contar uma identidade e o produto outra.
+ * - **`pet`** é UUID interno, e vai em claro pelo mesmo motivo de `account`:
+ *   `bucket_key` não sai em resposta nenhuma e o resumo tornaria impossível
+ *   responder qual pet bateu no teto de plaquinhas.
+ */
+function resolvedoresDaTag(deps: DependenciasDasRotasDeTag): {
+  code: ResolvedorDeDimensao;
+  finder_identity: ResolvedorDeDimensao;
+} {
+  return {
+    code: (request, sigilo) => {
+      const canonico = normalizarCodigoDaTag(codigoDoCaminho(request));
+      return canonico === undefined ? undefined : sigilo.hmac(`code:${canonico}`);
+    },
+    finder_identity: (request) => {
+      const userAgent =
+        typeof request.headers['user-agent'] === 'string'
+          ? request.headers['user-agent']
+          : undefined;
+      const identidade = hmacDeIdentidadeDoAchador(request.ip, userAgent, deps.ipHmacKey);
+      return identidade === null ? undefined : identidade.toString('base64url');
+    },
+  };
+}
+
 function petIdDoCaminho(request: FastifyRequest): PetId {
   const { petId } = request.params as { petId: string };
   return petId as PetId;
@@ -245,13 +284,17 @@ export function registrarRotasDeTags(
   app: FastifyInstance,
   deps: DependenciasDasRotasDeTag,
 ): void {
-  app.get(rotaDeListagemDeTags.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDeListagemDeTags, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await chamadorAutenticado(request, deps);
     const tags = await deps.tags.listar(petIdDoCaminho(request), chamador.userId);
     return reply.status(200).send({ items: tags.map(comoPetTag) });
   });
 
-  app.post(rotaDeEmissaoDeTag.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(
+    app,
+    rotaDeEmissaoDeTag,
+    { resolvedores: { pet: (request) => petIdDoCaminho(request) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await chamadorAutenticado(request, deps);
     const corpo = (request.body ?? {}) as { label?: string };
     const emitida = await deps.tags.emitir(
@@ -270,7 +313,11 @@ export function registrarRotasDeTags(
       .send({ ...comoPetTag(emitida.tag), code: emitida.codigo, url: emitida.url });
   });
 
-  app.get(rotaDeResolucaoDaTag.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(
+    app,
+    rotaDeResolucaoDaTag,
+    { resolvedores: resolvedoresDaTag(deps) },
+    async (request: FastifyRequest, reply: FastifyReply) => {
     aplicarHigieneDaRotaPublica(reply);
     const chamador = await chamadorOpcional(request, deps);
     const resolucao = await deps.tags.resolver(codigoDoCaminho(request), chamador);
@@ -301,7 +348,7 @@ export function registrarRotasDeTags(
     });
   });
 
-  app.get(rotaDeContextoDoDono.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDeContextoDoDono, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     aplicarHigieneDaRotaPublica(reply);
     const chamador = await chamadorAutenticado(request, deps);
     const contexto = await deps.tags.contextoDoDono(
@@ -311,12 +358,16 @@ export function registrarRotasDeTags(
     return reply.status(200).send({ pet_id: contexto.petId, tag_id: contexto.tagId });
   });
 
-  app.post(
-    rotaDeAvisoPelaTag.path,
-    // A marca que o portão de subida confere contra o contrato. Ela não faz a
-    // idempotência acontecer — quem faz é `executarComIdempotencia`, abaixo —,
-    // ela faz a divergência entre os dois ser impossível de passar despercebida.
-    { config: { idempotencia: true } },
+  registrarRota(
+    app,
+    rotaDeAvisoPelaTag,
+    {
+      // A marca que o portão de subida confere contra o contrato. Ela não faz a
+      // idempotência acontecer — quem faz é `executarComIdempotencia`, abaixo —,
+      // ela faz a divergência entre os dois ser impossível de passar despercebida.
+      config: { idempotencia: true },
+      resolvedores: resolvedoresDaTag(deps),
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       aplicarHigieneDaRotaPublica(reply);
       const chamador = await chamadorOpcional(request, deps);

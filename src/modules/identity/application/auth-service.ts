@@ -363,6 +363,32 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     },
 
     /**
+     * A família a que um token de renovação pertence, **sem consumi-lo**.
+     *
+     * Existe para o teto `token_family` de 10/min da renovação, que é aplicado
+     * antes do handler (`registrarRota`). O teto precisa da família, e a família
+     * só se conhece depois de uma leitura por hash — não há como deduzi-la do
+     * token, que é opaco e rotaciona a cada uso. Contar pelo token em vez da
+     * família daria um balde novo a cada renovação legítima e o teto nunca
+     * fecharia, que é o mesmo que não existir.
+     *
+     * O preço é uma leitura a mais no caminho de renovação. É o preço de contar
+     * a coisa certa, e a alternativa (contar pelo resumo do token apresentado)
+     * parece funcionar e não conta nada.
+     *
+     * Devolve `undefined` para token desconhecido: um token que não existe não
+     * tem família, e inventar um balde comum para todos eles juntaria vítimas de
+     * expiração com quem está martelando valores aleatórios. Quem cobre esse
+     * caso é a entrada `ip` / `invalid_attempts` da mesma rota.
+     */
+    async familiaDoRefresh(refreshApresentado: string): Promise<string | undefined> {
+      const armazenado = await deps.repositorio.buscarRefreshPorHash(
+        comoTokenHash(refreshApresentado),
+      );
+      return armazenado?.familyId;
+    },
+
+    /**
      * Rotação obrigatória: cada refresh vale **uma** vez.
      *
      * Apresentar um token já consumido revoga a família inteira, avisa a vítima

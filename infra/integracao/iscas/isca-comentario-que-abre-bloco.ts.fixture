@@ -1,0 +1,30 @@
+/**
+ * ISCA. Este arquivo NAO e compilado nem executado: ele existe para ser LIDO
+ * por `infra/integracao/variaveis-exigidas.mjs`, que precisa achar as duas
+ * chamadas de baixo e ignorar a de dentro do comentario.
+ *
+ * O caso e real e custou caro: a guarda da esteira anunciava "12 variaveis
+ * exigidas pelo codigo, todas preenchidas" enquanto era cega para treze delas,
+ * DATABASE_URL entre elas, por causa de um `/*` dentro de um comentario de
+ * linha em `src/shared/config/app-config.ts:531`.
+ *
+ * A extensao e `.ts.fixture` e nao `.ts` de proposito: `tsconfig.json` inclui
+ * so `src/` e `tests/`, entao o ESLint com servico de projeto recusaria um
+ * `.ts` aqui com "was not found by the project service" e deixaria
+ * `npm run lint` vermelho por causa de um arquivo que ninguem compila. O que
+ * esta sob prova e `semComentarios()`, que recebe TEXTO -- a extensao nao muda
+ * nada para ela.
+ */
+
+const antes = requireEnv('ISCA_ANTES_DO_COMENTARIO_DE_LINHA');
+
+// A armadilha, copiada da forma em que ela aparece de verdade: um caminho com
+// curinga dentro de um comentario de LINHA. O `/*` de `/.well-known/*` abre um
+// bloco para qualquer expressao regular que retire bloco antes de retirar
+// linha, e tudo daqui para baixo desaparece.
+
+const depois = requireEnv('ISCA_DEPOIS_DO_COMENTARIO_DE_LINHA');
+
+/* Esta aqui esta DENTRO de um bloco de verdade e NAO pode ser contada:
+   requireEnv('ISCA_SO_EM_COMENTARIO_DE_BLOCO') */
+// requireEnv('ISCA_SO_EM_COMENTARIO_DE_LINHA')

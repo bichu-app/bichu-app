@@ -1,0 +1,255 @@
+/**
+ * Registro de rota. **É aqui que o teto de chamada passa a existir.**
+ *
+ * ## O que este arquivo troca
+ *
+ * Antes: `app.post(rota.path, handler)`. O objeto de `defineRoute` chegava
+ * inteiro à borda e só a sua propriedade `path` era consumida. O `rateLimit`
+ * ficava declarado, obrigatório por tipo, e **nunca lido** — a declaração e a
+ * aplicação eram dois atos ligados por uma string.
+ *
+ * Agora: `registrarRota(app, rota, opcoes, handler)`. Quem registra passa a
+ * rota inteira, e é o registro que instala os ganchos que aplicam os tetos
+ * declarados nela. Não existe passo a lembrar, porque não existe passo.
+ *
+ * ## As três coisas que deixam de ser exprimíveis
+ *
+ * 1. **Registrar sem aplicar.** O portão `varrer-registro-direto` reprova
+ *    qualquer `app.get/post/put/patch/delete(` fora deste arquivo, e ele tem
+ *    isca própria — uma varredura que não acusa o caso plantado reprova a si
+ *    mesma.
+ * 2. **Registrar sem contador.** O contador chega pelo decorador
+ *    `tetoDeChamada`, que `criarServidor` instala e cujo tipo é obrigatório nas
+ *    opções do servidor. Um `FastifyInstance` sem ele derruba o registro na
+ *    subida, nomeando o que falta — não em produção, na primeira requisição.
+ * 3. **Declarar uma dimensão e não resolvê-la.** `ip`, `ip_24` e `origin` saem
+ *    da requisição crua e o registro resolve sozinho. As demais (`account`,
+ *    `email`, `code`, `pet`, `token_family`, `finder_identity`) o autor da rota
+ *    precisa fornecer, e a falta é **erro de compilação**: o tipo
+ *    `ResolvedoresExigidos` extrai as dimensões da própria tupla declarada em
+ *    `defineRoute`.
+ *
+ * ## Ordem dos ganchos, que é onde está a parte que importa
+ *
+ * ```
+ * onRequest      teto das dimensões de requisição crua  <- 429 sai daqui
+ * onRequest      os ganchos da própria rota (ex.: conferência de assinatura)
+ * preValidation  teto das dimensões que precisam do corpo ou da credencial
+ * handler
+ * onError        marca a tentativa como inválida, pelo `type` do problema
+ * onResponse     conta a inválida (`applies_to: invalid_attempts`)
+ * ```
+ *
+ * O teto genérico vem **antes** do gancho da rota, e não é detalhe de estilo: a
+ * conferência de assinatura do webhook é deliberadamente cara (tempo constante),
+ * e o critério 3 da BICHUS-178 exige que a chamada recusada por teto não chegue
+ * a ser conferida. Se este arquivo inverter as duas linhas, o teto continua
+ * respondendo 429 e deixa de proteger do que ele existe para proteger.
+ */
+import type {
+  FastifyInstance,
+  FastifyReply,
+  FastifyRequest,
+  onRequestAsyncHookHandler,
+  RouteShorthandOptions,
+} from 'fastify';
+
+import {
+  aplicarNaEntrada,
+  contarTentativaInvalida,
+  inventariarNaoAplicaveis,
+  resolvedoresGenericos,
+  type DependenciasDoTeto,
+  type Dimensao,
+  type EntradaNaoAplicavel,
+  type ResolvedorDeDimensao,
+  type Resolvedores,
+  DIMENSOES_GENERICAS,
+} from './aplicacao-de-teto.js';
+import { AppError } from './errors.js';
+import type { ProblemType } from './problem.js';
+import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
+
+declare module 'fastify' {
+  interface FastifyInstance {
+    /** Instalado por `criarServidor`. Ver `OpcoesDoServidor.teto`. */
+    tetoDeChamada?: DependenciasDoTeto;
+  }
+  interface FastifyRequest {
+    /**
+     * Marcada em `onError` quando o problema é recusa de credencial. Lida em
+     * `onResponse`, que é o único gancho que roda sempre.
+     */
+    tentativaInvalida?: true;
+  }
+}
+
+/**
+ * Os tipos de problema que significam **credencial recusada**, e só eles.
+ *
+ * `applies_to: invalid_attempts` conta a tentativa que se revelou inválida. A
+ * tentação é contar todo 4xx, e ela está errada de um jeito caro: o webhook do
+ * Postmark faz 600 chamadas legítimas por hora, e um punhado delas com um
+ * `RecordType` que ainda não classificamos responde **400**. Contar esses 400
+ * gastaria o teto de 20 inválidas com tráfego legítimo e passaria a recusar o
+ * provedor — o oposto do que o teto existe para fazer.
+ *
+ * Então a decisão é pelo `type` do problema, que é vocabulário fechado do
+ * contrato, e não pelo status. `tag-revoked` fica **fora** de propósito: quem
+ * escaneia uma plaquinha revogada acertou um código real, e isso é resolução
+ * bem-sucedida de uma tag morta, não tentativa inválida.
+ */
+export const TIPOS_DE_TENTATIVA_INVALIDA: ReadonlySet<ProblemType> = new Set<ProblemType>([
+  'unauthenticated',
+  'invalid-credentials',
+  'token-expired',
+  'forbidden',
+  'tag-code-malformed',
+  'tag-code-not-found',
+  'verification-token-expired',
+]);
+
+/** As dimensões que aparecem na tupla `rateLimit` da rota, como união literal. */
+type DimensoesDeclaradas<T extends RouteDefinition> = T extends {
+  readonly rateLimit: readonly RateLimitEntry[];
+}
+  ? T['rateLimit'][number]['dimension'][number]
+  : never;
+
+type DimensaoGenerica = (typeof DIMENSOES_GENERICAS)[number];
+
+/** O que a rota precisa resolver: tudo que ela declara e o registro não sabe. */
+type DimensoesExigidas<T extends RouteDefinition> = Exclude<
+  DimensoesDeclaradas<T>,
+  DimensaoGenerica
+>;
+
+/**
+ * Obrigatório quando a rota declara alguma dimensão específica; ausente quando
+ * não declara nenhuma. `[X] extends [never]` (e não `X extends never`) porque a
+ * forma simples distribui sobre a união e responde a pergunta errada.
+ */
+type ResolvedoresExigidos<T extends RouteDefinition> = [DimensoesExigidas<T>] extends [never]
+  ? { readonly resolvedores?: undefined }
+  : { readonly resolvedores: Readonly<Record<DimensoesExigidas<T>, ResolvedorDeDimensao>> };
+
+export type OpcoesDeRegistro<T extends RouteDefinition> = ResolvedoresExigidos<T> & {
+  /** Schema do Fastify, como antes. O corpo continua saindo do contrato. */
+  readonly schema?: RouteShorthandOptions['schema'];
+  readonly config?: RouteShorthandOptions['config'];
+  /** Ganchos da própria rota. Rodam DEPOIS do teto das dimensões genéricas. */
+  readonly onRequest?: readonly onRequestAsyncHookHandler[];
+};
+
+export type Handler = (request: FastifyRequest, reply: FastifyReply) => Promise<unknown>;
+
+/**
+ * O que a subida precisa dizer em voz alta: as entradas declaradas que este
+ * mecanismo **não** aplica. Acumula por processo, e `api.ts` imprime a lista.
+ *
+ * Lista de exceção que ninguém vê é lista que cresce, e é a própria forma do
+ * defeito que esta história conserta: uma proteção que se acredita existir.
+ */
+const naoAplicadas: EntradaNaoAplicavel[] = [];
+
+export function inventarioDoQueNaoEAplicado(): readonly EntradaNaoAplicavel[] {
+  return naoAplicadas;
+}
+
+/** Só para teste: o inventário é por processo e um cenário não herda o outro. */
+export function zerarInventario(): void {
+  naoAplicadas.length = 0;
+}
+
+/**
+ * O método declarado, no vocabulário do framework.
+ *
+ * Tabela e não `toUpperCase()`: a tabela é exaustiva por tipo, então acrescentar
+ * um método a `RouteBase` sem acrescentá-lo aqui não compila. Com a conversão de
+ * texto, o método novo chegaria ao framework como uma cadeia qualquer e falharia
+ * na subida, que é tarde demais para algo que o compilador sabia.
+ */
+const METODOS = {
+  get: 'GET',
+  post: 'POST',
+  put: 'PUT',
+  patch: 'PATCH',
+  delete: 'DELETE',
+} as const satisfies Record<RouteDefinition['method'], string>;
+
+function tetoDe(app: FastifyInstance): DependenciasDoTeto {
+  const teto = app.tetoDeChamada;
+  if (teto === undefined) {
+    throw new Error(
+      'Registro de rota sem contador de teto: o servidor não foi criado por ' +
+        '`criarServidor({ teto })`, ou o decorador `tetoDeChamada` foi removido. ' +
+        'Sem ele nenhuma rota aplicaria `x-rate-limit`, que é exatamente o defeito ' +
+        'da BICHUS-178. Ver adr/ADR-0016, Emenda 1.',
+    );
+  }
+  return teto;
+}
+
+/**
+ * Registra a rota e liga os tetos dela.
+ *
+ * `rota.method` finalmente é consumido: era o único campo do objeto, junto com
+ * `path`, que a borda lia — e ainda assim o método era repetido à mão em
+ * `app.post(...)`. Agora a declaração é a única fonte dos dois.
+ */
+export function registrarRota<const T extends RouteDefinition>(
+  app: FastifyInstance,
+  rota: T,
+  opcoes: OpcoesDeRegistro<T>,
+  handler: Handler,
+): void {
+  const deps = tetoDe(app);
+  naoAplicadas.push(...inventariarNaoAplicaveis(rota));
+
+  const resolvedores: Resolvedores = {
+    ...resolvedoresGenericos(deps),
+    ...((opcoes.resolvedores ?? {}) as Partial<Record<Dimensao, ResolvedorDeDimensao>>),
+  };
+
+  const tetoDeEntrada: onRequestAsyncHookHandler = async (request) => {
+    const { erro } = await aplicarNaEntrada(rota, request, resolvedores, deps, 'entrada');
+    if (erro !== undefined) throw erro;
+  };
+
+  const tetoDoCorpo: onRequestAsyncHookHandler = async (request) => {
+    const { erro } = await aplicarNaEntrada(rota, request, resolvedores, deps, 'corpo');
+    if (erro !== undefined) throw erro;
+  };
+
+  app.route({
+    method: METODOS[rota.method],
+    url: rota.path,
+    ...(opcoes.schema === undefined ? {} : { schema: opcoes.schema }),
+    ...(opcoes.config === undefined ? {} : { config: opcoes.config }),
+    onRequest: [tetoDeEntrada, ...(opcoes.onRequest ?? [])],
+    preValidation: [tetoDoCorpo],
+    onError: (request, _reply, erro, pronto) => {
+      if (erro instanceof AppError && TIPOS_DE_TENTATIVA_INVALIDA.has(erro.problemType)) {
+        request.tentativaInvalida = true;
+      }
+      pronto();
+    },
+    // Depois da resposta ter saído: contar não pode atrasar quem já foi
+    // recusado, e a contagem que atrasa a resposta vira o próprio custo que o
+    // teto existe para evitar.
+    onResponse: async (request) => {
+      if (request.tentativaInvalida !== true) return;
+      try {
+        await contarTentativaInvalida(rota, request, resolvedores, deps);
+      } catch (erro) {
+        // Falha ao contar não derruba nada (a resposta já saiu), mas também não
+        // some: um contador que para de contar é o teto voltando a não existir.
+        deps.log(
+          { operation_id: rota.operationId, err: String(erro) },
+          'nao foi possivel contar a tentativa invalida',
+        );
+      }
+    },
+    handler,
+  });
+}

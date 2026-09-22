@@ -28,6 +28,28 @@ function inicioDaJanela(agoraEmMilissegundos: number, janelaEmSegundos: number):
   return new Date(Math.floor(agoraEmMilissegundos / janelaEmMilissegundos) * janelaEmMilissegundos);
 }
 
+/**
+ * A decisão a partir da contagem JÁ APURADA.
+ *
+ * `hit` compara depois de somar (`contagem <= limite`), e `peek` compara antes
+ * (`contagem < limite`). Os dois usam este mesmo cálculo para que a fronteira
+ * não seja escrita duas vezes: um deslize de um em qualquer dos dois faz o
+ * balde recusar uma requisição cedo demais ou tarde demais, e nada acusa.
+ */
+function decidir(
+  contagem: number,
+  limite: number,
+  expiraEm: number,
+  agoraEmMilissegundos: number,
+): RateLimitDecision {
+  if (contagem <= limite) return { allowed: true, remaining: Math.max(0, limite - contagem) };
+  return {
+    allowed: false,
+    remaining: 0,
+    retryAfterSeconds: Math.max(1, Math.ceil((expiraEm - agoraEmMilissegundos) / 1000)),
+  };
+}
+
 export function criarContadorEmMemoria(agora: () => number): RateLimitStore {
   const baldes = new Map<string, { expiraEm: number; contagem: number }>();
 
@@ -48,15 +70,23 @@ export function criarContadorEmMemoria(agora: () => number): RateLimitStore {
       balde.contagem += 1;
       baldes.set(chave, balde);
 
-      const permitido = balde.contagem <= limite;
-      const decisao: RateLimitDecision = permitido
-        ? { allowed: true, remaining: Math.max(0, limite - balde.contagem) }
-        : {
-            allowed: false,
-            remaining: 0,
-            retryAfterSeconds: Math.max(1, Math.ceil((expiraEm - agoraEmMilissegundos) / 1000)),
-          };
-      return Promise.resolve(decisao);
+      return Promise.resolve(decidir(balde.contagem, limite, expiraEm, agoraEmMilissegundos));
+    },
+
+    /**
+     * Lê sem somar, e pergunta o que aconteceria **se** a próxima entrasse —
+     * daí o `contagem + 1`. O balde com `limite` tentativas inválidas dentro já
+     * chegou ao teto, e a próxima é a que precisa ser recusada antes de custar
+     * trabalho. Sem o `+ 1`, a 21ª de um teto de 20 ainda passaria e só a 22ª
+     * seria barrada.
+     */
+    peek: (bucketKey, limite, janela) => {
+      const agoraEmMilissegundos = agora();
+      const inicio = inicioDaJanela(agoraEmMilissegundos, janela);
+      const chave = `${bucketKey}|${inicio.getTime()}`;
+      const expiraEm = inicio.getTime() + janela * 1000;
+      const contagem = baldes.get(chave)?.contagem ?? 0;
+      return Promise.resolve(decidir(contagem + 1, limite, expiraEm, agoraEmMilissegundos));
     },
 
     reset: (prefixo) => {
@@ -92,14 +122,28 @@ export function criarContadorEmPostgres(
         .returning('count')
         .executeTakeFirstOrThrow();
 
-      if (linha.count <= limite) {
-        return { allowed: true, remaining: Math.max(0, limite - linha.count) };
-      }
-      return {
-        allowed: false,
-        remaining: 0,
-        retryAfterSeconds: Math.max(1, Math.ceil((expiraEm - agoraEmMilissegundos) / 1000)),
-      };
+      return decidir(linha.count, limite, expiraEm, agoraEmMilissegundos);
+    },
+
+    /**
+     * Lê sem somar, e por isso **não** precisa ser atômico: dois pedidos
+     * simultâneos lendo o mesmo balde podem ambos passar, e o pior caso é uma
+     * tentativa inválida a mais sendo conferida. O que não pode escapar é a
+     * contagem, e ela continua no `hit()` atômico de cima.
+     */
+    peek: async (bucketKey, limite, janela) => {
+      const agoraEmMilissegundos = agora();
+      const inicio = inicioDaJanela(agoraEmMilissegundos, janela);
+      const expiraEm = inicio.getTime() + janela * 1000;
+
+      const linha = await db
+        .selectFrom('rate_limit_counters')
+        .select('count')
+        .where('bucket_key', '=', bucketKey)
+        .where('window_start', '=', inicio)
+        .executeTakeFirst();
+
+      return decidir((linha?.count ?? 0) + 1, limite, expiraEm, agoraEmMilissegundos);
     },
 
     reset: async (prefixo) => {
@@ -121,6 +165,7 @@ export function criarContadorEmPostgres(
 export function criarContadorDesligado(): RateLimitStore {
   return {
     hit: () => Promise.resolve({ allowed: true, remaining: Number.MAX_SAFE_INTEGER }),
+    peek: () => Promise.resolve({ allowed: true, remaining: Number.MAX_SAFE_INTEGER }),
     reset: () => Promise.resolve(),
   };
 }
