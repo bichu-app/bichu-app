@@ -156,10 +156,38 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// tag nao tem imagem" de "nao consegui buscar". Nenhuma das duas encosta na
 /// porta `CameraEGaleria`, que e o que o criterio 10 protege.
 ///
+/// **Destravado uma oitava vez pelas BICHUS-232, BICHUS-233 e BICHUS-153**,
+/// os tres achados do cliente de 22/09/2026. Quatro arquivos, e nenhum deles
+/// encosta na porta `CameraEGaleria`:
+///
+/// - `abas.dart` (232) deixou de oferecer o botao de cadastro ao lado de
+///   `Entrou como` e `Ja tenho conta`: a porta de cadastro de pet nao mora no
+///   Perfil.
+/// - `perfil/meus_pets.dart` (232) passou a construir a acao de cadastrar num
+///   lugar so, usada nos dois ramos, em vez de duas copias que ja tinham
+///   divergido.
+/// - `casca_com_abas.dart` (232) teve o comentario de `EstadoDaSecao.existe`
+///   corrigido.
+/// - `escanear/tela_leitor_de_qr.dart` (233 e 153): o icone de proximidade
+///   virou `place_outlined`/`place` sob o enum `CampoSemantico`, e o 404 de
+///   `GET /v1/tags/{code}` passou a distinguir o codigo DIGITADO do codigo
+///   lido, com `Digitar de novo` devolvendo o foco ao campo sem limpa-lo.
+///
+/// A ultima **tira** ainda mais leitura da porta, em vez de somar: a tela
+/// continua sem consultar permissao nenhuma, e a origem do codigo que ela
+/// agora carrega vem do teclado, nunca da camera. O `_codigoFoiDigitado`
+/// nasce `false` de proposito, para a BICHUS-54 cair no caminho escaneado
+/// quando trouxer o leitor de verdade.
+///
+/// **A BICHUS-54 destrava isto de novo, e com outro numero.** Ela apaga
+/// `escanear/tela_leitor_de_qr.dart` e altera `mascara_do_codigo_da_tag.dart`.
+/// Quem mesclar por ultimo reescreve esta linha; um conflito aqui e o
+/// resultado esperado, e nao sinal de que alguem errou.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '648b91a93693066cc2346c754e11fca080d98101';
+const String _arvoreDasTelas = 'ba71b36251b088cdb6cd81c6b54b3c9c2a22bcb8';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
