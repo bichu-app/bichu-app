@@ -22,6 +22,18 @@
  * `pets.deleted_at is null` que decide se um pet excluído ainda reimprime. Um
  * dublê em memória responde o que o autor do dublê acreditou.
  *
+ * ## A isca, e como ela foi provada
+ *
+ * Removida a linha `.where('pets.owner_user_id', '=', dono)` de
+ * `construtorDaBuscaParaReimpressao`, em 22/09/2026, Node v26.8.2:
+ *
+ * | o que foi desligado | reprovaram |
+ * |---|---|
+ * | o predicado do dono na busca para reimpressão | 1 caso (de 68) |
+ *
+ * É `a conta B NÃO recebe o cifrado da tag de A` que reprova, e ela reprova
+ * porque o Postgres devolveu a linha — não porque um dublê recusou.
+ *
  * ## Como rodar
  *
  *   npm run test:integration

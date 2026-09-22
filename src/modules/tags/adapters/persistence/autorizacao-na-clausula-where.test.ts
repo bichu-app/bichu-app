@@ -31,18 +31,20 @@
  * Cada mecanismo foi desligado em `kysely-tag-repository.ts`, a suíte rodou, e
  * o mecanismo foi restaurado. Em 22/09/2026, Node v26.8.2:
  *
- * | o que foi desligado | reprovaram |
+ * Base: 976 casos, 976 passaram.
+ *
+ * | o que foi desligado em `kysely-tag-repository.ts` | reprovaram |
  * |---|---|
- * | `.where('pets.owner_user_id', '=', dono)` de `construtorDaBuscaParaReimpressao` | 3 casos |
- * | `.where('pets.owner_user_id', '=', dono)` de `construtorDoContextoDoDono` | 2 casos |
- * | `.where('owner_user_id', '=', dono)` de `construtorDaConferenciaDoPet` | 4 casos |
- * | `.where('pets.owner_user_id', '=', dono)` de `construtorDaListaDeTags` | 2 casos |
- * | `=` virando `is not` na busca para reimpressão | 3 casos |
+ * | `.where('pets.owner_user_id', '=', dono)` de `construtorDaBuscaParaReimpressao` | 2 casos |
+ * | `.where('pets.owner_user_id', '=', dono)` de `construtorDoContextoDoDono` | 1 caso |
+ * | `.where('owner_user_id', '=', dono)` de `construtorDaConferenciaDoPet` | 1 caso |
+ * | `.where('pets.owner_user_id', '=', dono)` de `construtorDaListaDeTags` | 1 caso |
+ * | `=` virando `is not` na busca para reimpressão | 1 caso |
  * | o `dono` do predicado virando `petId` na busca para reimpressão | 2 casos |
- * | `.where('pets.deleted_at', 'is', null)` da busca para reimpressão | 2 casos |
+ * | `.where('pets.deleted_at', 'is', null)` da busca para reimpressão | 1 caso |
  * | um `.where('pet_tags.status', '=', 'active')` ADICIONADO à busca para reimpressão | 2 casos |
  *
- * As três linhas do meio são o motivo de o predicado cobrar o operador e o
+ * A quinta e a sexta linhas são o motivo de o predicado cobrar o operador e o
  * **valor ligado** à posição `$n`, e não a presença do nome da coluna no texto:
  * `is not $1` casa toda linha da tabela, e `owner_user_id = :petId` é uma
  * igualdade acidental esperando dois uuids coincidirem.
@@ -50,6 +52,12 @@
  * A última linha é a direção contrária, e ela também precisa reprovar: a
  * ausência de `status` no `WHERE` é deliberada (ADR-0004), e um filtro a mais
  * transformaria o 410 da tag revogada em 404 sem quebrar nada visível.
+ *
+ * Uma nona tentativa não conta como prova e está registrada por isso: a
+ * primeira remoção de `pets.deleted_at` não casou com o texto do arquivo e
+ * escreveu de volta o mesmo conteúdo. A suíte ficou verde, e um relatório
+ * apressado teria chamado isso de "a isca não pega esse caso". O script passou
+ * a exigir que o arquivo mudasse antes de rodar.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
