@@ -58,7 +58,8 @@
  */
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { autoteste as autotesteDaLeitura, casosQueReprovaram, placarDoTap } from './casos-reprovados.mjs';
 
@@ -390,15 +391,20 @@ function autoteste() {
 // LINHA DE COMANDO
 // =========================================================================
 
-const argv = process.argv.slice(2);
+// ESTE ARQUIVO E MODULO **E** COMANDO, E A GUARDA ABAIXO NAO E CERIMONIA.
+// `infra/integracao/repetir.mjs` importa `registrarExecucao` daqui. Sem a
+// guarda, o simples `import` executaria a linha de comando com o argv do
+// CHAMADOR e morreria em "comando desconhecido" -- ou, pior, registraria o que
+// ninguem pediu.
+const souOComando = process.argv[1] !== undefined && fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 
-if (argv.includes('--autoteste')) {
+const argv = souOComando ? process.argv.slice(2) : ['--nao-sou-o-comando'];
+
+if (!souOComando) {
+  // Importado como modulo: nada a fazer aqui.
+} else if (argv.includes('--autoteste')) {
   process.exit(autoteste());
-}
-
-const comando = argv[0];
-
-if (comando === 'registrar') {
+} else if (argv[0] === 'registrar') {
   const livro = bandeira(argv, 'livro');
   const tap = bandeira(argv, 'tap');
   const suite = bandeira(argv, 'suite');
@@ -446,18 +452,16 @@ if (comando === 'registrar') {
   for (const caso of casos) console.log(`  reprovou: ${caso}`);
   void registro;
   process.exit(0);
-}
-
-if (comando === 'render') {
+} else if (argv[0] === 'render') {
   const livro = bandeira(argv, 'livro');
   if (livro === undefined) morrer('`render` exige `--livro`.');
   const suite = bandeira(argv, 'suite');
   const topo = Number.parseInt(bandeira(argv, 'topo') ?? '25', 10);
   process.stdout.write(renderizar(livro, { suite, topo }));
   process.exit(0);
+} else {
+  morrer(
+    'comando desconhecido. Use `registrar`, `render` ou `--autoteste`. ' +
+      'Ver o cabecalho deste arquivo.',
+  );
 }
-
-morrer(
-  'comando desconhecido. Use `registrar`, `render` ou `--autoteste`. ' +
-    'Ver o cabecalho deste arquivo.',
-);
