@@ -76,6 +76,8 @@ function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
     conferirTokenDeVerificacao: recusar('conferirTokenDeVerificacao'),
     invalidarTokensPendentes: recusar('invalidarTokensPendentes'),
     marcarEmailVerificado: recusar('marcarEmailVerificado'),
+    registrarPedidoDeTrocaDeEmail: recusar('registrarPedidoDeTrocaDeEmail'),
+    concluirTrocaDeEmail: recusar('concluirTrocaDeEmail'),
   };
 }
 

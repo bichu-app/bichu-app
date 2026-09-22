@@ -37,6 +37,14 @@ export type AuditAction =
   | 'auth.password_rehashed'
   | 'auth.password_reset_completed'
   | 'auth.email_verified'
+  /**
+   * Pediram a troca do e-mail da conta (BICHUS-42). Fica na trilha mesmo
+   * quando nenhum token é emitido — o pedido para um endereço que já tem dono
+   * é indistinguível na resposta, e a trilha é o único lugar onde ele aparece.
+   */
+  | 'auth.email_change_requested'
+  /** A troca foi confirmada no endereço novo e `users.email` mudou. */
+  | 'auth.email_changed'
   // Autorização
   | 'authz.denied'
   | 'profile.updated'

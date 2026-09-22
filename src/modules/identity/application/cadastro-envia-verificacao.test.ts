@@ -186,6 +186,14 @@ class RepositorioDeCadastro implements IdentityRepository {
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
   }
+
+  registrarPedidoDeTrocaDeEmail(): Promise<void> {
+    return naoUsado('registrarPedidoDeTrocaDeEmail');
+  }
+
+  concluirTrocaDeEmail(): Promise<Conta | undefined> {
+    return naoUsado('concluirTrocaDeEmail');
+  }
 }
 
 interface Bancada {

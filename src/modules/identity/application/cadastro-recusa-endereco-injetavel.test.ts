@@ -79,6 +79,8 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     conferirTokenDeVerificacao: () => naoDeveriaTerChegado('conferirTokenDeVerificacao'),
     invalidarTokensPendentes: () => naoDeveriaTerChegado('invalidarTokensPendentes'),
     marcarEmailVerificado: () => naoDeveriaTerChegado('marcarEmailVerificado'),
+    registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
+    concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
   };
 }
 
