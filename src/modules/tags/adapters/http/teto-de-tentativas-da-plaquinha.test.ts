@@ -78,12 +78,7 @@ import type { RateLimitEntry } from '../../../../shared/http/route-definition.js
 import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.js';
 import type { AuditLog } from '../../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator, SecretCipher } from '../../../../shared/ports/index.js';
-import type {
-  AbsoluteUrl,
-  Instant,
-  OpaqueToken,
-  UserId,
-} from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, Instant, OpaqueToken } from '../../../../shared/types/brands.js';
 import { criarTagService } from '../../application/tag-service.js';
 import { gerarCodigoDaTag } from '../../domain/tag-code.js';
 import { criarRasterizadorDeQr } from '../external/sharp-rasterizador-de-qr.js';
@@ -256,7 +251,7 @@ async function tentar(
   return {
     status: resposta.statusCode,
     tipo,
-    retryAfter: resposta.headers['retry-after'] as string | undefined,
+    retryAfter: resposta.headers['retry-after'],
   };
 }
 
