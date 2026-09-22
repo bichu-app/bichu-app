@@ -22,7 +22,7 @@
  * da URL do objeto, e o parser de URL resolve `..`: uma linha com
  * `card/../../x` lê de fora do bucket (BICHUS-134).
  */
-import type { Db } from '../../../../shared/db/pool.js';
+import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { JobKind } from '../../../../shared/ports/index.js';
 import type {
   FotoDoPet,
@@ -79,16 +79,128 @@ const COLUNAS_DA_FOTO = [
   'pet_photos.created_at',
 ] as const;
 
+/**
+ * ## Os construtores, e por que a autorização passou a sair por eles
+ *
+ * ADR-0021: a autorização mora na cláusula `WHERE`. A afirmação **não é
+ * observável pela resposta da rota** — uma consulta que traz a foto do outro e
+ * a descarta num `if` responde igual, até o dia em que alguém mexe no `if`, e
+ * aí não existe teste que acuse, porque o `if` era o teste.
+ *
+ * Cada uma das cinco cláusulas de dono deste arquivo foi removida, uma por vez,
+ * e os 967 casos unitários continuaram verdes nas cinco. O comportamento estava
+ * correto; o que faltava era a verificação.
+ *
+ * `autorizacao-na-clausula-where.test.ts` compila o SQL destas funções sem
+ * executá-las e lê o **valor ligado à posição `$n` do predicado**, e não a
+ * presença do nome da coluna no texto. A distinção decide o resultado aqui: as
+ * consultas de foto ligam `pet`, `foto` e `dono` na mesma chamada, e
+ * `parameters.includes(dono)` aprovaria um `owner_user_id = :petId` com o dono
+ * ainda na lista por causa de outro predicado.
+ */
+
+/** O pet é deste tutor? É o portão de `registrarIntencao` e de `confirmarEnvio`. */
+export function construtorDaConferenciaDoPet(db: DbExecutor, pet: PetId, dono: UserId) {
+  return db
+    .selectFrom('pets')
+    .select('id')
+    .where('id', '=', pet)
+    .where('owner_user_id', '=', dono)
+    .where('deleted_at', 'is', null);
+}
+
+/**
+ * A intenção de envio ainda aberta.
+ *
+ * Aqui o dono é `upload_intents.user_id`, e **não** `owner_user_id`: a tabela
+ * guarda quem pediu o envio, não o dono do pet. Uma isca que só procurasse
+ * `owner_user_id` ficaria verde com esta cláusula removida — é por isso que o
+ * arquivo de teste carrega dois predicados, e não um.
+ */
+export function construtorDaIntencaoAberta(
+  db: DbExecutor,
+  id: string,
+  dono: UserId,
+  agora: Instant,
+) {
+  return db
+    .selectFrom('upload_intents')
+    .selectAll()
+    .where('id', '=', id)
+    // As três condições valem juntas: dono errado, vencida e já confirmada
+    // saem todas como `null`, e é o serviço que as transforma na MESMA
+    // resposta — distinguir contaria a um estranho qual delas aconteceu.
+    .where('user_id', '=', dono)
+    .where('expires_at', '>', new Date(Number(agora)))
+    .where('confirmed_at', 'is', null);
+}
+
+/** As fotos do pet, com o dono no mesmo `WHERE` que o pet. */
+export function construtorDaListaDoPet(db: DbExecutor, pet: PetId, dono: UserId) {
+  return db
+    .selectFrom('pet_photos')
+    .innerJoin('pets', 'pets.id', 'pet_photos.pet_id')
+    .select(COLUNAS_DA_FOTO)
+    .where('pet_photos.pet_id', '=', pet)
+    .where('pets.owner_user_id', '=', dono)
+    .where('pet_photos.deleted_at', 'is', null)
+    .orderBy('pet_photos.is_primary', 'desc')
+    .orderBy('pet_photos.created_at', 'desc');
+}
+
+/** Uma foto específica, com pet e dono irmãos do id no mesmo `WHERE`. */
+export function construtorDaBuscaDeFoto(
+  db: DbExecutor,
+  pet: PetId,
+  foto: string,
+  dono: UserId,
+) {
+  return db
+    .selectFrom('pet_photos')
+    .innerJoin('pets', 'pets.id', 'pet_photos.pet_id')
+    .select(COLUNAS_DA_FOTO)
+    .where('pet_photos.id', '=', foto)
+    .where('pet_photos.pet_id', '=', pet)
+    .where('pets.owner_user_id', '=', dono)
+    .where('pet_photos.deleted_at', 'is', null);
+}
+
+/**
+ * A exclusão lógica da foto.
+ *
+ * O dono entra por `exists` correlacionado, e a correlação
+ * (`pets.id = pet_photos.pet_id`) é tão essencial quanto o `owner_user_id`: sem
+ * ela o `exists` seria verdadeiro para quem tivesse QUALQUER pet, e apagaria a
+ * foto de qualquer um. A isca cobra as duas coisas.
+ */
+export function construtorDaExclusaoDeFoto(
+  db: DbExecutor,
+  pet: PetId,
+  foto: string,
+  dono: UserId,
+  agora: Instant,
+) {
+  return db
+    .updateTable('pet_photos')
+    .set({ deleted_at: new Date(Number(agora)), is_primary: false })
+    .where('id', '=', foto)
+    .where('pet_id', '=', pet)
+    .where('deleted_at', 'is', null)
+    .where((eb) =>
+      eb.exists(
+        eb
+          .selectFrom('pets')
+          .select('pets.id')
+          .whereRef('pets.id', '=', 'pet_photos.pet_id')
+          .where('pets.owner_user_id', '=', dono),
+      ),
+    );
+}
+
 export function criarMediaRepository(db: Db): MediaRepository {
   return {
     async petEhDoTutor(pet: PetId, dono: UserId): Promise<boolean> {
-      const linha = await db
-        .selectFrom('pets')
-        .select('id')
-        .where('id', '=', pet)
-        .where('owner_user_id', '=', dono)
-        .where('deleted_at', 'is', null)
-        .executeTakeFirst();
+      const linha = await construtorDaConferenciaDoPet(db, pet, dono).executeTakeFirst();
       return linha !== undefined;
     },
 
@@ -113,17 +225,7 @@ export function criarMediaRepository(db: Db): MediaRepository {
       dono: UserId,
       agora: Instant,
     ): Promise<IntencaoDeEnvio | null> {
-      const linha = await db
-        .selectFrom('upload_intents')
-        .selectAll()
-        .where('id', '=', id)
-        // As três condições valem juntas: dono errado, vencida e já confirmada
-        // saem todas como `null`, e é o serviço que as transforma na MESMA
-        // resposta — distinguir contaria a um estranho qual delas aconteceu.
-        .where('user_id', '=', dono)
-        .where('expires_at', '>', new Date(Number(agora)))
-        .where('confirmed_at', 'is', null)
-        .executeTakeFirst();
+      const linha = await construtorDaIntencaoAberta(db, id, dono, agora).executeTakeFirst();
 
       if (linha === undefined) return null;
       return {
@@ -194,16 +296,7 @@ export function criarMediaRepository(db: Db): MediaRepository {
     },
 
     async listarDoPet(pet: PetId, dono: UserId): Promise<readonly FotoDoPet[]> {
-      const linhas = await db
-        .selectFrom('pet_photos')
-        .innerJoin('pets', 'pets.id', 'pet_photos.pet_id')
-        .select(COLUNAS_DA_FOTO)
-        .where('pet_photos.pet_id', '=', pet)
-        .where('pets.owner_user_id', '=', dono)
-        .where('pet_photos.deleted_at', 'is', null)
-        .orderBy('pet_photos.is_primary', 'desc')
-        .orderBy('pet_photos.created_at', 'desc')
-        .execute();
+      const linhas = await construtorDaListaDoPet(db, pet, dono).execute();
       return linhas.map((l) => comoFoto(l));
     },
 
@@ -229,15 +322,7 @@ export function criarMediaRepository(db: Db): MediaRepository {
     },
 
     async buscarFoto(pet: PetId, foto: string, dono: UserId): Promise<FotoDoPet | null> {
-      const linha = await db
-        .selectFrom('pet_photos')
-        .innerJoin('pets', 'pets.id', 'pet_photos.pet_id')
-        .select(COLUNAS_DA_FOTO)
-        .where('pet_photos.id', '=', foto)
-        .where('pet_photos.pet_id', '=', pet)
-        .where('pets.owner_user_id', '=', dono)
-        .where('pet_photos.deleted_at', 'is', null)
-        .executeTakeFirst();
+      const linha = await construtorDaBuscaDeFoto(db, pet, foto, dono).executeTakeFirst();
       return linha === undefined ? null : comoFoto(linha);
     },
 
@@ -306,22 +391,13 @@ export function criarMediaRepository(db: Db): MediaRepository {
     async excluirFoto(pet: PetId, foto: string, dono: UserId, agora: Instant): Promise<boolean> {
       // O subconsulta do dono está aqui, e não num `if` antes, pelo mesmo motivo
       // de sempre: o arranjo que apagaria a foto de outro tutor não existe.
-      const resultado = await db
-        .updateTable('pet_photos')
-        .set({ deleted_at: new Date(Number(agora)), is_primary: false })
-        .where('id', '=', foto)
-        .where('pet_id', '=', pet)
-        .where('deleted_at', 'is', null)
-        .where((eb) =>
-          eb.exists(
-            eb
-              .selectFrom('pets')
-              .select('pets.id')
-              .whereRef('pets.id', '=', 'pet_photos.pet_id')
-              .where('pets.owner_user_id', '=', dono),
-          ),
-        )
-        .executeTakeFirst();
+      const resultado = await construtorDaExclusaoDeFoto(
+        db,
+        pet,
+        foto,
+        dono,
+        agora,
+      ).executeTakeFirst();
       return Number(resultado.numUpdatedRows) > 0;
     },
   };
