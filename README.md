@@ -131,8 +131,62 @@ passa a afirmar em vez de calar. Para apontar um commit específico,
 | `make down` | derruba preservando o volume |
 | `make portas` | reescolhe o par de portas desta máquina |
 | `make verificar` | roda os portões locais, na ordem da esteira |
+| `make fechar-integracao` | **fecha uma integração**: `verificar` + Flutter + APK de verdade |
 
 O detalhe de cada um, e o porquê das decisões, está em `docs/07-devops.md`.
+
+### Fechamento de integração
+
+**Quem integra roda `make fechar-integracao`.** Não há mecanismo que substitua
+isso, e esta seção existe para que a obrigação tenha onde ser lida.
+
+`make verificar` é o laço de quem desenvolve e **não compila um APK**, de
+propósito: `apk` precisa de JDK 17, do SDK do Android e da distribuição do
+Gradle, que não são premissa desta máquina, e minutos dentro de um laço que é de
+segundos viram um laço desligado. `make fechar-integracao` é o outro conjunto:
+ele roda `verificar`, a metade Flutter (`flutter analyze` e `flutter test`) e
+`make apk`, que compila de verdade.
+
+Por que a separação existe: em 22/09/2026 uma integração se declarou verde sem
+nunca ter compilado um APK. Havia um `--` dentro de um comentário do
+`AndroidManifest.xml`, o mesclador de manifesto do Gradle recusava o arquivo, e
+o build do Android morria antes de compilar qualquer coisa. As três suítes
+passaram, porque `flutter analyze` e `flutter test` rodam na máquina virtual do
+Dart e nunca tocam no Gradle. A mesma classe já tinha sido corrigida no dia
+anterior e voltou.
+
+Custo medido nesta máquina, só da parte cara (`apk`):
+
+| cenário | Gradle | ponta a ponta |
+|---|---|---|
+| tudo frio | — | 4min20 |
+| distribuição quente, `build/` frio | 38,4 s | ~2 min |
+| tudo quente, sem mudança em Dart | 4,0 s | ~43 s |
+
+Contra uma rodada inteira de integração, é ruído.
+
+**O que faz a regra valer.** Duas camadas, e nenhuma delas é automática o
+bastante para dispensar a primeira:
+
+1. Você roda. É isto aqui, e é o que de fato fecha uma integração.
+2. O gancho `pre-push` recusa empurrar uma branch `integra/*` sem o recibo de
+   `make fechar-integracao` daquele commit exato, com a árvore limpa. O recibo
+   é `fechamento.local.txt`, fora do git e por árvore. A regra, as iscas e os
+   limites estão em `infra/verificacao/verificar-recibo-de-fechamento.sh`.
+   Como o guarda da `main` no mesmo gancho, ele é contornável com `--no-verify`:
+   ele existe para impedir o engano, que é o caso comum, não a decisão
+   deliberada.
+
+Desde 22/09 a esteira também dispara em `integra/**`, então uma branch de
+integração empurrada roda o `ci.yml` inteiro, incluindo o job `apk`. **O caminho
+que continua descoberto é a integração que nunca é empurrada**: se ela é
+mesclada só na máquina, nem o gancho nem a esteira veem nada, e o único controle
+é você rodar o alvo.
+
+Fica de fora do alvo, e a ausência é deliberada: `make e2e`. O Cypress grava com
+`--record`, que exige a chave do painel, e esta lista precisa rodar numa máquina
+sem segredo nenhum. Quem fecha uma integração que mexeu em fluxo de tela roda
+`make e2e` a mais.
 
 ### Integração a partir de um worktree
 

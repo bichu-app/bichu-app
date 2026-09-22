@@ -21,7 +21,7 @@ on:
   pull_request:
     branches: [main, development]
   push:
-    branches: [main, development]
+    branches: [main, development, 'integra/**']
 
 permissions:
   contents: read
@@ -83,6 +83,16 @@ jobs:
 
       - name: o XML que o build do aplicativo le esta bem formado
         run: python3 infra/verificacao/verificar_manifesto_android.py --raiz .
+      # O guarda que torna a lista de fechamento obrigatoria: branch `integra/*`
+      # so sai da maquina com o recibo de `make fechar-integracao` daquele
+      # commit (`.githooks/pre-push`). O gancho e contornavel com `--no-verify`,
+      # como o da `main`; o que NAO e contornavel e esta esteira, que roda em
+      # `integra/**` desde 22/09 (ver o gatilho no topo do arquivo).
+      #
+      # Aqui rodam so as iscas: elas nao empurram nada e nao tocam no git.
+      - name: as iscas do guarda de push de branch de integracao reprovam
+        run: sh infra/verificacao/verificar-recibo-de-fechamento.sh --autoteste
+
 
 
       # BICHUS-211, as duas iscas. Nenhuma das duas precisa de docker nem de
