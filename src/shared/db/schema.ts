@@ -465,10 +465,53 @@ export interface UserDevicesTable {
   last_seen_at: Date;
 }
 
+/**
+ * Os quatro estados de `AlertDispatch.reach_status`. Espelha o `enum` do
+ * contrato, e os quatro são distintos: ver o cabeçalho da migração.
+ */
+export type EstadoDoDisparo = 'computed' | 'unavailable' | 'queued' | 'no_location';
+
+/**
+ * BICHUS-18. Um disparo do alerta de 5 km, por caso.
+ *
+ * Tabela própria e não colunas em `lost_cases` porque um caso pode disparar
+ * mais de uma vez ao longo da vida (o reenvio do contrato existe, limitado a um
+ * por 24 h), e porque o critério 7 do ADR-0006 pergunta pelo **último** disparo
+ * — o que exige uma linha por disparo, e não o estado corrente sobrescrito.
+ */
+export interface AlertDispatchesTable {
+  id: string;
+  case_id: string;
+  radius_m: number;
+  reach_status: EstadoDoDisparo;
+  /** `null` em tudo que não é `computed`. O CHECK do banco impede o par errado. */
+  recipients_total: number | null;
+  /** O teto de 500 cortou a lista. Muda a leitura da métrica (critério 9). */
+  cap_reached: Generated<boolean>;
+  requested_at: Date;
+  /** `null` enquanto `queued`. O critério 7 do ADR-0006 conta a partir daqui. */
+  dispatched_at: Date | null;
+}
+
+/**
+ * BICHUS-18. Quem foi avisado em cada disparo.
+ *
+ * Existe para o teto de fadiga (critério 6 do ADR-0006), que é **por usuário e
+ * não por caso**. Sem coluna de aparelho, de token, de distância e de texto do
+ * aviso: o raciocínio inteiro está no cabeçalho da migração.
+ */
+export interface AlertRecipientsTable {
+  dispatch_id: string;
+  user_id: string;
+  notified_at: Date;
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
   user_devices: UserDevicesTable;
+  alert_dispatches: AlertDispatchesTable;
+  alert_recipients: AlertRecipientsTable;
   user_identities: UserIdentitiesTable;
   local_credentials: LocalCredentialsTable;
   user_roles: UserRolesTable;

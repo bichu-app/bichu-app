@@ -28,8 +28,17 @@ import {
 } from '../../../../shared/http/idempotency.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
-import type { LostCaseService, PreviaDoCaso } from '../../application/lost-case-service.js';
-import { centroDe, type CentroDoAlcance } from '../../domain/previa-do-alcance.js';
+import type {
+  CasoComAlerta,
+  LostCaseService,
+  PreviaDoCaso,
+} from '../../application/lost-case-service.js';
+import {
+  centroDe,
+  RAIO_DO_ALERTA_EM_METROS,
+  type CentroDoAlcance,
+} from '../../domain/previa-do-alcance.js';
+import type { DisparoGravado } from '../../ports/registro-de-disparos.js';
 import type { CasoGravado, DesfechoDoCaso, CanalDoReencontro } from '../../ports/lost-case-repository.js';
 import type { AbsoluteUrl, CaseId, Instant, PetId, UserId } from '../../../../shared/types/brands.js';
 
@@ -196,7 +205,46 @@ function instanteDeVistoPorUltimo(bruto: unknown, agora: Instant): Instant {
   return ms as Instant;
 }
 
-function comoRespostaDoCaso(caso: CasoGravado, baseDaWeb: AbsoluteUrl): Record<string, unknown> {
+/**
+ * `AlertDispatch`, a partir da linha do disparo.
+ *
+ * **Quatro campos, e nenhum a mais.** `next_resend_allowed_at` é declarado pelo
+ * contrato e fica de fora: nada hoje reenvia (não há rota de reenvio nesta
+ * entrega), e devolver um instante a partir do qual um reenvio que não existe
+ * seria permitido é prometer à tela um caminho que não está lá.
+ *
+ * `alerta` é `null` para caso aberto antes desta história, e aí a resposta cai
+ * no que a tela já sabia ler: `queued` com coordenada, `no_location` sem ela.
+ * Inventar `computed` com zero destinatários diria "não há ninguém por perto"
+ * quando a verdade é "este caso é de antes de existir disparo".
+ */
+function comoRespostaDoAlerta(
+  caso: CasoGravado,
+  alerta: DisparoGravado | null,
+): Record<string, unknown> {
+  if (alerta === null) {
+    return {
+      reach_status: caso.hasLocation ? 'queued' : 'no_location',
+      recipients_total: null,
+      radius_m: RAIO_DO_ALERTA_EM_METROS,
+      dispatched_at: null,
+    };
+  }
+  return {
+    reach_status: alerta.estado,
+    // `null` em tudo que não é `computed`, e o CHECK do banco garante o par.
+    // Zero aqui, para um disparo que não calculou, é a mentira que a BICHUS-20
+    // existe para impedir.
+    recipients_total: alerta.destinatarios,
+    radius_m: alerta.raioEmMetros,
+    dispatched_at: alerta.enviadoEm === null ? null : alerta.enviadoEm.toISOString(),
+  };
+}
+
+function comoRespostaDoCaso(
+  { caso, alerta }: CasoComAlerta,
+  baseDaWeb: AbsoluteUrl,
+): Record<string, unknown> {
   const base = baseDaWeb.replace(/\/$/, '');
   return {
     id: caso.id,
@@ -210,15 +258,7 @@ function comoRespostaDoCaso(caso: CasoGravado, baseDaWeb: AbsoluteUrl): Record<s
     // parece defeito e faz a pessoa tocar de novo.
     has_location: caso.hasLocation,
     description: caso.description,
-    alert: {
-      // Sem worker de alerta nesta entrega. `no_location` e `queued` são os
-      // dois valores honestos hoje; inventar `computed` com zero destinatários
-      // diria "não há ninguém por perto" quando a verdade é "não calculamos".
-      reach_status: caso.hasLocation ? 'queued' : 'no_location',
-      recipients_total: null,
-      radius_m: 5000,
-      dispatched_at: null,
-    },
+    alert: comoRespostaDoAlerta(caso, alerta),
     candidate_count: 0,
     unread_message_count: 0,
     share_url: `${base}/c/${caso.shareToken}`,

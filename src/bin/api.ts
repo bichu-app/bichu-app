@@ -64,7 +64,9 @@ import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-rout
 import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
 import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
-import { criarAlcanceAindaSemBase } from '../modules/lostfound/adapters/persistence/alcance-ainda-sem-base.js';
+import { criarAlcancePorPostGIS } from '../modules/lostfound/adapters/persistence/kysely-alcance-por-postgis.js';
+import { criarRegistroDeDisparos } from '../modules/lostfound/adapters/persistence/kysely-registro-de-disparos.js';
+import { criarJobQueue } from '../shared/queue/kysely-job-queue.js';
 import { criarIdempotencia } from '../shared/http/idempotency.js';
 import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
 import { criarRasterizadorDeQr } from '../modules/tags/adapters/external/sharp-rasterizador-de-qr.js';
@@ -354,15 +356,25 @@ export async function main(): Promise<void> {
       ids,
       clock: systemClock,
       trilha,
-      // A contagem de tutores alcancaveis CONTINUA NAO FECHADA, e o motivo
-      // mudou: as duas tabelas que faltavam passaram a existir
-      // (`user_reference_locations`, BICHUS-92; `user_devices`, BICHUS-91),
-      // entao a consulta e POSSIVEL. O que continua sem consulta escrita sao os
-      // outros CINCO criterios do ADR-0006 -- raio, validade de 30 dias, nao
-      // ser o proprio tutor, teto de fadiga e um disparo por caso por dia.
-      // Ligar so os dois que existem devolveria um numero que ignora os cinco
-      // restantes. Quem fecha a conta, com os sete, e a BICHUS-20.
-      alcance: criarAlcanceAindaSemBase(),
+      // BICHUS-20: **A CONTAGEM FECHOU.** Esta linha era
+      // `criarAlcanceAindaSemBase()`, que devolvia `null` de proposito porque
+      // os sete criterios do ADR-0006 nao tinham todos onde ser consultados.
+      // Agora tem: localizacao com a BICHUS-92, aparelho com a BICHUS-91, e a
+      // memoria do disparo (`alert_dispatches`, `alert_recipients`) com esta
+      // historia. Os SETE estao escritos -- seis no `WHERE` da consulta, o
+      // setimo em `podeDispararDeNovo`, que e pergunta sobre o caso e nao
+      // sobre pessoas (o argumento esta no cabecalho da porta).
+      //
+      // Ligar so parte deles era o que os autores da 92 e da 91 se recusaram a
+      // fazer, e estavam certos: numero errado com cara de certo e a mesma
+      // classe de mentira que o zero inventado.
+      alcance: criarAlcancePorPostGIS(db),
+      disparos: criarRegistroDeDisparos(db),
+      // A API ENFILEIRA, O WORKER ENVIA. O remetente de push nao e montado
+      // aqui de proposito -- `fiacao-do-push.test.ts` reprova se ele for --, e
+      // esta e a outra metade daquela decisao: o que a API faz com o alerta e
+      // pedir que ele saia.
+      fila: criarJobQueue(db, ids),
     }),
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),

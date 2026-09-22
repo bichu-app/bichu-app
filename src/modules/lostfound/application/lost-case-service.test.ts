@@ -27,7 +27,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
-import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
+import type { Clock, IdGenerator, JobKind, JobQueue } from '../../../shared/ports/index.js';
 import { comoData } from '../../../shared/time/clock.js';
 import { LostCaseService, type ContextoDoChamador, type EntradaDoCaso } from './lost-case-service.js';
 import type {
@@ -39,6 +39,7 @@ import type {
   NovoCaso,
 } from '../ports/lost-case-repository.js';
 import type { AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
+import type { DisparoGravado, RegistroDeDisparos } from '../ports/registro-de-disparos.js';
 import type { CentroDoAlcance } from '../domain/previa-do-alcance.js';
 import type { CaseId, Instant, OpaqueToken, PetId, UserId } from '../../../shared/types/brands.js';
 
@@ -91,6 +92,8 @@ interface Registro {
   readonly conferiuPrevia: { pet: PetId; dono: UserId }[];
   /** O que o servico pediu a porta de alcance, incluindo quem ele excluiu. */
   readonly contou: { centro: CentroDoAlcance; raio: number; excluiu: UserId }[];
+  readonly disparosAbertos: DisparoGravado[];
+  readonly enfileirados: { kind: JobKind; payload: unknown }[];
 }
 
 function casoAberto(): CasoGravado {
@@ -123,6 +126,8 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     conferiuAbertura: [],
     conferiuPrevia: [],
     contou: [],
+    disparosAbertos: [],
+    enfileirados: [],
   };
   const indice = new Set<PetId>(estado.petsComCasoAbertoNoIndice ?? []);
   // Cópia mutável: encerrar de verdade muda o estado, e é essa mudança que faz
@@ -242,15 +247,58 @@ function servico(estado: EstadoDoRepositorio = {}): {
     random80: () => new Uint8Array(10).fill(0x2b),
   };
 
+  // O dublê devolve **a lista**, porque a porta só sabe devolver lista. Um
+  // dublê que ainda devolvesse um número testaria uma porta que não existe, e
+  // é assim que uma suíte inteira fica verde contra uma implementação trocada.
   const alcance: AlcanceDoAlerta = {
-    contarAlcancaveis: (centro, raio, excluir) => {
-      registro.contou.push({ centro, raio, excluiu: excluir });
-      return Promise.resolve(estado.contagemDeAlcance ?? null);
+    alcancaveis: ({ centro, raioEmMetros, excluir }) => {
+      registro.contou.push({ centro, raio: raioEmMetros, excluiu: excluir });
+      const n = estado.contagemDeAlcance;
+      if (n == null) return Promise.resolve(null);
+      return Promise.resolve({
+        destinatarios: Array.from({ length: n }, (_, i) => ({
+          usuario: `018f3a2b-0000-7000-8000-${String(i).padStart(12, '0')}` as UserId,
+          aparelhos: [`018f3a2b-0000-7000-8000-a${String(i).padStart(11, '0')}`],
+        })),
+        tetoAtingido: false,
+      });
     },
   };
 
+  const disparos: RegistroDeDisparos = {
+    abrir: (entrada) => {
+      const gravado: DisparoGravado = {
+        id: entrada.id,
+        caso: entrada.caso,
+        estado: entrada.estado,
+        destinatarios: null,
+        raioEmMetros: entrada.raioEmMetros,
+        tetoAtingido: false,
+        pedidoEm: comoData(entrada.pedidoEm),
+        enviadoEm: null,
+      };
+      registro.disparosAbertos.push(gravado);
+      return Promise.resolve(gravado);
+    },
+    ultimoDoCaso: (caso) =>
+      Promise.resolve(registro.disparosAbertos.find((d) => d.caso === caso) ?? null),
+    ultimoEnvioDoCaso: () => Promise.resolve(null),
+    contextoDoCaso: () => Promise.resolve(null),
+    concluir: () => Promise.resolve(),
+  };
+
+  const fila: JobQueue = {
+    enqueue: (kind, payload) => {
+      registro.enfileirados.push({ kind, payload });
+      return Promise.resolve('018f3a2b-0000-7000-8000-00000000f11a');
+    },
+    claim: () => Promise.resolve([]),
+    complete: () => Promise.resolve(),
+    fail: () => Promise.resolve(),
+  };
+
   return {
-    casos: new LostCaseService({ repositorio, ids, clock, trilha, alcance }),
+    casos: new LostCaseService({ repositorio, ids, clock, trilha, alcance, disparos, fila }),
     registro,
     eventos,
   };
@@ -282,7 +330,7 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
   void it('o dono encerra o caso aberto e o desfecho fica gravado', async () => {
     const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
-    const encerrado = await casos.encerrar(CASO, 'reunited', 'tag_scan', 'Voltou sozinha.', chamador(DONO));
+    const { caso: encerrado } = await casos.encerrar(CASO, 'reunited', 'tag_scan', 'Voltou sozinha.', chamador(DONO));
 
     assert.equal(encerrado.status, 'closed_reunited');
     assert.equal(encerrado.closureOutcome, 'reunited');
@@ -325,7 +373,7 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
   void it('o segundo encerramento da fila offline não reescreve o desfecho do primeiro', async () => {
     const { casos, eventos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
-    const primeiro = await casos.encerrar(CASO, 'reunited', 'bichu_alert', undefined, chamador(DONO));
+    const { caso: primeiro } = await casos.encerrar(CASO, 'reunited', 'bichu_alert', undefined, chamador(DONO));
     const segundo = await capturar(() => casos.encerrar(CASO, 'not_found', undefined, undefined, chamador(DONO)));
 
     assert.equal(primeiro.closureOutcome, 'reunited');
@@ -369,7 +417,7 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
       // conta de "um reencontro em cada três" com atribuição inventada — e no
       // `false_alarm` (BICHUS-44 critério 3) ele tem de ser nulo, porque não
       // houve reencontro nenhum.
-      const encerrado = await casos.encerrar(CASO, desfecho, 'tag_scan', undefined, chamador(DONO));
+      const { caso: encerrado } = await casos.encerrar(CASO, desfecho, 'tag_scan', undefined, chamador(DONO));
 
       assert.equal(registro.encerrou[0]?.canal, undefined);
       assert.equal(encerrado.closureChannel, null);
@@ -379,7 +427,7 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
   void it('o instante do encerramento vem do relógio injetado, nunca do relógio de parede', async () => {
     const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
-    const encerrado = await casos.encerrar(CASO, 'reunited', 'on_my_own', undefined, chamador(DONO));
+    const { caso: encerrado } = await casos.encerrar(CASO, 'reunited', 'on_my_own', undefined, chamador(DONO));
 
     assert.equal(registro.encerrou[0]?.agora, AGORA);
     assert.equal(encerrado.closedAt?.getTime(), Number(AGORA));
@@ -407,7 +455,19 @@ void describe('closeLostCase: o desfecho é o instrumento de medição do produt
   void it('o caso encerrado que o serviço devolve não carrega coordenada nem contato', async () => {
     const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
 
-    const encerrado = await casos.encerrar(CASO, 'reunited', 'tag_scan', undefined, chamador(DONO));
+    const { caso: encerrado, alerta } = await casos.encerrar(
+      CASO,
+      'reunited',
+      'tag_scan',
+      undefined,
+      chamador(DONO),
+    );
+
+    // O ALERTA TAMBÉM PASSA PELA VARREDURA, e é a parte nova: ele nasceu nesta
+    // história e é o objeto mais provável de carregar geografia por engano —
+    // uma `distance_m` do destinatário mais próximo pareceria informação útil e
+    // seria uma trilateração pronta (ADR-0010).
+    assert.doesNotMatch(JSON.stringify(alerta ?? {}), COORDENADA);
 
     // A busca é por forma, e não por nome de campo: um `lat` renomeado para
     // `ponto` continuaria sendo o vazamento. Ficam de fora da varredura os
@@ -512,7 +572,7 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
   void it('caso sem coordenada abre pela cidade, e diz que não tem ponto', async () => {
     const { casos } = servico();
 
-    const caso = await casos.abrir(
+    const { caso, alerta } = await casos.abrir(
       PET,
       { lastSeenAt: ONTEM, city: 'São Paulo', neighborhood: 'Pinheiros' },
       chamador(DONO),
@@ -523,6 +583,9 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
     // localização — muita gente, e sobretudo quem instalou o app na pressa.
     assert.equal(caso.hasLocation, false);
     assert.equal(caso.status, 'open');
+    // Critério 14 da BICHUS-18: sem centro não há raio, e isso é registrado
+    // como `no_location` — não como falha de envio.
+    assert.equal(alerta?.estado, 'no_location');
   });
 
   void it('sem coordenada E sem cidade o caso não abre: seria um caso invisível', async () => {

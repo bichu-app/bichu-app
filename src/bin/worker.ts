@@ -4,8 +4,9 @@
  * Mesma imagem de `api.ts`, outro comando. Hoje ele carrega **dois** trabalhos:
  *
  * - o expurgo dos 24 meses de retenção da trilha de auditoria, por temporizador;
- * - o **consumo da fila** (`jobs`), que hoje processa foto de pet. Alerta,
- *   lembrete e e-mail entram com as histórias que os criam.
+ * - o **consumo da fila** (`jobs`), que processa foto de pet e **dispara o
+ *   alerta de 5 km** (`alert.dispatch`, BICHUS-18). Lembrete e e-mail entram
+ *   com as histórias que os criam.
  *
  * Os dois são coisas diferentes e é por isso que não compartilham laço: o
  * expurgo roda a cada seis horas e não tem fila; o processamento reserva
@@ -22,7 +23,10 @@ import { criarSecretProvider } from '../shared/adapters/external/env-var-secret-
 import { createDb } from '../shared/db/pool.js';
 import { manterProcessoVivo } from '../shared/process/vida-do-processo.js';
 import { systemClock } from '../shared/time/clock.js';
-import { expurgarEventosVencidos } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
+import {
+  criarTrilhaDeAuditoria,
+  expurgarEventosVencidos,
+} from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarJobQueue } from '../shared/queue/kysely-job-queue.js';
 import { criarIdGenerator } from '../shared/id/uuidv7.js';
 import { criarMediaRepository } from '../modules/media/adapters/persistence/kysely-media-repository.js';
@@ -32,6 +36,14 @@ import { criarPushSender } from '../modules/notifications/adapters/external/log-
 import { processarFoto, type CargaDoTrabalho } from '../modules/media/application/processar-foto.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
 import { criarLocalizacaoDeReferenciaRepository } from '../modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
+import { criarRegistroDeAparelhos } from '../modules/notifications/adapters/persistence/kysely-registro-de-aparelhos.js';
+import { RegistroDeAparelhosService } from '../modules/notifications/application/registro-de-aparelhos-service.js';
+import { criarEntregaDoAlertaPorPush } from '../modules/notifications/adapters/external/entrega-do-alerta-por-push.js';
+import { criarAlcancePorPostGIS } from '../modules/lostfound/adapters/persistence/kysely-alcance-por-postgis.js';
+import { criarRegistroDeDisparos } from '../modules/lostfound/adapters/persistence/kysely-registro-de-disparos.js';
+import { DisparoDoAlertaService } from '../modules/lostfound/application/disparo-do-alerta-service.js';
+
+import type { CaseId } from '../shared/types/brands.js';
 
 const INTERVALO_DO_EXPURGO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
 
@@ -142,10 +154,70 @@ export async function main(): Promise<void> {
     clock: systemClock,
   };
 
+  // BICHUS-18. O DISPARO DO ALERTA DE 5 KM, montado aqui e em lugar nenhum
+  // mais. É esta fiação que liga as três funções que a BICHUS-91 deixou com o
+  // chamador nomeado e ausente: `enderecoDeEnvio` e `revogarPorTokenRecusado`
+  // entram por `criarEntregaDoAlertaPorPush`, e o remetente de push acima
+  // deixa de ser decoração.
+  //
+  // A trilha é a do serviço de aparelhos e não uma nova: a revogação por token
+  // recusado grava `device.revoked` com o motivo, e como a linha do aparelho é
+  // apagada, essa é a única memória de por que aquele aparelho parou de
+  // receber.
+  const aparelhos = new RegistroDeAparelhosService({
+    repositorio: criarRegistroDeAparelhos(banco.db, ids),
+    clock: systemClock,
+    trilha: criarTrilhaDeAuditoria({
+      db: banco.db,
+      ids,
+      clock: systemClock,
+      ipHmacKey: config.ipHmacKey,
+      onFailure: (erro, evento) => {
+        // A trilha não derruba o alerta: um incidente no esquema de auditoria
+        // não é motivo para 500 vizinhos ficarem sem o aviso. Ruidosa, porém —
+        // falha silenciosa aqui apagaria a única memória da revogação.
+        console.error(
+          JSON.stringify({
+            evento: 'audit.write_failed',
+            acao: evento.action,
+            erro: String(erro),
+          }),
+        );
+      },
+    }),
+  });
+
+  const disparoDoAlerta = new DisparoDoAlertaService({
+    disparos: criarRegistroDeDisparos(banco.db),
+    alcance: criarAlcancePorPostGIS(banco.db),
+    entrega: criarEntregaDoAlertaPorPush({
+      aparelhos,
+      push,
+      revogarPorTokenRecusado: (token) => aparelhos.revogarPorTokenRecusado(token),
+    }),
+    clock: systemClock,
+    // A mesma montagem de `api.ts`: o banco guarda a chave, e a URL pública é
+    // montada na leitura. Uma URL gravada carrega o domínio do dia em que foi
+    // escrita, e é assim que `localhost` vaza para produção.
+    urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+  });
+
   const rodarFila = async (): Promise<void> => {
     const trabalhos = await fila.claim(TRABALHOS_POR_PASSADA);
     for (const trabalho of trabalhos) {
       try {
+        if (trabalho.kind === 'alert.dispatch') {
+          // BICHUS-18. O desfecho vem como VALOR e não como exceção, e por isso
+          // todos eles completam o trabalho: "o caso não existe mais" e "este
+          // caso já avisou hoje" não são falhas, e reenfileirá-los gastaria a
+          // fila contra algo que nunca vai mudar de resposta.
+          const { caseId } = trabalho.payload as { caseId: string };
+          const desfecho = await disparoDoAlerta.disparar(caseId as CaseId);
+          await fila.complete(trabalho.id);
+          console.info(JSON.stringify({ evento: 'alert.dispatch', caso: caseId, ...desfecho }));
+          continue;
+        }
+
         if (trabalho.kind !== 'media.process_upload') {
           // Trabalho de um tipo que este worker ainda não sabe fazer. Falhar
           // com o motivo é melhor que ignorar em silêncio: ignorado, ele fica

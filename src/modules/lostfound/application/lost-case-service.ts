@@ -33,7 +33,10 @@ import {
   type CentroDoAlcance,
   type EstadoDoAlcance,
 } from '../domain/previa-do-alcance.js';
-import type { AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
+import { contagemDe, estadoInicialDoDisparo } from '../domain/disparo-do-alerta.js';
+import type { AlcanceCalculado, AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
+import type { DisparoGravado, RegistroDeDisparos } from '../ports/registro-de-disparos.js';
+import type { JobQueue } from '../../../shared/ports/index.js';
 import type {
   CanalDoReencontro,
   CasoGravado,
@@ -48,6 +51,32 @@ export interface DependenciasDeCasos {
   readonly clock: Clock;
   readonly trilha: AuditLog;
   readonly alcance: AlcanceDoAlerta;
+  readonly disparos: RegistroDeDisparos;
+  /**
+   * A fila. **A API enfileira e o worker envia** (ADR-0001, e a métrica de
+   * arquitetura fala em "da abertura ao último push ENFILEIRADO, ≤ 60 s").
+   *
+   * Mandar 500 push dentro do `POST` que abre o caso faria a tutora em pânico
+   * esperar o transporte responder 500 vezes antes de ver a tela do caso — no
+   * exato minuto em que ela precisa do cartaz e do link.
+   */
+  readonly fila: JobQueue;
+}
+
+/**
+ * O caso e o estado do alerta dele, juntos.
+ *
+ * Juntos porque a resposta do contrato traz `alert` em toda leitura de caso
+ * (`LostCase.alert` é obrigatório), e porque montar aquele objeto a partir de
+ * `hasLocation` — que foi o que esta camada fez enquanto não havia tabela de
+ * disparo — deixou de ser verdade no instante em que o worker passou a gravar
+ * o número real. Uma tela que continuasse dizendo `queued` depois de o alerta
+ * ter saído para 87 pessoas seria falsa de um jeito que nada acusaria.
+ */
+export interface CasoComAlerta {
+  readonly caso: CasoGravado;
+  /** `null` só enquanto a linha do disparo não existir (casos abertos antes desta história). */
+  readonly alerta: DisparoGravado | null;
 }
 
 /** `LostCaseReachPreview`, ainda em vocabulário de domínio. */
@@ -101,7 +130,7 @@ export class LostCaseService {
     pet: PetId,
     entrada: EntradaDoCaso,
     chamador: ContextoDoChamador,
-  ): Promise<CasoGravado> {
+  ): Promise<CasoComAlerta> {
     const estado = await this.deps.repositorio.estadoParaAbertura(pet, chamador.userId);
     // Pet inexistente e pet de outro tutor são a mesma resposta.
     if (!estado.existeEhDoTutor) throw problemas.naoEncontrado();
@@ -169,7 +198,41 @@ export class LostCaseService {
       metadata: { has_location: caso.hasLocation, shared: caso.shareToPublicList },
     });
 
-    return caso;
+    return { caso, alerta: await this.pedirOAlerta(caso) };
+  }
+
+  /**
+   * Registra o disparo e o enfileira — ou registra por que ele não vai existir.
+   *
+   * **O caso já está gravado quando esta função roda, e é isso que a torna
+   * segura.** O critério 6 da BICHUS-20 é explícito: *"o caso é criado mesmo
+   * assim; o caso nunca se perde por falha de push"*. Se a fila estiver fora do
+   * ar, o que se perde é o alerta, e o tutor continua com o caso, o cartaz, o
+   * link e a tag.
+   *
+   * Sem coordenada, o disparo nasce `no_location` e **não é enfileirado**:
+   * critério 14 da BICHUS-18, que é explícito em dizer que isso não é falha de
+   * envio e não gera retentativa. Enfileirar para depois descobrir que não há
+   * centro produziria uma tentativa fracassada onde não havia o que tentar.
+   */
+  private async pedirOAlerta(caso: CasoGravado): Promise<DisparoGravado> {
+    const disparo = await this.deps.disparos.abrir({
+      id: this.deps.ids.uuidv7(),
+      caso: caso.id,
+      raioEmMetros: RAIO_DO_ALERTA_EM_METROS,
+      estado: estadoInicialDoDisparo(caso.hasLocation),
+      pedidoEm: this.deps.clock.now(),
+    });
+
+    if (disparo.estado === 'queued') {
+      // Só o identificador do caso. A regra do payload da fila (§11.5) é
+      // "carrega identificador, nunca conteúdo renderizado": o nome do pet e o
+      // bairro são lidos pelo worker no instante do envio, e enfileirados aqui
+      // eles congelariam o que a tutora corrigir nos próximos cinco minutos.
+      await this.deps.fila.enqueue('alert.dispatch', { caseId: caso.id });
+    }
+
+    return disparo;
   }
 
   /**
@@ -205,14 +268,12 @@ export class LostCaseService {
     const estado = await this.deps.repositorio.estadoParaPrevia(pet, chamador.userId);
     if (!estado.existeEhDoTutor) throw problemas.naoEncontrado();
 
-    const contagem =
-      centro === undefined
-        ? null
-        : await this.deps.alcance.contarAlcancaveis(
-            centro,
-            RAIO_DO_ALERTA_EM_METROS,
-            chamador.userId,
-          );
+    // `contagemDe` sobre o MESMO objeto que o disparo vai percorrer. Não há
+    // `COUNT(*)` nesta rota, e a ausência é o critério 9 da BICHUS-20: o número
+    // da tela é o número real de destinatários. Uma contagem própria aqui
+    // divergiria da lista no dia em que alguém acrescentasse um critério a uma
+    // e esquecesse a outra, e nenhum teste acusaria.
+    const contagem = centro === undefined ? null : contagemDe(await this.calcular(centro, chamador));
 
     const alcance = alcanceDe(centro, contagem);
 
@@ -229,10 +290,14 @@ export class LostCaseService {
     };
   }
 
-  async buscar(caso: CaseId, chamador: ContextoDoChamador): Promise<CasoGravado> {
+  async buscar(caso: CaseId, chamador: ContextoDoChamador): Promise<CasoComAlerta> {
     const achado = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
     if (achado === null) throw problemas.naoEncontrado();
-    return achado;
+    // A leitura do alerta vem DEPOIS da conferência do dono, e não junto: ela
+    // é por `case_id` e não carrega o dono no `WHERE`, então fazê-la antes
+    // devolveria o estado do alerta de um caso alheio a quem pediu por
+    // identificador. O 404 do ADR-0021 acontece primeiro.
+    return { caso: achado, alerta: await this.deps.disparos.ultimoDoCaso(achado.id) };
   }
 
   async encerrar(
@@ -241,7 +306,7 @@ export class LostCaseService {
     canal: CanalDoReencontro | undefined,
     nota: string | undefined,
     chamador: ContextoDoChamador,
-  ): Promise<CasoGravado> {
+  ): Promise<CasoComAlerta> {
     const encerrado = await this.deps.repositorio.encerrar({
       caso,
       dono: chamador.userId,
@@ -269,6 +334,44 @@ export class LostCaseService {
       metadata: { outcome: desfecho, channel: encerrado.closureChannel },
     });
 
-    return encerrado;
+    return { caso: encerrado, alerta: await this.deps.disparos.ultimoDoCaso(encerrado.id) };
+  }
+
+  /**
+   * O alcance da prévia, com a falha traduzida em `null`.
+   *
+   * O `catch` é aqui porque é esta camada que conhece a diferença entre "o
+   * banco não respondeu" e "não há ninguém por perto", e porque a consulta
+   * deliberadamente não engole exceção (ver o cabeçalho dela). `null` vira
+   * `unavailable`, que é a regra do ADR-0006 em uma frase: *"falha de cálculo
+   * não vira zero"*. Um `0` aqui faria desistir quem tinha cem vizinhos ao
+   * redor.
+   */
+  private async calcular(
+    centro: CentroDoAlcance,
+    chamador: ContextoDoChamador,
+  ): Promise<AlcanceCalculado | null> {
+    try {
+      return await this.deps.alcance.alcancaveis({
+        centro,
+        raioEmMetros: RAIO_DO_ALERTA_EM_METROS,
+        excluir: chamador.userId,
+        agora: this.deps.clock.now(),
+      });
+    } catch (erro: unknown) {
+      // O erro não some: ele sai no log com a correlação da requisição, e a
+      // tela diz que não conseguiu calcular. Engolir sem registrar
+      // transformaria um defeito de esquema num `unavailable` que ninguém
+      // procura — a verificação que não consegue verificar e mesmo assim não
+      // reprova.
+      console.error(
+        JSON.stringify({
+          evento: 'lost_case.reach_failed',
+          correlation_id: chamador.correlationId,
+          erro: String(erro),
+        }),
+      );
+      return null;
+    }
   }
 }
