@@ -382,6 +382,12 @@ class _BlocoDoCodigo extends StatelessWidget {
                 // pet ouve "Copiar o código" tres vezes iguais sem isso.
                 label: '${TextosDoCadastro.copiarOCodigo} da tag de $nome',
                 excludeSemantics: true,
+                // Sem esta linha o no sai com `button: true` e ZERO acoes:
+                // `excludeSemantics: true` leva junto a acao do
+                // `TextButton.icon`. E o unico caminho do app para copiar o
+                // codigo da tag, que so aparece nesta tela e nunca mais -- e
+                // ele estava fechado para quem usa leitor de tela.
+                onTap: aoCopiar,
                 child: TextButton.icon(
                   onPressed: aoCopiar,
                   icon: const Icon(Icons.copy, size: 20),

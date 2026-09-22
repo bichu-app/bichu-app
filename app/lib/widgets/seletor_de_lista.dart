@@ -112,6 +112,11 @@ class SeletorDeLista extends StatelessWidget {
           // precisa saber o que esta escolhido sem abrir a lista.
           label: '$rotulo, ${escolhido?.rotulo ?? estadoInicial}',
           excludeSemantics: true,
+          // Sem esta linha o seletor habilitado sai com `button: true`,
+          // `enabled: true` e ZERO acoes: `excludeSemantics: true` leva junto
+          // a acao do `InkWell`. O leitor de tela anunciava o valor escolhido
+          // e nao tinha como abrir a lista (WCAG 2.1 SC 4.1.2).
+          onTap: habilitado ? () => _abrir(context) : null,
           child: InkWell(
             onTap: habilitado ? () => _abrir(context) : null,
             borderRadius: BorderRadius.circular(BichuRaio.md),

@@ -97,10 +97,15 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// CAMERA nao contornou a porta --, e quem responde por isso e o portao de
 /// diretivas acima, que nao depende desta constante.
 ///
+/// **Destravado de novo pela BICHUS-205** (`fix/botao-primario-sem-acao`), na
+/// mesma integracao: a acao primaria voltava a se anunciar como tocavel, e
+/// `pet/tela_pet_cadastrado.dart` recebeu a correcao. A trava reprovou, como
+/// tem de reprovar, e o bump e o ato deliberado que ela cobra.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = 'bcee97ebbf8252360e7461f9395ade4cf0d0b45c';
+const String _arvoreDasTelas = 'cf0f8747f5bba5b451aa47af0b68d2fb2692e92b';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

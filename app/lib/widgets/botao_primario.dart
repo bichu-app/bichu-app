@@ -38,13 +38,39 @@ class BotaoPrimario extends StatelessWidget {
         critico ? bichu.filledButtonStyleCritico : bichu.filledButtonStyle;
     final textos = Theme.of(context).textTheme;
 
+    // A acao efetiva, numa variavel so, usada pelos tres lugares que precisam
+    // concordar: o `onPressed` do botao, o `onTap` da semantica e o `enabled`
+    // anunciado. Enquanto ela viveu apenas dentro do `onPressed`, os tres
+    // divergiram em silencio.
+    final VoidCallback? acao = carregando ? null : aoTocar;
+
     return Semantics(
       button: true,
-      enabled: aoTocar != null,
+      // `enabled` segue [acao], e nao [aoTocar]: enquanto seguia `aoTocar`, o
+      // botao carregando se anunciava HABILITADO sem ter acao nenhuma, e o
+      // leitor de tela oferecia um controle que nao responde.
+      enabled: acao != null,
       label: carregando ? '$rotulo, em andamento' : rotulo,
       excludeSemantics: true,
+      // A LINHA QUE FALTAVA.
+      //
+      // `excludeSemantics: true` apaga a arvore do filho INTEIRA, e com ela a
+      // acao de toque que o `FilledButton` publica. O que sobrava era um no
+      // com `button: true` e ZERO acoes. Medido na arvore: `Cadastrar meu pet`
+      // saia com `btn=true tap=false`, enquanto o `BotaoSecundario` ao lado,
+      // que nao embrulha nada, saia com `tap=true`.
+      //
+      // Quem navega por TalkBack ou VoiceOver ouvia que existe um botao e nao
+      // recebia a acao: a acao primaria de quase toda tela do produto era
+      // inalcancavel pelo leitor de tela (WCAG 2.1 SC 4.1.2, nome/funcao/valor).
+      //
+      // Redeclarar e o preco de `excludeSemantics`, e esquecer nao aparece em
+      // teste manual nem em revisao de codigo. Quem cobra agora e
+      // `test/a11y/acao_de_controle_test.dart`, em TODO no anunciado como
+      // botao -- a classe, e nao este caso.
+      onTap: acao,
       child: FilledButton(
-        onPressed: carregando ? null : aoTocar,
+        onPressed: acao,
         style: estilo,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
