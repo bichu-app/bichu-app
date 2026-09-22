@@ -23,9 +23,9 @@ import 'guarda_de_acao.dart';
 void irParaODestinoDoLogin(BuildContext context, DestinoPosLogin destino) {
   switch (destino) {
     case DestinoDeInicio():
-      // O único caminho legítimo para a home: não havia intenção, ou ela
-      // passou das 24 horas (regras 2 e 4 de 8.3).
-      context.go(Rotas.inicio);
+      // O único caminho legítimo para a seção de aterrissagem: não havia
+      // intenção, ou ela passou das 24 horas (regras 2 e 4 de 8.3).
+      context.go(Rotas.pets);
     case DestinoDeResultado(:final rota, :final extra):
       // A ação **já aconteceu**. Esta é a tela de resultado, com confirmação.
       context.go(rota, extra: extra);

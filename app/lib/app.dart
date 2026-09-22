@@ -18,6 +18,7 @@ import 'intencao/intencao_pendente.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
 import 'sessao/deposito_de_sessao.dart';
+import 'telas/perfil/meus_pets.dart';
 import 'theme/bichu_theme.dart';
 
 /// A raiz do app.
@@ -30,6 +31,7 @@ class BichuApp extends StatefulWidget {
     this.camera,
     this.avisos,
     this.depositoDeIntencao,
+    this.cacheDeMeusPets,
   });
 
   final AppConfig config;
@@ -66,6 +68,14 @@ class BichuApp extends StatefulWidget {
   /// deposito de sessao.
   final DepositoDaIntencao? depositoDeIntencao;
 
+  /// Injetavel para teste. Em producao nasce vazio a cada arranque, porque e
+  /// cache de memoria e nao de disco.
+  ///
+  /// Entra por aqui para que o caso do criterio 7 da BICHUS-62 -- cache quente
+  /// e atualizacao que falha -- seja exercitavel sem depender de duas idas ao
+  /// servidor em sequencia.
+  final CacheDeMeusPets? cacheDeMeusPets;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -81,6 +91,7 @@ class _BichuAppState extends State<BichuApp> {
   late final ControladorDeSessao _sessao;
   late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
+  late final CacheDeMeusPets _cacheDeMeusPets;
 
   @override
   void initState() {
@@ -88,6 +99,7 @@ class _BichuAppState extends State<BichuApp> {
     // O cliente pergunta o token ao controlador a cada chamada, em vez de
     // receber uma copia: assim a renovacao chega a requisicao seguinte sem
     // ninguem precisar reconstruir o cliente.
+    _cacheDeMeusPets = widget.cacheDeMeusPets ?? CacheDeMeusPets();
     _api = ApiClient(
       config: widget.config,
       cliente: widget.clienteHttp,
@@ -115,6 +127,20 @@ class _BichuAppState extends State<BichuApp> {
       deposito: widget.deposito ?? DepositoNoChaveiro(),
       // Sair da conta apaga o envelope (regra 7 de 8.3).
       guardaDeAcao: _guarda,
+      // O cache de `Perfil` > `Meus pets` morre junto com a sessao, nos QUATRO
+      // desfechos de `sair()` -- inclusive o que nao passa por botao nenhum: a
+      // sessao derrubada por refresh recusado (401 em `_renovar`). Enquanto a
+      // limpeza morava no `onPressed` de `abas.dart`, esse caminho deixava os
+      // pets da conta anterior em memoria para quem entrasse depois no mesmo
+      // aparelho. E a isca `SEG` da BICHUS-62 chegando pela porta de tras.
+      //
+      // Esta e a fiacao que a BICHUS-164 nao tinha como fazer: `LimpezaAoSair`
+      // nasceu na BICHUS-81 (`a84a286`) e nao existia na base daquele branch.
+      //
+      // O `limpar` e sincrono e `LimpezaAoSair` devolve `Future<void>`, entao
+      // o tear-off direto nao tipa (`void` nao e subtipo de `Future<void>`).
+      // O fecho `async` e o que a lista pede, e nao um adiamento.
+      limpezasAoSair: <LimpezaAoSair>[() async => _cacheDeMeusPets.limpar()],
     );
     _roteador = criarRoteador(_sessao);
     _sessao.iniciar();
@@ -139,6 +165,7 @@ class _BichuAppState extends State<BichuApp> {
       avisos: _avisos,
       sessao: _sessao,
       guarda: _guarda,
+      cacheDeMeusPets: _cacheDeMeusPets,
       child: MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,

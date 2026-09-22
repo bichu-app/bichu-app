@@ -14,6 +14,7 @@ import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/saida_da_tela.dart';
 import '../pet/textos_do_cadastro.dart';
 
 /// Os estados desenhados de F2.1.
@@ -35,11 +36,21 @@ enum EstadoDoLeitor {
 
 /// F2.1 — Leitor de QR. Figma `87:14`, `87:26` e `87:40`.
 ///
-/// **Esta tela nao leva barra de topo, e isso e desenho e nao esquecimento.**
-/// Ela e a aba `Escanear`, um destino de primeiro nivel da casca de abas, e
-/// destino de aba nao tem saida propria: a saida e a propria barra inferior. A
-/// barra de topo aparece em F1.3, F1.4, F1.5 e F1.6 porque as quatro cobrem a
-/// casca; aqui ela seria uma segunda navegacao concorrendo com a primeira.
+/// **Esta tela nao leva barra de topo nem barra inferior de abas, e isso e
+/// desenho.** O design system 11.11 lista o leitor de camera entre as telas em
+/// que a barra nao aparece: sao telas de tarefa unica. Uma barra de topo aqui
+/// competiria com o visor, que ocupa a tela inteira.
+///
+/// **O que mudou na BICHUS-164, e a consequencia que vem junto.** `Escanear`
+/// deixou de ser aba (o rotulo pedia 71,57 dp num slot de 64,0) e passou a ser
+/// rota irma da casca, alcancada por `push` das duas portas de 27.5.6: a
+/// primaria em `Pets` e a de conta em `Perfil`. Enquanto era aba, a saida
+/// **era a propria barra inferior** -- tocar em outra aba saia daqui. Sem a
+/// barra, essa saida sumiu, e uma tela sem barra e sem saida e exatamente o
+/// beco da BICHUS-157. Por isso entrou a [SaidaDaTela] sobreposta no canto
+/// superior esquerdo: ela existe **sempre**, inclusive quando a tela e
+/// alcancada por link direto com a pilha vazia, e nesse caso cai no escape.
+/// Ela fica sobreposta, e nao numa barra, porque o visor nao pode encolher.
 ///
 /// **A barra inferior vem do codigo, e nao do Figma.** O componente
 /// `NavigationBar` **nao existe** no arquivo de design: os quadros de F2.1
@@ -231,10 +242,34 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Sem `appBar`: esta tela e a aba `Escanear`, e a navegacao dela e a
-      // barra inferior da casca.
+      // Sem `appBar`: ver a nota da classe. A saida vem sobreposta, logo
+      // abaixo, e nao numa barra de topo.
       bottomNavigationBar: BarraDeAcaoFixa(acoes: _acoes()),
-      body: switch (_estado) {
+      body: Stack(
+        children: <Widget>[
+          Positioned.fill(child: _corpo()),
+          // Canto superior esquerdo: e onde o polegar procura a saida, e onde
+          // nenhum dos quatro estados desenha conteudo -- o visor centraliza e
+          // os outros tres comecam com folga de 64 dp.
+          SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(BichuEspaco.e2),
+              child: const Align(
+                alignment: Alignment.topLeft,
+                // `fechar` e nao `voltar`: o leitor e um destino, e nao um
+                // passo de um assistente. Quando ha pilha ele desempilha na
+                // mesma, e quando nao ha cai na secao de aterrissagem.
+                child: SaidaDaTela(tipo: TipoDeSaida.fechar),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _corpo() {
+    return switch (_estado) {
         EstadoDoLeitor.visor => _Visor(aviso: _avisoNoVisor),
         EstadoDoLeitor.permissaoNegada => _PermissaoNegada(
             permanente: _permissao == EstadoDaPermissao.negadaPermanentemente,
@@ -250,8 +285,7 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
             foco: _focoDoCodigo,
             faixa: _faixa,
           ),
-      },
-    );
+    };
   }
 
   List<Widget> _acoes() {

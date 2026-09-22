@@ -7,6 +7,7 @@ import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'intencao/guarda_de_acao.dart';
+import 'telas/perfil/meus_pets.dart';
 import 'sessao/controlador_de_sessao.dart';
 
 /// As dependencias do app, entregues pela arvore de widgets.
@@ -26,6 +27,7 @@ class Escopo extends InheritedWidget {
     required this.avisos,
     required this.sessao,
     required this.guarda,
+    required this.cacheDeMeusPets,
     required super.child,
     super.key,
   });
@@ -53,6 +55,13 @@ class Escopo extends InheritedWidget {
   /// instancias sobre o mesmo arquivo perderiam uma da outra.
   final GuardaDeAcao guarda;
 
+  /// O cache de leitura de `Perfil` › `Meus pets` (criterio 7 da BICHUS-62).
+  ///
+  /// Fica no escopo, e nao dentro da tela, porque ele precisa sobreviver a
+  /// tela ser descartada -- que e o caso comum: trocar de aba e voltar. Em
+  /// memoria e por dono; ver [CacheDeMeusPets].
+  final CacheDeMeusPets cacheDeMeusPets;
+
   static Escopo of(BuildContext context) {
     final escopo = context.dependOnInheritedWidgetOfExactType<Escopo>();
     if (escopo == null) {
@@ -74,5 +83,6 @@ class Escopo extends InheritedWidget {
       camera != anterior.camera ||
       avisos != anterior.avisos ||
       sessao != anterior.sessao ||
-      guarda != anterior.guarda;
+      guarda != anterior.guarda ||
+      cacheDeMeusPets != anterior.cacheDeMeusPets;
 }

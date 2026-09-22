@@ -221,8 +221,13 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
             aoTocar: null,
           ),
           // Secundaria **em texto, e nao em botao**, como a especificacao pede.
+          //
+          // O fim do assistente vai para `Perfil`, e nao para a secao de
+          // aterrissagem: e a excecao que a UX 26.8 abriu quando `Meus pets`
+          // passou a morar em `Perfil` > `Meus pets` (27.6). Quem acabou de
+          // cadastrar um pet quer ver o pet, e ele esta la.
           TextButton(
-            onPressed: () => context.go(Rotas.inicio),
+            onPressed: () => context.go(Rotas.perfil),
             child: const Text(TextosDoCadastro.depois),
           ),
         ],

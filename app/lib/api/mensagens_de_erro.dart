@@ -1,3 +1,4 @@
+import '../roteamento/rotas.dart';
 import 'falhas.dart';
 import 'problem.dart';
 
@@ -8,7 +9,12 @@ import 'problem.dart';
 /// tecnico. Os textos sao os da tabela 12.4 de docs/05-ux-research.md, copiados
 /// e nao reescritos: microcopy e especificacao.
 class MensagemDeErro {
-  const MensagemDeErro({required this.texto, this.acao, this.proximaAcao});
+  const MensagemDeErro({
+    required this.texto,
+    this.acao,
+    this.proximaAcao,
+    this.rotaDaAcao,
+  });
 
   /// A frase que a pessoa le.
   final String texto;
@@ -18,6 +24,22 @@ class MensagemDeErro {
 
   /// A saida que o servidor indicou em `next_action`, quando indicou.
   final ProximaAcao? proximaAcao;
+
+  /// O endereco **dentro do app** para onde [acao] leva, quando a saida e uma
+  /// navegacao simples e nao uma operacao.
+  ///
+  /// Existe porque um rotulo de acao sem destino e o defeito que a BICHUS-62
+  /// veio fechar: `Ver meus pets` estava escrito em dois lugares deste arquivo
+  /// e nao levava a lugar nenhum, e a tela que o renderizava com um toque
+  /// **reenviava o cadastro**, porque era o unico `aoTocarNaAcao` que ela
+  /// tinha. Quem renderiza a faixa le este campo **antes** de decidir o que o
+  /// toque faz.
+  ///
+  /// Nao e `ProximaAcao`: aquele enum carrega os valores de `next_action` que
+  /// o **servidor** manda, e inventar um membro para uma navegacao que o
+  /// contrato nunca declarou poria vocabulario nosso dentro do vocabulario
+  /// dele.
+  final String? rotaDaAcao;
 }
 
 /// Traduz uma falha de chamada na mensagem da tela.
@@ -33,6 +55,12 @@ abstract final class MensagensDeErro {
   /// Texto da acao que exige servidor agora e nao da para enfileirar.
   static const String semConexaoImpossivel =
       'Isso precisa de conexão. Tente de novo quando tiver sinal.';
+
+  /// O rotulo das duas saidas que apontavam para o vazio ate a BICHUS-62.
+  ///
+  /// Escrito uma vez so: eram duas copias da mesma frase, e a terceira era
+  /// questao de tempo. O destino e `Perfil` > `Meus pets` (UX 27.6).
+  static const String verMeusPets = 'Ver meus pets';
 
   static const String servidorFora =
       'O Bichu está fora do ar por alguns minutos. Já estamos arrumando.';
@@ -187,7 +215,8 @@ abstract final class MensagensDeErro {
         ),
       ProblemTipo.naoEncontrado => const MensagemDeErro(
           texto: 'Isso não está mais aqui.',
-          acao: 'Ver meus pets',
+          acao: verMeusPets,
+          rotaDaAcao: Rotas.perfil,
         ),
       ProblemTipo.limiteDePetsAtingido => _limiteDePets(problem),
       ProblemTipo.limiteDeTentativas => MensagemDeErro(
@@ -290,7 +319,8 @@ abstract final class MensagensDeErro {
         : 'Você chegou ao limite de $limite pets nesta conta.';
     return MensagemDeErro(
       texto: '$abertura Se precisar de mais, fale com a gente.',
-      acao: 'Ver meus pets',
+      acao: verMeusPets,
+      rotaDaAcao: Rotas.perfil,
     );
   }
 
