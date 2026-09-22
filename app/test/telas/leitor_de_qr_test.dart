@@ -32,7 +32,13 @@ void main() {
     return http.Response('', 404);
   }
 
-  Future<void> abrirAAbaEscanear(
+  /// Abre o leitor **pela porta primaria**, que e a de `Pets` (UX 27.5.6).
+  ///
+  /// Nao e mais uma aba: `Escanear` pedia 71,57 dp num slot de 64,0 e saiu da
+  /// barra na BICHUS-164. O caminho continua sendo um toque a partir da secao
+  /// de aterrissagem, e e por ele que estes casos entram -- entrar montando a
+  /// tela solta esconderia justamente o defeito de a porta sumir.
+  Future<void> abrirOLeitor(
     WidgetTester tester, {
     required EstadoDaPermissao permissao,
     Future<http.Response> Function(http.Request)? rede,
@@ -42,36 +48,54 @@ void main() {
       rede: rede ?? semServidor,
       camera: CameraDeTeste(permissao),
     );
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Escanear'));
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
     await tester.pumpAndSettle();
   }
 
-  testWidgets('a aba Escanear nao leva barra de topo, e mantem a de baixo',
-      (tester) async {
-    await abrirAAbaEscanear(
-      tester,
-      permissao: EstadoDaPermissao.concedida,
-    );
+  testWidgets('o leitor nao leva barra de topo NEM barra de abas, e ainda '
+      'assim tem saida', (tester) async {
+    await abrirOLeitor(tester, permissao: EstadoDaPermissao.concedida);
 
     expect(
       find.byType(AppBar),
       findsNothing,
-      reason: 'REPROVA: F2.1 ganhou uma barra de topo. Ela e a aba Escanear; '
-          'a navegacao dela e a barra inferior, e uma barra de topo seria uma '
-          'segunda navegacao concorrendo com a primeira.',
+      reason: 'REPROVA: F2.1 ganhou uma barra de topo. O visor ocupa a tela '
+          'inteira e o design system 11.11 lista o leitor de camera entre as '
+          'telas de tarefa unica, sem barra.',
     );
     expect(
       find.byType(NavigationBar),
-      findsOne,
-      reason: 'REPROVA: a barra inferior sumiu. Sem ela a tela fica sem '
-          'navegacao nenhuma, que e o defeito que o cliente encontrou nas '
-          'telas de conta.',
+      findsNothing,
+      reason: 'REPROVA: o leitor ainda mostra a barra de abas. O 11.11 diz '
+          'que ela nao aparece no leitor de camera, e a BICHUS-164 tirou '
+          '`Escanear` da barra justamente por isso.',
+    );
+
+    // **A consequencia de tirar a barra, e a razao deste caso existir.**
+    // Enquanto era aba, a saida do leitor ERA a barra inferior: tocar em
+    // outra aba saia daqui. Sem a barra, uma tela sem saida e o beco da
+    // BICHUS-157. A saida precisa existir, e precisa levar de volta.
+    final saida = find.byTooltip('Fechar');
+    expect(
+      saida,
+      findsOneWidget,
+      reason: 'REPROVA: o leitor ficou sem barra de abas E sem saida. Quem '
+          'entrou nao tem como sair sem o gesto do sistema, e no iOS por link '
+          'direto nao ha nem gesto.',
+    );
+
+    await tester.tap(saida);
+    await tester.pumpAndSettle();
+    expect(
+      find.byType(NavigationBar),
+      findsOneWidget,
+      reason: 'REPROVA: fechar o leitor nao devolveu a casca de abas.',
     );
   });
 
   testWidgets('com a camera concedida, o visor aparece e a digitacao continua '
       'visivel', (tester) async {
-    await abrirAAbaEscanear(tester, permissao: EstadoDaPermissao.concedida);
+    await abrirOLeitor(tester, permissao: EstadoDaPermissao.concedida);
 
     expect(find.text('Aponte para o QR da coleira'), findsOne);
 
@@ -96,7 +120,7 @@ void main() {
     // `indisponivel` nao e recusa: e ausencia de recurso. Mandar a pessoa para
     // os ajustes procurar uma permissao que nao existe seria pior que nao
     // dizer nada.
-    await abrirAAbaEscanear(tester, permissao: EstadoDaPermissao.indisponivel);
+    await abrirOLeitor(tester, permissao: EstadoDaPermissao.indisponivel);
 
     final principal = find.widgetWithText(
       BotaoPrimario,
@@ -129,7 +153,9 @@ void main() {
       'pedido que nao abre dialogo', (tester) async {
     final camera = CameraDeTeste(EstadoDaPermissao.negadaPermanentemente);
     await abrirOApp(tester, rede: semServidor, camera: camera);
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Escanear'));
+    // Pela porta primaria de `Pets`, como os demais casos: o duble da camera
+    // precisa ser este, e por isso o caso nao usa `abrirOLeitor`.
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
     await tester.pumpAndSettle();
 
     expect(find.text('O Bichu precisa da câmera para ler o QR'), findsOne);
@@ -161,7 +187,7 @@ void main() {
 
     testWidgets('tag-code-malformed manda conferir o que foi digitado',
         (tester) async {
-      await abrirAAbaEscanear(
+      await abrirOLeitor(
         tester,
         permissao: EstadoDaPermissao.indisponivel,
         rede: (_) async => problema('tag-code-malformed', 400),
@@ -182,7 +208,7 @@ void main() {
 
     testWidgets('tag-code-not-found diz que o codigo nao e de nenhuma tag',
         (tester) async {
-      await abrirAAbaEscanear(
+      await abrirOLeitor(
         tester,
         permissao: EstadoDaPermissao.indisponivel,
         rede: (_) async => problema('tag-code-not-found', 404),
@@ -208,7 +234,7 @@ void main() {
       // O `title` que `problema()` manda e enganoso de proposito. Se a tela
       // passar a exibi-lo, este caso reprova -- e e exatamente a mudanca que
       // passa despercebida num diff.
-      await abrirAAbaEscanear(
+      await abrirOLeitor(
         tester,
         permissao: EstadoDaPermissao.indisponivel,
         rede: (_) async => problema('tag-code-not-found', 404),

@@ -227,6 +227,12 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   DepositoDeIntencaoEmMemoria? envelope,
   DepositoDeSessao? deposito,
   CacheDeMeusPets? cacheDeMeusPets,
+  /// A escala de fonte do sistema. `null` usa a do ambiente (1,0).
+  ///
+  /// Entra por aqui, e nao por um `pumpWidget` proprio no caso, porque o
+  /// `BichuApp` aplica um `clamp` de 1 a 2 no proprio `builder`: um caso que
+  /// montasse a arvore sozinho estaria exercitando outra coisa que nao o app.
+  double? escala,
 }) async {
   AppConfig.limparParaTeste();
   // O envelope de intencao vai EM MEMORIA aqui, sempre.
@@ -238,22 +244,58 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   // espera um Future que nunca resolve. Custou uma execucao travada para
   // descobrir, e o sintoma nao aponta para a causa.
   final envelopeEmUso = envelope ?? DepositoDeIntencaoEmMemoria();
+  Widget comEscala(Widget app) {
+    if (escala == null) return app;
+    return MediaQuery(
+      data: MediaQueryData(textScaler: TextScaler.linear(escala)),
+      child: app,
+    );
+  }
+
   await tester.pumpWidget(
-    BichuApp(
-      config: AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste),
-      deposito: deposito ?? DepositoEmMemoria(),
-      depositoDeIntencao: envelopeEmUso,
-      clienteHttp: MockClient(rede),
-      cacheDeMeusPets: cacheDeMeusPets,
-      camera: camera ?? const CameraNaoEmbarcada(),
-      // O padrao e o mesmo do app quando o Firebase nao subiu: nenhum canal de
-      // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`
-      // de verdade travaria a suite num `Future` que nunca resolve.
-      avisos: avisos ?? const AvisosNaoEmbarcados(),
+    comEscala(
+      BichuApp(
+        config: AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste),
+        deposito: deposito ?? DepositoEmMemoria(),
+        depositoDeIntencao: envelopeEmUso,
+        clienteHttp: MockClient(rede),
+        cacheDeMeusPets: cacheDeMeusPets,
+        camera: camera ?? const CameraNaoEmbarcada(),
+        // O padrao e o mesmo do app quando o Firebase nao subiu: nenhum canal de
+        // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`
+        // de verdade travaria a suite num `Future` que nunca resolve.
+        avisos: avisos ?? const AvisosNaoEmbarcados(),
+      ),
     ),
   );
   await tester.pumpAndSettle();
   return envelopeEmUso;
+}
+
+/// As rotas que o `GoRouter` do app de fato registra.
+///
+/// Lidas do roteador montado, e nao de uma lista escrita a mao: uma lista a
+/// mao seria a segunda fonte da verdade, e continuaria dizendo que a rota
+/// existe no dia em que alguem a apagasse.
+Set<String> rotasRegistradasDoApp(WidgetTester tester) {
+  final roteador = GoRouter.of(tester.element(find.byType(Scaffold).first));
+  final achadas = <String>{};
+  void visitar(List<RouteBase> rotas) {
+    for (final rota in rotas) {
+      if (rota is GoRoute) achadas.add(rota.path);
+      visitar(rota.routes);
+      if (rota is StatefulShellRoute) {
+        for (final ramo in rota.branches) {
+          visitar(ramo.routes);
+        }
+      } else if (rota is ShellRouteBase) {
+        visitar(rota.routes);
+      }
+    }
+  }
+
+  visitar(roteador.configuration.routes);
+  return achadas;
 }
 
 /// Navega pelo roteador de verdade, com o `extra` que a rota espera.

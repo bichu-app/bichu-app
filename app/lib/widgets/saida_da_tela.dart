@@ -43,13 +43,14 @@ class SaidaDaTela extends StatelessWidget {
   const SaidaDaTela({
     required this.tipo,
     super.key,
-    this.escape = Rotas.inicio,
+    this.escape = Rotas.pets,
   });
 
   final TipoDeSaida tipo;
 
-  /// Para onde ir quando nao ha nada para desempilhar. O Inicio e o default
-  /// porque ele e a unica tela do app que nunca exige conta e nunca depende de
+  /// Para onde ir quando nao ha nada para desempilhar. `Pets` e o default
+  /// porque ele e a secao de aterrissagem -- a unica tela do app que nunca
+  /// exige conta e nunca depende de
   /// um passo anterior.
   final String escape;
 
@@ -105,7 +106,7 @@ class BarraDeConta extends StatelessWidget implements PreferredSizeWidget {
     required this.titulo,
     required this.saida,
     super.key,
-    this.escape = Rotas.inicio,
+    this.escape = Rotas.pets,
   });
 
   final String titulo;

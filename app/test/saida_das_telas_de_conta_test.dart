@@ -187,8 +187,8 @@ void main() {
     );
   });
 
-  testWidgets('Verifique seu e-mail tem saida de fechar, e ela devolve o '
-      'Inicio', (tester) async {
+  testWidgets('Verifique seu e-mail tem saida de fechar, e ela devolve '
+      'Pets', (tester) async {
     await abrirOApp(tester, deposito: await depositoLogado());
 
     await tester.tap(find.text('Confirmar meu e-mail'));
@@ -204,7 +204,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    exigirQueVoltouParaAba(tester, 'Início');
+    exigirQueVoltouParaAba(tester, 'Pets');
   });
 
   testWidgets('trocar entre Entrar e Criar conta nao empilha: a volta leva a '
@@ -276,8 +276,10 @@ void main() {
     await tester.tap(exigirSaida(tester, 'Voltar', na: 'Entrar (link direto)'));
     await tester.pumpAndSettle();
 
-    // Sem pilha, a saida cai no destino declarado pela tela. Deslogado, o
-    // Inicio se chama "Bichu".
-    exigirQueVoltouParaAba(tester, 'Bichu');
+    // Sem pilha, a saida cai no destino declarado pela tela: `Rotas.pets`, a
+    // secao de aterrissagem. O titulo dela e `Pets` logado e deslogado --
+    // antes desta historia o Inicio deslogado se chamava `Bichu`, que nao era
+    // o rotulo de aba nenhuma.
+    exigirQueVoltouParaAba(tester, 'Pets');
   });
 }
