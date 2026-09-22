@@ -69,6 +69,7 @@ import type {
   TagResolvida,
 } from '../../ports/tag-repository.js';
 import { registrarRotasDeTags, type DependenciasDasRotasDeTag } from './tag-routes.js';
+import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
@@ -227,7 +228,14 @@ function montar(): Bancada {
   };
 
   const contrato = carregarContrato('api/openapi.yaml');
-  const app = criarServidor({ problemBaseUrl: PROBLEM_BASE_URL, isProduction: false });
+  const app = criarServidor({
+    problemBaseUrl: PROBLEM_BASE_URL,
+    isProduction: false,
+    // Exigido desde a BICHUS-178: `registrarRota` recusa um servidor sem
+    // contador, na subida. Contador EM MEMORIA e nao desligado, para que estes
+    // casos exercitem a mesma fiacao que roda.
+    teto: tetoDeTeste(),
+  });
   const deps: DependenciasDasRotasDeTag = {
     tags,
     autenticador,

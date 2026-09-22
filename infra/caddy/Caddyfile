@@ -172,6 +172,14 @@
 	# uma `finder_identity`. Quem procurar protecao de taxa aqui nao vai
 	# achar, e e por isso que esta escrito.
 	#
+	# ATE 21/09/2026 A FRASE ACIMA ERA FALSA. O servico declarava os tetos e
+	# nao aplicava nenhum: `hit()` nunca era chamado. A borda declinava de
+	# proteger apoiada numa protecao que nao existia, e os dois lados tinham
+	# escrito que o outro cuidava. Passou a ser verdade com a BICHUS-178 e o
+	# ADR-0016 Emenda 1, e quem quiser conferir em vez de acreditar roda
+	# `src/tools/portao-de-vigencia-do-teto.ts`, que sobe a borda e estoura o
+	# teto de uma rota real.
+	#
 	# 12 MiB: o maior upload aceito pelo contrato e 10 MiB, e o resto e
 	# folga de envelope. Os bytes da imagem nao passam por aqui de qualquer
 	# forma — vao direto para o armazenamento, com URL assinada.

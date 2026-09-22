@@ -38,6 +38,7 @@ import type { Mailer } from '../../ports/mailer.js';
 import type { TokenSigner } from '../../ports/token-signer.js';
 import { criarAuthService } from '../../application/auth-service.js';
 import { registrarRotasDeIdentidade, type DependenciasDasRotas } from './routes.js';
+import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 
 const PROBLEM_BASE_URL = 'https://api.exemplo.invalid/problems' as AbsoluteUrl;
 
@@ -116,7 +117,14 @@ function montar(): FastifyInstance {
     baseDaWeb: 'https://exemplo.invalid' as AbsoluteUrl,
   });
 
-  const app = criarServidor({ problemBaseUrl: PROBLEM_BASE_URL, isProduction: false });
+  const app = criarServidor({
+    problemBaseUrl: PROBLEM_BASE_URL,
+    isProduction: false,
+    // Exigido desde a BICHUS-178: `registrarRota` recusa um servidor sem
+    // contador, na subida. Contador EM MEMORIA e nao desligado, para que estes
+    // casos exercitem a mesma fiacao que roda.
+    teto: tetoDeTeste(),
+  });
   const deps: DependenciasDasRotas = {
     auth,
     assinador,

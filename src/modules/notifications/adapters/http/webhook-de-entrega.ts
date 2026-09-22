@@ -35,6 +35,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota } from '../../../../shared/http/registrar-rota.js';
 import { AppError } from '../../../../shared/http/errors.js';
 import { iguaisEmTempoConstante } from '../../../../shared/crypto/digest.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
@@ -159,8 +160,9 @@ export function registrarRotaDoWebhookDeEntrega(
     );
   }
 
-  app.post(
-    rotaDoWebhookDeEntrega.path,
+  registrarRota(
+    app,
+    rotaDoWebhookDeEntrega,
     {
       schema: { body: schema },
       // A ASSINATURA É CONFERIDA EM `onRequest`, e não dentro do handler.
@@ -178,14 +180,17 @@ export function registrarRotaDoWebhookDeEntrega(
       // apresenta o segredo não faz o servidor nem desserializar JSON. Isso
       // também é o requisito de "não fazer trabalho no handler": o custo de uma
       // requisição inválida cai para uma comparação de bytes.
-      onRequest: (request: FastifyRequest, _reply: FastifyReply, pronto: (erro?: Error) => void) => {
-        try {
+      //
+      // E o teto de tentativas inválidas roda em `onRequest` ANTES deste gancho
+      // (`registrarRota` os empilha nessa ordem). É isso que faz a 21ª chamada
+      // inválida da hora receber 429 **sem** a comparação em tempo constante
+      // acontecer: a defesa contra o moedor de CPU não pode ela mesma custar CPU.
+      onRequest: [
+        (request: FastifyRequest): Promise<void> => {
           conferirAssinatura(request, deps.segredo);
-          pronto();
-        } catch (erro) {
-          pronto(erro as Error);
-        }
-      },
+          return Promise.resolve();
+        },
+      ],
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const corpo = (request.body ?? {}) as CorpoDoEvento;

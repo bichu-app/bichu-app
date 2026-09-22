@@ -82,6 +82,7 @@ import type { Mailer } from '../../ports/mailer.js';
 import type { TokenSigner } from '../../ports/token-signer.js';
 import { criarAuthService } from '../../application/auth-service.js';
 import { registrarRotasDeIdentidade, type DependenciasDasRotas } from './routes.js';
+import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const OUTRA_PESSOA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f02' as UserId;
@@ -322,7 +323,14 @@ function montar(): Bancada {
     baseDaWeb: 'https://exemplo.invalid' as AbsoluteUrl,
   });
 
-  const app = criarServidor({ problemBaseUrl: PROBLEM_BASE_URL, isProduction: false });
+  const app = criarServidor({
+    problemBaseUrl: PROBLEM_BASE_URL,
+    isProduction: false,
+    // Exigido desde a BICHUS-178: `registrarRota` recusa um servidor sem
+    // contador, na subida. Contador EM MEMORIA e nao desligado, para que estes
+    // casos exercitem a mesma fiacao que roda.
+    teto: tetoDeTeste(),
+  });
   const deps: DependenciasDasRotas = {
     auth,
     assinador,

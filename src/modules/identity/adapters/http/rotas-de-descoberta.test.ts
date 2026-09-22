@@ -44,6 +44,7 @@ import { generateKeyPairSync } from 'node:crypto';
 import { loadAppConfig } from '../../../../shared/config/app-config.js';
 import { carregarContrato } from '../../../../shared/http/contract.js';
 import { criarServidor } from '../../../../shared/http/server.js';
+import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import { criarTokenSigner } from '../external/rs256-token-signer.js';
 import { registrarRotasDeDescoberta, type DependenciasDasRotas } from './routes.js';
 import type { AuthService } from '../../application/auth-service.js';
@@ -137,7 +138,11 @@ function subirApp() {
   for (const [nome, valor] of Object.entries(ambiente())) process.env[nome] = valor;
   const config = loadAppConfig();
 
-  const app = criarServidor({ problemBaseUrl: config.problemBaseUrl, isProduction: false });
+  const app = criarServidor({
+    problemBaseUrl: config.problemBaseUrl,
+    isProduction: false,
+    teto: tetoDeTeste(),
+  });
   const deps: DependenciasDasRotas = {
     auth: {} as unknown as AuthService,
     assinador: criarTokenSigner(config.token),

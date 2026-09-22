@@ -18,6 +18,8 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import {
   executarComIdempotencia,
@@ -85,18 +87,40 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
   return schema;
 }
 
-async function donoAutenticado(
+/** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
+function donoAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeCaso,
 ): Promise<{ userId: UserId; correlationId: string; ip: string | undefined }> {
-  const cabecalho = request.headers.authorization;
-  if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
-    throw problemas.naoAutenticado();
+  return memoDaRequisicao(request, 'lostfound:dono', async () => {
+    const cabecalho = request.headers.authorization;
+    if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
+      throw problemas.naoAutenticado();
+    }
+    const token = cabecalho.slice('Bearer '.length).trim();
+    if (token === '') throw problemas.naoAutenticado();
+    const { userId } = await deps.autenticador.autenticar(token);
+    return { userId, correlationId: request.id, ip: request.ip };
+  });
+}
+
+/**
+ * `account` para o teto de abertura de caso.
+ *
+ * As duas entradas desta rota são `accept_and_defer_dispatch` e
+ * `hold_for_review`, e **nenhuma das duas recusa**: o caso sempre abre. Estourar
+ * o teto aqui registra e alerta, e é assim de propósito — portão aberto com três
+ * cães e um evento é acidente, não abuso.
+ */
+async function contaDoTeto(
+  request: FastifyRequest,
+  deps: DependenciasDasRotasDeCaso,
+): Promise<string | undefined> {
+  try {
+    return (await donoAutenticado(request, deps)).userId;
+  } catch {
+    return undefined;
   }
-  const token = cabecalho.slice('Bearer '.length).trim();
-  if (token === '') throw problemas.naoAutenticado();
-  const { userId } = await deps.autenticador.autenticar(token);
-  return { userId, correlationId: request.id, ip: request.ip };
 }
 
 /**
@@ -165,11 +189,13 @@ export function registrarRotasDeCasos(
   app: FastifyInstance,
   deps: DependenciasDasRotasDeCaso,
 ): void {
-  app.post(
-    rotaDeAberturaDeCaso.path,
+  registrarRota(
+    app,
+    rotaDeAberturaDeCaso,
     {
       schema: { body: corpoDe(deps.contrato, rotaDeAberturaDeCaso.operationId) },
       config: { idempotencia: true },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await donoAutenticado(request, deps);
@@ -220,7 +246,7 @@ export function registrarRotasDeCasos(
     },
   );
 
-  app.get(rotaDoCaso.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDoCaso, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await donoAutenticado(request, deps);
     const { caseId } = request.params as { caseId?: string };
     if (typeof caseId !== 'string' || caseId === '') throw problemas.naoEncontrado();
@@ -228,9 +254,13 @@ export function registrarRotasDeCasos(
     return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
   });
 
-  app.post(
-    rotaDeEncerramento.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDeEncerramento.operationId) } },
+  registrarRota(
+    app,
+    rotaDeEncerramento,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeEncerramento.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await donoAutenticado(request, deps);
       const { caseId } = request.params as { caseId?: string };
