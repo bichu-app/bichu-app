@@ -126,7 +126,9 @@ services:
   migracao:
     # Mesmo alvo do compose.yaml da raiz, pelo mesmo motivo: `node-pg-migrate` e
     # devDependency e a migracao nao muda de forma entre ambientes.
-    image: bichu-migrador:${TAG_DA_PILHA:?a tag sai de infra/integracao/rodar.mjs (sufixo do caminho do worktree). Tag fixa aqui faz dois worktrees compartilharem a MESMA imagem e um migrar com o esquema do outro: use `npm run test:integration`.}
+    # Aspas obrigatorias: a mensagem do `:?` tem `: `, e em escalar YAML sem
+    # aspas isso vira mapeamento e o arquivo nem parseia.
+    image: "bichu-migrador:${TAG_DA_PILHA:?sem TAG_DA_PILHA a tag seria fixa para todo worktree, e dois worktrees migrariam com o esquema um do outro. Rode `npm run test:integration`, que a injeta (infra/integracao/rodar.mjs).}"
     build:
       context: ../..
       target: migrador
@@ -153,7 +155,7 @@ services:
     # o Node 22 que `engines` exige. Rodar a integracao no Node do hospedeiro
     # seria provar o comportamento de um runtime que nao sobe em lugar nenhum:
     # esta maquina tem Node 26 instalado.
-    image: bichu-app:${TAG_DA_PILHA:?a tag sai de infra/integracao/rodar.mjs (sufixo do caminho do worktree). Tag fixa aqui faz dois worktrees compartilharem a MESMA imagem e um rodar o codigo do outro: use `npm run test:integration`.}
+    image: "bichu-app:${TAG_DA_PILHA:?sem TAG_DA_PILHA a tag seria fixa para todo worktree, e dois worktrees rodariam a imagem um do outro. Rode `npm run test:integration`, que a injeta (infra/integracao/rodar.mjs).}"
     build:
       context: ../..
       target: dev

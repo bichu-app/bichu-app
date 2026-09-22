@@ -1,0 +1,29 @@
+# A SEGUNDA ISCA: ela nao testa o compose, testa a LEITURA da isca.
+#
+# A varredura de dimensoes de `isca-de-isolamento.mjs` reporta hoje zero
+# identificador em tres das cinco dimensoes -- nome de conteiner, volume
+# nomeado e porta publicada --, porque a pilha de integracao nao declara
+# nenhuma das tres. Zero e a resposta CERTA, e e tambem a resposta que sai
+# quando a leitura esta quebrada: se o `docker compose config` mudar a forma do
+# JSON, a isca passa a nao achar nada e a informar "nenhum em comum" com a
+# mesma cara de aprovacao. Portao que nao consegue conferir precisa reprovar.
+#
+# Este arquivo declara de proposito, IGUAL nos dois projetos, um identificador
+# de cada dimensao. A isca o sobrepoe e EXIGE que as tres sejam acusadas. Se
+# alguma passar, a leitura daquela dimensao esta cega e a isca reprova a si
+# mesma, dizendo qual.
+#
+# Nada disto sobe: so `docker compose config` le este arquivo. A porta 59999
+# nunca e publicada de verdade, e o volume nunca e criado.
+services:
+  db:
+    volumes:
+      - dados-fixos-da-isca:/tmp/isca
+    ports:
+      - "127.0.0.1:59999:5432"
+  testes:
+    container_name: nome-fixo-da-isca
+
+volumes:
+  dados-fixos-da-isca:
+    name: volume-fixo-da-isca

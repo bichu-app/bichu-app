@@ -1,6 +1,3 @@
-/* global process */
-// A diretiva acima segue a convencao de infra/verificacao/*.mjs: o ESLint deste
-// repositorio nao declara os globais de Node para `**/*.mjs` fora de `src/`.
 /**
  * Quem e a pilha efemera DESTE worktree: nome do projeto e tag das imagens.
  *
