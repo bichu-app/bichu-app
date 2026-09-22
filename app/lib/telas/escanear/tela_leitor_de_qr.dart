@@ -7,6 +7,7 @@ import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../dispositivo/camera_e_galeria.dart';
+import '../../dispositivo/leitor_de_qr.dart';
 import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -16,34 +17,45 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 import '../pet/textos_do_cadastro.dart';
+import 'codigo_lido_do_qr.dart';
 import 'mascara_do_codigo_da_tag.dart';
 
 /// O que a saida sobreposta ocupa, contada do topo da area segura.
 ///
 /// **Nao e um numero escolhido: e a soma dos dois que ja existiam.** A saida
 /// e posicionada com [BichuEspaco.e2] de folga e o alvo dela e o piso critico
-/// de 64 dp (design system 6.5). Como ela fica **por cima** dos quatro
-/// estados, todo conteudo desenhado na faixa esquerda do topo precisa comecar
-/// depois desta linha.
+/// de 64 dp (design system 6.5). Como ela fica **por cima** dos estados, todo
+/// conteudo desenhado na faixa esquerda do topo precisa comecar depois desta
+/// linha.
 ///
 /// Ele existe escrito assim, e nao somado a mao em cada estado, porque foi
 /// somado a mao que o defeito nasceu: os estados desenhados abriam com
 /// 24 + 40 = 64 dp, o comentario do `build` afirmava "folga de 64 dp", e a
-/// saida ocupa 72. No estado `digitando`, o unico sem quadro no Figma, a
-/// abertura era 16 + 24 = 40 e o `x` caia em cima do rotulo do campo. Um
-/// numero derivado nao diverge quando alguem mexe no alvo.
+/// saida ocupa 72. Um numero derivado nao diverge quando alguem mexe no alvo.
 const double alturaDaSaidaSobreposta =
     BichuEspaco.e2 + BichuAlvoDeToque.critico;
 
-/// Os estados que F2.1 tem **enquanto a BICHUS-54 nao existe**.
+/// Os estados de F2.1.
 enum EstadoDoLeitor {
-  /// A tela de abertura: a leitura por camera nao existe nesta versao, e o
-  /// caminho que existe e digitar o codigo.
+  /// O primeiro quadro, enquanto a porta responde qual e o estado da
+  /// permissao.
   ///
-  /// **Nao ha quadro no Figma para este estado**, porque ele nao e um estado
-  /// do leitor: e a ausencia do leitor. Os quadros `87:14` (o visor) e `87:26`
-  /// (a permissao negada) continuam valendo, e voltam com a BICHUS-54.
-  semLeitura,
+  /// **Ele nao desenha moldura nem fundo de visor**, e isso e a regra da
+  /// BICHUS-220 aplicada ao unico instante em que ela ainda vale nesta tela:
+  /// por alguns quadros ainda nao se sabe se havera camera, e desenhar o
+  /// visor "adiantado" seria prometer antes de ter.
+  consultando,
+
+  /// Figma `87:14`. A camera esta ligada e o leitor procura um simbolo.
+  procurando,
+
+  /// Figma `87:26`. A permissao foi negada, desta vez ou de vez.
+  permissaoNegada,
+
+  /// Este build nao le QR (macOS, web, teste de widget), ou o sistema
+  /// bloqueou a camera por politica. **Nao e recusa: e ausencia**, e nao ha
+  /// ajuste a abrir.
+  semLeitor,
 
   /// Figma `87:40`. O codigo foi lido e a resolucao e no servidor.
   semConexao,
@@ -53,9 +65,8 @@ enum EstadoDoLeitor {
   digitando,
 }
 
-/// F2.1 — Leitor de QR. Figma `87:40`; os quadros `87:14` e `87:26` voltam
-/// com a BICHUS-54, e a nota "a tela parou de fingir" mais abaixo diz por que
-/// eles sairam.
+/// F2.1 — Leitor de QR. Figma `87:14` (visor), `87:26` (permissao negada),
+/// `87:18` (o aviso efemero) e `87:40` (sem conexao).
 ///
 /// **Esta tela nao leva barra de topo nem barra inferior de abas, e isso e
 /// desenho.** O design system 11.11 lista o leitor de camera entre as telas em
@@ -63,92 +74,148 @@ enum EstadoDoLeitor {
 /// competiria com o visor, que ocupa a tela inteira.
 ///
 /// **O que mudou na BICHUS-164, e a consequencia que vem junto.** `Escanear`
-/// deixou de ser aba (o rotulo pedia 71,57 dp num slot de 64,0) e passou a ser
-/// rota irma da casca, alcancada por `push` das duas portas de 27.5.6: a
-/// primaria em `Pets` e a de conta em `Perfil`. Enquanto era aba, a saida
-/// **era a propria barra inferior** -- tocar em outra aba saia daqui. Sem a
-/// barra, essa saida sumiu, e uma tela sem barra e sem saida e exatamente o
-/// beco da BICHUS-157. Por isso entrou a [SaidaDaTela] sobreposta no canto
+/// deixou de ser aba e passou a ser rota irma da casca, alcancada por `push`
+/// das duas portas de 27.5.6. Enquanto era aba, a saida **era a propria barra
+/// inferior**. Sem a barra, essa saida sumiu, e uma tela sem barra e sem saida
+/// e o beco da BICHUS-157. Por isso ha a [SaidaDaTela] sobreposta no canto
 /// superior esquerdo: ela existe **sempre**, inclusive quando a tela e
-/// alcancada por link direto com a pilha vazia, e nesse caso cai no escape.
-/// Ela fica sobreposta, e nao numa barra, porque o visor nao pode encolher.
+/// alcancada por link direto com a pilha vazia. Ela fica sobreposta, e nao
+/// numa barra, porque o visor nao pode encolher.
 ///
-/// **A barra inferior vem do codigo, e nao do Figma.** O componente
-/// `NavigationBar` **nao existe** no arquivo de design: os quadros de F2.1
-/// desenham o visor e a barra de acao fixa, e nenhum deles desenha a barra de
-/// quatro abas. A barra que esta tela recebe e a `CascaComAbas`, que ja existia
-/// e ja segue o paragrafo 11.11 do design system (quatro itens, rotulo sempre
-/// visivel, 48 dp por item). Nao desenhei um componente novo para tapar o
-/// buraco; a ausencia esta relatada.
+/// ## A CAMERA VOLTOU, E COM ELA A MOLDURA (BICHUS-54)
+///
+/// **O que houve antes.** Ate 22/09 esta tela desenhava fundo preto de borda a
+/// borda, uma moldura branca de 240 x 240 e [instrucaoDoVisor] com **nenhum
+/// widget de camera na arvore**. O cliente achou isso no primeiro teste em
+/// aparelho fisico (BICHUS-220), a tela passou a dizer a verdade, e
+/// `test/telas/leitor_nao_finge_camera_test.dart` passou a proibir a figura de
+/// visor **enquanto nao houvesse leitor**.
+///
+/// **O que mudou agora, e o que continua igual.** Ha leitor: `mobile_scanner`
+/// esta no `pubspec.yaml` e [LeitorDeQr] e a porta. A proibicao daquela isca
+/// nao foi apagada, foi **invertida**, e o invariante que ela sempre mediu
+/// continua o mesmo, com o sinal trocado: **moldura e camera andam juntas**.
+/// Com o leitor ligado a moldura e obrigatoria; sem ele, continua proibida. Os
+/// dois sentidos estao guardados naquele arquivo, e os dois reprovam.
+///
+/// ## A permissao volta a decidir a tela, e agora ela pode
+///
+/// Ate a BICHUS-54 ramificar por permissao produzia promessa falsa: `Abrir os
+/// ajustes` convidava a liberar uma camera que nao destravava leitura nenhuma.
+/// Com o leitor existindo, liberar a camera destrava de verdade, e os **quatro**
+/// estados de [EstadoDaPermissao] voltam a ter tela.
+///
+/// **Quem pergunta a permissao e a porta da camera, e nao a do leitor.** E a
+/// mesma permissao de sistema, e quem liberou a camera para a foto do pet em
+/// F1.4 nao e perguntado de novo aqui.
+///
+/// **O dialogo do sistema so abre no toque, nunca na abertura da tela.** No
+/// iOS o pedido e irreversivel: negado uma vez, so pelos Ajustes. E o mesmo
+/// cuidado que a BICHUS-24 pos na antessala de notificacao -- a pessoa le o
+/// motivo **antes** de a chance unica ser gasta --, e a forma que ele ja tem
+/// neste branch e a de F1.4: consultar o estado na montagem (que nao abre
+/// dialogo) e pedir so quando a pessoa toca no controle que diz o que vai
+/// acontecer. A antessala em folha modal da BICHUS-24 continua em
+/// `feat/BICHUS-24-antessala-de-permissao` e **nao esta nesta base**; quando os
+/// dois branches se encontrarem, este caminho e o dela viram um so, e a
+/// duplicacao a resolver esta apontada na entrega.
 ///
 /// **A camera nunca e o unico caminho.** `Digitar o código` esta presente em
-/// todos os estados e e alcancavel por teclado e por leitor de tela. O caminho
-/// de quem nao consegue escanear nao pode estar escondido atras do fracasso do
-/// caminho principal.
+/// todos os estados e e alcancavel por teclado e por leitor de tela. Nos tres
+/// estados em que a camera nao funciona ele e a acao **principal**, e nao a
+/// alternativa: a acao principal e a que resolve, e nao a que a tela preferia.
 ///
-/// ## A TELA PAROU DE FINGIR QUE E UMA CAMERA (achado em aparelho, 22/09)
-///
-/// **O que havia aqui.** Com a permissao concedida, esta tela desenhava fundo
-/// preto de borda a borda, uma moldura branca de 240 x 240 e a frase
-/// [TelaLeitorDeQr.instrucaoDoVisor]. **Nenhum widget de camera existia na
-/// arvore**, e nenhum plugin de leitura existe no `pubspec.yaml`. A pessoa
-/// apontava o aparelho para a coleira e ficava esperando um quadrado preto que
-/// nunca ia ler nada. O cliente encontrou isso no primeiro teste em aparelho
-/// fisico.
-///
-/// **Por que a permissao deixou de decidir a tela.** A camera nao e o que
-/// falta: o que falta e o leitor (BICHUS-54, `To Do`, declarada fora do escopo
-/// da BICHUS-161 por escrito). Com o leitor inexistente, a permissao de camera
-/// nao muda nada do que esta tela consegue fazer, e ramificar por ela produzia
-/// uma segunda promessa que o app nao cumpre: `Abrir os ajustes` convidava a
-/// liberar uma permissao que nao destravava leitura nenhuma. Por isso ha um
-/// estado so, [EstadoDoLeitor.semLeitura], e ele diz o que e verdade.
-///
-/// **O que a BICHUS-54 precisa repor**, e nada disso se perdeu de vista: o
-/// visor do quadro `87:14` com o preview de verdade atras dele; a tela de
-/// permissao negada do quadro `87:26` com os tres estados de
-/// [EstadoDaPermissao] e o caminho para os ajustes; o aviso efemero do
-/// `87:18` para o codigo que nao e do Bichu, dito sem sair da camera; e, fora
-/// da tela, o plugin, a declaracao de uso no `Info.plist` e no
-/// `AndroidManifest.xml` com a justificativa que a revisao da loja cobra, e a
-/// verificacao em aparelho, porque camera nao se verifica em simulador. Os
-/// tres estados de permissao continuam implementados e medidos na tela que
-/// **usa** a camera, F1.4 (`test/telas/cadastrar_foto_test.dart`).
-///
-/// **`GET /v1/tags/{code}` tambem nao existe no servidor ainda.** A tela chama
-/// o contrato e trata os quatro desfechos por `type`; enquanto nao houver
-/// rota, a chamada termina em falha e a tela mostra o texto da falha. Nenhuma
-/// resposta e simulada.
+/// **`GET /v1/tags/{code}` ainda nao existe no servidor.** A tela chama o
+/// contrato e trata os desfechos por `type`; enquanto nao houver rota, a
+/// chamada termina em falha e a tela mostra o texto da falha. Nenhuma resposta
+/// e simulada.
 class TelaLeitorDeQr extends StatefulWidget {
   const TelaLeitorDeQr({super.key});
 
-  /// O titulo de [EstadoDoLeitor.semLeitura].
+  /// A frase do criterio 1, **agora desenhada**.
   ///
-  /// **Microcopy nova**, e ela esta marcada como tal na entrega: nao ha frase
-  /// no UX nem no Figma para "a funcao ainda nao existe", porque nenhum dos
-  /// dois documentos previu entregar a tela antes do leitor. A pergunta
-  /// fechada foi devolvida junto com a tela, e esta e a proposta.
-  static const String tituloSemLeitura =
-      'A leitura por câmera ainda não está pronta';
+  /// Ela continua sendo uma constante da classe, e nao um literal dentro do
+  /// widget, pelo motivo de sempre: a isca de
+  /// `test/telas/leitor_nao_finge_camera_test.dart` a le daqui, e uma isca com
+  /// a propria copia da frase ficaria verde no dia em que o texto fosse
+  /// reescrito num lugar so.
+  static const String instrucaoDoVisor = 'Aponte para o QR da coleira';
 
-  /// A explicacao de [EstadoDoLeitor.semLeitura].
+  /// O titulo de [EstadoDoLeitor.semLeitor].
+  ///
+  /// **Microcopy nova**, e ela continua marcada como tal: nao ha frase no UX
+  /// nem no Figma para "este aparelho nao le". O texto mudou de dono com a
+  /// BICHUS-54 -- ele dizia que a funcao nao existia no app, e agora diz que
+  /// ela nao existe **neste aparelho**, que e a unica coisa que sobrou de
+  /// verdadeira.
+  static const String tituloSemLeitura =
+      'Este aparelho não lê o QR pela câmera';
+
+  /// A explicacao de [EstadoDoLeitor.semLeitor].
   ///
   /// Duas coisas, nesta ordem: o que **nao** existe, e o que existe. A segunda
-  /// frase nao e consolo -- a entrada manual e o que a BICHUS-54 chama de
-  /// caminho de igual valor, e ela resolve o mesmo codigo, pela mesma rota,
-  /// com o mesmo desfecho.
+  /// frase nao e consolo -- a entrada manual e o caminho de igual valor da
+  /// BICHUS-54, e ela resolve o mesmo codigo, pela mesma rota, com o mesmo
+  /// desfecho.
   static const String explicacaoSemLeitura =
-      'Esta versão do Bichu ainda não lê o QR da coleira pela câmera. O código '
-      'impresso na tag chega no mesmo lugar: digite e siga daqui.';
+      'A leitura por câmera não está disponível aqui. O código impresso na '
+      'tag chega no mesmo lugar: digite e siga daqui.';
 
-  /// A frase do criterio 1 da BICHUS-54, guardada **para nao ser desenhada**.
+  /// O titulo de [EstadoDoLeitor.permissaoNegada].
+  static const String tituloPermissaoNegada =
+      'A câmera está desligada para o Bichu';
+
+  /// A explicacao de [EstadoDoLeitor.permissaoNegada].
+  static const String explicacaoPermissaoNegada =
+      'Sem a câmera não dá para ler o QR da coleira. O código impresso na tag '
+      'chega no mesmo lugar, e ele está logo abaixo do QR na plaquinha.';
+
+  /// O rotulo que **abre o dialogo do sistema**, e por isso diz o que vai
+  /// acontecer antes de acontecer.
   ///
-  /// Ela fica aqui, e nao dentro de um widget, por um motivo so: a isca de
-  /// `test/telas/leitor_nao_finge_camera_test.dart` cobra a ausencia dela na
-  /// arvore, e uma isca que carregasse a propria copia da frase ficaria verde
-  /// no dia em que alguem repusesse o visor com o texto reescrito. Quando a
-  /// BICHUS-54 desenhar a camera de verdade, e esta constante que ela usa.
-  static const String instrucaoDoVisor = 'Aponte para o QR da coleira';
+  /// `Ligar a câmera`, e nao `Permitir`: `Permitir` e a palavra do botao do
+  /// dialogo do sistema, e repeti-la aqui faria a pessoa achar que ja
+  /// respondeu.
+  static const String ligarACamera = 'Ligar a câmera';
+
+  /// O criterio 3: o QR lido nao e do Bichu. **Dito sem sair da camera.**
+  static const String naoEDoBichu = 'Este código não é do Bichu. Tente de novo.';
+
+  /// Criterio 6, regiao viva: o leitor esta procurando.
+  static const String procurandoCodigo = 'Procurando código';
+
+  /// Criterio 6, regiao viva: o leitor achou.
+  static const String codigoEncontrado = 'Código encontrado';
+
+  /// DEDUZIDO, e e a pergunta fechada desta entrega.
+  ///
+  /// **A camera existe, esta ligada e nao le** -- codigo borrado, tag riscada,
+  /// pouca luz, lente arranhada. Nao ha erro: nada falhou, e o leitor continua
+  /// procurando. Mas ficar mudo enquanto a pessoa segura o aparelho sobre a
+  /// coleira de um animal que se mexe e deixa-la sem saber se o app esta vivo.
+  ///
+  /// A frase **nao acusa** (nao ha nada a acusar), **nao promete** que vai dar
+  /// certo, e aponta o caminho que funciona sem desligar o que esta rodando.
+  /// Ela aparece depois de [esperaAteAOfertaManual] e a camera **continua
+  /// lendo** por tras dela.
+  static const String aindaProcurando =
+      'Ainda não achei o código. Se a plaquinha estiver gasta ou riscada, dá '
+      'para digitar o código que está embaixo do QR.';
+
+  /// Quanto tempo o leitor procura antes de oferecer a digitacao.
+  ///
+  /// **12 s, e o numero e uma escolha declarada, nao uma medicao.** Curto
+  /// demais (3 a 5 s) interrompe quem so esta enquadrando; longo demais deixa
+  /// a pessoa achando que travou. Doze segundos e o que sobra depois de
+  /// enquadrar com uma mao so. O numero esta na pergunta fechada.
+  static const Duration esperaAteAOfertaManual = Duration(seconds: 12);
+
+  /// Quanto tempo o aviso do criterio 3 fica na tela.
+  ///
+  /// Ele e efemero porque a camera **nao para**: a pessoa ja esta apontando
+  /// para a proxima plaquinha quando ele some. Persistir exigiria um toque
+  /// para dispensar, com o aparelho na mao errada.
+  static const Duration duracaoDoAvisoEfemero = Duration(seconds: 4);
 
   @override
   State<TelaLeitorDeQr> createState() => _TelaLeitorDeQrState();
@@ -158,12 +225,11 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   final TextEditingController _codigo = TextEditingController();
   final FocusNode _focoDoCodigo = FocusNode();
 
-  /// **A tela abre dizendo a verdade, e nao consultando nada.**
-  ///
-  /// Nao ha estado inicial de espera porque nao ha nada que possa mudar a
-  /// resposta: o leitor de QR nao existe neste build, em nenhum aparelho e com
-  /// qualquer permissao.
-  EstadoDoLeitor _estado = EstadoDoLeitor.semLeitura;
+  /// **A tela abre sem afirmar nada**, e so depois de a porta responder ela
+  /// escolhe entre camera, permissao e ausencia.
+  EstadoDoLeitor _estado = EstadoDoLeitor.consultando;
+
+  EstadoDaPermissao _permissao = EstadoDaPermissao.negada;
 
   /// O codigo que foi lido e ainda nao resolveu. E o que a tela de sem conexao
   /// mostra, para a pessoa conseguir guarda-lo.
@@ -172,22 +238,141 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   int _tentativa = 0;
   int _segundosParaTentar = 0;
   Timer? _contagem;
+  Timer? _ofertaManual;
+  Timer? _limparAviso;
   bool _resolvendo = false;
+  bool _demorou = false;
   MensagemDeErro? _faixa;
+  String? _avisoEfemero;
+
+  /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
+  ///
+  /// `Escopo` e um `InheritedWidget`, e le-lo dentro de `initState` e erro de
+  /// framework. O sinalizador impede que o arranque rode de novo a cada
+  /// mudanca de tema, de tamanho de fonte ou de rotacao.
+  bool _iniciou = false;
 
   /// Tres tentativas automaticas, de 5 em 5 segundos, com o estado visivel.
   static const int _maximoDeTentativas = 3;
   static const int _esperaEntreTentativas = 5;
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_iniciou) return;
+    _iniciou = true;
+    _consultarPermissao();
+  }
+
+  @override
   void dispose() {
     _contagem?.cancel();
+    _ofertaManual?.cancel();
+    _limparAviso?.cancel();
     _codigo.dispose();
     _focoDoCodigo.dispose();
     super.dispose();
   }
 
+  /// Le o estado **sem abrir dialogo**, e decide a tela com ele.
+  ///
+  /// A ordem importa: [LeitorDeQr.embarcado] vem **antes** da permissao. Um
+  /// aparelho sem leitor com a camera liberada nao le nada, e mostrar a tela
+  /// de permissao ali mandaria a pessoa aos ajustes conceder o que ja esta
+  /// concedido.
+  Future<void> _consultarPermissao() async {
+    final escopo = Escopo.of(context);
+    if (!escopo.leitorDeQr.embarcado) {
+      setState(() => _estado = EstadoDoLeitor.semLeitor);
+      return;
+    }
+    final estado = await escopo.camera.estadoDaCamera();
+    if (!mounted) return;
+    setState(() {
+      _permissao = estado;
+      _estado = _telaDaPermissao(estado);
+    });
+    if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
+  }
+
+  EstadoDoLeitor _telaDaPermissao(EstadoDaPermissao permissao) {
+    return switch (permissao) {
+      EstadoDaPermissao.concedida => EstadoDoLeitor.procurando,
+      EstadoDaPermissao.negada ||
+      EstadoDaPermissao.negadaPermanentemente =>
+        EstadoDoLeitor.permissaoNegada,
+      // Nao ha permissao a conceder: o sistema bloqueou por politica, ou nao
+      // ha camera. Mandar aos ajustes faria procurar o que nao esta la.
+      EstadoDaPermissao.indisponivel => EstadoDoLeitor.semLeitor,
+    };
+  }
+
+  /// Pede a permissao. **So daqui**, e nunca da montagem da tela.
+  Future<void> _ligarACamera() async {
+    final camera = Escopo.of(context).camera;
+    // Negada permanentemente nao abre dialogo nenhum: o caminho e a faixa com
+    // os ajustes, que ja esta na tela. Insistir seria um toque que nao faz
+    // nada -- e o controle nem e construido naquele estado.
+    if (_permissao != EstadoDaPermissao.negada) return;
+    final novo = await camera.pedirCamera();
+    if (!mounted) return;
+    setState(() {
+      _permissao = novo;
+      _estado = _telaDaPermissao(novo);
+    });
+    if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
+  }
+
+  /// Arma a oferta de digitacao para quem ficou procurando sem achar.
+  void _comecarAProcurar() {
+    _demorou = false;
+    _ofertaManual?.cancel();
+    _ofertaManual = Timer(TelaLeitorDeQr.esperaAteAOfertaManual, () {
+      if (!mounted) return;
+      setState(() => _demorou = true);
+    });
+  }
+
+  /// Um simbolo chegou da camera.
+  ///
+  /// **A triagem e local, e nao no servidor.** O criterio 3 exige que um QR de
+  /// outra origem seja recusado **sem sair da camera**, e recusar sem sair da
+  /// camera quer dizer recusar aqui, sem ida e volta de rede -- ver
+  /// `codigo_lido_do_qr.dart`.
+  void _aoLer(LeituraDeQr leitura) {
+    // A camera entrega varios quadros por segundo e o mesmo simbolo chega
+    // muitas vezes. Enquanto uma resolucao esta em curso, o resto e ruido.
+    if (_resolvendo) return;
+
+    final codigo = codigoDeTagDoQr(
+      leitura.conteudo,
+      apiBaseUrl: Escopo.of(context).api.config.apiBaseUrl,
+    );
+
+    if (codigo == null) {
+      _mostrarAvisoEfemero(TelaLeitorDeQr.naoEDoBichu);
+      return;
+    }
+
+    anunciar(context, TelaLeitorDeQr.codigoEncontrado);
+    _resolver(codigo);
+  }
+
+  /// O aviso do criterio 3: aparece **sobre** o visor e some sozinho.
+  void _mostrarAvisoEfemero(String texto) {
+    // Um QR que nao e do Bichu aparecendo de novo nao reinicia a contagem para
+    // um texto que ja esta na tela: reinicia so quando o texto muda.
+    if (_avisoEfemero == texto && (_limparAviso?.isActive ?? false)) return;
+    setState(() => _avisoEfemero = texto);
+    _limparAviso?.cancel();
+    _limparAviso = Timer(TelaLeitorDeQr.duracaoDoAvisoEfemero, () {
+      if (!mounted) return;
+      setState(() => _avisoEfemero = null);
+    });
+  }
+
   void _irParaDigitacao() {
+    _ofertaManual?.cancel();
     setState(() => _estado = EstadoDoLeitor.digitando);
     _focoDoCodigo.requestFocus();
   }
@@ -199,12 +384,18 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   /// (410, com `next_action`) e `rate-limited` (429), e as quatro mensagens
   /// carregam **a mesma saida**. Um `if (status == 400)` acerta hoje por sorte
   /// e erra calado no dia em que outro tipo sair com o mesmo status.
+  ///
+  /// Os tres textos sao os mesmos de F4.5 (BICHUS-47), lidos de
+  /// `MensagensDeErro`: sao duas telas do mesmo desfecho, e escrever a frase
+  /// duas vezes e o comeco de duas respostas diferentes para o mesmo 404.
   Future<void> _resolver(String codigo) async {
     _contagem?.cancel();
+    _ofertaManual?.cancel();
     setState(() {
       _codigoLido = codigo;
       _resolvendo = true;
       _faixa = null;
+      _avisoEfemero = null;
     });
 
     try {
@@ -238,6 +429,9 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
           _estado = EstadoDoLeitor.digitando;
         }
       });
+      // A camera continua ligada: quem leu a plaquinha errada aponta para a
+      // proxima sem tocar em nada. A contagem da oferta manual recomeca.
+      if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
     }
   }
 
@@ -283,17 +477,14 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
           Positioned.fill(child: _corpo()),
           // Canto superior esquerdo: e onde o polegar procura a saida. Ela
           // fica POR CIMA de todos os estados, e por isso nenhum deles pode
-          // desenhar texto nos primeiros [alturaDaSaidaSobreposta] dp: o
-          // visor centraliza, os dois estados de falha abrem o texto bem
-          // abaixo, e `digitando` abre com a folga declarada.
-          SafeArea(
+          // desenhar texto nos primeiros [alturaDaSaidaSobreposta] dp.
+          const SafeArea(
             child: Padding(
-              padding: const EdgeInsets.all(BichuEspaco.e2),
-              child: const Align(
+              padding: EdgeInsets.all(BichuEspaco.e2),
+              child: Align(
                 alignment: Alignment.topLeft,
                 // `fechar` e nao `voltar`: o leitor e um destino, e nao um
-                // passo de um assistente. Quando ha pilha ele desempilha na
-                // mesma, e quando nao ha cai na secao de aterrissagem.
+                // passo de um assistente.
                 child: SaidaDaTela(tipo: TipoDeSaida.fechar),
               ),
             ),
@@ -305,37 +496,89 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
 
   Widget _corpo() {
     return switch (_estado) {
-        EstadoDoLeitor.semLeitura => const _SemLeitura(),
-        EstadoDoLeitor.semConexao => _SemConexao(
-            codigo: _codigoLido ?? '',
-            tentativa: _tentativa,
-            maximo: _maximoDeTentativas,
-            segundos: _segundosParaTentar,
-          ),
-        EstadoDoLeitor.digitando => _Digitacao(
-            controlador: _codigo,
-            foco: _focoDoCodigo,
-            faixa: _faixa,
-          ),
+      // Nem moldura nem fundo de visor: ver o comentario do proprio valor.
+      EstadoDoLeitor.consultando => const SizedBox.expand(),
+      EstadoDoLeitor.procurando => _Visor(
+          visor: Escopo.of(context).leitorDeQr.visor(aoLer: _aoLer),
+          aviso: _avisoEfemero,
+          demorou: _demorou,
+          resolvendo: _resolvendo,
+          faixa: _faixa,
+        ),
+      EstadoDoLeitor.permissaoNegada => _SemCamera(
+          titulo: TelaLeitorDeQr.tituloPermissaoNegada,
+          explicacao: TelaLeitorDeQr.explicacaoPermissaoNegada,
+          // O unico caminho de volta quando pedir de novo nao abre dialogo. A
+          // faixa e o texto sao os mesmos de F1.4, lidos de
+          // `TextosDoCadastro`: e a mesma permissao e a mesma frase.
+          faixaDosAjustes:
+              _permissao == EstadoDaPermissao.negadaPermanentemente,
+        ),
+      EstadoDoLeitor.semLeitor => _SemCamera(
+          titulo: TelaLeitorDeQr.tituloSemLeitura,
+          explicacao: TelaLeitorDeQr.explicacaoSemLeitura,
+          faixaDosAjustes: false,
+          // Informativo, e nao erro: nada deu errado e ninguem errou.
+          faixaDeAusencia: TextosDoCadastro.cameraNaoEmbarcada,
+        ),
+      EstadoDoLeitor.semConexao => _SemConexao(
+          codigo: _codigoLido ?? '',
+          tentativa: _tentativa,
+          maximo: _maximoDeTentativas,
+          segundos: _segundosParaTentar,
+        ),
+      EstadoDoLeitor.digitando => _Digitacao(
+          controlador: _codigo,
+          foco: _focoDoCodigo,
+          faixa: _faixa,
+        ),
     };
+  }
+
+  /// O controle que abre o campo. **Principal fora do visor, secundario
+  /// dentro dele.**
+  ///
+  /// Nao e hierarquia de gosto: a acao principal e a que resolve. Com a camera
+  /// lendo, ela e a camera; sem camera, a unica que resolve e esta.
+  Widget _acaoDeDigitar({required bool principal}) {
+    if (principal) {
+      return BotaoPrimario(
+        rotulo: TextosDoCadastro.digitarOCodigo,
+        critico: true,
+        aoTocar: _irParaDigitacao,
+      );
+    }
+    return BotaoSecundario(
+      rotulo: TextosDoCadastro.digitarOCodigo,
+      aoTocar: _irParaDigitacao,
+    );
   }
 
   List<Widget> _acoes() {
     return switch (_estado) {
-      // `Digitar o código` e a acao PRINCIPAL, e nao a alternativa: a acao
-      // principal e a que resolve, e nao a que a tela preferia.
-      //
-      // **Nao ha `Abrir os ajustes` aqui, e isso e desenho.** Liberar a camera
-      // nao destrava leitura nenhuma enquanto a BICHUS-54 nao existir, e
-      // mandar a pessoa aos ajustes do sistema para conseguir uma coisa que o
-      // app nao faz seria trocar uma mentira por outra. O caminho para os
-      // ajustes continua onde a camera de fato e usada, em F1.4.
-      EstadoDoLeitor.semLeitura => <Widget>[
-          BotaoPrimario(
-            rotulo: TextosDoCadastro.digitarOCodigo,
-            critico: true,
-            aoTocar: _irParaDigitacao,
-          ),
+      // Ainda sem resposta da porta. A saida nao aparece e some: ela existiria
+      // por dois ou tres quadros e piscaria na tela.
+      EstadoDoLeitor.consultando => <Widget>[
+          _acaoDeDigitar(principal: true),
+        ],
+      // Criterio 1: `Digitar o código` fica ABAIXO do visor, e existe mesmo
+      // com a camera funcionando.
+      EstadoDoLeitor.procurando => <Widget>[
+          _acaoDeDigitar(principal: _demorou),
+        ],
+      // Criterio 4: com a permissao negada, `Digitar o código` **vira a acao
+      // principal**. `Ligar a câmera` fica embaixo, e e ele -- e so ele -- que
+      // abre o dialogo do sistema.
+      EstadoDoLeitor.permissaoNegada => <Widget>[
+          _acaoDeDigitar(principal: true),
+          if (_permissao == EstadoDaPermissao.negada)
+            BotaoSecundario(
+              rotulo: TelaLeitorDeQr.ligarACamera,
+              aoTocar: _ligarACamera,
+            ),
+        ],
+      EstadoDoLeitor.semLeitor => <Widget>[
+          _acaoDeDigitar(principal: true),
         ],
       EstadoDoLeitor.semConexao => <Widget>[
           BotaoPrimario(
@@ -377,27 +620,274 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   }
 }
 
-/// A tela que diz que a leitura por camera ainda nao existe.
+/// A largura do lado da janela de leitura, em dp.
 ///
-/// **A honestidade aqui e o que a tela NAO desenha.** Nao ha fundo preto de
+/// Proporcional a tela e com teto: num celular estreito 280 dp encostaria nas
+/// bordas, e num tablet uma janela fixa ficaria perdida no meio. O piso de
+/// 160 dp existe porque abaixo disso a pessoa precisa aproximar tanto que o
+/// foco proximo da camera desiste -- o modulo do QR da plaquinha tem 0,677 mm.
+double ladoDaJanelaDeLeitura(Size tela) {
+  final proporcional = tela.shortestSide * 0.68;
+  return proporcional.clamp(160.0, 280.0);
+}
+
+/// Figma `87:14`. A camera ao vivo, a moldura, e o que se diz enquanto procura.
+///
+/// **A moldura so existe aqui.** Ela e desenhada como irma do visor dentro do
+/// mesmo `Stack`, e nunca em estado nenhum que nao tenha camera: e o
+/// invariante que `leitor_nao_finge_camera_test.dart` mede nos dois sentidos.
+///
+/// ## Nenhuma cor escrita a mao, e o que isso custou de desenho
+///
+/// O caminho obvio era branco puro sobre um escurecimento preto -- e o portao
+/// de `test/a11y/prosa_dos_tokens_test.dart` reprovou, com razao: cor a mao no
+/// Dart precisa estar declarada no inventario do design system, e o inventario
+/// nao e deste papel. O que saiu disso e melhor que o obvio, e vale escrever
+/// porque nao se deduz:
+///
+/// - **o escurecimento e [BichuCores.scrim]**, que ja existia para fundo de
+///   folha modal e e translucido nos dois temas (alfa 0xA3 no claro, 0xB8 no
+///   escuro). Ele cobre **so o lado de fora da janela**: dentro dela a imagem
+///   da camera chega limpa, que e onde o decodificador precisa dela;
+/// - **a moldura tem dois tracos concentricos**, [BichuCores.surfaceInverse]
+///   por fora e [BichuCores.textOnInverse] por dentro. Os dois sao um par
+///   invertido do sistema: onde um e claro o outro e escuro, e isso vale nos
+///   dois temas. Um traco sozinho, de qualquer cor, some sobre o quadro de
+///   video que por acaso tiver aquela cor -- e o quadro e arbitrario, porque e
+///   o mundo. Dois tracos opostos nao tem como sumir os dois juntos.
+///
+/// O texto nao fica solto sobre o video por motivo nenhum: ele vai numa placa
+/// opaca de [BichuCores.surfaceInverse], onde o contraste e o do sistema e o
+/// portao de pares do design system ja o mede.
+class _Visor extends StatelessWidget {
+  const _Visor({
+    required this.visor,
+    required this.aviso,
+    required this.demorou,
+    required this.resolvendo,
+    required this.faixa,
+  });
+
+  /// O widget que a porta produziu, ja embrulhado em
+  /// [SuperficieDeLeituraAoVivo].
+  final Widget visor;
+
+  /// O aviso efemero do criterio 3, quando ha um.
+  final String? aviso;
+
+  /// Se ja passou o tempo de procurar sem achar.
+  final bool demorou;
+
+  final bool resolvendo;
+
+  final MensagemDeErro? faixa;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+
+    return LayoutBuilder(
+      builder: (context, limites) {
+        final lado = ladoDaJanelaDeLeitura(
+          Size(limites.maxWidth, limites.maxHeight),
+        );
+        final folgaLateral = (limites.maxWidth - lado) / 2;
+        // A janela sobe um pouco do centro geometrico: a placa de texto ocupa
+        // a base, e a saida sobreposta ocupa o topo. Centrada no meio exato
+        // ela ficaria encostada na placa.
+        final folgaDeCima =
+            ((limites.maxHeight - lado) / 2 - alturaDaSaidaSobreposta / 2)
+                .clamp(alturaDaSaidaSobreposta, limites.maxHeight - lado);
+
+        Widget escuridao(
+          {double? left, double? top, double? right, double? bottom,
+          double? width, double? height}) {
+          return Positioned(
+            left: left,
+            top: top,
+            right: right,
+            bottom: bottom,
+            width: width,
+            height: height,
+            child: ColoredBox(color: cores.scrim),
+          );
+        }
+
+        return Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            visor,
+            // O escurecimento, so em volta da janela. Quatro faixas, e nao uma
+            // camada por cima de tudo: o decodificador le a imagem de dentro
+            // da janela, e uma camada sobre ela custaria contraste justamente
+            // onde o simbolo esta.
+            escuridao(left: 0, right: 0, top: 0, height: folgaDeCima),
+            escuridao(left: 0, right: 0, top: folgaDeCima + lado, bottom: 0),
+            escuridao(
+              left: 0,
+              width: folgaLateral,
+              top: folgaDeCima,
+              height: lado,
+            ),
+            escuridao(
+              right: 0,
+              width: folgaLateral,
+              top: folgaDeCima,
+              height: lado,
+            ),
+            Positioned(
+              left: folgaLateral,
+              top: folgaDeCima,
+              width: lado,
+              height: lado,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border.all(color: cores.surfaceInverse, width: 4),
+                  borderRadius: BorderRadius.circular(BichuRaio.md),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(BichuBorda.hairline),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: cores.textOnInverse, width: 2),
+                      borderRadius: BorderRadius.circular(BichuRaio.md),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // A placa de texto, na base e sobre o escurecimento.
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.all(BichuEspaco.e4),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: cores.surfaceInverse,
+                      borderRadius: BorderRadius.circular(BichuRaio.md),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(BichuEspaco.e4),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: <Widget>[
+                          Text(
+                            TelaLeitorDeQr.instrucaoDoVisor,
+                            textAlign: TextAlign.center,
+                            style: textos.titleMedium
+                                ?.copyWith(color: cores.textOnInverse),
+                          ),
+                          if (demorou) ...<Widget>[
+                            const SizedBox(height: BichuEspaco.e2),
+                            // Regiao viva, e nao anuncio: o TalkBack limpa a
+                            // fila de fala para dizer um anuncio, e esta frase
+                            // nao e urgente -- nada falhou.
+                            Semantics(
+                              liveRegion: true,
+                              child: Text(
+                                TelaLeitorDeQr.aindaProcurando,
+                                textAlign: TextAlign.center,
+                                style: textos.bodyMedium
+                                    ?.copyWith(color: cores.textOnInverse),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // O aviso do criterio 3 e a faixa de erro ficam ACIMA da janela:
+            // embaixo eles empurrariam a instrucao para fora da placa, e e a
+            // instrucao que diz o que fazer.
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding: const EdgeInsets.only(
+                    top: alturaDaSaidaSobreposta,
+                    left: BichuEspaco.e4,
+                    right: BichuEspaco.e4,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      if (faixa != null) FaixaDeAviso(texto: faixa!.texto),
+                      // O criterio 3, **sem sair da camera**: a faixa aparece
+                      // por cima do visor e some sozinha.
+                      if (aviso != null) ...<Widget>[
+                        const SizedBox(height: BichuEspaco.e2),
+                        FaixaDeAviso(
+                          peso: PesoDaFaixa.informativo,
+                          texto: aviso!,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // Criterio 6. A regiao viva nao e desenhada: ela existe na arvore
+            // de semantica, que e onde o VoiceOver e o TalkBack leem. Um texto
+            // visivel dizendo `Procurando código` competiria com a instrucao,
+            // que e a frase que a pessoa que enxerga precisa ler.
+            Semantics(
+              liveRegion: true,
+              label: resolvendo
+                  ? TelaLeitorDeQr.codigoEncontrado
+                  : TelaLeitorDeQr.procurandoCodigo,
+              container: true,
+              child: const SizedBox.shrink(),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A tela de quando a camera nao vai ler: permissao negada, ou ausencia.
+///
+/// **Um widget para os dois, e nao dois irmaos com a mesma `ListView`
+/// copiada.** Os dois estados tem a mesma anatomia (quadro `87:26`: lista
+/// rolavel, icone, titulo em `headline-sm`, explicacao em `body-lg`), e a
+/// diferenca entre eles e o texto e a existencia da saida para os ajustes.
+/// Duas classes divergiriam na primeira vez que alguem mexesse numa so, e a
+/// que ficaria para tras e a da ausencia, que e a que ninguem olha.
+///
+/// **A honestidade aqui e o que a tela NAO desenha.** Nao ha fundo escuro de
 /// borda a borda, nao ha moldura quadrada e nao ha instrucao para apontar o
 /// aparelho: os tres, juntos, sao o que a pessoa le como "a camera esta
-/// ligada". Desenhar qualquer um deles sem um preview atras e a mentira que a
-/// BICHUS-220 veio tirar, e e o que a isca de
-/// `test/telas/leitor_nao_finge_camera_test.dart` mede por geometria, e nao
-/// por texto.
+/// ligada", e nestes estados ela nao esta.
 ///
 /// O icone e o do caminho que **existe**, e nao o de uma camera. Um icone de
-/// camera aqui devolveria pela figura o enquadramento que o texto acabou de
-/// retirar.
-///
-/// A anatomia e a mesma do quadro `87:26`: lista rolavel, icone, titulo em
-/// `headline-sm` e explicacao em `body-lg`. Ela foi mantida de proposito --
-/// a folga de abertura ja esta medida contra a saida sobreposta em
-/// `test/telas/area_segura_do_aparelho_test.dart`, e mudar o esqueleto
-/// junto com o conteudo trocaria dois problemas por tres.
-class _SemLeitura extends StatelessWidget {
-  const _SemLeitura();
+/// camera aqui devolveria pela figura o enquadramento que o texto retirou.
+class _SemCamera extends StatelessWidget {
+  const _SemCamera({
+    required this.titulo,
+    required this.explicacao,
+    required this.faixaDosAjustes,
+    this.faixaDeAusencia,
+  });
+
+  final String titulo;
+  final String explicacao;
+
+  /// Se ha o que liberar nos ajustes do sistema.
+  final bool faixaDosAjustes;
+
+  /// A faixa informativa de quando **nao** ha o que liberar.
+  final String? faixaDeAusencia;
 
   @override
   Widget build(BuildContext context) {
@@ -420,16 +910,31 @@ class _SemLeitura extends StatelessWidget {
           const SizedBox(height: BichuEspaco.e6),
           Semantics(
             header: true,
-            child: Text(
-              TelaLeitorDeQr.tituloSemLeitura,
-              style: textos.headlineSmall,
-            ),
+            child: Text(titulo, style: textos.headlineSmall),
           ),
           const SizedBox(height: BichuEspaco.e4),
           Text(
-            TelaLeitorDeQr.explicacaoSemLeitura,
+            explicacao,
             style: textos.bodyLarge?.copyWith(color: cores.textSecondary),
           ),
+          if (faixaDosAjustes) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e4),
+            FaixaDeAviso(
+              peso: PesoDaFaixa.informativo,
+              texto: TextosDoCadastro.cameraNegada,
+              rotuloDaAcao: TextosDoCadastro.abrirOsAjustes,
+              // O unico caminho que resolve: pedir de novo nao abre dialogo.
+              aoTocarNaAcao: () =>
+                  Escopo.of(context).camera.abrirAjustesDoSistema(),
+            ),
+          ],
+          if (faixaDeAusencia != null) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e4),
+            FaixaDeAviso(
+              peso: PesoDaFaixa.informativo,
+              texto: faixaDeAusencia!,
+            ),
+          ],
           const SizedBox(height: BichuEspaco.e4),
           // Onde achar o codigo e como ele e. E a mesma linha do 12.4 que o
           // campo de digitacao ja usa como ajuda: quem le isto aqui chega no
@@ -443,6 +948,7 @@ class _SemLeitura extends StatelessWidget {
     );
   }
 }
+
 /// Figma `87:40`. O scan leu o codigo localmente e a resolucao e no servidor.
 class _SemConexao extends StatelessWidget {
   const _SemConexao({
@@ -524,9 +1030,9 @@ class _SemConexao extends StatelessWidget {
 /// A digitacao do codigo.
 ///
 /// **Este estado nao esta desenhado no Figma.** O quadro `87:14` desenha o
-/// botao `Digitar o código` e os tres estados que ele pode ter atras de si,
-/// mas nao o campo. Ele existe assim mesmo porque a alternativa era um botao
-/// visivel que nao faz nada, e porque a entrada manual e o caminho de quem nao
+/// botao `Digitar o código` e os estados que ele pode ter atras de si, mas nao
+/// o campo. Ele existe assim mesmo porque a alternativa era um botao visivel
+/// que nao faz nada, e porque a entrada manual e o caminho de quem nao
 /// consegue escanear -- ela nao pode estar atras do fracasso do caminho
 /// principal.
 ///

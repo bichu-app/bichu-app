@@ -36,7 +36,13 @@ class MascaraDoCodigoDaTag extends TextInputFormatter {
   ///
   /// `U` fica de fora, e e o unico: ele nao tem substituicao e nunca vira
   /// codigo, entao deixa-lo entrar so adiaria o 400 ate a viagem de rede.
-  static final RegExp _aceitos = RegExp('[0-9A-TV-Z]');
+  ///
+  /// **Publica desde a BICHUS-54**, e nao por conveniencia: `codigo_lido_do_qr`
+  /// precisa do MESMO alfabeto para decidir se um QR e do Bichu. Uma segunda
+  /// copia do intervalo divergiria da mascara no dia em que um dos dois
+  /// mudasse, e o sintoma seria o app recusar um codigo que ele acabou de
+  /// aceitar no campo ao lado.
+  static final RegExp aceitos = RegExp('[0-9A-TV-Z]');
 
   /// 16 simbolos, em quatro grupos de quatro.
   static const int simbolos = 16;
@@ -51,7 +57,7 @@ class MascaraDoCodigoDaTag extends TextInputFormatter {
     final buffer = StringBuffer();
     var escritos = 0;
     for (final caractere in bruto.toUpperCase().split('')) {
-      if (!_aceitos.hasMatch(caractere)) continue;
+      if (!aceitos.hasMatch(caractere)) continue;
       if (escritos == simbolos) break;
       if (escritos > 0 && escritos % tamanhoDoGrupo == 0) buffer.write('-');
       buffer.write(caractere);
@@ -76,7 +82,7 @@ class MascaraDoCodigoDaTag extends TextInputFormatter {
         .substring(0, novo.selection.baseOffset.clamp(0, novo.text.length))
         .toUpperCase()
         .split('')
-        .where(_aceitos.hasMatch)
+        .where(aceitos.hasMatch)
         .length;
 
     var deslocamento = 0;
