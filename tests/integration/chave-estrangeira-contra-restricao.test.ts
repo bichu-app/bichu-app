@@ -1524,48 +1524,81 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
    * para revalidar nada, e o caminho conclui — foi assim que o defeito passou
    * despercebido nas duas branches de origem.
    */
+  /**
+   * Quantas vezes a montagem é tentada antes de desistir.
+   *
+   * Limitado de propósito: `40P01` que não passa em cinco tentativas não é mais
+   * contenção, é contenção permanente, e aí o caso precisa reprovar dizendo
+   * isso. Repetição sem teto transformaria impedimento em teste pendurado.
+   */
+  const TENTATIVAS = 5;
+
   async function comConversa(corpo: () => Promise<void>): Promise<void> {
+    // ========================================================================
+    // POR QUE ISTO TEM CADEADO EXPLÍCITO **E** REPETIÇÃO
+    // ========================================================================
+    // A isca reprovava com `deadlock detected` (40P01) em 4 de 31 execuções da
+    // suíte inteira, sem defeito nenhum atrás. Medido, e não deduzido:
+    //
+    //   Process 119 waits for AccessExclusiveLock on relation 19812 (users);
+    //     blocked by process 133.
+    //   Process 133 waits for RowExclusiveLock on relation 20495
+    //     (conversation_messages); blocked by process 119.
+    //
+    // O pedaço que não é óbvio: `alter table conversation_messages drop
+    // constraint ..._sender_user_id_fkey` toma `AccessExclusiveLock` nas DUAS
+    // tabelas, e não só na que ela nomeia — a chave estrangeira tem gatilho dos
+    // dois lados, e derrubá-la mexe em `users` também. Conferido em `pg_locks`
+    // nesta pilha:
+    //
+    //   conversation_messages | AccessExclusiveLock
+    //   users                 | AccessExclusiveLock
+    //
+    // `node --test` roda os quinze arquivos de integração em paralelo contra o
+    // MESMO banco, então essa DDL disputa com o que os outros estão escrevendo.
+    //
+    // **E não existe ordem de cadeado que resolva isto sozinha.** Essa era a
+    // saída óbvia, e ela está errada; as duas ordens já convivem na suíte, e as
+    // duas foram medidas em `pg_locks` com uma sessão segurando a outra tabela:
+    //
+    //   insert into conversation_messages ...
+    //     -> SEGURA conversation_messages (RowExclusive), ESPERA users (RowShare)
+    //   delete from users ...          (o `after` dos outros arquivos)
+    //     -> SEGURA users (RowExclusive), ESPERA conversation_messages (RowExclusive)
+    //
+    // Filha→pai numa, pai→filha na outra. Qualquer ordem que esta função
+    // escolhesse fecharia ciclo com uma das duas. Pedir as duas num `lock table`
+    // só também não é atômico: ele adquire em sequência e pode ficar segurando a
+    // primeira enquanto espera a segunda.
+    //
+    // Então são duas medidas, e cada uma faz uma coisa:
+    //
+    // 1. `lock table` como PRIMEIRA instrução encolhe a janela: em vez de
+    //    disputar durante o segundo inteiro que a montagem mais a DDL levam, a
+    //    disputa fica restrita à aquisição dos dois cadeados.
+    // 2. A repetição cobre o resto. Impasse é transitório por definição — o
+    //    Postgres mata um dos participantes e **garante que o outro conclui** —
+    //    e repetir a transação vítima é o remédio que a própria documentação do
+    //    Postgres indica. Como tudo aqui termina em `ROLLBACK`, repetir parte do
+    //    mesmo estado.
+    //
+    // A repetição NÃO afrouxa a isca: só `40P01` é repetido. Falha de asserção
+    // sobe na primeira vez, e `23503`, `23514` ou qualquer outro código do
+    // Postgres também — que é o que a isca existe para ver.
+    for (let tentativa = 1; ; tentativa += 1) {
+      try {
+        await montarERodar(corpo);
+        return;
+      } catch (erro) {
+        if (codigoDoErro(erro) !== '40P01' || tentativa >= TENTATIVAS) throw erro;
+      }
+    }
+  }
+
+  async function montarERodar(corpo: () => Promise<void>): Promise<void> {
     await cliente.query('BEGIN');
     try {
-      // OS DOIS CADEADOS FORTES, NA ORDEM GLOBAL, ANTES DE QUALQUER ESCRITA.
-      //
-      // Sem esta linha a isca reprovava com `deadlock detected` (40P01) em
-      // cerca de 1 execução em 9, e a reprovação não tinha defeito nenhum
-      // atrás dela. Medido, e não deduzido:
-      //
-      //   Process 119 waits for AccessExclusiveLock on relation 19812 (users);
-      //     blocked by process 133.
-      //   Process 133 waits for RowExclusiveLock on relation 20495
-      //     (conversation_messages); blocked by process 119.
-      //
-      // A causa é ordem de cadeado, e o pedaço que não é óbvio é este:
-      // `alter table conversation_messages drop constraint ..._sender_user_id_fkey`
-      // toma `AccessExclusiveLock` nas DUAS tabelas, não só na que ela nomeia —
-      // a chave estrangeira tem gatilho dos dois lados, e derrubá-la mexe em
-      // `users` também. Conferido no banco desta pilha:
-      //
-      //   BEGIN; ALTER TABLE conversation_messages DROP CONSTRAINT ...;
-      //   SELECT relname, mode FROM pg_locks ... WHERE pid = pg_backend_pid();
-      //   -> conversation_messages | AccessExclusiveLock
-      //   -> users                 | AccessExclusiveLock
-      //
-      // `node --test` roda os quinze arquivos de integração em paralelo contra
-      // o MESMO banco. Todo arquivo que escreve mensagem precisa criar a conta
-      // primeiro, então a ordem de todo mundo é `users` e depois
-      // `conversation_messages`. A isca ia na ordem inversa, porque o `ALTER`
-      // nomeia a filha: ela escalava `conversation_messages` primeiro e pedia
-      // `users` depois. AB-BA, e o Postgres mata um dos dois.
-      //
-      // Pedir os dois aqui, nesta ordem, como PRIMEIRA instrução da transação,
-      // desfaz o ciclo: neste ponto a transação não segura nada, então ela não
-      // pode fechar ciclo com ninguém, e daqui para a frente ela já tem tudo o
-      // que o `ALTER` vai querer. Quem estiver no meio de uma escrita termina e
-      // a isca espera; a isca não espera por quem espera por ela.
-      //
-      // O custo é serializar estas duas tabelas por cerca de um segundo, que é
-      // o que o caso leva. Afrouxar não era opção: reprovação intermitente numa
-      // isca é pior que isca nenhuma, porque ensina a ignorar vermelho.
-      await cliente.query('lock table users, conversation_messages in access exclusive mode');
+      await cliente.query('lock table conversation_messages, users in access exclusive mode');
       await cliente.query(
         `insert into users (id, email) values
            ($1, 'achadora@isca.test'), ($2, 'tutora@isca.test')`,
