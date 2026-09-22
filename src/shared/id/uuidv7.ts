@@ -19,35 +19,62 @@ const VERSAO_7 = 0x70;
 const VARIANTE_RFC4122 = 0x80;
 
 /**
- * Contador monotônico dentro do mesmo milissegundo. Sem ele, dois identificadores
- * gerados no mesmo milissegundo saem em ordem aleatória entre si, e a ordenação
- * que justifica o v7 vale só na granularidade do milissegundo — exatamente onde
- * uma inserção em lote acontece.
- *
- * DEFEITO ABERTO — BICHUS-208. O contador é semeado com 12 bits de aleatório e
- * incrementado com `& 0x0fff`, então quando a semente cai perto de 4095 ele vira
- * para 0 dentro do mesmo milissegundo e o identificador seguinte fica
- * **lexicograficamente menor** que o anterior. Medido: 0,63% das execuções do caso
- * de ordenação da suíte, e 100% quando 4097 identificadores dividem um
- * milissegundo. A RFC 9562 §6.2 exige tratar a virada — emprestando 1 ms do futuro
- * ou esperando o tique seguinte — e semear o contador só nos bits baixos para
- * deixar espaço de crescimento. Não está corrigido aqui de propósito: este é o
- * gerador de toda chave primária do sistema, e a correção espera decisão.
+ * Contador dedicado de 12 bits, o método 1 da RFC 9562 §6.2. Sem ele, dois
+ * identificadores gerados no mesmo milissegundo saem em ordem aleatória entre si,
+ * e a ordenação que justifica o v7 vale só na granularidade do milissegundo —
+ * exatamente onde uma inserção em lote acontece.
  */
+const LARGURA_DO_CONTADOR = 0x0fff;
+
+/**
+ * A semente ocupa só os 8 bits baixos: os 4 mais significativos nascem zerados.
+ *
+ * RFC 9562 §6.2, "Fixed Bit-Length Dedicated Counter Seeding": os bits mais
+ * significativos do contador são inicializados em zero **com a única finalidade de
+ * proteger contra a virada**. Semeando em [0, 255] sobram no mínimo 3840
+ * incrementos dentro do mesmo milissegundo antes de a virada ser possível, contra
+ * os 0 que a semente uniforme em [0, 4095] deixava quando caía no topo (BICHUS-208).
+ *
+ * Isto não reduz a aleatoriedade que importa: a unicidade vem dos 62 bits de
+ * CSPRNG da cauda, e o UUIDv7 é identificador interno — o que vai a superfície
+ * pública sai de `opaqueToken` (SEC-001, SEC-002).
+ */
+const MASCARA_DA_SEMENTE = 0x00ff;
+
 let ultimoMilissegundo = -1;
 let sequencia = 0;
 
+function semear(): number {
+  return randomBytes(2).readUInt16BE(0) & MASCARA_DA_SEMENTE;
+}
+
 function bytesDoUuidV7(agoraEmMilissegundos: number): Buffer {
-  if (agoraEmMilissegundos === ultimoMilissegundo) {
-    sequencia = (sequencia + 1) & 0x0fff;
+  // O carimbo emitido nunca anda para trás, nem quando o relógio anda: o NTP
+  // ajustando o relógio da máquina para trás quebraria a ordenação do mesmo jeito
+  // que a virada do contador quebrava.
+  const milissegundo = Math.max(agoraEmMilissegundos, ultimoMilissegundo);
+
+  if (milissegundo === ultimoMilissegundo) {
+    sequencia += 1;
+    if (sequencia > LARGURA_DO_CONTADOR) {
+      // RFC 9562 §6.2, "Counter Rollover Handling": a virada **precisa** ser
+      // tratada, e são duas saídas. Congelar o contador e esperar o relógio andar
+      // não serve aqui, porque esta função é síncrona e a espera travaria o laço de
+      // eventos do Fastify. Fica a alternativa que a RFC autoriza: adiantar o
+      // carimbo de tempo e resemear o contador. O empréstimo é de 1 ms, e ele se
+      // devolve sozinho — assim que o relógio real alcança o carimbo adiantado, o
+      // `Math.max` acima volta a seguir o relógio.
+      ultimoMilissegundo = milissegundo + 1;
+      sequencia = semear();
+    }
   } else {
-    ultimoMilissegundo = agoraEmMilissegundos;
-    sequencia = randomBytes(2).readUInt16BE(0) & 0x0fff;
+    ultimoMilissegundo = milissegundo;
+    sequencia = semear();
   }
 
   const bytes = Buffer.alloc(16);
   // 48 bits de milissegundos da época, big-endian.
-  bytes.writeUIntBE(agoraEmMilissegundos, 0, 6);
+  bytes.writeUIntBE(ultimoMilissegundo, 0, 6);
   // 4 bits de versão e 12 bits de sequência.
   bytes[6] = VERSAO_7 | ((sequencia >> 8) & 0x0f);
   bytes[7] = sequencia & 0xff;
