@@ -15,7 +15,7 @@
  *    efeito.
  */
 import { sql } from 'kysely';
-import type { FastifyInstance } from 'fastify';
+import type { RegistradorDeRotas } from './registrar-rota.js';
 import type { Db } from '../db/pool.js';
 import { hashDeCorpo, iguaisEmTempoConstante } from '../crypto/digest.js';
 import type { Contrato } from './contract.js';
@@ -372,7 +372,7 @@ function caminhoDoContrato(url: string, prefixoDaApi: string): string {
  * terminar calada como se tivesse conferido alguma coisa.
  */
 export function vigiarIdempotenciaDasRotas(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   contrato: Contrato,
   prefixoDaApi: string,
 ): () => void {

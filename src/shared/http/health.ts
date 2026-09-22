@@ -18,9 +18,9 @@
  * conteúdo do próprio artefato e um commit declarado — nenhum dos dois diz nada
  * sobre a máquina, a rede ou o banco. Ver `shared/artefato/identidade-do-artefato`.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from './route-definition.js';
-import { registrarRota } from './registrar-rota.js';
+import { registrarRota, type RegistradorDeRotas } from './registrar-rota.js';
 import { problemas } from './errors.js';
 import { responderProblema } from './server.js';
 import type { AbsoluteUrl } from '../types/brands.js';
@@ -46,7 +46,7 @@ export interface DependenciasDaSaude {
   readonly verificacoes: Readonly<Record<string, () => Promise<void>>>;
 }
 
-export function registrarSaude(app: FastifyInstance, deps: DependenciasDaSaude): void {
+export function registrarSaude(app: RegistradorDeRotas, deps: DependenciasDaSaude): void {
   registrarRota(app, rotaDeSaude, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const checks: Record<string, 'ok' | 'fail'> = {};
     let saudavel = true;

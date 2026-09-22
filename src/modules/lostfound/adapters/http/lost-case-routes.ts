@@ -16,9 +16,9 @@
  *   de depuração, por uma captura de tela, por uma rota pública nova que
  *   reaproveite este montador.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import {
@@ -186,7 +186,7 @@ function comoRespostaDoCaso(caso: CasoGravado, baseDaWeb: AbsoluteUrl): Record<s
 }
 
 export function registrarRotasDeCasos(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   deps: DependenciasDasRotasDeCaso,
 ): void {
   registrarRota(

@@ -32,10 +32,10 @@
  *   conta — escrever o e-mail ali desfaz a promessa em um lugar onde ninguém
  *   vai procurá-la.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { AppError } from '../../../../shared/http/errors.js';
 import { iguaisEmTempoConstante } from '../../../../shared/crypto/digest.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
@@ -146,7 +146,7 @@ function instante(valor: unknown): Date | undefined {
 }
 
 export function registrarRotaDoWebhookDeEntrega(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   deps: DependenciasDoWebhookDeEntrega,
 ): void {
   // Schema de corpo tirado da própria especificação, como nas demais rotas: uma

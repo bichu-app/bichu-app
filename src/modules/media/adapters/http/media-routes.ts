@@ -11,9 +11,9 @@
  * Montar o endereço de um objeto que ninguém gravou seria uma promessa que o
  * cliente descobre quebrada na hora de desenhar a tela.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
@@ -127,7 +127,7 @@ function comoRespostaDaFoto(foto: FotoDoPet, baseDeMidia: AbsoluteUrl): Record<s
 }
 
 export function registrarRotasDeMidia(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   deps: DependenciasDasRotasDeMidia,
 ): void {
   registrarRota(

@@ -15,13 +15,13 @@
  */
 import Fastify, {
   type FastifyBaseLogger,
-  type FastifyInstance,
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import type { AbsoluteUrl } from '../types/brands.js';
 import type { DependenciasDoTeto } from './aplicacao-de-teto.js';
+import type { RegistradorDeRotas } from './registrar-rota.js';
 import { AppError, problemas } from './errors.js';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 import {
@@ -120,7 +120,7 @@ export function responderProblema(
     .send(corpo);
 }
 
-export function criarServidor(opcoes: OpcoesDoServidor): FastifyInstance {
+export function criarServidor(opcoes: OpcoesDoServidor): RegistradorDeRotas {
   const app = Fastify({
     // Correlação: aproveita a de fora quando ela tem forma de UUID, e gera uma
     // quando não tem. Aceitar qualquer texto do cliente deixaria o log ser
