@@ -50,6 +50,22 @@ import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js'
  */
 export const ESTADOS_VIVOS = ['pending_acceptance', 'accepted'] as const;
 
+/**
+ * O que substitui o resumo do convite quando ele e consumido.
+ *
+ * Nao e `null` porque a coluna e `NOT NULL` -- e ela e `NOT NULL` de proposito:
+ * linha de transferencia sem resumo de convite nunca existiu, e permitir o nulo
+ * abriria a porta para uma insercao que esquecesse o token. Trinta e dois zeros
+ * satisfazem o `CHECK` de tamanho e nao sao o resumo de nada que um gerador de
+ * 256 bits produza: nenhum token apresentado vai casar com isto.
+ *
+ * E por causa desta queima que `pet_transfers_invite_token` e um indice PARCIAL
+ * sobre `status = 'pending_acceptance'`: queimados, todos os convites aceitos
+ * carregam o mesmo valor, e um indice unico total recusaria o segundo aceite do
+ * sistema inteiro.
+ */
+const RESUMO_QUEIMADO = Buffer.alloc(32);
+
 /** As colunas da visao do tutor, num lugar so: cinco consultas usam a lista. */
 const COLUNAS = [
   'pet_transfers.id',
@@ -169,6 +185,11 @@ export function construtorDoAceite(
       status: 'accepted',
       accepted_at: new Date(entrada.acceptedAt),
       effective_at: new Date(entrada.effectiveAt),
+      // USO UNICO, na mesma escrita que registra o aceite (criterio 3 da
+      // BICHUS-66). A condicao `status = 'pending_acceptance'` ja bastaria para
+      // recusar um segundo aceite, mas ela e uma conferencia; apagar o resumo e
+      // o segredo deixando de existir. Os dois, e nao um.
+      invite_token_hash: RESUMO_QUEIMADO,
     })
     .where('id', '=', entrada.transferencia)
     .where('status', '=', 'pending_acceptance')

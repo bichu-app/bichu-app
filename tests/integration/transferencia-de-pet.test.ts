@@ -489,6 +489,112 @@ void describe('pet marcado como perdido durante a janela de 24 h', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Criterios 3, 12 e 15 da BICHUS-66
+// ---------------------------------------------------------------------------
+void describe('criterio 3: o token do convite e de uso unico', () => {
+  void it('depois do aceite o token do convite nao resolve mais nada', async () => {
+    const c = await cenario('convite-uso-unico');
+    await aceitar(c);
+
+    // QUEIMADO, e nao apenas recusado por estado. A condicao de estado sozinha
+    // seria uma conferencia; apagar o resumo e o segredo deixando de existir.
+    assert.equal(
+      await repo.buscarPorTokenDeConvite(hashDe(c.tokenDoConvite)),
+      undefined,
+      'o token do convite continua resolvendo depois de usado',
+    );
+  });
+
+  void it('DOIS aceites no sistema nao colidem no indice unico do convite', async () => {
+    // O defeito que o indice unico TOTAL produziria, e que so apareceria na
+    // segunda transferencia aceita em producao: os dois convites queimados
+    // carregam o mesmo valor, e o indice recusaria o segundo aceite.
+    const a1 = await cenario('colisao-1');
+    const a2 = await cenario('colisao-2');
+    await aceitar(a1);
+    await aceitar(a2, `cancelar-2-${a2.transferencia}`);
+
+    assert.equal((await repo.buscarDoTutor(a1.transferencia, a1.tutor))?.status, 'accepted');
+    assert.equal((await repo.buscarDoTutor(a2.transferencia, a2.tutor))?.status, 'accepted');
+  });
+});
+
+void describe('criterio 12: na corrida entre cancelar e consumar, o CANCELAMENTO vence', () => {
+  void it('cancelado no ultimo instante, o trabalho agendado encerra sem efeito e sem erro', async () => {
+    const c = await cenario('corrida');
+    await criarTag(c.pet, 'AC77');
+    await aceitar(c);
+
+    // O cancelamento chega primeiro, um milissegundo antes da consumacao.
+    const cancelada = await repo.cancelar({
+      transferencia: c.transferencia,
+      motivo: 'current_owner',
+      quando: (EM_24H - 1) as Instant,
+      consumirTokenDeCancelamento: true,
+    });
+    assert.equal(cancelada?.status, 'cancelled');
+
+    // E o trabalho, que ja estava agendado, acorda e nao faz nada. SEM ERRO: um
+    // trabalho que falha por um desfecho normal e um trabalho que volta a
+    // tentar para sempre.
+    const r = await repo.consumar(c.transferencia, EM_24H);
+    assert.equal(r.tipo, 'ja_resolvida');
+    assert.equal(await donoDe(c.pet), c.tutor, 'a consumacao venceu a corrida');
+    assert.equal(await tagsAtivasDe(c.pet), 1, 'a plaquinha caiu depois de cancelada');
+  });
+});
+
+void describe('criterio 15: as conversas mediadas do tutor antigo NAO vao junto', () => {
+  void it('depois de consumada, a conversa continua sendo do tutor ANTIGO', async () => {
+    const c = await cenario('conversas');
+    await aceitar(c);
+
+    // Uma conversa mediada nascida de um aviso do achador, como `messaging` a
+    // grava: `tutor_user_id` DESNORMALIZADO de `pets.owner_user_id`, que e o
+    // predicado do ADR-0021 nas consultas daquele modulo.
+    const aviso = randomUUID();
+    const conversa = randomUUID();
+    // `found_reports_scan_tem_tag_e_pet` exige a tag junto do pet quando a
+    // origem e `tag_scan`: o aviso veio da plaquinha, entao ele sabe de QUAL
+    // plaquinha veio. Medido contra o banco, nao deduzido.
+    const tag = await criarTag(c.pet, 'ZZ99');
+    await cliente.query(
+      `INSERT INTO found_reports
+         (id, pet_id, tag_id, origin, finder_token_hash, finder_token_expires_at, found_at)
+       VALUES ($1, $2, $3, 'tag_scan', $4, now() + interval '7 days', now())`,
+      [aviso, c.pet, tag, hashDe(aviso)],
+    );
+    await cliente.query(
+      `INSERT INTO conversations (id, found_report_id, pet_id, tutor_user_id)
+       VALUES ($1, $2, $3, $4)`,
+      [conversa, aviso, c.pet, c.tutor],
+    );
+
+    assert.equal((await repo.consumar(c.transferencia, EM_24H)).tipo, 'consumada');
+
+    // A CONSUMACAO NAO TOCA EM `conversations`, e e essa ausencia que satisfaz o
+    // criterio 15. Um `UPDATE conversations SET tutor_user_id = novoDono`
+    // escrito por quem achasse que "o pet mudou de dono, logo tudo dele muda"
+    // entregaria ao tutor novo o historico de mensagens de outra pessoa.
+    const linha = await cliente.query<{ tutor_user_id: string }>(
+      'SELECT tutor_user_id FROM conversations WHERE id = $1',
+      [conversa],
+    );
+    assert.equal(
+      linha.rows[0]?.tutor_user_id,
+      c.tutor,
+      'a conversa mediada foi transferida junto com o pet: o tutor novo passou a ler as ' +
+        'mensagens que o tutor antigo trocou com um achador',
+    );
+    assert.notEqual(linha.rows[0]?.tutor_user_id, c.destino);
+
+    // E o pet mudou mesmo de dono: sem isto, o caso passaria por nada ter
+    // acontecido.
+    assert.equal(await donoDe(c.pet), c.destino);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // O que so o banco garante
 // ---------------------------------------------------------------------------
 void describe('as garantias que o Postgres da, e a aplicacao nao', () => {

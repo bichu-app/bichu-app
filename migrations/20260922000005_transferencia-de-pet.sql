@@ -166,12 +166,24 @@ CREATE UNIQUE INDEX pet_transfers_uma_viva_por_pet
   ON pet_transfers (pet_id)
   WHERE status IN ('pending_acceptance', 'accepted');
 
--- A BUSCA PELO TOKEN DO CONVITE. Unico: dois convites com o mesmo resumo seriam
--- colisao de SHA-256 ou -- muito mais provavel -- o mesmo token gerado duas
--- vezes por um gerador quebrado. Nos dois casos o banco precisa recusar em vez
--- de deixar a consulta escolher uma das linhas.
+-- A BUSCA PELO TOKEN DO CONVITE. Unico entre os convites VIVOS: dois convites
+-- pendentes com o mesmo resumo seriam colisao de SHA-256 ou -- muito mais
+-- provavel -- o mesmo token gerado duas vezes por um gerador quebrado. Nos dois
+-- casos o banco precisa recusar em vez de deixar a consulta escolher uma linha.
+--
+-- PARCIAL, e a razao e o uso unico. O aceite QUEIMA o resumo (sobrescreve com
+-- 32 zeros) na mesma escrita em que registra o aceite: a condicao de estado
+-- sozinha seria uma conferencia, e queimar e o segredo deixando de existir.
+-- Queimados, todos os convites aceitos passam a carregar o MESMO valor, e um
+-- indice unico total recusaria o segundo aceite do sistema inteiro -- um defeito
+-- que so apareceria na segunda transferencia consumada em producao.
+--
+-- A coluna continua `NOT NULL`: linha de transferencia sem resumo de convite
+-- nunca existiu, e permitir o nulo abriria a porta para uma insercao que
+-- esquecesse o token.
 CREATE UNIQUE INDEX pet_transfers_invite_token
-  ON pet_transfers (invite_token_hash);
+  ON pet_transfers (invite_token_hash)
+  WHERE status = 'pending_acceptance';
 
 -- A BUSCA PELO TOKEN DE CANCELAMENTO, o caminho das duas rotas publicas.
 -- Parcial porque a coluna e nula ate o aceite, e `NULL` nao colide com `NULL`
