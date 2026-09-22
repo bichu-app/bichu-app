@@ -70,9 +70,13 @@ import { criarTrilhaDeAuditoria } from '../../src/modules/audit/adapters/persist
 import { criarTokenSigner } from '../../src/modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../../src/modules/identity/adapters/persistence/kysely-identity-repository.js';
 import {
+  criarVerificadorDeReautenticacao,
   registrarRotasDeIdentidade,
   rotaDeLogoutTotal,
+  rotaDeReautenticacao,
+  type DependenciasDasRotas,
 } from '../../src/modules/identity/adapters/http/routes.js';
+import type { VerificadorDeReautenticacao } from '../../src/shared/http/registrar-rota.js';
 import { criarAuthService } from '../../src/modules/identity/application/auth-service.js';
 import { criarAvisoDeReusoAoTitular } from '../../src/modules/identity/application/aviso-de-reuso.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
@@ -110,6 +114,19 @@ const MOTIVO = 'logout_all';
  */
 const CAMINHO_DO_LOGOUT_TOTAL = rotaDeLogoutTotal.path;
 
+/** Mesma amarra, para a rota que abre a janela de 5 minutos (BICHUS-48). */
+const CAMINHO_DA_REAUTENTICACAO = rotaDeReautenticacao.path;
+
+/**
+ * O escopo sai da DECLARACAO da rota, e nao de um literal escrito aqui.
+ *
+ * Se alguem trocar o `reauthScope` de `logout-all`, este arquivo passa a pedir
+ * o escopo novo em vez de continuar afirmando um que ninguem mais exige -- e o
+ * portao que reprova a troca e
+ * `src/shared/http/rotas-registradas-contra-o-contrato.test.ts`.
+ */
+const ESCOPO_DO_LOGOUT_TOTAL = rotaDeLogoutTotal.reauthScope;
+
 interface RespostaDeSessao {
   readonly access_token: string;
   readonly refresh_token: string;
@@ -137,11 +154,12 @@ const SENHA = 'chuva-morna-no-telhado-47';
 
 async function chamar(
   caminho: string,
-  opcoes: { metodo: 'GET' | 'POST'; corpo?: unknown; token?: string },
+  opcoes: { metodo: 'GET' | 'POST'; corpo?: unknown; token?: string; reauth?: string },
 ): Promise<{ status: number; corpo: unknown }> {
   const cabecalhos: Record<string, string> = { accept: 'application/json' };
   if (opcoes.corpo !== undefined) cabecalhos['content-type'] = 'application/json';
   if (opcoes.token !== undefined) cabecalhos['authorization'] = `Bearer ${opcoes.token}`;
+  if (opcoes.reauth !== undefined) cabecalhos['x-reauth-token'] = opcoes.reauth;
 
   const resposta = await fetch(`${base}${PREFIXO_DA_API}${caminho}`, {
     method: opcoes.metodo,
@@ -181,6 +199,35 @@ async function entrar(email: string): Promise<RespostaDeSessao> {
   return login.corpo as RespostaDeSessao;
 }
 
+/**
+ * Abre a janela de 5 minutos para o escopo que `logout-all` exige.
+ *
+ * Ela esta aqui e nao embutida na chamada porque a ordem importa: primeiro a
+ * senha, depois o ato destrutivo. E o desenho do critério 2 da BICHUS-48 --
+ * a folha pede a senha e a acao executa sozinha ao final.
+ */
+async function abrirJanela(acesso: string): Promise<string> {
+  const resposta = await chamar(CAMINHO_DA_REAUTENTICACAO, {
+    metodo: 'POST',
+    token: acesso,
+    corpo: { password: SENHA, scope: ESCOPO_DO_LOGOUT_TOTAL },
+  });
+  assert.equal(
+    resposta.status,
+    200,
+    `POST ${CAMINHO_DA_REAUTENTICACAO} recusou a senha certa (${String(resposta.status)}): ` +
+      `${JSON.stringify(resposta.corpo)}. Sem janela, nada abaixo consegue medir a revogacao.`,
+  );
+  const corpo = resposta.corpo as { reauth_token: string; expires_in: number };
+  assert.equal(
+    corpo.expires_in,
+    300,
+    `a janela veio com expires_in ${String(corpo.expires_in)}, e o criterio 10 da ` +
+      'BICHUS-48 e o contrato dizem 300 segundos.',
+  );
+  return corpo.reauth_token;
+}
+
 /** O retrato de `refresh_tokens` de uma conta, por linha. */
 async function refreshDe(userId: UserId): Promise<LinhaDeRefresh[]> {
   return banco.db
@@ -199,10 +246,19 @@ before(async () => {
   const ids = criarIdGenerator(() => systemClock.now());
   const assinador = criarTokenSigner(config.token);
 
+  // MESMO INDIRETO DE `src/bin/api.ts`, e pelo mesmo motivo de ordem: o
+  // verificador precisa do servico de identidade, que precisa do banco e da
+  // trilha, construidos abaixo. O valor inicial LANCA em vez de aprovar --
+  // um no-op aqui faria os casos rodarem contra a porta destrutiva aberta.
+  let verificarReautenticacao: VerificadorDeReautenticacao = () => {
+    throw new Error('verificador de reautenticacao chamado antes da fiacao terminar');
+  };
+
   app = criarServidor({
     problemBaseUrl: config.problemBaseUrl,
     isProduction: config.isProduction,
     teto: tetoDeTeste(),
+    reautenticacao: (request, escopo) => verificarReautenticacao(request, escopo),
   });
 
   const trilha = criarTrilhaDeAuditoria({
@@ -246,15 +302,18 @@ before(async () => {
     }),
   });
 
+  const dependenciasDasRotas: DependenciasDasRotas = {
+    auth,
+    assinador,
+    contrato,
+    issuer: config.token.issuer,
+    apiBaseUrl: config.apiBaseUrl,
+  };
+  verificarReautenticacao = criarVerificadorDeReautenticacao(dependenciasDasRotas);
+
   await app.register(
     (escopo, _opcoes, pronto) => {
-      registrarRotasDeIdentidade(escopo, {
-        auth,
-        assinador,
-        contrato,
-        issuer: config.token.issuer,
-        apiBaseUrl: config.apiBaseUrl,
-      });
+      registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
       pronto();
     },
     { prefix: PREFIXO_DA_API },
@@ -281,6 +340,8 @@ void describe(`BICHUS-125 — POST ${CAMINHO_DO_LOGOUT_TOTAL} derruba a conta, c
   let sessoes: RespostaDeSessao[];
   let sessaoDoVizinho: RespostaDeSessao;
   let respostaDoBotao: { status: number; corpo: unknown };
+  let semJanela: { status: number; corpo: unknown };
+  let vivasDepoisDaRecusa: number;
 
   before(async () => {
     titular = await criarConta(emailPrincipal);
@@ -309,10 +370,52 @@ void describe(`BICHUS-125 — POST ${CAMINHO_DO_LOGOUT_TOTAL} derruba a conta, c
         `que derrubar, e todos os casos abaixo passariam sobre um conjunto vazio.`,
     );
 
-    respostaDoBotao = await chamar(CAMINHO_DO_LOGOUT_TOTAL, {
+    // ISCA DE ORDEM: o botao SEM a janela precisa ser recusado, e precisa ser
+    // recusado ANTES de revogar coisa alguma. Este bloco roda antes do botao
+    // legitimo de proposito -- se ele revogasse, os casos abaixo ficariam
+    // verdes medindo o efeito da chamada errada.
+    semJanela = await chamar(CAMINHO_DO_LOGOUT_TOTAL, {
       metodo: 'POST',
       token: sessoes[0]!.access_token,
     });
+    vivasDepoisDaRecusa = (await refreshDe(titular)).filter((l) => l.revoked_at === null).length;
+
+    const janela = await abrirJanela(sessoes[0]!.access_token);
+
+    respostaDoBotao = await chamar(CAMINHO_DO_LOGOUT_TOTAL, {
+      metodo: 'POST',
+      token: sessoes[0]!.access_token,
+      reauth: janela,
+    });
+  });
+
+  void it('BICHUS-48: sem `X-Reauth-Token` responde 401 `reauthentication-required`', () => {
+    assert.equal(
+      semJanela.status,
+      401,
+      `"sair de todos os aparelhos" sem a janela respondeu ${String(semJanela.status)}: ` +
+        `${JSON.stringify(semJanela.corpo)}. Estar logado nao basta para uma operacao que ` +
+        'derruba a conta inteira -- quem tomou o aparelho com o app aberto conseguiria ' +
+        'trancar o titular para fora sem saber a senha dele.',
+    );
+    const corpo = semJanela.corpo as { type?: string };
+    assert.match(
+      String(corpo.type),
+      /reauthentication-required$/,
+      `o \`type\` do problema foi ${String(corpo.type)} e o criterio 11 exige ` +
+        '`reauthentication-required`. O app distingue por `type`, nao por status: com ' +
+        '`unauthenticated` ele DESLOGA a pessoa em vez de abrir a folha de senha, e ela ' +
+        'perde o que estava fazendo.',
+    );
+  });
+
+  void it('BICHUS-48: a recusa nao revoga nada -- ela acontece ANTES do efeito', () => {
+    assert.ok(
+      vivasDepoisDaRecusa >= APARELHOS,
+      `depois da chamada RECUSADA sobraram ${String(vivasDepoisDaRecusa)} familias vivas, ` +
+        `e havia pelo menos ${String(APARELHOS)}. Um 401 que ja tivesse revogado seria o ` +
+        'pior dos mundos: a tela diz "confirme sua senha" e as sessoes ja cairam.',
+    );
   });
 
   void it('responde 204, e não um erro nem um 200 mentiroso', () => {

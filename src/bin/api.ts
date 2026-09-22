@@ -23,6 +23,7 @@ import { criarMailer } from '../modules/identity/adapters/external/smtp-mailer.j
 import { systemClock } from '../shared/time/clock.js';
 import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
+import type { VerificadorDeReautenticacao } from '../shared/http/registrar-rota.js';
 import { dependenciasDoTeto } from '../shared/http/aplicacao-de-teto.js';
 import { escoparRotas, inventarioDoQueNaoEAplicado } from '../shared/http/registrar-rota.js';
 import {
@@ -45,6 +46,7 @@ import { criarRegistroDeAparelhos } from '../modules/notifications/adapters/pers
 import { RegistroDeAparelhosService } from '../modules/notifications/application/registro-de-aparelhos-service.js';
 import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http/device-routes.js';
 import {
+  criarVerificadorDeReautenticacao,
   registrarRotasDeDescoberta,
   registrarRotasDeIdentidade,
 } from '../modules/identity/adapters/http/routes.js';
@@ -136,6 +138,24 @@ export async function main(): Promise<void> {
   // um teto sem log. Antes da primeira requisição ele já aponta para o logger.
   let registrarNoLog: (evento: Record<string, unknown>, mensagem: string) => void = () => {};
 
+  // MESMO INDIRETO DO LOGGER, e pelo mesmo motivo de ordem: o verificador de
+  // `X-Reauth-Token` precisa do serviço de identidade, que precisa do banco e
+  // da trilha, que sao construidos abaixo -- e o servidor precisa existir antes
+  // de qualquer rota ser registrada.
+  //
+  // O valor inicial LANCA, e nao e um `() => {}`. Um no-op aqui seria uma
+  // porta destrutiva aberta caso a fiacao mudasse de ordem, e ela ficaria
+  // aberta em silencio: nenhuma requisicao falharia, nenhuma senha seria
+  // pedida, e o portao existiria so no nome. Verificacao que nao consegue
+  // verificar precisa reprovar.
+  let verificarReautenticacao: VerificadorDeReautenticacao = () => {
+    throw new Error(
+      'Verificador de reautenticacao chamado antes de a fiacao das rotas de identidade ' +
+        'terminar. Nenhuma requisicao devia alcancar este ponto: as rotas so sao registradas ' +
+        'depois. Corrija a ordem em src/bin/api.ts em vez de afrouxar isto (BICHUS-48).',
+    );
+  };
+
   const app = criarServidor({
     problemBaseUrl: config.problemBaseUrl,
     isProduction: config.isProduction,
@@ -146,6 +166,7 @@ export async function main(): Promise<void> {
         registrarNoLog(evento, mensagem);
       },
     }),
+    reautenticacao: (request, escopo) => verificarReautenticacao(request, escopo),
   });
 
   registrarNoLog = (evento, mensagem) => {
@@ -217,6 +238,10 @@ export async function main(): Promise<void> {
     issuer: config.token.issuer,
     apiBaseUrl: config.apiBaseUrl,
   };
+
+  // A partir daqui `X-Reauth-Token` e conferido de verdade. Quem o chama e
+  // `registrarRota`, em toda rota que declara `reauthScope`.
+  verificarReautenticacao = criarVerificadorDeReautenticacao(dependenciasDasRotas);
 
   // BICHUS-43. A conversa mediada. Declarada ANTES das tags porque o aviso da
   // plaquinha e o unico fato que abre uma conversa no produto: a linha

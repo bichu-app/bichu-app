@@ -30,6 +30,11 @@ import type {
   Conta,
   MotivoDeRevogacao,
 } from '../ports/identity-repository.js';
+import type { ReauthScope } from '../../../shared/http/route-definition.js';
+import {
+  expiracaoDaJanela,
+  JANELA_DE_REAUTENTICACAO_EM_SEGUNDOS,
+} from '../domain/reautenticacao.js';
 
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
@@ -966,6 +971,153 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           'Se foi voce, basta entrar de novo.\n\n' +
           'Se nao foi, troque a sua senha agora mesmo: quem fez isso estava ' +
           'dentro da sua conta.',
+      });
+    },
+
+    /**
+     * **Abre a janela de reautenticação.** A única operação do sistema que
+     * confere a senha de alguém já autenticado (critério 10 da BICHUS-48).
+     *
+     * O desenho concentra por três razões, e as três são o motivo de ela
+     * existir em vez de cada operação destrutiva pedir a senha do seu jeito: a
+     * senha trafega para **um** endpoint; o teto contra força bruta existe em
+     * **um** lugar; e `DELETE /me` não precisa de corpo.
+     *
+     * ## A senha errada não diz nada além de "não confere"
+     *
+     * Conta sem credencial local e senha errada recebem a **mesma** recusa, e o
+     * mesmo tempo de CPU. Hoje toda conta deste produto tem senha — `provider`
+     * aceita `google`, `apple` e `keycloak` na restrição do banco e **nenhum
+     * caminho de `src/` cria identidade com esses valores**, medido em 22/09. A
+     * simetria não é para hoje: ela é o que faz o primeiro provedor externo
+     * entrar sem transformar esta rota num oráculo de "aquela conta tem senha
+     * local?", que é a pergunta que decide onde o ataque insiste.
+     *
+     * Não há resposta diferente para conta inexistente porque não existe esse
+     * caso: quem chega aqui já apresentou um token de acesso válido.
+     */
+    async reautenticar(
+      autenticado: Autenticado,
+      senha: string,
+      escopo: ReauthScope,
+      contexto: ContextoDaRequisicao,
+    ): Promise<{ reauthToken: OpaqueToken; expiresIn: number; scope: ReauthScope }> {
+      const agora = deps.clock.now();
+      const conta = autenticado.conta;
+      const credencial = await deps.repositorio.buscarCredencialLocalPorEmail(conta.email);
+
+      if (credencial === undefined || !(await verificarSenha(senha, credencial.passwordPhc))) {
+        // O hash de descarte roda quando não há credencial: sem ele a diferença
+        // entre "não derivei nada" e "derivei 210.000 iterações" é um oráculo de
+        // centenas de milissegundos.
+        if (credencial === undefined) await consumirTempoDeVerificacao(senha);
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: conta.id,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.reauth_refused',
+          resourceKind: 'user',
+          resourceId: conta.id,
+          metadata: { scope: escopo },
+        });
+        // `invalid-credentials`, que é um dos tipos que `registrarRota` conta
+        // como tentativa inválida: é assim que o teto de 5 por hora do contrato
+        // passa a valer sem ninguém precisar chamar o contador.
+        throw problemas.credencialRecusada();
+      }
+
+      const tokenBruto: OpaqueToken = deps.ids.opaqueToken();
+      await deps.repositorio.criarJanelaDeReautenticacao({
+        id: deps.ids.uuidv7(),
+        userId: conta.id,
+        escopo,
+        acessoJti: autenticado.jti,
+        tokenHash: comoTokenHash(tokenBruto),
+        emitidaEm: agora,
+        expiraEm: expiracaoDaJanela(agora),
+        ipHmac: deps.hmacDeIp(contexto.ip),
+      });
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.reauth_granted',
+        resourceKind: 'user',
+        resourceId: conta.id,
+        metadata: { scope: escopo },
+      });
+
+      return {
+        reauthToken: tokenBruto,
+        expiresIn: JANELA_DE_REAUTENTICACAO_EM_SEGUNDOS,
+        scope: escopo,
+      };
+    },
+
+    /**
+     * **Consome a janela, ou recusa.** É o que a borda chama antes de deixar
+     * qualquer das seis operações destrutivas rodar.
+     *
+     * Lança `reautenticacaoNecessaria` (401, `reauthentication-required`) em
+     * todos os casos de recusa, e o corpo é idêntico nos seis. O motivo
+     * distinguido vai para a trilha: dizer "o escopo era outro" ou "essa janela
+     * já foi usada" descreve a máquina para quem a está atacando, e quem
+     * apresentou a janela certa nunca vê nenhuma dessas mensagens.
+     *
+     * A ausência do cabeçalho e um cabeçalho que não serve são o **mesmo** 401,
+     * e isso é o critério 11: o app abre a folha de senha sem perder o que a
+     * pessoa estava fazendo, e ele não precisa de dois caminhos para isso.
+     */
+    async consumirReautenticacao(
+      autenticado: Autenticado,
+      tokenApresentado: string | undefined,
+      escopo: ReauthScope,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const conta = autenticado.conta;
+
+      const registrarRecusa = async (motivo: string): Promise<never> => {
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: conta.id,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.reauth_window_refused',
+          resourceKind: 'user',
+          resourceId: conta.id,
+          metadata: { scope: escopo, reason: motivo },
+        });
+        throw problemas.reautenticacaoNecessaria();
+      };
+
+      if (tokenApresentado === undefined || tokenApresentado === '') {
+        return registrarRecusa('ausente');
+      }
+
+      const resultado = await deps.repositorio.consumirJanelaDeReautenticacao({
+        tokenHash: comoTokenHash(tokenApresentado),
+        userId: conta.id,
+        escopoExigido: escopo,
+        acessoJti: autenticado.jti,
+        barreiraDaConta: conta.sessionsInvalidBefore,
+        agora,
+      });
+
+      if (!resultado.consumida) return registrarRecusa(resultado.motivo);
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.reauth_window_used',
+        resourceKind: 'user',
+        resourceId: conta.id,
+        metadata: { scope: escopo },
       });
     },
 

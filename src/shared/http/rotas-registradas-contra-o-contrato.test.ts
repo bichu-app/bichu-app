@@ -20,7 +20,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 import { carregarContrato } from './contract.js';
 import { _decisaoDeStatus } from './validacao-de-parametros.js';
@@ -136,6 +138,115 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
       [],
       'Operações registradas que podem recusar parâmetro e não declaram 400 em ' +
         `api/openapi.yaml: ${semQuatrocentos.join(', ')}. A aplicação não sobe assim.`,
+    );
+  });
+
+  void it('a exigência de X-Reauth-Token bate nos dois sentidos: contrato e código', () => {
+    // ===================================================================
+    // ESTE É O CASO QUE IMPEDE UMA DAS SEIS DE FICAR SEM SENHA (BICHUS-48)
+    // ===================================================================
+    //
+    // `registrarRota` instala a conferência a partir de `rota.reauthScope`.
+    // Isso torna "esqueci de exigir a senha no manipulador" inexprimível, e
+    // deixa UM buraco: esquecer o `reauthScope` na declaração. É esse buraco
+    // que este caso fecha, e ele o fecha nos dois sentidos.
+    //
+    // A direção óbvia: operação que o contrato marca com `reauth: []` e cuja
+    // rota existe em `src/` PRECISA declarar o escopo. Sem ela, `Desativar a
+    // tag` poderia entrar sem senha nenhuma, que é o desfecho que esta
+    // história existe para impedir.
+    //
+    // A direção que ninguém olha: rota que declara um escopo que o contrato
+    // não exige. Ela não quebra ninguém — apenas pede uma senha que o
+    // documento não promete — e é exatamente por isso que atravessaria a
+    // revisão. Quem lê o contrato acreditaria numa coisa e quem chama a API
+    // encontraria outra, os dois com razão.
+    //
+    // A comparação é do VALOR do escopo, e não da presença dele: um
+    // `reauthScope: 'tag_revocation'` numa operação que o contrato marca como
+    // `account_deletion` passaria por uma conferência que só perguntasse "tem
+    // escopo?", e a janela aberta para revogar uma plaquinha valeria para
+    // apagar a conta.
+    const contrato = carregarContrato(CAMINHO_DA_SPEC);
+    const divergentes: string[] = [];
+
+    for (const rota of rotasDeclaradas()) {
+      const operacao = contrato.operacoes.get(rota.operationId);
+      if (operacao === undefined) continue; // o primeiro caso já reprovou.
+
+      const doContrato = operacao.raw['x-reauth-scope'];
+      const doCodigo = rota.reauthScope;
+
+      const exigidoNoContrato = typeof doContrato === 'string' ? doContrato : undefined;
+      if (exigidoNoContrato === doCodigo) continue;
+
+      divergentes.push(
+        `${rota.operationId}: contrato diz ${exigidoNoContrato ?? 'nenhum escopo'}, ` +
+          `código diz ${doCodigo ?? 'nenhum escopo'}`,
+      );
+    }
+
+    assert.deepEqual(
+      divergentes,
+      [],
+      'A exigência de reautenticação diverge entre api/openapi.yaml e a declaração da rota. ' +
+        'Escopo no contrato e ausente no código é operação destrutiva servida sem senha; ' +
+        'escopo no código e ausente no contrato é senha pedida sem o documento prometer.\n' +
+        divergentes.join('\n'),
+    );
+  });
+
+  void it('toda operação com `reauth: []` no contrato declara o mesmo escopo em `x-reauth-scope`', () => {
+    // A metade do contrato que o caso acima não alcança: operação marcada com
+    // `reauth: []` cuja rota ainda NÃO existe em `src/`. São quatro hoje
+    // (excluir a conta, trocar o e-mail, exportar os dados, transferir o pet),
+    // e elas precisam chegar ao código já com o escopo escrito — senão o caso
+    // acima aprova por ausência, que é a forma de portão que este projeto já
+    // pagou para aprender.
+    const spec = parseYaml(readFileSync(CAMINHO_DA_SPEC, 'utf8')) as {
+      paths: Record<string, Record<string, Record<string, unknown>>>;
+    };
+    const semEscopo: string[] = [];
+    const comEscopoSemExigencia: string[] = [];
+    let marcadas = 0;
+
+    for (const [caminho, item] of Object.entries(spec.paths)) {
+      for (const [metodo, operacao] of Object.entries(item)) {
+        if (typeof operacao !== 'object' || operacao === null) continue;
+        const seguranca = operacao['security'];
+        const pedeReauth =
+          Array.isArray(seguranca) &&
+          seguranca.some(
+            (req) => typeof req === 'object' && req !== null && 'reauth' in (req as object),
+          );
+        const escopo = operacao['x-reauth-scope'];
+        const id = typeof operacao['operationId'] === 'string'
+          ? operacao['operationId']
+          : `${metodo.toUpperCase()} ${caminho}`;
+
+        if (pedeReauth) {
+          marcadas += 1;
+          if (typeof escopo !== 'string') semEscopo.push(id);
+        } else if (typeof escopo === 'string') {
+          comEscopoSemExigencia.push(id);
+        }
+      }
+    }
+
+    // Portão que não acha alvo reprova. Um `security` que mudasse de forma
+    // deixaria `marcadas` em zero e todas as asserções acima passariam por
+    // percorrer lista vazia.
+    assert.ok(
+      marcadas >= 6,
+      `só ${String(marcadas)} operações com \`reauth: []\` encontradas no contrato, e as seis ` +
+        'ações sensíveis da BICHUS-48 estão marcadas. A leitura do `security` deixou de casar.',
+    );
+    assert.deepEqual(semEscopo, [], `operações com \`reauth: []\` e sem \`x-reauth-scope\`: ${semEscopo.join(', ')}`);
+    assert.deepEqual(
+      comEscopoSemExigencia,
+      [],
+      `operações com \`x-reauth-scope\` e sem \`reauth: []\`: ${comEscopoSemExigencia.join(', ')}. ` +
+        'O escopo sozinho não exige nada — ele só diz QUAL janela serve.',
     );
   });
 

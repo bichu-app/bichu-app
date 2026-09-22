@@ -270,6 +270,14 @@ class BancoDeMentira implements IdentityRepository {
   conferirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
     throw new Error('conferirTokenDeVerificacao: nenhum caso deste arquivo deveria chegar aqui');
   }
+  criarJanelaDeReautenticacao(): Promise<void> {
+    throw new Error('criarJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  consumirJanelaDeReautenticacao(): never {
+    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
   marcarEmailVerificado(): Promise<void> {
     throw new Error('marcarEmailVerificado: nenhum caso deste arquivo deveria chegar aqui');
   }

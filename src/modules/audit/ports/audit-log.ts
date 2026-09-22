@@ -34,6 +34,20 @@ export type AuditAction =
   | 'auth.password_changed'
   /** Tentativa de troca de senha recusada por senha atual errada (BICHUS-125). */
   | 'auth.password_change_refused'
+  /**
+   * BICHUS-48. A janela de reautenticacao de 5 minutos.
+   *
+   * Sao quatro eventos e nao dois, porque as duas metades respondem perguntas
+   * diferentes numa investigacao de tomada de conta: `reauth_refused` em
+   * sequencia e alguem testando senhas de dentro de uma sessao tomada;
+   * `reauth_window_refused` em sequencia e alguem tentando reaproveitar,
+   * mover de aparelho ou trocar o escopo de uma janela. O `metadata` carrega o
+   * escopo e o motivo interno da recusa -- que nunca sai no corpo da resposta.
+   */
+  | 'auth.reauth_granted'
+  | 'auth.reauth_refused'
+  | 'auth.reauth_window_used'
+  | 'auth.reauth_window_refused'
   | 'auth.password_rehashed'
   | 'auth.password_reset_completed'
   | 'auth.email_verified'

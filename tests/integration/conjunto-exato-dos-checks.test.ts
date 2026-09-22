@@ -227,6 +227,31 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'code',
     valores: ['dog', 'cat', 'other'],
   },
+  'public.reauth_tokens.reauth_tokens_escopo': {
+    coluna: 'scope',
+    // As seis finalidades de `X-Reauth-Token` (BICHUS-48). Espelha `ReauthScope`
+    // em `src/shared/http/route-definition.ts`, o enum de `scope` em
+    // `POST /auth/reauth` no contrato e o tipo da coluna em
+    // `src/shared/db/schema.ts`. Os quatro precisam andar juntos.
+    //
+    // `email_change` e `session_revocation` sao os dois que entraram. O
+    // primeiro porque `POST /me/email-change` ja exigia o cabecalho e o enum do
+    // contrato nao tinha o valor: a operacao era inalcancavel. O segundo porque
+    // `POST /auth/logout-all` passou a exigir a janela.
+    //
+    // `password_change` NAO esta aqui, e a ausencia e a divergencia registrada
+    // na BICHUS-48 contra a secao 7.5 de `docs/04-seguranca.md`. Acrescenta-lo
+    // sem a decisao do cliente faria `PUT /auth/password` pedir a mesma senha
+    // duas vezes na mesma requisicao.
+    valores: [
+      'account_deletion',
+      'email_change',
+      'data_export',
+      'pet_transfer',
+      'tag_revocation',
+      'session_revocation',
+    ],
+  },
   'public.refresh_tokens.refresh_tokens_revoked_reason_check': {
     coluna: 'revoked_reason',
     // O DEFEITO DE 22/09 MORA AQUI. `logout_all` é o valor que a rota de "sair

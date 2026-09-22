@@ -21,7 +21,7 @@ import Fastify, {
 import { randomUUID } from 'node:crypto';
 import type { AbsoluteUrl } from '../types/brands.js';
 import type { DependenciasDoTeto } from './aplicacao-de-teto.js';
-import type { RegistradorDeRotas } from './registrar-rota.js';
+import type { RegistradorDeRotas, VerificadorDeReautenticacao } from './registrar-rota.js';
 import { AppError, problemas } from './errors.js';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 import {
@@ -48,6 +48,17 @@ export interface OpcoesDoServidor {
    * `RATE_LIMIT_DRIVER`, e `disabled` fora de `dev` não sobe.
    */
   readonly teto: DependenciasDoTeto;
+  /**
+   * Confere e consome `X-Reauth-Token` nas operações que declaram
+   * `reauthScope` (BICHUS-48).
+   *
+   * **Opcional aqui e obrigatório lá.** Um servidor que não registra nenhuma
+   * rota destrutiva não precisa dele, e exigi-lo de todas as bancadas de teste
+   * seria ruído. Mas `registrarRota` derruba a subida quando uma rota declara
+   * `reauthScope` e este campo não veio: a operação destrutiva nunca chega a
+   * ser servida sem a segunda credencial.
+   */
+  readonly reautenticacao?: VerificadorDeReautenticacao;
 }
 
 /** Só aceita correlação vinda de fora se ela tiver a forma de um UUID. */
@@ -166,6 +177,9 @@ export function criarServidor(opcoes: OpcoesDoServidor): RegistradorDeRotas {
   // módulo precisaria receber. `registrarRota` o lê daqui, e um servidor sem
   // ele derruba o registro na subida em vez de servir rota sem teto.
   app.decorate('tetoDeChamada', opcoes.teto);
+  if (opcoes.reautenticacao !== undefined) {
+    app.decorate('reautenticacao', opcoes.reautenticacao);
+  }
 
   app.addHook('onSend', (request, reply, payload, done) => {
     void reply.header(CABECALHO_DE_CORRELACAO, request.id);

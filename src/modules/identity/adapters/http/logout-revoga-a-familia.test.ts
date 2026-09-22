@@ -256,6 +256,14 @@ class RepositorioFalso implements IdentityRepository {
   invalidarTokensPendentes(): Promise<number> {
     return naoUsado('invalidarTokensPendentes');
   }
+  criarJanelaDeReautenticacao(): Promise<void> {
+    return naoUsado('criarJanelaDeReautenticacao');
+  }
+
+  consumirJanelaDeReautenticacao(): never {
+    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo chega aqui');
+  }
+
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
   }
@@ -352,6 +360,17 @@ function montar(): Bancada {
     // contador, na subida. Contador EM MEMORIA e nao desligado, para que estes
     // casos exercitem a mesma fiacao que roda.
     teto: tetoDeTeste(),
+    // BICHUS-48: `registrarRota` recusa, na subida, um servidor sem verificador
+    // quando alguma rota declara `reauthScope` -- e `logout-all` declara. Este
+    // arquivo nao exercita a janela de reautenticacao, entao o verificador
+    // LANCA em vez de aprovar: um verificador que dissesse "ok" faria estes
+    // casos rodarem contra uma porta destrutiva aberta e ninguem veria.
+    reautenticacao: () => {
+      throw new Error(
+        'Verificador de reautenticacao chamado: nenhum caso deste arquivo exercita ' +
+          'X-Reauth-Token. Quem precisa dele e sair-de-todos-pelo-http (integracao).',
+      );
+    },
   });
   const deps: DependenciasDasRotas = {
     auth,
