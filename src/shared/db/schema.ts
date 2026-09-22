@@ -97,6 +97,7 @@ export interface RefreshTokensTable {
     | 'rotation'
     | 'reuse_detected'
     | 'logout'
+    | 'logout_all'
     | 'password_changed'
     | 'account_deleted'
     | null;

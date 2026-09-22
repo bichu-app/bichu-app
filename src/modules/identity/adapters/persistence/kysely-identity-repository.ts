@@ -383,6 +383,30 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linhas.length;
     },
 
+    /**
+     * Uma instrução. Varrer família por família exigiria primeiro listá-las, e
+     * entre a lista e o UPDATE uma renovação em curso abriria uma linha nova
+     * que a varredura já não alcançaria — a sessão que o gatilho existe para
+     * derrubar sobreviveria à própria revogação.
+     *
+     * `revoked_at IS NULL` mantém a idempotência: chamada duas vezes, a segunda
+     * devolve 0 e não reescreve o motivo nem a hora da primeira.
+     */
+    async revogarTodasAsFamilias(
+      userId: UserId,
+      motivo: MotivoDeRevogacao,
+      agora: Instant,
+    ): Promise<number> {
+      const linhas = await db
+        .updateTable('refresh_tokens')
+        .set({ revoked_at: new Date(agora), revoked_reason: motivo })
+        .where('user_id', '=', userId)
+        .where('revoked_at', 'is', null)
+        .returning('id')
+        .execute();
+      return linhas.length;
+    },
+
     async invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
       await db
         .updateTable('users')

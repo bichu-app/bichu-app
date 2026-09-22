@@ -86,6 +86,40 @@ export const rotaDeLogout = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * O outro verbo. Ver a emenda 1 do ADR-0002: `logout` é este aparelho,
+ * `logout-all` é a conta inteira.
+ *
+ * O teto é 10/h e não 60/h como o do logout comum. A diferença é o alcance: uma
+ * chamada aqui derruba todos os aparelhos da pessoa, então um token de acesso
+ * roubado, repetido em laço, manteria o titular fora da própria conta sem
+ * precisar da senha dele.
+ */
+export const rotaDeLogoutTotal = defineRoute({
+  operationId: 'logoutAllDevices',
+  method: 'post',
+  path: '/auth/logout-all',
+  effects: ['notifies'],
+  rateLimit: [{ dimension: ['account'], limit: 10, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDeTrocaDeSenha = defineRoute({
+  operationId: 'changePassword',
+  method: 'put',
+  path: '/auth/password',
+  effects: ['verifies_secret', 'notifies'],
+  rateLimit: [
+    { dimension: ['account'], limit: 10, window: '1h', onExceed: 'deny_429' },
+    {
+      dimension: ['account'],
+      limit: 5,
+      window: '1h',
+      onExceed: 'deny_429',
+      appliesTo: 'invalid_attempts',
+    },
+  ],
+});
+
 export const rotaDoMeuPerfil = defineRoute({
   operationId: 'getMe',
   method: 'get',
@@ -437,6 +471,34 @@ export function registrarRotasDeIdentidade(
     await deps.auth.sair(autenticado, corpo.refresh_token, contextoDe(request));
     return reply.status(204).send();
   });
+
+  /**
+   * Sem corpo, e é a decisão. A conta que cai é a do token — pedir um
+   * identificador no corpo criaria um campo que alguém um dia confiaria, e
+   * derrubar a sessão de outra pessoa passaria a depender de uma conferência
+   * que pode ser esquecida (ADR-0021).
+   */
+  app.post(rotaDeLogoutTotal.path, async (request: FastifyRequest, reply: FastifyReply) => {
+    const autenticado: Autenticado = await deps.auth.autenticar(tokenDoCabecalho(request));
+    await deps.auth.sairDeTodosOsAparelhos(autenticado, contextoDe(request));
+    return reply.status(204).send();
+  });
+
+  app.put(
+    rotaDeTrocaDeSenha.path,
+    { schema: { body: corpoDe(deps.contrato, rotaDeTrocaDeSenha.operationId) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const autenticado: Autenticado = await deps.auth.autenticar(tokenDoCabecalho(request));
+      const corpo = request.body as { current_password: string; new_password: string };
+      await deps.auth.trocarSenha(
+        autenticado,
+        corpo.current_password,
+        corpo.new_password,
+        contextoDe(request),
+      );
+      return reply.status(204).send();
+    },
+  );
 }
 
 /**

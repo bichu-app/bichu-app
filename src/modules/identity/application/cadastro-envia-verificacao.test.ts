@@ -153,6 +153,9 @@ class RepositorioDeCadastro implements IdentityRepository {
   revogarFamilia(): Promise<number> {
     return naoUsado('revogarFamilia');
   }
+  revogarTodasAsFamilias(): Promise<number> {
+    return naoUsado('revogarTodasAsFamilias');
+  }
   rotacionar(): Promise<boolean> {
     return naoUsado('rotacionar');
   }

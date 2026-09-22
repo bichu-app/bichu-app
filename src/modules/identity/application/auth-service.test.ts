@@ -102,6 +102,14 @@ class RepositorioFalso implements IdentityRepository {
    * com os 375 casos verdes.
    */
   public readonly invalidacoesDeSessao: { userId: UserId; agora: Instant }[] = [];
+  /** BICHUS-125: a outra metade da revogação em massa. */
+  public readonly revogacoesEmMassa: {
+    userId: UserId;
+    motivo: MotivoDeRevogacao;
+    agora: Instant;
+  }[] = [];
+  /** Quantas linhas de refresh a conta tem vivas, para a contagem da trilha. */
+  public familiasVivas = 2;
   public readonly invalidacoesDeTokens: { userId: UserId; agora: Instant }[] = [];
   public readonly credenciaisRegravadas: { identityId: string; agora: Instant }[] = [];
   /** Quantas vezes o link foi GASTO. O critério 12 vive nesta contagem. */
@@ -180,6 +188,20 @@ class RepositorioFalso implements IdentityRepository {
   invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
     this.invalidacoesDeSessao.push({ userId, agora });
     return Promise.resolve();
+  }
+  /**
+   * BICHUS-125: mesma razão do `invalidarSessoes` logo acima. Esta porta
+   * REGISTRA em vez de gritar, porque o defeito que ela existe para pegar é
+   * alguém **deixar** de revogar as famílias, e um dublê que só falha quando é
+   * chamado fica verde exatamente nesse caso.
+   */
+  revogarTodasAsFamilias(
+    userId: UserId,
+    motivo: MotivoDeRevogacao,
+    agora: Instant,
+  ): Promise<number> {
+    this.revogacoesEmMassa.push({ userId, motivo, agora });
+    return Promise.resolve(this.familiasVivas);
   }
   criarTokenDeVerificacao(): Promise<void> {
     return naoUsado('criarTokenDeVerificacao');

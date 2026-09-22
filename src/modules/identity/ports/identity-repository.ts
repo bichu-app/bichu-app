@@ -71,6 +71,7 @@ export type MotivoDeRevogacao =
   | 'rotation'
   | 'reuse_detected'
   | 'logout'
+  | 'logout_all'
   | 'password_changed'
   | 'account_deleted';
 
@@ -139,6 +140,24 @@ export interface IdentityRepository {
 
   /** Revoga a família inteira. Usada no logout e na detecção de reuso. */
   revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number>;
+
+  /**
+   * Revoga **todas** as famílias de refresh ainda vivas da conta, e devolve
+   * quantas linhas caíram.
+   *
+   * É a outra metade de `invalidarSessoes`, e não um atalho dela. A barreira
+   * derruba o token de **acesso** em menos de um segundo; ela não toca em
+   * `refresh_tokens`. Sem esta chamada, um refresh copiado antes do gatilho
+   * continua sendo uma linha viva no banco até vencer por inatividade — e o
+   * único motivo de ele não renovar é a barreira que `renovar()` passou a ler
+   * (BICHUS-77). Rede de proteção não substitui a revogação: quem depende só
+   * dela fica a uma refatoração de distância de voltar ao defeito.
+   */
+  revogarTodasAsFamilias(
+    userId: UserId,
+    motivo: MotivoDeRevogacao,
+    agora: Instant,
+  ): Promise<number>;
 
   /** SEC-006: empurra `sessions_invalid_before` para agora. */
   invalidarSessoes(userId: UserId, agora: Instant): Promise<void>;

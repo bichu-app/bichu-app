@@ -30,6 +30,8 @@ export type AuditAction =
   | 'auth.refresh_reuse_detected'
   | 'auth.sessions_revoked'
   | 'auth.password_changed'
+  /** Tentativa de troca de senha recusada por senha atual errada (BICHUS-125). */
+  | 'auth.password_change_refused'
   | 'auth.password_rehashed'
   | 'auth.password_reset_completed'
   | 'auth.email_verified'
