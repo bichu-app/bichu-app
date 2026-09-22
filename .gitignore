@@ -128,3 +128,9 @@ cypress/downloads/
 # direto em jarvis-ai/.
 .claude/agents
 infra/verificacao/__pycache__/
+
+# Recibo do `make fechar-integracao` (22/09/2026). Por ARVORE e fora do git, como
+# `portas.local.mk`: ele afirma que a lista de fechamento rodou verde NESTE
+# diretorio e NESTE commit. Versionado, ele viajaria para outra arvore
+# afirmando algo que nunca aconteceu ali, que e pior que nao ter recibo.
+fechamento.local.txt

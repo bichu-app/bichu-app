@@ -55,6 +55,35 @@ jobs:
 
       - name: portabilidade e hostname
         run: python3 infra/verificacao/verificar_portabilidade.py
+      # BOA-FORMACAO DO XML QUE O BUILD DO APLICATIVO LE (22/09/2026).
+      #
+      # Duas vezes em dois dias a mesma classe derrubou o build do Android, com
+      # a esteira e a suite verdes: `--` dentro de comentario XML, que a
+      # especificacao proibe e o mesclador de manifesto do Gradle recusa --
+      # `86499cb` (21/09) e `c0cd002` (22/09).
+      #
+      # ELE FICA AQUI, NO `rapidos`, E A ESCOLHA E DELIBERADA. 44 ms medidos,
+      # sem Gradle, sem JDK e sem SDK do Android: ele reprova no PROPRIO commit
+      # que traz o defeito, com arquivo, linha, coluna e o `--` apontado. Posto
+      # no job `apk`, que ja pega a mesma coisa, chegaria 4 minutos e um JDK
+      # depois, e com a mensagem pior ("Error parsing", sem linha).
+      #
+      # O que ele NAO cobre esta escrito no cabecalho do script e no alvo
+      # `fechar-integracao` do Makefile: merge com o manifesto das bibliotecas,
+      # placeholder do AGP e regra de esquema do Android. Essa metade continua
+      # sendo do job `apk`, que compila de verdade.
+      #
+      # As iscas ANTES da conferencia, como no `apk`: elas sao seis arquivos
+      # versionados em `infra/verificacao/iscas/manifesto-android/`, dois deles
+      # os manifestos REAIS de 21 e 22/09 extraidos do commit quebrado. Mais
+      # tres que precisam ser APROVADOS, porque portao que reprova quem esta
+      # certo e desligado na primeira semana.
+      - name: as iscas do portao de boa-formacao do manifesto reprovam
+        run: python3 infra/verificacao/verificar_manifesto_android.py --autoteste
+
+      - name: o XML que o build do aplicativo le esta bem formado
+        run: python3 infra/verificacao/verificar_manifesto_android.py --raiz .
+
 
       # BICHUS-211, as duas iscas. Nenhuma das duas precisa de docker nem de
       # `.env`, por isso estao aqui no primeiro estagio e nao no de integracao.
