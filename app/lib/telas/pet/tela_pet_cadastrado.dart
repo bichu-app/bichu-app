@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../acessibilidade/anunciar.dart';
 import '../../api/api_client.dart';
 import '../../api/falhas.dart';
+import '../../api/imagem_do_qr.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../dispositivo/avisos.dart';
@@ -57,6 +58,16 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
   bool _emitindo = true;
   MensagemDeErro? _faixa;
 
+  /// Em qual dos quatro estados a IMAGEM do QR esta. Separado de [_faixa] de
+  /// proposito: a faixa fala da emissao da tag, e uma imagem que nao carregou
+  /// nao e um problema da tag. O aviso mora onde o QR moraria.
+  _EstadoDoQr _estadoDoQr = _EstadoDoQr.semEndereco;
+
+  /// O provedor que o `Image` desenha. Ele vem do cofre, e o cofre e do
+  /// escopo: quem o esvazia no logout e a lista `limpezasAoSair`, e nao esta
+  /// tela. Ver [CofreDaImagemDoQr].
+  MemoryImage? _qr;
+
   Pet get _pet => widget.resultado.pet;
 
   /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
@@ -91,6 +102,13 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
         _tag = tag;
         _emitindo = false;
       });
+      // A imagem vem antes da antessala, porque a regra de UX abaixo fala do
+      // QR APARECENDO e nao da tag existindo. Ela nao pode DERRUBAR a
+      // antessala: a tag foi emitida, a pessoa ja tem o que perder, e uma
+      // imagem que nao carregou nao muda isso. Por isso `_baixarOQr` trata a
+      // propria falha e nunca propaga.
+      await _baixarOQr(tag);
+      if (!mounted) return;
       // A antessala vem DEPOIS de o QR aparecer, e so quando ele aparece.
       //
       // UX 10.1 fixa o momento: "F1.6, imediatamente depois de o primeiro pet
@@ -117,6 +135,58 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
                 texto: TextosDoCadastro.tagNaoSaiu(_pet.nome),
                 acao: MensagensDeErro.tentarDeNovo,
               );
+      });
+    }
+  }
+
+  /// Busca a imagem do QR **com o `Authorization` que a rota exige**.
+  ///
+  /// `Image.network` nao serve aqui e nao e questao de estilo: ele abre um
+  /// `HttpClient` proprio, por fora da camada de API, e nao ha por onde passar
+  /// cabecalho. A rota da imagem e `bearerAuth` e esta marcada
+  /// `reveals_credential` no contrato -- pela `Image.network` ela responde 401,
+  /// o `errorBuilder` colapsava para `SizedBox.shrink()`, e a tela ficava
+  /// exatamente como o cliente a viu: sem QR e sem dizer por que.
+  ///
+  /// A falha **nao** vira [_faixa]. A faixa e o slot da emissao da tag; a
+  /// imagem que nao veio e um problema da imagem, e o aviso dela fica onde ela
+  /// ficaria, junto do codigo que continua resolvendo.
+  Future<void> _baixarOQr(TagEmitida tag) async {
+    final endereco = tag.qrPngUrl;
+    if (endereco == null || endereco.isEmpty) {
+      // Nao ha imagem prometida. **Nada falhou**, e a tela diz isso com outro
+      // texto -- colapsar os dois casos no mesmo silencio foi o defeito.
+      if (mounted) setState(() => _estadoDoQr = _EstadoDoQr.semEndereco);
+      return;
+    }
+
+    // O escopo e lido ANTES do primeiro `await`, como no resto desta tela.
+    final api = Escopo.of(context).api;
+    final cofre = Escopo.of(context).cofreDoQr;
+
+    setState(() {
+      _estadoDoQr = _EstadoDoQr.carregando;
+      _qr = null;
+    });
+
+    try {
+      final Uint8List bytes = await api.baixarImagem(endereco);
+      final provedor = await cofre.guardar(bytes);
+      if (!mounted) return;
+      setState(() {
+        _qr = provedor;
+        _estadoDoQr = _EstadoDoQr.pronto;
+      });
+    } on FalhaDeChamada {
+      // Os quatro desfechos de `FalhaDeChamada` levam ao MESMO texto de tela, e
+      // isso e deliberado: para quem esta com o celular na mao, "401", "sem
+      // sinal" e "o endereco nao e desta API" produzem a mesma resposta -- o
+      // codigo por extenso resolve, e da para tentar de novo. O que a tela nao
+      // pode fazer e ficar calada.
+      if (!mounted) return;
+      setState(() {
+        _qr = null;
+        _estadoDoQr = _EstadoDoQr.falhou;
       });
     }
   }
@@ -263,7 +333,14 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
             if (_emitindo)
               const Center(child: CircularProgressIndicator())
             else if (tag != null)
-              _BlocoDoCodigo(tag: tag, nome: _pet.nome, aoCopiar: _copiar),
+              _BlocoDoCodigo(
+                tag: tag,
+                nome: _pet.nome,
+                aoCopiar: _copiar,
+                estadoDoQr: _estadoDoQr,
+                qr: _qr,
+                aoTentarDeNovo: () => _baixarOQr(tag),
+              ),
             if (_faixa != null) ...<Widget>[
               const SizedBox(height: BichuEspaco.e6),
               FaixaDeAviso(
@@ -301,22 +378,55 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
 /// anunciada junto do codigo, e nao depois dos botoes. Quem usa leitor de tela
 /// e exatamente quem mais perde com o codigo sumindo, porque a recuperacao
 /// alternativa (ler o codigo impresso na plaquinha) nao serve.
+/// Em qual estado esta a IMAGEM do QR. Quatro, e nao dois.
+///
+/// O defeito que este enum fecha: [semEndereco] e [falhou] desenhavam a mesma
+/// coisa -- nada. Quem estava com o celular na mao nao tinha como saber se a
+/// tag nao tem imagem ou se o app nao conseguiu busca-la, e so o segundo caso
+/// tem conserto do lado de ca.
+enum _EstadoDoQr {
+  /// A emissao nao prometeu imagem (`qr_png_url` ausente). Nada falhou.
+  semEndereco,
+
+  /// A requisicao esta em curso.
+  carregando,
+
+  /// Os bytes chegaram e estao desenhados.
+  pronto,
+
+  /// A requisicao saiu e nao voltou imagem.
+  falhou,
+}
+
+/// O lado do quadrado do QR, em dp.
+///
+/// Nao e espacamento e por isso nao sai de `BichuEspaco`: e o tamanho de
+/// desenho de uma imagem. Fica em constante porque os TRES estados precisam
+/// ocupar a mesma caixa -- se o esqueleto de carregamento tiver outra altura, a
+/// tela salta debaixo do dedo no instante em que a imagem chega.
+const double _ladoDoQr = 200;
+
 class _BlocoDoCodigo extends StatelessWidget {
   const _BlocoDoCodigo({
     required this.tag,
     required this.nome,
     required this.aoCopiar,
+    required this.estadoDoQr,
+    required this.qr,
+    required this.aoTentarDeNovo,
   });
 
   final TagEmitida tag;
   final String nome;
   final VoidCallback aoCopiar;
+  final _EstadoDoQr estadoDoQr;
+  final MemoryImage? qr;
+  final VoidCallback aoTentarDeNovo;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final qr = tag.qrPngUrl;
 
     return Container(
       padding: const EdgeInsets.all(BichuEspaco.e4),
@@ -331,25 +441,12 @@ class _BlocoDoCodigo extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
-          if (qr != null)
-            Center(
-              child: Semantics(
-                image: true,
-                // **A alternativa textual do QR e o codigo por extenso**, e nao
-                // "QR code do pet". Ninguem le um QR com leitor de tela, e uma
-                // alternativa que descreve a imagem em vez de entregar o
-                // conteudo dela nao serve para nada.
-                label: tag.codigo,
-                child: Image.network(
-                  qr,
-                  width: 200,
-                  height: 200,
-                  // O QR nao carregou: **nao ha QR de enfeite**. O codigo por
-                  // extenso continua na tela, que e o que a tag precisa.
-                  errorBuilder: (context, erro, pilha) => const SizedBox.shrink(),
-                ),
-              ),
-            ),
+          _ImagemDoQr(
+            estado: estadoDoQr,
+            provedor: qr,
+            codigo: tag.codigo,
+            aoTentarDeNovo: aoTentarDeNovo,
+          ),
           const SizedBox(height: BichuEspaco.e4),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -410,5 +507,116 @@ class _BlocoDoCodigo extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// O lugar do QR, nos quatro estados.
+///
+/// ## A decisao que este widget carrega
+///
+/// Ate 22/09 a tela usava `Image.network(qr, errorBuilder: (...) =>
+/// SizedBox.shrink())`. Duas coisas erradas numa linha:
+///
+/// 1. `Image.network` nao manda `Authorization`, e a rota e `bearerAuth`. O QR
+///    nunca ia aparecer.
+/// 2. O `errorBuilder` colapsava para nada. **A tela mentia por omissao**:
+///    ficava igual quando nao havia imagem e quando a busca falhou.
+///
+/// O que cada estado mostra, e por que:
+///
+/// - **[_EstadoDoQr.semEndereco]**: uma linha informativa, sem icone de alerta
+///   e sem acao. Nada falhou; nao ha o que a pessoa possa fazer, e um botao
+///   aqui seria trabalho inventado. Mesmo criterio da linha "a foto ainda esta
+///   subindo" logo acima nesta tela.
+/// - **[_EstadoDoQr.carregando]**: a caixa com o lado do QR, ocupada por um
+///   indicador. Ocupa a caixa inteira de proposito: a tela nao pode saltar
+///   quando a imagem chega, e o codigo por extenso esta logo abaixo do dedo.
+/// - **[_EstadoDoQr.pronto]**: a imagem, anunciada com o codigo por extenso
+///   como alternativa textual.
+/// - **[_EstadoDoQr.falhou]**: faixa informativa **com** `Tentar de novo`. E o
+///   unico estado com acao, porque e o unico em que existe uma.
+///
+/// Nos quatro, o codigo por extenso continua logo abaixo. Ele e o caminho que
+/// sempre funciona, e nenhum estado desta imagem o esconde.
+class _ImagemDoQr extends StatelessWidget {
+  const _ImagemDoQr({
+    required this.estado,
+    required this.provedor,
+    required this.codigo,
+    required this.aoTentarDeNovo,
+  });
+
+  final _EstadoDoQr estado;
+  final MemoryImage? provedor;
+  final String codigo;
+  final VoidCallback aoTentarDeNovo;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final imagem = provedor;
+
+    switch (estado) {
+      case _EstadoDoQr.semEndereco:
+        return Text(
+          TextosDoCadastro.qrSemImagem,
+          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+        );
+
+      case _EstadoDoQr.carregando:
+        return Center(
+          child: Semantics(
+            label: TextosDoCadastro.qrCarregando,
+            liveRegion: true,
+            child: const SizedBox(
+              width: _ladoDoQr,
+              height: _ladoDoQr,
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
+        );
+
+      case _EstadoDoQr.pronto:
+        if (imagem == null) {
+          // Estado impossivel pela construcao (`pronto` so e atribuido junto do
+          // provedor), e mesmo assim ele nao pode virar um quadrado vazio: cai
+          // no texto que diz a verdade sobre o que a pessoa esta vendo.
+          return Text(
+            TextosDoCadastro.qrSemImagem,
+            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+          );
+        }
+        return Center(
+          child: Semantics(
+            image: true,
+            // **A alternativa textual do QR e o codigo por extenso**, e nao
+            // "QR code do pet". Ninguem le um QR com leitor de tela, e uma
+            // alternativa que descreve a imagem em vez de entregar o conteudo
+            // dela nao serve para nada.
+            label: codigo,
+            child: Image(
+              image: imagem,
+              width: _ladoDoQr,
+              height: _ladoDoQr,
+              // `gaplessPlayback` fora: ele guarda o quadro ANTERIOR para
+              // mostrar durante a troca, e o quadro anterior aqui e a
+              // credencial de outra tag.
+              gaplessPlayback: false,
+            ),
+          ),
+        );
+
+      case _EstadoDoQr.falhou:
+        return FaixaDeAviso(
+          // Informativo, e nao erro: a tag existe, o codigo esta na tela e a
+          // plaquinha sai do mesmo jeito. Cor de erro aqui diria que algo se
+          // perdeu, e nao se perdeu nada.
+          peso: PesoDaFaixa.informativo,
+          texto: TextosDoCadastro.qrNaoCarregou,
+          rotuloDaAcao: MensagensDeErro.tentarDeNovo,
+          aoTocarNaAcao: aoTentarDeNovo,
+        );
+    }
   }
 }

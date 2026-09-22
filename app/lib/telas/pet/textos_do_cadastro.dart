@@ -222,6 +222,33 @@ abstract final class TextosDoCadastro {
         'tag, no próximo passo.';
   }
 
+  // -- F1.6, a imagem do QR (BICHUS-229) -----------------------------------
+  //
+  // TRES TEXTOS PARA TRES ESTADOS, e eles nao se substituem.
+  //
+  // Ate aqui o erro de imagem colapsava para `SizedBox.shrink()`: a tela ficava
+  // identica nos dois casos, e quem estava olhando nao tinha como distinguir
+  // "esta tag nao tem imagem" de "eu nao consegui buscar a imagem". O primeiro
+  // e um fato sobre a tag e nao tem o que fazer; o segundo e um fato sobre esta
+  // tentativa e tem: tentar de novo.
+
+  /// Enquanto a imagem esta sendo buscada. E o rotulo que o leitor de tela
+  /// anuncia, e nao um texto desenhado: o indicador ja ocupa o lugar.
+  static const String qrCarregando = 'Preparando a imagem do QR';
+
+  /// A emissao nao trouxe endereco de imagem. **Nada falhou**, e o texto nao
+  /// pode soar como falha: e uma tag sem arquivo de imagem, e o codigo por
+  /// extenso resolve a plaquinha do mesmo jeito.
+  static const String qrSemImagem =
+      'Esta tag não veio com imagem do QR. O código abaixo é o que vale, e '
+      'pode ser gravado na plaquinha do mesmo jeito.';
+
+  /// A busca da imagem falhou. Diz o que falhou, diz o que continua valendo, e
+  /// oferece o unico movimento que resolve.
+  static const String qrNaoCarregou =
+      'Não consegui carregar a imagem do QR. O código abaixo continua valendo, '
+      'e dá para tentar de novo.';
+
   /// UX F1.6, acessibilidade: confirmacao anunciada em regiao viva. Copiar sem
   /// retorno audivel e copiar sem saber se copiou.
   static const String codigoCopiado = 'Código copiado';

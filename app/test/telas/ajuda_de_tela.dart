@@ -25,6 +25,7 @@ import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
+import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
@@ -241,6 +242,10 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   DepositoDeIntencaoEmMemoria? envelope,
   DepositoDeSessao? deposito,
   CacheDeMeusPets? cacheDeMeusPets,
+  /// O cofre da imagem do QR. Entra por aqui porque o caso do logout precisa
+  /// OLHAR dentro dele depois de a sessao cair, e o que ele guarda e uma
+  /// credencial.
+  CofreDaImagemDoQr? cofreDoQr,
   /// A escala de fonte do sistema. `null` usa a do ambiente (1,0).
   ///
   /// Entra por aqui, e nao por um `pumpWidget` proprio no caso, porque o
@@ -274,6 +279,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         depositoDeIntencao: envelopeEmUso,
         clienteHttp: MockClient(rede),
         cacheDeMeusPets: cacheDeMeusPets,
+        cofreDoQr: cofreDoQr,
         camera: camera ?? const CameraNaoEmbarcada(),
         // O padrao e o mesmo do app quando o Firebase nao subiu: nenhum canal de
         // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`

@@ -147,10 +147,19 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// fazia da porta: o leitor nao consulta mais permissao nenhuma, porque a
 /// resposta nao mudava nada do que ele consegue fazer.
 ///
+/// **Destravado uma setima vez pela BICHUS-235**: o QR da tag passou a ser
+/// buscado com o `Authorization` que a rota exige, e a falha da imagem deixou
+/// de colapsar para `SizedBox.shrink()`.
+/// `pet/tela_pet_cadastrado.dart` trocou `Image.network` por um `Image` sobre
+/// os bytes que a camada de API baixou, e ganhou os quatro estados da imagem;
+/// `pet/textos_do_cadastro.dart` recebeu os tres textos que distinguem "esta
+/// tag nao tem imagem" de "nao consegui buscar". Nenhuma das duas encosta na
+/// porta `CameraEGaleria`, que e o que o criterio 10 protege.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '073c5c3ead12c23a2f62c8957dd80537da37d78e';
+const String _arvoreDasTelas = '648b91a93693066cc2346c754e11fca080d98101';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

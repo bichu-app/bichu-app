@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/devices_api.dart';
+import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
@@ -32,6 +33,7 @@ class BichuApp extends StatefulWidget {
     this.avisos,
     this.depositoDeIntencao,
     this.cacheDeMeusPets,
+    this.cofreDoQr,
   });
 
   final AppConfig config;
@@ -87,6 +89,11 @@ class BichuApp extends StatefulWidget {
   /// servidor em sequencia.
   final CacheDeMeusPets? cacheDeMeusPets;
 
+  /// Injetavel para teste, pelo mesmo motivo do [cacheDeMeusPets]: um caso
+  /// precisa conseguir OLHAR dentro dele depois do logout, e o que ele guarda
+  /// e uma credencial.
+  final CofreDaImagemDoQr? cofreDoQr;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -103,6 +110,7 @@ class _BichuAppState extends State<BichuApp> {
   late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
   late final CacheDeMeusPets _cacheDeMeusPets;
+  late final CofreDaImagemDoQr _cofreDoQr;
 
   @override
   void initState() {
@@ -111,6 +119,7 @@ class _BichuAppState extends State<BichuApp> {
     // receber uma copia: assim a renovacao chega a requisicao seguinte sem
     // ninguem precisar reconstruir o cliente.
     _cacheDeMeusPets = widget.cacheDeMeusPets ?? CacheDeMeusPets();
+    _cofreDoQr = widget.cofreDoQr ?? CofreDaImagemDoQr();
     _api = ApiClient(
       config: widget.config,
       cliente: widget.clienteHttp,
@@ -151,7 +160,16 @@ class _BichuAppState extends State<BichuApp> {
       // O `limpar` e sincrono e `LimpezaAoSair` devolve `Future<void>`, entao
       // o tear-off direto nao tipa (`void` nao e subtipo de `Future<void>`).
       // O fecho `async` e o que a lista pede, e nao um adiamento.
-      limpezasAoSair: <LimpezaAoSair>[() async => _cacheDeMeusPets.limpar()],
+      // A imagem do QR entra na MESMA lista, e pelo mesmo motivo (BICHUS-229).
+      // Ela carrega o codigo da tag dentro dos pixels e cai no cache global de
+      // imagem do Flutter, que nao tem nocao de sessao: descartar a tela tira a
+      // referencia viva e DEIXA a entrada no cache. Limpar no `dispose` da tela
+      // repetiria o defeito do `cacheDeMeusPets` -- a sessao derrubada por
+      // refresh recusado nao passa por tela nenhuma.
+      limpezasAoSair: <LimpezaAoSair>[
+        () async => _cacheDeMeusPets.limpar(),
+        _cofreDoQr.limpar,
+      ],
     );
     _roteador = criarRoteador(_sessao);
     _sessao.iniciar();
@@ -177,6 +195,7 @@ class _BichuAppState extends State<BichuApp> {
       sessao: _sessao,
       guarda: _guarda,
       cacheDeMeusPets: _cacheDeMeusPets,
+      cofreDoQr: _cofreDoQr,
       child: MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,
