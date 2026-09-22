@@ -92,14 +92,19 @@ import { criarTrilhaDeAuditoria } from '../../src/modules/audit/adapters/persist
 import { criarTokenSigner } from '../../src/modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../../src/modules/identity/adapters/persistence/kysely-identity-repository.js';
 import {
+  criarVerificadorDeReautenticacao,
   registrarRotasDeIdentidade,
   rotaDePedidoDeRedefinicao,
+  type DependenciasDasRotas,
 } from '../../src/modules/identity/adapters/http/routes.js';
 import { criarAuthService } from '../../src/modules/identity/application/auth-service.js';
 import { criarAvisoDeReusoAoTitular } from '../../src/modules/identity/application/aviso-de-reuso.js';
 import type { IdentityRepository } from '../../src/modules/identity/ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
-import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
+import type {
+  RegistradorDeRotas,
+  VerificadorDeReautenticacao,
+} from '../../src/shared/http/registrar-rota.js';
 import type { RateLimitEntry } from '../../src/shared/http/route-definition.js';
 
 /** O número do critério 9. Não é meta de desempenho e não afrouxa. */
@@ -213,10 +218,24 @@ before(async () => {
   const ids = criarIdGenerator(() => systemClock.now());
   const assinador = criarTokenSigner(config.token);
 
+  // BICHUS-48: `logout-all` declara `reauthScope`, entao `registrarRota`
+  // recusa este servidor sem o verificador -- e a recusa acontece DENTRO do
+  // plugin, que e por onde o Fastify responde "plugin did not start in time".
+  //
+  // O indireto e o mesmo de `src/bin/api.ts`, pela mesma ordem: o verificador
+  // precisa do servico de identidade, construido abaixo. Nenhum caso deste
+  // arquivo apresenta `X-Reauth-Token`, entao o verificador fica ligado de
+  // verdade em vez de aprovar por atalho: se algum caso alcancar `logout-all`,
+  // ele leva 401, que e o comportamento real da rota.
+  let verificarReautenticacao: VerificadorDeReautenticacao = () => {
+    throw new Error('verificador de reautenticacao chamado antes da fiacao terminar');
+  };
+
   app = criarServidor({
     problemBaseUrl: config.problemBaseUrl,
     isProduction: config.isProduction,
     teto: tetoDeTeste(),
+    reautenticacao: (request, escopo) => verificarReautenticacao(request, escopo),
   });
 
   const trilha = criarTrilhaDeAuditoria({
@@ -281,15 +300,18 @@ before(async () => {
     }),
   });
 
+  const dependenciasDasRotas: DependenciasDasRotas = {
+    auth,
+    assinador,
+    contrato,
+    issuer: config.token.issuer,
+    apiBaseUrl: config.apiBaseUrl,
+  };
+  verificarReautenticacao = criarVerificadorDeReautenticacao(dependenciasDasRotas);
+
   await app.register(
     (escopo, _opcoes, pronto) => {
-      registrarRotasDeIdentidade(escopo, {
-        auth,
-        assinador,
-        contrato,
-        issuer: config.token.issuer,
-        apiBaseUrl: config.apiBaseUrl,
-      });
+      registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
       pronto();
     },
     { prefix: PREFIXO_DA_API },

@@ -311,17 +311,30 @@ void describe('BICHUS-48 — POST /v1/auth/reauth abre a janela, e so com a senh
     );
 
     // A RESPOSTA NAO PODE DESCREVER A CONTA. Nem "esta conta nao tem senha
-    // local", nem "o e-mail nao existe", nem o e-mail em si. Quem chega aqui
-    // ja apresentou um token de acesso valido, entao o que sobra a proteger e
-    // COMO a conta se autentica -- a pergunta que decide onde o ataque insiste
-    // quando o primeiro provedor externo entrar.
-    const serializado = JSON.stringify(resposta.corpo);
-    for (const proibido of ['local', 'senha local', 'password_phc', 'provider', '@']) {
+    // local", nem o endereco de e-mail, nem nada sobre COMO ela se autentica --
+    // que e a pergunta que decide onde o ataque insiste quando o primeiro
+    // provedor externo entrar.
+    //
+    // O que esta conferencia alcanca, e o que ela nao alcanca: ela le o texto
+    // que sai. Ela NAO consegue comparar a resposta de uma conta sem senha
+    // local com a de uma com senha, porque nao existe caminho em `src/` que
+    // crie identidade `google`, `apple` ou `keycloak` (medido em 22/09, e as
+    // tres estao na restricao de `user_identities.provider`). A simetria de
+    // `reautenticar` esta escrita e testada no unitario; o dia em que o
+    // primeiro provedor externo entrar, o caso que falta e um cadastro por ele
+    // e a mesma medicao aqui.
+    const texto = `${String((resposta.corpo as { title?: unknown }).title)} ` +
+      `${String((resposta.corpo as { detail?: unknown }).detail)}`;
+    for (const proibido of ['local', 'phc', 'provider', 'externo', 'hash']) {
       assert.ok(
-        !serializado.includes(proibido),
-        `o corpo do 401 menciona '${proibido}': ${serializado}`,
+        !texto.toLowerCase().includes(proibido),
+        `o texto do 401 menciona '${proibido}' e descreve como a conta se autentica: ${texto}`,
       );
     }
+    assert.ok(
+      !JSON.stringify(resposta.corpo).includes('@'),
+      `o corpo do 401 carrega um endereco de e-mail: ${JSON.stringify(resposta.corpo)}`,
+    );
   });
 
   void it('a senha errada NAO derruba a sessao normal: a pessoa continua no app', async () => {
