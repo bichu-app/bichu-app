@@ -186,6 +186,19 @@ export function comoObjectKey(valor: string): ObjectKey {
     return valor as ObjectKey;
   }
 
+  // A FORMA NOVA que o comentário desta função antecipou ("foto de aviso do
+  // achador, por exemplo"), e ela chegou como previsto: BICHUS-35, critério 9.
+  //
+  // Mesmo desenho do original do pet — prefixo do dono do objeto, `original/`,
+  // e 128 bits de CSPRNG no nome. O prefixo separado de `pets/` não é
+  // cosmético: é o que permite a uma política de bucket, a um ciclo de vida e a
+  // uma varredura de expurgo tratarem os dois de formas diferentes, e o
+  // ADR-0010 exige isso — a foto do achador some 30 dias depois do
+  // encerramento, a do pet segue a vida do cadastro.
+  if (segmentos.length === 4 && segmentos[0] === 'found-reports' && segmentos[2] === 'original') {
+    return valor as ObjectKey;
+  }
+
   if (segmentos.length === 2 && (segmentos[0] === 'thumb' || segmentos[0] === 'card')) {
     const nome = segmentos[1] ?? '';
     const ponto = nome.lastIndexOf('.');
@@ -262,4 +275,25 @@ export function chaveDaDerivada(
   exigirAleatorioForte('da derivada pública', aleatorio);
   const nome = Buffer.from(aleatorio).toString('base64url');
   return comoObjectKey(`${variante}/${nome}.${extensao}`);
+}
+
+/**
+ * A chave da foto do aviso do achador (BICHUS-35, critério 9).
+ *
+ * `found-reports/{id}/original/{128 bits}`, no bucket **privado**. Ela nunca é
+ * servida por rota pública e nunca ganha derivada pública: a foto é vista pelo
+ * tutor dentro da conversa mediada, por URL assinada, e só.
+ *
+ * Separada de `chaveDoOriginal` e não um parâmetro a mais nela: um argumento
+ * `prefixo: string` faria o lugar onde a foto do achador é gravada virar um
+ * valor passado de fora, e a diferença entre o bucket do pet e o do achador é
+ * regra de retenção, não configuração de chamada.
+ */
+export function chaveDaFotoDoAchado(foundReportId: string, aleatorio: Uint8Array): ObjectKey {
+  exigirAleatorioForte('da foto do achado', aleatorio);
+  // Mesma porta da leitura, pelo mesmo motivo: um `/` dentro do identificador
+  // montaria uma chave com um segmento a mais, fora do prefixo do aviso.
+  return comoObjectKey(
+    `found-reports/${foundReportId}/original/${Buffer.from(aleatorio).toString('base64url')}`,
+  );
 }

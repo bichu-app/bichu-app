@@ -2231,6 +2231,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FoundReportPage' }
+        # BICHUS-35: `cursor` e `limit` PODEM recusar (maxLength, minimum,
+        # maximum), entao a operacao precisa declarar o 400 que ela vai
+        # responder. Sem esta linha `vigiarParametrosDasRotas` derruba a subida.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
 
   /found-reports/{foundReportId}:
@@ -2249,6 +2253,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FoundReport' }
+        # `foundReportId` e `format: uuid`, entao ele pode recusar e o 400
+        # precisa estar declarado (BICHUS-35).
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -2278,7 +2285,12 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FoundReport' }
+        # Mesmo `foundReportId` de `getFoundReport`, mesma razao (BICHUS-35).
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        # O achado que nao e de quem chama responde 404, nunca 403 (ADR-0021):
+        # um 403 confirmaria que aquele identificador e um achado de verdade.
+        '404': { $ref: '#/components/responses/NotFound' }
         '410':
           description: Caso ja encerrado.
           content:

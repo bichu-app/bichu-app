@@ -350,6 +350,23 @@ export const problemas = {
       nextAction: 'register_stray_found_report',
     }),
 
+  /**
+   * 410. O aviso já foi encerrado, e não há mais o que acrescentar a ele.
+   *
+   * O tipo é `conversation-closed` porque é o único 410 do vocabulário fechado do
+   * contrato que significa "este canal terminou" — os outros dois são tag
+   * revogada e token de uso único. O nome fala de conversa porque foi lá que ele
+   * nasceu; o que ele diz ao cliente é a mesma coisa nos dois casos, e é o `type`
+   * que a tela lê.
+   *
+   * **Não é 404.** O achado existe, é de quem está perguntando, e escondê-lo
+   * faria a pessoa achar que perdeu o próprio relato.
+   */
+  avisoEncerrado: (): AppError =>
+    new AppError('conversation-closed', 'Esse aviso já foi encerrado', {
+      detail: 'O caso terminou, então não dá mais para acrescentar detalhes aqui.',
+    }),
+
   limiteDeChamadas: (retryAfterSeconds: number): AppError =>
     new AppError('rate-limited', 'Tente de novo em instantes', {
       detail: 'Recebemos muitos pedidos deste aparelho em pouco tempo.',
