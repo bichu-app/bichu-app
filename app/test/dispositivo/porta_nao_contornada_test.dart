@@ -102,10 +102,13 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `pet/tela_pet_cadastrado.dart` recebeu a correcao. A trava reprovou, como
 /// tem de reprovar, e o bump e o ato deliberado que ela cobra.
 ///
+/// **Destravado uma terceira vez pela BICHUS-154**: o codigo da tag encolheu
+/// para 16 caracteres e a tela que o exibe acompanhou.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = 'cf0f8747f5bba5b451aa47af0b68d2fb2692e92b';
+const String _arvoreDasTelas = '58be8c8a91d2839b7a4912ffed1608f96173fa59';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

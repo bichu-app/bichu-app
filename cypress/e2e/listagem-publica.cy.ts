@@ -15,6 +15,7 @@
 import { exigirRota, caminhoDe } from '../apoio/rotas';
 import { criarConta, criarPet, emitirTag } from '../apoio/massa';
 import type { OuProblema, PaginaPublicaDePerdidos } from '../apoio/respostas';
+import { codigoBemFormadoInexistente } from '../apoio/codigo-da-tag';
 
 const CIDADE = 'São Paulo';
 
@@ -139,7 +140,7 @@ describe('@regressao listagem pública de perdidos', () => {
     criarConta('listagem-oraculo').then((conta) => {
       criarPet(conta).then((petId) => {
         emitirTag(conta, petId).then((tag) => {
-          const codigoInexistente = '0123456789ABCDEFGHJKMNPQRS';
+          const codigoInexistente = codigoBemFormadoInexistente();
           let totalComCodigoReal = -1;
 
           cy.request<OuProblema<PaginaPublicaDePerdidos>>({ method: 'GET', url: caminhoDe('listPublicLostPets'), failOnStatusCode: false, qs: { city: CIDADE, q: tag.code } })

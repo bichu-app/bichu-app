@@ -12,11 +12,29 @@
 import { exigirRota, caminhoDe } from '../apoio/rotas';
 import { criarConta, criarPet, emitirTag, autorizacao, chaveDeIdempotencia } from '../apoio/massa';
 import type { AvisoCriado, OuProblema, ResolucaoDeTag } from '../apoio/respostas';
+import { simboloDeVerificacao } from '../apoio/codigo-da-tag';
 
-/** 26 caracteres do alfabeto Crockford, bem formado e inexistente. */
-const CODIGO_BEM_FORMADO_INEXISTENTE = '0123456789ABCDEFGHJKMNPQRS';
+/**
+ * 16 caracteres do alfabeto Crockford, bem formado e inexistente, **com símbolo
+ * de verificação válido** (ADR-0004, Emenda 1).
+ *
+ * O dígito não é decoração aqui: sem ele este cenário passa a receber **400** e
+ * deixa de exercitar o 404 que ele existe para exercitar — **continuando
+ * verde**. É o caso mais fácil de quebrar em silêncio de toda a mudança, e a
+ * asserção logo abaixo do `beforeEach` existe para que ele não quebre calado.
+ *
+ * Conferido contra o gerador: `gerarCodigoDaTag(0102030405060708090a)`.
+ */
+const CODIGO_BEM_FORMADO_INEXISTENTE = '41061050R3GG28AY';
 /** `U` está fora do alfabeto Crockford: não normaliza para um código. */
-const TEXTO_QUE_NAO_NORMALIZA = 'UUUUUUUUUUUUUUUUUUUUUUUUUU';
+const TEXTO_QUE_NAO_NORMALIZA = 'UUUUUUUUUUUUUUUU';
+/**
+ * Bem formado no tamanho e no alfabeto, e com o **último caractere trocado**:
+ * só o símbolo de verificação o separa do de cima. É 400, e não 404.
+ */
+const CODIGO_COM_DIGITO_ERRADO = '41061050R3GG28A0';
+/** O formato anterior, de 26 caracteres. Corte seco: também é 400. */
+const CODIGO_DO_FORMATO_ANTIGO = '0123456789ABCDEFGHJKMNPQRS';
 
 describe('@regressao tag revogada, código inexistente e texto que não normaliza', () => {
   // Antes de cada caso, e não uma vez só: sem a prova de rota, "esperava 400,
@@ -24,6 +42,18 @@ describe('@regressao tag revogada, código inexistente e texto que não normaliz
   // não existir.
   beforeEach(() => {
     exigirRota('resolveTagCode', { code: CODIGO_BEM_FORMADO_INEXISTENTE });
+
+    // A conferência local, antes de qualquer requisição: um código de fixture
+    // com dígito inválido faz o cenário do 404 receber 400 e continuar verde.
+    // Aqui a quebra é imediata e diz o número da posição.
+    expect(
+      CODIGO_BEM_FORMADO_INEXISTENTE[15],
+      `${CODIGO_BEM_FORMADO_INEXISTENTE} tem símbolo de verificação inválido: o cenário do 404 viraria 400`,
+    ).to.eq(simboloDeVerificacao(CODIGO_BEM_FORMADO_INEXISTENTE.slice(0, 15)));
+    expect(
+      CODIGO_COM_DIGITO_ERRADO[15],
+      'o código do caso de 400 precisa ter o dígito ERRADO, senão ele testa o 404',
+    ).to.not.eq(simboloDeVerificacao(CODIGO_COM_DIGITO_ERRADO.slice(0, 15)));
   });
 
   it('tag revogada responde 410 com next_action, e nunca 404', () => {
@@ -69,6 +99,47 @@ describe('@regressao tag revogada, código inexistente e texto que não normaliz
           });
         });
       });
+    });
+  });
+
+  it('o código de teste tem dígito de verificação válido, senão o 404 abaixo é 400', () => {
+    // A guarda do cenário, e ela vem ANTES do caso que depende dela. Sem isto,
+    // um código de fixture refeito sem dígito válido faz o caso seguinte
+    // receber 400, deixar de testar o 404 e continuar verde: ninguém olha um
+    // teste que passa. Aqui a quebra é ruidosa e diz o motivo.
+    cy.request<OuProblema<ResolucaoDeTag>>({
+      method: 'GET',
+      url: caminhoDe('resolveTagCode', { code: CODIGO_BEM_FORMADO_INEXISTENTE }),
+      failOnStatusCode: false,
+    }).then((r) => {
+      expect(
+        r.status,
+        `${CODIGO_BEM_FORMADO_INEXISTENTE} recebeu 400: o símbolo de verificação não bate, e este cenário deixaria de exercitar o 404`,
+      ).to.not.eq(400);
+    });
+  });
+
+  it('um caractere trocado é 400 antes de tocar o banco, e não 404', () => {
+    // O ganho de produto inteiro desta mudança está neste caso. Antes, quem
+    // errava uma letra recebia "esse código não é de nenhuma tag do Bichu", que
+    // acusa a plaquinha quando a culpa foi do dedo. Os dois códigos diferem em
+    // um caractere e caem em respostas diferentes.
+    cy.request<OuProblema<ResolucaoDeTag>>({
+      method: 'GET',
+      url: caminhoDe('resolveTagCode', { code: CODIGO_COM_DIGITO_ERRADO }),
+      failOnStatusCode: false,
+    }).then((r) => {
+      expect(r.status, 'dígito de verificação que não bate é erro de digitação').to.eq(400);
+    });
+  });
+
+  it('o formato antigo de 26 caracteres é 400: não há duas gerações de plaquinha', () => {
+    cy.request<OuProblema<ResolucaoDeTag>>({
+      method: 'GET',
+      url: caminhoDe('resolveTagCode', { code: CODIGO_DO_FORMATO_ANTIGO }),
+      failOnStatusCode: false,
+    }).then((r) => {
+      expect(r.status, 'corte seco: 26 caracteres é tamanho errado como qualquer outro').to.eq(400);
     });
   });
 

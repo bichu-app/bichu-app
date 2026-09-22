@@ -102,6 +102,20 @@ export interface AppConfig {
    * do tamanho está no adaptador, junto do algoritmo que a exige.
    */
   readonly tagCodeKey: Buffer;
+  /**
+   * Chave do índice cego do código da tag, 32 bytes em hexadecimal
+   * (`TAG_CODE_INDEX_KEY`). É ela que entra no HMAC-SHA-256 que produz
+   * `code_hash` (ADR-0004, Emenda 1, §3.1).
+   *
+   * **Não é a mesma de `tagCodeKey`, e a subida recusa se for.** Quem vaza uma
+   * vazaria a outra, e o índice cego deixaria de ser cego para quem já tivesse
+   * a chave do `code_ciphertext`.
+   *
+   * **Não é rotacionável sozinha:** o valor buscado depende dela, então trocá-la
+   * exige recalcular `code_hash` da base inteira a partir de `code_ciphertext`.
+   * O procedimento está em `infra/roteiro-provisionamento.md`, passo 4.1.
+   */
+  readonly tagCodeIndexKey: Buffer;
   readonly openapiSpecPath: string;
   readonly version: string;
   readonly objectStorage: ObjectStorageConfig;
@@ -569,6 +583,26 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
+  // O índice cego (ADR-0004, Emenda 1, §3.1). A recusa aqui é o ponto inteiro
+  // desta variável: chave ausente que degradasse para hash sem chave devolveria
+  // o estado em que um dump do banco entrega a base de códigos, e nenhum teste
+  // funcional acusaria, porque a resolução continuaria encontrando as tags.
+  const tagCodeIndexKey = Buffer.from(requireEnv('TAG_CODE_INDEX_KEY').trim(), 'hex');
+  if (tagCodeIndexKey.length !== 32) {
+    throw new Error(
+      'TAG_CODE_INDEX_KEY precisa ter 32 bytes em hexadecimal (64 caracteres) e tem ' +
+        `${String(tagCodeIndexKey.length)}. Ela e a chave do indice cego de ` +
+        '`code_hash` (ADR-0004). Gere com: openssl rand -hex 32',
+    );
+  }
+  if (tagCodeIndexKey.equals(tagCodeKey)) {
+    throw new Error(
+      'TAG_CODE_INDEX_KEY e TAG_CODE_KEY precisam ser chaves diferentes. A ' +
+        'primeira indexa e a segunda cifra: iguais, quem vaza uma vaza a outra ' +
+        'e o indice cego deixa de ser cego.',
+    );
+  }
+
   // As duas credenciais são exigidas juntas: uma sozinha assina requisição que
   // o armazenamento recusa, e a falha aparece no primeiro envio de foto de um
   // usuário real, e não na subida.
@@ -670,6 +704,7 @@ export function loadAppConfig(): AppConfig {
     },
     ipHmacKey,
     tagCodeKey,
+    tagCodeIndexKey,
     objectStorage,
     mail,
     push: carregarPush(),

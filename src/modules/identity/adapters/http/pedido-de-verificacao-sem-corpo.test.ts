@@ -102,6 +102,7 @@ function montar(): RegistradorDeRotas {
       uuidv7: () => naoUsado('ids.uuidv7'),
       opaqueToken: () => naoUsado('ids.opaqueToken'),
       random128: () => naoUsado('ids.random128'),
+      random80: () => naoUsado('ids.random80'),
     },
     clock: relogioParado(INSTANTE_FIXO),
     janelas: {

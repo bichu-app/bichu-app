@@ -326,6 +326,9 @@ function montar(): Bancada {
       uuidv7: () => 'id-novo',
       opaqueToken: () => 'refresh-novo' as OpaqueToken,
       random128: () => new Uint8Array(16),
+      // BICHUS-154: a porta passou a ter `random80` (codigo da tag). Identidade
+      // nao emite tag nenhuma; o valor so precisa existir e ser estavel.
+      random80: () => new Uint8Array(10),
     },
     clock: relogioParado(AGORA),
     janelas: {

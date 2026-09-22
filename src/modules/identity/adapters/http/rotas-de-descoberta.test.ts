@@ -97,6 +97,7 @@ function ambiente(): Record<string, string> {
     JWT_NEXT_PRIVATE_KEY: PEM_ROTACAO,
     IP_HMAC_KEY: Buffer.alloc(32, 7).toString('base64'),
     TAG_CODE_KEY: 'c1'.repeat(32),
+    TAG_CODE_INDEX_KEY: 'd2'.repeat(32),
     OBJECT_STORAGE_REGION: 'regiao-de-teste',
     OBJECT_STORAGE_ACCESS_KEY_ID: 'descartavel',
     OBJECT_STORAGE_SECRET_ACCESS_KEY: 'descartavel-segredo',

@@ -167,9 +167,19 @@ export const problemas = {
    * encontramos este código" é útil, e não vaza nada: os dois casos contam
    * igualmente para o limite de tentativas inválidas.
    */
+  /**
+   * O 400 da digitação. Desde a Emenda 1 do ADR-0004 ele cobre DOIS casos que a
+   * pessoa não distingue e não precisa distinguir: tamanho errado e símbolo de
+   * verificação que não bate. O segundo é novo e é o que tira o erro de
+   * digitação do 404 — antes, um caractere trocado virava "esse código não é de
+   * nenhuma tag do Bichu", que acusava a plaquinha quando a culpa era do dedo.
+   *
+   * O texto não diz "dígito de verificação". Quem está na rua com um animal no
+   * colo precisa saber o que fazer, e o que fazer é o mesmo nos dois casos.
+   */
   tagCodeMalformado: (): AppError =>
     new AppError('tag-code-malformed', 'Confira o código da plaquinha', {
-      detail: 'O código tem 26 caracteres. Confira e digite de novo, com ou sem os hífens.',
+      detail: 'O código tem 16 caracteres. Confira e digite de novo, com ou sem os hífens.',
     }),
 
   /**

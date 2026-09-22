@@ -219,6 +219,10 @@ export async function main(): Promise<void> {
     // texto, porque nada deste arquivo é carregado por teste.
     baseDaTag: config.tagBaseUrl,
     baseDaWeb: config.webBaseUrl,
+    // `code_hash` é HMAC com esta chave, e não SHA-256 sem sal (ADR-0004,
+    // Emenda 1, §3.1). Se ela for a mesma de `tagCodeKey`, `loadAppConfig()`
+    // já recusou subir antes desta linha.
+    chaveDoIndiceDoCodigo: config.tagCodeIndexKey,
   });
 
   // Declarado ANTES do cadastro porque o cadastro depende dele: a ficha do pet
@@ -333,6 +337,7 @@ export async function main(): Promise<void> {
     contrato,
     clock: systemClock,
     ipHmacKey: config.ipHmacKey,
+    chaveDoIndiceDoCodigo: config.tagCodeIndexKey,
   };
 
   // Precisa vir ANTES do registro das rotas: o gancho `onRoute` só enxerga o

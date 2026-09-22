@@ -98,6 +98,7 @@ function geradorSequencial(): IdGenerator {
     uuidv7: () => `id-${String(++n).padStart(4, '0')}`,
     opaqueToken: () => `tok-${String(++n).padStart(4, '0')}` as OpaqueToken,
     random128: () => new Uint8Array(16),
+    random80: () => new Uint8Array(10),
   };
 }
 

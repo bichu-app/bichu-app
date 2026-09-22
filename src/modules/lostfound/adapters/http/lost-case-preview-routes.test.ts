@@ -138,6 +138,7 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
     uuidv7: () => '018f3a2b-0000-7000-8000-000000000001',
     opaqueToken: naoDeviaSerChamado,
     random128: () => new Uint8Array(16),
+    random80: () => new Uint8Array(10),
   };
   const trilha: AuditLog = { record: () => Promise.resolve() };
 

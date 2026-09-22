@@ -102,6 +102,7 @@ export function criarIdGenerator(agora: () => number): IdGenerator {
     // cabeçalho, e base64 padrão exigiria escape nos dois.
     opaqueToken: () => randomBytes(32).toString('base64url') as OpaqueToken,
     random128: () => new Uint8Array(randomBytes(16)),
+    random80: () => new Uint8Array(randomBytes(10)),
   };
 }
 

@@ -139,6 +139,8 @@ export interface DependenciasDasRotasDeTag {
   readonly contrato: Contrato;
   readonly clock: Clock;
   readonly ipHmacKey: Buffer;
+  /** Chave do índice cego de `code_hash` (ADR-0004, Emenda 1, §3.1). */
+  readonly chaveDoIndiceDoCodigo: Buffer;
 }
 
 /** Chamador que passou pelo token. `userId` é definido, e o tipo diz isso. */
@@ -442,7 +444,7 @@ export function registrarRotasDeTags(
           // que aqui é o próprio código da tag. Com conta, é o usuário. Nos dois
           // casos a chave de um chamador não devolve a resposta de outro.
           donoOuToken:
-            chamador.userId ?? `tag:${hashDoCodigoDaTag(canonico).toString('base64')}`,
+            chamador.userId ?? `tag:${hashDoCodigoDaTag(canonico, deps.chaveDoIndiceDoCodigo).toString('base64')}`,
           endpoint: `${rotaDeAvisoPelaTag.method.toUpperCase()} ${rotaDeAvisoPelaTag.path}`,
           corpo,
           agoraEmMilissegundos: deps.clock.now(),

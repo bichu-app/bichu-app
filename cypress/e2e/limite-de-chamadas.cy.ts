@@ -19,14 +19,17 @@
  */
 import { exigirRota, caminhoDe } from '../apoio/rotas';
 import { criarConta, criarPet, emitirTag, chaveDeIdempotencia } from '../apoio/massa';
+import { codigoBemFormadoInexistente } from '../apoio/codigo-da-tag';
 import type { AvisoCriado, OuProblema, PaginaPublicaDePerdidos, ResolucaoDeTag } from '../apoio/respostas';
 
-const CODIGO_INVALIDO_BEM_FORMADO = () => {
-  const alfabeto = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
-  let saida = '';
-  for (let i = 0; i < 26; i += 1) saida += alfabeto[Math.floor(Math.random() * alfabeto.length)];
-  return saida;
-};
+/**
+ * Um código bem formado e inexistente, com **símbolo de verificação válido**.
+ *
+ * Sem o símbolo, todas as tentativas abaixo viram 400 por erro de formato, e o
+ * teto de `invalid_attempts` deixa de ser exercitado — o cenário continuaria
+ * verde medindo outra coisa (ADR-0004, Emenda 1, §13.4).
+ */
+const CODIGO_INVALIDO_BEM_FORMADO = codigoBemFormadoInexistente;
 
 describe('@regressao limite de chamadas', () => {
   it('a sexta tentativa de aviso na mesma hora para o mesmo código não é recusada', () => {

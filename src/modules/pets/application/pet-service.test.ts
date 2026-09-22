@@ -116,6 +116,7 @@ function montar(): { servico: PetService; repo: RepositorioFalso; eventos: Audit
       uuidv7: () => `pet-${(proximo += 1)}`,
       opaqueToken: () => 'x' as never,
       random128: () => new Uint8Array(16),
+      random80: () => new Uint8Array(10),
     },
     clock: relogioParado(),
     trilha,

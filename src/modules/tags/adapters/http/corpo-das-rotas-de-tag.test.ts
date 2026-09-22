@@ -74,7 +74,13 @@ import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const TAG = '018f3a2b-0000-7000-8000-0000000000dd' as TagId;
-const CODIGO = '7K2F-9QJB-3XR0-5TWD-8MNC-VH12-34';
+// BICHUS-154 encurtou o codigo da tag para 16 caracteres (15 de aleatoriedade,
+// 75 bits exatos, mais 1 de verificacao). O valor antigo, de 30, passou a ser
+// recusado por `normalizarCodigoDaTag` antes de chegar ao manipulador -- os
+// casos deste arquivo levavam 400 `tag-code-malformed` e nao mediam mais o que
+// dizem medir. Este e o mesmo par usado em `tag-code.test.ts` e em
+// `tag-service.test.ts`, com digito de verificacao valido.
+const CODIGO = 'GQSM-0XHB-T4D9-G31S';
 const AGORA = 1_800_000_000_000 as Instant;
 const TOKEN_DE_ACESSO = 'acesso-do-tutor';
 const CHAVE_DE_IDEMPOTENCIA = '018f3a2b-0000-7000-8000-000000000e01';
@@ -195,6 +201,9 @@ function montar(): Bancada {
     },
     opaqueToken: () => `token-${String(sequencia)}` as OpaqueToken,
     random128: () => new Uint8Array(16).fill(0x2b),
+    // Mesmo valor fixo que `tag-service.test.ts` usa, para os dois falarem do
+    // mesmo codigo quando alguem comparar os dois arquivos.
+    random80: () => new Uint8Array(10).fill(0x2b),
   };
   const cifra: SecretCipher = {
     encrypt: (texto) => Promise.resolve(new TextEncoder().encode(texto)),
@@ -207,6 +216,9 @@ function montar(): Bancada {
     ids,
     clock,
     trilha,
+    // BICHUS-154: o resumo do codigo deixou de ser SHA-256 sem sal e passou a
+    // ser com chave. Mesmo valor fixo de `tag-service.test.ts`.
+    chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
     baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
   });
@@ -243,6 +255,7 @@ function montar(): Bancada {
     contrato,
     clock,
     ipHmacKey: Buffer.alloc(32, 7),
+    chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
   };
   void app.register(
     (escopo, _opcoes, pronto) => {

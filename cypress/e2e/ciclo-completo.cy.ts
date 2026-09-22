@@ -57,7 +57,13 @@ describe('@critico ciclo completo do caso por API', () => {
   it('3. emite a tag e recebe o código em claro, uma única vez', () => {
     emitirTag(conta, exigirEtapaAnterior(petId, 'o pet da etapa 2')).then((tag) => {
       codigoDaTag = tag.code;
-      expect(codigoDaTag, 'código normalizado de 26 caracteres').to.have.length(26);
+      // 16: 15 símbolos de aleatoriedade (75 bits) e 1 de verificação
+      // (ADR-0004, Emenda 1). O número vira plaquinha impressa, e é por isso
+      // que ele está afirmado aqui e não só no teste de domínio.
+      expect(codigoDaTag, 'código normalizado de 16 caracteres').to.have.length(16);
+      expect(codigoDaTag, 'quatro grupos de quatro na forma impressa').to.match(
+        /^[0-9A-HJKMNP-TV-Z]{16}$/,
+      );
     });
 
     // `listPetTags` nunca devolve o código em claro, nem para o dono.

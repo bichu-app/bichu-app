@@ -166,6 +166,7 @@ async function bancadaDePets(): Promise<Bancada> {
         throw new Error('não usado');
       },
       random128: () => new Uint8Array(16),
+      random80: () => new Uint8Array(10),
     },
     clock: relogioParado(),
     trilha: { record: () => Promise.resolve() },
@@ -391,7 +392,11 @@ void describe('código da tag: o `type` é o que o contrato declara', () => {
   void it('código com a forma certa passa pela borda e chega ao manipulador', async () => {
     const { app, alcancado } = await bancadaDaTag();
     try {
-      const codigo = 'ABCD-EFGH-JKMN-PQRS-TVWX-YZ';
+      // BICHUS-154: 16 caracteres, nao 27. O `pattern` do contrato foi de
+      // `{15,39}` para `{15,23}` -- a amostra antiga deixou de passar na borda,
+      // e o caso media a recusa em vez da travessia. O valor e o mesmo exemplo
+      // que o proprio contrato declara em `TagCode`.
+      const codigo = 'GQSM-0XHB-T4D9-G31S';
       const resposta = await app.inject({ method: 'GET', url: `${PREFIXO}/tags/${codigo}` });
       assert.equal(resposta.statusCode, 200);
       assert.deepEqual(alcancado, [codigo]);

@@ -280,6 +280,7 @@ function montar(
         return `segredo-opaco-numero-${String(contador)}` as OpaqueToken;
       },
       random128: () => new Uint8Array(16),
+      random80: () => new Uint8Array(10),
     },
     clock: relogioParado(AGORA),
     janelas: {

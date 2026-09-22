@@ -42,7 +42,10 @@ export type AbsoluteUrl = Brand<string, 'AbsoluteUrl'>;
 export type OpaqueToken = Brand<string, 'OpaqueToken'>;
 export type TokenHash = Brand<string, 'TokenHash'>;
 
-/** Código da tag JÁ normalizado: 26 caracteres, Crockford Base32, maiúsculas. */
+/**
+ * Código da tag JÁ normalizado: 16 caracteres, Crockford Base32, maiúsculas —
+ * 15 de aleatoriedade (75 bits) e 1 de verificação, este já conferido.
+ */
 export type TagCodeCanonical = Brand<string, 'TagCodeCanonical'>;
 
 /** Endereço público do pet, sem o arroba. */

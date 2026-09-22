@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../acessibilidade/anunciar.dart';
 import '../theme/bichu_colors.dart';
@@ -37,6 +38,7 @@ class BichuField extends StatelessWidget {
     this.capitalizacao = TextCapitalization.none,
     this.correcaoAutomatica = true,
     this.limite,
+    this.formatadores,
     this.linhas = 1,
     this.exemplo,
   });
@@ -72,6 +74,10 @@ class BichuField extends StatelessWidget {
   /// depois, porque o limite e do contrato e nao ha ambiguidade a resolver.
   final int? limite;
 
+  /// Formatadores aplicados a cada toque. Hoje o unico e a mascara do codigo
+  /// da tag; o campo nao conhece nenhum deles, e e essa a intencao.
+  final List<TextInputFormatter>? formatadores;
+
   /// Quantas linhas o campo mostra. Acima de uma, ele e de texto corrido.
   final int linhas;
 
@@ -106,6 +112,7 @@ class BichuField extends StatelessWidget {
           focusNode: foco,
           enabled: habilitado,
           maxLength: limite,
+          inputFormatters: formatadores,
           maxLines: obscurecer ? 1 : linhas,
           minLines: obscurecer ? 1 : linhas,
           keyboardType: tipoDeTeclado,

@@ -48,7 +48,12 @@ const OUTRO_TUTOR = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const TAG = '018f3a2b-0000-7000-8000-0000000000dd' as TagId;
 
-const CODIGO = '7K2F-9QJB-3XR0-5TWD-8MNC-VH12-34';
+/**
+ * A forma IMPRESSA de um código válido: quatro grupos de quatro, com símbolo de
+ * verificação correto. O serviço normaliza antes de qualquer coisa, então esta
+ * bancada exercita a volta da plaquinha digitada com hífen.
+ */
+const CODIGO = 'GQSM-0XHB-T4D9-G31S';
 const AGORA = 1_800_000_000_000;
 
 function petPadrao(): TagResolvida['pet'] {
@@ -161,6 +166,7 @@ function servico(estado: EstadoDoRepositorio) {
     },
     opaqueToken: () => `token-${String(sequencia)}` as OpaqueToken,
     random128: () => new Uint8Array(16).fill(0x2b),
+    random80: () => new Uint8Array(10).fill(0x2b),
   };
   const cifra: SecretCipher = {
     encrypt: (texto) => Promise.resolve(new TextEncoder().encode(texto)),
@@ -182,6 +188,7 @@ function servico(estado: EstadoDoRepositorio) {
       // primeira leva de plaquinha prensada (ADR-0004).
       baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
       baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
+      chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     }),
     contadores,
     eventos,
@@ -372,9 +379,9 @@ void describe('issuePetTag: a única resposta que traz o código em claro', () =
 
     assert.equal(gravada.codeHash.length, 32);
     assert.equal(gravada.codeSuffix, emitida.codigo.slice(-4));
-    // O que a coluna de resumo guarda não é o código: um SHA-256 de 32 bytes
-    // não contém os 26 caracteres, e a conferência abaixo é a que acusaria
-    // alguém trocando o resumo pelo valor.
+    // O que a coluna de resumo guarda não é o código: um HMAC-SHA-256 de 32
+    // bytes não contém os 16 caracteres, e a conferência abaixo é a que
+    // acusaria alguém trocando o resumo pelo valor.
     assert.notEqual(Buffer.from(gravada.codeHash).toString('utf8'), emitida.codigo);
   });
 

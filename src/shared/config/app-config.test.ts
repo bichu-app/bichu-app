@@ -65,6 +65,7 @@ function ambienteCompleto(): Record<string, string> {
     JWT_NEXT_PRIVATE_KEY: PEM_ROTACAO,
     IP_HMAC_KEY: Buffer.alloc(32, 7).toString('base64'),
     TAG_CODE_KEY: 'c1'.repeat(32),
+    TAG_CODE_INDEX_KEY: 'd2'.repeat(32),
     OBJECT_STORAGE_REGION: 'regiao-de-teste',
     OBJECT_STORAGE_ACCESS_KEY_ID: 'descartavel',
     OBJECT_STORAGE_SECRET_ACCESS_KEY: 'descartavel-segredo',
@@ -377,5 +378,46 @@ void describe('TAG_BASE_URL e WEB_BASE_URL: a separação que registra o irrever
   void it('a barra do fim é aparada: `base//t/codigo` é outro endereço', () => {
     aplicar({ ...ambienteCompleto(), TAG_BASE_URL: 'https://tag.exemplo.invalid/' });
     assert.equal(loadAppConfig().tagBaseUrl, 'https://tag.exemplo.invalid');
+  });
+});
+
+/**
+ * `TAG_CODE_INDEX_KEY`: a chave do índice cego (ADR-0004, Emenda 1, §3.1).
+ *
+ * Esta é a isca do critério 2, e ela existe porque o modo de falha perigoso é
+ * silencioso: uma chave ausente que "degradasse" para hash sem chave devolveria
+ * exatamente o estado que esta história foi escrita para impedir, e nenhum
+ * teste funcional acusaria — a resolução continuaria encontrando as tags. O que
+ * prova a guarda é a SUBIDA QUE MORRE, citando o nome da variável.
+ */
+void describe('TAG_CODE_INDEX_KEY: índice cego ausente não degrada, derruba a subida', () => {
+  void it('ausente: a subida morre citando a variável', () => {
+    aplicar({ ...ambienteCompleto(), TAG_CODE_INDEX_KEY: undefined });
+    assert.throws(loadAppConfig, /TAG_CODE_INDEX_KEY/);
+  });
+
+  void it('curta: 16 bytes não viram uma chave mais fraca, viram recusa', () => {
+    aplicar({ ...ambienteCompleto(), TAG_CODE_INDEX_KEY: 'd2'.repeat(16) });
+    assert.throws(loadAppConfig, /TAG_CODE_INDEX_KEY/);
+  });
+
+  void it('a mensagem diz o tamanho visto, porque é isso que o operador conserta', () => {
+    aplicar({ ...ambienteCompleto(), TAG_CODE_INDEX_KEY: 'd2'.repeat(16) });
+    assert.throws(loadAppConfig, /16/);
+  });
+
+  void it('é DIFERENTE de TAG_CODE_KEY: a mesma chave cifrando e indexando é um erro', () => {
+    // Reusar a chave da cifra como chave do índice não quebra nada visível, e é
+    // por isso que precisa ser recusado aqui: quem vaza uma vaza a outra, e o
+    // índice cego deixa de ser cego para quem tiver a chave do `code_ciphertext`.
+    aplicar({ ...ambienteCompleto(), TAG_CODE_INDEX_KEY: 'c1'.repeat(32) });
+    assert.throws(loadAppConfig, /TAG_CODE_INDEX_KEY/);
+  });
+
+  void it('com 32 bytes em hexadecimal, sobe e entrega os bytes', () => {
+    aplicar(ambienteCompleto());
+    const config = loadAppConfig();
+    assert.equal(config.tagCodeIndexKey.length, 32);
+    assert.equal(config.tagCodeIndexKey.toString('hex'), 'd2'.repeat(32));
   });
 });
