@@ -38,6 +38,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { carregarContrato } from '../../../../shared/http/contract.js';
 import { criarServidor } from '../../../../shared/http/server.js';
+import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import type { AbsoluteUrl } from '../../../../shared/types/brands.js';
 import { registrarRotaDoWebhookDeEntrega } from './webhook-de-entrega.js';
 import type { EventoParaGravar, RegistroDeEntregas } from '../../ports/registro-de-entregas.js';
@@ -81,7 +82,11 @@ function subirApp(opcoes: { segredoDoServidor?: string } = {}): Bancada {
     },
   };
 
-  const app = criarServidor({ problemBaseUrl: BASE_DE_PROBLEMA, isProduction: false });
+  const app = criarServidor({
+    problemBaseUrl: BASE_DE_PROBLEMA,
+    isProduction: false,
+    teto: tetoDeTeste(),
+  });
 
   app.addHook('onRequest', (request, _reply, pronto) => {
     for (const nivel of ['info', 'warn', 'error'] as const) {

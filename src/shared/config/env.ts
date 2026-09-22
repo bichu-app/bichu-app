@@ -37,6 +37,20 @@ export function boolEnv(name: string, fallback = false): boolean {
  * qualquer porta.
  */
 export function assertSafeBoot(): void {
+  // ANTES do desvio de produção abaixo, e de propósito: esta trava vale em todo
+  // ambiente que não seja `dev`, e não só em produção. Homologação subindo sem
+  // teto é a mesma classe de silêncio que fez a BICHUS-178 existir — a diferença
+  // é que ali ninguém percebe, porque ninguém está martelando homologação.
+  const ambiente = optionalEnv('ENVIRONMENT') ?? 'dev';
+  if (optionalEnv('RATE_LIMIT_DRIVER') === 'disabled' && ambiente !== 'dev') {
+    throw new Error(
+      `RATE_LIMIT_DRIVER=disabled com ENVIRONMENT=${ambiente}. ` +
+        'O contador desligado sempre permite, então TODA rota passa a servir sem ' +
+        'teto e nada acusa — que é exatamente o estado que a BICHUS-178 conserta. ' +
+        'Ele só é legítimo em `dev` e em teste. Use `memory` ou `postgres`.',
+    );
+  }
+
   const isProduction = process.env.NODE_ENV === 'production';
   if (!isProduction) return;
 
