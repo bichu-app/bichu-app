@@ -18,6 +18,39 @@ import '../../dispositivo/camera_e_galeria.dart';
 class RascunhoDePet extends ChangeNotifier {
   RascunhoDePet();
 
+  /// O rascunho que a tela de EDICAO abre (BICHUS-61, criterio 1).
+  ///
+  /// **Copia o pet INTEIRO, e nao so o que a tela mostra.** `PATCH
+  /// /pets/{petId}` recebe um `PetInput` completo e o repositorio grava todas
+  /// as colunas a partir dele: campo que nao viaja e gravado como nulo. Um
+  /// rascunho que soubesse ler so nome, especie e porte apagaria cor, sexo e
+  /// sinais particulares a cada correcao de nome, no servidor, sem erro nenhum
+  /// e sem nada no app acusando. **O que este construtor nao copiar, a edicao
+  /// apaga.**
+  ///
+  /// [Pet.versaoDaReferencia] vem junto e volta como veio. Trocar pela versao
+  /// corrente responderia "qual e a lista de hoje" a uma pergunta que e "de
+  /// qual lista este pet foi escolhido", e reescreveria a procedencia do dado
+  /// por causa de uma edicao de nome.
+  ///
+  /// A foto **nao** entra: [foto] e uma escolha local ainda nao enviada, e o
+  /// pet ja tem as dele no servidor. Acrescentar ou trocar foto na edicao
+  /// (criterios 4 e 9) e envio proprio, com o `pet_id` que ja existe.
+  factory RascunhoDePet.doPet(Pet pet) {
+    return RascunhoDePet()
+      ..nome = pet.nome
+      ..especie = pet.especie
+      ..porte = pet.porte
+      ..sexo = pet.sexo
+      ..breedCode = pet.racaCodigo
+      ..breedFreeText = pet.racaTextoLivre ?? ''
+      ..refDataVersion = pet.versaoDaReferencia
+      ..corPrincipalCodigo = pet.corPrincipalCodigo
+      ..segundaCorCodigo = pet.segundaCorCodigo
+      ..sinaisParticulares = pet.sinaisParticulares ?? ''
+      ..cuidados = pet.cuidados ?? '';
+  }
+
   // -- Passo 1, F1.3 --------------------------------------------------------
 
   String nome = '';
