@@ -384,6 +384,18 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       OBJECT_BUCKET_PUBLIC: ${OBJECT_BUCKET_PUBLIC:-bichu-media-public}
+      # O Caddyfile le `{$HOSTS_EXTRA_APP}` e `{$HOSTS_EXTRA_MIDIA}` desde a
+      # BICHUS-146, para o apex entrar AO LADO de homologacao em vez de no
+      # lugar dela. Sem a declaracao aqui as duas chegam vazias ao container,
+      # os dois espacos reservados colapsam, e o Caddy sobe conhecendo so
+      # `hml` e `img-hml` -- configuracao valida, apex mudo, e nada acusa.
+      # Medido em 21/09: `caddy adapt` listava dois hosts onde deviam ser
+      # quatro. O `.env` alimenta a interpolacao do compose, nao o processo.
+      #
+      # O padrao vazio e deliberado: em desenvolvimento a linha do Caddyfile
+      # colapsa para a base sozinha e nada muda.
+      HOSTS_EXTRA_APP: ${HOSTS_EXTRA_APP:-}
+      HOSTS_EXTRA_MIDIA: ${HOSTS_EXTRA_MIDIA:-}
     depends_on: [api, objeto]
     restart: unless-stopped
 
