@@ -119,6 +119,23 @@ jobs:
           fi
           echo "artefato_hospedado=$artefato" >> "$GITHUB_ENV"
 
+      # 2b. BICHUS-210: o destino hospedado precisa dizer de QUAL COMMIT saiu.
+      #
+      # Aqui SEM commit esperado, de proposito, e a ordem importa. A VM pode
+      # estar legitimamente atras deste repositorio, e cobrar dela o HEAD daqui
+      # reprovaria por um motivo que nao e dela -- que e como um portao vermelho
+      # por motivo errado vira `continue-on-error` na semana seguinte. O que se
+      # cobra neste ponto e que ela saiba RESPONDER: `null`, vazio e rotulo
+      # movel reprovam nominalmente.
+      #
+      # A comparacao com este commit vem no passo 3b, depois de o artefato
+      # bater: quando os dois artefatos sao o mesmo, o commit tambem tem de ser,
+      # e ai divergir deixa de ser atraso e passa a ser afirmacao falsa.
+      - name: a sonda hospedada diz de qual commit ela saiu
+        run: |
+          node infra/verificacao/verificar-commit-no-health.mjs \
+            "${{ steps.destino.outputs.url }}" | tee -a "$GITHUB_STEP_SUMMARY"
+
       # 3. O artefato no ar contra o artefato DESTE commit.
       #
       # O resumo e calculado pelo MESMO modulo que a aplicacao usa para
@@ -138,3 +155,16 @@ jobs:
             echo "::error::o destino hospedado roda o artefato $artefato_hospedado e este commit produz $esperado. Nao e defeito de codigo: e implantacao. Hoje o artefato vai para a VM por copia de diretorio, sem registry e sem digest -- publicar a imagem e puxar por digest e o que fecha esta lacuna"
             exit 1
           fi
+
+      # 3b. Mesmo artefato, entao o commit tem de ser o mesmo.
+      #
+      # So chega aqui quem passou pelo passo 3, e e isso que torna esta
+      # comparacao justa: com o artefato batendo, o destino hospedado roda ESTE
+      # codigo. Um commit diferente com o mesmo codigo compilado nao e atraso de
+      # implantacao -- e uma imagem construida sem o argumento certo, ou um
+      # valor fixado em algum lugar. A sonda estaria afirmando o que nao sabe,
+      # e e para isso que a segunda isca existe.
+      - name: o commit no ar e o deste commit
+        run: |
+          node infra/verificacao/verificar-commit-no-health.mjs \
+            "${{ steps.destino.outputs.url }}" "$(git rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"

@@ -75,6 +75,57 @@ COPY src ./src
 RUN npm run build && test -f dist/bin/api.js && test -f dist/bin/worker.js
 
 # --------------------------------------------------------------------------
+# O COMMIT. LEIA ANTES DE AFROUXAR.
+# --------------------------------------------------------------------------
+# `build.artifact` e EVIDENCIA: a aplicacao calcula o resumo lendo `dist/`, o
+# contrato e o `package.json` do disco de DENTRO do container, na subida. Por
+# isso ele sempre funcionou -- ninguem precisa lembrar de nada.
+#
+# O commit e a outra metade, e ele NAO se calcula do disco: `.git` esta no
+# `.dockerignore` (historico nao entra em imagem) e a imagem final nao tem git.
+# Ele so pode ser DECLARADO por quem constroi. Ate 22/09 o `compose.yaml`
+# declarava por variavel de RUNTIME com padrao vazio -- e `optionalEnv` mapeia
+# `''` para ausente, entao o padrao vazio virava `commit: null` na sonda, sem
+# nenhum ruido. O caminho de injecao existia pela metade: o leitor conferia a
+# FORMA do valor e nada nunca fornecia valor.
+#
+# O que mudou: o commit entra por ARGUMENTO DE BUILD e fica gravado na imagem.
+# Ele passa a VIAJAR com o artefato -- quem promove a imagem entre ambientes
+# promove o commit junto, e homologacao e producao respondem o mesmo valor sem
+# ninguem declarar nada na VM.
+#
+# E o build REPROVA quando ele falta. Binario que nao sabe de onde veio nao deve
+# ser produzido: com `commit` nulo, um servico rodando codigo ANTIGO responde
+# `status: ok` igual a um rodando o novo, e "subiu" e "achamos que subiu" ficam
+# indistinguiveis. Mesma regra que o codigo ja aplica a variavel de ambiente
+# ausente (`requireEnv`): falha ruidosa, com o nome na mensagem.
+#
+# Este estagio existe separado para a conferencia ficar em UM lugar. Os tres
+# alvos finais copiam `/etc/bichu/commit` dele, e e essa copia que o poe no
+# grafo do build: sem ela o BuildKit pularia o estagio e a conferencia seria
+# decorativa. O arquivo tambem e evidencia conferivel de fora, sem subir nada:
+#   docker run --rm --entrypoint cat bichu-app:local /etc/bichu/commit
+#
+# O ARG fica no FIM de cada alvo, depois de todo COPY, de proposito: ele muda a
+# cada commit, e mais acima invalidaria `npm ci` e a compilacao em toda troca de
+# HEAD.
+FROM base AS commit
+ARG BUILD_COMMIT
+RUN set -eu; \
+    if ! printf '%s' "${BUILD_COMMIT:-}" | grep -Eq '^[0-9a-f]{7,40}$'; then \
+      echo "ERRO: BUILD_COMMIT nao foi injetado neste build (veio '${BUILD_COMMIT:-}')." >&2; \
+      echo "  Esperado: de 7 a 40 digitos hexadecimais minusculos, o commit REAL de que esta" >&2; \
+      echo "  imagem esta sendo construida. Nao invente um valor e nao use rotulo movel: um" >&2; \
+      echo "  SHA falso engana pior que o nulo de antes, porque a sonda passa a AFIRMAR em" >&2; \
+      echo "  vez de calar, e a esteira compara o valor reportado com o commit construido." >&2; \
+      echo "  Via compose: BUILD_COMMIT=\$(git rev-parse HEAD) docker compose build" >&2; \
+      echo "  Direto:      docker build --build-arg BUILD_COMMIT=\$(git rev-parse HEAD) ." >&2; \
+      exit 1; \
+    fi; \
+    mkdir -p /etc/bichu; \
+    printf '%s' "$BUILD_COMMIT" > /etc/bichu/commit
+
+# --------------------------------------------------------------------------
 # ALVO dev
 # --------------------------------------------------------------------------
 # Carrega o codigo e a suite porque `make test` e `make test-int` rodam DENTRO
@@ -89,6 +140,11 @@ COPY --chown=node:node tests ./tests
 COPY --chown=node:node api ./api
 COPY --chown=node:node migrations ./migrations
 COPY --from=build --chown=node:node /app/dist ./dist
+# Ver o bloco "O COMMIT" acima. O COPY e o que poe o estagio `commit` -- e a
+# conferencia que ele carrega -- no grafo deste build.
+COPY --from=commit /etc/bichu/commit /etc/bichu/commit
+ARG BUILD_COMMIT
+ENV BUILD_COMMIT=${BUILD_COMMIT}
 USER node
 EXPOSE 3000
 # O processo trata SIGTERM sozinho (bin/api.ts e bin/worker.ts), entao ele pode
@@ -107,6 +163,10 @@ COPY --from=deps-prod --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json ./
 COPY --chown=node:node api ./api
 COPY --from=build --chown=node:node /app/dist ./dist
+# Ver o bloco "O COMMIT" acima.
+COPY --from=commit /etc/bichu/commit /etc/bichu/commit
+ARG BUILD_COMMIT
+ENV BUILD_COMMIT=${BUILD_COMMIT}
 USER node
 EXPOSE 3000
 CMD ["node", "dist/bin/api.js"]
@@ -136,6 +196,12 @@ ENV NODE_ENV=production
 COPY --from=deps-full --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json ./
 COPY --chown=node:node migrations ./migrations
+# O migrador nao responde sonda, mas e artefato como os outros dois: se ele
+# puder ser produzido sem saber de onde veio, existe um caminho de build sem a
+# conferencia, e caminho sem portao e por onde o portao deixa de valer.
+COPY --from=commit /etc/bichu/commit /etc/bichu/commit
+ARG BUILD_COMMIT
+ENV BUILD_COMMIT=${BUILD_COMMIT}
 USER node
 # Caminho explicito do arquivo em vez de `npx`: `npx` resolve na rede quando
 # nao acha local, e uma imagem que busca ferramenta na rede em tempo de

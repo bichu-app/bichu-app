@@ -192,6 +192,11 @@ services:
     build:
       context: .
       target: migrador
+      args:
+        # O migrador nao responde sonda, mas passa pela mesma conferencia: um
+        # alvo que se constroi sem o commit seria o caminho de build sem portao,
+        # e portao que tem desvio nao e portao.
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 256m
     env_file: [.env]
     depends_on:
@@ -211,6 +216,16 @@ services:
     build:
       context: .
       target: ${BUILD_TARGET:-dev}
+      args:
+        # O commit de que esta imagem sai, gravado NELA. O Dockerfile reprova o
+        # build quando o valor falta ou nao tem forma de commit -- e por isso o
+        # padrao aqui e vazio e nao `${BUILD_COMMIT:?}`: a interpolacao do
+        # compose acontece ao LER o arquivo, entao `:?` derrubaria tambem
+        # `down`, `logs` e `config`, que nao constroem nada. Quem precisa
+        # reprovar e o build, e e la que ele reprova.
+        #
+        #   BUILD_COMMIT=$(git rev-parse HEAD) docker compose build
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 320m
     command: ["node", "dist/bin/api.js"]
     env_file: [.env]
@@ -235,18 +250,24 @@ services:
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
-      # Commit DECLARADO por quem sobe a pilha, e aceito vazio de proposito:
-      # `BUILD_COMMIT=$(git rev-parse HEAD) make up` preenche, `make up` sozinho
-      # nao, e o padrao vazio e o que mantem a subida local funcionando sem
-      # ninguem precisar saber que esta variavel existe. Vazio vira `null` na
-      # resposta de /v1/health -- silencio honesto, e nao um valor inventado.
+      # `BUILD_COMMIT` NAO ESTA MAIS AQUI, e a ausencia e a correcao.
       #
-      # ELE NAO VIAJA DENTRO DA IMAGEM. Para viajar seria preciso um `ARG` no
-      # Dockerfile, que hoje nao existe; enquanto nao existir, quem compara dois
-      # destinos compara `build.artifact`, que e calculado do disco de dentro do
-      # container e nao e declarado por ninguem. Ver
-      # src/shared/build/identidade-do-artefato.ts.
-      BUILD_COMMIT: ${BUILD_COMMIT:-}
+      # Ate 22/09 ele era declarado como variavel de RUNTIME, com padrao vazio.
+      # Duas consequencias, e as duas ruins:
+      #
+      #  1. Vazio vira ausente (`optionalEnv` mapeia `''` para `undefined`),
+      #     entao a sonda respondia `commit: null` em toda subida que nao
+      #     lembrasse da variavel -- que eram todas. Nao havia ruido nenhum.
+      #  2. O valor ficava FORA da imagem. Promover a imagem entre ambientes
+      #     nao promovia o commit junto, e cada destino precisaria declarar o
+      #     seu -- que e como um destino declara um commit que nao e o que ele
+      #     roda, sem estar mentindo de propriedade.
+      #
+      # Agora ele entra por `build.args` logo abaixo e fica gravado na imagem.
+      # Declara-lo TAMBEM aqui reabriria o defeito pela porta dos fundos:
+      # `environment` sobrescreve o `ENV` da imagem, entao o padrao vazio
+      # apagaria o valor gravado e a sonda voltaria a `null` com a imagem
+      # correta na mao. Ver o bloco "O COMMIT" no Dockerfile.
     depends_on:
       db: {condition: service_healthy}
       objeto: {condition: service_healthy}
@@ -284,6 +305,13 @@ services:
     build:
       context: .
       target: ${BUILD_TARGET:-dev}
+      args:
+        # IDENTICO ao da api, e a identidade precisa ser exata. Os dois servicos
+        # apontam para o MESMO `image:`, entao um argumento de build diferente
+        # aqui produziria duas imagens com um nome so -- e a esteira, que
+        # compara `docker inspect` de api e worker, reprovaria por uma
+        # divergencia que nao e de codigo.
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 448m
     command: ["node", "dist/bin/worker.js"]
     env_file: [.env]

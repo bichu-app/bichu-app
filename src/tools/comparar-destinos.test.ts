@@ -26,10 +26,15 @@ import {
   conferirTopologia,
 } from './comparar-destinos.js';
 
+const COMMIT = '262cf1f8a1b2c3d4e5f60718293a4b5c6d7e8f90';
+const OUTRO_COMMIT = 'b528bc8fedcba9876543210fedcba9876543210f';
+
 const SONDA = {
   status: 'ok',
   version: '0.1.0',
-  build: { artifact: '0123456789abcdef', commit: null },
+  // Era `commit: null` até a BICHUS-210 — o estado real dos dois ambientes, e a
+  // concordância mais barata que existe: os dois não sabiam de onde vieram.
+  build: { artifact: '0123456789abcdef', commit: COMMIT },
   checks: { database: 'ok' },
 };
 
@@ -53,7 +58,7 @@ void describe('comparação entre destinos', () => {
   // duas pilhas de pé era exatamente o estado que o QA reprovou.
   void it('REPROVA quando o artefato difere, nomeando o campo e os dois valores', () => {
     const resultado = compararRespostas(
-      par({ ...structuredClone(SONDA), build: { artifact: 'fedcba9876543210', commit: null } }),
+      par({ ...structuredClone(SONDA), build: { artifact: 'fedcba9876543210', commit: COMMIT } }),
     );
     assert.equal(resultado.falhas.length, 1);
     assert.match(resultado.falhas[0] as string, /build\.artifact/);
@@ -78,29 +83,75 @@ void describe('comparação entre destinos', () => {
     assert.ok(resultado.falhas.some((f) => f.includes('checks')));
   });
 
+  // ISCA da BICHUS-210. `build.commit` era divergência PERMITIDA enquanto o
+  // commit não viajava dentro da imagem. Agora ele viaja, e dois destinos com o
+  // mesmo artefato que reportam commits diferentes são uma das duas coisas que
+  // a história existe para pegar: imagem construída sem o argumento certo, ou
+  // valor fixado em algum lugar.
+  void it('REPROVA quando o commit difere entre os destinos', () => {
+    const resultado = compararRespostas(
+      par({
+        ...structuredClone(SONDA),
+        build: { artifact: '0123456789abcdef', commit: OUTRO_COMMIT },
+      }),
+    );
+    assert.equal(resultado.falhas.length, 1);
+    assert.match(resultado.falhas[0] as string, /build\.commit/);
+    assert.match(resultado.falhas[0] as string, /local=/);
+    assert.match(resultado.falhas[0] as string, /hospedado=/);
+  });
+
+  // ISCA: um destino que não sabe de onde veio não pode sumir da comparação.
+  void it('REPROVA quando um destino responde commit nulo', () => {
+    const resultado = compararRespostas(
+      par({ ...structuredClone(SONDA), build: { artifact: '0123456789abcdef', commit: null } }),
+    );
+    assert.ok(resultado.falhas.some((f) => f.includes('build.commit')));
+  });
+
   // CONTROLE POSITIVO: a lista fechada precisa ser consultada de verdade. Um
   // comparador que reprova tudo passaria em todas as iscas acima.
+  //
+  // A lista REAL está vazia desde a BICHUS-210, então o controle passa uma
+  // lista própria: sem isto o mecanismo de exceção deixaria de ser exercitado e
+  // pararia de funcionar sem ninguém perceber, no dia em que a primeira entrada
+  // nova chegasse.
   void it('deixa passar a divergência que a lista fechada permite, e a anota', () => {
-    const resultado = compararRespostas(
-      par({ ...structuredClone(SONDA), build: { artifact: '0123456789abcdef', commit: '1a4a3f7' } }),
-    );
+    const resultado = compararRespostas(par({ ...structuredClone(SONDA), version: '0.2.0' }), [
+      { campo: 'version', motivo: 'exceção só deste teste, nunca da lista real' },
+    ]);
     assert.deepEqual(resultado.falhas, []);
-    assert.deepEqual(resultado.permitidas, ['build.commit: local=null hospedado="1a4a3f7"']);
+    assert.deepEqual(resultado.permitidas, ['version: local="0.1.0" hospedado="0.2.0"']);
   });
 
   void it('avisa quando uma exceção declarada não foi usada', () => {
-    const resultado = compararRespostas(par(structuredClone(SONDA)));
-    assert.deepEqual(resultado.naoUsadas, ['build.commit']);
+    const resultado = compararRespostas(par(structuredClone(SONDA)), [
+      { campo: 'version', motivo: 'exceção só deste teste, nunca da lista real' },
+    ]);
+    assert.deepEqual(resultado.naoUsadas, ['version']);
   });
 
+  // A lista real pode estar VAZIA — e hoje está, que é o objetivo dela. O que
+  // não pode é ter entrada sem motivo escrito: exceção sem justificativa é
+  // exceção que ninguém revisa.
   void it('toda entrada da lista fechada tem motivo escrito', () => {
-    assert.ok(DIVERGENCIAS_PERMITIDAS.length > 0);
     for (const entrada of DIVERGENCIAS_PERMITIDAS) {
       assert.ok(
         entrada.motivo.trim().length > 40,
         `\`${entrada.campo}\` está na lista sem motivo que explique nada`,
       );
     }
+  });
+
+  // A lista vazia é uma decisão, e uma decisão que envelhece calada é o que
+  // esta asserção impede: quem reintroduzir `build.commit` aqui precisa
+  // reabrir a BICHUS-210 e explicar por que o argumento de build parou de
+  // valer.
+  void it('`build.commit` NÃO está na lista de divergências permitidas', () => {
+    assert.equal(
+      DIVERGENCIAS_PERMITIDAS.some((e) => e.campo === 'build.commit'),
+      false,
+    );
   });
 });
 
