@@ -171,7 +171,13 @@ void main() {
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
       await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
 
-      exigirTodoBotaoComAcao(tester, tela: 'meus-pets', botoesEsperados: 9);
+      // 9 -> 8 em 22/09/2026: saiu do Perfil o `TextButton` de "Termos de uso
+      // e privacidade", que tinha `onPressed: null` e nao levava a lugar
+      // nenhum. Decisao do cliente no teste em aparelho -- os dois documentos
+      // ficam so na F1.1, onde sao o objeto do aceite. O piso desce porque a
+      // tela tem mesmo um controle a menos, e nao porque o portao passou a
+      // olhar menos.
+      exigirTodoBotaoComAcao(tester, tela: 'meus-pets', botoesEsperados: 8);
       handle.dispose();
     });
   });

@@ -122,11 +122,17 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// dela.** Ela e hash de bytes de fonte: ela acusa que o codigo mudou, nunca
 /// que o desenho se atropela. Quem cobra geometria e o arquivo de area
 /// segura, e ate 22/09 ele nao existia.
+/// **Destravado uma quinta vez pelas tres mudancas do teste em aparelho de
+/// 22/09/2026** (BICHUS-29 e BICHUS-81): o Perfil perdeu a linha de termos e
+/// privacidade em `abas.dart`, a F1.1 ganhou a caixa de aceite dos termos em
+/// `conta/tela_criar_conta.dart`, e a caixa de "continuar conectado" saiu de
+/// `tela_criar_conta.dart` e de `conta/tela_entrar.dart`. Nenhuma delas
+/// encosta na porta `CameraEGaleria`, que e o que o criterio 10 protege.
 ///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '6df0f981bf0f069b2a5ddee61b14ea3c316648bd';
+const String _arvoreDasTelas = 'a78d53755b1783dd98c4bdf11b01bc68efac601e';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

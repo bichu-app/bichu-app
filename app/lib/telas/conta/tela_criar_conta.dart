@@ -16,10 +16,34 @@ import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 
+/// A recusa de criar conta sem ter o que registrar como aceite.
+///
+/// Texto de tela, e nao de log: quem le e a pessoa, e ela nao tem como
+/// consertar isto. O que a frase precisa fazer e nao mentir -- nao dizer
+/// "tente de novo", porque tentar de novo neste build da no mesmo.
+const String _semVersaoDosTermos =
+    'Não conseguimos registrar o aceite dos termos nesta versão do app. '
+    'Sem esse registro a conta não pode ser criada.';
+
+/// A cobranca do aceite, quando ha o que registrar e a caixa esta desmarcada.
+const String _aceiteObrigatorio =
+    'Para criar a conta, aceite os termos de uso e a política de privacidade.';
+
 /// F1.1 — Criar conta.
 ///
-/// Tres campos, a regra de senha dita **antes** do erro, e a caixa de
-/// "continuar conectado" desmarcada por padrao, com o efeito em texto.
+/// Tres campos, a regra de senha dita **antes** do erro, e **uma** caixa: a do
+/// aceite dos termos.
+///
+/// **Duas mudancas do teste em aparelho de 22/09/2026**, nas palavras do
+/// cliente: "o checkbox que eu pedi para sobre o termos de uso na pagina de
+/// cadastro voce nao implementou. Retire o checkbox de manter conectado e
+/// traga isso como um comportamento padrao, tanto na tela de cadastro, quanto
+/// na tela de login."
+///
+/// A caixa que saiu governava a janela de inatividade do refresh (30 dias
+/// desmarcada, 180 marcada, ADR-0019). Como comportamento padrao ela vale
+/// sempre marcada -- ver `AuthApi.sessaoPersistentePorPadrao`, onde a
+/// implicacao de seguranca esta escrita.
 ///
 /// **Desvio, como a C.2.** Quem abre esta tela empilha (`push`) e ela traz uma
 /// saida explicita de voltar: criar conta e uma acao, e a regra de produto
@@ -42,10 +66,11 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   final FocusNode _focoDoEmail = FocusNode();
 
   bool _senhaVisivel = false;
-  bool _continuarConectado = false;
+  bool _aceitouOsTermos = false;
   bool _enviando = false;
   String? _erroDoEmail;
   String? _erroDaSenha;
+  String? _erroDoAceite;
   MensagemDeErro? _faixa;
 
   @override
@@ -61,6 +86,7 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     setState(() {
       _erroDoEmail = null;
       _erroDaSenha = null;
+      _erroDoAceite = null;
       _faixa = null;
     });
 
@@ -76,6 +102,31 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
       return;
     }
 
+    // O ACEITE E REGISTRO JURIDICO, E ELE TEM DUAS CONDICOES.
+    //
+    // A primeira e a pessoa ter marcado. A segunda, que e a que costuma
+    // passar batida, e HAVER O QUE REGISTRAR: sem `TERMS_VERSION` a chave
+    // `accepted_terms_version` nao vai no corpo, e o backend so grava
+    // `accepted_terms_at` quando ela chega
+    // (`kysely-identity-repository.ts:119`). Marcar a caixa nesse build
+    // gravaria conta criada e NENHUM registro de qual versao foi aceita --
+    // que e a pior combinacao das duas, porque a tela afirma um aceite que o
+    // banco nao tem.
+    //
+    // Entao a tela recusa alto em vez de criar a conta sem a prova. A ordem
+    // importa: a versao ausente e conferida ANTES do aceite, porque cobrar a
+    // marcacao de quem nao teria o aceite registrado de qualquer jeito e
+    // pedir um gesto que nao vale nada.
+    final String? versaoDosTermos = AppConfig.instancia.versaoDosTermos;
+    if (versaoDosTermos == null) {
+      setState(() => _faixa = const MensagemDeErro(texto: _semVersaoDosTermos));
+      return;
+    }
+    if (!_aceitouOsTermos) {
+      setState(() => _erroDoAceite = _aceiteObrigatorio);
+      return;
+    }
+
     setState(() => _enviando = true);
     final escopo = Escopo.of(context);
     try {
@@ -84,16 +135,13 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
         senha: _senha.text,
         nome: _nome.text.trim().isEmpty ? null : _nome.text.trim(),
         // A versao dos termos aceitos, que e prova juridica e nao dado de
-        // tela: sem ela o backend nao grava `accepted_terms_at` e nao ha como
-        // demonstrar o que a pessoa aceitou (docs/04-seguranca.md secao 6.6).
-        // Vem do build por `--dart-define=TERMS_VERSION`; enquanto o documento
-        // versionado nao existir, chega nulo, e essa ausencia agora esta
-        // escrita aqui em vez de acontecer sozinha.
-        versaoDosTermos: AppConfig.instancia.versaoDosTermos,
-        // A escolha da caixa agora chega ao servidor. Ate 17/09/2026
-        // `RegisterRequest` nao tinha o campo e esta linha era uma lacuna
-        // registrada em comentario; ADR-0019 a fechou.
-        continuarConectado: _continuarConectado,
+        // tela. Chega aqui **nao-nula por construcao**: a guarda acima ja
+        // recusou o caso em que ela falta, e e por isso que esta linha pode
+        // deixar de ser um `?` que apaga a chave em silencio.
+        versaoDosTermos: versaoDosTermos,
+        // `continuarConectado` NAO e mais passado aqui: virou o padrao de
+        // `AuthApi`, por decisao do cliente de 22/09/2026. Ver
+        // `AuthApi.sessaoPersistentePorPadrao`.
       );
       await escopo.sessao.abrir(sessao);
       if (!mounted) return;
@@ -210,27 +258,26 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
                     setState(() => _senhaVisivel = !_senhaVisivel),
               ),
             ),
-            const SizedBox(height: BichuEspaco.e6),
-            // LACUNA FECHADA em 17/09/2026 por ADR-0019: `RegisterRequest`
-            // passou a ter `stay_signed_in`, com a mesma forma e o mesmo
-            // padrao do `LoginRequest`, e a escolha desta caixa chega ao
-            // servidor. Ela governa a janela de inatividade do refresh: 30
-            // dias desmarcada, 180 marcada. Desmarcada por padrao, com o
-            // efeito dito em texto.
-            _CaixaDeContinuarConectado(
-              marcada: _continuarConectado,
-              aoMudar: (v) => setState(() => _continuarConectado = v),
-            ),
             if (_faixa != null) ...<Widget>[
               const SizedBox(height: BichuEspaco.e6),
               FaixaDeAviso(texto: _faixa!.texto),
             ],
             const SizedBox(height: BichuEspaco.e6),
-            // A linha de termos fica **acima** do botao, e nao no fim da tela:
-            // uma regra que se aceita ao apertar um botao precisa estar legivel
-            // antes do aperto, e nao abaixo da dobra (UX F1.1). Ela estava
-            // depois do botao e depois de "Ja tenho conta".
-            const _LinhaDeTermos(),
+            // O ACEITE, **acima** do botao: uma regra que se aceita ao apertar
+            // um botao precisa estar legivel antes do aperto, e nao abaixo da
+            // dobra (UX F1.1).
+            //
+            // Nao ha mais caixa de "continuar conectado" nesta tela: ela virou
+            // comportamento padrao em 22/09/2026, por decisao do cliente. A
+            // unica caixa da F1.1 e esta, e o que ela marca e o aceite.
+            _CaixaDeAceiteDosTermos(
+              marcada: _aceitouOsTermos,
+              erro: _erroDoAceite,
+              aoMudar: (v) => setState(() {
+                _aceitouOsTermos = v;
+                if (v) _erroDoAceite = null;
+              }),
+            ),
             const SizedBox(height: BichuEspaco.e6),
             BotaoPrimario(
               rotulo: 'Criar conta',
@@ -253,11 +300,13 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   }
 }
 
-/// A linha de termos da F1.1, com as duas expressoes como links.
+/// A frase do aceite, com as duas expressoes como links.
 ///
-/// Antes esta frase era texto corrido: a pessoa aceitava dois documentos que
-/// nao tinha como abrir. Nao e acabamento, e a diferenca entre um aceite e uma
-/// afirmacao de que houve aceite.
+/// Antes esta frase era narrativa ("Ao criar a conta, voce aceita...") e
+/// ficava solta acima do botao: o aceite acontecia por consequencia de apertar
+/// `Criar conta`, e nao por um gesto proprio. O cliente pediu a caixa em
+/// 22/09/2026 -- pela segunda vez -- e com ela a frase muda de modo verbal: ela
+/// descreve **o que a pessoa esta declarando**, e nao o que o app vai deduzir.
 ///
 /// **Divergencia que eu declaro.** O UX pede alvo de toque de 48 dp para os
 /// dois links. Link dentro de frase nao tem como ter 48 dp de altura sem
@@ -273,14 +322,14 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
 /// nao abre nada e pior que texto: parece que funcionou. As duas URLs entram
 /// por `--dart-define` (`TERMS_URL`, `PRIVACY_URL`) e as paginas sao superficie
 /// web, de outro time.
-class _LinhaDeTermos extends StatefulWidget {
-  const _LinhaDeTermos();
+class _FraseDeAceite extends StatefulWidget {
+  const _FraseDeAceite();
 
   @override
-  State<_LinhaDeTermos> createState() => _LinhaDeTermosState();
+  State<_FraseDeAceite> createState() => _FraseDeAceiteState();
 }
 
-class _LinhaDeTermosState extends State<_LinhaDeTermos> {
+class _FraseDeAceiteState extends State<_FraseDeAceite> {
   final List<TapGestureRecognizer> _gestos = <TapGestureRecognizer>[];
 
   @override
@@ -323,13 +372,13 @@ class _LinhaDeTermosState extends State<_LinhaDeTermos> {
     final textos = Theme.of(context).textTheme;
     final config = AppConfig.instancia;
 
-    final base = textos.bodyMedium?.copyWith(color: cores.textSecondary) ??
+    final base = textos.bodyMedium?.copyWith(color: cores.textPrimary) ??
         const TextStyle();
 
     return Text.rich(
       TextSpan(
         children: <InlineSpan>[
-          TextSpan(text: 'Ao criar a conta, você aceita os ', style: base),
+          TextSpan(text: 'Li e aceito os ', style: base),
           _link('termos de uso', config.urlDosTermos, base, cores.primary),
           TextSpan(text: ' e a ', style: base),
           _link(
@@ -345,13 +394,25 @@ class _LinhaDeTermosState extends State<_LinhaDeTermos> {
   }
 }
 
-class _CaixaDeContinuarConectado extends StatelessWidget {
-  const _CaixaDeContinuarConectado({
+/// A caixa de aceite dos termos da F1.1.
+///
+/// **So a caixa alterna, e a frase ao lado nao.** A linha inteira tocavel
+/// seria o padrao usual, e aqui ela nao serve: a frase carrega dois links, e
+/// um toque em "termos de uso" cairia na disputa entre abrir o documento e
+/// marcar a caixa. Quem resolve essa disputa e a arena de gestos do Flutter, e
+/// o resultado dela nao e o tipo de coisa que se quer descobrir em producao no
+/// gesto que registra um aceite. O `Checkbox` do Material ja garante o alvo de
+/// 48 dp sozinho (`materialTapTargetSize`), entao o que se perde e a
+/// conveniencia de tocar no texto, e nao a acessibilidade do controle.
+class _CaixaDeAceiteDosTermos extends StatelessWidget {
+  const _CaixaDeAceiteDosTermos({
     required this.marcada,
+    required this.erro,
     required this.aoMudar,
   });
 
   final bool marcada;
+  final String? erro;
   final ValueChanged<bool> aoMudar;
 
   @override
@@ -359,37 +420,56 @@ class _CaixaDeContinuarConectado extends StatelessWidget {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
-    return InkWell(
-      onTap: () => aoMudar(!marcada),
-      borderRadius: BorderRadius.circular(BichuRaio.sm),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e1),
-        child: Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
+            // O rotulo do controle e CURTO, e nao a frase inteira.
+            //
+            // Pelo `semanticLabel` do proprio `Checkbox`, e nao por um
+            // `Semantics` em volta: o `Checkbox` ja e um no de semantica, e
+            // envolve-lo cria um segundo no que nao se funde ao dele -- o
+            // rotulo ficaria no no de fora e o controle continuaria anunciado
+            // como "caixa de selecao" e nada mais.
+            //
+            // **Curto de proposito.** A primeira versao repetia aqui a frase
+            // inteira, e o no passou a ler a declaracao DUAS vezes: uma pelo
+            // rotulo do controle, outra pela frase ao lado. Quem enxerga le a
+            // frase uma vez; quem usa leitor de tela ouvia tudo duplicado. O
+            // controle diz o ato ("Aceitar os termos") e a frase ao lado diz
+            // o que esta sendo aceito, com os dois links navegaveis.
             Checkbox(
               value: marcada,
+              isError: erro != null,
+              semanticLabel: 'Aceitar os termos',
               onChanged: (v) => aoMudar(v ?? false),
             ),
             const SizedBox(width: BichuEspaco.e2),
+            // `container: true`: a frase e no PROPRIO, e nao parte do no da
+            // caixa. Sem isto os dois se fundem e volta a leitura duplicada
+            // que o rotulo curto acabou de resolver.
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: <Widget>[
-                  const SizedBox(height: BichuEspaco.e3),
-                  Text('Continuar conectado neste aparelho',
-                      style: textos.bodyLarge),
-                  Text(
-                    'Você não precisa entrar de novo neste celular.',
-                    style: textos.bodyMedium
-                        ?.copyWith(color: cores.textSecondary),
-                  ),
-                ],
+              child: Semantics(
+                container: true,
+                child: const Padding(
+                  padding: EdgeInsets.only(top: BichuEspaco.e3),
+                  child: _FraseDeAceite(),
+                ),
               ),
             ),
           ],
         ),
-      ),
+        if (erro != null)
+          Padding(
+            padding: const EdgeInsets.only(top: BichuEspaco.e2),
+            child: Text(
+              erro!,
+              style: textos.bodyMedium?.copyWith(color: cores.error),
+            ),
+          ),
+      ],
     );
   }
 }
