@@ -165,6 +165,18 @@ inalcançável. Ancore antes de qualquer outra coisa, com
 stash feito com `-u` guarda os não rastreados num terceiro pai (`<sha>^3`);
 restaurar só a árvore principal perde esses arquivos.
 
+**Isto é convenção, não portão: nada te impede de empilhar.** Existe um gancho
+pronto que recusaria o `git stash push` quando o repositório tem mais de um
+worktree, e ele está em `.githooks/desligado/reference-transaction`, desligado
+de propósito. A medição está no cabeçalho dele: ligá-lo custa cerca de 130 ms a
+mais em **todo** commit, porque o git chama esse gancho sete vezes por commit e
+cada chamada é um processo novo. O caso que ele precisa reprovar, e os cinco que
+ele não pode reprovar, estão em `infra/verificacao/verificar-portao-de-stash.sh`.
+
+E mesmo ligado ele não protegeria todo mundo: `core.hooksPath` é configuração
+**por clone**, aplicada pelo `make setup`. Um clone novo nasce sem gancho
+nenhum. Estar no repositório não é o mesmo que estar valendo na sua máquina.
+
 
 ## Homologação
 
