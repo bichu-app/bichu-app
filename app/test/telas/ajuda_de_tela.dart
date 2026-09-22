@@ -29,6 +29,7 @@ import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/api/fila_offline.dart';
+import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
@@ -229,6 +230,84 @@ class AvisosDeTeste implements Avisos {
   void mudarPelosAjustes(PermissaoDeAviso novo) => estadoAtual = novo;
 }
 
+/// Uma localizacao que responde o que o caso pedir.
+///
+/// Existe pelo mesmo motivo da [CameraDeTeste] e da [AvisosDeTeste], com um
+/// agravante proprio: dos cinco motivos de nao haver ponto, **quatro** so
+/// acontecem em aparelho de verdade -- recusa, recusa definitiva, servico
+/// desligado e GPS que nao fixa. Nenhum deles se verifica em simulador, e o
+/// criterio 5 da BICHUS-23 ("o fluxo inteiro funciona") vale exatamente sobre
+/// eles. Sem este duble, os quatro ficariam sustentados por uma frase.
+///
+/// Os contadores existem para a isca: [vezesQuePediu] passando de zero num
+/// caso em que a pessoa nao autorizou na antessala significa que o app abriu o
+/// dialogo do sistema sozinho -- e no iOS esse dialogo nao volta.
+class LocalizacaoDeTeste implements Localizacao {
+  LocalizacaoDeTeste(
+    this.estadoAtual, {
+    this.depoisDePedir,
+    this.resultado,
+    this.servico = true,
+  });
+
+  PermissaoDeLocalizacao estadoAtual;
+
+  /// O que `pedir` devolve. Nulo mantem [estadoAtual].
+  final PermissaoDeLocalizacao? depoisDePedir;
+
+  /// O que `pontoAproximado` devolve. Nulo deixa a porta decidir pelo estado,
+  /// que e o que a implementacao de verdade faz.
+  final ResultadoDaCaptura? resultado;
+
+  bool servico;
+
+  int vezesQuePediu = 0;
+  int vezesQueMediu = 0;
+  bool abriuAjustes = false;
+
+  @override
+  Future<PermissaoDeLocalizacao> estado() async => estadoAtual;
+
+  @override
+  Future<PermissaoDeLocalizacao> pedir() async {
+    vezesQuePediu += 1;
+    estadoAtual = depoisDePedir ?? estadoAtual;
+    return estadoAtual;
+  }
+
+  @override
+  Future<void> abrirAjustesDoSistema() async => abriuAjustes = true;
+
+  @override
+  Future<bool> servicoLigado() async => servico;
+
+  @override
+  Future<ResultadoDaCaptura> pontoAproximado({required Duration prazo}) async {
+    vezesQueMediu += 1;
+    if (resultado != null) return resultado!;
+    return switch (estadoAtual) {
+      PermissaoDeLocalizacao.concedida => servico
+          ? const CapturaComPonto(
+              PontoCapturado(
+                lat: -23.5505,
+                lon: -46.6333,
+                precisaoEmMetros: 240,
+                origem: OrigemDoPonto.deviceGps,
+              ),
+            )
+          : const CapturaSemPonto(MotivoDeNaoTerPonto.servicoDesligado),
+      PermissaoDeLocalizacao.negada ||
+      PermissaoDeLocalizacao.naoPedida =>
+        const CapturaSemPonto(MotivoDeNaoTerPonto.permissaoNegada),
+      PermissaoDeLocalizacao.negadaPermanentemente => const CapturaSemPonto(
+          MotivoDeNaoTerPonto.permissaoNegadaPermanentemente,
+        ),
+      PermissaoDeLocalizacao.indisponivel =>
+        const CapturaSemPonto(MotivoDeNaoTerPonto.indisponivel),
+    };
+  }
+}
+
 /// Uma resposta `application/problem+json` do contrato.
 ///
 /// O `title` e **deliberadamente enganoso** onde faz diferenca: se alguma tela
@@ -362,6 +441,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   CameraEGaleria? camera,
   LeitorDeQr? leitorDeQr,
   Avisos? avisos,
+  Localizacao? localizacao,
   DepositoDeIntencaoEmMemoria? envelope,
   DepositoDeSessao? deposito,
   CacheDeMeusPets? cacheDeMeusPets,
@@ -427,6 +507,11 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`
         // de verdade travaria a suite num `Future` que nunca resolve.
         avisos: avisos ?? const AvisosNaoEmbarcados(),
+        // O padrao e a porta ausente, e nao uma concedida: `Geolocator` de
+        // verdade estouraria `MissingPluginException` em teste de widget, e
+        // a excecao cairia dentro de um `Future` -- o formato de falha que
+        // nao aponta para a causa.
+        localizacao: localizacao ?? const LocalizacaoNaoEmbarcada(),
       ),
     ),
   );

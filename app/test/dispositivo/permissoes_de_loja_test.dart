@@ -138,6 +138,92 @@ void main() {
     });
   });
 
+
+  // -------------------------------------------------------------------------
+  // BICHUS-23 — a localizacao aproximada, e o defeito que so o plist enxerga
+  // -------------------------------------------------------------------------
+  //
+  // A ISCA DESTE GRUPO: **no iOS, quem decide se o app pede `Ao usar o app` ou
+  // `Sempre` NAO e o codigo Dart -- e este arquivo.**
+  //
+  // `geolocator_apple` escolhe a autorizacao olhando o `Info.plist`
+  // (`Handlers/PermissionHandler.m`, versao 2.3.14):
+  //
+  //     if (NSLocationWhenInUseUsageDescription != nil)
+  //         [locationManager requestWhenInUseAuthorization];
+  //     else if (containsLocationAlwaysDescription)
+  //         [locationManager requestAlwaysAuthorization];
+  //
+  // Ou seja: acrescentar `NSLocationAlwaysUsageDescription` e APAGAR a de
+  // `WhenInUse` muda o app de pedir localizacao pontual para pedir
+  // localizacao permanente -- sem uma unica linha de Dart mudar, sem nenhum
+  // teste de widget reprovar, e com o diff mostrando so duas linhas de XML.
+  //
+  // O criterio 2 da BICHUS-23 diz "no iOS o escopo e `Ao usar o app`, nunca
+  // `Sempre`". Esta e a unica trava do repositorio capaz de cobrar essa frase.
+  group('iOS: localizacao', () {
+    test('NSLocationWhenInUseUsageDescription existe e nao e generica', () {
+      final texto = valorDoPlist('NSLocationWhenInUseUsageDescription');
+      expect(
+        texto,
+        isNotNull,
+        reason: 'REPROVA: `NSLocationWhenInUseUsageDescription` ausente. Sem '
+            'ela o `geolocator` nem chega a pedir: ele devolve '
+            '`PermissionDefinitionsNotFound` e a captura falha em aparelho '
+            'enquanto a suite inteira continua verde. E a submissao e '
+            'recusada antes disso.',
+      );
+      expect(
+        texto!.length,
+        greaterThan(40),
+        reason: 'REPROVA: a justificativa tem ${texto.length} caracteres. '
+            '"O app usa a sua localizacao" e a forma que volta reprovada: ela '
+            'nao diz para que.',
+      );
+      expect(
+        texto.toLowerCase(),
+        contains('bairro'),
+        reason: 'REPROVA: a justificativa nao diz que o que aparece para as '
+            'outras pessoas e o BAIRRO. Essa e a promessa do criterio 3 e do '
+            'criterio 7, e o dialogo do sistema e o unico lugar onde ela '
+            'chega a quem ainda nao decidiu.',
+      );
+    });
+
+    test('NENHUMA chave de localizacao `Sempre` existe', () {
+      // O caso que sustenta o criterio 2. Ver o cabecalho deste grupo: e a
+      // PRESENCA destas chaves que muda o dialogo, e nao o codigo.
+      for (final proibida in <String>[
+        'NSLocationAlwaysUsageDescription',
+        'NSLocationAlwaysAndWhenInUseUsageDescription',
+      ]) {
+        expect(
+          plist,
+          isNot(contains(proibida)),
+          reason: 'REPROVA: `$proibida` entrou no Info.plist.\n'
+              'O criterio 2 da BICHUS-23 diz que o escopo e `Ao usar o app`, '
+              'NUNCA `Sempre`. O `geolocator_apple` le este arquivo para '
+              'decidir qual autorizacao pedir: com esta chave presente, o app '
+              'passa a poder pedir localizacao permanente sem nenhuma linha '
+              'de Dart mudar.\n'
+              'O produto nao usa localizacao em segundo plano -- ela esta em '
+              '*Fora desta historia* -- e a revisao da App Store cobra '
+              'justificativa de uso para o escopo que o binario declara.',
+        );
+      }
+    });
+
+    test('a justificativa e lida pela PESSOA, entao esta em portugues', () {
+      final texto = valorDoPlist('NSLocationWhenInUseUsageDescription')!;
+      expect(
+        RegExp('[áéíóúâêôãõç]', caseSensitive: false).hasMatch(texto),
+        isTrue,
+        reason: 'REPROVA: a justificativa de localizacao nao parece portugues. '
+            'O texto aparece palavra por palavra no dialogo do sistema.',
+      );
+    });
+  });
+
   group('iOS', () {
     test('NSCameraUsageDescription existe e nao e generica', () {
       final texto = valorDoPlist('NSCameraUsageDescription');

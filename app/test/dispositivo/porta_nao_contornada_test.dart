@@ -211,6 +211,20 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// codigo da tag nao volta. Nenhuma das telas encosta na porta
 /// `CameraEGaleria`, que e o que o criterio 10 protege -- a edicao **nao**
 /// embarca foto, e o motivo esta escrito em `tela_editar_pet.dart`.
+/// **Destravado uma oitava vez pela BICHUS-23**: a captura de localizacao no
+/// ponto de uso nasceu, e ela e uma pasta nova em `app/lib/telas` --
+/// `telas/localizacao/`, com `captura_de_localizacao.dart`,
+/// `antessala_de_localizacao.dart` e `textos_da_localizacao.dart`.
+///
+/// Nenhuma tela existente mudou: a pasta e inteiramente nova, e o hash de
+/// ARVORE cobre o diretorio recursivamente, entao pasta nova muda o valor
+/// mesmo sem um byte dos arquivos antigos mudar. E esse o comportamento que
+/// a troca de digest-de-sete-arquivos por hash-de-arvore comprou.
+///
+/// A peca nova NAO encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege, e ela fala com a porta `Localizacao` pelo escopo -- que e o
+/// arranjo que o portao estrutural abaixo exige, e que
+/// `localizacao_no_ponto_de_uso_test.dart` cobra por nome de arquivo.
 ///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
@@ -309,6 +323,16 @@ String _arvoreDeTelasAgora(String raiz) {
 const Map<String, String> _importesProibidos = <String, String>{
   'package:image_picker/': 'o seletor de imagem',
   'package:permission_handler/': 'o pedido de permissao',
+  // BICHUS-23: o plugin de localizacao entra na MESMA lista, no mesmo dia em
+  // que entra no `pubspec.yaml`. O criterio 10 da BICHUS-161 fala da camera,
+  // mas o portao estrutural deste arquivo cobra o ESPIRITO -- "tela nenhuma
+  // fala com o aparelho" --, e ele nao tem por que valer so para um plugin.
+  //
+  // Acrescentar aqui agora, e nao quando a primeira tela errar, e o que
+  // impede a classe de defeito de reabrir: `geolocator` e o proximo pacote de
+  // aparelho a chegar, e sem esta linha a primeira tela que o importasse
+  // passaria verde.
+  'package:geolocator/': 'a leitura de posicao do aparelho',
   'dart:io': 'o sistema de arquivos',
 };
 

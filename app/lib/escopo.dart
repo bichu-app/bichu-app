@@ -12,6 +12,7 @@ import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
+import 'dispositivo/localizacao.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'telas/perfil/meus_pets.dart';
 import 'sessao/controlador_de_sessao.dart';
@@ -36,6 +37,7 @@ class Escopo extends InheritedWidget {
     required this.avisos,
     required this.oportunidades,
     required this.vigiaDeAviso,
+    required this.localizacao,
     required this.sessao,
     required this.guarda,
     required this.cacheDeMeusPets,
@@ -99,6 +101,13 @@ class Escopo extends InheritedWidget {
   /// `Ligar nos ajustes`, e o fluxo da antessala, para lhe contar o que
   /// descobriu. Ver [VigiaDeAviso].
   final VigiaDeAviso vigiaDeAviso;
+  /// A fronteira com a localizacao do aparelho (BICHUS-23). Injetavel pelo
+  /// mesmo motivo das outras duas, com um agravante: dos cinco motivos de nao
+  /// haver ponto, **quatro** so acontecem em aparelho (permissao recusada,
+  /// recusada em definitivo, servico desligado, GPS que nao fixa). Sem a porta
+  /// nao haveria como exercitar nenhum deles, e o criterio 5 -- "o fluxo
+  /// inteiro funciona" -- ficaria sustentado por uma frase.
+  final Localizacao localizacao;
 
   final ControladorDeSessao sessao;
 
@@ -149,6 +158,7 @@ class Escopo extends InheritedWidget {
       avisos != anterior.avisos ||
       oportunidades != anterior.oportunidades ||
       vigiaDeAviso != anterior.vigiaDeAviso ||
+      localizacao != anterior.localizacao ||
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
       cacheDeMeusPets != anterior.cacheDeMeusPets ||
