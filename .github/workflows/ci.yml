@@ -283,6 +283,33 @@ jobs:
       - name: lint de limite de chamada, com as iscas
         run: node infra/verificacao/verificar-limite-de-chamada.mjs api/openapi.yaml
 
+      # BICHUS-125. O passo que faltava no dia em que "sair de todos os
+      # aparelhos" nasceu quebrado em `development`.
+      #
+      # A migracao que acrescentava `logout_all` a restricao de
+      # `refresh_tokens.revoked_reason` era a unica do repositorio sem o
+      # marcador `-- Up Migration`. Sem ele o node-pg-migrate manda o arquivo
+      # INTEIRO como subida: a descida rodava na sequencia da subida e a
+      # desfazia. A migracao APLICOU-SE COM SUCESSO -- nenhum erro, nenhum
+      # codigo de saida diferente de zero, nada vermelho em lugar nenhum -- e o
+      # banco ficou errado em silencio. A esteira inteira ficou verde por um dia
+      # com o remedio de quem perde o aparelho respondendo 500.
+      #
+      # O portao nao casa o texto `-- Up Migration`: ele importa o parser do
+      # proprio node-pg-migrate e confere o SQL que ele de fato produz. A
+      # expressao real e mais larga que a string (`-- UP MIGRATION` e
+      # `---- up  migration` tambem valem), e uma das cinco iscas existe so para
+      # provar que essas grafias PASSAM -- portao que reprova quem esta certo e
+      # desligado na primeira semana.
+      #
+      # As iscas rodam DENTRO do comando, antes da varredura: tres precisam
+      # reprovar e duas precisam passar. Se qualquer uma der o veredito errado,
+      # o script termina em 1 sem nem olhar para `migrations/`.
+      #
+      # Sem `continue-on-error`: este passo REPROVA a esteira.
+      - name: portao de migracao (a descida nao roda com a subida), iscas primeiro
+        run: node infra/verificacao/verificar-marcador-de-migracao.mjs migrations
+
       - run: npm run build
 
       # BICHUS-55. O portao existia, com teste ao lado, e NENHUM job o

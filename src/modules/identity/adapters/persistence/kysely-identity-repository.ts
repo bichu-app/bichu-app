@@ -14,7 +14,7 @@
  *   distinguir de um roubo.
  */
 import { sql, type Insertable } from 'kysely';
-import type { Db } from '../../../../shared/db/pool.js';
+import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { UsersTable } from '../../../../shared/db/schema.js';
 import { barreiraDeContaNova } from '../../domain/session.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
@@ -102,6 +102,85 @@ function paraConta(linha: LinhaSelecionada): Conta {
     sessionsInvalidBefore: linha.sessions_invalid_before.getTime() as Instant,
     createdAt: linha.created_at,
   };
+}
+
+/**
+ * ## Os construtores da escrita em massa, e por que eles saíram de dentro da fábrica
+ *
+ * As duas instruções abaixo são `UPDATE` **sem `id` no `WHERE`**: o que decide
+ * quantas linhas elas atingem é a coluna de escopo, e só ela. Removida a
+ * `user_id`, as duas continuam sintaticamente válidas, continuam devolvendo um
+ * número, e passam a valer para a base inteira — um "sair de todos os
+ * aparelhos" derrubaria a sessão de todo mundo, e uma troca de senha queimaria
+ * o link de verificação de todo mundo.
+ *
+ * Isso não é observável pelo lado de fora. Quem chama recebe o efeito que
+ * pediu; quem paga são contas que nenhuma requisição mencionou. Nem o dublê em
+ * memória acusa: ele apaga do `Map` da conta pedida de qualquer jeito, e a
+ * cardinalidade do `UPDATE` não existe dentro dele.
+ *
+ * `construtorD*` existe para que o escopo seja **verificável**:
+ * `escopo-de-escrita-em-massa.test.ts` compila estas funções sem executá-las e
+ * confere a cláusula `WHERE` inteira, e
+ * `tests/integration/escopo-da-revogacao-em-massa.test.ts` conta as linhas
+ * atingidas em Postgres de verdade, com duas contas na tabela.
+ *
+ * Eles recebem `DbExecutor` e não `Db` para que o mesmo predicado valha se um
+ * dia a chamada vier de dentro de uma transação.
+ */
+
+/**
+ * **SEC-006, revogação em massa das famílias de refresh de UMA conta.**
+ *
+ * Uma instrução. Varrer família por família exigiria primeiro listá-las, e
+ * entre a lista e o `UPDATE` uma renovação em curso abriria uma linha nova que
+ * a varredura já não alcançaria — a sessão que o gatilho existe para derrubar
+ * sobreviveria à própria revogação.
+ *
+ * `user_id = $n` é o escopo, e ele é o único limite de alcance desta
+ * instrução: a ADR-0002 (emenda 1) separa "sair" de "sair de todos os
+ * aparelhos" em dois mecanismos, e **os dois param na pessoa**. Nenhum dos
+ * cinco gatilhos do SEC-006 é da plataforma para a base.
+ *
+ * `revoked_at IS NULL` mantém a idempotência: chamada duas vezes, a segunda
+ * devolve 0 e não reescreve o motivo nem a hora da primeira.
+ */
+export function construtorDaRevogacaoEmMassa(
+  db: DbExecutor,
+  userId: UserId,
+  motivo: MotivoDeRevogacao,
+  agora: Instant,
+) {
+  return db
+    .updateTable('refresh_tokens')
+    .set({ revoked_at: new Date(agora), revoked_reason: motivo })
+    .where('user_id', '=', userId)
+    .where('revoked_at', 'is', null)
+    .returning('id');
+}
+
+/**
+ * **Critério 9 da BICHUS-77: nenhum link pendente sobrevive à troca de senha.**
+ *
+ * Mesma forma e mesmo risco da revogação de famílias: `user_id = $n` é o que
+ * separa "queimo os links desta conta" de "queimo os links de todo mundo", e a
+ * segunda leitura deixaria toda verificação de e-mail e toda redefinição em
+ * curso na plataforma morrer sem que ninguém conseguisse dizer por quê.
+ *
+ * `consumed_at IS NULL` não é filtro de correção e sim de idempotência e de
+ * verdade da contagem: sem ele a chamada reescreveria a hora de consumo de
+ * tokens já gastos e devolveria um número que não é o de links queimados.
+ */
+export function construtorDaInvalidacaoDeTokensPendentes(
+  db: DbExecutor,
+  userId: UserId,
+  agora: Instant,
+) {
+  return db
+    .updateTable('verification_tokens')
+    .set({ consumed_at: new Date(agora) })
+    .where('user_id', '=', userId)
+    .where('consumed_at', 'is', null);
 }
 
 export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepository {
@@ -390,27 +469,13 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linhas.length;
     },
 
-    /**
-     * Uma instrução. Varrer família por família exigiria primeiro listá-las, e
-     * entre a lista e o UPDATE uma renovação em curso abriria uma linha nova
-     * que a varredura já não alcançaria — a sessão que o gatilho existe para
-     * derrubar sobreviveria à própria revogação.
-     *
-     * `revoked_at IS NULL` mantém a idempotência: chamada duas vezes, a segunda
-     * devolve 0 e não reescreve o motivo nem a hora da primeira.
-     */
+    /** O predicado mora em {@link construtorDaRevogacaoEmMassa}. */
     async revogarTodasAsFamilias(
       userId: UserId,
       motivo: MotivoDeRevogacao,
       agora: Instant,
     ): Promise<number> {
-      const linhas = await db
-        .updateTable('refresh_tokens')
-        .set({ revoked_at: new Date(agora), revoked_reason: motivo })
-        .where('user_id', '=', userId)
-        .where('revoked_at', 'is', null)
-        .returning('id')
-        .execute();
+      const linhas = await construtorDaRevogacaoEmMassa(db, userId, motivo, agora).execute();
       return linhas.length;
     },
 
@@ -479,13 +544,9 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         : { userId: linha.user_id as UserId, enviadoPara: linha.sent_to };
     },
 
+    /** O predicado mora em {@link construtorDaInvalidacaoDeTokensPendentes}. */
     async invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
-      const r = await db
-        .updateTable('verification_tokens')
-        .set({ consumed_at: new Date(agora) })
-        .where('user_id', '=', userId)
-        .where('consumed_at', 'is', null)
-        .executeTakeFirst();
+      const r = await construtorDaInvalidacaoDeTokensPendentes(db, userId, agora).executeTakeFirst();
       return Number(r.numUpdatedRows);
     },
 

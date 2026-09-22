@@ -10,6 +10,18 @@
 -- `password_changed` cobre a troca e a redefinicao de senha, e `account_deleted`
 -- cobre a exclusao. O quarto gatilho do SEC-006 e este.
 
+-- Up Migration
+--
+-- O marcador acima NAO e decoracao, e a ausencia dele foi o defeito da
+-- BICHUS-125: `node-pg-migrate` procura `^\s*--[\s-]*up\s+migration` e, se
+-- nao acha, manda o ARQUIVO INTEIRO como subida. Sem esta linha, a metade de
+-- baixo -- que e a descida -- rodava na sequencia da de cima e desfazia o que
+-- ela acabara de fazer. A migracao ficava registrada em `pgmigrations` como
+-- aplicada, o `COMMENT ON COLUMN` sobrevivia prometendo `logout_all`, e a
+-- restricao voltava a ser a antiga. Ver
+-- `infra/verificacao/verificar-marcador-de-migracao.mjs`, o portao que impede
+-- a repeticao.
+
 ALTER TABLE refresh_tokens
   DROP CONSTRAINT refresh_tokens_revoked_reason_check;
 
