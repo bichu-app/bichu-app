@@ -12,6 +12,19 @@ import '../widgets/marca.dart';
 /// `planejada` e o que o mapa declara e ninguem construiu.
 enum EstadoDaSecao { existe, casca, planejada }
 
+/// O campo semantico do glifo de cada secao (BICHUS-230, criterio 2).
+///
+/// **Ele existe porque o rotulo encurtou e o significado foi transferido para
+/// o icone** (UX 27.3). Duas secoes que desenham do mesmo campo desfazem
+/// justamente a transferencia de que a barra de cinco depende, e foi o que o
+/// cliente leu no aparelho em 22/09: `storefront` em `Perto` e `shopping_bag`
+/// em `Loja` eram duas leituras de comercio, adjacentes na barra.
+///
+/// Declarar o campo no registro, e nao so trocar o glifo, e o que faz o portao
+/// pegar **a proxima** colisao: quem acrescentar uma secao e escolher o icone
+/// pela estetica reprova antes de chegar ao aparelho.
+enum CampoSemantico { animal, comunidade, lugar, compra, conta }
+
 /// Qual build esta sendo montado (UX 25.7.3).
 ///
 /// O paragrafo manda que secao `planejada` **nao seja renderizada** fora do
@@ -44,6 +57,7 @@ class DestinoDeNavegacao {
     required this.iconeSelecionado,
     required this.rota,
     required this.estado,
+    required this.campoSemantico,
   });
 
   /// O texto que aparece na barra. Curto por decisao: com cinco destinos o
@@ -73,6 +87,12 @@ class DestinoDeNavegacao {
   final String rota;
 
   final EstadoDaSecao estado;
+
+  /// O campo de significado de que o glifo desta secao tira a leitura.
+  ///
+  /// **Dois destinos nao podem declarar o mesmo**, e o portao de
+  /// `test/telas/casca_de_cinco_secoes_test.dart` reprova quando declaram.
+  final CampoSemantico campoSemantico;
 
   /// O nome que o VoiceOver e o TalkBack anunciam.
   ///
@@ -131,15 +151,26 @@ class CascaComAbas extends StatelessWidget {
       // e preciso dizer "cao" ou "gato". Nesta barra "animal" e exatamente o
       // que a secao e. A UX ja corrigiu esta premissa por escrito em 27.3.
       //
-      // O glifo que eu preferiria -- uma pata dentro de um alfinete de
+      // O glifo que a UX preferiria -- uma pata dentro de um alfinete de
       // localizacao -- nao existe no Material Symbols, e compor dois glifos
-      // sai da familia unica do 10.1 (UX 27.3.1).
+      // sai da familia unica do 10.1 (UX 27.3.1). **E ele deixou de ser
+      // possivel por outro motivo em 22/09**: o alfinete foi para `Perto`
+      // (BICHUS-233), e duas secoes vizinhas nao dividem a mesma forma. O
+      // desejo morre aqui, e isto esta escrito para nao ser reaberto.
       icone: Icons.pets_outlined,
       iconeSelecionado: Icons.pets,
       rota: Rotas.pets,
-      // O leitor de QR e o cadastro de pet respondem ao toque e levam a tela de
-      // verdade: a secao satisfaz o criterio (a) de 25.7.3.
+      // O leitor de QR responde ao toque e leva a tela de verdade: a secao
+      // satisfaz o criterio (a) de 25.7.3.
+      //
+      // **O cadastro de pet sustentava este `existe` junto com o leitor, e
+      // saiu daqui em 22/09** (BICHUS-232): cadastrar o **meu** pet e custodia
+      // e mora em `Perfil` > `Meus pets`, como a UX 27.5.1 e a 27.5.5 ja
+      // diziam. Sobra o leitor, e ele **continua bastando** pela letra do
+      // 25.7.3 -- por isso o estado declarado nao muda. O que nao podia ficar
+      // e esta justificativa citando uma acao que nao esta mais na tela.
       estado: EstadoDaSecao.existe,
+      campoSemantico: CampoSemantico.animal,
     ),
     DestinoDeNavegacao(
       rotulo: 'Rede',
@@ -150,16 +181,39 @@ class CascaComAbas extends StatelessWidget {
       iconeSelecionado: Icons.groups,
       rota: Rotas.rede,
       estado: EstadoDaSecao.planejada,
+      campoSemantico: CampoSemantico.comunidade,
     ),
     DestinoDeNavegacao(
       rotulo: 'Perto',
       reforcoAcessivel: 'profissionais e estabelecimentos indicados',
       reforcoDaPagina:
           'Os profissionais e estabelecimentos indicados por quem já usou.',
-      icone: Icons.storefront_outlined,
-      iconeSelecionado: Icons.storefront,
+      // O ALFINETE DE LOCALIZACAO, e nao a fachada de loja (BICHUS-233).
+      //
+      // `storefront` desenha uma fachada, e ficava a **dois slots** de
+      // `shopping_bag`, a sacola da aba `Loja`. A UX 27.3 defendia o par com
+      // o argumento de que "a sacola e compra minha; a fachada e o negocio de
+      // outra pessoa", e o argumento se sustenta no papel. No aparelho ele nao
+      // sobreviveu ao primeiro usuario, que e a unica bancada que conta: o
+      // cliente leu duas lojas lado a lado em 22/09.
+      //
+      // **`near_me` foi recusado**, e nao por ser pior: a seta e o sinal
+      // universal de "tracar rota", e o produto nao tem mapa nem rota por
+      // decisao de 17/09 (ADR-0010, o Maps cobra por carregamento). Um
+      // signifier que promete um mecanismo inexistente e o golfo da execucao
+      // aberto de proposito. `pin_drop`, `my_location` e `location_searching`
+      // caem pelo mesmo motivo, mais fraco: os tres leem como controle de mapa.
+      //
+      // Contorno em repouso e preenchido no selecionado, que e o M3 e o que os
+      // outros quatro ja fazem. As cores nao mudam: continuam vindo de
+      // `navigationBarTheme.iconTheme`. O rotulo e o nome acessivel tambem
+      // nao: o icone e decorativo e nao entra na arvore (UX 27.7), entao a
+      // troca nao tem efeito de acessibilidade.
+      icone: Icons.place_outlined,
+      iconeSelecionado: Icons.place,
       rota: Rotas.perto,
       estado: EstadoDaSecao.planejada,
+      campoSemantico: CampoSemantico.lugar,
     ),
     DestinoDeNavegacao(
       rotulo: 'Loja',
@@ -170,6 +224,7 @@ class CascaComAbas extends StatelessWidget {
       iconeSelecionado: Icons.shopping_bag,
       rota: Rotas.loja,
       estado: EstadoDaSecao.planejada,
+      campoSemantico: CampoSemantico.compra,
     ),
     DestinoDeNavegacao(
       rotulo: 'Perfil',
@@ -179,6 +234,7 @@ class CascaComAbas extends StatelessWidget {
       iconeSelecionado: Icons.account_circle,
       rota: Rotas.perfil,
       estado: EstadoDaSecao.existe,
+      campoSemantico: CampoSemantico.conta,
     ),
   ];
 

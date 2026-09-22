@@ -30,7 +30,6 @@ class AbaPets extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.pets);
     final sessao = Escopo.of(context).sessao;
-    final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
 
     return AnimatedBuilder(
@@ -77,16 +76,21 @@ class AbaPets extends StatelessWidget {
               ),
               const SizedBox(height: BichuEspaco.e6),
             ],
-            BotaoPrimario(
-              rotulo: 'Cadastrar meu pet',
-              // `push` e nao `go`: o assistente cobre a casca de abas e e um
-              // desvio, como as telas de conta. Deslogado, a conta e pedida
-              // dentro do caminho da acao, e nao no lugar dela (UX 5.2).
-              aoTocar: () => context.push(
-                logado ? Rotas.cadastrarPet : Rotas.criarConta,
-              ),
-            ),
-            const SizedBox(height: BichuEspaco.e4),
+            // `Cadastrar meu pet` NAO MORA AQUI (BICHUS-232, pedido do
+            // cliente em 22/09 depois do primeiro teste em aparelho).
+            //
+            // Nao e preferencia de quem olhou: a UX 27.5.1 lista os dezesseis
+            // sub-destinos de `Pets` e cadastro **nao esta entre eles**, e a
+            // 27.5.5 lista `Cadastrar pet` em `Perfil` com todas as letras. O
+            // botao entrou na implementacao, e nao na especificacao. `Pets` e
+            // a vizinhanca (perdidos, achados, adocoes); cadastrar o **meu**
+            // pet e custodia, e custodia e conta.
+            //
+            // A acao mora em `Perfil` > `Meus pets`, onde ela existe
+            // SEMPRE -- com a lista vazia e com a lista cheia. As duas metades
+            // sao uma coisa so: tirar daqui sem tornar permanente la apagaria
+            // o unico caminho do app para cadastrar o segundo pet.
+            //
             // A PORTA PRIMARIA DO LEITOR DE QR (UX 27.5.6).
             //
             // Ela vive aqui e nao em `Perfil` porque quem acha um cachorro na
@@ -130,22 +134,12 @@ class AbaPets extends StatelessWidget {
               explicacao: 'Aqui vão ficar os pets perdidos e achados da sua '
                   'região, com a foto e o bairro onde foram vistos.',
             ),
-            if (logado) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e6),
-              Text(
-                'Entrou como ${usuario?.email ?? ''}.',
-                style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-              ),
-            ],
-            if (!logado) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e4),
-              Center(
-                child: TextButton(
-                  onPressed: () => context.push(Rotas.entrar),
-                  child: const Text('Já tenho conta'),
-                ),
-              ),
-            ],
+            // `Entrou como <e-mail>` e `Ja tenho conta` TAMBEM SAIRAM
+            // (BICHUS-232). Os dois eram identidade e acao de conta dentro da
+            // secao de conteudo, e os dois eram **duplicata**: o e-mail com o
+            // estado de confirmacao ja e um `ListTile` de `Perfil`, e o login
+            // ja e `Entrar` e `Criar conta` em `Perfil` deslogado. Nao se
+            // perdeu caminho nenhum; parou de haver dois.
           ],
         );
       },

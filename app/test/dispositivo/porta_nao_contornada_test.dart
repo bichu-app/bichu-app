@@ -225,6 +225,33 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// 10 protege, e ela fala com a porta `Localizacao` pelo escopo -- que e o
 /// arranjo que o portao estrutural abaixo exige, e que
 /// `localizacao_no_ponto_de_uso_test.dart` cobra por nome de arquivo.
+/// **Destravado uma oitava vez pelas BICHUS-232, BICHUS-233 e BICHUS-153**,
+/// os tres achados do cliente de 22/09/2026. Quatro arquivos, e nenhum deles
+/// encosta na porta `CameraEGaleria`:
+///
+/// - `abas.dart` (232) deixou de oferecer o botao de cadastro ao lado de
+///   `Entrou como` e `Ja tenho conta`: a porta de cadastro de pet nao mora no
+///   Perfil.
+/// - `perfil/meus_pets.dart` (232) passou a construir a acao de cadastrar num
+///   lugar so, usada nos dois ramos, em vez de duas copias que ja tinham
+///   divergido.
+/// - `casca_com_abas.dart` (232) teve o comentario de `EstadoDaSecao.existe`
+///   corrigido.
+/// - `escanear/tela_leitor_de_qr.dart` (233 e 153): o icone de proximidade
+///   virou `place_outlined`/`place` sob o enum `CampoSemantico`, e o 404 de
+///   `GET /v1/tags/{code}` passou a distinguir o codigo DIGITADO do codigo
+///   lido, com `Digitar de novo` devolvendo o foco ao campo sem limpa-lo.
+///
+/// A ultima **tira** ainda mais leitura da porta, em vez de somar: a tela
+/// continua sem consultar permissao nenhuma, e a origem do codigo que ela
+/// agora carrega vem do teclado, nunca da camera. O `_codigoFoiDigitado`
+/// nasce `false` de proposito, para a BICHUS-54 cair no caminho escaneado
+/// quando trouxer o leitor de verdade.
+///
+/// **A BICHUS-54 destrava isto de novo, e com outro numero.** Ela apaga
+/// `escanear/tela_leitor_de_qr.dart` e altera `mascara_do_codigo_da_tag.dart`.
+/// Quem mesclar por ultimo reescreve esta linha; um conflito aqui e o
+/// resultado esperado, e nao sinal de que alguem errou.
 ///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o

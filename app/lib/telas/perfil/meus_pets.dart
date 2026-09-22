@@ -278,15 +278,27 @@ class _MeusPetsState extends State<MeusPets> {
           EstadoVazio(
             titulo: MeusPets.tituloDoVazio,
             explicacao: MeusPets.explicacaoDoVazio,
-            // Acao **unica** em destaque (criterio 6): nao ha um segundo botao
-            // competindo com ela nesta caixa.
-            acao: BotaoPrimario(
-              rotulo: 'Cadastrar meu pet',
-              aoTocar: () => context.push(Rotas.cadastrarPet),
-            ),
+            // Acao **unica** em destaque (criterio 6 da BICHUS-62, que nao
+            // muda): no vazio ela e a acao da caixa, e nao ha um segundo botao
+            // competindo com ela. Por isso a acao permanente abaixo dos
+            // cartoes **nao** e acrescentada neste ramo.
+            acao: _acaoDeCadastrar(),
           ),
         ],
-      _Fase.lista => <Widget>[..._cartoes(), ..._acaoDeMarcarPerdido()],
+      _Fase.lista => <Widget>[
+          ..._cartoes(),
+          ..._acaoDeMarcarPerdido(),
+          const SizedBox(height: BichuEspaco.e6),
+          // A ACAO PERMANENTE (BICHUS-232).
+          //
+          // **Ela existia so no estado vazio, e esse era o defeito.** Com um
+          // pet na lista o ramo era `_cartoes()` e a acao sumia; o unico ponto
+          // de entrada sempre visivel era o botao da secao `Pets`, que saiu em
+          // 22/09 por misturar contextos. As duas metades sao uma coisa so:
+          // sem esta linha, o app nao teria caminho nenhum para cadastrar o
+          // segundo pet.
+          _acaoDeCadastrar(),
+        ],
       _Fase.falhaComCache => <Widget>[
           FaixaDeAviso(
             peso: PesoDaFaixa.informativo,
@@ -347,6 +359,25 @@ class _MeusPetsState extends State<MeusPets> {
         },
       ),
     ];
+  }
+
+  /// `Cadastrar meu pet`, construida num lugar so.
+  ///
+  /// Os dois ramos que a mostram (o vazio e a lista cheia) precisam do **mesmo
+  /// rotulo e do mesmo destino**: duas construcoes a mao divergem no dia em
+  /// que alguem mexer numa delas, e o portao que exige a acao nos dois estados
+  /// continuaria verde com dois textos diferentes na tela.
+  ///
+  /// `BotaoPrimario` e nao um botao de contorno: entre duas formas igualmente
+  /// corretas, esta e a que poe a tinta da marca numa tela que hoje e cartao e
+  /// texto. O cliente disse em 22/09 que o app esta "sem cores" e decidiu nao
+  /// agir nisso agora -- isto nao e acabamento visual, e so a escolha da
+  /// variante que ja existia.
+  BotaoPrimario _acaoDeCadastrar() {
+    return BotaoPrimario(
+      rotulo: 'Cadastrar meu pet',
+      aoTocar: () => context.push(Rotas.cadastrarPet),
+    );
   }
 
   /// Os cartoes, um por pet, na ordem em que o servidor mandou.

@@ -172,8 +172,14 @@ void main() {
       await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
       await tester.pumpAndSettle();
 
-      // 5 destinos da barra + `Cadastrar meu pet` + `Escanear uma tag`.
-      exigirTodoBotaoComAcao(tester, tela: 'aterrissagem', botoesEsperados: 7);
+      // 5 destinos da barra + `Escanear uma tag`.
+      //
+      // Eram 7 ate 22/09: `Cadastrar meu pet` era o setimo. Ele saiu de `Pets`
+      // pela BICHUS-232 (cadastro e custodia, e custodia e `Perfil`), e a
+      // contagem desce junto. **Baixar o numero aqui e obrigatorio, e nao
+      // cosmetico:** e ele que faz este portao reprovar quando a arvore de
+      // semantica nao sobe, em vez de ficar verde por nao ter o que olhar.
+      exigirTodoBotaoComAcao(tester, tela: 'aterrissagem', botoesEsperados: 6);
       handle.dispose();
     });
 

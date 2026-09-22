@@ -241,7 +241,12 @@ void main() {
       expect(find.byType(CartaoDePet), findsOneWidget);
       final leiturasAteAqui = servidor.leituras;
 
-      await tocar(tester, find.widgetWithText(NavigationDestination, 'Pets'));
+      // A porta e a ACAO PERMANENTE de `Perfil` > `Meus pets` (BICHUS-232),
+      // e nao mais o botao da secao `Pets`, que saiu em 22/09.
+      //
+      // O caso ganha com a troca: com um pet na lista, esta acao **nao
+      // existia** antes de hoje, e a ida e volta ao assistente com a lista
+      // cheia era um caminho que nenhum teste percorria.
       await tocar(
         tester,
         find.widgetWithText(BotaoPrimario, 'Cadastrar meu pet'),

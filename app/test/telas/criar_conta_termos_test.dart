@@ -104,7 +104,12 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Cadastrar meu pet'));
+    // A porta de `Criar conta` deslogada mora em `Perfil` (BICHUS-232). Ate
+    // 22/09 este caso entrava pelo `Cadastrar meu pet` da secao de
+    // aterrissagem, que saiu de la por misturar cadastro com a vizinhanca.
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
   }
 

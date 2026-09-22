@@ -18,6 +18,12 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Vai para `Perfil`, que e onde moram as portas de conta (BICHUS-232).
+  Future<void> irParaPerfil(WidgetTester tester) async {
+    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
+    await tester.pumpAndSettle();
+  }
+
   testWidgets('abre deslogado em Pets, com as cinco secoes visiveis',
       (tester) async {
     await abrirOApp(tester);
@@ -82,10 +88,17 @@ void main() {
     }
   });
 
-  testWidgets('deslogado, o caminho para criar conta esta na tela',
+  testWidgets('deslogado, o caminho para criar conta esta em `Perfil`',
       (tester) async {
     await abrirOApp(tester);
-    await tester.tap(find.text('Cadastrar meu pet'));
+    // A PORTA MUDOU DE SECAO EM 22/09 (BICHUS-232), e nao desapareceu.
+    //
+    // Era `Cadastrar meu pet` na secao de aterrissagem, e o cliente pediu que
+    // saisse dali: cadastro e conta, e `Pets` e a vizinhanca. `Perfil`
+    // deslogado ja oferecia `Entrar` e `Criar conta` -- o botao da aterrissagem
+    // era a duplicata, nao o caminho.
+    await irParaPerfil(tester);
+    await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(AppBar, 'Criar conta'), findsOne);
@@ -98,7 +111,8 @@ void main() {
   testWidgets('a senha curta e recusada antes de gastar uma ida a rede',
       (tester) async {
     await abrirOApp(tester);
-    await tester.tap(find.text('Cadastrar meu pet'));
+    await irParaPerfil(tester);
+    await tester.tap(find.text('Criar conta'));
     await tester.pumpAndSettle();
 
     await tester.enterText(
