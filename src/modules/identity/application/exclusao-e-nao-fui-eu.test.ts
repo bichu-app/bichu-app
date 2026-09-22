@@ -33,7 +33,7 @@ import { describe, it } from 'node:test';
 import type { AuditEvent, AuditLog } from '../../audit/ports/audit-log.js';
 import { AppError } from '../../../shared/http/errors.js';
 import type { IdGenerator } from '../../../shared/ports/id-generator.js';
-import type { Clock } from '../../../shared/time/clock.js';
+import { comoIso, type Clock } from '../../../shared/time/clock.js';
 import { dataFixa, INSTANTE_FIXO } from '../../../shared/time/relogio-de-teste.js';
 import type {
   AbsoluteUrl,
@@ -52,7 +52,7 @@ import type {
   TokenConsumido,
 } from '../ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../ports/mailer.js';
-import type { ClaimsDoAcesso, TokenSigner } from '../ports/token-signer.js';
+import type { TokenSigner } from '../ports/token-signer.js';
 import type { Autenticado } from './auth-service.js';
 import { criarAuthService, PRAZO_DE_EXPURGO_EM_MS } from './auth-service.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
@@ -101,7 +101,7 @@ class BancoCaiu extends Error {
 
 interface LinhaDeRefresh {
   familyId: string;
-  revokedAt: Date | null;
+  revokedAt: Instant | null;
   revokedReason: MotivoDeRevogacao | null;
 }
 
@@ -153,7 +153,7 @@ class BancoDeMentira implements IdentityRepository {
       // A cláusula do banco: `WHERE user_id = $1 AND revoked_at IS NULL`. É ela
       // que torna a operação idempotente, e um `forEach` sobre tudo não seria.
       if (userId === TUTORA && linha.revokedAt === null) {
-        linha.revokedAt = new Date(agora);
+        linha.revokedAt = agora;
         linha.revokedReason = motivo;
         caidas += 1;
       }
@@ -185,7 +185,7 @@ class BancoDeMentira implements IdentityRepository {
 
   criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
     this.tokens.push({
-      hash: novo.tokenHash as string,
+      hash: novo.tokenHash,
       proposito: novo.proposito,
       enviadoPara: novo.enviadoPara,
       expiraEm: novo.expiraEm,
@@ -331,7 +331,7 @@ function montar(): Bancada {
   };
 
   const assinador: TokenSigner = {
-    emitir: () => ({ token: 'acesso', expiresInSeconds: 900, expiresAt: INSTANTE_FIXO as Instant }),
+    emitir: () => ({ token: 'acesso', expiresInSeconds: 900, expiresAt: INSTANTE_FIXO }),
     verificar: () => ({ ok: false, motivo: 'invalido' }),
     jwks: () => ({ keys: [] }),
   } as unknown as TokenSigner;
@@ -472,7 +472,7 @@ void describe('exclusão de conta (BICHUS-215, critério 3 — gatilho 3 do SEC-
     assert.deepEqual(pedido.metadata, {
       tags_revoked: 3,
       already_requested: false,
-      purge_after: new Date(INSTANTE_FIXO + PRAZO_DE_EXPURGO_EM_MS).toISOString(),
+      purge_after: comoIso((INSTANTE_FIXO + PRAZO_DE_EXPURGO_EM_MS) as Instant),
     });
     // A trilha sobrevive ao expurgo de propósito (24 meses, ADR-0010). O que
     // sobrevive não pode reconstituir o perfil que a exclusão apagou.

@@ -34,6 +34,7 @@ import type {
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
 import type { Mensagem } from '../ports/mailer.js';
+import { comoIso } from '../../../shared/time/clock.js';
 
 /**
  * Os motivos que derrubam a conta INTEIRA — os gatilhos do SEC-006.
@@ -1170,7 +1171,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         metadata: {
           tags_revoked: consequencias?.tagsRevogadas ?? 0,
           already_requested: consequencias === undefined,
-          purge_after: new Date(agora + PRAZO_DE_EXPURGO_EM_MS).toISOString(),
+          purge_after: comoIso((agora + PRAZO_DE_EXPURGO_EM_MS) as Instant),
         },
       });
 

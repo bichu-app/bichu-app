@@ -230,9 +230,9 @@ void it('emite o token do "Não fui eu" e põe o LINK no corpo (BICHUS-215, crit
     // `verification_tokens` com o valor em claro transformaria um vazamento de
     // leitura de banco numa revogação em massa disparável por qualquer um — e,
     // pior, num rastro de quem teve a conta invadida.
-    assert.notEqual(token.tokenHash as string, TOKEN_EM_CLARO);
+    assert.notEqual(token.tokenHash, TOKEN_EM_CLARO);
     assert.equal(
-      token.tokenHash as string,
+      token.tokenHash,
       createHash('sha256').update(TOKEN_EM_CLARO, 'utf8').digest('base64'),
     );
   });

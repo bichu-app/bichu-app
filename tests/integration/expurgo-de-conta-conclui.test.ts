@@ -31,8 +31,29 @@
  * `conversation_id` contra um pai que a mesma instrução tinha acabado de levar.
  *
  * Por isso a massa daqui tem **pet, tag, foto, caso, aviso e conversa com
- * mensagem escrita pela própria pessoa**. Tirar a mensagem da massa faz o caso
- * passar sem nunca tocar o mecanismo.
+ * mensagem escrita pela própria pessoa**: é a travessia inteira, e é o que
+ * torna "a exclusão concluiu" uma afirmação e não uma esperança.
+ *
+ * ===========================================================================
+ * O QUE ESTE ARQUIVO **NÃO** PEGA, MEDIDO E NÃO DEDUZIDO
+ * ===========================================================================
+ * A isca foi rodada: uma migração temporária devolveu o `SET NULL` a
+ * `conversation_messages.sender_user_id` — a declaração que a migração
+ * `20260922000005` corrigiu — e a suíte inteira rodou contra ela.
+ *
+ * Resultado: `chave-estrangeira-contra-restricao.test.ts` reprovou em QUATRO
+ * casos, inclusive o que exige o `23503`; **este arquivo passou**. Com a mesma
+ * massa em espírito, a exclusão daqui concluiu mesmo com a declaração errada.
+ * A ordem em que o Postgres dispara os gatilhos de integridade de um mesmo
+ * `DELETE` depende do conjunto de restrições envolvidas, e a massa daqui tem
+ * pet, tag, foto e intenção de envio que a do portão não tem. Remover o
+ * `case_id` da conversa, para igualar a forma, não mudou o resultado.
+ *
+ * A consequência é para quem ler depois, e é o motivo de estar escrito aqui em
+ * vez de virar nota de entrega: **a reprodução da quinta forma pertence ao
+ * portão de chave estrangeira, não a este arquivo.** Quem apagar aquele arquivo
+ * acreditando que este o cobre fica sem rede. Este prova outra coisa, e ela
+ * também não tinha prova: que o CAMINHO existe e termina.
  *
  * ===========================================================================
  * O CONTRAPESO
@@ -77,6 +98,8 @@ const CASO = '0192f3a1-7c2b-7e3d-9a10-2150000000e1';
 const AVISO = '0192f3a1-7c2b-7e3d-9a10-2150000000f1';
 const CONVERSA = '0192f3a1-7c2b-7e3d-9a10-215000000101';
 const MENSAGEM = '0192f3a1-7c2b-7e3d-9a10-215000000102';
+/** Usada só pelo caso do e-mail livre, e limpa junto com as outras duas. */
+const CONTA_DO_EMAIL_LIVRE = '0192f3a1-7c2b-7e3d-9a10-215000000999';
 
 let cliente: Client;
 let banco: DbHandle;
@@ -124,15 +147,25 @@ function codigoDoErro(erro: unknown): string {
 }
 
 /**
- * A massa: tudo o que a exclusão precisa atravessar, num SAVEPOINT.
+ * A massa: tudo o que a exclusão precisa atravessar.
  *
  * A conversa nasce do aviso da PRÓPRIA achadora e tem uma mensagem escrita por
  * ela. É essa combinação, e só ela, que exercita a quinta forma da classe de
  * 22/09 — sem a mensagem, ou com ela marcada como `system`, a exclusão conclui
  * mesmo com a declaração errada, e o caso vira decoração.
+ *
+ * Ela é COMMITADA, e não isolada num `BEGIN`/`ROLLBACK`.
+ *
+ * Não é preferência: o repositório sob teste tem a conexão dele (o pool do
+ * Kysely), e uma transação aberta neste cliente é invisível de lá. Massa dentro
+ * de savepoint faria `expurgarContasExcluidas` enxergar um banco sem as linhas
+ * e devolver "zero examinadas" — verde, sem ter exercitado nada.
+ *
+ * A limpeza é explícita e roda mesmo quando o caso reprova. Ela usa o mesmo
+ * `DELETE FROM users` que está sob teste, e isso é deliberado: se a limpeza
+ * falhar, a pilha efêmera some junto e o caso seguinte não herda lixo.
  */
 async function comMassa(corpo: () => Promise<void>): Promise<void> {
-  await cliente.query('BEGIN');
   try {
     await cliente.query(
       `insert into users (id, email, deleted_at, status, deletion_requested_at) values
@@ -192,7 +225,11 @@ async function comMassa(corpo: () => Promise<void>): Promise<void> {
     );
     await corpo();
   } finally {
-    await cliente.query('ROLLBACK');
+    await cliente.query('delete from users where id in ($1, $2, $3)', [
+      ACHADORA,
+      DONA,
+      CONTA_DO_EMAIL_LIVRE,
+    ]);
   }
 }
 
@@ -270,7 +307,7 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
       // `deleted_at` na marcação, quem excluiu a conta ficaria impedido de
       // criar outra com o próprio endereço até o expurgo — 30 dias depois.
       await cliente.query(`insert into users (id, email) values ($1, 'achadora@expurgo.test')`, [
-        '0192f3a1-7c2b-7e3d-9a10-215000000999',
+        CONTA_DO_EMAIL_LIVRE,
       ]);
       assert.equal(
         await contar(
@@ -307,11 +344,18 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
       // A varredura engole a falha de uma conta para não represar a fila, e é
       // por isso que `falhas` precisa ser afirmado: sem esta linha, um 23503
       // viraria uma rodada silenciosa que conta zero expurgadas e segue.
-      assert.deepEqual(
-        resultado,
-        { examinadas: 1, expurgadas: 1, falhas: 0 },
-        'a rodada não expurgou a conta. Se `falhas` for 1, o `DELETE` estourou e a mensagem ' +
-          'está no log do worker, com o código do Postgres.',
+      //
+      // Os números são relativos e não absolutos porque a pilha é compartilhada
+      // com os outros arquivos desta suíte, e `alcance-e-disparo.test.ts` também
+      // marca `users.deleted_at`. O que prova o caso são as linhas abaixo.
+      assert.equal(
+        resultado.falhas,
+        0,
+        'o `DELETE` estourou. A mensagem está no log do worker, com o código do Postgres.',
+      );
+      assert.ok(
+        resultado.expurgadas >= 1,
+        'a rodada não expurgou nenhuma conta, e havia uma vencida.',
       );
 
       const { rows } = await cliente.query<Record<string, string>>(
@@ -404,10 +448,11 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
       // Sem este caso, a implementação mais simples que passa no caso principal
       // é ignorar o prazo — e o prazo é o que dá socorro a quem clicou errado e
       // a quem teve a conta tomada e excluída por outra pessoa.
-      assert.deepEqual(resultado, { examinadas: 0, expurgadas: 0, falhas: 0 });
+      assert.equal(resultado.falhas, 0);
       assert.equal(
         await contar(`select count(*)::text as n from users where id = $1`, [ACHADORA]),
         '1',
+        'a conta foi expurgada um dia depois do pedido. O prazo de 30 dias deixou de valer.',
       );
     });
   });
@@ -423,7 +468,7 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
       // A cláusula é `deleted_at IS NOT NULL AND deleted_at <= $1`. Tirar a
       // primeira metade faria a varredura apagar toda conta criada há mais de
       // 30 dias, que é a base inteira.
-      assert.equal(resultado.expurgadas, 0);
+      assert.equal(resultado.falhas, 0);
       assert.equal(
         await contar(`select count(*)::text as n from users where id in ($1, $2)`, [ACHADORA, DONA]),
         '2',
