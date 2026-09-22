@@ -108,6 +108,12 @@ class _Segmento<T> extends StatelessWidget {
       button: true,
       label: opcao.rotulo,
       excludeSemantics: true,
+      // Sem esta linha o segmento sai da arvore com `button: true` e ZERO
+      // acoes -- medido: `Cao`, `Gato`, `Outro`, `Pequeno` e `Medio` saiam
+      // todos com `tap=false`. `excludeSemantics: true` leva junto a acao que
+      // o `InkWell` abaixo publica, e quem usa leitor de tela ouvia o nome da
+      // opcao sem receber como escolhe-la (WCAG 2.1 SC 4.1.2).
+      onTap: aoTocar,
       child: InkWell(
         onTap: aoTocar,
         borderRadius: BorderRadius.circular(BichuRaio.md),
