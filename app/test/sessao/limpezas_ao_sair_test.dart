@@ -92,6 +92,28 @@ const Map<String, ({String arquivo, String grupo})> iscasDaLista =
     arquivo: 'test/telas/marcar_como_perdido_test.dart',
     grupo: 'a fila offline morre no logout',
   ),
+  // ACRESCENTADA PELA BICHUS-75, o aviso persistente de cadastro.
+  //
+  // Ela e a quarta entrada e a segunda em DISCO. O que ela apaga e o registro
+  // de dispensas do aviso: quando a pessoa tocou em `Agora nao` pela ultima
+  // vez, e quantas vezes ja tocou.
+  //
+  // Parece contagem inocua e nao e. O e-mail sobre o qual a pessoa pediu
+  // silencio e dado dela, e o CONTADOR decide o texto: a partir da terceira
+  // dispensa o app passa a perguntar se o endereco esta certo. Herdado, o
+  // proximo tutor deste celular ganha duas coisas que nunca pediu -- sete dias
+  // de silencio sobre um aviso que ele precisa ler, e a suspeita sobre um
+  // endereco que e dele e esta correto.
+  //
+  // A isca dela aponta para o lado OPOSTO da de
+  // `test/dispositivo/oportunidades_de_aviso_test.dart`, que reprova se a
+  // entrada dela APARECER nesta lista: aquele registro e do APARELHO (o
+  // dialogo do iOS e gasto uma vez por instalacao) e este e da CONTA. As duas
+  // iscas existem para que ninguem uniformize uma pela outra.
+  '_avisoDeCadastro': (
+    arquivo: 'test/sessao/registro_do_aviso_de_cadastro_test.dart',
+    grupo: 'ISCA — o registro SOME no logout',
+  ),
 };
 
 /// O prazo da divida da `FilaOffline` (BICHUS-201).
