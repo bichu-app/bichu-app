@@ -38,6 +38,9 @@ import { identidadeDoArtefato } from '../shared/artefato/identidade-do-artefato.
 import { criarTrilhaDeAuditoria } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarTokenSigner } from '../modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../modules/identity/adapters/persistence/kysely-identity-repository.js';
+import { criarLocalizacaoDeReferenciaRepository } from '../modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
+import { LocalizacaoDeReferenciaService } from '../modules/identity/application/localizacao-de-referencia-service.js';
+import { registrarRotasDeLocalizacao } from '../modules/identity/adapters/http/localizacao-de-referencia-routes.js';
 import {
   registrarRotasDeDescoberta,
   registrarRotasDeIdentidade,
@@ -278,6 +281,26 @@ export async function main(): Promise<void> {
     },
   };
 
+  // BICHUS-92. A localizacao de referencia mora em `identity` porque `/me` e a
+  // superficie dela e porque a tabela pende de `users`. Ela e a coluna
+  // geografica que faltava para "tutores num raio de 5 km" ser calculavel --
+  // mas a CONTAGEM continua com `criarAlcanceAindaSemBase`, e isso e
+  // deliberado: dois dos sete criterios do ADR-0006 pedem aparelho com
+  // `push_permission = granted`, e nao ha tabela de aparelho (BICHUS-91). Ligar
+  // uma consulta aqui hoje devolveria o numero de quem tem localizacao e nao
+  // tem como receber push, que e um numero errado com cara de certo.
+  const dependenciasDasRotasDeLocalizacao = {
+    localizacao: new LocalizacaoDeReferenciaService({
+      repositorio: criarLocalizacaoDeReferenciaRepository(db),
+      clock: systemClock,
+      trilha,
+    }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
   const dependenciasDasRotasDeMidia = {
     midia: new MediaService({
       repositorio: repositorioDeMidia,
@@ -378,6 +401,7 @@ export async function main(): Promise<void> {
     registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
     registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
+    registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
