@@ -165,9 +165,18 @@ escreve cor, espaçamento, raio ou tamanho de tipo à mão.
 
 ```bash
 dart run tool/gen_tokens.dart   # regera lib/theme/bichu_tokens.g.dart
+dart run tool/gen_marca.dart    # regera lib/theme/marca_vetor.g.dart
 ```
 
-O arquivo gerado é versionado e começa com o aviso de que não deve ser editado.
+**O vetor da marca segue o mesmo arranjo, e pelo mesmo motivo.** A fonte é
+`design/marca/vetor/*.svg`, na raiz; `gen_marca.dart` lê os três que o app
+consome e emite as curvas mais o **nome do papel de cor**, nunca o valor — quem
+pinta resolve pelo tema. Cor de SVG que não seja primitivo de `tokens.json`
+reprova a geração. Quem mexer num SVG e não rodar o comando derruba
+`test/marca/vetor_da_marca_test.dart` com o nome do arquivo.
+
+Os arquivos gerados são versionados e começam com o aviso de que não devem ser
+editados.
 O outro destino previsto por §18.2.2, o CSS da rota pública do QR, é gerado
 fora deste pacote.
 

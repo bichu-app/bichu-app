@@ -1,5 +1,5 @@
 > **Status:** em revisão
-> **Atualizado:** 2026-09-21
+> **Atualizado:** 2026-09-22
 
 # Marca Bichu — leitura da identidade entregue pelo cliente
 
@@ -104,6 +104,15 @@ pesada e, abaixo, o descritor "a rede dos pets".
 
 - O logotipo é **vetor**. Nenhuma tela compõe a palavra "Bichu" digitando em
   fonte. Ver §8.4 do design system para o motivo.
+  **Desde 22/09/2026 isso é portão, não lembrança.** Duas telas quebravam a
+  regra por falta de vetor — a de abertura, com `Text('Bichu')` em
+  `displaySmall`, e a barra de topo da Início deslogada. As duas passaram a
+  desenhar (`app/lib/widgets/marca.dart`), e
+  `app/test/marca/logotipo_em_vetor_test.dart` reprova se alguma voltar a
+  compor: ele mantém o inventário de toda ocorrência do literal `'Bichu'` em
+  `app/lib/` e mede o que a tela **renderiza**, não o que o arquivo contém.
+  O nome do produto dentro de uma frase continua legítimo; o que a regra proíbe
+  é a palavra sozinha fazendo as vezes de marca.
 - A língua e os traços de brilho são sempre Manteiga, inclusive sobre Framboesa
   preenchida. Em versão de uma cor, eles somem em vez de mudar de cor.
 - **A patinha não é mais a marca.** Ela sobrevive como o grafismo de três
@@ -124,13 +133,19 @@ cartões de referência.
 
 ## 6. O que está pendente nesta pasta
 
-Três itens, todos registrados em §17 do design system:
+Quatro itens, todos registrados em §17 do design system. **Dois já caíram**, e
+ficam riscados aqui em vez de apagados: o que foi decidido e por quê é a parte
+que mais se perde.
 
 1. **O QR do verso da tag não escaneia**, e a própria folha admite isso. Antes
    de virar arte final, precisa de QR real com correção de erro nível H,
    impresso e lido em pelo menos três aparelhos.
-2. **A prova de redução a 24px é do cliente e não foi remedida aqui.** Bigodes
-   e olho piscando são os primeiros detalhes a fechar.
+2. ~~**A prova de redução a 24px é do cliente e não foi remedida aqui.**~~
+   **Remedida em 22/09/2026**, no rasterizador do próprio app e não a olho. O
+   enunciado da folha estava certo na causa: bigodes e olho piscando são o que
+   fecha primeiro. Só que a leitura é outra — **o símbolo completo não serve
+   24px de jeito nenhum**, e quem serve é a variante reduzida do item 4, que
+   existe justamente porque aqueles detalhes saíram.
 3. ~~**Não há SVG.**~~ **Resolvido em 21/09/2026, com ressalva que precisa
    viajar junto.** O cliente autorizou derivar o vetor dos PNG
    (*"derivar o vetor a partir do png"*), e `vetor/` agora tem sete SVG:
@@ -141,5 +156,17 @@ Três itens, todos registrados em §17 do design system:
    vetorial do autor da marca. O derivado garante silhueta, proporção e paleta
    acima de 48px; **não** garante que as curvas sejam as do autor, que o
    lettering de "Bichu" seja o mesmo desenho, nem fidelidade de impressão em
-   tiragem. E a **variante reduzida abaixo de 48px não saiu**, porque ela é
-   desenho novo e não conversão. Ver `vetor/README.md`.
+   tiragem. Ver `vetor/README.md`.
+
+4. ~~**A variante reduzida abaixo de 48px não saiu.**~~ **Saiu em
+   22/09/2026, e ela não foi desenho novo: foi subtração.** Com as curvas na
+   mão, apagar a piscada, os três bigodes e os dois brilhos — que é exatamente
+   o que a §3.10 já mandava — é uma operação exata, e o que sobra continua
+   sendo o desenho do autor. `vetor/simbolo-reduzido.svg`.
+
+   **Onde ela para, medido no rasterizador do app e não a olho:** o desenho
+   segura de **24px** para cima e se perde em 16px. O favicon de 16px é
+   servido por `vetor/selo-reduzido.svg`, que é a variante vazada em claro
+   sobre o quadrado Carmim — a mesma construção do ícone do app da folha do
+   cliente. Em 16px quem carrega a marca é o quadrado, e isso está dito em vez
+   de disfarçado. A tabela de medidas está em `vetor/README.md`.

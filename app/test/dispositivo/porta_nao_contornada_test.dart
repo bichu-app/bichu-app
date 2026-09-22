@@ -105,10 +105,14 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// **Destravado uma terceira vez pela BICHUS-154**: o codigo da tag encolheu
 /// para 16 caracteres e a tela que o exibe acompanhou.
 ///
+/// **Destravado uma quarta vez pela BICHUS-195/196**: `casca_com_abas.dart`
+/// ganhou `tituloEmMarca` e `abas.dart` recebeu a nota da decisao entre ela
+/// e a BICHUS-164.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '58be8c8a91d2839b7a4912ffed1608f96173fa59';
+const String _arvoreDasTelas = '597161a3566d10a2e87f58dc6398d862b692b923';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

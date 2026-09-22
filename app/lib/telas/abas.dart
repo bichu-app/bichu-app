@@ -39,6 +39,17 @@ class AbaPets extends StatelessWidget {
         final logado = sessao.logado;
 
         return TelaDeAba(
+          // O titulo e o rotulo da aba, LOGADO E DESLOGADO (UX 25.7.2 e
+          // 27.4.2). A BICHUS-195/196 trazia esta secao com o titulo `Bichu`
+          // em vetor quando deslogada, e nao dava para ficar com os dois: a
+          // BICHUS-164 e posterior e decide o contrario com a norma na mao --
+          // `Inicio` deixou de existir, e "a mesma palavra nos dois lugares" e
+          // o que faz a casca servir para conferir nomenclatura.
+          //
+          // O MECANISMO da 195/196 fica: `tituloEmMarca` continua em
+          // `casca_com_abas.dart` e `MarcaLockup` continua sendo o logotipo em
+          // vetor de `tela_de_abertura.dart`. O que nao fica e ligar a chave
+          // AQUI. Ver a pergunta aberta na entrega desta integracao.
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[

@@ -25,6 +25,7 @@ import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:flutter/material.dart';
+import 'package:bichu/widgets/marca.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 
@@ -104,9 +105,21 @@ void main() {
     return saida;
   }
 
-  void exigirQueVoltouParaAba(WidgetTester tester, String aba) {
+  void exigirQueVoltouParaAba(
+    WidgetTester tester,
+    String aba, {
+    bool porMarca = false,
+  }) {
     expect(
-      find.widgetWithText(AppBar, aba),
+      // Deslogada, a Inicio nao tem titulo escrito: ela carrega o logotipo em
+      // vetor (paragrafo 8.4 do design system). Procurar o texto "Bichu" aqui
+      // voltaria a exigir o que a regra da marca proibe.
+      porMarca
+          ? find.descendant(
+              of: find.byType(AppBar),
+              matching: find.byType(MarcaLockup),
+            )
+          : find.widgetWithText(AppBar, aba),
       findsOne,
       reason: 'A saida precisa devolver a aba "$aba", que e de onde a pessoa '
           'veio.',

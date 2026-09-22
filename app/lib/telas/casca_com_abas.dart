@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../roteamento/rotas.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import '../widgets/marca.dart';
 
 /// O estado de uma secao no registro (UX 27.5).
 ///
@@ -308,6 +309,7 @@ class TelaDeAba extends StatelessWidget {
     required this.filhos,
     super.key,
     this.reforco,
+    this.tituloEmMarca = false,
   });
 
   /// O **nome curto** da secao, igual ao rotulo da aba (UX 25.7.2 e 27.4.2).
@@ -321,6 +323,17 @@ class TelaDeAba extends StatelessWidget {
 
   final List<Widget> filhos;
 
+  /// Quando a barra de topo carrega o LOGOTIPO em vez do titulo escrito.
+  ///
+  /// Vale so para a tela em que o titulo E a marca. O paragrafo 8.4 do design
+  /// system diz que o logotipo e vetor e que nenhuma tela o recompoe digitando;
+  /// a barra precisa do lockup SEM descritor, porque o completo tem piso de
+  /// 160px de largura e nao cabe numa barra de 56px (paragrafo 21.2).
+  ///
+  /// [titulo] continua obrigatorio: ele vira o rotulo que o leitor de tela
+  /// anuncia. Imagem de marca sem rotulo e barra muda para quem nao ve.
+  final bool tituloEmMarca;
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -328,7 +341,15 @@ class TelaDeAba extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(titulo),
+        // A MARCA no lugar do texto quando `tituloEmMarca` (BICHUS-195/196).
+        // O `rotulo` continua indo para o leitor de tela: vetor sem nome e
+        // vetor mudo.
+        title: tituloEmMarca
+            ? MarcaLockup(
+                largura: MarcaLockup.pisoDeLargura,
+                rotulo: titulo,
+              )
+            : Text(titulo),
         // 64 dp, e nao os 56 do padrao do M3.
         //
         // O design system 23.2 desenhou a casca com barra de topo de 64 dp, e
