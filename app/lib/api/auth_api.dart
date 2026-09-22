@@ -107,7 +107,31 @@ class AuthApi {
   }
 
   /// `POST /auth/logout`.
-  Future<void> sair() => _api.post('/auth/logout');
+  ///
+  /// **O `refresh_token` vai no corpo, e ele e obrigatorio.** Nao e detalhe de
+  /// implementacao: e a unica informacao que diz ao servidor *qual* familia de
+  /// refresh morrer. Sem ela o servidor nao tem o que revogar, e um logout que
+  /// nao revoga deixa a credencial de longo prazo viva no banco por ate 180
+  /// dias enquanto o aparelho ja esqueceu dela (ADR-0002, emenda 1 de
+  /// 21/09/2026, secoes 1 e 4).
+  ///
+  /// Enquanto esta funcao nao levava parametro nenhum ela chamava
+  /// `_api.post('/auth/logout')` **sem corpo**, e o servidor respondia 204 sem
+  /// ter revogado coisa alguma. O contrato passou a exigir o campo e a recusar
+  /// com 400 quando ele falta, que e o certo: logout que nao revogou precisa
+  /// ser erro visivel, e nao sucesso indistinguivel do nada.
+  ///
+  /// **Sair deste aparelho, e nao de todos.** Esta operacao revoga so a
+  /// familia apresentada e nao toca `users.sessions_invalid_before`, que e por
+  /// pessoa. Quem sai do celular emprestado nao esta pedindo para cair da
+  /// propria casa; o outro verbo e `BICHUS-125`.
+  ///
+  /// Idempotente no servidor: reapresentar uma familia ja revogada responde
+  /// 204 e nao erra.
+  Future<void> sair(String refreshToken) => _api.post(
+        '/auth/logout',
+        corpo: <String, dynamic>{'refresh_token': refreshToken},
+      );
 
   /// `POST /auth/email-verification`. Responde sempre 202, exista ou nao a
   /// conta.
