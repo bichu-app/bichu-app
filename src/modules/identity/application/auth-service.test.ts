@@ -1156,3 +1156,176 @@ void describe('a troca de senha derruba a renovação, de ponta a ponta (BICHUS-
     assert.equal(bancada.repo.rotacoes.length, 1, 'depois da troca, não renova mais');
   });
 });
+
+/**
+ * O refresh que nasce JÁ revogado, no encontro de BICHUS-207 com BICHUS-77.
+ *
+ * Os dois consertos estão certos, e é o encontro deles que abre o buraco:
+ *
+ * - BICHUS-207 (`instanteDeRevogacao`) faz a SEGUNDA revogação dentro do mesmo
+ *   segundo gravar `sessions_invalid_before` **até 1 s à frente do relógio**,
+ *   para alcançar o `iat` que a emissão empurrou.
+ * - BICHUS-77 (`refreshFoiRevogado`) faz `renovar()` recusar todo refresh com
+ *   `issued_at < sessions_invalid_before`.
+ *
+ * Juntos, o login que cai nesse ≤1 s de barreira adiantada grava um refresh com
+ * `issued_at = agora`, abaixo da barreira, e a pessoa é derrubada na PRIMEIRA
+ * renovação — sem ter feito nada, logo depois de entrar. O `Math.max` de
+ * `abrirSessao` é o que fecha isso, e é o que estes casos protegem.
+ *
+ * **Fecha em vez de abrir: é regressão de disponibilidade, não de segurança.**
+ * Quem cai é quem acabou de retomar a conta, que é a pessoa de menor paciência
+ * do produto neste exato momento.
+ *
+ * O que estes casos afirmam é o EFEITO — a renovação acontecendo, com a rotação
+ * gravada — e não a chamada. Um caso que só conferisse `issued_at` do lado do
+ * repositório provaria a aritmética do teste; um que só olhasse o status ficaria
+ * verde porque `renovar()` responde 401 por meia dúzia de outros motivos.
+ *
+ * O relógio é CONDUZIDO, como em BICHUS-207: os quatro instantes são constantes
+ * do arquivo e caem no mesmo segundo **por construção**, nunca por velocidade de
+ * máquina. Uma isca que dependesse de corrida seria o defeito de hoje com outro
+ * nome.
+ */
+void describe('o refresh emitido logo depois de uma revogação dupla renova (BICHUS-207 + BICHUS-77)', () => {
+  const EMAIL_DA_CONTA = 'tutora@exemplo.test';
+  const SENHA = 'chuva-de-marco-no-quintal';
+  const IDENTIDADE = 'identidade-local-1';
+
+  /** `INSTANTE_FIXO` é virada de segundo exata; os quatro cabem no mesmo segundo. */
+  const PRIMEIRA_REVOGACAO = (INSTANTE_FIXO + 200) as Instant;
+  const SEGUNDA_REVOGACAO = (INSTANTE_FIXO + 400) as Instant;
+  const LOGIN = (INSTANTE_FIXO + 600) as Instant;
+  const PRIMEIRA_RENOVACAO = (INSTANTE_FIXO + 800) as Instant;
+  /** A marca que a conta tinha antes de tudo isso: nada de revogação recente. */
+  const ANTES = (INSTANTE_FIXO - 60_000) as Instant;
+
+  /**
+   * A barreira que a revogação dupla deixa gravada: `ceil((FIXO+200)/1000)*1000+1`.
+   * São 601 ms À FRENTE do relógio da segunda revogação, e é essa dianteira que
+   * o login seguinte tem de alcançar para não nascer condenado.
+   */
+  const BARREIRA_ADIANTADA = (INSTANTE_FIXO + 1_001) as Instant;
+
+  let phcGuardado: string | undefined;
+  async function phcDaSenha(): Promise<string> {
+    phcGuardado ??= await gerarHashDeSenha(SENHA);
+    return phcGuardado;
+  }
+
+  async function bancadaComRelogio(
+    barreiraInicial: Instant,
+  ): Promise<{ bancada: Bancada; mover: (q: Instant) => void }> {
+    let agora: Instant = ANTES;
+    const bancada = montar({
+      conta: contaAtiva(barreiraInicial),
+      relogio: { now: () => agora } satisfies Clock,
+      login: {
+        identityId: IDENTIDADE,
+        userId: VITIMA,
+        passwordPhc: await phcDaSenha(),
+        mustChange: false,
+      },
+    });
+    return { bancada, mover: (quando: Instant) => { agora = quando; } };
+  }
+
+  const entrar = (bancada: Bancada): Promise<{ access_token: string }> =>
+    bancada.servico.entrar({ email: EMAIL_DA_CONTA, password: SENHA, staySignedIn: false }, CONTEXTO);
+
+  void it('A ISCA: entra no ≤1 s seguinte a uma revogação dupla e a PRIMEIRA renovação funciona', async () => {
+    const { bancada, mover } = await bancadaComRelogio(ANTES);
+
+    // 1. "Não fui eu": a primeira revogação.
+    mover(PRIMEIRA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'logout_all', CONTEXTO);
+
+    // 2. A troca de senha, 200 ms depois — o MESMO segundo. É esta que empurra a
+    //    barreira para a frente do relógio (BICHUS-207).
+    mover(SEGUNDA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'password_changed', CONTEXTO);
+    assert.equal(
+      bancada.repo.invalidacoesDeSessao.at(-1)?.barreira,
+      BARREIRA_ADIANTADA,
+      'o cenário só existe se a segunda revogação tiver mesmo adiantado a barreira',
+    );
+
+    // 3. A tutora entra com a senha nova, 200 ms depois da revogação — dentro do
+    //    ≤1 s em que a barreira está à frente do relógio. O login FUNCIONA: o
+    //    token de acesso dela nasce empurrado por `instanteDeEmissaoDoAcesso` e
+    //    passa. É o refresh que nasce condenado, e ninguém percebe agora.
+    mover(LOGIN);
+    const daVitima = await entrar(bancada);
+    const autenticado = await bancada.servico.autenticar(daVitima.access_token);
+    assert.equal(autenticado.conta.id, VITIMA, 'o login em si precisa ter funcionado');
+
+    // 4. A PRIMEIRA renovação, 200 ms depois. É aqui que a pessoa cai.
+    //
+    //    A recusa é COLHIDA em vez de subir. Deixá-la estourar faria o caso
+    //    reprovar com o `AppError` cru e a pilha de `renovar()`, e quem olhasse o
+    //    vermelho daqui a seis meses veria um 401 sem causa. O que reprova tem de
+    //    dizer o que quebrou.
+    mover(PRIMEIRA_RENOVACAO);
+    const recusa = await bancada.servico
+      .renovar('refresh-novo', CONTEXTO)
+      .then(() => undefined, (erro: unknown) => erro);
+
+    assert.equal(
+      recusa,
+      undefined,
+      'a PRIMEIRA renovação de quem acabou de entrar foi recusada. O refresh do login nasceu ' +
+        'com `issued_at = agora`, abaixo da barreira que a revogação dupla adiantou ' +
+        '(BICHUS-207), e `refreshFoiRevogado` (BICHUS-77) o derrubou. Quem cai é a pessoa que ' +
+        'acabou de retomar a conta, 200 ms depois de entrar. O `Math.max` de `abrirSessao` faz ' +
+        'o refresh nascer NA barreira em vez de abaixo dela',
+    );
+    assert.equal(
+      bancada.repo.rotacoes.length,
+      1,
+      'renovou de verdade: a rotação tem de estar gravada, e não só a chamada ter voltado',
+    );
+    assert.deepEqual(
+      bancada.eventos.filter((e) => e.action === 'auth.refresh_rejected_revoked_session'),
+      [],
+      'a trilha registrou a renovação como se fosse sessão revogada, e a sessão é de 200 ms atrás',
+    );
+  });
+
+  void it('O CONTRAPESO: sem revogação recente, o login renova normalmente', async () => {
+    // A outra ponta, e sem ela a isca passaria com um `issuedAt` gravado sempre
+    // no futuro — que faria toda renovação do produto passar e transformaria o
+    // portão do SEC-006 em decoração. O que se protege aqui é `renovar()`
+    // continuar sendo portão: o empurrão só pode existir quando há barreira
+    // adiantada para alcançar.
+    const { bancada, mover } = await bancadaComRelogio(ANTES);
+
+    mover(LOGIN);
+    await entrar(bancada);
+    assert.equal(
+      bancada.repo.familiasAbertas.at(-1)?.issuedAt,
+      LOGIN,
+      'sem barreira à frente do relógio, `issued_at` continua sendo `agora` ao milissegundo',
+    );
+
+    mover(PRIMEIRA_RENOVACAO);
+    await bancada.servico.renovar('refresh-novo', CONTEXTO);
+    assert.equal(bancada.repo.rotacoes.length, 1, 'renovou normalmente');
+  });
+
+  void it('O PORTÃO CONTINUA PORTÃO: o refresh anterior à barreira segue recusado', async () => {
+    // O terceiro caso fecha a saída fácil. Uma "correção" que gravasse
+    // `issued_at` sempre à frente da barreira passaria nos dois casos acima e
+    // ressuscitaria o furo de BICHUS-77: quem copiou o refresh ANTES da troca de
+    // senha voltaria a renovar. A barreira alcança o que nasceu antes dela, e
+    // não alcança o que nasceu depois.
+    const bancada = montar({
+      refresh: refreshArmazenado({ issuedAt: LOGIN }),
+      conta: contaAtiva(BARREIRA_ADIANTADA),
+      agora: PRIMEIRA_RENOVACAO,
+    });
+
+    const erro = await capturar(bancada.servico.renovar('refresh-copiado', CONTEXTO));
+    assert.equal(erro.status, 401);
+    assert.deepEqual(bancada.repo.rotacoes, [], 'a recusa vem ANTES da rotação');
+  });
+});
