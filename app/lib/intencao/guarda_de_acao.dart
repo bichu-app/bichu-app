@@ -16,6 +16,8 @@ library;
 
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
+
 import '../api/falhas.dart';
 import '../api/mensagens_de_erro.dart';
 import 'deposito_de_intencao.dart';
@@ -134,6 +136,31 @@ class GuardaDeAcao {
   final Map<AcaoDeIntencao, AcaoExecutavel> _acoes;
   final DateTime Function() _agora;
 
+  /// Manda o defeito para o canal que a observabilidade escuta (Sentry,
+  /// ADR-0008), que é o mesmo caminho do `registrarSaidaNoCanalPadrao` da
+  /// sessão.
+  ///
+  /// **Sem rascunho e sem conteúdo de envelope.** O que a pessoa digitou está
+  /// dentro da intenção, e isto sai do aparelho: o relato leva a ação e a tela
+  /// de retorno, que dizem qual executor quebrou, e nada que identifique
+  /// alguém.
+  void _relatar(
+    Object erro,
+    StackTrace pilha,
+    String quando,
+    String detalhe,
+  ) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: erro,
+        stack: pilha,
+        library: 'bichu/intencao',
+        context: ErrorDescription(quando),
+        informationCollector: () => <DiagnosticsNode>[ErrorDescription(detalhe)],
+      ),
+    );
+  }
+
   /// Guarda a intenção. **A nova substitui a anterior** (regra 1).
   ///
   /// Não há pilha de intenções de propósito: duas intenções guardadas produzem
@@ -169,9 +196,20 @@ class GuardaDeAcao {
       intencao = IntencaoPendente.deJson(
         Map<String, dynamic>.from(jsonDecode(bruto) as Map),
       );
-    } on Object {
+    } on Object catch (erro, pilha) {
       // Arquivo corrompido, ação de outra versão do app, data ilegível.
       // Apagar e seguir: um envelope ruim não pode impedir alguém de entrar.
+      //
+      // **O comportamento está certo; o que faltava era o registro**
+      // (BICHUS-201, defeito 3). Descartar calado transforma corrupção
+      // recorrente em "às vezes a intenção some", que é a forma de defeito que
+      // ninguém consegue investigar porque ninguém consegue contar.
+      _relatar(
+        erro,
+        pilha,
+        'ao ler a intenção guardada',
+        'envelope ilegível descartado: a pessoa entra na conta e vai para o Início',
+      );
       await descartar();
       return (intencao: null, expirou: false);
     }
@@ -251,7 +289,7 @@ class GuardaDeAcao {
         extra: executavel.retomar(intencao, MensagensDeErro.de(falha)),
         erro: MensagensDeErro.de(falha),
       );
-    } on Object {
+    } on Object catch (erro, pilha) {
       // Defeito nosso: o executor estourou por algo que não é falha de
       // chamada — um envelope incompleto, um campo que mudou de tipo entre
       // versões do app. **Não pode terminar aqui**: sem este ramo, a exceção
@@ -262,6 +300,20 @@ class GuardaDeAcao {
       // app errou ao executar sua ação", e inventar microcopy é pior que
       // ficar calado: a tela de retorno abre com o rascunho carregado e a
       // pessoa toca no botão de novo.
+      //
+      // **Calado para a pessoa, não para nós** (BICHUS-201, defeito 2). O
+      // comentário acima diz "defeito nosso" desde que foi escrito, e mesmo
+      // assim o ramo não deixava rastro nenhum em produção: um defeito que o
+      // autor sabia existir e que ninguém conseguia ver acontecer. O `acao`
+      // vai junto porque sem ele o relato diz que algo quebrou e não diz o
+      // quê — e é a intenção que identifica o executor culpado.
+      _relatar(
+        erro,
+        pilha,
+        'ao executar a intenção guardada depois do login',
+        'o executor de `${intencao.acao.name}` estourou fora de FalhaDeChamada; '
+            'a pessoa voltou para `${intencao.telaDeRetorno}` com o rascunho e sem mensagem',
+      );
       return DestinoDeRetorno(
         rota: rotaDeRetorno,
         telaDeRetorno: intencao.telaDeRetorno,

@@ -22,6 +22,7 @@
 import { createConnection, type Socket } from 'node:net';
 import type { Mailer, Mensagem } from '../../ports/mailer.js';
 import type { MailConfig } from '../../../../shared/config/app-config.js';
+import { motivoDaRecusaDeEndereco } from '../../domain/gramatica-de-endereco.js';
 
 /** Uma troca do protocolo: manda a linha, espera o código esperado. */
 async function dizer(
@@ -57,77 +58,15 @@ export function escaparPontos(corpo: string): string {
 }
 
 /**
- * Tudo que um endereço não pode carregar, e por que a lista é esta e fecha.
+ * A classe recusada mora em `domain/gramatica-de-endereco.ts`, e este adaptador
+ * a **importa** em vez de repeti-la.
  *
- * O endereço é interpolado em dois contextos com gramática própria:
- * `To: ${para}` (campo de cabeçalho, RFC 5322) e `RCPT TO:<${para}>` (linha de
- * comando, RFC 5321). A lista abaixo é o conjunto de caracteres que têm
- * significado numa das duas gramáticas, e por isso é fechada por construção e
- * não por catálogo de ataques conhecidos:
- *
- * - `\u0000-\u0020` — os controles C0 e o espaço. CR e LF terminam linha nos
- *   dois protocolos, e é daí que sai cabeçalho novo ou comando novo. NUL trunca
- *   em MTA escrito em C. VT e FF são tratados como quebra por parte dos
- *   analisadores de cabeçalho. O espaço separa os argumentos do `RCPT TO:`, e é
- *   ele que permite enxertar parâmetro ESMTP (`NOTIFY=`, `ORCPT=`, RFC 3461)
- *   sem precisar de quebra de linha nenhuma.
- * - `\u007F-\u00A0` — DEL, os controles C1 (inclusive NEL, `U+0085`) e o espaço
- *   inquebrável. O `\s` do JavaScript não cobre `U+0085`, então quem confiasse
- *   nele deixaria passar um separador de linha.
- * - `\u1680`, `\u2000-\u200D`, `\u202F`, `\u205F`, `\u3000`, `\uFEFF` — o resto
- *   do espaço em branco Unicode, mais os de largura zero, que escondem o
- *   emendado de quem lê o log.
- * - `\u2028` e `\u2029` — separador de linha e de parágrafo.
- * - `<`, `>` — delimitam o caminho no `RCPT TO:<…>`. Um `>` no meio do endereço
- *   fecha o caminho e o resto vira argumento do comando. É injeção de comando
- *   SMTP **sem uma quebra de linha sequer**, e era o furo que sobrava depois de
- *   BICHUS-131.
- * - `,`, `;` — separam endereços numa lista de cabeçalho.
- * - `:` — separa o nome do campo no cabeçalho, e é o que monta a rota de origem
- *   do RFC 821 (`<@relay:vitima@…>`), que faz a mensagem passar por um servidor
- *   escolhido por outra pessoa antes de chegar à vítima.
- * - `"`, `\` — abrem literal citado e par escapado. Este adaptador não sabe
- *   emitir nenhum dos dois, então deixá-los passar é entregar um endereço que
- *   o servidor lê diferente do que nós lemos.
- *
- * **Normalização Unicode não entra aqui, e isso é medida e não descuido.** A
- * varredura dos 1.114.112 pontos de código sob NFC, NFD, NFKC e NFKD, mais
- * `toLowerCase` e `toUpperCase`, não encontra **nenhum** que produza CR ou LF
- * (o caso está versionado em `smtp-mailer.test.ts` e roda em 90 ms, então ele
- * acusa se uma versão futura do Unicode mudar isso). Acrescentar um passo de
- * normalização antes da conferência seria rito sem efeito; o que existe de
- * verdade são os separadores de linha do Unicode, e eles estão recusados acima
- * pelo que são, não pelo que viram.
- *
- * Codificação percentual (`%0d%0a`) também não é decodificada aqui, de
- * propósito: `%` é caractere legítimo de parte local (`atext`, RFC 5322), e
- * decodificar transformaria endereço válido em ataque. O que a conferência
- * garante é o que importa — o texto que chega é o texto que vai para o fio, e
- * `%0d%0a` no fio é literal, não quebra. Quem decodificar antes de chamar cai
- * na recusa, que é onde tem de cair.
+ * O motivo é a BICHUS-198: enquanto a lista viveu aqui dentro, a validação de
+ * forma do cadastro tinha a sua própria, mais frouxa, e o resultado era a conta
+ * nascendo antes de o envio recusar o endereço. Uma cópia aqui resolveria hoje
+ * e divergiria amanhã. O arquivo do domínio explica por que a lista é aquela e
+ * por que ela fecha.
  */
-const CARACTERE_PROIBIDO_NO_ENDERECO =
-  // eslint-disable-next-line no-control-regex -- os controles são exatamente o alvo
-  /[\u0000-\u0020\u007F-\u00A0\u1680\u2000-\u200D\u2028\u2029\u202F\u205F\u3000\uFEFF<>,;:"\\]/u;
-
-/**
- * O motivo, pronto para a mensagem de erro, ou `null` se o endereço passa.
- *
- * O endereço NÃO entra na mensagem, pelo mesmo motivo do `dizer` acima:
- * endereço de usuário é dado pessoal e mensagem de erro vai para o log. O que
- * sai é o ponto de código do caractere recusado, que o operador precisa para
- * entender o que aconteceu e que não identifica ninguém: ele é sempre um
- * controle ou um delimitador de protocolo.
- */
-function motivoDaRecusa(endereco: string): string | null {
-  const achado = CARACTERE_PROIBIDO_NO_ENDERECO.exec(endereco);
-  if (achado === null) return null;
-  const codigo = achado[0].codePointAt(0) ?? 0;
-  const ponto = `U+${codigo.toString(16).toUpperCase().padStart(4, '0')}`;
-  return codigo === 0x0d || codigo === 0x0a
-    ? `quebra de linha (${ponto})`
-    : `caractere que o transporte não carrega (${ponto})`;
-}
 
 /**
  * Recusa o destinatário perigoso, em vez de limpá-lo.
@@ -145,7 +84,7 @@ function motivoDaRecusa(endereco: string): string | null {
  * linha vermelha.
  */
 export function conferirDestinatario(para: string): void {
-  const motivo = motivoDaRecusa(para);
+  const motivo = motivoDaRecusaDeEndereco(para);
   if (motivo !== null) {
     throw new Error(`destinatário recusado: endereço com ${motivo}`);
   }
@@ -241,7 +180,7 @@ export function conferirRemetente(config: MailConfig): void {
     ['MAIL_FROM', config.from],
     ['MAIL_REPLY_TO', config.replyTo],
   ] as const) {
-    const motivo = motivoDaRecusa(valor);
+    const motivo = motivoDaRecusaDeEndereco(valor);
     if (motivo !== null) {
       throw new Error(`remetente recusado: ${variavel} com ${motivo}`);
     }
