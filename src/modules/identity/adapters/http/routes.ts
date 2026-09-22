@@ -10,9 +10,9 @@
  * Remover o `rateLimit` de qualquer bloco abaixo é erro de compilação, não
  * achado de revisão.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import {
   camposPendentesDoPerfil,
@@ -287,7 +287,7 @@ async function contaDoTeto(
 }
 
 export function registrarRotasDeIdentidade(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   deps: DependenciasDasRotas,
 ): void {
   /**
@@ -571,7 +571,7 @@ export function registrarRotasDeIdentidade(
  * raiz do host da API.
  */
 export function registrarRotasDeDescoberta(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   deps: DependenciasDasRotas,
 ): void {
   registrarRota(app, rotaDoJwks, {}, async (_request: FastifyRequest, reply: FastifyReply) => {

@@ -58,7 +58,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { FastifyInstance } from 'fastify';
+import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 
 import type { AuditEvent, AuditLog } from '../../../audit/ports/audit-log.js';
 import { carregarContrato, type Contrato } from '../../../../shared/http/contract.js';
@@ -245,7 +245,7 @@ class RepositorioFalso implements IdentityRepository {
 const TOKEN_DE_ACESSO = 'acesso-da-tutora';
 
 interface Bancada {
-  readonly app: FastifyInstance;
+  readonly app: RegistradorDeRotas;
   readonly repo: RepositorioFalso;
   readonly contrato: Contrato;
   readonly eventos: AuditEvent[];

@@ -23,9 +23,9 @@
  *   o domínio precisar; um `...pet` publicaria cada campo novo por omissão. A
  *   lista explícita faz a decisão de expor ser sempre uma decisão.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import {
@@ -242,7 +242,7 @@ function petIdDoCaminho(request: FastifyRequest): PetId {
 }
 
 export function registrarRotasDePets(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   deps: DependenciasDasRotasDePet,
 ): void {
   registrarRota(app, rotaDeListagemDePets, {}, async (request: FastifyRequest, reply: FastifyReply) => {

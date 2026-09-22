@@ -24,7 +24,7 @@ import { systemClock } from '../shared/time/clock.js';
 import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
 import { dependenciasDoTeto } from '../shared/http/aplicacao-de-teto.js';
-import { inventarioDoQueNaoEAplicado } from '../shared/http/registrar-rota.js';
+import { escoparRotas, inventarioDoQueNaoEAplicado } from '../shared/http/registrar-rota.js';
 import {
   criarContadorDesligado,
   criarContadorEmMemoria,
@@ -351,29 +351,30 @@ export async function main(): Promise<void> {
     contrato,
   });
 
-  await app.register(
-    (escopo, _opcoes, pronto) => {
-      registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
-      registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
-      registrarRotasDePets(escopo, dependenciasDasRotasDePet);
-      registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
-      registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
-      registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
-      registrarSaude(escopo, {
-        version: config.version,
-        // `version` e o mesmo `0.1.0` em qualquer build; `build` e o que
-        // distingue um artefato do outro, e e por ele que os dois destinos sao
-        // comparados (src/tools/comparar-destinos.ts).
-        build,
-        problemBaseUrl: config.problemBaseUrl,
-        // A sonda toca o banco de verdade: sonda que nao sonda nada sempre
-        // responde que esta tudo bem.
-        verificacoes: { database: () => banco.ping() },
-      });
-      pronto();
-    },
-    { prefix: PREFIXO_DA_API },
-  );
+  // `escoparRotas` e nao `app.register` cru: o `escopo` que o framework entrega
+  // e o servidor INTEIRO, e um `escopo.post(...)` aqui dentro compilava sem que
+  // nada acusasse -- foi por este furo que a BICHUS-178 passou. O registrador
+  // que chega aqui nao tem metodo de registro nenhum, entao a chamada direta
+  // deixou de ser exprimivel, e nao depende de o portao lembrar deste nome.
+  await escoparRotas(app, PREFIXO_DA_API, (escopo) => {
+    registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
+    registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
+    registrarRotasDePets(escopo, dependenciasDasRotasDePet);
+    registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
+    registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
+    registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
+    registrarSaude(escopo, {
+      version: config.version,
+      // `version` e o mesmo `0.1.0` em qualquer build; `build` e o que
+      // distingue um artefato do outro, e e por ele que os dois destinos sao
+      // comparados (src/tools/comparar-destinos.ts).
+      build,
+      problemBaseUrl: config.problemBaseUrl,
+      // A sonda toca o banco de verdade: sonda que nao sonda nada sempre
+      // responde que esta tudo bem.
+      verificacoes: { database: () => banco.ping() },
+    });
+  });
 
   // Rota que o contrato declara idempotente e que não passa pela idempotência
   // derruba a subida aqui, e não no segundo envio de um cliente offline, que é

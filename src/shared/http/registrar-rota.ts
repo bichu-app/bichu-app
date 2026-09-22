@@ -48,6 +48,7 @@
  */
 import type {
   FastifyInstance,
+  FastifyPluginCallback,
   FastifyReply,
   FastifyRequest,
   onRequestAsyncHookHandler,
@@ -191,7 +192,58 @@ const METODOS = {
   delete: 'DELETE',
 } as const satisfies Record<RouteDefinition['method'], string>;
 
-function tetoDe(app: FastifyInstance): DependenciasDoTeto {
+/**
+ * Os membros do servidor que **registram rota**, e que ninguém fora deste
+ * arquivo pode alcançar.
+ *
+ * `Extract<keyof FastifyInstance, ...>` e não uma união solta: um nome que o
+ * framework não tenha some do `Omit` abaixo em silêncio, e o `RegistradorDeRotas`
+ * voltaria a expor o método. A lista é conferida contra a do framework.
+ */
+type MetodoDeRegistro = Extract<
+  keyof FastifyInstance,
+  'get' | 'head' | 'post' | 'put' | 'patch' | 'delete' | 'options' | 'all' | 'route'
+>;
+
+/**
+ * O servidor **sem a porta dos fundos**. É o tipo que todo módulo de rota
+ * recebe, e o que `escoparRotas` entrega.
+ *
+ * Por que isto existe, e por que não bastava o portão de código-fonte: o portão
+ * acusa depois, na suíte, e acusa porque alguém lembrou de mantê-lo afiado. O
+ * tipo acusa no editor, na hora, e **não tem furo de nome de variável** — um
+ * parâmetro chamado `escopo`, `app` ou `xpto` simplesmente não tem `.post` para
+ * chamar. Foi por um nome de variável que a versão anterior do portão deixou
+ * passar o registro clandestino de `api.ts`.
+ *
+ * Tudo que não registra rota continua aqui: `register`, `addHook`, `listen`,
+ * `close`, `decorate`, `log`, `inject`. Quem precisa do servidor inteiro é
+ * `registrarRota`, e ele mora neste arquivo.
+ */
+export type RegistradorDeRotas = Omit<FastifyInstance, MetodoDeRegistro>;
+
+/**
+ * Abre um escopo prefixado e entrega ao chamador um servidor **sem** os métodos
+ * de registro.
+ *
+ * `app.register((escopo, ...) => ...)` do framework tipa `escopo` como o
+ * servidor inteiro, e era exatamente ali — dentro do escopo `/v1`, onde as seis
+ * famílias de rotas entram — que `escopo.post(...)` compilava sem que nada
+ * acusasse. Passando por aqui, o mesmo `escopo.post(...)` deixa de compilar.
+ */
+export async function escoparRotas(
+  app: RegistradorDeRotas,
+  prefixo: string,
+  montar: (registrador: RegistradorDeRotas) => void,
+): Promise<void> {
+  const plugin: FastifyPluginCallback = (escopo, _opcoes, pronto) => {
+    montar(escopo);
+    pronto();
+  };
+  await app.register(plugin, { prefix: prefixo });
+}
+
+function tetoDe(app: RegistradorDeRotas): DependenciasDoTeto {
   const teto = app.tetoDeChamada;
   if (teto === undefined) {
     throw new Error(
@@ -212,7 +264,7 @@ function tetoDe(app: FastifyInstance): DependenciasDoTeto {
  * `app.post(...)`. Agora a declaração é a única fonte dos dois.
  */
 export function registrarRota<const T extends RouteDefinition>(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   rota: T,
   opcoes: OpcoesDeRegistro<T>,
   handler: Handler,
@@ -235,7 +287,10 @@ export function registrarRota<const T extends RouteDefinition>(
     if (erro !== undefined) throw erro;
   };
 
-  app.route({
+  // A ÚNICA reabertura do tipo largo em todo o `src/`, e ela está no arquivo
+  // que o portão autoriza. `RegistradorDeRotas` é o mesmo objeto com os métodos
+  // de registro escondidos; aqui eles voltam, porque é aqui que se registra.
+  (app as FastifyInstance).route({
     method: METODOS[rota.method],
     url: rota.path,
     ...(opcoes.schema === undefined ? {} : { schema: opcoes.schema }),

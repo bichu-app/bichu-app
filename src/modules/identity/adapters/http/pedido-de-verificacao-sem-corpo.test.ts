@@ -26,7 +26,7 @@
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import type { FastifyInstance } from 'fastify';
+import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 
 import type { AuditEvent, AuditLog } from '../../../audit/ports/audit-log.js';
 import { carregarContrato } from '../../../../shared/http/contract.js';
@@ -78,7 +78,7 @@ function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
   };
 }
 
-function montar(): FastifyInstance {
+function montar(): RegistradorDeRotas {
   const eventos: AuditEvent[] = [];
   const trilha: AuditLog = {
     record: (evento) => {

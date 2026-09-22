@@ -17,9 +17,9 @@
  * - **A higiene da rota pública é aplicada por cabeçalho**, porque o código
  *   viaja na URL e isso é inevitável num QR.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import {
@@ -304,7 +304,7 @@ function codigoDoCaminho(request: FastifyRequest): string {
 }
 
 export function registrarRotasDeTags(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   deps: DependenciasDasRotasDeTag,
 ): void {
   registrarRota(app, rotaDeListagemDeTags, {}, async (request: FastifyRequest, reply: FastifyReply) => {

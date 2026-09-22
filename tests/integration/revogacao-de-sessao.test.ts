@@ -96,7 +96,7 @@ import { criarAuthService } from '../../src/modules/identity/application/auth-se
 import { criarAvisoDeReusoAoTitular } from '../../src/modules/identity/application/aviso-de-reuso.js';
 import type { IdentityRepository } from '../../src/modules/identity/ports/identity-repository.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
-import type { FastifyInstance } from 'fastify';
+import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
 
 /** O número do critério 9. Não é meta de desempenho e não afrouxa. */
 const TETO_EM_MS = 1000;
@@ -140,7 +140,7 @@ interface CorpoDeProblema {
   readonly title?: string;
 }
 
-let app: FastifyInstance;
+let app: RegistradorDeRotas;
 let banco: { db: Db; close: () => Promise<void> };
 let base: string;
 let userId: UserId | undefined;
