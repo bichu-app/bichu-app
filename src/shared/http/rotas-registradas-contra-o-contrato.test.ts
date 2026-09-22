@@ -27,6 +27,7 @@ import { _decisaoDeStatus } from './validacao-de-parametros.js';
 import type { RouteDefinition } from './route-definition.js';
 
 import * as identidade from '../../modules/identity/adapters/http/routes.js';
+import * as localizacao from '../../modules/identity/adapters/http/localizacao-de-referencia-routes.js';
 import * as pets from '../../modules/pets/adapters/http/pet-routes.js';
 import * as referencia from '../../modules/pets/adapters/http/reference-data-routes.js';
 import * as midia from '../../modules/media/adapters/http/media-routes.js';
@@ -39,6 +40,7 @@ const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
 const MODULOS: readonly Record<string, unknown>[] = [
   identidade,
+  localizacao,
   pets,
   referencia,
   midia,

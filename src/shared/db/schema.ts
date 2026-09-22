@@ -413,8 +413,35 @@ export interface LostCasesTable {
   reopen_deadline: Date | null;
 }
 
+/**
+ * BICHUS-92. Onde o tutor mora, aproximadamente, para a consulta de raio.
+ *
+ * Tabela própria e não colunas em `users`: `users` é lida em toda rota
+ * autenticada, e onde a pessoa mora não precisa acompanhar a leitura de sessão.
+ * O raciocínio inteiro está no cabeçalho da migração.
+ */
+export interface UserReferenceLocationsTable {
+  /** PK **e** FK. É isto que torna histórico inexprimível (critério 5). */
+  user_id: string;
+  /**
+   * `geography(Point,4326)`, já quantizado. `never` nos três sentidos de
+   * propósito: é o tipo que impede a coluna de ser selecionada crua ou inserida
+   * pelo construtor tipado. O único caminho para ela é o SQL de
+   * `kysely-localizacao-de-referencia.ts`, onde `ST_MakePoint` e `ST_Y`/`ST_X`
+   * ficam à vista de quem revisa.
+   */
+  reference_point: ColumnType<never, never, never>;
+  /** Lado da célula da grade, em metros, como ele sai em `UserLocation`. */
+  precision_m: number;
+  source: 'device_gps' | 'map_pin';
+  captured_at: Date;
+  /** 30 dias após a captura. Vencida, a conta sai da base de alerta. */
+  expires_at: Date;
+}
+
 export interface Database {
   users: UsersTable;
+  user_reference_locations: UserReferenceLocationsTable;
   user_identities: UserIdentitiesTable;
   local_credentials: LocalCredentialsTable;
   user_roles: UserRolesTable;

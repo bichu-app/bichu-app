@@ -55,7 +55,16 @@ export type AuditAction =
   | 'conversation.blocked'
   | 'moderation.decided'
   | 'privacy.account_deletion_requested'
-  | 'privacy.data_export_requested';
+  | 'privacy.data_export_requested'
+  /**
+   * BICHUS-92. A conta entrou (ou atualizou) a localizacao de referencia.
+   * O metadado carrega a ORIGEM e a PRECISAO; a coordenada nao entra aqui,
+   * pela regra do cabecalho deste arquivo e porque a trilha sobrevive a
+   * exclusao da conta de proposito.
+   */
+  | 'privacy.reference_location_set'
+  /** A conta saiu do raio de alerta por `DELETE /v1/me/location`. */
+  | 'privacy.reference_location_cleared';
 
 export type ActorKind = 'user' | 'anonymous' | 'system';
 

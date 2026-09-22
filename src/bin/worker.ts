@@ -31,6 +31,7 @@ import { criarImageProcessor } from '../modules/media/adapters/external/sharp-im
 import { criarPushSender } from '../modules/notifications/adapters/external/log-push-sender.js';
 import { processarFoto, type CargaDoTrabalho } from '../modules/media/application/processar-foto.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
+import { criarLocalizacaoDeReferenciaRepository } from '../modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 
 const INTERVALO_DO_EXPURGO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
 
@@ -53,6 +54,21 @@ const INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS = 15 * 60 * 1000;
  * encontrar a fila vazia.
  */
 const INTERVALO_DA_FILA_EM_MILISSEGUNDOS = 2000;
+
+/**
+ * De quanto em quanto tempo as localizações de referência vencidas são
+ * apagadas.
+ *
+ * Seis horas, o mesmo da trilha, e a folga é intencional. **Este temporizador
+ * não é o que faz a conta sair da base de alerta** — isso o `WHERE
+ * expires_at > agora` de toda leitura já fez, no milissegundo do vencimento
+ * (critério 7 da BICHUS-92). O que ele faz é retenção: dado vencido não fica
+ * guardado esperando alguém precisar dele (ADR-0010). Errar por seis horas na
+ * hora de apagar não muda quem recebe alerta nenhum; errar no sentido contrário
+ * — depender desta varredura para a elegibilidade — faria a janela de 30 dias
+ * virar "30 dias mais o atraso do worker", e ninguém acusaria.
+ */
+const INTERVALO_DO_EXPURGO_DE_LOCALIZACAO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
 
 /**
  * Quantos trabalhos por passada.
@@ -164,6 +180,16 @@ export async function main(): Promise<void> {
     }
   };
 
+  const localizacoes = criarLocalizacaoDeReferenciaRepository(banco.db);
+
+  const rodarExpurgoDeLocalizacao = async (): Promise<void> => {
+    const apagadas = await localizacoes.expurgarVencidas(systemClock.now());
+    // Silêncio quando não há nada, pelo mesmo motivo da varredura de envios.
+    if (apagadas > 0) {
+      console.info(JSON.stringify({ evento: 'privacy.reference_location_purged', apagadas }));
+    }
+  };
+
   const rodarExpurgo = async (): Promise<void> => {
     const resultado = await expurgarEventosVencidos(banco.db, systemClock.now());
     console.info(
@@ -184,6 +210,7 @@ export async function main(): Promise<void> {
   process.once('SIGINT', () => { encerrar('SIGINT'); });
 
   await rodarExpurgo();
+  await rodarExpurgoDeLocalizacao();
 
   const temporizadorDaVarredura = setInterval(() => {
     if (vida.estaEncerrando) return;
@@ -192,6 +219,16 @@ export async function main(): Promise<void> {
     });
   }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
   temporizadorDaVarredura.unref();
+
+  const temporizadorDaLocalizacao = setInterval(() => {
+    if (vida.estaEncerrando) return;
+    rodarExpurgoDeLocalizacao().catch((erro: unknown) => {
+      console.error(
+        JSON.stringify({ evento: 'privacy.reference_location_purge_failed', erro: String(erro) }),
+      );
+    });
+  }, INTERVALO_DO_EXPURGO_DE_LOCALIZACAO_EM_MILISSEGUNDOS);
+  temporizadorDaLocalizacao.unref();
 
   const temporizadorDaFila = setInterval(() => {
     if (vida.estaEncerrando) return;
@@ -222,6 +259,7 @@ export async function main(): Promise<void> {
   clearInterval(temporizador);
   clearInterval(temporizadorDaFila);
   clearInterval(temporizadorDaVarredura);
+  clearInterval(temporizadorDaLocalizacao);
   await banco.close();
 }
 
