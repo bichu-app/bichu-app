@@ -4,8 +4,10 @@
 
 ## Issue
 
-<!-- BICHU-000. Sem chave de issue, explique por que nao ha uma. -->
-Fecha BICHU-
+<!-- BICHUS-000. A chave vem do acionamento da tarefa, nao da memoria nem do
+     nome da branch. O projeto e BICHUS: chave BICHU-<n> e da numeracao antiga e
+     aponta para outro cartao. Sem chave de issue, explique por que nao ha uma. -->
+Fecha BICHUS-
 
 ## Onda
 
