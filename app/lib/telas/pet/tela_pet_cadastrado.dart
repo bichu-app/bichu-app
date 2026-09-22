@@ -117,15 +117,16 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
     if (foto == null) return;
 
     // O escopo e lido ANTES do primeiro `await`, como no resto desta tela.
-    final envio = Escopo.of(context).envioDeFoto;
-    final pets = Escopo.of(context).pets;
+    //
+    // `RetomadaDeFotos`, e nao `EnvioDeFoto` direto: e ela que guarda a foto
+    // no registro quando falta sinal (criterio 6) e a tira de la quando ela
+    // sobe. Chamar o mecanismo cru aqui faria esta tela ser a unica das tres
+    // que nao lembra, e a foto sumiria ao fechar o app.
+    final retomada = Escopo.of(context).retomadaDeFotos;
 
     if (mounted) setState(() => _estadoDaFoto = _EstadoDaFoto.subindo);
 
-    final desfecho = await envio.enviar(
-      foto: foto,
-      destino: FotoDePet(api: pets, petId: _pet.id),
-    );
+    final desfecho = await retomada.enviarDoPet(petId: _pet.id, foto: foto);
     if (!mounted) return;
     setState(() {
       _estadoDaFoto = switch (desfecho) {
@@ -307,7 +308,7 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
             // cadastrado e o codigo saiu; o que falta e uma foto.
             peso: PesoDaFaixa.informativo,
             texto: TextosDoCadastro.fotoNaoSubiuSemSinal(_pet.nome),
-            rotuloDaAcao: TextosDoCadastro.enviarAFotoDeNovo,
+            rotuloDaAcao: TextosDoCadastro.tentarEnviarAgora,
             aoTocarNaAcao: _enviarAFoto,
           ),
         ];

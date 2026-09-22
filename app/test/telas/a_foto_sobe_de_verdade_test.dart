@@ -81,9 +81,12 @@ http.Response _autorizacao() {
   );
 }
 
-/// O que saiu na rede, separado por destino.
+/// O que saiu na rede, separado por destino, mais o que foi LEMBRADO em disco.
 class _Rede {
   final List<http.Request> pedidos = <http.Request>[];
+
+  /// O registro de fotos pendentes do app montado, com o conteudo a vista.
+  late final DepositoDeFotosEmMemoria registro;
 
   Iterable<http.Request> get aoArmazenamento =>
       pedidos.where((p) => p.url.toString().startsWith(_armazenamento));
@@ -102,12 +105,17 @@ Future<_Rede> _abrirF16(
   bool comFoto = true,
   /// O que o armazenamento responde aos bytes.
   Future<http.Response> Function()? armazenamento,
+  /// O registro de fotos pendentes, quando o caso precisa monta-lo ja com
+  /// conteudo -- que e o estado de quem escolheu a foto ontem, sem sinal.
+  DepositoDeFotosEmMemoria? registro,
 }) async {
   final rede = _Rede();
+  rede.registro = registro ?? DepositoDeFotosEmMemoria();
   await abrirOApp(
     tester,
     camera: camera,
     deposito: depositoLogado(),
+    depositoDeFotos: rede.registro,
     rede: (requisicao) async {
       rede.pedidos.add(requisicao);
       final endereco = requisicao.url.toString();
@@ -312,7 +320,7 @@ void main() {
       );
     });
 
-    testWidgets('sem sinal: `Enviar a foto de novo` faz sair um SEGUNDO '
+    testWidgets('sem sinal: `Tentar agora` faz sair um SEGUNDO '
         'pedido ao armazenamento', (tester) async {
       var falhar = true;
       final rede = await _abrirF16(
@@ -327,7 +335,7 @@ void main() {
       expect(rede.aoArmazenamento.length, 1);
       falhar = false;
 
-      await tocar(tester, find.text('Enviar a foto de novo'));
+      await tocar(tester, find.text('Tentar agora'));
 
       expect(
         rede.aoArmazenamento.length,
@@ -350,7 +358,7 @@ void main() {
 
       expect(_textoContendo('Não consegui enviar a foto'), findsOne);
       expect(
-        find.text('Enviar a foto de novo'),
+        find.text('Tentar agora'),
         findsNothing,
         reason: 'REPROVA: a recusa ganhou um botao de repetir. Repetir uma '
             'recusa devolve a mesma recusa, e o rotulo promete um caminho que '
@@ -359,7 +367,7 @@ void main() {
       );
     });
 
-    testWidgets('acessibilidade: `Enviar a foto de novo` e botao COM acao de '
+    testWidgets('acessibilidade: `Tentar agora` e botao COM acao de '
         'toque', (tester) async {
       await _abrirF16(
         tester,
@@ -372,7 +380,7 @@ void main() {
       // cima de um filho cuja acao foi excluida), e medir o widget solto nao
       // enxerga isso.
       final nos = _todosOsNos(tester)
-          .where((n) => n.label == 'Enviar a foto de novo')
+          .where((n) => n.label == 'Tentar agora')
           .toList();
       expect(
         nos,
@@ -399,7 +407,208 @@ void main() {
       }
     });
   });
+  group('a foto que nao subiu FICA no aparelho (BICHUS-87, criterios 6 e 7)',
+      () {
+    testWidgets('sem sinal: o caminho do arquivo e gravado em disco',
+        (tester) async {
+      final rede = await _abrirF16(
+        tester,
+        camera: CameraDeTeste(EstadoDaPermissao.concedida),
+        armazenamento: () async => throw http.ClientException('sem rota'),
+      );
+
+      expect(
+        rede.registro.fotos.length,
+        1,
+        reason: 'REPROVA: a foto nao foi lembrada, e a tela promete que ela '
+            'sobe depois. Promessa sobre o que nao aconteceu e o que o '
+            'criterio 2 da BICHUS-31 proibe, e o criterio 6 da BICHUS-87 '
+            'manda o arquivo permanecer no disco do aparelho.',
+      );
+      expect(rede.registro.fotos.single['pet_id'], _nina().id);
+      expect(
+        rede.registro.fotos.single['caminho'],
+        fotoEscolhidaDeTeste.caminho,
+        reason: 'REPROVA: o registro nao guarda ONDE o arquivo esta. Sem o '
+            'caminho nao ha o que retomar.',
+      );
+    });
+
+    testWidgets('a foto subiu: NADA fica no registro', (tester) async {
+      final rede = await _abrirF16(
+        tester,
+        camera: CameraDeTeste(EstadoDaPermissao.concedida),
+      );
+
+      expect(
+        rede.registro.fotos,
+        isEmpty,
+        reason: 'REPROVA: a foto subiu e continua no registro. A varredura do '
+            'proximo arranque a subiria de novo, e o pet ganharia duas fotos '
+            'que ninguem escolheu.',
+      );
+    });
+
+    testWidgets('recusada: NADA fica no registro, porque repetir devolve a '
+        'mesma recusa', (tester) async {
+      final rede = await _abrirF16(
+        tester,
+        camera: CameraDeTeste(EstadoDaPermissao.concedida),
+        armazenamento: () async =>
+            http.Response('<Error>AccessDenied</Error>', 403),
+      );
+
+      expect(
+        rede.registro.fotos,
+        isEmpty,
+        reason: 'REPROVA: uma recusa definitiva ficou guardada para ser '
+            'retentada no arranque, para sempre. E o laco que gasta bateria e '
+            'nunca avisa ninguem (criterio 19 da BICHUS-87).',
+      );
+    });
+
+    testWidgets('ISCA — o app que ABRE com foto pendente a envia sozinho',
+        (tester) async {
+      final registro = DepositoDeFotosEmMemoria()
+        ..conteudo = jsonEncode(<Map<String, dynamic>>[
+          <String, dynamic>{
+            'pet_id': _nina().id,
+            'caminho': fotoEscolhidaDeTeste.caminho,
+            'tipo_de_conteudo': 'image/jpeg',
+            'tamanho_em_bytes': 27,
+            'criada_em': '2026-09-21T22:10:00.000Z',
+          },
+        ]);
+
+      final rede = _Rede()..registro = registro;
+      await abrirOApp(
+        tester,
+        camera: CameraDeTeste(EstadoDaPermissao.concedida),
+        deposito: depositoLogado(),
+        depositoDeFotos: registro,
+        rede: (requisicao) async {
+          rede.pedidos.add(requisicao);
+          if (requisicao.url.toString().startsWith(_armazenamento)) {
+            return http.Response('', 204);
+          }
+          if (requisicao.url.path.endsWith('/media/pet-photo-intents')) {
+            return _autorizacao();
+          }
+          return http.Response('', 202);
+        },
+      );
+
+      expect(
+        rede.aoArmazenamento.length,
+        1,
+        reason: 'REPROVA: o app abriu com uma foto pendente e nao a enviou. E '
+            'o criterio 7 da BICHUS-87 -- sem esta varredura a foto escolhida '
+            'sem sinal fica no aparelho para sempre, e a frase da tela ("sobe '
+            'na próxima vez que você abrir o app") vira mentira.',
+      );
+      expect(
+        registro.fotos,
+        isEmpty,
+        reason: 'REPROVA: subiu e continua no registro.',
+      );
+    });
+
+    testWidgets('SEM sessao, o arranque NAO toca no pendente', (tester) async {
+      final registro = DepositoDeFotosEmMemoria()
+        ..conteudo = jsonEncode(<Map<String, dynamic>>[
+          <String, dynamic>{
+            'pet_id': _nina().id,
+            'caminho': fotoEscolhidaDeTeste.caminho,
+            'tipo_de_conteudo': 'image/jpeg',
+            'tamanho_em_bytes': 27,
+            'criada_em': '2026-09-21T22:10:00.000Z',
+          },
+        ]);
+
+      final rede = _Rede()..registro = registro;
+      await abrirOApp(
+        tester,
+        camera: CameraDeTeste(EstadoDaPermissao.concedida),
+        // Sem `depositoLogado()`: o app abre deslogado.
+        depositoDeFotos: registro,
+        rede: (requisicao) async {
+          rede.pedidos.add(requisicao);
+          return http.Response('', 401);
+        },
+      );
+
+      expect(
+        rede.aoArmazenamento,
+        isEmpty,
+        reason: 'REPROVA: o app tentou enviar sem sessao.',
+      );
+      expect(
+        registro.fotos.length,
+        1,
+        reason: 'REPROVA: o arranque deslogado APAGOU a foto pendente. A rota '
+            'de intencao e `bearerAuth`: sem token ela responde 401, que o '
+            'mecanismo classifica como recusa, e recusa descarta. A varredura '
+            'sem guarda de sessao apaga exatamente o que ela existe para '
+            'salvar.',
+      );
+    });
+  });
+
+  group(grupoDaIscaDaFotoPendente, () {
+    testWidgets('o registro fica vazio depois de sair da conta',
+        (tester) async {
+      final rede = await _abrirF16(
+        tester,
+        camera: CameraDeTeste(EstadoDaPermissao.concedida),
+        armazenamento: () async => throw http.ClientException('sem rota'),
+      );
+
+      // **A isca so vale se o cenario de fato encheu o registro.** Um caso que
+      // saisse da conta com o arquivo ja vazio mediria nada e ficaria verde
+      // por isso.
+      expect(
+        rede.registro.fotos,
+        hasLength(1),
+        reason: 'A isca nao entrou no cenario: o registro precisa ter '
+            'conteudo ANTES do logout.',
+      );
+
+      // Sai pelo CONTROLADOR, e nao pelo botao: os quatro desfechos de
+      // `sair()` passam por la, inclusive o refresh recusado, que nao passa
+      // por tela nenhuma.
+      await escopoDoApp(tester).sessao.sair();
+      await tester.pumpAndSettle();
+
+      expect(
+        rede.registro.fotos,
+        isEmpty,
+        reason: 'REPROVA: a foto pendente sobreviveu ao logout. O que esta no '
+            'arquivo e o CAMINHO de uma foto do animal de uma pessoa, EM '
+            'DISCO, e disco sobrevive ao logout, ao app ser encerrado pelo '
+            'sistema e ao aparelho ser desligado. Pior que ficar: a varredura '
+            'do proximo arranque subiria essa foto para a conta de quem '
+            'entrasse depois no mesmo aparelho. A entrada e '
+            '`_fotosPendentes.limpar` na lista `limpezasAoSair` de '
+            '`lib/app.dart`.',
+      );
+      expect(
+        jsonDecode(rede.registro.conteudo ?? '[]'),
+        isEmpty,
+        reason: 'REPROVA: a lista em memoria esvaziou e o ARQUIVO continua '
+            'cheio. A leitura seguinte traria tudo de volta, e o logout teria '
+            '*parecido* funcionar.',
+      );
+    });
+  });
 }
+
+/// O nome do grupo da isca de logout, escrito uma vez so.
+///
+/// Citado por `iscasDaLista` em `test/sessao/limpezas_ao_sair_test.dart`: um
+/// registro que aponte para um grupo inexistente reprova la, e uma constante e
+/// o que impede renomear o grupo aqui e deixar o registro apontando para nada.
+const String grupoDaIscaDaFotoPendente =
+    'a foto pendente morre no logout';
 
 /// Todos os nos da arvore de semantica do app montado.
 List<SemanticsNode> _todosOsNos(WidgetTester tester) {

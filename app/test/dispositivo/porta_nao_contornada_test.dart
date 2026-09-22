@@ -287,7 +287,9 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// foto ainda esta sendo enviada" sobre um envio inexistente, e
 /// `PetsApi.intencaoDeFotoDoPet`, escrita na BICHUS-62, nunca tinha sido
 /// chamada. A tela passou a chamar `EnvioDeFoto` e a dizer a verdade nos
-/// quatro estados do envio.
+/// quatro estados do envio, e a chamar `RetomadaDeFotos` em vez do mecanismo
+/// cru -- e ela que guarda a foto no registro quando falta sinal (criterio 6
+/// da BICHUS-87) e a tira de la quando ela sobe.
 ///
 /// **Ela NAO encosta na porta `CameraEGaleria`, que e o que o criterio 10
 /// protege.** A tela nao le camera, nao le galeria e nao pede permissao
@@ -296,7 +298,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `CameraEGaleria.bytesDaFoto`, atras da porta, e o portao de diretivas
 /// abaixo -- que nao depende desta constante -- continua cobrando que nenhuma
 /// tela importe `image_picker` nem `permission_handler`.
-const String _arvoreDasTelas = '11ba10e4b2429fa8c355128ebf261a5cd4909b37';
+const String _arvoreDasTelas = '927cfff4c773b7ab27e441e3b6f69af23856b7e1';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

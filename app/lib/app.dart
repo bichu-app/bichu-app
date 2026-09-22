@@ -10,6 +10,7 @@ import 'api/casos_api.dart';
 import 'api/devices_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
+import 'api/fotos_pendentes.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'config/app_config.dart';
@@ -47,6 +48,7 @@ class BichuApp extends StatefulWidget {
     this.cofreDoQr,
     this.depositoDeOportunidades,
     this.depositoDaFila,
+    this.depositoDeFotos,
   });
 
   final AppConfig config;
@@ -150,6 +152,13 @@ class BichuApp extends StatefulWidget {
   /// espera um `Future` que nunca resolve.
   final DepositoDaFila? depositoDaFila;
 
+  /// Onde o registro de fotos pendentes mora. Injetavel pelo mesmo motivo do
+  /// [depositoDaFila], e com o mesmo sintoma quando falta: `DepositoDeFotosEmArquivo`
+  /// chama `getApplicationDocumentsDirectory()`, canal de plataforma que nao
+  /// existe em teste de widget, e o `pumpAndSettle` esperaria para sempre um
+  /// `Future` que nunca resolve.
+  final DepositoDeFotosPendentes? depositoDeFotos;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -161,6 +170,8 @@ class _BichuAppState extends State<BichuApp> {
   late final CasosApi _casos;
   late final AchadosApi _achados;
   late final EnvioDeFoto _envioDeFoto;
+  late final FotosPendentes _fotosPendentes;
+  late final RetomadaDeFotos _retomadaDeFotos;
   late final FilaOffline _fila;
   late final TagsApi _tags;
   late final DevicesApi _devices;
@@ -216,6 +227,14 @@ class _BichuAppState extends State<BichuApp> {
     _envioDeFoto = EnvioDeFoto(
       camera: _camera,
       cliente: widget.clienteHttp,
+    );
+    _fotosPendentes = FotosPendentes(
+      deposito: widget.depositoDeFotos ?? DepositoDeFotosEmArquivo(),
+    );
+    _retomadaDeFotos = RetomadaDeFotos(
+      envio: _envioDeFoto,
+      registro: _fotosPendentes,
+      pets: _pets,
     );
     _leitorDeQr = widget.leitorDeQr ?? const LeitorDeQrDoAparelho();
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
@@ -287,14 +306,55 @@ class _BichuAppState extends State<BichuApp> {
       //
       // `limpar` e assincrono e devolve `Future<void>`, entao o tear-off
       // direto tipa: nao ha fecho aqui porque nao ha nada a adiar.
+      // O REGISTRO DE FOTOS PENDENTES ENTRA NA MESMA LISTA, e pelo mesmo
+      // motivo da fila: ele vive em DISCO e carrega o caminho de um arquivo no
+      // aparelho -- a foto do animal da tutora anterior. Sobrevivendo ao
+      // logout, ela espera a proxima pessoa que entrar neste aparelho, e a
+      // varredura de arranque a subiria para a conta dela.
       limpezasAoSair: <LimpezaAoSair>[
         () async => _cacheDeMeusPets.limpar(),
         _cofreDoQr.limpar,
         _fila.limpar,
+        _fotosPendentes.limpar,
       ],
     );
     _roteador = criarRoteador(_sessao);
-    _sessao.iniciar();
+    _arrancar();
+  }
+
+  /// O arranque: ler o chaveiro e, **so depois disso**, retomar a foto que
+  /// ficou.
+  ///
+  /// **A ordem e o ponto.** `iniciar()` le a sessao do chaveiro de forma
+  /// assincrona, e ate ela terminar `tokenValido()` responde nulo -- nao
+  /// porque a pessoa esta deslogada, mas porque o app ainda nao sabe. Uma
+  /// varredura disparada em paralelo veria sempre "sem sessao" e nunca
+  /// enviaria nada, com a frase da tela prometendo o contrario. O defeito
+  /// ficaria invisivel em teste manual: basta tocar no botao `Tentar agora`
+  /// para a foto subir.
+  Future<void> _arrancar() async {
+    await _sessao.iniciar();
+    await _retomarAsFotos();
+  }
+
+  /// O criterio 7 da BICHUS-87: a foto que nao subiu sobe quando da.
+  ///
+  /// **Atras da sessao, e isso nao e detalhe.** A rota de intencao e
+  /// `bearerAuth`; sem token ela responde 401, que o mecanismo classifica como
+  /// recusa -- e recusa DESCARTA o pendente. Uma varredura sem esta guarda
+  /// apagaria, no arranque de quem esta deslogado, exatamente a foto que ela
+  /// existe para salvar.
+  ///
+  /// A falha inteira e engolida de proposito: isto roda antes de qualquer tela
+  /// existir, e uma excecao aqui derrubaria o arranque do app por causa de uma
+  /// foto.
+  Future<void> _retomarAsFotos() async {
+    try {
+      if (await _sessao.tokenValido() == null) return;
+      await _retomadaDeFotos.retomarTudo();
+    } on Object {
+      return;
+    }
   }
 
   @override
@@ -315,6 +375,7 @@ class _BichuAppState extends State<BichuApp> {
       casos: _casos,
       achados: _achados,
       envioDeFoto: _envioDeFoto,
+      retomadaDeFotos: _retomadaDeFotos,
       fila: _fila,
       tags: _tags,
       devices: _devices,

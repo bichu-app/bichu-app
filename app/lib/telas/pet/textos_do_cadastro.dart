@@ -288,13 +288,15 @@ abstract final class TextosDoCadastro {
   /// QR que nao carregou: aqui existe um movimento que resolve, e esconde-lo
   /// seria tirar da pessoa a unica coisa que ela pode fazer.
   ///
-  /// O texto nao promete fila: a foto **nao** fica guardada para subir
-  /// sozinha depois, e dizer que fica seria a tela de sucesso para o que nao
-  /// aconteceu que o criterio 2 da BICHUS-31 proibe.
+  /// **A promessa de que ela sobe depois so pode existir porque ela e
+  /// verdade.** O criterio 6 da BICHUS-87 manda o arquivo permanecer no disco
+  /// do aparelho, e o registro de fotos pendentes e o que cumpre isso: sem
+  /// ele esta frase seria a tela de sucesso para o que nao aconteceu que o
+  /// criterio 2 da BICHUS-31 proibe.
   static String fotoNaoSubiuSemSinal(String nome) {
     final pet = nome.trim().isEmpty ? 'do seu pet' : 'de ${nome.trim()}';
-    return 'A foto $pet não subiu: faltou sinal. O cadastro está salvo, e dá '
-        'para tentar de novo agora ou acrescentar a foto depois em Editar.';
+    return 'A foto $pet não subiu: faltou sinal. Ela está salva aqui e sobe '
+        'na próxima vez que você abrir o app com internet.';
   }
 
   /// UX F1.6, o envio da foto foi recusado.
@@ -310,7 +312,10 @@ abstract final class TextosDoCadastro {
   }
 
   /// O rotulo do unico movimento que resolve a falta de sinal.
-  static const String enviarAFotoDeNovo = 'Enviar a foto de novo';
+  ///
+  /// `Tentar agora`, e nao `Enviar de novo`: o texto ao lado ja diz que ela
+  /// sobe sozinha depois, e o que o botao acrescenta e o **agora**.
+  static const String tentarEnviarAgora = 'Tentar agora';
 
   /// UX F1.5, o aviso da redacao de `care_notes`, que aparece **aqui**.
   ///

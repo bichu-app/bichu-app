@@ -54,6 +54,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import '../api/pets_api_listar_test.dart' show petDoContrato;
+import '../telas/a_foto_sobe_de_verdade_test.dart'
+    show grupoDaIscaDaFotoPendente;
 import '../telas/ajuda_de_tela.dart';
 
 /// O nome do grupo desta isca, escrito uma vez so.
@@ -91,6 +93,22 @@ const Map<String, ({String arquivo, String grupo})> iscasDaLista =
   '_fila': (
     arquivo: 'test/telas/marcar_como_perdido_test.dart',
     grupo: 'a fila offline morre no logout',
+  ),
+  // ACRESCENTADA COM O ENVIO DE FOTO DO APP (BICHUS-87, criterios 6 e 7).
+  //
+  // A quarta entrada, e a SEGUNDA em disco. O que ela apaga e o registro de
+  // qual arquivo local pertence a qual pet: o caminho de uma foto do animal de
+  // uma pessoa, guardado porque o criterio 6 manda o arquivo permanecer no
+  // aparelho quando o envio falha por falta de sinal.
+  //
+  // O dano de esquecer esta entrada e MAIOR que o das outras tres, e vale
+  // dizer por que: alem de o dado ficar, a varredura de arranque
+  // (`_retomarAsFotos`) sobe o que estiver no registro assim que houver
+  // sessao. Sobrevivendo ao logout, a foto do pet da tutora anterior seria
+  // enviada **para a conta de quem entrasse depois naquele aparelho**.
+  '_fotosPendentes': (
+    arquivo: 'test/telas/a_foto_sobe_de_verdade_test.dart',
+    grupo: grupoDaIscaDaFotoPendente,
   ),
 };
 

@@ -6,6 +6,7 @@ import 'api/achados_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
 import 'api/envio_de_foto.dart';
+import 'api/fotos_pendentes.dart';
 import 'api/fila_offline.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
@@ -33,6 +34,7 @@ class Escopo extends InheritedWidget {
     required this.casos,
     required this.achados,
     required this.envioDeFoto,
+    required this.retomadaDeFotos,
     required this.fila,
     required this.tags,
     required this.devices,
@@ -71,6 +73,15 @@ class Escopo extends InheritedWidget {
   /// Um so no app inteiro, e dois consumidores: a foto do pet (F1.6) e a foto
   /// do achado avulso, quando F3.5 existir.
   final EnvioDeFoto envioDeFoto;
+
+  /// O envio da foto **mais o registro do que ficou pendente** (BICHUS-87,
+  /// criterios 6 e 7).
+  ///
+  /// Fica no escopo, e nao na tela, com a mesma razao da fila offline e uma a
+  /// mais: o registro vive em DISCO, e duas instancias sobre o mesmo arquivo
+  /// guardariam listas diferentes em memoria e uma sobrescreveria a outra. A
+  /// limpeza dele esta em `limpezasAoSair`, no `app.dart`.
+  final RetomadaDeFotos retomadaDeFotos;
 
   /// A fila de acoes sem conexao (BICHUS-31), **ligada pela BICHUS-21**.
   ///
@@ -171,6 +182,7 @@ class Escopo extends InheritedWidget {
       casos != anterior.casos ||
       achados != anterior.achados ||
       envioDeFoto != anterior.envioDeFoto ||
+      retomadaDeFotos != anterior.retomadaDeFotos ||
       fila != anterior.fila ||
       tags != anterior.tags ||
       devices != anterior.devices ||
