@@ -12,7 +12,13 @@
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
-import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
+import {
+  registrarRota,
+  CABECALHO_DE_REAUTENTICACAO,
+  type RegistradorDeRotas,
+  type VerificadorDeReautenticacao,
+} from '../../../../shared/http/registrar-rota.js';
+import type { ReauthScope } from '../../../../shared/http/route-definition.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import {
   camposPendentesDoPerfil,
@@ -106,6 +112,44 @@ export const rotaDeLogoutTotal = defineRoute({
   path: '/auth/logout-all',
   effects: ['notifies'],
   rateLimit: [{ dimension: ['account'], limit: 10, window: '1h', onExceed: 'deny_429' }],
+  // BICHUS-48. O escopo é próprio e não reaproveita nenhum dos outros: uma
+  // janela aberta para excluir a conta não derruba as sessões, e vice-versa.
+  // Declarar aqui é o que instala a conferência — ver `registrarRota`.
+  reauthScope: 'session_revocation',
+});
+
+/**
+ * A operação que abre a janela, e a única do sistema que confere a senha de
+ * alguém já autenticado (critério 10 da BICHUS-48).
+ *
+ * **Os dois tetos são do contrato, e o segundo é o que importa.** 10 por hora
+ * por conta limita o uso legítimo; 5 **inválidas** por hora por conta é a
+ * defesa contra força bruta, e ela existe porque reautenticação é oráculo de
+ * senha por construção: quem tomou a sessão pode testar senhas aqui sem
+ * disparar nada do login, que se defende por e-mail e por IP e não por conta.
+ *
+ * `deny_429` e não `challenge`: não há quem responda a um desafio nesta rota, e
+ * um desafio seria mais uma maneira de continuar tentando. Cinco erros fecham a
+ * porta destrutiva por uma hora **sem derrubar a sessão normal** — a pessoa
+ * continua usando o app, e só o ato destrutivo espera. E a recuperação de senha
+ * continua aberta pelo seu próprio caminho (critério 9), porque o teto é desta
+ * rota e não da conta.
+ */
+export const rotaDeReautenticacao = defineRoute({
+  operationId: 'reauthenticate',
+  method: 'post',
+  path: '/auth/reauth',
+  effects: ['verifies_secret'],
+  rateLimit: [
+    { dimension: ['account'], limit: 10, window: '1h', onExceed: 'deny_429' },
+    {
+      dimension: ['account'],
+      limit: 5,
+      window: '1h',
+      onExceed: 'deny_429',
+      appliesTo: 'invalid_attempts',
+    },
+  ],
 });
 
 export const rotaDeTrocaDeSenha = defineRoute({
@@ -617,6 +661,32 @@ export function registrarRotasDeIdentidade(
 
   registrarRota(
     app,
+    rotaDeReautenticacao,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeReautenticacao.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const sessao: Autenticado = await autenticado(request, deps);
+      const corpo = request.body as { password: string; scope: ReauthScope };
+      const janela = await deps.auth.reautenticar(
+        sessao,
+        corpo.password,
+        corpo.scope,
+        contextoDe(request),
+      );
+      // A janela em claro sai daqui e de lugar nenhum mais: `server.ts` já
+      // esconde `x-reauth-token` do log, e ela não vai para a trilha.
+      return reply.status(200).send({
+        reauth_token: janela.reauthToken,
+        expires_in: janela.expiresIn,
+        scope: janela.scope,
+      });
+    },
+  );
+
+  registrarRota(
+    app,
     rotaDeTrocaDeSenha,
     {
       schema: { body: corpoDe(deps.contrato, rotaDeTrocaDeSenha.operationId) },
@@ -634,6 +704,32 @@ export function registrarRotasDeIdentidade(
       return reply.status(204).send();
     },
   );
+}
+
+/**
+ * O verificador que `criarServidor` instala, e que `registrarRota` chama em toda
+ * rota que declara `reauthScope`.
+ *
+ * Ele mora aqui, e não em `shared/http`, porque conferir a janela exige o
+ * serviço de identidade. O que `shared/http` conhece é a **assinatura**, e é
+ * assim que a dependência anda na direção certa.
+ *
+ * `autenticado` é o memo por requisição: a conferência da janela precisa da
+ * conta e do `jti`, e o manipulador da rota vai precisar dos mesmos. Sem o
+ * memo, toda operação destrutiva verificaria RS256 e leria `users` duas vezes.
+ */
+export function criarVerificadorDeReautenticacao(
+  deps: DependenciasDasRotas,
+): VerificadorDeReautenticacao {
+  return async (request: FastifyRequest, escopo: ReauthScope): Promise<void> => {
+    const sessao: Autenticado = await autenticado(request, deps);
+    const cabecalho = request.headers[CABECALHO_DE_REAUTENTICACAO];
+    // Cabeçalho repetido chega como lista. Concatenar o que o cliente mandou
+    // duas vezes produziria um valor que não é nenhum dos dois; a primeira
+    // ocorrência é o que o resto da pilha também leria.
+    const apresentado = Array.isArray(cabecalho) ? cabecalho[0] : cabecalho;
+    await deps.auth.consumirReautenticacao(sessao, apresentado, escopo, contextoDe(request));
+  };
 }
 
 /**

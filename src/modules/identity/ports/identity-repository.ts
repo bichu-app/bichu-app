@@ -6,6 +6,8 @@
  * do domínio — conta, credencial, família de sessão — e não de tabela.
  */
 import type { Instant, TokenHash, UserId } from '../../../shared/types/brands.js';
+import type { ReauthScope } from '../../../shared/http/route-definition.js';
+import type { MotivoDaRecusa } from '../domain/reautenticacao.js';
 
 export interface Conta {
   readonly id: UserId;
@@ -239,4 +241,57 @@ export interface IdentityRepository {
   invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number>;
 
   marcarEmailVerificado(userId: UserId, agora: Instant): Promise<void>;
+
+  // --- Janela de reautenticacao (BICHUS-48) -------------------------------
+
+  /** Grava o HASH. O valor em claro so existe na resposta de `POST /auth/reauth`. */
+  criarJanelaDeReautenticacao(nova: NovaJanelaDeReautenticacao): Promise<void>;
+
+  /**
+   * Consome a janela em **UMA instrução**, com as cinco amarras na cláusula
+   * `WHERE` (ADR-0021: a autorização vai na cláusula, nunca num `if` depois de
+   * ler a linha).
+   *
+   * `UPDATE reauth_tokens SET consumed_at = $agora WHERE token_hash = $1 AND
+   * user_id = $2 AND scope = $3 AND access_jti = $4 AND consumed_at IS NULL AND
+   * expires_at > $agora AND issued_at >= $barreira RETURNING id`.
+   *
+   * Conferir e depois consumir em dois passos permite corrida, e aqui a corrida
+   * é o ataque: duas chamadas simultâneas de `DELETE /me` com a mesma janela
+   * passariam as duas pela conferência antes de qualquer uma marcar, e o uso
+   * único deixaria de ser único.
+   *
+   * O `motivo` da recusa sai de uma leitura SEPARADA, e só no caminho de recusa:
+   * ele existe para a trilha, nunca para o corpo da resposta — as seis recusas
+   * viram o mesmo 401 na borda.
+   */
+  consumirJanelaDeReautenticacao(
+    consumo: ConsumoDeJanela,
+  ): Promise<ResultadoDoConsumoDaJanela>;
 }
+
+export interface NovaJanelaDeReautenticacao {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly escopo: ReauthScope;
+  /** `jti` do token de acesso que pediu a janela. */
+  readonly acessoJti: string;
+  readonly tokenHash: TokenHash;
+  readonly emitidaEm: Instant;
+  readonly expiraEm: Instant;
+  readonly ipHmac: Buffer | null;
+}
+
+export interface ConsumoDeJanela {
+  readonly tokenHash: TokenHash;
+  readonly userId: UserId;
+  readonly escopoExigido: ReauthScope;
+  readonly acessoJti: string;
+  /** `users.sessions_invalid_before` da conta que apresenta (SEC-006). */
+  readonly barreiraDaConta: Instant;
+  readonly agora: Instant;
+}
+
+export type ResultadoDoConsumoDaJanela =
+  | { readonly consumida: true }
+  | { readonly consumida: false; readonly motivo: MotivoDaRecusa | 'inexistente' };

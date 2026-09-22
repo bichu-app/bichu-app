@@ -106,6 +106,33 @@ export interface RefreshTokensTable {
   ip_hmac: Buffer | null;
 }
 
+/**
+ * A janela de 5 minutos aberta por `POST /v1/auth/reauth` (BICHUS-48).
+ *
+ * Sem `Generated` em `issued_at`: a coluna nao tem `DEFAULT now()` porque ela e
+ * comparada com `users.sessions_invalid_before`, que a aplicacao grava. Os dois
+ * lados da comparacao precisam sair do mesmo relogio.
+ */
+export interface ReauthTokensTable {
+  id: string;
+  user_id: string;
+  /** `jti` do token de acesso que pediu a janela. E o vinculo com a sessao. */
+  access_jti: string;
+  scope:
+    | 'account_deletion'
+    | 'email_change'
+    | 'data_export'
+    | 'pet_transfer'
+    | 'tag_revocation'
+    | 'session_revocation';
+  token_hash: Buffer;
+  issued_at: Date;
+  expires_at: Date;
+  /** Uso unico: preenchido pela operacao que apresentou a janela. */
+  consumed_at: Date | null;
+  created_ip_hmac: Buffer | null;
+}
+
 export interface IdempotencyKeysTable {
   key: string;
   user_or_token_ref: string;
@@ -641,6 +668,7 @@ export interface Database {
   user_roles: UserRolesTable;
   verification_tokens: VerificationTokensTable;
   refresh_tokens: RefreshTokensTable;
+  reauth_tokens: ReauthTokensTable;
   idempotency_keys: IdempotencyKeysTable;
   rate_limit_counters: RateLimitCountersTable;
   ref_data_versions: RefDataVersionsTable;

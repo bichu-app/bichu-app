@@ -256,6 +256,14 @@ class RepositorioFalso implements IdentityRepository {
   invalidarTokensPendentes(): Promise<number> {
     return naoUsado('invalidarTokensPendentes');
   }
+  criarJanelaDeReautenticacao(): Promise<void> {
+    return naoUsado('criarJanelaDeReautenticacao');
+  }
+
+  consumirJanelaDeReautenticacao(): never {
+    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo chega aqui');
+  }
+
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
   }

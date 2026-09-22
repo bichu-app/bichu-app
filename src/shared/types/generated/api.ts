@@ -163,13 +163,18 @@ export interface paths {
          *     E o remedio de quem perdeu o aparelho, e o unico que fecha a janela de ate
          *     15 minutos que o logout comum deixa aberta.
          *
-         *     **Reautenticacao:** BICHUS-48 decide que esta operacao exige
-         *     `X-Reauth-Token`. A maquinaria de reautenticacao (`POST /auth/reauth`)
-         *     ainda nao existe em `src/`, e o enum `scope` daquela operacao tem quatro
-         *     valores, nenhum deles de revogacao de sessao. O cabecalho **nao** e
-         *     declarado aqui enquanto nao for aplicado: declarar exigencia que o codigo
-         *     nao impoe e a divergencia que este projeto ja pagou duas vezes. BICHUS-48
-         *     acrescenta o `reauth: []` e o escopo junto com o codigo que os aplica.
+         *     **Reautenticacao:** esta operacao exige `X-Reauth-Token` no escopo
+         *     `session_revocation`, e a exigencia esta aplicada em `src/` desde a
+         *     BICHUS-48 -- o cabecalho foi declarado aqui junto com o codigo que o
+         *     impoe, e nao antes dele. O escopo e proprio e nao reaproveita nenhum dos
+         *     outros: um token aberto para excluir a conta nao derruba as sessoes, e
+         *     vice-versa.
+         *
+         *     O escopo tambem e o que mantem a operacao utilizavel por quem acabou de
+         *     perder o aparelho. Derrubar as sessoes e a acao de REMEDIO, e ela e a
+         *     unica da lista que a propria pessoa precisa conseguir fazer as pressas:
+         *     os 5 minutos da janela valem a partir da senha conferida, e nao a partir
+         *     do login.
          *
          *     Idempotente: chamada com a conta ja sem sessao nenhuma, responde 204.
          */
@@ -282,15 +287,26 @@ export interface paths {
         put?: never;
         /**
          * Reautentica com a senha e abre a janela de operacao destrutiva
-         * @description As quatro operacoes destrutivas do produto — excluir a conta, exportar
-         *     os dados, transferir o pet e revogar a tag — exigem a senha de novo, e
-         *     **nao a pedem cada uma do seu jeito**. Esta e a unica operacao do
-         *     sistema que verifica a senha de um usuario ja autenticado, e devolve um
+         * @description As operacoes destrutivas do produto exigem a senha de novo, e **nao a
+         *     pedem cada uma do seu jeito**. Esta e a unica operacao do sistema que
+         *     verifica a senha de um usuario ja autenticado, e devolve um
          *     `reauth_token` de **5 minutos** que as outras aceitam no cabecalho
          *     `X-Reauth-Token`.
          *
+         *     Quem exige o cabecalho esta declarado em `x-reauth-scope`, operacao por
+         *     operacao, e o valor de `scope` aqui precisa ser o mesmo da operacao que
+         *     vai receber o token. Sao seis, e a lista e a da secao 7.5 de
+         *     `docs/04-seguranca.md` acrescida da revogacao de sessao:
+         *     `account_deletion`, `email_change`, `data_export`, `pet_transfer`,
+         *     `tag_revocation` e `session_revocation`. **Trocar a senha fica de fora**,
+         *     e a ausencia e deliberada: `PUT /auth/password` ja conferia
+         *     `current_password` no proprio corpo antes desta operacao existir, entao
+         *     exigir as duas coisas pediria a mesma senha duas vezes na mesma
+         *     requisicao. A divergencia contra a secao 7.5, que lista trocar senha
+         *     entre as seis, esta registrada na BICHUS-48.
+         *
          *     Concentrar aqui tem tres consequencias, e as tres sao o motivo do
-         *     desenho: a senha trafega para **um** endpoint em vez de quatro; o limite
+         *     desenho: a senha trafega para **um** endpoint em vez de seis; o limite
          *     contra forca bruta existe em **um** lugar; e `DELETE /me` nao precisa de
          *     corpo, o que evita a requisicao com corpo em DELETE que proxy e
          *     biblioteca tratam de formas diferentes.
@@ -3537,7 +3553,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            401: components["responses"]["Unauthorized"];
+            401: components["responses"]["ReauthRequired"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -3725,9 +3741,16 @@ export interface operations {
                      * @description A finalidade unica deste token. Apresenta-lo em operacao de
                      *     outro escopo responde 401, e nao 403: a janela para aquela
                      *     finalidade simplesmente nao foi aberta.
+                     *
+                     *     `email_change` estava faltando aqui enquanto
+                     *     `POST /me/email-change` ja declarava
+                     *     `x-reauth-scope: email_change`: nenhum token podia ser
+                     *     emitido para aquela operacao, entao ela era inalcancavel por
+                     *     contrato. `session_revocation` entra com a exigencia nova de
+                     *     `POST /auth/logout-all`.
                      * @enum {string}
                      */
-                    scope: "account_deletion" | "data_export" | "pet_transfer" | "tag_revocation";
+                    scope: "account_deletion" | "email_change" | "data_export" | "pet_transfer" | "tag_revocation" | "session_revocation";
                 };
             };
         };

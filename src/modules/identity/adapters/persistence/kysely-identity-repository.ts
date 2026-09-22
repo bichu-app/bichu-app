@@ -20,16 +20,21 @@ import { barreiraDeContaNova } from '../../domain/session.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
 import type { Instant, TokenHash, UserId } from '../../../../shared/types/brands.js';
 import type {
+  ConsumoDeJanela,
   Conta,
   CredencialLocal,
   IdentityRepository,
   MotivoDeRevogacao,
   NovaConta,
+  NovaJanelaDeReautenticacao,
   NovoRefresh,
   NovoTokenDeVerificacao,
+  ResultadoDoConsumoDaJanela,
   TokenConsumido,
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
+import { conferirJanela, type JanelaDeReautenticacao } from '../../domain/reautenticacao.js';
+import type { ReauthScope } from '../../../../shared/http/route-definition.js';
 
 const VIOLACAO_DE_UNICIDADE = '23505';
 
@@ -157,6 +162,59 @@ export function construtorDaRevogacaoEmMassa(
     .where('user_id', '=', userId)
     .where('revoked_at', 'is', null)
     .returning('id');
+}
+
+/**
+ * **BICHUS-48: as cinco amarras da janela de reautenticação, todas no `WHERE`.**
+ *
+ * Uma instrução, e ela CONSOME ao mesmo tempo em que confere. Ler a linha,
+ * decidir na aplicação e marcar depois é a forma que o ADR-0021 existe para
+ * eliminar, e aqui ela também perderia o uso único: duas chamadas simultâneas
+ * de `DELETE /me` com a mesma janela passariam as duas pela conferência antes
+ * de qualquer uma marcar.
+ *
+ * Cada predicado responde por uma amarra, e nenhum é redundante:
+ *
+ * | predicado | o que ele impede |
+ * |---|---|
+ * | `token_hash = $n` | endereça a linha, e só ela (256 bits de CSPRNG) |
+ * | `user_id = $n` | janela de OUTRA conta apresentada nesta sessão |
+ * | `scope = $n` | janela aberta para revogar a tag usada para excluir a conta |
+ * | `access_jti = $n` | janela copiada para outro aparelho |
+ * | `consumed_at IS NULL` | segunda apresentação do mesmo valor |
+ * | `expires_at > $agora` | janela vencida |
+ * | `issued_at >= $barreira` | janela anterior a uma troca de senha ou a um logout-all (SEC-006) |
+ *
+ * `reautenticacao-na-clausula-where.test.ts` compila esta função sem executá-la
+ * e cobra os sete, com isca que precisa reprovar quando qualquer um sai.
+ */
+export function construtorDoConsumoDaJanela(db: DbExecutor, consumo: ConsumoDeJanela) {
+  return db
+    .updateTable('reauth_tokens')
+    .set({ consumed_at: new Date(consumo.agora) })
+    .where('token_hash', '=', Buffer.from(consumo.tokenHash))
+    .where('user_id', '=', consumo.userId)
+    .where('scope', '=', consumo.escopoExigido)
+    .where('access_jti', '=', consumo.acessoJti)
+    .where('consumed_at', 'is', null)
+    .where('expires_at', '>', new Date(consumo.agora))
+    .where('issued_at', '>=', new Date(consumo.barreiraDaConta))
+    .returning('id');
+}
+
+/**
+ * A leitura que NOMEIA a recusa, e só ela.
+ *
+ * Endereça pelo hash e por nada mais, de propósito: é assim que ela consegue
+ * dizer "esta janela existe e é de outra conta" em vez de "não achei nada". O
+ * resultado vai para a trilha e **nunca para o corpo da resposta** — quem
+ * apresentou uma janela recusada recebe o mesmo 401 nos seis casos.
+ */
+export function construtorDaLeituraDaJanela(db: DbExecutor, tokenHash: TokenHash) {
+  return db
+    .selectFrom('reauth_tokens')
+    .select(['id', 'user_id', 'scope', 'access_jti', 'issued_at', 'expires_at', 'consumed_at'])
+    .where('token_hash', '=', Buffer.from(tokenHash));
 }
 
 /**
@@ -548,6 +606,59 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
     async invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
       const r = await construtorDaInvalidacaoDeTokensPendentes(db, userId, agora).executeTakeFirst();
       return Number(r.numUpdatedRows);
+    },
+
+    async criarJanelaDeReautenticacao(nova: NovaJanelaDeReautenticacao): Promise<void> {
+      await db
+        .insertInto('reauth_tokens')
+        .values({
+          id: nova.id,
+          user_id: nova.userId,
+          access_jti: nova.acessoJti,
+          scope: nova.escopo,
+          token_hash: Buffer.from(nova.tokenHash),
+          issued_at: new Date(nova.emitidaEm),
+          expires_at: new Date(nova.expiraEm),
+          created_ip_hmac: nova.ipHmac === null ? null : Buffer.from(nova.ipHmac),
+        })
+        .execute();
+    },
+
+    /** O predicado mora em {@link construtorDoConsumoDaJanela}. */
+    async consumirJanelaDeReautenticacao(
+      consumo: ConsumoDeJanela,
+    ): Promise<ResultadoDoConsumoDaJanela> {
+      const linha = await construtorDoConsumoDaJanela(db, consumo).executeTakeFirst();
+      if (linha !== undefined) return { consumida: true };
+
+      // Só no caminho de recusa, e só para a trilha. A leitura endereça pelo
+      // hash, que é o que permite distinguir "não existe" de "existe e não
+      // serve" — distinção que fica AQUI DENTRO.
+      const bruta = await construtorDaLeituraDaJanela(db, consumo.tokenHash).executeTakeFirst();
+      if (bruta === undefined) return { consumida: false, motivo: 'inexistente' };
+
+      const janela: JanelaDeReautenticacao = {
+        id: bruta.id,
+        userId: bruta.user_id,
+        escopo: bruta.scope as ReauthScope,
+        acessoJti: bruta.access_jti,
+        emitidaEm: bruta.issued_at.getTime() as Instant,
+        expiraEm: bruta.expires_at.getTime() as Instant,
+        consumidaEm: bruta.consumed_at === null ? null : (bruta.consumed_at.getTime() as Instant),
+      };
+      const veredicto = conferirJanela(janela, {
+        userId: consumo.userId,
+        escopoExigido: consumo.escopoExigido,
+        acessoJti: consumo.acessoJti,
+        barreiraDaConta: consumo.barreiraDaConta,
+        agora: consumo.agora,
+      });
+      // `vale: true` aqui significa que o `UPDATE` e a regra do domínio
+      // discordaram, e isso é defeito nosso, não recusa da pessoa. Ele vira
+      // `inexistente` na trilha em vez de um sucesso que a instrução não deu.
+      return veredicto.vale
+        ? { consumida: false, motivo: 'inexistente' }
+        : { consumida: false, motivo: veredicto.motivo };
     },
 
     async marcarEmailVerificado(userId: UserId, agora: Instant): Promise<void> {
