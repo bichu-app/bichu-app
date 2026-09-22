@@ -43,9 +43,10 @@ import { criarContadorDesligado, criarContadorEmMemoria } from '../../../../shar
 import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.js';
 import type { AbsoluteUrl, PetId, UserId } from '../../../../shared/types/brands.js';
 import type { AuditLog } from '../../../audit/ports/audit-log.js';
-import type { Clock, IdGenerator } from '../../../../shared/ports/index.js';
+import type { Clock, IdGenerator, JobQueue } from '../../../../shared/ports/index.js';
 import { LostCaseService } from '../../application/lost-case-service.js';
 import type { AlcanceDoAlerta } from '../../ports/alcance-do-alerta.js';
+import type { RegistroDeDisparos } from '../../ports/registro-de-disparos.js';
 import type {
   CasoGravado,
   EstadoDoPetParaAbertura,
@@ -122,6 +123,52 @@ function repositorio(cenario: Cenario): LostCaseRepository {
   };
 }
 
+/**
+ * `n` destinatários, com um aparelho cada.
+ *
+ * Os identificadores não importam para esta rota — ela só conta — e é
+ * exatamente por isso que eles existem: se a prévia algum dia começar a olhar
+ * para dentro da lista, é aqui que o teste vai precisar mudar, e a mudança vai
+ * aparecer na revisão.
+ */
+function destinatariosDeTeste(n: number): { usuario: UserId; aparelhos: string[] }[] {
+  return Array.from({ length: n }, (_, i) => ({
+    usuario: `018f3a2b-0000-7000-8000-${String(i).padStart(12, '0')}` as UserId,
+    aparelhos: [`018f3a2b-0000-7000-8000-a${String(i).padStart(11, '0')}`],
+  }));
+}
+
+/** O registro de disparos, em memória. A prévia não escreve nada nele. */
+function disparosDeTeste(): RegistroDeDisparos {
+  return {
+    abrir: (entrada) =>
+      Promise.resolve({
+        id: entrada.id,
+        caso: entrada.caso,
+        estado: entrada.estado,
+        destinatarios: null,
+        raioEmMetros: entrada.raioEmMetros,
+        tetoAtingido: false,
+        pedidoEm: new Date(Number(entrada.pedidoEm)),
+        enviadoEm: null,
+      }),
+    ultimoDoCaso: () => Promise.resolve(null),
+    ultimoEnvioDoCaso: () => Promise.resolve(null),
+    contextoDoCaso: () => Promise.resolve(null),
+    concluir: () => Promise.resolve(),
+  };
+}
+
+/** A fila, em memória. */
+function filaDeTeste(): JobQueue {
+  return {
+    enqueue: () => Promise.resolve('018f3a2b-0000-7000-8000-00000000f11a'),
+    claim: () => Promise.resolve([]),
+    complete: () => Promise.resolve(),
+    fail: () => Promise.resolve(),
+  };
+}
+
 function servidor(cenario: Cenario = {}): RegistradorDeRotas {
   const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMA,
@@ -130,8 +177,17 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
     bodyLimitBytes: 1_048_576,
   });
 
+  // `contagem` vira uma LISTA de destinatários, e não um número: a porta não
+  // tem mais como devolver "quantos" sem devolver "quem", e o dublê precisa
+  // obedecer à mesma regra que a implementação real — senão ele testa uma porta
+  // que não existe.
   const alcance: AlcanceDoAlerta = {
-    contarAlcancaveis: () => Promise.resolve(cenario.contagem ?? null),
+    alcancaveis: () =>
+      Promise.resolve(
+        cenario.contagem == null
+          ? null
+          : { destinatarios: destinatariosDeTeste(cenario.contagem), tetoAtingido: false },
+      ),
   };
   const clock: Clock = { now: () => 1_800_000_000_000 as ReturnType<Clock['now']> };
   const ids: IdGenerator = {
@@ -143,7 +199,15 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
   const trilha: AuditLog = { record: () => Promise.resolve() };
 
   registrarRotasDeCasos(app, {
-    casos: new LostCaseService({ repositorio: repositorio(cenario), ids, clock, trilha, alcance }),
+    casos: new LostCaseService({
+      repositorio: repositorio(cenario),
+      ids,
+      clock,
+      trilha,
+      alcance,
+      disparos: disparosDeTeste(),
+      fila: filaDeTeste(),
+    }),
     autenticador: {
       autenticar: (token: string) => Promise.resolve({ userId: token as UserId }),
     },

@@ -1177,6 +1177,14 @@ paths:
         - $ref: '#/components/parameters/DeviceId'
       responses:
         '204': { description: Removido. }
+        # `deviceId` e `format: uuid`, entao a borda pode recusar o parametro --
+        # e `vigiarParametrosDasRotas` derruba a SUBIDA de uma operacao que pode
+        # recusar sem declarar 400. Erro e contrato tambem: responder um status
+        # que a especificacao nao promete e a mesma divergencia que nao validar,
+        # na direcao oposta. Malformado responde 400 e bem formado que nao e seu
+        # responde 404, pelo argumento escrito em
+        # src/shared/http/validacao-de-parametros.ts.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
 

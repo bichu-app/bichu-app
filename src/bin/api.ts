@@ -41,6 +41,9 @@ import { criarIdentityRepository } from '../modules/identity/adapters/persistenc
 import { criarLocalizacaoDeReferenciaRepository } from '../modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 import { LocalizacaoDeReferenciaService } from '../modules/identity/application/localizacao-de-referencia-service.js';
 import { registrarRotasDeLocalizacao } from '../modules/identity/adapters/http/localizacao-de-referencia-routes.js';
+import { criarRegistroDeAparelhos } from '../modules/notifications/adapters/persistence/kysely-registro-de-aparelhos.js';
+import { RegistroDeAparelhosService } from '../modules/notifications/application/registro-de-aparelhos-service.js';
+import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http/device-routes.js';
 import {
   registrarRotasDeDescoberta,
   registrarRotasDeIdentidade,
@@ -61,7 +64,9 @@ import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-rout
 import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
 import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
-import { criarAlcanceAindaSemBase } from '../modules/lostfound/adapters/persistence/alcance-ainda-sem-base.js';
+import { criarAlcancePorPostGIS } from '../modules/lostfound/adapters/persistence/kysely-alcance-por-postgis.js';
+import { criarRegistroDeDisparos } from '../modules/lostfound/adapters/persistence/kysely-registro-de-disparos.js';
+import { criarJobQueue } from '../shared/queue/kysely-job-queue.js';
 import { criarIdempotencia } from '../shared/http/idempotency.js';
 import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
 import { criarRasterizadorDeQr } from '../modules/tags/adapters/external/sharp-rasterizador-de-qr.js';
@@ -287,15 +292,38 @@ export async function main(): Promise<void> {
 
   // BICHUS-92. A localizacao de referencia mora em `identity` porque `/me` e a
   // superficie dela e porque a tabela pende de `users`. Ela e a coluna
-  // geografica que faltava para "tutores num raio de 5 km" ser calculavel --
-  // mas a CONTAGEM continua com `criarAlcanceAindaSemBase`, e isso e
-  // deliberado: dois dos sete criterios do ADR-0006 pedem aparelho com
-  // `push_permission = granted`, e nao ha tabela de aparelho (BICHUS-91). Ligar
-  // uma consulta aqui hoje devolveria o numero de quem tem localizacao e nao
-  // tem como receber push, que e um numero errado com cara de certo.
+  // geografica que faltava para "tutores num raio de 5 km" ser calculavel. A
+  // CONTAGEM continua com `criarAlcanceAindaSemBase`, agora por outro motivo --
+  // ver a linha que a monta, abaixo.
   const dependenciasDasRotasDeLocalizacao = {
     localizacao: new LocalizacaoDeReferenciaService({
       repositorio: criarLocalizacaoDeReferenciaRepository(db),
+      clock: systemClock,
+      trilha,
+    }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    contrato,
+  };
+
+  // BICHUS-91. O aparelho e o token de push moram em `notifications` e nao em
+  // `identity`, mesmo o caminho sendo `/me`: o que a tabela guarda e o ENDERECO
+  // DE ENTREGA do push, e quem o consome e o alerta. Esta linha e o unico lugar
+  // do sistema que conhece os dois lados -- o modulo recebe um autenticador e
+  // nao o servico de identidade, entao ele nao tem como devolver dado de conta
+  // por engano. Mesmo arranjo de `tags`.
+  //
+  // O QUE ESTA FIACAO NAO FAZ, e a ausencia e deliberada: ela nao liga a
+  // contagem do alcance. `criarAlcanceAindaSemBase` continua abaixo. Com a
+  // BICHUS-92 e esta historia o calculo passou a ser POSSIVEL, e cinco dos sete
+  // criterios do ADR-0006 (raio, validade, nao ser o proprio tutor, teto de
+  // fadiga, um disparo por caso por dia) continuam sem consulta escrita --
+  // ligar so os dois daqui devolveria um numero que ignora os outros cinco, que
+  // e a mesma classe de mentira. Quem decide ligar e a BICHUS-20.
+  const dependenciasDasRotasDeAparelho = {
+    aparelhos: new RegistroDeAparelhosService({
+      repositorio: criarRegistroDeAparelhos(db, ids),
       clock: systemClock,
       trilha,
     }),
@@ -328,12 +356,25 @@ export async function main(): Promise<void> {
       ids,
       clock: systemClock,
       trilha,
-      // A contagem de tutores alcancaveis AINDA NAO E CALCULAVEL: o esquema nao
-      // tem localizacao de usuario nem permissao de push, que sao dois dos sete
-      // criterios do ADR-0006. Esta linha e o lugar onde isso e dito -- trocar
-      // por `criarAlcancePorPostGIS` no dia em que as tabelas existirem. Uma
-      // consulta escrita hoje devolveria zero, que e a resposta que o ADR proibe.
-      alcance: criarAlcanceAindaSemBase(),
+      // BICHUS-20: **A CONTAGEM FECHOU.** Esta linha era
+      // `criarAlcanceAindaSemBase()`, que devolvia `null` de proposito porque
+      // os sete criterios do ADR-0006 nao tinham todos onde ser consultados.
+      // Agora tem: localizacao com a BICHUS-92, aparelho com a BICHUS-91, e a
+      // memoria do disparo (`alert_dispatches`, `alert_recipients`) com esta
+      // historia. Os SETE estao escritos -- seis no `WHERE` da consulta, o
+      // setimo em `podeDispararDeNovo`, que e pergunta sobre o caso e nao
+      // sobre pessoas (o argumento esta no cabecalho da porta).
+      //
+      // Ligar so parte deles era o que os autores da 92 e da 91 se recusaram a
+      // fazer, e estavam certos: numero errado com cara de certo e a mesma
+      // classe de mentira que o zero inventado.
+      alcance: criarAlcancePorPostGIS(db),
+      disparos: criarRegistroDeDisparos(db),
+      // A API ENFILEIRA, O WORKER ENVIA. O remetente de push nao e montado
+      // aqui de proposito -- `fiacao-do-push.test.ts` reprova se ele for --, e
+      // esta e a outra metade daquela decisao: o que a API faz com o alerta e
+      // pedir que ele saia.
+      fila: criarJobQueue(db, ids),
     }),
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
@@ -410,6 +451,7 @@ export async function main(): Promise<void> {
     registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
+    registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
