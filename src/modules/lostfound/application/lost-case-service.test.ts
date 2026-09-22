@@ -32,21 +32,35 @@ import { comoData } from '../../../shared/time/clock.js';
 import { LostCaseService, type ContextoDoChamador, type EntradaDoCaso } from './lost-case-service.js';
 import type {
   CanalDoReencontro,
+  CandidatoDecidido,
   CasoGravado,
+  DecisaoDoCandidato,
   DesfechoDoCaso,
   EstadoDoPetParaAbertura,
   LostCaseRepository,
   NovoCaso,
 } from '../ports/lost-case-repository.js';
+import type { AberturaDeConversaPorCorrespondencia } from './lost-case-service.js';
 import type { AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
 import type { DisparoGravado, RegistroDeDisparos } from '../ports/registro-de-disparos.js';
 import type { CentroDoAlcance } from '../domain/previa-do-alcance.js';
-import type { CaseId, Instant, OpaqueToken, PetId, UserId } from '../../../shared/types/brands.js';
+import type {
+  CaseId,
+  FoundReportId,
+  Instant,
+  OpaqueToken,
+  PetId,
+  UserId,
+} from '../../../shared/types/brands.js';
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const OUTRO_TUTOR = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const CASO = '018f3a2b-0000-7000-8000-0000000000dd' as CaseId;
+
+const CANDIDATO = '018f3a2b-0000-7000-8000-0000000000ee';
+const ACHADO = '018f3a2b-0000-7000-8000-0000000000f1' as FoundReportId;
+const RELATOR = '018f3a2b-0000-7000-8000-0000000000f2' as UserId;
 
 const AGORA = 1_800_000_000_000 as Instant;
 const ONTEM = (1_800_000_000_000 - 24 * 3600 * 1000) as Instant;
@@ -75,6 +89,20 @@ interface EstadoDoRepositorio {
    * padrao numerico aqui faria os testes exercitarem um mundo que nao existe.
    */
   contagemDeAlcance?: number | null;
+  /**
+   * Um candidato de `match_candidates`, com o dono do CASO dele.
+   *
+   * O dono mora aqui e não no candidato porque `match_candidates` **não tem
+   * coluna de dono**: quem decide é o tutor do caso, e o duplo aqui precisa ter
+   * a mesma forma para que a asserção "um terceiro não decide" signifique a
+   * mesma coisa que no banco.
+   */
+  candidato?: {
+    readonly dono: UserId;
+    readonly casoAberto?: boolean;
+    readonly status: 'suggested' | DecisaoDoCandidato;
+    readonly decididoPor?: UserId;
+  };
 }
 
 interface Registro {
@@ -88,6 +116,12 @@ interface Registro {
     agora: Instant;
   }[];
   readonly buscou: { caso: CaseId; dono: UserId }[];
+  /** O que o serviço pediu ao repositório ao decidir, dono incluído. */
+  readonly decidiu: { caso: CaseId; candidato: string; dono: UserId; decisao: string }[];
+  /** As conversas que a decisão mandou abrir. Vazio prova que NÃO abriu. */
+  readonly conversasAbertas: Parameters<
+    AberturaDeConversaPorCorrespondencia['aoConfirmarCorrespondencia']
+  >[0][];
   readonly conferiuAbertura: { pet: PetId; dono: UserId }[];
   readonly conferiuPrevia: { pet: PetId; dono: UserId }[];
   /** O que o servico pediu a porta de alcance, incluindo quem ele excluiu. */
@@ -123,6 +157,8 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     abriu: [],
     encerrou: [],
     buscou: [],
+    decidiu: [],
+    conversasAbertas: [],
     conferiuAbertura: [],
     conferiuPrevia: [],
     contou: [],
@@ -217,6 +253,40 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       guardado = { dono: guardado.dono, gravado: encerrado };
       return Promise.resolve(encerrado);
     },
+
+    /**
+     * A decisão, com o mesmo `WHERE` que o SQL carrega.
+     *
+     * As quatro recusas saem como o MESMO `null`, e é isso que faz 404 e não
+     * 403: não existe caminho em que a linha de outro tutor chegue à camada de
+     * cima para ser descartada por um `if`.
+     */
+    decidirCandidato: (entrada) => {
+      registro.decidiu.push({
+        caso: entrada.caso,
+        candidato: entrada.candidato,
+        dono: entrada.dono,
+        decisao: entrada.decisao,
+      });
+      const c = estado.candidato;
+      if (c === undefined || entrada.caso !== CASO || entrada.candidato !== CANDIDATO) {
+        return Promise.resolve(null);
+      }
+      if (c.dono !== entrada.dono) return Promise.resolve(null);
+      if ((c.casoAberto ?? true) === false) return Promise.resolve(null);
+      if (c.status !== 'suggested') return Promise.resolve(null);
+      estado.candidato = { ...c, status: entrada.decisao, decididoPor: entrada.dono };
+      return Promise.resolve(candidatoGravado(entrada.decisao));
+    },
+
+    candidatoDecididoDoTutor: (caso, candidato, dono) => {
+      const c = estado.candidato;
+      if (c === undefined || caso !== CASO || candidato !== CANDIDATO) {
+        return Promise.resolve(null);
+      }
+      if (c.dono !== dono || c.status === 'suggested') return Promise.resolve(null);
+      return Promise.resolve(candidatoGravado(c.status));
+    },
   };
 
   return { repositorio, registro };
@@ -298,9 +368,55 @@ function servico(estado: EstadoDoRepositorio = {}): {
   };
 
   return {
-    casos: new LostCaseService({ repositorio, ids, clock, trilha, alcance, disparos, fila }),
+    casos: new LostCaseService({
+      repositorio,
+      ids,
+      clock,
+      trilha,
+      alcance,
+      disparos,
+      fila,
+      conversaDaCorrespondencia: {
+        aoConfirmarCorrespondencia: (aviso) => {
+          registro.conversasAbertas.push(aviso);
+          return Promise.resolve();
+        },
+      },
+    }),
     registro,
     eventos,
+  };
+}
+
+
+/** O candidato como o repositório o devolve depois de decidido. */
+function candidatoGravado(status: DecisaoDoCandidato): CandidatoDecidido {
+  return {
+    id: CANDIDATO,
+    caseId: CASO,
+    foundReportId: ACHADO,
+    petId: PET,
+    nomeDoPet: 'Nina',
+    relatorUserId: RELATOR,
+    score: 0.78,
+    atributosQuePontuaram: ['size', 'primary_color'],
+    distanciaEmMetros: 800,
+    linkOrigin: 'attribute_match',
+    versaoDaEstrategia: 'v1',
+    status,
+    criadoEm: comoData(ONTEM),
+    achado: {
+      id: ACHADO,
+      origin: 'stray_report',
+      status: 'open',
+      especie: 'dog',
+      porte: 'M',
+      cidade: 'São Paulo',
+      bairro: 'Vila Madalena',
+      achadoEm: comoData(ONTEM),
+      observacao: 'Estava com coleira vermelha.',
+      criadoEm: comoData(ONTEM),
+    },
   };
 }
 

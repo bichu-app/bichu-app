@@ -39,11 +39,48 @@ import type { DisparoGravado, RegistroDeDisparos } from '../ports/registro-de-di
 import type { JobQueue } from '../../../shared/ports/index.js';
 import type {
   CanalDoReencontro,
+  CandidatoDecidido,
   CasoGravado,
+  DecisaoDoCandidato,
   DesfechoDoCaso,
   LostCaseRepository,
 } from '../ports/lost-case-repository.js';
-import type { CaseId, Instant, PetId, UserId } from '../../../shared/types/brands.js';
+import type {
+  CaseId,
+  FoundReportId,
+  Instant,
+  PetId,
+  UserId,
+} from '../../../shared/types/brands.js';
+
+/**
+ * Quem abre a conversa mediada quando o tutor **confirma** uma correspondência.
+ *
+ * Porta de um método só, declarada por quem a exige, e com a mesma forma da
+ * `AberturaDeConversaPorAviso` do módulo de tags — de propósito: o outro lado é
+ * `ConversationService.abrirPorAviso`, que é indiferente à origem do achado, e
+ * duas formas diferentes para a mesma abertura seriam duas verdades sobre a
+ * primeira mensagem do sistema.
+ *
+ * A assimetria com o caminho da plaquinha está na seção 20.5 do backlog e é
+ * deliberada: **o aviso do QR abre a conversa ao ser registrado; o achado avulso
+ * abre no portão da decisão humana.** Quem escaneia a plaquinha está com o
+ * animal identificado na mão; quem registra um achado avulso ainda é um palpite
+ * do cruzamento, e abrir o canal antes da confirmação entregaria o tutor ao
+ * falso achador — que é exatamente o que o critério 20 da BICHUS-86 proíbe.
+ */
+export interface AberturaDeConversaPorCorrespondencia {
+  aoConfirmarCorrespondencia(aviso: {
+    readonly foundReportId: FoundReportId;
+    readonly petId: PetId;
+    readonly nomeDoPet: string;
+    readonly escaneadoEm: Instant;
+    readonly rotuloDaArea: string | null;
+    readonly recado: string | null;
+    readonly achadorComConta: UserId | null;
+    readonly avisoAnteriorId: FoundReportId | null;
+  }): Promise<void>;
+}
 
 export interface DependenciasDeCasos {
   readonly repositorio: LostCaseRepository;
@@ -61,6 +98,8 @@ export interface DependenciasDeCasos {
    * exato minuto em que ela precisa do cartaz e do link.
    */
   readonly fila: JobQueue;
+  /** BICHUS-86 critério 4. Confirmar abre a conversa; rejeitar não a abre. */
+  readonly conversaDaCorrespondencia: AberturaDeConversaPorCorrespondencia;
 }
 
 /**
@@ -335,6 +374,117 @@ export class LostCaseService {
     });
 
     return { caso: encerrado, alerta: await this.deps.disparos.ultimoDoCaso(encerrado.id) };
+  }
+
+  /**
+   * `POST /v1/lost-cases/{caseId}/candidates/{candidateId}/decision`.
+   *
+   * O fecho da BICHUS-86: o cruzamento sugere, e é aqui que uma pessoa afirma.
+   *
+   * **Três coisas acontecem, e a ordem entre elas é a regra.**
+   *
+   * 1. A escrita da decisão carrega a autorização na própria cláusula `WHERE`
+   *    (`lost_cases.owner_user_id = :dono`). Nada é lido antes para comparar
+   *    depois, então não existe o caminho em que a linha de outro tutor chega a
+   *    esta camada.
+   * 2. **Só `confirmed` abre a conversa.** `rejected` não abre nada, não avisa
+   *    ninguém e não é reversível — a seção 4.10 de `docs/03-arquitetura.md` e o
+   *    critério 12 da BICHUS-86 dizem a mesma frase, *"rejeitado não volta"*, e
+   *    quem a cumpre é o predicado `status = 'suggested'` da escrita mais o
+   *    filtro `m.status = 'rejected'` do cruzamento, que a partir desta
+   *    operação passa a ter o que eliminar.
+   * 3. A trilha registra as duas decisões, e não só a confirmação. Uma rejeição
+   *    é irreversível: ela precisa ter autor e instante em lugar auditável, que
+   *    é a mesma razão de `match_candidates_decisao_tem_autor` existir.
+   *
+   * **O reenvio da fila offline devolve 200, e não 404.** O critério 7 põe a
+   * confirmação numa fila quando falta conexão, e fila reenvia: a segunda
+   * chamada não encontra mais o candidato em `suggested`, e sem a leitura de
+   * `candidatoDecididoDoTutor` ela responderia "não encontramos isso" logo
+   * depois de a ação ter dado certo. Mudar de ideia é outra coisa, e continua
+   * recusada: só o reenvio da **mesma** decisão passa.
+   */
+  async decidirCandidato(
+    caso: CaseId,
+    candidato: string,
+    decisao: DecisaoDoCandidato,
+    chamador: ContextoDoChamador,
+  ): Promise<CandidatoDecidido> {
+    const decidido = await this.deps.repositorio.decidirCandidato({
+      caso,
+      candidato,
+      dono: chamador.userId,
+      decisao,
+      agora: this.deps.clock.now(),
+    });
+
+    if (decidido === null) return this.reenvioDaFila(caso, candidato, decisao, chamador);
+
+    await this.deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: chamador.userId,
+      actorIp: chamador.ip,
+      correlationId: chamador.correlationId,
+      // A ação é UMA, e a decisão é metadado. Duas ações diriam a mesma coisa
+      // com dois vocabulários, e a consulta "o que aconteceu com este
+      // candidato" passaria a depender de lembrar dos dois nomes.
+      action: 'match.candidate_decided',
+      resourceKind: 'match_candidate',
+      resourceId: decidido.id,
+      metadata: {
+        case_id: decidido.caseId,
+        decision: decisao,
+        link_origin: decidido.linkOrigin,
+      },
+    });
+
+    // **A ÚNICA porta entre a decisão e a conversa.** Fora do `if`, rejeitar
+    // abriria o canal com quem o tutor acabou de dizer que não é quem achou o
+    // pet dele.
+    if (decisao === 'confirmed') {
+      await this.deps.conversaDaCorrespondencia.aoConfirmarCorrespondencia({
+        foundReportId: decidido.foundReportId,
+        // O pet vem do CASO que casou, porque o achado avulso não tem `pet_id`.
+        petId: decidido.petId,
+        nomeDoPet: decidido.nomeDoPet,
+        // Para um achado não existe escaneamento: o instante da primeira
+        // mensagem do sistema é quando o animal foi visto.
+        escaneadoEm: decidido.achado.achadoEm.getTime() as Instant,
+        rotuloDaArea: rotuloDaArea({
+          city: decidido.achado.cidade ?? undefined,
+          neighborhood: decidido.achado.bairro ?? undefined,
+        }),
+        recado: decidido.achado.observacao,
+        achadorComConta: decidido.relatorUserId,
+        // Achado avulso não agrupa: o agrupamento é do achador anônimo que
+        // escaneia duas plaquinhas, e este caminho exige conta.
+        avisoAnteriorId: null,
+      });
+    }
+
+    return decidido;
+  }
+
+  /**
+   * O reenvio da mesma decisão, e só dele.
+   *
+   * Decisão diferente da que está gravada cai no mesmo 404 de tudo o mais: a
+   * decisão pendente que a requisição pede não existe mais. Não há caminho de
+   * "mudar de ideia" nesta operação, e a ausência é a regra, não um vazio.
+   */
+  private async reenvioDaFila(
+    caso: CaseId,
+    candidato: string,
+    decisao: DecisaoDoCandidato,
+    chamador: ContextoDoChamador,
+  ): Promise<CandidatoDecidido> {
+    const jaDecidido = await this.deps.repositorio.candidatoDecididoDoTutor(
+      caso,
+      candidato,
+      chamador.userId,
+    );
+    if (jaDecidido === null || jaDecidido.status !== decisao) throw problemas.naoEncontrado();
+    return jaDecidido;
   }
 
   /**

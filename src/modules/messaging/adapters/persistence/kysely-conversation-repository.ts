@@ -101,6 +101,30 @@ function comoMensagem(linha: LinhaDaMensagem): MensagemGravada {
  * Exportado para a bancada que lê o SQL compilado. O `OR` é o que permite a uma
  * conversa só servir aos dois lados sem uma segunda consulta: cada lado casa um
  * dos dois predicados, e nenhum terceiro casa nenhum.
+ *
+ * ## Por que o nome do achador sai de DUAS colunas (BICHUS-86)
+ *
+ * `found_reports.finder_display_name` é o campo do formulário de quem **não tem
+ * conta**: o achador anônimo que escaneia a plaquinha digita o nome ali. O
+ * achado avulso não tem esse formulário — `POST /v1/found-reports` exige conta,
+ * e o `INSERT` de `criarFoundReportRepository` não escreve a coluna, de propósito.
+ *
+ * Enquanto nada abria conversa a partir de um achado avulso isso não quebrava
+ * nada. A decisão humana do tutor passou a abrir, e sem o `coalesce` o tutor
+ * veria `Quem achou` (o rótulo de `primeiroNomeOuApelido` para `null`) na
+ * conversa de uma pessoa que tem conta e nome preenchido — justamente no
+ * momento em que ele precisa saber com quem está falando sobre o pet dele.
+ *
+ * **A ordem do `coalesce` é o que mantém a resposta de hoje igual.** O nome do
+ * formulário vem primeiro: no caminho da plaquinha ele já é o que a rota
+ * devolve, e invertê-lo trocaria, para quem tem conta E preencheu o formulário,
+ * o nome que a pessoa escolheu dar naquele aviso pelo nome do cadastro dela. O
+ * `LEFT JOIN` preenche só o que era nulo.
+ *
+ * Isto **não** alarga o que sai: `participantesVisiveis` passa o valor por
+ * `primeiroNomeOuApelido`, que corta no primeiro nome — que é o que o contrato
+ * promete em `Conversation.participants.display_name` ("Primeiro nome ou
+ * apelido. **Nunca** sobrenome completo").
  */
 export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
   return db
@@ -109,6 +133,9 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
     .innerJoin('users as tutor', 'tutor.id', 'conversations.tutor_user_id')
     .innerJoin('found_reports', 'found_reports.id', 'conversations.found_report_id')
     .leftJoin('lost_cases', 'lost_cases.id', 'conversations.case_id')
+    // LEFT e não INNER: o achador da plaquinha costuma não ter conta, e um
+    // INNER aqui faria a conversa dele **desaparecer** da lista do tutor.
+    .leftJoin('users as achador', 'achador.id', 'conversations.finder_user_id')
     .select((eb) => [
       'conversations.id',
       'conversations.case_id',
@@ -119,7 +146,9 @@ export function construtorDaLeituraDoChamador(db: Db, chamador: UserId) {
       'conversations.blocked_at',
       'lost_cases.status as case_status',
       'tutor.display_name as tutor_display_name',
-      'found_reports.finder_display_name',
+      sql<string | null>`coalesce("found_reports"."finder_display_name", "achador"."display_name")`.as(
+        'finder_display_name',
+      ),
       eb
         .case()
         .when('conversations.tutor_user_id', '=', chamador)

@@ -120,6 +120,8 @@ function repositorio(cenario: Cenario): LostCaseRepository {
     abrir: naoUsado,
     buscarDoTutor: (): Promise<CasoGravado | null> => Promise.resolve(null),
     encerrar: (): Promise<CasoGravado | null> => Promise.resolve(null),
+    decidirCandidato: naoUsado,
+    candidatoDecididoDoTutor: naoUsado,
   };
 }
 
@@ -207,6 +209,7 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       alcance,
       disparos: disparosDeTeste(),
       fila: filaDeTeste(),
+      conversaDaCorrespondencia: { aoConfirmarCorrespondencia: () => Promise.resolve() },
     }),
     autenticador: {
       autenticar: (token: string) => Promise.resolve({ userId: token as UserId }),

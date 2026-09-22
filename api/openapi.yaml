@@ -2827,7 +2827,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MatchCandidate' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /lost-cases/{caseId}/close:
     parameters:

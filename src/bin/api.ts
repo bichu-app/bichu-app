@@ -399,6 +399,20 @@ export async function main(): Promise<void> {
       // esta e a outra metade daquela decisao: o que a API faz com o alerta e
       // pedir que ele saia.
       fila: criarJobQueue(db, ids),
+      // BICHUS-86 criterio 4. **ESTA LINHA e a ligacao entre a decisao humana e
+      // a conversa mediada**, e e o unico lugar do sistema que conhece os dois
+      // lados. O modulo do caso perdido nao conhece `conversations`: ele entrega
+      // os dados do achado confirmado a uma porta de um metodo so.
+      //
+      // Do outro lado esta `abrirPorAviso`, o MESMO metodo que a plaquinha usa.
+      // Ele e indiferente a origem do achado de proposito: o que muda entre os
+      // dois caminhos e QUANDO a conversa nasce (o QR abre ao registrar, o
+      // achado avulso abre no portao da decisao), e nao COMO.
+      conversaDaCorrespondencia: {
+        aoConfirmarCorrespondencia: async (aviso) => {
+          await conversas.abrirPorAviso(aviso);
+        },
+      },
     }),
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
