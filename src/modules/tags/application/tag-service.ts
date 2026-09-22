@@ -32,6 +32,7 @@ import type {
 import type { RasterizadorDeQr } from '../ports/rasterizador-de-qr.js';
 import type {
   AbsoluteUrl,
+  FoundReportId,
   Instant,
   OpaqueToken,
   PetId,
@@ -88,6 +89,34 @@ export interface DependenciasDeTags {
    * decidiu escala, margem e correção antes de chegar nela.
    */
   readonly rasterizador: RasterizadorDeQr;
+  /**
+   * BICHUS-43. Quem abre a conversa mediada quando o aviso é registrado.
+   *
+   * Porta de um método só, declarada por quem a EXIGE. O aviso é o único fato
+   * que abre conversa no produto — não existe `POST /conversations`, e não pode
+   * existir, porque mensagem direta entre desconhecidos é o que a história
+   * declara fora de escopo. Ligar a abertura aqui é o que impede a conversa de
+   * nascer por qualquer outro caminho.
+   *
+   * Este módulo não conhece `conversations`, e não precisa: ele entrega os
+   * dados do aviso e segue. Quem liga os dois é a composição, em `bin/api.ts`.
+   */
+  readonly conversaDoAviso: AberturaDeConversaPorAviso;
+}
+
+/** A porta acima. O aviso já gravado, na forma que a abertura precisa. */
+export interface AberturaDeConversaPorAviso {
+  aoRegistrarAviso(aviso: {
+    readonly foundReportId: FoundReportId;
+    readonly petId: PetId;
+    readonly nomeDoPet: string;
+    readonly escaneadoEm: Instant;
+    readonly rotuloDaArea: string | null;
+    readonly recado: string | null;
+    readonly achadorComConta: UserId | null;
+    /** O aviso anterior do mesmo achador, quando este foi agrupado a ele. */
+    readonly avisoAnteriorId: FoundReportId | null;
+  }): Promise<void>;
 }
 
 /** A visão pública da tag, exatamente como `TagResolution` a declara. */
@@ -362,8 +391,9 @@ export function criarTagService(deps: DependenciasDeTags) {
       );
 
       const finderToken = deps.ids.opaqueToken();
+      const avisoId = deps.ids.uuidv7();
       await deps.repositorio.registrarAviso({
-        id: deps.ids.uuidv7(),
+        id: avisoId,
         tagId: tag.tagId,
         petId: tag.petId,
         reporterUserId: chamador.userId ?? null,
@@ -380,6 +410,24 @@ export function criarTagService(deps: DependenciasDeTags) {
         ipHmac: chamador.ipHmac,
         userAgentHash: chamador.userAgentHash,
         resultouEmAviso: true,
+      });
+
+      // A conversa mediada nasce AQUI, e só aqui (BICHUS-43). Quando o aviso
+      // foi agrupado a um recente do mesmo achador, ela não é a segunda: o
+      // escaneamento novo vira mensagem na que já existe, senão o tutor veria
+      // duas linhas para a mesma pessoa.
+      await deps.conversaDoAviso.aoRegistrarAviso({
+        foundReportId: avisoId as FoundReportId,
+        petId: tag.petId,
+        nomeDoPet: tag.pet.displayName,
+        escaneadoEm: agora,
+        // O bairro entra com a localização do escaneamento, que ainda não é
+        // resolvida neste caminho. Nulo é o valor verdadeiro; um rótulo
+        // inventado seria pior que a ausência.
+        rotuloDaArea: null,
+        recado: entrada.clientNote ?? null,
+        achadorComConta: chamador.userId ?? null,
+        avisoAnteriorId: recente === undefined ? null : (recente.id as FoundReportId),
       });
 
       return {

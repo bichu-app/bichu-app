@@ -51,6 +51,13 @@ export type AuditAction =
   | 'lost_case.closed'
   | 'lost_case.alert_dispatched'
   | 'match.candidate_decided'
+  /** BICHUS-43. A conversa nasceu de um aviso. Ator anônimo quando o achador não tem conta. */
+  | 'conversation.opened'
+  /**
+   * BICHUS-43, critérios 10 e 11. A conversa foi retida para revisão humana.
+   * O metadado carrega o MOTIVO, e nunca o texto das mensagens.
+   */
+  | 'conversation.held_for_review'
   | 'conversation.reported'
   | 'conversation.blocked'
   | 'moderation.decided'

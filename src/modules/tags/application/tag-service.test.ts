@@ -30,7 +30,11 @@ import type {
   UserId,
 } from '../../../shared/types/brands.js';
 import { comoData, comoIso } from '../../../shared/time/clock.js';
-import { criarTagService, type Chamador } from './tag-service.js';
+import {
+  criarTagService,
+  type AberturaDeConversaPorAviso,
+  type Chamador,
+} from './tag-service.js';
 import type { DesenhoDoQr } from '../domain/qr-da-tag.js';
 import type { RasterizadorDeQr } from '../ports/rasterizador-de-qr.js';
 import type {
@@ -207,6 +211,18 @@ function servico(estado: EstadoDoRepositorio) {
     },
   };
 
+  /**
+   * BICHUS-43. A conversa mediada só nasce de um aviso, e este dublê é o que
+   * torna essa frase verificável deste lado: ele guarda o que `avisar` entrega.
+   */
+  const conversasAbertas: Parameters<AberturaDeConversaPorAviso['aoRegistrarAviso']>[0][] = [];
+  const conversaDoAviso: AberturaDeConversaPorAviso = {
+    aoRegistrarAviso: (aviso) => {
+      conversasAbertas.push(aviso);
+      return Promise.resolve();
+    },
+  };
+
   return {
     tags: criarTagService({
       repositorio,
@@ -224,10 +240,12 @@ function servico(estado: EstadoDoRepositorio) {
       baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
       chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
       rasterizador,
+      conversaDoAviso,
     }),
     contadores,
     eventos,
     desenhosRasterizados,
+    conversasAbertas,
   };
 }
 

@@ -47,8 +47,9 @@ import { problemas, type AppError } from './errors.js';
 import { hmacDeEnderecoIp } from '../crypto/digest.js';
 
 /**
- * As dimensões declaradas no contrato. Nove, e não as seis que a BICHUS-178
- * lista: `ip_24`, `origin` e `pet` também são declaradas hoje.
+ * As dimensões declaradas no contrato. Dez, e não as seis que a BICHUS-178
+ * lista: `ip_24`, `origin` e `pet` também são declaradas hoje, e
+ * `conversation_participant` entrou com a BICHUS-43.
  */
 export const DIMENSOES_CONHECIDAS = [
   'ip',
@@ -60,6 +61,13 @@ export const DIMENSOES_CONHECIDAS = [
   'email',
   'token_family',
   'finder_identity',
+  /**
+   * BICHUS-43. O par (conversa, participante), que é a dimensão em que o teto
+   * de 30 mensagens por hora conta. Não é `account`: duas conversas da mesma
+   * pessoa são dois baldes, senão quem está combinando a devolução de dois
+   * animais ao mesmo tempo seria recusado por estar usando o produto.
+   */
+  'conversation_participant',
 ] as const;
 
 export type Dimensao = (typeof DIMENSOES_CONHECIDAS)[number];
@@ -215,7 +223,8 @@ export function entradasAplicaveis(rota: RouteDefinition): readonly RateLimitEnt
  * - `entrada` — todas as dimensões saem da requisição crua (`ip`, `ip_24`,
  *   `origin`). Roda em `onRequest`, antes de parsear qualquer byte;
  * - `corpo` — alguma dimensão precisa do corpo ou da credencial (`account`,
- *   `email`, `token_family`, `code`, `pet`, `finder_identity`). Roda em
+ *   `email`, `token_family`, `code`, `pet`, `finder_identity`,
+ *   `conversation_participant`). Roda em
  *   `preValidation`, que é depois do parse e **antes** da validação de schema:
  *   corpo malformado também consome o teto, e não vira um caminho de graça.
  */

@@ -5475,6 +5475,7 @@ export interface operations {
                     "application/json": components["schemas"]["ConversationPage"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -5501,6 +5502,7 @@ export interface operations {
                     "application/json": components["schemas"]["Conversation"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -5534,6 +5536,7 @@ export interface operations {
                     "application/json": components["schemas"]["Message"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Conversa encerrada ou bloqueada. */
             410: {

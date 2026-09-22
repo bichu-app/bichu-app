@@ -350,6 +350,20 @@ export const problemas = {
       nextAction: 'register_stray_found_report',
     }),
 
+  /**
+   * 410. A conversa mediada não aceita mais mensagem (BICHUS-43, critério 8).
+   *
+   * **Uma resposta para os dois motivos**, encerrada e bloqueada, e isso é
+   * deliberado: distinguir contaria a quem escreve que a outra pessoa o
+   * bloqueou, e bloquear é a ação que alguém executa com medo. O texto do
+   * encerramento — "o tutor marcou que o <nome> voltou para casa" — é do corpo
+   * da conversa, que continua legível, e não deste problema.
+   */
+  conversaEncerrada: (): AppError =>
+    new AppError('conversation-closed', 'Esta conversa está fechada', {
+      detail: 'Ela continua aqui para você reler, mas não recebe mensagem nova.',
+    }),
+
   limiteDeChamadas: (retryAfterSeconds: number): AppError =>
     new AppError('rate-limited', 'Tente de novo em instantes', {
       detail: 'Recebemos muitos pedidos deste aparelho em pouco tempo.',
