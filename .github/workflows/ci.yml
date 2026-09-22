@@ -227,13 +227,34 @@ jobs:
           # nunca executou nao esta funcionando, esta sem noticia.
           #
           # Versao fixada pelo mesmo motivo do spectral acima.
+          # As iscas do filtro ANTES de usar o filtro: um comparador que
+          # deixou de enxergar aprova tudo em silencio, e este passo existe
+          # justamente para nao aprovar em silencio.
+          python3 infra/verificacao/verificar_quebras_de_contrato.py --autoteste
+          # `--format json` em vez de `--fail-on ERR`: o veredito passa a ser
+          # tomado por quem consegue distinguir a quebra dispensada, POR NOME,
+          # de qualquer outra. `continue-on-error` aqui desligaria o portao
+          # inteiro, e desligamento nao volta atras.
           docker run --rm -v /tmp:/tmp -v "$PWD:/repo" -w /repo tufin/oasdiff:v1.32.1 \
-            breaking /tmp/base.yaml api/openapi.yaml --fail-on ERR
+            breaking /tmp/base.yaml api/openapi.yaml --format json > /tmp/quebras.json
+          # O VENCIMENTO da dispensa nao e conferido aqui: quem o confere e
+          # `verificar_dispensas.py`, no job `rapidos`, de que este job depende.
+          # Dispensa vencida derruba `rapidos` e este passo nem executa.
+          python3 infra/verificacao/verificar_quebras_de_contrato.py /tmp/quebras.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          # `tee` mascara o codigo de saida do python. Guardado aqui e usado na
+          # ULTIMA linha: sair agora pularia o changelog abaixo, e sair nunca
+          # deixaria o passo verde com a reprovacao impressa no resumo -- que e
+          # a pior forma de portao, a que parece ter funcionado.
+          veredito="${PIPESTATUS[0]}"
+
           # Campo ACRESCENTADO nao quebra ninguem e por isso passa nas
           # ferramentas -- e e exatamente por ali que a implementacao se afasta
           # do documento sem nenhum alarme. Aviso obrigatorio, nao reprovacao.
           docker run --rm -v /tmp:/tmp -v "$PWD:/repo" -w /repo tufin/oasdiff:v1.32.1 \
             changelog /tmp/base.yaml api/openapi.yaml | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit "$veredito"
 
   integracao:
     name: compose, migracao do zero e pilha de pe

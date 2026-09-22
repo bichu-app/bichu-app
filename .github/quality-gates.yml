@@ -42,3 +42,32 @@ dispensas:
     motivo: "conta Apple Developer pendente (BICHU-14): sem Team ID nao ha build nem Universal Links"
     responsavel: cliente
     vence_em: 2026-09-22
+
+  # A correcao do `logout` (BICHUS-81, commit aca2d33) acrescentou `requestBody`
+  # OBRIGATORIO a `POST /v1/auth/logout`, e para o `oasdiff` isso e quebra de
+  # contrato: `request-body-added-required`. Medido, nao suposto -- o comando da
+  # esteira sai com 1 e acusa exatamente essa mudanca, e so ela.
+  #
+  # A quebra e o ponto. Enquanto o corpo era opcional, quem seguisse o contrato
+  # ao pe da letra saia sem revogar nada e recebia 204: sucesso indistinguivel
+  # do nada. Recusar alto e o remedio.
+  #
+  # A operacao NAO e versionada, e a decisao e do coordenador: nao existe
+  # cliente publicado. Nao ha keystore, nao ha app em loja, e as listas de
+  # associacao do deep link estao vazias. Versionar criaria uma v2 para uma base
+  # de zero instalacoes, e a v1 passaria a carregar para sempre o comportamento
+  # que esta correcao existe para tirar de circulacao.
+  #
+  # A dispensa e ESTREITA e nomeia a mudanca: `verificar_quebras_de_contrato.py`
+  # so a aplica ao par regra+operacao escrito em `mudanca`. Qualquer outra
+  # quebra reprova o passo, inclusive outra quebra nesta mesma operacao.
+  #
+  # Ela vence junto com a janela do PR: depois do merge em `development` a base
+  # da comparacao ja tem o corpo obrigatorio e o portao fica quieto sozinho.
+  # Se a data chegar antes do merge, `rapidos` reprova por dispensa vencida e
+  # alguem decide de novo -- que e exatamente o comportamento desejado.
+  - portao: oasdiff-logout-corpo-obrigatorio
+    mudanca: "request-body-added-required logout"
+    motivo: "logout passou a exigir refresh_token no corpo (BICHUS-81): quebra deliberada, e nao ha cliente publicado para versionar a operacao"
+    responsavel: squad
+    vence_em: 2026-09-28
