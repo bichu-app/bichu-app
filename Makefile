@@ -306,9 +306,9 @@ verificar-docs-fechada: ## ADR-0018: a Swagger UI fechada, visto de fora (autote
 verificar-manifesto-do-aplicativo-autoteste: ## as iscas do portao de boa-formacao reprovam (nao le app/)
 	python3 infra/verificacao/verificar_manifesto_android.py --autoteste
 
-# 44 ms medidos, sem Gradle, sem JDK e sem SDK do Android: e por
-# isso que ele cabe no laco de quem desenvolve e no job `rapidos`, ao lado das
-# outras iscas, e nao no estagio caro.
+# 50 ms medidos para os 17 arquivos, sem Gradle, sem JDK e sem SDK do Android.
+# E por isso que ele cabe no laco de quem desenvolve e no job `rapidos`, ao
+# lado das outras iscas, e nao no estagio caro.
 #
 # Ele existe porque a MESMA classe derrubou o build do Android duas vezes em
 # dois dias (86499cb em 21/09, c0cd002 em 22/09): `--` dentro de comentario XML,
@@ -321,7 +321,7 @@ verificar-manifesto-do-aplicativo-autoteste: ## as iscas do portao de boa-formac
 # injeta, e regra de esquema do Android. Nada disso e boa-formacao, e nada disso
 # se ve sem o Gradle. Quem pega essa metade e `make apk`, que roda no
 # `fechar-integracao` e no job `apk` -- nao aqui.
-verificar-manifesto-do-aplicativo: ## o XML que o build do aplicativo le esta bem formado (44 ms)
+verificar-manifesto-do-aplicativo: ## o XML que o build do aplicativo le esta bem formado (50 ms)
 	python3 infra/verificacao/verificar_manifesto_android.py --raiz .
 
 apk: ## compila o APK de release de hml e confere o que saiu (o mesmo do job `apk` da esteira)
