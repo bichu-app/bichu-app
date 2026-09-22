@@ -709,6 +709,113 @@ jobs:
       - run: flutter test
         working-directory: app
 
+  # O job `app` acima NAO compila para Android. `flutter analyze` e
+  # `flutter test` rodam na maquina virtual do Dart, contra o SDK do Flutter, e
+  # nunca tocam no Gradle, no AGP nem no SDK do Android. Enquanto a esteira
+  # parou neles, existiu uma classe inteira de defeito sem portao: a dependencia
+  # que sobe o PISO da cadeia de ferramentas.
+  #
+  # Ela custou caro em 22/09/2026. A BICHUS-161 trouxe `permission_handler`, que
+  # exige compilar contra a API 37; o projeto compilava contra a 36 e o AGP
+  # 9.1.0 nao aceita a 37. Os oito jobs ficaram verdes. Quem descobriu foi o
+  # CLIENTE, na hora de gerar o APK para validar camera, splash e acessibilidade
+  # de formulario no aparelho -- as tres coisas que simulador nenhum prova.
+  #
+  # POR QUE EM TODO PUSH, E NAO NUM AGENDADO DIARIO
+  #
+  # O gatilho deste defeito e a mudanca de dependencia, que chega em um commit
+  # qualquer. Num agendado diario a esteira acusaria ate 24 horas depois, com o
+  # trabalho do dia ja empilhado em cima do commit culpado, e a bissecao feita a
+  # mao. Num filtro por caminho (`pubspec.lock`, `android/**`) o portao pularia,
+  # e `skipped` e exatamente o que o job `portao` recusa: portao que nao roda
+  # nao aprova.
+  #
+  # E o custo nao justifica o desconto. O job e PARALELO a `integracao`, que ja
+  # constroi duas imagens Docker e sobe a pilha inteira; ele nao entra no caminho
+  # critico da esteira, entra ao lado dele. Medido em 22/09 numa maquina de
+  # desenvolvimento, com a distribuicao do Gradle e os artefatos do AGP baixados
+  # do zero: 4min20 de ponta a ponta. Se um dia passar de 30 minutos no runner,
+  # a conversa e sobre cache, e nao sobre deixar a classe descoberta.
+  apk:
+    name: APK de release (compila de verdade)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+
+      # O projeto compila em JVM 17 (`compileOptions` e `jvmTarget` em
+      # app/android/app/build.gradle.kts). Declarar aqui evita que a esteira
+      # mude de JDK no dia em que a imagem do runner mudar de padrao.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # A PLATAFORMA E NOMEADA A MAO, DE PROPOSITO.
+      #
+      # A partir da API 37 a plataforma do Android tem versao MENOR: nao existe
+      # `platforms;android-37`, existem `android-37.0`, `37.1` e `37.2`. O
+      # projeto declara `compileSdk = 37` + `compileSdkMinor = 0`, que resolve
+      # para `android-37.0` -- e e esse, e so esse, que precisa estar instalado.
+      # Deixar o AGP baixar sozinho tornaria a esteira dependente de aceitacao
+      # de licenca na imagem do runner, que muda sem aviso e falha tarde.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.4"
+          channel: stable
+          cache: true
+
+      # Sem este cache o job rebaixa a distribuicao do Gradle (cerca de 200 MB)
+      # e os artefatos do AGP a cada execucao. A chave inclui os arquivos que
+      # determinam o que sera baixado, entao mudanca de AGP ou de wrapper invalida
+      # o cache em vez de servir o conteudo errado.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('app/android/**/*.gradle.kts', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/pubspec.lock') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - run: flutter pub get
+        working-directory: app
+
+      # ISCAS ANTES DO BUILD, e a ordem importa. O portao confere o que saiu do
+      # build (zip, manifesto, dex, libapp.so); se essa conferencia cegar, ela
+      # aprovaria qualquer coisa e o job ficaria verde compilando lixo. Este
+      # passo nao compila nada e leva segundos: ele monta pacotes defeituosos e
+      # exige que cada um seja REPROVADO, mais um pacote completo que precisa ser
+      # APROVADO -- porque conferencia que reprova tudo tambem nao diz nada.
+      - name: as iscas da conferencia do APK reprovam
+        run: sh infra/verificacao/verificar-apk.sh --autoteste
+
+      # O comando e o MESMO que o cliente roda, porque ele mora dentro do script
+      # e nao em duas copias. Se `flutter build apk --release` falhar por
+      # compileSdk, por metadado de AAR ou por versao de AGP, e porque alguma
+      # dependencia subiu o piso da cadeia de ferramentas e o projeto ficou para
+      # tras -- que e precisamente a classe que este job existe para pegar.
+      - name: compila o APK de release e confere o que saiu
+        run: sh infra/verificacao/verificar-apk.sh
+
+      # O APK fica pendurado na execucao. O cliente valida camera, splash e
+      # acessibilidade no aparelho a partir daqui, sem precisar de cadeia de
+      # ferramentas Android na maquina dele.
+      #
+      # Assinado com a chave de DEPURACAO (decisao de 22/09: nao vamos as lojas
+      # agora). Serve para instalar e validar; nao serve para publicar.
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: bichu-hml-apk-${{ github.sha }}
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
   tokens:
     name: tokens
     runs-on: ubuntu-latest
@@ -959,12 +1066,12 @@ jobs:
   portao:
     name: portao
     runs-on: ubuntu-latest
-    needs: [rapidos, codigo, contrato, integracao, app, tokens, contraste, sonar]
+    needs: [rapidos, codigo, contrato, integracao, app, apk, tokens, contraste, sonar]
     if: always()
     steps:
       - name: consolidar
         run: |
-          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.app.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
           echo "estados: $estados"
           for e in $estados; do
             case "$e" in

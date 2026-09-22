@@ -9,7 +9,13 @@ plugins {
 
 android {
     namespace = "app.bichu"
-    compileSdk = flutter.compileSdkVersion
+    // permission_handler_android (BICHUS-161) exige compilar contra a API 37.
+    // O SDK instalado nao tem "android-37" puro: a partir da API 37 a plataforma
+    // tem versao menor, e existem android-37.0, 37.1 e 37.2. Por isso o alvo e
+    // declarado em duas partes, e nao herdado de flutter.compileSdkVersion (36).
+    // O AGP 9.2.0 e a primeira versao que aceita a API 37 (a 9.1.0 para na 36).
+    compileSdk = 37
+    compileSdkMinor = 0
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
