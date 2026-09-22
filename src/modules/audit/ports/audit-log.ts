@@ -64,7 +64,21 @@ export type AuditAction =
    */
   | 'privacy.reference_location_set'
   /** A conta saiu do raio de alerta por `DELETE /v1/me/location`. */
-  | 'privacy.reference_location_cleared';
+  | 'privacy.reference_location_cleared'
+  // Aparelho e token de push (BICHUS-91)
+  /**
+   * `POST /v1/me/devices`. O metadado carrega plataforma e permissao; **o token
+   * nao entra**, pela regra do cabecalho deste arquivo ("nunca registrar ...
+   * token de qualquer especie") e porque a trilha sobrevive a exclusao da conta.
+   */
+  | 'device.registered'
+  /**
+   * O aparelho deixou de existir, e o metadado diz por que (`reason`). E a
+   * UNICA memoria da revogacao: a linha e apagada, e a trilha nao referencia
+   * `users`, entao ela responde "por que este aparelho parou de receber?"
+   * inclusive depois de a conta ter sido apagada.
+   */
+  | 'device.revoked';
 
 export type ActorKind = 'user' | 'anonymous' | 'system';
 
