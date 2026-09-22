@@ -208,6 +208,13 @@ export default tseslint.config(
       // pelo SwiftPM, nao codigo deste repositorio. Ja esta no .gitignore; o
       // ESLint nao le .gitignore, entao precisa ser dito aqui tambem.
       'app/build/**',
+      // Iscas do portao de saida: arvores de mentira que existem para ser
+      // REPROVADAS por `verificar-colunas-que-nao-saem.sh`. Elas imitam
+      // `src/`, `api/` e `migrations/` e nao estao no tsconfig, entao o
+      // servico de projeto nao as acha e o parser morre antes de qualquer
+      // regra. Lintar fixture de defeito e cobrar qualidade de codigo que
+      // existe para estar errado.
+      'infra/verificacao/iscas/**',
     ],
   },
 

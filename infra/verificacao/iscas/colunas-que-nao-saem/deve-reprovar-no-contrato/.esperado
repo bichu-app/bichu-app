@@ -1,0 +1,6 @@
+# O que a saida PRECISA dizer. Codigo de saida nao basta: um portao que
+# reprovasse por outro motivo (spec ilegivel, src/ vazio) ficaria verde aqui
+# estando cego para o vazamento, que e a unica coisa que ele existe para ver.
+REPROVADO
+quem_convidou
+declarada no contrato

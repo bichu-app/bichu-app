@@ -1,0 +1,14 @@
+openapi: 3.1.0
+info: { title: isca, version: '0' }
+paths:
+  /isca:
+    get:
+      operationId: iscaLimpa
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  display_name: { type: string }
