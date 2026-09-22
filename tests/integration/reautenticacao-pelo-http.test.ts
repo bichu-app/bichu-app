@@ -523,14 +523,34 @@ void describe('BICHUS-48 — o teto de tentativa, e o que ele nao pode trancar',
       );
     }
 
-    const recusadas = respostas.filter((r) => r.status === 429);
+    // A POSICAO, e nao "alguma delas". O contrato declara 5 invalidas por hora:
+    // a quinta ainda e recusada por credencial (401) e a SEXTA e recusada pelo
+    // teto (429). Afirmar apenas "alguma levou 429" deixaria passar a remocao
+    // da entrada `invalid_attempts`, porque a outra entrada da rota (10 por
+    // hora) tambem responde 429 -- so que na decima primeira chamada, que e
+    // tarde demais para servir de defesa contra forca bruta.
+    const status = respostas.map((r) => r.status);
+    assert.deepEqual(
+      status.slice(0, 5),
+      [401, 401, 401, 401, 401],
+      `as cinco primeiras tentativas com senha errada deviam ser 401 de credencial: ` +
+        `${JSON.stringify(status)}. Um 429 antes da quinta trancaria o titular que errou ` +
+        'a senha quatro vezes, e o criterio 3 poe o custo no ato destrutivo, nao na navegacao.',
+    );
+    assert.equal(
+      status[5],
+      429,
+      `a SEXTA tentativa com senha errada respondeu ${String(status[5])}: ` +
+        `${JSON.stringify(status)}.\n\n` +
+        'Sem o teto de 5 invalidas por hora, reautenticacao e um oraculo de senha aberto a ' +
+        'quem tomou a sessao: ele testa a vontade e o login nem fica sabendo, porque o login ' +
+        'se defende por e-mail e por IP, e nao por conta. O teto de 10 por hora da mesma ' +
+        'rota NAO cobre isto -- ele so recusa na decima primeira chamada.',
+    );
+    const ultima = respostas[5];
     assert.ok(
-      recusadas.length >= 1,
-      `nenhuma das 6 tentativas com senha errada levou 429: ` +
-        `${JSON.stringify(respostas.map((r) => r.status))}.\n\n` +
-        'Sem teto, reautenticacao e um oraculo de senha aberto a quem tomou a sessao: ele ' +
-        'testa a vontade e o login nem fica sabendo, porque o login se defende por e-mail ' +
-        'e por IP, e nao por conta.',
+      ultima !== undefined && (ultima.corpo as { title?: unknown }).title !== undefined,
+      'o 429 saiu sem corpo de problema',
     );
   });
 
