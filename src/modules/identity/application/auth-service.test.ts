@@ -25,6 +25,7 @@ import type {
   TokenHash,
   UserId,
 } from '../../../shared/types/brands.js';
+import type { Clock } from '../../../shared/time/clock.js';
 import { dataFixa, INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import { gerarHashDeSenha } from '../domain/password.js';
 import type {
@@ -127,8 +128,28 @@ class RepositorioFalso implements IdentityRepository {
     this.conta = conta;
   }
 
+  /**
+   * Devolve o que a bancada montou, ou — quando o caso subiu a pilha de verdade
+   * e abriu a família por `entrar()` — a linha que foi REALMENTE gravada.
+   *
+   * Sem essa volta, um caso de ponta a ponta leria uma linha de fixture em vez
+   * da que o produto acabou de escrever, e o `issuedAt` comparado com a barreira
+   * seria o do teste e não o do código.
+   */
   buscarRefreshPorHash(): Promise<RefreshArmazenado | undefined> {
-    return Promise.resolve(this.refresh);
+    const gravado = this.familiasAbertas.at(-1);
+    if (gravado === undefined) return Promise.resolve(this.refresh);
+    return Promise.resolve({
+      id: gravado.id,
+      userId: gravado.userId,
+      familyId: gravado.familyId,
+      issuedAt: gravado.issuedAt,
+      expiresAt: gravado.expiresAt,
+      absoluteExpiresAt: gravado.absoluteExpiresAt,
+      staySignedIn: gravado.staySignedIn,
+      rotatedToId: null,
+      revokedAt: null,
+    });
   }
 
   revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number> {
@@ -177,8 +198,18 @@ class RepositorioFalso implements IdentityRepository {
     this.familiasAbertas.push(novo);
     return Promise.resolve();
   }
+  /**
+   * Registra a chamada **e move a conta**, que é o que o repositório de verdade
+   * faz.
+   *
+   * O critério 7 de BICHUS-126 cobrava que a redefinição empurrasse a coluna, e
+   * a prova parava em `invalidacoesDeSessao`: uma lista de chamadas. Um dublê
+   * que só anota a chamada não prova que empurrar tem EFEITO — e era exatamente
+   * essa a situação, com o furo de `renovar()` inteiro de pé e a suíte verde.
+   */
   invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
     this.invalidacoesDeSessao.push({ userId, agora });
+    if (this.conta !== undefined) this.conta = { ...this.conta, sessionsInvalidBefore: agora };
     return Promise.resolve();
   }
   criarTokenDeVerificacao(): Promise<void> {
@@ -222,6 +253,12 @@ function montar(opcoes: {
   redefinicao?: RedefinicaoPendente | undefined;
   login?: CredencialLocal | undefined;
   agora?: Instant | undefined;
+  /**
+   * Relógio que ANDA, para o caso em que dois passos do mesmo cenário precisam
+   * cair em instantes diferentes — login, depois redefinição. O padrão continua
+   * parado, porque quase todo caso quer o contrário.
+   */
+  relogio?: Clock | undefined;
 }): Bancada {
   const repo = new RepositorioFalso(
     opcoes.refresh,
@@ -292,7 +329,7 @@ function montar(opcoes: {
       opaqueToken: () => 'refresh-novo' as OpaqueToken,
       random128: () => new Uint8Array(16),
     },
-    clock: relogioParado(agoraDaBancada),
+    clock: opcoes.relogio ?? relogioParado(agoraDaBancada),
     janelas: {
       idleTtlSeconds: 30 * 86_400,
       staySignedInIdleTtlSeconds: 180 * 86_400,
@@ -319,6 +356,7 @@ function refreshArmazenado(campos: Partial<RefreshArmazenado>): RefreshArmazenad
     id: 'refresh-1',
     userId: VITIMA,
     familyId: FAMILIA,
+    issuedAt: AGORA,
     expiresAt: (AGORA + 30 * 86_400_000) as Instant,
     absoluteExpiresAt: (AGORA + 180 * 86_400_000) as Instant,
     staySignedIn: false,
@@ -712,5 +750,198 @@ void describe('entrar no mesmo segundo da redefinição de senha (BICHUS-132)', 
       LOGIN_EM + 30 * 86_400_000,
       'o prazo do refresh conta a partir do relógio da requisição, e não do empurrão',
     );
+  });
+});
+
+
+/**
+ * O refresh anterior à troca de senha (BICHUS-77 critério 5, BICHUS-125).
+ *
+ * O furo que estes casos fecham: a redefinição empurrava
+ * `users.sessions_invalid_before`, `autenticar()` lia a coluna, e `renovar()`
+ * **nunca a consultava**. Quem tivesse copiado o refresh antes da troca chamava
+ * `POST /v1/auth/refresh`, recebia um token de acesso novo com `iat = agora`, e
+ * esse token passava pela barreira sem esforço. A pessoa descobria que a conta
+ * tinha sido invadida, trocava a senha — que é o único gesto que o produto
+ * oferece para expulsar o invasor — e o invasor continuava dentro,
+ * indefinidamente.
+ *
+ * O que estes casos afirmam é o EFEITO, e não o 401: a resposta da recusa é a
+ * mesma de um refresh vencido, de propósito. Um caso que só olhasse o status
+ * passaria com a comparação arrancada, porque `renovar()` já responde 401 por
+ * meia dúzia de outros motivos.
+ *
+ * O caso que só confere "a coluna foi empurrada" — o que a suíte tinha — fica
+ * verde com o furo inteiro de pé. É por isso que a prova aqui é a renovação
+ * sendo RECUSADA, e não a chamada à porta sendo registrada.
+ */
+void describe('renovar() respeita sessions_invalid_before (BICHUS-77 critério 5)', () => {
+  /** A troca de senha caiu 1 s depois de o refresh do invasor nascer. */
+  const TROCA_EM = (AGORA + 1_000) as Instant;
+
+  void it('A ISCA: recusa o refresh emitido ANTES da troca de senha', async () => {
+    const bancada = montar({
+      refresh: refreshArmazenado({ issuedAt: AGORA }),
+      conta: contaAtiva(TROCA_EM),
+    });
+
+    const erro = await capturar(bancada.servico.renovar('refresh-copiado', CONTEXTO));
+    assert.equal(erro.status, 401);
+    assert.equal(erro.problemType, 'token-expired');
+
+    // O que de fato importa: nenhum token novo saiu. Recusar depois de rotacionar
+    // deixaria o sucessor gravado com `issued_at` posterior à barreira, e o
+    // refresh recusado hoje passaria amanhã.
+    assert.deepEqual(bancada.repo.rotacoes, [], 'a recusa vem ANTES da rotação');
+  });
+
+  void it('O CONTRAPESO: o refresh emitido DEPOIS da troca continua valendo', async () => {
+    // Sem este caso, uma barreira que recusasse tudo passaria na isca — e
+    // ninguém conseguiria continuar conectado depois de trocar a senha, que é o
+    // oposto do que a história pede. O portão precisa ser portão, e não bloqueio.
+    const bancada = montar({
+      refresh: refreshArmazenado({ issuedAt: (TROCA_EM + 1) as Instant }),
+      conta: contaAtiva(TROCA_EM),
+    });
+
+    const sessao = await bancada.servico.renovar('refresh-legitimo', CONTEXTO);
+    assert.equal(bancada.repo.rotacoes.length, 1, 'rotacionou normalmente');
+    assert.ok(sessao.access_token.length > 0);
+  });
+
+  void it('o empate sobrevive: refresh nascido no MESMO instante da barreira renova', async () => {
+    // O terceiro caso existe para travar a correção errada, que é copiar o
+    // `Math.ceil` de `tokenFoiRevogado`. Lá o arredondamento compensa o `iat` do
+    // JWT, truncado ao segundo; aqui os dois lados são milissegundo gravado pelo
+    // mesmo relógio, e não há nada a compensar. Arredondar recusaria o refresh de
+    // quem acabou de retomar a conta — BICHUS-132 renascido na outra ponta.
+    const bancada = montar({
+      refresh: refreshArmazenado({ issuedAt: TROCA_EM }),
+      conta: contaAtiva(TROCA_EM),
+    });
+
+    await bancada.servico.renovar('refresh-do-mesmo-instante', CONTEXTO);
+    assert.equal(bancada.repo.rotacoes.length, 1);
+  });
+
+  void it('a recusa é indistinguível da de um refresh simplesmente vencido', async () => {
+    // Critério de não-oráculo. Se a barreira tivesse status, `type` ou detalhe
+    // próprio, qualquer pessoa de posse de um refresh velho descobriria que
+    // aquela conta trocou a senha há pouco — que é justamente o sinal de que ali
+    // houve incidente, e o convite para tentar de novo por outro caminho.
+    const porBarreira = montar({
+      refresh: refreshArmazenado({ issuedAt: AGORA }),
+      conta: contaAtiva(TROCA_EM),
+    });
+    const porVencimento = montar({
+      refresh: refreshArmazenado({ expiresAt: (AGORA - 1) as Instant }),
+      conta: contaAtiva(0 as Instant),
+    });
+
+    const a = await capturar(porBarreira.servico.renovar('refresh-copiado', CONTEXTO));
+    const b = await capturar(porVencimento.servico.renovar('refresh-vencido', CONTEXTO));
+
+    assert.equal(a.status, b.status);
+    assert.equal(a.problemType, b.problemType);
+    assert.equal(a.message, b.message);
+    assert.deepEqual(a.errors, b.errors);
+  });
+
+  void it('a tentativa negada entra na trilha, com a família como recurso', async () => {
+    // Do lado de dentro a recusa precisa ser legível: quem atende a tutora que
+    // liga dizendo "não fui eu" tem que ver que alguém continuou tentando renovar
+    // DEPOIS da troca. Isto é trilha, não resposta — nada disso sai pela borda.
+    const bancada = montar({
+      refresh: refreshArmazenado({ issuedAt: AGORA }),
+      conta: contaAtiva(TROCA_EM),
+    });
+    await capturar(bancada.servico.renovar('refresh-copiado', CONTEXTO));
+
+    const negadas = bancada.eventos.filter(
+      (e) => e.action === 'auth.refresh_rejected_revoked_session',
+    );
+    assert.equal(negadas.length, 1);
+    assert.equal(negadas[0]?.resourceId, FAMILIA);
+    assert.equal(
+      bancada.eventos.filter((e) => e.action === 'auth.session_refreshed').length,
+      0,
+      'renovação negada não é renovação',
+    );
+  });
+});
+
+/**
+ * A ponta que faltava do critério 7 de BICHUS-126: a prova de que **empurrar
+ * `sessions_invalid_before` tem efeito**.
+ *
+ * O que existia era um caso afirmando que a redefinição CHAMA `invalidarSessoes`.
+ * Ele ficava verde com o furo inteiro de pé, porque ninguém verificava o outro
+ * lado: a coluna era empurrada e `renovar()` não a lia. Aqui a bancada sobe a
+ * pilha — `entrar()` grava a família, a redefinição move a conta de verdade, e o
+ * MESMO refresh é apresentado de novo.
+ */
+void describe('a troca de senha derruba a renovação, de ponta a ponta (BICHUS-126 critério 7)', () => {
+  const EMAIL_DA_CONTA = 'tutora@exemplo.test';
+  const SENHA_NOVA = 'chuva-de-marco-no-quintal';
+  const LINK_DO_EMAIL = 'token-que-chegou-no-e-mail';
+  const DONO: TokenConsumido = { userId: VITIMA, enviadoPara: EMAIL_DA_CONTA };
+
+  let phcGuardado: string | undefined;
+  async function credencial(): Promise<CredencialLocal> {
+    phcGuardado ??= await gerarHashDeSenha(SENHA_NOVA);
+    return {
+      identityId: 'identidade-local-1',
+      userId: VITIMA,
+      passwordPhc: phcGuardado,
+      mustChange: false,
+    };
+  }
+
+  /**
+   * O relógio ANDA aqui, e a razão é o cenário: o login, a renovação e a
+   * redefinição acontecem em instantes diferentes, como na vida. Com o relógio
+   * parado os três cairiam no mesmo milissegundo, o empate mandaria, e o caso
+   * não provaria nada — que é o tipo de teste que fica verde sem olhar.
+   */
+  function relogioQueAnda(inicio: Instant): { clock: Clock; avancar: (ms: number) => void } {
+    let agora = inicio;
+    return { clock: { now: () => agora }, avancar: (ms) => { agora = (agora + ms) as Instant; } };
+  }
+
+  async function bancadaCompleta(relogio: Clock): Promise<Bancada> {
+    const cred = await credencial();
+    return montar({
+      conta: contaAtiva(0 as Instant),
+      login: cred,
+      redefinicao: { pendente: DONO, consumido: DONO, credencial: cred },
+      relogio,
+    });
+  }
+
+  void it('o refresh que funcionava antes da troca deixa de funcionar depois dela', async () => {
+    const tempo = relogioQueAnda(AGORA);
+    const bancada = await bancadaCompleta(tempo.clock);
+
+    // 1. A sessão existe e renova. Sem esta metade, um caso que só exigisse a
+    //    recusa passaria com `renovar()` quebrada para todo mundo.
+    await bancada.servico.entrar(
+      { email: EMAIL_DA_CONTA, password: SENHA_NOVA, staySignedIn: false },
+      CONTEXTO,
+    );
+    await bancada.servico.renovar('refresh-novo', CONTEXTO);
+    assert.equal(bancada.repo.rotacoes.length, 1, 'antes da troca, renova');
+
+    // 2. Meio segundo depois, a vítima redefine a senha. O dublê move a conta,
+    //    como o banco move.
+    tempo.avancar(500);
+    const TROCA = (AGORA + 500) as Instant;
+    await bancada.servico.confirmarRedefinicaoDeSenha(LINK_DO_EMAIL, SENHA_NOVA, CONTEXTO);
+    assert.deepEqual(bancada.repo.invalidacoesDeSessao, [{ userId: VITIMA, agora: TROCA }]);
+
+    // 3. O MESMO refresh, agora. É este passo que o critério 7 nunca teve: a
+    //    coluna empurrada só vale alguma coisa se alguém a ler do outro lado.
+    const erro = await capturar(bancada.servico.renovar('refresh-novo', CONTEXTO));
+    assert.equal(erro.status, 401);
+    assert.equal(bancada.repo.rotacoes.length, 1, 'depois da troca, não renova mais');
   });
 });

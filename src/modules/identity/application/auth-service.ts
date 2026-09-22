@@ -20,6 +20,7 @@ import {
   instanteDeEmissaoDoAcesso,
   prazosDeNovaFamilia,
   prazosDeRotacao,
+  refreshFoiRevogado,
   segundosRestantes,
   tokenFoiRevogado,
 } from '../domain/session.js';
@@ -208,6 +209,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       userId: conta.id,
       familyId,
       tokenHash: comoTokenHash(refreshToken),
+      issuedAt: agora,
       expiresAt: prazos.expiresAt,
       absoluteExpiresAt: prazos.absoluteExpiresAt,
       staySignedIn: continuarConectado,
@@ -411,6 +413,37 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       const conta = await deps.repositorio.buscarContaPorId(armazenado.userId);
       if (conta === undefined) throw problemas.sessaoExpirada();
 
+      // SEC-006 do lado do refresh. Sem esta comparação a troca de senha não
+      // expulsava ninguém: ela empurrava `sessions_invalid_before`, `autenticar()`
+      // lia a coluna e `renovar()` não — então quem tinha o refresh copiado
+      // pedia um token de acesso novo, com `iat = agora`, e passava pela
+      // barreira. A vítima fazia o único gesto que o produto oferece contra
+      // quem tomou a conta, e quem tomou a conta continuava dentro.
+      //
+      // Vem ANTES de `rotacionar`, e a ordem é a regra: recusar depois deixaria
+      // a linha sucessora gravada com `issued_at` posterior à barreira, e o
+      // refresh recusado desta vez passaria na próxima.
+      //
+      // A recusa é `sessaoExpirada()`, a MESMA de token desconhecido, consumido,
+      // revogado e vencido. É de propósito: um corpo ou um status próprio aqui
+      // transformaria a rota num oráculo que conta a um estranho, de posse de um
+      // refresh qualquer, que aquela conta trocou a senha há pouco — que é a
+      // informação de quem está procurando uma conta para atacar de novo.
+      if (refreshFoiRevogado(armazenado.issuedAt, conta.sessionsInvalidBefore)) {
+        // A tentativa negada é o sinal mais útil da trilha, e ela é interna: o
+        // que sai pela resposta continua indistinguível de um refresh vencido.
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: armazenado.userId,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.refresh_rejected_revoked_session',
+          resourceKind: 'refresh_family',
+          resourceId: armazenado.familyId,
+        });
+        throw problemas.sessaoExpirada();
+      }
+
       // "Continuar conectado" é escolha feita na autenticação com senha e
       // carregada pela família. Ela vem da linha gravada, nunca do corpo do
       // pedido de renovação: senão o cliente promoveria a própria sessão de 30
@@ -430,6 +463,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           userId: conta.id,
           familyId: armazenado.familyId,
           tokenHash: comoTokenHash(novoRefresh),
+          issuedAt: agora,
           expiresAt: prazos.expiresAt,
           absoluteExpiresAt: prazos.absoluteExpiresAt,
           staySignedIn: armazenado.staySignedIn,

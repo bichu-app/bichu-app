@@ -13,6 +13,7 @@ import {
   instanteDeEmissaoDoAcesso,
   prazosDeNovaFamilia,
   prazosDeRotacao,
+  refreshFoiRevogado,
   segundosRestantes,
   tokenFoiRevogado,
   type JanelasDeSessao,
@@ -216,5 +217,53 @@ void describe('emissão que espera a virada do segundo (BICHUS-132)', () => {
     // E a conta recém-criada, cuja barreira já vem truncada ao segundo, também
     // não paga: `barreiraDeContaNova` e este empurrão não se atropelam.
     assert.equal(instanteDeEmissaoDoAcesso(login, barreiraDeContaNova(login)), login);
+  });
+});
+
+/**
+ * A barreira do lado do refresh (BICHUS-77 critério 5).
+ *
+ * `tokenFoiRevogado` sozinha não expulsa ninguém: quem tem o refresh copiado
+ * pede um token de acesso novo e ele nasce do lado que passa. O que fecha a
+ * porta é recusar o refresh que nasceu antes da barreira.
+ *
+ * O ponto que estes casos travam é a **diferença** entre as duas funções, que é
+ * a coisa mais fácil de errar neste arquivo: `tokenFoiRevogado` arredonda a
+ * barreira para cima ao segundo, e `refreshFoiRevogado` não arredonda nada.
+ */
+void describe('refreshFoiRevogado(): SEC-006 do lado do refresh', () => {
+  /** A redefinição caiu 734 ms depois da virada do segundo. */
+  const REDEFINIDA_EM = 1_789_734_320_734 as Instant;
+
+  void it('recusa o refresh nascido antes da barreira, mesmo por 1 ms', () => {
+    // 1 ms e não 1 minuto de propósito: uma implementação que comparasse
+    // segundos passaria com a diferença grande e falharia aqui, que é o caso
+    // real — a renovação em laço de quem tomou a conta acontece a milissegundos
+    // da troca de senha.
+    assert.equal(refreshFoiRevogado((REDEFINIDA_EM - 1) as Instant, REDEFINIDA_EM), true);
+    assert.equal(refreshFoiRevogado((REDEFINIDA_EM - 3_600_000) as Instant, REDEFINIDA_EM), true);
+  });
+
+  void it('deixa passar o refresh nascido depois da barreira', () => {
+    assert.equal(refreshFoiRevogado((REDEFINIDA_EM + 1) as Instant, REDEFINIDA_EM), false);
+  });
+
+  void it('o empate SOBREVIVE, ao contrário do que vale para o token de acesso', () => {
+    // Este é o caso que separa as duas funções, e ele existe para impedir que
+    // alguém "uniformize" a comparação copiando o `Math.ceil` de
+    // `tokenFoiRevogado`. Lá o arredondamento compensa o truncamento do `iat`
+    // ao segundo; aqui os dois lados são milissegundo do mesmo relógio, e
+    // arredondar recusaria o refresh de quem acabou de retomar a conta.
+    assert.equal(refreshFoiRevogado(REDEFINIDA_EM, REDEFINIDA_EM), false);
+
+    // E o contraste, que é o que torna a assimetria legível: o token de acesso
+    // emitido no mesmo SEGUNDO continua caindo do lado revogado.
+    assert.equal(tokenFoiRevogado(Math.floor(REDEFINIDA_EM / 1000), REDEFINIDA_EM), true);
+  });
+
+  void it('conta sem revogação nenhuma: todo refresh passa', () => {
+    // O contrapeso trivial, e sem ele uma barreira que recusasse tudo passaria
+    // nos casos acima: a esmagadora maioria das contas nunca teve revogação.
+    assert.equal(refreshFoiRevogado(REDEFINIDA_EM, 0 as Instant), false);
   });
 });

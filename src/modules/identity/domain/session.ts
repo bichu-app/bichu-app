@@ -85,6 +85,44 @@ export function tokenFoiRevogado(iatEmSegundos: number, sessionsInvalidBefore: I
 }
 
 /**
+ * SEC-006 do lado do **refresh**, que é a metade que faltava.
+ *
+ * `tokenFoiRevogado` protege o token de acesso, e sozinha ela não expulsa
+ * ninguém: quem tem o refresh copiado chama `POST /v1/auth/refresh`, recebe um
+ * token de acesso novo com `iat = agora`, e esse token passa pela barreira sem
+ * esforço. A vítima trocou a senha — que é exatamente o gesto que o produto
+ * oferece para expulsar o invasor — e o invasor continuou dentro, renovando
+ * indefinidamente. A troca de senha prometia uma coisa e entregava outra.
+ *
+ * O refresh que **nasceu antes** da barreira morre com ela. Isso vale para
+ * todos os gatilhos do SEC-006 e não só para a redefinição de senha, porque o
+ * que se lê é a coluna, e não o motivo que a empurrou.
+ *
+ * **A comparação é estrita, e a diferença para `tokenFoiRevogado` é o ponto
+ * mais fácil de errar deste arquivo.** Lá a barreira é arredondada **para
+ * cima** ao segundo, e o arredondamento não é margem de segurança: ele existe
+ * para compensar o `iat` do JWT, que tem granularidade de segundo e é
+ * `floor(instante / 1000)`. Um token emitido em 20,734 s declara `iat = 20`, e
+ * sem o arredondamento ele pareceria anterior a uma barreira de 20,734 s que na
+ * verdade veio depois dele.
+ *
+ * Aqui não há truncamento nenhum a compensar: `issued_at` e
+ * `sessions_invalid_before` são os dois `timestamptz` em milissegundo, gravados
+ * pelo **mesmo relógio da aplicação**. Copiar o `Math.ceil` de lá recusaria todo
+ * refresh emitido no mesmo segundo da revogação — e quem emite um refresh logo
+ * depois de uma redefinição é a pessoa que acabou de retomar a conta. Seria o
+ * defeito de BICHUS-132 renascido na outra ponta: ela entraria, e cairia na
+ * primeira renovação.
+ *
+ * O empate (`issuedAt === sessionsInvalidBefore`) fica do lado que **sobrevive**,
+ * e isso não devolve nada a quem tomou a conta: a linha dele foi gravada
+ * estritamente antes da redefinição, porque a redefinição é o que veio depois.
+ */
+export function refreshFoiRevogado(issuedAt: Instant, sessionsInvalidBefore: Instant): boolean {
+  return issuedAt < sessionsInvalidBefore;
+}
+
+/**
  * A barreira do SEC-006 para uma conta **recém-criada**, truncada ao segundo.
  *
  * Criar conta não é revogar sessão, e tratar as duas do mesmo jeito produzia um

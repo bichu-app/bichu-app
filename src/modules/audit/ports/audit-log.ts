@@ -28,6 +28,8 @@ export type AuditAction =
   | 'auth.logout'
   | 'auth.session_refreshed'
   | 'auth.refresh_reuse_detected'
+  /** Refresh anterior a `sessions_invalid_before` (SEC-006). Tentativa negada. */
+  | 'auth.refresh_rejected_revoked_session'
   | 'auth.sessions_revoked'
   | 'auth.password_changed'
   | 'auth.password_rehashed'
