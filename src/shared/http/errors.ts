@@ -108,6 +108,34 @@ export const problemas = {
       nextAction: 'sign_in',
     }),
 
+  /**
+   * O `refresh_token` apresentado no logout não existe, ou não é desta conta
+   * (ADR-0002, emenda 1).
+   *
+   * **Os dois casos respondem exatamente isto**, de propósito. Separá-los
+   * transformaria `POST /v1/auth/logout` num oráculo: quem estivesse autenticado
+   * numa conta qualquer poderia perguntar, um token por vez, se aquele texto é
+   * um refresh vivo de alguém. É o mesmo raciocínio de `credencialRecusada`, que
+   * não distingue conta inexistente de senha errada.
+   *
+   * É **400**, e não 401: a sessão de quem pede continua valendo — o que não
+   * serve é o corpo. Responder 401 mandaria o app deslogar por causa de um campo
+   * errado, que é o contrário do que a tela precisa fazer. E não é 204: um
+   * logout que não revogou nada precisa ser erro visível, senão volta a ser
+   * indistinguível de um que revogou.
+   */
+  refreshNaoConfere: (): AppError =>
+    new AppError('validation-failed', 'Confira os dados', {
+      detail: 'Um ou mais campos não passaram na validação.',
+      errors: [
+        {
+          field: 'refresh_token',
+          code: 'unknown',
+          message: 'Este refresh não pertence a esta sessão.',
+        },
+      ],
+    }),
+
   /** Sem token, token ausente ou assinatura que não confere. Manda entrar. */
   naoAutenticado: (): AppError =>
     new AppError('unauthenticated', 'Entre para continuar', { nextAction: 'sign_in' }),

@@ -26,6 +26,7 @@ import {
   type Idempotencia,
 } from '../../../../shared/http/idempotency.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoAusenteEhCorpoVazio } from '../../../../shared/http/corpo-opcional.js';
 import {
   hashDeAgente,
   hashDoCodigoDaTag,
@@ -144,6 +145,28 @@ interface ChamadorComConta extends Chamador {
 }
 
 /**
+ * Schema de corpo tirado da própria especificação. Uma fonte só: schemas de
+ * OpenAPI 3.1 são JSON Schema, e o Fastify valida com JSON Schema. Validação
+ * escrita à mão em paralelo à spec é a segunda definição que diverge.
+ *
+ * **Quinta cópia desta função no repositório** (as outras estão em `identity`,
+ * `pets`, `lostfound` e `media`, idênticas). Ela é copiada e não importada
+ * porque foi assim que as quatro anteriores nasceram; extrair para
+ * `shared/http/` vale a pena e toca quatro módulos de uma vez, o que não cabe
+ * nesta correção.
+ */
+function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
+  const schema = contrato.requestBodySchema(operationId);
+  if (schema === undefined) {
+    throw new Error(
+      `Operação ${operationId} não declara corpo de requisição em application/json ` +
+        `no contrato, mas a rota espera um. Corrija a especificação, não o código.`,
+    );
+  }
+  return schema;
+}
+
+/**
  * Higiene da rota pública (ADR-0004). O código viaja na URL, e isso é inevitável
  * num QR — o que dá para fazer é impedir que ele seja indexado, que vaze pelo
  * referenciador e que fique guardado em cache intermediário.
@@ -251,24 +274,39 @@ export function registrarRotasDeTags(
     return reply.status(200).send({ items: tags.map(comoPetTag) });
   });
 
-  app.post(rotaDeEmissaoDeTag.path, async (request: FastifyRequest, reply: FastifyReply) => {
-    const chamador = await chamadorAutenticado(request, deps);
-    const corpo = (request.body ?? {}) as { label?: string };
-    const emitida = await deps.tags.emitir(
-      petIdDoCaminho(request),
-      chamador.userId,
-      corpo.label ?? null,
-      chamador,
-    );
+  app.post(
+    rotaDeEmissaoDeTag.path,
+    {
+      // Mesmo defeito do `logout`, no módulo das plaquinhas: o manipulador lia
+      // `label` de um corpo que o contrato não declarava, então não havia
+      // schema para o Fastify aplicar. `label` ia do corpo ao `INSERT` sem
+      // nenhuma conferência de tamanho, e quem recusava era o CHECK
+      // `pet_tags_label_tamanho` — quer dizer, 41 caracteres ou string vazia
+      // viravam **500** numa rota autenticada, quando a resposta certa é 400.
+      schema: { body: corpoDe(deps.contrato, rotaDeEmissaoDeTag.operationId) },
+      // E emitir plaquinha sem apelido continua sendo um POST sem corpo, que é
+      // o caminho comum. Vale aqui o mesmo motivo do aviso pela tag, abaixo.
+      preValidation: corpoAusenteEhCorpoVazio(deps.contrato, rotaDeEmissaoDeTag.operationId),
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const corpo = (request.body ?? {}) as { label?: string };
+      const emitida = await deps.tags.emitir(
+        petIdDoCaminho(request),
+        chamador.userId,
+        corpo.label ?? null,
+        chamador,
+      );
 
-    // `qr_png_url` fica de fora, e a ausência é honesta: `getPetTagQrImage` não
-    // está implementada, e devolver o endereço de uma rota que responde 404
-    // seria uma promessa que o cliente descobre quebrada na hora de imprimir. O
-    // campo é opcional no schema justamente para poder faltar.
-    return reply
-      .status(201)
-      .send({ ...comoPetTag(emitida.tag), code: emitida.codigo, url: emitida.url });
-  });
+      // `qr_png_url` fica de fora, e a ausência é honesta: `getPetTagQrImage`
+      // não está implementada, e devolver o endereço de uma rota que responde
+      // 404 seria uma promessa que o cliente descobre quebrada na hora de
+      // imprimir. O campo é opcional no schema justamente para poder faltar.
+      return reply
+        .status(201)
+        .send({ ...comoPetTag(emitida.tag), code: emitida.codigo, url: emitida.url });
+    },
+  );
 
   app.get(rotaDeResolucaoDaTag.path, async (request: FastifyRequest, reply: FastifyReply) => {
     aplicarHigieneDaRotaPublica(reply);
@@ -313,10 +351,28 @@ export function registrarRotasDeTags(
 
   app.post(
     rotaDeAvisoPelaTag.path,
-    // A marca que o portão de subida confere contra o contrato. Ela não faz a
-    // idempotência acontecer — quem faz é `executarComIdempotencia`, abaixo —,
-    // ela faz a divergência entre os dois ser impossível de passar despercebida.
-    { config: { idempotencia: true } },
+    {
+      // A marca que o portão de subida confere contra o contrato. Ela não faz a
+      // idempotência acontecer — quem faz é `executarComIdempotencia`, abaixo —,
+      // ela faz a divergência entre os dois ser impossível de passar despercebida.
+      config: { idempotencia: true },
+      // Esta rota é PÚBLICA e sem conta: qualquer pessoa na internet com um
+      // código de plaquinha chega aqui. Até esta linha existir, `client_note`
+      // ia do corpo direto para `notes` no banco **sem nenhuma conferência de
+      // tamanho**, enquanto o contrato declarava `maxLength: 500` — texto de
+      // tamanho arbitrário, em rota pública, gravado. O teto vem do contrato e
+      // não de um número repetido aqui, que é o que impede os dois de
+      // divergirem depois.
+      schema: { body: corpoDe(deps.contrato, rotaDeAvisoPelaTag.operationId) },
+      // E o corpo continua podendo NÃO VIR. O contrato declara este
+      // `requestBody` como `required: false` e diz, com todas as letras, que a
+      // operação "precisa funcionar com corpo vazio — um toque, zero campos".
+      // Sem este gancho, a linha acima sozinha faria a requisição de um toque
+      // responder 400 `body must be object`, porque o Fastify valida
+      // `request.body` mesmo quando ele é `undefined`. Validar o tamanho ao
+      // preço de quebrar o caminho principal do produto não é correção.
+      preValidation: corpoAusenteEhCorpoVazio(deps.contrato, rotaDeAvisoPelaTag.operationId),
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       aplicarHigieneDaRotaPublica(reply);
       const chamador = await chamadorOpcional(request, deps);

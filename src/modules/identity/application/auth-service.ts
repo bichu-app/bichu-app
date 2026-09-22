@@ -223,7 +223,9 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     // continuam em `agora`: o que muda é o `iat` de UM token, em até um segundo,
     // e só no login logo depois de uma redefinição de senha.
     const emitidoEm = instanteDeEmissaoDoAcesso(agora, conta.sessionsInvalidBefore);
-    const acesso = deps.assinador.emitir(conta.id, emitidoEm, deps.ids.uuidv7());
+    // `sid` e a familia que acabou de nascer (ADR-0002, emenda 1): o token de
+    // acesso passa a dizer de qual sessao ele veio.
+    const acesso = deps.assinador.emitir(conta.id, emitidoEm, deps.ids.uuidv7(), familyId);
     return {
       accessToken: acesso.token,
       expiresInSeconds: acesso.expiresInSeconds,
@@ -443,7 +445,14 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // instável — o cenário mais comum deste produto.
       if (!rotacionou) throw problemas.sessaoExpirada();
 
-      const acesso = deps.assinador.emitir(conta.id, agora, deps.ids.uuidv7());
+      // A renovacao continua na MESMA familia, entao o `sid` do token novo e o
+      // da familia rotacionada, e nao um valor novo.
+      const acesso = deps.assinador.emitir(
+        conta.id,
+        agora,
+        deps.ids.uuidv7(),
+        armazenado.familyId,
+      );
       await deps.trilha.record({
         actorKind: 'user',
         actorUserId: conta.id,
@@ -466,27 +475,53 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       );
     },
 
-    /** Encerra a sessão daquele aparelho, revogando a família apresentada. */
+    /**
+     * Encerra a sessão **daquele aparelho**, revogando no servidor a família de
+     * refresh apresentada (ADR-0002, emenda 1).
+     *
+     * Três decisões desta função, e nenhuma delas é detalhe:
+     *
+     * **O refresh é obrigatório.** Ele já não pode ser `undefined` na
+     * assinatura, e a ausência já foi recusada com 400 pela validação de
+     * contrato antes de chegar aqui. Enquanto ela era aceita, sair sem
+     * apresentar nada devolvia 204 sem ter revogado coisa alguma, e a família
+     * ficava viva até vencer por inatividade — um refresh já copiado renovava
+     * por até 180 dias contra uma pessoa que acredita ter saído.
+     *
+     * **Refresh desconhecido e refresh de outra conta recebem a MESMA recusa.**
+     * A conferência de dono existe para impedir que um token alheio apresentado
+     * aqui derrube a sessão de outra pessoa; responder diferente nos dois casos
+     * transformaria esta rota num oráculo que conta se um token existe em algum
+     * lugar. É a mesma razão de `credencialRecusada` e de
+     * `verification-token-expired` terem corpo idêntico para causas diferentes.
+     *
+     * **`invalidarSessoes` não é chamada aqui, e a ausência é a decisão.**
+     * `users.sessions_invalid_before` é por pessoa, não por sessão: empurrá-la
+     * no logout comum derrubaria os outros aparelhos da mesma conta e tornaria
+     * esta operação idêntica a "sair de todos os aparelhos", que precisa
+     * continuar significando outra coisa — é o remédio de quem teve o aparelho
+     * levado. A consequência aceita, e declarada no contrato, é que o token de
+     * acesso já emitido sobrevive até o `exp`, no máximo 15 minutos, sem poder
+     * ser renovado.
+     *
+     * Idempotente: `revogarFamilia` só alcança o que ainda não fora revogado, e
+     * a busca por hash devolve a linha mesmo revogada. Repetir responde 204.
+     */
     async sair(
       autenticado: Autenticado,
-      refreshApresentado: string | undefined,
+      refreshApresentado: string,
       contexto: ContextoDaRequisicao,
     ): Promise<void> {
       const agora = deps.clock.now();
-      let familia: string | undefined;
-
-      if (refreshApresentado !== undefined) {
-        const armazenado = await deps.repositorio.buscarRefreshPorHash(
-          comoTokenHash(refreshApresentado),
-        );
-        // A família só é revogada se pertencer a quem está pedindo. Sem esta
-        // conferência, um token de outra conta apresentado aqui derrubaria a
-        // sessão alheia.
-        if (armazenado !== undefined && armazenado.userId === autenticado.conta.id) {
-          familia = armazenado.familyId;
-          await deps.repositorio.revogarFamilia(familia, 'logout', agora);
-        }
+      const armazenado = await deps.repositorio.buscarRefreshPorHash(
+        comoTokenHash(refreshApresentado),
+      );
+      if (armazenado === undefined || armazenado.userId !== autenticado.conta.id) {
+        throw problemas.refreshNaoConfere();
       }
+
+      const familia = armazenado.familyId;
+      await deps.repositorio.revogarFamilia(familia, 'logout', agora);
 
       await deps.trilha.record({
         actorKind: 'user',
@@ -495,7 +530,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         correlationId: contexto.correlationId,
         action: 'auth.logout',
         resourceKind: 'refresh_family',
-        ...(familia === undefined ? {} : { resourceId: familia }),
+        resourceId: familia,
       });
     },
 
