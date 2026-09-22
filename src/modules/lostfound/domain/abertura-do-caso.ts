@@ -72,6 +72,8 @@ export function atingiuTetoDaConta(estado: EstadoParaAbertura): boolean {
 }
 
 /** Onde o pet foi visto. Uma das duas, nunca nenhuma. */
+import { rotuloDaArea as rotuloDeAreaCompartilhado } from '../../../shared/lugar/rotulo-de-area.js';
+
 export interface OndeFoiVisto {
   readonly lat?: number | undefined;
   readonly lon?: number | undefined;
@@ -97,20 +99,19 @@ export function temOndeSuficiente(onde: OndeFoiVisto): boolean {
 }
 
 /**
- * O rótulo de área que sai em **superfície pública**.
+ * O rótulo de área que sai em **superfície pública**: "Bairro, Cidade".
  *
- * Bairro e cidade, e esse é o nível máximo de precisão pública que o produto
- * admite (ADR-0010). A coordenada nunca aparece aqui — nem arredondada: ponto
- * arredondado ainda é ponto, e um arredondamento de 100 m no meio de um bairro
- * residencial aponta para o quarteirão.
+ * A definição MUDOU DE LUGAR na BICHUS-35 e continua sendo esta: ela agora mora
+ * em `shared/lugar/rotulo-de-area.ts`, porque o achado avulso passou a precisar
+ * do mesmo rótulo e módulo não enxerga o domínio de outro módulo (§6). O
+ * raciocínio inteiro, inclusive por que não é uma porta nem uma cópia, está lá.
+ *
+ * A reexportação fica aqui para que quem já importava `rotuloDaArea` deste
+ * arquivo continue importando do mesmo lugar, e para que `grep rotuloDaArea`
+ * mostre os dois lados. O invólucro tipado em `OndeFoiVisto` também mantém a
+ * afirmação que o teste deste módulo faz: passar `lat` e `lon` junto continua
+ * compilando, e continua saindo sem coordenada nenhuma.
  */
 export function rotuloDaArea(onde: OndeFoiVisto): string | null {
-  const bairro = onde.neighborhood?.trim();
-  const cidade = onde.city?.trim();
-  if (bairro !== undefined && bairro !== '' && cidade !== undefined && cidade !== '') {
-    return `${bairro}, ${cidade}`;
-  }
-  if (cidade !== undefined && cidade !== '') return cidade;
-  if (bairro !== undefined && bairro !== '') return bairro;
-  return null;
+  return rotuloDeAreaCompartilhado(onde);
 }
