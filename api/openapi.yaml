@@ -1710,17 +1710,44 @@ paths:
         Gera 128 bits de aleatoriedade criptografica, sem relacao com nenhum id
         do sistema. **Esta e a unica resposta que traz o codigo em claro.** O
         cliente nao deve persistir o valor: para reimprimir, chame `qr.png`.
+
+        O corpo e **opcional**: emitir plaquinha sem apelido e o caminho comum.
+        Ate esta declaracao existir, o manipulador lia `label` de um corpo que
+        este documento dizia nao existir, e `label` chegava ao banco sem
+        nenhuma conferencia de tamanho — um rotulo de 41 caracteres, ou uma
+        string vazia, passava a borda e morria no CHECK da tabela, virando
+        **500** onde a resposta certa e 400.
       x-rate-limit:
         - dimension: [pet]
           limit: 10
           window: 24h
           on_exceed: deny_429
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PetTagIssueInput' }
+            examples:
+              semApelido:
+                summary: Sem apelido, o caminho comum
+                value: {}
+              comApelido:
+                summary: Com apelido, para quem tem mais de uma plaquinha
+                value: { label: Coleira azul }
       responses:
         '201':
           description: Codigo emitido.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetTagIssued' }
+        '400':
+          description: |
+            `label` fora da faixa aceita. Os limites sao os mesmos do CHECK da
+            tabela, de proposito: a borda recusa o que o banco recusaria, e a
+            pessoa recebe 400 em vez de 500.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Teto de tags ativas por pet atingido (5).
@@ -4407,6 +4434,22 @@ components:
         revoked_at: { type: string, format: date-time, nullable: true }
         revocation_reason: { $ref: '#/components/schemas/TagRevocationReason' }
         created_at: { type: string, format: date-time }
+
+    PetTagIssueInput:
+      type: object
+      description: |
+        Todos os campos opcionais; corpo vazio e o caminho comum. `label` e o
+        apelido que distingue uma plaquinha da outra na tela do tutor, e nao
+        viaja no QR nem aparece na rota publica.
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: |
+            Faixa identica ao CHECK `pet_tags_label_tamanho` da tabela. O
+            `minLength` nao e enfeite: string vazia viola o CHECK, e sem ele a
+            recusa sairia como 500.
 
     PetTagIssued:
       allOf:

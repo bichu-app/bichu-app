@@ -674,6 +674,13 @@ export interface paths {
          * @description Gera 128 bits de aleatoriedade criptografica, sem relacao com nenhum id
          *     do sistema. **Esta e a unica resposta que traz o codigo em claro.** O
          *     cliente nao deve persistir o valor: para reimprimir, chame `qr.png`.
+         *
+         *     O corpo e **opcional**: emitir plaquinha sem apelido e o caminho comum.
+         *     Ate esta declaracao existir, o manipulador lia `label` de um corpo que
+         *     este documento dizia nao existir, e `label` chegava ao banco sem
+         *     nenhuma conferencia de tamanho — um rotulo de 41 caracteres, ou uma
+         *     string vazia, passava a borda e morria no CHECK da tabela, virando
+         *     **500** onde a resposta certa e 400.
          */
         post: operations["issuePetTag"];
         delete?: never;
@@ -2242,6 +2249,19 @@ export interface components {
             revocation_reason?: components["schemas"]["TagRevocationReason"];
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description Todos os campos opcionais; corpo vazio e o caminho comum. `label` e o
+         *     apelido que distingue uma plaquinha da outra na tela do tutor, e nao
+         *     viaja no QR nem aparece na rota publica.
+         */
+        PetTagIssueInput: {
+            /**
+             * @description Faixa identica ao CHECK `pet_tags_label_tamanho` da tabela. O
+             *     `minLength` nao e enfeite: string vazia viola o CHECK, e sem ele a
+             *     recusa sairia como 500.
+             */
+            label?: string;
         };
         PetTagIssued: components["schemas"]["PetTag"] & {
             /**
@@ -4312,7 +4332,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PetTagIssueInput"];
+            };
+        };
         responses: {
             /** @description Codigo emitido. */
             201: {
@@ -4321,6 +4345,19 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PetTagIssued"];
+                };
+            };
+            /**
+             * @description `label` fora da faixa aceita. Os limites sao os mesmos do CHECK da
+             *     tabela, de proposito: a borda recusa o que o banco recusaria, e a
+             *     pessoa recebe 400 em vez de 500.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             403: components["responses"]["Forbidden"];
