@@ -20,17 +20,43 @@
  * modelos nossos — e-mail com HTML de terceiro é a mesma classe de problema que
  * mídia servida na origem da aplicação.
  *
- * ## O que a porta EXIGE do adaptador: recusar `para` com quebra de linha
+ * ## O que a porta EXIGE do adaptador: recusar `para` que quebre a gramática
  *
- * Quem implementar esta porta tem que **recusar** `para` que contenha `\r` ou
- * `\n`, em vez de limpar ou de confiar. O endereço acaba interpolado em
- * cabeçalho (`To:`) e em comando de protocolo (`RCPT TO:<…>`), e uma quebra no
- * meio dele fecha a linha: o que vem depois vira cabeçalho novo — um `Bcc:`
- * escolhido por outra pessoa — ou comando novo. O resultado é o atacante
- * recebendo cópia integral do aviso de segurança da vítima, com o link de
- * redefinição de senha dentro. Recusa, e não limpeza: endereço com CRLF não é
- * endereço mal formatado, é tentativa, e limpar entregaria a mensagem em
- * silêncio a um endereço que ninguém escreveu.
+ * Quem implementar esta porta tem que **recusar** `para` que carregue qualquer
+ * caractere com significado na gramática do transporte, em vez de limpar ou de
+ * confiar. O endereço acaba interpolado em cabeçalho (`To:`, RFC 5322) e em
+ * comando de protocolo (`RCPT TO:<…>`, RFC 5321), e o conjunto perigoso é maior
+ * que o CRLF:
+ *
+ * 1. **`\r` e `\n`** fecham a linha nos dois protocolos: o que vem depois vira
+ *    cabeçalho novo — um `Bcc:` escolhido por outra pessoa — ou comando novo.
+ * 2. **`>`** fecha o caminho do `RCPT TO:<…>` sem quebra de linha nenhuma, e o
+ *    resto do endereço vira argumento do comando: parâmetro ESMTP de aviso de
+ *    entrega (`NOTIFY=`, `ORCPT=`, RFC 3461) apontado para onde o atacante
+ *    quiser. Uma conferência que só procurasse CRLF passaria este inteiro, e foi
+ *    o que ficou aberto entre BICHUS-131 e BICHUS-130.
+ * 3. **Espaço** separa os argumentos do comando, e é o que torna o item 2 útil.
+ * 4. **Controles C0 e C1** — NUL trunca em MTA escrito em C; VT, FF e NEL
+ *    (`U+0085`) são lidos como quebra por parte dos analisadores de cabeçalho.
+ *    O `\s` do JavaScript não cobre `U+0085`: quem confiar nele erra.
+ * 5. **`U+2028` e `U+2029`**, os separadores de linha e de parágrafo do Unicode.
+ * 6. **`,`, `;`, `:`** separam endereços numa lista de cabeçalho, e o `:` monta
+ *    a rota de origem do RFC 821 (`<@relay:vitima@…>`), que faz a mensagem
+ *    passar por um servidor escolhido por outra pessoa.
+ * 7. **`"` e `\`** abrem literal citado e par escapado, que um adaptador que não
+ *    saiba emitir os dois vai entregar com sentido diferente do que leu.
+ *
+ * O resultado de qualquer um deles é o atacante recebendo cópia integral do
+ * aviso de segurança da vítima, com o link de redefinição de senha dentro.
+ *
+ * **Recusa, e não limpeza**: endereço com CRLF não é endereço mal formatado, é
+ * tentativa, e limpar entregaria a mensagem em silêncio a um endereço que
+ * ninguém escreveu. A mensagem de erro **não** carrega o endereço, que é dado
+ * pessoal e acaba em log.
+ *
+ * O mesmo vale para o remetente que o adaptador tirar da configuração: ele é
+ * interpolado nos mesmos dois lugares, e a origem ser variável de ambiente baixa
+ * a probabilidade sem mudar o efeito.
  *
  * Isto está escrito **aqui**, e não deixado por conta de quem chama, porque a
  * validação de forma do domínio (`emailTemFormaValida`, que recusa espaço em
