@@ -73,6 +73,9 @@ import { criarRasterizadorDeQr } from '../modules/tags/adapters/external/sharp-r
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
 import { criarTagService } from '../modules/tags/application/tag-service.js';
 import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.js';
+import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
+import { ConversationService } from '../modules/messaging/application/conversation-service.js';
+import { registrarRotasDeConversas } from '../modules/messaging/adapters/http/conversation-routes.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -212,6 +215,17 @@ export async function main(): Promise<void> {
     apiBaseUrl: config.apiBaseUrl,
   };
 
+  // BICHUS-43. A conversa mediada. Declarada ANTES das tags porque o aviso da
+  // plaquinha e o unico fato que abre uma conversa no produto: a linha
+  // `conversaDoAviso`, abaixo, e a ligacao inteira entre os dois modulos, e ela
+  // e obrigatoria por tipo -- um `criarTagService` sem ela nao compila.
+  const conversas = new ConversationService({
+    repositorio: criarConversationRepository(db),
+    ids,
+    clock: systemClock,
+    trilha,
+  });
+
   const tags = criarTagService({
     repositorio: criarTagRepository(db),
     cifra: criarSecretCipher(config.tagCodeKey),
@@ -235,6 +249,13 @@ export async function main(): Promise<void> {
     // O arquivo do QR. O que decide o que vira plástico está em
     // `domain/qr-da-tag.ts`; este adaptador só embrulha o desenho em PNG.
     rasterizador: criarRasterizadorDeQr(),
+    // O modulo de tags nao conhece `conversations`: ele entrega os dados do
+    // aviso a uma porta de um metodo so. Quem liga os dois e esta linha.
+    conversaDoAviso: {
+      aoRegistrarAviso: async (aviso) => {
+        await conversas.abrirPorAviso(aviso);
+      },
+    },
   });
 
   // Declarado ANTES do cadastro porque o cadastro depende dele: a ficha do pet
@@ -455,6 +476,13 @@ export async function main(): Promise<void> {
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
+    registrarRotasDeConversas(escopo, {
+      conversas,
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      contrato,
+    });
     registrarSaude(escopo, {
       version: config.version,
       // `version` e o mesmo `0.1.0` em qualquer build; `build` e o que

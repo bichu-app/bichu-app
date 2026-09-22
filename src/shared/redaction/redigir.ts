@@ -243,8 +243,33 @@ const TELEFONE = /(?:\+?55[\s.-]*)?(?:\(?\d{2}\)?[\s.-]*)?\d(?:[\s.()-]*\d){7,12
 const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g;
 const LINK = /(?:https?:\/\/|www\.)[^\s]+|[a-z0-9-]+\.(?:com|net|org|br|me|io|app|link|gg)(?:\.br)?(?:\/[^\s]*)?/g;
 const CEP = /\d{5}-?\d{3}/g;
+/**
+ * Endereço: a palavra de logradouro seguida do resto, com o número opcional.
+ *
+ * `praca`, `largo`, `quadra` e `viela` ficam de fora desta lista e têm a sua,
+ * logo abaixo, **porque em português elas são ponto de encontro antes de serem
+ * endereço**. "Vamos na praça central" é exatamente a mensagem que o canal
+ * mediado existe para carregar — e é o que a própria mensagem de sistema do
+ * Bichu pede, quando diz para combinar um ponto público e movimentado. Redigir
+ * essa frase cumpriria a promessa de privacidade impedindo a devolução do
+ * animal, que é o único desfecho pelo qual o produto existe.
+ *
+ * As palavras de rua continuam casando sem número: "moro na Rua das Acácias" é
+ * revelação de onde a pessoa mora mesmo sem o `120` no fim.
+ */
 const LOGRADOURO =
-  /\b(?:rua|r\.|av|av\.|avenida|alameda|al\.|travessa|tv\.|rodovia|rod\.|estrada|praca|largo|viela|quadra|qd\.?)\s+[^,.;\n]{1,60}(?:,?\s*(?:n[o°º.]?\s*)?\d{1,6}\b)?/g;
+  /\b(?:rua|r\.|av|av\.|avenida|alameda|al\.|travessa|tv\.|rodovia|rod\.|estrada)\s+[^,.;\n]{1,60}(?:,?\s*(?:n[o°º.]?\s*)?\d{1,6}\b)?/g;
+
+/**
+ * Ponto de encontro: só vira endereço **com número**.
+ *
+ * "Praça da Sé, 100" é endereço; "na praça da Sé" é onde as duas pessoas vão
+ * se encontrar para devolver o animal. O número é o que distingue um do outro,
+ * e é o que o item 2 do ADR-0010 nomeia: "endereço, CEP e **número de
+ * residência**".
+ */
+const PONTO_DE_ENCONTRO =
+  /\b(?:praca|largo|viela|quadra|qd\.?)\s+[^,.;\n]{1,60}?,?\s*(?:n[o°º.]?\s*)?\d{1,6}\b/g;
 
 function achar(canonico: string, regex: RegExp, kind: Achado['kind']): Achado[] {
   const achados: Achado[] = [];
@@ -287,6 +312,7 @@ export function redigirCanalMediado(entrada: string | null | undefined): Resulta
     ...achar(canonico, LINK, 'external_link'),
     ...achar(canonico, CEP, 'address'),
     ...achar(canonico, LOGRADOURO, 'address'),
+    ...achar(canonico, PONTO_DE_ENCONTRO, 'address'),
     ...achar(canonico, TELEFONE, 'phone'),
   ].sort((a, b) => a.inicio - b.inicio || b.fim - a.fim);
 

@@ -506,6 +506,60 @@ export interface AlertRecipientsTable {
   notified_at: Date;
 }
 
+/** Papel na conversa mediada. `system` é o Bichu falando, e não uma pessoa. */
+export type PapelNaConversa = 'tutor' | 'finder' | 'system';
+
+/** Por que a conversa fechou. Espelha o CHECK de `conversations`. */
+export type MotivoDeEncerramentoDaConversa = 'case_closed' | 'pet_returned' | 'retention';
+
+/** Por que a conversa foi retida para revisão humana (BICHUS-43, 10, 11 e 17). */
+export type MotivoDeRetencao = 'message_volume' | 'serial_finder';
+
+/**
+ * BICHUS-43. A conversa mediada, que nasce de um aviso e de nada mais.
+ *
+ * **Não há coluna de `status`.** Os três valores que o contrato declara
+ * (`open`, `blocked`, `closed`) saem de `blocked_at`, de `closed_at` e do
+ * estado do caso ligado, na leitura. O raciocínio está no cabeçalho da migração.
+ */
+export interface ConversationsTable {
+  /** UUIDv7 gerado pela aplicação. Sem `DEFAULT` no banco, como em `pets`. */
+  id: string;
+  /** A origem, e a única. `UNIQUE`: um aviso, uma conversa. */
+  found_report_id: string;
+  pet_id: string;
+  /** Nulo quando a plaquinha foi escaneada sem caso aberto. */
+  case_id: string | null;
+  /** Desnormalizado de `pets.owner_user_id`: é o predicado do ADR-0021. */
+  tutor_user_id: string;
+  /** Nulo quando o achador não tem conta, que é o caminho principal. */
+  finder_user_id: string | null;
+  opened_at: Generated<Date>;
+  closed_at: Date | null;
+  closure_reason: MotivoDeEncerramentoDaConversa | null;
+  blocked_at: Date | null;
+  /** Papel e não id: o achador pode não ter conta (BICHUS-40). */
+  blocked_by_role: 'tutor' | 'finder' | null;
+  /** Invisível aos dois lados de propósito. Ver a migração. */
+  held_for_review_at: Date | null;
+  held_reason: MotivoDeRetencao | null;
+}
+
+/** BICHUS-43. A mensagem, com o texto **já redigido**. */
+export interface ConversationMessagesTable {
+  id: string;
+  conversation_id: string;
+  sender_role: PapelNaConversa;
+  /** Nulo na mensagem do sistema e na do achador sem conta. */
+  sender_user_id: string | null;
+  /** Já redigido. O que a pessoa digitou não existe em coluna nenhuma. */
+  body: string;
+  redactions: ColumnType<TrechoRedigido[], string | undefined, string>;
+  /** Chave de objeto, nunca URL. */
+  photo_object_key: string | null;
+  created_at: Generated<Date>;
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
@@ -533,6 +587,8 @@ export interface Database {
   jobs: JobsTable;
   notification_deliveries: NotificationDeliveriesTable;
   lost_cases: LostCasesTable;
+  conversations: ConversationsTable;
+  conversation_messages: ConversationMessagesTable;
   'audit.events': AuditEventsTable;
 }
 

@@ -75,6 +75,17 @@ void describe('redação de canal mediado — o que precisa sair', () => {
     assert.deepEqual(tipos('CEP 01310-100'), ['address']);
   });
 
+  void it('rua sem número continua saindo: é onde a pessoa mora', () => {
+    assert.deepEqual(tipos('moro na Rua das Acacias'), ['address']);
+  });
+
+  void it('ponto de encontro COM número é endereço', () => {
+    // BICHUS-43. A palavra sozinha não basta (ver a isca negativa abaixo), mas
+    // com número ela é endereço como qualquer outro.
+    assert.deepEqual(tipos('estou na Praca da Se, 100'), ['address']);
+    assert.deepEqual(tipos('moro na Quadra 104'), ['address']);
+  });
+
   void it('vários numa nota só, na ordem em que apareciam', () => {
     const entrada = 'liga 11987654321 ou joao@exemplo.com, moro na Rua X, 10';
     assert.deepEqual(tipos(entrada), ['phone', 'email', 'address']);
@@ -99,6 +110,22 @@ void describe('redação de canal mediado — o que NÃO pode sair', () => {
   void it('a nota de cuidado do exemplo do contrato passa intacta', () => {
     const entrada = 'Toma remedio de uso continuo, nao pode correr muito e tem medo de fogos.';
     assert.deepEqual(redigirCanalMediado(entrada).texto, entrada);
+  });
+
+  void it('ISCA NEGATIVA — o ponto de encontro público sobrevive (BICHUS-43)', () => {
+    // A mensagem de sistema do canal mediado PEDE que as duas pessoas combinem
+    // um ponto público e movimentado. Redigir a resposta a esse pedido cumpria
+    // a promessa de privacidade impedindo a devolução do animal, que é o único
+    // desfecho pelo qual o produto existe.
+    for (const entrada of [
+      'consigo te encontrar amanha de manha na praca central',
+      'te espero no largo da matriz as 10h',
+      'ela esta na praca perto do mercado',
+    ]) {
+      const r = redigirCanalMediado(entrada);
+      assert.deepEqual(r.retirados, [], `redigiu o ponto de encontro: ${entrada}`);
+      assert.equal(r.texto, entrada);
+    }
   });
 
   void it('palavra que contém número por extenso não é telefone', () => {

@@ -1,0 +1,90 @@
+{
+  "_leia_me": [
+    "Fixtures de evasão da redação do canal mediado (BICHUS-43, critérios 14 e 15).",
+    "Arquivo VERSIONADO de propósito: um caso de evasão que vive só dentro de um",
+    "`it(...)` desaparece na primeira reescrita do teste, e ninguém percebe porque",
+    "a suíte continua verde. Aqui ele é dado, tem histórico em git, e a esteira",
+    "conta as classes.",
+    "",
+    "`classe` é o que a evasão explora, e o critério 14 exige no mínimo três:",
+    "largura_zero, homoglifo e por_extenso. `espera` é a lista de `kind` que a",
+    "redação precisa devolver, na ordem.",
+    "",
+    "`negativas` é a outra metade, e é a que se esquece: uma redação que engole",
+    "'toma 2 comprimidos às 8h' cumpre a promessa de privacidade destruindo a",
+    "informação pela qual a mensagem existe."
+  ],
+  "versao": 1,
+  "evasoes": [
+    {
+      "classe": "largura_zero",
+      "descricao": "juntador de largura zero entre os dígitos do telefone",
+      "texto": "me liga 1​1​9​8​7​6​5​4​3​2​1",
+      "espera": ["phone"]
+    },
+    {
+      "classe": "largura_zero",
+      "descricao": "marca de direção colada de aplicativo de mensagem",
+      "texto": "contato 11‎98765‎4321",
+      "espera": ["phone"]
+    },
+    {
+      "classe": "largura_zero",
+      "descricao": "hífen suave no meio do e-mail",
+      "texto": "escreve pra ana­@­exemplo.com",
+      "espera": ["email"]
+    },
+    {
+      "classe": "homoglifo",
+      "descricao": "dígitos de largura plena",
+      "texto": "chama no １１９８７６５４３２１",
+      "espera": ["phone"]
+    },
+    {
+      "classe": "homoglifo",
+      "descricao": "traço cirílico separando os blocos",
+      "texto": "zap 11 98765–4321",
+      "espera": ["phone"]
+    },
+    {
+      "classe": "por_extenso",
+      "descricao": "telefone ditado, com 'meia' no lugar de seis",
+      "texto": "anota: um um nove oito sete meia cinco quatro tres dois um",
+      "espera": ["phone"]
+    },
+    {
+      "classe": "por_extenso",
+      "descricao": "e-mail ditado, com 'arroba' e 'ponto'",
+      "texto": "manda pra joao arroba exemplo ponto com",
+      "espera": ["email"]
+    },
+    {
+      "classe": "combinada",
+      "descricao": "largura zero dentro de número por extenso",
+      "texto": "anota um​ um​ nove oito sete meia cinco quatro tres dois um",
+      "espera": ["phone"]
+    }
+  ],
+  "negativas": [
+    {
+      "descricao": "posologia, que é a informação pela qual o campo existe",
+      "texto": "toma 2 comprimidos as 8h e remedio 3 vezes ao dia"
+    },
+    {
+      "descricao": "peso e idade",
+      "texto": "pesa 12 kg e tem 4 anos"
+    },
+    {
+      "descricao": "ponto de encontro público, que o próprio Bichu manda combinar",
+      "texto": "consigo te encontrar amanha de manha na praca central"
+    },
+    {
+      "descricao": "estado do animal, que é o que o tutor precisa saber agora",
+      "texto": "ele esta mancando da pata de tras e bebeu agua as 14h"
+    },
+    {
+      "descricao": "número por extenso que é linguagem, não dígito ditado",
+      "texto": "e um cao docil e tem seis meses"
+    }
+  ]
+}
