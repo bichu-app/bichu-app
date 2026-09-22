@@ -169,6 +169,17 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   /// mostra, para a pessoa conseguir guarda-lo.
   String? _codigoLido;
 
+  /// De onde saiu [_codigoLido]: do campo de digitacao, ou da camera.
+  ///
+  /// **A tela precisa disto porque o 404 diz coisas diferentes nos dois
+  /// caminhos** (BICHUS-153). Hoje a camera nao existe (a BICHUS-54 e quem a
+  /// traz) e todo codigo chega digitado, entao o valor e sempre `true` na
+  /// pratica. Ele existe mesmo assim, e o default e `false`, porque o dia em
+  /// que a leitura entrar e o dia em que ninguem vai lembrar de bifurcar este
+  /// texto -- e o defeito volta calado, com a tela acusando a plaquinha de
+  /// quem nem encostou no teclado.
+  bool _codigoFoiDigitado = false;
+
   int _tentativa = 0;
   int _segundosParaTentar = 0;
   Timer? _contagem;
@@ -192,6 +203,18 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     _focoDoCodigo.requestFocus();
   }
 
+  /// Devolve o foco ao campo **sem tocar no que esta escrito nele**.
+  ///
+  /// [TextEditingController.clear] nao e chamado aqui de proposito: o
+  /// criterio 4 da BICHUS-153 e exatamente que o texto anterior sobreviva.
+  void _voltarAoCampo() {
+    _focoDoCodigo.requestFocus();
+    _codigo.selection = TextSelection(
+      baseOffset: 0,
+      extentOffset: _codigo.text.length,
+    );
+  }
+
   /// Resolve o codigo contra `GET /v1/tags/{code}`.
   ///
   /// **A decisao e por `type`, nunca por status**: os quatro desfechos sao
@@ -199,10 +222,11 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   /// (410, com `next_action`) e `rate-limited` (429), e as quatro mensagens
   /// carregam **a mesma saida**. Um `if (status == 400)` acerta hoje por sorte
   /// e erra calado no dia em que outro tipo sair com o mesmo status.
-  Future<void> _resolver(String codigo) async {
+  Future<void> _resolver(String codigo, {required bool digitado}) async {
     _contagem?.cancel();
     setState(() {
       _codigoLido = codigo;
+      _codigoFoiDigitado = digitado;
       _resolvendo = true;
       _faixa = null;
     });
@@ -233,7 +257,7 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       setState(() {
         _resolvendo = false;
         _tentativa = 0;
-        _faixa = MensagensDeErro.de(falha);
+        _faixa = MensagensDeErro.de(falha, codigoDigitado: _codigoFoiDigitado);
         if (_estado == EstadoDoLeitor.semConexao) {
           _estado = EstadoDoLeitor.digitando;
         }
@@ -260,7 +284,11 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       if (_segundosParaTentar > 0) return;
       timer.cancel();
       final codigo = _codigoLido;
-      if (codigo != null) _resolver(codigo);
+      // A origem nao se perde na retentativa: e o MESMO codigo, e quem o
+      // digitou continua tendo digitado. Recalcular por estado de tela aqui
+      // era o caminho para o texto do 404 trocar sozinho depois de cinco
+      // segundos sem ninguem ter tocado em nada.
+      if (codigo != null) _resolver(codigo, digitado: _codigoFoiDigitado);
     });
   }
 
@@ -344,7 +372,7 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
             carregando: _resolvendo,
             aoTocar: () {
               final codigo = _codigoLido;
-              if (codigo != null) _resolver(codigo);
+              if (codigo != null) _resolver(codigo, digitado: _codigoFoiDigitado);
             },
           ),
           TextButton(
@@ -360,9 +388,22 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
             aoTocar: () {
               final digitado = _codigo.text.trim();
               if (digitado.isEmpty) return;
-              _resolver(digitado);
+              _resolver(digitado, digitado: true);
             },
           ),
+          // `Digitar de novo` (BICHUS-153, criterio 3). Ela aparece **so
+          // quando o 404 do caminho digitado esta na tela**: em qualquer outro
+          // momento ela seria um botao que repete o que o cursor ja faz.
+          //
+          // Ela **nao limpa o campo**, e isso e o ponto dela (criterio 4). A
+          // pessoa errou um caractere em dezesseis; devolver o foco com o
+          // texto preservado e oferecer a correcao, e limpar e cobrar de novo
+          // o trabalho que ja falhou uma vez.
+          if (_faixa?.texto == MensagensDeErro.codigoNaoEncontradoDigitado)
+            TextButton(
+              onPressed: _voltarAoCampo,
+              child: const Text(MensagensDeErro.digitarDeNovo),
+            ),
           // A saida comum as quatro telas de falha do codigo (UX 12.4). Ela
           // fica aqui, e nao so no erro: quem esta com um animal agora nao
           // precisa do codigo, e descobrir isso **antes** de errar tres vezes

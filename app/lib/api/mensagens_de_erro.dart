@@ -121,6 +121,35 @@ abstract final class MensagensDeErro {
       'Esse código não é de nenhuma tag do Bichu. Confira se a plaquinha é do '
       'Bichu.';
 
+  /// `tag-code-not-found`, 404, **quando o codigo veio do campo de digitacao**
+  /// (BICHUS-153). Microcopy da UX: nao reescrever.
+  ///
+  /// **Os dois textos existem porque as duas situacoes sao diferentes, e nao
+  /// porque uma e mais gentil.** No caminho escaneado o dedo nao participou:
+  /// a camera leu o que estava impresso, entao "confira se a plaquinha e do
+  /// Bichu" e verdade e continua sendo o texto de la. No caminho digitado a
+  /// pessoa pode ter errado um caractere, e acusar a plaquinha de ser de outro
+  /// produto manda embora quem so precisava corrigir uma letra.
+  ///
+  /// **O simbolo de verificacao do ADR-0004 nao fecha este caso.** Ele
+  /// transforma a maior parte dos erros de dedo em 400, e isso e ganho real --
+  /// mas o 404 legitimo nunca desaparece: tag revogada, tag de outro produto,
+  /// codigo inventado com sorte, e a propria transposicao que o simbolo nao
+  /// pega. Para esse resto o texto continua precisando estar certo.
+  ///
+  /// Quem le isto esta na rua com um animal no colo, ja falhou em escanear e
+  /// esta no caminho degradado. Um empurrao a mais aqui e uma desistencia, e
+  /// do outro lado dela ha um tutor esperando (risco R1 do UX).
+  static const String codigoNaoEncontradoDigitado =
+      'Esse código não é de nenhuma tag do Bichu. Confira se algum caractere '
+      'saiu trocado, ou registre o achado sem o código.';
+
+  /// A saida que devolve o foco ao campo **com o que foi digitado** (UX 12.4).
+  ///
+  /// Limpar o campo aqui seria cobrar de novo o trabalho que ja falhou uma
+  /// vez: a pessoa precisa trocar um caractere, e nao redigitar dezesseis.
+  static const String digitarDeNovo = 'Digitar de novo';
+
   /// A ajuda do campo de digitacao do codigo (UX 12.4).
   ///
   /// Sem esta linha a tolerancia do contrato existe e ninguem usa: o campo
@@ -143,9 +172,16 @@ abstract final class MensagensDeErro {
   /// [podeEnfileirar] separa as duas linhas de "sem conexao" da tabela 12.4:
   /// acao que o produto consegue guardar para reenviar, e acao que exige
   /// servidor agora. A diferenca nao e de tom, e de verdade.
+  /// [codigoDigitado] diz que o codigo saiu do campo de digitacao, e nao da
+  /// camera. **So o 404 da tag muda de texto por causa dele** (BICHUS-153);
+  /// todos os outros desfechos, inclusive o 400 de [codigoMalformado],
+  /// continuam identicos. Fundir os dois desfechos desfaria a separacao de
+  /// 17/09 em F4.5, e nao e isto que esta acontecendo aqui: o que se separa e
+  /// a **origem** do codigo, dentro de um desfecho so.
   static MensagemDeErro de(
     FalhaDeChamada falha, {
     bool podeEnfileirar = false,
+    bool codigoDigitado = false,
   }) {
     return switch (falha) {
       FalhaDeConexao() => MensagemDeErro(
@@ -155,7 +191,7 @@ abstract final class MensagensDeErro {
           texto: tempoEsgotado,
           acao: tentarDeNovo,
         ),
-      FalhaDaApi(:final problem) => _daApi(problem),
+      FalhaDaApi(:final problem) => _daApi(problem, codigoDigitado),
       // O endereco veio de um corpo de resposta e nao e desta API, entao a
       // requisicao NAO saiu e o token NAO viajou. Para quem esta lendo a tela
       // isso e indistinguivel de servidor fora, e o movimento util e o mesmo;
@@ -167,7 +203,7 @@ abstract final class MensagensDeErro {
     };
   }
 
-  static MensagemDeErro _daApi(Problem problem) {
+  static MensagemDeErro _daApi(Problem problem, [bool codigoDigitado = false]) {
     final saida = problem.proximaAcao;
 
     final porTipo = switch (problem.tipo) {
@@ -225,8 +261,10 @@ abstract final class MensagensDeErro {
           acao: registrarAchado,
           proximaAcao: ProximaAcao.registrarAchadoAvulso,
         ),
-      ProblemTipo.codigoDeTagNaoEncontrado => const MensagemDeErro(
-          texto: codigoNaoEncontrado,
+      ProblemTipo.codigoDeTagNaoEncontrado => MensagemDeErro(
+          texto: codigoDigitado
+              ? codigoNaoEncontradoDigitado
+              : codigoNaoEncontrado,
           acao: registrarAchado,
           proximaAcao: ProximaAcao.registrarAchadoAvulso,
         ),
