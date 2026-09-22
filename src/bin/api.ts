@@ -204,6 +204,11 @@ export async function main(): Promise<void> {
     avisarTitular: criarAvisoDeReusoAoTitular({
       repositorio: repositorioDeIdentidade,
       mailer,
+      // O aviso passou a emitir a credencial do "Nao fui eu" (BICHUS-215), e por
+      // isso precisa do gerador e da base publica. O link e montado na HORA do
+      // envio, nunca guardado.
+      ids,
+      baseDaWeb: config.webBaseUrl,
       registrarOcorrencia: (dados, mensagem) => {
         app.log.warn(dados, mensagem);
       },

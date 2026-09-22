@@ -62,6 +62,25 @@ export type AuditAction =
   | 'conversation.blocked'
   | 'moderation.decided'
   | 'privacy.account_deletion_requested'
+  /**
+   * BICHUS-215. O expurgo definitivo de 30 dias concluiu e a linha de `users`
+   * deixou de existir.
+   *
+   * `audit.events` nao referencia `users` de proposito, entao este evento
+   * sobrevive ao que ele registra: e a UNICA memoria de que aquela conta
+   * existiu e de quando ela foi apagada, e e o que torna o prazo do ADR-0010
+   * verificavel por quem audita de fora. O metadado nao carrega e-mail, nome
+   * nem coordenada -- o que sobrevive a exclusao nao pode reconstituir o
+   * perfil que a exclusao existe para apagar.
+   */
+  | 'privacy.account_purged'
+  /**
+   * BICHUS-215, gatilho 4 do SEC-006. Alguem respondeu "Nao fui eu" ao aviso
+   * de reuso, pelo link do e-mail, sem conta. `actorKind` e `anonymous`: quem
+   * apresentou o token provou ter a caixa de entrada, e nao provou ser o
+   * titular.
+   */
+  | 'auth.session_disavowed'
   | 'privacy.data_export_requested'
   /**
    * BICHUS-92. A conta entrou (ou atualizou) a localizacao de referencia.

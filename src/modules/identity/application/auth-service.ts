@@ -33,6 +33,7 @@ import type {
 
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
+import type { Mensagem } from '../ports/mailer.js';
 
 /**
  * Os motivos que derrubam a conta INTEIRA — os gatilhos do SEC-006.
@@ -44,7 +45,7 @@ import { projetarSessao, type ParDeTokens, type SessionView } from './session-vi
  */
 type MotivoDeRevogacaoEmMassa = Extract<
   MotivoDeRevogacao,
-  'logout_all' | 'password_changed' | 'account_deleted'
+  'logout_all' | 'password_changed' | 'account_deleted' | 'not_me'
 >;
 
 export interface EntradaDeCadastro {
@@ -70,14 +71,27 @@ function comoTokenHash(valor: string): TokenHash {
 }
 
 /** Quanto vale cada token. Os números vêm das histórias, não daqui. */
-const VALIDADE_EM_MS: Record<'email_verify' | 'password_reset', number> = {
+const VALIDADE_EM_MS: Record<'email_verify' | 'password_reset' | 'session_disavow', number> = {
   // 24 h (BICHUS-79 critério 6): o e-mail pode ser lido no dia seguinte.
   email_verify: 24 * 60 * 60 * 1000,
   // 30 min (BICHUS-77 critério 4): é uma credencial de troca de senha, e a
   // janela curta é a diferença entre uma caixa de entrada vazada ontem servir
   // ou não servir hoje.
   password_reset: 30 * 60 * 1000,
+  // 7 dias (BICHUS-215). Mais longo que os outros dois de propósito: quem
+  // recebe este aviso pode estar sem o aparelho, sem a caixa de entrada à mão,
+  // ou pode simplesmente não ter entendido na primeira leitura o que aconteceu.
+  // O que a janela expõe é pequeno — o link só derruba sessão, e derrubar
+  // sessão de quem já não deveria estar lá é o resultado desejado, não o dano.
+  session_disavow: 7 * 24 * 60 * 60 * 1000,
 };
+
+/**
+ * Trinta dias entre a exclusão lógica e o expurgo (ADR-0010, e a descrição de
+ * `deleteMyAccount` no contrato). O número está aqui e no worker lê daqui: duas
+ * cópias dele seriam duas promessas de prazo que divergem sem ninguém notar.
+ */
+export const PRAZO_DE_EXPURGO_EM_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function criarAuthService(deps: DependenciasDeIdentidade) {
   /**
@@ -326,6 +340,43 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     });
   }
 
+
+  /**
+   * O aviso que NÃO pode derrubar o efeito que ele anuncia.
+   *
+   * Medido em 22/09 na forma irmã desta: "sair de todos os aparelhos" abortava
+   * antes de o e-mail sair, e quem tinha perdido o aparelho ficava sem o
+   * remédio **e** sem o aviso. A lição não é mudar o e-mail de lugar — ele
+   * precisa vir depois, porque anuncia o que já aconteceu. É que a falha dele
+   * não pode desfazer, nem esconder, o que já está gravado no banco.
+   *
+   * O `catch` engole e **não silencia**: sem o registro, um SMTP fora do ar
+   * vira uma revogação que ninguém soube que aconteceu, que é o defeito de
+   * detecção silenciosa outra vez, um nível acima.
+   */
+  async function avisarSemDerrubarOEfeito(
+    mensagem: Mensagem,
+    contexto: { readonly evento: string; readonly correlationId: string },
+  ): Promise<void> {
+    try {
+      await deps.mailer.enviar(mensagem);
+      deps.registrarOcorrencia(
+        { evento: contexto.evento, correlationId: contexto.correlationId, enviado: true },
+        'aviso de seguranca enviado',
+      );
+    } catch (erro: unknown) {
+      deps.registrarOcorrencia(
+        {
+          evento: contexto.evento,
+          correlationId: contexto.correlationId,
+          enviado: false,
+          erro: erro instanceof Error ? erro.message : String(erro),
+        },
+        'aviso de seguranca NAO saiu; o efeito no banco esta feito',
+      );
+    }
+  }
+
   return {
     async cadastrar(
       entrada: EntradaDeCadastro,
@@ -517,6 +568,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
             userId: armazenado.userId,
             ocorridoEm: agora,
             correlationId: contexto.correlationId,
+            ipHmac: deps.hmacDeIp(contexto.ip),
           });
         }
         throw problemas.sessaoExpirada();
@@ -1049,6 +1101,182 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           'Se foi voce, e so entrar de novo com a senha nova.\n\n' +
           'Se nao foi, peca uma nova senha agora mesmo pelo aplicativo.',
       });
+    },
+
+
+    /**
+     * `DELETE /v1/me` — a exclusão de conta, gatilho 3 do SEC-006.
+     *
+     * ## O que ela é, e o que ela não é
+     *
+     * Ela **não apaga linha nenhuma**. O contrato diz o que ela faz, e a
+     * palavra está lá: *"Exclusão lógica imediata, expurgo definitivo em 30
+     * dias"*. O apagamento físico é {@link expurgarContasExcluidas}, no worker,
+     * e é ele que dispara as cascatas do banco. Responder 202 e não 204 é
+     * exatamente isso: o pedido foi aceito e o efeito completo tem prazo.
+     *
+     * ## A ORDEM, que não é estilo
+     *
+     * A revogação vem **antes** da marcação, e o cenário (1) do SEC-006 é o
+     * motivo literal: *"a pessoa exclui a conta e o atacante que tomou a sessão
+     * continua lendo conversas e exportando dados por mais 15 minutos"*. Se a
+     * marcação viesse primeiro e a revogação falhasse, o estado resultante
+     * seria o pior possível — conta marcada como excluída, com sessão viva
+     * dentro dela. Na ordem escrita aqui, a falha da revogação aborta sem ter
+     * marcado nada, e a falha da marcação deixa a pessoa deslogada de uma conta
+     * que ainda existe: ela entra de novo e repete. As duas falhas são
+     * recuperáveis; a ordem inversa tem uma que não é.
+     *
+     * O e-mail é o último, e a falha dele é **isolada**. O remédio já aconteceu
+     * e está gravado; deixar uma indisponibilidade do SMTP devolver 500 sobre
+     * uma exclusão consumada faria a pessoa repetir o gesto mais destrutivo do
+     * produto achando que ele não tinha funcionado.
+     *
+     * ## Reautenticação
+     *
+     * O contrato declara `x-reauth-scope: account_deletion` e a rota declara o
+     * mesmo escopo. **A verificação não é implementada aqui**, e não é
+     * esquecimento: ela é a BICHUS-48, que ainda não foi mesclada. Enquanto as
+     * duas branches não se encontrarem, o que protege esta rota é o token de
+     * acesso e o teto de 3 por 24 h.
+     */
+    async excluirMinhaConta(
+      autenticado: Autenticado,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const conta = autenticado.conta;
+
+      await derrubarTodasAsSessoes(conta.id, 'account_deleted', contexto, agora);
+
+      const consequencias = await deps.repositorio.registrarPedidoDeExclusao(conta.id, agora);
+
+      // Link de redefinição ou de verificação emitido antes do pedido
+      // continuaria valendo depois dele, e é por ele que se volta a uma conta
+      // que a pessoa acredita ter fechado. Mesmo critério 9 da BICHUS-77.
+      await deps.repositorio.invalidarTokensPendentes(conta.id, agora);
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'privacy.account_deletion_requested',
+        resourceKind: 'user',
+        resourceId: conta.id,
+        // Sem e-mail, sem nome e sem coordenada: a trilha sobrevive ao expurgo
+        // de propósito, e o que sobrevive não pode reconstituir o perfil que a
+        // exclusão existe para apagar (ADR-0010, cabeçalho de `audit-log.ts`).
+        metadata: {
+          tags_revoked: consequencias?.tagsRevogadas ?? 0,
+          already_requested: consequencias === undefined,
+          purge_after: new Date(agora + PRAZO_DE_EXPURGO_EM_MS).toISOString(),
+        },
+      });
+
+      await avisarSemDerrubarOEfeito(
+        {
+          para: conta.email,
+          assunto: 'Sua conta do Bichu foi excluida',
+          corpo:
+            'Recebemos o seu pedido de exclusao e a sua conta ja foi desativada: ' +
+            'as sessoes foram encerradas em todos os aparelhos e as plaquinhas dos ' +
+            'seus pets pararam de responder.\n\n' +
+            'Os dados serao apagados definitivamente em 30 dias.\n\n' +
+            'Se nao foi voce que pediu, responda esta mensagem agora: dentro desse ' +
+            'prazo ainda da para desfazer.',
+        },
+        { evento: 'account.deletion_requested', correlationId: contexto.correlationId },
+      );
+    },
+
+    /**
+     * O "Nao fui eu" — gatilho 4 do SEC-006, e o único alcançável sem conta.
+     *
+     * ## De onde ele é acionado, e por que não pede login
+     *
+     * Do link do e-mail de reuso de refresh. Quem lê aquele e-mail pode ser
+     * justamente quem **perdeu** a conta: o invasor já trocou o que precisava
+     * trocar, ou o aparelho ficou com outra pessoa. Um botão que exija login é
+     * inútil para ela, e o produto já resolveu esse mesmo problema uma vez, em
+     * `cancelTransferByToken`: a operação existe para desfazer, e pedir
+     * credencial para desfazer é a proteção trabalhando contra quem ela
+     * protege.
+     *
+     * ## A ORDEM, e por que o token é gasto DEPOIS
+     *
+     * Uso único antes do efeito é a regra certa para efeito **não idempotente**
+     * — uma redefinição de senha aplicada duas vezes são duas senhas. Esta não
+     * é: revogar as sessões duas vezes tem o mesmo resultado de revogar uma,
+     * porque `derrubarTodasAsSessoes` é idempotente e `sessions_invalid_before`
+     * só anda para a frente. Com o efeito idempotente, a ordem pode ser
+     * escolhida pelo modo de falhar — e gastar o token antes faria uma falha
+     * passageira do banco queimar o único remédio da vítima, que não tem como
+     * pedir outro link (quem dispara o aviso é o invasor).
+     *
+     * Por isso: confere sem consumir, revoga, e só então consome. A corrida de
+     * dois cliques revoga duas vezes, que é o mesmo que uma, e o segundo recebe
+     * 410.
+     *
+     * ## O que ele NÃO faz
+     *
+     * Não troca a senha. Quem tem o link não provou ser o titular, e uma troca
+     * de senha a partir daqui trancaria o titular para fora usando exatamente o
+     * link que existe para protegê-lo. O e-mail seguinte convida a redefinir
+     * pelo fluxo que exige a caixa de entrada.
+     */
+    async recusarSessaoAvisada(
+      tokenApresentado: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const hash = comoTokenHash(tokenApresentado);
+
+      const alvo = await deps.repositorio.conferirTokenDeVerificacao(
+        hash,
+        'session_disavow',
+        agora,
+      );
+      // Inexistente, vencido e já usado respondem igual. Distinguir contaria a
+      // um estranho que aquele token existiu, e esta rota é pública.
+      if (alvo === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+      await derrubarTodasAsSessoes(alvo.userId, 'not_me', contexto, agora);
+      await deps.repositorio.consumirTokenDeVerificacao(hash, 'session_disavow', agora);
+
+      // Um segundo evento, e ele registra a PROVENIÊNCIA que o primeiro não
+      // consegue registrar. `derrubarTodasAsSessoes` grava `auth.sessions_revoked`
+      // com `actorKind: 'user'`, porque a porta da trilha exige o titular quando
+      // o ator é uma conta. Aqui quem agiu provou ter a caixa de entrada e NÃO
+      // provou ser o titular, e `anonymous` é a única forma honesta de escrever
+      // isso. Quem investigar precisa conseguir distinguir uma revogação pedida
+      // de dentro da conta de uma pedida por um link.
+      await deps.trilha.record({
+        actorKind: 'anonymous',
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.session_disavowed',
+        resourceKind: 'user',
+        resourceId: alvo.userId,
+      });
+
+      // Redefinição pendente emitida por quem tomou a conta é a porta de
+      // volta, e ela sobreviveria a esta revogação sem esta linha.
+      await deps.repositorio.invalidarTokensPendentes(alvo.userId, agora);
+
+      await avisarSemDerrubarOEfeito(
+        {
+          para: alvo.enviadoPara,
+          assunto: 'Encerramos tudo. Agora troque a sua senha',
+          corpo:
+            'Voce respondeu que nao reconhece o acesso, e nos encerramos todas as ' +
+            'sessoes da sua conta, em todos os aparelhos.\n\n' +
+            'Falta uma coisa, e ela e importante: escolha uma senha nova. Enquanto ' +
+            'a senha atual valer, quem a conhece entra de novo.\n\n' +
+            'Peca a troca pela tela de entrar, em "Esqueci minha senha".',
+        },
+        { evento: 'session.disavowed', correlationId: contexto.correlationId },
+      );
     },
 
     segundosAteExpirar: (ate: Instant, agora: Instant) => segundosRestantes(agora, ate),

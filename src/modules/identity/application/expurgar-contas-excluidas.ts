@@ -1,0 +1,117 @@
+/**
+ * O expurgo definitivo, 30 dias depois do pedido de exclusão.
+ *
+ * ## Por que existem DUAS operações, e não uma
+ *
+ * `DELETE /v1/me` não apaga nada. O contrato escreve as duas metades numa frase
+ * só — *"Exclusão lógica imediata, expurgo definitivo em 30 dias"* — e cada
+ * metade resolve um problema diferente. A imediata devolve à pessoa o efeito
+ * que ela pediu no segundo em que pediu: sessões caem, tags param de responder,
+ * o endereço de e-mail fica livre. A definitiva cumpre a obrigação do art. 18
+ * da LGPD, e ela é adiada porque exclusão é irreversível e engano existe — o
+ * ADR-0010 chama o prazo de retenção, e ele também é a janela de socorro de
+ * quem clicou errado ou de quem teve a conta tomada e excluída por outra
+ * pessoa.
+ *
+ * ## A parte perigosa é esta, e ela é de banco
+ *
+ * `DELETE FROM users` é o único comando deste produto que dispara a árvore de
+ * cascatas inteira: contas, identidades, credenciais, papéis, tokens, refresh,
+ * aparelhos, localização, destinatários de alerta, pets, tags, leituras, fotos,
+ * intenções de envio, casos, candidatos, avisos, conversas e mensagens. Em
+ * 22/09 a mesma instrução falhou **cinco vezes** por contradição entre a ação de
+ * deleção de uma chave estrangeira e uma restrição alcançada por ela, e a
+ * quinta não estava dentro de uma tabela: estava entre três (ver o cabeçalho da
+ * migração `20260922000005`).
+ *
+ * Nenhuma dessas falhas aparece em teste unitário — dublê não tem chave
+ * estrangeira — e nenhuma aparece em uso normal. É por isso que a prova desta
+ * função mora em `tests/integration/expurgo-de-conta-conclui.test.ts`, com massa
+ * de verdade e `DELETE` de verdade. **Um teste que afirme apenas "chamou
+ * `expurgarConta()`" fica verde com um `23503` esperando na fila.**
+ *
+ * ## Uma conta por transação
+ *
+ * O `DELETE` de cada conta é a sua própria transação, e não há uma transação
+ * envolvendo a rodada. Uma conta que falhe por qualquer motivo não pode desfazer
+ * as que já concluíram, e a rodada não pode parar na primeira: a falha de uma
+ * linha viraria uma fila que nunca anda, com o expurgo de todo mundo represado
+ * atrás de um único registro problemático. Falha é contada, registrada com o
+ * identificador, e a conta volta na rodada seguinte.
+ */
+import type { Clock } from '../../../shared/time/clock.js';
+import type { Instant } from '../../../shared/types/brands.js';
+import type { IdentityRepository } from '../ports/identity-repository.js';
+import type { AuditLog } from '../../audit/ports/audit-log.js';
+import { PRAZO_DE_EXPURGO_EM_MS } from './auth-service.js';
+
+/**
+ * Quantas por rodada.
+ *
+ * Duzentas, e não "todas". Cada uma é um `DELETE` que cascateia por dezoito
+ * tabelas; uma rodada que pegasse dez mil contas de uma vez seguraria conexão
+ * de banco por minutos, competindo com o processamento de foto — que é o
+ * trabalho que alguém está esperando. O resto sai na rodada seguinte, e não há
+ * pressa: o prazo é de 30 dias, não de 30 dias e zero minutos.
+ */
+const POR_RODADA = 200;
+
+export interface DependenciasDoExpurgo {
+  readonly repositorio: Pick<IdentityRepository, 'contasAExpurgar' | 'expurgarConta'>;
+  readonly trilha: AuditLog;
+  readonly clock: Clock;
+}
+
+export interface ResultadoDoExpurgo {
+  readonly examinadas: number;
+  readonly expurgadas: number;
+  readonly falhas: number;
+}
+
+export async function expurgarContasExcluidas(
+  deps: DependenciasDoExpurgo,
+): Promise<ResultadoDoExpurgo> {
+  const agora = deps.clock.now();
+  const vencidas = await deps.repositorio.contasAExpurgar(
+    (agora - PRAZO_DE_EXPURGO_EM_MS) as Instant,
+    POR_RODADA,
+  );
+
+  let expurgadas = 0;
+  let falhas = 0;
+
+  for (const userId of vencidas) {
+    try {
+      const apagou = await deps.repositorio.expurgarConta(userId);
+      if (apagou) expurgadas += 1;
+      // A trilha entra DEPOIS do `DELETE`, e pode: `audit.events` não tem chave
+      // estrangeira para `users`, de propósito. O evento é a única
+      // memória de que aquela conta existiu e de quando ela deixou de existir,
+      // e é ela que torna o prazo do ADR-0010 verificável por alguém de fora.
+      await deps.trilha.record({
+        actorKind: 'system',
+        correlationId: `purge:${userId}`,
+        action: 'privacy.account_purged',
+        resourceKind: 'user',
+        resourceId: userId,
+        metadata: { deleted_rows: apagou ? 1 : 0 },
+      });
+    } catch (erro: unknown) {
+      // `catch` que engole a exceção e **não** a silencia. Sem esta linha, a
+      // sexta ocorrência da classe de 22/09 seria um worker que roda a cada 15
+      // minutos, falha em silêncio, e deixa a conta de alguém no banco por
+      // meses depois do prazo que a política promete.
+      falhas += 1;
+      console.error(
+        JSON.stringify({
+          evento: 'privacy.account_purge_failed',
+          user_id: userId,
+          erro: erro instanceof Error ? erro.message : String(erro),
+          codigo: (erro as { code?: unknown }).code,
+        }),
+      );
+    }
+  }
+
+  return { examinadas: vencidas.length, expurgadas, falhas };
+}

@@ -188,6 +188,50 @@ export const rotaDeConferenciaDeRedefinicao = defineRoute({
   rateLimit: [{ dimension: ['ip'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * A exclusão de conta. Teto de 3 por 24 h, que é o do contrato.
+ *
+ * `reauthScope` está declarado e a verificação **não** é desta branch: ela é a
+ * BICHUS-48, ainda não mesclada. A linha existe aqui desde já porque o portão
+ * que a BICHUS-48 traz cobra o contrato e o código nos DOIS sentidos —
+ * operação com `x-reauth-scope` cuja rota não declare o mesmo valor reprova —
+ * e uma rota nova que chegasse sem ela quebraria aquele portão no merge.
+ */
+export const rotaDeExclusaoDaConta = defineRoute({
+  operationId: 'deleteMyAccount',
+  method: 'delete',
+  path: '/me',
+  effects: ['irreversible_write', 'verifies_secret', 'notifies'],
+  reauthScope: 'account_deletion',
+  rateLimit: [{ dimension: ['account'], limit: 3, window: '24h', onExceed: 'deny_429' }],
+});
+
+/**
+ * O "Não fui eu", e ele é a única rota de revogação sem conta do produto.
+ *
+ * Três coisas dela são decisão, e não configuração:
+ *
+ * - **teto por `ip`, e `log_and_alert` em vez de `deny_429`.** Recusar aqui
+ *   trabalharia contra quem a rota protege: quem está com a conta tomada pode
+ *   estar atrás do mesmo NAT de um laço automatizado. O que defende a rota é o
+ *   token de 256 bits, não o contador; o contador existe para o laço aparecer;
+ * - **`noChallenge`**, porque não há quem responda a um desafio: o clique vem
+ *   de um cliente de e-mail, muitas vezes de um navegador sem sessão;
+ * - **sem GET equivalente.** Cliente de e-mail e antivírus de borda
+ *   pré-carregam link por GET. Uma revogação disparada por pré-carga derrubaria
+ *   a sessão de quem nunca clicou, e o defeito seria indistinguível de um
+ *   ataque.
+ */
+export const rotaDoNaoFuiEu = defineRoute({
+  operationId: 'disavowSessionAlert',
+  method: 'post',
+  path: '/public/session-alerts/:alertToken/disavow',
+  effects: ['verifies_secret', 'notifies', 'irreversible_write'],
+  noChallenge: true,
+  rateLimit: [{ dimension: ['ip'], limit: 10, window: '1h', onExceed: 'log_and_alert' }],
+});
+
+
 export const rotaDoJwks = defineRoute({
   operationId: 'jwks',
   method: 'get',
@@ -611,6 +655,38 @@ export function registrarRotasDeIdentidade(
     async (request: FastifyRequest, reply: FastifyReply) => {
       const sessao: Autenticado = await autenticado(request, deps);
       await deps.auth.sairDeTodosOsAparelhos(sessao, contextoDe(request));
+      return reply.status(204).send();
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeExclusaoDaConta,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const sessao: Autenticado = await autenticado(request, deps);
+      await deps.auth.excluirMinhaConta(sessao, contextoDe(request));
+      // 202, e não 204: o contrato promete exclusão lógica imediata e expurgo
+      // definitivo em 30 dias. Responder 204 prometeria um efeito que só
+      // termina daqui a um mês.
+      return reply.status(202).send();
+    },
+  );
+
+  /**
+   * O token viaja no caminho porque vem de um link de e-mail, e isso é
+   * inevitável. O que dá para impedir é que ele seja indexado, que vaze pelo
+   * `Referer` e que fique em cache intermediário — mesma higiene da rota de
+   * conferência de redefinição.
+   */
+  registrarRota(
+    app,
+    rotaDoNaoFuiEu,
+    {},
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      aplicarHigieneDeTokenNaUrl(reply);
+      const { alertToken } = request.params as { alertToken: string };
+      await deps.auth.recusarSessaoAvisada(alertToken, contextoDe(request));
       return reply.status(204).send();
     },
   );
