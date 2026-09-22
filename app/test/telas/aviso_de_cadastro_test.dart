@@ -29,6 +29,7 @@ import 'package:bichu/telas/avisos/aviso_de_cadastro_incompleto.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
 import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
@@ -445,6 +446,168 @@ void main() {
             'criterio 2 o chama de item destacado no TOPO da lista, e um '
             'destaque abaixo da linha que ele comenta e nota de rodape.',
       );
+    });
+  });
+
+  group('criterio 2 — a terceira posicao, no cartao de cada pet', () {
+    testWidgets('a linha discreta aparece em TODOS os cartoes',
+        (tester) async {
+      await abrirOApp(
+        tester,
+        deposito: depositoLogado(emailVerificado: false),
+        rede: (requisicao) async {
+          if (requisicao.method == 'GET' &&
+              requisicao.url.path.endsWith('/pets')) {
+            return json200(<String, dynamic>{
+              'items': <dynamic>[
+                <String, dynamic>{
+                  'id': 'p-1',
+                  'name': 'Nina',
+                  'species': 'dog',
+                  'status': 'active',
+                },
+                <String, dynamic>{
+                  'id': 'p-2',
+                  'name': 'Rex',
+                  'species': 'dog',
+                  'status': 'active',
+                },
+              ],
+            });
+          }
+          return json200(<String, dynamic>{});
+        },
+      );
+      await irPara(tester, Rotas.perfil);
+
+      expect(
+        find.text('E-mail não confirmado'),
+        findsNWidgets(2),
+        reason: 'REPROVA: a linha discreta do criterio 2 nao aparece nos dois '
+            'cartoes. O criterio diz "no cartao de CADA pet".',
+      );
+    });
+
+    testWidgets(
+        'ISCA — a linha do cartao entra no rotulo acessivel, e nao so no pixel',
+        (tester) async {
+      // O cartao e `excludeSemantics` com rotulo composto. Uma linha visivel
+      // que nao entrasse no rotulo seria informacao que so existe para quem
+      // enxerga, apagada em silencio pelo proprio `excludeSemantics`.
+      final semantica = tester.ensureSemantics();
+      await abrirOApp(
+        tester,
+        deposito: depositoLogado(emailVerificado: false),
+        rede: (requisicao) async {
+          if (requisicao.method == 'GET' &&
+              requisicao.url.path.endsWith('/pets')) {
+            return json200(<String, dynamic>{
+              'items': <dynamic>[
+                <String, dynamic>{
+                  'id': 'p-1',
+                  'name': 'Nina',
+                  'species': 'dog',
+                  'status': 'active',
+                },
+              ],
+            });
+          }
+          return json200(<String, dynamic>{});
+        },
+      );
+      await irPara(tester, Rotas.perfil);
+
+      final rotulos = <String>[];
+      void percorrer(SemanticsNode no) {
+        if (no.label.isNotEmpty) rotulos.add(no.label);
+        no.visitChildren((filho) {
+          percorrer(filho);
+          return true;
+        });
+      }
+
+      percorrer(tester.binding.pipelineOwner.semanticsOwner!.rootSemanticsNode!);
+      expect(
+        rotulos.where((r) => r.contains('Nina') &&
+            r.contains('E-mail não confirmado')),
+        isNotEmpty,
+        reason: 'REPROVA: o cartao da Nina mostra a linha do aviso na tela e '
+            'nao a diz no leitor de tela. `excludeSemantics` apaga a arvore do '
+            'filho, entao tudo o que o cartao mostra precisa estar no rotulo '
+            'composto por `rotuloAcessivelDe`.',
+      );
+      semantica.dispose();
+    });
+
+    testWidgets('e-mail verificado NAO poe linha nenhuma no cartao',
+        (tester) async {
+      await abrirOApp(
+        tester,
+        deposito: depositoLogado(emailVerificado: true),
+        rede: (requisicao) async {
+          if (requisicao.method == 'GET' &&
+              requisicao.url.path.endsWith('/pets')) {
+            return json200(<String, dynamic>{
+              'items': <dynamic>[
+                <String, dynamic>{
+                  'id': 'p-1',
+                  'name': 'Nina',
+                  'species': 'dog',
+                  'status': 'active',
+                },
+              ],
+            });
+          }
+          return json200(<String, dynamic>{});
+        },
+      );
+      await irPara(tester, Rotas.perfil);
+      expect(find.text('E-mail não confirmado'), findsNothing);
+    });
+  });
+
+  group('acessibilidade do app MONTADO', () {
+    testWidgets(
+        'ISCA — a linha encolhida anuncia botao E publica a acao de toque',
+        (tester) async {
+      // `btn=true tap=false` e o defeito que quatro widgets deste app ja
+      // tiveram: o leitor de tela anuncia um botao que quem usa leitor nao
+      // consegue acionar. Medido no APP MONTADO, e nao num widget solto.
+      final semantica = tester.ensureSemantics();
+      await abrirOApp(
+        tester,
+        deposito: depositoLogado(emailVerificado: false),
+        cacheDeMeusPets: _cacheCom(<Pet>[_pet()]),
+        depositoDoAviso: DepositoDoAvisoEmMemoria(
+          conteudoInicial: '{"conta":"u-1",'
+              '"dispensado_em":"2026-09-21T10:00:00.000Z","dispensas":1}',
+        ),
+        agora: () => DateTime.utc(2026, 9, 22, 10),
+        rede: _redeMuda,
+      );
+      await irPara(tester, Rotas.pets);
+      expect(find.text('E-mail não confirmado'), findsOneWidget);
+
+      final acusados = <String>[];
+      void percorrer(SemanticsNode no) {
+        final ehBotao = no.hasFlag(SemanticsFlag.isButton);
+        final temToque = no.getSemanticsData().hasAction(SemanticsAction.tap);
+        if (ehBotao && !temToque) acusados.add(no.label);
+        no.visitChildren((filho) {
+          percorrer(filho);
+          return true;
+        });
+      }
+
+      percorrer(tester.binding.pipelineOwner.semanticsOwner!.rootSemanticsNode!);
+      expect(
+        acusados,
+        isEmpty,
+        reason: 'REPROVA: ha no(s) anunciado(s) como botao sem acao de toque '
+            'na aba com o aviso encolhido: $acusados. Quem usa VoiceOver ouve '
+            '"botao" e nao tem como aciona-lo.',
+      );
+      semantica.dispose();
     });
   });
 
