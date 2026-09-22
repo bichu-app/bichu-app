@@ -159,7 +159,25 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '648b91a93693066cc2346c754e11fca080d98101';
+/// **Destravado uma oitava vez pela BICHUS-21**: o fluxo de marcar o pet como
+/// perdido entrou, e ele e cinco arquivos novos em `perdido/` -- F3.0
+/// (`tela_de_quem_e_o_caso.dart`), F3.1 (`tela_onde_e_quando.dart`), F3.2
+/// (`tela_alcance_do_alerta.dart`), F3.3 (`resultado_da_abertura.dart`), a
+/// ponte do envelope de intencao (`tela_de_retomada.dart`) e o cabecalho do
+/// pet (`cabecalho_do_pet.dart`). `perfil/meus_pets.dart` ganhou a porta que a
+/// BICHUS-62 deixou reservada, com a acao `Marcar como perdido` que so agora
+/// tem destino.
+///
+/// Nenhuma delas encosta na porta `CameraEGaleria`, que e o que o criterio 10
+/// protege: o fluxo inteiro nao le camera, nao le galeria e nao le
+/// localizacao. Quem responde por isso e o portao de diretivas abaixo, que nao
+/// depende desta constante.
+///
+/// Medido no worktree `wt-bichus-21` com o comando que a mensagem de falha
+/// imprime, sobre a arvore de trabalho:
+///   anterior:  648b91a93693066cc2346c754e11fca080d98101
+///   agora:     e2263ed05357bf22b31f1b177fcdb3d5b28f710b
+const String _arvoreDasTelas = 'e2263ed05357bf22b31f1b177fcdb3d5b28f710b';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

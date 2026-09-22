@@ -2,7 +2,9 @@ import 'package:flutter/widgets.dart';
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/fila_offline.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
@@ -22,6 +24,8 @@ class Escopo extends InheritedWidget {
     required this.api,
     required this.auth,
     required this.pets,
+    required this.casos,
+    required this.fila,
     required this.tags,
     required this.devices,
     required this.camera,
@@ -37,6 +41,24 @@ class Escopo extends InheritedWidget {
   final ApiClient api;
   final AuthApi auth;
   final PetsApi pets;
+
+  /// As rotas de caso de perdido (`tags: [lost]` do contrato).
+  final CasosApi casos;
+
+  /// A fila de acoes sem conexao (BICHUS-31), **ligada pela BICHUS-21**.
+  ///
+  /// Ela vive no escopo e nao dentro da tela de F3.2 pela mesma razao do
+  /// [cofreDoQr], e com a mesma consequencia: a limpeza dela esta registrada
+  /// em `limpezasAoSair` no `app.dart`, e uma fila criada dentro da tela seria
+  /// outro objeto -- o `sair()` limparia uma fila vazia enquanto o nome do
+  /// pet, o endereco de referencia e o telefone da tutora anterior
+  /// continuariam no arquivo do aparelho.
+  ///
+  /// Duas filas sobre o mesmo arquivo tambem perderiam uma da outra: cada
+  /// instancia guarda a lista em memoria depois da primeira leitura, e a
+  /// segunda sobrescreveria o que a primeira enfileirou.
+  final FilaOffline fila;
+
   final TagsApi tags;
   final DevicesApi devices;
 
@@ -89,6 +111,8 @@ class Escopo extends InheritedWidget {
       api != anterior.api ||
       auth != anterior.auth ||
       pets != anterior.pets ||
+      casos != anterior.casos ||
+      fila != anterior.fila ||
       tags != anterior.tags ||
       devices != anterior.devices ||
       camera != anterior.camera ||

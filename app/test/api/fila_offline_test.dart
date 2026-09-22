@@ -168,6 +168,42 @@ void main() {
     });
   });
 
+  // -------------------------------------------------------------------------
+  // BICHUS-21 — a limpeza que a fila nao tinha
+  // -------------------------------------------------------------------------
+  group('limpar: a entrada de `limpezasAoSair`', () {
+    test('esvazia o ARQUIVO, e nao so a lista em memoria', () async {
+      final deposito = DepositoFalso();
+      final fila = FilaOffline(deposito: deposito);
+      await fila.enfileirar(acao('a-1'));
+      expect(await fila.pendentes(), hasLength(1));
+
+      await fila.limpar();
+
+      expect(await fila.pendentes(), isEmpty);
+      // A metade que custa caro esquecer: uma limpeza que so zerasse a
+      // memoria deixaria o arquivo no disco, e **a proxima leitura o traria
+      // de volta**. O logout teria parecido funcionar.
+      expect(
+        jsonDecode(deposito.conteudo!),
+        isEmpty,
+        reason: 'REPROVA: a lista em memoria esvaziou e o arquivo nao. O '
+            'corpo de cada acao carrega o que a pessoa digitou -- nome do '
+            'pet, endereco de referencia, telefone de contato --, e ele '
+            'ficaria no aparelho esperando a proxima pessoa que entrar nele.',
+      );
+    });
+
+    test('uma fila NOVA sobre o mesmo deposito nao acha nada', () async {
+      // Imita a proxima abertura do app: outra instancia, outra memoria, o
+      // mesmo arquivo. E onde uma limpeza so-de-memoria apareceria.
+      final deposito = DepositoFalso();
+      await FilaOffline(deposito: deposito).enfileirar(acao('a-1'));
+      await FilaOffline(deposito: deposito).limpar();
+      expect(await FilaOffline(deposito: deposito).pendentes(), isEmpty);
+    });
+  });
+
   group('formato em disco', () {
     test('é JSON legível, para quem for depurar em campo', () async {
       final deposito = DepositoFalso();

@@ -10,6 +10,7 @@
 
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
 import 'package:bichu/widgets/cartao_de_pet.dart';
 import 'package:bichu/widgets/faixa_de_aviso.dart';
@@ -138,21 +139,56 @@ void main() {
         ]),
       );
 
-      // O mecanismo que este caso liga: **nao ha acao de perdido nesta tela**,
-      // porque a tela que ela abre (BICHUS-21) nao existe. Desligar o
-      // mecanismo e acrescentar o botao; o caso reprova nomeando-o.
-      for (final proibido in <String>[
-        'Marcar como perdido',
-        'Marcar como perdida',
-        'Perdi meu pet',
-      ]) {
+      // -------------------------------------------------------------------
+      // ATUALIZADO PELA BICHUS-21 — e esta e a mudanca deliberada que a isca
+      // cobrava.
+      //
+      // Ate aqui este bloco exigia a AUSENCIA de `Marcar como perdido`, e o
+      // motivo estava escrito na propria mensagem de falha: *"a BICHUS-21 nao
+      // existe"*. Ela existe. A premissa caiu, e manter a proibicao passaria
+      // a cobrar o contrario do criterio 2 -- proibir uma acao que agora TEM
+      // destino e o mesmo tipo de erro que permitir uma que nao tem.
+      //
+      // O que NAO caiu, e por isso continua medido abaixo: a propriedade. A
+      // acao precisa ter callback e apontar para rota registrada; e ela
+      // precisa DESAPARECER quando nao ha pet elegivel, que e o criterio 2 na
+      // direcao original. Esse segundo caso mora em
+      // `test/telas/marcar_como_perdido_test.dart`, grupo `acao com destino`.
+      // -------------------------------------------------------------------
+      expect(
+        find.text(MeusPets.rotuloDeMarcarPerdido),
+        findsOneWidget,
+        reason: 'REPROVA: a conta tem um pet elegivel e a acao nao esta na '
+            'tela. A BICHUS-62 a segurou por nao haver destino; o destino '
+            'existe desde a BICHUS-21, e esconder a acao agora deixa o tutor '
+            'sem a porta que o criterio 11 daquela historia exige "visivel, '
+            'sem submenu escondido".',
+      );
+
+      // **Uma redacao, e nao tres.** A decisao do cliente de 21/09 nomeia a
+      // acao, e o produto nao a chama de duas maneiras em telas diferentes:
+      // quem procura na memoria o que leu ontem nao acha.
+      for (final proibido in <String>['Marcar como perdida', 'Perdi meu pet']) {
         expect(
           find.text(proibido),
           findsNothing,
-          reason: 'REPROVA: "$proibido" esta na tela e a BICHUS-21 nao '
-              'existe. E o mesmo defeito do `Ver meus pets` sem destino que '
-              'esta historia veio fechar, entrando pela porta que veio '
-              'fecha-lo (criterio 2).',
+          reason: 'REPROVA: "$proibido" esta na tela. A acao tem UMA '
+              'redacao, e ela e `${MeusPets.rotuloDeMarcarPerdido}`.',
+        );
+      }
+
+      // A acao aponta para rota registrada, e nao para um endereco inventado.
+      final rotas = rotasRegistradasDoApp(tester);
+      for (final rota in <String>[
+        Rotas.escolherPetPerdido,
+        Rotas.marcarPerdido,
+      ]) {
+        expect(
+          rotas,
+          contains(rota),
+          reason: 'REPROVA: a acao empurra para `$rota`, que o roteador nao '
+              'registra. Acao com destino inexistente e o defeito que este '
+              'grupo inteiro existe para pegar.',
         );
       }
 

@@ -5,6 +5,7 @@ import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../escopo.dart';
+import '../../perdido/rascunho_do_caso.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -13,6 +14,7 @@ import '../../widgets/cartao_de_pet.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/moldura.dart';
 import '../casca_com_abas.dart';
+import '../perdido/tela_de_quem_e_o_caso.dart';
 
 /// O cache de leitura de `GET /pets`, do criterio 7 da BICHUS-62.
 ///
@@ -59,9 +61,25 @@ class CacheDeMeusPets {
 ///
 /// ## O que esta tela nao tem, e nao e esquecimento
 ///
-/// - **`Marcar como perdido`**, nem habilitado nem desabilitado, nem no cartao
-///   nem numa barra de acao fixa: a tela que a acao abre e a BICHUS-21 e nao
-///   existe (criterio 2, fatiamento de 19/09).
+/// - **O caso aberto dominando a tela.** Ver abaixo.
+///
+/// ## O que esta tela GANHOU na BICHUS-21
+///
+/// A acao `Marcar como perdido`. Ela faltava por um motivo que deixou de
+/// existir: *"a tela que a acao abre e a BICHUS-21 e nao existe"* (criterio 2
+/// da BICHUS-62). A tela existe agora, e a acao ganhou destino.
+///
+/// **Ela nao mora no cartao, e a razao e de acessibilidade e nao de gosto.**
+/// Um botao dentro do cartao criaria duas paradas de foco no mesmo objeto --
+/// o cartao ja e UMA parada, com `excludeSemantics` e rotulo composto -- e um
+/// controle anunciado dentro de outro controle. A acao e da tela: um toque, e
+/// a escolha de qual animal acontece em F3.0, que existe para isso.
+///
+/// **Ela so aparece quando tem destino.** Sem pet elegivel -- conta vazia,
+/// lista que nao carregou, ou todos os animais ja com caso aberto (criterio 13
+/// da BICHUS-21) -- a acao nao e renderizada, nem desabilitada. E a mesma
+/// regra do criterio 2 da BICHUS-62 que segurava esta acao ate hoje, aplicada
+/// agora a favor dela.
 /// - **O caso aberto dominando a tela.** Ele saiu daqui em 21/09 e virou a
 ///   BICHUS-177, no topo de `Pets`. Quem tem caso aberto esta em panico e nao
 ///   navega; atras de um toque numa aba `Perfil` o estado do caso ficaria
@@ -93,6 +111,9 @@ class MeusPets extends StatefulWidget {
   static const String rotuloDeAtualizar = 'Atualizar';
 
   static const String titulo = 'Meus pets';
+
+  /// A acao da BICHUS-21, palavra por palavra do criterio 11.
+  static const String rotuloDeMarcarPerdido = 'Marcar como perdido';
 
   @override
   State<MeusPets> createState() => _MeusPetsState();
@@ -265,7 +286,7 @@ class _MeusPetsState extends State<MeusPets> {
             ),
           ),
         ],
-      _Fase.lista => _cartoes(),
+      _Fase.lista => <Widget>[..._cartoes(), ..._acaoDeMarcarPerdido()],
       _Fase.falhaComCache => <Widget>[
           FaixaDeAviso(
             peso: PesoDaFaixa.informativo,
@@ -275,6 +296,7 @@ class _MeusPetsState extends State<MeusPets> {
           ),
           const SizedBox(height: BichuEspaco.e4),
           ..._cartoes(),
+          ..._acaoDeMarcarPerdido(),
         ],
       _Fase.falhaSemCache => <Widget>[
           FaixaDeAviso(
@@ -284,6 +306,47 @@ class _MeusPetsState extends State<MeusPets> {
           ),
         ],
     };
+  }
+
+  /// A acao `Marcar como perdido`, quando ela tem destino.
+  ///
+  /// Devolve lista vazia quando nao ha para onde ir. Ver o cabecalho da
+  /// classe: acao sem destino e o que o criterio 2 da BICHUS-62 proibe, e nao
+  /// deixa de ser proibido por a acao estar desabilitada -- um controle
+  /// desabilitado sem motivo dito e o desenho preguicoso que o criterio 5 da
+  /// BICHUS-21 recusa na tela seguinte.
+  List<Widget> _acaoDeMarcarPerdido() {
+    // Fase de carregamento e falha sem cache nao tem lista: a acao nasceria
+    // sobre uma lista que a tela nao sabe se existe.
+    if (_fase != _Fase.lista && _fase != _Fase.falhaComCache) {
+      return const <Widget>[];
+    }
+    final elegiveis = TelaDeQuemEOCaso.elegiveis(_pets);
+    if (elegiveis.isEmpty) return const <Widget>[];
+
+    return <Widget>[
+      const SizedBox(height: BichuEspaco.e4),
+      BotaoSecundario(
+        rotulo: MeusPets.rotuloDeMarcarPerdido,
+        aoTocar: () {
+          // **Um pet: F3.0 nao aparece.** O criterio 1 justifica a escolha
+          // "para prevenir o deslize de marcar o pet errado quando ha mais de
+          // um": com um animal nao ha deslize possivel, e uma tela de
+          // confirmacao seria o mesmo atrito que a pesquisa de UX recusa no
+          // `Quando?`. F3.1 ja mostra a foto e o nome no topo.
+          if (elegiveis.length == 1) {
+            context.push(
+              Rotas.marcarPerdido,
+              extra: RascunhoDoCaso(pet: elegiveis.first),
+            );
+            return;
+          }
+          // A lista INTEIRA, e nao so os elegiveis: F3.0 precisa dos que ja
+          // tem caso aberto para dize-lo (criterio 13).
+          context.push(Rotas.escolherPetPerdido, extra: _pets);
+        },
+      ),
+    ];
   }
 
   /// Os cartoes, um por pet, na ordem em que o servidor mandou.

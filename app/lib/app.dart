@@ -5,7 +5,9 @@ import 'package:http/http.dart' as http;
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/fila_offline.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'config/app_config.dart';
@@ -13,6 +15,7 @@ import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
+import 'intencao/caso_de_perdido_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'intencao/intencao_pendente.dart';
@@ -34,6 +37,7 @@ class BichuApp extends StatefulWidget {
     this.depositoDeIntencao,
     this.cacheDeMeusPets,
     this.cofreDoQr,
+    this.depositoDaFila,
   });
 
   final AppConfig config;
@@ -94,6 +98,16 @@ class BichuApp extends StatefulWidget {
   /// e uma credencial.
   final CofreDaImagemDoQr? cofreDoQr;
 
+  /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
+  ///
+  /// Entra por aqui pela mesma razao do [depositoDeIntencao], e com o mesmo
+  /// sintoma quando falta: `DepositoEmArquivo` chama
+  /// `getApplicationDocumentsDirectory()`, um canal de plataforma que nao
+  /// existe em teste de widget. Sem esta injecao, qualquer caso que faca a
+  /// tela ENFILEIRAR trava para sempre e sem mensagem -- o `pumpAndSettle`
+  /// espera um `Future` que nunca resolve.
+  final DepositoDaFila? depositoDaFila;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -102,6 +116,8 @@ class _BichuAppState extends State<BichuApp> {
   late final ApiClient _api;
   late final AuthApi _auth;
   late final PetsApi _pets;
+  late final CasosApi _casos;
+  late final FilaOffline _fila;
   late final TagsApi _tags;
   late final DevicesApi _devices;
   late final CameraEGaleria _camera;
@@ -127,6 +143,15 @@ class _BichuAppState extends State<BichuApp> {
     );
     _auth = AuthApi(_api);
     _pets = PetsApi(_api);
+    _casos = CasosApi(_api);
+    // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
+    // nada no app a construia: o criterio 6 desta historia -- "sem conexao a
+    // tela inteira funciona: o envio acontece em F3.2" -- so e verdade com
+    // ela em pe. UMA instancia no app inteiro: duas sobre o mesmo arquivo
+    // guardariam listas diferentes em memoria e uma sobrescreveria a outra.
+    _fila = FilaOffline(
+      deposito: widget.depositoDaFila ?? DepositoEmArquivo(),
+    );
     _tags = TagsApi(_api);
     _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraDoAparelho();
@@ -140,6 +165,11 @@ class _BichuAppState extends State<BichuApp> {
       // guardada para elas volta para a tela de retorno em vez de sumir.
       acoes: <AcaoDeIntencao, AcaoExecutavel>{
         AcaoDeIntencao.cadastrarPet: cadastroDePetExecutavel(_pets),
+        // `marcar_perdido` e a SEGUNDA acao executavel deste build. O criterio
+        // 7 da BICHUS-21 e o que ela cumpre: depois de autenticar, o caso e
+        // CRIADO e a pessoa cai em F3.3 -- nunca no formulario de novo e nunca
+        // na home.
+        AcaoDeIntencao.marcarPerdido: casoDePerdidoExecutavel(_pets, _casos),
       },
     );
     _sessao = ControladorDeSessao(
@@ -166,9 +196,21 @@ class _BichuAppState extends State<BichuApp> {
       // referencia viva e DEIXA a entrada no cache. Limpar no `dispose` da tela
       // repetiria o defeito do `cacheDeMeusPets` -- a sessao derrubada por
       // refresh recusado nao passa por tela nenhuma.
+      // A FILA OFFLINE ENTRA NA MESMA LISTA, e e a entrada mais cara de
+      // esquecer das tres. O cache de pets e o cofre do QR vivem em MEMORIA:
+      // eles morrem com o processo, e o pior caso e a proxima pessoa que
+      // entrar na mesma sessao do app. A fila vive em DISCO, e o corpo de cada
+      // acao carrega o que a tutora digitou -- nome do pet, endereco de
+      // referencia, telefone de contato. Sobrevivendo ao logout, esses dados
+      // esperam no aparelho a proxima pessoa que entrar nele, e o aparelho
+      // compartilhado e caso real no publico deste produto.
+      //
+      // `limpar` e assincrono e devolve `Future<void>`, entao o tear-off
+      // direto tipa: nao ha fecho aqui porque nao ha nada a adiar.
       limpezasAoSair: <LimpezaAoSair>[
         () async => _cacheDeMeusPets.limpar(),
         _cofreDoQr.limpar,
+        _fila.limpar,
       ],
     );
     _roteador = criarRoteador(_sessao);
@@ -188,6 +230,8 @@ class _BichuAppState extends State<BichuApp> {
       api: _api,
       auth: _auth,
       pets: _pets,
+      casos: _casos,
+      fila: _fila,
       tags: _tags,
       devices: _devices,
       camera: _camera,
