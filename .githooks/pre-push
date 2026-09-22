@@ -20,7 +20,7 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
 	"refs/heads/$protegida")
 		echo "pre-push: push direto em '$protegida' recusado." >&2
 		echo "" >&2
-		echo "  Abra um PR:  git switch -c <tipo>/BICHU-<n>-<slug-curto>" >&2
+		echo "  Abra um PR:  git switch -c <tipo>/BICHUS-<n>-<slug-curto>" >&2
 		echo "  Regra do que vale como pronto: docs/07-devops.md secao 13.3" >&2
 		echo "" >&2
 		exit 1

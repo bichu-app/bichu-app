@@ -156,8 +156,53 @@ def autoteste() -> None:
     print("  [ok] autoteste: a ordem errada reprova, a ordem certa passa")
 
 
+USO = "python3 infra/verificacao/verificar_ordem_das_fases.py <base>..<ponta>"
+
+
+def _intervalo_pedido(argv: list[str]) -> str:
+    """O intervalo vem de quem chama. Nao ha default, e a ausencia dele REPROVA.
+
+    Esta ferramenta ja teve o default `origin/main..HEAD`, e o default era a
+    falha. A integracao deste projeto acontece em `development`, nao em `main`:
+    medido em 22/09/2026, `origin/main..HEAD` rendia 156 commits enquanto a
+    branch em revisao estava a 0 commit de `development`. Sem argumento, a
+    conferencia varria historia ja integrada em vez da mudanca em revisao e
+    imprimia APROVADO sobre um intervalo que ninguem pediu -- e APROVADO com
+    aparencia valida e pior que erro nenhum, porque ninguem reconfere o que
+    acredita ja ter conferido. Em clone raso de esteira o estrago e outro e
+    igualmente silencioso: `origin/main` pode nem existir.
+
+    Quem chama sabe qual e o intervalo. Esta ferramenta nao, e nao adivinha.
+    """
+    if len(argv) < 2 or not argv[1].strip():
+        raise SystemExit(
+            "RECUSADO: falta o intervalo, e esta ferramenta nao tem default.\n"
+            f"\n    Uso: {USO}\n\n"
+            "Ela e ferramenta de REVISAO: so tem o que conferir enquanto a "
+            "mudanca esta sendo entregue, e por isso o intervalo e do lado de "
+            "quem chama. O default anterior era `origin/main..HEAD`, que aponta "
+            "para a branch errada -- a integracao daqui e em `development` -- e "
+            "fazia a conferencia aprovar um intervalo que ninguem pediu.\n"
+            "Conferencia que nao consegue conferir REPROVA, nunca aprova."
+        )
+    if len(argv) > 2:
+        raise SystemExit(
+            f"RECUSADO: esperava um intervalo so, recebi {len(argv) - 1}: "
+            f"{argv[1:]}\n\n    Uso: {USO}"
+        )
+    intervalo = argv[1].strip()
+    if ".." not in intervalo:
+        raise SystemExit(
+            f"RECUSADO: `{intervalo}` nao e um intervalo, e um ref. Sozinho ele "
+            "faz o `rev-list` varrer TODA a historia alcancavel e a conferencia "
+            "responde sobre commits que ninguem pos em revisao.\n"
+            f"\n    Uso: {USO}"
+        )
+    return intervalo
+
+
 def main() -> int:
-    intervalo = sys.argv[1] if len(sys.argv) > 1 else "origin/main..HEAD"
+    intervalo = _intervalo_pedido(sys.argv)
     print("ordem das fases (BICHUS-154, criterio 14)")
     autoteste()
     print(f"  intervalo conferido: {intervalo}")

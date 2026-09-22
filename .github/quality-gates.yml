@@ -57,12 +57,12 @@ dispensas:
   # ainda depende do Team ID. A decisao de hoje tira a submissao do caminho
   # critico; ela nao diz que o deep link abre.
   - portao: apk-assinado
-    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao nao ha build de release para assinar. CAI QUANDO houver decisao de submeter o app a uma loja; ate la o keystore (BICHU-15) segue pendente e o assetlinks.json segue sem impressao digital"
+    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao nao ha build de release para assinar. CAI QUANDO houver decisao de submeter o app a uma loja; ate la o keystore (BICHUS-106) segue pendente e o assetlinks.json segue sem impressao digital"
     responsavel: cliente
     vence_em: 2026-09-29
 
   - portao: ios
-    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao o alvo iOS sai do caminho critico. CAI QUANDO houver decisao de submeter o app a uma loja; ate la a conta Apple (BICHU-14) segue pendente e sem Team ID nao ha Universal Links"
+    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao o alvo iOS sai do caminho critico. CAI QUANDO houver decisao de submeter o app a uma loja; ate la a conta Apple (BICHUS-94) segue pendente e sem Team ID nao ha Universal Links"
     responsavel: cliente
     vence_em: 2026-09-29
 

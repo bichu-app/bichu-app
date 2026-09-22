@@ -1,0 +1,3 @@
+# Um ref sem `..` faz o rev-list varrer toda a historia alcancavel.
+RECUSADO
+nao e um intervalo, e um ref
