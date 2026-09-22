@@ -513,7 +513,7 @@ before(async () => {
   }>(
     `select ns.nspname || '.' || rel.relname as tabela,
             con.conname                      as nome,
-            (select array_agg(a.attname order by k.ord)
+            (select array_agg(a.attname::text order by k.ord)
                from unnest(con.conkey) with ordinality k(attnum, ord)
                join pg_attribute a on a.attrelid = con.conrelid and a.attnum = k.attnum)
                                              as colunas,
@@ -547,6 +547,17 @@ before(async () => {
         `confdeltype '${linha.codigo}' desconhecido em ${linha.tabela}.${linha.nome}. O ` +
           'catálogo passou a devolver um código que este arquivo não sabe ler, e classificar ' +
           'errado é pior que não classificar.',
+      );
+    }
+    // O `pg` só devolve array de verdade para tipo que ele sabe analisar:
+    // `attname` é do tipo `name`, e `array_agg` sem `::text` chega aqui como a
+    // string crua `{col}`. Sem esta guarda, o caso que compara colunas quebra
+    // com TypeError em vez de reprovar pela regra — falha com a cor errada.
+    if (!Array.isArray(linha.colunas) || !Array.isArray(linha.afetadas)) {
+      throw new Error(
+        `${linha.tabela}.${linha.nome}: o catálogo devolveu coluna fora de array. A consulta ` +
+          'de descoberta deixou de ser analisável, e comparar contra isto daria falha de tipo ' +
+          'no lugar de veredito.',
       );
     }
     return {
@@ -871,7 +882,7 @@ void describe('o efeito, e não só a declaração: apagar uma conta de verdade'
       );
       await cliente.query(
         `insert into pet_tags (id, pet_id, code_hash, code_suffix)
-         values ($1, $2, sha256('efeito'::bytea), 'EFEI')`,
+         values ($1, $2, sha256('efeito'::bytea), 'EFE7')`,
         [TAG, PET],
       );
       // Aviso nascido de leitura de QR: é ele que carrega `origin = tag_scan`,
