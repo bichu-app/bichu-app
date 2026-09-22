@@ -160,7 +160,7 @@ class BichuColors extends ThemeExtension<BichuColors> {
   /// Anel de foco de 3px, desenhado com 2px de afastamento.
   ///
   /// O afastamento nao e decoracao: e ele que faz o anel cumprir o SC 1.4.11.
-  /// No tema escuro o anel framboesa-claro (`#E3A0B4`) contra a manteiga
+  /// No tema escuro o anel carmim-claro (`#E79DB4`) contra a manteiga
   /// (`#E7B93E`) da 1.15:1, e o unico motivo de isso passar e os dois nunca se
   /// tocarem (secao 7). O mesmo vale para o anel sobre o Verde suave (1.24:1)
   /// e sobre a Goiaba suave (1.05:1).

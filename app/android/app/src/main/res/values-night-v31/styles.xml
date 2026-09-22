@@ -2,12 +2,12 @@
 <!--
     SPLASH DO ANDROID 12 EM DIANTE (API 31). Tema escuro.
 
-    A cor e a MESMA do tema claro: Framboesa `#922C4A`, de `design/tokens.json`
+    A cor e a MESMA do tema claro: Carmim `#9E0B3A`, de `design/tokens.json`
     primitivo `raspberry.700`. A procedencia completa e o motivo de o valor
     estar literal aqui estao em `values-v31/styles.xml`, que e o registro deste
     conjunto. Nao repita a explicacao; mantenha os dois iguais.
 
-    O cliente decidiu UM splash, nao dois: a marca abre em Framboesa
+    O cliente decidiu UM splash, nao dois: a marca abre em Carmim
     independentemente do tema do sistema.
 
     POR QUE ESTE ARQUIVO PRECISA EXISTIR SEPARADO: na tabela de precedencia de
@@ -15,18 +15,18 @@
     ANTES do de versao de plataforma. Num aparelho API 33 com tema escuro,
     `values-night/styles.xml` vence `values-v31/styles.xml`. Se so existisse o
     `values-v31`, quem usa tema escuro, que e a maioria, abriria o app no
-    fundo padrao e ninguem veria a Framboesa. O defeito nao aparece em teste
+    fundo padrao e ninguem veria o Carmim. O defeito nao aparece em teste
     feito no tema claro.
 -->
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
-        <!-- Framboesa. Ver values-v31/styles.xml para a procedencia. -->
+        <!-- Carmim. Ver values-v31/styles.xml para a procedencia. -->
         <item name="android:windowBackground">@drawable/launch_background</item>
         <item name="android:forceDarkAllowed">false</item>
         <item name="android:windowFullscreen">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">false</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-        <item name="android:windowSplashScreenBackground">#922C4A</item>
+        <item name="android:windowSplashScreenBackground">#9E0B3A</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">

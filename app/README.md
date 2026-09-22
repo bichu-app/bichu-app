@@ -88,21 +88,28 @@ deste pacote — mesmo arranjo de `tool/gen_tokens.dart`, que lê
 **falham dizendo qual arquivo faltou**, que é o comportamento certo: gerador que
 não acha a arte precisa parar, não emitir ícone em branco.
 
-**O fundo do splash é a Framboesa `#922C4A`**, que é `raspberry.700` de
+**O fundo do splash é o Carmim `#9E0B3A`**, que é `raspberry.700` de
 `design/tokens.json` e o `primary` do tema claro. Não é o fundo neutro do app.
-O valor está duplicado à mão em quatro arquivos nativos, porque XML de recurso
-do Android e storyboard do iOS são lidos pelo sistema antes de existir processo
-Dart e não conseguem ler `design/tokens.json`. A lista dos quatro pontos e a
-regra de manutenção estão em
-`android/app/src/main/res/values-v31/styles.xml`, que é o único deles cujo
-comentário sobrevive à regeração.
+Era a Framboesa `#922C4A` até 21/09/2026, quando o cliente trocou a semente.
+
+O valor está duplicado à mão nos quatro campos de `flutter_native_splash` em
+`pubspec.yaml`, porque XML de recurso do Android e catálogo de assets do iOS são
+lidos pelo sistema antes de existir processo Dart e não conseguem ler
+`design/tokens.json`. Os arquivos nativos saem desses quatro campos, pelo
+gerador.
+
+**Trocar a cor sem rodar os geradores reprova**, desde 21/09/2026:
+`test/marca/arte_do_app_test.dart` lê `design/tokens.json`, decodifica os PNG
+que os geradores assam e compara pixel com token. Antes disso nada no
+repositório lia pixel, e um produto com splash e ícone na cor velha passava pela
+esteira inteira em verde.
 
 ### Pendência medida no splash do iOS
 
 No simulador (iOS 27, iPhone 18 Pro) o fundo do splash do iOS renderiza
-`#9F2049`, e não `#922C4A`. É um vermelho mais saturado que a marca. Medido
+`#9F2049`, e não a cor da marca. É um vermelho mais saturado que ela. Medido
 comparando, na mesma captura, com a borda do botão `Escanear uma tag`, que o
-Flutter pinta a partir do mesmo token e que lê `#922C4A` exato: os dois
+Flutter pinta a partir do mesmo token e que lê o valor exato: os dois
 vermelhos ficam diferentes lado a lado.
 
 A causa tem conta fechada: converter `P3(0.5725, 0.1725, 0.2902)` para sRGB dá
@@ -112,7 +119,7 @@ nomeada de catálogo, PNG num imageset, e `displayP3` declarado com os
 componentes convertidos); estão listadas no comentário do
 `LaunchScreen.storyboard` para ninguém refazer o caminho.
 
-**O Android não tem esse problema:** o APK carrega `#ff922c4a` exato, conferido
+**O Android não tem esse problema:** o APK carrega o valor exato, conferido
 com `aapt2 dump resources` em `values-v31`, `values-night-v31` e no
 `launch_background`.
 
@@ -164,8 +171,8 @@ O arquivo gerado é versionado e começa com o aviso de que não deve ser editad
 O outro destino previsto por §18.2.2, o CSS da rota pública do QR, é gerado
 fora deste pacote.
 
-**A trava que não pode cair:** `ColorScheme.primary` é a tinta framboesa
-`#922C4A`, não a manteiga. A manteiga `#E7B93E` dá 1.73:1 contra a superfície
+**A trava que não pode cair:** `ColorScheme.primary` é a tinta carmim
+`#9E0B3A`, não a manteiga. A manteiga `#E7B93E` dá 1.73:1 contra a superfície
 marfim e nunca pode ser texto; ela chega à tela por `filledButtonTheme`,
 `floatingActionButtonTheme` e `BichuColors.actionFillBox`. O único campo que
 entrega o valor bruto se chama `actionFillRawDoNotUseAsText`.

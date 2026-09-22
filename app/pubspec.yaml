@@ -220,7 +220,8 @@ flutter_launcher_icons:
 # Splash (flutter_native_splash)
 # ---------------------------------------------------------------------------
 #
-# FUNDO FRAMBOESA `#922C4A`. Decisao do cliente, tomada em 17/09/2026.
+# FUNDO CARMIM `#9E0B3A`. Semente escolhida pelo cliente em 21/09/2026 (secao
+# 21 do design system). Era a Framboesa `#922C4A` de 17/09/2026.
 #
 # DE ONDE VEM O VALOR: `design/tokens.json`, primitivo `raspberry.700`, que e o
 # `primary` do tema claro (`lib/theme/bichu_tokens.g.dart`). NAO e o fundo
@@ -242,14 +243,21 @@ flutter_launcher_icons:
 #
 #   cd app && dart run flutter_native_splash:create
 #
+# ESQUECER O PASSO 2 NAO E MAIS SILENCIOSO. `test/marca/arte_do_app_test.dart`
+# le `design/tokens.json`, decodifica os PNG que os dois geradores assam e
+# REPROVA quando o pixel diverge do token -- inclusive quando so estes quatro
+# valores foram trocados e nenhum gerador rodou. Ate 21/09/2026 esse era o
+# caminho em que o produto saia com duas cores de marca ao mesmo tempo e
+# nenhum portao acusava, porque nada lia pixel.
+#
 flutter_native_splash:
-  color: "#922C4A"
+  color: "#9E0B3A"
   # Mesmo valor no tema escuro: o cliente decidiu UM splash, nao dois. Sem esta
   # linha o Android usaria o branco do `values-night` e o app abriria branco
   # para quem esta no tema escuro, que e a maioria.
-  color_dark: "#922C4A"
+  color_dark: "#9E0B3A"
 
-  # Simbolo da marca, centrado, em Marfim sobre a Framboesa
+  # Simbolo da marca, centrado, em Marfim sobre o Carmim
   # (design/marca/referencia/03-icone-do-app.png). Arte da designer.
   image: "../design/marca/app/splash-simbolo.png"
   android_gravity: center
@@ -263,13 +271,13 @@ flutter_native_splash:
 
   # Android 12 (API 31) trocou o mecanismo: o sistema desenha a splash pela
   # SplashScreen API e IGNORA `android:windowBackground`. Sem este bloco o
-  # aparelho de qualquer pessoa hoje abriria no fundo do tema, e nao na
-  # Framboesa -- e o teste em emulador antigo nao acusaria.
+  # aparelho de qualquer pessoa hoje abriria no fundo do tema, e nao no
+  # Carmim -- e o teste em emulador antigo nao acusaria.
   #
   # O icone desta splash e recortado num circulo pelo sistema: a arte precisa
   # ser 1152x1152 com o desenho dentro dos 768px centrais, senao as bordas
   # entram no corte.
   android_12:
-    color: "#922C4A"
-    color_dark: "#922C4A"
+    color: "#9E0B3A"
+    color_dark: "#9E0B3A"
     image: "../design/marca/app/splash-simbolo.png"

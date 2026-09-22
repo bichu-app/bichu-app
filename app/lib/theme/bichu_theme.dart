@@ -8,12 +8,12 @@ import 'bichu_typography.dart';
 ///
 /// Decisao do cliente: os componentes usam o M3 como base, pelo suporte nativo
 /// do Flutter (docs/06-design-system.md secao 15). A semente e a Framboesa
-/// `#922C4A`, mas **o esquema nao e gerado por HCT**: cada papel foi fixado por
+/// `#9E0B3A`, mas **o esquema nao e gerado por HCT**: cada papel foi fixado por
 /// medicao de contraste, porque o gerador do M3 produz pares que passam em AA
 /// e falham no piso de 7:1 que este produto adota nas superficies criticas.
 ///
 /// A trava principal esta em duas linhas deste arquivo, e vale reler antes de
-/// mexer: **`ColorScheme.primary` e a tinta framboesa `#922C4A`, nao a
+/// mexer: **`ColorScheme.primary` e a tinta carmim `#9E0B3A`, nao a
 /// manteiga `#E7B93E`.** Se a manteiga fosse `primary`, todo `TextButton`,
 /// todo `OutlinedButton` e todo icone acentuado do M3 nasceriam a 1.73:1, por
 /// padrao, sem ninguem escrever uma linha errada. Com a tinta ali, o padrao

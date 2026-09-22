@@ -8,7 +8,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// As travas do tema, escritas como teste porque comentario nao reprova merge.
 ///
-/// Os valores abaixo sao a identidade Framboesa de 17/09/2026 e foram medidos
+/// Os valores abaixo sao a identidade do cliente, com a tinta CARMIM que ele
+/// escolheu em 21/09/2026, e foram medidos
 /// contra `design/tokens.json`, nao escolhidos para o teste passar. Quem muda
 /// um token muda aqui junto: e esse acoplamento que faz a troca de paleta
 /// aparecer no diff em vez de escorregar.
@@ -18,12 +19,15 @@ void main() {
   // temas: a cor da marca nao clareia no escuro, quem clareia e a tinta.
   const manteiga = Color(0xFFE7B93E);
 
-  // Framboesa `raspberry.700`, o valor exato da folha do cliente. 7.49:1
-  // sobre a superficie off-white (era 7.36:1 sobre o marfim).
-  const tintaClara = Color(0xFF922C4A);
+  // Carmim `raspberry.700`, a semente escolhida pelo cliente em 21/09/2026
+  // (secao 21 do design system). 7.84:1 sobre a superficie off-white; era a
+  // Framboesa #922C4A a 7.49:1. O par que manda nao e este: e sobre
+  // `surface-sunken`, que subiu de 7.06 para 7.39.
+  const tintaClara = Color(0xFF9E0B3A);
 
-  // `raspberry.300`, a tinta no escuro. 8.65:1 sobre `bark.900`.
-  const tintaEscura = Color(0xFFE3A0B4);
+  // `raspberry.300`, a tinta no escuro. 8.59:1 sobre `bark.900`. Valor
+  // medido na secao 20.3, nao derivado da rampa.
+  const tintaEscura = Color(0xFFE79DB4);
 
   // A familia neutra que virou a superficie do app em 17/09/2026, quando o
   // cliente trocou o Marfim quente pelo off-white. A rampa `sand` deixou de
@@ -240,9 +244,9 @@ void main() {
       );
     });
 
-    test('a tinta framboesa melhorou sobre o fundo novo', () {
-      // 7.49:1, acima do piso de 7.0 das telas criticas. Era 7.36:1 sobre o
-      // marfim: a troca de fundo nao custou contraste, ganhou.
+    test('a tinta carmim melhorou sobre o fundo novo', () {
+      // 7.84:1, acima do piso de 7.0 das telas criticas. Era 7.49:1 com a
+      // Framboesa: a troca de semente nao custou contraste, ganhou.
       expect(
         _razao(BichuCores.claro.primary, BichuCores.claro.surface),
         greaterThanOrEqualTo(7.0),

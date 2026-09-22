@@ -1,5 +1,5 @@
 {
-  "$description": "Os 70 pares de contraste do paragrafo 7 de docs/06-design-system.md, medidos em 17/09/2026 sobre a identidade Framboesa entregue pelo cliente. A lista vive aqui, ao lado dos tokens, e NAO no codigo do verificador (paragrafo 18.2.2, item 3). Quem recalcula: test/a11y/contraste_tokens_test.dart.",
+  "$description": "Os 70 pares de contraste do paragrafo 7 de docs/06-design-system.md. Medidos em 17/09/2026 sobre a Framboesa e REMEDIDOS em 21/09/2026 sobre o Carmim #9E0B3A, a semente que o cliente escolheu na secao 21. Dezenove dos 70 mudaram de valor; nenhum mudou de veredito, e os tres pares criticos da tinta sobre superficie subiram (7,06 -> 7,39 no pior deles). A lista vive aqui, ao lado dos tokens, e NAO no codigo do verificador (paragrafo 18.2.2, item 3). Quem recalcula: test/a11y/contraste_tokens_test.dart.",
   "$contrato": {
     "formula": "WCAG 2.1 luminancia relativa, (L1 + 0.05) / (L2 + 0.05), com linearizacao sRGB. L = 0.2126*R + 0.7152*G + 0.0722*B sobre os canais linearizados.",
     "frente_e_fundo": "Referencia DTCG a um token de design/tokens.json, entre chaves. Cor com alfa nao entra nesta lista: contraste se mede sobre a cor composta, e o scrim nao carrega texto.",
@@ -132,7 +132,7 @@
       "frente": "{cor.claro.primary}",
       "fundo": "{cor.claro.surface}",
       "piso": 7.0,
-      "razao_esperada": 7.49,
+      "razao_esperada": 7.84,
       "veredito": "passa"
     },
     {
@@ -142,7 +142,7 @@
       "frente": "{cor.claro.primary}",
       "fundo": "{cor.claro.surface-alt}",
       "piso": 7.0,
-      "razao_esperada": 7.24,
+      "razao_esperada": 7.57,
       "veredito": "passa"
     },
     {
@@ -152,7 +152,7 @@
       "frente": "{cor.claro.primary}",
       "fundo": "{cor.claro.surface-sunken}",
       "piso": 7.0,
-      "razao_esperada": 7.06,
+      "razao_esperada": 7.39,
       "veredito": "passa",
       "nota": "E este par que fecha a faixa util das superficies claras: qualquer superficie mais escura derruba a framboesa abaixo de 7.0."
     },
@@ -163,7 +163,7 @@
       "frente": "{cor.claro.on-primary}",
       "fundo": "{cor.claro.primary}",
       "piso": 7.0,
-      "razao_esperada": 7.49,
+      "razao_esperada": 7.84,
       "veredito": "passa"
     },
     {
@@ -173,7 +173,7 @@
       "frente": "{cor.claro.on-primary-container}",
       "fundo": "{cor.claro.primary-container}",
       "piso": 7.0,
-      "razao_esperada": 9.4,
+      "razao_esperada": 8.63,
       "veredito": "passa"
     },
     {
@@ -310,7 +310,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.surface}",
       "piso": 3.0,
-      "razao_esperada": 7.49,
+      "razao_esperada": 7.84,
       "veredito": "passa",
       "norma": "1.4.11"
     },
@@ -321,7 +321,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.surface-alt}",
       "piso": 3.0,
-      "razao_esperada": 7.24,
+      "razao_esperada": 7.57,
       "veredito": "passa",
       "norma": "1.4.11"
     },
@@ -370,7 +370,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.action-fill}",
       "piso": 3.0,
-      "razao_esperada": 4.25,
+      "razao_esperada": 4.45,
       "veredito": "passa",
       "nota": "Passa mesmo sendo par nao-adjacente; ver as linhas equivalentes no tema escuro.",
       "norma": "1.4.11"
@@ -382,7 +382,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.community-fill}",
       "piso": 3.0,
-      "razao_esperada": 4.6,
+      "razao_esperada": 4.81,
       "veredito": "passa",
       "nota": "Passa mesmo sendo par nao-adjacente; ver as linhas equivalentes no tema escuro.",
       "norma": "1.4.11"
@@ -394,7 +394,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.accent-fill}",
       "piso": 3.0,
-      "razao_esperada": 3.9,
+      "razao_esperada": 4.08,
       "veredito": "passa",
       "nota": "Passa mesmo sendo par nao-adjacente; ver as linhas equivalentes no tema escuro.",
       "norma": "1.4.11"
@@ -511,7 +511,7 @@
       "frente": "{cor.escuro.primary}",
       "fundo": "{cor.escuro.surface}",
       "piso": 7.0,
-      "razao_esperada": 8.65,
+      "razao_esperada": 8.59,
       "veredito": "passa"
     },
     {
@@ -521,7 +521,7 @@
       "frente": "{cor.escuro.primary}",
       "fundo": "{cor.escuro.surface-alt}",
       "piso": 7.0,
-      "razao_esperada": 7.98,
+      "razao_esperada": 7.92,
       "veredito": "passa"
     },
     {
@@ -531,7 +531,7 @@
       "frente": "{cor.escuro.primary}",
       "fundo": "{cor.escuro.surface-sunken}",
       "piso": 7.0,
-      "razao_esperada": 7.06,
+      "razao_esperada": 7.01,
       "veredito": "passa",
       "nota": "E este par que fecha a faixa util das superficies claras: qualquer superficie mais escura derruba a framboesa abaixo de 7.0."
     },
@@ -542,7 +542,7 @@
       "frente": "{cor.escuro.on-primary}",
       "fundo": "{cor.escuro.primary}",
       "piso": 7.0,
-      "razao_esperada": 8.65,
+      "razao_esperada": 8.59,
       "veredito": "passa"
     },
     {
@@ -552,7 +552,7 @@
       "frente": "{cor.escuro.on-primary-container}",
       "fundo": "{cor.escuro.primary-container}",
       "piso": 7.0,
-      "razao_esperada": 9.2,
+      "razao_esperada": 8.91,
       "veredito": "passa"
     },
     {
@@ -688,7 +688,7 @@
       "frente": "{cor.escuro.focus-ring}",
       "fundo": "{cor.escuro.surface}",
       "piso": 3.0,
-      "razao_esperada": 8.65,
+      "razao_esperada": 8.59,
       "veredito": "passa",
       "norma": "1.4.11"
     },
@@ -699,7 +699,7 @@
       "frente": "{cor.escuro.focus-ring}",
       "fundo": "{cor.escuro.surface-alt}",
       "piso": 3.0,
-      "razao_esperada": 7.98,
+      "razao_esperada": 7.92,
       "veredito": "passa",
       "norma": "1.4.11"
     },
@@ -762,7 +762,7 @@
       "frente": "{cor.escuro.focus-ring}",
       "fundo": "{cor.escuro.community-fill}",
       "piso": 3.0,
-      "razao_esperada": 1.24,
+      "razao_esperada": 1.25,
       "veredito": "isento",
       "isencao": {
         "norma": "1.4.11",
@@ -776,7 +776,7 @@
       "frente": "{cor.escuro.focus-ring}",
       "fundo": "{cor.escuro.accent-fill}",
       "piso": 3.0,
-      "razao_esperada": 1.05,
+      "razao_esperada": 1.06,
       "veredito": "isento",
       "isencao": {
         "norma": "1.4.11",

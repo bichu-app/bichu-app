@@ -622,6 +622,20 @@ jobs:
         working-directory: app
         run: flutter test test/tema
 
+      # A ISCA DE PIXEL (21/09/2026). Os dois passos acima leem TEXTO: tokens,
+      # tabela de pares, papeis em Dart. A cor da marca tambem vive em 40 PNG
+      # que tres geradores assam, e ate hoje nenhum portao os lia -- trocar a
+      # semente e esquecer os geradores entregava um produto que abre com
+      # splash e icone na cor velha, com a esteira inteira verde.
+      #
+      # Caminho explicito pelo mesmo motivo dos outros dois: este portao nao
+      # pode depender da descoberta automatica. Dentro dele ha uma isca
+      # negativa versionada -- o bitmap na semente ANTERIOR, que precisa ser
+      # reprovado pelo mesmo codigo que aprova os de producao.
+      - name: portao de marca em pixel
+        working-directory: app
+        run: flutter test test/marca
+
   # SonarCloud. docs/07-devops.md secao 8.4.
   #
   # O cliente contratou o plano em 17/09/2026 e provisionou `SONAR_TOKEN`. Com

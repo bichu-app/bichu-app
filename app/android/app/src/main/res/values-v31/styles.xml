@@ -3,12 +3,14 @@
     SPLASH DO ANDROID 12 EM DIANTE (API 31). Tema claro.
 
     ========================= A COR =========================
-    Framboesa `#922C4A`.
+    Carmim `#9E0B3A`. Era a Framboesa `#922C4A` ate 21/09/2026, quando o
+    cliente escolheu a direcao A da secao 20.3 do design system.
 
     DE ONDE ELA VEM: `design/tokens.json`, na raiz do repositorio, primitivo
     `raspberry.700`. E o mesmo valor que vira `ColorScheme.primary` do tema
     claro em `lib/theme/bichu_tokens.g.dart`, gerado por
-    `app/tool/gen_tokens.dart`. Decisao do cliente de 17/09/2026: o splash abre
+    `app/tool/gen_tokens.dart`. Decisao do cliente de 17/09/2026, com a cor
+    trocada em 21/09/2026: o splash abre
     em cor de marca preenchida, e NAO no fundo neutro do app (`#FAFAF8`,
     `neutral.25`).
 
@@ -47,7 +49,7 @@
 -->
 <resources>
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <!-- Framboesa. Ver o cabecalho deste arquivo para a procedencia. -->
+        <!-- Carmim. Ver o cabecalho deste arquivo para a procedencia. -->
         <!-- O sistema nao pode escurecer a cor de marca por conta propria. -->
         <!-- Compatibilidade com o caminho pre-API 31, que continua valendo em
              aparelho antigo. -->
@@ -56,7 +58,7 @@
         <item name="android:windowFullscreen">false</item>
         <item name="android:windowDrawsSystemBarBackgrounds">false</item>
         <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
-        <item name="android:windowSplashScreenBackground">#922C4A</item>
+        <item name="android:windowSplashScreenBackground">#9E0B3A</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/android12splash</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">

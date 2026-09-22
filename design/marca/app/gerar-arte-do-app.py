@@ -32,9 +32,10 @@ AS TINTAS DE SAIDA SAO OS LITERAIS DECLARADOS, e nao os medidos no raster. O
 render entrega Framboesa em #9A2847, Marfim em #FCF6E8 e Manteiga em #FAC84F --
 alguns pontos fora dos valores da folha, porque e PNG e nao vetor. Os hexes
 declarados sao literais do cliente e nao se ajustam (design/marca/README.md
-secao 2); alem disso o fundo do splash ja esta escrito a mao como #922C4A nos
-arquivos nativos, e um icone em #9A2847 ao lado dele apareceria como duas
-Framboesas diferentes no mesmo aparelho.
+secao 2); alem disso o fundo do splash continua escrito a mao em `app/pubspec.yaml`, e um
+icone alguns pontos fora dele apareceria como duas tintas de marca diferentes no
+mesmo aparelho. Os quatro valores do pubspec e os PNG desta pasta sao cobrados
+contra design/tokens.json por app/test/marca/arte_do_app_test.dart.
 
 Requer Pillow e numpy. Nenhum dos dois entra no app: isto roda na maquina de
 quem desenha, como o `dart run flutter_launcher_icons` que consome a saida.
@@ -42,6 +43,7 @@ quem desenha, como o `dart run flutter_launcher_icons` que consome a saida.
 
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -52,15 +54,42 @@ RAIZ = Path(__file__).resolve().parents[3]
 SRC = RAIZ / "design/marca/referencia/03-icone-do-app.png"
 OUT = RAIZ / "design/marca/app"
 
-# Literais declarados. Framboesa e Manteiga tambem sao `raspberry/700` e
-# `butter/400` em design/tokens.json; o Marfim nao tem token porque saiu do app
-# em 17/09/2026 (secao 6.8 do design system) e ficou so no material de marca --
-# e o icone de loja e material de marca.
-FRAMBOESA = (0x92, 0x2C, 0x4A)
-MARFIM = (0xFF, 0xF7, 0xE8)
-MANTEIGA = (0xE7, 0xB9, 0x3E)
+TOKENS = RAIZ / "design/tokens.json"
 
-# Medidos no raster de referencia, e so servem para a desmistura.
+
+def _token(*caminho: str) -> tuple[int, int, int]:
+    """Le um valor de cor de design/tokens.json e devolve o RGB.
+
+    Ate 21/09/2026 a tinta da marca era uma constante escrita aqui, e ela foi
+    o setimo ponto de cor em texto do inventario da secao 21.4 do design
+    system: trocar a semente obrigava a editar este arquivo a mao, e esquecer
+    disso produzia arte na cor velha sem que portao nenhum acusasse. A fonte
+    agora e uma so.
+    """
+    no = json.loads(TOKENS.read_text(encoding="utf-8"))
+    for seg in caminho:
+        no = no[seg]
+    valor = no["$value"]
+    if not (isinstance(valor, str) and valor.startswith("#") and len(valor) == 7):
+        raise SystemExit(
+            f"REPROVA: {'.'.join(caminho)} em {TOKENS} nao e um hexadecimal de "
+            f"6 digitos, e sim {valor!r}. Sem cor resolvida esta arte sairia "
+            f"errada em silencio."
+        )
+    return (int(valor[1:3], 16), int(valor[3:5], 16), int(valor[5:7], 16))
+
+
+# A tinta da marca e a Manteiga saem de design/tokens.json, que e a fonte unica
+# (secao 18.2.2). O Marfim nao tem token porque saiu do app em 17/09/2026
+# (secao 6.8) e ficou so no material de marca -- e o icone de loja e material
+# de marca.
+TINTA_DA_MARCA = _token("raspberry", "700")
+MANTEIGA = _token("butter", "400")
+MARFIM = (0xFF, 0xF7, 0xE8)
+
+# Medidos no raster de referencia, e so servem para a desmistura. Eles NAO
+# acompanham a troca de semente: descrevem a cor que esta sendo REMOVIDA do
+# PNG de origem, que continua sendo a Framboesa de 17/09/2026.
 FUNDO_MEDIDO = np.array([154.0, 40.0, 71.0])
 MARFIM_MEDIDO = np.array([252.0, 246.0, 232.0])
 MANTEIGA_MEDIDO = np.array([250.0, 200.0, 79.0])
@@ -172,7 +201,7 @@ def main() -> int:
 
     if "--simbolo-primary" in sys.argv:
         destino = Path(sys.argv[sys.argv.index("--simbolo-primary") + 1])
-        simbolo = pintar(alfa, e_manteiga, FRAMBOESA)
+        simbolo = pintar(alfa, e_manteiga, TINTA_DA_MARCA)
         por_largura(simbolo, 512).save(destino, optimize=True)
         print(f"simbolo em primary -> {destino}")
         return 0
@@ -183,17 +212,17 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
 
     # 1. iOS: 1024x1024 SEM canal alfa. A App Store recusa alfa, e o iOS aplica
-    # a propria mascara -- por isso a Framboesa sangra ate a borda e a arte nao
+    # a propria mascara -- por isso a tinta sangra ate a borda e a arte nao
     # traz canto arredondado embutido, que viraria halo dentro da mascara.
-    ios = centrar(tela(1024, FRAMBOESA),
+    ios = centrar(tela(1024, TINTA_DA_MARCA),
                   por_largura(simbolo, round(1024 * PROPORCAO_NO_QUADRADO)),
                   DESLOCAMENTO_OPTICO_Y)
     ios.convert("RGB").save(OUT / "icone-ios-1024.png", optimize=True)
 
-    # 2. Android, camada de fundo: Framboesa chapada nos 108 dp inteiros. Ela
+    # 2. Android, camada de fundo: a tinta chapada nos 108 dp inteiros. Ela
     # cobre o deslocamento de parallax da tela inicial e qualquer mascara de
     # fabricante.
-    tela(1024, FRAMBOESA).convert("RGB").save(
+    tela(1024, TINTA_DA_MARCA).convert("RGB").save(
         OUT / "icone-android-background.png", optimize=True)
 
     # 3. Android, camada de frente. O gerador escreve `<inset android:inset="16%">`,
