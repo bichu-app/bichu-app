@@ -235,6 +235,30 @@ void main() {
         MensagensDeErro.digitarDeNovo,
         na: 'F2.1, 404 do codigo digitado',
       );
+
+      // O piso de alvo do criterio 7, medido no RENDER e nao deduzido do tema.
+      //
+      // Nada nesta tela pede tamanho: `Digitar de novo` e um `TextButton` nu,
+      // e os 48 dp vem do tema por DOIS caminhos independentes --
+      // `materialTapTargetSize: MaterialTapTargetSize.padded`, global, e
+      // `minimumSize: Size(0, BichuAlvoDeToque.min)` no estilo do botao.
+      //
+      // Medido, e nao suposto: com os dois, 48,0 dp; tirando **um** dos dois,
+      // ainda 48,0; tirando os dois, 40,0 e este `expect` reprova. A primeira
+      // versao deste comentario dizia que o `minimumSize` sozinho sustentava o
+      // piso, e a medicao desmentiu. A redundancia e boa, e e por causa dela
+      // que a afirmacao util e a altura que chega ao polegar, e nao a presenca
+      // de um token no tema: conferir o token acusaria uma perda que nao
+      // existe, e confiar na redundancia nao mostra o dia em que ela acaba.
+      final alvo = tamanhoDoAlvo(tester, digitarDeNovo);
+      expect(
+        alvo.height,
+        greaterThanOrEqualTo(pisoMinimo),
+        reason: 'REPROVA: `Digitar de novo` mede ${alvo.height} dp de altura, '
+            'e o piso do produto e $pisoMinimo dp. Quem esta em pe, na rua, '
+            'com um animal em um dos bracos, acerta com o polegar da outra '
+            'mao.',
+      );
     });
 
     testWidgets('devolve o foco ao campo SEM limpar o que foi digitado',
