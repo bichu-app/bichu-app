@@ -642,6 +642,12 @@ void main() {
       await tocar(tester, find.text('Reenviar'));
 
       expect(
+        find.text('E-mail reenviado.'),
+        findsOneWidget,
+        reason: 'REPROVA: o reenvio deu certo e a tela nao confirmou nada. Um '
+            'botao que nao muda a tela e um botao em que o dedo volta.',
+      );
+      expect(
         chamadas.where((c) => c.contains('/auth/email-verification')),
         isNotEmpty,
         reason: 'REPROVA: `Reenviar` nao foi ao servidor. Um botao que so muda '

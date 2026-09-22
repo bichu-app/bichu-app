@@ -235,6 +235,18 @@ class _AvisoDeCadastroIncompletoState extends State<AvisoDeCadastroIncompleto> {
   AvisoDecidido _decidido = AvisoDecidido.nenhum;
   bool _reenviando = false;
   String? _erro;
+
+  /// A confirmacao do reenvio, VISIVEL.
+  ///
+  /// Ela nao existia na primeira versao, e a falta era defeito de duas formas.
+  /// A primeira: quem enxerga tocava em `Reenviar` e a tela nao mudava nada --
+  /// o botao que parece nao fazer nada, e o dedo volta nele. A segunda so
+  /// apareceu ao provar a isca: com a confirmacao existindo apenas como
+  /// anuncio de leitor de tela, nenhum caso conseguia OBSERVAR que a tela
+  /// havia dito "reenviado", e a isca do criterio 2 da BICHUS-31 passava
+  /// inclusive com o anuncio movido para ANTES da resposta do servidor.
+  /// Verificacao que nao consegue verificar precisa reprovar, nao aprovar.
+  String? _confirmacao;
   bool _carregou = false;
 
   @override
@@ -279,6 +291,7 @@ class _AvisoDeCadastroIncompletoState extends State<AvisoDeCadastroIncompleto> {
     }
     setState(() {
       _erro = null;
+      _confirmacao = null;
       _reenviando = true;
     });
     try {
@@ -286,9 +299,10 @@ class _AvisoDeCadastroIncompletoState extends State<AvisoDeCadastroIncompleto> {
             email: widget.usuario.emailPendente,
           );
       if (!mounted) return;
-      // O anuncio so acontece DEPOIS de o servidor responder. Anunciar antes
-      // seria dizer que o e-mail saiu quando ele pode nao ter saido, que e o
-      // que o criterio 2 da BICHUS-31 proibe.
+      // A confirmacao so acontece DEPOIS de o servidor responder. Dize-la
+      // antes seria afirmar que o e-mail saiu quando ele pode nao ter saido,
+      // que e o que o criterio 2 da BICHUS-31 proibe.
+      setState(() => _confirmacao = TextosDoAvisoDeCadastro.reenviado);
       anunciar(context, TextosDoAvisoDeCadastro.reenviado);
     } on FalhaDeConexao {
       if (!mounted) return;
@@ -373,6 +387,13 @@ class _AvisoDeCadastroIncompletoState extends State<AvisoDeCadastroIncompleto> {
                   ),
                 ],
               ),
+              if (_confirmacao != null) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e2),
+                Text(
+                  _confirmacao!,
+                  style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
+                ),
+              ],
               if (_erro != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
                 Text(
