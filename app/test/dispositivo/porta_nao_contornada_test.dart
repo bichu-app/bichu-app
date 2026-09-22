@@ -156,10 +156,29 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// tag nao tem imagem" de "nao consegui buscar". Nenhuma das duas encosta na
 /// porta `CameraEGaleria`, que e o que o criterio 10 protege.
 ///
+/// **Destravado uma oitava vez pela BICHUS-54**: a leitura do QR pela camera
+/// entrou, e `escanear/tela_leitor_de_qr.dart` foi reescrita inteira --
+/// desfazendo o que a BICHUS-220 tinha feito, que era a tela **dizer** que nao
+/// havia leitor. Agora ha: `mobile_scanner` atras da porta nova
+/// `dispositivo/leitor_de_qr.dart`, os quatro estados de permissao voltando a
+/// decidir a tela, e `escanear/codigo_lido_do_qr.dart` triando localmente o QR
+/// que nao e do Bichu. Entrou tambem `escanear/mascara_do_codigo_da_tag.dart`,
+/// so para publicar `aceitos` -- a triagem precisa do MESMO alfabeto da
+/// mascara, e uma segunda copia do intervalo divergiria.
+///
+/// **Esta e a primeira vez que a trava dispara por uma tela que VOLTOU a ler a
+/// porta da camera**, e vale dizer por que isso nao contraria o criterio 10.
+/// A BICHUS-161 protege a porta `CameraEGaleria` de ser CONTORNADA -- tela
+/// chamando plugin direto. A tela do leitor nao a contorna: ela pergunta a
+/// permissao **por ela**, e de proposito nao pergunta pela porta do leitor,
+/// que e a mesma permissao de sistema. Duas portas consultando
+/// `Permission.camera` dariam duas respostas que precisam ser iguais e um dia
+/// nao seriam.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '648b91a93693066cc2346c754e11fca080d98101';
+const String _arvoreDasTelas = 'acbd457b4e936657bc736d411b86c1f38188a0ad';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
