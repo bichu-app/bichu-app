@@ -4882,6 +4882,7 @@ export interface operations {
                     "application/json": components["schemas"]["FoundReportPage"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -4934,6 +4935,7 @@ export interface operations {
                     "application/json": components["schemas"]["FoundReport"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -4962,7 +4964,9 @@ export interface operations {
                     "application/json": components["schemas"]["FoundReport"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             /** @description Caso ja encerrado. */
             410: {
                 headers: {

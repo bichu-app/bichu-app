@@ -14,8 +14,28 @@ import { sql } from 'kysely';
 import type { Db } from '../db/pool.js';
 import type { RateLimitDecision, RateLimitStore } from '../ports/rate-limit-store.js';
 
+/**
+ * `lifetime`, em segundos: cem anos.
+ *
+ * O contrato declara `window: lifetime` em `createFoundReportPhotoUploadIntent`
+ * — o teto de três fotos por aviso do achador (SEC-009) não é "três por hora",
+ * é "três, e acabou". Sem esta entrada, `janelaEmSegundos` lançava, e a rota
+ * respondia 500 a **toda** chamada, inclusive à primeira.
+ *
+ * O número não é arbitrário nem é uma aproximação de "para sempre" escolhida
+ * por conveniência: ele é o que faz `inicioDaJanela` devolver a **época** para
+ * qualquer instante que este sistema vá ver, e é isso que importa. Um balde
+ * cujo início é a época nunca vira, então a contagem nunca reinicia — que é
+ * exatamente a semântica de `lifetime`. Qualquer janela menor que a idade do
+ * relógio Unix faria o balde rolar, e o quarto upload de um aviso passaria a
+ * ser permitido no dia da virada, em silêncio.
+ */
+export const JANELA_VITALICIA_EM_SEGUNDOS = 100 * 365 * 86400;
+
 export function janelaEmSegundos(janela: string): number {
-  const casado = /^(\d+)(s|m|h|d)$/.exec(janela.trim());
+  const limpa = janela.trim();
+  if (limpa === 'lifetime') return JANELA_VITALICIA_EM_SEGUNDOS;
+  const casado = /^(\d+)(s|m|h|d)$/.exec(limpa);
   if (casado === null) throw new Error(`Janela de limite malformada: ${janela}`);
   const quantidade = Number.parseInt(casado[1] ?? '0', 10);
   const fatores = { s: 1, m: 60, h: 3600, d: 86400 } as const;
@@ -23,7 +43,7 @@ export function janelaEmSegundos(janela: string): number {
   return quantidade * fatores[unidade];
 }
 
-function inicioDaJanela(agoraEmMilissegundos: number, janelaEmSegundos: number): Date {
+export function inicioDaJanela(agoraEmMilissegundos: number, janelaEmSegundos: number): Date {
   const janelaEmMilissegundos = janelaEmSegundos * 1000;
   return new Date(Math.floor(agoraEmMilissegundos / janelaEmMilissegundos) * janelaEmMilissegundos);
 }
@@ -36,6 +56,21 @@ function inicioDaJanela(agoraEmMilissegundos: number, janelaEmSegundos: number):
  * não seja escrita duas vezes: um deslize de um em qualquer dos dois faz o
  * balde recusar uma requisição cedo demais ou tarde demais, e nada acusa.
  */
+/**
+ * Teto do `Retry-After`, em segundos: 24 h.
+ *
+ * Existe por causa da janela `lifetime`. Sem ele, o balde vitalício produziria
+ * um `Retry-After` de quase cem anos — e `setTimeout` de um cliente que o
+ * respeitasse estouraria o inteiro de 32 bits e dispararia **na hora**, que é o
+ * oposto do que o cabeçalho pediu.
+ *
+ * O número é um teto de FORMATO, não uma promessa de que a janela acabou: um
+ * teto vitalício estourado não reabre em 24 h, e é o corpo do problema, e não o
+ * cabeçalho, que diz isso a quem lê. Preferi um cabeçalho que o cliente
+ * consegue obedecer a um número exato que ele transforma em laço de reenvio.
+ */
+const TETO_DO_RETRY_AFTER_EM_SEGUNDOS = 24 * 3600;
+
 function decidir(
   contagem: number,
   limite: number,
@@ -43,10 +78,11 @@ function decidir(
   agoraEmMilissegundos: number,
 ): RateLimitDecision {
   if (contagem <= limite) return { allowed: true, remaining: Math.max(0, limite - contagem) };
+  const faltam = Math.ceil((expiraEm - agoraEmMilissegundos) / 1000);
   return {
     allowed: false,
     remaining: 0,
-    retryAfterSeconds: Math.max(1, Math.ceil((expiraEm - agoraEmMilissegundos) / 1000)),
+    retryAfterSeconds: Math.min(TETO_DO_RETRY_AFTER_EM_SEGUNDOS, Math.max(1, faltam)),
   };
 }
 

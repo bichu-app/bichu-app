@@ -258,23 +258,87 @@ export interface TagScansTable {
 }
 
 /**
- * O subconjunto de `found_reports` que o caminho da tag preenche. Caso, ponto,
- * foto e atributos de cruzamento entram com `lostfound`.
+ * O aviso do achador, pelos dois caminhos: o QR da plaquinha (`tag_scan`) e o
+ * achado avulso (`stray_report`, BICHUS-35).
+ *
+ * Uma tabela e não duas: ver o cabeçalho da migração
+ * `20260922000003_achado-avulso-e-correspondencia.sql`. O preço — colunas que só
+ * um dos dois caminhos preenche — está pago em `CHECK` no banco, e não em
+ * disciplina de aplicação.
  */
 export interface FoundReportsTable {
   id: string;
   origin: 'tag_scan' | 'stray_report';
   tag_id: string | null;
   pet_id: string | null;
+  /** Nulo no aviso anônimo; **obrigatório** no achado avulso (CHECK no banco). */
   reporter_user_id: string | null;
   /** Identidade derivada do achador sem conta. Sustenta a dimensão `finder_identity`. */
   finder_identity_hash: Buffer | null;
   finder_display_name: string | null;
   finder_email: string | null;
-  finder_token_hash: Buffer;
-  finder_token_expires_at: Date;
+  /**
+   * A autorização de quem NÃO tem conta. Anulável desde a BICHUS-35: no achado
+   * avulso o contrato exige `bearerAuth` e quem autoriza é `reporter_user_id` —
+   * cunhar um token ao portador para quem já tem conta seria fabricar uma
+   * credencial que ninguém usa. O CHECK `found_reports_scan_tem_token` mantém a
+   * obrigatoriedade exatamente onde ela significa alguma coisa.
+   */
+  finder_token_hash: Buffer | null;
+  finder_token_expires_at: Date | null;
   found_at: Date;
   notes: string | null;
+  created_at: CriadoEm;
+
+  /** Vínculo direto do critério 10, vindo do `share_token`. */
+  case_id: string | null;
+  species: 'dog' | 'cat' | 'other' | null;
+  size: 'P' | 'M' | 'G' | 'GG' | null;
+  sex: 'male' | 'female' | 'unknown' | null;
+  /** Código de `reference-data`. É ELE que o cruzamento lê (critério 8). */
+  breed_code: string | null;
+  /** A raça como o achador escreveu. Descreve, não cruza. */
+  breed_free_text: string | null;
+  primary_color_code: string | null;
+  ref_data_version: string | null;
+  /**
+   * `geography(Point,4326)`. `never` nos três sentidos, como
+   * `user_reference_locations.reference_point`: é o tipo que impede a coluna de
+   * ser selecionada crua ou inserida pelo construtor tipado. O único caminho
+   * para ela é o SQL de `kysely-found-report-repository.ts`, onde `ST_MakePoint`
+   * e `ST_Distance` ficam à vista de quem revisa.
+   */
+  found_point: ColumnType<never, never, never>;
+  found_city: string | null;
+  found_neighborhood: string | null;
+  found_state: string | null;
+  /** A foto do achador, no bucket privado (critério 9). */
+  photo_upload_id: string | null;
+  status: Generated<'open' | 'matched' | 'closed'>;
+  /** 30 dias. O expurgo lê esta coluna. */
+  retention_until: Date | null;
+}
+
+/**
+ * BICHUS-35, critério 7. O cruzamento **sugere**; quem confirma é uma pessoa.
+ *
+ * `decided_by_user_id` e `decided_at` não são opcionais por conveniência: o
+ * CHECK `match_candidates_decisao_tem_autor` exige os dois para qualquer status
+ * fora de `suggested`, e o cruzamento não tem nem um nem outro para oferecer.
+ */
+export interface MatchCandidatesTable {
+  id: string;
+  case_id: string;
+  found_report_id: string;
+  /** `numeric(4,3)`, que o driver entrega como texto. Ver o adaptador. */
+  score: ColumnType<string, number | string, number | string>;
+  matched_attributes: ColumnType<Record<string, number>, string, string>;
+  distance_m: number | null;
+  link_origin: 'attribute_match' | 'share_token';
+  strategy_version: string;
+  status: Generated<'suggested' | 'confirmed' | 'rejected'>;
+  decided_by_user_id: string | null;
+  decided_at: Date | null;
   created_at: CriadoEm;
 }
 
@@ -302,6 +366,12 @@ export interface UploadIntentsTable {
   user_id: string;
   /** Nulo para o achador sem pet: o vínculo dele é com o aviso. */
   pet_id: string | null;
+  /**
+   * O aviso a que esta intenção pertence (BICHUS-35). Exatamente um de `pet_id`
+   * e `found_report_id` é preenchido, e o banco cobra isso
+   * (`upload_intents_um_contexto_so`).
+   */
+  found_report_id: string | null;
   kind: TipoDeEnvio;
   /** Chave no armazenamento privado. **Nunca** uma URL. */
   object_key: string;
@@ -582,6 +652,7 @@ export interface Database {
   pet_tags: PetTagsTable;
   tag_scans: TagScansTable;
   found_reports: FoundReportsTable;
+  match_candidates: MatchCandidatesTable;
   upload_intents: UploadIntentsTable;
   pet_photos: PetPhotosTable;
   jobs: JobsTable;

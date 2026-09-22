@@ -66,6 +66,9 @@ import { LostCaseService } from '../modules/lostfound/application/lost-case-serv
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
 import { criarAlcancePorPostGIS } from '../modules/lostfound/adapters/persistence/kysely-alcance-por-postgis.js';
 import { criarRegistroDeDisparos } from '../modules/lostfound/adapters/persistence/kysely-registro-de-disparos.js';
+import { criarFoundReportRepository } from '../modules/found/adapters/persistence/kysely-found-report-repository.js';
+import { FoundReportService } from '../modules/found/application/found-report-service.js';
+import { registrarRotasDeAchado } from '../modules/found/adapters/http/found-report-routes.js';
 import { criarJobQueue } from '../shared/queue/kysely-job-queue.js';
 import { criarIdempotencia } from '../shared/http/idempotency.js';
 import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
@@ -413,6 +416,34 @@ export async function main(): Promise<void> {
     baseDaWeb: config.webBaseUrl,
   };
 
+  // BICHUS-35. O achado avulso mora em `found` e nao em `lostfound` porque ele e
+  // o outro lado da mesma moeda: `lostfound` e quem PERDEU, `found` e quem
+  // ACHOU, e as duas superficies sao lidas por pessoas diferentes, com
+  // autorizacoes diferentes. O que liga as duas e `match_candidates`, e ele so
+  // carrega sugestao -- nunca decisao.
+  //
+  // `armazenamento` e uma segunda instancia do MESMO adaptador que `media` usa,
+  // e nao um caminho novo: a foto do achador segue o desenho do ADR-0007 igual a
+  // do pet, com outro prefixo de chave, outro teto de bytes e outra retencao.
+  const dependenciasDasRotasDeAchado = {
+    achados: new FoundReportService({
+      repositorio: criarFoundReportRepository(db),
+      armazenamento: criarObjectStorage(config.objectStorage),
+      // O cruzamento por atributos e ENFILEIRADO, nunca sincrono na requisicao
+      // (secao 4.10). O que roda na hora e so o vinculo direto do criterio 10,
+      // que nao e cruzamento.
+      fila: criarJobQueue(db, ids),
+      ids,
+      clock: systemClock,
+    }),
+    autenticador: {
+      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+    },
+    idempotencia: criarIdempotencia(db),
+    contrato,
+    clock: systemClock,
+  };
+
   const dependenciasDasRotasDeTag = {
     tags,
     // A porta é de `tags` e quem a liga ao serviço de identidade é esta linha: é
@@ -475,6 +506,7 @@ export async function main(): Promise<void> {
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
+    registrarRotasDeAchado(escopo, dependenciasDasRotasDeAchado);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
     registrarRotasDeConversas(escopo, {
       conversas,
