@@ -273,10 +273,44 @@ abstract final class TextosDoCadastro {
   }
 
   /// UX F1.6, a foto ainda subindo. Sem botao: nao ha nada para a pessoa fazer.
+  ///
+  /// **Ate 22/09/2026 esta frase era falsa.** Nenhum caminho do app enviava
+  /// bytes, entao a tela anunciava o efeito de uma chamada que ninguem fazia.
+  /// Ela so pode aparecer enquanto o envio esta de fato em curso.
   static String fotoAindaSubindo(String nome) {
     final pet = nome.trim().isEmpty ? 'do seu pet' : 'de ${nome.trim()}';
     return 'A foto $pet ainda está sendo enviada. Isso não atrasa o código.';
   }
+
+  /// UX F1.6, o envio da foto parou por falta de sinal.
+  ///
+  /// **Com botao, ao contrario do estado acima**, e a diferenca e a mesma do
+  /// QR que nao carregou: aqui existe um movimento que resolve, e esconde-lo
+  /// seria tirar da pessoa a unica coisa que ela pode fazer.
+  ///
+  /// O texto nao promete fila: a foto **nao** fica guardada para subir
+  /// sozinha depois, e dizer que fica seria a tela de sucesso para o que nao
+  /// aconteceu que o criterio 2 da BICHUS-31 proibe.
+  static String fotoNaoSubiuSemSinal(String nome) {
+    final pet = nome.trim().isEmpty ? 'do seu pet' : 'de ${nome.trim()}';
+    return 'A foto $pet não subiu: faltou sinal. O cadastro está salvo, e dá '
+        'para tentar de novo agora ou acrescentar a foto depois em Editar.';
+  }
+
+  /// UX F1.6, o envio da foto foi recusado.
+  ///
+  /// **Sem botao**, e por isso e outro texto: tentar de novo devolve a mesma
+  /// recusa. Tipo fora da lista, arquivo acima do teto, autorizacao vencida e
+  /// arquivo que sumiu do aparelho terminam todos aqui, e o caminho que
+  /// resolve e escolher outra foto -- que e `Editar`, e nao esta tela.
+  static String fotoNaoSubiuRecusada(String nome) {
+    final pet = nome.trim().isEmpty ? 'do seu pet' : 'de ${nome.trim()}';
+    return 'Não consegui enviar a foto $pet. O cadastro está salvo, e dá para '
+        'escolher outra foto em Editar.';
+  }
+
+  /// O rotulo do unico movimento que resolve a falta de sinal.
+  static const String enviarAFotoDeNovo = 'Enviar a foto de novo';
 
   /// UX F1.5, o aviso da redacao de `care_notes`, que aparece **aqui**.
   ///

@@ -3,10 +3,12 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
+import 'api/achados_api.dart';
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
@@ -157,6 +159,8 @@ class _BichuAppState extends State<BichuApp> {
   late final AuthApi _auth;
   late final PetsApi _pets;
   late final CasosApi _casos;
+  late final AchadosApi _achados;
+  late final EnvioDeFoto _envioDeFoto;
   late final FilaOffline _fila;
   late final TagsApi _tags;
   late final DevicesApi _devices;
@@ -188,6 +192,7 @@ class _BichuAppState extends State<BichuApp> {
     _auth = AuthApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
+    _achados = AchadosApi(_api);
     // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
     // nada no app a construia: o criterio 6 desta historia -- "sem conexao a
     // tela inteira funciona: o envio acontece em F3.2" -- so e verdade com
@@ -199,6 +204,19 @@ class _BichuAppState extends State<BichuApp> {
     _tags = TagsApi(_api);
     _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraDoAparelho();
+    // **O caminho de bytes, ligado** (22/09/2026). Ele existia como ideia e
+    // nao existia como codigo: `intencaoDeFotoDoPet` estava escrita desde a
+    // BICHUS-62 e nunca era chamada, e a foto escolhida em F1.4 morria no
+    // aparelho.
+    //
+    // O cliente HTTP e o mesmo objeto injetado em teste, e em producao e um
+    // `http.Client` PROPRIO -- `widget.clienteHttp` e nulo la. A separacao
+    // importa: este cliente nao conhece o token da sessao, e o endereco para
+    // onde os bytes vao e outro host, escolhido pelo servidor.
+    _envioDeFoto = EnvioDeFoto(
+      camera: _camera,
+      cliente: widget.clienteHttp,
+    );
     _leitorDeQr = widget.leitorDeQr ?? const LeitorDeQrDoAparelho();
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
     _oportunidades = OportunidadesDeAviso(
@@ -283,6 +301,7 @@ class _BichuAppState extends State<BichuApp> {
   void dispose() {
     _vigiaDeAviso.dispose();
     _sessao.dispose();
+    _envioDeFoto.fechar();
     _api.fechar();
     super.dispose();
   }
@@ -294,6 +313,8 @@ class _BichuAppState extends State<BichuApp> {
       auth: _auth,
       pets: _pets,
       casos: _casos,
+      achados: _achados,
+      envioDeFoto: _envioDeFoto,
       fila: _fila,
       tags: _tags,
       devices: _devices,

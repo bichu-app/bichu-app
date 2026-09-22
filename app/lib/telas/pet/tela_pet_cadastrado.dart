@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/api_client.dart';
+import '../../api/envio_de_foto.dart';
 import '../../api/falhas.dart';
 import '../../api/imagem_do_qr.dart';
 import '../../api/mensagens_de_erro.dart';
@@ -69,6 +70,16 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
   /// tela. Ver [CofreDaImagemDoQr].
   MemoryImage? _qr;
 
+  /// Em qual dos quatro estados o ENVIO DA FOTO esta.
+  ///
+  /// Separado de [_faixa] e de [_estadoDoQr] pela mesma razao que separa
+  /// aqueles dois: a faixa fala da emissao da tag, o QR fala da imagem, e a
+  /// foto e um terceiro assunto que nao pode derrubar nenhum dos outros. O
+  /// cadastro esta feito nos quatro.
+  late _EstadoDaFoto _estadoDaFoto = widget.resultado.fotoPendente == null
+      ? _EstadoDaFoto.semFoto
+      : _EstadoDaFoto.subindo;
+
   Pet get _pet => widget.resultado.pet;
 
   /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
@@ -86,6 +97,43 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
     if (_iniciou) return;
     _iniciou = true;
     _emitir();
+    // **Em paralelo com a emissao da tag, e nao depois dela.** F1.4 prometeu
+    // que o envio da foto nao bloqueia o avanco, e encadear as duas faria a
+    // foto esperar o QR -- ou, pior, nunca sair quando a emissao falhasse.
+    // Nenhuma das duas depende do resultado da outra.
+    _enviarAFoto();
+  }
+
+  /// **O envio que nao existia.** Ate 22/09/2026 nenhum caminho do app mandava
+  /// bytes para lugar nenhum: `PetsApi.intencaoDeFotoDoPet` estava escrita
+  /// desde a BICHUS-62 e nunca era chamada, e esta tela ja anunciava "a foto
+  /// ainda esta sendo enviada" sobre um envio inexistente.
+  ///
+  /// A foto sobe **aqui**, e nao em F1.5, porque a autorizacao de upload exige
+  /// o `pet_id` -- que so existe depois do cadastro. E e esta tela que recebe
+  /// [ResultadoDoCadastro.fotoPendente] por causa disso.
+  Future<void> _enviarAFoto() async {
+    final foto = widget.resultado.fotoPendente;
+    if (foto == null) return;
+
+    // O escopo e lido ANTES do primeiro `await`, como no resto desta tela.
+    final envio = Escopo.of(context).envioDeFoto;
+    final pets = Escopo.of(context).pets;
+
+    if (mounted) setState(() => _estadoDaFoto = _EstadoDaFoto.subindo);
+
+    final desfecho = await envio.enviar(
+      foto: foto,
+      destino: FotoDePet(api: pets, petId: _pet.id),
+    );
+    if (!mounted) return;
+    setState(() {
+      _estadoDaFoto = switch (desfecho) {
+        DesfechoDoEnvio.enviada => _EstadoDaFoto.enviada,
+        DesfechoDoEnvio.semSinal => _EstadoDaFoto.semSinal,
+        DesfechoDoEnvio.recusada => _EstadoDaFoto.recusada,
+      };
+    });
   }
 
   Future<void> _emitir() async {
@@ -225,6 +273,60 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
     });
   }
 
+  /// O que a tela diz sobre a foto, nos quatro estados.
+  ///
+  /// **Nenhum deles diz "enviada".** O criterio 2 da BICHUS-31 proibe tela de
+  /// sucesso para o que nao aconteceu, e a outra metade dessa regra e que o
+  /// sucesso tambem nao precisa de anuncio: quando a foto sobe, a linha
+  /// simplesmente some, e a tela volta a ser a de um cadastro sem pendencia.
+  /// Um "foto enviada" ali seria ruido sobre o caminho normal.
+  List<Widget> _linhaDaFoto(TextTheme textos, BichuCores cores) {
+    final discreto = textos.bodyMedium?.copyWith(color: cores.textSecondary);
+    switch (_estadoDaFoto) {
+      case _EstadoDaFoto.semFoto:
+      case _EstadoDaFoto.enviada:
+        return const <Widget>[];
+
+      case _EstadoDaFoto.subindo:
+        return <Widget>[
+          const SizedBox(height: BichuEspaco.e1),
+          Text(
+            // Linha discreta, **sem botao**: o envio esta em curso e nao ha
+            // nada para a pessoa fazer. Um botao aqui seria trabalho
+            // inventado, e ele nao existia por engano.
+            TextosDoCadastro.fotoAindaSubindo(_pet.nome),
+            style: discreto,
+          ),
+        ];
+
+      case _EstadoDaFoto.semSinal:
+        return <Widget>[
+          const SizedBox(height: BichuEspaco.e2),
+          FaixaDeAviso(
+            // Informativo, e nao erro: **nada se perdeu**. O pet esta
+            // cadastrado e o codigo saiu; o que falta e uma foto.
+            peso: PesoDaFaixa.informativo,
+            texto: TextosDoCadastro.fotoNaoSubiuSemSinal(_pet.nome),
+            rotuloDaAcao: TextosDoCadastro.enviarAFotoDeNovo,
+            aoTocarNaAcao: _enviarAFoto,
+          ),
+        ];
+
+      case _EstadoDaFoto.recusada:
+        return <Widget>[
+          const SizedBox(height: BichuEspaco.e2),
+          FaixaDeAviso(
+            peso: PesoDaFaixa.informativo,
+            // **Sem rotulo e sem toque, juntos.** Um rotulo sem callback sai
+            // na arvore de semantica como botao sem acao -- o defeito que
+            // quatro widgets deste app ja tiveram. Aqui os dois faltam porque
+            // repetir a chamada devolve a mesma recusa.
+            texto: TextosDoCadastro.fotoNaoSubiuRecusada(_pet.nome),
+          ),
+        ];
+    }
+  }
+
   Future<void> _copiar() async {
     final codigo = _tag?.codigo;
     if (codigo == null) return;
@@ -285,15 +387,7 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
             ),
             const SizedBox(height: BichuEspaco.e2),
             Text(_pet.nome, style: textos.titleLarge),
-            if (widget.resultado.fotoPendente != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e1),
-              Text(
-                // Linha discreta, **sem botao**: nao ha nada para a pessoa
-                // fazer, e um botao aqui seria trabalho inventado.
-                TextosDoCadastro.fotoAindaSubindo(_pet.nome),
-                style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-              ),
-            ],
+            ..._linhaDaFoto(textos, cores),
             const SizedBox(height: BichuEspaco.e4),
             Text(
               TextosDoCadastro.corpoPetCadastrado,
@@ -366,6 +460,29 @@ enum _EstadoDoQr {
 
   /// A requisicao saiu e nao voltou imagem.
   falhou,
+}
+
+/// Em qual estado esta o ENVIO da foto escolhida em F1.4.
+///
+/// Quatro, e nao dois. "Nao subiu" junta duas situacoes que levam a telas
+/// diferentes, pela mesma razao que permissao tem tres estados e nao dois:
+/// [semSinal] tem um movimento que resolve e [recusada] nao tem.
+enum _EstadoDaFoto {
+  /// O cadastro veio sem foto. Nao ha linha nenhuma.
+  semFoto,
+
+  /// Os bytes estao a caminho. A linha discreta aparece, sem acao.
+  subindo,
+
+  /// Os bytes chegaram e a confirmacao saiu. A linha some.
+  enviada,
+
+  /// Faltou rede. Faixa informativa **com** `Enviar a foto de novo`.
+  semSinal,
+
+  /// O servidor ou o armazenamento recusaram. Faixa informativa sem acao:
+  /// repetir devolve a mesma recusa.
+  recusada,
 }
 
 /// O lado do quadrado do QR, em dp.

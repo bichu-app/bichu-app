@@ -19,6 +19,7 @@
 //    contrato declara.
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
@@ -72,7 +73,13 @@ const double pisoMinimo = 48;
 /// estados de recusa levam a telas diferentes, e o terceiro (negada
 /// permanentemente) e justamente o que ninguem lembra de exercitar a mao.
 class CameraDeTeste implements CameraEGaleria {
-  CameraDeTeste(this.estado, {this.depoisDePedir, this.foto});
+  CameraDeTeste(
+    this.estado, {
+    this.depoisDePedir,
+    this.foto,
+    this.bytes,
+    this.arquivoSumiu = false,
+  });
 
   EstadoDaPermissao estado;
 
@@ -80,6 +87,20 @@ class CameraDeTeste implements CameraEGaleria {
   final EstadoDaPermissao? depoisDePedir;
 
   final FotoLocal? foto;
+
+  /// Os bytes que [bytesDaFoto] devolve. Nulo devolve um conteudo curto e
+  /// reconhecivel, para o caso poder procurar por ele no corpo da requisicao
+  /// que saiu.
+  final List<int>? bytes;
+
+  /// O arquivo sumiu do aparelho entre a escolha e o envio. Acontece de
+  /// verdade: o sistema limpa o diretorio temporario da camera quando falta
+  /// espaco, e nenhum caso exercitava isso.
+  final bool arquivoSumiu;
+
+  /// Quantas vezes o app leu os bytes do arquivo. Zero prova que nada tentou
+  /// enviar.
+  int vezesQueLeuOsBytes = 0;
 
   bool abriuAjustes = false;
 
@@ -114,7 +135,31 @@ class CameraDeTeste implements CameraEGaleria {
 
   @override
   Future<FotoLocal?> escolherDaGaleria() async => foto;
+
+  @override
+  Future<Uint8List> bytesDaFoto(FotoLocal foto) async {
+    vezesQueLeuOsBytes += 1;
+    if (arquivoSumiu) {
+      throw const FileSystemException('o arquivo sumiu do aparelho');
+    }
+    return Uint8List.fromList(bytes ?? bytesDeFotoDeTeste);
+  }
 }
+
+/// Um conteudo de foto curto e **reconhecivel dentro do corpo que saiu**.
+///
+/// Nao e uma imagem de verdade e nao precisa ser: o que os casos medem e se
+/// estes bytes chegaram ao armazenamento, e um PNG valido nao tornaria a
+/// pergunta mais forte -- so mais dificil de procurar.
+final List<int> bytesDeFotoDeTeste =
+    utf8.encode('bytes-da-foto-de-nina-22-09');
+
+/// Uma [FotoLocal] escolhida, como a porta a devolveria.
+const FotoLocal fotoEscolhidaDeTeste = FotoLocal(
+  caminho: '/tmp/nina.jpg',
+  tipoDeConteudo: 'image/jpeg',
+  tamanhoEmBytes: 27,
+);
 
 /// Um leitor de QR que le o que o caso mandar (BICHUS-54).
 ///
