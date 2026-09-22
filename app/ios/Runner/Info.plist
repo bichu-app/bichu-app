@@ -26,6 +26,26 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
+		<!-- BICHUS-161. As duas strings abaixo sao o que a revisao da App Store
+		     le, e elas aparecem PALAVRA POR PALAVRA no dialogo do sistema. Sao
+		     texto de produto, nao configuracao: "O app usa a camera" e a forma
+		     que volta reprovada, porque nao diz para que. -->
+		<key>NSCameraUsageDescription</key>
+		<!-- UMA justificativa, DOIS usos, de proposito: fotografar o pet no
+		     cadastro (F1.4, BICHUS-161) e ler o QR da plaquinha (F2.1,
+		     BICHUS-54). Quem implementar a 54 usa esta string e nao escreve
+		     outra: duas justificativas diferentes para a mesma permissao e
+		     reprovacao de loja, descoberta na submissao. -->
+		<string>O Bichu usa a câmera para você fotografar o seu pet no cadastro e para ler o QR da plaquinha quando alguém encontra um animal perdido.</string>
+		<key>NSPhotoLibraryUsageDescription</key>
+		<!-- A string e declarada, mas NENHUMA permissao de biblioteca e pedida
+		     em tempo de execucao, e as duas coisas sao diferentes. O
+		     `image_picker` usa o `PHPickerViewController`, que roda fora do
+		     processo e devolve so a foto escolhida; no iOS 14+ ele dispensa a
+		     autorizacao de biblioteca. A string fica porque a revisao a cobra
+		     na ficha e porque o caminho antigo (`UIImagePickerController`) a
+		     exige em aparelho mais velho. Ver o criterio 6 da BICHUS-161. -->
+		<string>O Bichu acessa as suas fotos para você escolher uma imagem do seu pet no cadastro. Só a foto que você selecionar é usada.</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>

@@ -47,9 +47,20 @@ class BichuApp extends StatefulWidget {
   /// esse defeito que volta calado numa refatoracao.
   final http.Client? clienteHttp;
 
-  /// Injetavel para teste. Em producao e [CameraNaoEmbarcada], porque nenhum
-  /// plugin de camera entrou no `pubspec.yaml` ainda -- e ela nao finge que
-  /// entrou.
+  /// Injetavel para teste. Em producao e [CameraDoAparelho] desde a
+  /// BICHUS-161.
+  ///
+  /// O padrao **era** [CameraNaoEmbarcada], porque nenhum plugin de camera
+  /// tinha entrado no `pubspec.yaml`. Entraram o `image_picker` e o
+  /// `permission_handler`, e a troca acontece aqui e em lugar nenhum mais:
+  /// nenhuma tela do assistente de cadastro mudou de codigo, que era o
+  /// criterio 10 daquela historia.
+  ///
+  /// Os testes continuam passando a camera por parametro (ver
+  /// `test/telas/ajuda_de_tela.dart`), entao nenhum caso de widget encosta num
+  /// canal de plataforma. Os que montam o app sem passar nada recebem a
+  /// implementacao real, que responde `indisponivel` sem canal -- e essa e a
+  /// resposta certa num ambiente sem aparelho, nao um remendo.
   final CameraEGaleria? camera;
 
   /// Injetavel para teste. Em producao e [AvisosPorFirebase] quando o `main()`
@@ -109,7 +120,7 @@ class _BichuAppState extends State<BichuApp> {
     _pets = PetsApi(_api);
     _tags = TagsApi(_api);
     _devices = DevicesApi(_api);
-    _camera = widget.camera ?? const CameraNaoEmbarcada();
+    _camera = widget.camera ?? const CameraDoAparelho();
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),

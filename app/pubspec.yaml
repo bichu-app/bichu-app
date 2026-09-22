@@ -73,10 +73,16 @@ dependencies:
   # Entra pela fila offline da BICHUS-31, que precisa sobreviver ao app ser
   # encerrado pelo sistema -- e memoria nao sobrevive a isso.
   path_provider: ^2.1.5
+  image_picker: ^1.2.3
+  permission_handler: ^13.0.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # So o portao do criterio 10 da BICHUS-161 usa: ele guarda o digest das telas
+  # do assistente de cadastro para reprovar quando alguma mudar. Entra como
+  # dependencia de teste, e nao de producao, porque nada do app assina nada.
+  crypto: ^3.0.6
 
   flutter_lints: ^6.0.0
 

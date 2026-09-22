@@ -20,6 +20,7 @@
 
 import 'dart:convert';
 
+import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/avisos.dart';
@@ -28,6 +29,7 @@ import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
+import 'package:bichu/telas/pet/rascunho_de_pet.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +38,18 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 const String urlBaseDeTeste = 'http://localhost:3000';
+
+/// Um rascunho com o passo 1 completo, pronto para a F1.4.
+///
+/// Mora aqui, e nao em cada arquivo, porque mais de um teste precisa chegar a
+/// tela da foto e a rota recusa `extra` nulo caindo em F1.3 -- um caso que
+/// esquecesse o rascunho reprovaria pelo motivo errado.
+RascunhoDePet rascunhoParaFoto({String nome = 'Nina'}) {
+  return RascunhoDePet()
+    ..nome = nome
+    ..especie = Especie.cao
+    ..porte = Porte.medio;
+}
 
 /// O piso critico: 64 dp de altura **e** largura (design system 6.5, UX 15.1).
 ///
