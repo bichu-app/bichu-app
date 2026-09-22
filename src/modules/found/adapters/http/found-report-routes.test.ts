@@ -7,23 +7,34 @@
  * `application/problem+json` do 404, a validação de corpo vinda do contrato, e a
  * serialização real da resposta — que é onde um `case_id` vazaria.
  *
- * ## As iscas deste arquivo
+ * ## As iscas deste arquivo, e como cada uma foi provada
  *
- * | o que foi desligado | reprovaram |
+ * Cada linha foi desligada no código de produção, a mudança foi conferida no
+ * disco (`git diff --stat` não vazio), a suíte rodou e reprovou, e o arquivo foi
+ * restaurado. 22/09/2026, Node 22 no contêiner / Node 26.8.2 nesta máquina.
+ * O número é o `fail` que o próprio `node --test` reporta.
+ *
+ * | o que foi desligado | `fail` |
  * |---|---|
- * | `buscarDoRelator` ignorando o dono (autorização some) | 3 casos |
- * | `naoEncontrado()` virando `semPermissao()` (403 no lugar de 404) | 3 casos |
- * | `case_id` acrescentado ao montador da resposta | 2 casos |
- * | `rateLimit` removido de qualquer uma das rotas com efeito | **não compila** |
+ * | `deny_429` virando `log_and_alert` no teto da foto | 2 |
+ * | `window: 'lifetime'` virando `'1h'` no teto da foto | 1 |
+ * | `JANELA_VITALICIA_EM_SEGUNDOS` de 100 anos para 1 h | 1 |
+ * | a segunda contagem do serviço (SEC-009) | 1 |
+ * | o teto de 2 MB virando os 10 MB da foto de pet | 1 |
+ * | a chave da foto voltando para o prefixo `pets/` | 1 |
+ * | `naoEncontrado()` virando `semPermissao()` (403 no lugar de 404) | 1 |
+ * | `case_id` acrescentado ao montador da resposta | 1 |
+ * | o vínculo direto do critério 10 virando enfileiramento | 1 |
+ * | `deny_429` virando `hold_for_review` no registro | **não compila** |
+ * | `rateLimit` removido de qualquer rota com efeito | **não compila** |
  * | dimensão `found_report` declarada sem resolvedor | **não compila** |
  * | `app.post` direto, fora de `registrarRota` | o portão de registro reprova |
- * | `deny_429` virando `log_and_alert` no teto da foto | 2 casos |
- * | `window: 'lifetime'` virando `'1h'` no teto da foto | 1 caso |
  *
- * As duas últimas linhas são a razão de a isca do teto ser **automática**: o
- * mesmo caminho com `criarContadorDesligado()` precisa deixar a quarta foto
- * passar, e é isso que prova que o caso acima mede limite, e não a capacidade de
- * contar até quatro.
+ * As três linhas de "não compila" são a forma mais forte: o tipo de
+ * `defineRoute` e o de `registrarRota` recusam o arranjo antes de a suíte
+ * existir. E é por elas que a isca do teto precisa ser **automática** — o mesmo
+ * caminho com `criarContadorDesligado()` deixa a quarta foto passar, e é isso
+ * que prova que o caso mede LIMITE, e não a capacidade de contar até quatro.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

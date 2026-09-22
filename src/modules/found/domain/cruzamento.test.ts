@@ -16,18 +16,20 @@
  *
  * ## Como as iscas foram provadas
  *
- * Desligadas no código de produção, rodadas, vistas reprovar em 22/09/2026, e
- * restauradas:
+ * Cada linha foi desligada no código de produção, a mudança foi conferida no
+ * disco (`git diff --stat` não vazio), a suíte rodou e reprovou, e o arquivo foi
+ * restaurado. 22/09/2026, Node 22 no contêiner / Node 26.8.2 nesta máquina.
+ * O número é o `fail` que o próprio `node --test` reporta.
  *
- * | o que foi desligado em `cruzamento.ts` | reprovaram |
+ * | o que foi desligado em `cruzamento.ts` | `fail` |
  * |---|---|
- * | `PENALIDADE_DE_SEXO_DIVERGENTE` de `0.7` para `1` | 2 casos |
- * | a redistribuição do peso (divisor fixo em `1`) | 3 casos |
- * | `CORTE_DE_SCORE` de `0.45` para `0` | 2 casos |
- * | `PONTO_DE_RACA_INDEFINIDA` de `0.4` para `0` | 3 casos |
- * | o filtro de espécie removido de `excluir` | 2 casos |
- * | `TETO_DE_CANDIDATOS_POR_CASO` de `10` para `100` | 1 caso |
- * | um campo `status: 'confirmed'` acrescentado a `Sugestao` | 1 caso |
+ * | `PENALIDADE_DE_SEXO_DIVERGENTE` de `0.7` para `1` | 1 |
+ * | a redistribuição do peso (divisor fixo em `1`) | 1 |
+ * | `CORTE_DE_SCORE` de `0.45` para `0` | 1 |
+ * | `PONTO_DE_RACA_INDEFINIDA` de `0.4` para `0` | 1 |
+ * | o filtro de espécie removido de `excluir` | 1 |
+ * | `TETO_DE_CANDIDATOS_POR_CASO` de `10` para `100` | 1 |
+ * | **`Sugestao` passando a carregar `status: 'confirmed'`** | 1 |
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

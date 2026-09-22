@@ -12,15 +12,16 @@
  *
  * ## Como as iscas foram provadas
  *
- * Desligadas em `registro-de-achado.ts`, rodadas, vistas reprovar em 22/09/2026,
- * e restauradas:
+ * Cada linha foi desligada no código de produção, a mudança foi conferida no
+ * disco (`git diff --stat` não vazio), a suíte rodou e reprovou, e o arquivo foi
+ * restaurado. 22/09/2026, Node 22 no contêiner / Node 26.8.2 nesta máquina.
+ * O número é o `fail` que o próprio `node --test` reporta.
  *
- * | o que foi desligado | reprovaram |
+ * | o que foi desligado | `fail` |
  * |---|---|
- * | `temOndeSuficiente` passando a devolver `true` sempre | 2 casos |
- * | a recusa de `found_at` no futuro | 1 caso |
- * | `rotuloDaArea` montando texto a partir de lat/lon | 2 casos |
- * | `recusasDoRegistro` devolvendo o primeiro erro em vez da lista | 1 caso |
+ * | `rotuloDaArea` montando texto a partir de `lat` (ADR-0006) | 1 |
+ * | `temOndeSuficiente` passando a devolver `true` sempre | 2 |
+ * | a recusa de `found_at` no futuro | 2 |
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

@@ -34,17 +34,20 @@
  *
  * ## Como as iscas foram provadas
  *
- * Desligadas em `kysely-found-report-repository.ts`, rodadas, vistas reprovar em
- * 22/09/2026, e restauradas:
+ * Cada linha foi desligada no código de produção, a mudança foi conferida no
+ * disco (`git diff --stat` não vazio), a suíte rodou e reprovou, e o arquivo foi
+ * restaurado. 22/09/2026, Node 22 no contêiner / Node 26.8.2 nesta máquina.
+ * O número é o `fail` que o próprio `node --test` reporta.
  *
- * | o que foi desligado | reprovaram |
+ * | o que foi desligado em `kysely-found-report-repository.ts` | `fail` |
  * |---|---|
- * | `.where('reporter_user_id', '=', dono)` removido de `construtorDaLeitura` | 2 casos |
- * | idem de `construtorDaLista` | 2 casos |
- * | idem de `construtorDoEnriquecimento` | 2 casos |
- * | idem de `construtorDaContagemDeFotos` | 1 caso |
- * | `=` virando `is not` em `construtorDaLeitura` | 1 caso |
- * | `.where('status', '<>', 'closed')` removido do enriquecimento | 1 caso |
+ * | `.where('reporter_user_id', '=', dono)` fora de `construtorDaLeitura` | 1 |
+ * | `=` virando `is not` em `construtorDaLeitura` | 1 |
+ * | idem fora de `construtorDaLista` | 1 |
+ * | idem fora de `construtorDoEnriquecimento` | 1 |
+ * | `.where('status', '<>', 'closed')` fora do enriquecimento | 1 |
+ * | a contagem autorizando por `upload_intents.user_id` (coluna trocada) | 2 |
+ * | `onRef` virando `on` na contagem (correlação some) | 1 |
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
