@@ -156,10 +156,21 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// tag nao tem imagem" de "nao consegui buscar". Nenhuma das duas encosta na
 /// porta `CameraEGaleria`, que e o que o criterio 10 protege.
 ///
+/// **Destravado uma oitava vez pelas BICHUS-60 e BICHUS-61**: entrou a tela de
+/// detalhe do pet (T.1), que e a hospedeira que o criterio 1 das duas
+/// historias pressupoe, e com ela a tela de edicao. Os campos do pet sairam de
+/// dentro de `tela_cadastrar_identificacao.dart` e `tela_cadastrar_sinais.dart`
+/// para `pet/campos_do_pet.dart`, porque a edicao mexe nos MESMOS atributos do
+/// mesmo animal e duas formas diferentes de editar os mesmos campos e defeito;
+/// `pet/textos_do_detalhe.dart` recebeu a frase da ADR-0004 que diz que o
+/// codigo da tag nao volta. Nenhuma das telas encosta na porta
+/// `CameraEGaleria`, que e o que o criterio 10 protege -- a edicao **nao**
+/// embarca foto, e o motivo esta escrito em `tela_editar_pet.dart`.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '648b91a93693066cc2346c754e11fca080d98101';
+const String _arvoreDasTelas = '2ff4242773b8aa695b46050c0fe858ae4fdd7433';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

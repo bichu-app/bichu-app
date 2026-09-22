@@ -11,6 +11,7 @@
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
+import 'package:bichu/telas/pet/tela_detalhe_do_pet.dart';
 import 'package:bichu/widgets/cartao_de_pet.dart';
 import 'package:bichu/widgets/faixa_de_aviso.dart';
 import 'package:flutter/material.dart';
@@ -174,27 +175,38 @@ void main() {
       }
     });
 
-    testWidgets('o cartao de pet nao e um alvo de toque hoje', (tester) async {
-      // O 11.3 descreve o cartao como destino de navegacao, e a tela de
-      // detalhe do pet esta fora desta historia. Enquanto ela nao existir, um
-      // cartao clicavel seria uma acao sem destino.
+    testWidgets('o toque no cartao leva a uma rota REGISTRADA', (tester) async {
+      // **Este caso mudou de forma na BICHUS-60/61, e nao de proposito.**
+      //
+      // Ele nasceu cobrando que o cartao NAO fosse tocavel, e o comentario
+      // dizia por que: "a tela de detalhe do pet esta fora desta historia;
+      // enquanto ela nao existir, um cartao clicavel seria uma acao sem
+      // destino". A tela de detalhe passou a existir (T.1, hospedeira das
+      // BICHUS-60 e BICHUS-61), entao a premissa caiu.
+      //
+      // O que **nao** cai e o criterio 2, e por isso o caso nao foi apagado:
+      // ele passa a cobrar a propriedade de verdade -- o toque chega a uma
+      // rota que o roteador conhece. Apagar o caso deixaria a classe de
+      // defeito sem portao; troca-lo por "existe um InkWell" o deixaria verde
+      // com o cartao apontando para lugar nenhum, que e exatamente o defeito
+      // do `Ver meus pets` que esta historia veio fechar.
       await abrirOPerfil(
         tester,
         rede: redeComPets(<Map<String, dynamic>>[petDoContrato()]),
       );
+
+      await tester.tap(find.byType(CartaoDePet));
+      await tester.pumpAndSettle();
+
+      // Chegou em T.1. Uma rota nao registrada teria estourado no `push`, e
+      // uma registrada para o widget errado nao traria esta tela.
       expect(
-        find.descendant(
-          of: find.byType(CartaoDePet),
-          matching: find.byType(InkWell),
-        ),
-        findsNothing,
-      );
-      expect(
-        find.descendant(
-          of: find.byType(CartaoDePet),
-          matching: find.byType(GestureDetector),
-        ),
-        findsNothing,
+        find.byType(TelaDetalheDoPet),
+        findsOneWidget,
+        reason: 'REPROVA: o toque no cartao nao chegou ao detalhe do pet. Ou '
+            'a rota nao esta registrada, ou o cartao aponta para outro '
+            'lugar -- e cartao que promete toque e nao leva a nada e a acao '
+            'sem destino que o criterio 2 proibe.',
       );
     });
   });
@@ -286,12 +298,27 @@ void main() {
           contains(CartaoDePet.convitePlaquinha),
         );
 
-        // Nenhum no interativo: controle dentro de controle e o que o
-        // criterio proibe por nome, e um cartao clicavel sem destino seria a
-        // acao sem destino do criterio 2.
+        // **A acao de toque mora no NO DO CARTAO, e em nenhum no abaixo
+        // dele.**
+        //
+        // Este trecho tambem mudou na BICHUS-60/61. Ele cobrava
+        // `hasAction(tap) == false`, pela premissa -- hoje falsa -- de que o
+        // cartao nao tinha destino. O criterio 5 nunca foi sobre nao haver
+        // toque: ele e sobre **uma parada de foco** e **nenhum controle dentro
+        // de controle**. Com o destino existindo, a forma certa de cobrar isso
+        // e exigir que a acao esteja no proprio cartao, e que ele continue sem
+        // filhos de semantica -- que e o que a contagem acima ja garante.
+        //
+        // Um `Marcar como perdido` de 64 dp dentro do cartao, que e o defeito
+        // que o criterio nomeia, apareceria como um filho de semantica com
+        // acao propria, e reprovaria na contagem de filhos la em cima.
         expect(
           semantica.no.getSemanticsData().hasAction(SemanticsAction.tap),
-          isFalse,
+          isTrue,
+          reason: 'REPROVA: o cartao se anuncia sem acao de toque. Com o '
+              'destino registrado, um cartao anunciado como botao e sem '
+              '`onTap` deixa quem usa leitor de tela ouvindo que existe um '
+              'botao sem ter como aciona-lo (btn=true tap=false).',
         );
       } finally {
         handle.dispose();
