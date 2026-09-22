@@ -14,7 +14,7 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { AppError } from '../../../shared/http/errors.js';
-import { hashDeToken } from '../../../shared/crypto/digest.js';
+import { comoData } from '../../../shared/time/clock.js';
 import { PetTransferService } from './pet-transfer-service.js';
 import {
   instanteDaConsumacao,
@@ -122,7 +122,7 @@ function repositorioDe(mundo: Mundo): TransferRepository {
         toUserId: null,
         recipientEmail: nova.recipientEmail,
         status: 'pending_acceptance',
-        inviteExpiresAt: new Date(nova.inviteExpiresAt),
+        inviteExpiresAt: comoData(nova.inviteExpiresAt),
         acceptedAt: null,
         effectiveAt: null,
         cancelledAt: null,
@@ -166,7 +166,7 @@ function repositorioDe(mundo: Mundo): TransferRepository {
         petDisplayName: 'Nina',
         status: l.status,
         effectiveAt: l.effectiveAt,
-        requestedAt: new Date(T0),
+        requestedAt: comoData(T0),
       });
     },
 
@@ -179,8 +179,8 @@ function repositorioDe(mundo: Mundo): TransferRepository {
       }
       l.status = 'accepted';
       l.toUserId = e.toUserId;
-      l.acceptedAt = new Date(e.acceptedAt);
-      l.effectiveAt = new Date(e.effectiveAt);
+      l.acceptedAt = comoData(e.acceptedAt);
+      l.effectiveAt = comoData(e.effectiveAt);
       mundo.porTokenDeCancelamento.set(Buffer.from(e.cancelTokenHash).toString('hex'), l.id);
       return Promise.resolve({ tipo: 'aceita', transferencia: comoGravada(l) });
     },
@@ -190,7 +190,7 @@ function repositorioDe(mundo: Mundo): TransferRepository {
       // A CONDICAO DE ESTADO. Tirar esta linha e o que a isca 3 exercita.
       if (l === undefined || !VIVOS.includes(l.status)) return Promise.resolve(undefined);
       l.status = 'cancelled';
-      l.cancelledAt = new Date(e.quando);
+      l.cancelledAt = comoData(e.quando);
       l.cancellationReason = e.motivo;
       if (e.consumirTokenDeCancelamento) {
         for (const [chave, id] of mundo.porTokenDeCancelamento) {
@@ -204,7 +204,7 @@ function repositorioDe(mundo: Mundo): TransferRepository {
       for (const l of mundo.linhas.values()) {
         if (l.petId !== e.pet || !VIVOS.includes(l.status)) continue;
         l.status = 'cancelled';
-        l.cancelledAt = new Date(e.quando);
+        l.cancelledAt = comoData(e.quando);
         l.cancellationReason = e.motivo;
         return Promise.resolve(comoGravada(l));
       }

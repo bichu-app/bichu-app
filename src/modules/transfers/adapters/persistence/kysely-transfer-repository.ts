@@ -277,7 +277,7 @@ export function criarTransferRepository(db: Db): TransferRepository {
           .executeTakeFirst();
         if (viva !== undefined) return { tipo: 'ja_em_andamento' };
 
-        const linha = (await trx
+        const linha = await trx
           .insertInto('pet_transfers')
           .values({
             id: nova.id,
@@ -290,7 +290,7 @@ export function criarTransferRepository(db: Db): TransferRepository {
             created_at: new Date(agora),
           })
           .returning([...COLUNAS_DE_RETORNO])
-          .executeTakeFirstOrThrow()) as unknown as Linha;
+          .executeTakeFirstOrThrow();
 
         return { tipo: 'aberta', transferencia: comoDominio(linha) };
       });
@@ -393,7 +393,8 @@ export function criarTransferRepository(db: Db): TransferRepository {
     async expirar(transferencia: TransferId, quando: Instant): Promise<boolean> {
       const r = await db
         .updateTable('pet_transfers')
-        .set({ status: 'expired' })
+        // Mesma razao da consumacao: estado terminal nao guarda credencial.
+        .set({ status: 'expired', cancel_token_hash: null })
         .where('id', '=', transferencia)
         .where('status', '=', 'pending_acceptance')
         .where('invite_expires_at', '<=', new Date(quando))
@@ -449,13 +450,20 @@ export function criarTransferRepository(db: Db): TransferRepository {
           agora,
         ).executeTakeFirst();
 
-        const atualizada = (await trx
+        const atualizada = await trx
           .updateTable('pet_transfers')
-          .set({ status: 'effective' })
+          // O RESUMO DO TOKEN MORRE AQUI TAMBEM, e nao so no cancelamento.
+          // Medido contra Postgres: sem esta linha o token de cancelamento
+          // continuava RESOLVENDO para uma linha `effective`. O servico
+          // recusava (o 410 vem de `podeCancelar`), entao a rota estava certa
+          // -- mas o resumo de uma credencial gasta ficava no banco para
+          // sempre, e a corretude passava a depender de uma conferencia na
+          // aplicacao em vez de o segredo simplesmente nao existir mais.
+          .set({ status: 'effective', cancel_token_hash: null })
           .where('id', '=', transferencia)
           .where('status', '=', 'accepted')
           .returning([...COLUNAS_DE_RETORNO])
-          .executeTakeFirstOrThrow()) as unknown as Linha;
+          .executeTakeFirstOrThrow();
 
         return {
           tipo: 'consumada',

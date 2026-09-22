@@ -74,6 +74,7 @@
  */
 import { problemas } from '../../../shared/http/errors.js';
 import { hashDeToken } from '../../../shared/crypto/digest.js';
+import { comoIso } from '../../../shared/time/clock.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator, JobQueue } from '../../../shared/ports/index.js';
 import type { Mailer } from '../../identity/ports/mailer.js';
@@ -318,7 +319,9 @@ export class PetTransferService {
 
     const nome = (await this.deps.pets.nomeDe(convite.petId)) ?? 'o pet';
     const base = this.deps.baseDaWeb.replace(/\/$/, '');
-    const quando = new Date(efetivaEm).toISOString();
+    // `comoIso` e nao `new Date(...)`: o caminho declarado da conversao de
+    // instante, que a regra de lint de `application/` exige (shared/time/clock.ts).
+    const quando = comoIso(efetivaEm);
 
     // O E-MAIL DO TUTOR ATUAL E A ROTA PUBLICA INTEIRA. Ele pode estar em outro
     // aparelho, deslogado, com o app desinstalado -- e este e o momento em que

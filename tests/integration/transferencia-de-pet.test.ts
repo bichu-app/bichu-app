@@ -107,9 +107,14 @@ async function criarTag(pet: PetId, sufixo: string): Promise<string> {
 
 async function abrirCasoDePerdido(pet: PetId, dono: UserId): Promise<string> {
   const id = randomUUID();
+  // `last_seen_city` e obrigatorio pelo `lost_cases_tem_onde`: um caso sem ponto
+  // e sem cidade nao apareceria no alerta NEM na lista publica. Escrito sem ele
+  // na primeira versao, e o banco recusou -- que e o comportamento certo dele e
+  // a razao de este arquivo rodar contra Postgres de verdade.
   await cliente.query(
-    `INSERT INTO lost_cases (id, pet_id, owner_user_id, status, last_seen_at, share_token)
-     VALUES ($1, $2, $3, 'open', now(), $4)`,
+    `INSERT INTO lost_cases
+       (id, pet_id, owner_user_id, status, last_seen_at, last_seen_city, share_token)
+     VALUES ($1, $2, $3, 'open', now(), 'Sao Paulo', $4)`,
     [id, pet, dono, randomUUID()],
   );
   return id;
@@ -304,7 +309,7 @@ void describe('ISCA: a janela de 24 h vale dentro do Postgres', () => {
 
   void it('a segunda consumacao da mesma linha nao faz nada', async () => {
     const c = await cenario('duas-vezes');
-    await criarTag(c.pet, 'LM11');
+    await criarTag(c.pet, 'KM11');
     await aceitar(c);
 
     assert.equal((await repo.consumar(c.transferencia, EM_24H)).tipo, 'consumada');
