@@ -123,16 +123,22 @@ def _tracos_duplos_em_comentario(texto: str) -> list[tuple[int, int]]:
         i = fecha + 3
 
 
-def conferir(caminho: Path) -> tuple[bool, str]:
-    """Um arquivo. Devolve (aprovado, mensagem). Nao levanta."""
+def conferir(caminho: Path, rotulo: str | None = None) -> tuple[bool, str]:
+    """Um arquivo. Devolve (aprovado, mensagem). Nao levanta.
+
+    `rotulo` e so o nome que aparece na mensagem: o caminho absoluto e o que se
+    abre, e o relativo e o que se le. Quem reporta um defeito num caminho que
+    so existe na maquina de quem rodou obriga quem le a traduzir.
+    """
+    nome = rotulo if rotulo is not None else str(caminho)
     try:
         bruto = caminho.read_bytes()
     except OSError as erro:
-        return False, f"REPROVA: {caminho}: nao deu para ler ({erro})"
+        return False, f"REPROVA: {nome}: nao deu para ler ({erro})"
 
     if not bruto.strip():
         return False, (
-            f"REPROVA: {caminho}: arquivo vazio. XML vazio nao tem elemento raiz,"
+            f"REPROVA: {nome}: arquivo vazio. XML vazio nao tem elemento raiz,"
             " e arquivo esvaziado por engano passa despercebido justamente por"
             " nao ter conteudo para alguem estranhar"
         )
@@ -143,20 +149,28 @@ def conferir(caminho: Path) -> tuple[bool, str]:
     except xml.parsers.expat.ExpatError as erro:
         linha, coluna = erro.lineno, erro.offset + 1
         motivo = xml.parsers.expat.ErrorString(erro.code)
-        partes = [f"REPROVA: {caminho}:{linha}:{coluna}: {motivo}"]
+        partes = [f"REPROVA: {nome}:{linha}:{coluna}: {motivo}"]
 
         texto = bruto.decode("utf-8", errors="replace")
         linhas = texto.splitlines()
+        duplos = _tracos_duplos_em_comentario(texto)
+
+        # O circunflexo aponta para o `--`, e nao para onde o expat desistiu.
+        # O expat para no SEGUNDO hifen, e um circunflexo um caractere ao lado
+        # da causa e um circunflexo que manda a pessoa olhar para o lugar quase
+        # certo, que e a pior das tres possibilidades.
+        alvo = coluna
+        if duplos and duplos[0][0] == linha:
+            alvo = duplos[0][1]
         if 1 <= linha <= len(linhas):
             partes.append(f"  {linhas[linha - 1]}")
-            partes.append("  " + " " * (coluna - 1) + "^")
+            partes.append("  " + " " * (alvo - 1) + "^^")
 
-        duplos = _tracos_duplos_em_comentario(texto)
         if duplos:
             l, c = duplos[0]
             partes.append(
                 f"  A sequencia `--` aparece DENTRO de um comentario XML, em"
-                f" {caminho}:{l}:{c}"
+                f" {nome}:{l}:{c}"
                 + (f" (e em mais {len(duplos) - 1})" if len(duplos) > 1 else "")
                 + "."
             )
@@ -175,7 +189,7 @@ def conferir(caminho: Path) -> tuple[bool, str]:
             )
         return False, "\n".join(partes)
 
-    return True, f"APROVA: {caminho}"
+    return True, f"APROVA: {nome}"
 
 
 def reunir(raiz: Path) -> tuple[list[Path], list[str]]:
@@ -222,14 +236,24 @@ def rodada(raiz: Path) -> int:
 
     reprovados = 0
     for caminho in arquivos:
-        ok, mensagem = conferir(caminho)
+        try:
+            rotulo = str(caminho.relative_to(raiz))
+        except ValueError:
+            rotulo = str(caminho)
+        ok, mensagem = conferir(caminho, rotulo)
         if ok:
             print(mensagem)
         else:
+            # REPROVA vai para stderr (a esteira destaca), mas sem o flush as
+            # duas correntes chegam fora de ordem e a acusacao aparece longe do
+            # arquivo que a gerou. Ja confundiu leitura de log aqui.
+            sys.stdout.flush()
             print(mensagem, file=sys.stderr)
+            sys.stderr.flush()
             reprovados += 1
 
     if reprovados:
+        sys.stdout.flush()
         print(f"\n{reprovados} arquivo(s) reprovado(s).", file=sys.stderr)
         return 1
 
