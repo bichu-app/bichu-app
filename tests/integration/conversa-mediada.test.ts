@@ -37,7 +37,7 @@
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import pg from 'pg';
 
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
@@ -67,6 +67,7 @@ let repo: ConversationRepository;
 let especie: string;
 let porte: string;
 const contasCriadas: UserId[] = [];
+const avisosCriados: FoundReportId[] = [];
 
 async function criarConta(nome: string | null = null): Promise<UserId> {
   const id = randomUUID() as UserId;
@@ -88,15 +89,24 @@ async function criarPet(dono: UserId, nome = 'Aurora'): Promise<PetId> {
   return id;
 }
 
-/** Aviso avulso: `stray_report` não exige tag, e a conversa não depende dela. */
+/**
+ * Aviso avulso: `stray_report` não exige tag, e a conversa não depende dela.
+ *
+ * O resumo do token é DERIVADO do id, e não uma constante. `found_reports` tem
+ * índice único em `finder_token_hash`, então uma constante faz o segundo aviso
+ * de cada cenário morrer com violação de chave — que foi exatamente o que
+ * aconteceu na primeira execução deste arquivo: 19 casos reprovaram por causa
+ * da fixture, e não do código sob teste.
+ */
 async function criarAviso(nomeDoAchador: string | null = null): Promise<FoundReportId> {
   const id = randomUUID() as FoundReportId;
   await cliente.query(
     `INSERT INTO found_reports
        (id, origin, finder_display_name, finder_token_hash, finder_token_expires_at, found_at)
      VALUES ($1, 'stray_report', $2, $3, now() + interval '30 days', now())`,
-    [id, nomeDoAchador, Buffer.alloc(32, 0x5e)],
+    [id, nomeDoAchador, createHash('sha256').update(id).digest()],
   );
+  avisosCriados.push(id);
   return id;
 }
 
@@ -147,9 +157,9 @@ after(async () => {
     // ele próprio, um dos casos abaixo.
     await cliente.query('DELETE FROM users WHERE id = ANY($1::uuid[])', [contasCriadas]);
   }
-  await cliente.query('DELETE FROM found_reports WHERE finder_token_hash = $1', [
-    Buffer.alloc(32, 0x5e),
-  ]);
+  if (avisosCriados.length > 0) {
+    await cliente.query('DELETE FROM found_reports WHERE id = ANY($1::uuid[])', [avisosCriados]);
+  }
   await cliente.end();
   await banco.close();
 });
@@ -226,11 +236,16 @@ void describe('a abertura deriva o tutor do pet, e não de quem chamou', () => {
         achadorComConta: null,
       });
     }
-    const contagem = await cliente.query<{ n: string }>(
+    // `Number(...)`: `count(*)` volta como número ou como texto conforme o
+    // analisador de tipos do driver, e uma comparação estrita com `'1'` reprova
+    // por causa do driver e não do banco. Foi o que aconteceu na primeira
+    // execução deste arquivo, e um relatório apressado teria chamado de defeito
+    // na idempotência o que era `1 !== '1'`.
+    const contagem = await cliente.query<{ n: string | number }>(
       'SELECT count(*) AS n FROM conversations WHERE found_report_id = $1',
       [aviso],
     );
-    assert.equal(contagem.rows[0]?.n, '1');
+    assert.equal(Number(contagem.rows[0]?.n), 1);
   });
 });
 
@@ -510,10 +525,10 @@ void describe('a exclusão do pet leva a conversa junto', () => {
     });
 
     await cliente.query('DELETE FROM pets WHERE id = $1', [pet]);
-    const sobrou = await cliente.query<{ n: string }>(
+    const sobrou = await cliente.query<{ n: string | number }>(
       'SELECT count(*) AS n FROM conversation_messages WHERE conversation_id = $1',
       [conversa],
     );
-    assert.equal(sobrou.rows[0]?.n, '0');
+    assert.equal(Number(sobrou.rows[0]?.n), 0);
   });
 });
