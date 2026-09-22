@@ -91,9 +91,14 @@ void main() {
   // ACHADO 5 — o `Fechar` sobre o titulo do campo de digitar o codigo.
   //
   // A REGRA MEDIDA, e ela e mais larga que o defeito: a saida do leitor fica
-  // **sobreposta** aos quatro estados, num `Stack`. Nenhum deles pode desenhar
-  // texto embaixo dela. O caso percorre os tres estados alcancaveis e mede
+  // **sobreposta** a todos os estados, num `Stack`. Nenhum deles pode desenhar
+  // texto embaixo dela. O caso percorre os estados alcancaveis e mede
   // interseccao de retangulo, que e a medida que a suite nao tinha.
+  //
+  // A BICHUS-220 tirou o visor falso e juntou os dois estados de abertura num
+  // so (`semLeitura`): o que aqui se chamava `camera fora` e agora a unica
+  // tela de abertura que existe, e a medida continua valendo palavra por
+  // palavra.
   //
   // ISCA: devolva `SizedBox(height: BichuEspaco.e6)` a abertura de
   // `_Digitacao` e o caso reprova com os dois retangulos na mensagem.
@@ -112,7 +117,7 @@ void main() {
     Aparelho.android,
   ]) {
     for (final digitando in <bool>[false, true]) {
-      final estado = digitando ? 'digitando' : 'camera fora';
+      final estado = digitando ? 'digitando' : 'sem leitura';
       testWidgets(
           'a saida sobreposta do leitor nao cobre texto nenhum '
           '($estado, ${a.nome})', (tester) async {
@@ -147,8 +152,8 @@ void main() {
           isEmpty,
           reason:
               'REPROVA: o alvo de `Fechar` ($saida) cobre texto no estado '
-              '$estado: ${cobertos.join(" | ")}. A saida e sobreposta aos '
-              'quatro estados e ocupa os primeiros '
+              '$estado: ${cobertos.join(" | ")}. A saida e sobreposta a todos os '
+              'estados e ocupa os primeiros '
               '$alturaDaSaidaSobreposta dp a partir da area segura '
               '(${BichuEspaco.e2} dp de folga mais o alvo critico de '
               '${BichuAlvoDeToque.critico} dp, design system 6.5). Quem usa '

@@ -27,22 +27,23 @@ import 'mascara_do_codigo_da_tag.dart';
 /// depois desta linha.
 ///
 /// Ele existe escrito assim, e nao somado a mao em cada estado, porque foi
-/// somado a mao que o defeito nasceu: os tres estados desenhados abrem com
+/// somado a mao que o defeito nasceu: os estados desenhados abriam com
 /// 24 + 40 = 64 dp, o comentario do `build` afirmava "folga de 64 dp", e a
-/// saida ocupa 72. No estado `digitando`, o quarto e o unico sem quadro no
-/// Figma, a abertura era 16 + 24 = 40 e o `x` caia em cima do rotulo do
-/// campo. Um numero derivado nao diverge quando alguem mexe no alvo.
+/// saida ocupa 72. No estado `digitando`, o unico sem quadro no Figma, a
+/// abertura era 16 + 24 = 40 e o `x` caia em cima do rotulo do campo. Um
+/// numero derivado nao diverge quando alguem mexe no alvo.
 const double alturaDaSaidaSobreposta =
     BichuEspaco.e2 + BichuAlvoDeToque.critico;
 
-/// Os estados desenhados de F2.1.
+/// Os estados que F2.1 tem **enquanto a BICHUS-54 nao existe**.
 enum EstadoDoLeitor {
-  /// Figma `87:14`. O visor, a moldura e a instrucao.
-  visor,
-
-  /// Figma `87:26`. A camera nao abre; `Digitar o código` sobe para acao
-  /// principal.
-  permissaoNegada,
+  /// A tela de abertura: a leitura por camera nao existe nesta versao, e o
+  /// caminho que existe e digitar o codigo.
+  ///
+  /// **Nao ha quadro no Figma para este estado**, porque ele nao e um estado
+  /// do leitor: e a ausencia do leitor. Os quadros `87:14` (o visor) e `87:26`
+  /// (a permissao negada) continuam valendo, e voltam com a BICHUS-54.
+  semLeitura,
 
   /// Figma `87:40`. O codigo foi lido e a resolucao e no servidor.
   semConexao,
@@ -52,7 +53,9 @@ enum EstadoDoLeitor {
   digitando,
 }
 
-/// F2.1 — Leitor de QR. Figma `87:14`, `87:26` e `87:40`.
+/// F2.1 — Leitor de QR. Figma `87:40`; os quadros `87:14` e `87:26` voltam
+/// com a BICHUS-54, e a nota "a tela parou de fingir" mais abaixo diz por que
+/// eles sairam.
 ///
 /// **Esta tela nao leva barra de topo nem barra inferior de abas, e isso e
 /// desenho.** O design system 11.11 lista o leitor de camera entre as telas em
@@ -78,20 +81,39 @@ enum EstadoDoLeitor {
 /// visivel, 48 dp por item). Nao desenhei um componente novo para tapar o
 /// buraco; a ausencia esta relatada.
 ///
-/// **A camera nunca e o unico caminho.** `Digitar o código` esta presente nos
-/// tres estados desenhados e e alcancavel por teclado e por leitor de tela. O
-/// caminho de quem nao consegue escanear nao pode estar escondido atras do
-/// fracasso do caminho principal.
+/// **A camera nunca e o unico caminho.** `Digitar o código` esta presente em
+/// todos os estados e e alcancavel por teclado e por leitor de tela. O caminho
+/// de quem nao consegue escanear nao pode estar escondido atras do fracasso do
+/// caminho principal.
 ///
-/// **O que este build nao faz, e por que.** Nao ha leitor de QR embarcado:
-/// nenhum plugin de camera entrou no `pubspec.yaml` nesta rodada, e por isso
-/// `CameraEGaleria` responde [EstadoDaPermissao.indisponivel] e a tela abre
-/// direto no caminho alternativo. O visor desenhado esta implementado e e o
-/// que aparece quando a permissao for concedida; o que falta para ligar a
-/// camera de verdade nao e tela, e sim o plugin, a declaracao de uso no
-/// `Info.plist` e no `AndroidManifest.xml` com a justificativa que a revisao
-/// da loja cobra, e verificacao em aparelho, porque camera nao se verifica em
-/// simulador.
+/// ## A TELA PAROU DE FINGIR QUE E UMA CAMERA (achado em aparelho, 22/09)
+///
+/// **O que havia aqui.** Com a permissao concedida, esta tela desenhava fundo
+/// preto de borda a borda, uma moldura branca de 240 x 240 e a frase
+/// [TelaLeitorDeQr.instrucaoDoVisor]. **Nenhum widget de camera existia na
+/// arvore**, e nenhum plugin de leitura existe no `pubspec.yaml`. A pessoa
+/// apontava o aparelho para a coleira e ficava esperando um quadrado preto que
+/// nunca ia ler nada. O cliente encontrou isso no primeiro teste em aparelho
+/// fisico.
+///
+/// **Por que a permissao deixou de decidir a tela.** A camera nao e o que
+/// falta: o que falta e o leitor (BICHUS-54, `To Do`, declarada fora do escopo
+/// da BICHUS-161 por escrito). Com o leitor inexistente, a permissao de camera
+/// nao muda nada do que esta tela consegue fazer, e ramificar por ela produzia
+/// uma segunda promessa que o app nao cumpre: `Abrir os ajustes` convidava a
+/// liberar uma permissao que nao destravava leitura nenhuma. Por isso ha um
+/// estado so, [EstadoDoLeitor.semLeitura], e ele diz o que e verdade.
+///
+/// **O que a BICHUS-54 precisa repor**, e nada disso se perdeu de vista: o
+/// visor do quadro `87:14` com o preview de verdade atras dele; a tela de
+/// permissao negada do quadro `87:26` com os tres estados de
+/// [EstadoDaPermissao] e o caminho para os ajustes; o aviso efemero do
+/// `87:18` para o codigo que nao e do Bichu, dito sem sair da camera; e, fora
+/// da tela, o plugin, a declaracao de uso no `Info.plist` e no
+/// `AndroidManifest.xml` com a justificativa que a revisao da loja cobra, e a
+/// verificacao em aparelho, porque camera nao se verifica em simulador. Os
+/// tres estados de permissao continuam implementados e medidos na tela que
+/// **usa** a camera, F1.4 (`test/telas/cadastrar_foto_test.dart`).
 ///
 /// **`GET /v1/tags/{code}` tambem nao existe no servidor ainda.** A tela chama
 /// o contrato e trata os quatro desfechos por `type`; enquanto nao houver
@@ -99,6 +121,34 @@ enum EstadoDoLeitor {
 /// resposta e simulada.
 class TelaLeitorDeQr extends StatefulWidget {
   const TelaLeitorDeQr({super.key});
+
+  /// O titulo de [EstadoDoLeitor.semLeitura].
+  ///
+  /// **Microcopy nova**, e ela esta marcada como tal na entrega: nao ha frase
+  /// no UX nem no Figma para "a funcao ainda nao existe", porque nenhum dos
+  /// dois documentos previu entregar a tela antes do leitor. A pergunta
+  /// fechada foi devolvida junto com a tela, e esta e a proposta.
+  static const String tituloSemLeitura =
+      'A leitura por câmera ainda não está pronta';
+
+  /// A explicacao de [EstadoDoLeitor.semLeitura].
+  ///
+  /// Duas coisas, nesta ordem: o que **nao** existe, e o que existe. A segunda
+  /// frase nao e consolo -- a entrada manual e o que a BICHUS-54 chama de
+  /// caminho de igual valor, e ela resolve o mesmo codigo, pela mesma rota,
+  /// com o mesmo desfecho.
+  static const String explicacaoSemLeitura =
+      'Esta versão do Bichu ainda não lê o QR da coleira pela câmera. O código '
+      'impresso na tag chega no mesmo lugar: digite e siga daqui.';
+
+  /// A frase do criterio 1 da BICHUS-54, guardada **para nao ser desenhada**.
+  ///
+  /// Ela fica aqui, e nao dentro de um widget, por um motivo so: a isca de
+  /// `test/telas/leitor_nao_finge_camera_test.dart` cobra a ausencia dela na
+  /// arvore, e uma isca que carregasse a propria copia da frase ficaria verde
+  /// no dia em que alguem repusesse o visor com o texto reescrito. Quando a
+  /// BICHUS-54 desenhar a camera de verdade, e esta constante que ela usa.
+  static const String instrucaoDoVisor = 'Aponte para o QR da coleira';
 
   @override
   State<TelaLeitorDeQr> createState() => _TelaLeitorDeQrState();
@@ -108,8 +158,12 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   final TextEditingController _codigo = TextEditingController();
   final FocusNode _focoDoCodigo = FocusNode();
 
-  EstadoDoLeitor _estado = EstadoDoLeitor.visor;
-  EstadoDaPermissao _permissao = EstadoDaPermissao.negada;
+  /// **A tela abre dizendo a verdade, e nao consultando nada.**
+  ///
+  /// Nao ha estado inicial de espera porque nao ha nada que possa mudar a
+  /// resposta: o leitor de QR nao existe neste build, em nenhum aparelho e com
+  /// qualquer permissao.
+  EstadoDoLeitor _estado = EstadoDoLeitor.semLeitura;
 
   /// O codigo que foi lido e ainda nao resolveu. E o que a tela de sem conexao
   /// mostra, para a pessoa conseguir guarda-lo.
@@ -121,30 +175,9 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   bool _resolvendo = false;
   MensagemDeErro? _faixa;
 
-  /// A mensagem efemera do codigo que nao e do Bichu, dita **sem sair da
-  /// camera** (Figma `87:18`).
-  String? _avisoNoVisor;
-
   /// Tres tentativas automaticas, de 5 em 5 segundos, com o estado visivel.
   static const int _maximoDeTentativas = 3;
   static const int _esperaEntreTentativas = 5;
-
-  /// O arranque roda em `didChangeDependencies`, e nao em `initState`.
-  ///
-  /// `Escopo` e um `InheritedWidget`, e ler um inherited widget dentro de
-  /// `initState` e erro de framework: naquele momento a dependencia ainda nao
-  /// pode ser registrada, e o widget nao seria reconstruido se ela mudasse. O
-  /// sinalizador impede que o arranque rode de novo a cada mudanca de tema, de
-  /// tamanho de fonte ou de rotacao, que e o outro lado dessa troca.
-  bool _iniciou = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_iniciou) return;
-    _iniciou = true;
-    _consultarPermissao();
-  }
 
   @override
   void dispose() {
@@ -152,24 +185,6 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     _codigo.dispose();
     _focoDoCodigo.dispose();
     super.dispose();
-  }
-
-  Future<void> _consultarPermissao() async {
-    final estado = await Escopo.of(context).camera.estadoDaCamera();
-    if (!mounted) return;
-    setState(() {
-      _permissao = estado;
-      _estado = estado == EstadoDaPermissao.concedida
-          ? EstadoDoLeitor.visor
-          // Negada, negada permanentemente e sem camera no aparelho levam a
-          // mesma tela: a que oferece a digitacao. O que muda entre elas e o
-          // texto e a existencia do caminho para os ajustes.
-          : EstadoDoLeitor.permissaoNegada;
-    });
-  }
-
-  Future<void> _abrirAjustes() async {
-    await Escopo.of(context).camera.abrirAjustesDoSistema();
   }
 
   void _irParaDigitacao() {
@@ -267,7 +282,7 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
         children: <Widget>[
           Positioned.fill(child: _corpo()),
           // Canto superior esquerdo: e onde o polegar procura a saida. Ela
-          // fica POR CIMA dos quatro estados, e por isso nenhum deles pode
+          // fica POR CIMA de todos os estados, e por isso nenhum deles pode
           // desenhar texto nos primeiros [alturaDaSaidaSobreposta] dp: o
           // visor centraliza, os dois estados de falha abrem o texto bem
           // abaixo, e `digitando` abre com a folga declarada.
@@ -290,10 +305,7 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
 
   Widget _corpo() {
     return switch (_estado) {
-        EstadoDoLeitor.visor => _Visor(aviso: _avisoNoVisor),
-        EstadoDoLeitor.permissaoNegada => _PermissaoNegada(
-            permanente: _permissao == EstadoDaPermissao.negadaPermanentemente,
-          ),
+        EstadoDoLeitor.semLeitura => const _SemLeitura(),
         EstadoDoLeitor.semConexao => _SemConexao(
             codigo: _codigoLido ?? '',
             tentativa: _tentativa,
@@ -310,28 +322,20 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
 
   List<Widget> _acoes() {
     return switch (_estado) {
-      // No visor, `Digitar o código` e a saida sempre visivel -- secundaria,
-      // porque a acao principal ali e apontar a camera.
-      EstadoDoLeitor.visor => <Widget>[
-          BotaoSecundario(
-            rotulo: TextosDoCadastro.digitarOCodigo,
-            aoTocar: _irParaDigitacao,
-          ),
-        ],
-      // Com a camera fora, `Digitar o código` **sobe para acao principal**: a
-      // acao principal e a que resolve, e nao a que a tela preferia.
-      EstadoDoLeitor.permissaoNegada => <Widget>[
+      // `Digitar o código` e a acao PRINCIPAL, e nao a alternativa: a acao
+      // principal e a que resolve, e nao a que a tela preferia.
+      //
+      // **Nao ha `Abrir os ajustes` aqui, e isso e desenho.** Liberar a camera
+      // nao destrava leitura nenhuma enquanto a BICHUS-54 nao existir, e
+      // mandar a pessoa aos ajustes do sistema para conseguir uma coisa que o
+      // app nao faz seria trocar uma mentira por outra. O caminho para os
+      // ajustes continua onde a camera de fato e usada, em F1.4.
+      EstadoDoLeitor.semLeitura => <Widget>[
           BotaoPrimario(
             rotulo: TextosDoCadastro.digitarOCodigo,
             critico: true,
             aoTocar: _irParaDigitacao,
           ),
-          if (_permissao == EstadoDaPermissao.negadaPermanentemente ||
-              _permissao == EstadoDaPermissao.negada)
-            TextButton(
-              onPressed: _abrirAjustes,
-              child: const Text(TextosDoCadastro.abrirOsAjustes),
-            ),
         ],
       EstadoDoLeitor.semConexao => <Widget>[
           BotaoPrimario(
@@ -373,88 +377,27 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   }
 }
 
-/// O visor: tela cheia, fundo preto, mascara e a janela de leitura.
+/// A tela que diz que a leitura por camera ainda nao existe.
 ///
-/// O visor **fixa o modo escuro** na colecao de cor: e assim que os papeis
-/// resolvem sozinhos numa superficie escura, sem ninguem escolher tom a mao. A
-/// barra de acao volta ao modo claro porque ela e superficie do app, e nao
-/// camera. A manteiga nao entra sobre a imagem da camera: 1.73:1 contra o
-/// marfim, e pior ainda sobre video. O contorno de leitura e o marfim.
-class _Visor extends StatelessWidget {
-  const _Visor({this.aviso});
-
-  final String? aviso;
-
-  @override
-  Widget build(BuildContext context) {
-    final textos = Theme.of(context).textTheme;
-
-    return Theme(
-      data: Theme.of(context).copyWith(
-        extensions: <ThemeExtension<dynamic>>[BichuColors.temaEscuro],
-      ),
-      child: ColoredBox(
-        color: const Color(0xFF000000),
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: <Widget>[
-              Semantics(
-                header: true,
-                child: Text(
-                  'Aponte para o QR da coleira',
-                  textAlign: TextAlign.center,
-                  style: textos.titleLarge?.copyWith(
-                    color: const Color(0xFFFFFFFF),
-                  ),
-                ),
-              ),
-              const SizedBox(height: BichuEspaco.e6),
-              Container(
-                width: 240,
-                height: 240,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(BichuRaio.xl),
-                  border: Border.all(
-                    // Marfim, e nao `action-fill`: a manteiga sobre a imagem
-                    // da camera some.
-                    color: const Color(0xFFFFFFFF),
-                    width: BichuBorda.thick,
-                  ),
-                ),
-              ),
-              const SizedBox(height: BichuEspaco.e6),
-              if (aviso != null)
-                Semantics(
-                  liveRegion: true,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: BichuEspaco.e6,
-                    ),
-                    child: Text(
-                      aviso!,
-                      textAlign: TextAlign.center,
-                      style: textos.bodyLarge?.copyWith(
-                        color: const Color(0xFFFFFFFF),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Figma `87:26`. A camera nao abre.
-class _PermissaoNegada extends StatelessWidget {
-  const _PermissaoNegada({required this.permanente});
-
-  /// Verdadeiro quando pedir de novo **nao abre dialogo nenhum**, e o unico
-  /// caminho sao os ajustes do sistema.
-  final bool permanente;
+/// **A honestidade aqui e o que a tela NAO desenha.** Nao ha fundo preto de
+/// borda a borda, nao ha moldura quadrada e nao ha instrucao para apontar o
+/// aparelho: os tres, juntos, sao o que a pessoa le como "a camera esta
+/// ligada". Desenhar qualquer um deles sem um preview atras e a mentira que a
+/// BICHUS-220 veio tirar, e e o que a isca de
+/// `test/telas/leitor_nao_finge_camera_test.dart` mede por geometria, e nao
+/// por texto.
+///
+/// O icone e o do caminho que **existe**, e nao o de uma camera. Um icone de
+/// camera aqui devolveria pela figura o enquadramento que o texto acabou de
+/// retirar.
+///
+/// A anatomia e a mesma do quadro `87:26`: lista rolavel, icone, titulo em
+/// `headline-sm` e explicacao em `body-lg`. Ela foi mantida de proposito --
+/// a folga de abertura ja esta medida contra a saida sobreposta em
+/// `test/telas/area_segura_do_aparelho_test.dart`, e mudar o esqueleto
+/// junto com o conteudo trocaria dois problemas por tres.
+class _SemLeitura extends StatelessWidget {
+  const _SemLeitura();
 
   @override
   Widget build(BuildContext context) {
@@ -467,38 +410,39 @@ class _PermissaoNegada extends StatelessWidget {
         children: <Widget>[
           const SizedBox(height: BichuEspaco.e10),
           Icon(
-            Icons.photo_camera_outlined,
+            Icons.keyboard_alt_outlined,
             size: 48,
             color: cores.primary,
+            // Decorativo: o titulo logo abaixo ja diz o que o icone ilustra, e
+            // um nome proprio aqui seria anuncio duplo.
             semanticLabel: '',
           ),
           const SizedBox(height: BichuEspaco.e6),
           Semantics(
             header: true,
             child: Text(
-              'O Bichu precisa da câmera para ler o QR',
+              TelaLeitorDeQr.tituloSemLeitura,
               style: textos.headlineSmall,
             ),
           ),
           const SizedBox(height: BichuEspaco.e4),
           Text(
-            'Você pode liberar a câmera nos ajustes do aparelho. Se preferir '
-            'não liberar, dá para digitar o código que está impresso na tag.',
+            TelaLeitorDeQr.explicacaoSemLeitura,
             style: textos.bodyLarge?.copyWith(color: cores.textSecondary),
           ),
-          if (permanente) ...<Widget>[
-            const SizedBox(height: BichuEspaco.e4),
-            Text(
-              MensagensDeErro.ajudaDoCampoDeCodigo,
-              style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-            ),
-          ],
+          const SizedBox(height: BichuEspaco.e4),
+          // Onde achar o codigo e como ele e. E a mesma linha do 12.4 que o
+          // campo de digitacao ja usa como ajuda: quem le isto aqui chega no
+          // campo sabendo o que procurar na tag.
+          Text(
+            MensagensDeErro.ajudaDoCampoDeCodigo,
+            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+          ),
         ],
       ),
     );
   }
 }
-
 /// Figma `87:40`. O scan leu o codigo localmente e a resolucao e no servidor.
 class _SemConexao extends StatelessWidget {
   const _SemConexao({

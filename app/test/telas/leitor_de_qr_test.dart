@@ -16,6 +16,7 @@
 
 import 'package:bichu/api/mensagens_de_erro.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
+import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
 import 'package:bichu/telas/pet/textos_do_cadastro.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:flutter/material.dart';
@@ -93,86 +94,81 @@ void main() {
     );
   });
 
-  testWidgets('com a camera concedida, o visor aparece e a digitacao continua '
-      'visivel', (tester) async {
-    await abrirOLeitor(tester, permissao: EstadoDaPermissao.concedida);
+  // OS QUATRO ESTADOS DE PERMISSAO ABREM A MESMA TELA, e isso e o conserto de
+  // 22/09 e nao uma regressao.
+  //
+  // O que a BICHUS-54 desenhou (visor com a permissao concedida, explicacao e
+  // caminho para os ajustes com ela negada) pressupoe que exista um leitor
+  // atras da permissao. Nao existe: a BICHUS-54 esta em `To Do` e a BICHUS-161
+  // declarou por escrito que o leitor estava fora do escopo dela. Enquanto for
+  // assim, ramificar por permissao produz duas promessas falsas -- um visor
+  // que nao le, e um `Abrir os ajustes` que libera uma camera que continua sem
+  // ler.
+  //
+  // O loop nos quatro valores e deliberado: ele reprova no dia em que alguem
+  // reintroduzir um ramo por permissao sem repor o leitor junto.
+  //
+  // **Os tres estados de permissao continuam implementados e medidos**, na
+  // tela que de fato usa a camera: `test/telas/cadastrar_foto_test.dart`, F1.4.
+  for (final permissao in EstadoDaPermissao.values) {
+    testWidgets('a permissao `${permissao.name}` nao muda a tela: ela diz que '
+        'a leitura nao existe e oferece digitar', (tester) async {
+      final camera = CameraDeTeste(permissao);
+      await abrirOApp(tester, rede: semServidor, camera: camera);
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
+      await tester.pumpAndSettle();
 
-    expect(find.text('Aponte para o QR da coleira'), findsOne);
+      expect(
+        find.text(TelaLeitorDeQr.tituloSemLeitura),
+        findsOne,
+        reason: 'REPROVA: com a permissao `${permissao.name}` a tela deixou '
+            'de dizer que a leitura por camera nao existe. Nao ha leitor de '
+            'QR neste build, e a tela nao pode sugerir o contrario em '
+            'permissao nenhuma.',
+      );
 
-    // **A camera nunca e o unico caminho.** Se este `expect` reprovar, a saida
-    // por digitacao ficou escondida atras do sucesso do scan.
-    expect(
-      find.text(TextosDoCadastro.digitarOCodigo),
-      findsOne,
-      reason: 'REPROVA: `Digitar o código` sumiu do visor. Ele precisa estar '
-          'presente em TODOS os estados e alcancavel por teclado e por leitor '
-          'de tela.',
-    );
-    exigirRotuloAnunciavel(
-      tester,
-      TextosDoCadastro.digitarOCodigo,
-      na: 'F2.1, visor',
-    );
-  });
+      // **`Digitar o código` e a acao PRINCIPAL nos quatro.** A acao principal
+      // e a que resolve, e nao a que a tela preferia.
+      final principal = find.widgetWithText(
+        BotaoPrimario,
+        TextosDoCadastro.digitarOCodigo,
+      );
+      expect(
+        principal,
+        findsOne,
+        reason: 'REPROVA: `Digitar o código` nao e a acao principal com a '
+            'permissao `${permissao.name}`. Ele e o unico caminho que '
+            'funciona, e o caminho que funciona nao fica em segundo plano.',
+      );
 
-  testWidgets('sem camera no aparelho, Digitar o codigo vira acao principal '
-      'com 64 dp', (tester) async {
-    // `indisponivel` nao e recusa: e ausencia de recurso. Mandar a pessoa para
-    // os ajustes procurar uma permissao que nao existe seria pior que nao
-    // dizer nada.
-    await abrirOLeitor(tester, permissao: EstadoDaPermissao.indisponivel);
+      final alvo = tamanhoDoAlvo(tester, principal);
+      expect(
+        alvo.height,
+        greaterThanOrEqualTo(pisoCritico),
+        reason: 'REPROVA: alvo de ${alvo.height} dp. O piso critico e '
+            '$pisoCritico dp: pessoa em pe, com um animal em um dos bracos, '
+            'usando o polegar da outra mao.',
+      );
+      exigirRotuloAnunciavel(
+        tester,
+        TextosDoCadastro.digitarOCodigo,
+        na: 'F2.1, permissao ${permissao.name}',
+      );
 
-    final principal = find.widgetWithText(
-      BotaoPrimario,
-      TextosDoCadastro.digitarOCodigo,
-    );
-    expect(
-      principal,
-      findsOne,
-      reason: 'REPROVA: com a camera fora, `Digitar o código` continuou '
-          'secundario. A acao principal e a que resolve, e nao a que a tela '
-          'preferia.',
-    );
-
-    final alvo = tamanhoDoAlvo(tester, principal);
-    expect(
-      alvo.height,
-      greaterThanOrEqualTo(pisoCritico),
-      reason: 'REPROVA: alvo de ${alvo.height} dp. O piso critico e '
-          '$pisoCritico dp: pessoa em pe, com um animal em um dos bracos, '
-          'usando o polegar da outra mao.',
-    );
-    exigirRotuloAnunciavel(
-      tester,
-      TextosDoCadastro.digitarOCodigo,
-      na: 'F2.1, sem camera',
-    );
-  });
-
-  testWidgets('permissao negada permanentemente oferece os ajustes, e nao um '
-      'pedido que nao abre dialogo', (tester) async {
-    final camera = CameraDeTeste(EstadoDaPermissao.negadaPermanentemente);
-    await abrirOApp(tester, rede: semServidor, camera: camera);
-    // Pela porta primaria de `Pets`, como os demais casos: o duble da camera
-    // precisa ser este, e por isso o caso nao usa `abrirOLeitor`.
-    await tester.tap(find.widgetWithText(OutlinedButton, 'Escanear uma tag'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('O Bichu precisa da câmera para ler o QR'), findsOne);
-
-    final ajustes = find.text(TextosDoCadastro.abrirOsAjustes);
-    expect(
-      ajustes,
-      findsOne,
-      reason: 'REPROVA: o terceiro estado de permissao nao tem caminho. '
-          'Pedir de novo NAO abre dialogo nenhum depois da recusa permanente; '
-          'sem o caminho para os ajustes, a pessoa toca num botao que nunca '
-          'mais vai responder.',
-    );
-    await tester.tap(ajustes);
-    await tester.pumpAndSettle();
-    expect(camera.abriuAjustes, isTrue);
-  });
+      // A tela NAO manda aos ajustes do sistema, e nem toca na porta da
+      // camera. Mandar alguem liberar a camera para depois descobrir que o app
+      // nao le e o mesmo defeito com outra roupa.
+      expect(
+        find.text(TextosDoCadastro.abrirOsAjustes),
+        findsNothing,
+        reason: 'REPROVA: a tela oferece os ajustes do sistema. Liberar a '
+            'camera nao destrava leitura nenhuma enquanto a BICHUS-54 nao '
+            'existir, e o convite vira a segunda promessa que o app nao '
+            'cumpre.',
+      );
+      expect(camera.abriuAjustes, isFalse);
+    });
+  }
 
   group('o erro do codigo decide por type, e nunca por status', () {
     Future<void> digitarEEnviar(WidgetTester tester, String codigo) async {
