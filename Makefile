@@ -14,6 +14,29 @@ COMPOSE := docker compose
 #                               projeto (o Caddy escuta na porta que esta em
 #                               PUBLIC_BASE_URL, entao porta publicada e porta
 #                               da URL sao o MESMO numero)
+#
+# BICHUS-211: o PADRAO 3000/3001 nao servia numa maquina compartilhada. As duas
+# sao as portas mais disputadas que existem, e na maquina onde este produto e
+# desenvolvido as duas ja sao de outros projetos -- `make up` sem argumento
+# morria em `port is already allocated`, uma mensagem do Docker que diz que a
+# porta esta ocupada e NAO diz qual usar.
+#
+# A saida e `portas.local.mk`: gerado na primeira invocacao com o primeiro par
+# livre, POR MAQUINA, fora do git. Depois de gerado o par nao muda mais entre
+# execucoes -- e esse e o ponto. Procurar porta livre a cada subida faria o
+# endereco variar, e o teste com segundo aparelho da secao 3.10 depende de o
+# endereco que foi para o QR continuar valendo na subida seguinte.
+#
+# O `-include` precisa vir ANTES dos `?=` abaixo: quem define primeiro ganha.
+# E o alvo logo abaixo do include nao e enfeite -- quando o arquivo nao existe,
+# o GNU Make o constroi e RECOMECA a leitura do Makefile sozinho, entao a
+# primeira invocacao ja enxerga o par escolhido.
+PORTAS_LOCAIS := portas.local.mk
+-include $(PORTAS_LOCAIS)
+
+$(PORTAS_LOCAIS):
+	@python3 infra/escolher-portas.py --escrever $@
+
 HOST ?=
 PORTA ?= 3000
 PORTA_MIDIA ?= 3001
@@ -22,7 +45,15 @@ export PORTA_APP := $(PORTA)
 export PORTA_MIDIA
 
 BASE_HOST := $(if $(HOST),$(HOST),localhost)
-ifneq ($(HOST)$(PORTA),3000)
+# Sem nada trocado, as cinco URLs vem do `.env` -- e o que deixa a maquina de
+# homologacao subir com os enderecos `https://` dela em vez de `localhost`.
+# Trocado qualquer um dos tres, o Makefile passa a mandar nas cinco JUNTAS.
+#
+# `PORTA_MIDIA` estava fora desta condicao ate 22/09, e a falta dela era um
+# buraco real: `make up PORTA_MIDIA=4001` publicava a 4001 e deixava
+# MEDIA_PUBLIC_BASE_URL na 3001 do `.env`, sem nada acusar. E exatamente o
+# defeito que `make verificar-portas` reprova agora.
+ifneq ($(HOST)-$(PORTA)-$(PORTA_MIDIA),-3000-3001)
 export PUBLIC_BASE_URL := http://$(BASE_HOST):$(PORTA)
 # As duas que sairam de PUBLIC_BASE_URL (ADR-0017 item 2) acompanham o HOST.
 # Esquecer a de tag aqui faria `make up HOST=<ip>` emitir tag com `localhost`
@@ -41,7 +72,7 @@ export BIND_HOST := 0.0.0.0
 endif
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup up down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-docs-fechada backup restore pin-digests
+.PHONY: ajuda setup up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-docs-fechada backup restore pin-digests
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -53,11 +84,16 @@ setup: ## prepara a maquina: ganchos de git e .env
 	@echo "gancho de pre-push instalado por core.hooksPath (versionado, corrigivel por PR)"
 
 up: setup ## sobe dev, aplicando as migracoes. HOST=<ip> para servir na rede local
+	@$(MAKE) --no-print-directory verificar-portas
+	@python3 infra/escolher-portas.py --conferir $(PORTA) $(PORTA_MIDIA)
 	$(COMPOSE) --profile dev up -d --wait
 	@echo "migracoes: aplicadas pelo servico \`migracao\` antes da api subir (docker compose logs migracao)"
-	@echo "aplicacao: $${PUBLIC_BASE_URL:-http://localhost:3000}"
-	@echo "midia:     $${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}"
+	@echo "aplicacao: $${PUBLIC_BASE_URL:-http://localhost:$(PORTA)}"
+	@echo "midia:     $${MEDIA_PUBLIC_BASE_URL:-http://localhost:$(PORTA_MIDIA)}"
 	@echo "e-mail:    http://localhost:8025 (Mailpit; NAO prova entregabilidade)"
+
+portas: ## reescolhe o par de portas desta maquina e regrava portas.local.mk
+	@python3 infra/escolher-portas.py --escrever $(PORTAS_LOCAIS)
 
 down: ## derruba preservando volume
 	$(COMPOSE) --profile dev --profile qa down
@@ -112,6 +148,15 @@ verificar-cobertura: cobertura ## o lcov fala de src/**/*.ts? Com as quatro isca
 verificar-dispensas: ## dispensa de portao vencida reprova (secao 5.3)
 	python3 infra/verificacao/verificar_dispensas.py
 
+verificar-portas: ## BICHUS-211: porta publicada e URL base de acordo, pela config renderizada
+	@python3 infra/verificacao/verificar_portas.py --raiz .
+
+verificar-portas-autoteste: ## as iscas do portao de portas precisam reprovar (nao usa docker)
+	python3 infra/verificacao/verificar_portas.py --autoteste --raiz .
+
+verificar-escolha-de-portas: ## BICHUS-211: havendo par livre, `make up` sem argumento nao cai no bind
+	python3 infra/verificacao/verificar_escolha_de_portas.py --raiz .
+
 verificar-portabilidade: ## portao de portabilidade: provedor, hostname e as duas iscas
 	python3 infra/verificacao/verificar_portabilidade.py
 
@@ -129,14 +174,14 @@ verificar-borda: ## ADR-0016: x-edge-limits, prefixo e rota de /.well-known, por
 	python3 infra/verificacao/verificar_borda.py
 
 verificar-borda-local: ## a borda de pe responde o que o contrato promete, pela porta publicada
-	python3 infra/verificacao/verificar_borda_local.py $${PUBLIC_BASE_URL:-http://localhost:3000} .
+	python3 infra/verificacao/verificar_borda_local.py $${PUBLIC_BASE_URL:-http://localhost:$(PORTA)} .
 
 verificar-docs-fechada: ## ADR-0018: a Swagger UI fechada, visto de fora (autoteste roda sem rede)
 	python3 infra/verificacao/verificar_docs_fechada.py
 
 # Tudo que nao precisa de nuvem nem de segredo, na ordem da esteira. E o que
 # `make up` seguido de `make verificar` responde antes de abrir um PR.
-verificar: verificar-dispensas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-dispensas verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
 	@mkdir -p backup
