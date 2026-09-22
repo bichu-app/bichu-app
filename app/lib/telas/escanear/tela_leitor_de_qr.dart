@@ -18,6 +18,23 @@ import '../../widgets/saida_da_tela.dart';
 import '../pet/textos_do_cadastro.dart';
 import 'mascara_do_codigo_da_tag.dart';
 
+/// O que a saida sobreposta ocupa, contada do topo da area segura.
+///
+/// **Nao e um numero escolhido: e a soma dos dois que ja existiam.** A saida
+/// e posicionada com [BichuEspaco.e2] de folga e o alvo dela e o piso critico
+/// de 64 dp (design system 6.5). Como ela fica **por cima** dos quatro
+/// estados, todo conteudo desenhado na faixa esquerda do topo precisa comecar
+/// depois desta linha.
+///
+/// Ele existe escrito assim, e nao somado a mao em cada estado, porque foi
+/// somado a mao que o defeito nasceu: os tres estados desenhados abrem com
+/// 24 + 40 = 64 dp, o comentario do `build` afirmava "folga de 64 dp", e a
+/// saida ocupa 72. No estado `digitando`, o quarto e o unico sem quadro no
+/// Figma, a abertura era 16 + 24 = 40 e o `x` caia em cima do rotulo do
+/// campo. Um numero derivado nao diverge quando alguem mexe no alvo.
+const double alturaDaSaidaSobreposta =
+    BichuEspaco.e2 + BichuAlvoDeToque.critico;
+
 /// Os estados desenhados de F2.1.
 enum EstadoDoLeitor {
   /// Figma `87:14`. O visor, a moldura e a instrucao.
@@ -249,9 +266,11 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       body: Stack(
         children: <Widget>[
           Positioned.fill(child: _corpo()),
-          // Canto superior esquerdo: e onde o polegar procura a saida, e onde
-          // nenhum dos quatro estados desenha conteudo -- o visor centraliza e
-          // os outros tres comecam com folga de 64 dp.
+          // Canto superior esquerdo: e onde o polegar procura a saida. Ela
+          // fica POR CIMA dos quatro estados, e por isso nenhum deles pode
+          // desenhar texto nos primeiros [alturaDaSaidaSobreposta] dp: o
+          // visor centraliza, os dois estados de falha abrem o texto bem
+          // abaixo, e `digitando` abre com a folga declarada.
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.all(BichuEspaco.e2),
@@ -588,7 +607,10 @@ class _Digitacao extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(BichuEspaco.e4),
         children: <Widget>[
-          const SizedBox(height: BichuEspaco.e6),
+          // A abertura e [alturaDaSaidaSobreposta], e nao um espacamento
+          // escolhido: a saida fica por cima desta lista e o rotulo do campo
+          // e a primeira coisa que ela cobria.
+          const SizedBox(height: alturaDaSaidaSobreposta),
           BichuField(
             rotulo: TextosDoCadastro.digitarOCodigo,
             controlador: controlador,

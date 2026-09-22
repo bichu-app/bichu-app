@@ -109,10 +109,24 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// ganhou `tituloEmMarca` e `abas.dart` recebeu a nota da decisao entre ela
 /// e a BICHUS-164.
 ///
+/// **Destravado uma quinta vez pelos achados em aparelho fisico de 22/09**,
+/// os dois de posicionamento que a suite nao via:
+/// `escanear/tela_leitor_de_qr.dart` ganhou `alturaDaSaidaSobreposta` e o
+/// estado `digitando` passou a abrir depois da saida sobreposta, que cobria o
+/// rotulo do campo; `avisos/antessala_de_aviso.dart` ganhou o `SafeArea`
+/// inferior que `showModalBottomSheet(useSafeArea: true)` NAO aplica, porque
+/// `Agora não` caia debaixo da barra de gestos. Os dois estao medidos em
+/// `test/telas/area_segura_do_aparelho_test.dart`.
+///
+/// **Esta trava nao poderia ter pego nenhum dos dois, e isso e o desenho
+/// dela.** Ela e hash de bytes de fonte: ela acusa que o codigo mudou, nunca
+/// que o desenho se atropela. Quem cobra geometria e o arquivo de area
+/// segura, e ate 22/09 ele nao existia.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '597161a3566d10a2e87f58dc6398d862b692b923';
+const String _arvoreDasTelas = '6df0f981bf0f069b2a5ddee61b14ea3c316648bd';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
