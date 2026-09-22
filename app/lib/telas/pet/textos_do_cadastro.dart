@@ -299,4 +299,39 @@ abstract final class TextosDoCadastro {
   /// coinhar um rotulo ("Código da tag", "Código da plaquinha") que ninguem
   /// revisou.
   static const String digitarOCodigo = 'Digitar o código';
+
+  /// O rotulo da acao de avancar sem foto em F1.4 (BICHUS-157).
+  ///
+  /// **`Pular`, e nao `Depois`.** [depois] ja existe e e usado em F1.6 para
+  /// adiar **a tag da coleira**; reusar a palavra faria dois adiamentos
+  /// diferentes se chamarem igual a um passo de distancia no mesmo fluxo.
+  ///
+  /// A escolha do rotulo e da forma (botao ou texto) e decisao de UX e
+  /// **continua aberta** na BICHUS-157 -- a issue nao fixa nenhum dos dois.
+  /// `Pular` e o unico dos dois nomes escritos na issue que nao colide, e a
+  /// forma e botao porque o criterio 5 exige alvo de toque e a exigencia de
+  /// acessibilidade proibe que a acao seja so um link de texto pequeno.
+  static const String seguirSemFoto = 'Pular';
+
+  /// O nome acessivel da mesma acao.
+  ///
+  /// Contem o rotulo visivel (WCAG 2.1 SC 2.5.3, *Label in Name*) e diz o que
+  /// a acao faz, que `Pular` sozinho nao diz: quem ouve "Pular, botão" no meio
+  /// de um assistente de tres passos nao sabe se pula o passo ou o cadastro.
+  static const String seguirSemFotoAnunciado = 'Pular a foto';
+
+  /// DEDUZIDO. BICHUS-158: o quarto estado, `indisponivel`, em F1.4.
+  ///
+  /// Duas coisas que este texto **nao** pode fazer, e as duas estao escritas
+  /// no comentario do proprio `EstadoDaPermissao.indisponivel`: culpar a
+  /// pessoa, e mandar aos ajustes do sistema. Nao ha permissao a conceder, e
+  /// mandar procurar uma faria a pessoa percorrer os ajustes atras do que nao
+  /// existe.
+  ///
+  /// A ultima frase existe para nao deixar a tela so com a ma noticia: a acao
+  /// que sobra e a da BICHUS-157, e ela esta ali do lado.
+  static const String cameraNaoEmbarcada =
+      'Tirar foto e escolher da galeria ainda não estão disponíveis neste '
+      'aplicativo. Não há nada a ajustar no seu aparelho. Você pode seguir '
+      'sem foto.';
 }
