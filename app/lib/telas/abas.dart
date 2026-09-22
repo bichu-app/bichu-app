@@ -242,6 +242,16 @@ class AbaLoja extends StatelessWidget {
 }
 
 /// Secao 5 — `Perfil`. A conta do tutor. Navegavel deslogado.
+///
+/// **Sem linha de termos e privacidade, e isso e decisao do cliente** (teste
+/// em aparelho de 22/09/2026, nas palavras dele: "a pagina do perfil nao deve
+/// ter esse termos de uso e privacidade, apenas na pagina de cadastro").
+///
+/// O que havia aqui era um `TextButton` com `onPressed: null` nos dois
+/// estados da aba, logado e deslogado: um controle que se anunciava tocavel e
+/// nao levava a lugar nenhum. O lugar dos dois documentos e a F1.1, onde eles
+/// sao o objeto do aceite e tem link que abre. Repor a linha aqui reprova a
+/// isca de `app/test/telas/termos_so_no_cadastro_test.dart`.
 class AbaPerfil extends StatelessWidget {
   const AbaPerfil({super.key});
 
@@ -275,8 +285,6 @@ class AbaPerfil extends StatelessWidget {
                 rotulo: 'Escanear uma tag',
                 aoTocar: () => context.push(Rotas.escanear),
               ),
-              const SizedBox(height: BichuEspaco.e6),
-              const _LinhaDeTermos(),
             ],
           );
         }
@@ -311,8 +319,6 @@ class AbaPerfil extends StatelessWidget {
               rotulo: 'Escanear uma tag',
               aoTocar: () => context.push(Rotas.escanear),
             ),
-            const SizedBox(height: BichuEspaco.e8),
-            const _LinhaDeTermos(),
             const SizedBox(height: BichuEspaco.e8),
             _BotaoSair(sessao: sessao),
           ],
@@ -406,23 +412,6 @@ class _PortaDeSubDestino extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _LinhaDeTermos extends StatelessWidget {
-  const _LinhaDeTermos();
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: TextButton(
-        // A tela de termos e privacidade e de outra historia, e ela precisa
-        // ser acessivel sem conta.
-        onPressed: null,
-        child: const Text('Termos de uso e privacidade'),
       ),
     );
   }

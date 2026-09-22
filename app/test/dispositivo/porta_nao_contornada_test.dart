@@ -109,10 +109,17 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// ganhou `tituloEmMarca` e `abas.dart` recebeu a nota da decisao entre ela
 /// e a BICHUS-164.
 ///
+/// **Destravado uma quinta vez pelas tres mudancas do teste em aparelho de
+/// 22/09/2026** (BICHUS-29 e BICHUS-81): o Perfil perdeu a linha de termos e
+/// privacidade em `abas.dart`, a F1.1 ganhou a caixa de aceite dos termos em
+/// `conta/tela_criar_conta.dart`, e a caixa de "continuar conectado" saiu de
+/// `tela_criar_conta.dart` e de `conta/tela_entrar.dart`. Nenhuma delas
+/// encosta na porta `CameraEGaleria`, que e o que o criterio 10 protege.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '597161a3566d10a2e87f58dc6398d862b692b923';
+const String _arvoreDasTelas = 'e0fee17c23eebf335654cfd429cab37e88b31387';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

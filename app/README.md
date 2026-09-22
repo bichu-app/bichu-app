@@ -40,14 +40,35 @@ escrito no repositório é amarração de ambiente, e o portão de portabilidade
 
 Além de `API_BASE_URL`, que é obrigatória, o build aceita três valores que o
 app usa e que **ainda não têm de onde sair**. Elas não derrubam o arranque
-quando faltam, porque sem API o app não faz nada e o certo é parar, enquanto
-sem elas o app funciona inteiro e só a linha de termos fica sem link.
+quando faltam — sem API o app não faz nada e o certo é parar —, mas a primeira
+delas **fecha o cadastro** quando falta, e o motivo está abaixo.
 
 | Variável | Para que serve | O que acontece sem ela |
 |---|---|---|
-| `TERMS_VERSION` | vai em `accepted_terms_version` no cadastro | a chave não vai no corpo, e o backend não grava `accepted_terms_at`: fica registro de que a pessoa criou conta e **nenhum** registro de qual versão dos termos ela aceitou |
+| `TERMS_VERSION` | vai em `accepted_terms_version` no cadastro | **a tela de cadastro recusa criar conta**, dizendo `Não conseguimos registrar o aceite dos termos nesta versão do app.` O resto do app funciona |
 | `TERMS_URL` | destino do link "termos de uso" | a expressão fica texto comum, e não vira link que não abre nada |
 | `PRIVACY_URL` | destino do link "política de privacidade" | idem |
+
+**Por que o cadastro para, em vez de seguir sem registrar.** O caminho do aceite
+está inteiro: a tela manda `accepted_terms_version`, o contrato a declara em
+`RegisterRequest`, a rota a lê (`routes.ts:512`) e o banco grava as duas colunas
+(`kysely-identity-repository.ts:118-119`, onde `accepted_terms_at` só recebe
+data quando a versão chega). O que falta é **valor**, não código.
+
+Enquanto a variável faltava, a chave saía do corpo em silêncio pelo `?` do
+elemento nulo-ciente, a conta nascia com `accepted_terms_version` e
+`accepted_terms_at` nulos, e **nada falhava**. Com a caixa de aceite na tela
+(BICHUS-222) isso virou a pior combinação possível: a pessoa marca que aceitou,
+a tela afirma o aceite, e o banco não tem registro nenhum. Ônus da prova não é
+detalhe de tela.
+
+Então a tela recusa alto. É a mesma disciplina do `MAIL_WEBHOOK_SECRET`, que
+derruba o boot da API nomeando a variável: **verificação que não consegue
+verificar precisa reprovar, nunca aprovar.**
+
+A isca está em `app/test/telas/criar_conta_termos_test.dart`, e ela cobra o
+corpo enviado e não o widget — um caso que confirmasse "existe um `Checkbox`"
+ficaria verde com o aceite não sendo gravado.
 
 ```bash
 flutter run \
@@ -59,9 +80,9 @@ flutter run \
 
 Nenhuma delas tem valor padrão, e a ausência é deliberada. A versão dos termos
 precisa ser "o identificador do arquivo versionado no repositório, não `v1`
-digitado à mão" (`docs/04-seguranca.md` §6.6), e esse arquivo não existe:
-inventar um número aqui gravaria no banco a prova de um aceite a um documento
-inexistente, que é pior que não gravar. As duas URLs são páginas web, de outro
+digitado à mão" (`docs/04-seguranca.md` §6.6), e **esse arquivo ainda não
+existe** (`BICHUS-30`): inventar um número aqui gravaria no banco a prova de um
+aceite a um documento inexistente, que é pior que não gravar. As duas URLs são páginas web, de outro
 time, e montá-las sobre uma base pública seria inventar a rota delas.
 
 O que impede a omissão de virar esquecimento não é este README: é a assinatura
