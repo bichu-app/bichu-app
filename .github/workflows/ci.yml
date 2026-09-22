@@ -1216,15 +1216,64 @@ jobs:
               ;;
           esac
 
+  # ===========================================================================
+  # POR QUE ESTE JOB EXISTE, SE A ESTEIRA NAO RODA EM WORKTREE
+  # ===========================================================================
+  # O job `integracao` acima roda a suite na pilha `bichu` do proprio runner, e
+  # nunca usa `compose.integracao.yaml`. Quem usa aquele arquivo e a maquina de
+  # desenvolvimento, onde dezenas de worktrees rodam a suite ao mesmo tempo.
+  #
+  # Em 22/09/2026 aquela pilha isolava projeto, rede, volume e conteiner, e NAO
+  # isolava imagem: `bichu-migrador:integracao` era a mesma tag para todos, e
+  # cada `compose build` arrancava a tag de quem a tinha. Como o servico
+  # `migracao` copia `migrations/` para dentro da imagem, enquanto `testes`
+  # monta a arvore do worktree, o desfecho era uma suite rodando o teste da sua
+  # branch contra o esquema de OUTRA -- sem uma linha de erro. A tag trocou de
+  # dono treze vezes naquele dia, a menor folga sendo de tres segundos.
+  #
+  # A suite de integracao e o unico mecanismo que pega uma classe inteira de
+  # defeito neste projeto: duble aceita qualquer string, so o Postgres recusa.
+  # Se ela pode rodar contra o esquema de outra branch, o verde dela nao prova
+  # nada. Por isso a regra vira portao aqui, mesmo que o defeito seja local:
+  # quem edita `infra/integracao/` edita no PR, e e no PR que a regressao tem
+  # de aparecer.
+  #
+  # SEM FILTRO DE CAMINHO, de proposito. Filtrar por `infra/integracao/**` faria
+  # o job sair `skipped` na maioria dos PRs, e `skipped` e exatamente o que o
+  # job `portao` recusa. O custo nao justifica: o job e paralelo, constroi so o
+  # alvo `migrador` e nao sobe banco nenhum. Medido em 22/09 numa maquina de
+  # desenvolvimento com cache quente: 5,3 s de ponta a ponta.
+  isolamento:
+    name: duas pilhas de integracao nao se enxergam
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: rapidos
+    steps:
+      # `fetch-depth: 0` e exigencia da isca: ela faz `git worktree add` de duas
+      # arvores descartaveis, e worktree precisa de repositorio com historia.
+      # Com a profundidade 1 do padrao, `git worktree add` reprova -- e reprovar
+      # e o desfecho certo, mas seria uma reprovacao sobre o checkout e nao
+      # sobre o isolamento.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # A isca prova os dois sentidos e reprova nos dois: se duas pilhas se
+      # enxergarem, e tambem se a propria isca deixar de enxergar o defeito
+      # quando ele e reposto de proposito
+      # (infra/integracao/iscas/compose-defeito-tag-global.yaml).
+      - name: isca de isolamento da pilha de integracao
+        run: npm run verify:isolamento-da-pilha
+
   portao:
     name: portao
     runs-on: ubuntu-latest
-    needs: [rapidos, codigo, contrato, integracao, app, apk, tokens, contraste, sonar]
+    needs: [rapidos, codigo, contrato, integracao, isolamento, app, apk, tokens, contraste, sonar]
     if: always()
     steps:
       - name: consolidar
         run: |
-          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.isolamento.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
           echo "estados: $estados"
           for e in $estados; do
             case "$e" in

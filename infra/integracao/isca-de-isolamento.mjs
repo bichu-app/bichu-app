@@ -61,15 +61,16 @@
  * precisa impedir e a REGRESSAO, e nao so o defeito conhecido.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { gerar } from './gerar-env-de-integracao.mjs';
 import { identidadeDaPilha } from './identidade-da-pilha.mjs';
 
 const COMPOSE = 'infra/integracao/compose.integracao.yaml';
 const DEFEITO = 'infra/integracao/iscas/compose-defeito-tag-global.yaml';
+const IDENTIFICADOR_FIXO = 'infra/integracao/iscas/compose-defeito-identificador-fixo.yaml';
 const ENV = '.env.integracao';
 
 const raiz = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
@@ -96,6 +97,42 @@ function rodar(programa, argumentos, opcoes = {}) {
 }
 
 /**
+ * O que ainda NAO esta commitado, levado para a arvore descartavel.
+ *
+ * `git worktree add` materializa o COMMIT, e nao o que esta em disco. Sem isto
+ * a isca mediria a versao anterior do compose enquanto quem a roda olha para a
+ * correcao que acabou de escrever -- e responderia sobre outro arquivo, com a
+ * cara de estar respondendo sobre este. Ja aconteceu aqui, na primeira
+ * execucao desta isca.
+ *
+ * Duas partes, porque `git diff` nao cobre as duas: o diff dos rastreados e a
+ * copia dos nao rastreados que o `.gitignore` nao exclui. O que o `.gitignore`
+ * exclui fica de fora de proposito: `.env` e `node_modules` nao entram no
+ * contexto de build (`.dockerignore`) e `docs/` nao existe em worktree nenhum.
+ */
+function levarTrabalhoNaoCommitado(destino) {
+  const diff = rodar('git', ['-C', raiz, 'diff', '--binary', 'HEAD', '--', '.']);
+  if (diff.trim() !== '') {
+    const r = spawnSync('git', ['-C', destino, 'apply', '--binary', '-'], {
+      input: diff,
+      encoding: 'utf8',
+    });
+    if (r.status !== 0) {
+      throw new Error(`nao consegui levar as alteracoes nao commitadas para ${destino}\n${r.stderr}`);
+    }
+  }
+  const novos = rodar('git', ['-C', raiz, 'ls-files', '--others', '--exclude-standard'])
+    .split('\n')
+    .filter((l) => l.trim() !== '');
+  for (const relativo of novos) {
+    const alvo = join(destino, relativo);
+    mkdirSync(dirname(alvo), { recursive: true });
+    copyFileSync(join(raiz, relativo), alvo);
+  }
+  return { rastreados: diff.trim() === '' ? 0 : diff.split('\ndiff --git ').length, novos: novos.length };
+}
+
+/**
  * Uma arvore descartavel com uma migracao de marca propria.
  *
  * `git worktree add --detach` e nao uma copia do diretorio: o caminho precisa
@@ -111,6 +148,7 @@ function arvoreDescartavel(rotulo) {
   rmSync(caminho, { recursive: true, force: true });
   rodar('git', ['-C', raiz, 'worktree', 'add', '--detach', '--quiet', caminho, commitDeBuild]);
   aLimpar.arvores.push(caminho);
+  const levado = levarTrabalhoNaoCommitado(caminho);
 
   const marca = `29990101000000_marca-da-isca-${rotulo}.sql`;
   writeFileSync(
@@ -133,13 +171,11 @@ function arvoreDescartavel(rotulo) {
     process.chdir(antes);
   }
 
-  return { rotulo, caminho, marca, ...identidadeDaPilha(caminho) };
+  return { rotulo, caminho, marca, levado, ...identidadeDaPilha(caminho) };
 }
 
-function compose(arvore, argumentos, sobreporDefeito) {
-  const arquivos = sobreporDefeito
-    ? ['-f', COMPOSE, '-f', DEFEITO]
-    : ['-f', COMPOSE];
+function compose(arvore, argumentos, sobrepor) {
+  const arquivos = ['-f', COMPOSE, ...(sobrepor ? ['-f', sobrepor] : [])];
   return rodar(
     'docker',
     ['compose', '-p', arvore.projeto, ...arquivos, '--env-file', ENV, ...argumentos],
@@ -156,8 +192,8 @@ function compose(arvore, argumentos, sobreporDefeito) {
 }
 
 /** A configuracao RESOLVIDA, que e o que o compose de fato executa. */
-function configuracao(arvore, sobreporDefeito) {
-  return JSON.parse(compose(arvore, ['config', '--format', 'json'], sobreporDefeito));
+function configuracao(arvore, sobrepor) {
+  return JSON.parse(compose(arvore, ['config', '--format', 'json'], sobrepor));
 }
 
 /** As migracoes que existem DENTRO da imagem que este projeto resolve. */
@@ -177,7 +213,15 @@ function migracoesNaImagem(imagem) {
 function identificadores(cfg) {
   const servicos = Object.entries(cfg.services ?? {});
   return {
-    imagem: servicos.map(([n, s]) => `${n}=${String(s.image ?? '')}`),
+    // So o que ESTA PILHA constroi. `db` e `mail` referenciam imagem de
+    // terceiro fixada por digest, e compartilha-la e o desfecho certo: e a
+    // mesma versao de Postgres que sobe em dev e em producao, ninguem escreve
+    // nela, e dar um nome por worktree a uma imagem que nao se constroi seria
+    // baixar o mesmo digest setenta vezes. O que nao pode ser compartilhado e
+    // a imagem que carrega o codigo e as migracoes DESTE worktree.
+    imagem: servicos
+      .filter(([, s]) => s.build)
+      .map(([n, s]) => `${n}=${String(s.image ?? '')}`),
     'nome de conteiner': servicos
       .filter(([, s]) => s.container_name)
       .map(([n, s]) => `${n}=${String(s.container_name)}`),
@@ -189,6 +233,27 @@ function identificadores(cfg) {
         .map((p) => `${n}=${String(p.host_ip ?? '')}:${String(p.published)}`),
     ),
   };
+}
+
+/**
+ * Compara as cinco dimensoes entre os dois projetos.
+ * @returns {string[]} as dimensoes com identificador em comum
+ */
+function varrerDimensoes(a, b, sobrepor, imprimir) {
+  const idA = identificadores(configuracao(a, sobrepor));
+  const idB = identificadores(configuracao(b, sobrepor));
+  const compartilhadas = [];
+  for (const dimensao of Object.keys(idA)) {
+    const comuns = idA[dimensao].filter((v) => idB[dimensao].includes(v));
+    if (imprimir) {
+      console.log(
+        `    ${dimensao.padEnd(18)} ${String(idA[dimensao].length).padStart(2)} identificador(es)  ` +
+          `${comuns.length === 0 ? 'nenhum em comum' : `EM COMUM: ${comuns.join(', ')}`}`,
+      );
+    }
+    if (comuns.length > 0) compartilhadas.push(`${dimensao} (${comuns.join(', ')})`);
+  }
+  return compartilhadas;
 }
 
 function limpar() {
@@ -216,9 +281,9 @@ process.on('SIGINT', () => {
  *
  * @returns {{contaminou: boolean, linhas: string[]}}
  */
-function experimento(a, b, sobreporDefeito) {
-  compose(a, ['build', 'migracao'], sobreporDefeito);
-  compose(b, ['build', 'migracao'], sobreporDefeito);
+function experimento(a, b, sobrepor) {
+  compose(a, ['build', 'migracao'], sobrepor);
+  compose(b, ['build', 'migracao'], sobrepor);
 
   const linhas = [];
   let contaminou = false;
@@ -226,7 +291,7 @@ function experimento(a, b, sobreporDefeito) {
     [a, b],
     [b, a],
   ]) {
-    const imagem = String(configuracao(arvore, sobreporDefeito).services.migracao.image);
+    const imagem = String(configuracao(arvore, sobrepor).services.migracao.image);
     const migracoes = migracoesNaImagem(imagem);
     const temAPropria = migracoes.includes(arvore.marca);
     const temADoVizinho = migracoes.includes(vizinha.marca);
@@ -248,9 +313,14 @@ try {
   console.log('criando duas arvores descartaveis, cada uma com uma migracao de marca propria...\n');
   const a = arvoreDescartavel('a');
   const b = arvoreDescartavel('b');
+  console.log(
+    `base: ${commitDeBuild.slice(0, 10)} + ${String(a.levado.rastreados)} arquivo(s) alterado(s) e ` +
+      `${String(a.levado.novos)} nao rastreado(s) da arvore de origem -- a isca mede o que esta em ` +
+      'disco, nao o ultimo commit.\n',
+  );
 
   console.log('== SENTIDO 1: com o conserto (tag derivada do caminho) ==');
-  const comConserto = experimento(a, b, false);
+  const comConserto = experimento(a, b, null);
   console.log(comConserto.linhas.join('\n'));
   if (comConserto.contaminou) {
     morrer(
@@ -262,18 +332,7 @@ try {
   console.log('    -> isolado: cada projeto so ve a sua.\n');
 
   console.log('== dimensoes conferidas (identificador compartilhado reprova) ==');
-  const idA = identificadores(configuracao(a, false));
-  const idB = identificadores(configuracao(b, false));
-  const compartilhadas = [];
-  for (const dimensao of Object.keys(idA)) {
-    const comuns = idA[dimensao].filter((v) => idB[dimensao].includes(v));
-    const quantos = idA[dimensao].length;
-    console.log(
-      `    ${dimensao.padEnd(18)} ${String(quantos).padStart(2)} identificador(es)  ` +
-        `${comuns.length === 0 ? 'nenhum em comum' : `EM COMUM: ${comuns.join(', ')}`}`,
-    );
-    if (comuns.length > 0) compartilhadas.push(`${dimensao} (${comuns.join(', ')})`);
-  }
+  const compartilhadas = varrerDimensoes(a, b, null, true);
   if (compartilhadas.length > 0) {
     morrer(
       `dois worktrees compartilham identificador em: ${compartilhadas.join('; ')}. ` +
@@ -282,8 +341,28 @@ try {
   }
   console.log('');
 
+  // Tres das cinco dimensoes acima devolveram ZERO identificador, porque a
+  // pilha nao declara nenhum -- que e a resposta certa e tambem a resposta de
+  // uma leitura cega. Aqui a isca se testa: com identificador fixo declarado
+  // nas tres, as tres TEM que ser acusadas.
+  console.log('== autoteste da leitura (identificador fixo posto de proposito) ==');
+  const acusadas = varrerDimensoes(a, b, IDENTIFICADOR_FIXO, false);
+  const exigidas = ['nome de conteiner', 'volume nomeado', 'porta publicada'];
+  const cegas = exigidas.filter((d) => !acusadas.some((c) => c.startsWith(`${d} (`)));
+  for (const d of exigidas) {
+    console.log(`    ${d.padEnd(18)} ${cegas.includes(d) ? 'NAO ACUSOU' : 'acusou'}`);
+  }
+  if (cegas.length > 0) {
+    morrer(
+      `com ${IDENTIFICADOR_FIXO} sobreposto, que declara o MESMO identificador nos dois ` +
+        `projetos, estas dimensoes nao acusaram: ${cegas.join(', ')}. A isca esta cega nelas, e ` +
+        'o "nenhum em comum" que ela imprime para elas no sentido 1 nao vale nada.',
+    );
+  }
+  console.log('    -> a leitura enxerga as tres; o zero do sentido 1 e zero de verdade.\n');
+
   console.log('== SENTIDO 2: sem o conserto (tag fixa reposta pela isca) ==');
-  const semConserto = experimento(a, b, true);
+  const semConserto = experimento(a, b, DEFEITO);
   console.log(semConserto.linhas.join('\n'));
   if (!semConserto.contaminou) {
     morrer(

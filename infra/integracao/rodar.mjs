@@ -97,6 +97,49 @@ function derrubar() {
   if (derrubando) return;
   derrubando = true;
   compose(['down', '-v', '--remove-orphans', '--timeout', '5'], { stdio: 'inherit' });
+  apagarAsImagensDestaPilha();
+}
+
+/**
+ * As duas imagens desta pilha vao embora junto com ela.
+ *
+ * ===========================================================================
+ * POR QUE APAGAR, SE ANTES NAO SE APAGAVA
+ * ===========================================================================
+ * Antes havia DUAS imagens de integracao na maquina inteira, porque a tag era
+ * global -- o defeito e a contencao de disco eram a mesma coisa. Com a tag por
+ * worktree sao duas POR WORKTREE, e aqui ha setenta. Medido em 22/09 com
+ * `docker system df -v`: `bichu-app` tem 118 MB de camada unica e
+ * `bichu-migrador` 111 MB, o resto sendo camada compartilhada com todas as
+ * outras. Setenta worktrees dariam cerca de 16 GB de camada unica, numa maquina
+ * que ja carrega 44 GB de imagem e 25 GB de cache de build.
+ *
+ * Apagar e barato porque o que custa nao e a imagem, e o CACHE DE BUILD, e ele
+ * nao vai junto: `docker image rm` tira a referencia, e o `build` da proxima
+ * execucao reaproveita as mesmas camadas. Medido aqui: reconstruir depois de
+ * apagar levou cerca de um segundo.
+ *
+ * ===========================================================================
+ * SO AS DESTA PILHA, E ISSO E GARANTIA E NAO CUIDADO
+ * ===========================================================================
+ * A tag sai do sha1 do caminho DESTE worktree. Nenhuma outra pilha pode ter
+ * esta tag, entao este `rm` nao alcanca a imagem de quem esta com a suite no
+ * meio. Era justamente o que a tag global nao garantia.
+ *
+ * `BICHU_MANTER_IMAGEM=1` guarda as duas, para quem precisa abrir a imagem
+ * depois de uma reprovacao (`docker run --rm --entrypoint ls bichu-migrador:<tag> /app/migrations`).
+ *
+ * Imagem de worktree que sumiu sem rodar a suite de novo nao e alcancada por
+ * aqui. Para essas, ver `infra/integracao/limpar-imagens.mjs`.
+ */
+function apagarAsImagensDestaPilha() {
+  if (process.env.BICHU_MANTER_IMAGEM === '1') {
+    console.log(`imagens mantidas por BICHU_MANTER_IMAGEM=1: bichu-app:${tagDaPilha}, bichu-migrador:${tagDaPilha}`);
+    return;
+  }
+  for (const imagem of [`bichu-app:${tagDaPilha}`, `bichu-migrador:${tagDaPilha}`]) {
+    spawnSync('docker', ['image', 'rm', '-f', imagem], { stdio: 'ignore' });
+  }
 }
 process.on('SIGINT', () => {
   derrubar();
