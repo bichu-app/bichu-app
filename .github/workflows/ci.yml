@@ -289,6 +289,12 @@ jobs:
           # que o projeto nao existe -- e nao acertar um projeto de alguem.
           sed -i 's|^FCM_PROJECT=.*|FCM_PROJECT=projeto-de-ci-que-nao-existe|' .env
           grep -q '^FCM_PROJECT=' .env || echo 'FCM_PROJECT=projeto-de-ci-que-nao-existe' >> .env
+          # `MAIL_WEBHOOK_SECRET` nasce VAZIA no `.env.example` e e exigida por
+          # `requireEnv` -- a guarda antiga nao a via, pelo motivo explicado no
+          # passo de baixo. Com a leitura corrigida ela passa a reprovar aqui,
+          # que e o comportamento certo: ela e a UNICA autenticacao do webhook
+          # de entrega, e `app-config.ts` recusa menos de 32 bytes.
+          sed -i "s|^MAIL_WEBHOOK_SECRET=.*|MAIL_WEBHOOK_SECRET=ci-descartavel-$(openssl rand -hex 24)|" .env
           # Chaves geradas NO JOB e jogadas fora com o runner: chave de
           # assinatura de verdade nunca entra em repositorio nem em log.
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ativa.pem 2>/dev/null
@@ -316,56 +322,44 @@ jobs:
         # mao, entao TODA variavel nova quebra a pilha ate alguem lembrar de
         # edita-lo. Esta guarda le as exigencias do PROPRIO CODIGO e falha em
         # segundos com o nome da variavel, em vez de deixar a pilha morrer.
+        #
+        # A LEITURA MUDOU DE LUGAR EM 22/09, E O MOTIVO IMPORTA.
+        # Ela era um script Python inline aqui, e retirava comentario de BLOCO
+        # antes de comentario de LINHA. `src/shared/config/app-config.ts:531`
+        # tem um `/*` DENTRO de um comentario de linha (`/.well-known/*`), que
+        # abre um bloco para a expressao regular e engole o que vem depois.
+        # Resultado medido: a guarda enxergava 12 das 23 variaveis exigidas e
+        # anunciava "todas preenchidas". Entre as 11 invisiveis estava
+        # TAG_CODE_KEY -- a variavel cuja falta motivou escrever esta guarda.
+        # Ela era cega justamente para o caso que existia para pegar.
+        #
+        # Agora a leitura mora em `infra/integracao/variaveis-exigidas.mjs`,
+        # com autoteste que REPROVA se a ordem voltar a inverter, e e a MESMA
+        # que gera o `.env` da pilha de integracao dos worktrees. Duas copias
+        # da mesma leitura divergem, e a que diverge para menos aprova o que
+        # nao conferiu.
         run: |
-          python3 - <<'FIM'
-          import pathlib, re, sys
-          exigidas = set()
-          # Toda chamada, e nao so as que sabemos ler. A diferenca entre as duas
-          # listas e o ponto cego desta guarda, e ele precisa ser ruidoso: em
-          # 18/09 descobrimos que `carregarChave` monta o nome com template
-          # literal (`JWT_${sufixo}_KID`), entao nem `JWT_ACTIVE_KID` -- que e
-          # obrigatoria para a API subir -- estava sendo conferida aqui. A
-          # guarda dizia "todas preenchidas" sem nunca ter olhado para ela.
-          todas = re.compile(r'requireEnv\(')
-          literal = re.compile(r"requireEnv\(\s*'([A-Z0-9_]+)'\s*\)")
-          opacas = []
-          for arquivo in list(pathlib.Path('src').rglob('*.ts')) + list(pathlib.Path('bin').rglob('*.ts')):
-              texto = arquivo.read_text()
-              # Comentario nao e chamada. Sem isto, um comentario que CITA
-              # `requireEnv(nome)` -- e ha um, explicando justamente este ponto
-              # cego -- faz a guarda reprovar a si mesma.
-              texto = re.sub(r'/\*.*?\*/', '', texto, flags=re.S)
-              texto = re.sub(r'(?m)^\s*//.*$', '', texto)
-              # A definicao da propria funcao nao e chamada.
-              if arquivo.name == 'env.ts':
-                  texto = re.sub(r'export function requireEnv[^\n]*', '', texto)
-              nomes = set(literal.findall(texto))
-              exigidas |= nomes
-              # `requireEnv(nome)` com variavel, ou com template literal: o nome
-              # so existe em tempo de execucao. Contamos e reprovamos, em vez de
-              # pular calado -- pular calado foi o defeito.
-              vistas = len(todas.findall(texto))
-              if vistas > len(literal.findall(texto)):
-                  opacas.append(f'{arquivo}: {vistas - len(literal.findall(texto))}')
-          if opacas:
-              print('::error::ha chamada de requireEnv cujo nome esta fora do alcance desta '
-                    'guarda (variavel ou template literal). Ela NAO esta sendo conferida. '
-                    'Passe o nome literal, ou acrescente a variavel a lista explicita deste '
-                    'passo: ' + '; '.join(opacas))
-              sys.exit(1)
-          env = dict(
-              linha.split('=', 1)
-              for linha in pathlib.Path('.env').read_text().splitlines()
-              if '=' in linha and not linha.lstrip().startswith('#')
-          )
-          faltando = sorted(v for v in exigidas if not env.get(v, '').strip())
-          if faltando:
-              print('::error::o .env deste job nao preenche variavel exigida pelo codigo: '
-                    + ', '.join(faltando)
-                    + ' -- acrescente um valor descartavel no passo "ambiente de teste"')
-              sys.exit(1)
-          print(f'{len(exigidas)} variaveis exigidas pelo codigo, todas preenchidas')
-          FIM
+          node --input-type=module -e '
+            import { lerVariaveisExigidas, autoteste } from "./infra/integracao/variaveis-exigidas.mjs";
+            import { readFileSync } from "node:fs";
+            console.log(autoteste());
+            const { exigidas, opacas } = lerVariaveisExigidas("src");
+            if (opacas.length > 0) {
+              console.log("::error::ha chamada de requireEnv cujo nome esta fora do alcance desta "
+                + "guarda (variavel ou template literal). Ela NAO esta sendo conferida: " + opacas.join("; "));
+              process.exit(1);
+            }
+            const env = Object.fromEntries(readFileSync(".env", "utf8").split("\n")
+              .filter((l) => l.includes("=") && !l.trimStart().startsWith("#"))
+              .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
+            const faltando = exigidas.filter((v) => (env[v] ?? "").trim() === "");
+            if (faltando.length > 0) {
+              console.log("::error::o .env deste job nao preenche variavel exigida pelo codigo: "
+                + faltando.join(", ") + " -- acrescente um valor descartavel no passo \"ambiente de teste\"");
+              process.exit(1);
+            }
+            console.log(exigidas.length + " variaveis exigidas pelo codigo, todas preenchidas");
+          '
 
       - name: constroi a imagem (dev) e o migrador
         run: docker compose --profile dev build
@@ -511,8 +505,23 @@ jobs:
       # Rodar do runner exigiria publicar a porta do banco, que hoje nao e
       # publicada -- e publicar porta para poder testar e trocar a topologia
       # pelo teste.
-      - name: suite de integracao (17 casos, BICHUS-19 e BICHUS-56)
-        run: docker compose run --rm api npm run test:integration
+      # A suite so roda em banco que se declara descartavel. Quem provisiona
+      # declara; quem escreve confere (infra/integracao/guarda-de-banco-descartavel.mjs).
+      # Ela CRIA conta, revoga sessao, insere em audit.events e apaga
+      # `rate_limit_counters` inteira -- e o `.env` de um job de esteira e um
+      # arquivo como outro qualquer, que alguem pode apontar para outro lugar.
+      - name: o banco deste job se declara descartavel
+        run: |
+          docker compose exec -T db psql -v ON_ERROR_STOP=1 -U bichu -d bichu \
+            -c "COMMENT ON DATABASE \"bichu\" IS 'bichu:integracao:descartavel'"
+
+      # `test:integration:executar` e nao `test:integration`: o segundo sobe uma
+      # PILHA EFEMERA propria (para rodar de dentro de um worktree), e aqui a
+      # pilha ja esta de pe, do zero, desde o passo acima. O executor e o mesmo
+      # nos dois caminhos, com os mesmos portoes -- inclusive o que reprova
+      # quando a suite nao executa nada.
+      - name: suite de integracao (BICHUS-19, BICHUS-56, BICHUS-15 e BICHUS-178)
+        run: docker compose run --rm api npm run test:integration:executar
 
       - name: diagnostico quando falha
         if: failure()

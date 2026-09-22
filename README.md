@@ -70,10 +70,25 @@ porta publicada e URL base juntas. `make ajuda` lista o resto dos alvos.
 | `make up` | sobe dev, aplicando as migrações |
 | `make reset` | derruba apagando o volume e sobe do zero |
 | `make test` | testes unitários, dentro da imagem |
+| `npm run test:integration` | integração contra um Postgres de verdade, em pilha própria |
 | `make logs` | tail agregado dos serviços |
 | `make down` | derruba preservando o volume |
 
 O detalhe de cada um, e o porquê das decisões, está em `docs/07-devops.md`.
+
+### Integração a partir de um worktree
+
+`npm run test:integration` funciona de qualquer diretório de trabalho, incluindo
+um criado por `git worktree add`, e **não encosta na pilha de desenvolvimento**.
+Ele sobe uma pilha própria, com nome de projeto derivado do caminho e sem
+publicar porta nenhuma: quem roda a suíte é um serviço dentro daquela rede. O
+`.env` não precisa ser copiado — ele é gerado com valores de teste que não
+autenticam em lugar nenhum, porque segredo mora no Secret Manager (ADR-0022).
+
+A suíte só roda em banco que se declara descartável. Se ela recusar dizendo isso,
+o `DATABASE_URL` do ambiente está apontando para outro lugar.
+
+O caminho inteiro está em `infra/integracao/`, e cada arquivo explica o porquê.
 
 ## Homologação
 
