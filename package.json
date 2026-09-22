@@ -14,6 +14,7 @@
     "test:integration": "node infra/integracao/rodar.mjs",
     "test:integration:executar": "node infra/integracao/executar-suite.mjs",
     "verify:variaveis": "node infra/integracao/variaveis-exigidas.mjs",
+    "verify:isolamento-da-pilha": "node infra/integracao/isca-de-isolamento.mjs",
     "build": "tsc -p tsconfig.build.json",
     "generate:types": "openapi-typescript api/openapi.yaml -o src/shared/types/generated/api.ts && node src/tools/gerar-tipos-de-problema.mjs",
     "verify:types": "npm run generate:types && git diff --exit-code -- src/shared/types/generated/",
