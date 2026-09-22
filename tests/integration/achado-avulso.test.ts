@@ -94,7 +94,11 @@ async function criarPet(
       atributos.especie ?? 'dog',
       atributos.porte ?? 'M',
       atributos.cor ?? 'caramelo',
-      atributos.raca ?? 'srd_dog',
+      // A raça acompanha a ESPÉCIE, e o banco impõe:
+      // `FOREIGN KEY (breed_code, species_code) REFERENCES ref_breeds`. Um gato
+      // com `srd_dog` não entra — e foi assim que esta fixture reprovou na
+      // primeira execução, num caso que estava conferindo outra coisa.
+      atributos.raca ?? `srd_${atributos.especie ?? 'dog'}`,
       atributos.sexo ?? 'male',
     ],
   );
@@ -426,10 +430,15 @@ void describe('achado avulso em PostGIS (BICHUS-35)', { skip: CONEXAO === undefi
       const tutor = await criarConta();
       const relator = await criarConta();
       const pet = await criarPet(tutor);
-      await abrirCaso(tutor, pet, { ponto: SE, sumiuEm: Number(AGORA) - 2 * DIA });
+      const { id: caso } = await abrirCaso(tutor, pet, { ponto: SE, sumiuEm: Number(AGORA) - 2 * DIA });
       const achado = await repo.criar(novoAchado(relator));
 
-      const pares = await repo.paresParaCruzar(achado.id as FoundReportId);
+      // **Escopo.** A base é compartilhada pelos casos deste arquivo, e um
+      // `pares.length === 1` mediria a ordem em que eles rodaram, não a regra.
+      // O filtro é pelo caso que ESTE caso de teste criou.
+      const pares = (await repo.paresParaCruzar(achado.id as FoundReportId)).filter(
+        (par) => par.caso.caseId === caso,
+      );
       assert.equal(pares.length, 1);
       const distancia = pares[0]?.achado.distanciaEmMetros ?? 0;
       assert.ok(
@@ -444,12 +453,14 @@ void describe('achado avulso em PostGIS (BICHUS-35)', { skip: CONEXAO === undefi
       // em vez de zero — zero diria "no mesmo lugar".
       const tutor = await criarConta();
       const relator = await criarConta();
-      await abrirCaso(tutor, await criarPet(tutor), { cidade: 'São Paulo' });
+      const { id: caso } = await abrirCaso(tutor, await criarPet(tutor), { cidade: 'São Paulo' });
       const achado = await repo.criar(
         novoAchado(relator, { lat: undefined, lon: undefined, cidade: 'São Paulo' }),
       );
 
-      const pares = await repo.paresParaCruzar(achado.id as FoundReportId);
+      const pares = (await repo.paresParaCruzar(achado.id as FoundReportId)).filter(
+        (par) => par.caso.caseId === caso,
+      );
       assert.equal(pares.length, 1);
       assert.equal(pares[0]?.achado.distanciaEmMetros, null);
       assert.equal(pares[0]?.achado.temCoordenada, false);
@@ -459,12 +470,19 @@ void describe('achado avulso em PostGIS (BICHUS-35)', { skip: CONEXAO === undefi
       const tutor = await criarConta();
       const relator = await criarConta();
       // Um gato na Paulista: mesmo lugar, espécie diferente.
-      await abrirCaso(tutor, await criarPet(tutor, { especie: 'cat' }), { ponto: PAULISTA });
+      const gato = await abrirCaso(tutor, await criarPet(tutor, { especie: 'cat' }), {
+        ponto: PAULISTA,
+      });
       // Um cão em Belo Horizonte: mesma espécie, 490 km.
-      await abrirCaso(tutor, await criarPet(tutor), { ponto: { lat: -19.9167, lon: -43.9345 } });
+      const longe = await abrirCaso(tutor, await criarPet(tutor), {
+        ponto: { lat: -19.9167, lon: -43.9345 },
+      });
 
       const achado = await repo.criar(novoAchado(relator));
-      assert.deepEqual(await repo.paresParaCruzar(achado.id as FoundReportId), []);
+      const pares = await repo.paresParaCruzar(achado.id as FoundReportId);
+      const alcancados = pares.map((par) => par.caso.caseId);
+      assert.ok(!alcancados.includes(gato.id), 'o gato entrou: o filtro de espécie não excluiu');
+      assert.ok(!alcancados.includes(longe.id), 'os 490 km entraram: o filtro de distância não excluiu');
     });
   });
 
@@ -497,23 +515,41 @@ void describe('achado avulso em PostGIS (BICHUS-35)', { skip: CONEXAO === undefi
       // existe porque a tabela é a mesma para os dois caminhos, e uma leitura
       // frouxa devolveria a uma conta qualquer o aviso de um achador sem conta.
       const relator = await criarConta();
+      const tutor = await criarConta();
+      const pet = await criarPet(tutor);
+      const tag = randomUUID();
       await cliente.query(
-        `INSERT INTO found_reports (id, origin, found_at, finder_token_hash,
-                                    finder_token_expires_at, tag_id, pet_id)
-         VALUES ($1, 'tag_scan', now(), decode(repeat('ab', 32), 'hex'),
-                 now() + interval '30 days', NULL, NULL)`,
-        [randomUUID()],
-      ).catch(() => undefined);
-
-      const { rows } = await cliente.query<{ total: string }>(
-        `SELECT count(*)::text AS total FROM found_reports
-          WHERE origin = 'tag_scan' AND reporter_user_id IS NULL`,
+        `INSERT INTO pet_tags (id, pet_id, code_hash, code_suffix, code_ciphertext, status)
+         VALUES ($1, $2, decode(repeat('cd', 32), 'hex'), 'ABCD',
+                 decode('00', 'hex'), 'active')`,
+        [tag, pet],
       );
-      // Se a fixture acima não entrou (o CHECK do scan exige tag e pet), o caso
-      // ainda vale: ele afirma que a lista do relator não traz linha sem relator.
-      void rows;
-      const pagina = await repo.listarDoRelator(relator, 50, null);
-      assert.ok(pagina.itens.every((i) => i.origin === 'stray_report'));
+      // O aviso anônimo de verdade: sem `reporter_user_id`, endereçado pelo
+      // token do achador. É a linha que uma leitura frouxa entregaria a uma
+      // conta qualquer.
+      const anonimo = randomUUID();
+      await cliente.query(
+        `INSERT INTO found_reports (id, origin, tag_id, pet_id, found_at,
+                                    finder_token_hash, finder_token_expires_at)
+         VALUES ($1, 'tag_scan', $2, $3, now(), decode(repeat('ab', 32), 'hex'),
+                 now() + interval '30 days')`,
+        [anonimo, tag, pet],
+      );
+
+      // Ele existe...
+      const { rows } = await cliente.query<{ total: string }>(
+        "SELECT count(*)::text AS total FROM found_reports WHERE id = $1",
+        [anonimo],
+      );
+      assert.equal(rows[0]?.total, '1', 'a fixture do aviso anônimo não entrou');
+
+      // ...e não aparece para conta nenhuma. `= :dono` nunca casa com nulo, e é
+      // por isso que a ausência aqui é estrutural e não lembrada.
+      for (const conta of [relator, tutor]) {
+        const pagina = await repo.listarDoRelator(conta, 50, null);
+        assert.ok(!pagina.itens.some((i) => i.id === anonimo));
+      }
+      assert.equal(await repo.buscarDoRelator(anonimo as FoundReportId, tutor), null);
     });
 
     void it('a paginação por cursor não repete nem pula', async () => {
@@ -541,27 +577,94 @@ void describe('achado avulso em PostGIS (BICHUS-35)', { skip: CONEXAO === undefi
   void describe('o vínculo do critério 10 e a retenção', () => {
     void it('`share_token` de caso ABERTO resolve; de caso encerrado, não', async () => {
       const tutor = await criarConta();
-      const { shareToken } = await abrirCaso(tutor, await criarPet(tutor));
-      assert.notEqual(await repo.casoAbertoPorShareToken(shareToken), null);
+      const { id: caso, shareToken } = await abrirCaso(tutor, await criarPet(tutor));
+      assert.equal(
+        await repo.casoAbertoPorShareToken(shareToken),
+        caso,
+        `o token de um caso ABERTO não resolveu para o caso ${caso}`,
+      );
 
       const outro = await abrirCaso(tutor, await criarPet(tutor));
+      // `lost_cases_encerrado_tem_desfecho` cobra os três juntos: status,
+      // desfecho e instante. Encerrar só pelo status não é um estado que o
+      // banco represente, e é isso que impede a métrica de reencontro de mentir.
       await cliente.query(
-        "UPDATE lost_cases SET status = 'closed_reunited' WHERE id = $1",
+        `UPDATE lost_cases
+            SET status = 'closed_reunited', closure_outcome = 'reunited', closed_at = now()
+          WHERE id = $1`,
         [outro.id],
       );
       assert.equal(await repo.casoAbertoPorShareToken(outro.shareToken), null);
       assert.equal(await repo.casoAbertoPorShareToken('token-que-nao-existe'), null);
     });
 
-    void it('todo achado avulso nasce com prazo de guarda, e ele é de 30 dias', async () => {
+    void it('todo achado avulso nasce com prazo de guarda gravado', async () => {
+      // A conta dos 30 dias é de `retencaoAPartirDe` e está provada no unitário.
+      // O que só o banco prova é que a coluna existe, é NOT NULL para achado
+      // avulso (`found_reports_avulso_tem_prazo`) e guarda o instante que o
+      // repositório mandou — e não `now()`, que seria a coluna ignorando o
+      // argumento em silêncio.
       const relator = await criarConta();
-      const achado = await repo.criar(novoAchado(relator));
-      const { rows } = await cliente.query<{ dias: string }>(
-        `SELECT EXTRACT(day FROM retention_until - created_at)::text AS dias
-           FROM found_reports WHERE id = $1`,
+      const prazo = (Number(AGORA) + 30 * DIA) as Instant;
+      const achado = await repo.criar(novoAchado(relator, { retencaoAte: prazo }));
+      const { rows } = await cliente.query<{ retention_until: Date }>(
+        'SELECT retention_until FROM found_reports WHERE id = $1',
         [achado.id],
       );
-      assert.equal(Number(rows[0]?.dias), 30);
+      assert.equal(rows[0]?.retention_until.getTime(), Number(prazo));
+    });
+
+    void it('apagar a CONTA leva o achado junto, e o DELETE não reprova', async () => {
+      // **Este caso nasceu de uma reprovação da integração, e ele é a prova de
+      // que só ela pega.** `reporter_user_id` nascera com `ON DELETE SET NULL`,
+      // e o CHECK `found_reports_avulso_tem_conta` desta história o contradiz:
+      // apagar a conta disparava o `SET NULL`, violava o CHECK e derrubava o
+      // `DELETE FROM users` com 23514.
+      //
+      // O efeito seria a exclusão de conta — que o ADR-0010 promete — passar a
+      // falhar para qualquer pessoa que tivesse registrado um achado. Nenhum
+      // teste unitário chega perto disso: o dublê em memória não tem chave
+      // estrangeira, não tem CHECK, e apaga do `Map` de qualquer jeito.
+      const relator = await criarConta();
+      const achado = await repo.criar(novoAchado(relator));
+
+      await cliente.query('DELETE FROM users WHERE id = $1', [relator]);
+
+      const { rows } = await cliente.query<{ total: string }>(
+        'SELECT count(*)::text AS total FROM found_reports WHERE id = $1',
+        [achado.id],
+      );
+      assert.equal(rows[0]?.total, '0', 'o achado sobreviveu à conta que o registrou');
+    });
+
+    void it('apagar a conta de quem DECIDIU não deixa uma decisão sem autor', async () => {
+      // Segundo defeito da mesma família, e também só a integração o pega:
+      // `match_candidates.decided_by_user_id` nascera `ON DELETE SET NULL`, o
+      // que o CHECK `match_candidates_decisao_tem_autor` torna impossível.
+      // Medido contra o Postgres antes da correção:
+      //   23514 / violates check constraint "match_candidates_decisao_tem_autor"
+      //
+      // Uma decisão sem quem a tomou não é registro, é boato gravado — e o
+      // efeito prático era o mesmo do outro: a exclusão de conta falhando.
+      const tutor = await criarConta();
+      const relator = await criarConta();
+      const { id: caso } = await abrirCaso(tutor, await criarPet(tutor));
+      const achado = await repo.criar(novoAchado(relator));
+      await cliente.query(
+        `INSERT INTO match_candidates
+           (id, case_id, found_report_id, score, link_origin, strategy_version,
+            status, decided_by_user_id, decided_at)
+         VALUES ($1, $2, $3, 0.9, 'attribute_match', 'v1', 'confirmed', $4, now())`,
+        [randomUUID(), caso, achado.id, tutor],
+      );
+
+      await cliente.query('DELETE FROM users WHERE id = $1', [tutor]);
+
+      const { rows } = await cliente.query<{ total: string }>(
+        'SELECT count(*)::text AS total FROM match_candidates WHERE case_id = $1',
+        [caso],
+      );
+      assert.equal(rows[0]?.total, '0');
     });
 
     void it('o achado sobrevive ao caso a que estava ligado', async () => {

@@ -55,7 +55,6 @@ export interface AchadoAvulso {
   readonly onde: OndeFoiAchado;
   readonly observacao?: string;
   readonly shareToken?: string;
-  readonly fotoUploadId?: string;
 }
 
 export interface ProblemaDeCampo {

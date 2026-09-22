@@ -311,9 +311,25 @@ export function registrarRotasDeAchado(
                 },
                 ...(corpo.notes === undefined ? {} : { observacao: corpo.notes }),
                 ...(corpo.share_token === undefined ? {} : { shareToken: corpo.share_token }),
-                ...(corpo.photo_upload_id === undefined
-                  ? {}
-                  : { fotoUploadId: corpo.photo_upload_id }),
+                // `photo_upload_id` é lido do corpo e **não é usado**, e isso é
+                // uma tensão do contrato, não um esquecimento.
+                //
+                // Para existir um `upload_id` de foto de achado é preciso
+                // chamar `createFoundReportPhotoUploadIntent`, que exige
+                // `found_report_id` no corpo — ou seja, exige que o achado já
+                // exista. Não há como obter um valor válido para este campo
+                // ANTES da chamada que o recebe, e o único outro emissor de
+                // intenção (`createPetPhotoUploadIntent`) exige um `pet_id`,
+                // que o achado avulso não tem.
+                //
+                // O desenho da história é o mesmo: o critério 4 manda registrar
+                // o achado SEM a foto quando o upload falha, com o envio
+                // seguindo em segundo plano. A foto vem depois, sempre.
+                //
+                // Não recuso o campo porque o contrato o declara e recusá-lo
+                // quebraria um cliente que o lê. Não o uso porque não existe
+                // valor que eu possa honrar. Está na pauta de refinamento como
+                // pergunta fechada, junto do 415.
               },
               relator,
             ),

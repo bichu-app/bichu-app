@@ -199,6 +199,36 @@ ALTER TABLE found_reports
   ADD CONSTRAINT found_reports_avulso_tem_prazo
     CHECK (origin <> 'stray_report' OR retention_until IS NOT NULL);
 
+-- ----------------------------------------------------------------------
+-- 2b. A chave estrangeira do relator passa a CASCATEAR
+-- ----------------------------------------------------------------------
+--
+-- Descoberto pela integracao, e so por ela: `reporter_user_id` nasceu em
+-- 20260917000007 com `ON DELETE SET NULL`, o que estava certo enquanto a coluna
+-- era opcional em toda linha. Com `found_reports_avulso_tem_conta` acima ela
+-- deixou de ser: apagar uma conta dispara o `SET NULL`, que viola o CHECK, e o
+-- `DELETE FROM users` reprova com 23514.
+--
+-- O efeito pratico e pior do que parece: a exclusao de conta -- que o ADR-0010
+-- promete -- passaria a falhar para qualquer pessoa que tivesse registrado um
+-- achado. Um CHECK que impede o titular de sair e a pior forma de um CHECK
+-- estar errado.
+--
+-- CASCADE e nao um CHECK mais frouxo, e a escolha e de privacidade. O achado
+-- avulso e dado DA CONTA que o registrou: so ela le, so ela altera, e o teto de
+-- chamada e cobrado dela. Sem a conta nao sobra leitor nenhum -- e sobraria um
+-- relato com lugar, data e possivelmente foto, sem titular e sem quem pedisse o
+-- apagamento. A tabela de retencao do ADR-0010 diz "conta excluida: expurgo em
+-- 30 dias", e esta e a linha que faz isso valer para o achado tambem.
+--
+-- O aviso ANONIMO do QR nao e afetado: ali `reporter_user_id` ja e nulo, e o
+-- vinculo do achador e o token, que nao pende de conta nenhuma.
+ALTER TABLE found_reports
+  DROP CONSTRAINT IF EXISTS found_reports_reporter_user_id_fkey;
+ALTER TABLE found_reports
+  ADD CONSTRAINT found_reports_reporter_user_id_fkey
+  FOREIGN KEY (reporter_user_id) REFERENCES users (id) ON DELETE CASCADE;
+
 COMMENT ON COLUMN found_reports.found_point IS
   'Onde o animal foi visto. Existe para CONSULTA de distancia (ST_DWithin/ST_Distance no cruzamento da secao 4.10), nao para exibicao: o que sai em qualquer resposta e o rotulo de bairro e cidade derivado de found_neighborhood e found_city, jamais a coordenada, nem arredondada (ADR-0006 e ADR-0010).';
 
@@ -314,7 +344,18 @@ CREATE TABLE match_candidates (
                                CONSTRAINT match_candidates_status
                                CHECK (status IN ('suggested', 'confirmed', 'rejected')),
 
-  decided_by_user_id uuid      REFERENCES users (id) ON DELETE SET NULL,
+  -- CASCADE e nao SET NULL, e o motivo e o mesmo de
+  -- `found_reports_reporter_user_id_fkey`: com o CHECK abaixo, `SET NULL`
+  -- produziria uma linha impossivel e o `DELETE FROM users` reprovaria com
+  -- 23514. Medido contra o Postgres antes de escrever esta linha, nao deduzido:
+  --   DELETE FALHOU: 23514 / new row for relation "match_candidates"
+  --   violates check constraint "match_candidates_decisao_tem_autor"
+  --
+  -- CASCADE tambem e o que a realidade ja faz: quem decide e o tutor, e o caso
+  -- e dele -- apagar a conta ja levava a linha pelo `case_id`. O que o SET NULL
+  -- acrescentava era so a chance de a decisao ficar sem autor, que e uma trilha
+  -- que mente. Decisao sem quem a tomou nao e registro: e boato gravado.
+  decided_by_user_id uuid      REFERENCES users (id) ON DELETE CASCADE,
   decided_at       timestamptz,
 
   created_at       timestamptz NOT NULL DEFAULT now(),
@@ -368,6 +409,12 @@ DROP INDEX IF EXISTS found_reports_retencao;
 DROP INDEX IF EXISTS found_reports_abertos_por_especie;
 DROP INDEX IF EXISTS found_reports_do_relator;
 DROP INDEX IF EXISTS found_reports_por_lugar;
+
+ALTER TABLE found_reports
+  DROP CONSTRAINT IF EXISTS found_reports_reporter_user_id_fkey;
+ALTER TABLE found_reports
+  ADD CONSTRAINT found_reports_reporter_user_id_fkey
+  FOREIGN KEY (reporter_user_id) REFERENCES users (id) ON DELETE SET NULL;
 
 ALTER TABLE found_reports
   DROP CONSTRAINT IF EXISTS found_reports_avulso_tem_prazo,
