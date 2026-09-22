@@ -12,7 +12,7 @@
  * médio no ADR-0021 justamente porque a versão errada *parece* certa na revisão.
  */
 import { sql } from 'kysely';
-import type { Db } from '../../../../shared/db/pool.js';
+import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Instant, PetId, TagId, UserId } from '../../../../shared/types/brands.js';
 import type {
   AvisoRecente,
@@ -78,6 +78,120 @@ function comoTagDoTutor(linha: LinhaDeTagDoTutor): TagDoTutor {
   };
 }
 
+/**
+ * ## Os construtores, e por que a autorização passou a sair por eles
+ *
+ * ADR-0021: a autorização mora na cláusula `WHERE`, e em lugar nenhum além
+ * dela. Essa afirmação **não é observável pela resposta da rota** — uma consulta
+ * que traz a linha do outro e a descarta num `if` responde igual, até o dia em
+ * que alguém mexe no `if`, e aí não existe teste que acuse, porque o `if` era o
+ * teste.
+ *
+ * Até a BICHUS-237 a afirmação valia por confiança: removida a linha
+ * `.where('pets.owner_user_id', '=', dono)` de `buscarParaReimpressao`, os 967
+ * casos unitários e os 61 de integração continuavam verdes, numa rota marcada
+ * `reveals_credential` cujo QR carrega o código da plaquinha dentro dos pixels.
+ *
+ * `construtorD*` existe para que a afirmação seja **verificável**:
+ * `autorizacao-na-clausula-where.test.ts` compila o SQL destas funções sem
+ * executá-las, exige o predicado do dono ligado ao valor certo, e carrega a
+ * isca que precisa reprovar. É o mesmo instrumento que a BICHUS-92 montou em
+ * `identity/adapters/persistence/kysely-localizacao-de-referencia.ts`.
+ *
+ * Eles recebem `DbExecutor` e não `Db` porque a emissão os chama de dentro de
+ * uma transação: o predicado conferido é o mesmo nos dois caminhos.
+ */
+
+/**
+ * **A busca vinculada do ADR-0021.** Os dois predicados são irmãos no mesmo
+ * `WHERE`, e o `status` ativo está junto deles pelo mesmo motivo: a tag
+ * revogada do próprio tutor também é 404 aqui, e quem chama não recebe nada
+ * com que pudesse distinguir os casos.
+ */
+export function construtorDoContextoDoDono(db: DbExecutor, codeHash: Uint8Array, dono: UserId) {
+  return db
+    .selectFrom('pet_tags')
+    .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
+    .select(['pet_tags.id as tag_id', 'pets.id as pet_id'])
+    .where('pet_tags.code_hash', '=', Buffer.from(codeHash))
+    .where('pets.owner_user_id', '=', dono)
+    .where('pet_tags.status', '=', 'active')
+    .where('pets.deleted_at', 'is', null);
+}
+
+/**
+ * O pet é deste tutor? É a consulta que impede listar e emitir plaquinha de pet
+ * alheio a partir de um id adivinhado.
+ *
+ * Uma só para os dois caminhos, de propósito: listar e emitir precisam do mesmo
+ * predicado, e duas cópias são duas chances de uma delas divergir sem ninguém
+ * acusar. A emissão adiciona `.forUpdate()` no ponto de chamada, porque o
+ * bloqueio é decisão da transação e não do predicado.
+ */
+export function construtorDaConferenciaDoPet(db: DbExecutor, petId: PetId, dono: UserId) {
+  return db
+    .selectFrom('pets')
+    .select('id')
+    .where('id', '=', petId)
+    .where('owner_user_id', '=', dono)
+    .where('deleted_at', 'is', null);
+}
+
+/** As tags do pet, com o dono no mesmo `WHERE` que o pet. */
+export function construtorDaListaDeTags(db: DbExecutor, petId: PetId, dono: UserId) {
+  return db
+    .selectFrom('pet_tags')
+    .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
+    .select([
+      'pet_tags.id as id',
+      'pet_tags.status as status',
+      'pet_tags.code_suffix as code_suffix',
+      'pet_tags.label as label',
+      'pet_tags.scan_count as scan_count',
+      'pet_tags.last_scanned_at as last_scanned_at',
+      'pet_tags.revoked_at as revoked_at',
+      'pet_tags.revocation_reason as revocation_reason',
+      'pet_tags.created_at as created_at',
+    ])
+    .where('pet_tags.pet_id', '=', petId)
+    .where('pets.owner_user_id', '=', dono)
+    .orderBy('pet_tags.created_at', 'desc');
+}
+
+/**
+ * O cifrado para reimprimir o QR. **Uma consulta**, com o dono, o pet e a tag
+ * na mesma cláusula `WHERE`.
+ *
+ * Não há `select` do pet seguido de `if`, e não há comparação de tutor em
+ * JavaScript: o banco devolve linha ou não devolve, e "não devolve" é o mesmo
+ * resultado para tag inexistente, tag de outro pet e pet de outro tutor. Feito
+ * com duas consultas e uma comparação, isto vira o BOLA do SEC-001 numa rota
+ * que **revela credencial** — o caso mais caro dessa família, porque o que vaza
+ * é o que está impresso na coleira de alguém.
+ *
+ * `pets.deleted_at is null` fecha o quarto caso: pet excluído não reimprime.
+ *
+ * `status` NÃO entra no `WHERE`. A tag revogada precisa ser distinguível da
+ * inexistente para que a resposta seja 410 e não 404 (ADR-0004), e essa é a
+ * única distinção que esta consulta devolve: ela não diz de quem é a tag, diz
+ * que existe uma tag **sua** que está morta.
+ */
+export function construtorDaBuscaParaReimpressao(
+  db: DbExecutor,
+  petId: PetId,
+  tagId: TagId,
+  dono: UserId,
+) {
+  return db
+    .selectFrom('pet_tags')
+    .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
+    .select(['pet_tags.status as status', 'pet_tags.code_ciphertext as code_ciphertext'])
+    .where('pet_tags.id', '=', tagId)
+    .where('pet_tags.pet_id', '=', petId)
+    .where('pets.owner_user_id', '=', dono)
+    .where('pets.deleted_at', 'is', null);
+}
+
 export function criarTagRepository(db: Db): TagRepository {
   return {
     async resolverPorCodigo(codeHash): Promise<TagResolvida | undefined> {
@@ -130,90 +244,30 @@ export function criarTagRepository(db: Db): TagRepository {
       };
     },
 
-    /**
-     * **A busca vinculada do ADR-0021.** Os dois predicados são irmãos no mesmo
-     * `WHERE`, e o `status` ativo está junto deles pelo mesmo motivo: a tag
-     * revogada do próprio tutor também é 404 aqui, e quem chama não recebe nada
-     * com que pudesse distinguir os casos.
-     */
     async buscarContextoDoDono(codeHash, dono): Promise<ContextoDoDono | undefined> {
-      const linha = await db
-        .selectFrom('pet_tags')
-        .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
-        .select(['pet_tags.id as tag_id', 'pets.id as pet_id'])
-        .where('pet_tags.code_hash', '=', Buffer.from(codeHash))
-        .where('pets.owner_user_id', '=', dono)
-        .where('pet_tags.status', '=', 'active')
-        .where('pets.deleted_at', 'is', null)
-        .executeTakeFirst();
+      const linha = await construtorDoContextoDoDono(db, codeHash, dono).executeTakeFirst();
 
       if (linha === undefined) return undefined;
       return { petId: linha.pet_id as PetId, tagId: linha.tag_id as TagId };
     },
 
     async listarTagsDoPet(petId, dono): Promise<readonly TagDoTutor[] | undefined> {
-      // O pet é conferido pela mesma consulta que traz as tags: o `innerJoin`
-      // com o dono no `WHERE` é o que impede listar plaquinha de pet alheio a
-      // partir de um id adivinhado.
-      const pet = await db
-        .selectFrom('pets')
-        .select('id')
-        .where('id', '=', petId)
-        .where('owner_user_id', '=', dono)
-        .where('deleted_at', 'is', null)
-        .executeTakeFirst();
+      // Pet inexistente e pet de outra conta são o MESMO `undefined`: quem
+      // pergunta não recebe nada com que distinguir os dois.
+      const pet = await construtorDaConferenciaDoPet(db, petId, dono).executeTakeFirst();
       if (pet === undefined) return undefined;
 
-      const linhas = await db
-        .selectFrom('pet_tags')
-        .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
-        .select([
-          'pet_tags.id as id',
-          'pet_tags.status as status',
-          'pet_tags.code_suffix as code_suffix',
-          'pet_tags.label as label',
-          'pet_tags.scan_count as scan_count',
-          'pet_tags.last_scanned_at as last_scanned_at',
-          'pet_tags.revoked_at as revoked_at',
-          'pet_tags.revocation_reason as revocation_reason',
-          'pet_tags.created_at as created_at',
-        ])
-        .where('pet_tags.pet_id', '=', petId)
-        .where('pets.owner_user_id', '=', dono)
-        .orderBy('pet_tags.created_at', 'desc')
-        .execute();
-
+      const linhas = await construtorDaListaDeTags(db, petId, dono).execute();
       return linhas.map(comoTagDoTutor);
     },
 
-    /**
-     * O cifrado para reimprimir o QR. **Uma consulta**, com o dono, o pet e a
-     * tag na mesma cláusula `WHERE`.
-     *
-     * Não há `select` do pet seguido de `if`, e não há comparação de tutor em
-     * JavaScript: o banco devolve linha ou não devolve, e "não devolve" é o
-     * mesmo resultado para tag inexistente, tag de outro pet e pet de outro
-     * tutor. Feito com duas consultas e uma comparação, isto vira o BOLA do
-     * SEC-001 numa rota que **revela credencial** — o caso mais caro dessa
-     * família, porque o que vaza é o que está impresso na coleira de alguém.
-     *
-     * `pets.deleted_at is null` fecha o quarto caso: pet excluído não reimprime.
-     *
-     * `status` NÃO entra no `WHERE`. A tag revogada precisa ser distinguível da
-     * inexistente para que a resposta seja 410 e não 404 (ADR-0004), e essa é a
-     * única distinção que esta consulta devolve: ela não diz de quem é a tag,
-     * diz que existe uma tag **sua** que está morta.
-     */
     async buscarParaReimpressao(petId, tagId, dono): Promise<TagParaReimpressao | undefined> {
-      const linha = await db
-        .selectFrom('pet_tags')
-        .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
-        .select(['pet_tags.status as status', 'pet_tags.code_ciphertext as code_ciphertext'])
-        .where('pet_tags.id', '=', tagId)
-        .where('pet_tags.pet_id', '=', petId)
-        .where('pets.owner_user_id', '=', dono)
-        .where('pets.deleted_at', 'is', null)
-        .executeTakeFirst();
+      const linha = await construtorDaBuscaParaReimpressao(
+        db,
+        petId,
+        tagId,
+        dono,
+      ).executeTakeFirst();
 
       if (linha === undefined) return undefined;
       return {
@@ -234,12 +288,7 @@ export function criarTagRepository(db: Db): TagRepository {
      */
     async emitir(nova: NovaTag, dono: UserId, agora: Instant): Promise<ResultadoDaEmissao> {
       return db.transaction().execute(async (trx) => {
-        const pet = await trx
-          .selectFrom('pets')
-          .select('id')
-          .where('id', '=', nova.petId)
-          .where('owner_user_id', '=', dono)
-          .where('deleted_at', 'is', null)
+        const pet = await construtorDaConferenciaDoPet(trx, nova.petId, dono)
           .forUpdate()
           .executeTakeFirst();
         if (pet === undefined) return { tipo: 'pet_nao_e_deste_tutor' };
