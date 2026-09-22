@@ -86,7 +86,7 @@
          O Bichu funciona sem GPS: o criterio 5 da BICHUS-23 manda o fluxo
          inteiro funcionar pelo bairro digitado, e o caso e o achado existem do
          mesmo jeito. Sem estas linhas, o app sumiria da loja para um conjunto
-         de aparelhos em que ele funciona -- e isso so aparece no relatorio de
+         de aparelhos em que ele funciona — e isso so aparece no relatorio de
          alcance da Play Console, nunca rodando o app. -->
     <uses-feature
         android:name="android.hardware.location"
