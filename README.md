@@ -106,6 +106,21 @@ O mesmo vale para `make up HOST=<ip da sua máquina>`, que serve na rede local
 para um segundo aparelho físico alcançar a rota pública do QR: ele move host e
 porta nas cinco de uma vez, e o portão reprova se alguma ficar para trás.
 
+### Subir exige um checkout do git
+
+A imagem carrega, gravado dentro dela, o commit de que ela saiu, e o build
+**reprova** sem ele: um serviço que não sabe de onde veio responde `status: ok`
+igual a um que sabe, e aí quem está rodando código antigo fica indistinguível de
+quem está rodando o novo. O `make` resolve isso sozinho — ele lê
+`git rev-parse HEAD` e exporta o valor.
+
+O que isso quer dizer na prática: **`make up` de um tarball, de uma cópia da
+pasta ou de um diretório sem `.git` não sobe**, e você vai ver a mensagem
+dizendo qual dos dois casos é o seu. A saída certa é construir de um checkout, e
+não inventar um valor: um SHA falso engana pior que a ausência, porque a sonda
+passa a afirmar em vez de calar. Para apontar um commit específico,
+`make up BUILD_COMMIT=<sha>`.
+
 | Comando | O que faz |
 |---|---|
 | `make up` | sobe dev, aplicando as migrações |

@@ -71,8 +71,52 @@ ifneq ($(HOST),)
 export BIND_HOST := 0.0.0.0
 endif
 
+# ---------------------------------------------------------------------------
+# BUILD_COMMIT (absorcao da BICHUS-210, que mexeu no Dockerfile e nao aqui).
+#
+# Desde a 210 o commit entra por `ARG BUILD_COMMIT` e o build REPROVA quando
+# ele falta ou nao tem forma de commit. O `compose.yaml` repassa
+# `${BUILD_COMMIT:-}` como argumento de build, com padrao vazio de proposito:
+# a interpolacao acontece ao LER o arquivo, entao `:?` derrubaria tambem
+# `down`, `logs` e `config`, que nao constroem nada. Quem precisa reprovar e o
+# build. Falta alguem POR o valor, e esse alguem e este Makefile.
+#
+# `:=` e nao `?=`, e a diferenca nao e de desempenho. `?=` cria variavel de
+# expansao RECURSIVA: o `$(shell)` roda de novo a cada referencia, e como a
+# variavel e exportada, isso e um `git rev-parse` por linha de receita e por
+# sub-make. O problema real nao e o fork, e que o valor pode MUDAR no meio de
+# uma invocacao -- basta alguem commitar enquanto `make up` roda -- e os tres
+# alvos (dev, api, migrador) sairiam com commits diferentes do mesmo `make up`.
+# Uma subida estampa UM commit, e so expansao simples promete isso.
+#
+# O `ifeq` no lugar de `?=` porque `?=` considera definida a variavel que veio
+# VAZIA do ambiente (`BUILD_COMMIT= make up`), e ali cairiamos no vazio sem
+# sonda. Quem passa valor de verdade pelo ambiente ou pela linha de comando
+# continua mandando.
+#
+# Limite conhecido, escrito para nao virar surpresa: `git rev-parse HEAD` conta
+# de onde a arvore SAIU, nao o que ela tem agora. Com arvore suja a imagem sai
+# rotulada com o commit anterior. Em desenvolvimento a arvore esta suja quase
+# sempre e alarmar a cada `make up` seria ruido; onde isso importa, a esteira
+# compara o valor reportado com o commit construido (BICHUS-210).
+ifeq ($(strip $(BUILD_COMMIT)),)
+# `--verify` e nao `rev-parse HEAD` puro: em repositorio sem nenhum commit o
+# segundo IMPRIME a string `HEAD` e sai com erro, e esse lixo viraria o valor
+# exportado -- o Dockerfile o recusaria, mas por acaso, e `down` e `logs`
+# passariam a carregar um BUILD_COMMIT=HEAD no ambiente sem motivo.
+BUILD_COMMIT := $(shell git rev-parse --verify HEAD 2>/dev/null)
+endif
+export BUILD_COMMIT
+
+# A FORMA exigida. A autoridade e o Dockerfile (BICHUS-210), que reprova o
+# build com este mesmo criterio; a conferencia daqui nao aprova nada, ela so
+# troca a mensagem do Docker pela nossa antes de o build comecar -- mesmo
+# padrao da pre-checagem de portas. As duas precisam andar juntas: afrouxar
+# aqui nao afrouxa la, mas apertar la sem apertar aqui devolve a mensagem ruim.
+FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
+
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-docs-fechada backup restore pin-digests
+.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-docs-fechada backup restore pin-digests
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -83,7 +127,24 @@ setup: ## prepara a maquina: ganchos de git e .env
 	@test -f .env || { cp .env.example .env; echo "criado .env a partir do exemplo: PREENCHA os valores vazios"; }
 	@echo "gancho de pre-push instalado por core.hooksPath (versionado, corrigivel por PR)"
 
-up: setup ## sobe dev, aplicando as migracoes. HOST=<ip> para servir na rede local
+commit-de-build: ## confere BUILD_COMMIT antes de o docker construir (BICHUS-210)
+	@if printf '%s' '$(BUILD_COMMIT)' | grep -Eq '$(FORMA_DE_COMMIT)'; then exit 0; fi; \
+	 echo "BUILD_COMMIT vazio ou sem forma de commit (veio '$(BUILD_COMMIT)')."; \
+	 if git rev-parse --git-dir >/dev/null 2>&1; then \
+	   echo "  Este diretorio E um repositorio git, mas \`git rev-parse HEAD\` nao devolveu commit."; \
+	   echo "  Provavel: repositorio sem nenhum commit ainda, ou HEAD apontando para lugar nenhum."; \
+	 else \
+	   echo "  Este diretorio NAO e um repositorio git (tarball, copia, ou .git removido)."; \
+	 fi; \
+	 echo "  Desde a BICHUS-210 o commit e gravado DENTRO da imagem e o build reprova sem ele:"; \
+	 echo "  binario que nao sabe de onde veio responde \`status: ok\` igual ao que sabe, e ai"; \
+	 echo "  um servico rodando codigo antigo e indistinguivel de um rodando o novo."; \
+	 echo "  Saida certa: construa de um checkout do git."; \
+	 echo "  Nao invente um valor -- SHA falso engana pior que o nulo, porque a sonda passa a"; \
+	 echo "  AFIRMAR em vez de calar, e a esteira compara o reportado com o commit construido."; \
+	 exit 1
+
+up: setup commit-de-build ## sobe dev, aplicando as migracoes. HOST=<ip> para servir na rede local
 	@$(MAKE) --no-print-directory verificar-portas
 	@python3 infra/escolher-portas.py --conferir $(PORTA) $(PORTA_MIDIA)
 	$(COMPOSE) --profile dev up -d --wait
@@ -103,28 +164,28 @@ reset: ## derruba APAGANDO volume e sobe do zero. Prova a migracao em banco vazi
 	$(COMPOSE) --profile dev --profile qa down -v
 	$(MAKE) up
 
-migrar: ## aplica as migracoes pendentes no banco de pe (idempotente)
+migrar: commit-de-build ## aplica as migracoes pendentes no banco de pe (idempotente)
 	$(COMPOSE) up -d --wait db
 	$(COMPOSE) run --rm migracao up
 
 migrar-baixo: ## desfaz a ultima migracao. Prova que o `down` existe e roda
 	$(COMPOSE) run --rm migracao down 1
 
-seed: ## recria a massa fixa de qa, deterministica
+seed: commit-de-build ## recria a massa fixa de qa, deterministica
 	$(COMPOSE) run --rm api node dist/bin/seed.js
 
 logs: ## tail agregado dos servicos, com prefixo
 	$(COMPOSE) logs -f --tail=100
 
-test: ## testes unitarios
+test: commit-de-build ## testes unitarios
 	$(COMPOSE) run --rm api npm test
 
-test-int: ## sobe db e objeto, migra do zero e roda integracao
+test-int: commit-de-build ## sobe db e objeto, migra do zero e roda integracao
 	$(COMPOSE) up -d --wait db objeto
 	$(COMPOSE) run --rm migracao up
 	$(COMPOSE) run --rm api npm run test:integration
 
-e2e: ## Cypress contra o ambiente de qa
+e2e: commit-de-build ## Cypress contra o ambiente de qa
 	$(COMPOSE) --profile qa up -d --wait
 	npx cypress run --record
 
@@ -157,6 +218,9 @@ verificar-portas-autoteste: ## as iscas do portao de portas precisam reprovar (n
 verificar-escolha-de-portas: ## BICHUS-211: havendo par livre, `make up` sem argumento nao cai no bind
 	python3 infra/verificacao/verificar_escolha_de_portas.py --raiz .
 
+verificar-commit-de-build: ## BICHUS-210/211: o `make` exporta BUILD_COMMIT com forma de commit
+	python3 infra/verificacao/verificar_commit_de_build.py --raiz .
+
 verificar-portabilidade: ## portao de portabilidade: provedor, hostname e as duas iscas
 	python3 infra/verificacao/verificar_portabilidade.py
 
@@ -181,7 +245,7 @@ verificar-docs-fechada: ## ADR-0018: a Swagger UI fechada, visto de fora (autote
 
 # Tudo que nao precisa de nuvem nem de segredo, na ordem da esteira. E o que
 # `make up` seguido de `make verificar` responde antes de abrir um PR.
-verificar: verificar-dispensas verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-dispensas verificar-commit-de-build verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
 	@mkdir -p backup

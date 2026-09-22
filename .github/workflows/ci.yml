@@ -76,6 +76,15 @@ jobs:
       - name: "`make up` sem argumento nao cai no bind havendo par livre"
         run: python3 infra/verificacao/verificar_escolha_de_portas.py
 
+      # Absorcao da BICHUS-210: o Dockerfile reprova o build sem `BUILD_COMMIT`
+      # e o compose so repassa o que estiver no AMBIENTE, entao quem poe o valor
+      # la e o Makefile. Este passo roda POR DENTRO do make de proposito -- ele
+      # le a variavel do ambiente que o make montou, que e o caminho real. Apague
+      # o `export` do Makefile e ele reprova; a pre-checagem do `make up`, que le
+      # a variavel do make e nao o ambiente, continuaria passando.
+      - name: o make exporta BUILD_COMMIT
+        run: make --no-print-directory verificar-commit-de-build
+
       # ADR-0016 (itens 4 e 6) e o defeito de 17/09. Tres conferencias num
       # script so, todas por leitura de arquivo, todas com isca guardada em
       # `infra/verificacao/iscas/`:
