@@ -139,16 +139,28 @@ const FERRAMENTA_FORA_DO_RUNTIME =
 const AUSENCIAS_ACEITAS = new Map([
   // -- so tipo: o compilado nao tem uma instrucao sequer ---------------------
   ['src/modules/audit/ports/audit-log.ts', SO_TIPO],
+  // As cinco de 22/09, que chegaram com o alerta, a conversa mediada, o achado
+  // avulso e o aparelho. Cada uma esta nomeada, uma linha por arquivo, pelo
+  // motivo escrito no topo desta lista: um prefixo `src/modules/**/ports/**`
+  // seria uma linha a menos e dispensaria de antemao toda porta FUTURA,
+  // inclusive a que alguem escrever amanha ja com codigo de verdade dentro.
+  // Conferido arquivo a arquivo: nenhuma das cinco declara `const`, `function`,
+  // `class` ou `enum`, entao o compilado nao tem uma instrucao sequer.
+  ['src/modules/found/ports/found-report-repository.ts', SO_TIPO],
   ['src/modules/identity/application/dependencies.ts', SO_TIPO],
   ['src/modules/identity/ports/identity-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/localizacao-de-referencia-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/mailer.ts', SO_TIPO],
   ['src/modules/identity/ports/token-signer.ts', SO_TIPO],
   ['src/modules/lostfound/ports/alcance-do-alerta.ts', SO_TIPO],
+  ['src/modules/lostfound/ports/entrega-do-alerta.ts', SO_TIPO],
   ['src/modules/lostfound/ports/lost-case-repository.ts', SO_TIPO],
+  ['src/modules/lostfound/ports/registro-de-disparos.ts', SO_TIPO],
   ['src/modules/media/ports/image-processor.ts', SO_TIPO],
   ['src/modules/media/ports/media-repository.ts', SO_TIPO],
   ['src/modules/media/ports/object-storage.ts', SO_TIPO],
+  ['src/modules/messaging/ports/conversation-repository.ts', SO_TIPO],
+  ['src/modules/notifications/ports/registro-de-aparelhos.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-entregas.ts', SO_TIPO],
   ['src/modules/pets/ports/fotos-do-pet.ts', SO_TIPO],
   ['src/modules/pets/ports/pet-repository.ts', SO_TIPO],
@@ -169,13 +181,17 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/bin/seed.ts', PONTO_DE_ENTRADA],
 
   // -- adaptadores que nenhuma suite carrega ---------------------------------
+  //
+  // Sairam em 22/09, pela invariante 2 desta lista: `kysely-pet-repository.ts` e
+  // `kysely-tag-repository.ts` passaram a APARECER no relatorio de integracao
+  // (`autorizacao-de-pets-e-fotos.test.ts` e `reimpressao-do-qr-e-do-dono.
+  // test.ts` carregam os dois), e dispensa que sobra depois de o teste chegar e
+  // o comeco de uma lista que so cresce.
   ['src/modules/lostfound/adapters/persistence/kysely-lost-case-repository.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/media/application/media-service.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/media/application/processar-foto.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/notifications/adapters/persistence/kysely-registro-de-entregas.ts', SEM_SUITE_QUE_CARREGUE],
-  ['src/modules/pets/adapters/persistence/kysely-pet-repository.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/pets/adapters/persistence/kysely-reference-data-repository.ts', SEM_SUITE_QUE_CARREGUE],
-  ['src/modules/tags/adapters/persistence/kysely-tag-repository.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/shared/queue/kysely-job-queue.ts', SEM_SUITE_QUE_CARREGUE],
   [
     'src/shared/ports/index.ts',

@@ -76,9 +76,26 @@ interface ListaFechada {
  * conjunto inteiro em vez de para o valor que está acrescentando.
  */
 const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
+  'public.alert_dispatches.alert_dispatches_estado': {
+    coluna: 'reach_status',
+    // `EstadoDoDisparo` em `src/modules/lostfound/domain/disparo-do-alerta.ts`,
+    // espelhado em `src/shared/db/schema.ts`. Os quatro são estados distintos e
+    // nenhum é substituível por outro: `computed` traz número, `unavailable` é
+    // "não conseguimos contar", `queued` é "ainda não contamos" e
+    // `no_location` é "não existe raio, o caso não tem coordenada".
+    valores: ['computed', 'unavailable', 'queued', 'no_location'],
+  },
   'audit.events.events_actor_kind_check': {
     coluna: 'actor_kind',
     valores: ['user', 'anonymous', 'system'],
+  },
+  'public.conversation_messages.conversation_messages_sender_role_conhecido': {
+    coluna: 'sender_role',
+    // `Papel` em `src/modules/messaging/domain/conversa-mediada.ts`, e
+    // `PapelNaConversa` em `src/shared/db/schema.ts`. `system` está aqui e
+    // **não** em `conversations.blocked_by_role`: mensagem o sistema escreve,
+    // bloqueio ele não exerce.
+    valores: ['tutor', 'finder', 'system'],
   },
   'public.entity_verifications.entity_verifications_decision_check': {
     coluna: 'decision',
@@ -99,6 +116,17 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'origin',
     valores: ['tag_scan', 'stray_report'],
   },
+  'public.found_reports.found_reports_status': {
+    coluna: 'status',
+    // O `status` do `FoundReport` no contrato, e o mesmo tipo em
+    // `src/modules/found/domain/registro-de-achado.ts` e em `schema.ts`. Hoje o
+    // código só ESCREVE `open` (`kysely-found-report-repository.ts`, literal no
+    // `INSERT`): `matched` e `closed` são escritos pela decisão do candidato,
+    // que ainda não tem rota. Estão declarados porque o domínio é o do
+    // contrato, e não o do que já foi construído — tirá-los daqui obrigaria a
+    // uma migração no dia em que a rota entrar.
+    valores: ['open', 'matched', 'closed'],
+  },
   'public.jobs.jobs_status_check': {
     coluna: 'status',
     valores: ['pending', 'running', 'done', 'failed'],
@@ -114,6 +142,23 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   'public.lost_cases.lost_cases_status_check': {
     coluna: 'status',
     valores: ['open', 'closed_reunited', 'closed_not_found', 'closed_false_alarm'],
+  },
+  'public.match_candidates.match_candidates_origem_do_vinculo': {
+    coluna: 'link_origin',
+    // `Sugestao.linkOrigin` em `src/modules/found/domain/cruzamento.ts`. Os dois
+    // valores são os dois caminhos da seção 4.10: o cruzamento por atributos e
+    // o vizinho que chegou pelo push e disse "vi este pet" (score 1,0, sem
+    // cruzamento — e ainda assim sujeito à confirmação humana).
+    valores: ['attribute_match', 'share_token'],
+  },
+  'public.match_candidates.match_candidates_status': {
+    coluna: 'status',
+    // `suggested` é o único que o código escreve, e é literal no `INSERT` de
+    // `kysely-found-report-repository.ts` de propósito: `Sugestao` não tem campo
+    // de status, então o cruzamento não consegue nomear outro valor. `confirmed`
+    // e `rejected` são da decisão do tutor, que `match_candidates_decisao_tem_
+    // autor` obriga a trazer pessoa e instante.
+    valores: ['suggested', 'confirmed', 'rejected'],
   },
   'public.notification_deliveries.notification_deliveries_record_type_check': {
     coluna: 'record_type',
@@ -205,6 +250,21 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'kind',
     valores: ['pet_photo', 'found_report_photo', 'finder_photo'],
   },
+  'public.user_devices.user_devices_permissao': {
+    coluna: 'push_permission',
+    // Três valores, e `not_asked` é DISTINTO de `denied` (critério 2 da
+    // BICHUS-91): a linha de "permissão negada" só aparece para quem
+    // respondeu não. Juntar os dois apagaria a diferença entre quem recusou e
+    // quem ainda não foi perguntado, que é a métrica de alcance honesta do
+    // ADR-0008. Espelha `push_permission` em `src/shared/db/schema.ts`.
+    valores: ['granted', 'denied', 'not_asked'],
+  },
+  'public.user_devices.user_devices_plataforma': {
+    coluna: 'platform',
+    // `Device.platform` do contrato. Não há `web`: o produto é aplicativo, e
+    // um terceiro valor aqui entraria com a tela que o produzisse.
+    valores: ['android', 'ios'],
+  },
   'public.user_identities.user_identities_provider_check': {
     coluna: 'provider',
     valores: ['local', 'google', 'apple', 'keycloak'],
@@ -249,18 +309,90 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
 const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   'audit.events.audit_events_ator_coerente':
     "CHECK (((actor_kind = 'user'::text) = (actor_user_id IS NOT NULL)))",
+  // O par mentiroso do alcance: estado não calculado com número, ou `computed`
+  // sem número. `kysely-registro-de-disparos.ts` grava `null` em
+  // `recipients_total` para `unavailable`, e é este CHECK que impede o inverso.
+  'public.alert_dispatches.alert_dispatches_total_so_quando_calculado':
+    "CHECK (((reach_status = 'computed'::text) = (recipients_total IS NOT NULL)))",
+  'public.conversation_messages.conversation_messages_redactions_array':
+    "CHECK ((jsonb_typeof(redactions) = 'array'::text))",
+  // Mensagem de sistema não tem remetente humano: um `sender_user_id` numa
+  // linha `system` faria o aviso de golpe parecer escrito pelo tutor.
+  // `gravarMensagemDeSistema` força `senderUserId: null`, e aqui o banco cobra.
+  'public.conversation_messages.conversation_messages_sistema_sem_remetente':
+    "CHECK (((sender_role <> 'system'::text) OR (sender_user_id IS NULL)))",
+  // Papel, e não id: o achador pode não ter conta. `system` NÃO entra — o
+  // sistema escreve mensagem, não bloqueia ninguém.
+  'public.conversations.conversations_blocked_by_role_conhecido':
+    "CHECK (((blocked_by_role IS NULL) OR (blocked_by_role = ANY (ARRAY['tutor'::text, 'finder'::text]))))",
+  // `MotivoDeEncerramento` em
+  // `src/modules/messaging/ports/conversation-repository.ts`.
+  'public.conversations.conversations_closure_reason_conhecida':
+    "CHECK (((closure_reason IS NULL) OR (closure_reason = ANY (ARRAY['case_closed'::text, 'pet_returned'::text, 'retention'::text]))))",
+  // `MotivoDeRetencao` em
+  // `src/modules/messaging/domain/retencao-para-revisao.ts`, que é a única
+  // função que produz estes dois valores.
+  'public.conversations.conversations_held_reason_conhecido':
+    "CHECK (((held_reason IS NULL) OR (held_reason = ANY (ARRAY['message_volume'::text, 'serial_finder'::text]))))",
   'public.entity_verifications.entity_verifications_decidida_tem_quando':
     "CHECK ((((decision = 'pending'::text) AND (reviewed_at IS NULL)) OR ((decision <> 'pending'::text) AND (reviewed_at IS NOT NULL))))",
   'public.entity_verifications.entity_verifications_motivo_so_com_recusa':
     "CHECK (((rejection_reason IS NULL) OR (decision = 'rejected'::text)))",
+  // Os cinco `found_reports_avulso_*` e o `found_reports_scan_*` são a mesma
+  // regra escrita dos dois lados: cada linha carrega exatamente a autorização e
+  // os dados do caminho por onde ela entrou. O avulso exige conta, atributos,
+  // lugar e prazo; o scan exige token, tag e pet. Nenhum dos dois exige o do
+  // outro, e é por isso que `found_reports` pode ser uma tabela só.
+  //
+  // `required: [species, size, found_at]` do `StrayFoundReportInput`; `found_at`
+  // já é `NOT NULL` desde 17/09.
+  'public.found_reports.found_reports_avulso_tem_atributos':
+    "CHECK (((origin <> 'stray_report'::text) OR ((species IS NOT NULL) AND (size IS NOT NULL))))",
+  // `createStrayFoundReport` exige `bearerAuth`, e quem autoriza é
+  // `reporter_user_id`. Sem conta não há a quem responder nem de quem cobrar o
+  // teto.
+  'public.found_reports.found_reports_avulso_tem_conta':
+    "CHECK (((origin <> 'stray_report'::text) OR (reporter_user_id IS NOT NULL)))",
+  // O `anyOf: [location, area]` do contrato. Achado sem ponto E sem cidade não
+  // passa por filtro nenhum da seção 4.10: ficaria guardado 30 dias sem poder
+  // virar candidato de nada.
+  'public.found_reports.found_reports_avulso_tem_onde':
+    "CHECK (((origin <> 'stray_report'::text) OR (found_point IS NOT NULL) OR (found_city IS NOT NULL)))",
+  // Achado avulso sem prazo de guarda é a linha que o expurgo nunca acha.
+  'public.found_reports.found_reports_avulso_tem_prazo':
+    "CHECK (((origin <> 'stray_report'::text) OR (retention_until IS NOT NULL)))",
+  // Os três atributos de cruzamento repetem o domínio de `ref_species`,
+  // `ref_sizes` e `pets.sex`, e são anuláveis porque quem acha um animal na rua
+  // não sabe quase nada dele. Não são lista fechada de coluna por causa do
+  // `IS NULL` na frente, e a definição inteira é o que vale.
+  'public.found_reports.found_reports_especie':
+    "CHECK (((species IS NULL) OR (species = ANY (ARRAY['dog'::text, 'cat'::text, 'other'::text]))))",
+  'public.found_reports.found_reports_porte':
+    "CHECK (((size IS NULL) OR (size = ANY (ARRAY['P'::text, 'M'::text, 'G'::text, 'GG'::text]))))",
   'public.found_reports.found_reports_scan_tem_tag_e_pet':
     "CHECK (((origin <> 'tag_scan'::text) OR ((tag_id IS NOT NULL) AND (pet_id IS NOT NULL))))",
+  // O aviso vindo do QR continua endereçado pelo token: sem ele o achador perde
+  // a conversa e o tutor perde o único canal de volta. As duas colunas deixaram
+  // de ser `NOT NULL` em 22/09, e este CHECK é o que impede que isso afrouxe o
+  // caminho da tag.
+  'public.found_reports.found_reports_scan_tem_token':
+    "CHECK (((origin <> 'tag_scan'::text) OR ((finder_token_hash IS NOT NULL) AND (finder_token_expires_at IS NOT NULL))))",
+  'public.found_reports.found_reports_sexo':
+    "CHECK (((sex IS NULL) OR (sex = ANY (ARRAY['male'::text, 'female'::text, 'unknown'::text]))))",
   'public.local_credentials.local_credentials_phc_pbkdf2_sha512':
     "CHECK ((password_phc ~~ '$pbkdf2-sha512$%'::text))",
   'public.lost_cases.lost_cases_canal_so_com_reencontro':
     "CHECK (((closure_channel IS NULL) OR (closure_outcome = 'reunited'::text)))",
   'public.lost_cases.lost_cases_encerrado_tem_desfecho':
     "CHECK ((((status = 'open'::text) AND (closure_outcome IS NULL) AND (closed_at IS NULL)) OR ((status <> 'open'::text) AND (closure_outcome IS NOT NULL) AND (closed_at IS NOT NULL))))",
+  // A CONFIRMAÇÃO HUMANA ESCRITA EM DDL (critério 7 da BICHUS-35). Sair de
+  // `suggested` exige uma pessoa e um instante, e o cruzamento não tem nenhum
+  // dos dois: `Sugestao` não tem campo de status e o `INSERT` escreve
+  // `'suggested'` como literal. A segunda metade importa tanto quanto a
+  // primeira — sem ela, uma linha decidida poderia voltar a `suggested`
+  // mantendo o autor da decisão anterior, e a trilha passaria a mentir.
+  'public.match_candidates.match_candidates_decisao_tem_autor':
+    "CHECK ((((status = 'suggested'::text) AND (decided_by_user_id IS NULL) AND (decided_at IS NULL)) OR ((status = ANY (ARRAY['confirmed'::text, 'rejected'::text])) AND (decided_by_user_id IS NOT NULL) AND (decided_at IS NOT NULL))))",
   'public.pet_photos.pet_photos_pronta_tem_derivadas':
     "CHECK (((status <> 'ready'::text) OR ((thumb_key IS NOT NULL) AND (card_key IS NOT NULL))))",
   'public.pet_photos.pet_photos_recusada_tem_motivo':
@@ -290,6 +422,12 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK ((((claim_status = 'unclaimed'::text) AND (claimed_at IS NULL) AND (claimed_by_user_id IS NULL)) OR ((claim_status <> 'unclaimed'::text) AND (claimed_at IS NOT NULL))))",
   'public.ref_breeds.ref_breeds_code_check': "CHECK ((code ~ '^[a-z][a-z0-9_]{1,39}$'::text))",
   'public.ref_colors.ref_colors_code_check': "CHECK ((code ~ '^[a-z][a-z0-9_]{1,29}$'::text))",
+  // `upload_intents.kind` previa `found_report_photo` desde 18/09 e não havia
+  // coluna dizendo DE QUAL aviso. Sem ela o teto de três fotos por aviso
+  // (SEC-009) não teria como ser contado, e a foto confirmada não teria como
+  // ser ligada. O CHECK é o que impede a intenção de foto de achado sem achado.
+  'public.upload_intents.upload_intents_foto_de_achado_tem_aviso':
+    "CHECK (((kind <> 'found_report_photo'::text) OR (found_report_id IS NOT NULL)))",
   'public.users.users_phone_e164_formato':
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+55[0-9]{10,11}$'::text)))",
 };
