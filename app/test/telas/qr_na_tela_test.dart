@@ -475,6 +475,59 @@ void main() {
       );
     });
 
+    // ----------------------------------------------------------------
+    // O zero-fill de `CofreDaImagemDoQr.limpar()`, que ate a BICHUS-238 podia
+    // ser apagado com a suite verde em 528/528.
+    //
+    // Severidade baixa, e a linha DIZ isso: quem fecha o furo e o `evict()`,
+    // que tira a entrada do cache global. O zero-fill e o segundo passo, e
+    // resolve outra coisa -- o PNG deixa de estar legivel na memoria do
+    // processo AGORA, e nao quando o coletor de lixo resolver passar. Um
+    // despejo de memoria tirado entre o logout e a proxima coleta ainda traria
+    // o QR inteiro, e o QR carrega o codigo da tag dentro dos pixels
+    // (ADR-0004: codigo de tag e irreversivel).
+    //
+    // O que este caso NAO afirma: que nao existe outra copia dos bytes no
+    // processo. A resposta HTTP teve a sua, e ela nao e deste cofre. O que ele
+    // afirma e o que o cofre promete no proprio doc -- o buffer que ELE
+    // guardou sai ilegivel.
+    //
+    // DESLIGAR PARA VER REPROVAR: em `lib/api/imagem_do_qr.dart`, apague o
+    //   if (bytes != null) { bytes.fillRange(0, bytes.length, 0); }
+    // de `limpar()`. Este caso reprova; os outros do grupo continuam verdes,
+    // que e a medida certa da severidade.
+    // ----------------------------------------------------------------
+    test('`limpar()` zera os bytes guardados, e nao so despeja o provedor',
+        () async {
+      final cofre = CofreDaImagemDoQr();
+      // Copia, e nunca o `pngDeUmPixel` do arquivo: zerar o original deixaria
+      // todos os outros casos medindo um PNG de zeros, e eles passariam a
+      // reprovar por um motivo que nao e o deles.
+      final bytes = Uint8List.fromList(pngDeUmPixel);
+      await cofre.guardar(bytes);
+
+      expect(
+        bytes.any((b) => b != 0),
+        isTrue,
+        reason: 'A medicao que sustenta o resto: `guardar` nao pode ter '
+            'zerado nada ainda, senao este caso passaria sozinho.',
+      );
+
+      await cofre.limpar();
+
+      expect(
+        bytes.every((b) => b == 0),
+        isTrue,
+        reason: 'REPROVA: os bytes do PNG do QR continuam legiveis no buffer '
+            'que o cofre guardou depois de `limpar()`. O `evict()` tirou a '
+            'entrada do cache global, que e o furo grave; este e o segundo '
+            'passo, e ele existe para que o codigo da tag nao fique esperando '
+            'o coletor de lixo dentro da memoria do processo depois de a '
+            'tutora sair da conta.',
+      );
+      expect(cofre.provedor, isNull);
+    });
+
     test('nenhum pacote de cache de imagem em DISCO entrou no pubspec', () {
       // O portao que fecha a porta dos fundos. O caso acima mede o fluxo que
       // existe hoje; este cobra a decisao no dia em que alguem for resolver o
