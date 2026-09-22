@@ -96,7 +96,7 @@ export function criarRegistroDeDisparos(db: Db): RegistroDeDisparos {
         .returningAll()
         .executeTakeFirstOrThrow();
 
-      return comoDisparo(linha as unknown as LinhaDoDisparo);
+      return comoDisparo(linha);
     },
 
     async ultimoDoCaso(caso: CaseId): Promise<DisparoGravado | null> {
@@ -112,7 +112,7 @@ export function criarRegistroDeDisparos(db: Db): RegistroDeDisparos {
         .limit(1)
         .executeTakeFirst();
 
-      return linha === undefined ? null : comoDisparo(linha as unknown as LinhaDoDisparo);
+      return linha === undefined ? null : comoDisparo(linha);
     },
 
     async ultimoEnvioDoCaso(caso: CaseId): Promise<Instant | null> {

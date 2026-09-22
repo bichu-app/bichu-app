@@ -15,8 +15,14 @@
  * |---|---|
  * | `contagemDe` devolvendo `0` no lugar de `null` | 2 casos |
  * | `estadoInicialDoDisparo` devolvendo sempre `queued` | 2 casos |
- * | `podeDispararDeNovo` devolvendo sempre `true` | 2 casos |
+ * | `podeDispararDeNovo` devolvendo sempre `true` | 3 casos |
  * | `>=` virando `>` na janela de 24 h | 1 caso |
+ *
+ * A base é 14 casos verdes. A última linha é a que vale por si: ela move a
+ * borda em um milissegundo, nada mais, e mesmo assim reprova — é a diferença
+ * entre "um disparo por dia" e "um disparo a cada 24 h e um milissegundo", que
+ * o tutor sentiria como uma recusa sem explicação no mesmo horário do dia
+ * seguinte.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

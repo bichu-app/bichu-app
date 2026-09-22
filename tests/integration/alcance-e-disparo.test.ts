@@ -38,11 +38,31 @@
  *
  * ## As iscas, e como foram provadas
  *
- * Desligadas em `kysely-alcance-por-postgis.ts`, rodadas contra a pilha
- * efêmera e vistas reprovar em 22/09/2026, e depois restauradas. A conferência
- * de que o arquivo mudou foi por CONTEÚDO e não por `git diff` — os arquivos
- * desta história são novos e não rastreados, e o `git diff` não teria o que
- * mostrar. Os números estão no relatório da entrega.
+ * Desligadas uma a uma, rodadas contra a pilha efêmera e vistas reprovar em
+ * 22/09/2026, e depois restauradas. A conferência de que o arquivo mudou foi
+ * por CONTEÚDO e não por `git diff` — os arquivos desta história são novos e
+ * não rastreados, e o `git diff` não teria o que mostrar.
+ *
+ * | o que foi desligado | integração |
+ * |---|---|
+ * | o `EXISTS` de `user_devices` (critério 4) | 3 casos |
+ * | o `count(*)` de fadiga (critério 6) | 45 casos |
+ * | `u.deleted_at IS NULL` (BICHUS-88) | 1 caso |
+ * | `url.user_id <> ...` (critério 5) | 1 caso |
+ * | `url.expires_at > ...` (critério 2) | 1 caso |
+ * | `concluir` virado `no-op` | 3 casos |
+ *
+ * A fadiga derruba 45 porque, sem ela, cada caso passa a enxergar as contas que
+ * os outros criaram: a asserção de lista exata deixa de casar em quase toda a
+ * suíte. Reprovação barulhenta, e é o que se quer de uma isca.
+ *
+ * **A última linha é a razão de este arquivo existir.** Com `concluir`
+ * transformado em `no-op`, a suíte unitária inteira ficou **verde — 1106 casos,
+ * zero falhas** — porque todo teste sem banco fala com um dublê de
+ * `RegistroDeDisparos` que guarda o que recebeu. Aqui reprovaram três: o
+ * disparo não virou `computed`, `alert_recipients` ficou vazia, e o teto de
+ * fadiga não foi consumido. É a medida exata do que só o banco prova, e é o
+ * mesmo número que a BICHUS-91 mediu com `revogarDoDono`.
  *
  * ## O que sobrevive à execução
  *
@@ -80,9 +100,15 @@ const CENTRO = { lat: -23.5665, lon: -46.6935 };
 const DOMINIO_DE_TESTE = 'exemplo.invalid';
 
 /**
- * Um grau de latitude são ~111.320 m. Deslocar só a latitude mantém a conta
- * simples e independente da longitude — que encolhe com o cosseno da latitude e
- * daria distâncias diferentes em cada região.
+ * Um grau de latitude são ~111.320 m no equador. Deslocar só a latitude mantém
+ * a conta simples e independente da longitude, que encolhe com o cosseno da
+ * latitude e daria distâncias diferentes em cada região.
+ *
+ * **Isto é uma aproximação, e o erro é real**: o meridiano encolhe para ~110.900
+ * m por grau nesta latitude, então um ponto pedido a 5.000 m cai a ~4.981 m.
+ * Para os casos folgados (4 km contra 6 km) isso não muda nada; o caso da borda
+ * mede a distância no próprio banco antes de afirmar de que lado cada ponto
+ * está, em vez de confiar nesta função.
  */
 function aNorteDoCentro(metros: number): { lat: number; lon: number } {
   return { lat: CENTRO.lat + metros / 111_320, lon: CENTRO.lon };
@@ -253,12 +279,37 @@ void describe('critério 3: o raio de 5 km é medido sobre o elipsoide', () => {
     assert.ok(!alcancados.includes(longe), 'o vizinho a 6 km entrou num raio de 5 km');
   });
 
-  void it('a borda é medida em metros de verdade: 4.990 entra, 5.010 não', async () => {
-    // A diferença entre `geography` e `geometry` mora aqui. Com graus tratados
-    // como plano, estes dois cairiam do mesmo lado da borda.
+  void it('a borda separa os dois lados, e o BANCO diz de que lado cada um está', async () => {
+    // A diferença entre `geography` e `geometry` mora aqui: a distância é
+    // esférica, em metros sobre o elipsoide.
+    //
+    // **O teste não confia na minha aritmética de graus para metros**, e a
+    // primeira versão dele mostrou por quê: `aNorteDoCentro` usa 111.320 m por
+    // grau, que é o comprimento no equador, e o meridiano encolhe para ~110.900
+    // nesta latitude. Um ponto pedido a 5.010 m caiu a 4.992 m reais, DENTRO do
+    // raio, e o caso reprovou acusando a consulta de um defeito que era do
+    // fixture. Agora o lado de cada ponto é medido pelo próprio PostGIS antes
+    // da asserção: a régua do teste passa a ser a mesma régua da consulta.
     const tutor = await criarConta();
-    const dentro = await vizinhoEm(aNorteDoCentro(4990));
-    const fora = await vizinhoEm(aNorteDoCentro(5010));
+    const dentro = await vizinhoEm(aNorteDoCentro(4900));
+    const fora = await vizinhoEm(aNorteDoCentro(5100));
+
+    const medida = await cliente.query<{ user_id: string; metros: number }>(
+      `SELECT user_id,
+              ST_Distance(reference_point,
+                          ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography) AS metros
+         FROM user_reference_locations WHERE user_id = ANY($1::uuid[])`,
+      [[dentro, fora], CENTRO.lon, CENTRO.lat],
+    );
+    const metrosDe = new Map(medida.rows.map((l) => [l.user_id, Number(l.metros)]));
+    assert.ok(
+      (metrosDe.get(dentro) ?? Infinity) < RAIO,
+      `o fixture "dentro" caiu a ${String(metrosDe.get(dentro))} m, fora do raio`,
+    );
+    assert.ok(
+      (metrosDe.get(fora) ?? 0) > RAIO,
+      `o fixture "fora" caiu a ${String(metrosDe.get(fora))} m, dentro do raio`,
+    );
 
     const alcancados = await contasAlcancadas(tutor);
 

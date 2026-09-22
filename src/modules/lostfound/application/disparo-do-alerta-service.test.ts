@@ -15,16 +15,20 @@
  *
  * | o que foi desligado | reprovaram, aqui |
  * |---|---|
- * | `podeDispararDeNovo` deixando de ser consultado | 2 casos |
- * | `concluir` deixando de gravar os avisados | 3 casos |
+ * | `podeDispararDeNovo` deixando de ser consultado | 3 casos |
  * | `unavailable` virando `computed` com zero | 2 casos |
- * | a gravação passando para DEPOIS do laço de envio | 1 caso |
+ * | a gravação passando para DEPOIS do laço de envio | 6 casos |
  * | o caso encerrado deixando de ser recusado | 1 caso |
+ *
+ * A base é 20 casos verdes. A terceira linha derruba seis porque a ordem entre
+ * gravar e mandar sustenta também as asserções sobre o que foi gravado: sem a
+ * chamada antes do laço, não há o que conferir.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import type { Clock } from '../../../shared/ports/index.js';
+import { comoData } from '../../../shared/time/clock.js';
 import type { CaseId, Instant, UserId } from '../../../shared/types/brands.js';
 import { JANELA_DE_24H_EM_MS } from '../domain/disparo-do-alerta.js';
 import type { AlcanceCalculado, AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
@@ -93,7 +97,7 @@ function montar(cenario: Cenario = {}) {
           destinatarios: null,
           raioEmMetros: 5000,
           tetoAtingido: false,
-          pedidoEm: new Date(Number(AGORA)),
+          pedidoEm: comoData(AGORA),
           enviadoEm: null,
         });
 

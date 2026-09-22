@@ -27,9 +27,14 @@
  *
  * | o que foi desligado | reprovaram, aqui |
  * |---|---|
- * | `enderecoDeEnvio` deixando de ser chamado (token fixo) | 2 casos |
- * | `revogarPorTokenRecusado` virando `no-op` | 2 casos |
+ * | `enderecoDeEnvio` deixando de ser chamado (token fixo) | 4 casos |
+ * | `revogarPorTokenRecusado` virando `no-op` | 1 caso |
  * | `PushNaoEnviadoError` voltando a propagar | 1 caso |
+ *
+ * A base é 11 casos verdes. A primeira linha derruba quatro, e entre eles está
+ * o que importa: **o aparelho removido entre a lista e o envio volta a receber
+ * push.** É o defeito inteiro que a resolução no instante do envio existe para
+ * impedir.
  *
  * O que esta suíte **não** prova: que a revogação apaga a linha do banco. O
  * dublê apaga do `Map` de qualquer jeito, e foi exatamente esse o ponto cego

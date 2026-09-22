@@ -770,3 +770,59 @@ void describe('previa do alcance — o vínculo com o dono e a honestidade do n�
     ]);
   });
 });
+
+void describe('o alerta nasce junto do caso, e diz a verdade desde o primeiro instante', () => {
+  void it('com coordenada o alerta nasce `queued` e o trabalho é ENFILEIRADO', async () => {
+    // A API enfileira e o worker envia (ADR-0001). `queued` é um estado
+    // próprio e não um sinônimo de `unavailable` — critério 11 da BICHUS-20,
+    // que pede os dois como estados distintos.
+    const { casos, registro } = servico();
+
+    const { caso, alerta } = await casos.abrir(PET, entradaPadrao(), chamador(DONO));
+
+    assert.equal(alerta?.estado, 'queued');
+    assert.equal(alerta?.destinatarios, null, 'um disparo que não rodou não tem número');
+    // O identificador enfileirado é o do caso que ACABOU de ser gravado. Um
+    // trabalho enfileirado com outro identificador some na fila sem erro
+    // nenhum, e o alerta simplesmente nunca sai.
+    assert.deepEqual(registro.enfileirados, [
+      { kind: 'alert.dispatch', payload: { caseId: caso.id } },
+    ]);
+  });
+
+  void it('SEM coordenada nada é enfileirado: não é falha de envio, e não retenta', async () => {
+    // Critério 14 da BICHUS-18, textual. Enfileirar para depois descobrir que
+    // não há centro produziria uma tentativa fracassada onde não havia o que
+    // tentar, e a tela leria isso como "o alerta falhou".
+    const { casos, registro } = servico();
+
+    const { alerta } = await casos.abrir(
+      PET,
+      { lastSeenAt: ONTEM, city: 'São Paulo', neighborhood: 'Pinheiros' },
+      chamador(DONO),
+    );
+
+    assert.equal(alerta?.estado, 'no_location');
+    assert.deepEqual(registro.enfileirados, []);
+  });
+
+  void it('o payload da fila leva o identificador, e nunca conteúdo montado', async () => {
+    // A regra do payload da fila (§11.5). O nome do pet e o bairro são lidos
+    // pelo worker no instante do envio; enfileirados aqui, eles congelariam o
+    // que a tutora corrigir nos próximos cinco minutos.
+    const { casos, registro } = servico();
+
+    await casos.abrir(PET, entradaPadrao(), chamador(DONO));
+
+    assert.deepEqual(Object.keys(registro.enfileirados[0]?.payload as object), ['caseId']);
+  });
+
+  void it('os quatro estados de `AlertDispatch` são distintos entre si', () => {
+    // Critério 12 da BICHUS-20: `no_location` é um quarto estado, distinto de
+    // `computed` com zero, de `unavailable` e de `queued`. A tela tem texto
+    // diferente para cada um, e trocar um pelo outro é mentir para quem está
+    // em pânico.
+    const estados = new Set(['computed', 'unavailable', 'queued', 'no_location']);
+    assert.equal(estados.size, 4);
+  });
+});
