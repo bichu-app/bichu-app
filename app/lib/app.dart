@@ -18,6 +18,7 @@ import 'intencao/intencao_pendente.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
 import 'sessao/deposito_de_sessao.dart';
+import 'telas/perfil/meus_pets.dart';
 import 'theme/bichu_theme.dart';
 
 /// A raiz do app.
@@ -30,6 +31,7 @@ class BichuApp extends StatefulWidget {
     this.camera,
     this.avisos,
     this.depositoDeIntencao,
+    this.cacheDeMeusPets,
   });
 
   final AppConfig config;
@@ -66,6 +68,14 @@ class BichuApp extends StatefulWidget {
   /// deposito de sessao.
   final DepositoDaIntencao? depositoDeIntencao;
 
+  /// Injetavel para teste. Em producao nasce vazio a cada arranque, porque e
+  /// cache de memoria e nao de disco.
+  ///
+  /// Entra por aqui para que o caso do criterio 7 da BICHUS-62 -- cache quente
+  /// e atualizacao que falha -- seja exercitavel sem depender de duas idas ao
+  /// servidor em sequencia.
+  final CacheDeMeusPets? cacheDeMeusPets;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -81,6 +91,7 @@ class _BichuAppState extends State<BichuApp> {
   late final ControladorDeSessao _sessao;
   late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
+  late final CacheDeMeusPets _cacheDeMeusPets;
 
   @override
   void initState() {
@@ -88,6 +99,7 @@ class _BichuAppState extends State<BichuApp> {
     // O cliente pergunta o token ao controlador a cada chamada, em vez de
     // receber uma copia: assim a renovacao chega a requisicao seguinte sem
     // ninguem precisar reconstruir o cliente.
+    _cacheDeMeusPets = widget.cacheDeMeusPets ?? CacheDeMeusPets();
     _api = ApiClient(
       config: widget.config,
       cliente: widget.clienteHttp,
@@ -139,6 +151,7 @@ class _BichuAppState extends State<BichuApp> {
       avisos: _avisos,
       sessao: _sessao,
       guarda: _guarda,
+      cacheDeMeusPets: _cacheDeMeusPets,
       child: MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,

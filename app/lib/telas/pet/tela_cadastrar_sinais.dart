@@ -229,6 +229,19 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
     return MensagensDeErro.de(falha, podeEnfileirar: true);
   }
 
+  /// O que o toque na saida da faixa faz.
+  ///
+  /// Tres casos, nesta ordem: a mensagem aponta um endereco e o toque navega;
+  /// a mensagem tem rotulo e nenhum endereco, e o toque repete a operacao
+  /// desta tela; nao ha rotulo, e nao ha toque.
+  VoidCallback? _acaoDaFaixa() {
+    final faixa = _faixa;
+    if (faixa == null || faixa.acao == null) return null;
+    final rota = faixa.rotaDaAcao;
+    if (rota != null) return () => context.go(rota);
+    return _cadastrar;
+  }
+
   @override
   Widget build(BuildContext context) {
     final rascunho = widget.rascunho;
@@ -317,7 +330,12 @@ class _TelaCadastrarSinaisState extends State<TelaCadastrarSinais> {
               FaixaDeAviso(
                 texto: _faixa!.texto,
                 rotuloDaAcao: _faixa!.acao,
-                aoTocarNaAcao: _faixa!.acao == null ? null : _cadastrar,
+                // **A saida da mensagem decide, e nao a tela.** Ate a
+                // BICHUS-62 este callback era sempre `_cadastrar`, e por isso
+                // o 409 de limite de pets mostrava `Ver meus pets` e, ao
+                // toque, **reenviava o cadastro** -- que devolvia o mesmo 409.
+                // O rotulo prometia uma coisa e o botao fazia outra, em laco.
+                aoTocarNaAcao: _acaoDaFaixa(),
               ),
             ],
           ],

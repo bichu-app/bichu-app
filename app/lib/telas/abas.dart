@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../api/mensagens_de_erro.dart';
 import '../escopo.dart';
 import '../roteamento/rotas.dart';
 import '../sessao/controlador_de_sessao.dart';
@@ -10,6 +11,7 @@ import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
 import 'casca_com_abas.dart';
 import 'escanear/tela_leitor_de_qr.dart';
+import 'perfil/meus_pets.dart';
 
 /// Aba Inicio.
 ///
@@ -85,16 +87,23 @@ class AbaInicio extends StatelessWidget {
               ),
               const SizedBox(height: BichuEspaco.e6),
             ],
-            EstadoVazio(
-              titulo: 'Nenhum pet cadastrado ainda',
-              explicacao: 'Cadastre seu pet para gerar a tag com QR e entrar '
-                  'na rede de quem procura e de quem encontra.',
-              acao: BotaoPrimario(
-                rotulo: 'Cadastrar meu pet',
-                // F1.3 existe agora. `push` e nao `go`: o assistente cobre a
-                // casca de abas e e um desvio, como as telas de conta.
-                aoTocar: () => context.push(Rotas.cadastrarPet),
-              ),
+            // O `EstadoVazio` "Nenhum pet cadastrado ainda" era renderizado
+            // aqui **sem condicional nenhuma**, numa tela que nao sabia listar
+            // pet: o tutor cadastrava e continuava lendo que nao tinha
+            // nenhum. E o defeito que a BICHUS-62 veio fechar, e a saida nao e
+            // condicionar a frase -- e esta tela nao afirmar nada sobre um
+            // dado que ela nao carrega. A lista mora em `Perfil` > `Meus
+            // pets` (UX 27.6), e daqui sai o caminho ate ela.
+            BotaoPrimario(
+              rotulo: 'Cadastrar meu pet',
+              // F1.3 existe agora. `push` e nao `go`: o assistente cobre a
+              // casca de abas e e um desvio, como as telas de conta.
+              aoTocar: () => context.push(Rotas.cadastrarPet),
+            ),
+            const SizedBox(height: BichuEspaco.e4),
+            BotaoSecundario(
+              rotulo: MensagensDeErro.verMeusPets,
+              aoTocar: () => context.go(Rotas.perfil),
             ),
             const SizedBox(height: BichuEspaco.e6),
             Text(
@@ -185,6 +194,15 @@ class AbaPerfil extends StatelessWidget {
               ),
             ),
             const Divider(),
+            // `Perfil` > `Meus pets`: o destino que a secao 27.6 do UX fixou
+            // para os cartoes da BICHUS-62. A chave e por conta para que a
+            // troca de usuario reconstrua o estado em vez de reaproveitar o
+            // que estava carregado para a anterior.
+            MeusPets(
+              key: ValueKey<String>('meus-pets-${sessao.usuario?.id ?? ''}'),
+              cache: Escopo.of(context).cacheDeMeusPets,
+            ),
+            const SizedBox(height: BichuEspaco.e8),
             const _LinhaDeTermos(),
             const SizedBox(height: BichuEspaco.e8),
             _BotaoSair(sessao: sessao),
@@ -230,6 +248,12 @@ class _BotaoSair extends StatelessWidget {
           builder: (context) => const _FolhaDeSair(),
         );
         if (confirmou != true) return;
+        if (!context.mounted) return;
+        // O cache de `Meus pets` sai junto com a sessao. Ele ja tem trava por
+        // dono, entao isto e cinto **e** suspensorio -- e o custo de limpar e
+        // zero perto do de descobrir tarde que uma conta viu os pets de
+        // outra.
+        Escopo.of(context).cacheDeMeusPets.limpar();
         await sessao.sair();
         if (!context.mounted) return;
         context.go(Rotas.inicio);

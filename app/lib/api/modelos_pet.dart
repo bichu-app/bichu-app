@@ -171,6 +171,96 @@ enum RedacaoDeCuidados {
   }
 }
 
+/// `Pet.status` do contrato.
+///
+/// O app **nao** deduz estado a partir de `open_case_id`: sao dois campos e
+/// eles respondem coisas diferentes (`lost` e o estado do animal; o caso e o
+/// registro aberto). Um valor que este build nao conhece cai em
+/// [StatusDoPet.desconhecido] em vez de estourar: versao antiga do app
+/// continua instalada por semanas depois de o servidor ganhar um estado novo,
+/// e um `switch` que nao conhece o valor quebraria a ficha inteira.
+enum StatusDoPet {
+  ativo('active'),
+  perdido('lost'),
+  falecido('deceased'),
+  arquivado('archived'),
+
+  /// Nao esta no contrato: e o que este build faz com um valor que ele nao
+  /// conhece. Nunca e enviado ao servidor.
+  desconhecido('');
+
+  const StatusDoPet(this.valor);
+
+  final String valor;
+
+  static StatusDoPet de(String? valor) {
+    for (final s in StatusDoPet.values) {
+      if (s != StatusDoPet.desconhecido && s.valor == valor) return s;
+    }
+    return StatusDoPet.desconhecido;
+  }
+}
+
+/// `PetPhoto.status` do contrato.
+enum StatusDaFoto {
+  processando('processing'),
+  pronta('ready'),
+  recusada('rejected'),
+  desconhecido('');
+
+  const StatusDaFoto(this.valor);
+
+  final String valor;
+
+  static StatusDaFoto de(String? valor) {
+    for (final s in StatusDaFoto.values) {
+      if (s != StatusDaFoto.desconhecido && s.valor == valor) return s;
+    }
+    return StatusDaFoto.desconhecido;
+  }
+}
+
+/// `PetPhoto` do contrato.
+///
+/// `thumb_url` e `card_url` sao **anulaveis no contrato**, inclusive com
+/// `status: ready`. Quem consome precisa tratar foto pronta sem URL como foto
+/// que nao da para mostrar, e nao como impossivel.
+class FotoDoPet {
+  const FotoDoPet({
+    required this.id,
+    required this.status,
+    required this.principal,
+    this.thumbUrl,
+    this.cardUrl,
+  });
+
+  final String id;
+  final StatusDaFoto status;
+  final bool principal;
+  final String? thumbUrl;
+  final String? cardUrl;
+
+  /// Da para pintar esta foto na moldura agora?
+  bool get exibivel => status == StatusDaFoto.pronta && urlDeMiniatura != null;
+
+  /// A URL que o cartao da variante `lista` usa.
+  ///
+  /// `thumb_url` primeiro porque a moldura `foto/sm` tem 56 dp de largura e a
+  /// derivada de cartao tem ate 1024 px: baixar a grande para desenhar a
+  /// pequena e trafego pago pelo tutor no 3G da rua.
+  String? get urlDeMiniatura => thumbUrl ?? cardUrl;
+
+  factory FotoDoPet.doJson(Map<String, dynamic> json) {
+    return FotoDoPet(
+      id: json['id'] as String? ?? '',
+      status: StatusDaFoto.de(json['status'] as String?),
+      principal: json['is_primary'] as bool? ?? false,
+      thumbUrl: json['thumb_url'] as String?,
+      cardUrl: json['card_url'] as String?,
+    );
+  }
+}
+
 /// `Pet` do contrato, nos campos que estas telas usam.
 class Pet {
   const Pet({
@@ -178,13 +268,27 @@ class Pet {
     required this.nome,
     required this.especie,
     required this.redacoesDeCuidados,
+    this.status = StatusDoPet.ativo,
+    this.porte,
     this.racaRotulo,
     this.cuidados,
+    this.fotos = const <FotoDoPet>[],
+    this.tagsAtivas = 0,
+    this.idDoCasoAberto,
   });
 
   final String id;
   final String nome;
   final Especie especie;
+
+  /// `status`. O contrato o declara **obrigatorio**; o padrao daqui existe
+  /// para os construtores de teste, e nao para mascarar ausencia na resposta.
+  final StatusDoPet status;
+
+  /// `size`. Anulavel aqui e obrigatorio no contrato: o cartao mostra o que
+  /// veio, e um pet cujo porte nao chegou some do texto de atributos em vez de
+  /// derrubar a lista inteira.
+  final Porte? porte;
 
   /// `breed_label`: o rotulo ja resolvido pelo servidor. E o `label` da lista
   /// quando o codigo esta nela, e o texto livre quando o codigo e `outro_*`.
@@ -196,6 +300,43 @@ class Pet {
 
   final List<RedacaoDeCuidados> redacoesDeCuidados;
 
+  /// `photos`. Vazia e o caso comum: a foto e **opcional** no cadastro por
+  /// decisao de 21/09.
+  final List<FotoDoPet> fotos;
+
+  /// `active_tag_count`. Zero e o que faz o cartao trazer o convite de
+  /// plaquinha (criterio 4 da BICHUS-62).
+  final int tagsAtivas;
+
+  /// `open_case_id`. **Esta historia nao renderiza caso aberto** -- ele foi
+  /// para o topo de `Pets` pela BICHUS-177. O campo entra no modelo porque o
+  /// contrato o declara e porque ler metade da resposta e como o app e o
+  /// documento divergem sem ninguem ver.
+  final String? idDoCasoAberto;
+
+  /// A foto que o cartao pinta: a principal quando exibivel, senao a primeira
+  /// exibivel que existir. Nulo quando nao ha nenhuma.
+  FotoDoPet? get fotoDeCapa {
+    for (final f in fotos) {
+      if (f.principal && f.exibivel) return f;
+    }
+    for (final f in fotos) {
+      if (f.exibivel) return f;
+    }
+    return null;
+  }
+
+  /// Ha foto enviada que ainda nao terminou de processar?
+  ///
+  /// Existe porque "sem foto" e "foto a caminho" sao estados diferentes para
+  /// quem acabou de enviar uma, e dizer "sem foto" para quem enviou ha dez
+  /// segundos e a falha silenciosa que este projeto persegue.
+  bool get temFotoEmProcessamento =>
+      fotos.any((f) => f.status == StatusDaFoto.processando);
+
+  /// Sem plaquinha vinculada.
+  bool get semTag => tagsAtivas <= 0;
+
   /// O pronome do texto de tela concorda com o sexo? Nao: a microcopy de F1.5
   /// e F1.6 fala do pet pelo **nome**, e nao por pronome. Nada a decidir aqui.
 
@@ -204,6 +345,14 @@ class Pet {
       id: json['id'] as String,
       nome: json['name'] as String? ?? '',
       especie: Especie.de(json['species'] as String?) ?? Especie.outro,
+      status: StatusDoPet.de(json['status'] as String?),
+      porte: Porte.de(json['size'] as String?),
+      fotos: (json['photos'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(FotoDoPet.doJson)
+          .toList(growable: false),
+      tagsAtivas: json['active_tag_count'] as int? ?? 0,
+      idDoCasoAberto: json['open_case_id'] as String?,
       racaRotulo: json['breed_label'] as String?,
       cuidados: json['care_notes'] as String?,
       redacoesDeCuidados:

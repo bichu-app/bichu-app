@@ -24,6 +24,36 @@ class PetsApi {
     return DadosDeReferencia.doJson(json);
   }
 
+  /// `GET /pets` (`operationId: listMyPets`).
+  ///
+  /// **Lista completa, sem paginacao.** O contrato fixa o teto em 20 pets por
+  /// conta e por isso nao declara nem `limit` nem cursor: paginar aqui seria
+  /// inventar parametro que a operacao nao tem.
+  ///
+  /// Devolve `items` tipado. Uma entrada que nao seja objeto e descartada, e
+  /// uma que seja objeto e nao tenha `id` **estoura**: `Pet.doJson` le `id`
+  /// sem `??`, de proposito. Pet sem identidade nao e pet degradado, e um
+  /// cartao sem `id` seguiria para a tela de detalhe apontando para nada.
+  ///
+  /// O que esta funcao **nao** faz: nao trata falha e nao devolve lista vazia
+  /// quando a chamada quebra. Quem chama precisa distinguir "voce nao tem pet"
+  /// de "nao consegui perguntar", e um `catch` que devolvesse `[]` apagaria
+  /// essa diferenca -- que e exatamente o estado vazio que parece sucesso.
+  Future<List<Pet>> listarMeusPets() async {
+    final json = await _api.get('/pets');
+    final itens = json['items'];
+    if (itens is! List) {
+      throw const FormatException(
+        'GET /pets respondeu sem `items`. O contrato declara o campo como '
+        'obrigatorio (api/openapi.yaml, listMyPets).',
+      );
+    }
+    return itens
+        .whereType<Map<String, dynamic>>()
+        .map(Pet.doJson)
+        .toList(growable: false);
+  }
+
   /// `POST /pets`.
   ///
   /// **Raca sao dois campos, e a regra do contrato e que eles nao convivem.**

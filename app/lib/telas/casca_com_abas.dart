@@ -85,7 +85,25 @@ class TelaDeAba extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: Text(titulo)),
       body: SafeArea(
+        // `addSemanticIndexes: false` **nao e** microotimizacao. O padrao do
+        // `ListView` e embrulhar cada filho direto num `IndexedSemantics`, e
+        // com ele o filho vira **um** no de semantica: tudo o que estiver
+        // dentro colapsa num rotulo so. Isso e o certo para uma lista de
+        // itens, onde "item 3 de 10" significa alguma coisa -- e esta lista
+        // nao e uma lista de itens, e o corpo rolavel de uma pagina.
+        //
+        // O que o padrao causava, medido na arvore de semantica do `Perfil`:
+        // a secao inteira de `Meus pets` virava um unico no **anunciado como
+        // botao**, de nome `Meus pets Seu primeiro pet entra aqui. Cadastre
+        // seu pet ... Cadastrar meu pet`. O titulo da secao entrava no nome
+        // acessivel do botao, e o botao deixava de existir como controle
+        // separado: quem usa TalkBack ou VoiceOver nao tinha como parar nele.
+        // E SC 4.1.2 (nome, papel, valor) falhando numa acao primaria.
+        //
+        // Cada secao volta a compor os proprios nos, que e o que o leitor de
+        // tela precisa para deslizar entre titulo, texto e acao.
         child: ListView(
+          addSemanticIndexes: false,
           padding: const EdgeInsets.all(BichuEspaco.e4),
           children: filhos,
         ),

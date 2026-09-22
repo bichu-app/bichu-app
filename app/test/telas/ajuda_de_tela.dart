@@ -24,8 +24,10 @@ import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
+import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
+import 'package:bichu/telas/perfil/meus_pets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -188,6 +190,34 @@ Map<String, dynamic> referenciaDeTeste() {
   };
 }
 
+/// Uma sessao ja aberta no deposito, como a de quem abre o app logado.
+///
+/// O `id` entra porque o cache de `Meus pets` e trancado por dono: dois casos
+/// que usem contas diferentes precisam de ids diferentes, senao um deles
+/// passaria lendo o que o outro guardou.
+DepositoEmMemoria depositoLogado({
+  String id = 'u-1',
+  String email = 'marina@exemplo.com.br',
+  bool emailVerificado = true,
+}) {
+  final deposito = DepositoEmMemoria()
+    ..gravar(
+      Sessao(
+        accessToken: 'token-de-teste',
+        refreshToken: 'refresh-de-teste',
+        expiraEm: DateTime.now().add(const Duration(hours: 1)),
+        usuario: Usuario(
+          id: id,
+          email: email,
+          emailVerificado: emailVerificado,
+          pendencias: const <PendenciaDeCadastro>[],
+          podeAbrirCaso: true,
+        ),
+      ),
+    );
+  return deposito;
+}
+
 /// Monta o app com a rede e a camera que o caso pedir.
 Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   WidgetTester tester, {
@@ -195,6 +225,8 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   CameraEGaleria? camera,
   Avisos? avisos,
   DepositoDeIntencaoEmMemoria? envelope,
+  DepositoDeSessao? deposito,
+  CacheDeMeusPets? cacheDeMeusPets,
 }) async {
   AppConfig.limparParaTeste();
   // O envelope de intencao vai EM MEMORIA aqui, sempre.
@@ -205,13 +237,14 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   // GUARDAR uma intencao trava para sempre, sem mensagem: o `pumpAndSettle`
   // espera um Future que nunca resolve. Custou uma execucao travada para
   // descobrir, e o sintoma nao aponta para a causa.
-  final deposito = envelope ?? DepositoDeIntencaoEmMemoria();
+  final envelopeEmUso = envelope ?? DepositoDeIntencaoEmMemoria();
   await tester.pumpWidget(
     BichuApp(
       config: AppConfig.carregar(apiBaseUrlDeTeste: urlBaseDeTeste),
-      deposito: DepositoEmMemoria(),
-      depositoDeIntencao: deposito,
+      deposito: deposito ?? DepositoEmMemoria(),
+      depositoDeIntencao: envelopeEmUso,
       clienteHttp: MockClient(rede),
+      cacheDeMeusPets: cacheDeMeusPets,
       camera: camera ?? const CameraNaoEmbarcada(),
       // O padrao e o mesmo do app quando o Firebase nao subiu: nenhum canal de
       // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`
@@ -220,7 +253,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
     ),
   );
   await tester.pumpAndSettle();
-  return deposito;
+  return envelopeEmUso;
 }
 
 /// Navega pelo roteador de verdade, com o `extra` que a rota espera.
