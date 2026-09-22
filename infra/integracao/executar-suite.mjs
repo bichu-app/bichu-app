@@ -23,15 +23,48 @@
  * e nao por curinga entregue ao runner. E por isso o total de casos e conferido
  * contra o numero de arquivos: zero caso reprova, e menos casos do que arquivos
  * reprova.
+ *
+ * ===========================================================================
+ * `--lcov <arquivo>`: A MEDICAO QUE FALTAVA CHEGAR AO SONAR
+ * ===========================================================================
+ * Ate aqui esta suite nao emitia cobertura nenhuma, e a esteira alimentava o
+ * SonarCloud so com o lcov de `npm test`. Consequencia medida: 40 arquivos de
+ * producao de `src` -- quase todos os adaptadores `kysely-*` e os pontos de
+ * entrada `api.ts`/`worker.ts` -- nao apareciam em relatorio algum. Para o
+ * Sonar, arquivo de fonte SEM dado de cobertura e arquivo com 0%: eles estavam
+ * testados, so que por ESTA suite, e a medicao nunca saia do container.
+ *
+ * A bandeira tem a mesma forma da do executor da unitaria
+ * (`infra/suite/executar-unitaria.mjs`), de proposito: duas formas diferentes
+ * para a mesma coisa divergem, e a que diverge para menos mede menos sem
+ * avisar.
+ *
+ * `--enable-source-maps` so entra JUNTO com `--lcov`, e e ela que faz o
+ * reporter atravessar o source map e gravar `src/**\/*.ts` em vez de
+ * `dist/_tests/**\/*.js`. Sem ela o Sonar nao casa nenhum arquivo, nao
+ * reclama, e publica 0% -- ver o cabecalho de
+ * `infra/verificacao/verificar-cobertura-lcov.mjs`.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 
 import { exigirBancoDescartavel } from './guarda-de-banco-descartavel.mjs';
 
 const ORIGEM = 'tests/integration';
 const COMPILADO = 'dist/_tests/tests/integration';
+
+/**
+ * `--lcov <arquivo>`. Mesma forma da bandeira do executor da unitaria.
+ * Ausente, a suite roda sem instrumentar, como sempre rodou.
+ */
+const argv = process.argv.slice(2);
+const indiceDoLcov = argv.indexOf('--lcov');
+const lcov = indiceDoLcov === -1 ? undefined : argv[indiceDoLcov + 1];
+if (indiceDoLcov !== -1 && (lcov === undefined || lcov.startsWith('-'))) {
+  console.error('\nREPROVADO: `--lcov` exige o caminho do arquivo de saida.\n');
+  process.exit(1);
+}
 
 function varrer(raiz, sufixo) {
   if (!existsSync(raiz)) return [];
@@ -103,18 +136,24 @@ console.log(`\nsuite de integracao: ${String(caminhos.length)} arquivos\n${camin
 // Isso ja apareceu aqui: o placar sumia do fim do arquivo e so o veredito
 // restava. Portao que perde a evidencia em que se baseia nao e portao.
 const RELATORIO = 'dist/_tests/integracao.tap';
-const execucao = spawnSync(
-  'node',
-  [
-    '--test',
-    '--test-reporter=spec',
-    '--test-reporter-destination=stdout',
-    '--test-reporter=tap',
-    `--test-reporter-destination=${RELATORIO}`,
-    ...caminhos,
-  ],
-  { stdio: 'inherit' },
+const argumentos = [];
+// SEM ESSA FLAG o lcov sai apontando para `dist/_tests/**/*.js`, o Sonar nao
+// casa nenhum arquivo, nao reclama, e publica 0% de cobertura. Ela vem antes
+// de `--test` porque e opcao do PROCESSO, nao do runner.
+if (lcov !== undefined) argumentos.push('--enable-source-maps');
+argumentos.push(
+  '--test',
+  ...(lcov === undefined ? [] : ['--experimental-test-coverage']),
+  '--test-reporter=spec',
+  '--test-reporter-destination=stdout',
+  '--test-reporter=tap',
+  `--test-reporter-destination=${RELATORIO}`,
 );
+if (lcov !== undefined) {
+  mkdirSync(dirname(lcov), { recursive: true });
+  argumentos.push('--test-reporter=lcov', `--test-reporter-destination=${lcov}`);
+}
+const execucao = spawnSync('node', [...argumentos, ...caminhos], { stdio: 'inherit' });
 
 if (!existsSync(RELATORIO)) {
   morrer(
@@ -155,6 +194,19 @@ if (passaram === 0) {
 }
 if (falharam > 0 || execucao.status !== 0) {
   morrer(`${String(falharam)} caso(s) reprovaram.`);
+}
+
+// Pedir cobertura e nao receber arquivo nenhum precisa REPROVAR aqui. O passo
+// da esteira que consome este arquivo esta noutro job: se ele nao existir, o
+// `upload-artifact` sobe vazio, o `download-artifact` nao traz nada, e o
+// verificador do job `sonar` acusaria "relatorio nao encontrado" tres jobs
+// depois, com o motivo perdido no caminho. Quem pediu a medicao e quem cobra.
+if (lcov !== undefined && !existsSync(lcov)) {
+  morrer(
+    `a cobertura foi pedida em ${lcov} e o arquivo nao foi escrito. O reporter \`lcov\` do Node ` +
+      'nao gravou nada: ou `--experimental-test-coverage` nao chegou ao processo, ou o destino ' +
+      'nao e gravavel. Seguir daqui entregaria ao SonarCloud a ausencia, que ele publica como 0%.',
+  );
 }
 
 console.log('suite de integracao: APROVADA');

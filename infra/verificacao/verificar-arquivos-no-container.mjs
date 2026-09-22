@@ -89,25 +89,67 @@ function morrer(mensagem) {
 }
 
 /**
- * `run --rm <servico> npm [run] <script>`, nas tres formas em que ela aparece.
+ * `run --rm [bandeiras] <servico> npm [run] <script>`, nas formas em que ela aparece.
  *
  * A do `rodar.mjs` e um vetor de JavaScript (`['run', '--rm', 'testes', ...]`) e
- * as outras duas sao linha de shell. Em vez de tres expressoes, o texto e
- * normalizado antes: aspas, virgulas e colchetes viram espaco, e as tres formas
+ * as outras sao linha de shell. Em vez de varias expressoes, o texto e
+ * normalizado antes: aspas, virgulas e colchetes viram espaco, e as formas
  * passam a ser a mesma frase.
+ *
+ * AS BANDEIRAS ENTRE `--rm` E O SERVICO NAO SAO OPCIONAIS DE ENFEITE.
+ * O `-T` ja estava previsto; em 22/09 entrou `-v "$PWD/coverage:/app/coverage"`,
+ * que e como o lcov da suite de integracao sai de dentro do conteiner. Com o
+ * `(?:-T\s+)?` de antes, aquele chamador simplesmente DEIXAVA DE SER ENCONTRADO
+ * -- e a varredura nao teria como perceber, porque outros chamadores continuam
+ * casando e `chamadas.length` segue maior que zero. Portao que perde UM chamador
+ * em silencio e pior que portao que nao acha nenhum, porque este ultimo grita.
+ *
+ * A bandeira e reconhecida pelo que ela e: comeca com `-`. O ARGUMENTO dela
+ * (`$PWD/coverage:/app/coverage`) e consumido junto, e por isso o grupo aceita
+ * um token colado que nao e `npm`. O nome do servico continua obrigado a comecar
+ * com letra, entao a expressao nao passa a casar texto qualquer -- a terceira
+ * isca, la embaixo, prova isso sobre o `package.json`.
  */
 function descobrirChamadas(fontes) {
   const achadas = [];
   for (const fonte of fontes) {
     if (!existsSync(fonte)) continue;
-    const texto = readFileSync(fonte, 'utf8').replace(/['"[\],]/g, ' ');
-    const padrao = /\brun\s+--rm\s+(?:-T\s+)?([A-Za-z][\w.-]*)\s+npm\s+(?:run\s+)?([\w:.-]+)/g;
+    // A CONTINUACAO DE LINHA DO SHELL (`\\` no fim da linha) VIRA ESPACO ANTES
+    // DE QUALQUER COISA. Sem isto, quebrar um comando comprido em duas linhas no
+    // `ci.yml` -- que e a unica forma de ele caber e ser lido -- tirava o
+    // chamador da varredura, e nada acusava: `chamadas.length` continua maior
+    // que zero por causa dos outros chamadores.
+    const texto = readFileSync(fonte, 'utf8')
+      .replace(/\\\r?\n/g, ' ')
+      .replace(/['"[\],]/g, ' ');
+    const padrao =
+      /\brun\s+--rm\s+(?:-\S+(?:\s+(?!npm\b)\S+)?\s+)*([A-Za-z][\w.-]*)\s+npm\s+(?:run\s+)?([\w:.-]+)/g;
     for (const casado of texto.matchAll(padrao)) {
       achadas.push({ fonte, servico: casado[1], script: casado[2] });
     }
   }
   return achadas;
 }
+
+/**
+ * Casos de mesa da expressao acima. Regex larga aqui faz o portao encontrar
+ * chamador onde nao ha; regex estreita o faz perder chamador em silencio, que
+ * foi o defeito de 22/09. Os dois lados precisam de caso.
+ */
+const CASOS_DE_VARREDURA = [
+  ['run --rm api npm run test:integration:executar', 'api', 'test:integration:executar'],
+  ['run --rm -T db npm run seed', 'db', 'seed'],
+  [
+    'run --rm -v  $PWD/coverage:/app/coverage  api npm run test:integration:executar -- --lcov x',
+    'api',
+    'test:integration:executar',
+  ],
+  ['run --rm --user node api npm test', 'api', 'test'],
+  // Continuacao de linha do shell entre o servico e o `npm`: o caso que o
+  // `ci.yml` usa para o comando caber na largura do arquivo.
+  ['run --rm -v x:/app/coverage api \\\n  npm run test:integration:executar', 'api', 'test:integration:executar'],
+  ['docker run --rm outra-coisa sem npm nenhum', null, null],
+];
 
 /**
  * Token que e arquivo DESTE repositorio, e nao curinga nem bandeira.
@@ -264,6 +306,27 @@ for (const [indice, isca] of iscas.entries()) {
   }
   console.log(`  OK, reprovou: ${isca.nome}`);
 }
+
+// Os casos de mesa da expressao, antes das iscas de imagem: eles nao precisam de
+// Docker e apontam o defeito no lugar exato, em vez de deixa-lo aparecer como
+// "um chamador a menos" numa lista que ninguem confere.
+for (const [linha, servico, script] of CASOS_DE_VARREDURA) {
+  const texto = linha.replace(/\\\r?\n/g, ' ').replace(/['"[\],]/g, ' ');
+  const achado = /\brun\s+--rm\s+(?:-\S+(?:\s+(?!npm\b)\S+)?\s+)*([A-Za-z][\w.-]*)\s+npm\s+(?:run\s+)?([\w:.-]+)/.exec(
+    texto,
+  );
+  const obtidoServico = achado === null ? null : achado[1];
+  const obtidoScript = achado === null ? null : achado[2];
+  if (obtidoServico !== servico || obtidoScript !== script) {
+    morrer(
+      `a varredura de chamadores mudou de resposta: \`${linha}\` devia dar ` +
+        `${String(servico)}/${String(script)} e deu ${String(obtidoServico)}/${String(obtidoScript)}. ` +
+        'Perder um chamador aqui nao derruba nada: a lista so fica menor, e o arquivo que ele ' +
+        'exigia deixa de ser cobrado da imagem.',
+    );
+  }
+}
+console.log('  OK, a varredura acha o chamador com e sem bandeira entre `--rm` e o servico');
 
 // A terceira isca nao precisa de Docker: descoberta vazia tem que morrer, e nao
 // anunciar "nenhum arquivo faltando" para uma lista de zero arquivos.

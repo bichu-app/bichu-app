@@ -209,21 +209,32 @@ e2e: commit-de-build ## Cypress contra o ambiente de qa
 	npx cypress run --record
 
 # A mesma invocacao do job `sonar` da esteira, para conferir na maquina antes
-# de abrir PR. Roda fora do compose de proposito: e o caminho que o runner do
-# GitHub usa, e o objetivo aqui e reproduzir esse caminho, nao um parecido.
+# de abrir PR.
 #
-# `--enable-source-maps` nao e opcional: sem ela o lcov aponta para o
-# JavaScript de `dist/`, o Sonar nao casa nada e publica 0% sem reclamar.
-cobertura: ## gera coverage/lcov.info no formato que o SonarCloud le
+# ERA UMA COPIA do comando, com o curinga ENTRE ASPAS entregue ao runner --
+# exatamente a forma que a BICHUS-219 tirou do `package.json` porque padrao que
+# nao casa nada sai `# tests 0` e codigo de saida zero. A copia sobreviveu aqui
+# e teria medido outra coisa que a esteira. Agora chama o MESMO executor, com a
+# mesma bandeira: uma forma so.
+#
+# `--enable-source-maps` nao e opcional, e mora dentro do executor: sem ela o
+# lcov aponta para o JavaScript de `dist/`, o Sonar nao casa nada e publica 0%
+# sem reclamar.
+cobertura: ## gera coverage/lcov.info (unitaria) no formato que o SonarCloud le
 	@mkdir -p coverage
-	npx tsc -p tsconfig.json --outDir dist/_tests
-	node --enable-source-maps --test --experimental-test-coverage \
-	  --test-reporter=spec --test-reporter-destination=stdout \
-	  --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \
-	  "dist/_tests/src/**/*.test.js"
+	npm test -- --lcov coverage/lcov.info
 
-verificar-cobertura: cobertura ## o lcov fala de src/**/*.ts? Com as quatro iscas
-	node infra/verificacao/verificar-cobertura-lcov.mjs coverage/lcov.info
+# A OUTRA METADE. Sobe a pilha efemera, porque a suite de integracao precisa de
+# banco, e escreve `coverage/lcov-integracao.info` no proprio worktree (a arvore
+# esta montada em `/app`). Sem ela, 40 arquivos de producao de `src` nao
+# aparecem em relatorio nenhum -- e sem dado, para o Sonar, e 0%.
+cobertura-integracao: ## gera coverage/lcov-integracao.info subindo a pilha efemera
+	@mkdir -p coverage
+	npm run test:integration -- --lcov coverage/lcov-integracao.info
+
+verificar-cobertura: cobertura cobertura-integracao ## os dois lcov falam de src/**/*.ts, e de TODOS eles? Com as cinco iscas
+	node infra/verificacao/verificar-cobertura-lcov.mjs \
+	  coverage/lcov.info coverage/lcov-integracao.info
 
 verificar-dispensas: ## dispensa de portao vencida reprova (secao 5.3)
 	python3 infra/verificacao/verificar_dispensas.py
