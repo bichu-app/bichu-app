@@ -313,6 +313,7 @@ function autoTeste(): string[] {
     effects: [],
     hasRateLimit: false,
     raw: operacaoBruta,
+    parameters: [],
   };
 
   const achados = inspecionarCamposPublicos(spec, [operacao]);
@@ -337,6 +338,7 @@ function autoTeste(): string[] {
     effects: [],
     hasRateLimit: false,
     raw: paths['/isca-html']?.['get'] ?? {},
+    parameters: [],
   };
   const cabecalhos = inspecionarCabecalhos([paginaNua]);
   if (cabecalhos.paginasConferidas !== 1) {

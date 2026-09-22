@@ -700,6 +700,7 @@ function operacaoDeMentira(
     effects: [],
     hasRateLimit: false,
     raw: parameters === undefined ? {} : { parameters },
+    parameters: Array.isArray(parameters) ? (parameters as Record<string, unknown>[]) : [],
   };
 }
 
@@ -713,6 +714,7 @@ function contratoDeMentira(
       operacoes.map((operacao) => [operacao.operationId, operacao]),
     ),
     requestBodySchema: () => undefined,
+    parameterSchemas: () => ({ params: undefined, querystring: undefined, tiposDeProblema: new Map() }),
     responseSchema: () => undefined,
   };
 }

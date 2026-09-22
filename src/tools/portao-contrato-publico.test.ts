@@ -37,6 +37,7 @@ function operacaoDe(
       effects: [],
       hasRateLimit: false,
       raw,
+      parameters: [],
     },
   };
 }

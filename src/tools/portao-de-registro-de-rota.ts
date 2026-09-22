@@ -126,6 +126,12 @@ export const MEMBROS_QUE_NAO_REGISTRAM: ReadonlySet<string> = new Set([
   'setNotFoundHandler',
   // Requisição sintética, sem socket. Só teste usa.
   'inject',
+  // Espera os plugins subirem. Não cria rota nenhuma -- ao contrário, é o que
+  // se chama DEPOIS de todas existirem, e é por isso que as conferências de
+  // subida (idempotência, parâmetro) rodam logo em seguida. Entrou quando a
+  // BICHUS-199 trouxe bancadas que chamam `app.ready()`: o portão as reprovou,
+  // e reprovar o desconhecido é o desenho dele funcionando.
+  'ready',
 ]);
 
 export interface RegistroDireto {
