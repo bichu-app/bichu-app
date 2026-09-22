@@ -28,12 +28,30 @@
 /// algo que ainda não aconteceu, que é o defeito que o critério 2 proíbe. Quem
 /// decide é quem chama, e a fila não tem como adivinhar — por isso `enfileirar`
 /// é uma escolha explícita e não um retorno automático de falha de rede.
+///
+/// ## ANTES DE LIGAR ESTA FILA NO APP: ela precisa entrar em `limpezasAoSair`
+///
+/// Hoje `FilaOffline` existe em `lib/` e nos testes, e **nada no app a
+/// instancia**. Quem for ligá-la tem uma obrigação que não é óbvia no código
+/// desta classe:
+///
+/// A fila guarda **dado da conta em disco** — o corpo de cada ação carrega o
+/// que a pessoa digitou: nome do pet, endereço de referência, telefone de
+/// contato. Então ela tem de entrar na lista `limpezasAoSair` do
+/// `ControladorDeSessao` (`sessao/controlador_de_sessao.dart`), que é o que o
+/// `sair()` executa nos **quatro** desfechos de logout. O registro é uma linha
+/// em `app.dart`, ao lado do cache de pets que já está lá.
+///
+/// Fila offline que sobrevive ao logout é dado de uma conta esperando a
+/// próxima pessoa que entrar naquele aparelho — e o aparelho compartilhado é
+/// caso real no público deste produto, não hipótese.
 library;
 
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
 /// Uma ação esperando sinal.
@@ -164,6 +182,39 @@ class FilaOffline {
   /// até ocupar o armazenamento de quem já está com o telefone cheio.
   static const int teto = 50;
 
+  /// As ações pendentes, **sem deixar um item ruim levar os outros junto**.
+  ///
+  /// ## O que estava errado (BICHUS-201, defeito 1)
+  ///
+  /// Este método decodificava a lista inteira numa expressão só, dentro de um
+  /// `try`, e um `on FormatException` devolvia `[]`. O efeito era o oposto do
+  /// propósito desta classe: **um** item malformado descartava a fila
+  /// **inteira**, em silêncio. O alerta de pet sumido disparado no elevador
+  /// saía junto com o item quebrado, e não ficava registro em lugar nenhum.
+  ///
+  /// A fila existe exatamente para isso não acontecer.
+  ///
+  /// ## Como ficou
+  ///
+  /// Duas falhas diferentes, tratadas diferente, porque são diferentes:
+  ///
+  /// - **O documento não é uma lista JSON.** Não há item nenhum a salvar, e aí
+  ///   começar vazia continua sendo melhor que não abrir — a pessoa perderia o
+  ///   acesso ao app inteiro por causa de um arquivo. Mas é um **evento**, e
+  ///   sai pelo canal de erro, não por um `return []` calado.
+  /// - **Um item da lista não se decodifica.** Descartado sozinho; os demais
+  ///   sobrevivem. Também registrado, porque perda silenciosa é o que esta
+  ///   issue existe para acabar.
+  ///
+  /// `on Object`, e não `on FormatException`: `AcaoEnfileirada.deJson` converte
+  /// com `as String` e `as Map`, que levantam `TypeError`, não
+  /// `FormatException`. O `catch` antigo deixava esses passarem direto e
+  /// derrubar quem chamasse — ele nem cobria a classe que dizia cobrir.
+  ///
+  /// O item ruim **não é reescrito aqui**: `pendentes()` é leitura, e leitura
+  /// que grava surpreende quem chama e pode falhar na abertura do app. Ele some
+  /// do disco sozinho na próxima mutação, porque `_persistir` regrava a lista
+  /// inteira a partir dos sobreviventes.
   Future<List<AcaoEnfileirada>> pendentes() async {
     final emMemoria = _memoria;
     if (emMemoria != null) return List.unmodifiable(emMemoria);
@@ -174,19 +225,78 @@ class FilaOffline {
       return const <AcaoEnfileirada>[];
     }
 
+    final List<dynamic> cru;
     try {
-      final lista = (jsonDecode(bruto) as List<dynamic>)
-          .map((e) => AcaoEnfileirada.deJson(Map<String, dynamic>.from(e as Map)))
-          .toList();
-      _memoria = lista;
-      return List.unmodifiable(lista);
-    } on FormatException {
-      // Arquivo corrompido: começa vazia em vez de derrubar o app na abertura.
-      // Perder a fila é ruim; não abrir é pior, porque a pessoa perde o acesso
-      // ao cadastro inteiro por causa de um arquivo.
+      cru = jsonDecode(bruto) as List<dynamic>;
+    } on Object catch (erro, pilha) {
+      _relatar(
+        erro,
+        pilha,
+        'a fila offline inteira estava ilegível e foi descartada',
+        <String, int>{'bytes_no_arquivo': bruto.length},
+      );
       _memoria = <AcaoEnfileirada>[];
       return const <AcaoEnfileirada>[];
     }
+
+    final sobreviventes = <AcaoEnfileirada>[];
+    var descartados = 0;
+    Object? primeiroErro;
+    StackTrace? primeiraPilha;
+
+    for (final bruta in cru) {
+      try {
+        sobreviventes
+            .add(AcaoEnfileirada.deJson(Map<String, dynamic>.from(bruta as Map)));
+      } on Object catch (erro, pilha) {
+        descartados += 1;
+        primeiroErro ??= erro;
+        primeiraPilha ??= pilha;
+      }
+    }
+
+    if (descartados > 0) {
+      _relatar(
+        primeiroErro ?? StateError('item malformado na fila offline'),
+        primeiraPilha,
+        'itens malformados descartados da fila offline; os demais foram mantidos',
+        <String, int>{
+          'descartados': descartados,
+          'mantidos': sobreviventes.length,
+          'itens_no_arquivo': cru.length,
+        },
+      );
+    }
+
+    _memoria = sobreviventes;
+    return List.unmodifiable(sobreviventes);
+  }
+
+  /// Manda a perda para o canal que a observabilidade escuta (Sentry, ADR-0008).
+  ///
+  /// **Só contagem, nunca conteúdo.** O corpo de uma ação enfileirada carrega o
+  /// que a pessoa digitou — nome do pet, endereço, telefone de contato — e isto
+  /// aqui sai do aparelho. O que o operador precisa para agir é quantos itens
+  /// sumiram e de que tipo era a falha, e nada disso identifica ninguém.
+  void _relatar(
+    Object erro,
+    StackTrace? pilha,
+    String oQueAconteceu,
+    Map<String, int> numeros,
+  ) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: erro,
+        stack: pilha,
+        library: 'bichu/fila_offline',
+        context: ErrorDescription('ao ler a fila offline do disco'),
+        informationCollector: () => <DiagnosticsNode>[
+          ErrorDescription(oQueAconteceu),
+          for (final entrada in numeros.entries)
+            ErrorDescription('${entrada.key}: ${entrada.value}'),
+        ],
+      ),
+    );
   }
 
   Future<void> enfileirar(AcaoEnfileirada acao) async {

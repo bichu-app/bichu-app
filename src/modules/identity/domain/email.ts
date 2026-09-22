@@ -12,6 +12,8 @@
  * SMTP. Aplicá-la a todo mundo faria duas pessoas de um domínio corporativo
  * disputarem a mesma conta.
  */
+import { motivoDaRecusaDeEndereco } from './gramatica-de-endereco.js';
+
 export const TAMANHO_MAXIMO_DE_EMAIL = 254;
 
 export function normalizarEmail(bruto: string): string {
@@ -19,9 +21,27 @@ export function normalizarEmail(bruto: string): string {
 }
 
 /**
- * Validação de forma, deliberadamente frouxa. A prova de que o endereço existe é
- * o e-mail de verificação, não uma expressão regular: regex estrita rejeita
- * endereço válido e não impede endereço inexistente.
+ * Validação de forma, deliberadamente frouxa **na estrutura** e exata **na
+ * gramática do transporte**.
+ *
+ * Frouxa na estrutura porque a prova de que o endereço existe é o e-mail de
+ * verificação, não uma expressão regular: regex estrita rejeita endereço válido
+ * e não impede endereço inexistente. Por isso as regras de forma aqui são as
+ * mínimas -- um `@`, domínio com ponto, o tamanho do RFC 5321.
+ *
+ * Exata na gramática porque o que a borda recusa tem de ser **a mesma classe**
+ * que o envio recusa, e não uma aproximação dela. Até a BICHUS-198 esta função
+ * terminava em `!/\s/.test(email)`, que deixava passar `<`, `>`, `,`, `;`, `:`,
+ * `"`, `\`, NUL, os controles C1 e o NEL (`U+0085`, que o `\s` do JavaScript
+ * não cobre). O efeito não era endereço entregue errado -- o `smtp-mailer` já
+ * recusava --, era a **ordem** dos acontecimentos: `a@b.test;x` passava aqui, a
+ * conta era criada, e só então o envio da verificação estourava. A pessoa
+ * recebia 500 com a conta já existindo, em vez de 400 sem conta nenhuma.
+ *
+ * `motivoDaRecusaDeEndereco` é a definição única, importada também pelo
+ * adaptador de envio. Não existe segunda lista para divergir desta, e
+ * `borda-e-fio-recusam-a-mesma-classe.test.ts` compara as duas **em runtime**,
+ * ponto de código a ponto de código, em vez de repetir a lista dentro do teste.
  */
 export function emailTemFormaValida(email: string): boolean {
   if (email.length === 0 || email.length > TAMANHO_MAXIMO_DE_EMAIL) return false;
@@ -31,7 +51,7 @@ export function emailTemFormaValida(email: string): boolean {
   if (local === undefined || dominio === undefined) return false;
   if (local.length === 0 || dominio.length < 3) return false;
   if (!dominio.includes('.') || dominio.startsWith('.') || dominio.endsWith('.')) return false;
-  return !/\s/.test(email);
+  return motivoDaRecusaDeEndereco(email) === null;
 }
 
 /** `ma****@exemplo.com.br`. Usado onde a tela precisa confirmar sem revelar. */
