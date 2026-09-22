@@ -274,6 +274,25 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     aoApagar: 'CASCADE',
     levaJunto: 'a senha da identidade apagada. Da própria pessoa.',
   },
+  // BICHUS-48. A janela de reautenticação de 5 minutos.
+  //
+  // A cascata é o comportamento certo, e ela já está provada por medição: o caso
+  // "a linha da janela morre junto com a conta" de
+  // `reautenticacao-pelo-http.test.ts` abre a janela, apaga a conta e conta as
+  // linhas que sobraram. A migração `20260922000005_reautenticacao-com-senha.sql`
+  // declara `REFERENCES users (id) ON DELETE CASCADE`.
+  //
+  // O que faltava era a linha AQUI. O veredito deste registro é escrito à mão —
+  // o catálogo sabe que a linha some, não sabe de quem ela é — e sem ela o caso
+  // "toda chave estrangeira do banco está declarada aqui" reprovava a suíte.
+  'public.reauth_tokens.reauth_tokens_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a janela de reautenticação da própria pessoa. Deixá-la para trás seria guardar, depois ' +
+      'da conta apagada, a autorização que ela abriu para apagá-la.',
+  },
   'public.refresh_tokens.refresh_tokens_rotated_to_id_fkey': {
     colunas: ['rotated_to_id'],
     referencia: 'public.refresh_tokens',
