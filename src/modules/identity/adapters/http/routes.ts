@@ -19,6 +19,7 @@ import {
 import type { Conta } from '../../ports/identity-repository.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
+import { corpoAusenteEhCorpoVazio } from '../../../../shared/http/corpo-opcional.js';
 import type { AuthService, Autenticado } from '../../application/auth-service.js';
 import type { ContextoDaRequisicao } from '../../application/dependencies.js';
 import type { TokenSigner } from '../../ports/token-signer.js';
@@ -273,7 +274,20 @@ export function registrarRotasDeIdentidade(
 
   app.post(
     rotaDePedidoDeVerificacao.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDePedidoDeVerificacao.operationId) } },
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDePedidoDeVerificacao.operationId) },
+      // Esta é a outra operação do contrato com `requestBody: required: false`,
+      // e o manipulador abaixo diz isso ao ler `request.body ?? {}`: com token
+      // no cabeçalho, o e-mail vem da sessão e não há corpo a enviar. Sem este
+      // gancho, o schema acima sozinho recusava a chamada sem corpo com 400
+      // `body must be object`, porque o Fastify valida `request.body` mesmo
+      // quando ele é `undefined` — a rota prometia 202 "exista ou não a conta"
+      // e respondia 400 para quem não mandasse campo nenhum.
+      preValidation: corpoAusenteEhCorpoVazio(
+        deps.contrato,
+        rotaDePedidoDeVerificacao.operationId,
+      ),
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const corpo = (request.body ?? {}) as { email?: string };
       const cabecalho = request.headers.authorization;
