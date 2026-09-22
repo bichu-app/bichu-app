@@ -275,6 +275,13 @@ class Pet {
     this.fotos = const <FotoDoPet>[],
     this.tagsAtivas = 0,
     this.idDoCasoAberto,
+    this.racaCodigo,
+    this.racaTextoLivre,
+    this.versaoDaReferencia,
+    this.corPrincipalCodigo,
+    this.segundaCorCodigo,
+    this.sexo,
+    this.sinaisParticulares,
   });
 
   final String id;
@@ -312,7 +319,54 @@ class Pet {
   /// para o topo de `Pets` pela BICHUS-177. O campo entra no modelo porque o
   /// contrato o declara e porque ler metade da resposta e como o app e o
   /// documento divergem sem ninguem ver.
+  ///
+  /// A BICHUS-61 e a BICHUS-60 passaram a **ler** este campo: a edicao avisa
+  /// que o alerta ja disparado nao e reescrito (criterio 3 da 61), e a
+  /// exclusao avisa que o caso sera encerrado sem desfecho (criterio 4 da 60).
   final String? idDoCasoAberto;
+
+  // --------------------------------------------------------------------
+  // Os campos que a BICHUS-61 acrescentou, e o motivo de eles nao existirem
+  // antes
+  // --------------------------------------------------------------------
+  //
+  // O contrato declara `Pet` como `allOf [PetInput, ...]`: a resposta SEMPRE
+  // trouxe `breed_code`, `primary_color_code`, `secondary_color_code`, `sex` e
+  // `distinctive_marks`. Este modelo simplesmente nao os lia, porque a lista
+  // de `Meus pets` nao os mostra.
+  //
+  // **Para a edicao isso deixa de ser economia e vira perda de dado.**
+  // `PATCH /pets/{petId}` recebe um `PetInput` inteiro e o repositorio grava
+  // TODAS as colunas (`kysely-pet-repository.ts`, `atualizar`): campo que nao
+  // for enviado e gravado como nulo. Uma tela de edicao que so soubesse ler
+  // nome, especie e porte apagaria a cor, o sexo e os sinais particulares do
+  // pet a cada vez que o tutor corrigisse o nome -- em silencio, e sem que
+  // nada no app reprovasse. Ler a resposta inteira e o que torna o `PATCH`
+  // seguro.
+
+  /// `breed_code`. **O codigo, e nao o rotulo**: e ele que o cruzamento de
+  /// perdido e achado le, e e ele que volta no `PATCH`. [racaRotulo] continua
+  /// sendo o que a tela exibe.
+  final String? racaCodigo;
+
+  /// `breed_free_text`. So existe quando [racaCodigo] e o `outro_*` da
+  /// especie; o contrato recusa os dois juntos fora disso.
+  final String? racaTextoLivre;
+
+  /// `ref_data_version`: de qual versao da lista este pet foi escolhido.
+  ///
+  /// Reenviado como veio no `PATCH` que **nao** mexe na raca. Mandar a versao
+  /// corrente ali responderia "qual e a lista de hoje" a uma pergunta que e
+  /// "de qual lista este pet foi escolhido", e reescreveria a procedencia do
+  /// dado por causa de uma edicao de nome.
+  final String? versaoDaReferencia;
+
+  final String? corPrincipalCodigo;
+  final String? segundaCorCodigo;
+  final Sexo? sexo;
+
+  /// `distinctive_marks`, ate 500 caracteres no contrato.
+  final String? sinaisParticulares;
 
   /// A foto que o cartao pinta: a principal quando exibivel, senao a primeira
   /// exibivel que existir. Nulo quando nao ha nenhuma.
@@ -354,6 +408,13 @@ class Pet {
       tagsAtivas: json['active_tag_count'] as int? ?? 0,
       idDoCasoAberto: json['open_case_id'] as String?,
       racaRotulo: json['breed_label'] as String?,
+      racaCodigo: json['breed_code'] as String?,
+      racaTextoLivre: json['breed_free_text'] as String?,
+      versaoDaReferencia: json['ref_data_version'] as String?,
+      corPrincipalCodigo: json['primary_color_code'] as String?,
+      segundaCorCodigo: json['secondary_color_code'] as String?,
+      sexo: Sexo.de(json['sex'] as String?),
+      sinaisParticulares: json['distinctive_marks'] as String?,
       cuidados: json['care_notes'] as String?,
       redacoesDeCuidados:
           (json['care_notes_redactions'] as List<dynamic>? ?? const <dynamic>[])
