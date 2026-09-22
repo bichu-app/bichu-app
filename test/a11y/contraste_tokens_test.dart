@@ -1,5 +1,11 @@
-// Contraste recalculado sobre o JSON: os 70 pares do paragrafo 7, medidos
+// Contraste recalculado sobre o JSON: os 86 pares do paragrafo 7, medidos
 // direto de design/tokens.json e nao de uma copia.
+//
+// Passaram a 86 em 21/09/2026 com o conjunto `Icone de pet` (BICHUS-144): duas
+// tintas e so duas -- `text-secondary` no estado padrao e `primary` no
+// selecionado -- medidas contra surface, surface-alt, surface-sunken e
+// primary-container nos dois temas. Os 16 entram com piso de 3:1 (SC 1.4.11,
+// objeto grafico), entao a conta dos pares cobrados em 7:1 continua 38.
 //
 // Eram 58 na paleta ambar. Passaram a 70 com a identidade Framboesa: quatro
 // papeis novos (community-fill, on-community-fill, accent-fill,
@@ -43,12 +49,12 @@ void main() {
     pares = jsonDecode(arquivo.readAsStringSync()) as Map<String, dynamic>;
   });
 
-  test('a lista tem os 70 pares que o paragrafo 7 declara', () {
+  test('a lista tem os 86 pares que o paragrafo 7 declara', () {
     expect(
       (pares['pares'] as List).length,
-      70,
+      86,
       reason:
-          'o paragrafo 7 mede 70 pares. Se o numero mudou, a tabela do '
+          'o paragrafo 7 mede 86 pares. Se o numero mudou, a tabela do '
           'documento e este arquivo sairam de sincronia, e o portao passa a '
           'cobrir menos do que anuncia.',
     );

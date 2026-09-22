@@ -42,3 +42,25 @@ dispensas:
     motivo: "conta Apple Developer pendente (BICHU-14): sem Team ID nao ha build nem Universal Links"
     responsavel: cliente
     vence_em: 2026-09-22
+
+  # O portao do paragrafo 7 do design system
+  # (test/a11y/documento_secao7_test.dart) compara a tabela e a prosa de
+  # docs/06-design-system.md com design/contrast-pairs.json. Ele existe porque
+  # o paragrafo 7 afirmava ter esse portao e NAO tinha: quatro razoes da rampa
+  # anterior sobreviveram na prosa por dias com a esteira verde (BICHUS-194).
+  #
+  # Aqui ele nao roda, e o motivo nao e tecnico: `docs/` esta fora do
+  # repositorio por decisao do cliente de 17/09/2026, entao o checkout da CI
+  # nao traz o arquivo. Sem esta entrada o teste REPROVA por ausencia, que e o
+  # comportamento correto de uma verificacao que nao consegue verificar.
+  #
+  # A saida esta em .jarvis/DECISOES-PARA-22-09.md: ou `docs/` (ou so este
+  # arquivo) entra no repositorio, ou o portao passa a rodar no passo de
+  # publicacao no Confluence, ou se aceita que o paragrafo 7 nao tem portao e
+  # o texto dele diz isso. Enquanto esta entrada existir, a tabela do
+  # documento NAO e conferida pela esteira, e o teste imprime `::warning::`
+  # dizendo isso em cada execucao.
+  - portao: documento-secao7
+    motivo: "docs/ fora do repositorio por decisao de 17/09/2026: o checkout da CI nao traz docs/06-design-system.md e o portao do paragrafo 7 nao tem o que ler"
+    responsavel: cliente
+    vence_em: 2026-09-24
