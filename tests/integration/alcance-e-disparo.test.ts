@@ -47,7 +47,7 @@
  * |---|---|
  * | o `EXISTS` de `user_devices` (critério 4) | 3 casos |
  * | o `count(*)` de fadiga (critério 6) | 45 casos |
- * | `u.deleted_at IS NULL` (BICHUS-88) | 1 caso |
+ * | `u.deleted_at IS NULL` (BICHUS-88) | **0 casos, desde 22/09** — ver abaixo |
  * | `url.user_id <> ...` (critério 5) | 1 caso |
  * | `url.expires_at > ...` (critério 2) | 1 caso |
  * | `concluir` virado `no-op` | 3 casos |
@@ -55,6 +55,18 @@
  * A fadiga derruba 45 porque, sem ela, cada caso passa a enxergar as contas que
  * os outros criaram: a asserção de lista exata deixa de casar em quase toda a
  * suíte. Reprovação barulhenta, e é o que se quer de uma isca.
+ *
+ * **A linha da BICHUS-88 mudou de veredito em 22/09, e a mudança está medida.**
+ * Com o gatilho da migração `20260922000006` no lugar, a linha de localização da
+ * conta excluída deixa de existir no instante da exclusão lógica. Tirar
+ * `u.deleted_at IS NULL` da consulta passou a NÃO reprovar caso nenhum desta
+ * suíte: medido, 252 de 252 verdes com a cláusula removida. Isso não quer dizer
+ * que a cláusula sobre; quer dizer que ela virou a SEGUNDA camada, e que esta
+ * suíte deixou de ser quem a segura. Quem a segura agora é
+ * `src/modules/lostfound/adapters/persistence/sete-criterios-na-consulta.test.ts`,
+ * pelo texto do SQL — a mesma isca derruba 2 casos lá. Registrado aqui porque
+ * uma tabela de iscas que promete uma reprovação que não acontece mais é pior
+ * que nenhuma tabela: ela é a confiança falsa que ninguém vai conferir.
  *
  * **A última linha é a razão de este arquivo existir.** Com `concluir`
  * transformado em `no-op`, a suíte unitária inteira ficou **verde — 1106 casos,

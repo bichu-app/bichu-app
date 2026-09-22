@@ -210,6 +210,29 @@ void describe('BICHUS-88: entre a exclusão lógica e o expurgo, a linha não ex
     );
   });
 
+  void it('escrever deleted_at = NULL numa conta viva não apaga a localização dela', async () => {
+    const dono = await criarConta();
+    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+
+    // Este caso existe por causa de uma isca. Com a condição `WHEN` removida, os
+    // outros casos deste arquivo continuavam verdes: `AFTER UPDATE OF
+    // deleted_at` já não dispara num `UPDATE` que não atribui a coluna, e
+    // reverter uma exclusão apaga uma linha que ela mesma já tinha apagado.
+    // O que a condição guarda de verdade é ISTO: uma conta VIVA, com
+    // localização, num `UPDATE` que atribui `deleted_at = NULL` — o que qualquer
+    // atualizador genérico de perfil faz ao reescrever a linha inteira. Sem a
+    // condição, o tutor sai da base de alerta ao salvar o perfil.
+    await cliente.query('UPDATE users SET deleted_at = NULL WHERE id = $1', [dono]);
+
+    assert.deepEqual(
+      await alcancadosPorConsultaDistraida([dono]),
+      [dono],
+      'a condição `WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)` saiu do ' +
+        'gatilho: atribuir `deleted_at` sem excluir nada apagou a localização de uma conta ' +
+        'viva. Tutor ativo sai da base de alerta sem nada avisar.',
+    );
+  });
+
   void it('a exclusão que volta atrás leva a localização de volta (critério 7)', async () => {
     const dono = await criarConta();
     await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
@@ -272,11 +295,18 @@ void describe('o gatilho está no catálogo, e é ele que faz o acima acontecer'
     );
     assert.match(definicao, /AFTER UPDATE OF deleted_at ON public\.users/i, definicao);
     assert.match(definicao, /FOR EACH ROW/i, definicao);
-    assert.match(
-      definicao,
-      /WHEN \(\(?old\.deleted_at IS NULL\)? AND \(?new\.deleted_at IS NOT NULL\)?\)/i,
-      'a condição do gatilho mudou. Ela precisa disparar na ida (NULL -> não nulo) e só ' +
-        `nela. Definição atual:\n${definicao}`,
-    );
+    // Em pedaços, e não numa expressão só: o `pg_get_triggerdef` parenteriza a
+    // condição do seu jeito (`WHEN (((old...) AND (new...)))`), e casar a
+    // pontuação dele seria prender este caso a um detalhe de formatação do
+    // Postgres em vez da regra.
+    for (const parte of [/\bWHEN\b/i, /old\.deleted_at IS NULL/i, /new\.deleted_at IS NOT NULL/i]) {
+      assert.match(
+        definicao,
+        parte,
+        'a condição do gatilho mudou. Ela precisa disparar na ida (NULL -> não nulo) e só ' +
+          `nela: sem a condição, reverter uma exclusão apagaria a localização de novo, e ` +
+          `todo UPDATE de \`users\` pagaria a chamada. Definição atual:\n${definicao}`,
+      );
+    }
   });
 });
