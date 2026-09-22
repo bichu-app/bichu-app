@@ -19,9 +19,17 @@
 //     python3 design/marca/app/gerar-arte-do-app.py
 //     cd app && dart run flutter_launcher_icons
 //     cd app && dart run flutter_native_splash:create
+//     cd app && dart run tool/corrigir_splash_ios.dart
 //
 // derruba este arquivo nomeando o primeiro arquivo divergente e a cor que ele
 // encontrou.
+//
+// O QUARTO COMANDO NAO E COBRADO AQUI, e por isso existe um segundo arquivo.
+// Ele carimba o perfil de cor nos PNG do catalogo de assets do iOS, e o que
+// ele conserta nao aparece no byte: sem perfil declarado o byte continua na
+// semente e o iOS EXIBE outra cor. Em 21/09/2026 as oito iscas deste arquivo
+// estavam VERDES com a splash nativa do iOS abrindo em `#AD0038`. Quem cobra
+// isso e `test/marca/splash_ios_test.dart`.
 //
 // O QUE ELE NAO FAZ, e vale estar escrito para ninguem contar com o contrario:
 // ele nao olha o DESENHO. Um simbolo trocado, deformado, deslocado ou fora da

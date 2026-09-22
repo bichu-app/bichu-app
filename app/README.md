@@ -79,9 +79,17 @@ divergência entre densidades feita à mão só aparece no aparelho de outra pes
 ```bash
 dart run flutter_launcher_icons         # ícone, Android e iOS
 dart run flutter_native_splash:create   # splash, Android e iOS
+dart run tool/corrigir_splash_ios.dart  # SEMPRE depois dos dois acima
 ```
 
-A configuração dos dois está no fim do `pubspec.yaml`, comentada. A **arte** é
+**O terceiro comando não é limpeza, é parte da geração.** Os dois primeiros
+escrevem os PNG do catálogo de assets do iOS sem nenhum chunk de espaço de cor,
+e escrevem o `backgroundColor` do `LaunchScreen.storyboard` em branco. Sem ele a
+splash nativa do iOS abre em `#AD0038`. O porquê está logo abaixo e no cabeçalho
+de `tool/corrigir_splash_ios.dart`; quem esquecer o passo derruba
+`test/marca/splash_ios_test.dart`, que nomeia o arquivo e repete o comando.
+
+A configuração dos dois primeiros está no fim do `pubspec.yaml`, comentada. A **arte** é
 entrega da designer e cai em `design/marca/app/`, na raiz do repositório, fora
 deste pacote — mesmo arranjo de `tool/gen_tokens.dart`, que lê
 `../design/tokens.json`. Enquanto os arquivos não estiverem lá, os dois comandos
@@ -104,29 +112,49 @@ que os geradores assam e compara pixel com token. Antes disso nada no
 repositório lia pixel, e um produto com splash e ícone na cor velha passava pela
 esteira inteira em verde.
 
-### Pendência medida no splash do iOS
+### O desvio de cor do splash do iOS, e o que o fechou
 
-No simulador (iOS 27, iPhone 18 Pro) o fundo do splash do iOS renderiza
-`#9F2049`, e não a cor da marca. É um vermelho mais saturado que ela. Medido
-comparando, na mesma captura, com a borda do botão `Escanear uma tag`, que o
-Flutter pinta a partir do mesmo token e que lê o valor exato: os dois
-vermelhos ficam diferentes lado a lado.
+Até 21/09/2026 a splash **nativa** do iOS abria numa cor que não era a da
+marca. Medido no simulador (iPhone 18 Pro, iOS 27), em oito capturas de uma
+inicialização a frio: o quadro da launch screen nativa media `#AD0038`, e o
+quadro seguinte, já da superfície Flutter e com a mesma arte, media o Carmim.
+Dois quadros consecutivos da mesma abertura, mesmo pipeline de captura, cores
+diferentes.
 
-A causa tem conta fechada: converter `P3(0.5725, 0.1725, 0.2902)` para sRGB dá
-exatamente `#9F2049`, ou seja o sistema usa os componentes do storyboard como
-se já fossem Display P3. Três saídas foram testadas e nenhuma resolveu (cor
-nomeada de catálogo, PNG num imageset, e `displayP3` declarado com os
-componentes convertidos); estão listadas no comentário do
-`LaunchScreen.storyboard` para ninguém refazer o caminho.
+A conta fecha exatamente:
+
+```
+P3(#9E0B3A) interpretado e convertido para sRGB = #AD0038   (Carmim, hoje)
+P3(#922C4A) interpretado e convertido para sRGB = #9F204A   (Framboesa, antes)
+```
+
+**A causa não era o storyboard, era o PNG.** Este README dizia que o caminho
+que fecha é "PNG gerado, que carrega perfil de cor" — e o PNG gerado não
+carregava perfil nenhum:
+
+```
+LaunchBackground.imageset/background.png -> chunks: IHDR, IDAT, IEND
+```
+
+Sem `sRGB`, `iCCP` ou `cHRM`, o catálogo de assets do Xcode trata os
+componentes como se já estivessem no gamut do display, que no iPhone é Display
+P3, e o sistema converte P3 para sRGB ao exibir. O mesmo valia para as
+dezoito medidas do ícone da loja, pelo mesmo motivo e no mesmo catálogo.
+
+`dart run tool/corrigir_splash_ios.dart` carimba `sRGB`, `gAMA` e `cHRM` nos 26
+PNG do catálogo, como a §11.3.3.5 da ISO/IEC 15948 manda, e troca o branco de
+fábrica do `backgroundColor` do storyboard pela semente. Ele é idempotente e
+precisa rodar depois de cada execução dos outros dois geradores, que desfazem
+os dois ajustes.
+
+Medido de novo depois do conserto, no mesmo aparelho e no mesmo procedimento:
+a launch screen nativa passou a medir `#9E0B3A`.
 
 **O Android não tem esse problema:** o APK carrega o valor exato, conferido
 com `aapt2 dump resources` em `values-v31`, `values-night-v31` e no
-`launch_background`.
-
-**O que fecha:** `dart run flutter_native_splash:create` com a arte, que resolve
-o fundo do iOS por PNG gerado — e PNG carrega perfil de cor. Esse é o caminho
-que vai para a loja; o storyboard escrito à mão é o remendo de antes da arte.
-**Meça de novo depois de rodar o gerador.**
+`launch_background`. Os PNG do Android também não declaram perfil, e ali isso
+não desvia nada: o decodificador do Android assume sRGB na ausência de
+declaração, em vez de assumir o gamut do display.
 
 **O ícone de notificação do Android está deliberadamente vazio**, com o motivo
 no `AndroidManifest.xml`: ele exige silhueta monocromática de 24 dp, e a régua
