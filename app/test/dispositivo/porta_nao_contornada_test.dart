@@ -215,6 +215,23 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
+/// **Destravado uma oitava vez pela BICHUS-21**: o fluxo de marcar o pet como
+/// perdido entrou, e ele e cinco arquivos novos em `perdido/` -- F3.0
+/// (`tela_de_quem_e_o_caso.dart`), F3.1 (`tela_onde_e_quando.dart`), F3.2
+/// (`tela_alcance_do_alerta.dart`), F3.3 (`resultado_da_abertura.dart`), a
+/// ponte do envelope de intencao (`tela_de_retomada.dart`) e o cabecalho do
+/// pet (`cabecalho_do_pet.dart`). `perfil/meus_pets.dart` ganhou a porta que a
+/// BICHUS-62 deixou reservada, com a acao `Marcar como perdido` que so agora
+/// tem destino.
+///
+/// Nenhuma delas encosta na porta `CameraEGaleria`, que e o que o criterio 10
+/// protege: o fluxo inteiro nao le camera, nao le galeria e nao le
+/// localizacao. Quem responde por isso e o portao de diretivas abaixo, que nao
+/// depende desta constante.
+///
+/// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
+/// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
+/// as seis historias juntas.
 const String _arvoreDasTelas = '3831b7207e32ae96a7ac40852e3681017eb81918';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.

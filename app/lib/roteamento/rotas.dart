@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../api/modelos_pet.dart';
 import '../intencao/cadastro_de_pet_como_intencao.dart';
+import '../intencao/caso_de_perdido_como_intencao.dart';
+import '../perdido/rascunho_do_caso.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../telas/abas.dart';
 import '../telas/casca_com_abas.dart';
@@ -19,6 +22,11 @@ import '../telas/pet/tela_cadastrar_sinais.dart';
 import '../telas/pet/tela_detalhe_do_pet.dart';
 import '../telas/pet/tela_editar_pet.dart';
 import '../telas/pet/tela_pet_cadastrado.dart';
+import '../telas/perdido/resultado_da_abertura.dart';
+import '../telas/perdido/tela_alcance_do_alerta.dart';
+import '../telas/perdido/tela_de_quem_e_o_caso.dart';
+import '../telas/perdido/tela_de_retomada.dart';
+import '../telas/perdido/tela_onde_e_quando.dart';
 import '../telas/tela_de_abertura.dart';
 
 /// Os enderecos do app.
@@ -98,6 +106,20 @@ abstract final class Rotas {
   static const String cadastrarPetSinais = '/pets/novo/sinais';
   static const String petCadastrado = '/pets/cadastrado';
 
+  /// O fluxo de marcar como perdido: F3.0, F3.1, F3.2 e F3.3.
+  ///
+  /// Sao enderecos pela mesma razao do assistente de cadastro, e o que **nao**
+  /// atravessa o endereco e o mesmo: o rascunho do caso vai em `extra`, porque
+  /// um passo intermediario alcancado por link direto nasceria sem o pet e sem
+  /// o que a pessoa digitou. Quem chega assim cai na escolha do pet.
+  ///
+  /// [escolherPetPerdido] e F3.0 e **so aparece com dois ou mais pets**: ver o
+  /// cabecalho de `TelaDeQuemEOCaso`.
+  static const String escolherPetPerdido = '/pets/perdido';
+  static const String marcarPerdido = '/pets/perdido/onde-e-quando';
+  static const String marcarPerdidoAlcance = '/pets/perdido/alcance';
+  static const String casoAberto = '/pets/perdido/caso';
+
   // -- T.1, a edicao e a exclusao (BICHUS-60 e BICHUS-61) -------------------
   //
   // **`/pets/:petId` vem DEPOIS de `/pets/novo` e `/pets/cadastrado` na
@@ -145,6 +167,13 @@ abstract final class Rotas {
       'F1.4' => cadastrarPetFoto,
       'F1.5' => cadastrarPetSinais,
       'F1.6' => petCadastrado,
+      // O fluxo de perdido. **F3.1 e a tela de retorno de `marcar_perdido`**:
+      // e onde o rascunho mora, e e de la que a pessoa segue em frente de novo
+      // depois de uma abertura que falhou (UX 8.3, regra 4).
+      'F3.0' => escolherPetPerdido,
+      'F3.1' => marcarPerdido,
+      'F3.2' => marcarPerdidoAlcance,
+      'F3.3' => casoAberto,
       _ => null,
     };
   }
@@ -281,6 +310,59 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
             // sem saber o que houve da primeira vez.
             erroInicial: extra is RetomadaDoCadastro ? extra.erro : null,
           );
+        },
+      ),
+      // ---------------------------------------------------------------
+      // O fluxo de marcar como perdido (BICHUS-21).
+      //
+      // As quatro telas cobrem a casca de abas, como o assistente de
+      // cadastro, e por isso cada uma tem saida propria. Todas recusam
+      // `extra` ausente caindo no comeco do fluxo em vez de estourar: link
+      // direto para um passo do meio e caso real (F5, App Links), e uma tela
+      // que nasce sem o pet nao sabe de qual animal fala.
+      // ---------------------------------------------------------------
+      GoRoute(
+        path: Rotas.escolherPetPerdido,
+        builder: (context, estado) {
+          final pets = estado.extra;
+          // Sem a lista nao ha o que escolher. **Nao chama rede aqui**: o
+          // criterio 6 manda o fluxo funcionar sem conexao, e quem tem a lista
+          // e `Perfil` > `Meus pets`, que ja a carregou.
+          if (pets is! List<Pet> || pets.isEmpty) return const AbaPerfil();
+          return TelaDeQuemEOCaso(pets: pets);
+        },
+      ),
+      GoRoute(
+        path: Rotas.marcarPerdido,
+        builder: (context, estado) {
+          final extra = estado.extra;
+          // A volta de uma intencao que falhou (UX 8.3, regra 4) chega aqui
+          // com o **id** do pet, e nao com o pet: o envelope nao guarda o
+          // animal. Quem busca o resto e a tela de retomada.
+          if (extra is RetomadaDoCaso) {
+            return TelaDeRetomadaDoCaso(retomada: extra);
+          }
+          if (extra is! RascunhoDoCaso) return const AbaPerfil();
+          return TelaOndeEQuando(rascunho: extra);
+        },
+      ),
+      GoRoute(
+        path: Rotas.marcarPerdidoAlcance,
+        builder: (context, estado) {
+          final rascunho = estado.extra;
+          if (rascunho is! RascunhoDoCaso) return const AbaPerfil();
+          return TelaAlcanceDoAlerta(rascunho: rascunho);
+        },
+      ),
+      GoRoute(
+        path: Rotas.casoAberto,
+        builder: (context, estado) {
+          final resultado = estado.extra;
+          // **Sem `extra` nao ha tela de resultado**, e inventar uma seria
+          // exatamente o que o criterio 2 da BICHUS-31 proibe: uma tela que
+          // afirma um desfecho que ninguem produziu.
+          if (resultado is! ResultadoDaAbertura) return const AbaPerfil();
+          return TelaCasoAberto(resultado: resultado);
         },
       ),
       GoRoute(

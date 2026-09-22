@@ -23,10 +23,12 @@ import 'dart:convert';
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
+import 'package:bichu/escopo.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
+import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
@@ -284,6 +286,42 @@ Map<String, dynamic> referenciaDeTeste() {
   };
 }
 
+/// A fila offline **em memoria**, com o conteudo a vista.
+///
+/// Existe pelo mesmo motivo do `DepositoDeIntencaoEmMemoria`: o
+/// `DepositoEmArquivo` chama `getApplicationDocumentsDirectory()`, que e um
+/// canal de plataforma que nao existe em teste de widget -- sem esta injecao
+/// qualquer caso que enfileire trava num `Future` que nunca resolve.
+///
+/// O conteudo fica **publico e cru**, e nao atras de um `FilaOffline`: os
+/// casos desta entrega precisam conferir o que foi gravado no disco (a chave
+/// de idempotencia, o corpo) e precisam conferir que o logout esvaziou o
+/// arquivo, e nao so a lista em memoria de uma instancia.
+class DepositoDaFilaEmMemoria implements DepositoDaFila {
+  String? conteudo;
+
+  /// Quantas vezes o app mandou gravar. Zero prova que nada enfileirou.
+  int gravacoes = 0;
+
+  @override
+  Future<String?> ler() async => conteudo;
+
+  @override
+  Future<void> gravar(String texto) async {
+    gravacoes += 1;
+    conteudo = texto;
+  }
+
+  /// As acoes gravadas, decodificadas.
+  List<Map<String, dynamic>> get acoes {
+    final bruto = conteudo;
+    if (bruto == null || bruto.isEmpty) return const <Map<String, dynamic>>[];
+    return (jsonDecode(bruto) as List<dynamic>)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList(growable: false);
+  }
+}
+
 /// Uma sessao ja aberta no deposito, como a de quem abre o app logado.
 ///
 /// O `id` entra porque o cache de `Meus pets` e trancado por dono: dois casos
@@ -293,6 +331,10 @@ DepositoEmMemoria depositoLogado({
   String id = 'u-1',
   String email = 'marina@exemplo.com.br',
   bool emailVerificado = true,
+  /// A regiao cadastrada pelo tutor (`Me.reference_area`, BICHUS-92). E ela
+  /// que preenche o bairro em F3.1 sem geocodificar nada (criterio 2 da
+  /// BICHUS-21); nula, o campo abre vazio e com o foco dentro dele.
+  RegiaoDeReferencia? regiaoDeReferencia,
 }) {
   final deposito = DepositoEmMemoria()
     ..gravar(
@@ -306,6 +348,7 @@ DepositoEmMemoria depositoLogado({
           emailVerificado: emailVerificado,
           pendencias: const <PendenciaDeCadastro>[],
           podeAbrirCaso: true,
+          regiaoDeReferencia: regiaoDeReferencia,
         ),
       ),
     );
@@ -322,6 +365,8 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   DepositoDeIntencaoEmMemoria? envelope,
   DepositoDeSessao? deposito,
   CacheDeMeusPets? cacheDeMeusPets,
+  /// A fila offline. Em memoria sempre, pelo motivo do proprio tipo.
+  DepositoDaFilaEmMemoria? depositoDaFila,
   /// O cofre da imagem do QR. Entra por aqui porque o caso do logout precisa
   /// OLHAR dentro dele depois de a sessao cair, e o que ele guarda e uma
   /// credencial.
@@ -370,6 +415,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         clienteHttp: MockClient(rede),
         cacheDeMeusPets: cacheDeMeusPets,
         cofreDoQr: cofreDoQr,
+        depositoDaFila: depositoDaFila ?? DepositoDaFilaEmMemoria(),
         camera: camera ?? const CameraNaoEmbarcada(),
         depositoDeOportunidades:
             oportunidades ?? DepositoDeOportunidadesEmMemoria(),
@@ -386,6 +432,16 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   );
   await tester.pumpAndSettle();
   return envelopeEmUso;
+}
+
+/// O `Escopo` do app montado.
+///
+/// Existe para os casos que precisam chamar o CONTROLADOR e nao o botao: os
+/// quatro desfechos de `sair()` passam pelo controlador, e um deles -- o
+/// refresh recusado -- nao passa por tela nenhuma. Um caso que so tocasse no
+/// botao de sair mediria um dos quatro.
+Escopo escopoDoApp(WidgetTester tester) {
+  return Escopo.of(tester.element(find.byType(Scaffold).first));
 }
 
 /// As rotas que o `GoRouter` do app de fato registra.

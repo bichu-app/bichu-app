@@ -25,6 +25,44 @@ enum PendenciaDeCadastro {
   }
 }
 
+/// `Me.reference_area`: onde o tutor mora, **em texto**.
+///
+/// Os quatro campos sao anulaveis no contrato, inclusive quando o objeto
+/// existe. Ela e a fonte honesta do bairro ja preenchido em F3.1 (criterio 2
+/// da BICHUS-21): **coordenada nao vira nome de bairro**, porque nao ha
+/// geocodificacao no MVP (ADR-0006), e o que a pessoa cadastrou e a unica
+/// regiao que o produto sabe escrever.
+///
+/// **Nao ha coordenada aqui, e nao ha de haver.** O servidor guarda o ponto de
+/// referencia numa coluna geografica propria (BICHUS-92) que nao sai em
+/// resposta nenhuma, e ha portao de contrato que reprova quando
+/// `reference_point` aparece em qualquer corpo.
+class RegiaoDeReferencia {
+  const RegiaoDeReferencia({this.bairro, this.cidade, this.uf, this.cep});
+
+  final String? bairro;
+  final String? cidade;
+  final String? uf;
+  final String? cep;
+
+  /// Verdadeiro quando ha algo a preencher. Um objeto com os campos nulos
+  /// existe no contrato e nao serve para preencher nada.
+  bool get temAlgo =>
+      (bairro != null && bairro!.isNotEmpty) ||
+      (cidade != null && cidade!.isNotEmpty);
+
+  static RegiaoDeReferencia? doJson(Map<String, dynamic>? json) {
+    if (json == null) return null;
+    final regiao = RegiaoDeReferencia(
+      bairro: json['neighborhood'] as String?,
+      cidade: json['city'] as String?,
+      uf: json['state'] as String?,
+      cep: json['postal_code'] as String?,
+    );
+    return regiao.temAlgo ? regiao : null;
+  }
+}
+
 /// `Me` do contrato: quem esta usando o app.
 class Usuario {
   const Usuario({
@@ -36,6 +74,7 @@ class Usuario {
     this.nome,
     this.emailPendente,
     this.emailEntregavel = true,
+    this.regiaoDeReferencia,
   });
 
   final String id;
@@ -56,6 +95,10 @@ class Usuario {
   /// marcar um pet como perdido.
   final bool podeAbrirCaso;
 
+  /// A regiao cadastrada pelo tutor, quando ha uma. E o que preenche o bairro
+  /// em F3.1 sem geocodificar nada (criterio 2 da BICHUS-21).
+  final RegiaoDeReferencia? regiaoDeReferencia;
+
   bool get cadastroIncompleto => pendencias.isNotEmpty;
 
   factory Usuario.doJson(Map<String, dynamic> json) {
@@ -73,6 +116,9 @@ class Usuario {
           .whereType<PendenciaDeCadastro>()
           .toList(growable: false),
       podeAbrirCaso: json['can_open_lost_case'] as bool? ?? false,
+      regiaoDeReferencia: RegiaoDeReferencia.doJson(
+        json['reference_area'] as Map<String, dynamic>?,
+      ),
     );
   }
 }

@@ -80,6 +80,18 @@ const Map<String, ({String arquivo, String grupo})> iscasDaLista =
     arquivo: 'test/telas/qr_na_tela_test.dart',
     grupo: 'ISCA 3 — a imagem nao sobrevive ao logout',
   ),
+  // ACRESCENTADA PELA BICHUS-21, que ligou a `FilaOffline`.
+  //
+  // Ela e a terceira entrada da lista e a unica das tres que guarda em
+  // **DISCO**: o cache de pets e o cofre do QR morrem com o processo, e o pior
+  // caso deles e a proxima pessoa na mesma sessao do app. O corpo de cada acao
+  // enfileirada carrega o que a tutora digitou -- nome do pet, endereco de
+  // referencia, telefone de contato --, e disco sobrevive ao logout, ao app
+  // ser encerrado pelo sistema e ao aparelho ser desligado.
+  '_fila': (
+    arquivo: 'test/telas/marcar_como_perdido_test.dart',
+    grupo: 'a fila offline morre no logout',
+  ),
 };
 
 /// O prazo da divida da `FilaOffline` (BICHUS-201).

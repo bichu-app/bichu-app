@@ -314,6 +314,29 @@ class FilaOffline {
     await _persistir(atual);
   }
 
+  /// Apaga a fila inteira: **a entrada de `limpezasAoSair`** (BICHUS-21).
+  ///
+  /// Ela existe porque o cabeçalho desta classe cobrava uma obrigação que não
+  /// tinha como ser cumprida: não havia método para limpar. Registrar um
+  /// fecho que só zerasse a memória teria esvaziado a lista em pé e deixado o
+  /// arquivo no disco — o pior dos dois mundos, porque a leitura seguinte o
+  /// traria de volta e o logout teria *parecido* funcionar.
+  ///
+  /// Grava `[]` em vez de apagar o arquivo: o depósito é uma porta de duas
+  /// operações (`ler`, `gravar`), e um terceiro método só para o logout
+  /// obrigaria toda implementação futura a saber apagar. Lista vazia lê como
+  /// lista vazia em qualquer depósito.
+  ///
+  /// **Zera a memória ANTES de gravar**, e não depois: se a gravação falhar —
+  /// disco cheio, que é o aparelho deste público —, o que fica em pé é um app
+  /// sem os dados da conta anterior em memória e um arquivo que a próxima
+  /// gravação sobrescreve. A ordem inversa deixaria o nome do pet, o endereço
+  /// de referência e o telefone da tutora anterior vivos na sessão seguinte.
+  Future<void> limpar() async {
+    _memoria = <AcaoEnfileirada>[];
+    await _deposito.gravar('[]');
+  }
+
   /// Tenta enviar tudo, **na ordem em que entrou**.
   ///
   /// A ordem importa: criar o pet e depois marcar como perdido só funciona
