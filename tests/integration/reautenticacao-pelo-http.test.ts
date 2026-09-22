@@ -29,6 +29,39 @@
  * ele NAO pode fazer e trancar o titular para fora do proprio remedio: a
  * recuperacao de senha continua aberta, e ha um caso aqui para isso.
  *
+ * ## A isca, e como ela foi provada
+ *
+ * Desligada uma de cada vez, rodada, vista reprovar, e religada -- em
+ * 22/09/2026, com node 22.23.2 e a pilha de integracao efemera. O roteiro
+ * ABORTA quando o trecho a desligar nao casa exatamente uma vez, e confere a
+ * mudanca por sha256 E por `git diff` nao vazio antes de rodar.
+ *
+ * | o que foi desligado | reprovaram |
+ * |---|---|
+ * | `reauthScope` de `rotaDeLogoutTotal` | nao compila (o proprio tipo acusa) |
+ * | `reauthScope: 'session_revocation'` -> `'tag_revocation'` | 1 (o portao de contrato, pelo VALOR) |
+ * | `reauthScope` acrescentado a `/auth/logout`, que o contrato nao marca | 7 |
+ * | `.where('token_hash'...)` -- ver nota abaixo | nao aplicavel |
+ * | `.where('user_id', '=', consumo.userId)` do consumo | 3 |
+ * | `.where('scope', '=', consumo.escopoExigido)` | 3 |
+ * | `.where('access_jti', '=', consumo.acessoJti)` | 3 |
+ * | `.where('consumed_at', 'is', null)` | 2 |
+ * | `.where('expires_at', '>', ...)` | 2 |
+ * | `.where('issued_at', '>=', ...)` (SEC-006) | 3 |
+ * | a conferencia de `expiraEm` dentro de `conferirJanela` | 1 |
+ * | a entrada `invalid_attempts` de `rotaDeReautenticacao` | 1 (so a integracao) |
+ * | `detail` do 401 passando a dizer "a senha local desta conta" | 1 (so a integracao) |
+ * | `session_revocation` fora do `CHECK` da migracao | 7 (so a integracao) |
+ *
+ * **A isca do teto nasceu inutil, e isso esta escrito aqui de proposito.** A
+ * primeira versao afirmava "alguma das seis tentativas levou 429" e ficava
+ * VERDE com a entrada `invalid_attempts` removida, porque a outra entrada da
+ * mesma rota (10 por hora) tambem responde 429 -- so que na decima primeira
+ * chamada. E a primeira versao do roteiro apontava para o bloco de
+ * `rotaDeTrocaDeSenha`, que tem o texto identico: casou uma vez, desligou o
+ * teto da rota errada, e teria produzido um relatorio errado. Confira a
+ * clausula que existe, nao a que voce espera encontrar.
+ *
  * ## Como rodar
  *
  *   npm run test:integration

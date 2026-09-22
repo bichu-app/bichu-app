@@ -28,7 +28,22 @@
  * ## A isca, e como ela foi provada
  *
  * Desligada uma de cada vez em `kysely-identity-repository.ts`, rodada, vista
- * reprovar, e restaurada. A tabela está no relatório da BICHUS-48.
+ * reprovar, e restaurada — em 22/09/2026, com node 22.23.2.
+ *
+ * | predicado removido do consumo | casos reprovados AQUI |
+ * |---|---|
+ * | `user_id` | 3 |
+ * | `scope` | 3 |
+ * | `access_jti` | 3 |
+ * | `consumed_at IS NULL` | 2 |
+ * | `expires_at >` | 2 |
+ * | `issued_at >=` | 3 |
+ *
+ * O caso "EXATAMENTE sete" reprovou em todos os seis, e é ele que também pega
+ * a direção oposta — o predicado a MAIS, que nenhum caso de presença enxerga.
+ *
+ * A tabela completa, incluindo as iscas que só a integração pega, está no
+ * cabeçalho de `tests/integration/reautenticacao-pelo-http.test.ts`.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
