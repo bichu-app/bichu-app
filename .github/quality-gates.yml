@@ -56,13 +56,70 @@ dispensas:
   # trabalho futuro: a impressao digital ainda depende do keystore e o `appID`
   # ainda depende do Team ID. A decisao de hoje tira a submissao do caminho
   # critico; ela nao diz que o deep link abre.
+  #
+  # AS CHAVES CITADAS ABAIXO ESTAO NA NUMERACAO DE HOJE. Ate 22/09/2026 elas
+  # diziam `BICHU-15` e `BICHU-14`, que sao pre-migracao: hoje `BICHUS-15` e
+  # `BICHUS-14` sao OUTRAS historias, e quem seguisse a citacao caia no lugar
+  # errado. Traduzido por `.jarvis/mapa-chaves.json`: BICHU-15 -> BICHUS-106,
+  # BICHU-14 -> BICHUS-94.
+  #
+  # MEDICAO DE 22/09/2026 sobre a impressao digital de DEBUG. A BICHUS-106
+  # (Concluida) decidiu: "registrar no assetlinks.json a impressao digital do
+  # certificado de debug usado na homologacao, e substitui-la pela de release no
+  # dia da publicacao". A regra nunca foi executada, e ESTE COMENTARIO EXISTE
+  # PARA DIZER POR QUE -- ausencia sem motivo registrado vira, um mes depois,
+  # "ninguem lembrou".
+  #
+  # Tres medicoes, duas passam e uma reprova:
+  #
+  # 1. OK - o APK de homologacao E assinado com certificado de debug.
+  #    `app/android/app/build.gradle.kts`: `buildTypes.release` usa
+  #    `signingConfigs.getByName("debug")`.
+  #
+  # 2. REPROVA - a digital de debug NAO e estavel fora da maquina que compila.
+  #    O keystore e o `~/.android/debug.keystore` que a cadeia de ferramentas
+  #    gera sozinha. Ele nao esta versionado (`.gitignore` exclui `*.keystore`
+  #    e `*.jks`), a esteira nao constroi APK, e a senha e o DN sao fixos mas
+  #    O PAR RSA E SORTEADO A CADA GERACAO. Conferido, e nao deduzido: tres
+  #    `keytool -genkeypair` com parametros identicos (RSA 2048, alias
+  #    `androiddebugkey`, `CN=Android Debug,O=Android,C=US`) deram tres
+  #    digitais diferentes --
+  #      5A:A0:22:FF..., 69:7F:68:F5... e 5D:7A:C5:50... (a desta maquina).
+  #    Registrar qualquer uma delas aqui daria um `assetlinks.json` que casa com
+  #    o APK de UMA maquina e falha em TODAS as outras, sem erro em lugar
+  #    nenhum: o link so abre o navegador. Metade de um App Links e pior que
+  #    nenhum, e e exatamente o defeito que este arquivo existe para evitar.
+  #
+  # 3. OK - o arquivo e servido de onde o Android procura. O sistema busca em
+  #    `https://<host do link>/.well-known/assetlinks.json`, e o host do link e
+  #    `TAG_BASE_URL` = `tag.bichu.app`. Conferido de fora em 22/09: 200,
+  #    `application/json`, ZERO redirecionamentos. (Em 19/09 `tag.bichu.app`
+  #    ainda nao resolvia; hoje resolve para 35.247.247.16, a VM de
+  #    homologacao.)
+  #
+  # CONCLUSAO: a 106 autorizou um caminho que a realidade nao sustenta na forma
+  # em que foi escrita. Ela supos "o keystore de debug gerado automaticamente"
+  # como se fosse UM keystore; sao N, um por maquina. Executar a 106 exige
+  # primeiro decidir ONDE vive um keystore de debug COMPARTILHADO -- e isso e
+  # decisao de quem coordena, nao do portao. O keystore e a senha dele sao
+  # segredo e vao para o Secret Manager (ADR-0022); a digital que sai dele NAO
+  # e segredo e e justamente o que entra neste repositorio.
+  #
+  # ENQUANTO ISSO NAO ACONTECER, a lista segue vazia de proposito e o estado e
+  # ruidoso, nao silencioso: `verificar_borda_local.py` acusa a lista vazia a
+  # cada execucao e REPROVA assim que a dispensa `apk-assinado` vencer (29/09).
+  # Conferido em 22/09 contra `https://tag.bichu.app`: com a dispensa valendo
+  # sai `[aviso]` e APROVADO; com `vence_em` recuado para 21/09 sai REPROVADO
+  # com codigo de saida 1, nomeando o insumo que falta. Nao ha `TODO` nenhum
+  # segurando isso, e e de proposito: a troca da digital no dia da publicacao
+  # nao pode depender de alguem lembrar.
   - portao: apk-assinado
-    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao nao ha build de release para assinar. CAI QUANDO houver decisao de submeter o app a uma loja; ate la o keystore (BICHU-15) segue pendente e o assetlinks.json segue sem impressao digital"
+    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao nao ha build de release para assinar. CAI QUANDO houver decisao de submeter o app a uma loja; ate la o keystore (BICHUS-106) segue pendente e o assetlinks.json segue sem impressao digital"
     responsavel: cliente
     vence_em: 2026-09-29
 
   - portao: ios
-    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao o alvo iOS sai do caminho critico. CAI QUANDO houver decisao de submeter o app a uma loja; ate la a conta Apple (BICHU-14) segue pendente e sem Team ID nao ha Universal Links"
+    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao o alvo iOS sai do caminho critico. CAI QUANDO houver decisao de submeter o app a uma loja; ate la a conta Apple (BICHUS-94) segue pendente e sem Team ID nao ha Universal Links"
     responsavel: cliente
     vence_em: 2026-09-29
 

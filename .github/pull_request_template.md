@@ -4,8 +4,8 @@
 
 ## Issue
 
-<!-- BICHU-000. Sem chave de issue, explique por que nao ha uma. -->
-Fecha BICHU-
+<!-- BICHUS-000. Sem chave de issue, explique por que nao ha uma. -->
+Fecha BICHUS-
 
 ## Onda
 

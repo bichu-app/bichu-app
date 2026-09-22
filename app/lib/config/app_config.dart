@@ -96,7 +96,8 @@ class AppConfig {
   ///
   /// Nunca sobe degradado em silencio: um app apontado para lugar nenhum passa
   /// na homologacao como se fosse problema de rede, e o defeito so aparece no
-  /// aparelho de quem esta homologando (criterio de aceite de BICHU-25).
+  /// aparelho de quem esta homologando (criterio de aceite de BICHUS-13,
+  /// antiga BICHU-25).
   static AppConfig carregar({
     String? apiBaseUrlDeTeste,
     String? versaoDosTermosDeTeste,
