@@ -41,7 +41,7 @@ export BIND_HOST := 0.0.0.0
 endif
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup up down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-docs-fechada backup restore pin-digests
+.PHONY: ajuda setup up down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-variaveis verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-docs-fechada backup restore pin-digests
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -80,13 +80,32 @@ seed: ## recria a massa fixa de qa, deterministica
 logs: ## tail agregado dos servicos, com prefixo
 	$(COMPOSE) logs -f --tail=100
 
-test: ## testes unitarios
+# `compose.yaml` declara `name: bichu`, entao `$(COMPOSE)` resolve para a PILHA
+# PRINCIPAL venha o comando de onde vier -- inclusive de um worktree. Rodar a
+# suite unitaria assim de dentro de um worktree executaria o codigo da arvore
+# principal e chamaria o resultado de "os meus testes passaram". Nao e colisao:
+# e testar outra coisa, em silencio.
+#
+# Por isso a recusa. Ela e por CAMINHO e nao por branch: o que decide qual codigo
+# roda e o diretorio.
+test: ## testes unitarios (so na arvore principal; de worktree use `npm test`)
+	@principal=$$(git rev-parse --path-format=absolute --git-common-dir | xargs dirname); \
+	 aqui=$$(git rev-parse --show-toplevel); \
+	 if [ "$$principal" != "$$aqui" ]; then \
+	   echo "recusado: $$aqui e um worktree, e \`docker compose\` aqui resolve para a pilha"; \
+	   echo "          \`bichu\`, que carrega o codigo de $$principal."; \
+	   echo "          A suite unitaria nao precisa de banco: rode \`npm test\` direto."; \
+	   exit 1; \
+	 fi
 	$(COMPOSE) run --rm api npm test
 
-test-int: ## sobe db e objeto, migra do zero e roda integracao
-	$(COMPOSE) up -d --wait db objeto
-	$(COMPOSE) run --rm migracao up
-	$(COMPOSE) run --rm api npm run test:integration
+# Pilha EFEMERA, com nome de projeto derivado do caminho e NENHUMA porta
+# publicada. Roda igual da arvore principal e de qualquer worktree, e nunca
+# encosta no banco de desenvolvimento -- a versao anterior deste alvo migrava e
+# escrevia DENTRO da pilha `bichu`, viesse o comando de onde viesse.
+# Ver infra/integracao/rodar.mjs.
+test-int: ## sobe uma pilha efemera propria, migra do zero e roda a integracao
+	npm run test:integration
 
 e2e: ## Cypress contra o ambiente de qa
 	$(COMPOSE) --profile qa up -d --wait
@@ -112,6 +131,9 @@ verificar-cobertura: cobertura ## o lcov fala de src/**/*.ts? Com as quatro isca
 verificar-dispensas: ## dispensa de portao vencida reprova (secao 5.3)
 	python3 infra/verificacao/verificar_dispensas.py
 
+verificar-variaveis: ## as variaveis que o codigo exige, lidas do codigo, com autoteste
+	npm run verify:variaveis
+
 verificar-portabilidade: ## portao de portabilidade: provedor, hostname e as duas iscas
 	python3 infra/verificacao/verificar_portabilidade.py
 
@@ -136,7 +158,7 @@ verificar-docs-fechada: ## ADR-0018: a Swagger UI fechada, visto de fora (autote
 
 # Tudo que nao precisa de nuvem nem de segredo, na ordem da esteira. E o que
 # `make up` seguido de `make verificar` responde antes de abrir um PR.
-verificar: verificar-dispensas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-dispensas verificar-variaveis verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
 	@mkdir -p backup
