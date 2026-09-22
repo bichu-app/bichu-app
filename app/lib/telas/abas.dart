@@ -33,7 +33,10 @@ class AbaInicio extends StatelessWidget {
       builder: (context, _) {
         if (!sessao.logado) {
           return TelaDeAba(
+            // O titulo desta tela E a marca, entao a barra carrega o vetor e
+            // esta string vira o rotulo do leitor de tela. Ver `tituloEmMarca`.
             titulo: 'Bichu',
+            tituloEmMarca: true,
             filhos: <Widget>[
               Text(
                 'O Bichu dá uma identidade ao seu pet e aciona a vizinhança '

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
+import '../widgets/marca.dart';
 
 /// A casca de navegacao: quatro destinos, barra sempre visivel, **inclusive
 /// deslogado**.
@@ -75,15 +76,34 @@ class TelaDeAba extends StatelessWidget {
     required this.titulo,
     required this.filhos,
     super.key,
+    this.tituloEmMarca = false,
   });
 
   final String titulo;
   final List<Widget> filhos;
 
+  /// Quando a barra de topo carrega o LOGOTIPO em vez do titulo escrito.
+  ///
+  /// Vale so para a tela em que o titulo E a marca. O paragrafo 8.4 do design
+  /// system diz que o logotipo e vetor e que nenhuma tela o recompoe digitando;
+  /// a barra precisa do lockup SEM descritor, porque o completo tem piso de
+  /// 160px de largura e nao cabe numa barra de 56px (paragrafo 21.2).
+  ///
+  /// [titulo] continua obrigatorio: ele vira o rotulo que o leitor de tela
+  /// anuncia. Imagem de marca sem rotulo e barra muda para quem nao ve.
+  final bool tituloEmMarca;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(titulo)),
+      appBar: AppBar(
+        title: tituloEmMarca
+            ? MarcaLockup(
+                largura: MarcaLockup.pisoDeLargura,
+                rotulo: titulo,
+              )
+            : Text(titulo),
+      ),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),

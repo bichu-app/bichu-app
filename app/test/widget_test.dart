@@ -2,6 +2,7 @@ import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
 import 'package:flutter/material.dart';
+import 'package:bichu/widgets/marca.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -65,7 +66,17 @@ void main() {
       await tester.tap(find.widgetWithText(NavigationDestination, aba));
       await tester.pumpAndSettle();
       expect(
-        find.widgetWithText(AppBar, aba == 'Início' ? 'Bichu' : aba),
+        // Deslogado, o titulo da Inicio E a marca, e desde 22/09/2026 ela e o
+        // LOGOTIPO EM VETOR, nao a palavra digitada: o paragrafo 8.4 do design
+        // system proibe compor "Bichu" em fonte viva. Este caso procurava
+        // `find.text('Bichu')` e reprovou com a troca -- que e o
+        // comportamento certo de um teste que passou a medir a coisa velha.
+        aba == 'Início'
+            ? find.descendant(
+                of: find.byType(AppBar),
+                matching: find.byType(MarcaLockup),
+              )
+            : find.widgetWithText(AppBar, aba),
         findsOne,
         reason: 'A aba $aba precisa abrir deslogada.',
       );
