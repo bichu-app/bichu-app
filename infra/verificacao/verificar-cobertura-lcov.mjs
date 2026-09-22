@@ -169,7 +169,6 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/bin/seed.ts', PONTO_DE_ENTRADA],
 
   // -- adaptadores que nenhuma suite carrega ---------------------------------
-  ['src/modules/lostfound/adapters/persistence/alcance-ainda-sem-base.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/lostfound/adapters/persistence/kysely-lost-case-repository.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/media/application/media-service.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/media/application/processar-foto.ts', SEM_SUITE_QUE_CARREGUE],
