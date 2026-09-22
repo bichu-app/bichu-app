@@ -35,6 +35,7 @@ import * as casos from '../../modules/lostfound/adapters/http/lost-case-routes.j
 import * as achados from '../../modules/found/adapters/http/found-report-routes.js';
 import * as tags from '../../modules/tags/adapters/http/tag-routes.js';
 import * as conversas from '../../modules/messaging/adapters/http/conversation-routes.js';
+import * as transferencias from '../../modules/transfers/adapters/http/transfer-routes.js';
 import * as webhook from '../../modules/notifications/adapters/http/webhook-de-entrega.js';
 import * as aparelhos from '../../modules/notifications/adapters/http/device-routes.js';
 import * as saude from './health.js';
@@ -53,6 +54,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   achados,
   tags,
   conversas,
+  // BICHUS-66. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
+  transferencias,
   webhook,
   aparelhos,
   saude,

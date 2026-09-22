@@ -42,6 +42,17 @@ import { criarEntregaDoAlertaPorPush } from '../modules/notifications/adapters/e
 import { criarAlcancePorPostGIS } from '../modules/lostfound/adapters/persistence/kysely-alcance-por-postgis.js';
 import { criarRegistroDeDisparos } from '../modules/lostfound/adapters/persistence/kysely-registro-de-disparos.js';
 import { DisparoDoAlertaService } from '../modules/lostfound/application/disparo-do-alerta-service.js';
+import { criarMailer } from '../modules/identity/adapters/external/smtp-mailer.js';
+import {
+  criarTransferRepository,
+  transferenciasVencidas,
+} from '../modules/transfers/adapters/persistence/kysely-transfer-repository.js';
+import {
+  criarEmailVerificadoDoChamador,
+  criarNomeDoPet,
+} from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
+import { PetTransferService } from '../modules/transfers/application/pet-transfer-service.js';
+import type { TransferId } from '../modules/transfers/ports/transfer-repository.js';
 
 import type { CaseId } from '../shared/types/brands.js';
 
@@ -202,6 +213,37 @@ export async function main(): Promise<void> {
     urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
   });
 
+  // BICHUS-66. QUEM FECHA A JANELA DE 24 H.
+  //
+  // O aceite agenda `case.transfer_consummate` para daqui 24 h; este servico e
+  // quem executa. Ele mora no WORKER e nao na API de proposito: consumar troca o
+  // dono do pet e revoga todas as tags (ADR-0004), e isso nao pode depender de
+  // alguem abrir uma tela na hora certa.
+  const transferencias = new PetTransferService({
+    repositorio: criarTransferRepository(banco.db),
+    ids,
+    clock: systemClock,
+    trilha: criarTrilhaDeAuditoria({
+      db: banco.db,
+      ids,
+      clock: systemClock,
+      ipHmacKey: config.ipHmacKey,
+      onFailure: (erro, evento) => {
+        console.error(
+          JSON.stringify({ evento: 'audit.failure', acao: evento.action, erro: String(erro) }),
+        );
+      },
+    }),
+    mailer: criarMailer(config.mail),
+    contas: criarEmailVerificadoDoChamador(banco.db),
+    pets: criarNomeDoPet(banco.db),
+    // A consumacao nao enfileira nada. A fila entra na porta porque o tipo a
+    // exige (o mesmo servico serve a API, que agenda), e nao porque este lado a
+    // use -- e por isso ela e a mesma instancia, e nao uma segunda.
+    fila,
+    baseDaWeb: config.webBaseUrl,
+  });
+
   const rodarFila = async (): Promise<void> => {
     const trabalhos = await fila.claim(TRABALHOS_POR_PASSADA);
     for (const trabalho of trabalhos) {
@@ -215,6 +257,24 @@ export async function main(): Promise<void> {
           const desfecho = await disparoDoAlerta.disparar(caseId as CaseId);
           await fila.complete(trabalho.id);
           console.info(JSON.stringify({ evento: 'alert.dispatch', caso: caseId, ...desfecho }));
+          continue;
+        }
+
+        if (trabalho.kind === 'case.transfer_consummate') {
+          // Mesmo padrao do alerta: o desfecho vem como VALOR e nao como
+          // excecao. "Ja cancelada" e "caso de perdido aberto" sao desfechos
+          // NORMAIS desta operacao -- reenfileira-los gastaria a fila contra
+          // algo que nunca vai mudar de resposta.
+          const { transferId } = trabalho.payload as { transferId: string };
+          const desfecho = await transferencias.consumar(transferId as TransferId);
+          await fila.complete(trabalho.id);
+          console.info(
+            JSON.stringify({
+              evento: 'transfer.consummate',
+              transferencia: transferId,
+              ...desfecho,
+            }),
+          );
           continue;
         }
 
@@ -236,6 +296,35 @@ export async function main(): Promise<void> {
         await fila.fail(trabalho.id, String(erro));
         console.error(JSON.stringify({ evento: 'media.process_failed', trabalho: trabalho.id, erro: String(erro) }));
       }
+    }
+  };
+
+  /**
+   * BICHUS-66. A REDE DE SEGURANCA DA JANELA, e ela nao e redundancia inutil.
+   *
+   * O trabalho agendado pode nao ter rodado: processo caido por mais de um dia,
+   * banco restaurado de um backup anterior ao agendamento, fila purgada. Sem
+   * esta varredura, uma transferencia aceita ficaria `accepted` para sempre --
+   * com a tela do tutor dizendo que a janela corre e NADA acontecendo quando ela
+   * fecha, que e a pior forma de errar aqui: a promessa continua na tela e o
+   * sistema parou de honra-la.
+   *
+   * Reenfileirar em vez de consumar na varredura mantem UM caminho de
+   * consumacao. Dois caminhos divergem, e o que diverge primeiro e sempre o que
+   * ninguem esta olhando.
+   */
+  const rodarVarreduraDeTransferencias = async (): Promise<void> => {
+    const agora = systemClock.now();
+    const { aExpirar, aConsumar } = await transferenciasVencidas(banco.db, agora, 50);
+    const repositorio = criarTransferRepository(banco.db);
+    for (const id of aExpirar) {
+      if (await repositorio.expirar(id, agora)) {
+        console.info(JSON.stringify({ evento: 'transfer.expired', transferencia: id }));
+      }
+    }
+    for (const id of aConsumar) {
+      await fila.enqueue('case.transfer_consummate', { transferId: id });
+      console.info(JSON.stringify({ evento: 'transfer.reenqueued', transferencia: id }));
     }
   };
 
@@ -301,6 +390,16 @@ export async function main(): Promise<void> {
     });
   }, INTERVALO_DO_EXPURGO_DE_LOCALIZACAO_EM_MILISSEGUNDOS);
   temporizadorDaLocalizacao.unref();
+
+  const temporizadorDeTransferencias = setInterval(() => {
+    if (vida.estaEncerrando) return;
+    rodarVarreduraDeTransferencias().catch((erro: unknown) => {
+      console.error(
+        JSON.stringify({ evento: 'transfer.sweep_failed', erro: String(erro) }),
+      );
+    });
+  }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
+  temporizadorDeTransferencias.unref();
 
   const temporizadorDaFila = setInterval(() => {
     if (vida.estaEncerrando) return;

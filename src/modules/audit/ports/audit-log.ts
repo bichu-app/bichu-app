@@ -85,7 +85,24 @@ export type AuditAction =
    * `users`, entao ela responde "por que este aparelho parou de receber?"
    * inclusive depois de a conta ter sido apagada.
    */
-  | 'device.revoked';
+  | 'device.revoked'
+  // Transferencia de pet (BICHUS-66). Quatro eventos e nao um com `status`: a
+  // pergunta que a trilha responde e "quando cada coisa aconteceu", e um evento
+  // unico com estado obrigaria a reconstruir a ordem por carimbo.
+  //
+  // O metadado NUNCA carrega token nem endereco em claro: `pet_transfer.started`
+  // grava `recipient_email_masked`, e a razao e que a trilha sobrevive a
+  // exclusao da conta -- o endereco em claro ficaria ali depois de a pessoa ter
+  // pedido para sumir, e ela pode nem ter tido conta.
+  | 'pet_transfer.started'
+  | 'pet_transfer.accepted'
+  /** Ator anonimo quando o cancelamento veio pelo link do e-mail, sem conta. */
+  | 'pet_transfer.cancelled'
+  /**
+   * A posse mudou e as tags cairam. Ator `system`: quem executa e o trabalho
+   * agendado 24 h antes, e nao a pessoa que aceitou.
+   */
+  | 'pet_transfer.consummated';
 
 export type ActorKind = 'user' | 'anonymous' | 'system';
 

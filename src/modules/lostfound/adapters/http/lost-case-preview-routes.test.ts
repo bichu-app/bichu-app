@@ -207,6 +207,10 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
       alcance,
       disparos: disparosDeTeste(),
       fila: filaDeTeste(),
+      // BICHUS-66. Esta bancada nao abre caso -- ela le a previa --, entao o
+      // dublê nunca e chamado. Ele existe porque a porta e obrigatoria por
+      // tipo, que e o que faz a fiacao de `api.ts` nao poder esquecer dela.
+      transferencias: { cancelarPorCasoAberto: () => Promise.resolve() },
     }),
     autenticador: {
       autenticar: (token: string) => Promise.resolve({ userId: token as UserId }),

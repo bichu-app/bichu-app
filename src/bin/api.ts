@@ -79,6 +79,13 @@ import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.j
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
 import { ConversationService } from '../modules/messaging/application/conversation-service.js';
 import { registrarRotasDeConversas } from '../modules/messaging/adapters/http/conversation-routes.js';
+import { criarTransferRepository } from '../modules/transfers/adapters/persistence/kysely-transfer-repository.js';
+import { PetTransferService } from '../modules/transfers/application/pet-transfer-service.js';
+import { registrarRotasDeTransferencia } from '../modules/transfers/adapters/http/transfer-routes.js';
+import {
+  criarEmailVerificadoDoChamador,
+  criarNomeDoPet,
+} from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -374,6 +381,38 @@ export async function main(): Promise<void> {
     baseDeMidia: config.mediaPublicBaseUrl,
   };
 
+  // BICHUS-66. A transferencia de pet, declarada ANTES dos casos de perdido
+  // porque a abertura de um caso CANCELA a transferencia viva daquele pet -- e
+  // essa direcao e a decisao de desenho da historia, nao um detalhe de ordem.
+  //
+  // Por que o caso ganha: consumar com caso aberto revogaria todas as tags do
+  // pet (ADR-0004, irreversivel) no minuto em que a plaquinha da coleira e a
+  // unica coisa ligando o animal ao tutor. O contrato ja tinha escolhido esse
+  // lado na direcao inversa (`startPetTransfer` responde 409 para pet com caso
+  // aberto); aqui ele vale tambem quando o caso chega depois.
+  const transferencias = new PetTransferService({
+    repositorio: criarTransferRepository(db),
+    ids,
+    clock: systemClock,
+    trilha,
+    // O MESMO transporte do cadastro e da redefinicao de senha. O convite sai
+    // SINCRONO e nao pela fila, porque o payload de `jobs` e gravado e o que
+    // precisa chegar ao e-mail e o token em claro (ports/mailer.ts).
+    mailer,
+    // "O e-mail que esta conta PROVOU ser dela", e nao `users.email` cru: a
+    // camada 2 da transferencia inteira depende de VERIFICADO. Sem isso,
+    // bastaria cadastrar uma conta com o endereco do destinatario para aceitar
+    // a transferencia dele.
+    contas: criarEmailVerificadoDoChamador(db),
+    // Nome lido na hora, nunca copiado para a linha da transferencia: uma copia
+    // congelaria o nome que o pet tinha no dia do convite.
+    pets: criarNomeDoPet(db),
+    // So para AGENDAR a consumacao (`case.transfer_consummate`). O payload leva
+    // identificador e nada mais -- nenhum token, nenhum endereco.
+    fila: criarJobQueue(db, ids),
+    baseDaWeb: config.webBaseUrl,
+  });
+
   const dependenciasDasRotasDeCaso = {
     casos: new LostCaseService({
       repositorio: criarLostCaseRepository(db),
@@ -399,6 +438,8 @@ export async function main(): Promise<void> {
       // esta e a outra metade daquela decisao: o que a API faz com o alerta e
       // pedir que ele saia.
       fila: criarJobQueue(db, ids),
+      // BICHUS-66: a porta de UM metodo. Ver o bloco de `transferencias`, acima.
+      transferencias,
     }),
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
@@ -508,6 +549,15 @@ export async function main(): Promise<void> {
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     registrarRotasDeAchado(escopo, dependenciasDasRotasDeAchado);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
+    registrarRotasDeTransferencia(escopo, {
+      transferencias,
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      contrato,
+      idempotencia: criarIdempotencia(db),
+      clock: systemClock,
+    });
     registrarRotasDeConversas(escopo, {
       conversas,
       autenticador: {

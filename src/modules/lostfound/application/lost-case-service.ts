@@ -45,6 +45,24 @@ import type {
 } from '../ports/lost-case-repository.js';
 import type { CaseId, Instant, PetId, UserId } from '../../../shared/types/brands.js';
 
+/**
+ * BICHUS-66. O que a abertura de caso precisa dizer ao modulo de transferencia.
+ *
+ * Uma porta de UM metodo, e nao o servico inteiro: o que `lostfound` sabe e que
+ * "este pet foi dado como perdido"; o que se faz com uma transferencia em curso
+ * e decisao do outro modulo. Injetar `PetTransferService` aqui acoplaria os dois
+ * pela implementacao e faria os testes de caso precisarem de um servico de
+ * transferencia inteiro para abrir um caso.
+ *
+ * **Ela nao lanca, e a implementacao tem de honrar isso**: abrir o caso e a
+ * coisa urgente, e uma falha ao cancelar um convite nao pode derrubar o alerta
+ * de um animal na rua. A barreira que GARANTE nao e esta -- e a reconferencia
+ * dentro da transacao que consumaria a transferencia.
+ */
+export interface AvisoDeCasoAberto {
+  cancelarPorCasoAberto(pet: PetId): Promise<void>;
+}
+
 export interface DependenciasDeCasos {
   readonly repositorio: LostCaseRepository;
   readonly ids: IdGenerator;
@@ -61,6 +79,11 @@ export interface DependenciasDeCasos {
    * exato minuto em que ela precisa do cartaz e do link.
    */
   readonly fila: JobQueue;
+  /**
+   * BICHUS-66. Avisado quando um caso abre, para que a transferencia viva
+   * daquele pet caia em vez de consumar no meio da emergencia.
+   */
+  readonly transferencias: AvisoDeCasoAberto;
 }
 
 /**
@@ -183,6 +206,21 @@ export class LostCaseService {
     // `null` é a corrida perdida para o índice único: outra requisição abriu o
     // caso entre a conferência e a gravação. A resposta é a verdade.
     if (caso === null) throw problemas.petJaEstaPerdido();
+
+    // BICHUS-66. O PET ACABOU DE SER DADO COMO PERDIDO, E ISSO DERRUBA UMA
+    // TRANSFERENCIA EM CURSO.
+    //
+    // A assimetria decide: consumar com caso aberto revogaria TODAS as tags do
+    // pet (ADR-0004, irreversivel) no minuto em que um estranho pode estar com o
+    // animal no colo lendo o QR da coleira -- e ele chegaria a um beco sem
+    // saida. Cancelar a transferencia custa ao tutor refazer o convite depois do
+    // reencontro. O contrato ja tinha escolhido esse lado na direcao inversa:
+    // `startPetTransfer` responde 409 para pet com caso aberto.
+    //
+    // Fica DEPOIS da abertura de proposito. Cancelar antes e ver a abertura
+    // falhar por corrida no indice unico deixaria o tutor sem caso E sem
+    // transferencia, que e o pior dos tres desfechos.
+    await this.deps.transferencias.cancelarPorCasoAberto(pet);
 
     await this.deps.trilha.record({
       actorKind: 'user',

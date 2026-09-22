@@ -630,6 +630,52 @@ export interface ConversationMessagesTable {
   created_at: Generated<Date>;
 }
 
+/**
+ * BICHUS-66. Os cinco estados da troca de tutor.
+ *
+ * `accepted` e o unico que carrega prazo: dele para `effective` passam 24 h em
+ * que NADA foi revogado e qualquer um dos tres caminhos de cancelamento ainda
+ * desfaz. Ver o cabecalho de `migrations/20260922000005_transferencia-de-pet.sql`.
+ */
+export type StatusDaTransferencia =
+  | 'pending_acceptance'
+  | 'accepted'
+  | 'effective'
+  | 'cancelled'
+  | 'expired';
+
+/** Por que a transferencia foi desfeita. Lista fechada, imposta por CHECK. */
+export type MotivoDoCancelamentoDaTransferencia =
+  | 'current_owner'
+  | 'cancel_token'
+  | 'lost_case_opened'
+  | 'recipient_gone';
+
+export interface PetTransfersTable {
+  /** UUIDv7 gerado pela aplicacao. Sem `DEFAULT` no banco, como em `pets`. */
+  id: string;
+  pet_id: string;
+  /** O tutor no momento do convite. Depois de consumada, `pets.owner_user_id` ja e outro. */
+  from_user_id: string;
+  /** Normalizado (minusculas, sem espaco). Sai mascarado, nunca em claro. */
+  recipient_email: string;
+  /** Preenchida no aceite. Anulavel porque a FK e `ON DELETE SET NULL`. */
+  to_user_id: string | null;
+  /** SHA-256 de 256 bits de CSPRNG. O claro nunca existe em coluna nenhuma. */
+  invite_token_hash: Buffer;
+  /** Nulo ate o aceite; depois dele, a credencial de desfazer, de uso unico. */
+  cancel_token_hash: Buffer | null;
+  status: Generated<StatusDaTransferencia>;
+  /** Fim do prazo para ACEITAR (72 h). E o `expires_at` do contrato. */
+  invite_expires_at: Date;
+  accepted_at: Date | null;
+  /** 24 h apos o aceite. Enquanto o estado e `accepted`, esta no futuro. */
+  effective_at: Date | null;
+  cancelled_at: Date | null;
+  cancellation_reason: MotivoDoCancelamentoDaTransferencia | null;
+  created_at: CriadoEm;
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
@@ -660,6 +706,7 @@ export interface Database {
   lost_cases: LostCasesTable;
   conversations: ConversationsTable;
   conversation_messages: ConversationMessagesTable;
+  pet_transfers: PetTransfersTable;
   'audit.events': AuditEventsTable;
 }
 

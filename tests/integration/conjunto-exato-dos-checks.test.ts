@@ -112,6 +112,26 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'evidence_kind',
     valores: ['crmv', 'cnpj', 'phone_callback', 'document'],
   },
+  // BICHUS-66. As duas listas fechadas da transferencia de pet. Escritas POR
+  // EXTENSO e a mao: derivar do proprio banco compararia o banco com ele mesmo.
+  'public.pet_transfers.pet_transfers_status_conhecido': {
+    coluna: 'status',
+    // `StatusDaTransferencia` em
+    // `src/modules/transfers/domain/janela-da-transferencia.ts`, espelhado em
+    // `src/shared/db/schema.ts`. Os cinco sao distintos: `accepted` e o UNICO
+    // que carrega prazo -- dele para `effective` passam 24 h em que nada foi
+    // revogado --, e `expired` e "ninguem aceitou em 72 h", que nao e a mesma
+    // coisa que `cancelled`, "alguem desfez".
+    valores: ['pending_acceptance', 'accepted', 'effective', 'cancelled', 'expired'],
+  },
+  'public.pet_transfers.pet_transfers_motivo_conhecido': {
+    coluna: 'cancellation_reason',
+    // `MotivoDoCancelamento`, mesmo arquivo. `lost_case_opened` e a resposta da
+    // BICHUS-66 ao caso que nem ela nem a BICHUS-21 previram: o pet marcado
+    // como perdido no meio da janela. `recipient_gone` e o `ON DELETE SET NULL`
+    // de `to_user_id` chegando ao dominio.
+    valores: ['current_owner', 'cancel_token', 'lost_case_opened', 'recipient_gone'],
+  },
   'public.found_reports.found_reports_origin_check': {
     coluna: 'origin',
     valores: ['tag_scan', 'stray_report'],
@@ -420,6 +440,13 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'::text)))",
   'public.professionals.professionals_titularidade_tem_marco':
     "CHECK ((((claim_status = 'unclaimed'::text) AND (claimed_at IS NULL) AND (claimed_by_user_id IS NULL)) OR ((claim_status <> 'unclaimed'::text) AND (claimed_at IS NOT NULL))))",
+  // BICHUS-66. A regra nas DUAS direcoes: cancelada tem motivo, e nao-cancelada
+  // NAO tem. A segunda metade e a que ninguem olha -- um CHECK que so cobrasse
+  // a presenca deixaria passar uma linha `effective` carregando
+  // `lost_case_opened`, que e o tipo de lixo em cima do qual alguem constroi um
+  // relatorio meses depois.
+  'public.pet_transfers.pet_transfers_motivo_acompanha_o_cancelamento':
+    "CHECK (((status = 'cancelled'::text) = (cancellation_reason IS NOT NULL)))",
   'public.ref_breeds.ref_breeds_code_check': "CHECK ((code ~ '^[a-z][a-z0-9_]{1,39}$'::text))",
   'public.ref_colors.ref_colors_code_check': "CHECK ((code ~ '^[a-z][a-z0-9_]{1,29}$'::text))",
   // `upload_intents.kind` previa `found_report_photo` desde 18/09 e não havia

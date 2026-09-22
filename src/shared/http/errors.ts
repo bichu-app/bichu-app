@@ -246,6 +246,60 @@ export const problemas = {
     }),
 
   /**
+   * 409. Este pet já tem transferência viva (BICHUS-66).
+   *
+   * O texto oferece a saída, porque ela existe e não é óbvia: o tutor cancela
+   * a que está em andamento e começa de novo. Sem isso a tela diria "já existe"
+   * e deixaria a pessoa sem o próximo passo.
+   */
+  transferenciaEmAndamento: (): AppError =>
+    new AppError('transfer-already-in-progress', 'Este pet já está sendo transferido', {
+      detail: 'Cancele a transferência em andamento antes de começar outra.',
+    }),
+
+  /**
+   * 409. Não dá para transferir um pet com caso de perdido aberto.
+   *
+   * O tipo é `pet-already-lost`, que é literalmente "este pet já tem caso
+   * aberto" — e é o fato. A transferência espera o reencontro: consumar no meio
+   * de um caso revogaria a plaquinha da coleira justamente enquanto ela é a
+   * única coisa ligando o animal ao tutor (ADR-0004).
+   */
+  transferenciaComCasoAberto: (): AppError =>
+    new AppError('pet-already-lost', 'Encerre o caso antes de transferir', {
+      detail: 'Este pet está marcado como perdido. A plaquinha precisa continuar funcionando até ele voltar.',
+    }),
+
+  /**
+   * 409. A transferência já se consumou, e cancelar deixou de ser o caminho.
+   *
+   * Só a rota autenticada usa este tipo. A superfície pública do token responde
+   * 410 sem distinguir os três casos, de propósito: ver o 410 de
+   * `getTransferByCancelToken` no contrato.
+   */
+  transferenciaJaConsumada: (): AppError =>
+    new AppError('transfer-already-effective', 'Esta transferência já se concluiu', {
+      detail: 'O pet já está na conta da outra pessoa. Para tê-lo de volta, peça que ela transfira para você.',
+    }),
+
+  /**
+   * 403. O token do convite é válido, mas quem o apresenta não é o
+   * destinatário — ou não tem e-mail verificado.
+   *
+   * **403 e não 410**, e o contrato é explícito: o token não está errado, quem
+   * apresenta é que não é o destinatário. Um 410 mandaria a pessoa certa, logada
+   * na conta errada, pedir um convite novo que não resolveria nada.
+   *
+   * Os dois casos — outra conta e conta sem e-mail verificado — respondem
+   * idêntico. Separá-los daria a quem tem o token uma pista sobre o cadastro do
+   * destinatário.
+   */
+  transferenciaNaoEDestaConta: (): AppError =>
+    new AppError('forbidden', 'Este convite não é para esta conta', {
+      detail: 'Entre com a conta do e-mail que recebeu o convite, e confirme esse e-mail antes de aceitar.',
+    }),
+
+  /**
    * 409. Teto de três casos abertos simultâneos na conta.
    *
    * Separado de `pet-already-lost` porque a **saída é diferente**: lá a pessoa
