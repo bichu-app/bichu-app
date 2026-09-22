@@ -18,6 +18,7 @@ import {
 import { validarSenha } from '../domain/password-policy.js';
 import {
   instanteDeEmissaoDoAcesso,
+  instanteDeRevogacao,
   prazosDeNovaFamilia,
   prazosDeRotacao,
   segundosRestantes,
@@ -193,6 +194,20 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
    * de `tokenFoiRevogado` existe para tirar. Depois de uma redefinição a pessoa
    * legítima não renova: a família dela caiu junto, e o caminho dela é entrar.
    */
+  /**
+   * A barreira que a conta tem AGORA, que é o outro lado da conta de
+   * {@link instanteDeRevogacao}.
+   *
+   * Conta ausente devolve 0, e isso não é fallback silencioso: 0 faz o empurrão
+   * sumir e a revogação gravar `agora`, que é o comportamento de sempre. O único
+   * caminho que chega aqui sem conta é a exclusão de conta, em que a linha de
+   * `users` já saiu — e ali não há token novo para alcançar.
+   */
+  async function barreiraAtualDe(userId: UserId): Promise<Instant> {
+    const conta = await deps.repositorio.buscarContaPorId(userId);
+    return conta?.sessionsInvalidBefore ?? (0 as Instant);
+  }
+
   async function abrirSessao(
     conta: Conta,
     continuarConectado: boolean,
@@ -716,7 +731,16 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       await deps.repositorio.invalidarTokensPendentes(consumido.userId, agora);
       // Critério 5: todas as sessões e todos os refresh. Efeito em menos de um
       // segundo, e não nos até 15 minutos de validade do JWT.
-      await deps.repositorio.invalidarSessoes(consumido.userId, agora);
+      //
+      // A barreira não é `agora` cru: `instanteDeRevogacao` alcança também o
+      // token que `instanteDeEmissaoDoAcesso` datou à frente do relógio numa
+      // revogação anterior do MESMO segundo. Sem ela, duas revogações seguidas
+      // deixam vivo justamente o token emitido entre as duas.
+      await deps.repositorio.invalidarSessoes(
+        consumido.userId,
+        instanteDeRevogacao(agora, await barreiraAtualDe(consumido.userId)),
+        agora,
+      );
 
       await deps.trilha.record({
         actorKind: 'user',
@@ -748,7 +772,11 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       contexto: ContextoDaRequisicao,
     ): Promise<void> {
       const agora = deps.clock.now();
-      await deps.repositorio.invalidarSessoes(userId, agora);
+      await deps.repositorio.invalidarSessoes(
+        userId,
+        instanteDeRevogacao(agora, await barreiraAtualDe(userId)),
+        agora,
+      );
       await deps.trilha.record({
         actorKind: 'user',
         actorUserId: userId,

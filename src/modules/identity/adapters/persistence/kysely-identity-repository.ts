@@ -13,7 +13,7 @@
  *   token, que é exatamente o cenário que a detecção de reuso existe para
  *   distinguir de um roubo.
  */
-import type { Insertable } from 'kysely';
+import { sql, type Insertable } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import type { UsersTable } from '../../../../shared/db/schema.js';
 import { barreiraDeContaNova } from '../../domain/session.js';
@@ -383,10 +383,18 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linhas.length;
     },
 
-    async invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
+    async invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void> {
+      // `GREATEST` e não atribuição direta: a barreira é calculada a partir do
+      // valor lido antes, e duas revogações simultâneas leem o mesmo valor. Sem
+      // o piso, a que terminasse por último podia gravar um instante MENOR que a
+      // outra já tinha gravado e devolver a janela que as duas existem para
+      // fechar. A coluna só anda para a frente.
       await db
         .updateTable('users')
-        .set({ sessions_invalid_before: new Date(agora), updated_at: new Date(agora) })
+        .set({
+          sessions_invalid_before: sql<Date>`greatest(${sql.val(new Date(barreira))}::timestamptz, sessions_invalid_before)`,
+          updated_at: new Date(agora),
+        })
         .where('id', '=', userId)
         .execute();
     },

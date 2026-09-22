@@ -25,6 +25,7 @@ import type {
   TokenHash,
   UserId,
 } from '../../../shared/types/brands.js';
+import type { Clock } from '../../../shared/time/clock.js';
 import { dataFixa, INSTANTE_FIXO, relogioParado } from '../../../shared/time/relogio-de-teste.js';
 import { gerarHashDeSenha } from '../domain/password.js';
 import type {
@@ -101,7 +102,8 @@ class RepositorioFalso implements IdentityRepository {
    * que a redefinição de senha podia parar de empurrar `sessions_invalid_before`
    * com os 375 casos verdes.
    */
-  public readonly invalidacoesDeSessao: { userId: UserId; agora: Instant }[] = [];
+  public readonly invalidacoesDeSessao: { userId: UserId; barreira: Instant; agora: Instant }[] =
+    [];
   public readonly invalidacoesDeTokens: { userId: UserId; agora: Instant }[] = [];
   public readonly credenciaisRegravadas: { identityId: string; agora: Instant }[] = [];
   /** Quantas vezes o link foi GASTO. O critério 12 vive nesta contagem. */
@@ -177,8 +179,22 @@ class RepositorioFalso implements IdentityRepository {
     this.familiasAbertas.push(novo);
     return Promise.resolve();
   }
-  invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
-    this.invalidacoesDeSessao.push({ userId, agora });
+  /**
+   * O dublê MOVE a conta, porque o banco move — e com o mesmo piso.
+   *
+   * Um dublê que só anotasse a chamada deixaria passar a correção que grava a
+   * barreira errada: a segunda revogação de um caso encontraria a conta ainda
+   * com a marca antiga e o cálculo daria certo por acidente. `greatest` é o do
+   * `UPDATE` real, e está aqui pela mesma razão.
+   */
+  invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void> {
+    this.invalidacoesDeSessao.push({ userId, barreira, agora });
+    if (this.conta !== undefined) {
+      this.conta = {
+        ...this.conta,
+        sessionsInvalidBefore: Math.max(barreira, this.conta.sessionsInvalidBefore) as Instant,
+      };
+    }
     return Promise.resolve();
   }
   criarTokenDeVerificacao(): Promise<void> {
@@ -222,6 +238,12 @@ function montar(opcoes: {
   redefinicao?: RedefinicaoPendente | undefined;
   login?: CredencialLocal | undefined;
   agora?: Instant | undefined;
+  /**
+   * Relógio próprio, para o caso em que o tempo precisa ANDAR dentro de um
+   * mesmo caso — duas revogações e um login entre elas não cabem num instante
+   * só, e é justamente a distância entre eles que está sendo provada.
+   */
+  relogio?: Clock | undefined;
 }): Bancada {
   const repo = new RepositorioFalso(
     opcoes.refresh,
@@ -292,7 +314,7 @@ function montar(opcoes: {
       opaqueToken: () => 'refresh-novo' as OpaqueToken,
       random128: () => new Uint8Array(16),
     },
-    clock: relogioParado(agoraDaBancada),
+    clock: opcoes.relogio ?? relogioParado(agoraDaBancada),
     janelas: {
       idleTtlSeconds: 30 * 86_400,
       staySignedInIdleTtlSeconds: 180 * 86_400,
@@ -521,7 +543,14 @@ void describe('confirmarRedefinicaoDeSenha(): o gatilho que sobrou do critério 
     // relógio da operação, porque `sessions_invalid_before` é comparado com o
     // `iat` do JWT — empurrar para um instante anterior à emissão do token do
     // invasor deixaria o token dele passar pela barreira.
-    assert.deepEqual(bancada.repo.invalidacoesDeSessao, [{ userId: VITIMA, agora: AGORA }]);
+    //
+    // A `barreira` é o que vai para a coluna e o `agora` é o relógio da
+    // operação. Sem revogação recente na conta os dois coincidem, e é assim que
+    // tem de ser: `instanteDeRevogacao` só empurra quando a revogação cai dentro
+    // do segundo que outra já cobriu.
+    assert.deepEqual(bancada.repo.invalidacoesDeSessao, [
+      { userId: VITIMA, barreira: AGORA, agora: AGORA },
+    ]);
   });
 
   void it('derruba junto os links de redefinição pendentes e regrava a credencial', async () => {
@@ -712,5 +741,176 @@ void describe('entrar no mesmo segundo da redefinição de senha (BICHUS-132)', 
       LOGIN_EM + 30 * 86_400_000,
       'o prazo do refresh conta a partir do relógio da requisição, e não do empurrão',
     );
+  });
+});
+
+/**
+ * Duas revogações no MESMO SEGUNDO (SEC-006).
+ *
+ * O defeito, que a suíte de integração só acusava em máquina rápida o bastante
+ * para duas rodadas caírem no mesmo segundo de relógio: a correção de
+ * BICHUS-132 faz o token de acesso nascer com `iat` já arredondado para a virada
+ * do segundo, e um token assim é **imune a qualquer revogação anterior àquela
+ * virada**. A segunda revogação não move o teto além dele, e o token emitido
+ * entre as duas sobrevive por até quinze minutos.
+ *
+ * Aqui o relógio é conduzido, e não torcido: os três instantes são constantes do
+ * arquivo e cabem dentro do mesmo segundo por construção. Um caso que só
+ * reprovasse em máquina rápida seria o defeito de hoje com outro nome.
+ *
+ * O cenário tem gente dentro. A tutora desconfia, aperta "não fui eu" (revogação
+ * 1); quem tomou a conta ainda tem a senha e entra de novo no mesmo segundo; ela
+ * então troca a senha (revogação 2), que é o gesto que o produto oferece para
+ * expulsá-lo. Sem esta correção, ele fica.
+ */
+void describe('duas revogações no mesmo segundo (SEC-006)', () => {
+  const EMAIL_DA_CONTA = 'tutora@exemplo.test';
+  const SENHA = 'chuva-de-marco-no-quintal';
+  const IDENTIDADE = 'identidade-local-1';
+
+  /** `INSTANTE_FIXO` é virada de segundo exata; os três cabem no mesmo segundo. */
+  const PRIMEIRA_REVOGACAO = (INSTANTE_FIXO + 200) as Instant;
+  const LOGIN_DO_INVASOR = (INSTANTE_FIXO + 400) as Instant;
+  const SEGUNDA_REVOGACAO = (INSTANTE_FIXO + 600) as Instant;
+  /** A marca que a conta tinha antes de tudo isso: nada de revogação recente. */
+  const ANTES = (INSTANTE_FIXO - 60_000) as Instant;
+
+  let phcGuardado: string | undefined;
+  async function phcDaSenha(): Promise<string> {
+    phcGuardado ??= await gerarHashDeSenha(SENHA);
+    return phcGuardado;
+  }
+
+  /** Bancada com relógio conduzido: `relogio.agora` é escrito pelo caso. */
+  async function bancadaComRelogio(): Promise<{ bancada: Bancada; mover: (q: Instant) => void }> {
+    let agora: Instant = ANTES;
+    const bancada = montar({
+      conta: contaAtiva(ANTES),
+      relogio: { now: () => agora } satisfies Clock,
+      login: {
+        identityId: IDENTIDADE,
+        userId: VITIMA,
+        passwordPhc: await phcDaSenha(),
+        mustChange: false,
+      },
+    });
+    return {
+      bancada,
+      mover: (quando: Instant) => {
+        agora = quando;
+      },
+    };
+  }
+
+  const entrar = (bancada: Bancada): Promise<{ access_token: string }> =>
+    bancada.servico.entrar({ email: EMAIL_DA_CONTA, password: SENHA, staySignedIn: false }, CONTEXTO);
+
+  void it('A ISCA: o token emitido ENTRE as duas revogações não sobrevive à segunda', async () => {
+    const { bancada, mover } = await bancadaComRelogio();
+
+    // 1. "Não fui eu": a primeira revogação.
+    mover(PRIMEIRA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'logout', CONTEXTO);
+
+    // 2. Quem tomou a conta ainda tem a senha e entra de novo, 200 ms depois —
+    //    dentro do mesmo segundo. O `iat` deste token sai empurrado para a
+    //    virada por `instanteDeEmissaoDoAcesso`, e é ele que sobrevivia.
+    mover(LOGIN_DO_INVASOR);
+    const doInvasor = await entrar(bancada);
+    const aindaVale = await bancada.servico.autenticar(doInvasor.access_token);
+    assert.equal(aindaVale.conta.id, VITIMA, 'o token precisa ter VALIDO, senão não há o que revogar');
+
+    // 3. A tutora troca a senha, 200 ms depois — ainda o mesmo segundo.
+    mover(SEGUNDA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'password_changed', CONTEXTO);
+
+    const erro = await capturar(bancada.servico.autenticar(doInvasor.access_token));
+    assert.equal(
+      erro.problemType,
+      'token-expired',
+      'a segunda revogação não alcançou o token emitido depois da primeira: quem tomou a ' +
+        'conta continua dentro por até quinze minutos, e a troca de senha prometeu expulsá-lo',
+    );
+    assert.equal(erro.status, 401);
+  });
+
+  void it('O CONTRAPESO: quem revoga continua conseguindo entrar em seguida', async () => {
+    // A outra ponta, e sem ela a isca passaria com uma barreira que recusa
+    // tudo: a tutora acabou de trocar a senha e a PRIMEIRA tela dela não pode
+    // responder 401. É BICHUS-132, agora depois de duas revogações seguidas.
+    const { bancada, mover } = await bancadaComRelogio();
+
+    mover(PRIMEIRA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'logout', CONTEXTO);
+    mover(SEGUNDA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'password_changed', CONTEXTO);
+
+    const daVitima = await entrar(bancada);
+    const autenticado = await bancada.servico.autenticar(daVitima.access_token);
+    assert.equal(autenticado.conta.id, VITIMA, 'a primeira tela depois da troca não pode dar 401');
+  });
+
+  void it('sem revogação recente, a barreira gravada é `agora` ao milissegundo', async () => {
+    // O contrapeso que protege o que NÃO é desta correção. `agora + 1` por
+    // padrão mudaria a barreira de toda revogação do produto, e com ela o
+    // empate do lado do refresh (`refreshFoiRevogado`, BICHUS-77), em que o
+    // refresh nascido no mesmo milissegundo da barreira sobrevive de propósito.
+    const { bancada, mover } = await bancadaComRelogio();
+
+    mover(PRIMEIRA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'logout', CONTEXTO);
+
+    assert.deepEqual(bancada.repo.invalidacoesDeSessao, [
+      { userId: VITIMA, barreira: PRIMEIRA_REVOGACAO, agora: PRIMEIRA_REVOGACAO },
+    ]);
+  });
+
+  void it('o empurrão da segunda revogação é de no máximo um segundo', async () => {
+    // O teto do custo, escrito. A barreira anda para a frente do relógio para
+    // alcançar o `iat` empurrado, e nunca mais do que a virada seguinte — o
+    // mesmo teto de `instanteDeEmissaoDoAcesso`, e bem abaixo dos 60 s de
+    // tolerância de relógio de que os dois dependem.
+    const { bancada, mover } = await bancadaComRelogio();
+
+    mover(PRIMEIRA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'logout', CONTEXTO);
+    mover(SEGUNDA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'password_changed', CONTEXTO);
+
+    const segunda = bancada.repo.invalidacoesDeSessao[1];
+    assert.ok(segunda !== undefined);
+    assert.equal(segunda.agora, SEGUNDA_REVOGACAO, '`updated_at` continua no relógio da requisição');
+    assert.ok(
+      segunda.barreira > SEGUNDA_REVOGACAO,
+      'a barreira precisa passar do `iat` que a emissão empurrou',
+    );
+    assert.ok(
+      segunda.barreira - SEGUNDA_REVOGACAO <= 1000,
+      'e não pode passar da virada seguinte: mais que isso é tempo de ninguém entrar',
+    );
+  });
+
+  void it('a recusa é indistinguível de um token inválido qualquer', async () => {
+    // Nada aqui pode virar oráculo. Um corpo próprio para "caiu na segunda
+    // revogação" contaria a um estranho que aquela conta acabou de trocar a
+    // senha — que é exatamente o que ele quer saber.
+    const { bancada, mover } = await bancadaComRelogio();
+
+    mover(PRIMEIRA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'logout', CONTEXTO);
+    mover(LOGIN_DO_INVASOR);
+    const doInvasor = await entrar(bancada);
+    mover(SEGUNDA_REVOGACAO);
+    await bancada.servico.invalidarTodasAsSessoes(VITIMA, 'password_changed', CONTEXTO);
+
+    const pelaSegundaRevogacao = await capturar(bancada.servico.autenticar(doInvasor.access_token));
+
+    // O token de uma sessão simplesmente vencida, sem revogação nenhuma no meio.
+    const outra = montar({ conta: contaAtiva(0 as Instant), verificacao: { ok: false, motivo: 'expirado' } });
+    const qualquerUm = await capturar(outra.servico.autenticar('token-vencido'));
+
+    assert.equal(pelaSegundaRevogacao.status, qualquerUm.status);
+    assert.equal(pelaSegundaRevogacao.problemType, qualquerUm.problemType);
+    assert.equal(pelaSegundaRevogacao.message, qualquerUm.message);
   });
 });

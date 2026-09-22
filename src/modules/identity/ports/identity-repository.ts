@@ -140,8 +140,21 @@ export interface IdentityRepository {
   /** Revoga a família inteira. Usada no logout e na detecção de reuso. */
   revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number>;
 
-  /** SEC-006: empurra `sessions_invalid_before` para agora. */
-  invalidarSessoes(userId: UserId, agora: Instant): Promise<void>;
+  /**
+   * SEC-006: empurra `sessions_invalid_before` para `barreira`.
+   *
+   * `barreira` e `agora` são parâmetros SEPARADOS de propósito. A barreira sai
+   * de `instanteDeRevogacao` e pode estar até um segundo à frente do relógio,
+   * para alcançar o token que a emissão datou à frente numa revogação anterior
+   * do mesmo segundo; `agora` é o relógio da requisição e é o que vai para
+   * `updated_at`. Um parâmetro só convidaria a gravar o relógio e deixar o
+   * defeito de volta.
+   *
+   * A gravação é **monotônica**: a coluna nunca anda para trás, porque duas
+   * revogações simultâneas leem a mesma barreira anterior e a que escrever por
+   * último não pode desfazer a que escreveu antes.
+   */
+  invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void>;
 
   // --- Tokens de verificação e de redefinição -----------------------------
 
