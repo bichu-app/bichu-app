@@ -312,6 +312,61 @@ void describe('a decisão humana sobre o candidato (BICHUS-86)', { skip: CONEXAO
       assert.equal((await statusDoCandidato(primeiro.candidato))?.status, 'suggested');
     });
 
+    void it('o terceiro COM CASO PRÓPRIO ABERTO também não decide', async () => {
+      // **O caso que o terceiro sem caso nenhum não alcança**, e a diferença não
+      // é teórica: sem a correlação `lost_cases.id = match_candidates.case_id` a
+      // escrita vira produto cartesiano, e aí `owner_user_id = :dono` passa a
+      // perguntar *"esta conta tem ALGUM caso aberto?"*. Contra um estranho que
+      // não tem caso nenhum a resposta é não, e a consulta errada acerta por
+      // acidente — que foi exatamente o que aconteceu ao desligar a correlação e
+      // ver a suíte de integração ficar verde.
+      //
+      // Aqui o estranho tem caso aberto. É ele que separa as duas consultas.
+      const alvo = await cenario();
+      const estranho = await criarConta('Terceiro com caso');
+      await abrirCaso(estranho, await criarPet(estranho, 'Rex'));
+
+      const decidido = await casos.decidirCandidato({
+        caso: alvo.caso,
+        candidato: alvo.candidato,
+        dono: estranho,
+        decisao: 'confirmed',
+        agora: AGORA,
+      });
+
+      assert.equal(
+        decidido,
+        null,
+        'uma conta com caso próprio decidiu o candidato do caso de outra pessoa: a ' +
+          'correlação entre o candidato e o caso sumiu, e o predicado do dono passou a ' +
+          'responder sobre o conjunto errado',
+      );
+      assert.equal((await statusDoCandidato(alvo.candidato))?.status, 'suggested');
+    });
+
+    void it('o tutor de OUTRO pet do mesmo dono não decide pelo pet errado', async () => {
+      // A correlação `pets.id = lost_cases.pet_id` tem a mesma armadilha: sem
+      // ela, o nome do pet que vai para a primeira mensagem do sistema sai de um
+      // pet qualquer. Este caso cobra que o nome devolvido seja o do pet DO CASO.
+      const { tutor, caso, candidato } = await cenario();
+      await criarPet(tutor, 'Bidu');
+
+      const decidido = await casos.decidirCandidato({
+        caso,
+        candidato,
+        dono: tutor,
+        decisao: 'confirmed',
+        agora: AGORA,
+      });
+
+      assert.equal(
+        decidido?.nomeDoPet,
+        'Nina',
+        'o nome do pet veio de um pet que não é o do caso, e a primeira mensagem da ' +
+          'conversa passaria a falar do animal errado',
+      );
+    });
+
     void it('caso encerrado não aceita mais decisão', async () => {
       const { tutor, caso, candidato } = await cenario();
       // Pelo caminho de verdade: `lost_cases_encerrado_tem_desfecho` recusa um
