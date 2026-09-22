@@ -8,12 +8,14 @@ import '../../api/fila_offline.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_caso.dart';
 import '../../api/problem.dart';
+import '../../dispositivo/oportunidades_de_aviso.dart';
 import '../../escopo.dart';
 import '../../intencao/caso_de_perdido_como_intencao.dart';
 import '../../perdido/rascunho_do_caso.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../avisos/pedido_de_aviso.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
@@ -167,19 +169,10 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
       // =====================================================================
       // A SEGUNDA OPORTUNIDADE DE PEDIR O AVISO (UX 10.4, BICHUS-24).
       //
-      // **Esta chamada esta comentada porque a BICHUS-24 nao esta mesclada.**
-      // Nem `PedidoDeAviso`, nem `OportunidadeDeAviso`, nem
-      // `Escopo.oportunidades`, nem `Escopo.vigiaDeAviso` existem nesta
-      // arvore: escrita ativa, ela nao compila. O bloco fica aqui, no ponto
-      // exato, para que a integracao seja descomentar e importar -- e nao
-      // redescobrir onde a linha ia.
-      //
-      // O QUE A INTEGRACAO PRECISA FAZER:
-      //   1. importar `../avisos/pedido_de_aviso.dart` e
-      //      `../../dispositivo/oportunidades_de_aviso.dart`;
-      //   2. descomentar o bloco abaixo;
-      //   3. ligar o caso que prova que a segunda oportunidade e oferecida
-      //      aqui -- sem ele, esta linha volta a ser codigo sem chamador.
+      // **Ligada na integracao de 22/09**, quando a BICHUS-24 entrou na mesma
+      // arvore que esta tela. Ate aqui o bloco vivia comentado porque
+      // `PedidoDeAviso`, `OportunidadeDeAviso`, `Escopo.oportunidades` e
+      // `Escopo.vigiaDeAviso` nao existiam nesta arvore.
       //
       // POR QUE AQUI, e nao na abertura da tela: a oportunidade e gasta
       // quando a folha ABRE, e nao na resposta. Oferecida em `initState`,
@@ -193,18 +186,18 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
       // numa antessala que nao consegue registrar nada. Quem esta sem sinal
       // tem a oportunidade preservada para quando o alerta de fato sair.
       //
-      // final desfecho = await PedidoDeAviso.oferecer(
-      //   context,
-      //   oportunidade: OportunidadeDeAviso.primeiroCasoDePerdido,
-      //   nomeDoPet: r.pet.nome,
-      // );
-      // if (!mounted) return;
-      // if (desfecho == DesfechoDoPedido.registroFalhou) {
-      //   // O caso ESTA aberto: a falha do registro nao pode virar um erro
-      //   // que pareca ter impedido a abertura. Ela viaja para F3.3, que e
-      //   // quem tem espaco para dizer que o aviso no celular nao ficou
-      //   // ligado.
-      // }
+      final desfecho = await PedidoDeAviso.oferecer(
+        context,
+        oportunidade: OportunidadeDeAviso.primeiroCasoDePerdido,
+        nomeDoPet: r.pet.nome,
+      );
+      if (!mounted) return;
+      if (desfecho == DesfechoDoPedido.registroFalhou) {
+        // O caso ESTA aberto: a falha do registro nao pode virar um erro
+        // que pareca ter impedido a abertura. Ela viaja para F3.3, que e
+        // quem tem espaco para dizer que o aviso no celular nao ficou
+        // ligado.
+      }
       // =====================================================================
 
       context.pushReplacement(

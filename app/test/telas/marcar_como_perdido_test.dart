@@ -30,7 +30,9 @@ import 'dart:convert';
 import 'dart:ui' show Tristate;
 
 import 'package:bichu/api/modelos.dart';
+import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/avisos/antessala_de_aviso.dart';
 import 'package:bichu/telas/perdido/resultado_da_abertura.dart';
 import 'package:bichu/telas/perdido/tela_alcance_do_alerta.dart';
 import 'package:bichu/telas/perdido/tela_de_quem_e_o_caso.dart';
@@ -100,12 +102,14 @@ Future<void> abrirOPerfil(
   required Future<http.Response> Function(http.Request) rede,
   RegiaoDeReferencia? regiao,
   DepositoDaFilaEmMemoria? fila,
+  Avisos? avisos,
 }) async {
   await abrirOApp(
     tester,
     rede: rede,
     deposito: depositoLogado(regiaoDeReferencia: regiao),
     depositoDaFila: fila,
+    avisos: avisos,
   );
   await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
   await tester.pumpAndSettle();
@@ -743,6 +747,79 @@ void main() {
             'publica: F5 entrega uma URL com o app fechado.',
       );
       expect(find.text(TelaCasoAberto.tituloNaFila), findsNothing);
+    });
+  });
+  // -------------------------------------------------------------------------
+  // COSTURA DA INTEGRACAO DE 22/09 - a segunda oportunidade ganhou chamador
+  // -------------------------------------------------------------------------
+  group('a segunda oportunidade de aviso tem chamador de PRODUCAO', () {
+    // A BICHUS-24 entregou o mecanismo com dois gatilhos, e o segundo
+    // (`primeiroCasoDePerdido`) so existia em teste: a unica coisa que
+    // chamava `PedidoDeAviso.oferecer` com ele era o proprio caso da 24.
+    // A chamada de producao mora em F3.2, e ficou comentada ate a BICHUS-24 e
+    // a BICHUS-21 estarem na mesma arvore.
+    //
+    // Este caso atravessa o fluxo inteiro pela interface -- F3.0, F3.1, F3.2 e
+    // o toque em `Avisar` -- e cobra a antessala DEPOIS da abertura. Ele
+    // reprova se alguem comentar a chamada de novo, e e por isso que ele
+    // dirige a tela em vez de chamar `oferecer` direto.
+    testWidgets('abrir o caso em F3.2 oferece a antessala da segunda',
+        (tester) async {
+      await abrirOPerfil(
+        tester,
+        avisos: AvisosDeTeste(PermissaoDeAviso.naoPedida),
+        rede: servidorCom(
+          <Map<String, dynamic>>[pet(id: 'p-1', nome: 'Rex')],
+          previa: <String, dynamic>{
+            'reach_status': 'unavailable',
+            'radius_m': 5000,
+            'blockers': <dynamic>[],
+          },
+          casoCriado: <String, dynamic>{
+            'id': 'c-1',
+            'pet_id': 'p-1',
+            'status': 'open',
+            'opened_at': '2026-09-22T12:00:00Z',
+            'has_location': false,
+            'alert': <String, dynamic>{'reach_status': 'no_location'},
+          },
+        ),
+        regiao: const RegiaoDeReferencia(
+          bairro: 'Vila Madalena',
+          cidade: 'São Paulo',
+          uf: 'SP',
+        ),
+      );
+
+      await tocar(tester, _porta);
+      await tocarNaOpcao(tester, 'Agora');
+      await tocar(
+        tester,
+        find.widgetWithText(BotaoPrimario, TelaOndeEQuando.rotuloDeContinuar),
+      );
+      final avisar =
+          find.widgetWithText(BotaoPrimario, TelaAlcanceDoAlerta.rotuloDeAvisar);
+      await tester.ensureVisible(avisar);
+      await tester.pumpAndSettle();
+      await tester.tap(avisar);
+
+      // `pump` e nao `pumpAndSettle`, e o motivo e o proprio desenho da tela:
+      // enquanto a folha esta aberta o envio de F3.2 segue "em curso" e o
+      // indicador de progresso continua girando. `pumpAndSettle` esperaria
+      // uma animacao que so termina quando a pessoa responde a folha -- que e
+      // exatamente o que este caso quer observar antes de responder.
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+
+      expect(
+        find.text(TextosDaAntessala.tituloDaSegunda('Rex')),
+        findsOneWidget,
+        reason: 'REPROVA: o caso abriu e a segunda antessala nao apareceu. '
+            'A UX 10.4 da BICHUS-24 diz que a segunda das DUAS chances e '
+            'oferecida no primeiro caso de perdido; se ela so aparece quando '
+            'um teste chama `PedidoDeAviso.oferecer` na mao, o gatilho nao '
+            'existe para quem usa o app.',
+      );
     });
   });
 }
