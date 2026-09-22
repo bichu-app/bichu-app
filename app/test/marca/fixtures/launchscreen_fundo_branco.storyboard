@@ -19,18 +19,7 @@
                             <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleToFill" image="LaunchBackground" translatesAutoresizingMaskIntoConstraints="NO" id="tWc-Dq-wcI"/>
                             <imageView opaque="NO" clipsSubviews="YES" multipleTouchEnabled="YES" contentMode="center" image="LaunchImage" translatesAutoresizingMaskIntoConstraints="NO" id="YRO-k0-Ey4"></imageView>
                         </subviews>
-                        <!-- bichu:fundo-inerte-do-storyboard
-                             O branco do template do flutter_native_splash foi trocado pela
-                             semente da marca (raspberry.700 de design/tokens.json) por
-                             app/tool/corrigir_splash_ios.dart. Hoje este valor e inerte: o
-                             imageView de LaunchBackground cobre a view raiz pelas quatro
-                             bordas. Ele existe para o dia em que alguem remover aquele
-                             imageView, ou UMA das quatro constraints: com branco aqui a
-                             splash do iOS ficaria branca e nenhum portao acusaria. O
-                             caminho primario da cor continua sendo o PNG do catalogo, que
-                             so acerta porque carrega chunk sRGB.
-                        -->
-                        <color key="backgroundColor" red="0.61960784313725492" green="0.043137254901960784" blue="0.22745098039215686" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="1" green="1" blue="1" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
                             <constraint firstItem="YRO-k0-Ey4" firstAttribute="leading" secondItem="Ze5-6b-2t3" secondAttribute="leading" id="3T2-ad-Qdv"/>
                             <constraint firstItem="tWc-Dq-wcI" firstAttribute="bottom" secondItem="Ze5-6b-2t3" secondAttribute="bottom" id="RPx-PI-7Xg"/>

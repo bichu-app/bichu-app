@@ -145,6 +145,12 @@ flutter:
 # gerador que nao acha a arte precisa parar, nao emitir icone em branco.
 #
 #   cd app && dart run flutter_launcher_icons
+#   cd app && dart run tool/corrigir_splash_ios.dart
+#
+# O segundo comando carimba o perfil de cor nos PNG do catalogo de assets do
+# iOS. As dezoito medidas do icone sofrem o mesmo desvio do fundo do splash --
+# sem `sRGB` declarado, o Xcode le os componentes como Display P3 e o quadrado
+# da marca sai em `#AD0038`. Ver o bloco do splash mais abaixo.
 #
 flutter_launcher_icons:
   # iOS: quadrado de 1024x1024 sem transparencia. A App Store recusa icone com
@@ -243,18 +249,33 @@ flutter_launcher_icons:
 #
 # Quem mudar a cor do splash precisa mudar, no mesmo commit:
 #   1. `color` e `color_dark` aqui, e os mesmos dois dentro de `android_12`;
-#   2. rodar o comando abaixo, que reescreve os arquivos nativos;
+#   2. rodar os DOIS comandos abaixo, nesta ordem;
 #   3. conferir que o valor continua igual a `raspberry.700` de
 #      `design/tokens.json` -- se divergiu, o errado e aqui.
 #
 #   cd app && dart run flutter_native_splash:create
+#   cd app && dart run tool/corrigir_splash_ios.dart
 #
-# ESQUECER O PASSO 2 NAO E MAIS SILENCIOSO. `test/marca/arte_do_app_test.dart`
-# le `design/tokens.json`, decodifica os PNG que os dois geradores assam e
-# REPROVA quando o pixel diverge do token -- inclusive quando so estes quatro
-# valores foram trocados e nenhum gerador rodou. Ate 21/09/2026 esse era o
-# caminho em que o produto saia com duas cores de marca ao mesmo tempo e
-# nenhum portao acusava, porque nada lia pixel.
+# O SEGUNDO COMANDO NAO E OPCIONAL. O `flutter_native_splash` escreve os PNG do
+# catalogo de assets do iOS sem chunk de espaco de cor, e escreve o
+# `backgroundColor` do `LaunchScreen.storyboard` em branco. Sem perfil
+# declarado o Xcode trata os componentes como se fossem do gamut do display
+# (Display P3) e a splash NATIVA do iOS abre em `#AD0038` -- medido no
+# simulador, iPhone 18 Pro com iOS 27. O segundo comando carimba `sRGB`,
+# `gAMA` e `cHRM` e troca o branco pela semente; ele e idempotente e desfaz
+# exatamente o que o primeiro estraga.
+#
+# ESQUECER O PASSO 2 NAO E SILENCIOSO. `test/marca/arte_do_app_test.dart` le
+# `design/tokens.json`, decodifica os PNG que os dois geradores assam e REPROVA
+# quando o pixel diverge do token -- inclusive quando so estes quatro valores
+# foram trocados e nenhum gerador rodou. Ate 21/09/2026 esse era o caminho em
+# que o produto saia com duas cores de marca ao mesmo tempo e nenhum portao
+# acusava, porque nada lia pixel.
+#
+# E `test/marca/splash_ios_test.dart` cobre a metade que a leitura de pixel NAO
+# alcanca: ele nao pergunta qual e o byte, pergunta qual cor o iOS EXIBE a
+# partir dele. Com o defeito do perfil de cor de pe, as oito iscas do arquivo
+# acima ficavam VERDES -- o byte estava certo, o render e que nao.
 #
 flutter_native_splash:
   color: "#9E0B3A"

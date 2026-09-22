@@ -79,9 +79,19 @@ divergência entre densidades feita à mão só aparece no aparelho de outra pes
 ```bash
 dart run flutter_launcher_icons         # ícone, Android e iOS
 dart run flutter_native_splash:create   # splash, Android e iOS
+dart run tool/corrigir_splash_ios.dart  # SEMPRE depois dos dois acima
 ```
 
-A configuração dos dois está no fim do `pubspec.yaml`, comentada. A **arte** é
+**O terceiro comando não é limpeza, é parte da geração.** Os dois primeiros
+escrevem os PNG do catálogo de assets do iOS sem nenhum chunk de espaço de cor,
+e escrevem o `backgroundColor` do `LaunchScreen.storyboard` em branco. Sem ele a
+splash nativa do iOS abre **branca** — esse é o defeito que o terceiro comando
+conserta de fato. O `#AD0038` do primeiro quadro é outra coisa, tem causa
+própria e não tem conserto; está explicado logo abaixo. Quem esquecer o passo
+derruba `test/marca/splash_ios_test.dart`, que nomeia o arquivo e repete o
+comando.
+
+A configuração dos dois primeiros está no fim do `pubspec.yaml`, comentada. A **arte** é
 entrega da designer e cai em `design/marca/app/`, na raiz do repositório, fora
 deste pacote — mesmo arranjo de `tool/gen_tokens.dart`, que lê
 `../design/tokens.json`. Enquanto os arquivos não estiverem lá, os dois comandos
@@ -104,29 +114,61 @@ que os geradores assam e compara pixel com token. Antes disso nada no
 repositório lia pixel, e um produto com splash e ícone na cor velha passava pela
 esteira inteira em verde.
 
-### Pendência medida no splash do iOS
+### O desvio de cor do splash do iOS: duas fases, e só a primeira erra
 
-No simulador (iOS 27, iPhone 18 Pro) o fundo do splash do iOS renderiza
-`#9F2049`, e não a cor da marca. É um vermelho mais saturado que ela. Medido
-comparando, na mesma captura, com a borda do botão `Escanear uma tag`, que o
-Flutter pinta a partir do mesmo token e que lê o valor exato: os dois
-vermelhos ficam diferentes lado a lado.
+A splash **nativa** do iOS é exibida **duas vezes**, e as duas medem cores
+diferentes. Medido no simulador (iPhone 18 Pro, iOS 27), em aparelhos criados
+do zero:
 
-A causa tem conta fechada: converter `P3(0.5725, 0.1725, 0.2902)` para sRGB dá
-exatamente `#9F2049`, ou seja o sistema usa os componentes do storyboard como
-se já fossem Display P3. Três saídas foram testadas e nenhuma resolveu (cor
-nomeada de catálogo, PNG num imageset, e `displayP3` declarado com os
-componentes convertidos); estão listadas no comentário do
-`LaunchScreen.storyboard` para ninguém refazer o caminho.
+| fase | o que é | mede |
+|---|---|---|
+| snapshot | o que o iOS guardou de uma abertura anterior | `#AD0038` |
+| render vivo | o processo do app desenhando o mesmo storyboard | `#9E0B3A` |
+
+**Não tem conserto no app, e a versão anterior deste texto dizia o contrário.**
+Ela explicava o `#AD0038` pelo catálogo de assets: PNG sem chunk de espaço de
+cor, `actool` interpretando os componentes como Display P3. O QA refutou em
+22/09 e a refutação é limpa — o `Assets.car` compilado é **idêntico** antes e
+depois da correção, porque o `actool` do Xcode 27 já marcava o PNG como sRGB.
+Cinco medições do build "corrigido", em simuladores novos, deram `#AD0038` de
+novo.
+
+A causa real (BICHUS-209): o primeiro quadro vem de
+`Library/SplashBoard/Snapshots/<bundle>`, um contêiner ASTC da Apple na
+variante **sem** `sRGB`, sem função de transferência nem primárias. Números
+sRGB vão crus para um buffer Display P3, e isso dá exatamente:
+
+```
+P3(#9E0B3A) lido cru num buffer P3 = #AD0038   (Carmim, hoje)
+P3(#922C4A) lido cru num buffer P3 = #9F204A   (Framboesa, antes)
+```
+
+Pré-compensar consertaria o snapshot e **estragaria o render vivo**: não há
+valor que sirva para as duas fases. E não é do Bichu — um app de
+`flutter create` puro, sem asset nenhum, reproduz as duas fases idênticas em
+três aparelhos criados do zero, e o mesmo PNG desenhado pelo SpringBoard como
+ícone da tela inicial mede `#9E0B3A` exato **na mesma captura**.
+
+**O que `dart run tool/corrigir_splash_ios.dart` continua fazendo, e por quê.**
+Ele carimba `sRGB`, `gAMA` e `cHRM` nos 26 PNG do catálogo (§11.3.3.5 da
+ISO/IEC 15948) e troca o branco de fábrica do `backgroundColor` do storyboard
+pela semente. O carimbo não muda o `Assets.car`, mas faz o PNG **se descrever**
+em vez de depender do que a ferramenta da vez assume; a troca do
+`backgroundColor` é correção de verdade e independente disso. Ele é idempotente
+e precisa rodar depois de cada execução dos outros dois geradores, que desfazem
+os dois ajustes.
+
+**O que falta, e é do cliente:** medir em aparelho físico. O `devicectl` só
+enxerga simuladores nesta máquina. Se o desvio não existir no aparelho de
+verdade, a BICHUS-142 precisa de um critério que diga **em qual das duas fases**
+a cor tem de valer. Os instrumentos estão versionados em
+`tool/medir_splash_ios.sh` e `tool/sonda_splash_ios.storyboard`.
 
 **O Android não tem esse problema:** o APK carrega o valor exato, conferido
 com `aapt2 dump resources` em `values-v31`, `values-night-v31` e no
-`launch_background`.
-
-**O que fecha:** `dart run flutter_native_splash:create` com a arte, que resolve
-o fundo do iOS por PNG gerado — e PNG carrega perfil de cor. Esse é o caminho
-que vai para a loja; o storyboard escrito à mão é o remendo de antes da arte.
-**Meça de novo depois de rodar o gerador.**
+`launch_background`. Os PNG do Android também não declaram perfil, e ali isso
+não desvia nada: o decodificador do Android assume sRGB na ausência de
+declaração, em vez de assumir o gamut do display.
 
 **O ícone de notificação do Android está deliberadamente vazio**, com o motivo
 no `AndroidManifest.xml`: ele exige silhueta monocromática de 24 dp, e a régua
