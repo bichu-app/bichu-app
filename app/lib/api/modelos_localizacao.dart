@@ -182,3 +182,46 @@ Onde? montarOnde({PontoCapturado? ponto, AreaDigitada? area}) {
   if (area != null) return OndePorArea(area);
   return null;
 }
+
+/// O `Onde` remontado a partir de uma coordenada que **ja foi capturada** e
+/// atravessou o envelope de intencao (UX 8.3).
+///
+/// ## Por que ela mora aqui, e nao em `lib/intencao/`
+///
+/// O criterio 1 da BICHUS-23 diz que a porta `Localizacao` e nomeada em uma
+/// lista curta de arquivos, e este e um deles -- **pelos tipos**, e nao para
+/// falar com o aparelho. Esta funcao nao mede nada, nao pede permissao e nao
+/// abre dialogo: ela recebe dois numeros que alguem ja tinha e monta o mesmo
+/// `Onde` que a captura montaria.
+///
+/// Escrita em `lib/intencao/`, ela obrigaria aquele diretorio a importar a
+/// porta -- e ai o portao de ponto de uso reprovaria, com razao: um terceiro
+/// arquivo nomeando a porta e como o "dois pontos de uso" deixa de ser
+/// verdade.
+///
+/// ## O que se perde na volta, e por que nao e problema
+///
+/// A **precisao** nao atravessa: `LocalizacaoDaIntencao` guarda latitude,
+/// longitude e o carimbo de tempo, e nada mais. `GeoPoint.accuracy_m` e
+/// opcional no contrato, e o que ele alimenta e o texto "cerca de 300 m" da
+/// tela de captura -- que ja foi lido por quem capturou. Inventar um numero
+/// aqui seria pior que a ausencia dele.
+///
+/// **A origem e `deviceGps`, e nao um palpite**: nao ha pino no mapa em todo o
+/// produto, entao a medicao do aparelho e o unico caminho que existe para uma
+/// coordenada chegar a este app.
+Onde? ondeJaCapturado({
+  double? lat,
+  double? lon,
+  AreaDigitada? area,
+}) {
+  final ponto = (lat == null || lon == null)
+      ? null
+      : PontoCapturado(
+          lat: lat,
+          lon: lon,
+          precisaoEmMetros: null,
+          origem: OrigemDoPonto.deviceGps,
+        );
+  return montarOnde(ponto: ponto, area: area);
+}

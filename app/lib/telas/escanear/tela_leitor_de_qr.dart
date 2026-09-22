@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
@@ -9,6 +10,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../dispositivo/leitor_de_qr.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -656,9 +658,16 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
           // precisa do codigo, e descobrir isso **antes** de errar tres vezes
           // e o que impede o beco.
           TextButton(
-            // F3.5 e de outra historia.
-            onPressed: null,
-            child: Text(MensagensDeErro.registrarAchado),
+            // **F3.5 EXISTE** (BICHUS-35). Esta porta nasceu desabilitada com
+            // o comentario "F3.5 e de outra historia", e a historia chegou: o
+            // que muda aqui e uma linha, e nenhum botao novo entra na tela --
+            // o que importa para a varredura de acessibilidade, que conta os
+            // controles de cada tela.
+            //
+            // `push` e nao `go`: quem esta com um animal no colo e nao achou
+            // o codigo precisa voltar para o leitor se mudar de ideia.
+            onPressed: () => context.push(Rotas.registrarAchado),
+            child: const Text(MensagensDeErro.registrarAchado),
           ),
         ],
     };

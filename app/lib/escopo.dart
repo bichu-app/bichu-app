@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/achados_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
 import 'api/fila_offline.dart';
@@ -29,6 +30,7 @@ class Escopo extends InheritedWidget {
     required this.auth,
     required this.pets,
     required this.casos,
+    required this.achados,
     required this.fila,
     required this.tags,
     required this.devices,
@@ -52,6 +54,10 @@ class Escopo extends InheritedWidget {
 
   /// As rotas de caso de perdido (`tags: [lost]` do contrato).
   final CasosApi casos;
+
+  /// As rotas de achado avulso (`tags: [found]` do contrato), ligadas pela
+  /// BICHUS-35.
+  final AchadosApi achados;
 
   /// A fila de acoes sem conexao (BICHUS-31), **ligada pela BICHUS-21**.
   ///
@@ -150,6 +156,7 @@ class Escopo extends InheritedWidget {
       auth != anterior.auth ||
       pets != anterior.pets ||
       casos != anterior.casos ||
+      achados != anterior.achados ||
       fila != anterior.fila ||
       tags != anterior.tags ||
       devices != anterior.devices ||

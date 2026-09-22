@@ -43,6 +43,7 @@
 
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
+import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
 import 'package:bichu/api/devices_api.dart';
 import 'package:bichu/api/fila_offline.dart';
@@ -112,6 +113,8 @@ Future<_Caixa> _montar(
       auth: auth,
       pets: PetsApi(api),
       casos: CasosApi(api),
+      // BICHUS-35: a camada de achado entrou no escopo junto com F3.5.
+      achados: AchadosApi(api),
       fila: FilaOffline(deposito: DepositoDaFilaEmMemoria()),
       tags: TagsApi(api),
       devices: devices,
