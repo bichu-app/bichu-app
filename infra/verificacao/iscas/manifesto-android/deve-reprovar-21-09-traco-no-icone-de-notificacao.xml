@@ -1,0 +1,76 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application
+        android:label="bichu"
+        android:name="${applicationName}"
+        android:icon="@mipmap/ic_launcher">
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:taskAffinity=""
+            android:theme="@style/LaunchTheme"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
+            android:hardwareAccelerated="true"
+            android:windowSoftInputMode="adjustResize">
+            <!-- Specifies an Android theme to apply to this Activity as soon as
+                 the Android process has started. This theme is visible to the user
+                 while the Flutter UI initializes. After that, this theme continues
+                 to determine the Window background behind the Flutter UI. -->
+            <meta-data
+              android:name="io.flutter.embedding.android.NormalTheme"
+              android:resource="@style/NormalTheme"
+              />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+        </activity>
+        <!-- ICONE DE NOTIFICACAO DO ANDROID: AUSENTE DE PROPOSITO.
+
+             O lugar dele e uma meta-data
+             `com.google.firebase.messaging.default_notification_icon`
+             apontando para um drawable. Ela nao esta aqui, e nao e
+             esquecimento.
+
+             A partir do Android 5.0 o sistema descarta a cor do icone de
+             notificacao e renderiza so o canal alfa: o que aparece na barra de
+             status e uma SILHUETA branca de 24dp. Colorido vira quadrado
+             branco solido, que e o defeito classico.
+
+             Nao ha silhueta para colocar aqui. A regua de reducao de
+             `docs/06-design-system.md` paragrafo 3.10 REPROVA o simbolo abaixo
+             de 48px: em 32px "olho e lingua viram mancha", em 24px "o simbolo
+             e um borrao". Derivar uma silhueta do PNG colorido seria redesenhar
+             a marca do cliente, e justamente no tamanho em que ela ja foi
+             medida reprovando. Falta o VETOR, que e item do cliente
+             (`design/marca/README.md`, pendencia 3).
+
+             Ate o vetor chegar, o Firebase cai no icone do app, que e o
+             comportamento padrao. Nao preencha este campo com um PNG colorido
+             nem com uma silhueta improvisada.
+
+             (`firebase_messaging` ENTROU em 19/09, com a historia de push, e
+             este campo continua vazio de proposito -- que e exatamente o que
+             este comentario existia para garantir. O plugin declara sozinho
+             POST_NOTIFICATIONS, os servicos e o receptor no manifesto dele, e
+             o merge do Gradle os traz: nao ha nada a acrescentar aqui alem do
+             icone, e o icone depende do vetor da marca.) -->
+
+        <!-- Don't delete the meta-data below.
+             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <meta-data
+            android:name="flutterEmbedding"
+            android:value="2" />
+    </application>
+    <!-- Required to query activities that can process text, see:
+         https://developer.android.com/training/package-visibility and
+         https://developer.android.com/reference/android/content/Intent#ACTION_PROCESS_TEXT.
+
+         In particular, this is used by the Flutter engine in io.flutter.plugin.text.ProcessTextPlugin. -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT"/>
+            <data android:mimeType="text/plain"/>
+        </intent>
+    </queries>
+</manifest>

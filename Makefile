@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada apk verificar-apk-autoteste backup restore pin-digests
+.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-app fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -303,6 +303,27 @@ verificar-borda-local: ## a borda de pe responde o que o contrato promete, pela 
 verificar-docs-fechada: ## ADR-0018: a Swagger UI fechada, visto de fora (autoteste roda sem rede)
 	python3 infra/verificacao/verificar_docs_fechada.py
 
+verificar-manifesto-do-aplicativo-autoteste: ## as iscas do portao de boa-formacao reprovam (nao le app/)
+	python3 infra/verificacao/verificar_manifesto_android.py --autoteste
+
+# 50 ms medidos para os 17 arquivos, sem Gradle, sem JDK e sem SDK do Android.
+# E por isso que ele cabe no laco de quem desenvolve e no job `rapidos`, ao
+# lado das outras iscas, e nao no estagio caro.
+#
+# Ele existe porque a MESMA classe derrubou o build do Android duas vezes em
+# dois dias (86499cb em 21/09, c0cd002 em 22/09): `--` dentro de comentario XML,
+# que a especificacao proibe e o mesclador de manifesto do Gradle recusa. Nas
+# duas vezes a suite ficou verde, porque `flutter analyze` e `flutter test`
+# rodam na maquina virtual do Dart e nunca tocam no Gradle.
+#
+# O QUE ELE NAO COBRE: conflito de merge com o manifesto das bibliotecas,
+# placeholder (`$${applicationName}`), `package`/`minSdk`/`targetSdk` que o AGP
+# injeta, e regra de esquema do Android. Nada disso e boa-formacao, e nada disso
+# se ve sem o Gradle. Quem pega essa metade e `make apk`, que roda no
+# `fechar-integracao` e no job `apk` -- nao aqui.
+verificar-manifesto-do-aplicativo: ## o XML que o build do aplicativo le esta bem formado (50 ms)
+	python3 infra/verificacao/verificar_manifesto_android.py --raiz .
+
 apk: ## compila o APK de release de hml e confere o que saiu (o mesmo do job `apk` da esteira)
 	sh infra/verificacao/verificar-apk.sh
 
@@ -317,7 +338,101 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+
+verificar-recibo-de-fechamento-autoteste: ## as iscas do guarda de push de `integra/*` reprovam
+	sh infra/verificacao/verificar-recibo-de-fechamento.sh --autoteste
+
+verificar-app: ## a metade Flutter: analise e suite de widget (job `app` da esteira)
+	cd app && flutter pub get && flutter analyze && flutter test
+
+# ---------------------------------------------------------------------------
+# A LISTA DE FECHAMENTO DE INTEGRACAO
+#
+# POR QUE ELA EXISTE
+#
+# Em 22/09/2026 uma integracao se declarou VERDE sem nunca ter compilado um
+# APK. Havia um `--` dentro de um comentario do `AndroidManifest.xml`, o
+# mesclador de manifesto do Gradle recusava o arquivo, e o build do Android
+# morria antes de compilar qualquer coisa. A mesma classe ja tinha sido
+# corrigida em 21/09 (`86499cb`) e voltou em 22/09 (`c0cd002`).
+#
+# O buraco NAO foi a esteira nao ter o job: o `ci.yml` tem o job `apk`, e ele
+# esta certo onde esta. O buraco foi a integracao LOCAL declarar verde sem
+# nunca te-lo rodado, porque aquela branch nao passou por PR nenhum -- entao a
+# esteira nunca disparou. Nao existia lista de fechamento. Esta e ela.
+#
+# POR QUE ELA NAO ESTA NO LACO DE QUEM DESENVOLVE, E POR QUE ISSO NAO E DESCUIDO
+#
+# `apk` precisa de JDK 17, do SDK do Android (`platforms;android-37.0`) e da
+# distribuicao do Gradle -- nada disso e premissa desta maquina, e nenhum deles
+# e necessario para escrever uma rota ou um widget.
+#
+# MEDIDO NESTE WORKTREE em 22/09/2026, com `/usr/bin/time -p`, APK de 75,3 MB:
+#
+#   make apk, `build/` frio, distribuicao do Gradle quente    35,6 s
+#   make apk, tudo quente, sem mudanca em Dart                 7,6 s
+#   make verificar-app (pub get + analyze + 750 testes)       37,0 s
+#   os portoes que este commit acrescentou a `verificar`       0,22 s
+#
+# Nao medi `make verificar` inteiro: ele constroi imagens Docker e sonda uma
+# pilha que outros agentes estao usando agora. O numero que importa para o
+# argumento e o de cima: o que entrou no laco de quem desenvolve custa 0,22 s.
+#
+# Contra uma rodada inteira de integracao, `apk` e ruido. Contra o ciclo de
+# editar e rodar teste, que e de segundos, e proibitivo. Por isso `verificar`
+# continua sem `apk` e este alvo existe separado. NAO MOVA `apk` PARA
+# `verificar`: o laco fica lento, e laco lento e desligado -- que e como a
+# verificacao morre de verdade, nao por alguem discordar dela.
+#
+# COMO ELA SE FAZ CUMPRIR, e a resposta honesta e em duas camadas
+#
+# 1. QUEM INTEGRA RODA. Nao ha mecanismo que substitua isso, e fingir que ha
+#    seria pior. A obrigacao esta escrita no README, secao "Fechamento de
+#    integracao", e e la que quem integra a le.
+# 2. O gancho `pre-push` recusa empurrar uma branch `integra/*` sem o recibo
+#    verde DESTE commit (ver `.githooks/pre-push`). Ele e contornavel com
+#    `--no-verify`, de proposito e pelo mesmo motivo do guarda da `main`: ele
+#    existe para impedir o ENGANO, que e o caso comum, e nao a decisao
+#    deliberada. Decisao deliberada aparece na esteira, em vermelho.
+#
+# FICA DE FORA, e a ausencia e deliberada: `make e2e`. O Cypress grava com
+# `--record`, que exige a chave do painel; e um passo com segredo, e esta lista
+# precisa rodar numa maquina sem nenhum. Quem fecha uma integracao que mexeu em
+# fluxo de tela roda `make e2e` a mais, e o README diz isso.
+RECIBO_DE_FECHAMENTO := fechamento.local.txt
+
+fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + Flutter + APK de verdade
+	@echo "fechamento de integracao: verificar -> verificar-app -> apk."
+	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade."
+	@echo "  Medido neste worktree: apk em 7,6 s quente e 35,6 s com \`build/\` frio."
+	@rm -f $(RECIBO_DE_FECHAMENTO)
+	@$(MAKE) --no-print-directory verificar
+	@$(MAKE) --no-print-directory verificar-app
+	@$(MAKE) --no-print-directory apk
+	@$(MAKE) --no-print-directory carimbar-fechamento
+
+# O carimbo mora num alvo PROPRIO para poder ser exercitado sem compilar um APK
+# de 75 MB antes. Quem le o recibo tem as sete iscas de
+# `verificar-recibo-de-fechamento.sh`; quem o ESCREVE e esta receita, e uma
+# regra provada so de um lado e meia regra.
+#
+# NAO CHAME ESTE ALVO A MAO para pular o fechamento: carimbar sem ter rodado a
+# lista produz um recibo que afirma o que ninguem provou, que e pior que nao
+# ter recibo -- o gancho passa a aprovar em vez de calar.
+carimbar-fechamento: ## carimba o recibo do fechamento no commit atual (chamado por fechar-integracao)
+	@commit=$$(git rev-parse --verify HEAD 2>/dev/null); \
+	 test -n "$$commit" || { echo "fechamento: sem commit em HEAD; nao ha o que carimbar" >&2; exit 1; }; \
+	 if [ -z "$$(git status --porcelain)" ]; then arvore=limpa; else arvore=suja; fi; \
+	 { echo "commit=$$commit"; \
+	   echo "arvore=$$arvore"; \
+	   echo "em=$$(date -u +%Y-%m-%dT%H:%M:%SZ)"; } > $(RECIBO_DE_FECHAMENTO); \
+	 echo ""; \
+	 echo "recibo em $(RECIBO_DE_FECHAMENTO) (fora do git, por arvore): $$commit, arvore $$arvore"; \
+	 if [ "$$arvore" = "suja" ]; then \
+	   echo "  AVISO: a arvore estava suja. O que foi provado nao e o que esta commitado,"; \
+	   echo "         e o gancho \`pre-push\` vai recusar este recibo."; \
+	 fi
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
 	@mkdir -p backup

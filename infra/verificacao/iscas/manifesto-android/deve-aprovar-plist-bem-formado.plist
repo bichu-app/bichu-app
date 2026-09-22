@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- O `.plist` do iOS e XML e morre pela mesma sequencia proibida. O
+	     build do iOS tambem nao tem suite que o compile, entao ele esta na
+	     mesma situacao em que o manifesto do Android estava. -->
+	<key>CFBundleName</key>
+	<string>bichu</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Para fotografar o pet no cadastro e ler o QR da plaquinha.</string>
+</dict>
+</plist>
