@@ -34,6 +34,7 @@ import * as midia from '../../modules/media/adapters/http/media-routes.js';
 import * as casos from '../../modules/lostfound/adapters/http/lost-case-routes.js';
 import * as tags from '../../modules/tags/adapters/http/tag-routes.js';
 import * as webhook from '../../modules/notifications/adapters/http/webhook-de-entrega.js';
+import * as aparelhos from '../../modules/notifications/adapters/http/device-routes.js';
 import * as saude from './health.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
@@ -47,6 +48,7 @@ const MODULOS: readonly Record<string, unknown>[] = [
   casos,
   tags,
   webhook,
+  aparelhos,
   saude,
 ];
 

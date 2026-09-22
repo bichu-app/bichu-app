@@ -54,6 +54,9 @@ const TABELAS_ESPERADAS = [
   // verde por nao ter olhado para nada.
   'public.professionals',
   'public.entity_verifications',
+  // BICHUS-91, pela mesma razao: sem exigir a tabela aqui, uma base sem a
+  // migracao do aparelho passaria verde em toda inspecao abaixo.
+  'public.user_devices',
 ];
 
 /**

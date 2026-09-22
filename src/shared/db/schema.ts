@@ -439,9 +439,36 @@ export interface UserReferenceLocationsTable {
   expires_at: Date;
 }
 
+/**
+ * BICHUS-91. Os aparelhos de uma conta, e o token por onde o push chega.
+ *
+ * Tabela própria e não colunas em `users` pela mesma razão de
+ * `user_reference_locations`, com um peso a mais: `push_token` é **credencial
+ * de entrega**, e `users` é lida em toda rota autenticada. O raciocínio inteiro
+ * está no cabeçalho da migração.
+ */
+export interface UserDevicesTable {
+  /** UUIDv7 da aplicação. Sai em `Device.id`, e só para o dono. */
+  id: string;
+  user_id: string;
+  platform: 'android' | 'ios';
+  /**
+   * Em claro porque precisa ser **replicada** ao FCM a cada envio — o refresh
+   * mora como SHA-256 porque só precisa ser conferido, e este não. `null` é
+   * estado legítimo: quem negou a permissão continua registrado (ADR-0008).
+   */
+  push_token: string | null;
+  push_permission: 'granted' | 'denied' | 'not_asked';
+  app_version: string | null;
+  os_version: string | null;
+  registered_at: Date;
+  last_seen_at: Date;
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
+  user_devices: UserDevicesTable;
   user_identities: UserIdentitiesTable;
   local_credentials: LocalCredentialsTable;
   user_roles: UserRolesTable;
