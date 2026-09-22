@@ -4346,6 +4346,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTransfer"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["ReauthRequired"];
             403: components["responses"]["Forbidden"];
             /** @description Pet com caso aberto, ou transferencia ja em andamento. */
@@ -4379,6 +4380,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTransfer"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Ja consumada. Depois disso o caminho e transferir de volta. */
             409: {

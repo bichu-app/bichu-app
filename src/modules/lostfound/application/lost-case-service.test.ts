@@ -88,6 +88,8 @@ interface Registro {
     agora: Instant;
   }[];
   readonly buscou: { caso: CaseId; dono: UserId }[];
+  /** BICHUS-66: os pets cuja transferencia viva o servico mandou cancelar. */
+  readonly transferenciasCanceladas: PetId[];
   readonly conferiuAbertura: { pet: PetId; dono: UserId }[];
   readonly conferiuPrevia: { pet: PetId; dono: UserId }[];
   /** O que o servico pediu a porta de alcance, incluindo quem ele excluiu. */
@@ -128,6 +130,7 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     contou: [],
     disparosAbertos: [],
     enfileirados: [],
+    transferenciasCanceladas: [],
   };
   const indice = new Set<PetId>(estado.petsComCasoAbertoNoIndice ?? []);
   // Cópia mutável: encerrar de verdade muda o estado, e é essa mudança que faz
@@ -297,8 +300,27 @@ function servico(estado: EstadoDoRepositorio = {}): {
     fail: () => Promise.resolve(),
   };
 
+  // BICHUS-66. Nao e dublê mudo: ele REGISTRA, para que o caso de "abrir caso
+  // cancela a transferencia" possa afirmar que a chamada aconteceu em vez de
+  // apenas compilar.
+  const transferencias = {
+    cancelarPorCasoAberto: (pet: PetId) => {
+      registro.transferenciasCanceladas.push(pet);
+      return Promise.resolve();
+    },
+  };
+
   return {
-    casos: new LostCaseService({ repositorio, ids, clock, trilha, alcance, disparos, fila }),
+    casos: new LostCaseService({
+      repositorio,
+      ids,
+      clock,
+      trilha,
+      alcance,
+      disparos,
+      fila,
+      transferencias,
+    }),
     registro,
     eventos,
   };
@@ -647,6 +669,56 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
  * suíte e reprovaria neste bloco — que é a única forma de acusar a diferença
  * entre autorização na consulta e autorização num `if`.
  */
+/**
+ * BICHUS-66. Abrir um caso de perdido DERRUBA a transferencia viva daquele pet.
+ *
+ * Este bloco e a isca dessa ligacao, e ela existe porque a primeira medicao
+ * mostrou que ela faltava: com `cancelarPorCasoAberto` trocado por um `no-op`,
+ * os 1389 casos unitarios continuaram VERDES. O caso da transferencia chamava o
+ * servico dela diretamente e nao passava por aqui, entao a unica coisa que
+ * segurava a ligacao era o tipo -- e tipo prova que a fiacao existe, nao que
+ * ela e usada.
+ *
+ * A assimetria que decide o desenho: consumar com caso aberto revogaria todas
+ * as tags do pet (ADR-0004, irreversivel) no minuto em que a plaquinha da
+ * coleira e a unica coisa ligando o animal ao tutor. Cancelar custa refazer o
+ * convite depois do reencontro.
+ */
+void describe('BICHUS-66: abrir o caso cancela a transferencia viva do pet', () => {
+  void it('o caso aberto avisa o modulo de transferencia, com o pet certo', async () => {
+    const { casos, registro } = servico();
+    await casos.abrir(PET, entradaPadrao(), chamador(DONO));
+
+    assert.deepEqual(
+      registro.transferenciasCanceladas,
+      [PET],
+      'abrir um caso de perdido deixou de derrubar a transferencia em curso: a janela de 24 h ' +
+        'continua correndo e, quando fechar, o QR da coleira e revogado com o animal na rua',
+    );
+  });
+
+  void it('o aviso sai DEPOIS de o caso existir, e nao antes', async () => {
+    // A ordem importa: cancelar antes e ver a abertura falhar por corrida no
+    // indice unico deixaria o tutor sem caso E sem transferencia, que e o pior
+    // dos tres desfechos.
+    const { casos, registro } = servico();
+    await casos.abrir(PET, entradaPadrao(), chamador(DONO));
+
+    assert.equal(registro.abriu.length, 1);
+    assert.equal(registro.transferenciasCanceladas.length, 1);
+  });
+
+  void it('abertura RECUSADA nao avisa ninguem', async () => {
+    // Pet de outro tutor: nao houve caso, entao nao ha transferencia a derrubar.
+    // Avisar aqui deixaria qualquer conta cancelar a transferencia de qualquer
+    // pet, usando a abertura recusada como gatilho.
+    const { casos, registro } = servico({ abertura: { existeEhDoTutor: false } });
+    await capturar(() => casos.abrir(PET, entradaPadrao(), chamador(OUTRO_TUTOR)));
+
+    assert.deepEqual(registro.transferenciasCanceladas, []);
+  });
+});
+
 void describe('previa do alcance — o vínculo com o dono e a honestidade do número', () => {
   void it('o dono viaja no argumento da consulta, e não é conferido depois', async () => {
     const { casos, registro } = servico();
