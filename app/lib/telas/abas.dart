@@ -8,6 +8,7 @@ import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
+import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
 import 'perfil/meus_pets.dart';
 
@@ -312,6 +313,8 @@ class AbaPerfil extends StatelessWidget {
               cache: Escopo.of(context).cacheDeMeusPets,
             ),
             const SizedBox(height: BichuEspaco.e6),
+            // A saida de quem negou o aviso (UX 10.1, BICHUS-24).
+            const _AvisoPorPertoDesligado(),
             // A SEGUNDA PORTA DO LEITOR: a porta de conta (UX 27.5.6), onde o
             // cliente pediu. Um leitor so; o destino da leitura sai das regras
             // dos tres cenarios de QR e **nunca** da aba de origem.
@@ -413,6 +416,71 @@ class _PortaDeSubDestino extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A linha fixa de quem negou a permissao de aviso (UX 10.1, BICHUS-24).
+///
+/// ## Por que ela existe
+///
+/// Negar a permissao de notificacao no iOS e irreversivel pelo app: o dialogo
+/// do sistema nao e mostrado uma segunda vez, e o desenho da BICHUS-24 leva
+/// isso a serio -- nenhuma terceira antessala, nenhum dialogo repetido. Sem
+/// esta linha, esse rigor vira beco sem saida: o app para de perguntar, nao
+/// oferece nada no lugar, e a pessoa que mudou de ideia nao tem por onde
+/// voltar. Rigor sem saida e so abandono com outro nome.
+///
+/// UX 10.1 e literal: "O caminho para reverter e `Ligar nos ajustes`, que abre
+/// os ajustes do sistema, e existe tambem em Perfil."
+///
+/// ## O que ela diz, e o que ela nao pode dizer
+///
+/// Diz **o que se perde** -- o alerta de pet perdido por perto -- e diz junto
+/// que o caso proprio continua coberto por e-mail (ADR-0008: "um canal que
+/// depende de permissao do sistema operacional nao pode ser o unico"). Sem a
+/// segunda frase a primeira soaria como se negar tivesse desligado o produto,
+/// e ela seria falsa: "Continua usando o app inteiro. Nada fica escondido".
+///
+/// ## Por que so `negada`, e nao `naoPedida`
+///
+/// Quem tocou em `Agora nao` nunca viu o dialogo do sistema. Dizer a essa
+/// pessoa que ela "nao recebe aviso por perto" seria o app se desculpando por
+/// uma escolha que ele mesmo ainda nao ofereceu -- e queimaria o argumento da
+/// segunda antessala, em F3.2, antes de ela acontecer.
+///
+/// ## Por que ela some sozinha
+///
+/// Ela escuta o [VigiaDeAviso]. No instante em que a pessoa volta dos ajustes
+/// com a chave ligada, o vigia reconcilia e esta linha desaparece. Uma linha
+/// que continuasse aqui depois disso diria a ela que nao funcionou, e o
+/// proximo passo dela seria desinstalar o app.
+class _AvisoPorPertoDesligado extends StatelessWidget {
+  const _AvisoPorPertoDesligado();
+
+  @override
+  Widget build(BuildContext context) {
+    final vigia = Escopo.of(context).vigiaDeAviso;
+
+    return AnimatedBuilder(
+      animation: vigia,
+      builder: (context, _) {
+        if (!vigia.negouOAviso) return const SizedBox.shrink();
+        return Padding(
+          padding: const EdgeInsets.only(bottom: BichuEspaco.e6),
+          child: FaixaDeAviso(
+            // Informativo, e nao erro: **nada deu errado**. A pessoa escolheu,
+            // e a escolha dela nao e um defeito a ser corrigido com cor de
+            // alarme.
+            peso: PesoDaFaixa.informativo,
+            texto: '${TextosDaAntessala.semAvisoPorPerto} '
+                '${TextosDaAntessala.oEmailCobreOCasoProprio}',
+            rotuloDaAcao: TextosDaAntessala.ligarNosAjustes,
+            aoTocarNaAcao: () =>
+                Escopo.of(context).avisos.abrirAjustesDoSistema(),
+          ),
+        );
+      },
     );
   }
 }
