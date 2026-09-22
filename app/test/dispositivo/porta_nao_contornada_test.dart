@@ -303,7 +303,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// F3.5 tambem **nao** fala com a porta `Localizacao`: ela embute
 /// `CapturaDeLocalizacao`, que e quem fala, e
 /// `localizacao_no_ponto_de_uso_test.dart` cobra isso por lista de arquivos.
-const String _arvoreDasTelas = '4fc7e037e73949b31f8a5d76160172728813eb92';
+const String _arvoreDasTelas = '9e4a16491555177e268f50d4b3e5585245135c73';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
