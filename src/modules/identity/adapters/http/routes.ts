@@ -195,12 +195,46 @@ export const rotaDePedidoDeVerificacao = defineRoute({
   ],
 });
 
+/**
+ * Confirmar o e-mail pelo token do link.
+ *
+ * **`appliesTo: 'invalid_attempts'` nao e detalhe de redacao: e o que decide
+ * quem paga o teto.** Sem a qualificacao, a entrada vai por `hit()`
+ * (`shared/http/aplicacao-de-teto.ts`) e conta TODA requisicao -- "20
+ * tentativas invalidas por hora" vira "20 requisicoes por hora". E a dimensao
+ * e `ip`: vinte e uma confirmacoes de boa-fe atras do mesmo endereco nao sao
+ * um ataque, sao vinte e uma pessoas no CGNAT de uma operadora movel ou na
+ * rede de um escritorio, e a vigesima primeira fica trancada para fora
+ * exatamente da confirmacao que estava tentando concluir. O proprio
+ * `aplicacao-de-teto.ts` ja escreve o argumento na justificativa de `ip_24`:
+ * teto por IP puro e armadilha no Brasil.
+ *
+ * A qualificacao nao afrouxa nada. O balde e CONSULTADO na chegada (`peek`) e
+ * so incrementado depois, em `onResponse`, quando a resposta foi recusa de
+ * credencial (`registrar-rota.ts`, `TIPOS_DE_TENTATIVA_INVALIDA`): quem varre
+ * token continua sendo recusado na 21a tentativa, e recusado ANTES de
+ * qualquer consulta ao banco. O que muda e que a pessoa que acertou o link
+ * deixa de gastar o teto de quem errou.
+ *
+ * O contrato sempre declarou `applies_to: invalid_attempts` aqui
+ * (`api/openapi.yaml`, `confirmEmailVerification`); era o codigo que tinha
+ * perdido a qualificacao. A prova do efeito, e nao da declaracao, esta em
+ * `tests/integration/teto-das-confirmacoes-por-link.test.ts`.
+ */
 export const rotaDeConfirmacaoDeEmail = defineRoute({
   operationId: 'confirmEmailVerification',
   method: 'post',
   path: '/auth/email-verification/confirm',
   effects: ['verifies_secret'],
-  rateLimit: [{ dimension: ['ip'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+  rateLimit: [
+    {
+      dimension: ['ip'],
+      limit: 20,
+      window: '1h',
+      onExceed: 'deny_429',
+      appliesTo: 'invalid_attempts',
+    },
+  ],
 });
 
 export const rotaDePedidoDeRedefinicao = defineRoute({
@@ -214,12 +248,38 @@ export const rotaDePedidoDeRedefinicao = defineRoute({
   ],
 });
 
+/**
+ * Definir a senha nova pelo token do link.
+ *
+ * Mesmo argumento de `rotaDeConfirmacaoDeEmail`, e aqui ele custa mais caro:
+ * sem `appliesTo: 'invalid_attempts'` a entrada conta toda requisicao, e a
+ * vigesima primeira pessoa que redefine a senha atras do mesmo IP recebe 429
+ * no meio de uma recuperacao de acesso -- que e o momento em que ela ja nao
+ * consegue entrar na conta e nao tem outro caminho. O teto vira o oposto do
+ * remedio.
+ *
+ * Com a qualificacao, o balde conta so o que saiu como recusa de credencial:
+ * varrer token de redefinicao continua parando na 21a tentativa, e quem abriu
+ * o proprio link nao entra na conta.
+ *
+ * Contrato: `api/openapi.yaml`, `confirmPasswordReset` (dimension [ip], limit
+ * 20, window 1h, on_exceed deny_429, applies_to invalid_attempts). Prova de
+ * efeito em `tests/integration/teto-das-confirmacoes-por-link.test.ts`.
+ */
 export const rotaDeConfirmacaoDeRedefinicao = defineRoute({
   operationId: 'confirmPasswordReset',
   method: 'post',
   path: '/auth/password-reset/confirm',
   effects: ['verifies_secret', 'notifies', 'irreversible_write'],
-  rateLimit: [{ dimension: ['ip'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+  rateLimit: [
+    {
+      dimension: ['ip'],
+      limit: 20,
+      window: '1h',
+      onExceed: 'deny_429',
+      appliesTo: 'invalid_attempts',
+    },
+  ],
 });
 
 export const rotaDeConferenciaDeRedefinicao = defineRoute({
