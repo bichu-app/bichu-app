@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/achados_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
 import 'api/fila_offline.dart';
@@ -19,6 +20,7 @@ import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
+import 'intencao/achado_como_intencao.dart';
 import 'intencao/caso_de_perdido_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
 import 'intencao/guarda_de_acao.dart';
@@ -157,6 +159,7 @@ class _BichuAppState extends State<BichuApp> {
   late final AuthApi _auth;
   late final PetsApi _pets;
   late final CasosApi _casos;
+  late final AchadosApi _achados;
   late final FilaOffline _fila;
   late final TagsApi _tags;
   late final DevicesApi _devices;
@@ -188,6 +191,7 @@ class _BichuAppState extends State<BichuApp> {
     _auth = AuthApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
+    _achados = AchadosApi(_api);
     // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
     // nada no app a construia: o criterio 6 desta historia -- "sem conexao a
     // tela inteira funciona: o envio acontece em F3.2" -- so e verdade com
@@ -221,6 +225,15 @@ class _BichuAppState extends State<BichuApp> {
         // CRIADO e a pessoa cai em F3.3 -- nunca no formulario de novo e nunca
         // na home.
         AcaoDeIntencao.marcarPerdido: casoDePerdidoExecutavel(_pets, _casos),
+        // `registrar_achado` e a TERCEIRA acao executavel deste build, e o
+        // criterio 3 da BICHUS-35 e o que ela cumpre: depois de autenticar, o
+        // achado e REGISTRADO e a pessoa cai na tela do achado registrado --
+        // nunca no formulario de novo e nunca na home.
+        //
+        // Ela precisa de UMA camada so, e a diferenca em relacao a
+        // `marcar_perdido` e o proprio desenho da acao: la ha um alvo (o pet)
+        // que precisa ser buscado antes; aqui o alvo e o que a execucao cria.
+        AcaoDeIntencao.registrarAchado: achadoExecutavel(_achados),
       },
     );
     _sessao = ControladorDeSessao(
@@ -294,6 +307,7 @@ class _BichuAppState extends State<BichuApp> {
       auth: _auth,
       pets: _pets,
       casos: _casos,
+      achados: _achados,
       fila: _fila,
       tags: _tags,
       devices: _devices,
