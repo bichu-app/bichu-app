@@ -25,6 +25,8 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import {
   executarComIdempotencia,
@@ -197,18 +199,40 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
   return schema;
 }
 
-async function donoAutenticado(
+/**
+ * MEMOIZADA por requisição: o teto por `account` precisa do dono antes do
+ * handler, e o handler precisa do mesmo dono. Sem a memória, toda rota de pet
+ * passaria a verificar o token e a ler `users` duas vezes.
+ */
+function donoAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDePet,
 ): Promise<{ userId: UserId; correlationId: string; ip: string | undefined }> {
-  const cabecalho = request.headers.authorization;
-  if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
-    throw problemas.naoAutenticado();
+  return memoDaRequisicao(request, 'pets:dono', async () => {
+    const cabecalho = request.headers.authorization;
+    if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
+      throw problemas.naoAutenticado();
+    }
+    const token = cabecalho.slice('Bearer '.length).trim();
+    if (token === '') throw problemas.naoAutenticado();
+    const { userId } = await deps.autenticador.autenticar(token);
+    return { userId, correlationId: request.id, ip: request.ip };
+  });
+}
+
+/**
+ * `account` para o teto. Quem não apresentou credencial válida não tem balde de
+ * conta — a recusa dele é o 401 do handler, não um 429.
+ */
+async function contaDoTeto(
+  request: FastifyRequest,
+  deps: DependenciasDasRotasDePet,
+): Promise<string | undefined> {
+  try {
+    return (await donoAutenticado(request, deps)).userId;
+  } catch {
+    return undefined;
   }
-  const token = cabecalho.slice('Bearer '.length).trim();
-  if (token === '') throw problemas.naoAutenticado();
-  const { userId } = await deps.autenticador.autenticar(token);
-  return { userId, correlationId: request.id, ip: request.ip };
 }
 
 function petIdDoCaminho(request: FastifyRequest): PetId {
@@ -221,7 +245,7 @@ export function registrarRotasDePets(
   app: FastifyInstance,
   deps: DependenciasDasRotasDePet,
 ): void {
-  app.get(rotaDeListagemDePets.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDeListagemDePets, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await donoAutenticado(request, deps);
     const pets = await deps.pets.listar(chamador);
     // UMA consulta para as fotos de todos os pets: a lista do tutor é a tela
@@ -233,10 +257,12 @@ export function registrarRotasDePets(
     });
   });
 
-  app.post(
-    rotaDeCadastroDePet.path,
+  registrarRota(
+    app,
+    rotaDeCadastroDePet,
     {
       schema: { body: corpoDe(deps.contrato, rotaDeCadastroDePet.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
       // A marca que o portão de subida confere contra o contrato. Ela não faz a
       // idempotência acontecer — quem faz é `executarComIdempotencia`, abaixo —,
       // ela faz a divergência entre os dois ser impossível de passar batida.
@@ -270,16 +296,20 @@ export function registrarRotasDePets(
     },
   );
 
-  app.get(rotaDeDetalheDoPet.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDeDetalheDoPet, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const chamador = await donoAutenticado(request, deps);
     const pet = await deps.pets.buscar(petIdDoCaminho(request), chamador);
     const fotos = await deps.fotos.porPets([pet.id]);
     return reply.status(200).send(comoRespostaDoPet(pet, fotos.get(pet.id) ?? []));
   });
 
-  app.patch(
-    rotaDeEdicaoDoPet.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDeEdicaoDoPet.operationId) } },
+  registrarRota(
+    app,
+    rotaDeEdicaoDoPet,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeEdicaoDoPet.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await donoAutenticado(request, deps);
       const petId = petIdDoCaminho(request);
@@ -298,11 +328,16 @@ export function registrarRotasDePets(
     },
   );
 
-  app.delete(rotaDeExclusaoDoPet.path, async (request: FastifyRequest, reply: FastifyReply) => {
-    const chamador = await donoAutenticado(request, deps);
-    await deps.pets.excluir(petIdDoCaminho(request), chamador);
-    return reply.status(204).send();
-  });
+  registrarRota(
+    app,
+    rotaDeExclusaoDoPet,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await donoAutenticado(request, deps);
+      await deps.pets.excluir(petIdDoCaminho(request), chamador);
+      return reply.status(204).send();
+    },
+  );
 }
 
 /** O gravado de volta na forma do corpo, para a fusão do `PATCH`. */

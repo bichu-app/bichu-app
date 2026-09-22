@@ -21,6 +21,7 @@ import Fastify, {
 } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import type { AbsoluteUrl } from '../types/brands.js';
+import type { DependenciasDoTeto } from './aplicacao-de-teto.js';
 import { AppError, problemas } from './errors.js';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 import {
@@ -35,6 +36,18 @@ export interface OpcoesDoServidor {
   readonly problemBaseUrl: AbsoluteUrl;
   readonly isProduction: boolean;
   readonly bodyLimitBytes?: number;
+  /**
+   * Contador de teto e o HMAC de IP, instalados no decorador `tetoDeChamada`.
+   *
+   * **Obrigatório de propósito.** Enquanto o servidor podia ser criado sem
+   * contador, criar um servidor sem teto era a coisa mais fácil do mundo — e
+   * foi o que aconteceu: `server.ts` não mencionava limite de chamada em lugar
+   * nenhum e as 80 operações declaravam tetos que ninguém aplicava
+   * (BICHUS-178, adr/ADR-0016 Emenda 1). Em teste, `criarContadorEmMemoria`
+   * ou `criarContadorDesligado` servem; em produção, quem escolhe é
+   * `RATE_LIMIT_DRIVER`, e `disabled` fora de `dev` não sobe.
+   */
+  readonly teto: DependenciasDoTeto;
 }
 
 /** Só aceita correlação vinda de fora se ela tiver a forma de um UUID. */
@@ -148,6 +161,11 @@ export function criarServidor(opcoes: OpcoesDoServidor): FastifyInstance {
       },
     },
   });
+
+  // O contador viaja no próprio servidor e não numa dependência que cada
+  // módulo precisaria receber. `registrarRota` o lê daqui, e um servidor sem
+  // ele derruba o registro na subida em vez de servir rota sem teto.
+  app.decorate('tetoDeChamada', opcoes.teto);
 
   app.addHook('onSend', (request, reply, payload, done) => {
     void reply.header(CABECALHO_DE_CORRELACAO, request.id);

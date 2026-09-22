@@ -393,6 +393,54 @@ continua útil; o que ele não pode é seguir sendo lido como prova de vigência
    `notify_owner` de 100/24h por código, que é o sinal de suspeita de clonagem.
    **O tamanho do código não depende disto**: ver ADR-0004, seção 14.
 
+## Registro de vigencia — 21/09/2026
+
+Esta emenda foi escrita como decisao. O paragrafo abaixo registra **quando ela
+deixou de ser promessa**, porque uma emenda que corrige uma premissa falsa e
+sozinha vira a mesma premissa falsa com data mais nova.
+
+| | |
+|---|---|
+| **A premissa falsa** | secao 4: *"os tetos por IP ja existem em `x-rate-limit` e sao aplicados no servico"*. |
+| **Desde quando era falsa** | desde sempre. `hit()` nunca foi chamado fora de teste: o mecanismo nao regrediu, ele nunca foi construido. A frase entrou neste ADR em 17/09/2026 e o `infra/caddy/Caddyfile` a repetia em duas linhas. |
+| **Por que ninguem viu** | `infra/verificacao/verificar-limite-de-chamada.mjs` lia `api/openapi.yaml` e passava com "80 operacoes, 0 achados". Ele nunca abriu `src/`. Verde produzido por nao verificar. |
+| **Quando passou a ser verdade** | 21/09/2026, com a BICHUS-178. |
+
+O que passou a ser verdade, item a item:
+
+1. **A aplicacao e estrutural.** `src/shared/http/registrar-rota.ts` e a unica
+   porta de registro de rota do servico, e e ela que instala os ganchos que
+   aplicam os tetos declarados. O autor da rota nao chama nada.
+2. **As tres barreiras.** `defineRoute` torna a omissao da declaracao erro de
+   compilacao; `registrarRota` exige por tipo um resolvedor para cada dimensao
+   especifica declarada e derruba a subida quando o servidor nao traz contador;
+   e `src/tools/portao-de-registro-de-rota.ts` reprova qualquer chamada direta
+   ao framework fora daquele arquivo. As 34 rotas do servico passaram a
+   registrar por ele.
+3. **A subida recusa o limitador desligado fora de `dev`**, com o motivo e o
+   nome do ambiente na mensagem (`assertSafeBoot`). `RATE_LIMIT_DRIVER` passou a
+   ser variavel exigida, sem padrao embutido.
+4. **A vigencia e provada com isca.**
+   `src/tools/portao-de-vigencia-do-teto.ts` sobe a borda, manda 21 tentativas
+   invalidas ao webhook do Postmark e exige que a 21a saia **429 com
+   `type: rate-limited`** — o tipo e o que prova que a assinatura nao chegou a
+   ser conferida, porque a conferencia teria respondido `unauthenticated`. O
+   mesmo caso com `criarContadorDesligado()` **reprova**, e essa reprovacao mora
+   no repositorio.
+5. **O portao de declaracao continua existindo** e a saida dele passou a dizer,
+   em voz alta, que ele nao prova vigencia e quem prova.
+
+O que **continua sem ser aplicado**, e a ausencia agora e dita em vez de
+suposta: `counts: distinct_identities` / `distinct_emails` / `distinct_cases`
+contam valores distintos, e `when:` condiciona o teto ao estado do pet. Nenhum
+dos dois e exprimivel pela porta `RateLimitStore` de hoje. A subida **imprime a
+lista** dessas entradas, por operacao e com o motivo. Aplicar o que da e calar
+sobre o resto seria repetir este mesmo defeito uma camada abaixo.
+
+A divida da secao 6 (trocar o driver do contador antes da segunda instancia)
+continua de pe, e agora ela e a unica: o problema anterior, de o limite nao
+rodar, esta fechado.
+
 **Dívida quitada e dívida que continua:** a "dívida aceita, com gatilho" da
 seção 6 registrava que o limite roda em processo e precisa trocar de driver antes
 da segunda instância. Essa continua. O que esta emenda acrescenta é que, antes

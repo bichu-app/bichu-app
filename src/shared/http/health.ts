@@ -20,6 +20,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from './route-definition.js';
+import { registrarRota } from './registrar-rota.js';
 import { problemas } from './errors.js';
 import { responderProblema } from './server.js';
 import type { AbsoluteUrl } from '../types/brands.js';
@@ -46,7 +47,7 @@ export interface DependenciasDaSaude {
 }
 
 export function registrarSaude(app: FastifyInstance, deps: DependenciasDaSaude): void {
-  app.get(rotaDeSaude.path, async (request: FastifyRequest, reply: FastifyReply) => {
+  registrarRota(app, rotaDeSaude, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const checks: Record<string, 'ok' | 'fail'> = {};
     let saudavel = true;
 

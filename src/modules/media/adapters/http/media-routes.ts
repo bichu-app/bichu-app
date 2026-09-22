@@ -13,6 +13,8 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota } from '../../../../shared/http/registrar-rota.js';
+import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { MediaService } from '../../application/media-service.js';
@@ -68,17 +70,32 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
   return schema;
 }
 
-async function donoAutenticado(
+/** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
+function donoAutenticado(
   request: FastifyRequest,
   deps: DependenciasDasRotasDeMidia,
 ): Promise<UserId> {
-  const cabecalho = request.headers.authorization;
-  if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
-    throw problemas.naoAutenticado();
+  return memoDaRequisicao(request, 'media:dono', async () => {
+    const cabecalho = request.headers.authorization;
+    if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
+      throw problemas.naoAutenticado();
+    }
+    const token = cabecalho.slice('Bearer '.length).trim();
+    if (token === '') throw problemas.naoAutenticado();
+    return (await deps.autenticador.autenticar(token)).userId;
+  });
+}
+
+/** `account` para o teto. Sem credencial válida não há balde de conta. */
+async function contaDoTeto(
+  request: FastifyRequest,
+  deps: DependenciasDasRotasDeMidia,
+): Promise<string | undefined> {
+  try {
+    return await donoAutenticado(request, deps);
+  } catch {
+    return undefined;
   }
-  const token = cabecalho.slice('Bearer '.length).trim();
-  if (token === '') throw problemas.naoAutenticado();
-  return (await deps.autenticador.autenticar(token)).userId;
 }
 
 function petIdDoCaminho(request: FastifyRequest): PetId {
@@ -113,9 +130,13 @@ export function registrarRotasDeMidia(
   app: FastifyInstance,
   deps: DependenciasDasRotasDeMidia,
 ): void {
-  app.post(
-    rotaDeIntencaoDeFoto.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDeIntencaoDeFoto.operationId) } },
+  registrarRota(
+    app,
+    rotaDeIntencaoDeFoto,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeIntencaoDeFoto.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const dono = await donoAutenticado(request, deps);
       const corpo = request.body as { pet_id: string; content_type: string; byte_size: number };
@@ -142,9 +163,13 @@ export function registrarRotasDeMidia(
     },
   );
 
-  app.post(
-    rotaDeConfirmacaoDeFoto.path,
-    { schema: { body: corpoDe(deps.contrato, rotaDeConfirmacaoDeFoto.operationId) } },
+  registrarRota(
+    app,
+    rotaDeConfirmacaoDeFoto,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeConfirmacaoDeFoto.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const dono = await donoAutenticado(request, deps);
       const corpo = request.body as { upload_id: string; set_as_primary?: boolean };
@@ -161,12 +186,17 @@ export function registrarRotasDeMidia(
     },
   );
 
-  app.delete(rotaDeExclusaoDeFoto.path, async (request: FastifyRequest, reply: FastifyReply) => {
-    const dono = await donoAutenticado(request, deps);
-    const { photoId } = request.params as { photoId?: string };
-    if (typeof photoId !== 'string' || photoId === '') throw problemas.naoEncontrado();
+  registrarRota(
+    app,
+    rotaDeExclusaoDeFoto,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const { photoId } = request.params as { photoId?: string };
+      if (typeof photoId !== 'string' || photoId === '') throw problemas.naoEncontrado();
 
-    await deps.midia.excluirFoto(petIdDoCaminho(request), dono, photoId);
-    return reply.status(204).send();
-  });
+      await deps.midia.excluirFoto(petIdDoCaminho(request), dono, photoId);
+      return reply.status(204).send();
+    },
+  );
 }

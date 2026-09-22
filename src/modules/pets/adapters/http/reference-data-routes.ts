@@ -11,6 +11,7 @@
  */
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota } from '../../../../shared/http/registrar-rota.js';
 import type { ReferenceDataRepository } from '../../ports/reference-data-repository.js';
 
 export const rotaDeDadosDeReferencia = defineRoute({
@@ -30,8 +31,10 @@ export function registrarRotasDeReferencia(
   app: FastifyInstance,
   repositorio: ReferenceDataRepository,
 ): void {
-  app.get(
-    rotaDeDadosDeReferencia.path,
+  registrarRota(
+    app,
+    rotaDeDadosDeReferencia,
+    {},
     async (request: FastifyRequest, reply: FastifyReply) => {
       const dados = await repositorio.carregar();
       const etag = `"${dados.version}"`;

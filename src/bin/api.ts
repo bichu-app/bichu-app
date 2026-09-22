@@ -23,6 +23,14 @@ import { criarMailer } from '../modules/identity/adapters/external/smtp-mailer.j
 import { systemClock } from '../shared/time/clock.js';
 import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
+import { dependenciasDoTeto } from '../shared/http/aplicacao-de-teto.js';
+import { inventarioDoQueNaoEAplicado } from '../shared/http/registrar-rota.js';
+import {
+  criarContadorDesligado,
+  criarContadorEmMemoria,
+  criarContadorEmPostgres,
+} from '../shared/http/rate-limit.js';
+import { rateLimitDriver } from '../shared/config/app-config.js';
 import { vigiarIdempotenciaDasRotas } from '../shared/http/idempotency.js';
 import { registrarSaude } from '../shared/http/health.js';
 import { identidadeDoArtefato } from '../shared/artefato/identidade-do-artefato.js';
@@ -89,10 +97,44 @@ export async function main(): Promise<void> {
   const ids = criarIdGenerator(() => systemClock.now());
   const assinador = criarTokenSigner(config.token);
 
+  // O CONTADOR DE TETO, que até 21/09 não era construído em lugar nenhum.
+  //
+  // Ele entra no servidor, e não em cada módulo de rota: `registrarRota` o lê do
+  // próprio `app`, e com isso uma rota registrada sem teto deixa de ser
+  // exprimível. Enquanto ele fosse uma dependência que cada módulo recebia,
+  // esquecer de passá-lo em um deles seria uma linha a menos que ninguém
+  // acusaria — que é a forma exata do defeito da BICHUS-178.
+  //
+  // `disabled` fora de `dev` não chega aqui: `assertSafeBoot` já derrubou.
+  const driver = rateLimitDriver();
+  const contador =
+    driver === 'postgres'
+      ? criarContadorEmPostgres(db, () => systemClock.now(), config.isProduction)
+      : driver === 'memory'
+        ? criarContadorEmMemoria(() => systemClock.now())
+        : criarContadorDesligado();
+
+  // O logger só existe depois do servidor, e o servidor precisa do teto: o
+  // indireto abaixo resolve a ordem sem deixar um `console.log` no caminho nem
+  // um teto sem log. Antes da primeira requisição ele já aponta para o logger.
+  let registrarNoLog: (evento: Record<string, unknown>, mensagem: string) => void = () => {};
+
   const app = criarServidor({
     problemBaseUrl: config.problemBaseUrl,
     isProduction: config.isProduction,
+    teto: dependenciasDoTeto({
+      contador,
+      chaveDeHmac: config.ipHmacKey,
+      log: (evento, mensagem) => {
+        registrarNoLog(evento, mensagem);
+      },
+    }),
   });
+
+  registrarNoLog = (evento, mensagem) => {
+    app.log.warn(evento, mensagem);
+  };
+  app.log.info({ rate_limit_driver: driver }, 'contador de teto de chamada ligado');
 
   const trilha = criarTrilhaDeAuditoria({
     db,
@@ -337,6 +379,27 @@ export async function main(): Promise<void> {
   // derruba a subida aqui, e não no segundo envio de um cliente offline, que é
   // onde o defeito apareceria sozinho.
   conferirIdempotencia();
+
+  // O QUE O TETO NAO APLICA, DITO EM VOZ ALTA.
+  //
+  // `counts: distinct_*` conta valores distintos e `when:` condiciona o teto ao
+  // estado do pet: nenhum dos dois é exprimível pela porta `RateLimitStore` de
+  // hoje. Aplicar o que dá e calar sobre o resto seria repetir, uma camada
+  // abaixo, o defeito que esta subida acabou de fechar — uma proteção que se
+  // acredita existir. A lista sai no log, por operação e com o motivo.
+  const fora = inventarioDoQueNaoEAplicado();
+  if (fora.length > 0) {
+    app.log.warn(
+      { total: fora.length },
+      'entradas de x-rate-limit declaradas e NAO aplicadas por esta versao',
+    );
+    for (const item of fora) {
+      app.log.warn(
+        { operation_id: item.operationId, dimension: item.entrada.dimension, motivo: item.motivo },
+        'teto declarado e nao aplicado',
+      );
+    }
+  }
 
   const encerrar = async (sinal: string): Promise<void> => {
     app.log.info({ sinal }, 'encerrando');

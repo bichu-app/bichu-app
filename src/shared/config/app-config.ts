@@ -15,6 +15,7 @@ import { createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
 import { boolEnv, optionalEnv, requireEnv } from './env.js';
 import { ehAmbienteHospedado } from './ambiente-hospedado.js';
 import type { AbsoluteUrl } from '../types/brands.js';
+import type { RateLimitDriver } from '../ports/rate-limit-store.js';
 
 export interface SigningKey {
   readonly kid: string;
@@ -680,4 +681,23 @@ export function loadAppConfig(): AppConfig {
 /** Exposta para o `assertSafeBoot` e para teste; não decide nada sozinha. */
 export function rateLimitDisabled(): boolean {
   return boolEnv('RATE_LIMIT_DISABLED');
+}
+
+/**
+ * Qual contador de teto a subida usa.
+ *
+ * `requireEnv` e não um padrão embutido, pela §11.2: o padrão silencioso aqui
+ * seria o mais caro de todos, porque a escolha errada não quebra nada — ela
+ * apenas deixa de proteger, e o serviço responde 200 a tudo como se estivesse
+ * certo. Faltando a variável, o boot morre nomeando ela.
+ *
+ * `disabled` fora de `dev` não chega aqui: `assertSafeBoot` já derrubou.
+ */
+export function rateLimitDriver(): RateLimitDriver {
+  const bruto = requireEnv('RATE_LIMIT_DRIVER');
+  if (bruto === 'memory' || bruto === 'postgres' || bruto === 'disabled') return bruto;
+  throw new Error(
+    `RATE_LIMIT_DRIVER=${bruto} não é um contador conhecido. ` +
+      'Use `memory` (uma instância só), `postgres` (compartilhado) ou `disabled` (só em dev).',
+  );
 }
