@@ -155,9 +155,16 @@ COPY --chown=node:node migrations ./migrations
 # volume. `infra/verificacao/verificar-arquivos-no-container.mjs` confere a
 # IMAGEM, que e o caminho que a esteira usa.
 #
-# So `integracao/`: `infra/caddy` e configuracao da borda, `infra/verificacao`
-# roda no hospedeiro, e imagem recebe o que ela executa.
+# `infra/suite/` entra pelo mesmo criterio, e pela BICHUS-219: `npm test` --
+# que o `make test` executa com `docker compose run --rm api npm test` -- passou
+# a ser `node infra/suite/executar-unitaria.mjs`. Sem este COPY o comando morre
+# com `Cannot find module`, que e exatamente o defeito de 22/09 repetido num
+# diretorio novo.
+#
+# `infra/caddy` e configuracao da borda e `infra/verificacao` roda no
+# hospedeiro: imagem recebe o que ela executa, e so isso.
 COPY --chown=node:node infra/integracao ./infra/integracao
+COPY --chown=node:node infra/suite ./infra/suite
 COPY --from=build --chown=node:node /app/dist ./dist
 # Ver o bloco "O COMMIT" acima. O COPY e o que poe o estagio `commit` -- e a
 # conferencia que ele carrega -- no grafo deste build.

@@ -1,0 +1,17 @@
+# REPROVA pela mesma premissa do caso `steps-outputs`, escrita em escalar de
+# bloco. Sem o ramo que junta as linhas seguintes, o portao leria `>-` como
+# expressao vazia -- e a condicao inteira passaria sem ser olhada.
+name: isca-bloco-multilinha
+on: [push]
+jobs:
+  codigo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: existe codigo para verificar?
+        id: existe
+        run: echo "tem=sim" >> "$GITHUB_OUTPUT"
+
+      - if: >-
+          steps.existe.outputs.tem == 'sim' &&
+          github.event_name == 'push'
+        run: npm test

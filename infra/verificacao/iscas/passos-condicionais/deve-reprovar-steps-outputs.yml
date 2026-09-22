@@ -1,0 +1,15 @@
+# REPROVA por `steps.<id>.outputs.*`. E o defeito de 22/09 copiado do job
+# `codigo`: sem `package.json` todos os passos essenciais eram pulados e o job
+# reportava success.
+name: isca-steps-outputs
+on: [push]
+jobs:
+  codigo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: existe codigo para verificar?
+        id: existe
+        run: echo "tem=sim" >> "$GITHUB_OUTPUT"
+
+      - if: steps.existe.outputs.tem == 'sim'
+        run: npm test

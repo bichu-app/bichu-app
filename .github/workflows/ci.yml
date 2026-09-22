@@ -97,6 +97,24 @@ jobs:
       - name: as iscas do portao do commit de build reprovam
         run: make --no-print-directory verificar-commit-de-build-autoteste
 
+      # BICHUS-219. O `portao` recusa `skipped` no nivel de JOB. Passo pulado
+      # dentro de job que reporta sucesso nao passa por la -- e era assim que o
+      # job `codigo` inteiro (lint, tipos, tipos gerados, suite unitaria) podia
+      # ficar verde sem ter rodado nada, bastando `package.json` faltar.
+      #
+      # Este passo le `.github/workflows/*.yml` e recusa condicao de PASSO que
+      # dependa de premissa que o proprio job mediu (`steps.*.outputs.*`, `env.*`,
+      # `hashFiles(...)`). Condicao sobre o evento e sobre o resultado continua
+      # valendo. A lista e de PERMITIDOS: forma que ele nao reconhece reprova, em
+      # vez de passar por omissao.
+      #
+      # As iscas de `iscas/passos-condicionais/` rodam DENTRO deste comando,
+      # antes dos workflows de verdade, e cada uma precisa reprovar pelo motivo
+      # que ela isola -- nao so reprovar. Duas delas reprovavam parcialmente pelo
+      # motivo do vizinho ate isso ser medido.
+      - name: nenhum passo e pulado por premissa do proprio job, iscas primeiro
+        run: python3 infra/verificacao/verificar_passos_condicionais.py
+
       # Absorcao da BICHUS-210: o Dockerfile reprova o build sem `BUILD_COMMIT`
       # e o compose so repassa o que estiver no AMBIENTE, entao quem poe o valor
       # la e o Makefile. Este passo roda POR DENTRO do make de proposito -- ele
@@ -169,30 +187,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: existe codigo para verificar?
-        id: existe
+      # BICHUS-219. ISTO ERA UM `if:`, E O `if:` ERA O DEFEITO.
+      #
+      # Ate hoje este passo escrevia `tem=sim`/`tem=nao` num output e os seis
+      # passos abaixo carregavam `if: steps.existe.outputs.tem == 'sim'`. Sem
+      # `package.json`, lint, typecheck, tipos gerados e `npm test` eram TODOS
+      # pulados e o job reportava `success`. O `portao` recusa `skipped`, mas so
+      # no nivel de JOB: passo pulado dentro de job que reporta sucesso passa
+      # batido, e um job inteiro podia aprovar sem ter rodado nada.
+      #
+      # A premissa nao virou condicao: virou ASSERCAO. Ou o repositorio tem o
+      # esqueleto de backend, e os passos abaixo rodam todos, ou ele nao tem, e
+      # este passo derruba o job nomeando o motivo. As duas saidas sao visiveis;
+      # a terceira, que era "verde sem ter olhado", deixou de existir.
+      #
+      # `infra/verificacao/verificar_passos_condicionais.py`, no job `rapidos`,
+      # impede que a forma antiga volte por qualquer passo de qualquer workflow.
+      - name: o esqueleto de backend existe
         run: |
-          if [ -f package.json ]; then
-            echo "tem=sim" >> "$GITHUB_OUTPUT"
-          else
-            echo "tem=nao" >> "$GITHUB_OUTPUT"
-            echo "::notice::package.json ainda nao existe; a frente de backend nao criou o esqueleto"
+          if [ ! -f package.json ]; then
+            echo "::error::package.json nao existe. Este job inteiro (lint, tipos, tipos gerados e suite unitaria) so tem sentido com o esqueleto de backend no repositorio. Verificacao que nao consegue verificar REPROVA: um job verde aqui diria que o codigo foi conferido, e nada teria sido"
+            exit 1
           fi
+          echo "package.json presente; os passos deste job rodam todos, sem condicao"
 
       - uses: actions/setup-node@v4
-        if: steps.existe.outputs.tem == 'sim'
         with:
           node-version: "22"
           cache: npm
 
-      - if: steps.existe.outputs.tem == 'sim'
-        run: npm ci
+      - run: npm ci
 
-      - if: steps.existe.outputs.tem == 'sim'
-        run: npm run lint
+      - run: npm run lint
 
       - name: tipos
-        if: steps.existe.outputs.tem == 'sim'
         run: npm run typecheck
 
       # Uma fonte, um destino gerado, e um portao que reprova na divergencia.
@@ -200,7 +228,6 @@ jobs:
       # contrato e o codigo divergem SEM QUE O DIFF MOSTRE, porque a proxima
       # geracao desfaz a edicao em silencio.
       - name: tipos gerados batem com a spec
-        if: steps.existe.outputs.tem == 'sim'
         run: |
           npm run generate:types
           if ! git diff --exit-code -- src/shared/types/generated/; then
@@ -208,7 +235,16 @@ jobs:
             exit 1
           fi
 
-      - if: steps.existe.outputs.tem == 'sim'
+      # BICHUS-219, as iscas ANTES da suite. `npm test` terminava num curinga
+      # entregue ao runner, e padrao que nao casa nada sai `# tests 0` com
+      # codigo 0 -- medido no Node 22.23.2, o mesmo desta imagem. O executor
+      # calcula os caminhos do DISCO e exige que todo `*.test.ts` da fonte tenha
+      # compilado correspondente executado. Este passo prova que ele continua
+      # enxergando: cada regra reprova sozinha, contra arvore descartavel.
+      - name: as iscas do executor da suite unitaria reprovam
+        run: node infra/suite/executar-unitaria.mjs --autoteste
+
+      - name: suite unitaria
         run: npm test
 
   contrato:
@@ -1076,27 +1112,24 @@ jobs:
       - run: npm ci
 
       # A cobertura e gerada AQUI, e nao herdada do job `codigo`, porque
-      # `npm test` nao emite lcov e `package.json` e da frente de backend.
-      # Chamar o `node` direto com os mesmos argumentos do script `test` custa
-      # os poucos segundos da suite e nao mexe em arquivo de outra frente.
+      # `npm test` sozinho nao emite lcov.
       #
-      # CONSEQUENCIA A VIGIAR: se o script `test` do package.json mudar de
-      # forma (outro diretorio de saida, outro padrao de arquivo), esta linha
-      # fica medindo outra coisa. O passo seguinte acusa quando isso esvaziar o
-      # relatorio, mas nao acusa se ele continuar cheio e errado.
+      # ERA UMA COPIA DO COMANDO DO package.json, e o comentario desta linha
+      # registrava a consequencia por escrito: "se o script `test` mudar de
+      # forma, esta linha fica medindo outra coisa". A BICHUS-219 mudou o script
+      # de forma, e a copia teria ficado medindo outra coisa exatamente como
+      # previsto. Agora o lcov e uma BANDEIRA do proprio executor: uma forma so,
+      # e os mesmos portoes da suite valem aqui.
       #
-      # `--enable-source-maps` NAO E OPCIONAL. Sem ela o reporter lcov grava o
-      # caminho do JavaScript compilado (`dist/_tests/**/*.js`), o Sonar nao
-      # casa nenhum arquivo, nao reclama, e publica 0% de cobertura. Uma flag,
-      # e a diferenca entre medir e fingir que mediu.
+      # `--enable-source-maps` continua obrigatoria e agora mora no executor:
+      # sem ela o reporter lcov grava o caminho do JavaScript compilado
+      # (`dist/_tests/**/*.js`), o Sonar nao casa nenhum arquivo, nao reclama, e
+      # publica 0% de cobertura. Uma flag, e a diferenca entre medir e fingir
+      # que mediu.
       - name: cobertura em lcov
         run: |
           mkdir -p coverage
-          npx tsc -p tsconfig.json --outDir dist/_tests
-          node --enable-source-maps --test --experimental-test-coverage \
-            --test-reporter=spec --test-reporter-destination=stdout \
-            --test-reporter=lcov --test-reporter-destination=coverage/lcov.info \
-            "dist/_tests/src/**/*.test.js"
+          npm test -- --lcov coverage/lcov.info
 
       # As quatro iscas de infra/verificacao/iscas/lcov-* rodam ANTES do
       # relatorio real, e tres delas precisam reprovar nominalmente. Isca que

@@ -1,0 +1,7 @@
+# REPROVA por descoberta vazia. Nenhum `steps:`, nenhum passo: um portao que nao
+# achou o que conferir e indistinguivel de um portao que conferiu e aprovou.
+name: isca-sem-passo
+on: [push]
+jobs:
+  vazio:
+    uses: ./.github/workflows/outro.yml

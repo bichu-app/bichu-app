@@ -1,0 +1,24 @@
+# APROVA. `needs.*` em nivel de JOB e assunto do job `portao`, que recusa
+# `skipped`. Se a leitura por indentacao quebrar e passar a tratar condicao de
+# job como condicao de passo, este caso reprova e o autoteste acusa.
+name: isca-condicao-de-job
+on: [push]
+jobs:
+  primeiro:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo um
+
+  segundo:
+    runs-on: ubuntu-latest
+    needs: primeiro
+    if: needs.primeiro.result == 'success'
+    steps:
+      - run: echo dois
+
+  consolidar:
+    runs-on: ubuntu-latest
+    needs: [primeiro, segundo]
+    if: always()
+    steps:
+      - run: echo tres

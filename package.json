@@ -10,7 +10,7 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "rm -rf dist/_tests && tsc -p tsconfig.json --outDir dist/_tests && node --test --experimental-test-coverage \"dist/_tests/src/**/*.test.js\"",
+    "test": "rm -rf dist/_tests && tsc -p tsconfig.json --outDir dist/_tests && node infra/suite/executar-unitaria.mjs",
     "test:integration": "node infra/integracao/rodar.mjs",
     "test:integration:executar": "node infra/integracao/executar-suite.mjs",
     "verify:variaveis": "node infra/integracao/variaveis-exigidas.mjs",
