@@ -1,0 +1,36 @@
+{
+  "name": "bichu",
+  "services": {
+    "db": {
+      "image": "postgres:16-alpine"
+    },
+    "edge": {
+      "image": "caddy:2-alpine"
+    },
+    "migracao": {
+      "build": {
+        "context": ".",
+        "target": "migrador",
+        "args": {}
+      }
+    },
+    "api": {
+      "build": {
+        "context": ".",
+        "target": "dev",
+        "args": {
+          "BUILD_COMMIT": "11df2a4217e5321b9dc2bfdd2d0b5e53bdcd5d0f"
+        }
+      }
+    },
+    "worker": {
+      "build": {
+        "context": ".",
+        "target": "dev",
+        "args": {
+          "BUILD_COMMIT": "11df2a4217e5321b9dc2bfdd2d0b5e53bdcd5d0f"
+        }
+      }
+    }
+  }
+}

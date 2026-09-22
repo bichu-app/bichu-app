@@ -1,5 +1,5 @@
 {
-  "$description": "Os 70 pares de contraste do paragrafo 7 de docs/06-design-system.md, medidos em 17/09/2026 sobre a identidade Framboesa entregue pelo cliente. A lista vive aqui, ao lado dos tokens, e NAO no codigo do verificador (paragrafo 18.2.2, item 3). Quem recalcula: test/a11y/contraste_tokens_test.dart.",
+  "$description": "Os 86 pares de contraste do paragrafo 7 de docs/06-design-system.md. Os 16 ultimos entraram em 21/09/2026 com o conjunto `Icone de pet` (BICHUS-144): duas tintas e so duas, `text-secondary` no estado padrao e `primary` no selecionado, medidas contra as tres superficies e o primary-container de cada tema. Eram 70. Medidos em 17/09/2026 sobre a Framboesa e REMEDIDOS em 21/09/2026 sobre o Carmim #9E0B3A, a semente que o cliente escolheu na secao 21. Dezenove dos 70 mudaram de valor; nenhum mudou de veredito, e os tres pares criticos da tinta sobre superficie subiram (7,06 -> 7,39 no pior deles). A lista vive aqui, ao lado dos tokens, e NAO no codigo do verificador (paragrafo 18.2.2, item 3). Quem recalcula: test/a11y/contraste_tokens_test.dart.",
   "$contrato": {
     "formula": "WCAG 2.1 luminancia relativa, (L1 + 0.05) / (L2 + 0.05), com linearizacao sRGB. L = 0.2126*R + 0.7152*G + 0.0722*B sobre os canais linearizados.",
     "frente_e_fundo": "Referencia DTCG a um token de design/tokens.json, entre chaves. Cor com alfa nao entra nesta lista: contraste se mede sobre a cor composta, e o scrim nao carrega texto.",
@@ -13,6 +13,10 @@
     "1.4.3": "4.5:1 texto de corpo, 3:1 texto grande. Componente desabilitado e isento.",
     "1.4.6": "7:1 texto de corpo em nivel AAA. Adotado nas superficies criticas do paragrafo 6.5.",
     "1.4.11": "3:1 para componente de interface e objeto grafico. Conteudo puramente decorativo e isento."
+  },
+  "$valores_historicos": {
+    "$description": "Razoes que aparecem na PROSA do paragrafo 7 como registro do que ja foi e nao e mais. Elas nao pertencem a nenhum par vigente, e por isso o portao do documento (test/a11y/documento_secao7_test.dart) as acusaria como numero velho se nao estivessem declaradas aqui. Declarar e barato; deixar a excecao implicita e como quatro numeros da rampa anterior sobreviveram no texto por dias sem ninguem notar.",
+    "6.88": "text-secondary do tema escuro em #B5B0A2 sobre surface-sunken, abaixo do piso de 7:1. Corrigido para #BEB9AB, que da 7.60."
   },
   "$telas_criticas": [
     "F2 tela do achador no app",
@@ -128,11 +132,11 @@
     {
       "id": "claro/primary-texto-sobre-surface",
       "tema": "claro",
-      "uso": "primary (Framboesa) como titulo, link e icone / superficie",
+      "uso": "primary (Carmim) como titulo, link e icone / superficie",
       "frente": "{cor.claro.primary}",
       "fundo": "{cor.claro.surface}",
       "piso": 7.0,
-      "razao_esperada": 7.49,
+      "razao_esperada": 7.84,
       "veredito": "passa"
     },
     {
@@ -142,7 +146,7 @@
       "frente": "{cor.claro.primary}",
       "fundo": "{cor.claro.surface-alt}",
       "piso": 7.0,
-      "razao_esperada": 7.24,
+      "razao_esperada": 7.57,
       "veredito": "passa"
     },
     {
@@ -152,7 +156,7 @@
       "frente": "{cor.claro.primary}",
       "fundo": "{cor.claro.surface-sunken}",
       "piso": 7.0,
-      "razao_esperada": 7.06,
+      "razao_esperada": 7.39,
       "veredito": "passa",
       "nota": "E este par que fecha a faixa util das superficies claras: qualquer superficie mais escura derruba a framboesa abaixo de 7.0."
     },
@@ -163,7 +167,7 @@
       "frente": "{cor.claro.on-primary}",
       "fundo": "{cor.claro.primary}",
       "piso": 7.0,
-      "razao_esperada": 7.49,
+      "razao_esperada": 7.84,
       "veredito": "passa"
     },
     {
@@ -173,7 +177,7 @@
       "frente": "{cor.claro.on-primary-container}",
       "fundo": "{cor.claro.primary-container}",
       "piso": 7.0,
-      "razao_esperada": 9.4,
+      "razao_esperada": 8.63,
       "veredito": "passa"
     },
     {
@@ -310,7 +314,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.surface}",
       "piso": 3.0,
-      "razao_esperada": 7.49,
+      "razao_esperada": 7.84,
       "veredito": "passa",
       "norma": "1.4.11"
     },
@@ -321,7 +325,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.surface-alt}",
       "piso": 3.0,
-      "razao_esperada": 7.24,
+      "razao_esperada": 7.57,
       "veredito": "passa",
       "norma": "1.4.11"
     },
@@ -370,7 +374,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.action-fill}",
       "piso": 3.0,
-      "razao_esperada": 4.25,
+      "razao_esperada": 4.45,
       "veredito": "passa",
       "nota": "Passa mesmo sendo par nao-adjacente; ver as linhas equivalentes no tema escuro.",
       "norma": "1.4.11"
@@ -382,7 +386,7 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.community-fill}",
       "piso": 3.0,
-      "razao_esperada": 4.6,
+      "razao_esperada": 4.81,
       "veredito": "passa",
       "nota": "Passa mesmo sendo par nao-adjacente; ver as linhas equivalentes no tema escuro.",
       "norma": "1.4.11"
@@ -394,9 +398,105 @@
       "frente": "{cor.claro.focus-ring}",
       "fundo": "{cor.claro.accent-fill}",
       "piso": 3.0,
-      "razao_esperada": 3.9,
+      "razao_esperada": 4.08,
       "veredito": "passa",
       "nota": "Passa mesmo sendo par nao-adjacente; ver as linhas equivalentes no tema escuro.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "claro/icone-pet-sobre-surface",
+      "tema": "claro",
+      "uso": "Icone de pet (padrao) / superficie",
+      "frente": "{cor.claro.text-secondary}",
+      "fundo": "{cor.claro.surface}",
+      "piso": 3.0,
+      "razao_esperada": 8.6,
+      "veredito": "passa",
+      "nota": "Icone de pet do conjunto `Icone de pet` (Figma 200:1249, 22 variantes), estado padrao. Objeto grafico: piso de 3:1 pelo SC 1.4.11. Medido tambem contra o piso AAA de 7:1 por aparecer em superficie critica (F2 e F4), e passa nos dois.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "claro/icone-pet-sobre-surface-alt",
+      "tema": "claro",
+      "uso": "Icone de pet (padrao) / superficie-alt",
+      "frente": "{cor.claro.text-secondary}",
+      "fundo": "{cor.claro.surface-alt}",
+      "piso": 3.0,
+      "razao_esperada": 8.31,
+      "veredito": "passa",
+      "nota": "Icone de pet do conjunto `Icone de pet` (Figma 200:1249, 22 variantes), estado padrao. Objeto grafico: piso de 3:1 pelo SC 1.4.11. Medido tambem contra o piso AAA de 7:1 por aparecer em superficie critica (F2 e F4), e passa nos dois.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "claro/icone-pet-sobre-surface-sunken",
+      "tema": "claro",
+      "uso": "Icone de pet (padrao) / superficie-afundada",
+      "frente": "{cor.claro.text-secondary}",
+      "fundo": "{cor.claro.surface-sunken}",
+      "piso": 3.0,
+      "razao_esperada": 8.11,
+      "veredito": "passa",
+      "nota": "Icone de pet do conjunto `Icone de pet` (Figma 200:1249, 22 variantes), estado padrao. Objeto grafico: piso de 3:1 pelo SC 1.4.11. Medido tambem contra o piso AAA de 7:1 por aparecer em superficie critica (F2 e F4), e passa nos dois.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "claro/icone-pet-sobre-primary-container",
+      "tema": "claro",
+      "uso": "Icone de pet (padrao) / primary-container",
+      "frente": "{cor.claro.text-secondary}",
+      "fundo": "{cor.claro.primary-container}",
+      "piso": 3.0,
+      "razao_esperada": 7.83,
+      "veredito": "passa",
+      "nota": "Icone de pet do conjunto `Icone de pet` (Figma 200:1249, 22 variantes), estado padrao. Objeto grafico: piso de 3:1 pelo SC 1.4.11. Medido tambem contra o piso AAA de 7:1 por aparecer em superficie critica (F2 e F4), e passa nos dois.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "claro/icone-pet-selecionado-sobre-surface",
+      "tema": "claro",
+      "uso": "Icone de pet selecionado / superficie",
+      "frente": "{cor.claro.primary}",
+      "fundo": "{cor.claro.surface}",
+      "piso": 3.0,
+      "razao_esperada": 7.84,
+      "veredito": "passa",
+      "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "claro/icone-pet-selecionado-sobre-surface-alt",
+      "tema": "claro",
+      "uso": "Icone de pet selecionado / superficie-alt",
+      "frente": "{cor.claro.primary}",
+      "fundo": "{cor.claro.surface-alt}",
+      "piso": 3.0,
+      "razao_esperada": 7.57,
+      "veredito": "passa",
+      "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "claro/icone-pet-selecionado-sobre-surface-sunken",
+      "tema": "claro",
+      "uso": "Icone de pet selecionado / superficie-afundada",
+      "frente": "{cor.claro.primary}",
+      "fundo": "{cor.claro.surface-sunken}",
+      "piso": 3.0,
+      "razao_esperada": 7.39,
+      "veredito": "passa",
+      "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "claro/icone-pet-selecionado-sobre-primary-container",
+      "tema": "claro",
+      "uso": "Icone de pet selecionado / primary-container",
+      "frente": "{cor.claro.primary}",
+      "fundo": "{cor.claro.primary-container}",
+      "piso": 3.0,
+      "razao_esperada": 7.13,
+      "veredito": "passa",
+      "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
       "norma": "1.4.11"
     },
     {
@@ -507,11 +607,11 @@
     {
       "id": "escuro/primary-texto-sobre-surface",
       "tema": "escuro",
-      "uso": "primary (Framboesa) como titulo, link e icone / superficie",
+      "uso": "primary (Carmim claro) como titulo, link e icone / superficie",
       "frente": "{cor.escuro.primary}",
       "fundo": "{cor.escuro.surface}",
       "piso": 7.0,
-      "razao_esperada": 8.65,
+      "razao_esperada": 8.59,
       "veredito": "passa"
     },
     {
@@ -521,7 +621,7 @@
       "frente": "{cor.escuro.primary}",
       "fundo": "{cor.escuro.surface-alt}",
       "piso": 7.0,
-      "razao_esperada": 7.98,
+      "razao_esperada": 7.92,
       "veredito": "passa"
     },
     {
@@ -531,7 +631,7 @@
       "frente": "{cor.escuro.primary}",
       "fundo": "{cor.escuro.surface-sunken}",
       "piso": 7.0,
-      "razao_esperada": 7.06,
+      "razao_esperada": 7.01,
       "veredito": "passa",
       "nota": "E este par que fecha a faixa util das superficies claras: qualquer superficie mais escura derruba a framboesa abaixo de 7.0."
     },
@@ -542,7 +642,7 @@
       "frente": "{cor.escuro.on-primary}",
       "fundo": "{cor.escuro.primary}",
       "piso": 7.0,
-      "razao_esperada": 8.65,
+      "razao_esperada": 8.59,
       "veredito": "passa"
     },
     {
@@ -552,7 +652,7 @@
       "frente": "{cor.escuro.on-primary-container}",
       "fundo": "{cor.escuro.primary-container}",
       "piso": 7.0,
-      "razao_esperada": 9.2,
+      "razao_esperada": 8.91,
       "veredito": "passa"
     },
     {
@@ -688,7 +788,7 @@
       "frente": "{cor.escuro.focus-ring}",
       "fundo": "{cor.escuro.surface}",
       "piso": 3.0,
-      "razao_esperada": 8.65,
+      "razao_esperada": 8.59,
       "veredito": "passa",
       "norma": "1.4.11"
     },
@@ -699,7 +799,7 @@
       "frente": "{cor.escuro.focus-ring}",
       "fundo": "{cor.escuro.surface-alt}",
       "piso": 3.0,
-      "razao_esperada": 7.98,
+      "razao_esperada": 7.92,
       "veredito": "passa",
       "norma": "1.4.11"
     },
@@ -762,7 +862,7 @@
       "frente": "{cor.escuro.focus-ring}",
       "fundo": "{cor.escuro.community-fill}",
       "piso": 3.0,
-      "razao_esperada": 1.24,
+      "razao_esperada": 1.25,
       "veredito": "isento",
       "isencao": {
         "norma": "1.4.11",
@@ -776,12 +876,108 @@
       "frente": "{cor.escuro.focus-ring}",
       "fundo": "{cor.escuro.accent-fill}",
       "piso": 3.0,
-      "razao_esperada": 1.05,
+      "razao_esperada": 1.06,
       "veredito": "isento",
       "isencao": {
         "norma": "1.4.11",
         "motivo": "NAO-ADJACENCIA. O anel e desenhado com focus.offset de 2px por fora do elemento, e o vao e pintado com a superficie da tela: os dois nunca se tocam. As adjacencias reais do anel sao focus-ring/surface e focus-ring/surface-alt, ambas na lista. As linhas ficam aqui porque sao elas que provam que o afastamento de 2px nao e decoracao; remover o outline-offset quebra a conformidade. No tema escuro a tinta da marca clareia e os tres preenchimentos de marca nao clareiam junto, porque sao o valor exato da folha do cliente nos dois temas: por isso sao TRES exencoes, e nao uma."
       }
+    },
+    {
+      "id": "escuro/icone-pet-sobre-surface",
+      "tema": "escuro",
+      "uso": "Icone de pet (padrao) / superficie",
+      "frente": "{cor.escuro.text-secondary}",
+      "fundo": "{cor.escuro.surface}",
+      "piso": 3.0,
+      "razao_esperada": 9.31,
+      "veredito": "passa",
+      "nota": "Icone de pet do conjunto `Icone de pet` (Figma 200:1249, 22 variantes), estado padrao. Objeto grafico: piso de 3:1 pelo SC 1.4.11. Medido tambem contra o piso AAA de 7:1 por aparecer em superficie critica (F2 e F4), e passa nos dois.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "escuro/icone-pet-sobre-surface-alt",
+      "tema": "escuro",
+      "uso": "Icone de pet (padrao) / superficie-alt",
+      "frente": "{cor.escuro.text-secondary}",
+      "fundo": "{cor.escuro.surface-alt}",
+      "piso": 3.0,
+      "razao_esperada": 8.59,
+      "veredito": "passa",
+      "nota": "Icone de pet do conjunto `Icone de pet` (Figma 200:1249, 22 variantes), estado padrao. Objeto grafico: piso de 3:1 pelo SC 1.4.11. Medido tambem contra o piso AAA de 7:1 por aparecer em superficie critica (F2 e F4), e passa nos dois.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "escuro/icone-pet-sobre-surface-sunken",
+      "tema": "escuro",
+      "uso": "Icone de pet (padrao) / superficie-afundada",
+      "frente": "{cor.escuro.text-secondary}",
+      "fundo": "{cor.escuro.surface-sunken}",
+      "piso": 3.0,
+      "razao_esperada": 7.6,
+      "veredito": "passa",
+      "nota": "Icone de pet do conjunto `Icone de pet` (Figma 200:1249, 22 variantes), estado padrao. Objeto grafico: piso de 3:1 pelo SC 1.4.11. Medido tambem contra o piso AAA de 7:1 por aparecer em superficie critica (F2 e F4), e passa nos dois.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "escuro/icone-pet-sobre-primary-container",
+      "tema": "escuro",
+      "uso": "Icone de pet (padrao) / primary-container",
+      "frente": "{cor.escuro.text-secondary}",
+      "fundo": "{cor.escuro.primary-container}",
+      "piso": 3.0,
+      "razao_esperada": 7.61,
+      "veredito": "passa",
+      "nota": "Icone de pet do conjunto `Icone de pet` (Figma 200:1249, 22 variantes), estado padrao. Objeto grafico: piso de 3:1 pelo SC 1.4.11. Medido tambem contra o piso AAA de 7:1 por aparecer em superficie critica (F2 e F4), e passa nos dois.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "escuro/icone-pet-selecionado-sobre-surface",
+      "tema": "escuro",
+      "uso": "Icone de pet selecionado / superficie",
+      "frente": "{cor.escuro.primary}",
+      "fundo": "{cor.escuro.surface}",
+      "piso": 3.0,
+      "razao_esperada": 8.59,
+      "veredito": "passa",
+      "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "escuro/icone-pet-selecionado-sobre-surface-alt",
+      "tema": "escuro",
+      "uso": "Icone de pet selecionado / superficie-alt",
+      "frente": "{cor.escuro.primary}",
+      "fundo": "{cor.escuro.surface-alt}",
+      "piso": 3.0,
+      "razao_esperada": 7.92,
+      "veredito": "passa",
+      "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "escuro/icone-pet-selecionado-sobre-surface-sunken",
+      "tema": "escuro",
+      "uso": "Icone de pet selecionado / superficie-afundada",
+      "frente": "{cor.escuro.primary}",
+      "fundo": "{cor.escuro.surface-sunken}",
+      "piso": 3.0,
+      "razao_esperada": 7.01,
+      "veredito": "passa",
+      "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
+      "norma": "1.4.11"
+    },
+    {
+      "id": "escuro/icone-pet-selecionado-sobre-primary-container",
+      "tema": "escuro",
+      "uso": "Icone de pet selecionado / primary-container",
+      "frente": "{cor.escuro.primary}",
+      "fundo": "{cor.escuro.primary-container}",
+      "piso": 3.0,
+      "razao_esperada": 7.02,
+      "veredito": "passa",
+      "nota": "Icone de pet no estado selecionado, pintado com `primary`. Duas tintas e so duas no conjunto inteiro: `text-secondary` no padrao e `primary` no selecionado. Objeto grafico: piso de 3:1 pelo SC 1.4.11.",
+      "norma": "1.4.11"
     }
   ]
 }

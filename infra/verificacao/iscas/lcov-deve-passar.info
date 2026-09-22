@@ -1,0 +1,35 @@
+# CONTRAPROVA. PRECISA PASSAR.
+#
+# Relatorio legitimo: caminhos relativos a raiz, dentro de `src`, terminados em
+# `.ts`, com linhas instrumentadas e linhas cobertas, e com pelo menos um
+# arquivo que nao e de teste.
+#
+# Ela existe porque verificador que reprova qualquer coisa e tao inutil quanto
+# verificador que aprova qualquer coisa, e esse segundo defeito so aparece no
+# dia em que alguem tenta passar um relatorio de verdade.
+#
+# A conferencia de existencia no disco NAO roda sobre esta isca, de proposito:
+# ela tem isca propria (`lcov-deve-reprovar-arquivo-inexistente.info`), e
+# amarrar a contraprova a um caminho real do backend faria este portao quebrar
+# no dia em que alguem renomear um arquivo que nao tem nada a ver com ele.
+TN:
+SF:src/exemplo/de/contraprova.ts
+FN:12,fazAlgo
+FNDA:3,fazAlgo
+FNF:1
+FNH:1
+BRDA:12,0,0,3
+BRF:1
+BRH:1
+DA:12,3
+DA:13,3
+LF:20
+LH:17
+end_of_record
+TN:
+SF:src/exemplo/de/contraprova.test.ts
+FNF:1
+FNH:1
+LF:8
+LH:8
+end_of_record

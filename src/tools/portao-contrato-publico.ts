@@ -23,7 +23,7 @@ import { parse as parseYaml } from 'yaml';
 import { readFileSync } from 'node:fs';
 import { carregarContrato, type OperacaoDoContrato } from '../shared/http/contract.js';
 
-export const VERSAO_DO_PORTAO = '1.1.0';
+export const VERSAO_DO_PORTAO = '1.2.0';
 
 /**
  * Nomes proibidos em resposta a quem não tem conta. Comparação por nome exato:
@@ -44,6 +44,39 @@ const CAMPOS_PROIBIDOS = new Set([
   'address',
   'street',
   'zip',
+  // ---------------------------------------------------------------------
+  // BICHUS-92. A granularidade que sai em superfície pública é bairro,
+  // cidade e UF, e **nunca mais fino** (ADR-0010, "o que a rota pública
+  // jamais exibe", itens 4 e 5).
+  //
+  // As sete primeiras são a coordenada por outros nomes. `reference_point`
+  // é a coluna nova, e está aqui porque a lista acima cobria `lat`/`lon` e
+  // deixaria passar o nome da coluna: uma resposta pública declarando
+  // `reference_point: { type: string }` (o WKT de um ponto é texto)
+  // atravessava as duas listas sem um achado.
+  //
+  // `distance_m`, `distance_km` e `radius_m` não são coordenada e são
+  // igualmente proibidas em superfície pública, pelo motivo que o ADR-0010
+  // registra: distância implica centro, e três distâncias a partir de
+  // centros conhecidos trilateram o centro desconhecido. No contrato de
+  // hoje as três aparecem apenas em operação com `bearerAuth`
+  // (`LostCaseReachPreview` e a lista de candidatos), e é justamente por
+  // isso que declará-las aqui não muda nada hoje e fecha a porta amanhã.
+  //
+  // `map_url` fecha o item 5 (mapa com pino, em qualquer zoom).
+  'point',
+  'reference_point',
+  'geo',
+  'geom',
+  'geohash',
+  'coordinate',
+  'coordinates',
+  'distance_m',
+  'distance_km',
+  'radius_m',
+  'map_url',
+  'street_number',
+  'house_number',
 ]);
 
 const ESQUEMAS_SEM_CONTA = new Set(['tagCode', 'finderToken']);
@@ -288,6 +321,24 @@ paths:
                 properties:
                   lat: { type: number }
                   pet_id: { type: string, format: uuid }
+  /isca-granularidade:
+    get:
+      operationId: iscaDeGranularidadeFinaDemais
+      security: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  neighborhood: { type: string }
+                  city: { type: string }
+                  state: { type: string }
+                  reference_point: { type: string }
+                  distance_m: { type: integer }
+                  radius_m: { type: integer }
+                  map_url: { type: string }
   /isca-html:
     get:
       operationId: iscaDePaginaNua
@@ -313,6 +364,7 @@ function autoTeste(): string[] {
     effects: [],
     hasRateLimit: false,
     raw: operacaoBruta,
+    parameters: [],
   };
 
   const achados = inspecionarCamposPublicos(spec, [operacao]);
@@ -321,6 +373,44 @@ function autoTeste(): string[] {
   }
   if (!achados.some((a) => a.campo === 'pet_id')) {
     falhas.push('a isca com `pet_id` de UUID passou: o portão parou de enxergar id interno');
+  }
+
+  // ---------------------------------------------------------------------
+  // A ISCA DE GRANULARIDADE (BICHUS-92).
+  //
+  // Ela declara bairro, cidade e UF -- que PRECISAM passar, porque são
+  // exatamente a granularidade permitida -- lado a lado com quatro campos mais
+  // finos que precisam ser reprovados. Sem a metade que passa, a isca não
+  // distinguiria um portão que enxerga de um portão que reprova tudo, e um
+  // portão que reprova tudo é retirado na primeira sexta-feira.
+  // ---------------------------------------------------------------------
+  const granularidade: OperacaoDoContrato = {
+    operationId: 'iscaDeGranularidadeFinaDemais',
+    method: 'get',
+    path: '/isca-granularidade',
+    security: [],
+    securitySchemes: [],
+    effects: [],
+    hasRateLimit: false,
+    raw: paths['/isca-granularidade']?.['get'] ?? {},
+    parameters: [],
+  };
+  const achadosDaGranularidade = inspecionarCamposPublicos(spec, [granularidade]);
+  for (const fino of ['reference_point', 'distance_m', 'radius_m', 'map_url']) {
+    if (!achadosDaGranularidade.some((a) => a.campo === fino)) {
+      falhas.push(
+        `a isca de granularidade passou em \`${fino}\`: a superfície pública voltou a ` +
+          'poder dizer onde a pessoa está com precisão maior que bairro, cidade e UF',
+      );
+    }
+  }
+  for (const permitido of ['neighborhood', 'city', 'state']) {
+    if (achadosDaGranularidade.some((a) => a.campo === permitido)) {
+      falhas.push(
+        `o portão reprovou \`${permitido}\`, que é a granularidade PERMITIDA: ` +
+          'portão que reprova tudo não distingue nada e é retirado na primeira sexta-feira',
+      );
+    }
   }
 
   // A isca de cabeçalho existe por causa do ADR-0017. O contrato real não tem
@@ -337,6 +427,7 @@ function autoTeste(): string[] {
     effects: [],
     hasRateLimit: false,
     raw: paths['/isca-html']?.['get'] ?? {},
+    parameters: [],
   };
   const cabecalhos = inspecionarCabecalhos([paginaNua]);
   if (cabecalhos.paginasConferidas !== 1) {

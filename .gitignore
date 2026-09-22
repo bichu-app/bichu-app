@@ -15,6 +15,11 @@
 .env.*
 !.env.example
 
+# BICHUS-211: o par de portas DESTA maquina. Nao e versionado porque o par
+# livre de uma maquina nao e o par livre da proxima -- e foi versionar o par
+# (3000/3001) que criou o problema. `make portas` o regrava.
+portas.local.mk
+
 # Material de assinatura e credencial de provedor
 *.jks
 *.keystore
@@ -61,7 +66,16 @@ AGENTS.md
 # ---------------------------------------------------------------------------
 node_modules/
 dist/
-build/
+# `/build/` ANCORADO na raiz, e nao `build/` solto. Sem a barra inicial, o git
+# ignora QUALQUER diretorio chamado `build` em qualquer profundidade -- e em
+# 19/09 isso quase custou um modulo: `src/shared/build/` foi criado, versionado
+# na cabeca de quem escreveu, e sumiria do commit sem o `git status` dizer uma
+# palavra. Arquivo ignorado nao aparece como nao rastreado; ele simplesmente
+# nao existe para o git, e o defeito so apareceria em outra maquina, como
+# "modulo nao encontrado".
+/build/
+# A saida do Flutter, que e o outro `build/` legitimo desta arvore.
+app/build/
 coverage/
 *.tsbuildinfo
 .npm/
@@ -100,3 +114,17 @@ infra/*.key
 infra/*secret*
 infra/google-services.json
 infra/GoogleService-Info.plist
+
+# Cypress: capturas e videos de execucao. Cada falha gera um PNG, e uma suite
+# vermelha por desenho gera dezenas. O painel ja guarda tudo isso.
+cypress/screenshots/
+cypress/videos/
+cypress/downloads/
+
+# Link para a squad de agentes, que mora na plataforma Jarvis (jarvis-ai/.claude/
+# agents/) e nao neste repositorio. O link aponta para FORA da arvore do git:
+# commitado, ele viraria um caminho quebrado em qualquer outro clone. Quem for
+# trabalhar neste produto com a squad refaz o link localmente, ou abre a sessao
+# direto em jarvis-ai/.
+.claude/agents
+infra/verificacao/__pycache__/

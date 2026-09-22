@@ -62,7 +62,19 @@ services:
     volumes:
       - dados_db:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bichu} -d ${POSTGRES_DB:-bichu}"]
+      # `-h 127.0.0.1` NAO e enfeite: sem ele, `pg_isready` conecta pelo SOCKET
+      # UNIX, e a imagem do Postgres sobe um servidor temporario que escuta so
+      # no socket (`listen_addresses=''`) enquanto roda a inicializacao, antes
+      # de reiniciar ouvindo em TCP.
+      #
+      # A sonda passava naquele servidor temporario, o compose dava o `db` como
+      # saudavel, a migracao partia para o TCP e levava ECONNREFUSED. Falha
+      # intermitente e do pior tipo: verde na maioria das vezes, e quando
+      # reprova todo mundo aprende a mandar rodar de novo -- que e como um
+      # portao para de valer sem ninguem decidir desliga-lo.
+      #
+      # Sondar por TCP e sondar o que o cliente usa.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-bichu} -d ${POSTGRES_DB:-bichu}"]
       interval: 5s
       timeout: 3s
       retries: 20
@@ -89,6 +101,18 @@ services:
       # homologacao atras de tunel ou de IP de rede local.
       MINIO_SERVER_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       MINIO_BROWSER_REDIRECT_URL: ${MINIO_CONSOLE_URL:-http://localhost:9001}
+      # CRIPTOGRAFIA NO SERVIDOR. O criterio 22 de BICHUS-87 a exige, e a
+      # politica de upload assinada manda `x-amz-server-side-encryption: AES256`.
+      #
+      # Sem esta variavel o MinIO responde **501 Not Implemented** ao envio -- e
+      # nao 400: ele entende o pedido e nao sabe atende-lo, porque SSE-S3 exige
+      # um KMS. O KMS embutido (`MINIO_KMS_SECRET_KEY`) atende, e e o caminho
+      # que o proprio MinIO documenta para ambiente sem KMS externo.
+      #
+      # Chave de DESENVOLVIMENTO, descartavel, com valor no `.env`. Em producao
+      # isto vira o KMS do provedor, que e configuracao e nao codigo -- o
+      # cabecalho que a aplicacao envia e o mesmo nos dois.
+      MINIO_KMS_SECRET_KEY: ${OBJECT_STORAGE_KMS_KEY:?defina no .env}
     volumes:
       - dados_objeto:/data
     healthcheck:
@@ -120,9 +144,36 @@ services:
         mc alias set local http://objeto:9000 "$$CHAVE" "$$SEGREDO"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PRIVATE"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PUBLIC"
-        mc anonymous set none     "local/$$OBJECT_BUCKET_PRIVATE"
-        mc anonymous set download "local/$$OBJECT_BUCKET_PUBLIC"
-        echo "buckets prontos: privado sem acesso anonimo, publico somente leitura"
+        mc anonymous set none "local/$$OBJECT_BUCKET_PRIVATE"
+        # NAO use `mc anonymous set download`: o preset concede `s3:GetObject`
+        # E `s3:ListBucket`, e a listagem anula a unica protecao que a chave
+        # publica tem.
+        #
+        # A derivada e servida sem assinatura, e o que a protege e nao ser
+        # adivinhavel -- e por isso que `chaveDaDerivada` exige 128 bits de
+        # CSPRNG (BICHUS-134). Com `ListBucket` anonimo, qualquer um pede a
+        # lista e recebe TODAS as chaves: os 128 bits deixam de valer, e a foto
+        # do pet de qualquer pessoa fica a uma requisicao de distancia.
+        #
+        # Descoberto em 19/09 no minimo hospedado, com
+        # `GET https://img-hml.bichu.app/bichu-media-public/` devolvendo
+        # `ListBucketResult`. O bucket estava vazio; se houvesse foto, estaria
+        # tudo listado.
+        cat >/tmp/publico.json <<POLITICA
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "AWS": ["*"] },
+              "Action": ["s3:GetObject"],
+              "Resource": ["arn:aws:s3:::$$OBJECT_BUCKET_PUBLIC/*"]
+            }
+          ]
+        }
+        POLITICA
+        mc anonymous set-json /tmp/publico.json "local/$$OBJECT_BUCKET_PUBLIC"
+        echo "buckets prontos: privado sem acesso anonimo, publico so GetObject (sem listagem)"
     restart: "no"
 
   migracao:
@@ -141,6 +192,11 @@ services:
     build:
       context: .
       target: migrador
+      args:
+        # O migrador nao responde sonda, mas passa pela mesma conferencia: um
+        # alvo que se constroi sem o commit seria o caminho de build sem portao,
+        # e portao que tem desvio nao e portao.
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 256m
     env_file: [.env]
     depends_on:
@@ -160,6 +216,16 @@ services:
     build:
       context: .
       target: ${BUILD_TARGET:-dev}
+      args:
+        # O commit de que esta imagem sai, gravado NELA. O Dockerfile reprova o
+        # build quando o valor falta ou nao tem forma de commit -- e por isso o
+        # padrao aqui e vazio e nao `${BUILD_COMMIT:?}`: a interpolacao do
+        # compose acontece ao LER o arquivo, entao `:?` derrubaria tambem
+        # `down`, `logs` e `config`, que nao constroem nada. Quem precisa
+        # reprovar e o build, e e la que ele reprova.
+        #
+        #   BUILD_COMMIT=$(git rev-parse HEAD) docker compose build
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 320m
     command: ["node", "dist/bin/api.js"]
     env_file: [.env]
@@ -174,8 +240,34 @@ services:
       # Vem do .env por padrao; `make up PORTA=<n>` sobrescreve pelo ambiente do
       # shell, e as duas pontas (borda e aplicacao) mudam juntas.
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
+      # Separadas de PUBLIC_BASE_URL em 19/09 (ADR-0017 item 2). Precisam estar
+      # AQUI e nao so no `.env`: `make up HOST=<ip>` sobrescreve pelo ambiente do
+      # shell, e uma base de tag que nao acompanha o resto faz o QR do ambiente
+      # de rede local codificar `localhost` -- endereco que o telefone do outro
+      # lado da Wi-Fi resolve para ele mesmo. Para um link isso e um erro de
+      # teste; para plastico prensado nao ha conserto (ADR-0004).
+      TAG_BASE_URL: ${TAG_BASE_URL:-http://localhost:3000}
+      WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
+      # `BUILD_COMMIT` NAO ESTA MAIS AQUI, e a ausencia e a correcao.
+      #
+      # Ate 22/09 ele era declarado como variavel de RUNTIME, com padrao vazio.
+      # Duas consequencias, e as duas ruins:
+      #
+      #  1. Vazio vira ausente (`optionalEnv` mapeia `''` para `undefined`),
+      #     entao a sonda respondia `commit: null` em toda subida que nao
+      #     lembrasse da variavel -- que eram todas. Nao havia ruido nenhum.
+      #  2. O valor ficava FORA da imagem. Promover a imagem entre ambientes
+      #     nao promovia o commit junto, e cada destino precisaria declarar o
+      #     seu -- que e como um destino declara um commit que nao e o que ele
+      #     roda, sem estar mentindo de propriedade.
+      #
+      # Agora ele entra por `build.args` logo abaixo e fica gravado na imagem.
+      # Declara-lo TAMBEM aqui reabriria o defeito pela porta dos fundos:
+      # `environment` sobrescreve o `ENV` da imagem, entao o padrao vazio
+      # apagaria o valor gravado e a sonda voltaria a `null` com a imagem
+      # correta na mao. Ver o bloco "O COMMIT" no Dockerfile.
     depends_on:
       db: {condition: service_healthy}
       objeto: {condition: service_healthy}
@@ -213,6 +305,13 @@ services:
     build:
       context: .
       target: ${BUILD_TARGET:-dev}
+      args:
+        # IDENTICO ao da api, e a identidade precisa ser exata. Os dois servicos
+        # apontam para o MESMO `image:`, entao um argumento de build diferente
+        # aqui produziria duas imagens com um nome so -- e a esteira, que
+        # compara `docker inspect` de api e worker, reprovaria por uma
+        # divergencia que nao e de codigo.
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 448m
     command: ["node", "dist/bin/worker.js"]
     env_file: [.env]
@@ -252,7 +351,9 @@ services:
   mail:
     # Captura SMTP em dev e qa. NAO prova entregabilidade: isso e reputacao de
     # dominio, SPF, DKIM e DMARC, e so existe com provedor real. No perfil de
-    # homologacao este servico nao sobe e MAIL_TRANSPORT vira `postmark`.
+    # homologacao este servico nao sobe e MAIL_TRANSPORT vira `log`, porque o
+    # adaptador do Postmark ainda nao existe (ADR-0009). Dizia `postmark` ate
+    # 19/09, e esse valor mata a subida desde que a validacao entrou.
     image: axllent/mailpit:v1.20@sha256:7eef0f38dbc85e4e264f2edf5d70fbb694826791e05cb2cae4fc9e3282f968f5
     mem_limit: 64m
     profiles: [dev, qa]
@@ -274,12 +375,42 @@ services:
     # o Caddy escuta na porta que esta em PUBLIC_BASE_URL, entao 3100:3000
     # publicaria um endereco que o proprio servidor nao atende.
     #
-    # O numero e variavel porque em maquina compartilhada a 3000 e disputada.
-    # `make up PORTA=3100` troca porta e URL base juntas -- trocar so uma faz o
-    # app gerar link para uma porta que nao responde.
+    # O numero e variavel porque em maquina compartilhada a 3000 e disputada --
+    # e na maquina onde este produto e desenvolvido ela ja e de outro projeto,
+    # junto com a 3001 (medido em 22/09, BICHUS-211). Por isso o par NAO vem
+    # mais so daqui: `portas.local.mk`, gerado por maquina e fora do git, fixa o
+    # primeiro par livre, e `make up` sem argumento passa a funcionar.
+    #
+    # `PORTA_APP` e `PORTA_MIDIA` trocam porta publicada e URL base JUNTAS --
+    # trocar so uma faz o app gerar link para uma porta que nao responde, e isso
+    # e pior do que nao subir porque nao falha na hora: falha no telefone de
+    # quem leu o QR, e o que o QR guarda nao se corrige depois (ADR-0004).
+    #
+    # Ate 22/09 esse acordo era mantido por este comentario e pela disciplina de
+    # lembrar do `PORTA=`. Comentario nao reprova nada. Agora quem reprova e
+    # `make verificar-portas`, que le a configuracao RENDERIZADA por este
+    # arquivo e confere porta publicada contra as cinco URLs base, com as iscas
+    # em `infra/verificacao/iscas/portas-*.json`. Ele roda dentro de `make up`,
+    # antes do docker.
     ports:
       - "${BIND_HOST:-127.0.0.1}:${PORTA_APP:-3000}:${PORTA_APP:-3000}"
       - "${BIND_HOST:-127.0.0.1}:${PORTA_MIDIA:-3001}:${PORTA_MIDIA:-3001}"
+      # A 443 PRECISA estar aqui, e a falta dela derrubou a primeira subida do
+      # minimo hospedado em 19/09 de um jeito que engana: com `PUBLIC_BASE_URL`
+      # em https, o Caddy EMITE o certificado normalmente -- o desafio ACME usa
+      # a 80, que esta publicada -- e o log diz "certificate obtained". So que
+      # emitir nao e servir: ele passa a escutar TLS na 443, que ninguem
+      # publicava, e a maquina recusa conexao em https com todos os certificados
+      # no lugar.
+      #
+      # `PORTA_APP` sozinha nao resolve: em ambiente hospedado sao DUAS portas,
+      # 80 para o redirecionamento e o desafio, 443 para o trafego. Com uma
+      # variavel so, escolher 443 tira a 80 e a emissao para de funcionar.
+      #
+      # O padrao e 8443 e nao 443 de proposito: em `localhost` o Caddy nao faz
+      # TLS e a porta fica sem uso, entao mapear 443 seria pedir privilegio que
+      # o desenvolvimento nao precisa. Em homologacao o `.env` poe 443.
+      - "${BIND_HOST:-127.0.0.1}:${PORTA_TLS:-8443}:443"
     volumes:
       - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       # Os arquivos de associacao de deep link. O Caddyfile ja tinha os dois
@@ -295,6 +426,18 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       OBJECT_BUCKET_PUBLIC: ${OBJECT_BUCKET_PUBLIC:-bichu-media-public}
+      # O Caddyfile le `{$HOSTS_EXTRA_APP}` e `{$HOSTS_EXTRA_MIDIA}` desde a
+      # BICHUS-146, para o apex entrar AO LADO de homologacao em vez de no
+      # lugar dela. Sem a declaracao aqui as duas chegam vazias ao container,
+      # os dois espacos reservados colapsam, e o Caddy sobe conhecendo so
+      # `hml` e `img-hml` -- configuracao valida, apex mudo, e nada acusa.
+      # Medido em 21/09: `caddy adapt` listava dois hosts onde deviam ser
+      # quatro. O `.env` alimenta a interpolacao do compose, nao o processo.
+      #
+      # O padrao vazio e deliberado: em desenvolvimento a linha do Caddyfile
+      # colapsa para a base sozinha e nada muda.
+      HOSTS_EXTRA_APP: ${HOSTS_EXTRA_APP:-}
+      HOSTS_EXTRA_MIDIA: ${HOSTS_EXTRA_MIDIA:-}
     depends_on: [api, objeto]
     restart: unless-stopped
 

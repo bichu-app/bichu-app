@@ -1,3 +1,4 @@
+import '../roteamento/rotas.dart';
 import 'falhas.dart';
 import 'problem.dart';
 
@@ -8,7 +9,12 @@ import 'problem.dart';
 /// tecnico. Os textos sao os da tabela 12.4 de docs/05-ux-research.md, copiados
 /// e nao reescritos: microcopy e especificacao.
 class MensagemDeErro {
-  const MensagemDeErro({required this.texto, this.acao, this.proximaAcao});
+  const MensagemDeErro({
+    required this.texto,
+    this.acao,
+    this.proximaAcao,
+    this.rotaDaAcao,
+  });
 
   /// A frase que a pessoa le.
   final String texto;
@@ -18,6 +24,22 @@ class MensagemDeErro {
 
   /// A saida que o servidor indicou em `next_action`, quando indicou.
   final ProximaAcao? proximaAcao;
+
+  /// O endereco **dentro do app** para onde [acao] leva, quando a saida e uma
+  /// navegacao simples e nao uma operacao.
+  ///
+  /// Existe porque um rotulo de acao sem destino e o defeito que a BICHUS-62
+  /// veio fechar: `Ver meus pets` estava escrito em dois lugares deste arquivo
+  /// e nao levava a lugar nenhum, e a tela que o renderizava com um toque
+  /// **reenviava o cadastro**, porque era o unico `aoTocarNaAcao` que ela
+  /// tinha. Quem renderiza a faixa le este campo **antes** de decidir o que o
+  /// toque faz.
+  ///
+  /// Nao e `ProximaAcao`: aquele enum carrega os valores de `next_action` que
+  /// o **servidor** manda, e inventar um membro para uma navegacao que o
+  /// contrato nunca declarou poria vocabulario nosso dentro do vocabulario
+  /// dele.
+  final String? rotaDaAcao;
 }
 
 /// Traduz uma falha de chamada na mensagem da tela.
@@ -33,6 +55,12 @@ abstract final class MensagensDeErro {
   /// Texto da acao que exige servidor agora e nao da para enfileirar.
   static const String semConexaoImpossivel =
       'Isso precisa de conexão. Tente de novo quando tiver sinal.';
+
+  /// O rotulo das duas saidas que apontavam para o vazio ate a BICHUS-62.
+  ///
+  /// Escrito uma vez so: eram duas copias da mesma frase, e a terceira era
+  /// questao de tempo. O destino e `Perfil` > `Meus pets` (UX 27.6).
+  static const String verMeusPets = 'Ver meus pets';
 
   static const String servidorFora =
       'O Bichu está fora do ar por alguns minutos. Já estamos arrumando.';
@@ -71,6 +99,44 @@ abstract final class MensagensDeErro {
   static const String tentarDeNovo = 'Tentar de novo';
 
   static const String esqueciMinhaSenha = 'Esqueci minha senha';
+
+  /// A saida comum as quatro telas de falha do codigo da tag (UX 12.4).
+  static const String registrarAchado = 'Registrar que achei um pet';
+
+  /// `tag-code-malformed`, 400 (UX 12.6).
+  static const String codigoMalformado =
+      'Confira o código. Parece que faltou alguma coisa, ou entrou um '
+      'caractere a mais. O código está impresso embaixo do QR, na plaquinha.';
+
+  /// `tag-code-not-found`, 404 (UX 12.6).
+  ///
+  /// **Este texto deixou de ser o destino de um erro de digitacao**, e era esse
+  /// o defeito dele. Ate a Emenda 1 do ADR-0004 o codigo nao tinha simbolo de
+  /// verificacao, entao um caractere trocado normalizava para um codigo bem
+  /// formado e inexistente e caia AQUI: a tela acusava a plaquinha ("nao e do
+  /// Bichu") quando o que houve foi um dedo no lugar errado. Com o simbolo de
+  /// verificacao, esse caso vira 400 e [codigoMalformado], e este texto passa a
+  /// dizer a verdade -- ele so aparece quando o codigo e mesmo de outra coisa.
+  static const String codigoNaoEncontrado =
+      'Esse código não é de nenhuma tag do Bichu. Confira se a plaquinha é do '
+      'Bichu.';
+
+  /// A ajuda do campo de digitacao do codigo (UX 12.4).
+  ///
+  /// Sem esta linha a tolerancia do contrato existe e ninguem usa: o campo
+  /// continua parecendo exigir transcricao exata dos 16 caracteres.
+  static const String ajudaDoCampoDeCodigo =
+      'São 16 caracteres, em quatro grupos de quatro. Pode digitar com ou sem '
+      'hífen, em maiúscula ou minúscula. Se confundir I com 1 ou O com 0, a '
+      'gente entende.';
+
+  /// `validation-failed` que chegou **sem nomear campo nenhum** (UX 12.6).
+  ///
+  /// O contrato manda o servidor nomear o campo em `errors[]`, e quando ele
+  /// nao nomeia o defeito e nosso. A tela nao pode ficar muda, mas tambem nao
+  /// pode acusar um campo que ninguem apontou.
+  static const String naoConseguimosSalvar =
+      'Não conseguimos salvar. Confira o que você preencheu e tente de novo.';
 
   /// A mensagem de uma falha qualquer, fora do contexto de um formulario.
   ///
@@ -141,6 +207,29 @@ abstract final class MensagensDeErro {
       ProblemTipo.credencialInvalida => const MensagemDeErro(
           texto: credencialNaoConfere,
           acao: esqueciMinhaSenha,
+        ),
+      // Os quatro desfechos de `GET /v1/tags/{code}` (F2.1 e F4.5). As quatro
+      // mensagens carregam **a mesma saida**, com o mesmo texto e o mesmo
+      // botao, e e isso que impede o beco sem saida: quem esta com um animal
+      // no colo nao precisa do codigo para registrar o achado (UX 12.4 e F4.5).
+      ProblemTipo.codigoDeTagMalformado => const MensagemDeErro(
+          texto: codigoMalformado,
+          acao: registrarAchado,
+          proximaAcao: ProximaAcao.registrarAchadoAvulso,
+        ),
+      ProblemTipo.codigoDeTagNaoEncontrado => const MensagemDeErro(
+          texto: codigoNaoEncontrado,
+          acao: registrarAchado,
+          proximaAcao: ProximaAcao.registrarAchadoAvulso,
+        ),
+      ProblemTipo.naoEncontrado => const MensagemDeErro(
+          texto: 'Isso não está mais aqui.',
+          acao: verMeusPets,
+          rotaDaAcao: Rotas.perfil,
+        ),
+      ProblemTipo.limiteDePetsAtingido => _limiteDePets(problem),
+      ProblemTipo.limiteDeTentativas => MensagemDeErro(
+          texto: _muitasTentativas(problem.tenteDepoisDe),
         ),
       ProblemTipo.validacaoFalhou || ProblemTipo.desconhecido => null,
     };
@@ -221,6 +310,27 @@ abstract final class MensagensDeErro {
     // Tipo que este build nao conhece, ou 500. O catalogo geral resolve, e
     // nenhum caminho daqui afirma que a credencial nao confere.
     return de(falha);
+  }
+
+  /// `pet-limit-reached`, 409 (UX 12.6).
+  ///
+  /// **O numero vem da resposta, nunca escrito na frase.** O esquema `Problem`
+  /// de `api/openapi.yaml` nao declara campo nenhum que o carregue hoje; se um
+  /// dia declarar, e so ele chegar, esta funcao passa a dizer o teto. Enquanto
+  /// nao chega, a tela diz que o limite foi atingido **sem numero**, em vez de
+  /// escrever "20" no binario: uma versao antiga do app continua instalada por
+  /// semanas depois de o servidor mudar o teto, e ela repetiria o numero
+  /// errado com a mesma confianca.
+  static MensagemDeErro _limiteDePets(Problem problem) {
+    final limite = problem.inteiro('limit') ?? problem.inteiro('pet_limit');
+    final abertura = limite == null
+        ? 'Você chegou ao limite de pets nesta conta.'
+        : 'Você chegou ao limite de $limite pets nesta conta.';
+    return MensagemDeErro(
+      texto: '$abertura Se precisar de mais, fale com a gente.',
+      acao: verMeusPets,
+      rotaDaAcao: Rotas.perfil,
+    );
   }
 
   static String _muitasTentativas(Duration? esperar) {

@@ -14,6 +14,10 @@ build
 .githooks
 .github
 
+# Configuracao de esteira que nao tem uso em runtime. As chaves do SonarCloud
+# nao sao segredo, mas arquivo que a imagem nao usa e peso e superficie.
+sonar-project.properties
+
 # Documento e processo. Vao para Confluence e para o Jira, nunca para a imagem.
 docs
 adr

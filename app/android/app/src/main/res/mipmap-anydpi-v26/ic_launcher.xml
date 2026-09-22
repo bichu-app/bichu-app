@@ -1,34 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    ICONE ADAPTATIVO DO ANDROID (API 26 em diante).
-
-    Antes deste arquivo o projeto tinha SO o `ic_launcher.png` legado nas cinco
-    densidades de `mipmap-*`. Em aparelho API 26+ isso vira um PNG quadrado
-    colado dentro da mascara do fabricante: quem usa mascara redonda perde os
-    cantos do desenho, e o icone nao acompanha o parallax nem as animacoes da
-    tela inicial. O icone adaptativo resolve isso exigindo DUAS CAMADAS
-    separadas, que o sistema recorta e move de forma independente.
-
-    GEOMETRIA, que e a parte que costuma sair errada:
-      - cada camada e 108x108 dp;
-      - a mascara do fabricante fica sobre os 72x72 dp centrais;
-      - so os 66x66 dp centrais sao garantidos visiveis em toda mascara
-        ("safe zone" do Material Design);
-      - os 18 dp de cada borda existem para o parallax e SEMPRE somem.
-    Ou seja: o simbolo precisa caber nos 66 dp centrais. Arte que use os 108 dp
-    inteiros e cortada.
-
-    ESTE ARQUIVO E SAIDA de `dart run flutter_launcher_icons`, que le o bloco
-    `flutter_launcher_icons` do `pubspec.yaml` e escreve as camadas em
-    `drawable-mdpi` ate `drawable-xxxhdpi`. Mudou a arte? Troque o PNG em
-    `design/marca/app/` e rode o comando; nao edite este XML a mao.
-
-    NAO HA CAMADA `<monochrome>`, e a ausencia e deliberada. Ver o comentario
-    de `adaptive_icon_monochrome` no `pubspec.yaml`. Resumo: o campo pede
-    silhueta de uma cor so, derivar uma do PNG colorido seria redesenhar a marca
-    do cliente, e falta o vetor, que e item dele. Sem `<monochrome>` o Android
-    13+ usa este icone colorido normalmente.
--->
 <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
   <background android:drawable="@drawable/ic_launcher_background"/>
   <foreground>

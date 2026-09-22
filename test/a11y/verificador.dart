@@ -3,8 +3,9 @@
 // Ele NAO faz `expect`. Ele devolve a lista de violacoes, e quem decide o que
 // fazer com ela sao os testes:
 //
-//   - contraste_texto_test.dart, alvo_de_toque_test.dart e
-//     rotulo_acessivel_test.dart exigem lista VAZIA nas telas conformes;
+//   - contraste_texto_test.dart, alvo_de_toque_test.dart,
+//     rotulo_acessivel_test.dart e acao_de_controle_test.dart exigem lista
+//     VAZIA nas telas conformes;
 //   - isca_test.dart exige lista NAO VAZIA nas iscas, com o valor medido.
 //
 // A separacao existe por um motivo so: um verificador que so sabe reprovar nao
@@ -19,6 +20,7 @@
 library;
 
 import 'dart:math' as math;
+import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -36,7 +38,13 @@ const String prefixoIsencao = 'a11y-exempt:';
 // Violacao
 // ---------------------------------------------------------------------------
 
-enum TipoDeViolacao { contraste, alvoDeToque, rotuloAusente, indeterminado }
+enum TipoDeViolacao {
+  contraste,
+  alvoDeToque,
+  rotuloAusente,
+  acaoAusente,
+  indeterminado,
+}
 
 class Violacao {
   Violacao({
@@ -447,6 +455,110 @@ List<Violacao> verificarRotulos(
         ),
       );
     }
+  }
+  return violacoes;
+}
+
+/// Todo no anunciado como BOTAO e nao desabilitado precisa carregar a acao de
+/// toque (WCAG 2.1 SC 4.1.2: nome, **funcao** e valor; e SC 2.1.1, operavel
+/// por outro meio que nao o ponteiro).
+///
+/// POR QUE ESTE PORTAO EXISTE, e por que ele varre em vez de apontar um widget:
+///
+/// O produto acumulou dois defeitos da mesma familia em menos de um dia, e os
+/// dois passaram pela suite inteira verdes:
+///
+///  1. o `ListView` das abas embrulhava cada secao num `IndexedSemantics` e a
+///     secao virava UM no anunciado como botao, com o nome sendo a
+///     concatenacao de toda a tela (corrigido na BICHUS-62);
+///  2. o inverso: o no existe, e anunciado como botao, e **perdeu a acao** --
+///     `Semantics(button: true, excludeSemantics: true)` sem redeclarar
+///     `onTap` apaga a arvore do filho e leva a acao junto.
+///
+/// Os dois passaram porque a verificacao de acessibilidade do projeto olhava
+/// **rotulo e contraste, e nao olhava acao**. Consertar os widgets nao fecha a
+/// classe: o proximo `excludeSemantics` reabre. Isto fecha.
+///
+/// Tres decisoes que valem ser lidas antes de mexer:
+///
+/// - **Desabilitado nao e violacao.** Botao com `enabled: false` corretamente
+///   nao tem acao, e exigir acao dele faria o portao cobrar o contrario do
+///   certo. `Tristate.none` (sem estado declarado) CONTA como habilitado: e o
+///   caso do `InkWell` embrulhado, que e justamente onde o defeito mora.
+/// - **A medida e a arvore de semantica em execucao, nunca o texto do
+///   arquivo.** Uma varredura de fonte casaria com a mencao ao mecanismo
+///   dentro de um comentario -- foi o que aconteceu com uma isca da BICHUS-164,
+///   que nascia furada porque apagar o codigo de verdade a deixava verde. Este
+///   portao nao tem como olhar para um comentario: ele le o que o aparelho
+///   entrega ao leitor de tela.
+/// - **`tap`, e nao qualquer acao.** Botao que so responde a `longPress` nao e
+///   alcancavel pelo gesto de ativacao padrao de TalkBack e VoiceOver.
+///
+/// [botoesEsperados] e a mesma defesa de cobertura das outras travas: portao
+/// que nao enxerga nada devolve lista vazia, e lista vazia e indistinguivel de
+/// "esta tudo certo".
+List<Violacao> verificarAcaoDosControles(
+  WidgetTester tester, {
+  required String tela,
+  required String tema,
+  required int botoesEsperados,
+}) {
+  final violacoes = <Violacao>[];
+  final nos = _nosTocaveis(tester);
+  // NAO filtra `isHidden`, e a diferenca importa. As outras travas pulam o
+  // no escondido porque medir tamanho ou cor de algo fora da tela nao diz
+  // nada. Acao e outra coisa: o segmento que esta abaixo da dobra volta a
+  // aparecer assim que a pessoa rola, e ele precisa carregar a acao ja. Pular
+  // escondido aqui deixaria de fora justamente os controles do fim de
+  // formulario longo, que sao os que ninguem testa a mao.
+  final botoes = nos.where((n) => n.dados.flagsCollection.isButton).toList();
+
+  final falta = _conferirCobertura(botoes.length, botoesEsperados, tela, tema);
+  if (falta != null) {
+    violacoes.add(
+      Violacao(
+        tipo: TipoDeViolacao.indeterminado,
+        tela: falta.tela,
+        tema: falta.tema,
+        alvo: '(cobertura de botoes)',
+        detalhe:
+            'a tela declara $botoesEsperados no(s) anunciado(s) como botao e '
+            'o portao achou ${botoes.length}. Ou a arvore de semantica nao '
+            'esta ligada (tester.ensureSemantics()), ou a tela mudou e a '
+            'contagem ficou para tras. Nos dois casos um verde aqui seria '
+            'verde por nao estar olhando para nada',
+        medido: botoes.length.toDouble(),
+        piso: botoesEsperados.toDouble(),
+      ),
+    );
+  }
+
+  for (final no in botoes) {
+    final d = no.dados;
+    // Desabilitado por declaracao: ausencia de acao e o comportamento certo.
+    if (d.flagsCollection.isEnabled == Tristate.isFalse) continue;
+    if (d.hasAction(SemanticsAction.tap)) continue;
+
+    final rotulo = _rotuloDe(d);
+    violacoes.add(
+      Violacao(
+        tipo: TipoDeViolacao.acaoAusente,
+        tela: tela,
+        tema: tema,
+        alvo: rotulo.isEmpty
+            ? '(sem rotulo) em ${no.retanguloDp.topLeft}'
+            : _resumo(rotulo),
+        detalhe:
+            'anunciado como botao, habilitado, e SEM a acao de toque. Quem '
+            'navega por TalkBack ou VoiceOver ouve que existe um botao e nao '
+            'recebe a acao: o controle e inalcancavel pelo leitor de tela '
+            '(WCAG 2.1 SC 4.1.2). A causa quase sempre e um '
+            '`Semantics(button: true, excludeSemantics: true)` que nao '
+            'redeclarou `onTap` -- o `excludeSemantics` apaga a arvore do '
+            'filho e leva a acao do `InkWell` ou do `*Button` junto. '
+            'enabled=${d.flagsCollection.isEnabled.name} acoes=${d.actions}',
+      ),
+    );
   }
   return violacoes;
 }

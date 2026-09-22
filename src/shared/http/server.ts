@@ -15,13 +15,15 @@
  */
 import Fastify, {
   type FastifyBaseLogger,
-  type FastifyInstance,
   type FastifyReply,
   type FastifyRequest,
 } from 'fastify';
 import { randomUUID } from 'node:crypto';
 import type { AbsoluteUrl } from '../types/brands.js';
+import type { DependenciasDoTeto } from './aplicacao-de-teto.js';
+import type { RegistradorDeRotas } from './registrar-rota.js';
 import { AppError, problemas } from './errors.js';
+import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 import {
   montarProblema,
   TIPO_DE_CONTEUDO_DO_PROBLEMA,
@@ -34,6 +36,18 @@ export interface OpcoesDoServidor {
   readonly problemBaseUrl: AbsoluteUrl;
   readonly isProduction: boolean;
   readonly bodyLimitBytes?: number;
+  /**
+   * Contador de teto e o HMAC de IP, instalados no decorador `tetoDeChamada`.
+   *
+   * **Obrigatório de propósito.** Enquanto o servidor podia ser criado sem
+   * contador, criar um servidor sem teto era a coisa mais fácil do mundo — e
+   * foi o que aconteceu: `server.ts` não mencionava limite de chamada em lugar
+   * nenhum e as 80 operações declaravam tetos que ninguém aplicava
+   * (BICHUS-178, adr/ADR-0016 Emenda 1). Em teste, `criarContadorEmMemoria`
+   * ou `criarContadorDesligado` servem; em produção, quem escolhe é
+   * `RATE_LIMIT_DRIVER`, e `disabled` fora de `dev` não sobe.
+   */
+  readonly teto: DependenciasDoTeto;
 }
 
 /** Só aceita correlação vinda de fora se ela tiver a forma de um UUID. */
@@ -86,7 +100,15 @@ export function responderProblema(
   erro: AppError,
   problemBaseUrl: AbsoluteUrl,
 ): FastifyReply {
-  const corpo: ProblemBody = montarProblema(erro, problemBaseUrl, request.id, request.url);
+  // `instance` também carrega o caminho, e o caminho da rota pública carrega o
+  // código da tag. Quem recebe o corpo já tem o código, mas o corpo de erro é
+  // justamente o que acaba colado em chamado de suporte e em relato de defeito.
+  const corpo: ProblemBody = montarProblema(
+    erro,
+    problemBaseUrl,
+    request.id,
+    ocultarCodigoDaTagNaUrl(request.url),
+  );
   if (erro.retryAfterSeconds !== undefined) {
     // A RFC 9110 exige `Retry-After` no 429, e o cliente offline precisa dele
     // para decidir quando reenviar a fila em vez de martelar.
@@ -98,7 +120,7 @@ export function responderProblema(
     .send(corpo);
 }
 
-export function criarServidor(opcoes: OpcoesDoServidor): FastifyInstance {
+export function criarServidor(opcoes: OpcoesDoServidor): RegistradorDeRotas {
   const app = Fastify({
     // Correlação: aproveita a de fora quando ela tem forma de UUID, e gera uma
     // quando não tem. Aceitar qualquer texto do cliente deixaria o log ser
@@ -126,8 +148,24 @@ export function criarServidor(opcoes: OpcoesDoServidor): FastifyInstance {
         ],
         censor: '[removido]',
       },
+      serializers: {
+        // `redact` não alcança a URL: ela não é um campo, é parte do caminho. O
+        // código da tag é uma credencial ao portador e entraria em claro em toda
+        // linha de log de acesso da rota mais pública do produto (ADR-0004).
+        req: (request) => ({
+          method: request.method,
+          url: ocultarCodigoDaTagNaUrl(request.url),
+          host: request.host,
+          remoteAddress: request.ip,
+        }),
+      },
     },
   });
+
+  // O contador viaja no próprio servidor e não numa dependência que cada
+  // módulo precisaria receber. `registrarRota` o lê daqui, e um servidor sem
+  // ele derruba o registro na subida em vez de servir rota sem teto.
+  app.decorate('tetoDeChamada', opcoes.teto);
 
   app.addHook('onSend', (request, reply, payload, done) => {
     void reply.header(CABECALHO_DE_CORRELACAO, request.id);

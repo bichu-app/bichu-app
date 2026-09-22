@@ -1,0 +1,168 @@
+# Pilha EFEMERA de integracao. Existe para uma coisa so: `npm run test:integration`
+# rodar de dentro de um worktree sem encostar na pilha principal.
+#
+# ===========================================================================
+# POR QUE ESTE ARQUIVO EXISTE, E NAO UM PERFIL DO compose.yaml
+# ===========================================================================
+# O `compose.yaml` da raiz declara `name: bichu`. Nome de projeto fixo quer
+# dizer que `docker compose` rodado de QUALQUER diretorio -- inclusive de um
+# worktree -- resolve para os MESMOS conteineres. `make test-int` de dentro de
+# um worktree nao colidia com a pilha principal: ele migrava e escrevia DENTRO
+# dela. Isso e pior que colisao, porque nada acusa.
+#
+# Aqui nao ha `name:`. Quem escolhe e o `-p` de `rodar.mjs`, derivado do
+# caminho do worktree: dois worktrees nunca se encontram, e nenhum dos dois
+# encontra `bichu`.
+#
+# ===========================================================================
+# NENHUMA PORTA PUBLICADA. LEIA ANTES DE ACRESCENTAR UMA.
+# ===========================================================================
+# O `db` da pilha principal NAO publica porta, e isso esta certo. Publicar a
+# dele para o teste alcancar de fora seria abrir o banco de desenvolvimento no
+# hospedeiro para resolver um problema de teste.
+#
+# Publicar a porta DESTE banco tambem nao serve: com 8 worktrees seriam 8
+# publicacoes, e a 5432 do hospedeiro ja e de `analytics-postgres`. Porta
+# sorteada resolveria a colisao e ainda assim exporia um banco por worktree.
+#
+# A saida e nao ter porta: o processo que roda a suite e o servico `testes`,
+# que vive DENTRO desta rede e alcanca `db:5432` e `mail:1025` pelo nome. O
+# `.env.example` ja escreve os dois assim (`postgres://bichu:@db:5432/bichu`,
+# `MAIL_HOST=mail`), entao o ambiente de integracao e o mesmo da aplicacao.
+#
+# Se algum dia precisar de porta no hospedeiro, publique `127.0.0.1::5432` --
+# duas partes, sem numero do lado de fora, que e o que faz o nucleo sortear --
+# e leia o numero de volta com `docker compose port`. NUNCA um numero fixo.
+# ===========================================================================
+
+services:
+  db:
+    # O MESMO digest do compose.yaml da raiz. Testar integracao contra outra
+    # versao de Postgres do que a que sobe em dev e producao seria provar o
+    # comportamento de um banco que ninguem roda.
+    image: postgis/postgis:16-3.4@sha256:44126d872ac91993766c341e369c539e8196614321765d36a6f1bab0419a5fa5
+    mem_limit: 768m
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bichu}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?a senha vem do .env.integracao gerado por infra/integracao/gerar-env-de-integracao.mjs}
+      POSTGRES_DB: ${POSTGRES_DB:-bichu}
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - work_mem=8MB
+      # A suite de concorrencia abre dezenas de conexoes de uma vez. O padrao de
+      # 40 do compose.yaml da raiz e de uma pilha com api e worker; aqui quem
+      # conecta e a suite, e ela precisa de folga para PROVAR concorrencia --
+      # um teto baixo transformaria "o contador perdeu incremento" em "o banco
+      # recusou conexao", que e outra falha com a mesma cor.
+      - -c
+      - max_connections=120
+    # Dado em memoria: a pilha e descartavel por desenho e nao deve deixar
+    # volume para tras nem quando a execucao morre no meio. `down -v` limpa o
+    # resto; isto garante que nem exista resto de dado.
+    tmpfs:
+      - /var/lib/postgresql/data:size=512m
+    healthcheck:
+      # `-h 127.0.0.1` pelo mesmo motivo do compose.yaml da raiz: sem ele a
+      # sonda passa no servidor temporario do initdb, que escuta so no socket
+      # unix, e a migracao parte para o TCP e leva ECONNREFUSED.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U ${POSTGRES_USER:-bichu} -d ${POSTGRES_DB:-bichu}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: "no"
+
+  mail:
+    # `tests/integration/transporte-de-email.test.ts` nao se pula por falta de
+    # receptor: ele reprova. Entao o receptor faz parte da pilha, e nao do
+    # ambiente de quem roda.
+    image: axllent/mailpit:v1.20@sha256:7eef0f38dbc85e4e264f2edf5d70fbb694826791e05cb2cae4fc9e3282f968f5
+    mem_limit: 64m
+    healthcheck:
+      test: ["CMD", "/mailpit", "readyz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 3s
+    restart: "no"
+
+  migracao:
+    # Mesmo alvo do compose.yaml da raiz, pelo mesmo motivo: `node-pg-migrate` e
+    # devDependency e a migracao nao muda de forma entre ambientes.
+    image: bichu-migrador:integracao
+    build:
+      context: ../..
+      target: migrador
+      # `BUILD_COMMIT` passou a ser EXIGIDO pelo Dockerfile em todo alvo, e sem
+      # ele o build reprova antes de qualquer coisa -- que e o portao fazendo o
+      # que deve. Faltava declarar o argumento aqui, e o resultado era a suite
+      # de integracao inalcancavel de dentro de worktree. Padrao vazio, como no
+      # `compose.yaml` da raiz: `:?` derrubaria tambem `down` e `config`, que
+      # nao constroem nada, e quem precisa reprovar e o build.
+      #
+      #   BUILD_COMMIT=$(git rev-parse HEAD) npm run test:integration
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+    mem_limit: 256m
+    env_file: [../../.env.integracao]
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["up"]
+    restart: "no"
+
+  testes:
+    # O alvo `dev` e o MESMO que a esteira usa para rodar a suite, e ele carrega
+    # o Node 22 que `engines` exige. Rodar a integracao no Node do hospedeiro
+    # seria provar o comportamento de um runtime que nao sobe em lugar nenhum:
+    # esta maquina tem Node 26 instalado.
+    image: bichu-app:integracao
+    build:
+      context: ../..
+      target: dev
+      # `BUILD_COMMIT` passou a ser EXIGIDO pelo Dockerfile em todo alvo, e sem
+      # ele o build reprova antes de qualquer coisa -- que e o portao fazendo o
+      # que deve. Faltava declarar o argumento aqui, e o resultado era a suite
+      # de integracao inalcancavel de dentro de worktree. Padrao vazio, como no
+      # `compose.yaml` da raiz: `:?` derrubaria tambem `down` e `config`, que
+      # nao constroem nada, e quem precisa reprovar e o build.
+      #
+      #   BUILD_COMMIT=$(git rev-parse HEAD) npm run test:integration
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+    mem_limit: 1g
+    env_file: [../../.env.integracao]
+    environment:
+      # O `dev` da imagem e `NODE_ENV=development`. A suite precisa disso: o
+      # `reset()` do contador de limite recusa rodar em producao, de proposito.
+      NODE_ENV: development
+      # A API do mailpit, que e outra porta que a SMTP de MAIL_PORT.
+      MAILPIT_API_PORT: "8025"
+      # Marca lida pela guarda de banco descartavel. Nao substitui a guarda:
+      # ela pergunta ao BANCO se ele se declara descartavel, e nao ao ambiente
+      # de quem chama. Isto aqui so aparece na mensagem de erro.
+      BICHU_PILHA_DE_INTEGRACAO: "efemera"
+    volumes:
+      # A arvore do worktree por cima da imagem: editar e rodar de novo nao
+      # exige reconstruir. O que NAO entra e `node_modules` -- o volume anonimo
+      # abaixo preserva o da imagem, compilado para linux pelo lockfile. Sem
+      # essa linha, o `node_modules` do macOS entraria no container e `sharp`
+      # (binario nativo por plataforma) quebraria com "invalid ELF header".
+      - ../..:/app
+      - /app/node_modules
+    depends_on:
+      db:
+        condition: service_healthy
+      mail:
+        condition: service_healthy
+      migracao:
+        condition: service_completed_successfully
+    # Nada por padrao: este servico existe para `docker compose run --rm testes`.
+    command: ["node", "-e", "console.error('use `npm run test:integration`'); process.exit(1)"]
+    restart: "no"

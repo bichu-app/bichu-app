@@ -28,13 +28,22 @@ export type AuditAction =
   | 'auth.logout'
   | 'auth.session_refreshed'
   | 'auth.refresh_reuse_detected'
+  /** Refresh anterior a `sessions_invalid_before` (SEC-006). Tentativa negada. */
+  | 'auth.refresh_rejected_revoked_session'
   | 'auth.sessions_revoked'
   | 'auth.password_changed'
+  /** Tentativa de troca de senha recusada por senha atual errada (BICHUS-125). */
+  | 'auth.password_change_refused'
   | 'auth.password_rehashed'
   | 'auth.password_reset_completed'
   | 'auth.email_verified'
   // Autorização
   | 'authz.denied'
+  | 'profile.updated'
+  // Cadastro do pet
+  | 'pet.created'
+  | 'pet.updated'
+  | 'pet.deleted'
   // Tag, caso, conversa e moderação entram com as histórias que as criam.
   | 'tag.issued'
   | 'tag.revoked'
@@ -46,7 +55,16 @@ export type AuditAction =
   | 'conversation.blocked'
   | 'moderation.decided'
   | 'privacy.account_deletion_requested'
-  | 'privacy.data_export_requested';
+  | 'privacy.data_export_requested'
+  /**
+   * BICHUS-92. A conta entrou (ou atualizou) a localizacao de referencia.
+   * O metadado carrega a ORIGEM e a PRECISAO; a coordenada nao entra aqui,
+   * pela regra do cabecalho deste arquivo e porque a trilha sobrevive a
+   * exclusao da conta de proposito.
+   */
+  | 'privacy.reference_location_set'
+  /** A conta saiu do raio de alerta por `DELETE /v1/me/location`. */
+  | 'privacy.reference_location_cleared';
 
 export type ActorKind = 'user' | 'anonymous' | 'system';
 

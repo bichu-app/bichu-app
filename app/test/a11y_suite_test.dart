@@ -19,26 +19,35 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'a11y/acao_de_controle_test.dart' as acao_de_controle;
 import 'a11y/alvo_de_toque_test.dart' as alvo_de_toque;
 import 'a11y/contraste_texto_test.dart' as contraste_texto;
 import 'a11y/contraste_tokens_test.dart' as contraste_tokens;
+import 'a11y/documento_secao7_test.dart' as documento_secao7;
 import 'a11y/isca_test.dart' as isca;
+import 'a11y/prosa_dos_tokens_test.dart' as prosa_dos_tokens;
 import 'a11y/rotulo_acessivel_test.dart' as rotulo_acessivel;
 
 /// Os arquivos ligados acima, pelo nome com que vivem em `test/a11y/`.
 const List<String> _ligados = <String>[
+  'acao_de_controle_test.dart',
   'alvo_de_toque_test.dart',
   'contraste_texto_test.dart',
   'contraste_tokens_test.dart',
+  'documento_secao7_test.dart',
   'isca_test.dart',
+  'prosa_dos_tokens_test.dart',
   'rotulo_acessivel_test.dart',
 ];
 
 void main() {
+  group('a11y/acao_de_controle', acao_de_controle.main);
   group('a11y/alvo_de_toque', alvo_de_toque.main);
   group('a11y/contraste_texto', contraste_texto.main);
   group('a11y/contraste_tokens', contraste_tokens.main);
+  group('a11y/documento_secao7', documento_secao7.main);
   group('a11y/isca', isca.main);
+  group('a11y/prosa_dos_tokens', prosa_dos_tokens.main);
   group('a11y/rotulo_acessivel', rotulo_acessivel.main);
 
   // A guarda da ponte. Sem ela, um arquivo novo em test/a11y/ fica invisivel

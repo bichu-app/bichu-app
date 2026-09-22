@@ -1,0 +1,50 @@
+{
+  "name": "bichu",
+  "services": {
+    "edge": {
+      "environment": {
+        "MEDIA_PUBLIC_BASE_URL": "http://192.168.0.10:3001",
+        "PUBLIC_BASE_URL": "http://192.168.0.10:3000"
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 3000,
+          "published": "3000",
+          "protocol": "tcp"
+        },
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 3001,
+          "published": "3001",
+          "protocol": "tcp"
+        },
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 443,
+          "published": "8443",
+          "protocol": "tcp"
+        }
+      ]
+    },
+    "api": {
+      "environment": {
+        "API_BASE_URL": "http://192.168.0.10:3000",
+        "BIND_HOST": "0.0.0.0",
+        "MEDIA_PUBLIC_BASE_URL": "http://192.168.0.10:3001",
+        "PORT": "3000",
+        "PUBLIC_BASE_URL": "http://192.168.0.10:3000",
+        "TAG_BASE_URL": "http://192.168.0.10:3000",
+        "WEB_BASE_URL": "http://192.168.0.10:3000"
+      }
+    },
+    "objeto": {
+      "environment": {
+        "MINIO_SERVER_URL": "http://192.168.0.10:3001"
+      }
+    }
+  }
+}

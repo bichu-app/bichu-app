@@ -28,7 +28,22 @@ linter:
   # producing the lint.
   rules:
     # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+    # BICHUS-161 (revisao do portao estrutural): ligado em 22/09/2026.
+    #
+    # `app/test/dispositivo/porta_nao_contornada_test.dart` reprovava tela que
+    # importa plugin de aparelho casando o texto `import '`, com aspa SIMPLES.
+    # Com esta regra comentada, `import "package:image_picker/..."` passava nos
+    # dois: o portao nao casava e o analisador nao reclamava.
+    #
+    # O conserto de verdade foi no portao, que hoje LE a diretiva em vez de
+    # casar texto e nao depende desta linha. Esta regra e o cinto: ela faz a
+    # aspa dupla aparecer na revisao antes de virar discussao. **Nenhum portao
+    # deve passar a depender dela** -- portao que depende de lint tem duas
+    # maneiras de morrer, e a segunda e silenciosa.
+    #
+    # Custo medido antes de ligar: `flutter analyze` com a regra ativa em toda
+    # a base deu "No issues found". Zero arquivos quebram.
+    prefer_single_quotes: true
 
 # Additional information about this file can be found at
 # https://dart.dev/guides/language/analysis-options

@@ -97,6 +97,7 @@ export interface RefreshTokensTable {
     | 'rotation'
     | 'reuse_detected'
     | 'logout'
+    | 'logout_all'
     | 'password_changed'
     | 'account_deleted'
     | null;
@@ -110,7 +111,12 @@ export interface IdempotencyKeysTable {
   user_or_token_ref: string;
   endpoint: string;
   request_hash: Buffer;
-  response_status: number;
+  /**
+   * `NULL` enquanto a chave está **reservada** e a execução em curso; o status
+   * HTTP depois disso. A ausência de resposta é escrita como ausência de valor,
+   * e não como um `0` que a coluna recusa (migração 20260917000008).
+   */
+  response_status: number | null;
   response_body: unknown;
   created_at: CriadoEm;
   expires_at: Date;
@@ -209,6 +215,69 @@ export interface PetsTable {
   deleted_at: Date | null;
 }
 
+/** Dois valores, e só dois (ADR-0004). Não há tag suspensa nem tag fabricada. */
+export type StatusDaTag = 'active' | 'revoked';
+
+export type MotivoDeRevogacaoDaTag =
+  | 'lost_tag'
+  | 'suspected_clone'
+  | 'owner_request'
+  | 'pet_transferred'
+  | 'pet_deceased'
+  | 'pet_deleted';
+
+export interface PetTagsTable {
+  /** UUIDv7 gerado pela aplicação. Sem `DEFAULT` no banco, como em `pets`. */
+  id: string;
+  pet_id: string;
+  /** SHA-256 do código normalizado. O código em claro não existe em coluna nenhuma. */
+  code_hash: Buffer;
+  /** AES-256-GCM do código. Só serve para reimprimir, e é apagado na revogação. */
+  code_ciphertext: Buffer | null;
+  /** `char(4)`: volta do banco com preenchimento à direita. Sempre `trim` na leitura. */
+  code_suffix: string;
+  label: string | null;
+  status: Generated<StatusDaTag>;
+  revoked_at: Date | null;
+  revocation_reason: MotivoDeRevogacaoDaTag | null;
+  scan_count: Generated<number>;
+  last_scanned_at: Date | null;
+  created_at: CriadoEm;
+}
+
+/** Apenas inserção. Retenção de 90 dias. */
+export interface TagScansTable {
+  id: string;
+  tag_id: string;
+  scanned_at: Generated<Date>;
+  /** HMAC com chave, nunca o endereço em claro e nunca hash puro (SEC-010). */
+  ip_hmac: Buffer | null;
+  user_agent_hash: Buffer | null;
+  area_label: string | null;
+  resulted_in_found_report: Generated<boolean>;
+}
+
+/**
+ * O subconjunto de `found_reports` que o caminho da tag preenche. Caso, ponto,
+ * foto e atributos de cruzamento entram com `lostfound`.
+ */
+export interface FoundReportsTable {
+  id: string;
+  origin: 'tag_scan' | 'stray_report';
+  tag_id: string | null;
+  pet_id: string | null;
+  reporter_user_id: string | null;
+  /** Identidade derivada do achador sem conta. Sustenta a dimensão `finder_identity`. */
+  finder_identity_hash: Buffer | null;
+  finder_display_name: string | null;
+  finder_email: string | null;
+  finder_token_hash: Buffer;
+  finder_token_expires_at: Date;
+  found_at: Date;
+  notes: string | null;
+  created_at: CriadoEm;
+}
+
 /** Esquema `audit`, separado e com papel próprio (BICHUS-56). */
 export interface AuditEventsTable {
   id: string;
@@ -225,8 +294,154 @@ export interface AuditEventsTable {
   metadata: unknown;
 }
 
+/** O que o cliente vai enviar direto ao armazenamento (ADR-0007, BICHUS-87). */
+export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
+
+export interface UploadIntentsTable {
+  id: string;
+  user_id: string;
+  /** Nulo para o achador sem pet: o vínculo dele é com o aviso. */
+  pet_id: string | null;
+  kind: TipoDeEnvio;
+  /** Chave no armazenamento privado. **Nunca** uma URL. */
+  object_key: string;
+  /** O que o cliente DECLAROU. Diagnóstico, nunca verdade. */
+  declared_type: string;
+  max_bytes: number;
+  expires_at: Date;
+  confirmed_at: Date | null;
+  created_at: CriadoEm;
+}
+
+/** `processing` → `ready` ou `rejected`. Nunca volta. */
+export type StatusDaFoto = 'processing' | 'ready' | 'rejected';
+
+export interface PetPhotosTable {
+  id: string;
+  pet_id: string;
+  upload_intent_id: string;
+  status: Generated<StatusDaFoto>;
+  rejection_reason: string | null;
+  /** Original, bucket privado. Só o dono, e só por URL assinada curta. */
+  original_key: string;
+  /** Derivadas no bucket público, chave com 128 bits aleatórios. Nulas até o worker. */
+  thumb_key: string | null;
+  card_key: string | null;
+  is_primary: Generated<boolean>;
+  created_at: CriadoEm;
+  processed_at: Date | null;
+  deleted_at: Date | null;
+}
+
+export type StatusDoTrabalho = 'pending' | 'running' | 'done' | 'failed';
+
+/**
+ * A fila, no próprio Postgres.
+ *
+ * `SELECT ... FOR UPDATE SKIP LOCKED` atende a ordem de grandeza deste produto
+ * por muito tempo, e uma fila dedicada seria mais um serviço para operar,
+ * monitorar e migrar de nuvem (ADR-0012).
+ */
+export interface JobsTable {
+  id: string;
+  kind: string;
+  payload: ColumnType<Record<string, unknown>, string, string>;
+  status: Generated<StatusDoTrabalho>;
+  attempts: Generated<number>;
+  max_attempts: Generated<number>;
+  last_error: string | null;
+  run_after: Generated<Date>;
+  locked_at: Date | null;
+  created_at: CriadoEm;
+  finished_at: Date | null;
+}
+
+/** `RecordType` do corpo do webhook. Espelha o `enum` de `api/openapi.yaml`. */
+export type TipoDeEventoDeEntrega =
+  | 'Delivery'
+  | 'Bounce'
+  | 'SpamComplaint'
+  | 'Open'
+  | 'SubscriptionChange';
+
+/**
+ * Eventos de entrega vindos do provedor de e-mail (migração 20260919000001).
+ *
+ * **Não há coluna com o endereço do destinatário**, e a ausência é a decisão:
+ * o corpo do evento traz `Recipient` em claro, e gravá-lo aqui criaria uma
+ * segunda cópia do e-mail de todo mundo fora de `users`, sem caminho de
+ * exclusão quando a conta pedir remoção (ADR-0010 item 6). O endereço vive só
+ * dentro da requisição, o tempo de achar a conta e marcar `email_deliverable`.
+ */
+export interface NotificationDeliveriesTable {
+  id: string;
+  /** `MessageID` do provedor. Texto: o formato é dele, não nosso. */
+  message_id: string;
+  record_type: TipoDeEventoDeEntrega;
+  /** Subtipo da devolução (`HardBounce`, `Transient`, ...), quando vem. */
+  event_type: string | null;
+  description: string | null;
+  /** `DeliveredAt` do corpo. Anulável: nem todo tipo de evento traz. */
+  occurred_at: Date | null;
+  /** Quando NÓS recebemos. Distância para `occurred_at` denuncia reentrega. */
+  received_at: Generated<Date>;
+}
+
+export type StatusDoCaso = 'open' | 'closed_reunited' | 'closed_not_found' | 'closed_false_alarm';
+
+export interface LostCasesTable {
+  id: string;
+  pet_id: string;
+  /** Desnormalizado de `pets.owner_user_id`: sustenta o teto de 3 por conta sem junção. */
+  owner_user_id: string;
+  status: Generated<StatusDoCaso>;
+  last_seen_at: Date;
+  /** `geography(Point,4326)`. **Anulável**: área sozinha abre o caso. */
+  last_seen_point: ColumnType<string | null, never, never>;
+  last_seen_city: string | null;
+  last_seen_neighborhood: string | null;
+  last_seen_state: string | null;
+  description: string | null;
+  share_to_public_list: Generated<boolean>;
+  /** A única chave do caso em superfície pública. `case_id` nunca sai de lá. */
+  share_token: string;
+  opened_at: Generated<Date>;
+  closed_at: Date | null;
+  closure_outcome: 'reunited' | 'not_found' | 'false_alarm' | null;
+  closure_channel: 'tag_scan' | 'bichu_alert' | 'poster_or_link' | 'on_my_own' | 'other' | null;
+  closure_note: string | null;
+  reopen_deadline: Date | null;
+}
+
+/**
+ * BICHUS-92. Onde o tutor mora, aproximadamente, para a consulta de raio.
+ *
+ * Tabela própria e não colunas em `users`: `users` é lida em toda rota
+ * autenticada, e onde a pessoa mora não precisa acompanhar a leitura de sessão.
+ * O raciocínio inteiro está no cabeçalho da migração.
+ */
+export interface UserReferenceLocationsTable {
+  /** PK **e** FK. É isto que torna histórico inexprimível (critério 5). */
+  user_id: string;
+  /**
+   * `geography(Point,4326)`, já quantizado. `never` nos três sentidos de
+   * propósito: é o tipo que impede a coluna de ser selecionada crua ou inserida
+   * pelo construtor tipado. O único caminho para ela é o SQL de
+   * `kysely-localizacao-de-referencia.ts`, onde `ST_MakePoint` e `ST_Y`/`ST_X`
+   * ficam à vista de quem revisa.
+   */
+  reference_point: ColumnType<never, never, never>;
+  /** Lado da célula da grade, em metros, como ele sai em `UserLocation`. */
+  precision_m: number;
+  source: 'device_gps' | 'map_pin';
+  captured_at: Date;
+  /** 30 dias após a captura. Vencida, a conta sai da base de alerta. */
+  expires_at: Date;
+}
+
 export interface Database {
   users: UsersTable;
+  user_reference_locations: UserReferenceLocationsTable;
   user_identities: UserIdentitiesTable;
   local_credentials: LocalCredentialsTable;
   user_roles: UserRolesTable;
@@ -240,6 +455,14 @@ export interface Database {
   ref_colors: RefColorsTable;
   ref_breeds: RefBreedsTable;
   pets: PetsTable;
+  pet_tags: PetTagsTable;
+  tag_scans: TagScansTable;
+  found_reports: FoundReportsTable;
+  upload_intents: UploadIntentsTable;
+  pet_photos: PetPhotosTable;
+  jobs: JobsTable;
+  notification_deliveries: NotificationDeliveriesTable;
+  lost_cases: LostCasesTable;
   'audit.events': AuditEventsTable;
 }
 

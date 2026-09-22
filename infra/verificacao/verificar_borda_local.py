@@ -86,6 +86,85 @@ CAMINHOS_DA_DOCUMENTACAO = ["/v1/docs", "/v1/openapi.yaml"]
 # removida do contrato continuava respondendo enquanto o codigo dela existisse.
 CAMINHO_QUE_NAO_EXISTE = "/t/ABC123"
 
+# O webhook de entrega do provedor de e-mail (BICHUS-13, criterios 7 e 9).
+#
+# POR QUE ELE MERECE UMA SONDA PROPRIA, e por que ela e POST e espera 401:
+#
+# Este caminho teve o defeito em DUAS metades ao mesmo tempo -- nao havia
+# handler em `src/` e nao havia rota na borda --, e cada metade sozinha produz
+# o mesmo sintoma visto de fora: 404. Uma sonda GET nao distingue as duas, e
+# nem distingue nenhuma delas de "esta tudo certo", porque a aplicacao tambem
+# responde 404 para GET num caminho que so aceita POST.
+#
+# O 401 e o unico status que prova as duas metades de uma vez: para responder
+# "assinatura ausente ou invalida" a requisicao precisou ATRAVESSAR a borda E
+# chegar num handler que confere segredo. 404 aqui significa que alguma das
+# duas metades esta faltando, e o relatorio diz qual procurar primeiro.
+#
+# 204 seria o pior de todos: a aplicacao ACEITOU um evento de entrega sem
+# assinatura nenhuma. Nesse estado qualquer um na internet forja uma devolucao
+# definitiva e desliga o e-mail de um tutor.
+CAMINHO_DO_WEBHOOK = "/webhooks/postmark"
+
+
+def postar(base: str, caminho: str, corpo: bytes) -> tuple[int, dict, bytes]:
+    """POST sem seguir redirecionamento, para sondar rota de ENTRADA.
+
+    Deliberadamente SEM cabecalho de assinatura: o que se quer provar e que a
+    requisicao chega a um handler que exige credencial, e nao que ela e aceita.
+    Mandar uma assinatura valida aqui exigiria o segredo de producao dentro de
+    um script de verificacao, que e o contrario do que se quer.
+    """
+    partes = urllib.parse.urlsplit(base)
+    Conexao = http.client.HTTPSConnection if partes.scheme == "https" else http.client.HTTPConnection
+    porta = partes.port or (443 if partes.scheme == "https" else 80)
+    conexao = Conexao(partes.hostname, porta, timeout=TEMPO_LIMITE)
+    try:
+        conexao.request("POST", caminho, body=corpo, headers={
+            "User-Agent": "bichu-verificacao-borda/1",
+            "Content-Type": "application/json",
+            "Content-Length": str(len(corpo)),
+        })
+        resposta = conexao.getresponse()
+        return resposta.status, {k.lower(): v for k, v in resposta.getheaders()}, resposta.read(64 * 1024)
+    except Exception as e:
+        raise Reprovacao(f"POST {base}{caminho} falhou: {e}") from e
+    finally:
+        conexao.close()
+
+
+def verificar_webhook_de_entrega(base: str) -> list[str]:
+    """O webhook do provedor de e-mail atravessa a borda e exige assinatura."""
+    corpo = b'{"RecordType":"Bounce","MessageID":"sonda-da-verificacao"}'
+    status, _cabecalhos, _corpo = postar(base, CAMINHO_DO_WEBHOOK, corpo)
+
+    if status == 401:
+        return []
+
+    if status == 404:
+        return [
+            f"{CAMINHO_DO_WEBHOOK}: 404. O caminho NAO chega a aplicacao, e o provedor de e-mail "
+            "trata 404 como falha de entrega e REENVIA -- o sintoma nao e um caminho mudo, e um "
+            "laco de reentrega contra a borda enquanto a lista de supressao nunca chega ate nos. "
+            "Duas causas possiveis, nesta ordem: (1) falta `handle /webhooks/postmark` em "
+            "infra/caddy/Caddyfile, e ai `verificar_borda.py` tambem reprova; (2) a borda roteia e "
+            "a rota nao esta registrada na aplicacao -- confira se `registrarRotaDoWebhookDeEntrega` "
+            "e chamada na composicao de src/bin/api.ts"
+        ]
+
+    if status in (200, 202, 204):
+        return [
+            f"{CAMINHO_DO_WEBHOOK}: {status} SEM assinatura nenhuma. A aplicacao aceitou um evento "
+            "de entrega de um chamador anonimo: neste estado qualquer um na internet forja uma "
+            "devolucao definitiva para o e-mail de um tutor e desliga o aviso de pet encontrado "
+            "dele, sem que nada acuse. O contrato exige 401 (esquema `webhookSignature`)"
+        ]
+
+    return [
+        f"{CAMINHO_DO_WEBHOOK}: esperado 401 sem assinatura, veio {status}. O contrato declara "
+        "401 para assinatura ausente ou invalida, e o provedor decide reenviar pelo status"
+    ]
+
 
 def verificar_arquivo_de_plataforma(base: str, caminho: str) -> list[str]:
     falhas: list[str] = []
@@ -245,6 +324,13 @@ def main(argv: list[str]) -> int:
             resultado = [f"{caminho}: nao foi possivel verificar: {e}"]
         print(f"  [{'ok' if not resultado else 'REPROVA'}] {caminho} fechado por credencial")
         falhas.extend(resultado)
+
+    try:
+        resultado = verificar_webhook_de_entrega(base)
+    except Reprovacao as e:
+        resultado = [f"{CAMINHO_DO_WEBHOOK}: nao foi possivel verificar: {e}"]
+    print(f"  [{'ok' if not resultado else 'REPROVA'}] {CAMINHO_DO_WEBHOOK} chega a aplicacao e exige assinatura")
+    falhas.extend(resultado)
 
     try:
         status, _cab, _corpo = buscar(base, CAMINHO_QUE_NAO_EXISTE)

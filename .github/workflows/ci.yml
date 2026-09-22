@@ -11,14 +11,30 @@
 
 name: ci
 
+# A BRANCH PADRAO DO REPOSITORIO E `development`, e nao `main` (17/09/2026,
+# repositorio novo `bichu-app/bichu-app`). Um gatilho so em `main` deixaria
+# esta esteira sem disparar em nenhum PR do fluxo real de trabalho, que abre
+# contra `development`: o arquivo existiria, os jobs estariam escritos, e nada
+# rodaria. Portao que nao dispara nem chega a ficar verde sem verificar -- ele
+# so consta.
 on:
   pull_request:
-    branches: [main]
+    branches: [main, development]
   push:
-    branches: [main]
+    branches: [main, development]
 
 permissions:
   contents: read
+  # LEITURA, e so. O gitleaks chama `GET /repos/{dono}/{repo}/pulls/{n}/commits`
+  # no evento `pull_request` para saber o intervalo que precisa varrer, e o
+  # padrao `contents: read` responde 403 nesse endpoint -- o portao rapido caia,
+  # e com ele os outros 7 jobs, que dependem dele.
+  #
+  # `write` faria a acao tambem comentar o achado no PR, e nao e o que queremos:
+  # o comentario cita o TRECHO do segredo, em lugar publico e permanente. Um
+  # vazamento viraria dois, e o segundo sobrevive ao rebase que apagar o
+  # primeiro. Por isso o escopo para em `read` e o comentario segue desligado.
+  pull-requests: read
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -40,6 +56,98 @@ jobs:
       - name: portabilidade e hostname
         run: python3 infra/verificacao/verificar_portabilidade.py
 
+      # BICHUS-211, as duas iscas. Nenhuma das duas precisa de docker nem de
+      # `.env`, por isso estao aqui no primeiro estagio e nao no de integracao.
+      #
+      # A primeira roda o portao do invariante contra as iscas de
+      # `iscas/portas-*.json` e exige que cada uma REPROVE. Ela nao confere a
+      # configuracao real -- quem faz isso e o passo de mesmo nome no job
+      # `integracao`, onde existe `.env` para o compose interpolar. O que ela
+      # prova e que o portao continua enxergando: o dia em que alguem afrouxar
+      # uma regra, a isca correspondente passa a aprovar e este passo cai
+      # nomeando o arquivo.
+      - name: as iscas do portao de portas reprovam
+        run: python3 infra/verificacao/verificar_portas.py --autoteste
+
+      # A segunda: havendo par livre, a escolha de portas nao pode entregar um
+      # par ocupado -- e o que fazia `make up` sem argumento morrer em
+      # `port is already allocated`. O cenario ocupa portas altas com socket do
+      # proprio processo e inclui o caso `sem mecanismo`, que precisa reprovar.
+      - name: "`make up` sem argumento nao cai no bind havendo par livre"
+        run: python3 infra/verificacao/verificar_escolha_de_portas.py
+
+      # BICHUS-213. O passo `o alvo de producao constroi, e morre
+      # pelo motivo certo`, la no job `integracao`, aprova UMA morte e precisa
+      # reprovar as outras -- um portao que aprova qualquer morte nao prova
+      # nada, e era exatamente esse o risco de trocar a sonda por uma
+      # conferencia de log.
+      #
+      # Aqui e nao la porque o juizo nao precisa de docker: ele le o log e a
+      # lista `SEGREDOS_DE_RUNTIME` do codigo. Cada isca esta em
+      # `iscas/boot-prod-*.log`, e a que precisa APROVAR foi capturada da
+      # execucao 35721851040, que e a vermelha de hoje.
+      - name: as iscas do juizo do alvo prod reprovam
+        run: python3 infra/verificacao/verificar_boot_do_alvo_prod.py --autoteste
+
+      # BICHUS-216, as iscas primeiro. Cada caso guardado precisa reprovar pela
+      # regra DELE e so por ela: o autoteste compara conjuntos de regras, porque
+      # isca que reprova por dois motivos ao mesmo tempo continua verde depois de
+      # a regra que ela testava ser desligada, e passa a aprovar a regra
+      # quebrada. Nao usa docker; roda em milissegundos.
+      - name: as iscas do portao do commit de build reprovam
+        run: make --no-print-directory verificar-commit-de-build-autoteste
+
+      # BICHUS-219. O `portao` recusa `skipped` no nivel de JOB. Passo pulado
+      # dentro de job que reporta sucesso nao passa por la -- e era assim que o
+      # job `codigo` inteiro (lint, tipos, tipos gerados, suite unitaria) podia
+      # ficar verde sem ter rodado nada, bastando `package.json` faltar.
+      #
+      # Este passo le `.github/workflows/*.yml` e recusa condicao de PASSO que
+      # dependa de premissa que o proprio job mediu (`steps.*.outputs.*`, `env.*`,
+      # `hashFiles(...)`). Condicao sobre o evento e sobre o resultado continua
+      # valendo. A lista e de PERMITIDOS: forma que ele nao reconhece reprova, em
+      # vez de passar por omissao.
+      #
+      # As iscas de `iscas/passos-condicionais/` rodam DENTRO deste comando,
+      # antes dos workflows de verdade, e cada uma precisa reprovar pelo motivo
+      # que ela isola -- nao so reprovar. Duas delas reprovavam parcialmente pelo
+      # motivo do vizinho ate isso ser medido.
+      - name: nenhum passo e pulado por premissa do proprio job, iscas primeiro
+        run: python3 infra/verificacao/verificar_passos_condicionais.py
+
+      # Absorcao da BICHUS-210: o Dockerfile reprova o build sem `BUILD_COMMIT`
+      # e o compose so repassa o que estiver no AMBIENTE, entao quem poe o valor
+      # la e o Makefile. Este passo roda POR DENTRO do make de proposito -- ele
+      # le a variavel do ambiente que o make montou, que e o caminho real. Apague
+      # o `export` do Makefile e ele reprova; a pre-checagem do `make up`, que le
+      # a variavel do make e nao o ambiente, continuaria passando.
+      #
+      # ELE CONTINUA AQUI, NO `rapidos`, E A ESCOLHA E DELIBERADA (BICHUS-216).
+      # Ate 22/09 a terceira conferencia deste passo -- a que le
+      # `build.args.BUILD_COMMIT` da configuracao renderizada -- ficava CEGA aqui,
+      # porque nao ha `.env` neste job (ele so nasce no `integracao`, no
+      # `cp .env.example .env`) e a renderizacao do compose falhava. A recusa era
+      # engolida por um `except Exception` e o passo saia APROVADO.
+      #
+      # As duas saidas obvias foram medidas e recusadas:
+      #
+      #   - mover o passo para o `integracao` o poe DEPOIS do build, e depois de
+      #     dois jobs. Portao que so acusa depois de construir a imagem chega
+      #     tarde para pegar um `export` apagado num rebase;
+      #   - `cp .env.example .env` aqui nao basta: o exemplo nasce com quatro
+      #     chaves vazias que o compose exige com `:?`, e a renderizacao morre em
+      #     `OBJECT_STORAGE_SECRET_ACCESS_KEY`. Passar dali exigiria repetir aqui
+      #     as ~40 linhas de `sed` do job `integracao`, uma segunda copia que
+      #     deriva da primeira na proxima variavel.
+      #
+      # O portao passou a renderizar contra um `.env` descartavel, derivado do
+      # `.env.example` num diretorio temporario. `BUILD_COMMIT` continua vindo do
+      # ambiente que o make exportou, que e o que este passo mede; todo o resto e
+      # enchimento. A resposta passou a ser a mesma aqui e na maquina de quem tem
+      # `.env` -- antes ela dependia do `.env` de cada um, em silencio.
+      - name: o make exporta BUILD_COMMIT, e ele chega ao build
+        run: make --no-print-directory verificar-commit-de-build
+
       # ADR-0016 (itens 4 e 6) e o defeito de 17/09. Tres conferencias num
       # script so, todas por leitura de arquivo, todas com isca guardada em
       # `infra/verificacao/iscas/`:
@@ -58,6 +166,18 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # No evento `pull_request` a acao tenta COMENTAR no PR, e o token do
+          # workflow so tem `contents: read` -- ela morria com "Resource not
+          # accessible by integration" e derrubava o portao rapido, que e o
+          # primeiro: os outros 7 jobs nem chegavam a rodar.
+          #
+          # A correcao natural seria conceder `pull-requests: write`. Nao e a
+          # certa: o comentario do gitleaks cita o TRECHO do segredo achado, e
+          # comentario de PR e publico e permanente. Um vazamento viraria dois.
+          # Desligar o comentario mantem a varredura (que e o que importa: ela
+          # reprova o job do mesmo jeito) e o token sem escopo de escrita.
+          GITLEAKS_ENABLE_COMMENTS: 'false'
+          GITLEAKS_ENABLE_SUMMARY: 'true'
 
   codigo:
     name: lint, tipos e teste unitario
@@ -67,30 +187,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: existe codigo para verificar?
-        id: existe
+      # BICHUS-219. ISTO ERA UM `if:`, E O `if:` ERA O DEFEITO.
+      #
+      # Ate hoje este passo escrevia `tem=sim`/`tem=nao` num output e os seis
+      # passos abaixo carregavam `if: steps.existe.outputs.tem == 'sim'`. Sem
+      # `package.json`, lint, typecheck, tipos gerados e `npm test` eram TODOS
+      # pulados e o job reportava `success`. O `portao` recusa `skipped`, mas so
+      # no nivel de JOB: passo pulado dentro de job que reporta sucesso passa
+      # batido, e um job inteiro podia aprovar sem ter rodado nada.
+      #
+      # A premissa nao virou condicao: virou ASSERCAO. Ou o repositorio tem o
+      # esqueleto de backend, e os passos abaixo rodam todos, ou ele nao tem, e
+      # este passo derruba o job nomeando o motivo. As duas saidas sao visiveis;
+      # a terceira, que era "verde sem ter olhado", deixou de existir.
+      #
+      # `infra/verificacao/verificar_passos_condicionais.py`, no job `rapidos`,
+      # impede que a forma antiga volte por qualquer passo de qualquer workflow.
+      - name: o esqueleto de backend existe
         run: |
-          if [ -f package.json ]; then
-            echo "tem=sim" >> "$GITHUB_OUTPUT"
-          else
-            echo "tem=nao" >> "$GITHUB_OUTPUT"
-            echo "::notice::package.json ainda nao existe; a frente de backend nao criou o esqueleto"
+          if [ ! -f package.json ]; then
+            echo "::error::package.json nao existe. Este job inteiro (lint, tipos, tipos gerados e suite unitaria) so tem sentido com o esqueleto de backend no repositorio. Verificacao que nao consegue verificar REPROVA: um job verde aqui diria que o codigo foi conferido, e nada teria sido"
+            exit 1
           fi
+          echo "package.json presente; os passos deste job rodam todos, sem condicao"
 
       - uses: actions/setup-node@v4
-        if: steps.existe.outputs.tem == 'sim'
         with:
           node-version: "22"
           cache: npm
 
-      - if: steps.existe.outputs.tem == 'sim'
-        run: npm ci
+      - run: npm ci
 
-      - if: steps.existe.outputs.tem == 'sim'
-        run: npm run lint
+      - run: npm run lint
 
       - name: tipos
-        if: steps.existe.outputs.tem == 'sim'
         run: npm run typecheck
 
       # Uma fonte, um destino gerado, e um portao que reprova na divergencia.
@@ -98,7 +228,6 @@ jobs:
       # contrato e o codigo divergem SEM QUE O DIFF MOSTRE, porque a proxima
       # geracao desfaz a edicao em silencio.
       - name: tipos gerados batem com a spec
-        if: steps.existe.outputs.tem == 'sim'
         run: |
           npm run generate:types
           if ! git diff --exit-code -- src/shared/types/generated/; then
@@ -106,7 +235,16 @@ jobs:
             exit 1
           fi
 
-      - if: steps.existe.outputs.tem == 'sim'
+      # BICHUS-219, as iscas ANTES da suite. `npm test` terminava num curinga
+      # entregue ao runner, e padrao que nao casa nada sai `# tests 0` com
+      # codigo 0 -- medido no Node 22.23.2, o mesmo desta imagem. O executor
+      # calcula os caminhos do DISCO e exige que todo `*.test.ts` da fonte tenha
+      # compilado correspondente executado. Este passo prova que ele continua
+      # enxergando: cada regra reprova sozinha, contra arvore descartavel.
+      - name: as iscas do executor da suite unitaria reprovam
+        run: node infra/suite/executar-unitaria.mjs --autoteste
+
+      - name: suite unitaria
         run: npm test
 
   contrato:
@@ -167,16 +305,89 @@ jobs:
       - name: portao de contrato publico, iscas primeiro
         run: sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
 
+      # BICHUS-188. Mesma historia do portao acima, e por isso o mesmo remedio:
+      # ele nasceu com teste ao lado e NENHUM job o executava. A entrega que o
+      # criou registrou a lacuna por escrito, e regra escrita com mecanismo
+      # ausente e a familia de defeito que este projeto passou o dia
+      # catalogando -- ninguem acusa, porque ninguem procura o que acredita ja
+      # ter.
+      #
+      # `created_by_user_id` e "quem convidou": vinculo entre duas pessoas, que
+      # o ADR-0011 secao 4 proibe expor. A proibicao valia "em revisao", e
+      # revisao humana esquece.
+      #
+      # ISCAS PRIMEIRO, e aqui elas nao sao zelo: as duas tabelas nasceram sem
+      # rota, entao o contrato tem ZERO ocorrencia das colunas marcadas e a
+      # varredura real nao tem o que achar. Sem as tres iscas este passo ficaria
+      # verde por nao ter olhado para nada -- e continuaria verde no dia em que
+      # quebrasse. Elas cobrem o vazamento no contrato, o vazamento em codigo, e
+      # o apagamento da marca no COMMENT ON COLUMN, que e o pior dos tres porque
+      # deixa o portao sem lista e ele passa a aprovar tudo calado.
+      #
+      # Sem `continue-on-error`: este passo REPROVA a esteira.
+      - name: portao de saida (colunas que nao saem), iscas primeiro
+        run: sh infra/verificacao/verificar-colunas-que-nao-saem.sh .
+
+      # BICHUS-13 criterio 12, parte que NAO depende de rede. O comando roda o
+      # autoteste das iscas antes de qualquer outra coisa: se o comparador
+      # deixar de enxergar, ele falha dizendo isso.
+      #
+      # Sem destino nenhum de proposito. Num PR o destino hospedado ainda nao
+      # foi implantado com o codigo deste PR, e compara-lo aqui reprovaria por
+      # motivo errado -- que e como um portao vira ruido e depois vira
+      # `continue-on-error`. O que ESTE passo confere e a lista fechada: todo
+      # servico com `profiles:` no compose precisa estar declarado como ausente
+      # no destino hospedado, com motivo, e toda declaracao precisa corresponder
+      # ao arquivo. A comparacao entre os dois enderecos roda em
+      # `.github/workflows/dois-destinos.yml`, agendada, e o comando imprime em
+      # voz alta que ela NAO rodou aqui.
+      - name: a divergencia entre destinos esta declarada em lista fechada
+        run: node dist/tools/comparar-destinos.js
+
       - name: compatibilidade contra main
         if: github.event_name == 'pull_request'
         run: |
           git show origin/${{ github.base_ref }}:api/openapi.yaml > /tmp/base.yaml 2>/dev/null || {
             echo "::notice::sem versao anterior da spec: primeira introducao"; exit 0; }
-          npx --yes oasdiff breaking /tmp/base.yaml api/openapi.yaml --fail-on ERR
+          # `oasdiff` e um binario Go. O pacote npm de mesmo nome NAO declara
+          # executavel, e `npx --yes oasdiff` morre com "could not determine
+          # executable to run" -- o passo reprovava por ferramenta ausente, e
+          # nao por incompatibilidade, que e a pior forma de portao vermelho.
+          #
+          # O passo inteiro so roda em `pull_request`, entao ele estreou no
+          # PRIMEIRO PR deste repositorio, meses depois de escrito. E o mesmo
+          # padrao do gitleaks e do TAG_CODE_KEY na mesma esteira: passo que
+          # nunca executou nao esta funcionando, esta sem noticia.
+          #
+          # Versao fixada pelo mesmo motivo do spectral acima.
+          # As iscas do filtro ANTES de usar o filtro: um comparador que
+          # deixou de enxergar aprova tudo em silencio, e este passo existe
+          # justamente para nao aprovar em silencio.
+          python3 infra/verificacao/verificar_quebras_de_contrato.py --autoteste
+          # `--format json` em vez de `--fail-on ERR`: o veredito passa a ser
+          # tomado por quem consegue distinguir a quebra dispensada, POR NOME,
+          # de qualquer outra. `continue-on-error` aqui desligaria o portao
+          # inteiro, e desligamento nao volta atras.
+          docker run --rm -v /tmp:/tmp -v "$PWD:/repo" -w /repo tufin/oasdiff:v1.32.1 \
+            breaking /tmp/base.yaml api/openapi.yaml --format json > /tmp/quebras.json
+          # O VENCIMENTO da dispensa nao e conferido aqui: quem o confere e
+          # `verificar_dispensas.py`, no job `rapidos`, de que este job depende.
+          # Dispensa vencida derruba `rapidos` e este passo nem executa.
+          python3 infra/verificacao/verificar_quebras_de_contrato.py /tmp/quebras.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          # `tee` mascara o codigo de saida do python. Guardado aqui e usado na
+          # ULTIMA linha: sair agora pularia o changelog abaixo, e sair nunca
+          # deixaria o passo verde com a reprovacao impressa no resumo -- que e
+          # a pior forma de portao, a que parece ter funcionado.
+          veredito="${PIPESTATUS[0]}"
+
           # Campo ACRESCENTADO nao quebra ninguem e por isso passa nas
           # ferramentas -- e e exatamente por ali que a implementacao se afasta
           # do documento sem nenhum alarme. Aviso obrigatorio, nao reprovacao.
-          npx --yes oasdiff changelog /tmp/base.yaml api/openapi.yaml | tee -a "$GITHUB_STEP_SUMMARY"
+          docker run --rm -v /tmp:/tmp -v "$PWD:/repo" -w /repo tufin/oasdiff:v1.32.1 \
+            changelog /tmp/base.yaml api/openapi.yaml | tee -a "$GITHUB_STEP_SUMMARY"
+
+          exit "$veredito"
 
   integracao:
     name: compose, migracao do zero e pilha de pe
@@ -199,6 +410,45 @@ jobs:
           sed -i "s#^DATABASE_URL=.*#DATABASE_URL=postgres://bichu:$senha@db:5432/bichu#" .env
           sed -i 's/^OBJECT_STORAGE_ACCESS_KEY_ID=.*/OBJECT_STORAGE_ACCESS_KEY_ID=ci-descartavel/' .env
           sed -i 's/^OBJECT_STORAGE_SECRET_ACCESS_KEY=.*/OBJECT_STORAGE_SECRET_ACCESS_KEY=ci-descartavel-segredo/' .env
+          # O MinIO exige esta chave para cifrar no servidor, e a politica de
+          # upload assinada manda `x-amz-server-side-encryption` (BICHUS-87,
+          # criterio 22). Sem ela o `compose.yaml` nem valida -- ele usa
+          # `${OBJECT_STORAGE_KMS_KEY:?}`.
+          #
+          # NAO e coberta pela guarda `nenhuma variavel exigida ficou vazia`: a
+          # guarda le os `requireEnv()` do codigo da APLICACAO, e esta variavel
+          # e exigida pelo COMPOSE. A guarda continua valendo para o que ela
+          # cobre; este comentario existe para a proxima pessoa nao concluir que
+          # ela cobre tudo.
+          sed -i "s|^OBJECT_STORAGE_KMS_KEY=.*|OBJECT_STORAGE_KMS_KEY=ci-descartavel:$(openssl rand -base64 32)|" .env
+          # `SECRET_STORE_PROJECT` so e EXIGIDA em prod/preprod, onde os segredos
+          # vem do gerenciador (ADR-0022). Este job roda em `dev` e nunca a le.
+          # Ela esta aqui porque a guarda abaixo conta `requireEnv('NOME')` por
+          # TEXTO e nao conhece condicional -- e isso e de proposito: ensina-la a
+          # entender `if` faria dela uma analise de fluxo, e analise de fluxo
+          # incompleta e o tipo de guarda que aprova o que nao entende.
+          # Valor descartavel, jamais usado: nenhum segredo e buscado em `dev`.
+          sed -i 's|^SECRET_STORE_PROJECT=.*|SECRET_STORE_PROJECT=projeto-de-ci-descartavel|' .env
+          grep -q '^SECRET_STORE_PROJECT=' .env || echo 'SECRET_STORE_PROJECT=projeto-de-ci-descartavel' >> .env
+          # `FCM_PROJECT` so e EXIGIDA com `PUSH_TRANSPORT=fcm` (ADR-0008). Este
+          # job roda em `log`, que e o padrao do .env.example, e nunca a le --
+          # com `log` nada sai do processo. Ela esta aqui pelo MESMO motivo de
+          # `SECRET_STORE_PROJECT` logo acima: a guarda seguinte conta
+          # `requireEnv('NOME')` por TEXTO e nao conhece condicional, e isso e
+          # de proposito. Sem esta linha a guarda reprova o job citando
+          # FCM_PROJECT, que foi como ela reprovou hoje.
+          #
+          # Valor descartavel e que NAO PARECE um projeto de verdade: se um dia
+          # este job passar a rodar com `fcm`, o envio precisa falhar dizendo
+          # que o projeto nao existe -- e nao acertar um projeto de alguem.
+          sed -i 's|^FCM_PROJECT=.*|FCM_PROJECT=projeto-de-ci-que-nao-existe|' .env
+          grep -q '^FCM_PROJECT=' .env || echo 'FCM_PROJECT=projeto-de-ci-que-nao-existe' >> .env
+          # `MAIL_WEBHOOK_SECRET` nasce VAZIA no `.env.example` e e exigida por
+          # `requireEnv` -- a guarda antiga nao a via, pelo motivo explicado no
+          # passo de baixo. Com a leitura corrigida ela passa a reprovar aqui,
+          # que e o comportamento certo: ela e a UNICA autenticacao do webhook
+          # de entrega, e `app-config.ts` recusa menos de 32 bytes.
+          sed -i "s|^MAIL_WEBHOOK_SECRET=.*|MAIL_WEBHOOK_SECRET=ci-descartavel-$(openssl rand -hex 24)|" .env
           # Chaves geradas NO JOB e jogadas fora com o runner: chave de
           # assinatura de verdade nunca entra em repositorio nem em log.
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ativa.pem 2>/dev/null
@@ -213,12 +463,109 @@ jobs:
           trocar('JWT_ACTIVE_PRIVATE_KEY', base64.b64encode(pathlib.Path('/tmp/ativa.pem').read_bytes()).decode())
           trocar('JWT_NEXT_PRIVATE_KEY', base64.b64encode(pathlib.Path('/tmp/rotacao.pem').read_bytes()).decode())
           trocar('IP_HMAC_KEY', base64.b64encode(b'ci-descartavel-de-32-bytes-no-min').decode())
+          # Hex de 64 caracteres: app-config.ts recusa qualquer outro tamanho.
+          trocar('TAG_CODE_KEY', 'c1' * 32)
+          # DIFERENTE da de cima, e nao por estetica: `app-config.ts` recusa
+          # subir com as duas iguais (ADR-0004, Emenda 1).
+          trocar('TAG_CODE_INDEX_KEY', 'd2' * 32)
           env.write_text(texto)
           FIM
           docker compose config -q
 
+      - name: nenhuma variavel exigida ficou vazia
+        # A ausencia de TAG_CODE_KEY quebrou este job em 17/09 e a causa so
+        # aparecia no log da api em loop de restart, dezenas de linhas abaixo
+        # do passo que realmente falhou. O passo acima nomeia cada segredo a
+        # mao, entao TODA variavel nova quebra a pilha ate alguem lembrar de
+        # edita-lo. Esta guarda le as exigencias do PROPRIO CODIGO e falha em
+        # segundos com o nome da variavel, em vez de deixar a pilha morrer.
+        #
+        # A LEITURA MUDOU DE LUGAR EM 22/09, E O MOTIVO IMPORTA.
+        # Ela era um script Python inline aqui, e retirava comentario de BLOCO
+        # antes de comentario de LINHA. `src/shared/config/app-config.ts:531`
+        # tem um `/*` DENTRO de um comentario de linha (`/.well-known/*`), que
+        # abre um bloco para a expressao regular e engole o que vem depois.
+        # Resultado medido: a guarda enxergava 12 das 23 variaveis exigidas e
+        # anunciava "todas preenchidas". Entre as 11 invisiveis estava
+        # TAG_CODE_KEY -- a variavel cuja falta motivou escrever esta guarda.
+        # Ela era cega justamente para o caso que existia para pegar.
+        #
+        # Agora a leitura mora em `infra/integracao/variaveis-exigidas.mjs`,
+        # com autoteste que REPROVA se a ordem voltar a inverter, e e a MESMA
+        # que gera o `.env` da pilha de integracao dos worktrees. Duas copias
+        # da mesma leitura divergem, e a que diverge para menos aprova o que
+        # nao conferiu.
+        run: |
+          node --input-type=module -e '
+            import { lerVariaveisExigidas, autoteste } from "./infra/integracao/variaveis-exigidas.mjs";
+            import { readFileSync } from "node:fs";
+            console.log(autoteste());
+            const { exigidas, opacas } = lerVariaveisExigidas("src");
+            if (opacas.length > 0) {
+              console.log("::error::ha chamada de requireEnv cujo nome esta fora do alcance desta "
+                + "guarda (variavel ou template literal). Ela NAO esta sendo conferida: " + opacas.join("; "));
+              process.exit(1);
+            }
+            const env = Object.fromEntries(readFileSync(".env", "utf8").split("\n")
+              .filter((l) => l.includes("=") && !l.trimStart().startsWith("#"))
+              .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
+            const faltando = exigidas.filter((v) => (env[v] ?? "").trim() === "");
+            if (faltando.length > 0) {
+              console.log("::error::o .env deste job nao preenche variavel exigida pelo codigo: "
+                + faltando.join(", ") + " -- acrescente um valor descartavel no passo \"ambiente de teste\"");
+              process.exit(1);
+            }
+            console.log(exigidas.length + " variaveis exigidas pelo codigo, todas preenchidas");
+          '
+
+      # BICHUS-210. O commit entra por ARGUMENTO DE BUILD e fica gravado na
+      # imagem; o Dockerfile REPROVA o build sem ele. Esta linha precisa vir
+      # antes de qualquer `docker compose build` deste job.
+      #
+      # `git rev-parse HEAD` e nao `github.sha`: os dois coincidem em `push`,
+      # mas em `pull_request` o `actions/checkout` posiciona o merge commit, e
+      # e ELE que esta sendo construido. Perguntar ao repositorio clonado
+      # responde sobre o que a imagem de fato carrega; `github.sha` responde
+      # sobre o evento, e sao coisas diferentes no dia em que divergem.
+      - name: o commit de que esta imagem vai sair
+        run: |
+          commit=$(git rev-parse HEAD)
+          echo "BUILD_COMMIT=$commit" >> "$GITHUB_ENV"
+          echo "construindo a partir de $commit"
+
+      # BICHUS-211, contra a configuracao REAL: com o `.env` do passo acima
+      # montado, o compose ja interpola tudo, e aqui se confere porta publicada
+      # contra as cinco URLs base. Vem ANTES do build e da subida de proposito:
+      # o defeito que ele pega nao derruba a pilha -- ela sobe, a sonda passa, e
+      # o link gerado e que aponta para porta muda. Depois de `up` seria tarde e
+      # verde.
+      - name: porta publicada e URL base de acordo
+        run: python3 infra/verificacao/verificar_portas.py
+
       - name: constroi a imagem (dev) e o migrador
         run: docker compose --profile dev build
+
+      # BICHUS-215. ANTES de subir a pilha, de proposito: o defeito que este
+      # passo pega nao derruba servico nenhum -- a pilha sobe inteira, a sonda
+      # passa, as migracoes aplicam, e a reprovacao so chega no ULTIMO passo do
+      # job, `Cannot find module`, depois de dez minutos de runner.
+      #
+      # Em 22/09 foi exatamente assim (execucao 35725325183): o alvo `dev`
+      # copia diretorio NOME A NOME, a BICHUS-204 tinha movido o executor da
+      # suite para `infra/integracao/`, e nenhum `COPY` alcancava. O
+      # `.dockerignore` nunca teve culpa.
+      #
+      # O que este passo confere nao e uma lista: ele varre QUEM manda
+      # `npm run <script>` dentro de conteiner (esta esteira, o Makefile e
+      # `rodar.mjs`), resolve os arquivos que cada script abre -- importacao em
+      # cadeia inclusive -- e exige que estejam na imagem. Rodar a suite de um
+      # worktree nao substitui isto: `compose.integracao.yaml` monta a arvore
+      # por cima de `/app` e tudo aparece pelo volume, com a imagem vazia.
+      #
+      # As iscas rodam ANTES da imagem real, dentro do proprio script: duas
+      # imagens mutiladas derivadas desta, que PRECISAM reprovar.
+      - name: a imagem carrega o que a esteira manda rodar dentro dela
+        run: node infra/verificacao/verificar-arquivos-no-container.mjs bichu-app:local | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: sobe a pilha inteira, do zero
         # `--wait` e o que torna este passo uma verificacao: ele so devolve 0
@@ -273,6 +620,60 @@ jobs:
             exit 1
           fi
 
+      # BICHUS-13 criterio 12. `docker inspect` acima compara a IMAGEM dos dois
+      # containers; este passo compara o que cada PROCESSO calcula sobre si
+      # mesmo, lendo `dist/` e o contrato de dentro do container.
+      #
+      # Sao coisas diferentes e as duas importam: a imagem pode ser a mesma e um
+      # volume montado por cima trocar o codigo, e a imagem pode ser outra
+      # (construida noutro momento, noutro destino) com o mesmo codigo. Entre
+      # DESTINOS so a segunda comparacao e possivel sem publicar a imagem num
+      # registry, e e ela que viaja na resposta de `/v1/health`.
+      - name: a sonda diz QUAL artefato esta no ar
+        run: |
+          corpo=$(curl -sS --fail --max-time 10 http://localhost:3000/v1/health)
+          echo "$corpo"
+          artefato=$(printf '%s' "$corpo" | sed -n 's/.*"artifact":"\([0-9a-f]*\)".*/\1/p')
+          if [ -z "$artefato" ]; then
+            echo "::error::/v1/health respondeu sem \`build.artifact\`. Sem identificador de build na resposta, \"os dois destinos rodam a mesma coisa\" volta a ser palavra (BICHUS-13, criterio 12)"
+            exit 1
+          fi
+          case "$artefato" in
+            [0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) ;;
+            *) echo "::error::\`build.artifact\` nao tem a forma esperada: $artefato"; exit 1 ;;
+          esac
+          echo "artefato no ar: $artefato" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # BICHUS-210. A outra metade da pergunta: o artefato diz O QUE roda, o
+      # commit diz DE ONDE ele veio.
+      #
+      # POR QUE ESTE PASSO NAO E UM `grep '"commit"'`. O campo ja existia no
+      # contrato e vinha `null` nos dois ambientes: conferir a presenca ficaria
+      # verde com o defeito inteiro de pe. O verificador cobra o VALOR, e cobra
+      # que ele seja o commit de que a imagem foi construida -- sem a segunda
+      # metade, fixar uma string no codigo deixaria este portao verde
+      # reportando a mentira.
+      #
+      # As iscas rodam ANTES da rede, dentro do proprio script, e uma delas e
+      # exatamente o corpo que os dois ambientes respondiam em 22/09.
+      - name: a sonda diz de QUAL COMMIT o artefato saiu
+        run: |
+          node infra/verificacao/verificar-commit-no-health.mjs \
+            http://localhost:3000 "$BUILD_COMMIT" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: api e worker calculam o MESMO artefato, de dentro
+        # O worker nao fala HTTP, entao o valor e pedido ao modulo diretamente.
+        # E a mesma funcao que a api usa para responder a sonda.
+        run: |
+          calcular="import('/app/dist/shared/artefato/identidade-do-artefato.js').then(m=>console.log(m.resumirArtefato('/app')))"
+          artefato_api=$(docker compose exec -T api node -e "$calcular" | tr -d '\r')
+          artefato_worker=$(docker compose exec -T worker node -e "$calcular" | tr -d '\r')
+          echo "api=$artefato_api worker=$artefato_worker"
+          if [ "$artefato_api" != "$artefato_worker" ]; then
+            echo "::error::api e worker calculam artefatos diferentes. A imagem pode ser a mesma e o codigo nao: procure volume montado por cima de \`dist\` nos dois servicos"
+            exit 1
+          fi
+
       - name: limites de memoria estao valendo de verdade
         run: |
           # `deploy.resources.limits` fora do Swarm e ignorado EM SILENCIO e o
@@ -287,10 +688,43 @@ jobs:
             echo "limite de $c aplicado: $limite bytes"
           done
 
-      - name: o alvo de producao tambem constroi e sobe
-        # A variavel BUILD_TARGET existe para trocar de alvo; um alvo `prod`
-        # que ninguem constroi quebra no dia da implantacao, que e o pior dia
-        # para descobrir. Aqui ele e construido e o processo e posto de pe.
+      # BICHUS-213. ESTE PASSO MUDOU DE PROMESSA EM 22/09, E VALE LER O PORQUE.
+      #
+      # Ate 22/09 ele dizia "constroi e SOBE", e a sonda era a prova. Isso
+      # funcionou ate a ADR-0022 entrar na `development`: em
+      # `NODE_ENV=production` o boot busca oito segredos no Secret Manager, e
+      # num runner do GitHub nao ha metadata server nem projeto -- o `.env`
+      # deste job aponta para `projeto-de-ci-descartavel`, que nao existe de
+      # proposito. O processo morre antes de ouvir a porta, e nao ha conserto
+      # para isso DENTRO da esteira.
+      #
+      # Medido na execucao 35721851040. E nao foi surpresa de todo: o passo
+      # ficou verde pela ultima vez em 19/09 as 16h26, no commit 6b923e2, que
+      # e ANTERIOR a ADR-0022. Entre um e outro o job morria mais cedo, entao
+      # este passo simplesmente nao chegava a rodar.
+      #
+      # Tres saidas foram consideradas. Um provedor de segredos falso para
+      # `NODE_ENV=production` criaria um caminho que producao nao usa, e um dia
+      # alguem confiaria nele. Tirar o passo da esteira deixaria o alvo `prod`
+      # sem nenhuma conferencia entre commits. Fica a terceira: o passo
+      # exercita o que da para exercitar sem gerenciador, e diz em voz alta o
+      # que deixou de provar.
+      #
+      # O QUE ELE PROVA: que a imagem `prod` constroi, que o processo EXECUTA
+      # (carrega o codigo, chega a sequencia de subida) e que ele morre
+      # EXATAMENTE no gerenciador de segredos, nomeando a fonte, o projeto que
+      # o `.env` declarou e a lista inteira de `SEGREDOS_DE_RUNTIME`.
+      #
+      # O QUE ELE NAO PROVA MAIS: que o alvo `prod` atende requisicao. Isso
+      # passou a ser verificacao de IMPLANTACAO, onde existe gerenciador de
+      # verdade -- `infra/verificacao/verificar-commit-no-health.mjs` e
+      # `verificar_borda.py` ja batem na sonda do ambiente hospedado.
+      #
+      # O juizo NAO aprova qualquer morte: morte em outro ponto, morte no
+      # adaptador de ambiente, morte parcial, projeto divergente e boot que
+      # SOBE sao todos reprovacao. As iscas disso rodam no job `rapidos`, e cada
+      # regra tem a sua: desligar uma faz o autoteste cair nomeando o caso.
+      - name: o alvo de producao constroi, e morre pelo motivo certo
         env:
           BUILD_TARGET: prod
           IMAGE_TAG: prod
@@ -298,15 +732,65 @@ jobs:
           docker compose build api
           docker run -d --name prova-prod --network bichu_default --env-file .env \
             -e NODE_ENV=production -e BIND_HOST=0.0.0.0 -e PORT=3000 bichu-app:prod
-          for _ in $(seq 1 20); do
-            if docker exec prova-prod node -e "fetch('http://127.0.0.1:3000/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then
-              echo "alvo prod respondeu a sonda"; exit 0
+
+          # `docker wait` devolve o codigo de saida do processo. O `timeout`
+          # existe porque um container que NAO morre tambem e reprovacao, e
+          # precisa ser dita com outras palavras: sem ele o passo ficaria
+          # pendurado ate o limite do job e a causa sairia como "cancelado".
+          if saida=$(timeout 60 docker wait prova-prod); then :; else saida=nenhuma; fi
+          docker logs prova-prod > /tmp/prova-prod.log 2>&1
+          echo "saida do processo: $saida"
+          cat /tmp/prova-prod.log
+
+          # Lido do `.env` e nao escrito a mao: o portao confere que o boot
+          # procurou no projeto que ESTE job declarou. Copiar o nome para ca
+          # faria as duas pontas divergirem em silencio no dia em que uma
+          # mudasse.
+          projeto=$(sed -n 's/^SECRET_STORE_PROJECT=//p' .env | head -1)
+          test -n "$projeto" || { echo "::error::SECRET_STORE_PROJECT vazia no .env deste job"; exit 1; }
+
+          python3 infra/verificacao/verificar_boot_do_alvo_prod.py \
+            --log /tmp/prova-prod.log --saida "$saida" --projeto "$projeto" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          veredito="${PIPESTATUS[0]}"
+
+          echo "Este passo NAO prova que o alvo \`prod\` atende requisicao: sem gerenciador de segredos no runner, essa prova e de implantacao (BICHUS-213)." \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+          if [ "$veredito" != "0" ]; then
+            echo "::error::o alvo prod nao morreu pelo motivo certo. Ver o veredito acima e o log do container"
+          fi
+          exit "$veredito"
+
+      # BICHUS-210, nos alvos que a subida acima NAO exercita.
+      #
+      # O passo do `dev` cobra o commit pela SONDA, que e o caminho real. Aqui a
+      # leitura e da IMAGEM, e de proposito: `prod` e `migrador` sao artefatos
+      # como o `dev`, e cada um grava o commit pelo SEU proprio `ARG`/`ENV`. Um
+      # alvo pode carregar e o outro nao, e o que vai para a VM e justamente o
+      # `prod` -- conferir so o `dev` deixaria o defeito onde ele custa mais.
+      #
+      # Ler a imagem em vez de subir mais um processo tambem evita amarrar esta
+      # conferencia ao boot de `prod`, que em `NODE_ENV=production` busca os
+      # segredos no gerenciador (ADR-0022) e nao depende desta historia.
+      #
+      # Sao DUAS leituras por outro caminho cada: o `ENV`, que e o que a
+      # aplicacao le, e o arquivo que o estagio de conferencia gravou. Divergir
+      # entre os dois significa `ARG` passado em dois lugares com valores
+      # diferentes, que e um jeito de a imagem mentir sem ninguem notar.
+      - name: os alvos prod e migrador tambem sabem de qual commit sairam
+        run: |
+          falhou=0
+          for imagem in bichu-app:prod bichu-migrador:local; do
+            declarado=$(docker run --rm --entrypoint printenv "$imagem" BUILD_COMMIT)
+            gravado=$(docker run --rm --entrypoint cat "$imagem" /etc/bichu/commit)
+            echo "$imagem: ENV=$declarado arquivo=$gravado" | tee -a "$GITHUB_STEP_SUMMARY"
+            if [ "$declarado" != "$BUILD_COMMIT" ] || [ "$gravado" != "$BUILD_COMMIT" ]; then
+              echo "::error::$imagem foi construida de $BUILD_COMMIT e carrega ENV=$declarado, arquivo=$gravado. Um alvo que nao sabe de onde veio responde \`commit: null\` na sonda, e ai um servico rodando codigo antigo fica indistinguivel de um rodando o novo (BICHUS-210)"
+              falhou=1
             fi
-            sleep 2
           done
-          echo "::error::a imagem do alvo prod nao ficou saudavel"
-          docker logs prova-prod
-          exit 1
+          exit $falhou
 
       # Os 17 casos de `tests/integration/` provam BICHUS-19 e BICHUS-56 por
       # consulta ao catalogo do Postgres -- inclusive o banco recusando de fato
@@ -324,8 +808,23 @@ jobs:
       # Rodar do runner exigiria publicar a porta do banco, que hoje nao e
       # publicada -- e publicar porta para poder testar e trocar a topologia
       # pelo teste.
-      - name: suite de integracao (17 casos, BICHUS-19 e BICHUS-56)
-        run: docker compose run --rm api npm run test:integration
+      # A suite so roda em banco que se declara descartavel. Quem provisiona
+      # declara; quem escreve confere (infra/integracao/guarda-de-banco-descartavel.mjs).
+      # Ela CRIA conta, revoga sessao, insere em audit.events e apaga
+      # `rate_limit_counters` inteira -- e o `.env` de um job de esteira e um
+      # arquivo como outro qualquer, que alguem pode apontar para outro lugar.
+      - name: o banco deste job se declara descartavel
+        run: |
+          docker compose exec -T db psql -v ON_ERROR_STOP=1 -U bichu -d bichu \
+            -c "COMMENT ON DATABASE \"bichu\" IS 'bichu:integracao:descartavel'"
+
+      # `test:integration:executar` e nao `test:integration`: o segundo sobe uma
+      # PILHA EFEMERA propria (para rodar de dentro de um worktree), e aqui a
+      # pilha ja esta de pe, do zero, desde o passo acima. O executor e o mesmo
+      # nos dois caminhos, com os mesmos portoes -- inclusive o que reprova
+      # quando a suite nao executa nada.
+      - name: suite de integracao (BICHUS-19, BICHUS-56, BICHUS-15 e BICHUS-178)
+        run: docker compose run --rm api npm run test:integration:executar
 
       - name: diagnostico quando falha
         if: failure()
@@ -365,6 +864,113 @@ jobs:
       # dentro dela reprova -- em vez de a suite desaparecer em silencio.
       - run: flutter test
         working-directory: app
+
+  # O job `app` acima NAO compila para Android. `flutter analyze` e
+  # `flutter test` rodam na maquina virtual do Dart, contra o SDK do Flutter, e
+  # nunca tocam no Gradle, no AGP nem no SDK do Android. Enquanto a esteira
+  # parou neles, existiu uma classe inteira de defeito sem portao: a dependencia
+  # que sobe o PISO da cadeia de ferramentas.
+  #
+  # Ela custou caro em 22/09/2026. A BICHUS-161 trouxe `permission_handler`, que
+  # exige compilar contra a API 37; o projeto compilava contra a 36 e o AGP
+  # 9.1.0 nao aceita a 37. Os oito jobs ficaram verdes. Quem descobriu foi o
+  # CLIENTE, na hora de gerar o APK para validar camera, splash e acessibilidade
+  # de formulario no aparelho -- as tres coisas que simulador nenhum prova.
+  #
+  # POR QUE EM TODO PUSH, E NAO NUM AGENDADO DIARIO
+  #
+  # O gatilho deste defeito e a mudanca de dependencia, que chega em um commit
+  # qualquer. Num agendado diario a esteira acusaria ate 24 horas depois, com o
+  # trabalho do dia ja empilhado em cima do commit culpado, e a bissecao feita a
+  # mao. Num filtro por caminho (`pubspec.lock`, `android/**`) o portao pularia,
+  # e `skipped` e exatamente o que o job `portao` recusa: portao que nao roda
+  # nao aprova.
+  #
+  # E o custo nao justifica o desconto. O job e PARALELO a `integracao`, que ja
+  # constroi duas imagens Docker e sobe a pilha inteira; ele nao entra no caminho
+  # critico da esteira, entra ao lado dele. Medido em 22/09 numa maquina de
+  # desenvolvimento, com a distribuicao do Gradle e os artefatos do AGP baixados
+  # do zero: 4min20 de ponta a ponta. Se um dia passar de 30 minutos no runner,
+  # a conversa e sobre cache, e nao sobre deixar a classe descoberta.
+  apk:
+    name: APK de release (compila de verdade)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+
+      # O projeto compila em JVM 17 (`compileOptions` e `jvmTarget` em
+      # app/android/app/build.gradle.kts). Declarar aqui evita que a esteira
+      # mude de JDK no dia em que a imagem do runner mudar de padrao.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # A PLATAFORMA E NOMEADA A MAO, DE PROPOSITO.
+      #
+      # A partir da API 37 a plataforma do Android tem versao MENOR: nao existe
+      # `platforms;android-37`, existem `android-37.0`, `37.1` e `37.2`. O
+      # projeto declara `compileSdk = 37` + `compileSdkMinor = 0`, que resolve
+      # para `android-37.0` -- e e esse, e so esse, que precisa estar instalado.
+      # Deixar o AGP baixar sozinho tornaria a esteira dependente de aceitacao
+      # de licenca na imagem do runner, que muda sem aviso e falha tarde.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-37.0 build-tools;37.0.0 platform-tools'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.47.4"
+          channel: stable
+          cache: true
+
+      # Sem este cache o job rebaixa a distribuicao do Gradle (cerca de 200 MB)
+      # e os artefatos do AGP a cada execucao. A chave inclui os arquivos que
+      # determinam o que sera baixado, entao mudanca de AGP ou de wrapper invalida
+      # o cache em vez de servir o conteudo errado.
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('app/android/**/*.gradle.kts', 'app/android/gradle/wrapper/gradle-wrapper.properties', 'app/pubspec.lock') }}
+          restore-keys: gradle-${{ runner.os }}-
+
+      - run: flutter pub get
+        working-directory: app
+
+      # ISCAS ANTES DO BUILD, e a ordem importa. O portao confere o que saiu do
+      # build (zip, manifesto, dex, libapp.so); se essa conferencia cegar, ela
+      # aprovaria qualquer coisa e o job ficaria verde compilando lixo. Este
+      # passo nao compila nada e leva segundos: ele monta pacotes defeituosos e
+      # exige que cada um seja REPROVADO, mais um pacote completo que precisa ser
+      # APROVADO -- porque conferencia que reprova tudo tambem nao diz nada.
+      - name: as iscas da conferencia do APK reprovam
+        run: sh infra/verificacao/verificar-apk.sh --autoteste
+
+      # O comando e o MESMO que o cliente roda, porque ele mora dentro do script
+      # e nao em duas copias. Se `flutter build apk --release` falhar por
+      # compileSdk, por metadado de AAR ou por versao de AGP, e porque alguma
+      # dependencia subiu o piso da cadeia de ferramentas e o projeto ficou para
+      # tras -- que e precisamente a classe que este job existe para pegar.
+      - name: compila o APK de release e confere o que saiu
+        run: sh infra/verificacao/verificar-apk.sh
+
+      # O APK fica pendurado na execucao. O cliente valida camera, splash e
+      # acessibilidade no aparelho a partir daqui, sem precisar de cadeia de
+      # ferramentas Android na maquina dele.
+      #
+      # Assinado com a chave de DEPURACAO (decisao de 22/09: nao vamos as lojas
+      # agora). Serve para instalar e validar; nao serve para publicar.
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: bichu-hml-apk-${{ github.sha }}
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
 
   tokens:
     name: tokens
@@ -435,15 +1041,190 @@ jobs:
         working-directory: app
         run: flutter test test/tema
 
+      # A ISCA DE PIXEL (21/09/2026). Os dois passos acima leem TEXTO: tokens,
+      # tabela de pares, papeis em Dart. A cor da marca tambem vive em 40 PNG
+      # que tres geradores assam, e ate hoje nenhum portao os lia -- trocar a
+      # semente e esquecer os geradores entregava um produto que abre com
+      # splash e icone na cor velha, com a esteira inteira verde.
+      #
+      # Caminho explicito pelo mesmo motivo dos outros dois: este portao nao
+      # pode depender da descoberta automatica. Dentro dele ha uma isca
+      # negativa versionada -- o bitmap na semente ANTERIOR, que precisa ser
+      # reprovado pelo mesmo codigo que aprova os de producao.
+      - name: portao de marca em pixel
+        working-directory: app
+        run: flutter test test/marca
+
+  # SonarCloud. docs/07-devops.md secao 8.4.
+  #
+  # O cliente contratou o plano em 17/09/2026 e provisionou `SONAR_TOKEN`. Com
+  # o insumo na mao, a dispensa `sonarcloud` saiu de `.github/quality-gates.yml`
+  # e este job passou a ser o portao de verdade.
+  #
+  # Duas coisas sao verificadas aqui, e elas sao diferentes:
+  #
+  #   1. O RELATORIO DE COBERTURA SERVE? Bloqueante hoje, sem excecao. O
+  #      SonarCloud aceita em silencio um lcov que nao casa com arquivo nenhum
+  #      e publica 0% como se fosse medicao. Esta e a falha que este job existe
+  #      para nao deixar passar.
+  #   2. O VEREDITO DO PORTAO DE QUALIDADE. Informativo enquanto houver a
+  #      dispensa datada `sonarcloud-veredito` no quality-gates.yml; bloqueante
+  #      no instante em que ela for apagada. O motivo esta na secao 8.4: na
+  #      PRIMEIRA analise o SonarCloud trata o repositorio inteiro como "codigo
+  #      novo", entao os 74% de linha medidos hoje vao de encontro ao piso de
+  #      80% do perfil `Sonar way` e o portao reprova -- um veredito sobre
+  #      treze dias de codigo acumulado, cobrado de quem abriu o PR. Portao que
+  #      reprova tudo no primeiro dia e desligado na primeira semana, e o
+  #      desligamento e definitivo. Uma semana de linha de base, e ele passa a
+  #      julgar o diff, que e o que ele sabe julgar.
+  sonar:
+    name: SonarCloud (analise estatica e cobertura)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: codigo
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # O Sonar usa o blame do Git para atribuir "codigo novo". Checkout
+          # raso faz todo o repositorio parecer novo em toda analise, e o
+          # portao passa a cobrar de cada PR o acumulado do projeto.
+          fetch-depth: 0
+
+      # SEM `if:`, DE PROPOSITO. `if: secrets.SONAR_TOKEN != ''` e a saida
+      # preguicosa que a secao 5.3 proibe: o job sumiria da lista, o `portao`
+      # veria apenas "skipped", e a ausencia da analise viraria silencio. Aqui
+      # a ausencia do token REPROVA, com o nome da credencial na mensagem.
+      - name: o token existe?
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          if [ -z "$SONAR_TOKEN" ]; then
+            echo "::error::SONAR_TOKEN ausente. A dispensa \`sonarcloud\` saiu de .github/quality-gates.yml quando o plano foi contratado: este portao existe e nao tem como ficar verde sem o token. Ou o segredo volta para Settings > Secrets do repositorio, ou a dispensa volta para o arquivo com motivo, responsavel e data"
+            exit 1
+          fi
+          echo "SONAR_TOKEN presente (o valor nunca e impresso)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # A cobertura e gerada AQUI, e nao herdada do job `codigo`, porque
+      # `npm test` sozinho nao emite lcov.
+      #
+      # ERA UMA COPIA DO COMANDO DO package.json, e o comentario desta linha
+      # registrava a consequencia por escrito: "se o script `test` mudar de
+      # forma, esta linha fica medindo outra coisa". A BICHUS-219 mudou o script
+      # de forma, e a copia teria ficado medindo outra coisa exatamente como
+      # previsto. Agora o lcov e uma BANDEIRA do proprio executor: uma forma so,
+      # e os mesmos portoes da suite valem aqui.
+      #
+      # `--enable-source-maps` continua obrigatoria e agora mora no executor:
+      # sem ela o reporter lcov grava o caminho do JavaScript compilado
+      # (`dist/_tests/**/*.js`), o Sonar nao casa nenhum arquivo, nao reclama, e
+      # publica 0% de cobertura. Uma flag, e a diferenca entre medir e fingir
+      # que mediu.
+      - name: cobertura em lcov
+        run: |
+          mkdir -p coverage
+          npm test -- --lcov coverage/lcov.info
+
+      # As quatro iscas de infra/verificacao/iscas/lcov-* rodam ANTES do
+      # relatorio real, e tres delas precisam reprovar nominalmente. Isca que
+      # passa derruba o job com "o verificador de cobertura parou de verificar".
+      - name: o relatorio de cobertura fala de src/**/*.ts, iscas primeiro
+        run: node infra/verificacao/verificar-cobertura-lcov.mjs coverage/lcov.info
+
+      # O modo vem do quality-gates.yml, e nao de um `if` escrito aqui.
+      # Secao 5.3: "Para remover a dispensa: apague a entrada. Nao mexa no
+      # workflow." Apagar `sonarcloud-veredito` torna o veredito bloqueante, e
+      # a data da dispensa faz o job `rapidos` reprovar sozinho se ninguem
+      # apagar. Nao existe caminho em que isto seja esquecido em silencio.
+      - name: o veredito bloqueia ou informa?
+        id: modo
+        run: |
+          if grep -qE '^[[:space:]]*-[[:space:]]*portao:[[:space:]]*sonarcloud-veredito[[:space:]]*$' .github/quality-gates.yml; then
+            echo "bloqueante=nao" >> "$GITHUB_OUTPUT"
+            echo "::notice::veredito do SonarCloud em modo informativo, por dispensa datada em .github/quality-gates.yml"
+          else
+            echo "bloqueante=sim" >> "$GITHUB_OUTPUT"
+            echo "veredito do SonarCloud em modo bloqueante"
+          fi
+
+      # As chaves de organizacao e de projeto, os caminhos de fonte e as
+      # exclusoes estao em `sonar-project.properties`, na raiz. Nada de branch
+      # nem de PR e passado aqui: o scanner le isso do ambiente do GitHub
+      # Actions sozinho, e um valor fixo transformaria toda analise de PR em
+      # analise da mesma branch.
+      - name: scanner
+        uses: SonarSource/sonarqube-scan-action@v8.2.2
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: veredito do portao de qualidade
+        id: veredito
+        # `true` SEMPRE, e isto NAO afrouxa o portao: quem decide reprovar e o
+        # passo seguinte, que le `steps.veredito.outcome` e sai com 1 quando a
+        # dispensa nao existe. O bloqueio continua inteiro; o que muda e QUEM o
+        # aplica.
+        #
+        # Era `${{ steps.modo.outputs.bloqueante == 'nao' }}`, e nao funcionava:
+        # medido em 18/09, com o `modo` tendo dito "informativo" no log, o passo
+        # terminou `failure` e o passo do veredito foi **pulado** -- a dispensa
+        # estava escrita e era INERTE. Expressao condicional aqui depende de o
+        # `steps` context estar resolvido no momento em que a acao composta
+        # falha por dentro, e ele nao estava.
+        #
+        # Com `true` fixo, os dois caminhos ficam no passo de baixo, onde sao
+        # legiveis e testaveis: sem dispensa -> `::error::` e exit 1; com
+        # dispensa -> `::warning::` e o job segue.
+        continue-on-error: true
+        uses: SonarSource/sonarqube-quality-gate-action@v1.2.1
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      # ESTE PASSO NAO E `continue-on-error` DISFARCADO. Ele existe para que
+      # um veredito vermelho apareca como vermelho no resumo da execucao mesmo
+      # durante a janela informativa. Reprovacao registrada com prazo nao e a
+      # mesma coisa que job verde.
+      - name: o veredito, dito em voz alta
+        run: |
+          estado='${{ steps.veredito.outcome }}'
+          bloqueante='${{ steps.modo.outputs.bloqueante }}'
+          echo "veredito=$estado bloqueante=$bloqueante"
+          case "$estado" in
+            success)
+              echo 'SonarCloud: portao de qualidade verde.' >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            failure)
+              if [ "$bloqueante" = 'sim' ]; then
+                echo '::error::o portao de qualidade do SonarCloud reprovou'
+                exit 1
+              fi
+              echo '::warning::o portao de qualidade do SonarCloud REPROVOU e nao esta bloqueando, por dispensa datada (sonarcloud-veredito) em .github/quality-gates.yml. Isto nao e um job verde: e uma reprovacao registrada com prazo'
+              {
+                echo '### SonarCloud: portao de qualidade REPROVADO'
+                echo 'Informativo ate a dispensa sonarcloud-veredito de .github/quality-gates.yml vencer ou ser apagada.'
+                echo 'A partir dai, este mesmo veredito derruba o PR.'
+              } >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "::error::nao foi possivel obter o veredito do SonarCloud (passo em '$estado'). Verificacao que nao consegue verificar reprova, nunca aprova"
+              exit 1
+              ;;
+          esac
+
   portao:
     name: portao
     runs-on: ubuntu-latest
-    needs: [rapidos, codigo, contrato, integracao, app, tokens, contraste]
+    needs: [rapidos, codigo, contrato, integracao, app, apk, tokens, contraste, sonar]
     if: always()
     steps:
       - name: consolidar
         run: |
-          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.app.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }}"
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
           echo "estados: $estados"
           for e in $estados; do
             case "$e" in

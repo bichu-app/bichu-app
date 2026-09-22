@@ -46,6 +46,39 @@ enum ProblemTipo {
   petSemFoto('pet-photo-missing'),
   tagRevogada('tag-revoked'),
 
+  /// Teto de pets por conta atingido. 409. So aparece em F1.3/F1.5, ao
+  /// cadastrar.
+  ///
+  /// O numero **vem da resposta**, nunca escrito na frase -- e pela mesma
+  /// razao do `Retry-After`: um teto escrito no binario continua sendo dito
+  /// por versao antiga do app depois de o servidor ter mudado o valor.
+  limiteDePetsAtingido('pet-limit-reached'),
+
+  /// O texto **nao normaliza para um codigo**: tamanho diferente de 16 depois
+  /// da normalizacao, caractere fora do alfabeto, ou **simbolo de verificacao
+  /// que nao bate**. 400.
+  ///
+  /// O terceiro caso e o que chegou com a Emenda 1 do ADR-0004, e e o que tira
+  /// o erro de digitacao do 404: um caractere trocado e uma transposicao caem
+  /// aqui, antes de o servidor tocar o banco.
+  ///
+  /// **Diferente de [codigoDeTagNaoEncontrado]**, e a diferenca e util para
+  /// quem esta na rua: um diz "confira o que voce digitou", o outro diz "nao
+  /// encontramos este codigo".
+  codigoDeTagMalformado('tag-code-malformed'),
+
+  /// Normalizou para um codigo bem formado que nao existe. 404.
+  codigoDeTagNaoEncontrado('tag-code-not-found'),
+
+  /// Recurso que sumiu ou nunca foi da pessoa. 404.
+  ///
+  /// O contrato usa 404 para os dois casos de proposito, para nao confirmar
+  /// que o recurso de outro tutor existe, e a tela nao pode desfazer isso.
+  naoEncontrado('not-found'),
+
+  /// Estouro de limite com `deny_429`. A espera vem do `Retry-After`.
+  limiteDeTentativas('rate-limited'),
+
   /// Chegou um `type` que este build nao conhece.
   ///
   /// Nao e caso de erro: versao antiga do app continua instalada por semanas e
@@ -121,6 +154,7 @@ class Problem {
     this.proximaAcao,
     this.campos = const <ProblemCampo>[],
     this.tenteDepoisDe,
+    this.extensoes = const <String, dynamic>{},
   });
 
   /// O `type` ja resolvido. **E por aqui que a tela decide.**
@@ -149,6 +183,25 @@ class Problem {
   /// Vem do cabecalho `Retry-After` do 429, em segundos.
   final Duration? tenteDepoisDe;
 
+  /// O corpo cru, para os **membros de extensao** da RFC 9457: propriedades
+  /// que o `Problem` carrega e o esquema do contrato nao declara.
+  ///
+  /// Existe por um caso concreto e nao por generalidade: a microcopy de
+  /// `pet-limit-reached` manda dizer o teto **lido da resposta**, e o esquema
+  /// `Problem` de `api/openapi.yaml` nao tem campo para ele. Enquanto o
+  /// contrato nao declarar um, [inteiro] devolve nulo e a tela cai no texto
+  /// que nao promete numero -- em vez de escrever "20" no binario, que e
+  /// exatamente o que a regra do `{limite}` proibe.
+  final Map<String, dynamic> extensoes;
+
+  /// Um membro de extensao numerico, quando o servidor mandou um.
+  int? inteiro(String chave) {
+    final valor = extensoes[chave];
+    if (valor is int) return valor;
+    if (valor is String) return int.tryParse(valor);
+    return null;
+  }
+
   factory Problem.doJson(
     Map<String, dynamic> json, {
     required int status,
@@ -168,6 +221,7 @@ class Problem {
           .map(ProblemCampo.doJson)
           .toList(growable: false),
       tenteDepoisDe: tenteDepoisDe,
+      extensoes: json,
     );
   }
 

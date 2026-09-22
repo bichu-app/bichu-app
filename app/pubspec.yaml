@@ -44,9 +44,24 @@ dependencies:
   flutter_secure_storage: ^9.2.4
 
   # Exigido por lib/firebase_options.dart, que ja veio configurado para o
-  # projeto bichu-app-508914. `firebase_messaging` entra com a historia de
-  # push: a dependencia do envio de notificacao nao e do esqueleto.
+  # projeto bichu-app-508914.
   firebase_core: ^4.3.0
+
+  # Push (BICHUS-13, criterio 3). A VERSAO NAO FOI ESCOLHIDA A MAO: saiu de
+  # `flutter pub add firebase_messaging`, e o resolvedor a casou com o
+  # `firebase_core: ^4.3.0` acima pelo `_flutterfire_internals` que os dois
+  # compartilham. Fixar um numero aqui a mao e o jeito conhecido de descobrir a
+  # incompatibilidade so no `pod install` ou no Gradle, que e longe daqui.
+  #
+  # O QUE ESTE PACOTE **NAO** TRAZ, e a fronteira do ADR-0008: nada de Firebase
+  # Auth, Analytics, Firestore ou Crashlytics. Identidade e nossa (ADR-0002) e
+  # observabilidade e Sentry. O Firebase entra como transporte de mensagem e
+  # nada mais -- a fronteira some sem ninguem decidir se o proximo pacote da
+  # familia entrar sem esta linha ser lida.
+  #
+  # iOS nao esta coberto: falta a chave APNs (`.p8`), que e da conta Apple e
+  # esta em BICHUS-136. O pacote entra igual, porque quem o usa e o Android.
+  firebase_messaging: ^16.7.0
   # Abre os termos de uso e a politica de privacidade no navegador do sistema.
   # Eles sao superficie web, de outro time, e nao telas deste app: embuti-los
   # num WebView colocaria o app na fronteira de "site embrulhado" da revisao da
@@ -54,10 +69,20 @@ dependencies:
   # juridico. O navegador do sistema e tambem onde a pessoa consegue guardar,
   # imprimir e compartilhar o que aceitou.
   url_launcher: ^6.3.2
+  # Unica forma de achar o diretorio do app sem escrever codigo por plataforma.
+  # Entra pela fila offline da BICHUS-31, que precisa sobreviver ao app ser
+  # encerrado pelo sistema -- e memoria nao sobrevive a isso.
+  path_provider: ^2.1.5
+  image_picker: ^1.2.3
+  permission_handler: ^13.0.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  # So o portao do criterio 10 da BICHUS-161 usa: ele guarda o digest das telas
+  # do assistente de cadastro para reprovar quando alguma mudar. Entra como
+  # dependencia de teste, e nao de producao, porque nada do app assina nada.
+  crypto: ^3.0.6
 
   flutter_lints: ^6.0.0
 
@@ -120,6 +145,12 @@ flutter:
 # gerador que nao acha a arte precisa parar, nao emitir icone em branco.
 #
 #   cd app && dart run flutter_launcher_icons
+#   cd app && dart run tool/corrigir_splash_ios.dart
+#
+# O segundo comando carimba o perfil de cor nos PNG do catalogo de assets do
+# iOS. As dezoito medidas do icone sofrem o mesmo desvio do fundo do splash --
+# sem `sRGB` declarado, o Xcode le os componentes como Display P3 e o quadrado
+# da marca sai em `#AD0038`. Ver o bloco do splash mais abaixo.
 #
 flutter_launcher_icons:
   # iOS: quadrado de 1024x1024 sem transparencia. A App Store recusa icone com
@@ -140,8 +171,21 @@ flutter_launcher_icons:
   # arredondado, gota -- e desloca as camadas no parallax da tela inicial. Uma
   # imagem chapada unica fica cortada em aparelho que usa mascara redonda.
   #
-  # As duas camadas sao 108x108 dp; so os 72dp centrais sao garantidos visiveis
-  # (a "safe zone" do Material Design). O simbolo precisa caber ali.
+  # GEOMETRIA, que e a parte que costuma sair errada:
+  #   - cada camada e 108x108 dp;
+  #   - a mascara do fabricante fica sobre os 72x72 dp centrais;
+  #   - so os 66x66 dp centrais sao garantidos visiveis em TODA mascara
+  #     (a "safe zone" do Material Design);
+  #   - os 18 dp de cada borda existem para o parallax e SEMPRE somem.
+  # Ou seja: o simbolo precisa caber nos 66 dp centrais, e nao nos 72. Os 72 dp
+  # sao a MASCARA; a GARANTIA e 66, que e o numero mais restritivo e o que vale.
+  # Medido na arte em vigor: 62,4 dp de diametro circunscrito, 3,6 dp de folga.
+  #
+  # ESTE BLOCO E A FONTE DA GEOMETRIA, e esta aqui por um motivo mecanico:
+  # `mipmap-anydpi-v26/ic_launcher.xml` e SAIDA de `dart run
+  # flutter_launcher_icons` e e reescrito a cada geracao, junto com os drawables
+  # de camada. Qualquer explicacao que viva la se perde no proximo comando, sem
+  # ninguem perceber. Este arquivo nao e gerado, entao a explicacao mora aqui.
   adaptive_icon_foreground: "../design/marca/app/icone-android-foreground.png"
   adaptive_icon_background: "../design/marca/app/icone-android-background.png"
   adaptive_icon_foreground_inset: 16
@@ -165,11 +209,31 @@ flutter_launcher_icons:
   # adaptativo e cai no `ic_launcher.png` legado, que continua sendo gerado.
   min_sdk_android: 21
 
+# CONFIRA O `project.pbxproj` DEPOIS DE RODAR O GERADOR DE ICONE. A versao
+# 0.14.4 tem um defeito: ela quer garantir
+# `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;` em cada configuracao de build
+# e, nas configuracoes de NIVEL DE PROJETO (Debug e Release), onde essa chave
+# nao existe, ela sobrescreve o VALOR da primeira chave `ASSETCATALOG_COMPILER_*`
+# que encontra. Na pratica isso grava
+# `ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon`, que
+# o Xcode le como booleano: tudo que nao for `YES` vale `NO`. O efeito e desligar
+# a geracao de simbolos de asset em Swift, em silencio e sem ninguem pedir.
+#
+# Revertido a mao em 21/09/2026 (BICHUS-141): as duas voltaram para `YES`. As
+# configuracoes do ALVO Runner ja tem `ASSETCATALOG_COMPILER_APPICON_NAME` e
+# nao precisam da chave; as de projeto nunca precisaram.
+#
+# Quem rodar `dart run flutter_launcher_icons` de novo precisa conferir:
+#   git diff app/ios/Runner.xcodeproj/project.pbxproj
+# O diff esperado desse comando e VAZIO. Qualquer linha
+# `..._GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = AppIcon` e o defeito voltando.
+
 # ---------------------------------------------------------------------------
 # Splash (flutter_native_splash)
 # ---------------------------------------------------------------------------
 #
-# FUNDO FRAMBOESA `#922C4A`. Decisao do cliente, tomada em 17/09/2026.
+# FUNDO CARMIM `#9E0B3A`. Semente escolhida pelo cliente em 21/09/2026 (secao
+# 21 do design system). Era a Framboesa `#922C4A` de 17/09/2026.
 #
 # DE ONDE VEM O VALOR: `design/tokens.json`, primitivo `raspberry.700`, que e o
 # `primary` do tema claro (`lib/theme/bichu_tokens.g.dart`). NAO e o fundo
@@ -185,20 +249,42 @@ flutter_launcher_icons:
 #
 # Quem mudar a cor do splash precisa mudar, no mesmo commit:
 #   1. `color` e `color_dark` aqui, e os mesmos dois dentro de `android_12`;
-#   2. rodar o comando abaixo, que reescreve os arquivos nativos;
+#   2. rodar os DOIS comandos abaixo, nesta ordem;
 #   3. conferir que o valor continua igual a `raspberry.700` de
 #      `design/tokens.json` -- se divergiu, o errado e aqui.
 #
 #   cd app && dart run flutter_native_splash:create
+#   cd app && dart run tool/corrigir_splash_ios.dart
+#
+# O SEGUNDO COMANDO NAO E OPCIONAL. O `flutter_native_splash` escreve os PNG do
+# catalogo de assets do iOS sem chunk de espaco de cor, e escreve o
+# `backgroundColor` do `LaunchScreen.storyboard` em branco. Sem perfil
+# declarado o Xcode trata os componentes como se fossem do gamut do display
+# (Display P3) e a splash NATIVA do iOS abre em `#AD0038` -- medido no
+# simulador, iPhone 18 Pro com iOS 27. O segundo comando carimba `sRGB`,
+# `gAMA` e `cHRM` e troca o branco pela semente; ele e idempotente e desfaz
+# exatamente o que o primeiro estraga.
+#
+# ESQUECER O PASSO 2 NAO E SILENCIOSO. `test/marca/arte_do_app_test.dart` le
+# `design/tokens.json`, decodifica os PNG que os dois geradores assam e REPROVA
+# quando o pixel diverge do token -- inclusive quando so estes quatro valores
+# foram trocados e nenhum gerador rodou. Ate 21/09/2026 esse era o caminho em
+# que o produto saia com duas cores de marca ao mesmo tempo e nenhum portao
+# acusava, porque nada lia pixel.
+#
+# E `test/marca/splash_ios_test.dart` cobre a metade que a leitura de pixel NAO
+# alcanca: ele nao pergunta qual e o byte, pergunta qual cor o iOS EXIBE a
+# partir dele. Com o defeito do perfil de cor de pe, as oito iscas do arquivo
+# acima ficavam VERDES -- o byte estava certo, o render e que nao.
 #
 flutter_native_splash:
-  color: "#922C4A"
+  color: "#9E0B3A"
   # Mesmo valor no tema escuro: o cliente decidiu UM splash, nao dois. Sem esta
   # linha o Android usaria o branco do `values-night` e o app abriria branco
   # para quem esta no tema escuro, que e a maioria.
-  color_dark: "#922C4A"
+  color_dark: "#9E0B3A"
 
-  # Simbolo da marca, centrado, em Marfim sobre a Framboesa
+  # Simbolo da marca, centrado, em Marfim sobre o Carmim
   # (design/marca/referencia/03-icone-do-app.png). Arte da designer.
   image: "../design/marca/app/splash-simbolo.png"
   android_gravity: center
@@ -212,13 +298,13 @@ flutter_native_splash:
 
   # Android 12 (API 31) trocou o mecanismo: o sistema desenha a splash pela
   # SplashScreen API e IGNORA `android:windowBackground`. Sem este bloco o
-  # aparelho de qualquer pessoa hoje abriria no fundo do tema, e nao na
-  # Framboesa -- e o teste em emulador antigo nao acusaria.
+  # aparelho de qualquer pessoa hoje abriria no fundo do tema, e nao no
+  # Carmim -- e o teste em emulador antigo nao acusaria.
   #
   # O icone desta splash e recortado num circulo pelo sistema: a arte precisa
   # ser 1152x1152 com o desenho dentro dos 768px centrais, senao as bordas
   # entram no corte.
   android_12:
-    color: "#922C4A"
-    color_dark: "#922C4A"
+    color: "#9E0B3A"
+    color_dark: "#9E0B3A"
     image: "../design/marca/app/splash-simbolo.png"

@@ -38,6 +38,39 @@ export interface OperacaoDoContrato {
   readonly effects: readonly string[];
   readonly hasRateLimit: boolean;
   readonly raw: Record<string, unknown>;
+  /**
+   * Os parâmetros da operação, com os do **item de caminho** já juntos e todo
+   * `$ref` de parâmetro resolvido.
+   *
+   * A junção acontece aqui porque ela é fácil de esquecer e cara quando
+   * esquecida: neste contrato a maior parte dos parâmetros de caminho está
+   * declarada no nível do item de caminho, e não dentro da operação. Quem
+   * lesse só `raw['parameters']` concluiria que `getPet` não tem parâmetro
+   * nenhum — e validaria nada com toda a aparência de estar validando.
+   */
+  readonly parameters: readonly Record<string, unknown>[];
+}
+
+/**
+ * O que o Fastify precisa para validar parâmetro de caminho e de query string.
+ *
+ * `undefined` em `params` ou `querystring` significa "a operação não declara
+ * nenhum parâmetro desse lugar", e não "não há o que validar": a distinção é o
+ * que permite ao portão de subida saber se ele conferiu alguma coisa.
+ */
+export interface EsquemasDeParametros {
+  readonly params: Record<string, unknown> | undefined;
+  readonly querystring: Record<string, unknown> | undefined;
+  /**
+   * Tipo de problema a devolver quando **aquele** parâmetro reprova, por nome.
+   *
+   * Sai de `x-problem-type` no próprio parâmetro. Existe porque o contrato já
+   * declara, para alguns parâmetros, um 400 com significado próprio — o código
+   * da tag responde `tag-code-malformed`, e não `validation-failed`. Sem isto,
+   * ligar a validação de borda trocaria o `type` que o app lê para decidir a
+   * tela, e o teto de tentativas inválidas deixaria de contar a tentativa.
+   */
+  readonly tiposDeProblema: ReadonlyMap<string, string>;
 }
 
 export interface Contrato {
@@ -46,6 +79,8 @@ export interface Contrato {
   /** Schema de corpo de requisição em JSON Schema puro, quando existe. */
   requestBodySchema(operationId: string): Record<string, unknown> | undefined;
   responseSchema(operationId: string, status: string): Record<string, unknown> | undefined;
+  /** Schemas de `params` e `querystring` em JSON Schema puro, vindos do contrato. */
+  parameterSchemas(operationId: string): EsquemasDeParametros;
 }
 
 function ehObjeto(valor: unknown): valor is Record<string, unknown> {
@@ -76,15 +111,49 @@ const CHAVES_DESCARTADAS = new Set([
   'writeOnly',
 ]);
 
+/**
+ * Palavras-chave cujo VALOR e um mapa de nomes escolhidos por quem escreveu o
+ * contrato, e nao mais um schema com palavras-chave de OpenAPI.
+ *
+ * Esta distincao nao e detalhe: sem ela, `CHAVES_DESCARTADAS` e o corte de
+ * `x-` se aplicavam dentro de `properties`, onde a chave e o NOME DO CAMPO. Um
+ * corpo com um campo chamado `example`, `deprecated`, `readOnly` ou qualquer um
+ * comecando com `x-` perdia esse campo de `properties` e o mantinha em
+ * `required`; com `additionalProperties: false` a rota passava a recusar
+ * **toda** requisicao, para sempre, sem que nada no contrato parecesse errado.
+ *
+ * Nenhum campo do contrato de hoje tem esses nomes -- o defeito era latente, e
+ * e exatamente por isso que ele merecia teste antes de alguem bater nele.
+ */
+const MAPAS_DE_NOMES = new Set([
+  'properties',
+  'patternProperties',
+  'dependentSchemas',
+  '$defs',
+  'definitions',
+]);
+
 function paraJsonSchema(
   valor: unknown,
   spec: Record<string, unknown>,
   refsNoCaminho: ReadonlySet<string>,
+  /** O objeto recebido e um mapa de NOMES (ver `MAPAS_DE_NOMES`), nao um schema. */
+  mapaDeNomes = false,
 ): unknown {
   if (Array.isArray(valor)) {
     return valor.map((item) => paraJsonSchema(item, spec, refsNoCaminho));
   }
   if (!ehObjeto(valor)) return valor;
+
+  // Antes de qualquer outra coisa: num mapa de nomes nenhuma chave e palavra
+  // de OpenAPI. Nem `$ref`, que aqui seria um campo chamado `$ref`.
+  if (mapaDeNomes) {
+    const porNome: Record<string, unknown> = {};
+    for (const [nome, item] of Object.entries(valor)) {
+      porNome[nome] = paraJsonSchema(item, spec, refsNoCaminho);
+    }
+    return porNome;
+  }
 
   const ref = valor['$ref'];
   if (typeof ref === 'string') {
@@ -103,7 +172,7 @@ function paraJsonSchema(
   for (const [chave, item] of Object.entries(valor)) {
     if (CHAVES_DESCARTADAS.has(chave) || chave.startsWith('x-')) continue;
     if (chave === 'nullable') continue;
-    saida[chave] = paraJsonSchema(item, spec, refsNoCaminho);
+    saida[chave] = paraJsonSchema(item, spec, refsNoCaminho, MAPAS_DE_NOMES.has(chave));
   }
 
   // `nullable: true` é forma de OpenAPI 3.0 e aparece neste contrato. Em 3.1 o
@@ -151,9 +220,33 @@ export function carregarContrato(caminho: string): Contrato {
 
   const operacoes = new Map<string, OperacaoDoContrato>();
   const semSecurity: string[] = [];
+  const securityMalformado: string[] = [];
+
+  /** Resolve `$ref` de parâmetro e descarta o que não é um objeto de parâmetro. */
+  const parametrosDe = (valor: unknown): Record<string, unknown>[] => {
+    if (!Array.isArray(valor)) return [];
+    const resolvidos: Record<string, unknown>[] = [];
+    for (const bruto of valor) {
+      if (!ehObjeto(bruto)) continue;
+      const ref = bruto['$ref'];
+      if (typeof ref !== 'string') {
+        resolvidos.push(bruto);
+        continue;
+      }
+      const alvo = resolverRef(spec, ref);
+      if (!ehObjeto(alvo)) {
+        throw new Error(`Referência de parâmetro não resolvida no contrato: ${ref}`);
+      }
+      resolvidos.push(alvo);
+    }
+    return resolvidos;
+  };
 
   for (const [caminhoDaRota, item] of Object.entries(paths)) {
     if (!ehObjeto(item)) continue;
+    // Parâmetros do ITEM DE CAMINHO. É onde a maior parte dos parâmetros de
+    // caminho deste contrato mora, e ignorá-los seria validar quase nada.
+    const parametrosDoCaminho = parametrosDe(item['parameters']);
     for (const metodo of METODOS) {
       const operacao = item[metodo];
       if (!ehObjeto(operacao)) continue;
@@ -167,7 +260,22 @@ export function carregarContrato(caminho: string): Contrato {
         semSecurity.push(operationId);
         continue;
       }
+      // `security` DECLARADO mas malformado é tão perigoso quanto ausente, e
+      // mais traiçoeiro: `security: [bearerAuth]` — sem os dois-pontos e as
+      // chaves — é o erro mais natural do arquivo, porque `tags` e `x-effects`
+      // logo ao lado são listas de texto. `Array.isArray` passa, o filtro
+      // esvazia, e o resultado é `security: []`, que este módulo documenta como
+      // **pública**. Uma rota escrita para exigir conta vira pública em
+      // silêncio, e o portão que existe para pegar isso é o mesmo que foi
+      // enganado.
+      //
+      // Por isso: lista não vazia que não tem NENHUM mapa não carrega. A lista
+      // vazia continua valendo, porque ela é a forma correta de dizer "pública".
       const entradas = security.filter(ehObjeto);
+      if (security.length > 0 && entradas.length === 0) {
+        securityMalformado.push(operationId);
+        continue;
+      }
       const efeitos = operacao['x-effects'];
 
       operacoes.set(operationId, {
@@ -179,10 +287,19 @@ export function carregarContrato(caminho: string): Contrato {
         effects: Array.isArray(efeitos) ? efeitos.filter((e): e is string => typeof e === 'string') : [],
         hasRateLimit: Array.isArray(operacao['x-rate-limit']) && operacao['x-rate-limit'].length > 0,
         raw: operacao,
+        parameters: [...parametrosDoCaminho, ...parametrosDe(operacao['parameters'])],
       });
     }
   }
 
+  if (securityMalformado.length > 0) {
+    throw new Error(
+      'Operações com `security` declarado em forma que não é mapa — provavelmente ' +
+        '`security: [bearerAuth]` em vez de `security: [{ bearerAuth: [] }]`. ' +
+        'Isso seria lido como rota PÚBLICA, que é o contrário do que foi escrito: ' +
+        `${securityMalformado.join(', ')}`,
+    );
+  }
   if (semSecurity.length > 0) {
     // Negar por padrão, e falhar na subida em vez de na primeira requisição:
     // especificação sem `security` não carrega.
@@ -196,6 +313,7 @@ export function carregarContrato(caminho: string): Contrato {
   }
 
   const cacheDeCorpo = new Map<string, Record<string, unknown> | undefined>();
+  const cacheDeParametros = new Map<string, EsquemasDeParametros>();
 
   return {
     spec,
@@ -216,6 +334,63 @@ export function carregarContrato(caminho: string): Contrato {
         }
       }
       cacheDeCorpo.set(operationId, resultado);
+      return resultado;
+    },
+    parameterSchemas(operationId) {
+      const emCache = cacheDeParametros.get(operationId);
+      if (emCache !== undefined) return emCache;
+
+      const operacao = operacoes.get(operationId);
+      const porLugar = new Map<'path' | 'query', { propriedades: Record<string, unknown>; exigidos: string[] }>();
+      const tiposDeProblema = new Map<string, string>();
+
+      for (const parametro of operacao?.parameters ?? []) {
+        const lugar = parametro['in'];
+        const nome = parametro['name'];
+        if (typeof nome !== 'string') continue;
+        // `header` e `cookie` ficam de fora de propósito. `Idempotency-Key` é
+        // cabeçalho e tem máquina própria (`idempotency.ts`), que faz muito mais
+        // do que conferir formato; duplicar a conferência aqui criaria a segunda
+        // definição, que é o defeito que este módulo inteiro existe para evitar.
+        if (lugar !== 'path' && lugar !== 'query') continue;
+        if (parametro['schema'] === undefined) continue;
+
+        const convertido = paraJsonSchema(parametro['schema'], spec, new Set());
+        if (!ehObjeto(convertido)) continue;
+
+        const grupo = porLugar.get(lugar) ?? { propriedades: {}, exigidos: [] };
+        grupo.propriedades[nome] = convertido;
+        // Parâmetro de caminho é sempre obrigatório por definição da própria
+        // especificação; o de query só quando o contrato disser.
+        if (lugar === 'path' || parametro['required'] === true) grupo.exigidos.push(nome);
+        porLugar.set(lugar, grupo);
+
+        const tipo = parametro['x-problem-type'];
+        if (typeof tipo === 'string') tiposDeProblema.set(nome, tipo);
+      }
+
+      const montar = (lugar: 'path' | 'query'): Record<string, unknown> | undefined => {
+        const grupo = porLugar.get(lugar);
+        if (grupo === undefined) return undefined;
+        return {
+          type: 'object',
+          properties: grupo.propriedades,
+          ...(grupo.exigidos.length > 0 ? { required: grupo.exigidos } : {}),
+          // `additionalProperties` fica ABERTO, e isso é decisão, não descuido.
+          // Em `params` o Fastify só entrega o que a própria rota declarou no
+          // caminho, então fechar não acrescenta nada. Em `querystring`, fechar
+          // recusaria `?utm_source=...` e qualquer parâmetro que um cliente
+          // publicado já mande — uma recusa nova sobre uma requisição que hoje
+          // funciona, sem nenhum ganho de segurança.
+        };
+      };
+
+      const resultado: EsquemasDeParametros = {
+        params: montar('path'),
+        querystring: montar('query'),
+        tiposDeProblema,
+      };
+      cacheDeParametros.set(operationId, resultado);
       return resultado;
     },
     responseSchema(operationId, status) {

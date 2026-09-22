@@ -9,8 +9,9 @@
  * sol e para quem não distingue cores, e é por isso que `label` é obrigatório
  * em todo item e não há campo de valor hexadecimal nesta resposta.
  */
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
+import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import type { ReferenceDataRepository } from '../../ports/reference-data-repository.js';
 
 export const rotaDeDadosDeReferencia = defineRoute({
@@ -27,11 +28,13 @@ export const rotaDeDadosDeReferencia = defineRoute({
 const CACHE_EM_SEGUNDOS = 86_400;
 
 export function registrarRotasDeReferencia(
-  app: FastifyInstance,
+  app: RegistradorDeRotas,
   repositorio: ReferenceDataRepository,
 ): void {
-  app.get(
-    rotaDeDadosDeReferencia.path,
+  registrarRota(
+    app,
+    rotaDeDadosDeReferencia,
+    {},
     async (request: FastifyRequest, reply: FastifyReply) => {
       const dados = await repositorio.carregar();
       const etag = `"${dados.version}"`;

@@ -105,8 +105,75 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Encerra a sessao e revoga a familia de refresh */
+        /**
+         * Encerra a sessao e revoga a familia de refresh
+         * @description **Sair deste aparelho e revogacao no servidor, sempre** (ADR-0002,
+         *     emenda 1). O corpo e obrigatorio: sem o `refresh_token` nao ha o que
+         *     revogar, e a operacao recusa com **400** em vez de responder 204.
+         *     Enquanto o corpo era opcional, um cliente que seguisse este contrato ao
+         *     pe da letra saia sem revogar nada e recebia 204 — sucesso
+         *     indistinguivel do nada.
+         *
+         *     O que esta operacao **nao** faz: ela nao empurra
+         *     `users.sessions_invalid_before`. Essa coluna e por pessoa, e usa-la aqui
+         *     derrubaria os outros aparelhos da mesma conta, tornando `logout`
+         *     identico a "sair de todos os aparelhos" — que e OUTRO verbo, com outro
+         *     mecanismo, e que ainda **nao tem operacao declarada neste contrato**
+         *     (BICHUS-125). O alcance desta operacao e uma familia de refresh, quer
+         *     dizer, um aparelho.
+         *
+         *     **Janela residual declarada:** o token de acesso ja emitido continua
+         *     sendo aceito ate o `exp`, no maximo 15 minutos, e nao pode ser renovado
+         *     porque o refresh que o renovaria acabou de ser revogado. Fechar essa
+         *     janela em menos de um segundo e trabalho de "sair de todos os
+         *     aparelhos", que e o remedio de quem teve o aparelho levado.
+         *
+         *     **Idempotente:** chamada com uma familia ja revogada, responde 204 e nao
+         *     erra. O app que so consegue enviar a revogacao atrasada nao e punido por
+         *     isso.
+         */
         post: operations["logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sai de todos os aparelhos e revoga todas as sessoes da conta
+         * @description O outro verbo da emenda 1 do ADR-0002. `POST /auth/logout` encerra **este**
+         *     aparelho revogando a familia de refresh apresentada; esta operacao encerra
+         *     **todos**: empurra `users.sessions_invalid_before` e revoga **todas** as
+         *     familias de refresh da conta.
+         *
+         *     As duas metades sao necessarias e nenhuma substitui a outra. A barreira
+         *     derruba os tokens de acesso em menos de um segundo; a revogacao das
+         *     familias impede que um refresh copiado antes continue renovando. Sem a
+         *     segunda, as linhas ficam vivas no banco ate vencerem por inatividade.
+         *
+         *     E o remedio de quem perdeu o aparelho, e o unico que fecha a janela de ate
+         *     15 minutos que o logout comum deixa aberta.
+         *
+         *     **Reautenticacao:** BICHUS-48 decide que esta operacao exige
+         *     `X-Reauth-Token`. A maquinaria de reautenticacao (`POST /auth/reauth`)
+         *     ainda nao existe em `src/`, e o enum `scope` daquela operacao tem quatro
+         *     valores, nenhum deles de revogacao de sessao. O cabecalho **nao** e
+         *     declarado aqui enquanto nao for aplicado: declarar exigencia que o codigo
+         *     nao impoe e a divergencia que este projeto ja pagou duas vezes. BICHUS-48
+         *     acrescenta o `reauth: []` e o escopo junto com o codigo que os aplica.
+         *
+         *     Idempotente: chamada com a conta ja sem sessao nenhuma, responde 204.
+         */
+        post: operations["logoutAllDevices"];
         delete?: never;
         options?: never;
         head?: never;
@@ -648,6 +715,13 @@ export interface paths {
          * @description Gera 128 bits de aleatoriedade criptografica, sem relacao com nenhum id
          *     do sistema. **Esta e a unica resposta que traz o codigo em claro.** O
          *     cliente nao deve persistir o valor: para reimprimir, chame `qr.png`.
+         *
+         *     O corpo e **opcional**: emitir plaquinha sem apelido e o caminho comum.
+         *     Ate esta declaracao existir, o manipulador lia `label` de um corpo que
+         *     este documento dizia nao existir, e `label` chegava ao banco sem
+         *     nenhuma conferencia de tamanho — um rotulo de 41 caracteres, ou uma
+         *     string vazia, passava a borda e morria no CHECK da tabela, virando
+         *     **500** onde a resposta certa e 400.
          */
         post: operations["issuePetTag"];
         delete?: never;
@@ -711,10 +785,13 @@ export interface paths {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -727,9 +804,17 @@ export interface paths {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -742,7 +827,7 @@ export interface paths {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -786,10 +871,13 @@ export interface paths {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -802,9 +890,17 @@ export interface paths {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -817,7 +913,7 @@ export interface paths {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -861,10 +957,13 @@ export interface paths {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -877,9 +976,17 @@ export interface paths {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -892,7 +999,7 @@ export interface paths {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -2217,6 +2324,19 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        /**
+         * @description Todos os campos opcionais; corpo vazio e o caminho comum. `label` e o
+         *     apelido que distingue uma plaquinha da outra na tela do tutor, e nao
+         *     viaja no QR nem aparece na rota publica.
+         */
+        PetTagIssueInput: {
+            /**
+             * @description Faixa identica ao CHECK `pet_tags_label_tamanho` da tabela. O
+             *     `minLength` nao e enfeite: string vazia viola o CHECK, e sem ele a
+             *     recusa sairia como 500.
+             */
+            label?: string;
+        };
         PetTagIssued: components["schemas"]["PetTag"] & {
             /**
              * @description **Unica resposta que traz o codigo em claro.** O cliente nao
@@ -2991,6 +3111,20 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description O envio foi confirmado, mas os bytes nao estao no armazenamento.
+         *     Acontece quando a rede cai no meio do envio: o cliente chega a confirmar
+         *     e o objeto nunca chegou. Sem este estado a foto nasceria `processing`
+         *     para sempre.
+         */
+        UploadNotReceived: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Tipo de arquivo nao aceito. */
         UnsupportedMedia: {
             headers: {
@@ -3043,10 +3177,13 @@ export interface components {
         ConversationId: string;
         DeviceId: string;
         /**
-         * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+         * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
          *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-         *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-         *     por hifen, porque digito agrupado se le e se confere melhor.
+         *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+         *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+         *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+         *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+         *     le e se confere melhor.
          *
          *     **O que o servidor aceita na entrada e mais largo do que a forma
          *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -3059,9 +3196,17 @@ export interface components {
          *     2. passar para maiusculas;
          *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
          *        `1`**, **`O` vira `0`**;
-         *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+         *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
          *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-         *     5. buscar pelo SHA-256 desse resultado.
+         *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+         *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+         *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+         *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+         *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+         *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+         *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+         *        e abriria a pagina do pet errado;
+         *     6. buscar pelo resumo desse resultado.
          *
          *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
          *     codigo emitido normaliza para ele mesmo.
@@ -3074,7 +3219,7 @@ export interface components {
          *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
          *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
          *     invalido.
-         * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+         * @example GQSM-0XHB-T4D9-G31S
          */
         TagCode: string;
         /** @description Token opaco do caso, o mesmo que o link compartilhavel carrega. */
@@ -3338,9 +3483,54 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /**
+                     * @description O refresh da sessao **deste** aparelho. A familia dele e o
+                     *     que morre. Token que nao pertence a conta do `bearerAuth`
+                     *     nao revoga nada e recebe a mesma resposta de token
+                     *     inexistente, de proposito: distinguir os dois contaria a
+                     *     quem pergunta se aquele token existe.
+                     */
+                    refresh_token: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Sessao encerrada e familia de refresh revogada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /**
+             * @description Sem `refresh_token`, ou com um que nao pertence a esta conta. **E
+             *     erro de proposito**: um logout que nao revogou nao pode se parecer
+             *     com um que revogou.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    logoutAllDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
         requestBody?: never;
         responses: {
-            /** @description Sessao encerrada. */
+            /** @description Todas as sessoes da conta foram encerradas. */
             204: {
                 headers: {
                     [name: string]: unknown;
@@ -3348,6 +3538,7 @@ export interface operations {
                 content?: never;
             };
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     requestEmailVerification: {
@@ -3894,6 +4085,7 @@ export interface operations {
                     "application/json": components["schemas"]["Pet"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -3917,6 +4109,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -3982,7 +4175,9 @@ export interface operations {
                     "application/json": components["schemas"]["PetPhoto"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            409: components["responses"]["UploadNotReceived"];
             415: components["responses"]["UnsupportedMedia"];
         };
     };
@@ -4034,6 +4229,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /**
@@ -4233,6 +4429,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -4245,7 +4442,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["PetTagIssueInput"];
+            };
+        };
         responses: {
             /** @description Codigo emitido. */
             201: {
@@ -4256,6 +4457,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTagIssued"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Teto de tags ativas por pet atingido (5). */
             409: {
@@ -4289,6 +4491,7 @@ export interface operations {
                     "image/png": string;
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Tag revogada. O QR nao e reimpresso. */
             410: {
@@ -4337,10 +4540,13 @@ export interface operations {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -4353,9 +4559,17 @@ export interface operations {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -4368,7 +4582,7 @@ export interface operations {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -4387,9 +4601,16 @@ export interface operations {
             };
             /**
              * @description O texto **nao normaliza para um codigo**: tem tamanho diferente de
-             *     26 depois da normalizacao, ou contem caractere fora do alfabeto
-             *     (`U`, por exemplo). E erro de digitacao, e a tela pede para conferir
-             *     e digitar de novo.
+             *     16 depois da normalizacao, contem caractere fora do alfabeto (`U`,
+             *     por exemplo), ou o **simbolo de verificacao nao bate**. E erro de
+             *     digitacao, e a tela pede para conferir e digitar de novo.
+             *
+             *     O terceiro caso e o que mudou: um unico caractere trocado e uma
+             *     transposicao de dois caracteres caem **aqui**, e nao no 404. Antes
+             *     do simbolo de verificacao eles viravam "esse codigo nao e de nenhuma
+             *     tag do Bichu", que acusava a plaquinha quando o que houve foi um
+             *     dedo no lugar errado. Um codigo de **26 caracteres**, do formato
+             *     anterior, tambem e 400: nao ha convivencia de dois tamanhos.
              */
             400: {
                 headers: {
@@ -4439,10 +4660,13 @@ export interface operations {
             header?: never;
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -4455,9 +4679,17 @@ export interface operations {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -4470,7 +4702,7 @@ export interface operations {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -4520,10 +4752,13 @@ export interface operations {
             };
             path: {
                 /**
-                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **26
+                 * @description Codigo da tag. **A forma canonica** e Crockford Base32, **16
                  *     caracteres**, maiusculas, sem separador: e ela que e hasheada e
-                 *     guardada. A forma **impressa** e a mesma em grupos de quatro separados
-                 *     por hifen, porque digito agrupado se le e se confere melhor.
+                 *     guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+                 *     CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+                 *     como entropia. A forma **impressa** e a mesma em grupos de quatro
+                 *     separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+                 *     le e se confere melhor.
                  *
                  *     **O que o servidor aceita na entrada e mais largo do que a forma
                  *     canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -4536,9 +4771,17 @@ export interface operations {
                  *     2. passar para maiusculas;
                  *     3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
                  *        `1`**, **`O` vira `0`**;
-                 *     4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+                 *     4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
                  *        `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-                 *     5. buscar pelo SHA-256 desse resultado.
+                 *     5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+                 *        quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+                 *        (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+                 *        pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+                 *        roda **antes de qualquer acesso ao banco**: quem erra uma letra
+                 *        recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+                 *        corrige** -- um codigo corrigido seria um codigo valido e diferente,
+                 *        e abriria a pagina do pet errado;
+                 *     6. buscar pelo resumo desse resultado.
                  *
                  *     A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
                  *     codigo emitido normaliza para ele mesmo.
@@ -4551,7 +4794,7 @@ export interface operations {
                  *     encontrado": seria **abrir a pagina do pet errado**, o que e pior do que
                  *     pedir para digitar de novo. `U` nao tem substituicao e e caractere
                  *     invalido.
-                 * @example 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+                 * @example GQSM-0XHB-T4D9-G31S
                  */
                 code: components["parameters"]["TagCode"];
             };
@@ -4573,6 +4816,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FoundReportCreated"];
+                };
+            };
+            /**
+             * @description O texto do codigo **nao normaliza para um codigo bem formado**:
+             *     tamanho errado depois da normalizacao, ou caractere fora do
+             *     alfabeto. Responde `tag-code-malformed`, o mesmo tipo de
+             *     `resolveTagCode`, porque e o mesmo erro do mesmo parametro — e o
+             *     app decide a tela pelo `type`, nao pelo status.
+             *
+             *     Recusado **na borda**, antes de qualquer leitura: um codigo que nao
+             *     tem a forma de codigo nao chega a virar consulta.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Tag revogada ou pet excluido. */
@@ -4943,6 +5204,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCaseReachPreview"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -4973,6 +5235,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["LostCaseBlocked"];
         };
@@ -4997,6 +5260,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -5133,6 +5397,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -5783,6 +6048,51 @@ export interface operations {
                         /** @enum {string} */
                         status: "ok" | "degraded";
                         version: string;
+                        /**
+                         * @description Identidade do BUILD que esta respondendo. Ela existe para o
+                         *     criterio 12 de BICHUS-13: portabilidade **provada por
+                         *     execucao** nos dois destinos, e nao afirmada em documento.
+                         *
+                         *     `version` nao serve para isso -- ela vem do `package.json`
+                         *     e e o mesmo valor em qualquer build desde que alguem
+                         *     escreveu aquele numero.
+                         *
+                         *     Obrigatoria, e nao opcional: uma sonda que responde sem
+                         *     dizer qual artefato esta no ar e exatamente o estado que o
+                         *     QA reprovou. Campo opcional aqui deixaria o destino que o
+                         *     omitisse passar calado pela comparacao.
+                         */
+                        build: {
+                            /**
+                             * @description Resumo SHA-256 truncado sobre `dist/**\/*.js`, o proprio
+                             *     contrato e o `package.json`, CALCULADO NA SUBIDA a
+                             *     partir do disco de dentro do container. E evidencia, e
+                             *     nao afirmacao: ninguem o declara.
+                             *
+                             *     Dois destinos com o mesmo valor rodam o mesmo codigo
+                             *     compilado e o mesmo contrato. Ele NAO e o digest da
+                             *     imagem Docker -- base e `node_modules` ficam de fora --
+                             *     e por isso nao distingue o alvo `dev` do alvo `prod`,
+                             *     que copiam o mesmo `dist`.
+                             */
+                            artifact: string;
+                            /**
+                             * @description Commit DECLARADO por quem construiu, pela variavel
+                             *     `BUILD_COMMIT`. Vale o que vale uma afirmacao, e o nome
+                             *     do campo separa as duas coisas de proposito.
+                             *
+                             *     `null` quando ninguem declarou -- silencio honesto em
+                             *     vez de um valor inventado. Desde a BICHUS-210 o
+                             *     `ARG BUILD_COMMIT` existe no `Dockerfile` e o commit
+                             *     VIAJA dentro da imagem: o build REPROVA sem ele, entao
+                             *     imagem construida pela esteira nunca responde `null`
+                             *     aqui. O tipo continua aceitando `null` porque nada
+                             *     impede um `docker build` feito a mao noutro lugar, e
+                             *     um alvo que nao sabe de onde veio precisa dizer isso
+                             *     em vez de inventar.
+                             */
+                            commit: string | null;
+                        };
                         checks?: {
                             [key: string]: "ok" | "fail";
                         };

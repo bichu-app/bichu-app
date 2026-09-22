@@ -17,14 +17,35 @@ import {
 } from '../domain/password.js';
 import { validarSenha } from '../domain/password-policy.js';
 import {
+  instanteDeEmissaoDoAcesso,
+  instanteDeRevogacao,
   prazosDeNovaFamilia,
   prazosDeRotacao,
+  refreshFoiRevogado,
   segundosRestantes,
   tokenFoiRevogado,
 } from '../domain/session.js';
-import type { Conta } from '../ports/identity-repository.js';
+import type {
+  CamposDoPerfil,
+  Conta,
+  MotivoDeRevogacao,
+} from '../ports/identity-repository.js';
+
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
+
+/**
+ * Os motivos que derrubam a conta INTEIRA — os gatilhos do SEC-006.
+ *
+ * `rotation`, `reuse_detected` e `logout` ficam de fora porque valem para UMA
+ * família. O tipo é estreito de propósito: `logout` aqui apagaria da trilha a
+ * diferença entre sair de um aparelho e derrubar a conta, que é a distinção que
+ * a emenda 1 do ADR-0002 existe para fixar.
+ */
+type MotivoDeRevogacaoEmMassa = Extract<
+  MotivoDeRevogacao,
+  'logout_all' | 'password_changed' | 'account_deleted'
+>;
 
 export interface EntradaDeCadastro {
   readonly email: string;
@@ -48,12 +69,164 @@ function comoTokenHash(valor: string): TokenHash {
   return hashDeToken(valor).toString('base64') as TokenHash;
 }
 
+/** Quanto vale cada token. Os números vêm das histórias, não daqui. */
+const VALIDADE_EM_MS: Record<'email_verify' | 'password_reset', number> = {
+  // 24 h (BICHUS-79 critério 6): o e-mail pode ser lido no dia seguinte.
+  email_verify: 24 * 60 * 60 * 1000,
+  // 30 min (BICHUS-77 critério 4): é uma credencial de troca de senha, e a
+  // janela curta é a diferença entre uma caixa de entrada vazada ontem servir
+  // ou não servir hoje.
+  password_reset: 30 * 60 * 1000,
+};
+
 export function criarAuthService(deps: DependenciasDeIdentidade) {
+  /**
+   * Gera o token, guarda o HASH, e manda o valor em claro pelo e-mail.
+   *
+   * O valor em claro existe **só nesta função e no corpo da mensagem**. Ele não
+   * é devolvido, não é registrado, não vai para a trilha e não passa pela fila
+   * — é o critério 11 das duas histórias, e é por isso que o envio acontece
+   * aqui dentro e não depois.
+   *
+   * O link é montado na hora do envio a partir de `baseDaWeb`, e nunca
+   * guardado: um link gravado carrega o domínio do dia em que foi escrito, e
+   * este e-mail é lido horas depois (§11.1 proibição 9).
+   */
+  async function emitirEEnviarToken(
+    userId: UserId,
+    email: string,
+    proposito: 'email_verify' | 'password_reset',
+    contexto: ContextoDaRequisicao,
+  ): Promise<void> {
+    const agora = deps.clock.now();
+    // 256 bits de CSPRNG.
+    const tokenBruto = deps.ids.opaqueToken();
+
+    await deps.repositorio.criarTokenDeVerificacao({
+      id: deps.ids.uuidv7(),
+      userId,
+      proposito,
+      tokenHash: comoTokenHash(tokenBruto),
+      enviadoPara: email,
+      expiraEm: (agora + VALIDADE_EM_MS[proposito]) as Instant,
+      ipHmac: deps.hmacDeIp(contexto.ip),
+    });
+
+    const base = deps.baseDaWeb.replace(/\/$/, '');
+    const mensagem =
+      proposito === 'email_verify'
+        ? {
+            para: email,
+            assunto: 'Confirme seu e-mail no Bichu',
+            corpo:
+              `Confirme seu e-mail para liberar o aviso de pet perdido:\n\n` +
+              `${base}/verificar-email?token=${tokenBruto}\n\n` +
+              `O link vale por 24 horas. Se você não criou uma conta no Bichu, ignore esta mensagem.`,
+          }
+        : {
+            para: email,
+            assunto: 'Redefinir sua senha do Bichu',
+            corpo:
+              `Para escolher uma senha nova, abra:\n\n` +
+              `${base}/redefinir-senha?token=${tokenBruto}\n\n` +
+              `O link vale por 30 minutos e só pode ser usado uma vez.\n` +
+              `Se não foi você que pediu, ignore — a sua senha continua a mesma.`,
+          };
+
+    await deps.mailer.enviar(mensagem);
+
+    // O evento nasce AQUI, e não no transporte (BICHUS-147 critério 2). Foi a
+    // ausência dele em homologação, diante de um 201, que provou que o caminho
+    // nem tinha sido percorrido — e o transporte de log registrava, enquanto o
+    // de SMTP não registra nada. Prova de disparo que depende de qual
+    // transporte está ligado não prova disparo.
+    //
+    // `tokenBruto` NÃO entra aqui, e a ausência é o critério 7: o valor em
+    // claro existe nesta função e no corpo da mensagem, e em nenhum outro
+    // lugar. Registrar "o e-mail saiu" com o link dentro transformaria o log em
+    // cópia da credencial, legível por quem investiga qualquer outra coisa.
+    deps.registrarOcorrencia(
+      {
+        evento: 'email.send',
+        proposito,
+        userId,
+        correlationId: contexto.correlationId,
+      },
+      'e-mail transacional enviado',
+    );
+  }
+
+  /**
+   * O envio de verificação do CADASTRO, e o que ele engole.
+   *
+   * O envio é do servidor, dentro de `cadastrar` (BICHUS-147). Ele não é do
+   * app depois do 201: `registerUser` já declara `x-effects: [notifies]` no
+   * contrato, o reenvio tem teto de 3 por hora e gastá-lo na ida deixaria sem
+   * remédio justamente quem errou o endereço, e cliente novo não herda a
+   * memória de chamar.
+   *
+   * **A falha do envio não derruba a conta que nasceu** (critério 3). A conta
+   * existe, a sessão abre, o par de tokens volta — e a falha fica no log com o
+   * `correlation_id`, que é o que liga o 201 daquela pessoa ao e-mail que não
+   * saiu. Propagar aqui devolveria 500 para quem já tem conta criada e sessão
+   * aberta: o app mostraria erro de cadastro sobre um cadastro que deu certo, e
+   * a pessoa tentaria de novo para colher um 409.
+   *
+   * O `catch` engole o erro mas **não o silencia**: sem o registro, o e-mail
+   * que não sai vira exatamente o defeito que esta issue corrige, com a
+   * diferença de ninguém conseguir provar.
+   */
+  async function enviarVerificacaoDoCadastro(
+    conta: Conta,
+    contexto: ContextoDaRequisicao,
+  ): Promise<void> {
+    try {
+      await emitirEEnviarToken(conta.id, conta.email, 'email_verify', contexto);
+    } catch (erro) {
+      deps.registrarOcorrencia(
+        {
+          evento: 'email.send_failed',
+          proposito: 'email_verify',
+          userId: conta.id,
+          correlationId: contexto.correlationId,
+          motivo: erro instanceof Error ? erro.message : String(erro),
+        },
+        'o e-mail de verificação do cadastro não saiu; a conta e a sessão seguem de pé',
+      );
+    }
+  }
+
   /**
    * Emite o par de tokens de uma **família nova**. Usado no cadastro e no login,
    * que são os dois momentos em que a senha foi de fato verificada — e é dessa
    * verificação que o teto absoluto de 180 dias começa a contar.
+   *
+   * É aqui, e **só aqui**, que a emissão do token de acesso espera a virada do
+   * segundo quando a conta acabou de ter as sessões invalidadas (BICHUS-132).
+   * A senha recém-verificada é o que justifica o empurrão: depois de uma
+   * redefinição, a senha nova só está na mão de quem a escolheu.
+   *
+   * `renovar` NÃO recebe o mesmo tratamento, e a ausência é a decisão. Lá o que
+   * se apresenta é um refresh, não a senha — e quem tomou a conta está
+   * justamente renovando em laço no instante em que a vítima troca a senha. Dar
+   * o empurrão ali devolveria a ele a janela de um segundo que o arredondamento
+   * de `tokenFoiRevogado` existe para tirar. Depois de uma redefinição a pessoa
+   * legítima não renova: a família dela caiu junto, e o caminho dela é entrar.
    */
+  /**
+   * A barreira que a conta tem AGORA, que é o outro lado da conta de
+   * {@link instanteDeRevogacao}.
+   *
+   * Conta ausente devolve 0, e isso não é fallback silencioso: 0 faz o empurrão
+   * sumir e a revogação gravar `agora`, que é o comportamento de sempre. O único
+   * caminho que chega aqui sem conta é a exclusão de conta, em que a linha de
+   * `users` já saiu — e ali não há token novo para alcançar.
+   */
+  async function barreiraAtualDe(userId: UserId): Promise<Instant> {
+    const conta = await deps.repositorio.buscarContaPorId(userId);
+    return conta?.sessionsInvalidBefore ?? (0 as Instant);
+  }
+
   async function abrirSessao(
     conta: Conta,
     continuarConectado: boolean,
@@ -69,6 +242,24 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       userId: conta.id,
       familyId,
       tokenHash: comoTokenHash(refreshToken),
+      // A REGRESSAO QUE NASCE DO ENCONTRO DE DOIS CONSERTOS CERTOS, e esta
+      // linha e o conserto dela.
+      //
+      // SEC-006 faz a revogacao gravar `instanteDeRevogacao`, que numa segunda
+      // revogacao dentro do mesmo segundo fica ate 1 s A FRENTE do relogio. A
+      // BICHUS-77 faz `renovar()` recusar todo refresh com
+      // `issuedAt < sessions_invalid_before`. Juntas: o refresh emitido no <=1 s
+      // seguinte a uma revogacao dupla nasceria com `issuedAt = agora`, ja
+      // abaixo da barreira, e a pessoa cairia na PRIMEIRA renovacao -- logo
+      // depois de trocar a senha, que e o gesto com que ela acabou de retomar a
+      // conta. Fecha em vez de abrir, mas e regressao de disponibilidade.
+      //
+      // `max` e NAO `Math.ceil`: a assimetria entre os dois lados e deliberada.
+      // `tokenFoiRevogado` arredonda para o segundo porque o `iat` do JWT e
+      // truncado; `refreshFoiRevogado` compara milissegundo com milissegundo e
+      // o empate sobrevive de proposito. Arredondar aqui mataria esse empate --
+      // e ha um caso em `session.test.ts` cobrando exatamente isso.
+      issuedAt: Math.max(agora, conta.sessionsInvalidBefore) as Instant,
       expiresAt: prazos.expiresAt,
       absoluteExpiresAt: prazos.absoluteExpiresAt,
       staySignedIn: continuarConectado,
@@ -76,13 +267,63 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       ipHmac: deps.hmacDeIp(contexto.ip),
     });
 
-    const acesso = deps.assinador.emitir(conta.id, agora, deps.ids.uuidv7());
+    // A espera da virada do segundo mora aqui, e não no domínio: quem sabe QUAL
+    // conta está entrando é o caso de uso. O domínio só faz a conta — ele não
+    // pode ler relógio, e não precisa: `agora` já chega injetado.
+    //
+    // Nada mais se move junto. Os prazos do refresh, a trilha e a projeção
+    // continuam em `agora`: o que muda é o `iat` de UM token, em até um segundo,
+    // e só no login logo depois de uma redefinição de senha.
+    const emitidoEm = instanteDeEmissaoDoAcesso(agora, conta.sessionsInvalidBefore);
+    // `sid` e a familia que acabou de nascer (ADR-0002, emenda 1): o token de
+    // acesso passa a dizer de qual sessao ele veio.
+    const acesso = deps.assinador.emitir(conta.id, emitidoEm, deps.ids.uuidv7(), familyId);
     return {
       accessToken: acesso.token,
       expiresInSeconds: acesso.expiresInSeconds,
       refreshToken,
       refreshExpiresAt: prazos.expiresAt,
     };
+  }
+
+  /**
+   * As DUAS metades da revogação em massa, num lugar só. Ver o comentário de
+   * `invalidarTodasAsSessoes`, que é a porta pública desta função.
+   *
+   * Existe como função interna, e não como chamada repetida em cada gatilho,
+   * porque quatro cópias de "revoga e empurra" são quatro chances de alguém
+   * mexer numa e esquecer das outras três — que é exatamente como a redefinição
+   * de senha ficou empurrando a barreira sem revogar família nenhuma.
+   */
+  async function derrubarTodasAsSessoes(
+    userId: UserId,
+    motivo: MotivoDeRevogacaoEmMassa,
+    contexto: ContextoDaRequisicao,
+    agora: Instant,
+  ): Promise<void> {
+    const familiasCaidas = await deps.repositorio.revogarTodasAsFamilias(userId, motivo, agora);
+    // A barreira sai de `instanteDeRevogacao` e não de `agora` cru (SEC-006):
+    // duas revogações dentro do MESMO segundo deixariam vivo exatamente o token
+    // emitido entre as duas, porque `instanteDeEmissaoDoAcesso` o datou na
+    // virada do segundo seguinte à primeira barreira. Esta é a única gravação
+    // de `sessions_invalid_before` em massa que existe, e é aqui que a conta é
+    // feita -- os quatro gatilhos da BICHUS-125 herdam a correção por passarem
+    // por este lugar.
+    await deps.repositorio.invalidarSessoes(
+      userId,
+      instanteDeRevogacao(agora, await barreiraAtualDe(userId)),
+      agora,
+    );
+    await deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: userId,
+      actorIp: contexto.ip,
+      correlationId: contexto.correlationId,
+      action: 'auth.sessions_revoked',
+      resourceKind: 'user',
+      resourceId: userId,
+      metadata: { reason: motivo, revoked_families: familiasCaidas },
+    });
   }
 
   return {
@@ -131,6 +372,15 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         resourceKind: 'user',
         resourceId: conta.id,
       });
+
+      // O e-mail de verificação sai DAQUI, e depois da consulta de unicidade
+      // (critério 6): se o envio viesse antes de `criarContaLocal`, um POST com
+      // o endereço de outra pessoa faria este serviço mandar e-mail para ela.
+      // Sem esta linha a conta fica com `email_verified_at` nulo para sempre, e
+      // sem contato verificado o tutor não marca o pet como perdido
+      // (BICHUS-73) — era este o defeito de BICHUS-147.
+      await enviarVerificacaoDoCadastro(conta, contexto);
+
       return projetarSessao(conta, par, agora);
     },
 
@@ -207,6 +457,32 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     },
 
     /**
+     * A família a que um token de renovação pertence, **sem consumi-lo**.
+     *
+     * Existe para o teto `token_family` de 10/min da renovação, que é aplicado
+     * antes do handler (`registrarRota`). O teto precisa da família, e a família
+     * só se conhece depois de uma leitura por hash — não há como deduzi-la do
+     * token, que é opaco e rotaciona a cada uso. Contar pelo token em vez da
+     * família daria um balde novo a cada renovação legítima e o teto nunca
+     * fecharia, que é o mesmo que não existir.
+     *
+     * O preço é uma leitura a mais no caminho de renovação. É o preço de contar
+     * a coisa certa, e a alternativa (contar pelo resumo do token apresentado)
+     * parece funcionar e não conta nada.
+     *
+     * Devolve `undefined` para token desconhecido: um token que não existe não
+     * tem família, e inventar um balde comum para todos eles juntaria vítimas de
+     * expiração com quem está martelando valores aleatórios. Quem cobre esse
+     * caso é a entrada `ip` / `invalid_attempts` da mesma rota.
+     */
+    async familiaDoRefresh(refreshApresentado: string): Promise<string | undefined> {
+      const armazenado = await deps.repositorio.buscarRefreshPorHash(
+        comoTokenHash(refreshApresentado),
+      );
+      return armazenado?.familyId;
+    },
+
+    /**
      * Rotação obrigatória: cada refresh vale **uma** vez.
      *
      * Apresentar um token já consumido revoga a família inteira, avisa a vítima
@@ -255,6 +531,37 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       const conta = await deps.repositorio.buscarContaPorId(armazenado.userId);
       if (conta === undefined) throw problemas.sessaoExpirada();
 
+      // SEC-006 do lado do refresh. Sem esta comparação a troca de senha não
+      // expulsava ninguém: ela empurrava `sessions_invalid_before`, `autenticar()`
+      // lia a coluna e `renovar()` não — então quem tinha o refresh copiado
+      // pedia um token de acesso novo, com `iat = agora`, e passava pela
+      // barreira. A vítima fazia o único gesto que o produto oferece contra
+      // quem tomou a conta, e quem tomou a conta continuava dentro.
+      //
+      // Vem ANTES de `rotacionar`, e a ordem é a regra: recusar depois deixaria
+      // a linha sucessora gravada com `issued_at` posterior à barreira, e o
+      // refresh recusado desta vez passaria na próxima.
+      //
+      // A recusa é `sessaoExpirada()`, a MESMA de token desconhecido, consumido,
+      // revogado e vencido. É de propósito: um corpo ou um status próprio aqui
+      // transformaria a rota num oráculo que conta a um estranho, de posse de um
+      // refresh qualquer, que aquela conta trocou a senha há pouco — que é a
+      // informação de quem está procurando uma conta para atacar de novo.
+      if (refreshFoiRevogado(armazenado.issuedAt, conta.sessionsInvalidBefore)) {
+        // A tentativa negada é o sinal mais útil da trilha, e ela é interna: o
+        // que sai pela resposta continua indistinguível de um refresh vencido.
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: armazenado.userId,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.refresh_rejected_revoked_session',
+          resourceKind: 'refresh_family',
+          resourceId: armazenado.familyId,
+        });
+        throw problemas.sessaoExpirada();
+      }
+
       // "Continuar conectado" é escolha feita na autenticação com senha e
       // carregada pela família. Ela vem da linha gravada, nunca do corpo do
       // pedido de renovação: senão o cliente promoveria a própria sessão de 30
@@ -274,6 +581,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           userId: conta.id,
           familyId: armazenado.familyId,
           tokenHash: comoTokenHash(novoRefresh),
+          issuedAt: agora,
           expiresAt: prazos.expiresAt,
           absoluteExpiresAt: prazos.absoluteExpiresAt,
           staySignedIn: armazenado.staySignedIn,
@@ -287,7 +595,14 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // instável — o cenário mais comum deste produto.
       if (!rotacionou) throw problemas.sessaoExpirada();
 
-      const acesso = deps.assinador.emitir(conta.id, agora, deps.ids.uuidv7());
+      // A renovacao continua na MESMA familia, entao o `sid` do token novo e o
+      // da familia rotacionada, e nao um valor novo.
+      const acesso = deps.assinador.emitir(
+        conta.id,
+        agora,
+        deps.ids.uuidv7(),
+        armazenado.familyId,
+      );
       await deps.trilha.record({
         actorKind: 'user',
         actorUserId: conta.id,
@@ -310,27 +625,53 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       );
     },
 
-    /** Encerra a sessão daquele aparelho, revogando a família apresentada. */
+    /**
+     * Encerra a sessão **daquele aparelho**, revogando no servidor a família de
+     * refresh apresentada (ADR-0002, emenda 1).
+     *
+     * Três decisões desta função, e nenhuma delas é detalhe:
+     *
+     * **O refresh é obrigatório.** Ele já não pode ser `undefined` na
+     * assinatura, e a ausência já foi recusada com 400 pela validação de
+     * contrato antes de chegar aqui. Enquanto ela era aceita, sair sem
+     * apresentar nada devolvia 204 sem ter revogado coisa alguma, e a família
+     * ficava viva até vencer por inatividade — um refresh já copiado renovava
+     * por até 180 dias contra uma pessoa que acredita ter saído.
+     *
+     * **Refresh desconhecido e refresh de outra conta recebem a MESMA recusa.**
+     * A conferência de dono existe para impedir que um token alheio apresentado
+     * aqui derrube a sessão de outra pessoa; responder diferente nos dois casos
+     * transformaria esta rota num oráculo que conta se um token existe em algum
+     * lugar. É a mesma razão de `credencialRecusada` e de
+     * `verification-token-expired` terem corpo idêntico para causas diferentes.
+     *
+     * **`invalidarSessoes` não é chamada aqui, e a ausência é a decisão.**
+     * `users.sessions_invalid_before` é por pessoa, não por sessão: empurrá-la
+     * no logout comum derrubaria os outros aparelhos da mesma conta e tornaria
+     * esta operação idêntica a "sair de todos os aparelhos", que precisa
+     * continuar significando outra coisa — é o remédio de quem teve o aparelho
+     * levado. A consequência aceita, e declarada no contrato, é que o token de
+     * acesso já emitido sobrevive até o `exp`, no máximo 15 minutos, sem poder
+     * ser renovado.
+     *
+     * Idempotente: `revogarFamilia` só alcança o que ainda não fora revogado, e
+     * a busca por hash devolve a linha mesmo revogada. Repetir responde 204.
+     */
     async sair(
       autenticado: Autenticado,
-      refreshApresentado: string | undefined,
+      refreshApresentado: string,
       contexto: ContextoDaRequisicao,
     ): Promise<void> {
       const agora = deps.clock.now();
-      let familia: string | undefined;
-
-      if (refreshApresentado !== undefined) {
-        const armazenado = await deps.repositorio.buscarRefreshPorHash(
-          comoTokenHash(refreshApresentado),
-        );
-        // A família só é revogada se pertencer a quem está pedindo. Sem esta
-        // conferência, um token de outra conta apresentado aqui derrubaria a
-        // sessão alheia.
-        if (armazenado !== undefined && armazenado.userId === autenticado.conta.id) {
-          familia = armazenado.familyId;
-          await deps.repositorio.revogarFamilia(familia, 'logout', agora);
-        }
+      const armazenado = await deps.repositorio.buscarRefreshPorHash(
+        comoTokenHash(refreshApresentado),
+      );
+      if (armazenado === undefined || armazenado.userId !== autenticado.conta.id) {
+        throw problemas.refreshNaoConfere();
       }
+
+      const familia = armazenado.familyId;
+      await deps.repositorio.revogarFamilia(familia, 'logout', agora);
 
       await deps.trilha.record({
         actorKind: 'user',
@@ -339,7 +680,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         correlationId: contexto.correlationId,
         action: 'auth.logout',
         resourceKind: 'refresh_family',
-        ...(familia === undefined ? {} : { resourceId: familia }),
+        resourceId: familia,
       });
     },
 
@@ -366,23 +707,347 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       return { conta, jti: resultado.claims.jti };
     },
 
-    /** Empurra `sessions_invalid_before`. Usada pelos cinco gatilhos do SEC-006. */
-    async invalidarTodasAsSessoes(
+    /**
+     * O perfil da conta, com o que falta e o que isso impede.
+     *
+     * `pending_profile_fields` e `can_open_lost_case` são **derivados aqui** e
+     * não guardados: são função do estado da conta, e uma coluna que os
+     * guardasse seria uma segunda fonte que envelhece na primeira verificação
+     * de e-mail que alguém esquecer de propagar.
+     */
+    async meuPerfil(userId: UserId): Promise<Conta> {
+      const conta = await deps.repositorio.buscarContaPorId(userId);
+      if (conta === undefined) throw problemas.naoAutenticado();
+      return conta;
+    },
+
+    /**
+     * Atualiza o perfil. **Não aceita e-mail** (SEC-003).
+     *
+     * A ausência não é esquecimento: aceitar `email` aqui faria a resposta
+     * revelar se um endereço já tem conta — o erro de unicidade viraria um
+     * oráculo de existência consultável por qualquer pessoa logada, que é
+     * exatamente o que o fluxo separado de troca de e-mail evita.
+     */
+    async atualizarMeuPerfil(
       userId: UserId,
-      motivo: 'logout' | 'password_changed' | 'account_deleted',
+      campos: CamposDoPerfil,
       contexto: ContextoDaRequisicao,
-    ): Promise<void> {
+    ): Promise<Conta> {
       const agora = deps.clock.now();
-      await deps.repositorio.invalidarSessoes(userId, agora);
+      const conta = await deps.repositorio.atualizarPerfil(userId, campos, agora);
+      if (conta === undefined) throw problemas.naoAutenticado();
+
       await deps.trilha.record({
         actorKind: 'user',
         actorUserId: userId,
         actorIp: contexto.ip,
         correlationId: contexto.correlationId,
-        action: 'auth.sessions_revoked',
+        action: 'profile.updated',
         resourceKind: 'user',
         resourceId: userId,
-        metadata: { reason: motivo },
+        // O QUE mudou, nunca o valor: telefone e endereço são justamente o que a
+        // trilha não pode guardar (docs/04-seguranca.md 9).
+        metadata: { campos: Object.keys(campos).filter((c) => campos[c as keyof CamposDoPerfil] !== undefined) },
+      });
+
+      return conta;
+    },
+
+    // --- Verificação de e-mail e redefinição de senha --------------------
+
+    /**
+     * Pede o link de verificação. Responde **sempre** 202.
+     *
+     * Conta inexistente, conta já verificada e conta de outra pessoa produzem a
+     * mesma resposta: qualquer diferença aqui é um oráculo de existência de
+     * e-mail, consultável sem conta nenhuma.
+     */
+    async solicitarVerificacaoDeEmail(
+      email: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const conta = await deps.repositorio.buscarContaPorEmail(normalizarEmail(email));
+      // Sai em silêncio: não existe, ou já está verificada. As duas viram 202.
+      if (conta === undefined || conta.emailVerifiedAt !== null) return;
+
+      await emitirEEnviarToken(conta.id, conta.email, 'email_verify', contexto);
+    },
+
+    /**
+     * Confirma o e-mail. O token é consumido **atomicamente**.
+     *
+     * `undefined` cobre inexistente, expirado e já consumido, e os três viram
+     * 410 — distinguir contaria a um estranho se aquele token existiu.
+     */
+    async confirmarVerificacaoDeEmail(
+      tokenBruto: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<UserId> {
+      const agora = deps.clock.now();
+      const consumido = await deps.repositorio.consumirTokenDeVerificacao(
+        comoTokenHash(tokenBruto),
+        'email_verify',
+        agora,
+      );
+      if (consumido === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+      await deps.repositorio.marcarEmailVerificado(consumido.userId, agora);
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: consumido.userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.email_verified',
+        resourceKind: 'user',
+        resourceId: consumido.userId,
+      });
+      return consumido.userId;
+    },
+
+    /**
+     * Pede o link de redefinição. Responde **sempre** 202 (critério 2).
+     *
+     * Funciona inclusive com a conta em bloqueio temporário por falhas de login
+     * (critério 10): recusar aqui trancaria para fora justamente o titular que
+     * está tentando recuperar o acesso — e quem causou o bloqueio foi o
+     * atacante.
+     */
+    async solicitarRedefinicaoDeSenha(
+      email: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const conta = await deps.repositorio.buscarContaPorEmail(normalizarEmail(email));
+      if (conta === undefined) return;
+      await emitirEEnviarToken(conta.id, conta.email, 'password_reset', contexto);
+    },
+
+    /** Só confere, sem consumir. Serve à página antes do formulário. */
+    async conferirTokenDeRedefinicao(tokenBruto: string): Promise<void> {
+      const valido = await deps.repositorio.conferirTokenDeVerificacao(
+        comoTokenHash(tokenBruto),
+        'password_reset',
+        deps.clock.now(),
+      );
+      if (valido === undefined) throw problemas.tokenDeVerificacaoVencido();
+    },
+
+    /**
+     * Redefine a senha.
+     *
+     * **A ordem das três primeiras linhas é o critério 12**, e não estilo: a
+     * senha é validada ANTES de o token ser consumido. Consumir primeiro
+     * gastaria o único link que a pessoa tem porque ela digitou uma senha curta
+     * — e ela teria que pedir outro e-mail para tentar de novo.
+     */
+    async confirmarRedefinicaoDeSenha(
+      tokenBruto: string,
+      senhaNova: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const hash = comoTokenHash(tokenBruto);
+
+      // 1. O token existe? (sem consumir)
+      const pendente = await deps.repositorio.conferirTokenDeVerificacao(hash, 'password_reset', agora);
+      if (pendente === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+      // 2. A senha serve? Recusar aqui NÃO gasta o token.
+      const problemasDaSenha = validarSenha(senhaNova, { email: pendente.enviadoPara });
+      if (problemasDaSenha.length > 0) throw problemas.senhaFraca(problemasDaSenha);
+
+      // 3. Agora sim, atomicamente. Entre 1 e 3 outra requisição pode ter
+      //    consumido, e é por isso que 3 confere de novo em vez de confiar em 1.
+      const consumido = await deps.repositorio.consumirTokenDeVerificacao(hash, 'password_reset', agora);
+      if (consumido === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+      const credencial = await deps.repositorio.buscarCredencialLocalPorEmail(consumido.enviadoPara);
+      if (credencial === undefined) throw problemas.tokenDeVerificacaoVencido();
+      await deps.repositorio.regravarCredencial(
+        credencial.identityId,
+        await gerarHashDeSenha(senhaNova),
+        agora,
+      );
+
+      // Critério 9: TODO token pendente cai junto. Um link de redefinição
+      // emitido antes da troca continuaria valendo depois dela, e é por ele
+      // que quem tomou a conta volta.
+      await deps.repositorio.invalidarTokensPendentes(consumido.userId, agora);
+      // Critério 5: todas as sessões e todos os refresh. As DUAS metades
+      // (BICHUS-125): a barreira derruba o token de acesso em menos de um
+      // segundo, e a revogação das famílias mata o refresh copiado antes da
+      // troca. Até aqui só a barreira era empurrada, e as linhas de
+      // `refresh_tokens` seguiam vivas até vencerem por inatividade.
+      //
+      // A barreira que `derrubarTodasAsSessoes` grava não é `agora` cru: ela
+      // passa por `instanteDeRevogacao` (SEC-006), que alcança também o token
+      // que `instanteDeEmissaoDoAcesso` datou à frente do relógio numa
+      // revogação anterior do MESMO segundo.
+      await derrubarTodasAsSessoes(consumido.userId, 'password_changed', contexto, agora);
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: consumido.userId,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.password_reset_completed',
+        resourceKind: 'user',
+        resourceId: consumido.userId,
+      });
+
+      // Critério 7: avisar o endereço da conta. Se a troca não foi o titular,
+      // este e-mail é a única chance dele de descobrir hoje.
+      await deps.mailer.enviar({
+        para: consumido.enviadoPara,
+        assunto: 'Sua senha do Bichu foi alterada',
+        corpo:
+          'A senha da sua conta no Bichu acabou de ser alterada.\n\n' +
+          'Se foi você, não precisa fazer nada.\n\n' +
+          'Se não foi, peça uma nova senha agora mesmo pelo aplicativo: ' +
+          'quem fez isso entrou com um link enviado para este endereço.',
+      });
+    },
+
+    /**
+     * Os cinco gatilhos do SEC-006 passam por aqui, e ela faz **duas** coisas.
+     *
+     * 1. Revoga **todas as famílias de refresh** da conta. É o efeito: sem ele
+     *    as linhas seguem vivas no banco até vencerem por inatividade.
+     * 2. Empurra `sessions_invalid_before`. É a barreira: derruba o token de
+     *    **acesso** já emitido em menos de um segundo, sem esperar o `exp`.
+     *
+     * **Nenhuma das duas substitui a outra**, e a ordem não é estilo. A
+     * revogação vem primeiro porque, entre os dois passos, um refresh copiado
+     * que chegasse a `renovar()` rotacionaria e receberia um token de acesso com
+     * `iat = agora` — depois da barreira, portanto imune a ela. Com a revogação
+     * primeiro, esse refresh já encontra `revokedAt` preenchido. A barreira lida
+     * por `renovar()` (BICHUS-77) é rede de proteção para o caso de esta ordem
+     * ser desfeita; ela não é motivo para prescindir da revogação.
+     *
+     * Idempotente: chamada com a conta já sem sessão nenhuma, revoga zero linhas
+     * e grava o evento assim mesmo. O evento é do **pedido**, não do efeito.
+     */
+    async invalidarTodasAsSessoes(
+      userId: UserId,
+      motivo: MotivoDeRevogacaoEmMassa,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      await derrubarTodasAsSessoes(userId, motivo, contexto, deps.clock.now());
+    },
+
+    /**
+     * "Sair de todos os aparelhos" — o segundo verbo da emenda 1 do ADR-0002.
+     *
+     * É o remédio de quem perdeu o aparelho, e o único que fecha a janela de até
+     * 15 minutos que o logout comum deixa aberta de propósito.
+     *
+     * A conta **é a do token**, nunca do corpo do pedido: derrubar a conta de
+     * outra pessoa não pode ser possível nem com o identificador dela na mão
+     * (ADR-0021 — a autorização vai na cláusula, não num `if` de papel).
+     *
+     * Quem pediu também cai, e isso é o desenho: o aparelho de onde o pedido
+     * saiu é um dos "todos". A tela avisa e o app reautentica.
+     */
+    async sairDeTodosOsAparelhos(
+      autenticado: Autenticado,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const conta = autenticado.conta;
+      await derrubarTodasAsSessoes(conta.id, 'logout_all', contexto, deps.clock.now());
+
+      // Se quem pediu não foi o titular, este e-mail é a única chance de ele
+      // descobrir hoje. Mesmo raciocínio do aviso da redefinição de senha.
+      await deps.mailer.enviar({
+        para: conta.email,
+        assunto: 'Suas sessoes do Bichu foram encerradas',
+        corpo:
+          'Todas as sessoes da sua conta no Bichu acabaram de ser encerradas, ' +
+          'em todos os aparelhos.\n\n' +
+          'Se foi voce, basta entrar de novo.\n\n' +
+          'Se nao foi, troque a sua senha agora mesmo: quem fez isso estava ' +
+          'dentro da sua conta.',
+      });
+    },
+
+    /**
+     * Troca a senha de quem está autenticado, conferindo a senha atual.
+     *
+     * A senha atual é conferida aqui — e não via `X-Reauth-Token` — porque é o
+     * que o contrato declara em `changePassword`: a operação leva
+     * `verifies_secret` e `current_password` no corpo, e **não** leva
+     * `reauth: []`. Trocar isso é mexer no contrato público, e não é desta
+     * história.
+     *
+     * A ordem das linhas é a mesma da redefinição, pelo mesmo motivo: a senha
+     * nova é validada **antes** de a atual ser conferida? Não — aqui é o
+     * inverso, e de propósito. A senha atual vem primeiro porque, enquanto ela
+     * não for conferida, quem está do outro lado pode ser o invasor: devolver
+     * "sua senha nova é fraca" a quem não provou saber a senha atual entrega
+     * informação sobre a política a quem não tinha direito a ela, e gasta CPU de
+     * hash a pedido de qualquer um com um token de acesso.
+     */
+    async trocarSenha(
+      autenticado: Autenticado,
+      senhaAtual: string,
+      senhaNova: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const conta = autenticado.conta;
+      const credencial = await deps.repositorio.buscarCredencialLocalPorEmail(conta.email);
+
+      // Conta sem senha local (só provedor externo, no futuro) e senha errada
+      // recebem a MESMA recusa. Distinguir diria a quem tomou o token de acesso
+      // se aquela conta tem senha — e é por aí que ele decide onde insistir.
+      if (credencial === undefined) {
+        await consumirTempoDeVerificacao(senhaAtual);
+        throw problemas.credencialRecusada();
+      }
+      if (!(await verificarSenha(senhaAtual, credencial.passwordPhc))) {
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: conta.id,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.password_change_refused',
+          resourceKind: 'user',
+          resourceId: conta.id,
+        });
+        throw problemas.credencialRecusada();
+      }
+
+      const problemasDaSenha = validarSenha(senhaNova, { email: conta.email });
+      if (problemasDaSenha.length > 0) throw problemas.senhaFraca(problemasDaSenha);
+
+      await deps.repositorio.regravarCredencial(
+        credencial.identityId,
+        await gerarHashDeSenha(senhaNova),
+        agora,
+      );
+
+      // Mesmo par da redefinição: link pendente cai junto, senão quem tomou a
+      // conta volta por um `password_reset` pedido antes da troca.
+      await deps.repositorio.invalidarTokensPendentes(conta.id, agora);
+      await derrubarTodasAsSessoes(conta.id, 'password_changed', contexto, agora);
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.password_changed',
+        resourceKind: 'user',
+        resourceId: conta.id,
+      });
+
+      await deps.mailer.enviar({
+        para: conta.email,
+        assunto: 'Sua senha do Bichu foi alterada',
+        corpo:
+          'A senha da sua conta no Bichu acabou de ser alterada, e todas as ' +
+          'sessoes foram encerradas.\n\n' +
+          'Se foi voce, e so entrar de novo com a senha nova.\n\n' +
+          'Se nao foi, peca uma nova senha agora mesmo pelo aplicativo.',
       });
     },
 

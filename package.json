@@ -10,8 +10,10 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.json --outDir dist/_tests && node --test --experimental-test-coverage \"dist/_tests/src/**/*.test.js\"",
-    "test:integration": "tsc -p tsconfig.json --outDir dist/_tests && node --test \"dist/_tests/tests/integration/**/*.test.js\"",
+    "test": "rm -rf dist/_tests && tsc -p tsconfig.json --outDir dist/_tests && node infra/suite/executar-unitaria.mjs",
+    "test:integration": "node infra/integracao/rodar.mjs",
+    "test:integration:executar": "node infra/integracao/executar-suite.mjs",
+    "verify:variaveis": "node infra/integracao/variaveis-exigidas.mjs",
     "build": "tsc -p tsconfig.build.json",
     "generate:types": "openapi-typescript api/openapi.yaml -o src/shared/types/generated/api.ts && node src/tools/gerar-tipos-de-problema.mjs",
     "verify:types": "npm run generate:types && git diff --exit-code -- src/shared/types/generated/",
@@ -23,8 +25,10 @@
     "@eslint/js": "^9.12.0",
     "@types/node": "^22.7.0",
     "@types/pg": "^8.23.1",
+    "@types/qrcode": "^1.5.6",
     "cypress": "^16.1.0",
     "eslint": "^9.12.0",
+    "jsqr": "^1.4.0",
     "node-pg-migrate": "^9.0.0",
     "openapi-typescript": "^7.4.0",
     "typescript": "^5.9.0",
@@ -34,6 +38,8 @@
     "fastify": "^5.12.5",
     "kysely": "^0.29.6",
     "pg": "^8.23.0",
+    "qrcode": "^1.5.4",
+    "sharp": "^0.35.4",
     "yaml": "^2.9.1"
   }
 }

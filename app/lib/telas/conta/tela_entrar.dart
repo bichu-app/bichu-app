@@ -4,8 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../escopo.dart';
+import '../../intencao/ir_para_o_destino.dart';
 import '../../roteamento/rotas.dart';
-import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
@@ -18,6 +18,10 @@ import '../../widgets/saida_da_tela.dart';
 /// tela respeita isso: uma mensagem so, com a saida para a recuperacao de
 /// senha ao lado dela. Distinguir os dois casos entregaria a lista de quem tem
 /// conta.
+///
+/// **Sem caixa de "continuar conectado"**, por decisao do cliente de
+/// 22/09/2026: a sessao persistente virou comportamento padrao nesta tela e na
+/// F1.1. Ver `AuthApi.sessaoPersistentePorPadrao`.
 ///
 /// **Esta tela e um desvio, e nao um destino.** A regra de produto (visao de
 /// produto, secao 5 e matriz 8.6) e que o app e navegavel deslogado e que sao
@@ -48,7 +52,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
   final FocusNode _focoDaSenha = FocusNode();
 
   bool _senhaVisivel = false;
-  bool _continuarConectado = false;
   bool _enviando = false;
   MensagemDeErro? _faixa;
   String? _erroDoEmail;
@@ -119,21 +122,28 @@ class _TelaEntrarState extends State<TelaEntrar> {
 
     final escopo = Escopo.of(context);
     try {
+      // `continuarConectado` NAO e passado: virou o padrao de `AuthApi`, por
+      // decisao do cliente de 22/09/2026. Ver
+      // `AuthApi.sessaoPersistentePorPadrao`.
       final sessao = await escopo.auth.entrar(
         email: _email.text.trim(),
         senha: _senha.text,
-        continuarConectado: _continuarConectado,
       );
       await escopo.sessao.abrir(sessao);
+      // O destino depois do login e a intencao pendente (UX 8.3), e nao a
+      // home. **A acao guardada e executada aqui**, antes de qualquer
+      // navegacao: a regra 3 diz "executar, nao apenas navegar", e devolver a
+      // pessoa ao formulario preenchido para que ela toque no botao de novo e
+      // a meia-entrega que a propria secao nomeia. Quem tocou em `Registrar
+      // achado` antes do login nao toca de novo depois dele.
+      //
+      // O Inicio continua sendo um destino possivel, e so um caso chega la:
+      // nao havia intencao, ou ela passou das 24 horas e foi descartada em
+      // silencio (regra 2). Falha de execucao **nao** vai para a home: vai
+      // para a tela de retorno, com o rascunho e o erro (regra 4).
+      final destino = await escopo.guarda.executarDepoisDoLogin();
       if (!mounted) return;
-      // O destino depois do login bem-sucedido **nao** muda aqui. A secao 8.3
-      // da pesquisa de UX ("nunca a home") o resolve pelo envelope de intencao
-      // pendente: a acao que a pessoa tentou e executada e ela chega na tela de
-      // resultado. Esse envelope ainda nao existe, e substituir `go` por um
-      // `pop` agora seria escolher meio caminho sem a especificacao inteira.
-      // `go` tambem limpa o desvio da pilha, entao nenhuma tela de conta fica
-      // pendurada atras do Inicio.
-      context.go(Rotas.inicio);
+      irParaODestinoDoLogin(context, destino);
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       // **A decisao e por `type`, nunca pelo status.** O contrato declara
@@ -154,9 +164,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
     return Scaffold(
       appBar: const BarraDeConta(
         titulo: 'Entrar',
@@ -214,31 +221,6 @@ class _TelaEntrarState extends State<TelaEntrar> {
                 ),
                 child: const Text('Esqueci minha senha'),
               ),
-            ),
-            const SizedBox(height: BichuEspaco.e2),
-            Row(
-              children: <Widget>[
-                Checkbox(
-                  value: _continuarConectado,
-                  onChanged: (v) =>
-                      setState(() => _continuarConectado = v ?? false),
-                ),
-                const SizedBox(width: BichuEspaco.e2),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text('Continuar conectado neste aparelho',
-                          style: textos.bodyLarge),
-                      Text(
-                        'Você não precisa entrar de novo neste celular.',
-                        style: textos.bodyMedium
-                            ?.copyWith(color: cores.textSecondary),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
             ),
             if (_faixa != null) ...<Widget>[
               const SizedBox(height: BichuEspaco.e6),

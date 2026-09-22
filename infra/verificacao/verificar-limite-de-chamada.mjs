@@ -417,7 +417,21 @@ function main(argv) {
   }
 
   console.log('');
-  console.log('APROVADO');
+  console.log('APROVADO: os tetos estao DECLARADOS no contrato.');
+  // O QUE ESTE "APROVADO" NAO DIZ.
+  //
+  // Ate 21/09/2026 esta linha saiu verde todos os dias sobre um servico em que
+  // `hit()` nunca era chamado: este verificador le `api/openapi.yaml` e nunca
+  // abre `src/`. Ele responde "o teto esta escrito", e essa e uma pergunta
+  // diferente de "o teto vale". Quem confundiu as duas parou de procurar.
+  //
+  // A vigencia e provada por `src/tools/portao-de-vigencia-do-teto.ts`, que sobe
+  // a borda, estoura o teto de uma rota real e exige 429 -- com a isca de que o
+  // mesmo caso com o limitador desligado precisa reprovar (BICHUS-178).
+  console.log(
+    'Este portao NAO prova vigencia: ele nao abre src/. Quem prova e ' +
+      'src/tools/portao-de-vigencia-do-teto.ts (BICHUS-178, ADR-0016 Emenda 1).',
+  );
   return 0;
 }
 

@@ -53,8 +53,23 @@ O ambiente inteiro sobe em containers, sem conta em nuvem nenhuma.
 ```sh
 cp .env.example .env     # preencha os valores vazios (chaves de dev, senhas)
 make up                  # constrói a imagem, aplica as migrações e sobe tudo
-curl http://localhost:3000/v1/health
+curl http://localhost:3000/v1/health   # ou a porta que o `make up` imprimir
 ```
+
+**A porta pode não ser a 3000 na sua máquina, e isso é esperado.** Na primeira
+invocação o `make` sonda as portas, escolhe o primeiro par livre e grava a
+escolha em `portas.local.mk`. O arquivo não é versionado, é só seu, e o par fica
+o mesmo em todas as subidas seguintes. O endereço de verdade sai no fim do
+`make up`:
+
+```
+aplicação: http://localhost:3200
+mídia:     http://localhost:3201
+```
+
+Não há passo manual: o arquivo nasce sozinho. O que existe para você fazer, se
+quiser, é **editar os dois números dentro dele** para fixar outra porta, ou
+rodar `make portas` para reescolher do zero.
 
 `make up` é o comando único: `compose.yaml` traz a aplicação, PostgreSQL com
 PostGIS, armazenamento de objeto compatível com S3, um receptor de e-mail local
@@ -62,18 +77,104 @@ e a borda. As migrações são aplicadas antes de a aplicação subir, por um jo
 próprio; `make reset` apaga o volume e repete tudo do zero, que é o que prova a
 migração em banco vazio.
 
-Se a porta 3000 da sua máquina já é de outro projeto, `make up PORTA=3100` troca
-porta publicada e URL base juntas. `make ajuda` lista o resto dos alvos.
+`make ajuda` lista o resto dos alvos.
+
+### Quando a subida reclamar de porta
+
+```
+porta ocupada por outro processo: 3200
+  esta pilha esta configurada para 3200 (aplicacao) e 3201 (midia).
+  livre agora: 3300 e 3301. Para fixar este par nesta maquina:
+    make portas
+```
+
+Alguém subiu outra coisa na porta que era sua desde a última vez. `make portas`
+reescolhe e regrava; `make up PORTA=3300 PORTA_MIDIA=3301` usa outro par só
+nesta subida, sem fixar.
+
+**Não troque de porta editando as URLs do `.env`.** É o atalho óbvio e é o pior
+dos caminhos: o serviço sobe, a sonda passa, e todo link de tag e de e-mail
+passa a apontar para uma porta que não responde. Isso é pior do que não subir,
+porque não falha na hora — falha no telefone de quem leu o QR, e o que o QR
+guarda não se corrige depois (ADR-0004). O `Makefile` deriva as cinco URLs base
+(`PUBLIC_BASE_URL`, `TAG_BASE_URL`, `WEB_BASE_URL`, `API_BASE_URL` e
+`MEDIA_PUBLIC_BASE_URL`) dos mesmos dois números, e `make verificar-portas`
+reprova quando porta publicada e URL base discordam. Ele roda dentro do
+`make up`, antes do Docker.
+
+O mesmo vale para `make up HOST=<ip da sua máquina>`, que serve na rede local
+para um segundo aparelho físico alcançar a rota pública do QR: ele move host e
+porta nas cinco de uma vez, e o portão reprova se alguma ficar para trás.
+
+### Subir exige um checkout do git
+
+A imagem carrega, gravado dentro dela, o commit de que ela saiu, e o build
+**reprova** sem ele: um serviço que não sabe de onde veio responde `status: ok`
+igual a um que sabe, e aí quem está rodando código antigo fica indistinguível de
+quem está rodando o novo. O `make` resolve isso sozinho — ele lê
+`git rev-parse HEAD` e exporta o valor.
+
+O que isso quer dizer na prática: **`make up` de um tarball, de uma cópia da
+pasta ou de um diretório sem `.git` não sobe**, e você vai ver a mensagem
+dizendo qual dos dois casos é o seu. A saída certa é construir de um checkout, e
+não inventar um valor: um SHA falso engana pior que a ausência, porque a sonda
+passa a afirmar em vez de calar. Para apontar um commit específico,
+`make up BUILD_COMMIT=<sha>`.
 
 | Comando | O que faz |
 |---|---|
 | `make up` | sobe dev, aplicando as migrações |
 | `make reset` | derruba apagando o volume e sobe do zero |
 | `make test` | testes unitários, dentro da imagem |
+| `npm run test:integration` | integração contra um Postgres de verdade, em pilha própria |
 | `make logs` | tail agregado dos serviços |
 | `make down` | derruba preservando o volume |
+| `make portas` | reescolhe o par de portas desta máquina |
+| `make verificar` | roda os portões locais, na ordem da esteira |
 
 O detalhe de cada um, e o porquê das decisões, está em `docs/07-devops.md`.
+
+### Integração a partir de um worktree
+
+`npm run test:integration` funciona de qualquer diretório de trabalho, incluindo
+um criado por `git worktree add`, e **não encosta na pilha de desenvolvimento**.
+Ele sobe uma pilha própria, com nome de projeto derivado do caminho e sem
+publicar porta nenhuma: quem roda a suíte é um serviço dentro daquela rede. O
+`.env` não precisa ser copiado — ele é gerado com valores de teste que não
+autenticam em lugar nenhum, porque segredo mora no Secret Manager (ADR-0022).
+
+A suíte só roda em banco que se declara descartável. Se ela recusar dizendo isso,
+o `DATABASE_URL` do ambiente está apontando para outro lugar.
+
+O caminho inteiro está em `infra/integracao/`, e cada arquivo explica o porquê.
+
+## Homologação
+
+Existe um ambiente de homologação de pé, e ele **não** é `bichu.app`:
+
+| Para que | Endereço |
+|---|---|
+| API | `https://hml.bichu.app` (health em `/v1/health`) |
+| Contrato, atrás de credencial | `https://hml.bichu.app/v1/docs` |
+| Mídia pública | `https://img-hml.bichu.app` |
+
+Build para instalar no aparelho Android apontando para lá:
+
+```sh
+flutter build apk --debug --dart-define=API_BASE_URL=https://hml.bichu.app
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+```
+
+**Sem `/v1` no valor**: o `ApiClient` acrescenta a versão em cada chamada, e
+`.../v1` no build produz requisições para `/v1/v1/...` e um 404 que parece
+defeito de servidor.
+
+É **homologação e não produção**, e ela **não deve receber dado de usuário
+real** — o apex `bichu.app` ainda nem é nosso, o push não está configurado, o
+deep link sobe com as listas vazias e o e-mail não sai do log. O endereço, o que
+funciona, o que não funciona e o backup estão na seção 9.0 de
+`docs/07-devops.md`; como a máquina foi montada, em
+`infra/roteiro-provisionamento.md`.
 
 ## Configuração que ainda não existe
 
@@ -83,11 +184,19 @@ mensagem, em vez de usar um exemplo que alguém confunda com o real.
 
 | O que falta | Onde entra |
 |---|---|
-| Nome do pacote do aplicativo | manifesto Android e projeto iOS |
 | Team ID da conta Apple | `apple-app-site-association` |
 | Impressão digital SHA-256 da chave de assinatura do APK | `assetlinks.json` |
 | Chaves do Google Maps | configuração do app |
 
-Enquanto faltarem, as rotas dos dois arquivos de associação respondem **503**, e
-não um arquivo vazio: arquivo válido e errado faz o sistema operacional cachear
-uma associação quebrada, e o deep link passa a falhar em silêncio.
+O nome do pacote saiu desta tabela em 19/09 porque ele foi decidido:
+`app.bichu` nas duas plataformas, e é esse valor que o `assetlinks.json` servido
+em homologação já carrega.
+
+Enquanto os outros três faltarem, os dois arquivos de associação sobem **com as
+listas vazias** — conferido em 19/09: `200` com `application/json` e
+`sha256_cert_fingerprints` e `applinks.details` vazios. Lista vazia é recusa
+honesta: o sistema operacional não encontra correspondência, não abre o app, e é
+exatamente isso que acontece na realidade. Preencher com valor de exemplo seria
+pior, porque qualquer conferência superficial ficaria verde e a falha só
+apareceria no aparelho de um usuário — depois de a plaquinha ter sido impressa
+com o domínio. O raciocínio inteiro está em `infra/caddy/well-known/LEIA-ME.md`.

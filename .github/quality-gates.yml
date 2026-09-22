@@ -9,17 +9,110 @@
 # data. Para remover a dispensa: apague a entrada. Nao mexa no workflow.
 
 dispensas:
-  - portao: sonarcloud
-    motivo: "SONAR_TOKEN nao provisionado; SonarCloud e pago em repositorio privado e a contratacao nao foi decidida"
-    responsavel: cliente
-    vence_em: 2026-09-23
+  # A dispensa `sonarcloud` saiu em 17/09/2026: o cliente contratou o plano e
+  # provisionou SONAR_TOKEN. O job `sonar` da esteira passou a existir de
+  # verdade, e sem o token ele REPROVA nomeando a credencial.
+  #
+  # O que continua dispensado e so o VEREDITO do portao de qualidade, e por um
+  # motivo estreito: na primeira analise o SonarCloud trata o repositorio
+  # inteiro como codigo novo, entao os 74% de linha medidos hoje batem no piso
+  # de 80% do perfil `Sonar way` e o portao reprova de saida. Isso e um
+  # veredito sobre treze dias de codigo acumulado, cobrado de quem abrir o
+  # proximo PR. Portao que reprova tudo no primeiro dia e desligado na
+  # primeira semana, e o desligamento nao volta atras.
+  #
+  # Uma semana depois existe linha de base em `development`, "codigo novo"
+  # passa a significar o diff do PR, e o piso de 80% vira uma exigencia sobre
+  # o que a pessoa acabou de escrever -- que e o que ele sabe cobrar.
+  #
+  # Enquanto esta entrada existir, o job `sonar` publica o veredito vermelho
+  # no resumo da execucao com `::warning::` e nao derruba o PR. Apagar esta
+  # entrada torna o veredito bloqueante, sem tocar no workflow.
+  - portao: sonarcloud-veredito
+    motivo: "primeira analise trata o repositorio inteiro como codigo novo e reprova os 74% contra o piso de 80% do Sonar way; a janela existe para criar linha de base em development"
+    responsavel: squad
+    vence_em: 2026-09-24
 
+  # AS DUAS DE BAIXO MUDARAM DE NATUREZA EM 22/09/2026, E NAO SO DE DATA.
+  #
+  # Ate hoje elas diziam "o insumo nao chegou" -- chave de assinatura, conta
+  # Apple -- e isso e a frase de quem ESPERA. O cliente decidiu hoje que o app
+  # nao vai para loja nenhuma por ora, e a frase de quem DECIDIU e outra: o que
+  # estas duas verificacoes protegem e a submissao a loja, e a submissao saiu do
+  # horizonte. Quem ler daqui a um mes precisa encontrar a decisao, nao a espera.
+  #
+  # O GATILHO DE REATIVACAO E UM EVENTO, NAO UMA DATA: as duas caem no dia em
+  # que existir decisao de submeter o app a uma loja. `verificar_dispensas.py`
+  # so entende `vence_em`, entao o evento vive no `motivo` -- de proposito, e
+  # nao num campo novo: campo que o portao nao le e dispensa inerte com outro
+  # nome, que e o defeito que o SonarCloud ja teve em 18/09. A data e curta e
+  # nao e arbitraria: 29/09 e a vespera do fim de desenvolvimento (30/09/2026),
+  # que e quando a pergunta "vamos submeter?" tem resposta de verdade.
+  #
+  # O QUE ESTAS DUAS ENTRADAS NAO DISPENSAM, e vale dizer porque o nome engana:
+  # `verificar_borda_local.py` tambem as consulta, para tratar `assetlinks.json`
+  # e `apple-app-site-association` VAZIOS como aviso em vez de falha. Isso e
+  # DEEP LINK (BICHUS-94, 136 e 38), nao e loja, e continua valendo como
+  # trabalho futuro: a impressao digital ainda depende do keystore e o `appID`
+  # ainda depende do Team ID. A decisao de hoje tira a submissao do caminho
+  # critico; ela nao diz que o deep link abre.
   - portao: apk-assinado
-    motivo: "chave de assinatura do APK pendente (BICHU-15). Sem ela nao ha build de release nem impressao digital para o assetlinks.json"
+    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao nao ha build de release para assinar. CAI QUANDO houver decisao de submeter o app a uma loja; ate la o keystore (BICHU-15) segue pendente e o assetlinks.json segue sem impressao digital"
     responsavel: cliente
-    vence_em: 2026-09-22
+    vence_em: 2026-09-29
 
   - portao: ios
-    motivo: "conta Apple Developer pendente (BICHU-14): sem Team ID nao ha build nem Universal Links"
+    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao o alvo iOS sai do caminho critico. CAI QUANDO houver decisao de submeter o app a uma loja; ate la a conta Apple (BICHU-14) segue pendente e sem Team ID nao ha Universal Links"
     responsavel: cliente
-    vence_em: 2026-09-22
+    vence_em: 2026-09-29
+
+  # A correcao do `logout` (BICHUS-81, commit aca2d33) acrescentou `requestBody`
+  # OBRIGATORIO a `POST /v1/auth/logout`, e para o `oasdiff` isso e quebra de
+  # contrato: `request-body-added-required`. Medido, nao suposto -- o comando da
+  # esteira sai com 1 e acusa exatamente essa mudanca, e so ela.
+  #
+  # A quebra e o ponto. Enquanto o corpo era opcional, quem seguisse o contrato
+  # ao pe da letra saia sem revogar nada e recebia 204: sucesso indistinguivel
+  # do nada. Recusar alto e o remedio.
+  #
+  # A operacao NAO e versionada, e a decisao e do coordenador: nao existe
+  # cliente publicado. Nao ha keystore, nao ha app em loja, e as listas de
+  # associacao do deep link estao vazias. Versionar criaria uma v2 para uma base
+  # de zero instalacoes, e a v1 passaria a carregar para sempre o comportamento
+  # que esta correcao existe para tirar de circulacao.
+  #
+  # A dispensa e ESTREITA e nomeia a mudanca: `verificar_quebras_de_contrato.py`
+  # so a aplica ao par regra+operacao escrito em `mudanca`. Qualquer outra
+  # quebra reprova o passo, inclusive outra quebra nesta mesma operacao.
+  #
+  # Ela vence junto com a janela do PR: depois do merge em `development` a base
+  # da comparacao ja tem o corpo obrigatorio e o portao fica quieto sozinho.
+  # Se a data chegar antes do merge, `rapidos` reprova por dispensa vencida e
+  # alguem decide de novo -- que e exatamente o comportamento desejado.
+  - portao: oasdiff-logout-corpo-obrigatorio
+    mudanca: "request-body-added-required logout"
+    motivo: "logout passou a exigir refresh_token no corpo (BICHUS-81): quebra deliberada, e nao ha cliente publicado para versionar a operacao"
+    responsavel: squad
+    vence_em: 2026-09-28
+
+  # O portao do paragrafo 7 do design system
+  # (test/a11y/documento_secao7_test.dart) compara a tabela e a prosa de
+  # docs/06-design-system.md com design/contrast-pairs.json. Ele existe porque
+  # o paragrafo 7 afirmava ter esse portao e NAO tinha: quatro razoes da rampa
+  # anterior sobreviveram na prosa por dias com a esteira verde (BICHUS-194).
+  #
+  # Aqui ele nao roda, e o motivo nao e tecnico: `docs/` esta fora do
+  # repositorio por decisao do cliente de 17/09/2026, entao o checkout da CI
+  # nao traz o arquivo. Sem esta entrada o teste REPROVA por ausencia, que e o
+  # comportamento correto de uma verificacao que nao consegue verificar.
+  #
+  # A saida esta em .jarvis/DECISOES-PARA-22-09.md: ou `docs/` (ou so este
+  # arquivo) entra no repositorio, ou o portao passa a rodar no passo de
+  # publicacao no Confluence, ou se aceita que o paragrafo 7 nao tem portao e
+  # o texto dele diz isso. Enquanto esta entrada existir, a tabela do
+  # documento NAO e conferida pela esteira, e o teste imprime `::warning::`
+  # dizendo isso em cada execucao.
+  - portao: documento-secao7
+    motivo: "docs/ fora do repositorio por decisao de 17/09/2026: o checkout da CI nao traz docs/06-design-system.md e o portao do paragrafo 7 nao tem o que ler"
+    responsavel: cliente
+    vence_em: 2026-09-24

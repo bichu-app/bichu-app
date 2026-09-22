@@ -1,0 +1,14 @@
+{
+  "name": "bichu",
+  "services": {
+    "db": {
+      "image": "postgres:16-alpine"
+    },
+    "edge": {
+      "image": "caddy:2-alpine"
+    },
+    "api": {
+      "image": "bichu-app:local"
+    }
+  }
+}

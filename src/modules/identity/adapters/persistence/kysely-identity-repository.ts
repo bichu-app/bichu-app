@@ -13,9 +13,10 @@
  *   token, que é exatamente o cenário que a detecção de reuso existe para
  *   distinguir de um roubo.
  */
-import type { Insertable } from 'kysely';
+import { sql, type Insertable } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import type { UsersTable } from '../../../../shared/db/schema.js';
+import { barreiraDeContaNova } from '../../domain/session.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
 import type { Instant, TokenHash, UserId } from '../../../../shared/types/brands.js';
 import type {
@@ -25,6 +26,8 @@ import type {
   MotivoDeRevogacao,
   NovaConta,
   NovoRefresh,
+  NovoTokenDeVerificacao,
+  TokenConsumido,
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
 
@@ -114,9 +117,13 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         display_name: nova.displayName ?? null,
         accepted_terms_version: nova.acceptedTermsVersion ?? null,
         accepted_terms_at: nova.acceptedTermsVersion === undefined ? null : agora,
-        // A conta nasce com a barreira do SEC-006 no instante da criação: assim
+        // A conta nasce com a barreira do SEC-006 no segundo da criação: assim
         // nenhum token anterior a ela pode existir, nem por relógio adiantado.
-        sessions_invalid_before: agora,
+        // TRUNCADA AO SEGUNDO de propósito — ver `barreiraDeContaNova`: com a
+        // precisão de milissegundo, o token que o próprio cadastro devolve
+        // nascia revogado, e `POST /v1/auth/register` entregava uma sessão que
+        // não abria nenhuma tela.
+        sessions_invalid_before: new Date(barreiraDeContaNova(nova.agora)),
         created_at: agora,
         updated_at: agora,
       };
@@ -172,6 +179,40 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         .where('id', '=', id)
         .where('deleted_at', 'is', null)
         .executeTakeFirst();
+      return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+    },
+
+    async atualizarPerfil(id: UserId, campos, agora): Promise<Conta | undefined> {
+      // Só entra no `SET` o que veio no corpo. `undefined` é "não mexer" e
+      // `null` é "apagar": montar o objeto com todos os campos transformaria um
+      // `PATCH` de um campo numa limpeza silenciosa dos outros cinco.
+      const mudancas: Record<string, unknown> = { updated_at: new Date(Number(agora)) };
+      const mapa = {
+        displayName: 'display_name',
+        phoneE164: 'phone_e164',
+        referencePostalCode: 'reference_postal_code',
+        referenceNeighborhood: 'reference_neighborhood',
+        referenceCity: 'reference_city',
+        referenceState: 'reference_state',
+      } as const;
+
+      for (const [campo, coluna] of Object.entries(mapa)) {
+        const valor = (campos as Record<string, unknown>)[campo];
+        if (valor !== undefined) mudancas[coluna] = valor;
+      }
+
+      // Trocar o telefone invalida a verificação anterior: o número novo não
+      // herda a confiança do antigo, e `can_open_lost_case` precisa cair junto.
+      if (mudancas['phone_e164'] !== undefined) mudancas['phone_verified_at'] = null;
+
+      const linha = await db
+        .updateTable('users')
+        .set(mudancas)
+        .where('id', '=', id)
+        .where('deleted_at', 'is', null)
+        .returning(COLUNAS_DA_CONTA)
+        .executeTakeFirst();
+
       return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
     },
 
@@ -234,6 +275,10 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           user_id: novo.userId,
           family_id: novo.familyId,
           token_hash: Buffer.from(novo.tokenHash, 'base64'),
+          // Explícito, e não pelo `DEFAULT now()` da coluna: é este valor que
+          // `renovar()` compara com `sessions_invalid_before`, que também é
+          // gravado pelo relógio da aplicação.
+          issued_at: new Date(novo.issuedAt),
           expires_at: new Date(novo.expiresAt),
           absolute_expires_at: new Date(novo.absoluteExpiresAt),
           stay_signed_in: novo.staySignedIn,
@@ -254,6 +299,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           'id',
           'user_id',
           'family_id',
+          'issued_at',
           'expires_at',
           'absolute_expires_at',
           'stay_signed_in',
@@ -268,6 +314,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         id: linha.id,
         userId: linha.user_id as UserId,
         familyId: linha.family_id,
+        issuedAt: linha.issued_at.getTime() as Instant,
         expiresAt: linha.expires_at.getTime() as Instant,
         absoluteExpiresAt: linha.absolute_expires_at.getTime() as Instant,
         staySignedIn: linha.stay_signed_in,
@@ -289,6 +336,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             user_id: sucessor.userId,
             family_id: sucessor.familyId,
             token_hash: Buffer.from(sucessor.tokenHash, 'base64'),
+            issued_at: new Date(sucessor.issuedAt),
             expires_at: new Date(sucessor.expiresAt),
             absolute_expires_at: new Date(sucessor.absoluteExpiresAt),
             stay_signed_in: sucessor.staySignedIn,
@@ -342,10 +390,115 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return linhas.length;
     },
 
-    async invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
+    /**
+     * Uma instrução. Varrer família por família exigiria primeiro listá-las, e
+     * entre a lista e o UPDATE uma renovação em curso abriria uma linha nova
+     * que a varredura já não alcançaria — a sessão que o gatilho existe para
+     * derrubar sobreviveria à própria revogação.
+     *
+     * `revoked_at IS NULL` mantém a idempotência: chamada duas vezes, a segunda
+     * devolve 0 e não reescreve o motivo nem a hora da primeira.
+     */
+    async revogarTodasAsFamilias(
+      userId: UserId,
+      motivo: MotivoDeRevogacao,
+      agora: Instant,
+    ): Promise<number> {
+      const linhas = await db
+        .updateTable('refresh_tokens')
+        .set({ revoked_at: new Date(agora), revoked_reason: motivo })
+        .where('user_id', '=', userId)
+        .where('revoked_at', 'is', null)
+        .returning('id')
+        .execute();
+      return linhas.length;
+    },
+
+    async invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void> {
+      // `GREATEST` e não atribuição direta: a barreira é calculada a partir do
+      // valor lido antes, e duas revogações simultâneas leem o mesmo valor. Sem
+      // o piso, a que terminasse por último podia gravar um instante MENOR que a
+      // outra já tinha gravado e devolver a janela que as duas existem para
+      // fechar. A coluna só anda para a frente.
       await db
         .updateTable('users')
-        .set({ sessions_invalid_before: new Date(agora), updated_at: new Date(agora) })
+        .set({
+          sessions_invalid_before: sql<Date>`greatest(${sql.val(new Date(barreira))}::timestamptz, sessions_invalid_before)`,
+          updated_at: new Date(agora),
+        })
+        .where('id', '=', userId)
+        .execute();
+    },
+
+    async criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
+      await db
+        .insertInto('verification_tokens')
+        .values({
+          id: novo.id,
+          user_id: novo.userId,
+          purpose: novo.proposito,
+          token_hash: Buffer.from(novo.tokenHash),
+          sent_to: novo.enviadoPara,
+          expires_at: new Date(novo.expiraEm),
+          created_ip_hmac: novo.ipHmac === null ? null : Buffer.from(novo.ipHmac),
+        })
+        .execute();
+    },
+
+    async consumirTokenDeVerificacao(hash, proposito, agora): Promise<TokenConsumido | undefined> {
+      // UMA instrução. As três condições no `WHERE` e a marcação no `SET` são
+      // avaliadas sob a mesma trava de linha: duas aberturas simultâneas do
+      // mesmo link disputam a linha, e só uma sai com `RETURNING`.
+      const linha = await db
+        .updateTable('verification_tokens')
+        .set({ consumed_at: new Date(agora) })
+        .where('token_hash', '=', Buffer.from(hash))
+        .where('purpose', '=', proposito)
+        .where('consumed_at', 'is', null)
+        .where('expires_at', '>', new Date(agora))
+        .returning(['user_id', 'sent_to'])
+        .executeTakeFirst();
+
+      return linha === undefined
+        ? undefined
+        : { userId: linha.user_id as UserId, enviadoPara: linha.sent_to };
+    },
+
+    async conferirTokenDeVerificacao(hash, proposito, agora): Promise<TokenConsumido | undefined> {
+      const linha = await db
+        .selectFrom('verification_tokens')
+        .select(['user_id', 'sent_to'])
+        .where('token_hash', '=', Buffer.from(hash))
+        .where('purpose', '=', proposito)
+        .where('consumed_at', 'is', null)
+        .where('expires_at', '>', new Date(agora))
+        .executeTakeFirst();
+
+      return linha === undefined
+        ? undefined
+        : { userId: linha.user_id as UserId, enviadoPara: linha.sent_to };
+    },
+
+    async invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
+      const r = await db
+        .updateTable('verification_tokens')
+        .set({ consumed_at: new Date(agora) })
+        .where('user_id', '=', userId)
+        .where('consumed_at', 'is', null)
+        .executeTakeFirst();
+      return Number(r.numUpdatedRows);
+    },
+
+    async marcarEmailVerificado(userId: UserId, agora: Instant): Promise<void> {
+      await db
+        .updateTable('users')
+        .set({
+          email_verified_at: new Date(agora),
+          // Verificar o e-mail prova que ele entrega. Uma devolução antiga não
+          // pode continuar marcando a conta como inalcançável depois disso.
+          email_deliverable: true,
+          updated_at: new Date(agora),
+        })
         .where('id', '=', userId)
         .execute();
     },

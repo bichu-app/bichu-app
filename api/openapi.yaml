@@ -285,8 +285,10 @@ x-problem-types:
   - { slug: not-found,                     status: 404 }
   - { slug: email-already-registered,      status: 409 }
   - { slug: slug-taken,                    status: 409 }
-  - { slug: pet-already-lost,              status: 409 }
-  - { slug: pet-limit-reached,             status: 409 }
+  - { slug: pet-already-lost,              status: 409, note: "este pet ja tem caso aberto. O banco impoe (indice unico parcial), e o tipo existe para a tela dizer 'voce ja marcou' em vez de 'erro'" }
+  - { slug: open-case-limit-reached,       status: 409, note: "teto de 3 casos ABERTOS SIMULTANEOS por conta (BICHUS-21 criterio 8). Separado de `pet-already-lost`: um diz 'este pet ja esta perdido' e o outro 'voce ja tem tres animais perdidos'. A saida e diferente -- no primeiro a pessoa abre o caso que ja existe, no segundo ela precisa encerrar um. Alem de produto, e privacidade: a lista publica mostra bairro e data, e sem teto uma conta entregaria uma SERIE de pontos no tempo e no espaco da mesma pessoa" }
+  - { slug: pet-limit-reached,             status: 409, note: "teto de pets DA CONTA" }
+  - { slug: tag-limit-reached,             status: 409, note: "teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada" }
   - { slug: contact-channel-unverified,    status: 409 }
   - { slug: pet-photo-missing,             status: 409 }
   - { slug: transfer-not-for-this-account, status: 409 }
@@ -294,6 +296,9 @@ x-problem-types:
   - { slug: tag-revoked,                   status: 410, note: "tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)" }
   - { slug: tag-code-not-found,            status: 404 }
   - { slug: tag-code-malformed,            status: 400 }
+  - { slug: unsupported-media-type,        status: 415, note: "quatro operacoes ja respondiam 415 e nenhum slug significava isso: o corpo do problema saia com um `type` fora desta lista fechada, que e exatamente o que ela existe para impedir" }
+  - { slug: verification-token-expired,    status: 410, note: "token de USO UNICO (verificacao de e-mail, redefinicao de senha) expirado, ja usado ou inexistente. Separado de `token-expired`, que e 401: as duas operacoes declaram 410 e o slug de 401 nao podia responder por elas. Os tres casos sao a MESMA resposta de proposito -- distinguir contaria a um estranho se aquele token existiu" }
+  - { slug: upload-not-received,           status: 409, note: "o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar" }
   - { slug: weak-password,                 status: 422 }
   - { slug: rate-limited,                  status: 429 }
   - { slug: internal,                      status: 500 }
@@ -591,9 +596,127 @@ paths:
           window: 1h
           on_exceed: deny_429
       summary: Encerra a sessao e revoga a familia de refresh
+      description: |
+        **Sair deste aparelho e revogacao no servidor, sempre** (ADR-0002,
+        emenda 1). O corpo e obrigatorio: sem o `refresh_token` nao ha o que
+        revogar, e a operacao recusa com **400** em vez de responder 204.
+        Enquanto o corpo era opcional, um cliente que seguisse este contrato ao
+        pe da letra saia sem revogar nada e recebia 204 — sucesso
+        indistinguivel do nada.
+
+        O que esta operacao **nao** faz: ela nao empurra
+        `users.sessions_invalid_before`. Essa coluna e por pessoa, e usa-la aqui
+        derrubaria os outros aparelhos da mesma conta, tornando `logout`
+        identico a "sair de todos os aparelhos" — que e OUTRO verbo, com outro
+        mecanismo, e que ainda **nao tem operacao declarada neste contrato**
+        (BICHUS-125). O alcance desta operacao e uma familia de refresh, quer
+        dizer, um aparelho.
+
+        **Janela residual declarada:** o token de acesso ja emitido continua
+        sendo aceito ate o `exp`, no maximo 15 minutos, e nao pode ser renovado
+        porque o refresh que o renovaria acabou de ser revogado. Fechar essa
+        janela em menos de um segundo e trabalho de "sair de todos os
+        aparelhos", que e o remedio de quem teve o aparelho levado.
+
+        **Idempotente:** chamada com uma familia ja revogada, responde 204 e nao
+        erra. O app que so consegue enviar a revogacao atrasada nao e punido por
+        isso.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+                  minLength: 20
+                  maxLength: 512
+                  description: |
+                    O refresh da sessao **deste** aparelho. A familia dele e o
+                    que morre. Token que nao pertence a conta do `bearerAuth`
+                    nao revoga nada e recebe a mesma resposta de token
+                    inexistente, de proposito: distinguir os dois contaria a
+                    quem pergunta se aquele token existe.
       responses:
-        '204': { description: Sessao encerrada. }
+        '204': { description: Sessao encerrada e familia de refresh revogada. }
+        '400':
+          description: |
+            Sem `refresh_token`, ou com um que nao pertence a esta conta. **E
+            erro de proposito**: um logout que nao revogou nao pode se parecer
+            com um que revogou.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                semRefresh:
+                  summary: O corpo nao trouxe o refresh
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/validation-failed
+                    title: Confira os dados
+                    status: 400
+                    detail: Um ou mais campos nao passaram na validacao.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+                    errors:
+                      - field: refresh_token
+                        code: required
+                        message: Envie o refresh desta sessao para que ela seja revogada.
+                refreshDesconhecido:
+                  summary: Refresh inexistente ou de outra conta — resposta identica
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/validation-failed
+                    title: Confira os dados
+                    status: 400
+                    detail: Um ou mais campos nao passaram na validacao.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+                    errors:
+                      - field: refresh_token
+                        code: unknown
+                        message: Este refresh nao pertence a esta sessao.
         '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /auth/logout-all:
+    post:
+      operationId: logoutAllDevices
+      security:
+        - bearerAuth: []
+      tags: [auth]
+      x-effects: [notifies]
+      x-rate-limit:
+        - dimension: [account]
+          limit: 10
+          window: 1h
+          on_exceed: deny_429
+          note: "derruba a conta inteira: sem teto, um token roubado vira negacao de servico contra o titular"
+      summary: Sai de todos os aparelhos e revoga todas as sessoes da conta
+      description: |
+        O outro verbo da emenda 1 do ADR-0002. `POST /auth/logout` encerra **este**
+        aparelho revogando a familia de refresh apresentada; esta operacao encerra
+        **todos**: empurra `users.sessions_invalid_before` e revoga **todas** as
+        familias de refresh da conta.
+
+        As duas metades sao necessarias e nenhuma substitui a outra. A barreira
+        derruba os tokens de acesso em menos de um segundo; a revogacao das
+        familias impede que um refresh copiado antes continue renovando. Sem a
+        segunda, as linhas ficam vivas no banco ate vencerem por inatividade.
+
+        E o remedio de quem perdeu o aparelho, e o unico que fecha a janela de ate
+        15 minutos que o logout comum deixa aberta.
+
+        **Reautenticacao:** BICHUS-48 decide que esta operacao exige
+        `X-Reauth-Token`. A maquinaria de reautenticacao (`POST /auth/reauth`)
+        ainda nao existe em `src/`, e o enum `scope` daquela operacao tem quatro
+        valores, nenhum deles de revogacao de sessao. O cabecalho **nao** e
+        declarado aqui enquanto nao for aplicado: declarar exigencia que o codigo
+        nao impoe e a divergencia que este projeto ja pagou duas vezes. BICHUS-48
+        acrescenta o `reauth: []` e o escopo junto com o codigo que os aplica.
+
+        Idempotente: chamada com a conta ja sem sessao nenhuma, responde 204.
+      responses:
+        '204': { description: Todas as sessoes da conta foram encerradas. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/email-verification:
     post:
@@ -1203,6 +1326,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Pet' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1250,6 +1374,7 @@ paths:
         a diferenca importa para quem esta com o animal na mao.
       responses:
         '204': { description: Excluido. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -1295,7 +1420,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetPhoto' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/UploadNotReceived' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
 
   # ----------------------------------------------------------------------
@@ -1376,6 +1503,7 @@ paths:
       summary: Remove a foto
       responses:
         '204': { description: Removida. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -1616,6 +1744,7 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/PetTag' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: issuePetTag
@@ -1628,17 +1757,44 @@ paths:
         Gera 128 bits de aleatoriedade criptografica, sem relacao com nenhum id
         do sistema. **Esta e a unica resposta que traz o codigo em claro.** O
         cliente nao deve persistir o valor: para reimprimir, chame `qr.png`.
+
+        O corpo e **opcional**: emitir plaquinha sem apelido e o caminho comum.
+        Ate esta declaracao existir, o manipulador lia `label` de um corpo que
+        este documento dizia nao existir, e `label` chegava ao banco sem
+        nenhuma conferencia de tamanho — um rotulo de 41 caracteres, ou uma
+        string vazia, passava a borda e morria no CHECK da tabela, virando
+        **500** onde a resposta certa e 400.
       x-rate-limit:
         - dimension: [pet]
           limit: 10
           window: 24h
           on_exceed: deny_429
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PetTagIssueInput' }
+            examples:
+              semApelido:
+                summary: Sem apelido, o caminho comum
+                value: {}
+              comApelido:
+                summary: Com apelido, para quem tem mais de uma plaquinha
+                value: { label: Coleira azul }
       responses:
         '201':
           description: Codigo emitido.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetTagIssued' }
+        # Duas causas, uma resposta, e `400` so pode aparecer uma vez aqui:
+        #  - CORPO: `label` fora da faixa aceita. Os limites sao os mesmos do
+        #    CHECK da tabela, de proposito -- a borda recusa o que o banco
+        #    recusaria, e a pessoa recebe 400 em vez de 500 (wt-logout).
+        #  - PARAMETRO: `petId` que nao e UUID, que ate a BICHUS-199 chegava
+        #    torto ao Postgres (wt-params).
+        # `ValidationFailed` diz "Corpo ou parametro invalido" e cobre as duas.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Teto de tags ativas por pet atingido (5).
@@ -1673,6 +1829,11 @@ paths:
           content:
             image/png:
               schema: { type: string, format: binary }
+        # `petId` e `tagId` declaram `format: uuid`, entao a borda PODE recusar o
+        # parametro -- e `vigiarParametrosDasRotas` derruba a subida quando uma
+        # operacao nessa situacao nao declara 400. Nao e escolha de estilo: sem
+        # esta linha a aplicacao nao sobe (BICHUS-63).
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '410':
           description: Tag revogada. O QR nao e reimpresso.
@@ -1806,9 +1967,16 @@ paths:
         '400':
           description: |
             O texto **nao normaliza para um codigo**: tem tamanho diferente de
-            26 depois da normalizacao, ou contem caractere fora do alfabeto
-            (`U`, por exemplo). E erro de digitacao, e a tela pede para conferir
-            e digitar de novo.
+            16 depois da normalizacao, contem caractere fora do alfabeto (`U`,
+            por exemplo), ou o **simbolo de verificacao nao bate**. E erro de
+            digitacao, e a tela pede para conferir e digitar de novo.
+
+            O terceiro caso e o que mudou: um unico caractere trocado e uma
+            transposicao de dois caracteres caem **aqui**, e nao no 404. Antes
+            do simbolo de verificacao eles viravam "esse codigo nao e de nenhuma
+            tag do Bichu", que acusava a plaquinha quando o que houve foi um
+            dedo no lugar errado. Um codigo de **26 caracteres**, do formato
+            anterior, tambem e 400: nao ha convivencia de dois tamanhos.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -1984,6 +2152,19 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FoundReportCreated' }
+        '400':
+          description: |
+            O texto do codigo **nao normaliza para um codigo bem formado**:
+            tamanho errado depois da normalizacao, ou caractere fora do
+            alfabeto. Responde `tag-code-malformed`, o mesmo tipo de
+            `resolveTagCode`, porque e o mesmo erro do mesmo parametro — e o
+            app decide a tela pelo `type`, nao pelo status.
+
+            Recusado **na borda**, antes de qualquer leitura: um codigo que nao
+            tem a forma de codigo nao chega a virar consulta.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '410':
           description: Tag revogada ou pet excluido.
           content:
@@ -2425,6 +2606,12 @@ paths:
                     radius_m: 5000
                     area_label: Vila Madalena
                     blockers: [contact_channel_unverified]
+        # `petId` no caminho e `lat`/`lon` na query podem ser recusados, e desde
+        # a BICHUS-199 a borda os valida contra este documento -- um `petId` que
+        # nao e UUID, ou uma latitude fora da faixa, respondem 400 antes de o
+        # manipulador rodar. Declarar o status que a rota de fato devolve nao e
+        # burocracia: quem le o contrato precisa ver a recusa que existe.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /pets/{petId}/lost-cases:
@@ -2473,6 +2660,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCase' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/LostCaseBlocked' }
 
@@ -2492,6 +2680,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCase' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -2652,6 +2841,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCase' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /lost-cases/{caseId}/reopen:
@@ -3215,7 +3405,7 @@ paths:
   /.well-known/assetlinks.json:
     servers:
       - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
+        variables: { dominio: { default: TAG_BASE_URL } }
     get:
       operationId: wellKnownAssetLinks
       tags: [web]
@@ -3270,7 +3460,7 @@ paths:
   /.well-known/apple-app-site-association:
     servers:
       - url: https://{dominio}
-        variables: { dominio: { default: PUBLIC_BASE_URL } }
+        variables: { dominio: { default: TAG_BASE_URL } }
     get:
       operationId: wellKnownAppleAppSiteAssociation
       tags: [web]
@@ -3480,10 +3670,58 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [status, version]
+                required: [status, version, build]
                 properties:
                   status: { type: string, enum: [ok, degraded] }
                   version: { type: string }
+                  build:
+                    type: object
+                    required: [artifact, commit]
+                    description: |
+                      Identidade do BUILD que esta respondendo. Ela existe para o
+                      criterio 12 de BICHUS-13: portabilidade **provada por
+                      execucao** nos dois destinos, e nao afirmada em documento.
+
+                      `version` nao serve para isso -- ela vem do `package.json`
+                      e e o mesmo valor em qualquer build desde que alguem
+                      escreveu aquele numero.
+
+                      Obrigatoria, e nao opcional: uma sonda que responde sem
+                      dizer qual artefato esta no ar e exatamente o estado que o
+                      QA reprovou. Campo opcional aqui deixaria o destino que o
+                      omitisse passar calado pela comparacao.
+                    properties:
+                      artifact:
+                        type: string
+                        pattern: '^[0-9a-f]{16}$'
+                        description: |
+                          Resumo SHA-256 truncado sobre `dist/**/*.js`, o proprio
+                          contrato e o `package.json`, CALCULADO NA SUBIDA a
+                          partir do disco de dentro do container. E evidencia, e
+                          nao afirmacao: ninguem o declara.
+
+                          Dois destinos com o mesmo valor rodam o mesmo codigo
+                          compilado e o mesmo contrato. Ele NAO e o digest da
+                          imagem Docker -- base e `node_modules` ficam de fora --
+                          e por isso nao distingue o alvo `dev` do alvo `prod`,
+                          que copiam o mesmo `dist`.
+                      commit:
+                        type: [string, 'null']
+                        pattern: '^[0-9a-f]{7,40}$'
+                        description: |
+                          Commit DECLARADO por quem construiu, pela variavel
+                          `BUILD_COMMIT`. Vale o que vale uma afirmacao, e o nome
+                          do campo separa as duas coisas de proposito.
+
+                          `null` quando ninguem declarou -- silencio honesto em
+                          vez de um valor inventado. Desde a BICHUS-210 o
+                          `ARG BUILD_COMMIT` existe no `Dockerfile` e o commit
+                          VIAJA dentro da imagem: o build REPROVA sem ele, entao
+                          imagem construida pela esteira nunca responde `null`
+                          aqui. O tipo continua aceitando `null` porque nada
+                          impede um `docker build` feito a mao noutro lugar, e
+                          um alvo que nao sabe de onde veio precisa dizer isso
+                          em vez de inventar.
                   checks:
                     type: object
                     additionalProperties: { type: string, enum: [ok, fail] }
@@ -3587,11 +3825,20 @@ components:
       name: code
       in: path
       required: true
+      # O 400 deste parametro NAO e `validation-failed`: as operacoes que o usam
+      # declaram `tag-code-malformed`, e o app decide a tela pelo `type`. A borda
+      # le esta chave para produzir o problema certo; sem ela, ligar a validacao
+      # de parametro trocaria o tipo em silencio e o teto de tentativas invalidas
+      # deixaria de contar a tentativa (ele conta por `type`, nao por status).
+      x-problem-type: tag-code-malformed
       description: |
-        Codigo da tag. **A forma canonica** e Crockford Base32, **26
+        Codigo da tag. **A forma canonica** e Crockford Base32, **16
         caracteres**, maiusculas, sem separador: e ela que e hasheada e
-        guardada. A forma **impressa** e a mesma em grupos de quatro separados
-        por hifen, porque digito agrupado se le e se confere melhor.
+        guardada. Sao **15 simbolos de aleatoriedade** (75 bits exatos de
+        CSPRNG) e **1 simbolo de verificacao**, que nao e aleatorio e nao conta
+        como entropia. A forma **impressa** e a mesma em grupos de quatro
+        separados por hifen (`XXXX-XXXX-XXXX-XXXX`), porque digito agrupado se
+        le e se confere melhor.
 
         **O que o servidor aceita na entrada e mais largo do que a forma
         canonica**, porque existe um caminho em que a pessoa digita em vez de
@@ -3604,9 +3851,17 @@ components:
         2. passar para maiusculas;
         3. aplicar as substituicoes do proprio Crockford: **`I` e `L` viram
            `1`**, **`O` vira `0`**;
-        4. o resultado precisa ter exatamente 26 caracteres, todos do alfabeto
+        4. o resultado precisa ter exatamente 16 caracteres, todos do alfabeto
            `0-9 A-H J K M N P-T V-Z` (sem `I`, `L`, `O`, `U`);
-        5. buscar pelo SHA-256 desse resultado.
+        5. o **decimo sexto** caractere precisa ser o simbolo de verificacao dos
+           quinze primeiros. E um simbolo de paridade sobre `GF(2^5)`
+           (Reed-Solomon [16,15,2] encurtado, primitivo `x^5 + x^2 + 1`), que
+           pega **todo** erro de um simbolo e **toda** transposicao. Este passo
+           roda **antes de qualquer acesso ao banco**: quem erra uma letra
+           recebe 400 "confira o codigo", e nao 404. Ele **detecta e nunca
+           corrige** -- um codigo corrigido seria um codigo valido e diferente,
+           e abriria a pagina do pet errado;
+        6. buscar pelo resumo desse resultado.
 
         A mesma normalizacao e aplicada na emissao, entao ela e idempotente: o
         codigo emitido normaliza para ele mesmo.
@@ -3621,8 +3876,8 @@ components:
         invalido.
       schema:
         type: string
-        pattern: '^[0-9A-Za-z][0-9A-Za-z-]{25,39}$'
-      example: 7K2F-9QJB-3XR0-5TWD-8MNC-VH
+        pattern: '^[0-9A-Za-z][0-9A-Za-z-]{15,23}$'
+      example: GQSM-0XHB-T4D9-G31S
     ShareToken:
       name: shareToken
       in: path
@@ -3780,6 +4035,15 @@ components:
           schema: { $ref: '#/components/schemas/Problem' }
     TokenExpired:
       description: Token de uso unico expirado, ja usado ou invalido.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+    UploadNotReceived:
+      description: |
+        O envio foi confirmado, mas os bytes nao estao no armazenamento.
+        Acontece quando a rede cai no meio do envio: o cliente chega a confirmar
+        e o objeto nunca chegou. Sem este estado a foto nasceria `processing`
+        para sempre.
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
@@ -4274,6 +4538,22 @@ components:
         revoked_at: { type: string, format: date-time, nullable: true }
         revocation_reason: { $ref: '#/components/schemas/TagRevocationReason' }
         created_at: { type: string, format: date-time }
+
+    PetTagIssueInput:
+      type: object
+      description: |
+        Todos os campos opcionais; corpo vazio e o caminho comum. `label` e o
+        apelido que distingue uma plaquinha da outra na tela do tutor, e nao
+        viaja no QR nem aparece na rota publica.
+      properties:
+        label:
+          type: string
+          minLength: 1
+          maxLength: 40
+          description: |
+            Faixa identica ao CHECK `pet_tags_label_tamanho` da tabela. O
+            `minLength` nao e enfeite: string vazia viola o CHECK, e sem ele a
+            recusa sairia como 500.
 
     PetTagIssued:
       allOf:

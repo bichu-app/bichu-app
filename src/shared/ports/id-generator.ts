@@ -15,6 +15,16 @@ export interface IdGenerator {
   uuidv7(): string;
   /** 256 bits de CSPRNG, para token ao portador. */
   opaqueToken(): OpaqueToken;
-  /** 128 bits de CSPRNG. Usado pelo código da tag e pela parte aleatória da chave de mídia. */
+  /** 128 bits de CSPRNG. Usado pela parte aleatória da chave de mídia. */
   random128(): Uint8Array;
+  /**
+   * 80 bits de CSPRNG, dos quais o código da tag usa **75** (ADR-0004, Emenda 1,
+   * §13.2). Os 5 bits mais altos são descartados por máscara, e 75 bits não são
+   * um número inteiro de bytes: por isso a porta entrega 10 bytes e não 9.
+   *
+   * Separada de `random128` de propósito. Um único método "aleatório" com
+   * tamanho por parâmetro deixaria o número que importa — o que vira plaquinha
+   * impressa — escondido num argumento de chamada.
+   */
+  random80(): Uint8Array;
 }

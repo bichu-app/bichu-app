@@ -195,29 +195,54 @@ def comparar_prefixo(prefixo: str, prefixos_servers: list[str]) -> list[str]:
 def caminhos_fora_do_prefixo(texto: str) -> list[str]:
     """Chaves de `paths:` que NAO entram sob o prefixo de versao.
 
-    Sao os caminhos que o padrao fixa na raiz do host (`/.well-known/...`). Eles
-    nao chegam pelo `handle /v1/*`, entao ou tem bloco proprio na borda ou caem
-    no catch-all -- que responde 404 sem uma linha de erro em lugar nenhum.
+    Sao os caminhos servidos na RAIZ do host. Eles nao chegam pelo
+    `handle /v1/*`, entao ou tem bloco proprio na borda ou caem no catch-all --
+    que responde 404 sem uma linha de erro em lugar nenhum.
+
+    COMO SE RECONHECE UM DELES, e por que nao e pelo nome do caminho. Quase toda
+    chave de `paths:` neste contrato comeca com `/` sem `/v1` (`/auth/login`,
+    `/pets`, `/health`): o prefixo mora no `servers:` da RAIZ e nao se repete em
+    cada caminho. O que distingue os que ficam FORA e declararem um `servers:`
+    PROPRIO, que sobrescreve o da raiz e os tira do prefixo de versao.
+
+    Ate 19/09 esta funcao terminava em `[r for r in encontrados if
+    r.startswith("/.well-known/")]`, e essa linha era o proprio defeito que o
+    arquivo existe para pegar. Ela nasceu junto com o caso de 17/09, quando os
+    unicos caminhos na raiz eram os quatro de `.well-known`, e virou uma regra
+    escrita sobre os exemplos da epoca em vez de sobre o criterio. Quando
+    `/webhooks/postmark` entrou no contrato -- tambem com `servers:` proprio,
+    tambem fora de `/v1` --, ele foi COLETADO e descartado em silencio pelo
+    filtro. O portao imprimia "rota na borda para os 4 caminho(s)" e APROVAVA,
+    com o webhook sem rota nenhuma na borda. Um portao que conhece os quatro
+    nomes de 17/09 nao verifica a regra: ele verifica a lembranca dela.
     """
     m = re.search(r"^paths:\s*$", texto, re.M)
     if not m:
         raise Reprovacao("o contrato nao tem `paths:` na raiz")
     encontrados: list[str] = []
+    rota_atual: str | None = None
     total = 0
     for linha in texto[m.end():].splitlines()[1:]:
         if linha.strip() and not linha.startswith((" ", "\t")):
             break
         if m2 := re.fullmatch(r"  (/\S*):\s*", linha.split("#", 1)[0].rstrip() + " "):
             total += 1
-            rota = m2.group(1)
-            if not rota.startswith("/v1"):
-                encontrados.append(rota)
+            rota_atual = m2.group(1)
+        elif rota_atual is not None and re.fullmatch(r"    servers:\s*", linha.rstrip()):
+            encontrados.append(rota_atual)
     if total == 0:
         raise Reprovacao(
             "nao encontrei nenhuma rota em `paths:`. Filtro que nao filtra termina verde e "
             "ninguem desconfia: a ausencia de alvo reprova"
         )
-    return [r for r in encontrados if r.startswith("/.well-known/")]
+    if not encontrados:
+        raise Reprovacao(
+            "nenhum caminho de `paths:` declara `servers:` proprio. Ou o contrato deixou de "
+            "servir qualquer coisa na raiz do host -- e ai esta conferencia precisa sair junto "
+            "--, ou o formato mudou e o parser parou de enxergar. Nos dois casos a conferencia "
+            "nao tem o que provar, e passar verde aqui e o defeito de 17/09 de volta"
+        )
+    return encontrados
 
 
 def comparar_roteamento(rotas: list[str], caddyfile: str) -> list[str]:
@@ -290,6 +315,29 @@ def autoteste(raiz: Path) -> list[str]:
             falhas.append(
                 "caddyfile-sem-rota-well-known: A ISCA PASSOU. O portao parou de enxergar "
                 "caminho do contrato sem rota na borda, que e o defeito de 17/09"
+            )
+
+    # (c2) borda com os quatro `.well-known` e SEM o webhook.
+    #
+    # A isca (c) acima nao bastava, e a insuficiencia dela e o defeito de 19/09:
+    # um Caddyfile sem nenhuma rota de raiz reprova por causa dos quatro
+    # caminhos antigos, entao ele passaria igual com o filtro cego
+    # `startswith("/.well-known/")` de volta no lugar. Esta isca tem os quatro e
+    # nao tem o quinto: ela so reprova se o portao enxergar `/webhooks/postmark`
+    # especificamente.
+    if texto := caddy("caddyfile-sem-rota-webhook"):
+        rotas = caminhos_fora_do_prefixo(contrato)
+        if not any(r.startswith("/webhooks/") for r in rotas):
+            falhas.append(
+                "o contrato nao declara nenhum caminho em `/webhooks/` fora de `/v1`, entao esta "
+                "isca nao tem o que provar. Ou o webhook saiu do contrato -- e ai a isca sai "
+                "junto --, ou `caminhos_fora_do_prefixo` voltou a filtrar por nome de caminho"
+            )
+        elif not comparar_roteamento(rotas, texto):
+            falhas.append(
+                "caddyfile-sem-rota-webhook: A ISCA PASSOU. O portao enxerga os quatro "
+                "`.well-known` e NAO enxerga `/webhooks/postmark`, que e exatamente o estado "
+                "em que ele aprovou a borda em 19/09 com o webhook sem rota nenhuma"
             )
 
     # (d) prefixo divergente entre Fastify e contrato

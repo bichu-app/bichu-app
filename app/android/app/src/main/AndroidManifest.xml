@@ -1,4 +1,57 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- CAMERA (BICHUS-161). A justificativa de uso vive no texto da ficha da
+         Play Console e no `NSCameraUsageDescription` do iOS; aqui fica a
+         declaracao tecnica e a razao de ela existir.
+
+         UMA declaracao, DOIS usos, de proposito: fotografar o pet no cadastro
+         (F1.4, BICHUS-161) e ler o QR da plaquinha (F2.1, BICHUS-54). Duas
+         justificativas diferentes para a mesma permissao e reprovacao de
+         revisao de loja, e ela chega na submissao, que e onde o erro custa uma
+         rodada inteira.
+
+         A ARMADILHA QUE ESTA LINHA LIGA, e ela e contraintuitiva:
+         `ACTION_IMAGE_CAPTURE` (que e o que o `image_picker` usa para tirar
+         foto) NAO precisa de `CAMERA`, porque quem fotografa e o app de
+         camera do sistema. Mas o Android inverte isso no instante em que o
+         manifesto declara a permissao: a partir daqui, a captura passa a
+         EXIGIR que ela esteja concedida em tempo de execucao. Ou seja, esta
+         linha nao e burocracia, ela muda o comportamento.
+
+         Foi declarada agora mesmo assim, e nao quando a BICHUS-54 chegar,
+         porque a alternativa e pior: a 54 acrescentaria a linha depois e
+         mudaria, em silencio, o caminho de uma tela que ninguem tocou. A
+         `CameraDoAparelho` ja trata os quatro estados de permissao.
+
+         GALERIA: NAO HA PERMISSAO DECLARADA, e isso e decisao.
+         `READ_MEDIA_IMAGES` e `READ_EXTERNAL_STORAGE` estao ausentes de
+         proposito. O `image_picker` usa o Photo Picker do sistema
+         (`ACTION_PICK_IMAGES`) no Android 13+ e o seletor de documentos
+         abaixo: os dois rodam FORA do processo e devolvem so o arquivo
+         escolhido. Pedir `READ_MEDIA_IMAGES` seria pedir a biblioteca inteira
+         para ler uma foto: mais permissao do que o produto usa, que e
+         exatamente o que a revisao da loja cobra. -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- `required="false"` E OBRIGATORIO AQUI, e omiti-lo e um defeito de
+         distribuicao que nao aparece em nenhum teste.
+
+         Declarar `CAMERA` faz o Play Store INFERIR
+         `<uses-feature android:name="android.hardware.camera">` como
+         obrigatoria, e a loja passa a esconder o app de todo aparelho sem
+         camera. O Bichu funciona sem camera: o criterio 5 da BICHUS-161 manda
+         a galeria continuar oferecida, e o criterio 6 da BICHUS-157 deixa o
+         cadastro avancar sem foto nenhuma.
+
+         Sem esta linha, o app sumiria da loja para um conjunto de aparelhos
+         em que ele funciona. Isso so se descobre olhando o relatorio de
+         alcance da Play Console, nunca rodando o app. -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.camera.autofocus"
+        android:required="false" />
     <application
         android:label="bichu"
         android:name="${applicationName}"
@@ -49,9 +102,12 @@
              comportamento padrao. Nao preencha este campo com um PNG colorido
              nem com uma silhueta improvisada.
 
-             (O app ainda nao tem `firebase_messaging`: a dependencia entra com
-             a historia de push. Este comentario existe para que ela nao entre
-             junto com um icone inventado.) -->
+             (`firebase_messaging` ENTROU em 19/09, com a historia de push, e
+             este campo continua vazio de proposito — que e exatamente o que
+             este comentario existia para garantir. O plugin declara sozinho
+             POST_NOTIFICATIONS, os servicos e o receptor no manifesto dele, e
+             o merge do Gradle os traz: nao ha nada a acrescentar aqui alem do
+             icone, e o icone depende do vetor da marca.) -->
 
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

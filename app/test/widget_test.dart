@@ -1,6 +1,7 @@
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
+import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -17,16 +18,22 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('abre deslogado no Inicio, com as quatro abas visiveis',
+  testWidgets('abre deslogado em Pets, com as cinco secoes visiveis',
       (tester) async {
     await abrirOApp(tester);
 
     // Deslogado e um estado de navegacao, nao um muro: nenhuma aba some,
-    // nenhuma fica desabilitada.
-    expect(find.widgetWithText(NavigationDestination, 'Início'), findsOne);
-    expect(find.widgetWithText(NavigationDestination, 'Perdidos'), findsOne);
-    expect(find.widgetWithText(NavigationDestination, 'Escanear'), findsOne);
-    expect(find.widgetWithText(NavigationDestination, 'Perfil'), findsOne);
+    // nenhuma fica desabilitada. A lista vem do registro, e nao escrita a
+    // mao: escrita a mao ela continuaria dizendo `Perdidos` para sempre.
+    for (final destino in CascaComAbas.destinos) {
+      expect(
+        find.widgetWithText(NavigationDestination, destino.rotulo),
+        findsOne,
+        reason: 'REPROVA: a secao "${destino.rotulo}" nao esta na barra '
+            'deslogada.',
+      );
+    }
+    expect(find.widgetWithText(AppBar, 'Pets'), findsOne);
   });
 
   testWidgets('o app fala pt-BR, e o Flutter tambem', (tester) async {
@@ -49,16 +56,28 @@ void main() {
     expect(materiais.drawerLabel, isNotEmpty);
   });
 
-  testWidgets('as quatro abas abrem sem conta', (tester) async {
+  testWidgets('as cinco secoes abrem sem conta, com o titulo curto',
+      (tester) async {
     await abrirOApp(tester);
 
-    for (final aba in <String>['Perdidos', 'Escanear', 'Perfil', 'Início']) {
-      await tester.tap(find.widgetWithText(NavigationDestination, aba));
+    // **O titulo da barra de topo e o nome curto da secao, igual ao rotulo da
+    // aba** (UX 25.7.2 e 27.4.2). Antes desta historia o Inicio deslogado
+    // abria com o titulo `Bichu`, que nao era o rotulo de aba nenhuma; a
+    // regra de "a mesma palavra nos dois lugares" e o que faz a casca servir
+    // para conferir nomenclatura.
+    //
+    // Agora sao as CINCO, e nao tres: `Escanear` deixou de ser aba e virou
+    // rota irma da casca, entao nao ha mais a excecao sem barra de topo aqui.
+    for (final destino in CascaComAbas.destinos) {
+      await tester.tap(
+        find.widgetWithText(NavigationDestination, destino.rotulo),
+      );
       await tester.pumpAndSettle();
       expect(
-        find.widgetWithText(AppBar, aba == 'Início' ? 'Bichu' : aba),
+        find.widgetWithText(AppBar, destino.rotulo),
         findsOne,
-        reason: 'A aba $aba precisa abrir deslogada.',
+        reason: 'REPROVA: a secao ${destino.rotulo} precisa abrir deslogada, '
+            'com o titulo igual ao rotulo da aba.',
       );
     }
   });

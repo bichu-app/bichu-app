@@ -1,0 +1,29 @@
+# APROVA. As quatro formas legitimas de condicao de passo, todas sobre o EVENTO
+# ou sobre o RESULTADO, nenhuma sobre premissa que o job mediu.
+name: isca-aprovar
+on: [push]
+jobs:
+  exemplo:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: so em pull request
+        if: github.event_name == 'pull_request'
+        run: echo evento
+
+      - name: diagnostico depois da queda
+        if: failure()
+        run: echo log
+
+      - name: derruba a pilha de qualquer jeito
+        if: always()
+        run: echo down
+
+      - name: publica o artefato
+        if: success()
+        run: echo artefato
+
+      - name: forma composta, ainda sobre o evento
+        if: always() && startsWith(github.ref, 'refs/heads/')
+        run: echo composto
