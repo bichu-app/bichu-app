@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada backup restore pin-digests
+.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada apk verificar-apk-autoteste backup restore pin-digests
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -268,8 +268,20 @@ verificar-borda-local: ## a borda de pe responde o que o contrato promete, pela 
 verificar-docs-fechada: ## ADR-0018: a Swagger UI fechada, visto de fora (autoteste roda sem rede)
 	python3 infra/verificacao/verificar_docs_fechada.py
 
+apk: ## compila o APK de release de hml e confere o que saiu (o mesmo do job `apk` da esteira)
+	sh infra/verificacao/verificar-apk.sh
+
+verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (nao compila nada)
+	sh infra/verificacao/verificar-apk.sh --autoteste
+
 # Tudo que nao precisa de nuvem nem de segredo, na ordem da esteira. E o que
 # `make up` seguido de `make verificar` responde antes de abrir um PR.
+#
+# `apk` NAO entra nesta lista, e a ausencia e deliberada. Ele leva minutos e
+# precisa da cadeia de ferramentas Android instalada, que nao e premissa desta
+# maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
+# errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
+# resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
 verificar: verificar-dispensas verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
