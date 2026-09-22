@@ -17,6 +17,12 @@
  * alcancava, porque apagar UMA entrada de uma lista de seis nao viola o tipo
  * `NonEmpty` de `defineRoute`.
  *
+ * As DUAS entradas de `invalid_attempts` desta operacao sao medidas aqui, cada
+ * uma na posicao em que ela e observavel: a quinta (5 por `finder_identity`, em
+ * 10 min) pela sexta tentativa do mesmo aparelho, e a sexta (20 por `ip`, em
+ * 1 h) por um aparelho LIMPO que chega depois de quatro outros terem gasto cinco
+ * cada. Nenhuma das duas tinha teste ate 22/09.
+ *
  * ===========================================================================
  * AS DUAS ARMADILHAS DESTA CASA, E COMO CADA UMA E DESARMADA AQUI
  * ===========================================================================
@@ -112,6 +118,16 @@ const TETO_DE_INVALIDAS_POR_IP = 20;
 const APARELHO_A = 'Mozilla/5.0 (Android 14; Pixel 7) AppleWebKit/537.36';
 const APARELHO_B = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)';
 const ENDERECO = '203.0.113.44';
+
+/**
+ * Quantos aparelhos distintos cabem no teto por IP antes de ele estourar.
+ *
+ * Quatro, porque cada um gasta `TETO_DE_INVALIDAS` antes de ser barrado pelo
+ * proprio balde: 4 x 5 = 20, que e exatamente `TETO_DE_INVALIDAS_POR_IP`. E a
+ * conta que o contrato fez ao escolher os dois numeros, e escreve-la aqui e o
+ * que faz este arquivo reprovar se qualquer um dos dois mudar sem o outro.
+ */
+const APARELHOS_ATE_O_TETO_DE_IP = TETO_DE_INVALIDAS_POR_IP / TETO_DE_INVALIDAS;
 
 function naoUsado(nome: string): never {
   throw new Error(`o duble nao implementa ${nome}: nenhum caso deste arquivo chega la`);
@@ -336,6 +352,74 @@ void describe('o teto de invalidas de GET /tags/{code}, pela posicao da recusa',
     );
   });
 
+  void it('esgotados quatro aparelhos, o quinto ja chega recusado: o teto por IP', async () => {
+    // ===================================================================
+    // A SEXTA ENTRADA, QUE E O PAR DA QUINTA
+    // ===================================================================
+    // `resolveTagCode` tem DUAS entradas `invalid_attempts`, e a de IP existe
+    // para o caso que a de identidade nao alcanca: quem troca o `User-Agent` a
+    // cada tentativa ganha um balde novo de cinco, e faria varredura sem fim
+    // por um preco desprezivel. A de IP fecha isso em vinte por hora.
+    //
+    // Este caso mede a POSICAO dela pelo unico caminho em que ela e observavel:
+    // quatro aparelhos gastando cinco invalidas cada, e um QUINTO aparelho,
+    // limpo, que precisa chegar ja recusado. Sem a entrada de IP, esse quinto
+    // aparelho responderia 404 -- ele tem o proprio balde de identidade
+    // intacto, e nada mais o barraria.
+    // Divisao exata, e ela precisa continuar exata: o caso distribui as
+    // invalidas em aparelhos INTEIROS, e um resto faria a ultima rodada parar
+    // no meio -- o quinto aparelho chegaria com o balde de IP ainda com folga e
+    // o 404 dele seria lido como "a entrada sumiu".
+    assert.equal(
+      TETO_DE_INVALIDAS_POR_IP % TETO_DE_INVALIDAS,
+      0,
+      'o teto por IP deixou de ser multiplo do teto por identidade. Este caso so mede o que ' +
+        'diz medir enquanto a divisao for exata.',
+    );
+    const app = bancada();
+    let semente = 0;
+    const aparelho = (n: number): string => `${APARELHO_A} Build/${String(n)}`;
+
+    const status: number[] = [];
+    for (let i = 0; i < APARELHOS_ATE_O_TETO_DE_IP; i += 1) {
+      for (let j = 0; j < TETO_DE_INVALIDAS; j += 1) {
+        semente += 1;
+        status.push((await tentar(app, aparelho(i), semente)).status);
+      }
+    }
+    semente += 1;
+    const aparelhoLimpo = await tentar(app, aparelho(99), semente);
+    await app.close();
+
+    assert.deepEqual(
+      status,
+      Array.from({ length: TETO_DE_INVALIDAS_POR_IP }, () => 404),
+      `as ${String(TETO_DE_INVALIDAS_POR_IP)} invalidas distribuidas em ` +
+        `${String(APARELHOS_ATE_O_TETO_DE_IP)} aparelhos deviam sair todas 404, e sairam ` +
+        `${JSON.stringify(status)}. Cada aparelho tem o proprio balde de identidade e nenhum ` +
+        'deles chega a gastar o seu; um 429 aqui significa que o teto por IP ficou mais ' +
+        'apertado que os vinte do contrato.',
+    );
+
+    assert.equal(
+      aparelhoLimpo.status,
+      429,
+      `a ${String(TETO_DE_INVALIDAS_POR_IP + 1)}a invalida do mesmo endereco respondeu ` +
+        `${String(aparelhoLimpo.status)}, e ela veio de um aparelho que nunca tinha tentado ` +
+        'nada. Esta e a UNICA posicao em que a entrada por IP e observavel: o balde de ' +
+        'identidade dele esta limpo, entao 404 aqui quer dizer que a entrada sumiu ou deixou ' +
+        'de recusar. E ela que impede a varredura de comprar baldes novos trocando o ' +
+        '`User-Agent` a cada tentativa, que e a saida obvia para quem quer burlar a de ' +
+        'identidade.',
+    );
+    assert.equal(
+      aparelhoLimpo.tipo,
+      'rate-limited',
+      `a recusa saiu com \`type: ${String(aparelhoLimpo.tipo)}\`. Um 429 de outro \`type\` ` +
+        'nao e este teto.',
+    );
+  });
+
   void it('a rota declara o teto que o contrato declara', () => {
     // O OUTRO LADO DA PINCA, independente do caso de posicao DE PROPOSITO.
     // Aquele prova que o mecanismo recusa onde deve; este prova que o numero nao
@@ -377,6 +461,40 @@ void describe('o teto de invalidas de GET /tags/{code}, pela posicao da recusa',
         'invalid_attempts, limit 5, window 10m, on_exceed deny_429). `on_exceed` merece ' +
         'atencao especial: so `deny_429` recusa, e qualquer outra palavra do vocabulario ' +
         'deixa a rota declarando teto e servindo sem teto.',
+    );
+
+    const porIp = declaradas.filter(
+      (outra) =>
+        outra.appliesTo === 'invalid_attempts' &&
+        outra.dimension.length === 1 &&
+        outra.dimension[0] === 'ip',
+    );
+    assert.equal(
+      porIp.length,
+      1,
+      'GET /tags/{code} deixou de declarar exatamente uma entrada `invalid_attempts` por ' +
+        '`ip`. E ela que impede a varredura de comprar baldes de identidade novos trocando o ' +
+        '`User-Agent`.',
+    );
+    const deIp = porIp[0];
+    assert.ok(deIp !== undefined);
+    assert.deepEqual(
+      {
+        dimension: [...deIp.dimension],
+        appliesTo: deIp.appliesTo,
+        limit: deIp.limit,
+        window: deIp.window,
+        onExceed: deIp.onExceed,
+      },
+      {
+        dimension: ['ip'],
+        appliesTo: 'invalid_attempts',
+        limit: TETO_DE_INVALIDAS_POR_IP,
+        window: '1h',
+        onExceed: 'deny_429',
+      },
+      'o teto de invalidas por IP divergiu do contrato (`api/openapi.yaml`, `resolveTagCode`: ' +
+        'dimension [ip], applies_to invalid_attempts, limit 20, window 1h, on_exceed deny_429).',
     );
   });
 });
