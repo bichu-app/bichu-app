@@ -215,15 +215,29 @@ export function construtorDaContagemDoParticipante(
 }
 
 /**
- * Em quantos CASOS DISTINTOS esta conta escreveu na janela (critério 17).
+ * Em quantos CASOS DISTINTOS esta conta escreveu **como achadora** na janela.
  *
- * `COUNT(DISTINCT ...)` sobre `COALESCE(case_id, conversation_id)`: a conversa
- * sem caso conta como um caso próprio. Deixá-la de fora daria ao falso achador
- * em série o caminho grátis de abordar tutores cujos pets não estão marcados
- * como perdidos — que é exatamente a plaquinha escaneada na rua.
+ * Três decisões, e as três mudam o que o critério 17 mede.
  *
- * E o que se conta é caso, nunca mensagem: trinta mensagens num caso só valem
- * `1`. Contar a coisa errada aqui inverte a contramedida.
+ * **`COUNT(DISTINCT ...)` e não `COUNT(*)`.** O que se conta é caso, nunca
+ * mensagem: trinta mensagens num caso só valem `1`. Contar a coisa errada aqui
+ * inverte a contramedida — a conta que conversa muito com UM tutor seria retida,
+ * e a que aborda três tutores diferentes passaria.
+ *
+ * **`COALESCE(case_id, conversation_id)`.** A conversa sem caso conta como um
+ * caso próprio. Deixá-la de fora daria ao falso achador em série o caminho
+ * grátis de abordar tutores cujos pets não estão marcados como perdidos — que é
+ * exatamente a plaquinha escaneada na rua, o caminho mais comum de todos.
+ *
+ * **`finder_user_id = :conta`, e é aqui que este arquivo lê o critério 11 pela
+ * nota e não pela dimensão.** O contrato diz `dimension: [account]`, e a leitura
+ * literal contaria também o TUTOR: quem tem três animais perdidos ao mesmo tempo
+ * escreve em três casos distintos em 24 h fazendo exatamente o que o produto
+ * existe para ele fazer, e seria retido para revisão humana **sem ser avisado**,
+ * porque o critério manda não avisar. A nota do próprio contrato nomeia o alvo
+ * com todas as letras: *"falso achador em série: uma conta que aborda tutores de
+ * casos diferentes"*. Quem aborda é o achador. O predicado é o que faz a
+ * contramedida pegar o padrão que ela nomeia, e só ele.
  */
 export function construtorDosCasosDistintosDaConta(db: Db, conta: UserId, desde: Instant) {
   return db
@@ -233,6 +247,7 @@ export function construtorDosCasosDistintosDaConta(db: Db, conta: UserId, desde:
       sql<string>`count(distinct coalesce(conversations.case_id, conversations.id))`.as('n'),
     )
     .where('conversation_messages.sender_user_id', '=', conta)
+    .where('conversations.finder_user_id', '=', conta)
     .where('conversation_messages.created_at', '>=', new Date(desde));
 }
 

@@ -358,6 +358,31 @@ void describe('critério 17 — a contagem é de CASOS, e é o banco que conta',
     assert.equal(await repo.contarCasosDistintosDaConta(achador, (AGORA - UM_DIA) as Instant), 3);
   });
 
+  void it('o TUTOR que escreve em tres casos NAO dispara o gatilho de serie', async () => {
+    // Quem tem tres animais perdidos ao mesmo tempo escreve em tres conversas
+    // fazendo o que o produto existe para ele fazer. Contar o tutor aqui o
+    // reteria para revisao humana sem avisar, porque o criterio 11 manda nao
+    // avisar. So o banco prova isto: o dublê devolve o numero que mandarem.
+    const tutor = await criarConta();
+    for (let i = 0; i < 3; i += 1) {
+      const pet = await criarPet(tutor, `Pet ${String(i)}`);
+      const { conversa } = await abrirConversa(pet);
+      await repo.gravarMensagem({
+        id: randomUUID(),
+        conversationId: conversa,
+        senderRole: 'tutor',
+        senderUserId: tutor,
+        body: 'oi',
+        redactions: [],
+      });
+    }
+    assert.equal(
+      await repo.contarCasosDistintosDaConta(tutor, (AGORA - UM_DIA) as Instant),
+      0,
+      'o tutor entrou na contagem do falso achador em serie',
+    );
+  });
+
   void it('a contagem por participante separa os dois lados', async () => {
     const tutor = await criarConta();
     const achador = await criarConta();

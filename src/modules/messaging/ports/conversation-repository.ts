@@ -143,12 +143,16 @@ export interface ConversationRepository {
   ): Promise<number>;
 
   /**
-   * Em quantos CASOS DISTINTOS esta conta escreveu desde o instante dado.
+   * Em quantos CASOS DISTINTOS esta conta escreveu **como achadora**.
    *
    * Casos, não mensagens (critério 17). Conversa sem caso conta como um caso
    * próprio: o escaneamento de uma plaquinha com o pet em casa é uma abordagem
    * a um tutor como qualquer outra, e deixá-la de fora daria ao falso achador
    * em série um caminho grátis.
+   *
+   * "Como achadora" é o recorte que a nota do critério 11 nomeia e que a
+   * dimensão `account` sozinha não diz. Ver o adaptador: contar o tutor aqui
+   * reteria, sem avisar, quem tem três animais perdidos ao mesmo tempo.
    */
   contarCasosDistintosDaConta(conta: UserId, desde: Instant): Promise<number>;
 

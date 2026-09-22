@@ -187,6 +187,20 @@ void describe('toda consulta de conversa que responde a uma pessoa carrega o cha
     assert.equal(parameters[Number(achado[1]) - 1], CHAMADOR);
   });
 
+  void it('a contagem do falso achador em série olha só o lado do ACHADOR', () => {
+    // Sem este predicado, quem tem três animais perdidos ao mesmo tempo escreve
+    // em três casos distintos em 24 h fazendo o que o produto existe para ele
+    // fazer, e é retido para revisão humana SEM ser avisado — porque o critério
+    // 11 manda não avisar. A nota do contrato nomeia o alvo: quem ABORDA.
+    const compilada = construtorDosCasosDistintosDaConta(semBanco, CHAMADOR, DESDE).compile();
+    const achado = /"finder_user_id"\s*=\s*\$(\d+)/.exec(compilada.sql);
+    assert.ok(
+      achado !== null,
+      `a contagem perdeu o recorte do achador e voltou a alcançar o tutor. SQL: ${compilada.sql}`,
+    );
+    assert.equal(compilada.parameters[Number(achado[1]) - 1], CHAMADOR);
+  });
+
   void it('a contagem conta CASOS DISTINTOS, e não mensagens (critério 17)', () => {
     // `count(*)` aqui inverteria a contramedida: trinta mensagens num caso só
     // disparariam o gatilho do falso achador em série, e uma mensagem em três
