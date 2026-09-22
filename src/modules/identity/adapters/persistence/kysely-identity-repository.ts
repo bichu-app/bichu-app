@@ -275,6 +275,10 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           user_id: novo.userId,
           family_id: novo.familyId,
           token_hash: Buffer.from(novo.tokenHash, 'base64'),
+          // Explícito, e não pelo `DEFAULT now()` da coluna: é este valor que
+          // `renovar()` compara com `sessions_invalid_before`, que também é
+          // gravado pelo relógio da aplicação.
+          issued_at: new Date(novo.issuedAt),
           expires_at: new Date(novo.expiresAt),
           absolute_expires_at: new Date(novo.absoluteExpiresAt),
           stay_signed_in: novo.staySignedIn,
@@ -295,6 +299,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           'id',
           'user_id',
           'family_id',
+          'issued_at',
           'expires_at',
           'absolute_expires_at',
           'stay_signed_in',
@@ -309,6 +314,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         id: linha.id,
         userId: linha.user_id as UserId,
         familyId: linha.family_id,
+        issuedAt: linha.issued_at.getTime() as Instant,
         expiresAt: linha.expires_at.getTime() as Instant,
         absoluteExpiresAt: linha.absolute_expires_at.getTime() as Instant,
         staySignedIn: linha.stay_signed_in,
@@ -330,6 +336,7 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
             user_id: sucessor.userId,
             family_id: sucessor.familyId,
             token_hash: Buffer.from(sucessor.tokenHash, 'base64'),
+            issued_at: new Date(sucessor.issuedAt),
             expires_at: new Date(sucessor.expiresAt),
             absolute_expires_at: new Date(sucessor.absoluteExpiresAt),
             stay_signed_in: sucessor.staySignedIn,

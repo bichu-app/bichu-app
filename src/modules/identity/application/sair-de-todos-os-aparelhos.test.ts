@@ -113,6 +113,8 @@ interface Linha {
   userId: UserId;
   familyId: string;
   tokenHash: string;
+  /** BICHUS-77: `renovar()` compara este valor com a barreira da conta. */
+  issuedAt: Instant;
   expiresAt: Instant;
   absoluteExpiresAt: Instant;
   staySignedIn: boolean;
@@ -163,6 +165,7 @@ class BancoDeMentira implements IdentityRepository {
       userId: novo.userId,
       familyId: novo.familyId,
       tokenHash: novo.tokenHash,
+      issuedAt: novo.issuedAt,
       expiresAt: novo.expiresAt,
       absoluteExpiresAt: novo.absoluteExpiresAt,
       staySignedIn: novo.staySignedIn,
@@ -180,6 +183,7 @@ class BancoDeMentira implements IdentityRepository {
       id: l.id,
       userId: l.userId,
       familyId: l.familyId,
+      issuedAt: l.issuedAt,
       expiresAt: l.expiresAt,
       absoluteExpiresAt: l.absoluteExpiresAt,
       staySignedIn: l.staySignedIn,

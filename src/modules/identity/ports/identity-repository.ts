@@ -79,6 +79,17 @@ export interface RefreshArmazenado {
   readonly id: string;
   readonly userId: UserId;
   readonly familyId: string;
+  /**
+   * Quando esta linha nasceu. É o que `renovar()` compara com
+   * `users.sessions_invalid_before` (SEC-006): refresh anterior à barreira é
+   * recusado, e sem este campo a comparação não tem com o que ser feita.
+   *
+   * Vem do relógio da aplicação, e não do `DEFAULT now()` do banco: o outro
+   * lado da comparação também é gravado pela aplicação, e misturar os dois
+   * relógios faria a barreira valer alguns milissegundos a mais ou a menos sem
+   * que ninguém percebesse.
+   */
+  readonly issuedAt: Instant;
   readonly expiresAt: Instant;
   readonly absoluteExpiresAt: Instant;
   readonly staySignedIn: boolean;
@@ -91,6 +102,12 @@ export interface NovoRefresh {
   readonly userId: UserId;
   readonly familyId: string;
   readonly tokenHash: TokenHash;
+  /**
+   * O instante de nascimento, pelo relógio da aplicação. Obrigatório de
+   * propósito: a coluna tem `DEFAULT now()`, e deixar o banco preenchê-la
+   * colocaria os dois lados da barreira do SEC-006 em relógios diferentes.
+   */
+  readonly issuedAt: Instant;
   readonly expiresAt: Instant;
   readonly absoluteExpiresAt: Instant;
   readonly staySignedIn: boolean;
