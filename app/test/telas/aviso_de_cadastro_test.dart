@@ -541,7 +541,10 @@ void main() {
         });
       }
 
-      percorrer(tester.binding.pipelineOwner.semanticsOwner!.rootSemanticsNode!);
+      // A raiz vem por `getSemantics`, e nao pelo `pipelineOwner` do binding:
+      // aquele acesso esta depreciado desde a v3.10 e `flutter analyze` e
+      // limpo nesta base.
+      percorrer(tester.getSemantics(find.byType(MaterialApp)));
       expect(
         rotulos.where((r) => r.contains('Nina') &&
             r.contains('E-mail não confirmado')),
@@ -605,7 +608,7 @@ void main() {
 
       final acusados = <String>[];
       void percorrer(SemanticsNode no) {
-        final ehBotao = no.hasFlag(SemanticsFlag.isButton);
+        final ehBotao = no.flagsCollection.isButton;
         final temToque = no.getSemanticsData().hasAction(SemanticsAction.tap);
         if (ehBotao && !temToque) acusados.add(no.label);
         no.visitChildren((filho) {
@@ -614,7 +617,7 @@ void main() {
         });
       }
 
-      percorrer(tester.binding.pipelineOwner.semanticsOwner!.rootSemanticsNode!);
+      percorrer(tester.getSemantics(find.byType(MaterialApp)));
       expect(
         acusados,
         isEmpty,

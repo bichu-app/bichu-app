@@ -281,7 +281,16 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
-const String _arvoreDasTelas = 'f14551245240f69cfb43cb67216e2682cdb7684c';
+///
+/// **BICHUS-75, 22/09**: superado de novo. O aviso persistente de cadastro
+/// acrescentou `app/lib/telas/avisos/aviso_de_cadastro_incompleto.dart` e
+/// alterou `app/lib/telas/abas.dart` e
+/// `app/lib/telas/perfil/meus_pets.dart`. Nenhuma das tres mudancas contorna
+/// a porta `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161 protege:
+/// a historia nao encosta em camera, e o diff nao cita `CameraEGaleria`,
+/// `ImagePicker` nem `Permission`. Anterior:
+/// `f14551245240f69cfb43cb67216e2682cdb7684c`.
+const String _arvoreDasTelas = '9cb530462c690c132115101ccc26e4f217e4e58c';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
