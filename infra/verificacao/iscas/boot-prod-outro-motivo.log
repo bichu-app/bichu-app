@@ -1,0 +1,5 @@
+Error: variável de ambiente obrigatória ausente ou vazia: RATE_LIMIT_DRIVER. Veja .env.example e docs/07-devops.md §6.
+    at requireEnv (file:///app/dist/shared/config/env.js:41:11)
+    at rateLimitDriver (file:///app/dist/shared/config/app-config.js:612:20)
+    at assertSafeBoot (file:///app/dist/shared/config/app-config.js:588:3)
+    at async main (file:///app/dist/bin/api.js:63:3)

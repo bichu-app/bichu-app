@@ -33,15 +33,38 @@ dispensas:
     responsavel: squad
     vence_em: 2026-09-24
 
+  # AS DUAS DE BAIXO MUDARAM DE NATUREZA EM 22/09/2026, E NAO SO DE DATA.
+  #
+  # Ate hoje elas diziam "o insumo nao chegou" -- chave de assinatura, conta
+  # Apple -- e isso e a frase de quem ESPERA. O cliente decidiu hoje que o app
+  # nao vai para loja nenhuma por ora, e a frase de quem DECIDIU e outra: o que
+  # estas duas verificacoes protegem e a submissao a loja, e a submissao saiu do
+  # horizonte. Quem ler daqui a um mes precisa encontrar a decisao, nao a espera.
+  #
+  # O GATILHO DE REATIVACAO E UM EVENTO, NAO UMA DATA: as duas caem no dia em
+  # que existir decisao de submeter o app a uma loja. `verificar_dispensas.py`
+  # so entende `vence_em`, entao o evento vive no `motivo` -- de proposito, e
+  # nao num campo novo: campo que o portao nao le e dispensa inerte com outro
+  # nome, que e o defeito que o SonarCloud ja teve em 18/09. A data e curta e
+  # nao e arbitraria: 29/09 e a vespera do fim de desenvolvimento (30/09/2026),
+  # que e quando a pergunta "vamos submeter?" tem resposta de verdade.
+  #
+  # O QUE ESTAS DUAS ENTRADAS NAO DISPENSAM, e vale dizer porque o nome engana:
+  # `verificar_borda_local.py` tambem as consulta, para tratar `assetlinks.json`
+  # e `apple-app-site-association` VAZIOS como aviso em vez de falha. Isso e
+  # DEEP LINK (BICHUS-94, 136 e 38), nao e loja, e continua valendo como
+  # trabalho futuro: a impressao digital ainda depende do keystore e o `appID`
+  # ainda depende do Team ID. A decisao de hoje tira a submissao do caminho
+  # critico; ela nao diz que o deep link abre.
   - portao: apk-assinado
-    motivo: "chave de assinatura do APK pendente (BICHU-15). Sem ela nao ha build de release nem impressao digital para o assetlinks.json"
+    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao nao ha build de release para assinar. CAI QUANDO houver decisao de submeter o app a uma loja; ate la o keystore (BICHU-15) segue pendente e o assetlinks.json segue sem impressao digital"
     responsavel: cliente
-    vence_em: 2026-09-22
+    vence_em: 2026-09-29
 
   - portao: ios
-    motivo: "conta Apple Developer pendente (BICHU-14): sem Team ID nao ha build nem Universal Links"
+    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao o alvo iOS sai do caminho critico. CAI QUANDO houver decisao de submeter o app a uma loja; ate la a conta Apple (BICHU-14) segue pendente e sem Team ID nao ha Universal Links"
     responsavel: cliente
-    vence_em: 2026-09-22
+    vence_em: 2026-09-29
 
   # A correcao do `logout` (BICHUS-81, commit aca2d33) acrescentou `requestBody`
   # OBRIGATORIO a `POST /v1/auth/logout`, e para o `oasdiff` isso e quebra de

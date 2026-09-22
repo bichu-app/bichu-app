@@ -1,0 +1,13 @@
+Error: Não foi possível ler 8 segredo(s) de runtime em variável de ambiente (arquivo fora do git, via env_file). A aplicação NÃO sobe sem eles:
+  - DATABASE_URL: A variável de ambiente não está definida, ou está vazia. Veja .env.example e a §11.2 de docs/03-arquitetura.md.
+  - IP_HMAC_KEY: A variável de ambiente não está definida, ou está vazia. Veja .env.example e a §11.2 de docs/03-arquitetura.md.
+  - TAG_CODE_KEY: A variável de ambiente não está definida, ou está vazia. Veja .env.example e a §11.2 de docs/03-arquitetura.md.
+  - TAG_CODE_INDEX_KEY: A variável de ambiente não está definida, ou está vazia. Veja .env.example e a §11.2 de docs/03-arquitetura.md.
+  - JWT_ACTIVE_PRIVATE_KEY: A variável de ambiente não está definida, ou está vazia. Veja .env.example e a §11.2 de docs/03-arquitetura.md.
+  - JWT_NEXT_PRIVATE_KEY: A variável de ambiente não está definida, ou está vazia. Veja .env.example e a §11.2 de docs/03-arquitetura.md.
+  - OBJECT_STORAGE_ACCESS_KEY_ID: A variável de ambiente não está definida, ou está vazia. Veja .env.example e a §11.2 de docs/03-arquitetura.md.
+  - OBJECT_STORAGE_SECRET_ACCESS_KEY: A variável de ambiente não está definida, ou está vazia. Veja .env.example e a §11.2 de docs/03-arquitetura.md.
+Cada nome acima é, ao mesmo tempo, o nome da variável de ambiente e o identificador do segredo no gerenciador — eles são iguais de propósito (ADR-0022). Veja .env.example e docs/07-devops.md §6.
+    at resolverSegredos (file:///app/dist/shared/config/segredos.js:131:15)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async main (file:///app/dist/bin/api.js:71:5)
