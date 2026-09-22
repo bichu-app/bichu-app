@@ -43,14 +43,19 @@
 
 import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
+import 'package:bichu/api/casos_api.dart';
 import 'package:bichu/api/devices_api.dart';
+import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos_localizacao.dart';
 import 'package:bichu/api/pets_api.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
+import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
+import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
+import 'package:bichu/dispositivo/vigia_de_aviso.dart';
 import 'package:bichu/escopo.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/intencao/guarda_de_acao.dart';
@@ -98,6 +103,7 @@ Future<_Caixa> _montar(
   addTearDown(sessao.dispose);
   addTearDown(api.fechar);
 
+  final devices = DevicesApi(api);
   final caixa = _Caixa();
 
   await tester.pumpWidget(
@@ -105,10 +111,23 @@ Future<_Caixa> _montar(
       api: api,
       auth: auth,
       pets: PetsApi(api),
+      casos: CasosApi(api),
+      fila: FilaOffline(deposito: DepositoDaFilaEmMemoria()),
       tags: TagsApi(api),
-      devices: DevicesApi(api),
+      devices: devices,
       camera: const CameraNaoEmbarcada(),
+      // Este caso monta o `Escopo` a mao, e nao pelo `App`: as cinco
+      // dependencias abaixo entraram na integracao de 22/09 (BICHUS-21, 24 e
+      // 54) e sao as variantes que nao encostam em canal de plataforma, que e
+      // o que um teste de widget suporta.
+      leitorDeQr: const LeitorDeQrNaoEmbarcado(),
       avisos: const AvisosNaoEmbarcados(),
+      oportunidades:
+          OportunidadesDeAviso(deposito: DepositoDeOportunidadesEmMemoria()),
+      vigiaDeAviso: VigiaDeAviso(
+        avisos: const AvisosNaoEmbarcados(),
+        devices: devices,
+      ),
       localizacao: localizacao,
       sessao: sessao,
       guarda: guarda,

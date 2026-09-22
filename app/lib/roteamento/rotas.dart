@@ -13,7 +13,6 @@ import '../telas/conta/tela_entrar.dart';
 import '../telas/conta/tela_esqueci_minha_senha.dart';
 import '../telas/conta/tela_verifique_seu_email.dart';
 import '../telas/escanear/tela_leitor_de_qr.dart';
-import '../api/modelos_pet.dart';
 import '../telas/pet/rascunho_de_pet.dart';
 import '../telas/pet/resultado_do_cadastro.dart';
 import '../telas/pet/tela_cadastrar_foto.dart';
