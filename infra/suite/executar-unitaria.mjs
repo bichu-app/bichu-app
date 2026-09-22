@@ -405,6 +405,22 @@ function executar(argv) {
     );
   }
   const tap = readFileSync(join(raiz, RELATORIO), 'utf8');
+
+  // A copia do TAP para fora de `dist/`, para o acumulado de
+  // `infra/suite/acumular-reprovados.mjs` conseguir le-la. ANTES do veredito:
+  // copiar depois de `morrer()` registraria so as execucoes verdes, que e a
+  // lista que nao serve para nada. Ausente a bandeira, nada muda.
+  const indiceDoPlacar = argv.indexOf('--placar');
+  const destinoDoPlacar = indiceDoPlacar === -1 ? undefined : argv[indiceDoPlacar + 1];
+  if (indiceDoPlacar !== -1 && (destinoDoPlacar === undefined || destinoDoPlacar.startsWith('-'))) {
+    morrer('`--placar` exige o caminho do diretorio de saida.');
+  }
+  if (destinoDoPlacar !== undefined) {
+    mkdirSync(join(raiz, destinoDoPlacar), { recursive: true });
+    writeFileSync(join(raiz, destinoDoPlacar, 'unitaria.tap'), tap);
+    console.log(`copia do relatorio TAP em ${join(destinoDoPlacar, 'unitaria.tap')}`);
+  }
+
   const { total, passaram, falharam } = placar(tap);
   if (total === undefined || passaram === undefined || falharam === undefined) {
     morrer(

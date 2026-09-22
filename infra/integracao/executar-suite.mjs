@@ -46,7 +46,7 @@
  * `infra/verificacao/verificar-cobertura-lcov.mjs`.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 
 import { exigirBancoDescartavel } from './guarda-de-banco-descartavel.mjs';
@@ -59,6 +59,25 @@ const COMPILADO = 'dist/_tests/tests/integration';
  * Ausente, a suite roda sem instrumentar, como sempre rodou.
  */
 const argv = process.argv.slice(2);
+
+/**
+ * `--placar <diretorio>`: onde deixar uma COPIA do relatorio TAP, para o
+ * acumulado de `infra/suite/acumular-reprovados.mjs` conseguir le-la.
+ *
+ * Existe pelo mesmo motivo de `--lcov`: esta suite roda DENTRO de um container
+ * que `docker compose run --rm` apaga no fim, e `dist/` nao e montado -- montar
+ * `dist/` por cima cobriria o `dist/` compilado da propria imagem. Quem quer o
+ * arquivo do lado de fora monta UM diretorio proprio e passa o caminho aqui.
+ *
+ * Ausente, nada muda: o TAP continua so em `dist/_tests/integracao.tap`.
+ */
+const indiceDoPlacar = argv.indexOf('--placar');
+const placar = indiceDoPlacar === -1 ? undefined : argv[indiceDoPlacar + 1];
+if (indiceDoPlacar !== -1 && (placar === undefined || placar.startsWith('-'))) {
+  console.error('\nREPROVADO: `--placar` exige o caminho do diretorio de saida.\n');
+  process.exit(1);
+}
+
 const indiceDoLcov = argv.indexOf('--lcov');
 const lcov = indiceDoLcov === -1 ? undefined : argv[indiceDoLcov + 1];
 if (indiceDoLcov !== -1 && (lcov === undefined || lcov.startsWith('-'))) {
@@ -162,6 +181,18 @@ if (!existsSync(RELATORIO)) {
   );
 }
 const saida = readFileSync(RELATORIO, 'utf8');
+
+// A COPIA SAI ANTES DO VEREDITO, E ISSO E O PONTO INTEIRO.
+//
+// O acumulado de casos que piscam existe para registrar a execucao que
+// REPROVOU. Copiar depois de `morrer()` seria copiar so as execucoes verdes,
+// que e exatamente a lista que nao serve para nada.
+if (placar !== undefined) {
+  mkdirSync(placar, { recursive: true });
+  writeFileSync(join(placar, 'integracao.tap'), saida);
+  console.log(`copia do relatorio TAP em ${join(placar, 'integracao.tap')}`);
+}
+
 const numero = (rotulo) => {
   const casado = new RegExp(`^# ${rotulo} (\\d+)$`, 'm').exec(saida);
   return casado === null ? undefined : Number.parseInt(casado[1], 10);
