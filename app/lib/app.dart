@@ -11,6 +11,7 @@ import 'api/pets_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
+import 'dispositivo/localizacao.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
@@ -31,6 +32,7 @@ class BichuApp extends StatefulWidget {
     this.clienteHttp,
     this.camera,
     this.avisos,
+    this.localizacao,
     this.depositoDeIntencao,
     this.cacheDeMeusPets,
     this.cofreDoQr,
@@ -73,6 +75,16 @@ class BichuApp extends StatefulWidget {
   /// caminho travaria a suite inteira num `Future` que nunca resolve.
   final Avisos? avisos;
 
+  /// Injetavel para teste. Em producao e [LocalizacaoPorGeolocator].
+  ///
+  /// O padrao e [LocalizacaoNaoEmbarcada] de proposito, e a razao e mais forte
+  /// que a dos avisos: `Geolocator.checkPermission()` num ambiente sem canal
+  /// de plataforma lanca `MissingPluginException`, e ela cairia no meio de um
+  /// `Future` dentro de `setState` -- que e o formato de falha que nao aponta
+  /// para a causa. Com o padrao ausente, a suite exercita os cinco motivos de
+  /// nao haver ponto sem tocar em canal nenhum.
+  final Localizacao? localizacao;
+
   /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
   ///
   /// O envelope de intencao (UX 8.3) precisa sobreviver ao app ser **encerrado
@@ -106,6 +118,7 @@ class _BichuAppState extends State<BichuApp> {
   late final DevicesApi _devices;
   late final CameraEGaleria _camera;
   late final Avisos _avisos;
+  late final Localizacao _localizacao;
   late final ControladorDeSessao _sessao;
   late final GuardaDeAcao _guarda;
   late final GoRouter _roteador;
@@ -131,6 +144,7 @@ class _BichuAppState extends State<BichuApp> {
     _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraDoAparelho();
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
+    _localizacao = widget.localizacao ?? const LocalizacaoNaoEmbarcada();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
@@ -192,6 +206,7 @@ class _BichuAppState extends State<BichuApp> {
       devices: _devices,
       camera: _camera,
       avisos: _avisos,
+      localizacao: _localizacao,
       sessao: _sessao,
       guarda: _guarda,
       cacheDeMeusPets: _cacheDeMeusPets,

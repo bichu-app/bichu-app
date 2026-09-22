@@ -76,6 +76,51 @@ dependencies:
   image_picker: ^1.2.3
   permission_handler: ^13.0.2
 
+  # Localizacao aproximada no ponto de uso (BICHUS-23), atras da porta
+  # `lib/dispositivo/localizacao.dart`. A VERSAO NAO FOI ESCOLHIDA A MAO: saiu
+  # de `flutter pub add geolocator`.
+  #
+  # POR QUE ESTE, e nao o `location`, que tem um TERCO das dependencias:
+  #
+  # 1. **Ele nao sabe geocodificar, e isso e o requisito.** O ADR-0006 proibe
+  #    converter coordenada em endereco e endereco em coordenada. No
+  #    `geolocator` essa conversao nao existe -- ela mora no pacote SEPARADO
+  #    `geocoding`, do mesmo publicador, que este projeto nao declara. A
+  #    proibicao deixa de depender da disciplina de quem escreve a proxima
+  #    tela: o codigo para converter nao esta no binario. (Conferido por
+  #    varredura no fonte dos quatro pacotes: zero ocorrencia de `placemark`,
+  #    `geocode` ou `fromAddress`.)
+  #
+  # 2. **Ele deixa desligar o provedor do Google.** No Android, o padrao do
+  #    ecossistema e o `FusedLocationProvider`, que e um componente do Google
+  #    Play Services e combina GPS com a base de Wi-Fi e de celula do Google.
+  #    `AndroidSettings(forceLocationManager: true)` usa o `LocationManager` do
+  #    proprio Android, sem terceiro no caminho -- e a porta liga isso POR
+  #    PADRAO. O `location` nao oferece essa saida. O produto precisa de
+  #    bairro, nao de calcada: a precisao que o provedor fundido acrescenta nao
+  #    tem uso aqui, e o custo dela e uma dependencia de terceiro no caminho de
+  #    um dado pessoal.
+  #
+  # O QUE ELE MANDA PARA FORA: nada. Nao ha cliente HTTP nem socket no codigo
+  # Dart dos quatro pacotes (conferido por varredura: as unicas URLs sao links
+  # de documentacao em comentario). A coordenada so sai do aparelho quando ESTE
+  # app a manda para a nossa API.
+  #
+  # O PRECO: ele e federado e traz as implementacoes de web, Windows e Linux
+  # junto (`geoclue`, `gsettings`, `win32`, `package_info_plus`, `uuid`) -- 14
+  # pacotes no `pub add` contra 3 do `location`. Nenhum deles entra no binario
+  # de iOS ou de Android: sao compilados por plataforma, e este app so publica
+  # nas duas. Depender so de `geolocator_android` + `geolocator_apple` cortaria
+  # a lista, e nao vale: e um arranjo que a proxima pessoa "conserta"
+  # acrescentando o `geolocator` de volta.
+  #
+  # O que limita a precisao NAO e este pacote: e `ACCESS_COARSE_LOCATION` sem
+  # `ACCESS_FINE_LOCATION` no AndroidManifest, e a chave
+  # `NSLocationWhenInUseUsageDescription` sem nenhuma de `Always` no Info.plist
+  # — o `geolocator_apple` LE o plist para decidir qual autorizacao pedir. As
+  # duas sao cobradas por teste; ver `permissoes_de_loja_test.dart`.
+  geolocator: ^14.0.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

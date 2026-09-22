@@ -52,6 +52,48 @@
     <uses-feature
         android:name="android.hardware.camera.autofocus"
         android:required="false" />
+
+    <!-- LOCALIZACAO APROXIMADA (BICHUS-23, criterio 2).
+
+         `ACCESS_COARSE_LOCATION` SOZINHA, e a ausencia de
+         `ACCESS_FINE_LOCATION` e a declaracao mais importante deste bloco.
+         O criterio 2 pede precisao `coarse`, e quem de fato limita a precisao
+         e ESTA linha, nao a `LocationAccuracy.low` do Dart: com `FINE`
+         declarada, o sistema entrega o ponto fino e o pedido em Dart vira
+         preferencia. Sem ela, o sistema nao tem como entregar mais que o
+         quarteirao, e a regra deixa de depender de quem escreve a proxima
+         chamada.
+
+         O produto nunca mostra mais que bairro (ADR-0010). O dado mais fino
+         nao teria onde ser usado e teria onde vazar.
+
+         SEGUNDO PLANO: NAO HA PERMISSAO DECLARADA, e isso e decisao.
+         `ACCESS_BACKGROUND_LOCATION` esta ausente de proposito. A BICHUS-23
+         lista "Localizacao em segundo plano" e "Geofencing" em *Fora desta
+         historia*, e a captura acontece no ponto de uso, com o app aberto.
+         Essa permissao tambem e a que a Play Store submete a um formulario de
+         declaracao proprio, com video do fluxo: pedi-la sem uso e uma rodada
+         de revisao perdida por algo que o produto nao faz. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- `required="false"` E OBRIGATORIO AQUI, pelo mesmo motivo da camera.
+
+         Declarar permissao de localizacao faz a Play Store INFERIR
+         `android.hardware.location` (e, com `FINE`, tambem
+         `android.hardware.location.gps`) como recurso obrigatorio, e a loja
+         passa a esconder o app de todo aparelho sem GPS.
+
+         O Bichu funciona sem GPS: o criterio 5 da BICHUS-23 manda o fluxo
+         inteiro funcionar pelo bairro digitado, e o caso e o achado existem do
+         mesmo jeito. Sem estas linhas, o app sumiria da loja para um conjunto
+         de aparelhos em que ele funciona -- e isso so aparece no relatorio de
+         alcance da Play Console, nunca rodando o app. -->
+    <uses-feature
+        android:name="android.hardware.location"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.location.gps"
+        android:required="false" />
     <application
         android:label="bichu"
         android:name="${applicationName}"

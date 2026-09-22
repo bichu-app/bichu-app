@@ -37,6 +37,22 @@
 		     outra: duas justificativas diferentes para a mesma permissao e
 		     reprovacao de loja, descoberta na submissao. -->
 		<string>O Bichu usa a câmera para você fotografar o seu pet no cadastro e para ler o QR da plaquinha quando alguém encontra um animal perdido.</string>
+		<key>NSLocationWhenInUseUsageDescription</key>
+		<!-- BICHUS-23, criterio 2: o escopo e `Ao usar o app`, NUNCA `Sempre`.
+		     E ESTA CHAVE, sozinha, que garante isso, e nao o codigo Dart. O
+		     `geolocator_apple` escolhe qual autorizacao pedir olhando o
+		     `Info.plist` (`PermissionHandler.m`): com esta chave presente ele
+		     chama `requestWhenInUseAuthorization`; se ela faltar e houver
+		     `NSLocationAlwaysUsageDescription`, ele chama
+		     `requestAlwaysAuthorization`, e o app passaria a pedir localizacao
+		     permanente sem nenhuma linha de Dart ter mudado.
+
+		     Por isso NAO HA, e nao pode haver, `NSLocationAlwaysUsageDescription`
+		     nem `NSLocationAlwaysAndWhenInUseUsageDescription` neste arquivo. O
+		     produto nao usa localizacao em segundo plano (*Fora desta historia*),
+		     e acrescentar a chave mudaria o dialogo do sistema em silencio.
+		     `permissoes_de_loja_test.dart` reprova se alguma das duas aparecer. -->
+		<string>O Bichu usa a sua localização aproximada só no momento em que você marca um pet como perdido ou registra um animal que encontrou, para avisar os tutores que estão por perto. O seu endereço não aparece para ninguém: o que as outras pessoas veem é o bairro.</string>
 		<key>NSPhotoLibraryUsageDescription</key>
 		<!-- A string e declarada, mas NENHUMA permissao de biblioteca e pedida
 		     em tempo de execucao, e as duas coisas sao diferentes. O
