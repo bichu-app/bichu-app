@@ -15,6 +15,11 @@
 .env.*
 !.env.example
 
+# BICHUS-211: o par de portas DESTA maquina. Nao e versionado porque o par
+# livre de uma maquina nao e o par livre da proxima -- e foi versionar o par
+# (3000/3001) que criou o problema. `make portas` o regrava.
+portas.local.mk
+
 # Material de assinatura e credencial de provedor
 *.jks
 *.keystore

@@ -375,9 +375,23 @@ services:
     # o Caddy escuta na porta que esta em PUBLIC_BASE_URL, entao 3100:3000
     # publicaria um endereco que o proprio servidor nao atende.
     #
-    # O numero e variavel porque em maquina compartilhada a 3000 e disputada.
-    # `make up PORTA=3100` troca porta e URL base juntas -- trocar so uma faz o
-    # app gerar link para uma porta que nao responde.
+    # O numero e variavel porque em maquina compartilhada a 3000 e disputada --
+    # e na maquina onde este produto e desenvolvido ela ja e de outro projeto,
+    # junto com a 3001 (medido em 22/09, BICHUS-211). Por isso o par NAO vem
+    # mais so daqui: `portas.local.mk`, gerado por maquina e fora do git, fixa o
+    # primeiro par livre, e `make up` sem argumento passa a funcionar.
+    #
+    # `PORTA_APP` e `PORTA_MIDIA` trocam porta publicada e URL base JUNTAS --
+    # trocar so uma faz o app gerar link para uma porta que nao responde, e isso
+    # e pior do que nao subir porque nao falha na hora: falha no telefone de
+    # quem leu o QR, e o que o QR guarda nao se corrige depois (ADR-0004).
+    #
+    # Ate 22/09 esse acordo era mantido por este comentario e pela disciplina de
+    # lembrar do `PORTA=`. Comentario nao reprova nada. Agora quem reprova e
+    # `make verificar-portas`, que le a configuracao RENDERIZADA por este
+    # arquivo e confere porta publicada contra as cinco URLs base, com as iscas
+    # em `infra/verificacao/iscas/portas-*.json`. Ele roda dentro de `make up`,
+    # antes do docker.
     ports:
       - "${BIND_HOST:-127.0.0.1}:${PORTA_APP:-3000}:${PORTA_APP:-3000}"
       - "${BIND_HOST:-127.0.0.1}:${PORTA_MIDIA:-3001}:${PORTA_MIDIA:-3001}"

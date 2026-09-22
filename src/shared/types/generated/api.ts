@@ -5997,8 +5997,14 @@ export interface operations {
                              *     do campo separa as duas coisas de proposito.
                              *
                              *     `null` quando ninguem declarou -- silencio honesto em
-                             *     vez de um valor inventado. Para o commit viajar dentro
-                             *     da imagem seria preciso um `ARG` no `Dockerfile`.
+                             *     vez de um valor inventado. Desde a BICHUS-210 o
+                             *     `ARG BUILD_COMMIT` existe no `Dockerfile` e o commit
+                             *     VIAJA dentro da imagem: o build REPROVA sem ele, entao
+                             *     imagem construida pela esteira nunca responde `null`
+                             *     aqui. O tipo continua aceitando `null` porque nada
+                             *     impede um `docker build` feito a mao noutro lugar, e
+                             *     um alvo que nao sabe de onde veio precisa dizer isso
+                             *     em vez de inventar.
                              */
                             commit: string | null;
                         };

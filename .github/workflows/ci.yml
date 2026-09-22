@@ -56,6 +56,35 @@ jobs:
       - name: portabilidade e hostname
         run: python3 infra/verificacao/verificar_portabilidade.py
 
+      # BICHUS-211, as duas iscas. Nenhuma das duas precisa de docker nem de
+      # `.env`, por isso estao aqui no primeiro estagio e nao no de integracao.
+      #
+      # A primeira roda o portao do invariante contra as iscas de
+      # `iscas/portas-*.json` e exige que cada uma REPROVE. Ela nao confere a
+      # configuracao real -- quem faz isso e o passo de mesmo nome no job
+      # `integracao`, onde existe `.env` para o compose interpolar. O que ela
+      # prova e que o portao continua enxergando: o dia em que alguem afrouxar
+      # uma regra, a isca correspondente passa a aprovar e este passo cai
+      # nomeando o arquivo.
+      - name: as iscas do portao de portas reprovam
+        run: python3 infra/verificacao/verificar_portas.py --autoteste
+
+      # A segunda: havendo par livre, a escolha de portas nao pode entregar um
+      # par ocupado -- e o que fazia `make up` sem argumento morrer em
+      # `port is already allocated`. O cenario ocupa portas altas com socket do
+      # proprio processo e inclui o caso `sem mecanismo`, que precisa reprovar.
+      - name: "`make up` sem argumento nao cai no bind havendo par livre"
+        run: python3 infra/verificacao/verificar_escolha_de_portas.py
+
+      # Absorcao da BICHUS-210: o Dockerfile reprova o build sem `BUILD_COMMIT`
+      # e o compose so repassa o que estiver no AMBIENTE, entao quem poe o valor
+      # la e o Makefile. Este passo roda POR DENTRO do make de proposito -- ele
+      # le a variavel do ambiente que o make montou, que e o caminho real. Apague
+      # o `export` do Makefile e ele reprova; a pre-checagem do `make up`, que le
+      # a variavel do make e nao o ambiente, continuaria passando.
+      - name: o make exporta BUILD_COMMIT
+        run: make --no-print-directory verificar-commit-de-build
+
       # ADR-0016 (itens 4 e 6) e o defeito de 17/09. Tres conferencias num
       # script so, todas por leitura de arquivo, todas com isca guardada em
       # `infra/verificacao/iscas/`:
@@ -396,6 +425,15 @@ jobs:
           commit=$(git rev-parse HEAD)
           echo "BUILD_COMMIT=$commit" >> "$GITHUB_ENV"
           echo "construindo a partir de $commit"
+
+      # BICHUS-211, contra a configuracao REAL: com o `.env` do passo acima
+      # montado, o compose ja interpola tudo, e aqui se confere porta publicada
+      # contra as cinco URLs base. Vem ANTES do build e da subida de proposito:
+      # o defeito que ele pega nao derruba a pilha -- ela sobe, a sonda passa, e
+      # o link gerado e que aponta para porta muda. Depois de `up` seria tarde e
+      # verde.
+      - name: porta publicada e URL base de acordo
+        run: python3 infra/verificacao/verificar_portas.py
 
       - name: constroi a imagem (dev) e o migrador
         run: docker compose --profile dev build
