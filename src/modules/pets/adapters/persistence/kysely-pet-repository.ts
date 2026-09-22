@@ -15,7 +15,7 @@
  * aplicação: é o que impede a ficha, o cartaz e o perfil público de repetirem a
  * mesma escolha de três formas ligeiramente diferentes.
  */
-import type { Db } from '../../../../shared/db/pool.js';
+import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { rotuloDaRaca } from '../../domain/breed.js';
 import type {
   CodigosConhecidos,
@@ -118,37 +118,138 @@ function comoPet(linha: LinhaDoPet): PetGravado {
   };
 }
 
+/**
+ * Os valores que a edição grava, **derivados do próprio helper** e não escritos
+ * à mão: a primeira versão deste tipo repetia as colunas e já divergiu do
+ * schema em `sex` e `neutered`. Separados do construtor porque o `WHERE` é o
+ * que está sob verificação, e misturar as duas coisas numa função só faria a
+ * isca medir o `set` junto do predicado.
+ */
+export type ValoresDaAtualizacao = ReturnType<typeof valoresDaAtualizacao>;
+
+/** Os valores da edição, na forma de coluna do banco. */
+export function valoresDaAtualizacao(dados: DadosDoPet, quando: Date) {
+  return {
+    name: dados.name,
+    species_code: dados.species,
+    breed_code: dados.breedCode,
+    breed_free_text: dados.breedFreeText,
+    ref_data_version: dados.refDataVersion,
+    size_code: dados.size,
+    primary_color_code: dados.primaryColorCode,
+    secondary_color_code: dados.secondaryColorCode,
+    sex: dados.sex,
+    neutered: dados.neutered,
+    birth_date_approx: dados.birthDateApprox === null ? null : new Date(dados.birthDateApprox),
+    distinctive_marks: dados.distinctiveMarks,
+    care_notes: dados.careNotes,
+    care_notes_redactions: JSON.stringify(dados.careNotesRedactions),
+    microchip_number: dados.microchipNumber,
+    sinpatinhas_id: dados.sinpatinhasId,
+    updated_at: quando,
+  };
+}
+
+/**
+ * ## Os construtores, e por que a autorização passou a sair por eles
+ *
+ * ADR-0021: a autorização mora na cláusula `WHERE`, e em lugar nenhum além
+ * dela. Essa afirmação **não é observável pela resposta da rota** — uma consulta
+ * que traz o pet do outro e o descarta num `if` responde igual, até o dia em
+ * que alguém mexe no `if`, e aí não existe teste que acuse, porque o `if` era o
+ * teste.
+ *
+ * Até esta branch a afirmação valia por confiança. Cada uma das quatro
+ * cláusulas de dono deste arquivo foi removida, uma por vez, e os 967 casos
+ * unitários continuaram verdes nas quatro. O comportamento estava correto; o
+ * que faltava era a verificação.
+ *
+ * `construtorD*` existe para que a afirmação seja **verificável**:
+ * `autorizacao-na-clausula-where.test.ts` compila o SQL destas funções sem
+ * executá-las, exige o predicado do dono ligado ao valor certo, e carrega as
+ * iscas que precisam reprovar. É o instrumento da BICHUS-92, com a emenda da
+ * BICHUS-237 (a posição `$n` é lida de volta).
+ *
+ * Eles recebem `DbExecutor` e não `Db` para que o mesmo predicado valha dentro
+ * e fora de transação.
+ */
+
+/**
+ * **A leitura do dono.** Base de `buscarDoTutor`, `listarDoTutor` e da releitura
+ * que `criar` faz — três caminhos, um predicado só, de propósito: três cópias
+ * seriam três chances de uma delas divergir sem ninguém acusar.
+ */
+export function construtorDaLeituraDoDono(db: DbExecutor, dono: UserId) {
+  return db
+    .selectFrom('pets')
+    .leftJoin('ref_breeds', (j) =>
+      j
+        .onRef('ref_breeds.code', '=', 'pets.breed_code')
+        .onRef('ref_breeds.species_code', '=', 'pets.species_code'),
+    )
+    .select((eb) => [
+      ...COLUNAS,
+      'ref_breeds.label as breed_list_label',
+      eb
+        .selectFrom('pet_tags')
+        .whereRef('pet_tags.pet_id', '=', 'pets.id')
+        .where('pet_tags.status', '=', 'active')
+        .select(({ fn }) => fn.countAll().as('n'))
+        .as('active_tag_count'),
+    ])
+    .where('pets.owner_user_id', '=', dono)
+    .where('pets.deleted_at', 'is', null);
+}
+
+/**
+ * A contagem do tutor, que decide o teto de pets por conta.
+ *
+ * Sem o dono no `WHERE` ela conta os pets do mundo inteiro: a primeira conta a
+ * criar um pet bateria no teto, e nenhum caso unitário acusaria.
+ */
+export function construtorDaContagemDoTutor(db: DbExecutor, dono: UserId) {
+  return db
+    .selectFrom('pets')
+    .select(({ fn }) => fn.countAll<string>().as('n'))
+    .where('owner_user_id', '=', dono)
+    .where('deleted_at', 'is', null);
+}
+
+/**
+ * A edição da ficha. O dono é irmão do `id` no mesmo `WHERE`, e não um `if`
+ * antes: o `UPDATE` que gravaria na ficha de outro tutor não existe aqui.
+ */
+export function construtorDaAtualizacao(
+  db: DbExecutor,
+  pet: PetId,
+  dono: UserId,
+  valores: ValoresDaAtualizacao,
+) {
+  return db
+    .updateTable('pets')
+    .set(valores)
+    .where('id', '=', pet)
+    .where('owner_user_id', '=', dono)
+    .where('deleted_at', 'is', null);
+}
+
+/** A exclusão lógica, com o dono no mesmo `WHERE` pelo mesmo motivo. */
+export function construtorDaExclusao(db: DbExecutor, pet: PetId, dono: UserId, quando: Instant) {
+  return db
+    .updateTable('pets')
+    .set({ deleted_at: new Date(Number(quando)) })
+    .where('id', '=', pet)
+    .where('owner_user_id', '=', dono)
+    .where('deleted_at', 'is', null);
+}
+
 export function criarPetRepository(db: Db): PetRepository {
   /** A leitura do dono, com o rótulo da raça e a contagem de tags ativas. */
-  const leituraDoDono = (dono: UserId) =>
-    db
-      .selectFrom('pets')
-      .leftJoin('ref_breeds', (j) =>
-        j
-          .onRef('ref_breeds.code', '=', 'pets.breed_code')
-          .onRef('ref_breeds.species_code', '=', 'pets.species_code'),
-      )
-      .select((eb) => [
-        ...COLUNAS,
-        'ref_breeds.label as breed_list_label',
-        eb
-          .selectFrom('pet_tags')
-          .whereRef('pet_tags.pet_id', '=', 'pets.id')
-          .where('pet_tags.status', '=', 'active')
-          .select(({ fn }) => fn.countAll().as('n'))
-          .as('active_tag_count'),
-      ])
-      .where('pets.owner_user_id', '=', dono)
-      .where('pets.deleted_at', 'is', null);
+  const leituraDoDono = (dono: UserId) => construtorDaLeituraDoDono(db, dono);
 
   return {
     async contarDoTutor(dono) {
-      const linha = await db
-        .selectFrom('pets')
-        .select(({ fn }) => fn.countAll<string>().as('n'))
-        .where('owner_user_id', '=', dono)
-        .where('deleted_at', 'is', null)
-        .executeTakeFirstOrThrow();
+      const linha = await construtorDaContagemDoTutor(db, dono).executeTakeFirstOrThrow();
       return Number(linha.n);
     },
 
@@ -234,44 +335,19 @@ export function criarPetRepository(db: Db): PetRepository {
     },
 
     async atualizar(pet, dono, dados) {
-      const resultado = await db
-        .updateTable('pets')
-        .set({
-          name: dados.name,
-          species_code: dados.species,
-          breed_code: dados.breedCode,
-          breed_free_text: dados.breedFreeText,
-          ref_data_version: dados.refDataVersion,
-          size_code: dados.size,
-          primary_color_code: dados.primaryColorCode,
-          secondary_color_code: dados.secondaryColorCode,
-          sex: dados.sex,
-          neutered: dados.neutered,
-          birth_date_approx: dados.birthDateApprox === null ? null : new Date(dados.birthDateApprox),
-          distinctive_marks: dados.distinctiveMarks,
-          care_notes: dados.careNotes,
-          care_notes_redactions: JSON.stringify(dados.careNotesRedactions),
-          microchip_number: dados.microchipNumber,
-          sinpatinhas_id: dados.sinpatinhasId,
-          updated_at: new Date(),
-        })
-        .where('id', '=', pet)
-        .where('owner_user_id', '=', dono)
-        .where('deleted_at', 'is', null)
-        .executeTakeFirst();
+      const resultado = await construtorDaAtualizacao(
+        db,
+        pet,
+        dono,
+        valoresDaAtualizacao(dados, new Date()),
+      ).executeTakeFirst();
 
       if (Number(resultado.numUpdatedRows) === 0) return null;
       return this.buscarDoTutor(pet, dono);
     },
 
     async excluir(pet: PetId, dono: UserId, quando: Instant) {
-      const resultado = await db
-        .updateTable('pets')
-        .set({ deleted_at: new Date(Number(quando)) })
-        .where('id', '=', pet)
-        .where('owner_user_id', '=', dono)
-        .where('deleted_at', 'is', null)
-        .executeTakeFirst();
+      const resultado = await construtorDaExclusao(db, pet, dono, quando).executeTakeFirst();
       return Number(resultado.numUpdatedRows) > 0;
     },
   };
