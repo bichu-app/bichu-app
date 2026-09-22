@@ -111,6 +111,99 @@ interface ChaveDeclarada {
  */
 const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // -------------------------------------------------------------------------
+  // alertas
+  // -------------------------------------------------------------------------
+  'public.alert_dispatches.alert_dispatches_case_id_fkey': {
+    colunas: ['case_id'],
+    referencia: 'public.lost_cases',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'o disparo do alerta do caso apagado, e com ele os destinatários por ' +
+      '`alert_recipients.dispatch_id`. O caso é do tutor.',
+  },
+  'public.alert_recipients.alert_recipients_dispatch_id_fkey': {
+    colunas: ['dispatch_id'],
+    referencia: 'public.alert_dispatches',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a linha de destinatário do disparo apagado, que sem o disparo não é nada. Mas a linha ' +
+      'é sobre OUTRA pessoa, o vizinho que foi avisado, e é por aqui que apagar a conta do ' +
+      'tutor apaga o registro de que um terceiro foi notificado. Ver o caso "a cascata ' +
+      'atravessa pessoas".',
+  },
+  'public.alert_recipients.alert_recipients_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'o registro de que a própria pessoa foi avisada. Da própria pessoa.',
+  },
+
+  // -------------------------------------------------------------------------
+  // conversa mediada
+  // -------------------------------------------------------------------------
+  'public.conversation_messages.conversation_messages_conversation_id_fkey': {
+    colunas: ['conversation_id'],
+    referencia: 'public.conversations',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as mensagens da conversa apagada, dos DOIS lados. Conversa que deixou de existir ' +
+      'deixou de existir para ambos, e é por aqui que a exclusão de uma conta leva embora o ' +
+      'que a outra pessoa escreveu. Ver o caso "a cascata atravessa pessoas".',
+  },
+  'public.conversation_messages.conversation_messages_sender_user_id_fkey': {
+    colunas: ['sender_user_id'],
+    referencia: 'public.users',
+    // Era `SET NULL`, e era a QUINTA ocorrência de 22/09: a primeira que não
+    // cabe dentro de uma tabela só. O `SET NULL` é um UPDATE, e todo UPDATE
+    // revalida as OUTRAS chaves da linha. `conversation_id` era revalidada
+    // contra uma conversa que a cascata `found_reports -> conversations`
+    // acabara de apagar na mesma instrução: 23503, e não 23514.
+    //
+    // `CASCADE` porque neste caminho a conversa vai embora de qualquer jeito.
+    // "A mensagem fica, a identidade sai" foi escrito para o caso em que a
+    // conversa SOBREVIVE, e ali a intenção continua valendo; ali esta chave
+    // nunca chega a ser exercida. Ver
+    // `20260922000005_mensagem-cede-para-a-cascata-do-aviso.sql`.
+    aoApagar: 'CASCADE',
+    levaJunto: 'a mensagem que a própria pessoa escreveu.',
+  },
+  'public.conversations.conversations_case_id_fkey': {
+    colunas: ['case_id'],
+    referencia: 'public.lost_cases',
+    aoApagar: 'SET NULL',
+  },
+  'public.conversations.conversations_finder_user_id_fkey': {
+    colunas: ['finder_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+  'public.conversations.conversations_found_report_id_fkey': {
+    colunas: ['found_report_id'],
+    referencia: 'public.found_reports',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a conversa mediada do aviso apagado, e com ela as mensagens dos dois lados. O aviso é ' +
+      'de quem achou; o outro lado da conversa é o tutor. Ver o caso "a cascata atravessa ' +
+      'pessoas".',
+  },
+  'public.conversations.conversations_pet_id_fkey': {
+    colunas: ['pet_id'],
+    referencia: 'public.pets',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a conversa sobre o pet apagado, e as mensagens dela. O pet é do tutor; o que o achador ' +
+      'escreveu vai junto. Ver o caso "a cascata atravessa pessoas".',
+  },
+  'public.conversations.conversations_tutor_user_id_fkey': {
+    colunas: ['tutor_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a conversa do tutor, e dentro dela as mensagens do ACHADOR. Ver o caso "a cascata ' +
+      'atravessa pessoas".',
+  },
+
+  // -------------------------------------------------------------------------
   // entity_verifications
   // -------------------------------------------------------------------------
   'public.entity_verifications.entity_verifications_claimant_user_id_fkey': {
@@ -191,6 +284,14 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.users',
     aoApagar: 'CASCADE',
     levaJunto: 'as sessões da própria pessoa.',
+  },
+  'public.user_devices.user_devices_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os aparelhos registrados da própria pessoa, e com eles o token de push. Da própria ' +
+      'pessoa.',
   },
   'public.user_identities.user_identities_user_id_fkey': {
     colunas: ['user_id'],
@@ -432,6 +533,108 @@ const PARES_DE_NULO_CONTRA_RESTRICAO: Readonly<Record<string, ParDeclarado>> = {
         'DELETE FROM users de quem reivindicou conclui; a linha fica ' +
         "claim_status = 'claimed', claimed_by_user_id = NULL, claimed_at preenchido.",
     },
+
+  // =========================================================================
+  // O lado permissivo da conversa mediada, medido e não lido.
+  // =========================================================================
+  // `conversations_dois_lados_distintos` é
+  // `finder_user_id IS NULL OR finder_user_id <> tutor_user_id`. O nulo
+  // satisfaz o PRIMEIRO ramo, então ele cabe: a restrição existe para impedir
+  // que os dois lados sejam a mesma pessoa, e uma conversa sem achador
+  // identificado não viola isso.
+  //
+  // A entrada que ESTAVA prevista para
+  // `conversation_messages_sender_user_id_fkey + conversation_messages_sistema_sem_remetente`
+  // não está aqui, e a ausência é a mesma prova que a de `found_reports.tag_id`
+  // acima: a chave deixou de pôr nulo. `20260922000005` a passou para
+  // `CASCADE`, o par sumiu da consulta de descoberta, e escrever a linha faria
+  // o caso "par declarado que o banco não tem mais" reprovar. O veredito dela
+  // foi medido antes de a migração existir, e sobrevive na isca da quinta
+  // forma: o nulo CABIA no CHECK (`sender_role <> 'system' OR sender_user_id
+  // IS NULL`), e mesmo assim a exclusão falhava — por um motivo que nenhum
+  // CHECK desta tabela poderia explicar.
+  'public.conversations.conversations_finder_user_id_fkey + conversations_dois_lados_distintos': {
+    coluna: 'finder_user_id',
+    veredito: 'compativel',
+    medicao:
+      'DELETE FROM users de quem achou, com o aviso registrado por um TERCEIRO (para isolar ' +
+      'o par da cascata de `found_reports.reporter_user_id`): conclui, e a conversa sobrevive ' +
+      'com finder_user_id = NULL e tutor_user_id preenchido.',
+  },
+};
+
+// ===========================================================================
+// A QUINTA FORMA, E POR QUE ELA NÃO CABIA NAS QUATRO
+// ===========================================================================
+// As quatro combinações do cabeçalho vivem DENTRO de uma tabela: a ação de
+// deleção de uma chave contra as restrições da própria tabela. A quinta
+// atravessa TRÊS, e por isso o bloco de pares acima é cego para ela por
+// construção — ele só olha `CHECK` da mesma tabela.
+//
+// Ela apareceu em 22/09, na integração, e não podia ter aparecido antes:
+// `conversa-mediada` e `dominio-de-achado-avulso` chegaram por branches
+// diferentes, e as três tabelas só se encontraram quando as duas foram
+// mescladas. Medido:
+//
+//   users         --CASCADE--> found_reports.reporter_user_id
+//   found_reports --CASCADE--> conversations.found_report_id
+//   users         --SET NULL-> conversation_messages.sender_user_id
+//
+//   DELETE FROM users da achadora
+//     => 23503 / conversation_messages_conversation_id_fkey
+//        Key (conversation_id)=(...) is not present in table "conversations"
+//
+// O MECANISMO, que é o que torna isto invisível: `SET NULL` não apaga, ele
+// ATUALIZA. E todo `UPDATE` revalida TODAS as chaves estrangeiras da linha
+// atualizada, inclusive as que nada têm a ver com a coluna que mudou. Quando o
+// gatilho do `SET NULL` roda depois da cascata que já levou o avô, ele
+// revalida contra um pai que não existe mais.
+//
+// Nenhuma das três declarações está errada lida sozinha. O defeito só existe
+// na interseção — e é exatamente por isso que ele precisa de portão, e não de
+// atenção de quem revisa uma migração.
+//
+// A DESCOBERTA É MECÂNICA E O VEREDITO É ESCRITO, pelo mesmo motivo dos pares:
+// se a linha do meio sobrevive ao `DELETE` depende da ORDEM em que o Postgres
+// dispara os gatilhos de ação referencial, e ordem de gatilho não se lê no
+// catálogo. Então a consulta abaixo DESCOBRE o formato de risco (um nulo que
+// corre junto com uma cascata que alcança o outro pai da mesma linha) e exige
+// que alguém abra o banco, apague, e escreva o que aconteceu.
+//
+// A consulta reporta A MAIS de propósito: formato de risco que na prática
+// conclui entra aqui como `compativel` medido, e não some da lista. Portão que
+// só mostra o que já quebrou não avisa antes da próxima vez.
+
+interface NuloContraCascataDeclarado {
+  readonly veredito: VereditoDoPar;
+  /** Como foi MEDIDO. Mesma exigência do registro de pares: evidência, não leitura. */
+  readonly medicao: string;
+}
+
+/**
+ * Todo par (chave que põe nulo, chave vizinha da MESMA linha cujo pai a mesma
+ * instrução de `DELETE` apaga por cascata).
+ *
+ * Formato novo sem entrada aqui REPROVA, nomeando as três tabelas e o caminho
+ * da cascata. "Há um risco no esquema" não conserta nada; `A -> B -> C` sim.
+ */
+const NULOS_CONTRA_CASCATA_DE_TERCEIRO: Readonly<Record<string, NuloContraCascataDeclarado>> = {
+  'public.conversations.conversations_finder_user_id_fkey + conversations_found_report_id_fkey': {
+    veredito: 'compativel',
+    medicao:
+      'DELETE FROM users de quem achou, sendo ela também quem registrou o aviso: conclui, ' +
+      'sem linha sobrando. A conversa é apagada pela cascata `found_reports -> conversations` ' +
+      'ANTES de o SET NULL precisar dela, e o nulo sobre uma linha que já saiu é operação ' +
+      'sobre zero linhas, não erro. Difere do caso da mensagem porque aqui a linha do nulo e ' +
+      'a linha apagada são A MESMA: não há neto para revalidar nada.',
+  },
+  'public.conversations.conversations_finder_user_id_fkey + conversations_pet_id_fkey': {
+    veredito: 'compativel',
+    medicao:
+      'DELETE FROM users do TUTOR (dono do pet): conclui. A cascata `pets -> conversations` ' +
+      'apaga a mesma linha que o SET NULL de `finder_user_id` tocaria, e pela mesma razão do ' +
+      'par acima não há revalidação de neto.',
+  },
 };
 
 /**
@@ -444,6 +647,11 @@ const PARES_DE_NULO_CONTRA_RESTRICAO: Readonly<Record<string, ParDeclarado>> = {
  * concordem, e o segundo bloco exercita o caminho com `DELETE` de verdade.
  */
 const CASCATAS_QUE_ATRAVESSAM_PESSOAS: readonly string[] = [
+  'public.alert_recipients.alert_recipients_dispatch_id_fkey',
+  'public.conversation_messages.conversation_messages_conversation_id_fkey',
+  'public.conversations.conversations_found_report_id_fkey',
+  'public.conversations.conversations_pet_id_fkey',
+  'public.conversations.conversations_tutor_user_id_fkey',
   'public.found_reports.found_reports_reporter_user_id_fkey',
   'public.match_candidates.match_candidates_decided_by_user_id_fkey',
   'public.match_candidates.match_candidates_found_report_id_fkey',
@@ -481,11 +689,107 @@ interface ParDoBanco {
   readonly definicao: string;
 }
 
+interface NuloContraCascataDoBanco {
+  /** `tabela.fk_que_poe_nulo + fk_revalidada`. */
+  readonly chave: string;
+  readonly tabela: string;
+  readonly fkQuePoeNulo: string;
+  readonly tabelaApagada: string;
+  readonly fkRevalidada: string;
+  readonly paiQueSome: string;
+  /** `A -> B -> C`, e todos eles separados por ` | `: por onde a cascata chega ao pai que some. */
+  readonly caminho: string;
+}
+
+/**
+ * A descoberta da quinta forma. É uma FUNÇÃO, e não um trecho dentro do
+ * `before`, por um motivo só: a isca precisa reexecutá-la depois de devolver o
+ * `SET NULL` de 22/09 ao banco. Descoberta que só roda uma vez não pode ser
+ * provada, e verificação não provada vale pela confiança do dia em que foi
+ * escrita.
+ */
+async function descobrirNulosContraCascata(
+  conexao: Client,
+): Promise<NuloContraCascataDoBanco[]> {
+  const r = await conexao.query<{
+    tabela: string;
+    fk_que_poe_nulo: string;
+    tabela_apagada: string;
+    fk_revalidada: string;
+    pai_que_some: string;
+    caminho: string;
+  }>(
+    `with recursive fks as (
+        select con.oid,
+               ns.nspname  || '.' || rel.relname  as tabela,
+               con.conname                        as nome,
+               fns.nspname || '.' || frel.relname as referencia,
+               con.confdeltype                    as acao
+          from pg_constraint con
+          join pg_class rel     on rel.oid  = con.conrelid
+          join pg_namespace ns  on ns.oid   = rel.relnamespace
+          join pg_class frel    on frel.oid = con.confrelid
+          join pg_namespace fns on fns.oid  = frel.relnamespace
+         where con.contype = 'f' and ns.nspname = any($1::text[])),
+      -- Aresta de cascata: apagar uma linha de \`pai\` apaga linhas de \`filho\`.
+      cascata as (select referencia as pai, tabela as filho from fks where acao = 'c'),
+      -- Fecho transitivo, com o caminho junto. O \`position\` corta ciclo: sem
+      -- ele uma cascata circular faria a recursão não terminar, e portão que
+      -- trava é portão que alguém desliga.
+      alcance as (
+        select pai as origem, filho as alvo, filho::text as caminho from cascata
+        union all
+        select a.origem, c.filho, a.caminho || ' -> ' || c.filho
+          from alcance a join cascata c on c.pai = a.alvo
+         where position(c.filho in a.caminho) = 0)
+     select nulo.tabela            as tabela,
+            nulo.nome              as fk_que_poe_nulo,
+            nulo.referencia        as tabela_apagada,
+            vizinha.nome           as fk_revalidada,
+            vizinha.referencia     as pai_que_some,
+            -- TODOS os caminhos, e nao o mais curto. Duas cascatas diferentes
+            -- podem alcancar o mesmo pai, e quem for consertar precisa ver as
+            -- duas: fechar so a que a mensagem citou deixa a outra de pe.
+            string_agg(distinct a.origem || ' -> ' || a.caminho, ' | '
+                       order by a.origem || ' -> ' || a.caminho) as caminho
+       from fks nulo
+       join fks vizinha on vizinha.tabela = nulo.tabela and vizinha.oid <> nulo.oid
+       join alcance a   on a.origem = nulo.referencia and a.alvo = vizinha.referencia
+      -- \`nulo\` é quem ATUALIZA (e portanto revalida a linha inteira).
+      -- \`vizinha\` só entra se o sumiço do pai dela puder reprovar essa
+      -- revalidação: se ela também pusesse nulo, o nulo satisfaria a si mesmo.
+      where nulo.acao in ('n', 'd') and vizinha.acao in ('c', 'r', 'a')
+      group by 1, 2, 3, 4, 5
+      order by 1, 2, 4`,
+    [ESQUEMAS_DO_PRODUTO],
+  );
+
+  return r.rows.map((l) => ({
+    chave: `${l.tabela}.${l.fk_que_poe_nulo} + ${l.fk_revalidada}`,
+    tabela: l.tabela,
+    fkQuePoeNulo: l.fk_que_poe_nulo,
+    tabelaApagada: l.tabela_apagada,
+    fkRevalidada: l.fk_revalidada,
+    paiQueSome: l.pai_que_some,
+    caminho: l.caminho,
+  }));
+}
+
+/** Uma linha da descoberta, escrita do jeito que conserta: três tabelas e o caminho. */
+function descrever(n: NuloContraCascataDoBanco): string {
+  return (
+    `\n  ${n.tabela}.${n.fkQuePoeNulo} põe nulo quando ${n.tabelaApagada} sai;` +
+    `\n    na MESMA instrução ${n.paiQueSome} some por ${n.caminho},` +
+    `\n    e o UPDATE do nulo revalida ${n.tabela}.${n.fkRevalidada} contra ele.`
+  );
+}
+
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
 
 let cliente: Client;
 let chaves: ChaveDoBanco[] = [];
 let pares: ParDoBanco[] = [];
+let nulosContraCascata: NuloContraCascataDoBanco[] = [];
 
 before(async () => {
   if (CONEXAO === undefined || CONEXAO === '') {
@@ -623,6 +927,10 @@ before(async () => {
     coluna: linha.coluna,
     definicao: linha.definicao,
   }));
+
+  // A quinta forma, que atravessa três tabelas e por isso não cabe na consulta
+  // de pares acima.
+  nulosContraCascata = await descobrirNulosContraCascata(cliente);
 });
 
 after(async () => {
@@ -786,6 +1094,56 @@ void describe('a contradição entre a ação de deleção e a restrição da ta
       'chave estrangeira e restrição se contradizem: a exclusão da linha referenciada falha ' +
         'com 23514 no momento em que o Postgres tenta pôr o nulo. Em caminho de exclusão de ' +
         'conta isto é dado pessoal que não se consegue apagar.' +
+        `${contradizem.join('')}`,
+    );
+  });
+});
+
+void describe('a quinta forma: o nulo que corre junto com a cascata de um terceiro', () => {
+  void it('todo formato de risco do banco tem veredito escrito, e todo escrito existe', () => {
+    const semVeredito = nulosContraCascata
+      .filter((n) => NULOS_CONTRA_CASCATA_DE_TERCEIRO[n.chave] === undefined)
+      .map(descrever);
+
+    assert.deepEqual(
+      semVeredito,
+      [],
+      'formato de risco da quinta forma sem entrada em NULOS_CONTRA_CASCATA_DE_TERCEIRO. ' +
+        'Abra o banco, apague a linha referenciada e escreva o que aconteceu: se der 23503 ' +
+        'numa chave que a linha do nulo NÃO estava mudando, o veredito é `contradiz`.' +
+        `${semVeredito.join('')}`,
+    );
+
+    // O outro sentido. Entrada que sobrevive à chave que a justificava afirma
+    // um risco que o banco não tem, e foi exatamente assim que a entrada de
+    // `found_reports.tag_id` precisou sair do registro de pares.
+    const noBanco = new Set(nulosContraCascata.map((n) => n.chave));
+    assert.deepEqual(
+      Object.keys(NULOS_CONTRA_CASCATA_DE_TERCEIRO)
+        .filter((c) => !noBanco.has(c))
+        .sort(),
+      [],
+      'veredito declarado para um formato que o banco não tem mais. Se a ação de deleção ' +
+        'mudou, apague a linha: registro que não corresponde ao banco é pior que registro ' +
+        'nenhum, porque ele é lido como se correspondesse.',
+    );
+  });
+
+  void it('nenhum nulo em contradição com cascata de terceiro sobreviveu no banco', () => {
+    const contradizem = nulosContraCascata
+      .filter((n) => NULOS_CONTRA_CASCATA_DE_TERCEIRO[n.chave]?.veredito === 'contradiz')
+      .map(
+        (n) =>
+          `${descrever(n)}` +
+          `\n    medido: ${NULOS_CONTRA_CASCATA_DE_TERCEIRO[n.chave]?.medicao ?? '(sem medição)'}`,
+      );
+
+    assert.deepEqual(
+      contradizem,
+      [],
+      'o UPDATE do SET NULL revalida uma chave contra um pai que a cascata já apagou na mesma ' +
+        'instrução: 23503, e em caminho de exclusão de conta isto é dado pessoal que não se ' +
+        'consegue apagar.' +
         `${contradizem.join('')}`,
     );
   });
@@ -1128,6 +1486,197 @@ void describe('o efeito, e não só a declaração: apagar uma conta de verdade'
         'o aviso de leitura de QR não sobreviveu inteiro à tentativa de apagar a tag. Se ele ' +
           'sumiu, a ação virou CASCADE e o produto passou a apagar a prova de um resgate ' +
           'porque a plaquinha foi descartada. Se `tag_id` ficou nulo, o SET NULL voltou.',
+      );
+    });
+  });
+});
+
+// ===========================================================================
+// A ISCA DA QUINTA FORMA
+// ===========================================================================
+// Verificação que nunca reprovou não é verificação, e a única prova disponível
+// aqui é o defeito de 22/09 em si. Este bloco DEVOLVE o `SET NULL` ao banco,
+// dentro de uma transação que termina em `ROLLBACK`, e exige duas coisas do
+// portão: que ele acuse, e que a acusação diga ONDE.
+//
+// "O portão acusa" sozinho não bastaria. Uma mensagem como "há um risco no
+// esquema" reprova igual e não conserta nada: quem ler daqui a um mês precisa
+// das três tabelas e do caminho da cascata para saber o que abrir. Por isso a
+// asserção abaixo confere o TEXTO, e não só a quantidade.
+//
+// A DDL dentro da transação é de propósito, e é segura: o Postgres tem DDL
+// transacional, então o `ROLLBACK` devolve a chave ao `CASCADE` mesmo se uma
+// asserção estourar no meio. A alternativa — medir num banco à parte — mediria
+// outro esquema, que é precisamente o erro que este arquivo existe para não
+// cometer.
+
+const ACHADORA = '9e1f0000-0000-4000-8000-0000000000c1';
+const TUTORA = '9e1f0000-0000-4000-8000-0000000000c2';
+const PET_DA_TUTORA = '9e1f0000-0000-4000-8000-0000000000cb';
+const AVISO_DA_ACHADORA = '9e1f0000-0000-4000-8000-0000000000cc';
+const CONVERSA = '9e1f0000-0000-4000-8000-0000000000cd';
+const MENSAGEM = '9e1f0000-0000-4000-8000-0000000000ce';
+
+void describe('a isca da quinta forma: com o SET NULL de volta, o portão precisa acusar', () => {
+  /**
+   * A massa mínima do defeito: a achadora registra o aviso, a conversa nasce
+   * desse aviso, e a achadora escreve UMA mensagem. Sem a mensagem não há neto
+   * para revalidar nada, e o caminho conclui — foi assim que o defeito passou
+   * despercebido nas duas branches de origem.
+   */
+  async function comConversa(corpo: () => Promise<void>): Promise<void> {
+    await cliente.query('BEGIN');
+    try {
+      await cliente.query(
+        `insert into users (id, email) values
+           ($1, 'achadora@isca.test'), ($2, 'tutora@isca.test')`,
+        [ACHADORA, TUTORA],
+      );
+      await cliente.query(
+        `insert into pets (id, owner_user_id, name, species_code, size_code)
+         values ($1, $2, 'Mel', 'dog', 'M')`,
+        [PET_DA_TUTORA, TUTORA],
+      );
+      await cliente.query(
+        `insert into found_reports
+           (id, origin, reporter_user_id, found_at, species, size, found_city, retention_until)
+         values ($1, 'stray_report', $2, now(), 'dog', 'M', 'Sao Paulo',
+                 now() + interval '90 days')`,
+        [AVISO_DA_ACHADORA, ACHADORA],
+      );
+      await cliente.query(
+        `insert into conversations (id, found_report_id, pet_id, tutor_user_id, finder_user_id)
+         values ($1, $2, $3, $4, $5)`,
+        [CONVERSA, AVISO_DA_ACHADORA, PET_DA_TUTORA, TUTORA, ACHADORA],
+      );
+      await cliente.query(
+        `insert into conversation_messages
+           (id, conversation_id, sender_role, sender_user_id, body)
+         values ($1, $2, 'finder', $3, 'achei seu cachorro')`,
+        [MENSAGEM, CONVERSA, ACHADORA],
+      );
+      await corpo();
+    } finally {
+      await cliente.query('ROLLBACK');
+    }
+  }
+
+  /** Devolve `conversation_messages.sender_user_id` ao `SET NULL` de antes de 22/09. */
+  async function reporOSetNull(): Promise<void> {
+    await cliente.query(
+      `alter table conversation_messages
+         drop constraint conversation_messages_sender_user_id_fkey`,
+    );
+    await cliente.query(
+      `alter table conversation_messages
+         add constraint conversation_messages_sender_user_id_fkey
+         foreign key (sender_user_id) references users (id) on delete set null`,
+    );
+  }
+
+  void it('com o SET NULL de volta, a descoberta acusa nomeando as três tabelas e o caminho', async () => {
+    await comConversa(async () => {
+      await reporOSetNull();
+
+      const achados = await descobrirNulosContraCascata(cliente);
+      const chave =
+        'public.conversation_messages.conversation_messages_sender_user_id_fkey + ' +
+        'conversation_messages_conversation_id_fkey';
+      const achado = achados.find((n) => n.chave === chave);
+
+      assert.ok(
+        achado,
+        'o SET NULL de 22/09 está de volta no banco e a descoberta da quinta forma NÃO o ' +
+          'encontrou. O portão parou de enxergar a classe inteira, e o defeito que custou ' +
+          'uma exclusão de conta passaria de novo.\nachou: ' +
+          `${achados.map((n) => n.chave).join(', ') || '(nada)'}`,
+      );
+
+      // A acusação precisa CONSERTAR, e para isso ela nomeia as três tabelas e
+      // o caminho. Medir só a quantidade deixaria a mensagem apodrecer.
+      const texto = descrever(achado);
+      for (const exigido of [
+        'public.conversation_messages',
+        'conversation_messages_sender_user_id_fkey',
+        'public.users',
+        'conversation_messages_conversation_id_fkey',
+        'public.conversations',
+        // Os DOIS caminhos, porque os dois existem: apagar o tutor leva a
+        // conversa direto, e apagar quem registrou o aviso a leva pelo aviso.
+        // Exigir só um deixaria a agregação apodrecer sem ninguém ver.
+        'public.users -> public.conversations',
+        'public.users -> public.found_reports -> public.conversations',
+      ]) {
+        assert.ok(
+          texto.includes(exigido),
+          `a acusação da quinta forma não diz "${exigido}". Quem ler daqui a um mês precisa ` +
+            'das três tabelas e do caminho da cascata para saber o que abrir; sem isso a ' +
+            `reprovação é ruído.\nacusação:${texto}`,
+        );
+      }
+
+      // E ela precisa cair no lado que reprova, não só aparecer na lista.
+      assert.equal(
+        NULOS_CONTRA_CASCATA_DE_TERCEIRO[chave],
+        undefined,
+        'o formato que a migração 20260922000005 eliminou voltou a estar declarado no ' +
+          'registro. Ele não deve ter entrada: com o CASCADE de pé ele não existe no banco.',
+      );
+    });
+  });
+
+  void it('com o SET NULL de volta, apagar a conta de quem achou FALHA com 23503', async () => {
+    await comConversa(async () => {
+      await reporOSetNull();
+      await cliente.query('SAVEPOINT tentativa');
+
+      try {
+        await cliente.query('delete from users where id = $1', [ACHADORA]);
+        assert.fail(
+          'com o SET NULL de 22/09 de volta, apagar a conta de quem achou o animal CONCLUIU. ' +
+            'Ou a ordem dos gatilhos de cascata mudou, ou o esquema mudou: o defeito que a ' +
+            'migração 20260922000005 corrige deixou de ser reproduzível, e o portão passou a ' +
+            'vigiar uma classe que ninguém consegue mais provar que existe.',
+        );
+      } catch (erro) {
+        if (erro instanceof assert.AssertionError) throw erro;
+        assert.equal(
+          codigoDoErro(erro),
+          '23503',
+          'esperava 23503 na revalidação da chave do neto. Outro código significa que a ' +
+            'falha mudou de natureza, e a medição escrita na migração deixou de valer.',
+        );
+      } finally {
+        await cliente.query('ROLLBACK TO tentativa');
+      }
+    });
+  });
+
+  void it('com o CASCADE de hoje, a mesma exclusão CONCLUI e não sobra linha órfã', async () => {
+    // A outra metade da isca. Portão que reprova o caminho certo junto com o
+    // errado é portão desligado na primeira semana, e o jeito de não reprovar
+    // quem está certo é provar que o certo passa.
+    await comConversa(async () => {
+      await cliente.query('delete from users where id = $1', [ACHADORA]);
+
+      const { rows } = await cliente.query<{
+        conversas: string;
+        mensagens: string;
+        avisos: string;
+        tutora: string;
+      }>(
+        `select (select count(*) from conversations where id = $1)          as conversas,
+                (select count(*) from conversation_messages where id = $2) as mensagens,
+                (select count(*) from found_reports where id = $3)         as avisos,
+                (select count(*) from users where id = $4)                 as tutora`,
+        [CONVERSA, MENSAGEM, AVISO_DA_ACHADORA, TUTORA],
+      );
+      assert.deepEqual(
+        rows[0],
+        { conversas: '0', mensagens: '0', avisos: '0', tutora: '1' },
+        'a exclusão concluiu mas o que sobrou não é o esperado. A conversa e a mensagem saem ' +
+          'junto com o aviso, pela cascata; a conta da TUTORA não é tocada. Se a tutora sumiu, ' +
+          'alguma cascata passou a atravessar para o lado errado.',
       );
     });
   });
