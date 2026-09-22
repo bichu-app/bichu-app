@@ -23,6 +23,7 @@
 // faixa de cadastro ja morava la antes desta historia. Os casos usam
 // `Rotas.pets` por isso, e nao por conveniencia.
 
+import 'package:bichu/api/modelos.dart';
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/avisos/aviso_de_cadastro_incompleto.dart';
@@ -140,20 +141,34 @@ void main() {
   group('criterio 7 — quem verificou nao ve nada', () {
     testWidgets('ISCA — e-mail verificado apaga o aviso das DUAS abas',
         (tester) async {
+      // O E-MAIL VERIFICADO **E** O TELEFONE FALTANDO, e a combinacao e o caso
+      // inteiro. Com `pendencias` vazia, `cadastroIncompleto` e falso por
+      // conta propria e este caso passaria mesmo com a condicao velha -- uma
+      // isca que nao reprova o defeito que ela existe para pegar. Medido em
+      // 22/09: com `pendencias: []`, desligar a isca deixou tudo verde.
+      //
+      // `phone` pendente e o estado comum de quem acabou de confirmar o
+      // e-mail: `cadastroIncompleto` fica VERDADEIRO e a condicao velha
+      // mostraria "Confirme seu e-mail" sobre um e-mail ja confirmado.
       await abrirOApp(
         tester,
-        deposito: depositoLogado(emailVerificado: true),
+        deposito: depositoLogado(
+          emailVerificado: true,
+          pendencias: const <PendenciaDeCadastro>[PendenciaDeCadastro.telefone],
+        ),
         cacheDeMeusPets: _cacheCom(<Pet>[_pet()]),
         rede: _redeMuda,
       );
 
       await irPara(tester, Rotas.pets);
       expect(
-        find.byType(AvisoDeCadastroIncompleto).evaluate().isEmpty ||
-            find.text('Confirme seu e-mail').evaluate().isEmpty,
-        isTrue,
+        find.text('Confirme seu e-mail'),
+        findsNothing,
+        reason: 'REPROVA: a conta tem o e-mail CONFIRMADO e o telefone '
+            'faltando, e a faixa de confirmar e-mail apareceu assim mesmo. A '
+            'condicao voltou a ser `cadastroIncompleto`, que e verdadeiro '
+            'quando falta qualquer campo do perfil.',
       );
-      expect(find.text('Confirme seu e-mail'), findsNothing);
       expect(find.text('E-mail não confirmado'), findsNothing);
 
       await irPara(tester, Rotas.perfil);
