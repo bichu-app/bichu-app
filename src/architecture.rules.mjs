@@ -11,7 +11,7 @@
 
 /** Módulos do monólito modular (ADR-0001). */
 export const MODULES = [
-  'identity', 'pets', 'tags', 'lostfound',
+  'identity', 'pets', 'tags', 'lostfound', 'found',
   'messaging', 'media', 'notifications', 'professionals', 'audit',
 ];
 

@@ -47,8 +47,13 @@ import { problemas, type AppError } from './errors.js';
 import { hmacDeEnderecoIp } from '../crypto/digest.js';
 
 /**
- * As dimensões declaradas no contrato. Nove, e não as seis que a BICHUS-178
- * lista: `ip_24`, `origin` e `pet` também são declaradas hoje.
+ * As dimensões declaradas no contrato. Dez, e não as seis que a BICHUS-178
+ * lista: `ip_24`, `origin`, `pet` e `found_report` também são declaradas hoje.
+ *
+ * A lista cresce quando uma rota que declara a dimensão passa a existir, e não
+ * quando o contrato passa a declará-la: uma dimensão aqui sem rota que a use
+ * seria um nome que nada resolve, e `registrar-rota.ts` deixaria de acusar a
+ * falta do resolvedor em tempo de compilação para justamente essa.
  */
 export const DIMENSOES_CONHECIDAS = [
   'ip',
@@ -60,6 +65,10 @@ export const DIMENSOES_CONHECIDAS = [
   'email',
   'token_family',
   'finder_identity',
+  // BICHUS-35. O teto de três fotos por aviso do achador (SEC-009) é por AVISO e
+  // não por conta: a mesma pessoa pode registrar vários achados, e um teto por
+  // conta faria o segundo animal da noite ficar sem foto nenhuma.
+  'found_report',
 ] as const;
 
 export type Dimensao = (typeof DIMENSOES_CONHECIDAS)[number];

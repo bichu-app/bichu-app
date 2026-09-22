@@ -32,6 +32,7 @@ import * as pets from '../../modules/pets/adapters/http/pet-routes.js';
 import * as referencia from '../../modules/pets/adapters/http/reference-data-routes.js';
 import * as midia from '../../modules/media/adapters/http/media-routes.js';
 import * as casos from '../../modules/lostfound/adapters/http/lost-case-routes.js';
+import * as achados from '../../modules/found/adapters/http/found-report-routes.js';
 import * as tags from '../../modules/tags/adapters/http/tag-routes.js';
 import * as webhook from '../../modules/notifications/adapters/http/webhook-de-entrega.js';
 import * as saude from './health.js';
@@ -45,6 +46,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   referencia,
   midia,
   casos,
+  // BICHUS-35. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
+  achados,
   tags,
   webhook,
   saude,
