@@ -1,0 +1,10 @@
+# REPROVA por `hashFiles(...)`. Ela le o disco em tempo de execucao: e a mesma
+# premissa de `[ -f package.json ]`, escrita numa expressao em vez de num passo.
+name: isca-hashfiles
+on: [push]
+jobs:
+  codigo:
+    runs-on: ubuntu-latest
+    steps:
+      - if: hashFiles('package.json') != ''
+        run: npm test

@@ -1,0 +1,10 @@
+# REPROVA por `env.*`. O passo anterior escreve a variavel via $GITHUB_ENV, e o
+# efeito e identico ao de `steps.*.outputs.*`: a premissa e do proprio job.
+name: isca-env
+on: [push]
+jobs:
+  codigo:
+    runs-on: ubuntu-latest
+    steps:
+      - if: env.TEM_CODIGO == 'sim'
+        run: npm test

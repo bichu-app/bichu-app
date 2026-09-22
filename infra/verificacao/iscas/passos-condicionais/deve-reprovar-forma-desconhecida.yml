@@ -1,0 +1,10 @@
+# REPROVA por forma nao reconhecida. A lista do portao e de PERMITIDOS: o que
+# ele nao previu reprova, em vez de passar por omissao.
+name: isca-forma-desconhecida
+on: [push]
+jobs:
+  codigo:
+    runs-on: ubuntu-latest
+    steps:
+      - if: contexto_novo.valor == 'sim'
+        run: npm test
