@@ -24,6 +24,7 @@ library;
 
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 /// Onde a permissao de aviso esta, do ponto de vista de quem decide se pergunta.
 enum PermissaoDeAviso {
@@ -87,6 +88,19 @@ abstract class Avisos {
   /// e registrado no servidor assim mesmo (ADR-0008) -- e esse registro que
   /// permite contar quantos tutores sao de fato alcancaveis.
   Future<String?> token();
+
+  /// Abre os ajustes do sistema (BICHUS-24).
+  ///
+  /// **E o unico caminho de volta de quem esta em [PermissaoDeAviso.negada]**,
+  /// e por isso ele precisa existir nesta porta e nao so na da camera. UX 10.1
+  /// fecha o assunto: "Nenhum dialogo repetido. O caminho para reverter e
+  /// `Ligar nos ajustes`, que abre os ajustes do sistema, e existe tambem em
+  /// Perfil."
+  ///
+  /// Sem isto quem nega fica num beco sem saida: o app nunca mais pergunta,
+  /// por desenho, e nao oferece nenhum outro caminho. Um app que so sabe se
+  /// calar diante da propria recusa nao e prudente, e omisso.
+  Future<void> abrirAjustesDoSistema();
 }
 
 /// A implementacao de verdade: FCM pelo `firebase_messaging`.
@@ -152,6 +166,17 @@ class AvisosPorFirebase implements Avisos {
     return FirebaseMessaging.instance.getToken();
   }
 
+  @override
+  Future<void> abrirAjustesDoSistema() async {
+    if (plataforma == null) return;
+    // `openAppSettings()` do `permission_handler`, o mesmo que a porta da
+    // camera usa. Ele abre a pagina DO APP nos ajustes, e nao a raiz: a
+    // pessoa que chegou aqui esta atras de uma chave, e a raiz dos ajustes
+    // com a chave a tres niveis de profundidade e o mesmo que nao oferecer
+    // caminho nenhum.
+    await openAppSettings();
+  }
+
   static PermissaoDeAviso _traduzir(AuthorizationStatus status) {
     switch (status) {
       case AuthorizationStatus.authorized:
@@ -197,4 +222,11 @@ class AvisosNaoEmbarcados implements Avisos {
 
   @override
   Future<String?> token() async => null;
+
+  /// **Nao abre nada, e isso e a resposta certa.** Sem push neste processo nao
+  /// ha permissao de notificacao a conceder; mandar a pessoa aos ajustes a
+  /// faria procurar uma chave que nao esta la. Quem decide nao oferecer o
+  /// caminho e a tela, olhando o estado, e nao esta classe.
+  @override
+  Future<void> abrirAjustesDoSistema() async {}
 }

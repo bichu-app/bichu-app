@@ -156,10 +156,36 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// tag nao tem imagem" de "nao consegui buscar". Nenhuma das duas encosta na
 /// porta `CameraEGaleria`, que e o que o criterio 10 protege.
 ///
+/// **Destravado uma oitava vez pela BICHUS-24**, "duas oportunidades e nao
+/// mais". A trava reprovou com `648b91a936...` contra o
+/// `3831b7207e32ae96a7ac40852e3681017eb81918` medido, que e o ato deliberado
+/// que ela cobra. Quatro arquivos, e nenhum deles encosta na porta
+/// `CameraEGaleria`:
+///
+/// - `avisos/pedido_de_aviso.dart` **nasceu**: o fluxo do pedido de permissao
+///   saiu de dentro de F1.6 porque F3.2 e a SEGUNDA oportunidade da mesma
+///   permissao, e reimplementa-lo la faria "duas oportunidades" virar "duas em
+///   cada tela" sem ninguem decidir.
+/// - `avisos/antessala_de_aviso.dart` ganhou a segunda variante (criterio 4) e
+///   os textos de quem negou. **O mesmo widget para as duas**, porque o
+///   criterio 6 diz "a antessala em qualquer ponto" e duas `Column` copiadas
+///   divergem na primeira vez que alguem mexe numa so.
+/// - `pet/tela_pet_cadastrado.dart` perdeu o `_resolverAviso` inteiro e ficou
+///   com o que e da tela: quando chamar, e o que fazer com a faixa de falha.
+/// - `abas.dart` ganhou a linha de Perfil de quem negou, com `Ligar nos
+///   ajustes` (UX 10.1). Sem ela, o rigor de nao repetir o dialogo virava beco
+///   sem saida.
+///
+/// O portao de diretivas abaixo continua valendo sobre as quatro, e e ele que
+/// responde pelo que o criterio 10 de fato protege: nenhuma delas importa
+/// plugin de aparelho nem abre canal de plataforma. O acesso ao servico de
+/// notificacao continua atras da porta `Avisos`, em `lib/dispositivo/`, que e
+/// onde `openAppSettings()` passou a morar.
+///
 /// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
 /// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
 /// que essa issue deixou, e nao o que um commit de setembro deixou.
-const String _arvoreDasTelas = '648b91a93693066cc2346c754e11fca080d98101';
+const String _arvoreDasTelas = '3831b7207e32ae96a7ac40852e3681017eb81918';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

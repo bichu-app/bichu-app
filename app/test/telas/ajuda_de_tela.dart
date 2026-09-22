@@ -25,6 +25,7 @@ import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
+import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
@@ -146,6 +147,18 @@ class AvisosDeTeste implements Avisos {
   @override
   Future<String?> token() async =>
       estadoAtual == PermissaoDeAviso.concedida ? tokenDoAparelho : null;
+
+  /// **O contador da outra isca.** Quem negou tem UM caminho de volta, e ele e
+  /// este: se ele nunca for chamado, `Ligar nos ajustes` e um rotulo.
+  int vezesQueAbriuAjustes = 0;
+
+  @override
+  Future<void> abrirAjustesDoSistema() async => vezesQueAbriuAjustes += 1;
+
+  /// Simula a pessoa mexendo na chave PELOS AJUSTES, com o app em segundo
+  /// plano. Nao passa por `pedir()` de proposito: o dialogo do sistema nao
+  /// abre de novo, e e exatamente por isso que este caminho existe.
+  void mudarPelosAjustes(PermissaoDeAviso novo) => estadoAtual = novo;
 }
 
 /// Uma resposta `application/problem+json` do contrato.
@@ -246,6 +259,16 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   /// OLHAR dentro dele depois de a sessao cair, e o que ele guarda e uma
   /// credencial.
   CofreDaImagemDoQr? cofreDoQr,
+  /// O registro das duas oportunidades de aviso (BICHUS-24).
+  ///
+  /// Entra por aqui pelos dois motivos do envelope de intencao e mais um: o
+  /// padrao do app e um arquivo, e `getApplicationDocumentsDirectory()` e um
+  /// canal de plataforma que trava o `pumpAndSettle` para sempre, sem
+  /// mensagem. O motivo a mais e que **um caso precisa montar o app com uma
+  /// oportunidade JA gasta** -- o estado de quem cadastrou um pet ontem --, e
+  /// isso nao se produz passando pelo fluxo duas vezes, porque cada
+  /// `pumpWidget` e um app novo, com disco novo.
+  DepositoDeOportunidadesEmMemoria? oportunidades,
   /// A escala de fonte do sistema. `null` usa a do ambiente (1,0).
   ///
   /// Entra por aqui, e nao por um `pumpWidget` proprio no caso, porque o
@@ -281,6 +304,8 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         cacheDeMeusPets: cacheDeMeusPets,
         cofreDoQr: cofreDoQr,
         camera: camera ?? const CameraNaoEmbarcada(),
+        depositoDeOportunidades:
+            oportunidades ?? DepositoDeOportunidadesEmMemoria(),
         // O padrao e o mesmo do app quando o Firebase nao subiu: nenhum canal de
         // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`
         // de verdade travaria a suite num `Future` que nunca resolve.

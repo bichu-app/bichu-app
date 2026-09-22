@@ -11,6 +11,8 @@ import 'api/pets_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
+import 'dispositivo/oportunidades_de_aviso.dart';
+import 'dispositivo/vigia_de_aviso.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
@@ -34,6 +36,7 @@ class BichuApp extends StatefulWidget {
     this.depositoDeIntencao,
     this.cacheDeMeusPets,
     this.cofreDoQr,
+    this.depositoDeOportunidades,
   });
 
   final AppConfig config;
@@ -94,6 +97,20 @@ class BichuApp extends StatefulWidget {
   /// e uma credencial.
   final CofreDaImagemDoQr? cofreDoQr;
 
+  /// Onde o registro das duas oportunidades mora (BICHUS-24).
+  ///
+  /// Injetavel pelo mesmo motivo do envelope de intencao: o padrao e um
+  /// arquivo no diretorio do app, e `getApplicationDocumentsDirectory()` e um
+  /// canal de plataforma que nao existe em teste de widget. Sem esta injecao
+  /// qualquer caso que chegue a F1.6 travaria sem mensagem, esperando um
+  /// `Future` que nunca resolve.
+  ///
+  /// **E tambem o unico jeito de um caso provar o limite de duas.** Ele
+  /// precisa montar o app com uma oportunidade JA gasta, que e o estado de
+  /// quem cadastrou um pet ontem -- e nenhum teste consegue produzir isso
+  /// passando pelo fluxo duas vezes, porque cada `pumpWidget` e um app novo.
+  final DepositoDeOportunidades? depositoDeOportunidades;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -111,6 +128,8 @@ class _BichuAppState extends State<BichuApp> {
   late final GoRouter _roteador;
   late final CacheDeMeusPets _cacheDeMeusPets;
   late final CofreDaImagemDoQr _cofreDoQr;
+  late final OportunidadesDeAviso _oportunidades;
+  late final VigiaDeAviso _vigiaDeAviso;
 
   @override
   void initState() {
@@ -131,6 +150,11 @@ class _BichuAppState extends State<BichuApp> {
     _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraDoAparelho();
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
+    _oportunidades = OportunidadesDeAviso(
+      deposito: widget.depositoDeOportunidades ??
+          DepositoDeOportunidadesEmArquivo(),
+    );
+    _vigiaDeAviso = VigiaDeAviso(avisos: _avisos, devices: _devices)..ligar();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
       rotaDaTela: Rotas.rotaDaTelaDeUx,
@@ -166,6 +190,17 @@ class _BichuAppState extends State<BichuApp> {
       // referencia viva e DEIXA a entrada no cache. Limpar no `dispose` da tela
       // repetiria o defeito do `cacheDeMeusPets` -- a sessao derrubada por
       // refresh recusado nao passa por tela nenhuma.
+      //
+      // O QUE **NAO** ENTRA NESTA LISTA, e por que (BICHUS-24): o registro das
+      // duas oportunidades de aviso (`OportunidadesDeAviso`). Esta lista e do
+      // que e da CONTA -- dado e credencial de uma pessoa, que nao podem vazar
+      // para a proxima que entrar neste aparelho. O registro das oportunidades
+      // e do APARELHO: o dialogo de notificacao do iOS e gasto uma vez por
+      // instalacao, nao por login. Limpa-lo aqui daria ao tutor seguinte duas
+      // antessalas novas cujo `Sim` abriria um dialogo que o sistema nao mostra
+      // mais, e ele ficaria olhando para um botao que nao faz nada. A isca que
+      // segura esta decisao esta em
+      // `test/dispositivo/oportunidades_de_aviso_test.dart`.
       limpezasAoSair: <LimpezaAoSair>[
         () async => _cacheDeMeusPets.limpar(),
         _cofreDoQr.limpar,
@@ -177,6 +212,7 @@ class _BichuAppState extends State<BichuApp> {
 
   @override
   void dispose() {
+    _vigiaDeAviso.dispose();
     _sessao.dispose();
     _api.fechar();
     super.dispose();
@@ -192,6 +228,8 @@ class _BichuAppState extends State<BichuApp> {
       devices: _devices,
       camera: _camera,
       avisos: _avisos,
+      oportunidades: _oportunidades,
+      vigiaDeAviso: _vigiaDeAviso,
       sessao: _sessao,
       guarda: _guarda,
       cacheDeMeusPets: _cacheDeMeusPets,

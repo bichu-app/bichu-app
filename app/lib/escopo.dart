@@ -7,6 +7,8 @@ import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
+import 'dispositivo/oportunidades_de_aviso.dart';
+import 'dispositivo/vigia_de_aviso.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'telas/perfil/meus_pets.dart';
 import 'sessao/controlador_de_sessao.dart';
@@ -26,6 +28,8 @@ class Escopo extends InheritedWidget {
     required this.devices,
     required this.camera,
     required this.avisos,
+    required this.oportunidades,
+    required this.vigiaDeAviso,
     required this.sessao,
     required this.guarda,
     required this.cacheDeMeusPets,
@@ -48,6 +52,22 @@ class Escopo extends InheritedWidget {
   /// camera: notificacao nao se verifica em simulador, e o que o teste precisa
   /// exercitar e a reacao da tela aos quatro estados.
   final Avisos avisos;
+
+  /// Quais das DUAS oportunidades de UX 10.1 ja foram gastas neste aparelho
+  /// (BICHUS-24).
+  ///
+  /// Fica no escopo, e nao dentro da tela, porque as duas oportunidades moram
+  /// em telas diferentes -- F1.6 e F3.2 -- e precisam contar a MESMA coisa.
+  /// Duas instancias sobre o mesmo arquivo perderiam uma da outra, e o limite
+  /// de duas viraria dois limites de uma.
+  final OportunidadesDeAviso oportunidades;
+
+  /// Quem reconcilia a permissao de aviso quando ela muda com o app aberto.
+  ///
+  /// Fica no escopo porque quem precisa dela e o Perfil, para saber se mostra
+  /// `Ligar nos ajustes`, e o fluxo da antessala, para lhe contar o que
+  /// descobriu. Ver [VigiaDeAviso].
+  final VigiaDeAviso vigiaDeAviso;
 
   final ControladorDeSessao sessao;
 
@@ -93,6 +113,8 @@ class Escopo extends InheritedWidget {
       devices != anterior.devices ||
       camera != anterior.camera ||
       avisos != anterior.avisos ||
+      oportunidades != anterior.oportunidades ||
+      vigiaDeAviso != anterior.vigiaDeAviso ||
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
       cacheDeMeusPets != anterior.cacheDeMeusPets ||
