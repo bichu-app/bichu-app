@@ -23,9 +23,27 @@ import {
   segundosRestantes,
   tokenFoiRevogado,
 } from '../domain/session.js';
-import type { CamposDoPerfil, Conta } from '../ports/identity-repository.js';
+import type {
+  CamposDoPerfil,
+  Conta,
+  MotivoDeRevogacao,
+} from '../ports/identity-repository.js';
+
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
+
+/**
+ * Os motivos que derrubam a conta INTEIRA — os gatilhos do SEC-006.
+ *
+ * `rotation`, `reuse_detected` e `logout` ficam de fora porque valem para UMA
+ * família. O tipo é estreito de propósito: `logout` aqui apagaria da trilha a
+ * diferença entre sair de um aparelho e derrubar a conta, que é a distinção que
+ * a emenda 1 do ADR-0002 existe para fixar.
+ */
+type MotivoDeRevogacaoEmMassa = Extract<
+  MotivoDeRevogacao,
+  'logout_all' | 'password_changed' | 'account_deleted'
+>;
 
 export interface EntradaDeCadastro {
   readonly email: string;
@@ -232,6 +250,35 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       refreshToken,
       refreshExpiresAt: prazos.expiresAt,
     };
+  }
+
+  /**
+   * As DUAS metades da revogação em massa, num lugar só. Ver o comentário de
+   * `invalidarTodasAsSessoes`, que é a porta pública desta função.
+   *
+   * Existe como função interna, e não como chamada repetida em cada gatilho,
+   * porque quatro cópias de "revoga e empurra" são quatro chances de alguém
+   * mexer numa e esquecer das outras três — que é exatamente como a redefinição
+   * de senha ficou empurrando a barreira sem revogar família nenhuma.
+   */
+  async function derrubarTodasAsSessoes(
+    userId: UserId,
+    motivo: MotivoDeRevogacaoEmMassa,
+    contexto: ContextoDaRequisicao,
+    agora: Instant,
+  ): Promise<void> {
+    const familiasCaidas = await deps.repositorio.revogarTodasAsFamilias(userId, motivo, agora);
+    await deps.repositorio.invalidarSessoes(userId, agora);
+    await deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: userId,
+      actorIp: contexto.ip,
+      correlationId: contexto.correlationId,
+      action: 'auth.sessions_revoked',
+      resourceKind: 'user',
+      resourceId: userId,
+      metadata: { reason: motivo, revoked_families: familiasCaidas },
+    });
   }
 
   return {
@@ -749,9 +796,12 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // emitido antes da troca continuaria valendo depois dela, e é por ele
       // que quem tomou a conta volta.
       await deps.repositorio.invalidarTokensPendentes(consumido.userId, agora);
-      // Critério 5: todas as sessões e todos os refresh. Efeito em menos de um
-      // segundo, e não nos até 15 minutos de validade do JWT.
-      await deps.repositorio.invalidarSessoes(consumido.userId, agora);
+      // Critério 5: todas as sessões e todos os refresh. As DUAS metades
+      // (BICHUS-125): a barreira derruba o token de acesso em menos de um
+      // segundo, e a revogação das famílias mata o refresh copiado antes da
+      // troca. Até aqui só a barreira era empurrada, e as linhas de
+      // `refresh_tokens` seguiam vivas até vencerem por inatividade.
+      await derrubarTodasAsSessoes(consumido.userId, 'password_changed', contexto, agora);
 
       await deps.trilha.record({
         actorKind: 'user',
@@ -776,23 +826,146 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       });
     },
 
-    /** Empurra `sessions_invalid_before`. Usada pelos cinco gatilhos do SEC-006. */
+    /**
+     * Os cinco gatilhos do SEC-006 passam por aqui, e ela faz **duas** coisas.
+     *
+     * 1. Revoga **todas as famílias de refresh** da conta. É o efeito: sem ele
+     *    as linhas seguem vivas no banco até vencerem por inatividade.
+     * 2. Empurra `sessions_invalid_before`. É a barreira: derruba o token de
+     *    **acesso** já emitido em menos de um segundo, sem esperar o `exp`.
+     *
+     * **Nenhuma das duas substitui a outra**, e a ordem não é estilo. A
+     * revogação vem primeiro porque, entre os dois passos, um refresh copiado
+     * que chegasse a `renovar()` rotacionaria e receberia um token de acesso com
+     * `iat = agora` — depois da barreira, portanto imune a ela. Com a revogação
+     * primeiro, esse refresh já encontra `revokedAt` preenchido. A barreira lida
+     * por `renovar()` (BICHUS-77) é rede de proteção para o caso de esta ordem
+     * ser desfeita; ela não é motivo para prescindir da revogação.
+     *
+     * Idempotente: chamada com a conta já sem sessão nenhuma, revoga zero linhas
+     * e grava o evento assim mesmo. O evento é do **pedido**, não do efeito.
+     */
     async invalidarTodasAsSessoes(
       userId: UserId,
-      motivo: 'logout' | 'password_changed' | 'account_deleted',
+      motivo: MotivoDeRevogacaoEmMassa,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      await derrubarTodasAsSessoes(userId, motivo, contexto, deps.clock.now());
+    },
+
+    /**
+     * "Sair de todos os aparelhos" — o segundo verbo da emenda 1 do ADR-0002.
+     *
+     * É o remédio de quem perdeu o aparelho, e o único que fecha a janela de até
+     * 15 minutos que o logout comum deixa aberta de propósito.
+     *
+     * A conta **é a do token**, nunca do corpo do pedido: derrubar a conta de
+     * outra pessoa não pode ser possível nem com o identificador dela na mão
+     * (ADR-0021 — a autorização vai na cláusula, não num `if` de papel).
+     *
+     * Quem pediu também cai, e isso é o desenho: o aparelho de onde o pedido
+     * saiu é um dos "todos". A tela avisa e o app reautentica.
+     */
+    async sairDeTodosOsAparelhos(
+      autenticado: Autenticado,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const conta = autenticado.conta;
+      await derrubarTodasAsSessoes(conta.id, 'logout_all', contexto, deps.clock.now());
+
+      // Se quem pediu não foi o titular, este e-mail é a única chance de ele
+      // descobrir hoje. Mesmo raciocínio do aviso da redefinição de senha.
+      await deps.mailer.enviar({
+        para: conta.email,
+        assunto: 'Suas sessoes do Bichu foram encerradas',
+        corpo:
+          'Todas as sessoes da sua conta no Bichu acabaram de ser encerradas, ' +
+          'em todos os aparelhos.\n\n' +
+          'Se foi voce, basta entrar de novo.\n\n' +
+          'Se nao foi, troque a sua senha agora mesmo: quem fez isso estava ' +
+          'dentro da sua conta.',
+      });
+    },
+
+    /**
+     * Troca a senha de quem está autenticado, conferindo a senha atual.
+     *
+     * A senha atual é conferida aqui — e não via `X-Reauth-Token` — porque é o
+     * que o contrato declara em `changePassword`: a operação leva
+     * `verifies_secret` e `current_password` no corpo, e **não** leva
+     * `reauth: []`. Trocar isso é mexer no contrato público, e não é desta
+     * história.
+     *
+     * A ordem das linhas é a mesma da redefinição, pelo mesmo motivo: a senha
+     * nova é validada **antes** de a atual ser conferida? Não — aqui é o
+     * inverso, e de propósito. A senha atual vem primeiro porque, enquanto ela
+     * não for conferida, quem está do outro lado pode ser o invasor: devolver
+     * "sua senha nova é fraca" a quem não provou saber a senha atual entrega
+     * informação sobre a política a quem não tinha direito a ela, e gasta CPU de
+     * hash a pedido de qualquer um com um token de acesso.
+     */
+    async trocarSenha(
+      autenticado: Autenticado,
+      senhaAtual: string,
+      senhaNova: string,
       contexto: ContextoDaRequisicao,
     ): Promise<void> {
       const agora = deps.clock.now();
-      await deps.repositorio.invalidarSessoes(userId, agora);
+      const conta = autenticado.conta;
+      const credencial = await deps.repositorio.buscarCredencialLocalPorEmail(conta.email);
+
+      // Conta sem senha local (só provedor externo, no futuro) e senha errada
+      // recebem a MESMA recusa. Distinguir diria a quem tomou o token de acesso
+      // se aquela conta tem senha — e é por aí que ele decide onde insistir.
+      if (credencial === undefined) {
+        await consumirTempoDeVerificacao(senhaAtual);
+        throw problemas.credencialRecusada();
+      }
+      if (!(await verificarSenha(senhaAtual, credencial.passwordPhc))) {
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: conta.id,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.password_change_refused',
+          resourceKind: 'user',
+          resourceId: conta.id,
+        });
+        throw problemas.credencialRecusada();
+      }
+
+      const problemasDaSenha = validarSenha(senhaNova, { email: conta.email });
+      if (problemasDaSenha.length > 0) throw problemas.senhaFraca(problemasDaSenha);
+
+      await deps.repositorio.regravarCredencial(
+        credencial.identityId,
+        await gerarHashDeSenha(senhaNova),
+        agora,
+      );
+
+      // Mesmo par da redefinição: link pendente cai junto, senão quem tomou a
+      // conta volta por um `password_reset` pedido antes da troca.
+      await deps.repositorio.invalidarTokensPendentes(conta.id, agora);
+      await derrubarTodasAsSessoes(conta.id, 'password_changed', contexto, agora);
+
       await deps.trilha.record({
         actorKind: 'user',
-        actorUserId: userId,
+        actorUserId: conta.id,
         actorIp: contexto.ip,
         correlationId: contexto.correlationId,
-        action: 'auth.sessions_revoked',
+        action: 'auth.password_changed',
         resourceKind: 'user',
-        resourceId: userId,
-        metadata: { reason: motivo },
+        resourceId: conta.id,
+      });
+
+      await deps.mailer.enviar({
+        para: conta.email,
+        assunto: 'Sua senha do Bichu foi alterada',
+        corpo:
+          'A senha da sua conta no Bichu acabou de ser alterada, e todas as ' +
+          'sessoes foram encerradas.\n\n' +
+          'Se foi voce, e so entrar de novo com a senha nova.\n\n' +
+          'Se nao foi, peca uma nova senha agora mesmo pelo aplicativo.',
       });
     },
 

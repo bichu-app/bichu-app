@@ -70,6 +70,7 @@ function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
     rotacionar: recusar('rotacionar'),
     revogarFamilia: recusar('revogarFamilia'),
     invalidarSessoes: recusar('invalidarSessoes'),
+    revogarTodasAsFamilias: recusar('revogarTodasAsFamilias'),
     criarTokenDeVerificacao: recusar('criarTokenDeVerificacao'),
     consumirTokenDeVerificacao: recusar('consumirTokenDeVerificacao'),
     conferirTokenDeVerificacao: recusar('conferirTokenDeVerificacao'),

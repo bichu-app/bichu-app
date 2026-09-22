@@ -151,6 +151,14 @@ class RepositorioFalso implements IdentityRepository {
    * como `naoUsado`, porque o que precisa reprovar é a chamada EXISTIR.
    */
   public readonly invalidacoesDeSessao: { userId: UserId; agora: Instant }[] = [];
+  /**
+   * A outra metade da mesma isca, e ela so passou a existir com a BICHUS-125:
+   * `sairDeTodosOsAparelhos` revoga as familias EM MASSA alem de empurrar
+   * `sessions_invalid_before`. Sair deste aparelho nao pode chamar nenhuma das
+   * duas, e uma isca que so olhasse a coluna deixaria passar a outra.
+   */
+  public readonly revogacoesEmMassa: { userId: UserId; motivo: MotivoDeRevogacao; agora: Instant }[] =
+    [];
 
   private readonly linhas = new Map<TokenHash, RefreshArmazenado & { revokedAt: Date | null }>();
 
@@ -195,6 +203,15 @@ class RepositorioFalso implements IdentityRepository {
   invalidarSessoes(userId: UserId, agora: Instant): Promise<void> {
     this.invalidacoesDeSessao.push({ userId, agora });
     return Promise.resolve();
+  }
+
+  revogarTodasAsFamilias(
+    userId: UserId,
+    motivo: MotivoDeRevogacao,
+    agora: Instant,
+  ): Promise<number> {
+    this.revogacoesEmMassa.push({ userId, motivo, agora });
+    return Promise.resolve(0);
   }
 
   buscarContaPorId(): Promise<Conta | undefined> {
@@ -437,6 +454,11 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
       bancada.repo.invalidacoesDeSessao,
       [],
       'sair deste aparelho não pode alcançar as outras sessões da mesma conta',
+    );
+    assert.deepEqual(
+      bancada.repo.revogacoesEmMassa,
+      [],
+      'sair deste aparelho não pode revogar as famílias das outras sessões (BICHUS-125)',
     );
   });
 

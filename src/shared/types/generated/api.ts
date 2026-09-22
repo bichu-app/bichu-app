@@ -139,6 +139,47 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Sai de todos os aparelhos e revoga todas as sessoes da conta
+         * @description O outro verbo da emenda 1 do ADR-0002. `POST /auth/logout` encerra **este**
+         *     aparelho revogando a familia de refresh apresentada; esta operacao encerra
+         *     **todos**: empurra `users.sessions_invalid_before` e revoga **todas** as
+         *     familias de refresh da conta.
+         *
+         *     As duas metades sao necessarias e nenhuma substitui a outra. A barreira
+         *     derruba os tokens de acesso em menos de um segundo; a revogacao das
+         *     familias impede que um refresh copiado antes continue renovando. Sem a
+         *     segunda, as linhas ficam vivas no banco ate vencerem por inatividade.
+         *
+         *     E o remedio de quem perdeu o aparelho, e o unico que fecha a janela de ate
+         *     15 minutos que o logout comum deixa aberta.
+         *
+         *     **Reautenticacao:** BICHUS-48 decide que esta operacao exige
+         *     `X-Reauth-Token`. A maquinaria de reautenticacao (`POST /auth/reauth`)
+         *     ainda nao existe em `src/`, e o enum `scope` daquela operacao tem quatro
+         *     valores, nenhum deles de revogacao de sessao. O cabecalho **nao** e
+         *     declarado aqui enquanto nao for aplicado: declarar exigencia que o codigo
+         *     nao impoe e a divergencia que este projeto ja pagou duas vezes. BICHUS-48
+         *     acrescenta o `reauth: []` e o escopo junto com o codigo que os aplica.
+         *
+         *     Idempotente: chamada com a conta ja sem sessao nenhuma, responde 204.
+         */
+        post: operations["logoutAllDevices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/email-verification": {
         parameters: {
             query?: never;
@@ -3434,6 +3475,26 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    logoutAllDevices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Todas as sessoes da conta foram encerradas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     requestEmailVerification: {
