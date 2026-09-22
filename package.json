@@ -10,8 +10,8 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "tsc -p tsconfig.json --outDir dist/_tests && node --test --experimental-test-coverage \"dist/_tests/src/**/*.test.js\"",
-    "test:integration": "tsc -p tsconfig.json --outDir dist/_tests && node --test \"dist/_tests/tests/integration/**/*.test.js\"",
+    "test": "rm -rf dist/_tests && tsc -p tsconfig.json --outDir dist/_tests && node --test --experimental-test-coverage \"dist/_tests/src/**/*.test.js\"",
+    "test:integration": "rm -rf dist/_tests && tsc -p tsconfig.json --outDir dist/_tests && node --test \"dist/_tests/tests/integration/**/*.test.js\"",
     "build": "tsc -p tsconfig.build.json",
     "generate:types": "openapi-typescript api/openapi.yaml -o src/shared/types/generated/api.ts && node src/tools/gerar-tipos-de-problema.mjs",
     "verify:types": "npm run generate:types && git diff --exit-code -- src/shared/types/generated/",
