@@ -10,6 +10,7 @@ import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
@@ -42,6 +43,7 @@ class Escopo extends InheritedWidget {
     required this.guarda,
     required this.cacheDeMeusPets,
     required this.cofreDoQr,
+    required this.avisoDeCadastro,
     required super.child,
     super.key,
   });
@@ -133,6 +135,19 @@ class Escopo extends InheritedWidget {
   /// anterior continuaria no cache global de imagem.
   final CofreDaImagemDoQr cofreDoQr;
 
+  /// O registro de dispensas do aviso persistente de cadastro (BICHUS-75).
+  ///
+  /// Fica no escopo porque o aviso aparece em TRES lugares -- a faixa de
+  /// `Inicio`, o item do topo de `Perfil` e a linha do cartao de cada pet -- e
+  /// os tres precisam contar a MESMA dispensa. Duas instancias sobre o mesmo
+  /// arquivo perderiam uma da outra, e "dispensei uma vez" viraria "dispensei
+  /// em cada tela, separadamente": a faixa de `Inicio` encolheria e a de
+  /// `Perfil` continuaria cheia.
+  ///
+  /// A limpeza dele esta em `limpezasAoSair` no `app.dart`, pelo motivo escrito
+  /// em [AvisoDeCadastro]: o que ele guarda e da CONTA.
+  final AvisoDeCadastro avisoDeCadastro;
+
   static Escopo of(BuildContext context) {
     final escopo = context.dependOnInheritedWidgetOfExactType<Escopo>();
     if (escopo == null) {
@@ -162,5 +177,6 @@ class Escopo extends InheritedWidget {
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
       cacheDeMeusPets != anterior.cacheDeMeusPets ||
-      cofreDoQr != anterior.cofreDoQr;
+      cofreDoQr != anterior.cofreDoQr ||
+      avisoDeCadastro != anterior.avisoDeCadastro;
 }

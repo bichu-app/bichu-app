@@ -8,6 +8,7 @@ import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/botao_primario.dart';
 import '../widgets/faixa_de_aviso.dart';
+import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
 import 'perfil/meus_pets.dart';
@@ -53,21 +54,22 @@ class AbaPets extends StatelessWidget {
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
-            if (logado && usuario != null && usuario.cadastroIncompleto) ...[
-              // O aviso persistente vem primeiro na hierarquia, e ele e
-              // justificado pelo pet, nao pelo cadastro.
-              FaixaDeAviso(
-                peso: PesoDaFaixa.informativo,
-                texto: 'Confirme seu e-mail. É por ele que a gente te avisa '
-                    'quando alguém encontrar seu pet.',
-                rotuloDaAcao: 'Confirmar meu e-mail',
-                aoTocarNaAcao: () => context.push(
-                  Rotas.verifiqueSeuEmail,
-                  extra: usuario.email,
-                ),
+            // A POSICAO 1 DO AVISO PERSISTENTE (BICHUS-75, criterio 1): faixa
+            // de largura total logo abaixo do cabecalho, acima de tudo.
+            //
+            // A condicao mudou de `cadastroIncompleto` para
+            // `!emailVerificado`, e a troca nao e cosmetica.
+            // `cadastroIncompleto` e verdadeiro quando FALTA QUALQUER COISA --
+            // telefone, nome, regiao de referencia --, entao quem verificou o
+            // e-mail e nao preencheu o telefone continuava lendo "Confirme seu
+            // e-mail" sobre um e-mail ja confirmado. O criterio 7 proibe isso
+            // com todas as letras: com o e-mail verificado o aviso nao aparece
+            // em lugar nenhum.
+            if (logado && usuario != null)
+              AvisoDeCadastroIncompleto(
+                key: ValueKey<String>('aviso-inicio-${usuario.id}'),
+                usuario: usuario,
               ),
-              const SizedBox(height: BichuEspaco.e6),
-            ],
             if (!logado) ...<Widget>[
               Text(
                 'O Bichu dá uma identidade ao seu pet e aciona a vizinhança '
@@ -288,6 +290,15 @@ class AbaPerfil extends StatelessWidget {
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
+            // A POSICAO 2 (BICHUS-75, criterio 2): item destacado no TOPO da
+            // lista, antes do proprio endereco. Vem antes porque o criterio o
+            // chama de destacado, e um destaque abaixo da linha que ele
+            // comenta seria nota de rodape.
+            if (sessao.usuario != null)
+              AvisoDeCadastroIncompleto(
+                key: ValueKey<String>('aviso-perfil-${sessao.usuario!.id}'),
+                usuario: sessao.usuario!,
+              ),
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(sessao.usuario?.email ?? ''),

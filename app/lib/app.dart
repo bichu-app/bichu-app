@@ -14,6 +14,7 @@ import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
@@ -44,6 +45,8 @@ class BichuApp extends StatefulWidget {
     this.cacheDeMeusPets,
     this.cofreDoQr,
     this.depositoDeOportunidades,
+    this.depositoDoAvisoDeCadastro,
+    this.agora,
     this.depositoDaFila,
   });
 
@@ -138,6 +141,21 @@ class BichuApp extends StatefulWidget {
   /// quem cadastrou um pet ontem -- e nenhum teste consegue produzir isso
   /// passando pelo fluxo duas vezes, porque cada `pumpWidget` e um app novo.
   final DepositoDeOportunidades? depositoDeOportunidades;
+
+  /// Onde o registro de dispensas do aviso persistente mora (BICHUS-75).
+  ///
+  /// Entra por aqui pelos mesmos dois motivos do registro de oportunidades: o
+  /// padrao e um arquivo, e `getApplicationDocumentsDirectory()` trava o
+  /// `pumpAndSettle` para sempre em teste de widget.
+  final DepositoDoAvisoDeCadastro? depositoDoAvisoDeCadastro;
+
+  /// O relogio do ciclo de 7 dias do criterio 4 da BICHUS-75.
+  ///
+  /// **Entra pela porta, e a razao esta escrita no refinamento de 17/09:** "o
+  /// ciclo de 7 dias nao e observavel em treze dias sem relogio injetavel". Um
+  /// `DateTime.now()` dentro do registro tornaria o criterio 4 uma frase --
+  /// verdadeira ou falsa, ninguem saberia antes do oitavo dia de producao.
+  final DateTime Function()? agora;
   /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
   ///
   /// Entra por aqui pela mesma razao do [depositoDeIntencao], e com o mesmo
@@ -170,6 +188,7 @@ class _BichuAppState extends State<BichuApp> {
   late final CacheDeMeusPets _cacheDeMeusPets;
   late final CofreDaImagemDoQr _cofreDoQr;
   late final OportunidadesDeAviso _oportunidades;
+  late final AvisoDeCadastro _avisoDeCadastro;
   late final VigiaDeAviso _vigiaDeAviso;
 
   @override
@@ -204,6 +223,10 @@ class _BichuAppState extends State<BichuApp> {
     _oportunidades = OportunidadesDeAviso(
       deposito: widget.depositoDeOportunidades ??
           DepositoDeOportunidadesEmArquivo(),
+    );
+    _avisoDeCadastro = AvisoDeCadastro(
+      deposito: widget.depositoDoAvisoDeCadastro ?? DepositoDoAvisoEmArquivo(),
+      agora: widget.agora ?? DateTime.now,
     );
     _vigiaDeAviso = VigiaDeAviso(avisos: _avisos, devices: _devices)..ligar();
     _localizacao = widget.localizacao ?? const LocalizacaoNaoEmbarcada();
@@ -273,6 +296,18 @@ class _BichuAppState extends State<BichuApp> {
         () async => _cacheDeMeusPets.limpar(),
         _cofreDoQr.limpar,
         _fila.limpar,
+        // O REGISTRO DE DISPENSAS DO AVISO PERSISTENTE ENTRA AQUI (BICHUS-75),
+        // e a diferenca em relacao ao registro de oportunidades logo acima e a
+        // razao de as duas decisoes serem opostas. Aquele e do APARELHO: o
+        // dialogo de notificacao do iOS e gasto uma vez por instalacao. Este e
+        // da CONTA: ele guarda que a Marina pediu silencio sobre o e-mail DELA.
+        //
+        // Sem esta linha, o tutor seguinte neste aparelho herdaria o silencio
+        // de sete dias comprado pela anterior -- e com tres dispensas herdadas
+        // veria de cara "O e-mail <o dele> esta certo?" sobre um endereco que
+        // esta certo. A isca esta em
+        // `test/sessao/registro_do_aviso_de_cadastro_test.dart`.
+        _avisoDeCadastro.limpar,
       ],
     );
     _roteador = criarRoteador(_sessao);
@@ -307,6 +342,7 @@ class _BichuAppState extends State<BichuApp> {
       guarda: _guarda,
       cacheDeMeusPets: _cacheDeMeusPets,
       cofreDoQr: _cofreDoQr,
+      avisoDeCadastro: _avisoDeCadastro,
       child: MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,
