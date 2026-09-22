@@ -89,13 +89,45 @@ jobs:
       - name: as iscas do juizo do alvo prod reprovam
         run: python3 infra/verificacao/verificar_boot_do_alvo_prod.py --autoteste
 
+      # BICHUS-216, as iscas primeiro. Cada caso guardado precisa reprovar pela
+      # regra DELE e so por ela: o autoteste compara conjuntos de regras, porque
+      # isca que reprova por dois motivos ao mesmo tempo continua verde depois de
+      # a regra que ela testava ser desligada, e passa a aprovar a regra
+      # quebrada. Nao usa docker; roda em milissegundos.
+      - name: as iscas do portao do commit de build reprovam
+        run: make --no-print-directory verificar-commit-de-build-autoteste
+
       # Absorcao da BICHUS-210: o Dockerfile reprova o build sem `BUILD_COMMIT`
       # e o compose so repassa o que estiver no AMBIENTE, entao quem poe o valor
       # la e o Makefile. Este passo roda POR DENTRO do make de proposito -- ele
       # le a variavel do ambiente que o make montou, que e o caminho real. Apague
       # o `export` do Makefile e ele reprova; a pre-checagem do `make up`, que le
       # a variavel do make e nao o ambiente, continuaria passando.
-      - name: o make exporta BUILD_COMMIT
+      #
+      # ELE CONTINUA AQUI, NO `rapidos`, E A ESCOLHA E DELIBERADA (BICHUS-216).
+      # Ate 22/09 a terceira conferencia deste passo -- a que le
+      # `build.args.BUILD_COMMIT` da configuracao renderizada -- ficava CEGA aqui,
+      # porque nao ha `.env` neste job (ele so nasce no `integracao`, no
+      # `cp .env.example .env`) e a renderizacao do compose falhava. A recusa era
+      # engolida por um `except Exception` e o passo saia APROVADO.
+      #
+      # As duas saidas obvias foram medidas e recusadas:
+      #
+      #   - mover o passo para o `integracao` o poe DEPOIS do build, e depois de
+      #     dois jobs. Portao que so acusa depois de construir a imagem chega
+      #     tarde para pegar um `export` apagado num rebase;
+      #   - `cp .env.example .env` aqui nao basta: o exemplo nasce com quatro
+      #     chaves vazias que o compose exige com `:?`, e a renderizacao morre em
+      #     `OBJECT_STORAGE_SECRET_ACCESS_KEY`. Passar dali exigiria repetir aqui
+      #     as ~40 linhas de `sed` do job `integracao`, uma segunda copia que
+      #     deriva da primeira na proxima variavel.
+      #
+      # O portao passou a renderizar contra um `.env` descartavel, derivado do
+      # `.env.example` num diretorio temporario. `BUILD_COMMIT` continua vindo do
+      # ambiente que o make exportou, que e o que este passo mede; todo o resto e
+      # enchimento. A resposta passou a ser a mesma aqui e na maquina de quem tem
+      # `.env` -- antes ela dependia do `.env` de cada um, em silencio.
+      - name: o make exporta BUILD_COMMIT, e ele chega ao build
         run: make --no-print-directory verificar-commit-de-build
 
       # ADR-0016 (itens 4 e 6) e o defeito de 17/09. Tres conferencias num

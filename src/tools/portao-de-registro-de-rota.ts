@@ -313,3 +313,190 @@ export function varrerRegistroDireto(
 
   return { clandestinos, noAutorizado, arquivosVarridos };
 }
+
+// ---------------------------------------------------------------------------
+// A BARREIRA DE TIPO, E O QUE A GUARDA. BICHUS-217.
+// ---------------------------------------------------------------------------
+//
+// `RegistradorDeRotas = Omit<FastifyInstance, MetodoDeRegistro>` é a PRIMEIRA
+// camada: ela acusa no editor, na hora, e não tem furo de nome de variável.
+// A varredura acima é a segunda, e acusa depois, na suíte.
+//
+// O QA mediu que a primeira podia ser desfeita sem que nada acusasse: trocar o
+// `Omit` por `FastifyInstance` deixava 856 de 856 verdes e o `eslint .` limpo.
+// Mecanismo importante cuja remoção não derruba nada é a mesma forma de defeito
+// que a BICHUS-206 conserta.
+//
+// POR QUE A CONFERÊNCIA NÃO LÊ O TEXTO DO ARQUIVO
+//
+// Ler `Omit<FastifyInstance, MetodoDeRegistro>` com expressão regular seria a
+// terceira vez que um portão deste repositório enumera forma de escrita: a
+// versão antiga desta varredura listava nomes de variável e `escopo` não estava
+// nela; o portão estrutural da BICHUS-161 casava `import '` com aspa simples e
+// a aspa dupla passava. Uma reescrita equivalente -- `Omit<FastifyInstance,
+// 'get' | 'post' | ...>`, um `Exclude` no lugar do `Omit`, um alias
+// intermediário -- deixaria o texto diferente com a barreira intacta, e a
+// varredura reprovaria o que está certo. O inverso é pior: `Omit<FastifyInstance,
+// never>` casa com a expressão e não esconde nada.
+//
+// Então a pergunta é feita ao COMPILADOR, e é sobre o EFEITO: quais membros do
+// `FastifyInstance` deixaram de existir no `RegistradorDeRotas`. Qualquer forma
+// de escrever o tipo que produza o mesmo efeito passa; qualquer uma que não
+// produza reprova, inclusive as que ninguém previu.
+
+/**
+ * Os membros que o `Omit` precisa esconder, e exatamente eles.
+ *
+ * É o complemento de `MEMBROS_QUE_NAO_REGISTRAM`: aquela lista diz o que pode
+ * ser chamado, esta diz o que não pode nem ser alcançado. As duas precisam ser
+ * disjuntas, e há um caso que confere isso.
+ */
+export const MEMBROS_QUE_O_OMIT_ESCONDE: readonly string[] = [
+  'all',
+  'delete',
+  'get',
+  'head',
+  'options',
+  'patch',
+  'post',
+  'put',
+  'route',
+];
+
+/** O que a sonda mediu sobre a barreira. Nenhum campo é opcional de propósito. */
+export interface BarreiraDeTipo {
+  /** `keyof FastifyInstance` menos `keyof RegistradorDeRotas`, ordenado. */
+  readonly escondidos: readonly string[];
+  /**
+   * Quantos membros o `FastifyInstance` tem. **Controle de cegueira**: se o
+   * tipo não resolveu (dependência ausente, `import` renomeado, caminho errado),
+   * ele vem com pouca coisa ou zero, e aí `escondidos` vazio significaria "não
+   * consegui olhar" e não "a barreira sumiu". Aprovar nesse estado seria o
+   * portão cego da BICHUS-216, na outra linguagem.
+   */
+  readonly membrosDoServidor: number;
+  /** Códigos de erro do compilador na chamada de registro SOBRE o registrador. */
+  readonly errosNaChamadaEscondida: readonly number[];
+  /** Códigos de erro na MESMA chamada sobre o `FastifyInstance` inteiro. */
+  readonly errosNoControle: readonly number[];
+}
+
+/** `error TS2339: Property 'x' does not exist on type 'y'`. */
+export const PROPRIEDADE_INEXISTENTE = 2339;
+
+const SONDA_DOS_MEMBROS = path.join('src', 'tools', '_sondas', 'membros.ts');
+const SONDA_DA_CHAMADA_ESCONDIDA = path.join('src', 'tools', '_sondas', 'chamada-escondida.ts');
+const SONDA_DE_CONTROLE = path.join('src', 'tools', '_sondas', 'controle.ts');
+
+/**
+ * As sondas vivem em memória, como as iscas da varredura: arquivo gravado em
+ * `src/` que não compila deixa lixo quando o teste quebra no meio, e este em
+ * particular **não compila de propósito**.
+ *
+ * `_sondas/` está dois níveis abaixo de `src/`, então o caminho relativo até
+ * `shared/http/registrar-rota.js` sobe dois.
+ */
+function sondas(): ArquivosEmMemoria {
+  const importes = [
+    "import type { FastifyInstance } from 'fastify';",
+    "import type { RegistradorDeRotas } from '../../shared/http/registrar-rota.js';",
+  ].join('\n');
+  return new Map([
+    [
+      SONDA_DOS_MEMBROS,
+      [
+        importes,
+        'export declare const servidorInteiro: FastifyInstance;',
+        'export declare const registrador: RegistradorDeRotas;',
+      ].join('\n'),
+    ],
+    [
+      // A isca: o registro clandestino ESCRITO, com o tipo que os dez pontos de
+      // rota recebem. Ela precisa NÃO compilar.
+      SONDA_DA_CHAMADA_ESCONDIDA,
+      [
+        "import type { RegistradorDeRotas } from '../../shared/http/registrar-rota.js';",
+        'export function montar(escopo: RegistradorDeRotas): void {',
+        "  void escopo.post('/isca-da-barreira-de-tipo', async () => ({ ok: true }));",
+        '}',
+      ].join('\n'),
+    ],
+    [
+      // O controle positivo: a MESMA chamada, no tipo largo. Ela precisa
+      // compilar limpa. Sem ele, uma sonda que não compilasse por qualquer
+      // outro motivo (import errado, caminho quebrado) faria o caso acima
+      // passar sem medir nada -- aprovação por acidente.
+      SONDA_DE_CONTROLE,
+      [
+        "import type { FastifyInstance } from 'fastify';",
+        'export function montar(escopo: FastifyInstance): void {',
+        "  void escopo.post('/controle-da-barreira-de-tipo', async () => ({ ok: true }));",
+        '}',
+      ].join('\n'),
+    ],
+  ]);
+}
+
+function tipoDaConstante(
+  fonte: ts.SourceFile,
+  nome: string,
+  verificador: ts.TypeChecker,
+): ts.Type | undefined {
+  for (const comando of fonte.statements) {
+    if (!ts.isVariableStatement(comando)) continue;
+    for (const declaracao of comando.declarationList.declarations) {
+      if (ts.isIdentifier(declaracao.name) && declaracao.name.text === nome) {
+        return verificador.getTypeAtLocation(declaracao.name);
+      }
+    }
+  }
+  return undefined;
+}
+
+function membros(tipo: ts.Type | undefined): ReadonlySet<string> {
+  return new Set((tipo?.getProperties() ?? []).map((simbolo) => simbolo.getName()));
+}
+
+function codigosDeErro(programa: ts.Program, absoluto: string): readonly number[] {
+  const fonte = programa.getSourceFile(absoluto);
+  if (fonte === undefined) {
+    throw new Error(
+      `a sonda ${absoluto} nao entrou no programa. Sem ela nao ha o que medir, e ` +
+        'uma medicao que nao mede reprova, nunca aprova',
+    );
+  }
+  return programa.getSemanticDiagnostics(fonte).map((d) => d.code);
+}
+
+/**
+ * Pergunta ao compilador o que o `Omit` esconde de fato.
+ *
+ * Monta um programa próprio: as sondas não podem entrar no programa que
+ * `varrerRegistroDireto` percorre, porque uma delas é um registro clandestino
+ * de verdade e seria achada como tal.
+ */
+export function medirBarreiraDeTipo(raiz: string = process.cwd()): BarreiraDeTipo {
+  const absoluto = (relativo: string): string => path.join(raiz, relativo);
+  const emMemoria: Map<string, string> = new Map();
+  for (const [relativo, conteudo] of sondas()) emMemoria.set(absoluto(relativo), conteudo);
+
+  const programa = criarPrograma(raiz, emMemoria);
+  const verificador = programa.getTypeChecker();
+
+  const fonte = programa.getSourceFile(absoluto(SONDA_DOS_MEMBROS));
+  if (fonte === undefined) {
+    throw new Error(
+      `a sonda ${SONDA_DOS_MEMBROS} nao entrou no programa: a barreira ficou sem medicao`,
+    );
+  }
+
+  const doServidor = membros(tipoDaConstante(fonte, 'servidorInteiro', verificador));
+  const doRegistrador = membros(tipoDaConstante(fonte, 'registrador', verificador));
+
+  return {
+    escondidos: [...doServidor].filter((nome) => !doRegistrador.has(nome)).sort(),
+    membrosDoServidor: doServidor.size,
+    errosNaChamadaEscondida: codigosDeErro(programa, absoluto(SONDA_DA_CHAMADA_ESCONDIDA)),
+    errosNoControle: codigosDeErro(programa, absoluto(SONDA_DE_CONTROLE)),
+  };
+}

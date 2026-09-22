@@ -194,8 +194,15 @@ def conferir(config: dict) -> list[str]:
     return faltas
 
 
-def renderizar(raiz: Path, perfil: str) -> dict:
-    cmd = ["docker", "compose", "--profile", perfil, "config", "--format", "json"]
+def renderizar(raiz: Path, perfil: str, extras: list[str] | None = None) -> dict:
+    """A configuracao renderizada pelo proprio compose.
+
+    `extras` entra ANTES do subcomando, que e onde o compose aceita as opcoes
+    globais (`-f`, `--project-directory`). Existe para o portao do BICHUS-216,
+    que precisa renderizar sem depender do `.env` da maquina; aqui, sem
+    `extras`, o comando e letra por letra o que sempre foi.
+    """
+    cmd = ["docker", "compose", *(extras or []), "--profile", perfil, "config", "--format", "json"]
     try:
         r = subprocess.run(cmd, cwd=raiz, capture_output=True, text=True, timeout=180, check=False)
     except FileNotFoundError:

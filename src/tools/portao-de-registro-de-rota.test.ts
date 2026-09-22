@@ -26,8 +26,11 @@ import { describe, it } from 'node:test';
 
 import {
   criarPrograma,
+  medirBarreiraDeTipo,
   varrerRegistroDireto,
   MEMBROS_QUE_NAO_REGISTRAM,
+  MEMBROS_QUE_O_OMIT_ESCONDE,
+  PROPRIEDADE_INEXISTENTE,
   type ArquivosEmMemoria,
   type RegistroDireto,
 } from './portao-de-registro-de-rota.js';
@@ -197,6 +200,103 @@ void describe('portão do registro de rota', () => {
       `${vazados.join(', ')} registra(m) rota e está(ão) na lista de permitidos. ` +
         'A lista existe para o que NÃO registra; pôr um verbo nela é desligar o portão ' +
         'pelo lado de dentro.',
+    );
+  });
+});
+
+/**
+ * BICHUS-217: a barreira de tipo passa a ter isca.
+ *
+ * `RegistradorDeRotas = Omit<FastifyInstance, MetodoDeRegistro>` era afirmada em
+ * comentário e por mais nada. O QA trocou o `Omit` por `FastifyInstance` e mediu
+ * 856 de 856 verdes com `eslint .` limpo: a primeira camada de defesa podia
+ * sumir num refactor sem que nada acusasse.
+ *
+ * Os casos abaixo perguntam ao COMPILADOR, e sobre o EFEITO do tipo, nunca
+ * sobre o texto dele. Varredura textual do nome é o furo que já custou dois
+ * portões nesta sessão, e escrever um terceiro aqui seria repetir a classe:
+ * `Omit<FastifyInstance, never>` casa com qualquer expressão regular razoável e
+ * não esconde nada, enquanto um `Exclude` equivalente não casa com nenhuma e
+ * esconde tudo.
+ *
+ * UM CASO POR REGRA, e nenhuma cadeia `if/elif`: uma isca que reprova por dois
+ * motivos ao mesmo tempo aprova a regra quebrada, porque desligar a regra que
+ * ela existe para testar deixa o outro motivo reprovando e o verde permanece.
+ */
+void describe('a barreira de tipo do RegistradorDeRotas', () => {
+  // Uma medição só: montar o programa é o custo, e nenhum caso muda o estado.
+  const barreira = medirBarreiraDeTipo(raiz);
+
+  void it('CONTROLE DE CEGUEIRA: a sonda enxergou o FastifyInstance inteiro', () => {
+    // Se o tipo não resolver -- dependência ausente, `import` renomeado, caminho
+    // da sonda errado --, `escondidos` vem vazio, e vazio é indistinguível de
+    // "a barreira foi desfeita". Sem este caso, o portão inteiro aprovaria por
+    // cegueira, que é o defeito irmão desta entrega (BICHUS-216).
+    assert.ok(
+      barreira.membrosDoServidor > 20,
+      `a sonda viu ${String(barreira.membrosDoServidor)} membros no FastifyInstance. ` +
+        'O tipo não resolveu, então nada do que este bloco afirma foi medido de verdade.',
+    );
+  });
+
+  void it('o Omit esconde exatamente os membros que registram rota', () => {
+    assert.deepEqual(
+      barreira.escondidos,
+      [...MEMBROS_QUE_O_OMIT_ESCONDE],
+      'o que `RegistradorDeRotas` esconde do `FastifyInstance` deixou de ser a lista de ' +
+        'registro. Lista vazia significa que o `Omit` foi desfeito (é o que acontece com ' +
+        '`= FastifyInstance`) e os dez pontos de rota voltaram a poder chamar `.post` ' +
+        'direto; lista menor significa que um verbo caiu de `MetodoDeRegistro` e voltou a ' +
+        'ser alcançável.',
+    );
+  });
+
+  void it('a lista do que precisa ser escondido não pode encolher nem virar prosa', () => {
+    // O conserto preguiçoso do caso acima é esvaziar a lista até ela concordar
+    // com o `Omit` desfeito. Isto reprova esse conserto.
+    assert.equal(
+      MEMBROS_QUE_O_OMIT_ESCONDE.length,
+      9,
+      'a lista dos membros que o `Omit` precisa esconder mudou de tamanho. Encolhê-la é ' +
+        'o jeito de fazer o caso anterior ficar verde sem barreira nenhuma.',
+    );
+
+    // E o outro conserto preguiçoso: mover o verbo para a lista de permitidos,
+    // onde a varredura deixa de reprová-lo. As duas listas são complementares e
+    // precisam continuar sendo.
+    const nosDois = MEMBROS_QUE_O_OMIT_ESCONDE.filter((membro) =>
+      MEMBROS_QUE_NAO_REGISTRAM.has(membro),
+    );
+    assert.deepEqual(
+      nosDois,
+      [],
+      `${nosDois.join(', ')} está(ão) nas duas listas: escondido pelo tipo e permitido ` +
+        'pela varredura. Uma das duas está errada, e a combinação desliga as duas camadas.',
+    );
+  });
+
+  void it('ISCA: o registro clandestino sobre o RegistradorDeRotas NÃO compila', () => {
+    // A isca é o furo real escrito por extenso: `escopo.post(...)` com o tipo
+    // que os dez pontos de rota recebem. Ela é a prova negativa guardada no
+    // repositório, e não uma frase dizendo que alguém testou.
+    assert.ok(
+      barreira.errosNaChamadaEscondida.includes(PROPRIEDADE_INEXISTENTE),
+      '`escopo.post(...)` COMPILOU sobre `RegistradorDeRotas`. A barreira que acusa no ' +
+        'editor deixou de existir, e sobrou só a varredura, que acusa depois e só ' +
+        `enquanto alguém a mantiver afiada. Erros vistos: [${barreira.errosNaChamadaEscondida.join(', ')}]`,
+    );
+  });
+
+  void it('CONTROLE POSITIVO: a mesma chamada sobre o FastifyInstance compila limpa', () => {
+    // Sem este caso, o anterior aprovaria por acidente: uma sonda que não
+    // compila por qualquer outro motivo (import quebrado, caminho errado,
+    // opção de compilação nova) também traria erro, e o erro seria lido como
+    // "a barreira pegou". Aqui se prova que o que reprova lá é a barreira.
+    assert.deepEqual(
+      barreira.errosNoControle,
+      [],
+      'a sonda de controle não compila, então o erro da isca pode não ter vindo da ' +
+        `barreira. Erros: [${barreira.errosNoControle.join(', ')}]`,
     );
   });
 });
