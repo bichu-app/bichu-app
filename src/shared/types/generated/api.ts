@@ -5448,7 +5448,9 @@ export interface operations {
                     "application/json": components["schemas"]["MatchCandidate"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     closeLostCase: {
