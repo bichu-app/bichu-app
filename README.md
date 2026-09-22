@@ -157,12 +157,12 @@ anterior e voltou.
 
 Custo medido em 22/09/2026, com `/usr/bin/time -p`, APK de 75,3 MB:
 
-| leg | estado dos caches | ponta a ponta |
+| etapa | estado dos caches | ponta a ponta |
 |---|---|---|
 | `make apk` | `build/` frio, distribuição do Gradle quente | 35,6 s |
 | `make apk` | tudo quente, sem mudança em Dart | 7,6 s |
 | `make verificar-app` | `pub get` + `analyze` + 750 testes | 37,0 s |
-| o que este commit acrescentou a `make verificar` | — | 0,22 s |
+| os portões de boa-formação e de recibo, que entraram em `make verificar` | — | 0,22 s |
 
 `make verificar` inteiro não foi cronometrado aqui: ele constrói imagens Docker
 e sonda uma pilha compartilhada. O número que sustenta a separação é o da última
