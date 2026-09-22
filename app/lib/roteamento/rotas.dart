@@ -10,11 +10,14 @@ import '../telas/conta/tela_entrar.dart';
 import '../telas/conta/tela_esqueci_minha_senha.dart';
 import '../telas/conta/tela_verifique_seu_email.dart';
 import '../telas/escanear/tela_leitor_de_qr.dart';
+import '../api/modelos_pet.dart';
 import '../telas/pet/rascunho_de_pet.dart';
 import '../telas/pet/resultado_do_cadastro.dart';
 import '../telas/pet/tela_cadastrar_foto.dart';
 import '../telas/pet/tela_cadastrar_identificacao.dart';
 import '../telas/pet/tela_cadastrar_sinais.dart';
+import '../telas/pet/tela_detalhe_do_pet.dart';
+import '../telas/pet/tela_editar_pet.dart';
 import '../telas/pet/tela_pet_cadastrado.dart';
 import '../telas/tela_de_abertura.dart';
 
@@ -94,6 +97,35 @@ abstract final class Rotas {
   static const String cadastrarPetFoto = '/pets/novo/foto';
   static const String cadastrarPetSinais = '/pets/novo/sinais';
   static const String petCadastrado = '/pets/cadastrado';
+
+  // -- T.1, a edicao e a exclusao (BICHUS-60 e BICHUS-61) -------------------
+  //
+  // **`/pets/:petId` vem DEPOIS de `/pets/novo` e `/pets/cadastrado` na
+  // declaracao, e a ordem e o que impede o engano.** `go_router` casa na
+  // ordem em que as rotas sao registradas, e um parametro casa com qualquer
+  // segmento: declarado antes, `/pets/:petId` engoliria `/pets/novo` e o
+  // cadastro abriria o detalhe de um pet chamado "novo".
+
+  /// O padrao de `T.1`. Use [detalheDoPetDe] para montar o endereco.
+  static const String detalheDoPet = '/pets/:petId';
+
+  /// A edicao (BICHUS-61), filha do detalhe.
+  static const String editarPet = '/pets/:petId/editar';
+
+  /// O nome do parametro de caminho, num lugar so: quem monta o endereco e
+  /// quem o le usam a mesma palavra.
+  static const String parametroDoPetId = 'petId';
+
+  /// O endereco de T.1 para [petId].
+  ///
+  /// `Uri.encodeComponent` porque o id vem da resposta do servidor e nao desta
+  /// tela: montar caminho com interpolacao crua e como um id com barra vira
+  /// uma rota que nao existe.
+  static String detalheDoPetDe(String petId) =>
+      '/pets/${Uri.encodeComponent(petId)}';
+
+  static String editarPetDe(String petId) =>
+      '${detalheDoPetDe(petId)}/editar';
 
   /// O endereco da tela de retorno de um envelope de intencao (UX 8.3).
   ///
@@ -257,6 +289,40 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           final resultado = estado.extra as ResultadoDoCadastro?;
           if (resultado == null) return const TelaCadastrarIdentificacao();
           return TelaPetCadastrado(resultado: resultado);
+        },
+      ),
+      // T.1, a edicao e a exclusao (BICHUS-60 e BICHUS-61).
+      //
+      // **Declaradas DEPOIS de `/pets/novo` e `/pets/cadastrado`, e a ordem e
+      // o que impede o engano**: `go_router` casa na ordem de registro e um
+      // parametro casa com qualquer segmento. Acima delas, `/pets/:petId`
+      // engoliria `/pets/novo` e o cadastro abriria o detalhe de um pet
+      // chamado "novo".
+      //
+      // Cobrem a casca de abas, como o assistente, e por isso cada uma tem
+      // saida propria: `Perfil` > `Meus pets` continua vivo no ramo de baixo,
+      // e voltar devolve a pessoa onde ela estava.
+      GoRoute(
+        path: Rotas.detalheDoPet,
+        builder: (context, estado) => TelaDetalheDoPet(
+          petId: estado.pathParameters[Rotas.parametroDoPetId]!,
+        ),
+      ),
+      GoRoute(
+        path: Rotas.editarPet,
+        builder: (context, estado) {
+          // A edicao recebe o pet JA CARREGADO em `extra`, porque quem a abre
+          // e T.1, que acabou de le-lo. Alcancada por link direto ela nasceria
+          // sem ele: cai no detalhe, que sabe carregar, em vez de abrir um
+          // formulario que nao sabe de qual pet fala. E a mesma regra dos
+          // passos intermediarios do assistente.
+          final pet = estado.extra;
+          if (pet is! Pet) {
+            return TelaDetalheDoPet(
+              petId: estado.pathParameters[Rotas.parametroDoPetId]!,
+            );
+          }
+          return TelaEditarPet(pet: pet);
         },
       ),
       StatefulShellRoute.indexedStack(

@@ -34,9 +34,18 @@ import 'moldura.dart';
 /// [rotuloAcessivelDe]. Nao ha controle dentro de controle porque nao ha
 /// controle nenhum.
 class CartaoDePet extends StatelessWidget {
-  const CartaoDePet({required this.pet, super.key});
+  const CartaoDePet({required this.pet, super.key, this.aoTocar});
 
   final Pet pet;
+
+  /// O toque que leva a T.1, o detalhe do pet.
+  ///
+  /// **Opcional, e nulo continua sendo um estado legitimo.** O 11.3 chama o
+  /// cartao de "destino de navegacao", mas ate a BICHUS-60/61 nao havia
+  /// destino nenhum, e o criterio 2 da BICHUS-62 proibe renderizar acao sem
+  /// ele. Com nulo o cartao volta a ser o que era: um container que informa e
+  /// nao promete toque.
+  final VoidCallback? aoTocar;
 
   /// O convite de plaquinha do criterio 4 da BICHUS-62.
   ///
@@ -91,6 +100,14 @@ class CartaoDePet extends StatelessWidget {
 
     return Semantics(
       container: true,
+      // **`button` e `onTap` andam juntos, sempre.** Anunciar o cartao como
+      // botao sem republicar a acao o deixaria com `btn=true tap=false` --
+      // quem usa leitor de tela ouviria que ha um botao e nao teria como
+      // aciona-lo --, e `test/a11y/acao_de_controle_test.dart` reprova por
+      // isso. `excludeSemantics` abaixo apaga a arvore do filho e leva junto a
+      // acao que o `InkWell` publica, entao ela precisa ser redeclarada aqui.
+      button: aoTocar != null,
+      onTap: aoTocar,
       label: rotuloAcessivelDe(pet),
       // **Uma parada de leitor de tela, e uma so** (criterio 5). O rotulo
       // acima e composto por `rotuloAcessivelDe`, e os textos de dentro saem
@@ -116,42 +133,50 @@ class CartaoDePet extends StatelessWidget {
           ),
           child: Stack(
             children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.all(BichuEspaco.e4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    _MolduraDoPet(pet: pet),
-                    const SizedBox(width: BichuEspaco.e4),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          if (perdido) ...<Widget>[
-                            const _SeloPerdido(),
-                            const SizedBox(height: BichuEspaco.e2),
-                          ],
-                          Text(pet.nome, style: textos.titleMedium),
-                          const SizedBox(height: BichuEspaco.e1),
-                          Text(
-                            atributosDe(pet),
-                            style: textos.bodyMedium?.copyWith(
-                              color: cores.textSecondary,
-                            ),
-                          ),
-                          if (pet.semTag) ...<Widget>[
+              // O `InkWell` embrulha o conteudo inteiro, e nao um botao
+              // dentro dele: o 11.3 manda foco e pressionado valerem para o
+              // cartao todo, e um alvo interno criaria duas paradas de foco no
+              // mesmo objeto (criterio 5 da BICHUS-62). Com `aoTocar` nulo ele
+              // nao publica acao nenhuma.
+              InkWell(
+                onTap: aoTocar,
+                child: Padding(
+                  padding: const EdgeInsets.all(BichuEspaco.e4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      _MolduraDoPet(pet: pet),
+                      const SizedBox(width: BichuEspaco.e4),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            if (perdido) ...<Widget>[
+                              const _SeloPerdido(),
+                              const SizedBox(height: BichuEspaco.e2),
+                            ],
+                            Text(pet.nome, style: textos.titleMedium),
                             const SizedBox(height: BichuEspaco.e1),
                             Text(
-                              convitePlaquinha,
-                              style: textos.bodySmall?.copyWith(
-                                color: cores.textMuted,
+                              atributosDe(pet),
+                              style: textos.bodyMedium?.copyWith(
+                                color: cores.textSecondary,
                               ),
                             ),
+                            if (pet.semTag) ...<Widget>[
+                              const SizedBox(height: BichuEspaco.e1),
+                              Text(
+                                convitePlaquinha,
+                                style: textos.bodySmall?.copyWith(
+                                  color: cores.textMuted,
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
               if (perdido)
@@ -203,9 +228,8 @@ class _MolduraDoPet extends StatelessWidget {
           alignment: const Alignment(0, -1 / 3),
           // Falha de rede nao pode virar caixa vermelha de excecao no meio de
           // uma lista: cai na moldura vazia, que e o que o 11.4 manda.
-          errorBuilder: (context, erro, pilha) => const Moldura(
-            largura: BichuMoldura.larguraFotoSm,
-          ),
+          errorBuilder: (context, erro, pilha) =>
+              const Moldura(largura: BichuMoldura.larguraFotoSm),
         ),
       );
     }
