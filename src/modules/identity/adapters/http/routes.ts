@@ -282,14 +282,72 @@ export const rotaDeConfirmacaoDeRedefinicao = defineRoute({
   ],
 });
 
+/**
+ * Diz se o link de redefinição ainda vale.
+ *
+ * Só lê. É a página do time web perguntando "vale a pena mostrar o
+ * formulário?" antes de a pessoa digitar uma senha para um link morto.
+ *
+ * ## O teto: `log_and_alert`, e não `deny_429`. O argumento, medido
+ *
+ * Até 22/09/2026 esta rota declarava `60/1h deny_429` no código contra
+ * `30/1h log_and_alert` no contrato, e ninguém cruzava os dois. O código cedeu,
+ * nos dois campos, e a razão não é "o contrato manda":
+ *
+ * **1. O token não é adivinhável, então o teto não é a defesa.** São 256 bits
+ * de CSPRNG (`shared/id/uuidv7.ts`, `opaqueToken`), guardados só como SHA-256,
+ * uso único consumido atomicamente, validade de 30 minutos. Mesmo com um
+ * atacante de um milhão de endereços a 60 por hora cada, dentro da janela de
+ * meia hora, a chance de acertar um token vivo fica na ordem de 10^-64. Entre
+ * 30 e 60 não há diferença de segurança nenhuma contra enumeração.
+ *
+ * **2. Recusar aqui não fecha o oráculo, porque ele não é exclusivo desta
+ * rota.** `POST /auth/password-reset/confirm` também responde 410 para token
+ * que não vale, e já carrega `20/1h deny_429 applies_to invalid_attempts`.
+ * Quem for recusado aqui troca de verbo. O `deny_429` desta rota encarecia o
+ * caminho mais barato sem fechar caminho nenhum.
+ *
+ * **3. Recusar aqui quebra o remédio, e na hora pior.** A dimensão é `ip`, e o
+ * CGNAT das operadoras brasileiras agrupa muita gente atrás de poucos
+ * endereços — o argumento está escrito em `aplicacao-de-teto.ts` (justificativa
+ * de `ip_24`) e duas vezes no ADR-0016. Esta rota é chamada ao ABRIR o link do
+ * e-mail: recarregar a página, abrir no outro aparelho e o varredor de link do
+ * cliente de e-mail somam chamadas que a pessoa não fez conscientemente. Um 429
+ * aqui deixa a página sem mostrar o formulário, e a pessoa não entra na conta
+ * (é por isso que ela está redefinindo a senha) nem tem outro caminho. A
+ * operação existe para que ninguém chegue a um beco; recusar transforma a
+ * própria operação no beco, mais cedo. E o dia em que muita gente redefine a
+ * senha na mesma hora atrás do mesmo IP é o dia do incidente, que é exatamente
+ * quando o remédio precisa funcionar.
+ *
+ * **4. `challenge` não é opção**, e a rota declara `x-no-challenge`: não há
+ * ninguém para responder a um desafio numa chamada que a página faz ao carregar.
+ *
+ * **O que `log_and_alert` NÃO faz, dito por extenso:** ele não recusa. O balde
+ * continua contando (`hit()`) e o estouro continua virando linha de log em
+ * `aplicacao-de-teto.ts`, mas a requisição passa. A proteção volumétrica desta
+ * rota é da borda (ADR-0016, item 4), e hoje a borda só limita tamanho de
+ * corpo. Isso é lacuna conhecida e compartilhada com `jwks`,
+ * `openidConfiguration`, `resolveTag` e o webhook de entrega, que escolheram
+ * `log_and_alert` pelo mesmo motivo; não é lacuna criada aqui.
+ *
+ * **O número 30 é do contrato e está em aberto.** 30 por hora por IP, a 1–4
+ * chamadas por redefinição legítima, alerta a partir de 8 pessoas por hora
+ * atrás do mesmo endereço — pouco para um pool de CGNAT, e alerta que dispara
+ * em tráfego normal é alerta que alguém silencia. A pergunta fechada está em
+ * `.jarvis/PAUTA-DE-REFINAMENTO-22-09.md` ("O teto de `GET
+ * /public/password-reset/{token}`: 30 por hora por IP, ou 60?"). Enquanto ela não for
+ * respondida vale o contrato, que é a fonte declarada do número.
+ *
+ * A isca que impede este teto de ser "endurecido" de volta em silêncio está em
+ * `tests/integration/teto-da-conferencia-do-link.test.ts`.
+ */
 export const rotaDeConferenciaDeRedefinicao = defineRoute({
   operationId: 'checkPasswordResetToken',
   method: 'get',
   path: '/public/password-reset/:token',
-  // Só lê. É a página do time web perguntando "vale a pena mostrar o
-  // formulário?" antes de a pessoa digitar uma senha para um link morto.
   effects: [],
-  rateLimit: [{ dimension: ['ip'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+  rateLimit: [{ dimension: ['ip'], limit: 30, window: '1h', onExceed: 'log_and_alert' }],
 });
 
 export const rotaDoJwks = defineRoute({
