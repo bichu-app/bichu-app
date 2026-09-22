@@ -33,27 +33,28 @@
 # tem `--no-verify`, e este portao existe para impedir o ENGANO, nao a decisao
 # deliberada de quem sabe o que esta fazendo.
 #
-# ELE ESTA DESLIGADO, DE PROPOSITO, E O MOTIVO E MEDIDO.
-# O git so executa `<core.hooksPath>/<nome-do-gancho>`, nunca um subdiretorio.
-# Enquanto este arquivo morar em `.githooks/desligado/` ele nao roda.
-# Para ligar:  git mv .githooks/desligado/reference-transaction .githooks/
+# ELE ESTA VALENDO. O custo e conhecido e foi aceito de proposito.
 #
-# Por que desligado: `reference-transaction` e chamado 7 vezes num `git commit`
-# pequeno (1x HEAD, 2x a branch, 4x AUTO_MERGE), e cada chamada e um fork+exec
-# de `/bin/sh`. Medido neste repositorio, 40 commits por braco, tres rodadas:
+# `reference-transaction` e chamado 7 vezes num `git commit` pequeno (1x HEAD,
+# 2x a branch, 4x AUTO_MERGE), e cada chamada e um fork+exec de `/bin/sh`.
+# Medido neste repositorio, 40 commits por braco, tres rodadas:
 #
 #   sem gancho nenhum        48 a 87 ms por commit
 #   gancho no-op (so drena)  188 a 215 ms por commit
 #   este gancho              174 a 216 ms por commit
 #
 # Ou seja: cerca de +130 ms por commit, e o custo e de TER um gancho de
-# `reference-transaction`, nao da logica daqui. Um no-op custa o mesmo. Nao ha
-# como baratear sem deixar de existir. `git status` nao dispara transacao de ref
-# nenhuma e fica inalterado.
+# `reference-transaction`, nao da logica daqui. Um no-op custa o mesmo, dentro
+# do ruido, entao nao ha como baratear sem deixar de existir.
 #
-# A conta, entao, e esta: +130 ms em todo commit de todo mundo, todo dia, contra
-# um acidente que aconteceu uma vez. Quem religar isto esta dizendo que a conta
-# virou. Rode `infra/verificacao/verificar-portao-de-stash.sh` depois de ligar.
+# `git status` nao dispara transacao de ref nenhuma: zero invocacoes, custo
+# zero. Os +130 ms caem so no commit, e quem comita aqui e agente, nao pessoa
+# esperando o prompt voltar. Algumas dezenas de commits por dia vezes 130 ms e
+# ruido; a troca de trabalho entre worktrees ja custou um resgate inteiro e
+# quase dois dias. Convencao no README protege quem le o README; o gancho
+# protege quem esqueceu.
+#
+# Antes de mexer aqui, rode `infra/verificacao/verificar-portao-de-stash.sh`.
 #
 # LIMITACAO CONHECIDA: `core.hooksPath` e configuracao POR CLONE (`make setup`).
 # Um clone novo nasce SEM esta protecao ate alguem liga-la. Nao presuma que

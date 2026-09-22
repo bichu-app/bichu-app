@@ -22,10 +22,9 @@
 # repositorio de quem chama, e nunca usa `git stash` fora deles.
 set -uo pipefail
 
-# O gancho esta DESLIGADO em `.githooks/desligado/`. Este script o copia
-# para repositorios descartaveis, entao confere a regra esteja ela ligada
-# ou nao. Se alguem religar, e este mesmo arquivo que roda.
-GANCHO_REL="${GANCHO_DE_STASH:-.githooks/desligado/reference-transaction}"
+# Este script copia o gancho para repositorios descartaveis, entao confere a
+# regra sem depender de como o repositorio de quem chama esta configurado.
+GANCHO_REL="${GANCHO_DE_STASH:-.githooks/reference-transaction}"
 raiz=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 gancho="$raiz/$GANCHO_REL"
 

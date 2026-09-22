@@ -165,17 +165,45 @@ inalcançável. Ancore antes de qualquer outra coisa, com
 stash feito com `-u` guarda os não rastreados num terceiro pai (`<sha>^3`);
 restaurar só a árvore principal perde esses arquivos.
 
-**Isto é convenção, não portão: nada te impede de empilhar.** Existe um gancho
-pronto que recusaria o `git stash push` quando o repositório tem mais de um
-worktree, e ele está em `.githooks/desligado/reference-transaction`, desligado
-de propósito. A medição está no cabeçalho dele: ligá-lo custa cerca de 130 ms a
-mais em **todo** commit, porque o git chama esse gancho sete vezes por commit e
-cada chamada é um processo novo. O caso que ele precisa reprovar, e os cinco que
-ele não pode reprovar, estão em `infra/verificacao/verificar-portao-de-stash.sh`.
+### Se você precisa mesmo de um `git stash`
 
-E mesmo ligado ele não protegeria todo mundo: `core.hooksPath` é configuração
-**por clone**, aplicada pelo `make setup`. Um clone novo nasce sem gancho
-nenhum. Estar no repositório não é o mesmo que estar valendo na sua máquina.
+```
+BICHU_STASH_LIBERADO=1 git stash push
+```
+
+Isso passa por cima do portão abaixo. Use quando você sabe que é seguro, por
+exemplo num clone só seu. O portão existe para impedir o engano, não a decisão
+deliberada.
+
+`pop`, `drop` e `clear` **nunca** são bloqueados: quem tem um stash preso
+precisa exatamente deles para sair do buraco.
+
+### O portão que recusa o `git stash`
+
+`.githooks/reference-transaction` recusa criar `refs/stash` quando o
+repositório tem mais de um worktree. Ele **está valendo**.
+
+Ele custa cerca de 130 ms a mais em **todo** commit, porque o git chama um
+gancho de `reference-transaction` sete vezes por commit e cada chamada é um
+processo novo. `git status` não dispara transação de ref nenhuma e fica
+inalterado. A medição, com os três braços de comparação, está no cabeçalho do
+gancho. A conta foi aceita de propósito: o acidente já aconteceu e custou um
+resgate inteiro, e quem comita aqui é agente, não pessoa esperando o prompt.
+
+O caso que ele precisa reprovar, e os cinco que ele **não pode** reprovar,
+estão em `infra/verificacao/verificar-portao-de-stash.sh`. Rode depois de mexer
+nele.
+
+**Duas limitações, e nenhuma delas é pequena.** Não presuma que estar no
+repositório é o mesmo que estar valendo na sua máquina:
+
+1. `core.hooksPath` é configuração **por clone**, aplicada pelo `make setup`.
+   Um clone novo nasce sem gancho nenhum.
+2. O caminho configurado é **relativo**, então o git o resolve a partir da raiz
+   de cada worktree. Na prática, o gancho só vale num worktree cuja branch já
+   contenha o arquivo. Worktree em branch que saiu antes deste commit continua
+   sem proteção até rebasear ou sair de novo da principal. Isto vale igual para
+   o `pre-push`, e é medido, não deduzido.
 
 
 ## Homologação
