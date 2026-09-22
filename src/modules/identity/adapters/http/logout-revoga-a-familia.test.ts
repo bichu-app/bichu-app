@@ -267,6 +267,10 @@ class RepositorioFalso implements IdentityRepository {
   concluirTrocaDeEmail(): Promise<Conta | undefined> {
     return naoUsado('concluirTrocaDeEmail');
   }
+
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return naoUsado('cancelarTrocaDeEmailPendente');
+  }
 }
 
 const TOKEN_DE_ACESSO = 'acesso-da-tutora';

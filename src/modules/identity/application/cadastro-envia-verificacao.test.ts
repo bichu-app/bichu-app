@@ -194,6 +194,10 @@ class RepositorioDeCadastro implements IdentityRepository {
   concluirTrocaDeEmail(): Promise<Conta | undefined> {
     return naoUsado('concluirTrocaDeEmail');
   }
+
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return naoUsado('cancelarTrocaDeEmailPendente');
+  }
 }
 
 interface Bancada {

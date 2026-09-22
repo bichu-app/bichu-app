@@ -278,4 +278,16 @@ export interface IdentityRepository {
     novoEmail: string,
     agora: Instant,
   ): Promise<Conta | undefined>;
+
+  /**
+   * Apaga a intenção de troca, sem tocar no e-mail que a conta usa.
+   *
+   * É a outra metade do critério 9: trocar a senha por qualquer caminho
+   * invalida os pedidos de troca de e-mail pendentes. `invalidarTokensPendentes`
+   * mata o TOKEN, e isso já impede a troca de se concluir — mas `pending_email`
+   * sobreviveria, e a tela continuaria mostrando uma troca pendente que nenhum
+   * link consegue mais concluir. Aviso que não corresponde a nada é o que ensina
+   * a pessoa a ignorar aviso.
+   */
+  cancelarTrocaDeEmailPendente(userId: UserId, agora: Instant): Promise<void>;
 }

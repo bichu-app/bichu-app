@@ -103,6 +103,10 @@ class RepositorioDaTroca implements IdentityRepository {
     return naoUsado('concluirTrocaDeEmail');
   }
 
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return naoUsado('cancelarTrocaDeEmailPendente');
+  }
+
   criarContaLocal(): Promise<Conta | undefined> {
     return naoUsado('criarContaLocal');
   }

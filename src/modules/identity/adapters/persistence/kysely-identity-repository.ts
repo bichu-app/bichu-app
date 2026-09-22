@@ -616,6 +616,15 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         throw erro;
       }
     },
+
+    async cancelarTrocaDeEmailPendente(userId: UserId, agora: Instant): Promise<void> {
+      await db
+        .updateTable('users')
+        .set({ pending_email: null, updated_at: new Date(agora) })
+        .where('id', '=', userId)
+        .where('pending_email', 'is not', null)
+        .execute();
+    },
   };
 }
 

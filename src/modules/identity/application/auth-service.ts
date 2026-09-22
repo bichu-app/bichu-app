@@ -1210,6 +1210,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // emitido antes da troca continuaria valendo depois dela, e é por ele
       // que quem tomou a conta volta.
       await deps.repositorio.invalidarTokensPendentes(consumido.userId, agora);
+      await deps.repositorio.cancelarTrocaDeEmailPendente(consumido.userId, agora);
       // Critério 5: todas as sessões e todos os refresh. As DUAS metades
       // (BICHUS-125): a barreira derruba o token de acesso em menos de um
       // segundo, e a revogação das famílias mata o refresh copiado antes da
@@ -1365,6 +1366,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // Mesmo par da redefinição: link pendente cai junto, senão quem tomou a
       // conta volta por um `password_reset` pedido antes da troca.
       await deps.repositorio.invalidarTokensPendentes(conta.id, agora);
+      await deps.repositorio.cancelarTrocaDeEmailPendente(conta.id, agora);
       await derrubarTodasAsSessoes(conta.id, 'password_changed', contexto, agora);
 
       await deps.trilha.record({

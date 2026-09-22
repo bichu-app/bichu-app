@@ -271,6 +271,10 @@ class RepositorioFalso implements IdentityRepository {
   concluirTrocaDeEmail(): Promise<Conta | undefined> {
     return naoUsado('concluirTrocaDeEmail');
   }
+
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 interface Bancada {

@@ -281,6 +281,10 @@ class BancoDeMentira implements IdentityRepository {
   concluirTrocaDeEmail(): Promise<Conta | undefined> {
     throw new Error('concluirTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui');
   }
+
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 interface Bancada {

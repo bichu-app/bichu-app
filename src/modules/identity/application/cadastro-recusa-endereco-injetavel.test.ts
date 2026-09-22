@@ -81,6 +81,7 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     marcarEmailVerificado: () => naoDeveriaTerChegado('marcarEmailVerificado'),
     registrarPedidoDeTrocaDeEmail: () => naoDeveriaTerChegado('registrarPedidoDeTrocaDeEmail'),
     concluirTrocaDeEmail: () => naoDeveriaTerChegado('concluirTrocaDeEmail'),
+    cancelarTrocaDeEmailPendente: () => naoDeveriaTerChegado('cancelarTrocaDeEmailPendente'),
   };
 }
 

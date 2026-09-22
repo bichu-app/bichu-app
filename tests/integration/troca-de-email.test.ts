@@ -93,7 +93,7 @@ function enderecoNovo(rotulo: string): string {
 
 async function chamar(
   caminho: string,
-  opcoes: { metodo: 'GET' | 'POST'; corpo?: unknown; token?: string },
+  opcoes: { metodo: 'GET' | 'POST' | 'PUT'; corpo?: unknown; token?: string },
 ): Promise<{ status: number; corpo: unknown }> {
   const cabecalhos: Record<string, string> = { accept: 'application/json' };
   if (opcoes.corpo !== undefined) cabecalhos['content-type'] = 'application/json';
@@ -502,6 +502,46 @@ void describe(`BICHUS-42 — POST ${CAMINHO_DA_TROCA} contra Postgres`, () => {
       /rate-limited/,
       'a recusa não é a do teto de chamada',
     );
+  });
+
+  void it('9. trocar a senha cancela a troca de e-mail pendente (critério 9)', async () => {
+    const tutor = await criarTutor('senha');
+    const destino = enderecoNovo('destino-senha');
+
+    await pedirTroca(tutor, destino);
+    const token = tokenDoLink((mensagensPara(destino)[0] as Mensagem).corpo);
+    assert.equal((await perfil(tutor.acesso)).pending_email, destino);
+
+    const troca = await chamar('/auth/password', {
+      metodo: 'PUT',
+      token: tutor.acesso,
+      corpo: { current_password: SENHA, new_password: 'vento-sul-na-varanda-88' },
+    });
+    assert.equal(troca.status, 204, JSON.stringify(troca.corpo));
+
+    // O link emitido antes da troca de senha é por onde quem tomou a conta
+    // volta. Ele precisa estar morto.
+    const confirmacao = await chamar('/auth/email-verification/confirm', {
+      metodo: 'POST',
+      corpo: { token },
+    });
+    assert.equal(
+      confirmacao.status,
+      410,
+      'o link de troca emitido ANTES da troca de senha continua valendo depois ' +
+        'dela. É exatamente por ele que quem tomou a conta volta.',
+    );
+
+    // E o pendente some da tela: aviso que não corresponde a nada é o que
+    // ensina a pessoa a ignorar aviso.
+    const entrarDeNovo = await chamar('/auth/login', {
+      metodo: 'POST',
+      corpo: { email: tutor.email, password: 'vento-sul-na-varanda-88', stay_signed_in: false },
+    });
+    assert.equal(entrarDeNovo.status, 200);
+    const depois = await perfil((entrarDeNovo.corpo as { access_token: string }).access_token);
+    assert.equal(depois.pending_email, null, 'a troca pendente sobreviveu à troca de senha');
+    assert.equal(depois.email, tutor.email);
   });
 
   void it('8. sem sessão não há pedido: 401, e nada é gravado', async () => {
