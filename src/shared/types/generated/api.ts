@@ -5119,6 +5119,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCaseReachPreview"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };

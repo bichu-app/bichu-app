@@ -2594,6 +2594,12 @@ paths:
                     radius_m: 5000
                     area_label: Vila Madalena
                     blockers: [contact_channel_unverified]
+        # `petId` no caminho e `lat`/`lon` na query podem ser recusados, e desde
+        # a BICHUS-199 a borda os valida contra este documento -- um `petId` que
+        # nao e UUID, ou uma latitude fora da faixa, respondem 400 antes de o
+        # manipulador rodar. Declarar o status que a rota de fato devolve nao e
+        # burocracia: quem le o contrato precisa ver a recusa que existe.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /pets/{petId}/lost-cases:

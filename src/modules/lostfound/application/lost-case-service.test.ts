@@ -38,6 +38,8 @@ import type {
   LostCaseRepository,
   NovoCaso,
 } from '../ports/lost-case-repository.js';
+import type { AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
+import type { CentroDoAlcance } from '../domain/previa-do-alcance.js';
 import type { CaseId, Instant, OpaqueToken, PetId, UserId } from '../../../shared/types/brands.js';
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
@@ -62,6 +64,16 @@ interface EstadoDoRepositorio {
    * "não", e sem dois lugares para o estado essa corrida não é representável.
    */
   petsComCasoAbertoNoIndice?: PetId[];
+  /** A area de referencia em texto do tutor, que so sai no caminho sem centro. */
+  areaDeReferencia?: { city?: string; neighborhood?: string };
+  /**
+   * O que a porta `AlcanceDoAlerta` responde.
+   *
+   * `null` e o padrao de proposito: e o que a implementacao ligada em `api.ts`
+   * devolve hoje, porque as tabelas de localizacao e de push nao existem. Um
+   * padrao numerico aqui faria os testes exercitarem um mundo que nao existe.
+   */
+  contagemDeAlcance?: number | null;
 }
 
 interface Registro {
@@ -76,6 +88,9 @@ interface Registro {
   }[];
   readonly buscou: { caso: CaseId; dono: UserId }[];
   readonly conferiuAbertura: { pet: PetId; dono: UserId }[];
+  readonly conferiuPrevia: { pet: PetId; dono: UserId }[];
+  /** O que o servico pediu a porta de alcance, incluindo quem ele excluiu. */
+  readonly contou: { centro: CentroDoAlcance; raio: number; excluiu: UserId }[];
 }
 
 function casoAberto(): CasoGravado {
@@ -101,7 +116,14 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
   repositorio: LostCaseRepository;
   registro: Registro;
 } {
-  const registro: Registro = { abriu: [], encerrou: [], buscou: [], conferiuAbertura: [] };
+  const registro: Registro = {
+    abriu: [],
+    encerrou: [],
+    buscou: [],
+    conferiuAbertura: [],
+    conferiuPrevia: [],
+    contou: [],
+  };
   const indice = new Set<PetId>(estado.petsComCasoAbertoNoIndice ?? []);
   // Cópia mutável: encerrar de verdade muda o estado, e é essa mudança que faz
   // o segundo encerramento da fila offline encontrar um caso que não está mais
@@ -118,6 +140,22 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
         casosAbertosDaConta: 0,
         temCanalVerificado: true,
         ...estado.abertura,
+      });
+    },
+
+    estadoParaPrevia: (pet, dono) => {
+      registro.conferiuPrevia.push({ pet, dono });
+      return Promise.resolve({
+        existeEhDoTutor: true,
+        temFotoPronta: true,
+        petJaTemCasoAberto: false,
+        casosAbertosDaConta: 0,
+        temCanalVerificado: true,
+        ...estado.abertura,
+        areaDeReferenciaDoTutor: {
+          city: estado.areaDeReferencia?.city,
+          neighborhood: estado.areaDeReferencia?.neighborhood,
+        },
       });
     },
 
@@ -203,7 +241,18 @@ function servico(estado: EstadoDoRepositorio = {}): {
     random128: () => new Uint8Array(16).fill(0x2b),
   };
 
-  return { casos: new LostCaseService({ repositorio, ids, clock, trilha }), registro, eventos };
+  const alcance: AlcanceDoAlerta = {
+    contarAlcancaveis: (centro, raio, excluir) => {
+      registro.contou.push({ centro, raio, excluiu: excluir });
+      return Promise.resolve(estado.contagemDeAlcance ?? null);
+    },
+  };
+
+  return {
+    casos: new LostCaseService({ repositorio, ids, clock, trilha, alcance }),
+    registro,
+    eventos,
+  };
 }
 
 function chamador(userId: UserId): ContextoDoChamador {
@@ -522,5 +571,138 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
     assert.ok(novo !== undefined);
     assert.notEqual(novo.shareToken, novo.id);
     assert.doesNotMatch(novo.shareToken, /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  });
+});
+
+/**
+ * A prévia do alcance (BICHUS-202).
+ *
+ * O que se prova aqui é o que a rota não consegue provar sozinha: **o vínculo
+ * com o dono viaja no argumento**. Um serviço que buscasse o estado sem passar o
+ * chamador e conferisse o dono depois passaria em toda asserção de status desta
+ * suíte e reprovaria neste bloco — que é a única forma de acusar a diferença
+ * entre autorização na consulta e autorização num `if`.
+ */
+void describe('previa do alcance — o vínculo com o dono e a honestidade do número', () => {
+  void it('o dono viaja no argumento da consulta, e não é conferido depois', async () => {
+    const { casos, registro } = servico();
+
+    await casos.previa(PET, undefined, chamador(DONO));
+
+    assert.deepEqual(registro.conferiuPrevia, [{ pet: PET, dono: DONO }]);
+  });
+
+  void it('pet que a consulta vinculada não devolve responde 404, e nunca 403', async () => {
+    const { casos } = servico({ abertura: { existeEhDoTutor: false } });
+
+    await assert.rejects(
+      () => casos.previa(PET, undefined, chamador(OUTRO_TUTOR)),
+      (erro: unknown) => {
+        assert.ok(erro instanceof AppError);
+        assert.equal(erro.status, 404);
+        // A BICHUS-21, critério 12, diz 403. A ADR-0021 diz 404 e é ela que
+        // vale: aqui um 403 confirmaria que aquele pet existe e está perdido a
+        // quem não é dono dele.
+        assert.notEqual(erro.status, 403);
+        assert.equal(erro.problemType, 'not-found');
+        return true;
+      },
+    );
+  });
+
+  void it('bloqueio NÃO é erro na prévia: ele sai em lista, com 200', async () => {
+    const { casos } = servico({
+      abertura: { temCanalVerificado: false, temFotoPronta: false, petJaTemCasoAberto: true },
+    });
+
+    const previa = await casos.previa(PET, undefined, chamador(DONO));
+
+    assert.deepEqual(previa.bloqueios, [
+      'contact_channel_unverified',
+      'pet_photo_missing',
+      'pet_already_lost',
+    ]);
+  });
+
+  void it('a contagem exclui o próprio tutor e usa o raio de 5 km', async () => {
+    const { casos, registro } = servico({ contagemDeAlcance: 46 });
+
+    await casos.previa(PET, { lat: -23.56, lon: -46.68 }, chamador(DONO));
+
+    // Critério 5 do ADR-0006: o tutor do caso nunca entra na própria lista de
+    // notificados. O número da tela é o mesmo que o disparo vai usar, então um
+    // tutor contado aqui seria um destinatário a mais na métrica e a menos na
+    // realidade.
+    assert.deepEqual(registro.contou, [
+      { centro: { lat: -23.56, lon: -46.68 }, raio: 5000, excluiu: DONO },
+    ]);
+  });
+
+  void it('sem centro a porta de alcance NÃO é chamada: não há raio para contar', async () => {
+    const { casos, registro } = servico({ contagemDeAlcance: 46 });
+
+    const previa = await casos.previa(PET, undefined, chamador(DONO));
+
+    assert.deepEqual(registro.contou, []);
+    assert.equal(previa.estadoDoAlcance, 'no_location');
+    assert.equal(previa.tutoresAlcancaveis, null);
+  });
+
+  void it('com centro o rótulo de área é nulo: não há geocodificação no MVP', async () => {
+    const { casos } = servico({
+      contagemDeAlcance: 46,
+      areaDeReferencia: { neighborhood: 'Vila Madalena', city: 'São Paulo' },
+    });
+
+    const previa = await casos.previa(PET, { lat: -23.56, lon: -46.68 }, chamador(DONO));
+
+    // Rotular o ponto onde o pet sumiu com o bairro de casa do tutor seria uma
+    // mentira de aparência plausível, e a tela a exibiria com a confiança de um
+    // dado do servidor: "Vamos avisar 46 tutores num raio de 5 km da Vila
+    // Madalena" quando o pet sumiu em outra cidade.
+    assert.equal(previa.rotuloDaArea, null);
+  });
+
+  void it('sem centro o rótulo é a área de referência do próprio tutor', async () => {
+    const { casos } = servico({
+      areaDeReferencia: { neighborhood: 'Vila Madalena', city: 'São Paulo' },
+    });
+
+    const previa = await casos.previa(PET, undefined, chamador(DONO));
+
+    assert.equal(previa.rotuloDaArea, 'Vila Madalena, São Paulo');
+  });
+
+  void it('nada que sai da prévia carrega coordenada ou identificador interno', async () => {
+    const { casos } = servico({ contagemDeAlcance: 46 });
+
+    const previa = await casos.previa(PET, { lat: -23.56, lon: -46.68 }, chamador(DONO));
+
+    // Busca por FORMA, e não por nome de campo: um campo novo acrescentado
+    // depois cai nesta asserção sem ninguém atualizar o teste.
+    const serializada = JSON.stringify(previa);
+    assert.doesNotMatch(serializada, COORDENADA);
+    assert.doesNotMatch(
+      serializada,
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i,
+    );
+  });
+
+  void it('o teto de casos abertos da conta NÃO vira bloqueio nem sai na resposta', async () => {
+    const { casos } = servico({ abertura: { casosAbertosDaConta: 99 } });
+
+    const previa = await casos.previa(PET, undefined, chamador(DONO));
+
+    // Ele não está entre os três `blockers` do contrato, e devolvê-lo "porque já
+    // está na mão" agruparia os pets do tutor numa resposta que o documento não
+    // declara — propriedade a MAIS, que nenhum portão de contrato acusa.
+    assert.deepEqual(previa.bloqueios, []);
+    assert.deepEqual(Object.keys(previa).sort(), [
+      'bloqueios',
+      'estadoDoAlcance',
+      'raioEmMetros',
+      'rotuloDaArea',
+      'tutoresAlcancaveis',
+    ]);
   });
 });

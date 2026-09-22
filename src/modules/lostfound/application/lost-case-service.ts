@@ -23,9 +23,17 @@ import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import {
   atingiuTetoDaConta,
   bloqueiosParaAbrirCaso,
+  rotuloDaArea,
   temOndeSuficiente,
   type Bloqueio,
 } from '../domain/abertura-do-caso.js';
+import {
+  alcanceDe,
+  RAIO_DO_ALERTA_EM_METROS,
+  type CentroDoAlcance,
+  type EstadoDoAlcance,
+} from '../domain/previa-do-alcance.js';
+import type { AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
 import type {
   CanalDoReencontro,
   CasoGravado,
@@ -39,6 +47,16 @@ export interface DependenciasDeCasos {
   readonly ids: IdGenerator;
   readonly clock: Clock;
   readonly trilha: AuditLog;
+  readonly alcance: AlcanceDoAlerta;
+}
+
+/** `LostCaseReachPreview`, ainda em vocabulário de domínio. */
+export interface PreviaDoCaso {
+  readonly estadoDoAlcance: EstadoDoAlcance;
+  readonly tutoresAlcancaveis: number | null;
+  readonly raioEmMetros: number;
+  readonly rotuloDaArea: string | null;
+  readonly bloqueios: readonly Bloqueio[];
 }
 
 export interface EntradaDoCaso {
@@ -152,6 +170,63 @@ export class LostCaseService {
     });
 
     return caso;
+  }
+
+  /**
+   * A prévia do alcance, ANTES de abrir o caso (F3.2).
+   *
+   * Três coisas que decidem o desenho desta função, na ordem em que importam:
+   *
+   * 1. **Pet que não é do chamador responde 404**, e a decisão vem da ADR-0021 —
+   *    não do corpo da BICHUS-21, cujo critério 12 diz 403. A divergência é
+   *    conhecida e está resolvida a favor da ADR: aqui um 403 confirmaria a
+   *    existência de um pet alheio, e a rota viraria oráculo de enumeração de
+   *    UUID para qualquer pessoa com cadastro. A conferência é a leitura do
+   *    `existeEhDoTutor` que já veio VINCULADO da consulta, e não um `if` sobre
+   *    um pet que a consulta tenha devolvido sem vínculo.
+   * 2. **Bloqueio não é erro.** A abertura lança `problemaDoBloqueio`; a prévia
+   *    devolve os três em lista, e responde 200. É o que faz a folha de bloqueio
+   *    ter o texto certo sem uma segunda chamada, e é literalmente o que o
+   *    contrato declara em `blockers`.
+   * 3. **Nada aqui inventa número.** `alcanceDe` só produz `computed` quando a
+   *    porta devolveu um inteiro; `null` vira `unavailable` e ausência de centro
+   *    vira `no_location`.
+   *
+   * O teto de casos abertos por conta NÃO é consultado aqui, e a ausência é
+   * deliberada: ele não está entre os três `blockers` do contrato, e acrescentá-lo
+   * faria a resposta entregar mais do que o documento declara — que é o defeito
+   * que nenhum portão de contrato pega.
+   */
+  async previa(
+    pet: PetId,
+    centro: CentroDoAlcance | undefined,
+    chamador: ContextoDoChamador,
+  ): Promise<PreviaDoCaso> {
+    const estado = await this.deps.repositorio.estadoParaPrevia(pet, chamador.userId);
+    if (!estado.existeEhDoTutor) throw problemas.naoEncontrado();
+
+    const contagem =
+      centro === undefined
+        ? null
+        : await this.deps.alcance.contarAlcancaveis(
+            centro,
+            RAIO_DO_ALERTA_EM_METROS,
+            chamador.userId,
+          );
+
+    const alcance = alcanceDe(centro, contagem);
+
+    return {
+      estadoDoAlcance: alcance.estado,
+      tutoresAlcancaveis: alcance.tutoresAlcancaveis,
+      raioEmMetros: RAIO_DO_ALERTA_EM_METROS,
+      // Com centro o rótulo é `null`: não há geocodificação no MVP (ADR-0006),
+      // então nomear o ponto onde o pet sumiu com o bairro de casa do tutor
+      // seria uma mentira de aparência plausível — e a tela a exibiria com a
+      // confiança de um dado do servidor.
+      rotuloDaArea: centro === undefined ? rotuloDaArea(estado.areaDeReferenciaDoTutor) : null,
+      bloqueios: bloqueiosParaAbrirCaso(estado),
+    };
   }
 
   async buscar(caso: CaseId, chamador: ContextoDoChamador): Promise<CasoGravado> {

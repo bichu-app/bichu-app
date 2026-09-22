@@ -28,7 +28,8 @@ import {
 } from '../../../../shared/http/idempotency.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
-import type { LostCaseService } from '../../application/lost-case-service.js';
+import type { LostCaseService, PreviaDoCaso } from '../../application/lost-case-service.js';
+import { centroDe, type CentroDoAlcance } from '../../domain/previa-do-alcance.js';
 import type { CasoGravado, DesfechoDoCaso, CanalDoReencontro } from '../../ports/lost-case-repository.js';
 import type { AbsoluteUrl, CaseId, Instant, PetId, UserId } from '../../../../shared/types/brands.js';
 
@@ -44,6 +45,40 @@ export const rotaDeAberturaDeCaso = defineRoute({
     // exatamente no dia em que ele existe para funcionar.
     { dimension: ['account'], limit: 5, window: '24h', onExceed: 'accept_and_defer_dispatch' },
     { dimension: ['account'], limit: 20, window: '24h', onExceed: 'hold_for_review' },
+  ],
+});
+
+/**
+ * A prévia do alcance (`previewLostCaseReach`, F3.2).
+ *
+ * **Os dois tetos são os do contrato, copiados dele e não escolhidos aqui.** A
+ * operação declara `x-effects: [expensive_query]`, e com efeito não vazio
+ * `defineRoute` torna a ausência de `rateLimit` erro de compilação. As duas
+ * dimensões são específicas (`account` e `pet`), então `registrarRota` exige um
+ * resolvedor para cada uma — também por tipo, também sem chance de esquecer.
+ *
+ * Por que `account` é a dimensão que RECUSA, e o que ela protege:
+ *
+ * - A rota é autenticada, então `account` existe e é exata. Teto por `ip` seria
+ *   armadilha no Brasil, onde o CGNAT das operadoras põe muita gente atrás de
+ *   poucos endereços: ele pegaria vizinhos inocentes e erraria o abusador.
+ * - O que se protege é uma **consulta geoespacial de 5 km** sobre índice GiST,
+ *   disparada por uma tela que a pessoa reabre enquanto decide. Trinta por hora
+ *   cobre o uso legítimo mais folgado — abrir, fechar, voltar, tentar com outra
+ *   posição — e ainda impede uma conta de virar gerador de carga no caminho mais
+ *   caro do produto.
+ * - `pet` com `serve_cache` **não recusa**: só `deny_429` recusa
+ *   (`aplicacao-de-teto.ts`). Ele conta e alerta, e está aqui porque o contrato
+ *   o declara — não porque a rota o tenha inventado.
+ */
+export const rotaDePreviaDoCaso = defineRoute({
+  operationId: 'previewLostCaseReach',
+  method: 'get',
+  path: '/pets/:petId/lost-case-preview',
+  effects: ['expensive_query'],
+  rateLimit: [
+    { dimension: ['account'], limit: 30, window: '1h', onExceed: 'deny_429' },
+    { dimension: ['pet'], limit: 10, window: '1h', onExceed: 'serve_cache' },
   ],
 });
 
@@ -85,6 +120,21 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
     );
   }
   return schema;
+}
+
+/**
+ * O `petId` do caminho, ou `undefined` quando ele não veio utilizável.
+ *
+ * Devolve `undefined` em vez de lançar porque ele é lido em DOIS lugares com
+ * significados diferentes: no resolvedor do teto, onde ausência significa "esta
+ * entrada não se aplica e é pulada", e no handler, onde ela vira 404. Um
+ * lançamento aqui recusaria a requisição de dentro de um gancho de teto, que é
+ * o lugar errado para decidir isso.
+ */
+function petIdDoCaminho(request: FastifyRequest): PetId | undefined {
+  const { petId } = request.params as { petId?: unknown };
+  if (typeof petId !== 'string' || petId === '') return undefined;
+  return petId as PetId;
 }
 
 /** MEMOIZADA: o teto por `account` e o handler precisam do mesmo dono. */
@@ -185,10 +235,124 @@ function comoRespostaDoCaso(caso: CasoGravado, baseDaWeb: AbsoluteUrl): Record<s
   };
 }
 
+/**
+ * O centro do raio, vindo da consulta.
+ *
+ * Validação explícita e não `schema.querystring` por um motivo concreto: o
+ * tradutor de erro do servidor transforma `FST_ERR_VALIDATION` num
+ * `validation-failed` com `field: ''`, e a tela que precisa dizer "essa posição
+ * não parece do Brasil" ficaria sem saber qual dos dois campos recusou.
+ *
+ * As três recusas, e o que cada uma impede:
+ *
+ * - **Não é número.** `?lat=abc` viraria `NaN` e `NaN` atravessa comparação sem
+ *   ninguém reclamar, virando um centro que o PostGIS recusa lá no fundo.
+ * - **Um sem o outro.** Meia coordenada não é meio centro. Aceitá-la faria a
+ *   rota escolher em silêncio entre ignorar o que a pessoa mandou e inventar o
+ *   que faltou — e a resposta viria `no_location` como se nada tivesse chegado.
+ * - **Fora da faixa do contrato.** Os limites são os declarados em
+ *   `api/openapi.yaml` (lat de -34 a 6, lon de -74 a -32), que é o retângulo do
+ *   Brasil. Coordenada trocada de ordem — o erro mais comum de quem monta a
+ *   consulta à mão — cai fora dele e é recusada aqui, e não depois de rodar a
+ *   consulta cara sobre um ponto no meio do oceano Índico.
+ */
+const FAIXA_DE_LATITUDE = { min: -34, max: 6 } as const;
+const FAIXA_DE_LONGITUDE = { min: -74, max: -32 } as const;
+
+function numeroDaConsulta(bruto: unknown, campo: string): number | undefined {
+  if (bruto === undefined) return undefined;
+  if (typeof bruto !== 'string' || bruto.trim() === '') {
+    throw problemas.validacao([
+      { field: campo, code: 'invalid', message: 'Precisa ser um número.' },
+    ]);
+  }
+  const valor = Number(bruto);
+  if (!Number.isFinite(valor)) {
+    throw problemas.validacao([
+      { field: campo, code: 'invalid', message: 'Precisa ser um número.' },
+    ]);
+  }
+  return valor;
+}
+
+function naFaixa(valor: number, faixa: { min: number; max: number }, campo: string): void {
+  if (valor < faixa.min || valor > faixa.max) {
+    throw problemas.validacao([
+      { field: campo, code: 'out_of_range', message: 'Essa posição não parece ser do Brasil.' },
+    ]);
+  }
+}
+
+function centroDaConsulta(request: FastifyRequest): CentroDoAlcance | undefined {
+  const { lat: latBruta, lon: lonBruta } = request.query as { lat?: unknown; lon?: unknown };
+  const lat = numeroDaConsulta(latBruta, 'lat');
+  const lon = numeroDaConsulta(lonBruta, 'lon');
+
+  if (lat === undefined && lon === undefined) return undefined;
+  if (lat === undefined || lon === undefined) {
+    throw problemas.validacao([
+      {
+        field: lat === undefined ? 'lat' : 'lon',
+        code: 'required',
+        message: 'Latitude e longitude vão juntas.',
+      },
+    ]);
+  }
+
+  naFaixa(lat, FAIXA_DE_LATITUDE, 'lat');
+  naFaixa(lon, FAIXA_DE_LONGITUDE, 'lon');
+  return centroDe(lat, lon);
+}
+
+/**
+ * `LostCaseReachPreview`, campo a campo como o contrato declara.
+ *
+ * **Cinco campos, e nenhum a mais.** O que sai daqui não tem `pet_id`, não tem
+ * `case_id` e não tem contagem de casos da conta — e a ausência do último é a
+ * menos óbvia: o serviço lê `casosAbertosDaConta` para nada nesta rota, e
+ * devolvê-lo "porque já está na mão" agruparia os pets do tutor numa resposta
+ * que o contrato não declara. O ADR-0010 proíbe o agrupamento no item 7; o
+ * portão de contrato, que só procura o que SUMIU, não veria a propriedade a
+ * mais.
+ */
+function comoRespostaDaPrevia(previa: PreviaDoCaso): Record<string, unknown> {
+  return {
+    reach_status: previa.estadoDoAlcance,
+    reachable_tutors: previa.tutoresAlcancaveis,
+    radius_m: previa.raioEmMetros,
+    area_label: previa.rotuloDaArea,
+    blockers: previa.bloqueios,
+  };
+}
+
 export function registrarRotasDeCasos(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotasDeCaso,
 ): void {
+  registrarRota(
+    app,
+    rotaDePreviaDoCaso,
+    {
+      resolvedores: {
+        account: (request) => contaDoTeto(request, deps),
+        // UUID interno em claro na chave do balde, pelo mesmo motivo declarado
+        // em `aplicacao-de-teto.ts`: `rate_limit_counters.bucket_key` não sai em
+        // resposta nenhuma, e o resumo tornaria impossível responder qual pet
+        // bateu no teto numa investigação. O SEC-010 fala de IP, e o IP desta
+        // rota nem chega a virar chave: a dimensão que recusa é `account`.
+        pet: (request) => petIdDoCaminho(request),
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await donoAutenticado(request, deps);
+      const petId = petIdDoCaminho(request);
+      if (petId === undefined) throw problemas.naoEncontrado();
+
+      const previa = await deps.casos.previa(petId, centroDaConsulta(request), chamador);
+      return reply.status(200).send(comoRespostaDaPrevia(previa));
+    },
+  );
+
   registrarRota(
     app,
     rotaDeAberturaDeCaso,
