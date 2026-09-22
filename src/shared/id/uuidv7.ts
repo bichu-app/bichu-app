@@ -23,6 +23,16 @@ const VARIANTE_RFC4122 = 0x80;
  * gerados no mesmo milissegundo saem em ordem aleatória entre si, e a ordenação
  * que justifica o v7 vale só na granularidade do milissegundo — exatamente onde
  * uma inserção em lote acontece.
+ *
+ * DEFEITO ABERTO — BICHUS-208. O contador é semeado com 12 bits de aleatório e
+ * incrementado com `& 0x0fff`, então quando a semente cai perto de 4095 ele vira
+ * para 0 dentro do mesmo milissegundo e o identificador seguinte fica
+ * **lexicograficamente menor** que o anterior. Medido: 0,63% das execuções do caso
+ * de ordenação da suíte, e 100% quando 4097 identificadores dividem um
+ * milissegundo. A RFC 9562 §6.2 exige tratar a virada — emprestando 1 ms do futuro
+ * ou esperando o tique seguinte — e semear o contador só nos bits baixos para
+ * deixar espaço de crescimento. Não está corrigido aqui de propósito: este é o
+ * gerador de toda chave primária do sistema, e a correção espera decisão.
  */
 let ultimoMilissegundo = -1;
 let sequencia = 0;
