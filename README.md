@@ -148,6 +148,98 @@ o `DATABASE_URL` do ambiente está apontando para outro lugar.
 
 O caminho inteiro está em `infra/integracao/`, e cada arquivo explica o porquê.
 
+### `git stash` não é seguro neste repositório
+
+A pilha de stash mora no diretório git comum, não em cada worktree: os cerca de
+60 worktrees deste repositório compartilham uma pilha só. Dois agentes que
+empilham em paralelo dão `pop` no trabalho um do outro, e nada na saída do
+comando avisa. Já aconteceu: duas medições de base com 76 segundos de diferença
+terminaram com cada worktree segurando o trabalho do outro.
+
+Para medir a base, use `git worktree add` a partir de um ref limpo, ou meça num
+clone descartável.
+
+Se você já perdeu trabalho assim, ele não sumiu: o commit de stash vira objeto
+inalcançável. Ancore antes de qualquer outra coisa, com
+`git update-ref refs/resgate/<nome> <sha>`, e só depois mexa no worktree. Um
+stash feito com `-u` guarda os não rastreados num terceiro pai (`<sha>^3`);
+restaurar só a árvore principal perde esses arquivos.
+
+### Se você precisa mesmo de um `git stash`
+
+```
+BICHU_STASH_LIBERADO=1 git stash push
+```
+
+Isso passa por cima do portão abaixo. Use quando você sabe que é seguro, por
+exemplo num clone só seu. O portão existe para impedir o engano, não a decisão
+deliberada.
+
+Quando a saída é usada o gancho **avisa em voz alta**, e o aviso não é
+cerimônia: não há como saber se a variável foi digitada na linha ou exportada
+no seu perfil, porque ela chega igual nos dois casos. Se você vir esse aviso
+sem ter digitado nada, o portão está desligado em **todo** comando seu. Confira
+com `env | grep BICHU_STASH_LIBERADO` e religue com `unset`.
+
+`pop`, `drop` e `clear` **nunca** são bloqueados: quem tem um stash preso
+precisa exatamente deles para sair do buraco.
+
+### O portão que recusa o `git stash`
+
+`.githooks/reference-transaction` recusa criar `refs/stash` quando o
+repositório tem mais de um worktree. Ele **está valendo**.
+
+Ele custa cerca de 130 ms a mais em **todo** commit, porque o git chama um
+gancho de `reference-transaction` sete vezes por commit e cada chamada é um
+processo novo. `git status` não dispara transação de ref nenhuma e fica
+inalterado. A medição, com os três braços de comparação, está no cabeçalho do
+gancho. A conta foi aceita de propósito: o acidente já aconteceu e custou um
+resgate inteiro, e quem comita aqui é agente, não pessoa esperando o prompt.
+
+O caso que ele precisa reprovar, e os seis que ele **não pode** reprovar,
+estão em `infra/verificacao/verificar-portao-de-stash.sh`. Rode depois de mexer
+nele.
+
+**Uma limitação, e ela não é pequena.** `core.hooksPath` é configuração **por
+clone**, aplicada pelo `make setup`. Um clone novo nasce sem gancho nenhum, e
+estar no repositório não é o mesmo que estar valendo na sua máquina.
+
+### Os ganchos vêm do checkout principal
+
+`make setup` grava `core.hooksPath` como caminho **absoluto**, apontando para o
+`.githooks/` do checkout principal. Isso é deliberado, e conserta um furo que
+ninguém tinha medido.
+
+O caminho era relativo, e o git resolve caminho relativo a partir da raiz de
+**cada worktree**. Na prática o gancho só valia num worktree cuja branch já
+contivesse o arquivo: quem saísse de uma branch antiga ficava sem proteção
+nenhuma, sem nenhum sinal. Isso valia igual para o `pre-push`, ou seja, a
+proteção contra push direto na principal alcançava menos worktrees do que
+qualquer um suporia. Gancho não deve variar por branch.
+
+**O preço é que o checkout principal virou fonte única.** Se alguém deixar a
+árvore principal numa branch que não tem `.githooks/`, ou numa versão antiga
+dela, os ganchos mudam para todo mundo de uma vez, incluindo os worktrees que
+não encostaram em nada.
+
+O que fazer quando acontecer:
+
+```
+git -C <checkout principal> switch development   # devolva a principal ao lugar
+git config --get core.hooksPath                  # confira o que está valendo
+make setup                                       # regrave, se estiver errado
+```
+
+`make setup` **recusa** configurar quando o checkout principal não tem
+`.githooks/`, em vez de gravar um caminho que não existe. Portão que aponta
+para o vazio fica verde sem conferir nada, e é assim que se descobre tarde.
+
+O alcance dos dois ganchos, com caminho relativo e com absoluto, está provado
+em `infra/verificacao/verificar-alcance-dos-ganchos.sh`, incluindo que o
+`pre-push` continua recusando a principal e continua deixando passar as outras
+branches.
+
+
 ## Homologação
 
 Existe um ambiente de homologação de pé, e ele **não** é `bichu.app`:

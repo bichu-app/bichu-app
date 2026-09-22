@@ -1,0 +1,131 @@
+#!/bin/sh
+# Recusa EMPILHAR em `refs/stash` quando o repositorio tem mais de um worktree.
+#
+# Por que ele existe: a pilha de stash mora no diretorio git COMUM e e uma so
+# para todos os worktrees. Dois agentes que empilham em paralelo dao `pop` no
+# trabalho um do outro, e nada na saida do comando avisa. Ja aconteceu aqui:
+# duas medicoes de base com 76 segundos de diferenca terminaram com cada
+# worktree segurando o trabalho do outro. Ver README, secao "git stash nao e
+# seguro neste repositorio".
+#
+# O que ele NAO faz, de proposito:
+#   - nao atrapalha quem tem UM worktree so. La `git stash` e seguro, e portao
+#     que reprova todo mundo e desligado na primeira semana;
+#   - nao atrapalha `pop`, `drop` nem `clear`. Quem tem um stash preso precisa
+#     exatamente disso para sair do buraco.
+#
+# Como ele distingue um do outro, MEDIDO e nao deduzido (git 2.54.0):
+#   `stash push`  -> antigo = so zeros, novo = sha real.  Vale inclusive quando
+#                    `refs/stash` JA existe: o git nao usa o valor anterior.
+#   `pop`/`drop` deixando entradas -> NAO ha transacao em `refs/stash`.
+#   `drop`/`clear` esvaziando      -> antigo = sha real, novo = so zeros.
+# Por isso a regra e "antigo todo zero e novo nao": ela pega todo `push` e
+# nenhuma recuperacao. O caso que prova os dois lados esta em
+# `infra/verificacao/verificar-portao-de-stash.sh`.
+#
+# CAMINHO QUENTE: `reference-transaction` dispara em TODA transacao de ref, de
+# todo comando git. Ate a linha do `git worktree list` este script so usa
+# builtins de shell, sem UM processo filho. O laco tambem drena a entrada nas
+# fases em que o codigo de saida e ignorado: sair sem ler deixaria o git
+# escrevendo num cano fechado.
+#
+# Saida de emergencia: `BICHU_STASH_LIBERADO=1 git stash push`. `git stash` nao
+# tem `--no-verify`, e este portao existe para impedir o ENGANO, nao a decisao
+# deliberada de quem sabe o que esta fazendo. Quando ela e usada o gancho AVISA
+# em voz alta, porque variavel exportada no perfil desligaria o portao em
+# silencio, e portao desligado em silencio e pior que portao nenhum.
+#
+# ELE ESTA VALENDO. O custo e conhecido e foi aceito de proposito.
+#
+# `reference-transaction` e chamado 7 vezes num `git commit` pequeno (1x HEAD,
+# 2x a branch, 4x AUTO_MERGE), e cada chamada e um fork+exec de `/bin/sh`.
+# Medido neste repositorio, 40 commits por braco, tres rodadas:
+#
+#   sem gancho nenhum        48 a 87 ms por commit
+#   gancho no-op (so drena)  188 a 215 ms por commit
+#   este gancho              174 a 216 ms por commit
+#
+# Ou seja: cerca de +130 ms por commit, e o custo e de TER um gancho de
+# `reference-transaction`, nao da logica daqui. Um no-op custa o mesmo, dentro
+# do ruido, entao nao ha como baratear sem deixar de existir.
+#
+# `git status` nao dispara transacao de ref nenhuma: zero invocacoes, custo
+# zero. Os +130 ms caem so no commit, e quem comita aqui e agente, nao pessoa
+# esperando o prompt voltar. Algumas dezenas de commits por dia vezes 130 ms e
+# ruido; a troca de trabalho entre worktrees ja custou um resgate inteiro e
+# quase dois dias. Convencao no README protege quem le o README; o gancho
+# protege quem esqueceu.
+#
+# Antes de mexer aqui, rode `infra/verificacao/verificar-portao-de-stash.sh`.
+#
+# LIMITACAO CONHECIDA: `core.hooksPath` e configuracao POR CLONE (`make setup`).
+# Um clone novo nasce SEM esta protecao ate alguem liga-la. Nao presuma que
+# estar no repositorio significa estar valendo na sua maquina.
+
+empilhando=0
+
+while read -r antigo novo ref; do
+	case "$ref" in
+	refs/stash) ;;
+	*) continue ;;
+	esac
+
+	# `antigo` com algum digito nao-zero: a ref ja valia algo, entao isto e
+	# recuperacao (`drop`/`clear` esvaziando), nunca empilhamento.
+	case "$antigo" in
+	*[!0]*) continue ;;
+	esac
+
+	# `novo` com algum digito nao-zero: esta nascendo um stash de verdade.
+	case "$novo" in
+	*[!0]*) empilhando=1 ;;
+	esac
+done
+
+[ "$empilhando" -eq 1 ] || exit 0
+
+# Fora de `prepared` o git ignora o codigo de saida. Ja drenamos a entrada.
+[ "$1" = "prepared" ] || exit 0
+
+# Primeiro e unico processo filho, e so para quem chegou ate aqui.
+[ -n "$BICHU_PORTAO_STASH_ATIVO" ] && exit 0
+BICHU_PORTAO_STASH_ATIVO=1
+export BICHU_PORTAO_STASH_ATIVO
+
+quantos=$(git worktree list | wc -l | tr -d " ")
+[ "$quantos" -le 1 ] && exit 0
+
+# A saida de emergencia e conferida SO aqui, depois de saber que havia
+# bloqueio de verdade: avisar quem tem um worktree so seria ruido.
+#
+# Nao da para saber se a variavel foi digitada na linha do comando ou
+# exportada no perfil: nos dois casos ela chega igual, pelo ambiente. Entao o
+# gancho nao tenta adivinhar, e avisa SEMPRE que ignorar um bloqueio. Quem
+# exportou sem querer ve o aviso em todo stash e descobre; quem digitou de
+# proposito le uma linha a mais e segue.
+if [ -n "$BICHU_STASH_LIBERADO" ]; then
+	echo "reference-transaction: portao de stash IGNORADO por BICHU_STASH_LIBERADO." >&2
+	echo "  Este repositorio tem $quantos worktrees e a pilha de stash e uma so." >&2
+	echo "  Voce esta empilhando assim mesmo." >&2
+	echo "" >&2
+	echo "  Se voce NAO digitou BICHU_STASH_LIBERADO=1 nesta linha, ela esta no" >&2
+	echo "  seu ambiente e o portao esta desligado em TODO comando seu." >&2
+	echo "    conferir:  env | grep BICHU_STASH_LIBERADO" >&2
+	echo "    religar:   unset BICHU_STASH_LIBERADO" >&2
+	echo "" >&2
+	exit 0
+fi
+
+echo "reference-transaction: \`git stash\` recusado." >&2
+echo "" >&2
+echo "  Este repositorio tem $quantos worktrees, e a pilha de stash e UMA SO," >&2
+echo "  compartilhada por todos. Empilhar aqui faz o proximo \`pop\` de qualquer" >&2
+echo "  outro worktree levar o seu trabalho, sem aviso nenhum." >&2
+echo "" >&2
+echo "  Para medir a base:  git worktree add <dir> <ref-limpo>" >&2
+echo "  Ou meca num clone descartavel." >&2
+echo "" >&2
+echo "  Se voce sabe o que esta fazendo:  BICHU_STASH_LIBERADO=1 git stash push" >&2
+echo "  O porque esta no README, secao \"git stash nao e seguro neste repositorio\"." >&2
+echo "" >&2
+exit 1

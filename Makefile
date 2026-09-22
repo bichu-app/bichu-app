@@ -122,10 +122,28 @@ ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
 
 setup: ## prepara a maquina: ganchos de git e .env
-	@git config core.hooksPath .githooks
-	@chmod +x .githooks/* 2>/dev/null || true
+# `core.hooksPath` ABSOLUTO, apontando para o checkout principal. Relativo, que
+# era o que estava aqui, o git resolve a partir da raiz de CADA worktree: o
+# gancho so valia onde a branch ja continha o arquivo, e worktree em branch
+# antiga ficava sem protecao nenhuma sem nenhum sinal. Medido, nao deduzido:
+# `infra/verificacao/verificar-alcance-dos-ganchos.sh`.
+#
+# O preco e que o checkout principal vira FONTE UNICA: deixar a arvore
+# principal numa branch antiga troca os ganchos de todo mundo de uma vez.
+# O README diz o que fazer quando isso acontecer.
+	@raiz="$$(dirname "$$(git rev-parse --path-format=absolute --git-common-dir)")"; \
+	 if [ ! -d "$$raiz/.githooks" ]; then \
+	   echo "make setup: nao achei '$$raiz/.githooks'."; \
+	   echo "  O checkout principal e a fonte dos ganchos. Se ele esta numa branch"; \
+	   echo "  que nao tem essa pasta, ninguem fica protegido. Recusando em vez de"; \
+	   echo "  configurar um caminho que nao existe."; \
+	   exit 1; \
+	 fi; \
+	 git config core.hooksPath "$$raiz/.githooks"; \
+	 chmod +x "$$raiz"/.githooks/* 2>/dev/null || true; \
+	 echo "ganchos ligados em $$raiz/.githooks"; \
+	 echo "  caminho absoluto: vale em todos os worktrees, inclusive em branch antiga"
 	@test -f .env || { cp .env.example .env; echo "criado .env a partir do exemplo: PREENCHA os valores vazios"; }
-	@echo "gancho de pre-push instalado por core.hooksPath (versionado, corrigivel por PR)"
 
 commit-de-build: ## confere BUILD_COMMIT antes de o docker construir (BICHUS-210)
 	@if printf '%s' '$(BUILD_COMMIT)' | grep -Eq '$(FORMA_DE_COMMIT)'; then exit 0; fi; \
