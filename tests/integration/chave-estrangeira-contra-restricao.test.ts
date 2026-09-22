@@ -158,8 +158,18 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   'public.found_reports.found_reports_tag_id_fkey': {
     colunas: ['tag_id'],
     referencia: 'public.pet_tags',
-    // CONTRADIÇÃO VIVA. Ver PARES_DE_NULO_CONTRA_RESTRICAO.
-    aoApagar: 'SET NULL',
+    // Era `SET NULL`, e era a terceira ocorrência de 22/09: o nulo que a ação
+    // mandava pôr é exatamente o que `found_reports_scan_tem_tag_e_pet` proíbe
+    // enquanto `origin = 'tag_scan'`. Corrigida em
+    // `20260922000004_tag-apagada-nao-contradiz-o-achado.sql`.
+    //
+    // `RESTRICT` e não `CASCADE` porque o achado por escaneamento é registro
+    // histórico: a plaquinha sumir depois não desfaz o encontro, e o aviso
+    // ainda carrega a conversa mediada com o tutor. `RESTRICT` e não um CHECK
+    // mais frouxo porque a invariante é verdadeira no NASCIMENTO da linha —
+    // afrouxar fecharia o caso raro (a tag some depois) abrindo o caso comum
+    // (um serviço com defeito grava `tag_scan` sem tag, e nada acusa).
+    aoApagar: 'RESTRICT',
   },
 
   // -------------------------------------------------------------------------
@@ -387,27 +397,22 @@ interface ParDeclarado {
  */
 const PARES_DE_NULO_CONTRA_RESTRICAO: Readonly<Record<string, ParDeclarado>> = {
   // =========================================================================
-  // A TERCEIRA OCORRÊNCIA DE 22/09, E ELA ESTÁ VIVA.
+  // A TERCEIRA OCORRÊNCIA DE 22/09 SAIU DAQUI, E O LUGAR VAZIO É A PROVA.
   // =========================================================================
-  // `CHECK ((origin <> 'tag_scan') OR (tag_id IS NOT NULL AND pet_id IS NOT
-  // NULL))` torna o nulo impossível em `tag_id` sempre que `origin =
-  // 'tag_scan'` — que é a origem de TODO aviso que nasceu de uma leitura de QR.
-  // A chave estrangeira manda pôr exatamente esse nulo quando a tag é apagada.
+  // `found_reports.found_reports_tag_id_fkey + found_reports_scan_tem_tag_e_pet`
+  // era a entrada `contradiz` deste objeto. Ela não foi apagada por
+  // conveniência: ela deixou de EXISTIR no banco.
   //
-  // Não estourou ainda porque tag é revogada por status (`pet_tags.status =
-  // 'revoked'`), não apagada. Está viva e esperando o dia em que alguém apagar
-  // uma tag — uma limpeza de tag de teste, um `DELETE` de correção, uma rotina
-  // de retenção.
+  // A descoberta só enxerga par cuja chave estrangeira põe nulo ou default.
+  // `20260922000004_tag-apagada-nao-contradiz-o-achado.sql` trocou a ação por
+  // `RESTRICT`, então a chave parou de pôr nulo, o par sumiu da consulta, e o
+  // caso "par declarado que o banco não tem mais" passaria a reprovar se a
+  // entrada continuasse escrita aqui. Manter a linha seria afirmar uma
+  // contradição que o banco não tem.
   //
-  // Este arquivo NÃO conserta o esquema: ele acusa. O conserto é migração, e
-  // migração tem dono.
-  'public.found_reports.found_reports_tag_id_fkey + found_reports_scan_tem_tag_e_pet': {
-    coluna: 'tag_id',
-    veredito: 'contradiz',
-    medicao:
-      'DELETE FROM pet_tags de uma tag com aviso `origin = tag_scan` reprova com 23514 em ' +
-      'found_reports_scan_tem_tag_e_pet, no UPDATE ... SET tag_id = NULL que a FK dispara.',
-  },
+  // O que sobrou no lugar dela é a medição, e ela está viva em
+  // "apagar a tag agora reprova pela chave estrangeira": o que era 23514 num
+  // CHECK virou 23503 na chave, e apagar pet e conta continua concluindo.
 
   // =========================================================================
   // O lado permissivo, e ele é permissivo de verdade.
@@ -1044,14 +1049,26 @@ void describe('o efeito, e não só a declaração: apagar uma conta de verdade'
     });
   });
 
-  void it('a terceira ocorrência de 22/09, medida: apagar a tag reprova com 23514', async () => {
-    // A MEDIÇÃO do veredito `contradiz`. O caso declarativo acusa pela
-    // declaração; este acusa pelo Postgres, que é quem recusa o INSERT.
+  void it('apagar a tag reprova pela chave estrangeira, e o achado de escaneamento sobrevive', async () => {
+    // ESTE CASO AFIRMAVA A FALHA. Até 22/09 ele exigia `23514` em
+    // `found_reports_scan_tem_tag_e_pet`, e foi escrito assim de propósito:
+    // para reprovar no dia em que a migração chegasse, com o arquivo inteiro na
+    // mão de quem consertasse.
     //
-    // Ele AFIRMA a falha de hoje de propósito. No dia em que a migração
-    // corrigir `found_reports.tag_id`, este caso reprova — e reprovar aqui é o
-    // sinal de que o conserto chegou, com o arquivo inteiro para ser atualizado
-    // junto.
+    // `20260922000004_tag-apagada-nao-contradiz-o-achado.sql` chegou. O que
+    // mudou não é "a tag passou a poder ser apagada": ela continua não podendo,
+    // e isso é a decisão. O que mudou é QUEM recusa e QUANDO.
+    //
+    //   antes  23514 / found_reports_scan_tem_tag_e_pet
+    //          O CHECK recusa a linha que o `SET NULL` acabou de fabricar. O
+    //          erro aponta para uma restrição da tabela errada, num `UPDATE`
+    //          que ninguém escreveu, e não diz o que está no caminho.
+    //   agora  23503 / found_reports_tag_id_fkey
+    //          A chave recusa a exclusão antes de fabricar linha nenhuma, e
+    //          nomeia a tabela que segura a tag.
+    //
+    // Mesma recusa, contada pelo lado que explica. A comparação dos dois
+    // códigos é o caso: se voltar a ser 23514, o `SET NULL` voltou.
     await comMassa(async () => {
       await cliente.query('SAVEPOINT tentativa');
       let codigo = '(não falhou)';
@@ -1069,17 +1086,48 @@ void describe('o efeito, e não só a declaração: apagar uma conta de verdade'
 
       assert.equal(
         codigo,
-        '23514',
-        'apagar uma tag com aviso de leitura de QR NÃO falhou mais. Se `found_reports.tag_id` ' +
-          'deixou de ser ON DELETE SET NULL, o defeito foi corrigido: atualize ' +
-          'CHAVES_ESTRANGEIRAS e remova a entrada de PARES_DE_NULO_CONTRA_RESTRICAO.',
+        '23503',
+        'apagar uma tag citada por um aviso de leitura de QR devia reprovar com 23503, que é ' +
+          'a chave estrangeira segurando. 23514 significa que `found_reports.tag_id` voltou a ' +
+          'ser ON DELETE SET NULL e a contradição de 22/09 ressuscitou. "(não falhou)" é pior: ' +
+          'a tag passou a ser apagável e a procedência do achado some em silêncio.',
       );
       assert.equal(
         restricao,
-        'found_reports_scan_tem_tag_e_pet',
-        'a exclusão da tag falhou por outra restrição que não a declarada. Sintoma que ' +
-          'reaparece com outro nome é cadeia, não recaída: olhe a mensagem crua antes de ' +
+        'found_reports_tag_id_fkey',
+        'a exclusão da tag falhou por outra restrição que não a chave estrangeira. Sintoma ' +
+          'que reaparece com outro nome é cadeia, não recaída: olhe a mensagem crua antes de ' +
           'mexer no registro.',
+      );
+
+      // A METADE DE PRODUTO DA DECISÃO, e ela não sai do código de erro: o
+      // aviso é a prova de que alguém achou o animal e leu a plaquinha, e ele
+      // continua de pé — com a tag, com o pet e com o token da conversa
+      // mediada, que é por onde tutor e achador combinam a devolução.
+      //
+      // `CASCADE` teria passado nas duas asserções acima por outro caminho (a
+      // exclusão simplesmente concluiria) e apagado exatamente isto. É esta
+      // conferência que separa as duas formas.
+      const { rows } = await cliente.query<{
+        avisos: string;
+        com_tag: string;
+        com_token: string;
+        tags: string;
+      }>(
+        `select (select count(*) from found_reports where id = $1) as avisos,
+                (select count(*) from found_reports
+                  where id = $1 and tag_id = $2 and pet_id = $3) as com_tag,
+                (select count(*) from found_reports
+                  where id = $1 and finder_token_hash is not null) as com_token,
+                (select count(*) from pet_tags where id = $2) as tags`,
+        [AVISO_DE_SCAN, TAG, PET],
+      );
+      assert.deepEqual(
+        rows[0],
+        { avisos: '1', com_tag: '1', com_token: '1', tags: '1' },
+        'o aviso de leitura de QR não sobreviveu inteiro à tentativa de apagar a tag. Se ele ' +
+          'sumiu, a ação virou CASCADE e o produto passou a apagar a prova de um resgate ' +
+          'porque a plaquinha foi descartada. Se `tag_id` ficou nulo, o SET NULL voltou.',
       );
     });
   });
