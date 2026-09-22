@@ -9,22 +9,64 @@
 //
 // Sao dois portoes, e eles pegam coisas diferentes:
 //
-// 1. A TRAVA DE CONTEUDO cobra a letra do criterio: os arquivos do assistente
-//    de cadastro sao byte a byte os de `7fe24a6`, a base desta branch. Um
-//    espaco a mais reprova. E de proposito que ela seja burra: o criterio nao
-//    fala de comportamento, fala de o codigo nao ter mudado.
+// 1. A TRAVA DE ARVORE cobra a letra do criterio: o conteudo de
+//    `app/lib/telas` e o mesmo que estava valendo quando a trava foi escrita
+//    pela ultima vez. Um espaco a mais reprova. E de proposito que ela seja
+//    burra: o criterio nao fala de comportamento, fala de o codigo nao ter
+//    mudado.
 //
 // 2. O PORTAO ESTRUTURAL cobra o espirito, e sobrevive a esta historia: tela
 //    nenhuma importa plugin de aparelho nem fala canal de plataforma. A trava
-//    de conteudo morre no dia em que uma historia legitima mexer na tela; este
+//    de arvore morre no dia em que uma historia legitima mexer numa tela; este
 //    aqui continua valendo, e e ele que pega o contorno de verdade.
 //
+// ---------------------------------------------------------------------------
+// O QUE MUDOU DEPOIS DA REVISAO DA BICHUS-161 (e por que)
+// ---------------------------------------------------------------------------
+//
+// **O portao estrutural tinha um furo, e era grande.** Ele casava o texto
+// `import '`, com aspa SIMPLES. `import "package:image_picker/..."`, com aspa
+// dupla, passava verde -- e o `prefer_single_quotes` estava comentado no
+// `analysis_options.yaml`, entao o `flutter analyze` tambem ficava calado. O
+// portao que existe para impedir que uma tela contorne a porta era contornavel
+// trocando o tipo de aspa, que e a diferenca mais inocente que existe entre
+// dois programadores.
+//
+// Agora ele nao casa texto: ele LE as diretivas, com o leitor de
+// `diretivas_dart.dart`, que entende aspa simples, dupla, tripla, string crua,
+// escape unicode, literais adjacentes, comentario no meio e `import`
+// condicional. O grupo `autoteste do leitor` abaixo prova cada uma dessas
+// formas, e ele fica no repositorio de proposito: prova negativa que vive numa
+// frase evapora, e esta precisa acusar no dia em que o leitor deixar de
+// enxergar.
+//
+// `prefer_single_quotes` FOI ligado tambem (zero arquivos do projeto quebram
+// com ele), mas como cinto, nao como freio: se alguem o desligar amanha, este
+// portao continua enxergando igual. Era essa dependencia que fazia o portao
+// antigo ter duas maneiras de morrer, e a segunda ser silenciosa.
+//
+// **A trava de conteudo virou trava de ARVORE.** Ela fixava o digest SHA-256
+// de sete arquivos de `app/lib/telas/pet/`, enumerados a mao, contra o commit
+// `7fe24a6`. Tres problemas, e o terceiro e o pior:
+//
+//   - fixava um COMMIT, e nao uma propriedade: quem destravasse uma vez
+//     passaria a cobrar "byte a byte o da base 7fe24a6" sobre o que a pessoa
+//     anterior colou;
+//   - custava sete linhas de digest por destravamento, o que transforma um ato
+//     deliberado em cerimonia -- e cerimonia se despacha no automatico;
+//   - cobria sete arquivos de uma SUBPASTA. Pasta nova dentro de
+//     `app/lib/telas` nao era coberta por nada.
+//
+// `git write-tree` devolve o hash da arvore, que cobre o diretorio inteiro
+// **recursivamente**: arquivo novo, arquivo apagado, subpasta nova, permissao
+// trocada, tudo muda o hash. Uma constante no lugar de sete, o diretorio no
+// lugar da subpasta, e o commit citado como PROCEDENCIA e nao como alvo.
+//
 // COMO DESTRAVAR, quando uma historia FUTURA tiver motivo legitimo para mexer
-// numa destas telas (a BICHUS-159, por exemplo): rode
-// `shasum -a 256 app/lib/telas/pet/<arquivo>`, troque o digest na tabela
-// abaixo e cite a chave da issue na linha. Trocar o digest e um ato
-// deliberado, com nome e motivo no diff; era isso que "nao mudou" precisava
-// custar para deixar de ser uma frase.
+// numa tela: rode o comando que a mensagem de falha imprime, troque a
+// constante `_arvoreDasTelas` e cite a chave da issue na linha. Continua sendo
+// um ato deliberado, com nome e motivo no diff -- so deixou de custar sete
+// edicoes para custar uma.
 //
 // O QUE ESTE PORTAO NAO COBRE: o criterio 12, verificacao em aparelho fisico.
 // Camera nao se verifica em simulador nem em teste de widget, e nada aqui
@@ -32,8 +74,23 @@
 
 import 'dart:io';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'diretivas_dart.dart';
+
+/// O diretorio que a trava cobre, relativo a raiz do repositorio.
+const String _caminhoDasTelas = 'app/lib/telas';
+
+/// O hash de arvore de [_caminhoDasTelas].
+///
+/// Procedencia: `7fe24a6` (BICHUS-157 e 158, o commit em que a BICHUS-161
+/// nasceu) e `71559a0` (a ponta da BICHUS-161) dao **o mesmo** hash -- que e
+/// exatamente o que o criterio 10 afirma, e o que esta constante trava.
+///
+/// Nao e "o hash da base 7fe24a6": e o hash que vale agora. Quem destravar
+/// troca esta linha e cita a issue aqui, e a proxima pessoa passa a cobrar o
+/// que essa issue deixou, e nao o que um commit de setembro deixou.
+const String _arvoreDasTelas = '52ea5cee883547d9a324900479a8e60802041d4a';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
@@ -42,7 +99,7 @@ import 'package:flutter_test/flutter_test.dart';
 Directory _raizDoRepositorio() {
   var dir = Directory.current.absolute;
   while (true) {
-    if (Directory('${dir.path}/app/lib/telas').existsSync()) return dir;
+    if (Directory('${dir.path}/$_caminhoDasTelas').existsSync()) return dir;
     final pai = dir.parent;
     if (pai.path == dir.path) break;
     dir = pai;
@@ -54,98 +111,109 @@ Directory _raizDoRepositorio() {
   );
 }
 
-/// O assistente de cadastro, arquivo por arquivo, com o digest da base
-/// `7fe24a6` (BICHUS-157 e 158, o commit em que esta branch nasceu).
+/// Roda `git` e **reprova alto** quando ele falha.
 ///
-/// A lista e fechada **e conferida contra o diretorio**: arquivo novo em
-/// `telas/pet/` tambem reprova, porque acrescentar tela ao assistente e
-/// muda-lo tanto quanto editar uma.
-const Map<String, String> _digestDoAssistente = <String, String>{
-  'rascunho_de_pet.dart':
-      '0c83f78ad3541eaf61dd7d3762d02cd126a6f6b503a773042e3ccc00d56d8a19',
-  'resultado_do_cadastro.dart':
-      'f464d320e17cbdf1cfebfe91eaf06ac1663eb0182d4fd86707f87e1d03525abd',
-  'tela_cadastrar_foto.dart':
-      '025eb4f7dcf6530f46776031df4dec0125e3f79888340c45d28c0f2f3f877986',
-  'tela_cadastrar_identificacao.dart':
-      'aceceb61dad9487e89ada142bb6e73497b1bfe876931eab2571c6c821392c19a',
-  'tela_cadastrar_sinais.dart':
-      '892c3934005f3668108b949b2e08eeb8b5da75e8fa70d1d6c70f3db7ae86da99',
-  'tela_pet_cadastrado.dart':
-      'e262c8d1ec39464ac92441d684684a12fe153e9ebaccd6110949ca108308a26b',
-  'textos_do_cadastro.dart':
-      'eb1f9009a4fbd48045b819652a6416fabca39463e118d4de3e669df6075cbf47',
+/// Portao que nao consegue conferir precisa reprovar: um `git` ausente, um
+/// diretorio que nao e repositorio ou um `HEAD` inalcancavel nao podem virar
+/// silencio verde.
+String _git(
+  String raiz,
+  List<String> argumentos,
+  Map<String, String> ambiente,
+) {
+  final resultado = Process.runSync(
+    'git',
+    argumentos,
+    workingDirectory: raiz,
+    environment: ambiente,
+  );
+  if (resultado.exitCode != 0) {
+    throw StateError(
+      'REPROVA: `git ${argumentos.join(' ')}` saiu com ${resultado.exitCode} '
+      'em "$raiz". Este portao confere a arvore pelo proprio git; sem ele nao '
+      'ha o que conferir, e ficar verde assim seria pior que nao existir.\n'
+      '  stderr: ${resultado.stderr}',
+    );
+  }
+  return (resultado.stdout as String).trim();
+}
+
+/// O hash de arvore de `app/lib/telas` **como esta no disco agora**.
+///
+/// Usa um indice temporario (`GIT_INDEX_FILE`) para nao tocar no indice de
+/// quem roda. Le a arvore de trabalho, e nao o `HEAD`: alteracao ainda nao
+/// commitada precisa reprovar na hora, e nao so depois que a esteira olhar.
+String _arvoreDeTelasAgora(String raiz) {
+  final indice = File(
+    '${Directory.systemTemp.path}/bichu-portao-$pid-'
+    '${DateTime.now().microsecondsSinceEpoch}.index',
+  );
+  final ambiente = <String, String>{'GIT_INDEX_FILE': indice.path};
+  try {
+    _git(raiz, const <String>['read-tree', 'HEAD'], ambiente);
+    _git(raiz, const <String>['add', '-A', '--', _caminhoDasTelas], ambiente);
+    final completa = _git(raiz, const <String>['write-tree'], ambiente);
+    return _git(
+      raiz,
+      <String>['rev-parse', '$completa:$_caminhoDasTelas'],
+      ambiente,
+    );
+  } finally {
+    if (indice.existsSync()) indice.deleteSync();
+  }
+}
+
+/// O que uma tela nao pode importar, e por que.
+const Map<String, String> _importesProibidos = <String, String>{
+  'package:image_picker/': 'o seletor de imagem',
+  'package:permission_handler/': 'o pedido de permissao',
+  'dart:io': 'o sistema de arquivos',
 };
 
 void main() {
   final raiz = _raizDoRepositorio().path;
-  final pastaDoAssistente = Directory('$raiz/app/lib/telas/pet');
-  final pastaDeTelas = Directory('$raiz/app/lib/telas');
+  final pastaDeTelas = Directory('$raiz/$_caminhoDasTelas');
 
-  group('criterio 10: o assistente de cadastro nao mudou uma linha', () {
-    test('a pasta do assistente existe e tem arquivo', () {
+  group('criterio 10: as telas nao mudaram uma linha', () {
+    test('a pasta de telas existe e tem arquivo', () {
       // Sem isto, apagar a pasta deixaria os outros casos verdes por vazio.
       expect(
-        pastaDoAssistente.existsSync(),
+        pastaDeTelas.existsSync(),
         isTrue,
-        reason: 'REPROVA: ${pastaDoAssistente.path} nao existe. Este portao '
-            'nao tem o que conferir, e ficar verde assim seria pior que nao '
-            'existir.',
+        reason: 'REPROVA: ${pastaDeTelas.path} nao existe. Este portao nao tem '
+            'o que conferir, e ficar verde assim seria pior que nao existir.',
       );
     });
 
-    test('o conjunto de arquivos e exatamente o da base', () {
-      final noDisco = pastaDoAssistente
-          .listSync()
-          .whereType<File>()
-          .map((f) => f.uri.pathSegments.last)
-          .where((n) => n.endsWith('.dart'))
-          .toSet();
-
+    test('a arvore de `$_caminhoDasTelas` e a que esta travada', () {
+      final agora = _arvoreDeTelasAgora(raiz);
       expect(
-        noDisco,
-        equals(_digestDoAssistente.keys.toSet()),
-        reason: 'REPROVA: o assistente de cadastro ganhou ou perdeu arquivo. '
-            'No disco: ${noDisco.toList()..sort()}. Na tabela desta isca: '
-            '${_digestDoAssistente.keys.toList()..sort()}. Acrescentar tela ao '
-            'assistente muda o assistente tanto quanto editar uma; se a '
-            'mudanca e legitima e de outra historia, acrescente o arquivo e o '
-            'digest dele na tabela, citando a chave da issue.',
+        agora,
+        _arvoreDasTelas,
+        reason: 'REPROVA: `$_caminhoDasTelas` mudou.\n'
+            '  travado:    $_arvoreDasTelas\n'
+            '  encontrado: $agora\n'
+            'O criterio 10 da BICHUS-161 diz que nenhuma tela muda de codigo '
+            'por causa da camera embarcada: se uma precisou mudar, a porta '
+            '`CameraEGaleria` esta sendo contornada, e o lugar do conserto e a '
+            'porta, nao a tela.\n'
+            'O hash e de ARVORE, e cobre o diretorio inteiro recursivamente: '
+            'editar, criar, apagar ou renomear qualquer arquivo em qualquer '
+            'subpasta muda esse valor. Para ver o que mudou:\n'
+            '  git status --short -- $_caminhoDasTelas\n'
+            '  git diff -- $_caminhoDasTelas\n'
+            'Se a mudanca e de OUTRA historia e legitima, commite e rode\n'
+            '  git rev-parse HEAD:$_caminhoDasTelas\n'
+            'e troque `_arvoreDasTelas` neste arquivo, citando a chave da '
+            'issue na linha. Trocar o hash precisa ser um ato deliberado, com '
+            'nome e motivo no diff -- e agora custa uma linha, para que '
+            'continuar sendo deliberado nao dependa de paciencia.',
       );
     });
-
-    for (final entrada in _digestDoAssistente.entries) {
-      test('${entrada.key} e byte a byte o da base 7fe24a6', () {
-        final arquivo = File('${pastaDoAssistente.path}/${entrada.key}');
-        expect(
-          arquivo.existsSync(),
-          isTrue,
-          reason: 'REPROVA: ${entrada.key} sumiu do assistente de cadastro.',
-        );
-
-        final agora = sha256.convert(arquivo.readAsBytesSync()).toString();
-        expect(
-          agora,
-          entrada.value,
-          reason: 'REPROVA: `app/lib/telas/pet/${entrada.key}` mudou.\n'
-              '  esperado (base 7fe24a6): ${entrada.value}\n'
-              '  encontrado:              $agora\n'
-              'O criterio 10 da BICHUS-161 diz que nenhuma tela do assistente '
-              'de cadastro muda de codigo por causa da camera embarcada: se '
-              'uma precisou mudar, a porta `CameraEGaleria` esta sendo '
-              'contornada, e o lugar do conserto e a porta, nao a tela.\n'
-              'Se a mudanca e de OUTRA historia e legitima, rode '
-              '`shasum -a 256 app/lib/telas/pet/${entrada.key}` e troque o '
-              'digest na tabela de `porta_nao_contornada_test.dart`, citando a '
-              'chave da issue na linha. Trocar o digest precisa ser um ato '
-              'deliberado, com nome e motivo no diff.',
-        );
-      });
-    }
   });
 
   group('o espirito do criterio 10: nenhuma tela fala com o aparelho', () {
-    // Este grupo sobrevive ao dia em que a trava de conteudo for destravada.
+    // Este grupo sobrevive ao dia em que a trava de arvore for destravada.
     // Ele nao cobra "a tela nao mudou", cobra "a tela nao virou a porta".
     late final List<File> telas;
 
@@ -171,25 +239,49 @@ void main() {
       // A porta existe para que a integracao com o aparelho tenha UM lugar.
       // Uma tela que importe o plugin direto contorna a porta sem precisar
       // mudar nenhuma assinatura, e nada mais pega isso.
-      const proibidos = <String, String>{
-        'package:image_picker/': 'o seletor de imagem',
-        'package:permission_handler/': 'o pedido de permissao',
-        'dart:io': 'o sistema de arquivos',
-      };
-
+      //
+      // A leitura e por DIRETIVA, nao por texto: a forma da aspa, o escape e a
+      // quebra de linha nao mudam o que o Dart importa, e nao podem mudar o
+      // que este portao enxerga.
       for (final tela in telas) {
         final fonte = tela.readAsStringSync();
-        for (final proibido in proibidos.entries) {
+        for (final diretiva in lerDiretivas(fonte)) {
+          for (final proibido in _importesProibidos.entries) {
+            expect(
+              diretiva.uri.startsWith(proibido.key),
+              isFalse,
+              reason: 'REPROVA: ${tela.path}:${diretiva.linha} '
+                  '(${diretiva.palavra}) traz `${diretiva.uri}` '
+                  '-- ${proibido.value}. Integracao com o aparelho mora em '
+                  '`lib/dispositivo/`, atras da porta `CameraEGaleria`. Tela '
+                  'que importa o plugin direto contorna a porta sem mudar '
+                  'assinatura nenhuma, deixa de ser testavel sem aparelho, e '
+                  'leva a regra de permissao para um lugar onde ela vai ser '
+                  'reescrita diferente na proxima tela.',
+            );
+          }
+        }
+      }
+    });
+
+    test('nenhuma tela nomeia plugin de aparelho fora de diretiva', () {
+      // A rede de seguranca do caso anterior: referencia que nao esteja num
+      // `import` -- uma constante com a URI, uma biblioteca adiada -- tambem
+      // reprova. Roda sobre o fonte SEM COMENTARIOS, para que uma tela possa
+      // explicar em prosa que nao importa o plugin sem por isso reprovar.
+      for (final tela in telas) {
+        final codigo = semComentarios(tela.readAsStringSync());
+        for (final proibido in _importesProibidos.entries) {
+          // `dart:io` fica de fora desta rede: e curto demais e aparece em
+          // nome de simbolo legitimo. A diretiva dele ja e coberta acima.
+          if (proibido.key == 'dart:io') continue;
           expect(
-            fonte.contains("import '${proibido.key}"),
+            codigo.contains(proibido.key),
             isFalse,
-            reason: 'REPROVA: ${tela.path} importa `${proibido.key}` '
-                '(${proibido.value}). Integracao com o aparelho mora em '
-                '`lib/dispositivo/`, atras da porta `CameraEGaleria`. Tela que '
-                'importa o plugin direto contorna a porta sem mudar assinatura '
-                'nenhuma, deixa de ser testavel sem aparelho, e leva a regra de '
-                'permissao para um lugar onde ela vai ser reescrita diferente '
-                'na proxima tela.',
+            reason: 'REPROVA: ${tela.path} nomeia `${proibido.key}` '
+                '(${proibido.value}) fora de comentario. Mesmo sem um '
+                '`import`, uma tela que carrega a URI do plugin esta a um '
+                'passo de contornar a porta `CameraEGaleria`.',
           );
         }
       }
@@ -200,10 +292,10 @@ void main() {
       // `HapticFeedback` sao dele e sao de tela. O que nao e de tela e abrir
       // canal.
       for (final tela in telas) {
-        final fonte = tela.readAsStringSync();
+        final codigo = semComentarios(tela.readAsStringSync());
         for (final canal in <String>['MethodChannel(', 'EventChannel(']) {
           expect(
-            fonte.contains(canal),
+            codigo.contains(canal),
             isFalse,
             reason: 'REPROVA: ${tela.path} abre um `$canal`. Canal de '
                 'plataforma e da camada de dispositivo; numa tela ele nao tem '
@@ -219,13 +311,13 @@ void main() {
       // `CameraDoAparelho` faria a tela deixar de ser montavel sem aparelho, e
       // e o jeito mais discreto de contornar a injecao.
       for (final tela in telas) {
-        final fonte = tela.readAsStringSync();
+        final codigo = semComentarios(tela.readAsStringSync());
         for (final concreta in <String>[
           'CameraDoAparelho',
           'CameraNaoEmbarcada',
         ]) {
           expect(
-            fonte.contains(concreta),
+            codigo.contains(concreta),
             isFalse,
             reason: 'REPROVA: ${tela.path} nomeia `$concreta`. A tela recebe '
                 '`CameraEGaleria` pelo escopo e nao escolhe implementacao; '
@@ -233,6 +325,97 @@ void main() {
           );
         }
       }
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // O autoteste do leitor
+  // -------------------------------------------------------------------------
+  //
+  // O portao acima so vale o que o leitor enxerga. Estes casos sao as formas
+  // que o Dart aceita para a MESMA diretiva, e a aspa dupla esta aqui porque
+  // ela ja passou verde uma vez. Eles ficam no repositorio porque "testei nos
+  // dois sentidos e acusou certo" e afirmacao, nao evidencia: ninguem
+  // reexecuta uma frase, e ela nao acusa no dia em que o leitor cegar.
+  group('autoteste do leitor: as formas de escrever o mesmo import', () {
+    final formas = <String, String>{
+      'aspa simples': "import 'package:image_picker/image_picker.dart';",
+      'aspa dupla': 'import "package:image_picker/image_picker.dart";',
+      'string crua, aspa simples':
+          "import r'package:image_picker/image_picker.dart';",
+      'string crua, aspa dupla':
+          'import r"package:image_picker/image_picker.dart";',
+      'aspa tripla simples':
+          "import '''package:image_picker/image_picker.dart''';",
+      'aspa tripla dupla':
+          'import """package:image_picker/image_picker.dart""";',
+      'quebra de linha antes da URI':
+          "import\n    'package:image_picker/image_picker.dart';",
+      'comentario de bloco no meio':
+          "import /* nota */ 'package:image_picker/image_picker.dart';",
+      'comentario de linha no meio':
+          "import // nota\n    'package:image_picker/image_picker.dart';",
+      'literais adjacentes':
+          "import 'package:' 'image_picker/image_picker.dart';",
+      'escape unicode na URI':
+          r"import 'package:image_picker/image_picker.dart';",
+      'com prefixo `as`':
+          'import "package:image_picker/image_picker.dart" as seletor;',
+      'com `show`':
+          "import 'package:image_picker/image_picker.dart' show ImagePicker;",
+      'import condicional, na URI alternativa':
+          "import 'inexistente.dart'\n"
+              '    if (dart.library.io) '
+              '"package:image_picker/image_picker.dart";',
+      'export em vez de import':
+          'export "package:image_picker/image_picker.dart";',
+      'sem espaco depois da palavra-chave':
+          'import"package:image_picker/image_picker.dart";',
+    };
+
+    formas.forEach((nome, fonte) {
+      test('o leitor enxerga: $nome', () {
+        final uris = lerDiretivas(fonte).map((d) => d.uri).toList();
+        expect(
+          uris.any((u) => u.startsWith('package:image_picker/')),
+          isTrue,
+          reason: 'REPROVA: o leitor NAO enxergou o seletor de imagem escrito '
+              'como "$nome". Era exatamente assim que o portao antigo era '
+              'contornado: ele casava `import` mais aspa simples, e a aspa '
+              'dupla passava verde. O que o leitor devolveu: $uris\n'
+              '  fonte: $fonte',
+        );
+      });
+    });
+
+    test('o leitor nao confunde `import` escrito dentro de uma string', () {
+      // O outro lado: um portao que acusa demais e desligado por quem cansa.
+      const fonte = 'const exemplo = "import \'package:image_picker/x.dart\';";';
+      expect(
+        lerDiretivas(fonte),
+        isEmpty,
+        reason: 'REPROVA: o leitor tratou o conteudo de uma string como '
+            'diretiva. Falso positivo em portao estrutural nao e zelo: e o '
+            'motivo pelo qual portao acaba desligado.',
+      );
+    });
+
+    test('o leitor nao confunde `import` escrito num comentario', () {
+      const fonte = "// import 'package:image_picker/x.dart';\nvoid main() {}";
+      expect(lerDiretivas(fonte), isEmpty);
+    });
+
+    test('`semComentarios` apaga a prosa e preserva o codigo', () {
+      const fonte = '// nao importamos package:image_picker aqui\n'
+          "const x = 'package:image_picker/y.dart';";
+      final codigo = semComentarios(fonte);
+      expect(
+        codigo.contains('nao importamos'),
+        isFalse,
+        reason: 'REPROVA: a prosa sobreviveu, e a rede de seguranca vai '
+            'reprovar telas que so explicam o que nao fazem.',
+      );
+      expect(codigo.contains('package:image_picker/y.dart'), isTrue);
     });
   });
 }

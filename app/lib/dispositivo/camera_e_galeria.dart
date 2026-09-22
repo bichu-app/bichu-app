@@ -80,19 +80,33 @@ abstract class CameraEGaleria {
   Future<FotoLocal?> escolherDaGaleria();
 }
 
-/// A implementacao deste build: **nao ha camera embarcada ainda.**
+/// O aparelho que **nao tem camera** -- e o duble que os testes montam.
+///
+/// ATENCAO AO QUE ESTA CLASSE NAO E MAIS: ate a BICHUS-161 ela era a
+/// implementacao deste build, e este cabecalho dizia que nao havia camera
+/// embarcada e que faltavam as declaracoes de manifesto. As duas coisas
+/// deixaram de ser verdade em 21/09/2026. Quem escolhe em producao e
+/// `app.dart`, e desde a BICHUS-161 ele monta [CameraDoAparelho].
+///
+/// O que a BICHUS-161 entregou, e por isso saiu desta lista:
+///  - o plugin de camera e galeria (`image_picker`) e o de permissao
+///    (`permission_handler`), atras desta mesma porta;
+///  - `NSCameraUsageDescription` e `NSPhotoLibraryUsageDescription` no
+///    `Info.plist`, e `android.permission.CAMERA` no `AndroidManifest.xml`,
+///    com a justificativa de uso que a revisao da loja cobra.
+///
+/// O que continua faltando, e nao e trabalho de tela: o **plugin de leitura de
+/// QR** (F2.1 le codigo, e ler QR nao e tirar foto), e a verificacao em
+/// aparelho fisico -- camera nao se verifica em simulador nem em teste de
+/// widget, e o criterio 12 da BICHUS-161 continua sendo o unico que nenhum
+/// portao deste repositorio cobre.
 ///
 /// Ela nao finge. Todo metodo responde [EstadoDaPermissao.indisponivel] ou
 /// nulo, e as telas ja tratam esse estado com o caminho alternativo que a
 /// especificacao exige de qualquer forma: digitar o codigo em F2.1 e escolher
-/// da galeria em F1.4. O dia em que o plugin de camera entrar, entra uma
-/// implementacao nova aqui e nenhuma tela muda.
-///
-/// **O que falta para trocar isto por camera de verdade**, e nao e trabalho de
-/// tela: um plugin de leitura de QR, a declaracao de uso da camera no
-/// `Info.plist` e no `AndroidManifest.xml` com a justificativa que a revisao
-/// da loja cobra, e verificacao em aparelho -- camera nao se verifica em
-/// simulador.
+/// da galeria em F1.4. E por ela continuar existindo que as telas seguem
+/// montaveis sem aparelho, e que o caminho "o aparelho nao coopera" tem um
+/// lugar onde ser exercitado.
 class CameraNaoEmbarcada implements CameraEGaleria {
   const CameraNaoEmbarcada();
 
