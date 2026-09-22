@@ -31,7 +31,9 @@
 #
 # Saida de emergencia: `BICHU_STASH_LIBERADO=1 git stash push`. `git stash` nao
 # tem `--no-verify`, e este portao existe para impedir o ENGANO, nao a decisao
-# deliberada de quem sabe o que esta fazendo.
+# deliberada de quem sabe o que esta fazendo. Quando ela e usada o gancho AVISA
+# em voz alta, porque variavel exportada no perfil desligaria o portao em
+# silencio, e portao desligado em silencio e pior que portao nenhum.
 #
 # ELE ESTA VALENDO. O custo e conhecido e foi aceito de proposito.
 #
@@ -85,8 +87,6 @@ done
 # Fora de `prepared` o git ignora o codigo de saida. Ja drenamos a entrada.
 [ "$1" = "prepared" ] || exit 0
 
-[ -n "$BICHU_STASH_LIBERADO" ] && exit 0
-
 # Primeiro e unico processo filho, e so para quem chegou ate aqui.
 [ -n "$BICHU_PORTAO_STASH_ATIVO" ] && exit 0
 BICHU_PORTAO_STASH_ATIVO=1
@@ -94,6 +94,27 @@ export BICHU_PORTAO_STASH_ATIVO
 
 quantos=$(git worktree list | wc -l | tr -d " ")
 [ "$quantos" -le 1 ] && exit 0
+
+# A saida de emergencia e conferida SO aqui, depois de saber que havia
+# bloqueio de verdade: avisar quem tem um worktree so seria ruido.
+#
+# Nao da para saber se a variavel foi digitada na linha do comando ou
+# exportada no perfil: nos dois casos ela chega igual, pelo ambiente. Entao o
+# gancho nao tenta adivinhar, e avisa SEMPRE que ignorar um bloqueio. Quem
+# exportou sem querer ve o aviso em todo stash e descobre; quem digitou de
+# proposito le uma linha a mais e segue.
+if [ -n "$BICHU_STASH_LIBERADO" ]; then
+	echo "reference-transaction: portao de stash IGNORADO por BICHU_STASH_LIBERADO." >&2
+	echo "  Este repositorio tem $quantos worktrees e a pilha de stash e uma so." >&2
+	echo "  Voce esta empilhando assim mesmo." >&2
+	echo "" >&2
+	echo "  Se voce NAO digitou BICHU_STASH_LIBERADO=1 nesta linha, ela esta no" >&2
+	echo "  seu ambiente e o portao esta desligado em TODO comando seu." >&2
+	echo "    conferir:  env | grep BICHU_STASH_LIBERADO" >&2
+	echo "    religar:   unset BICHU_STASH_LIBERADO" >&2
+	echo "" >&2
+	exit 0
+fi
 
 echo "reference-transaction: \`git stash\` recusado." >&2
 echo "" >&2

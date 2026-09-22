@@ -175,6 +175,12 @@ Isso passa por cima do portão abaixo. Use quando você sabe que é seguro, por
 exemplo num clone só seu. O portão existe para impedir o engano, não a decisão
 deliberada.
 
+Quando a saída é usada o gancho **avisa em voz alta**, e o aviso não é
+cerimônia: não há como saber se a variável foi digitada na linha ou exportada
+no seu perfil, porque ela chega igual nos dois casos. Se você vir esse aviso
+sem ter digitado nada, o portão está desligado em **todo** comando seu. Confira
+com `env | grep BICHU_STASH_LIBERADO` e religue com `unset`.
+
 `pop`, `drop` e `clear` **nunca** são bloqueados: quem tem um stash preso
 precisa exatamente deles para sair do buraco.
 
@@ -190,20 +196,48 @@ inalterado. A medição, com os três braços de comparação, está no cabeçal
 gancho. A conta foi aceita de propósito: o acidente já aconteceu e custou um
 resgate inteiro, e quem comita aqui é agente, não pessoa esperando o prompt.
 
-O caso que ele precisa reprovar, e os cinco que ele **não pode** reprovar,
+O caso que ele precisa reprovar, e os seis que ele **não pode** reprovar,
 estão em `infra/verificacao/verificar-portao-de-stash.sh`. Rode depois de mexer
 nele.
 
-**Duas limitações, e nenhuma delas é pequena.** Não presuma que estar no
-repositório é o mesmo que estar valendo na sua máquina:
+**Uma limitação, e ela não é pequena.** `core.hooksPath` é configuração **por
+clone**, aplicada pelo `make setup`. Um clone novo nasce sem gancho nenhum, e
+estar no repositório não é o mesmo que estar valendo na sua máquina.
 
-1. `core.hooksPath` é configuração **por clone**, aplicada pelo `make setup`.
-   Um clone novo nasce sem gancho nenhum.
-2. O caminho configurado é **relativo**, então o git o resolve a partir da raiz
-   de cada worktree. Na prática, o gancho só vale num worktree cuja branch já
-   contenha o arquivo. Worktree em branch que saiu antes deste commit continua
-   sem proteção até rebasear ou sair de novo da principal. Isto vale igual para
-   o `pre-push`, e é medido, não deduzido.
+### Os ganchos vêm do checkout principal
+
+`make setup` grava `core.hooksPath` como caminho **absoluto**, apontando para o
+`.githooks/` do checkout principal. Isso é deliberado, e conserta um furo que
+ninguém tinha medido.
+
+O caminho era relativo, e o git resolve caminho relativo a partir da raiz de
+**cada worktree**. Na prática o gancho só valia num worktree cuja branch já
+contivesse o arquivo: quem saísse de uma branch antiga ficava sem proteção
+nenhuma, sem nenhum sinal. Isso valia igual para o `pre-push`, ou seja, a
+proteção contra push direto na principal alcançava menos worktrees do que
+qualquer um suporia. Gancho não deve variar por branch.
+
+**O preço é que o checkout principal virou fonte única.** Se alguém deixar a
+árvore principal numa branch que não tem `.githooks/`, ou numa versão antiga
+dela, os ganchos mudam para todo mundo de uma vez, incluindo os worktrees que
+não encostaram em nada.
+
+O que fazer quando acontecer:
+
+```
+git -C <checkout principal> switch development   # devolva a principal ao lugar
+git config --get core.hooksPath                  # confira o que está valendo
+make setup                                       # regrave, se estiver errado
+```
+
+`make setup` **recusa** configurar quando o checkout principal não tem
+`.githooks/`, em vez de gravar um caminho que não existe. Portão que aponta
+para o vazio fica verde sem conferir nada, e é assim que se descobre tarde.
+
+O alcance dos dois ganchos, com caminho relativo e com absoluto, está provado
+em `infra/verificacao/verificar-alcance-dos-ganchos.sh`, incluindo que o
+`pre-push` continua recusando a principal e continua deixando passar as outras
+branches.
 
 
 ## Homologação

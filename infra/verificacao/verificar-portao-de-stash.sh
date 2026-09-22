@@ -12,7 +12,8 @@
 #   CASO 3  mesma isca, sem gancho  -> PASSA  (prova que a causa e o gancho)
 #   CASO 4  dois worktrees          -> `pop` e `drop` PASSAM
 #   CASO 5  dois worktrees          -> `clear` PASSA
-#   CASO 6  saida de emergencia     -> PASSA
+#   CASO 6  saida de emergencia     -> PASSA, e AVISA em voz alta
+#   CASO 7  um worktree + emergencia -> PASSA, e NAO avisa (sem ruido)
 #
 # Portao que reprova todo mundo e desligado na primeira semana, e ai nao ha
 # protecao nenhuma. Por isso CASO 1 e CASO 4 sao obrigatorios: eles guardam o
@@ -115,8 +116,8 @@ fi
 # tem um stash preso para tirar.
 r=$(forjar recuperacao)
 git -C "$r" worktree add -q "$r/../recuperacao-wt2" -b outra HEAD
-sujar "$r"; BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m preso1
-sujar "$r"; BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m preso2
+sujar "$r"; BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m preso1 2>/dev/null
+sujar "$r"; BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m preso2 2>/dev/null
 if [ "$(pilha "$r")" != "2" ]; then
 	falha "CASO 4: nao consegui montar a pilha de 2 para testar a recuperacao"
 else
@@ -137,7 +138,7 @@ fi
 # ---------------------------------------------------------------- CASO 5
 r=$(forjar limpeza)
 git -C "$r" worktree add -q "$r/../limpeza-wt2" -b outra HEAD
-sujar "$r"; BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m preso
+sujar "$r"; BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m preso 2>/dev/null
 # Sem esta guarda, um gancho que impede ate o preparo deixaria o caso verde
 # por vazio: `clear` numa pilha vazia nao gera transacao e passa sempre.
 if [ "$(pilha "$r")" != "1" ]; then
@@ -153,17 +154,40 @@ fi
 r=$(forjar saida-de-emergencia)
 git -C "$r" worktree add -q "$r/../saida-de-emergencia-wt2" -b outra HEAD
 sujar "$r"
-if BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m deliberado 2>"$tmp/e6" \
-	&& [ "$(pilha "$r")" = "1" ]; then
-	ok "CASO 6: BICHU_STASH_LIBERADO=1 passa por cima, como documentado"
-else
+if ! BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m deliberado 2>"$tmp/e6" \
+	|| [ "$(pilha "$r")" != "1" ]; then
 	falha "CASO 6: a saida de emergencia documentada nao funciona.
           Mensagem: $(cat "$tmp/e6")"
+elif ! grep -q "IGNORADO" "$tmp/e6"; then
+	# Variavel exportada no perfil desligaria o portao em silencio, e portao
+	# desligado em silencio e pior que portao nenhum.
+	falha "CASO 6: a saida de emergencia passou SEM avisar. Quem exportou a
+          variavel sem querer nunca vai descobrir. Mensagem: $(cat "$tmp/e6")"
+elif ! grep -q "unset BICHU_STASH_LIBERADO" "$tmp/e6"; then
+	falha "CASO 6: avisou mas nao disse como religar."
+else
+	ok "CASO 6: BICHU_STASH_LIBERADO=1 passa por cima E avisa em voz alta"
+fi
+
+# ---------------------------------------------------------------- CASO 7
+# O aviso do CASO 6 nao pode virar ruido para quem esta seguro. Com um
+# worktree so nao ha bloqueio a ignorar, entao nao ha o que avisar.
+r=$(forjar aviso-sem-ruido)
+sujar "$r"
+if ! BICHU_STASH_LIBERADO=1 git -C "$r" stash push -q -m deliberado 2>"$tmp/e7"; then
+	falha "CASO 7: um worktree so e nem com a saida de emergencia passou.
+          Mensagem: $(cat "$tmp/e7")"
+elif grep -q "IGNORADO" "$tmp/e7"; then
+	falha "CASO 7: avisou num repositorio de UM worktree, onde nao havia
+          bloqueio nenhum para ignorar. Aviso que aparece sem motivo deixa de
+          ser lido. Mensagem: $(cat "$tmp/e7")"
+else
+	ok "CASO 7: com um worktree so a saida de emergencia nao vira ruido"
 fi
 
 echo
 if [ "$falhas" -eq 0 ]; then
-	echo "portao de stash: os 6 casos conferem"
+	echo "portao de stash: os 7 casos conferem"
 	exit 0
 fi
 echo "portao de stash: $falhas caso(s) reprovaram" >&2
