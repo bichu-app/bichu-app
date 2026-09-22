@@ -40,7 +40,7 @@ import type { Chamador, TagService } from '../../application/tag-service.js';
 import type { Autenticador } from '../../ports/autenticador.js';
 import type { TagDoTutor } from '../../ports/tag-repository.js';
 import type { Clock } from '../../../../shared/ports/index.js';
-import type { PetId, UserId } from '../../../../shared/types/brands.js';
+import type { PetId, TagId, UserId } from '../../../../shared/types/brands.js';
 
 export const rotaDeListagemDeTags = defineRoute({
   operationId: 'listPetTags',
@@ -57,6 +57,22 @@ export const rotaDeEmissaoDeTag = defineRoute({
   // o que não se desfaz: o código é imutável e não se reativa.
   effects: ['reveals_credential', 'irreversible_write'],
   rateLimit: [{ dimension: ['pet'], limit: 10, window: '24h', onExceed: 'deny_429' }],
+});
+
+/**
+ * A imagem do QR para impressão.
+ *
+ * `reveals_credential` porque o QR **é** o código: quem tem o arquivo tem a
+ * plaquinha. É a segunda e última superfície da API que entrega o código, e a
+ * única que o entrega mais de uma vez — por isso ela é autenticada, tem teto por
+ * conta, e o teto é `deny_429` e não `serve_cache`.
+ */
+export const rotaDaImagemDoQr = defineRoute({
+  operationId: 'getPetTagQrImage',
+  method: 'get',
+  path: '/pets/:petId/tags/:tagId/qr.png',
+  effects: ['reveals_credential'],
+  rateLimit: [{ dimension: ['account'], limit: 30, window: '1h', onExceed: 'deny_429' }],
 });
 
 export const rotaDeResolucaoDaTag = defineRoute({
@@ -141,6 +157,37 @@ export interface DependenciasDasRotasDeTag {
   readonly ipHmacKey: Buffer;
   /** Chave do índice cego de `code_hash` (ADR-0004, Emenda 1, §3.1). */
   readonly chaveDoIndiceDoCodigo: Buffer;
+  /**
+   * Base pública desta API, de onde sai `qr_png_url`. É `API_BASE_URL`, e **não**
+   * `TAG_BASE_URL`: a plaquinha aponta para o host público da tag, e o endereço
+   * da imagem é uma rota autenticada desta API. Trocar as duas faria a emissão
+   * prometer um arquivo num host que não serve a API.
+   */
+  readonly baseDaApi: string;
+}
+
+/** Prefixo de versão da API. O mesmo de `PREFIXO_DA_API` em `src/bin/api.ts`. */
+const PREFIXO_DA_API = '/v1';
+
+/**
+ * O endereço da imagem do QR, montado a partir da **própria rota**.
+ *
+ * Interpolar `/pets/${petId}/tags/${tagId}/qr.png` à mão aqui criaria a segunda
+ * definição do caminho: mudar `rotaDaImagemDoQr.path` moveria a rota registrada
+ * e deixaria a promessa da emissão apontando para o endereço antigo — 404 na
+ * hora de imprimir, que é o modo de falha que o comentário anterior deste
+ * arquivo existia para evitar. Aqui a substituição é sobre a declaração, então
+ * as duas se movem juntas.
+ */
+function enderecoDaImagemDoQr(
+  deps: DependenciasDasRotasDeTag,
+  petId: PetId,
+  tagId: TagId,
+): string {
+  const caminho = rotaDaImagemDoQr.path
+    .replace(':petId', encodeURIComponent(petId))
+    .replace(':tagId', encodeURIComponent(tagId));
+  return `${deps.baseDaApi}${PREFIXO_DA_API}${caminho}`;
 }
 
 /** Chamador que passou pelo token. `userId` é definido, e o tipo diz isso. */
@@ -295,9 +342,29 @@ function resolvedoresDaTag(deps: DependenciasDasRotasDeTag): {
   };
 }
 
+/**
+ * `account` para o teto. Sem credencial válida não há balde de conta, e a
+ * recusa vem do manipulador — o teto não é o lugar de responder 401.
+ */
+async function contaDoTeto(
+  request: FastifyRequest,
+  deps: DependenciasDasRotasDeTag,
+): Promise<string | undefined> {
+  try {
+    return (await chamadorAutenticado(request, deps)).userId;
+  } catch {
+    return undefined;
+  }
+}
+
 function petIdDoCaminho(request: FastifyRequest): PetId {
   const { petId } = request.params as { petId: string };
   return petId as PetId;
+}
+
+function tagIdDoCaminho(request: FastifyRequest): TagId {
+  const { tagId } = request.params as { tagId: string };
+  return tagId as TagId;
 }
 
 function codigoDoCaminho(request: FastifyRequest): string {
@@ -341,13 +408,55 @@ export function registrarRotasDeTags(
         chamador,
       );
 
-      // `qr_png_url` fica de fora, e a ausência é honesta: `getPetTagQrImage`
-      // não está implementada, e devolver o endereço de uma rota que responde
-      // 404 seria uma promessa que o cliente descobre quebrada na hora de
-      // imprimir. O campo é opcional no schema justamente para poder faltar.
+      // `qr_png_url` fechando o critério 2 da BICHUS-63. Ele é montado a partir
+      // da própria `rotaDaImagemDoQr`, e não de uma cadeia repetida aqui: o
+      // endereço prometido e o endereço registrado passam a ser a mesma
+      // declaração, e mudar o caminho da rota move os dois de uma vez.
+      //
+      // Os dois UUID no caminho não contrariam o ADR-0010. O que o item 6
+      // proíbe é identificador interno em **saída pública**, e esta resposta é
+      // autenticada, para o dono, sobre um `petId` que ele acabou de enviar e um
+      // `tagId` que `PetTag.id` já traz nesta mesma linha. O que o ADR nomeia
+      // como o erro irreversível do projeto é `pet_id` **no QR**, e o QR carrega
+      // só `{base}/t/{código}` (`qr-da-tag.ts`, com isca que decodifica o PNG e
+      // reprova se algum UUID aparecer).
+      return reply.status(201).send({
+        ...comoPetTag(emitida.tag),
+        code: emitida.codigo,
+        url: emitida.url,
+        qr_png_url: enderecoDaImagemDoQr(deps, petIdDoCaminho(request), emitida.tag.id),
+      });
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDaImagemDoQr,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const imagem = await deps.tags.imagemDoQr(
+        petIdDoCaminho(request),
+        tagIdDoCaminho(request),
+        chamador.userId,
+      );
+
+      // A mesma higiene da rota pública, por um motivo diferente e igualmente
+      // concreto: lá o código viaja na URL, aqui ele viaja DENTRO da imagem.
+      // `no-store` impede que o QR de um pet fique num cache intermediário, e
+      // `noindex`/`no-referrer` valem porque a imagem acaba compartilhada por
+      // aplicativo de mensagem na hora de mandar imprimir.
+      aplicarHigieneDaRotaPublica(reply);
       return reply
-        .status(201)
-        .send({ ...comoPetTag(emitida.tag), code: emitida.codigo, url: emitida.url });
+        .status(200)
+        .type('image/png')
+        // O nome que o navegador e o aparelho oferecem ao salvar. O sufixo de
+        // quatro caracteres é o mesmo que o tutor já vê na lista de plaquinhas,
+        // e é o que faz ele saber qual arquivo é de qual coleira quando tem
+        // mais de uma (critério 4). Nunca o código inteiro: nome de arquivo
+        // sobrevive em pasta de download e em histórico de conversa.
+        .header('Content-Disposition', `attachment; filename="bichu-tag-${imagem.codeSuffix}.png"`)
+        .send(imagem.png);
     },
   );
 

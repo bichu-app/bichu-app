@@ -22,12 +22,14 @@ import type { Clock, IdGenerator, SecretCipher } from '../../../shared/ports/ind
 import { problemas } from '../../../shared/http/errors.js';
 import { hashDeToken, hashDoCodigoDaTag } from '../../../shared/crypto/digest.js';
 import { gerarCodigoDaTag, normalizarCodigoDaTag, sufixoDoCodigo } from '../domain/tag-code.js';
+import { desenharQr, urlDaTag } from '../domain/qr-da-tag.js';
 import type {
   ContextoDoDono,
   TagDoTutor,
   TagRepository,
   TagResolvida,
 } from '../ports/tag-repository.js';
+import type { RasterizadorDeQr } from '../ports/rasterizador-de-qr.js';
 import type {
   AbsoluteUrl,
   Instant,
@@ -80,6 +82,12 @@ export interface DependenciasDeTags {
    * ambiente.
    */
   readonly chaveDoIndiceDoCodigo: Buffer;
+  /**
+   * Quem embrulha o desenho do QR num arquivo PNG. É porta porque a biblioteca
+   * de imagem traz binário nativo e o §11.1 a mantém fora daqui; o domínio já
+   * decidiu escala, margem e correção antes de chegar nela.
+   */
+  readonly rasterizador: RasterizadorDeQr;
 }
 
 /** A visão pública da tag, exatamente como `TagResolution` a declara. */
@@ -102,6 +110,20 @@ export interface TagEmitida {
   readonly tag: TagDoTutor;
   readonly codigo: TagCodeCanonical;
   readonly url: AbsoluteUrl;
+}
+
+/**
+ * O arquivo do QR e o sufixo que nomeia o download.
+ *
+ * O sufixo sai daqui e não de uma segunda consulta porque ele é derivado do
+ * código que esta operação acabou de decifrar: `sufixoDoCodigo` é a mesma
+ * função que a emissão usou para gravar `code_suffix`, então o nome do arquivo
+ * e a linha que o tutor vê na lista não têm como discordar.
+ */
+export interface ImagemDoQr {
+  readonly png: Buffer;
+  /** Os quatro últimos caracteres. É o que o tutor já vê na lista de plaquinhas. */
+  readonly codeSuffix: string;
 }
 
 export interface AvisoCriado {
@@ -258,7 +280,56 @@ export function criarTagService(deps: DependenciasDeTags) {
       return {
         tag: resultado.tag,
         codigo,
-        url: `${deps.baseDaTag}/t/${codigo}` as AbsoluteUrl,
+        // A MESMA função que monta o conteúdo do QR (`urlDaTag`). Duas
+        // interpolações parecidas divergem, e o divergente aqui é o texto
+        // legível apontando para um lugar e o QR ao lado apontando para outro,
+        // os dois na mesma plaquinha prensada.
+        url: urlDaTag(deps.baseDaTag, codigo),
+      };
+    },
+
+    /**
+     * `GET /v1/pets/{petId}/tags/{tagId}/qr.png` — o arquivo para mandar
+     * imprimir, e a **reimpressão**: a emissão devolve o código em claro uma vez
+     * só, e depois dela este é o único caminho até o QR.
+     *
+     * Três coisas, na ordem em que acontecem:
+     *
+     * 1. **A autorização é a consulta.** `buscarParaReimpressao` leva o dono no
+     *    `WHERE`; não existe aqui um `if` de tutor porque não existe o que
+     *    comparar. Tag que não é sua é 404, nunca 403 (ADR-0021).
+     * 2. **Revogada é 410.** O ADR-0004 apaga `code_ciphertext` na revogação, e
+     *    a plaquinha passa a responder "tag desativada": gerar o arquivo dela
+     *    seria imprimir algo que já não resolve.
+     * 3. **O código decifrado normaliza para ele mesmo, ou nada é gerado.** É o
+     *    critério 9 da história, e é aqui que ele tem dente: se a normalização
+     *    de hoje não devolver o código que a emissão gravou, o QR impresso
+     *    apontaria para uma página que a própria plataforma não encontra. Falha
+     *    ruidosa é a única resposta aceitável, porque o caminho alternativo é
+     *    plástico inútil.
+     */
+    async imagemDoQr(petId: PetId, tagId: TagId, dono: UserId): Promise<ImagemDoQr> {
+      const tag = await deps.repositorio.buscarParaReimpressao(petId, tagId, dono);
+      if (tag === undefined) throw problemas.naoEncontrado();
+      if (tag.status === 'revoked' || tag.codeCiphertext === null) throw problemas.tagRevogada();
+
+      const decifrado = await deps.cifra.decrypt(tag.codeCiphertext);
+      const codigo = normalizarCodigoDaTag(decifrado);
+      if (codigo === undefined || codigo !== decifrado) {
+        throw new Error(
+          'O código decifrado de uma tag ativa não normaliza para ele mesmo. A ' +
+            'normalização da emissão e a da resolução deixaram de ser a mesma função, ' +
+            'ou o cifrado é de um formato anterior. Gerar o QR assim produziria uma ' +
+            'plaquinha impressa que esta plataforma não consegue resolver, e o ' +
+            'formato impresso é irreversível (ADR-0004, critério 9 da BICHUS-63). ' +
+            `Tag ${tagId}.`,
+        );
+      }
+
+      const desenho = desenharQr(urlDaTag(deps.baseDaTag, codigo));
+      return {
+        png: await deps.rasterizador.paraPng(desenho),
+        codeSuffix: sufixoDoCodigo(codigo),
       };
     },
 

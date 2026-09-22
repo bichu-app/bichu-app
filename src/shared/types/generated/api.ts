@@ -4491,6 +4491,7 @@ export interface operations {
                     "image/png": string;
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Tag revogada. O QR nao e reimpresso. */
             410: {

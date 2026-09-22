@@ -24,6 +24,7 @@ import type {
   ResultadoDaEmissao,
   StatusDaTag,
   TagDoTutor,
+  TagParaReimpressao,
   TagRepository,
   TagResolvida,
 } from '../../ports/tag-repository.js';
@@ -183,6 +184,43 @@ export function criarTagRepository(db: Db): TagRepository {
         .execute();
 
       return linhas.map(comoTagDoTutor);
+    },
+
+    /**
+     * O cifrado para reimprimir o QR. **Uma consulta**, com o dono, o pet e a
+     * tag na mesma cláusula `WHERE`.
+     *
+     * Não há `select` do pet seguido de `if`, e não há comparação de tutor em
+     * JavaScript: o banco devolve linha ou não devolve, e "não devolve" é o
+     * mesmo resultado para tag inexistente, tag de outro pet e pet de outro
+     * tutor. Feito com duas consultas e uma comparação, isto vira o BOLA do
+     * SEC-001 numa rota que **revela credencial** — o caso mais caro dessa
+     * família, porque o que vaza é o que está impresso na coleira de alguém.
+     *
+     * `pets.deleted_at is null` fecha o quarto caso: pet excluído não reimprime.
+     *
+     * `status` NÃO entra no `WHERE`. A tag revogada precisa ser distinguível da
+     * inexistente para que a resposta seja 410 e não 404 (ADR-0004), e essa é a
+     * única distinção que esta consulta devolve: ela não diz de quem é a tag,
+     * diz que existe uma tag **sua** que está morta.
+     */
+    async buscarParaReimpressao(petId, tagId, dono): Promise<TagParaReimpressao | undefined> {
+      const linha = await db
+        .selectFrom('pet_tags')
+        .innerJoin('pets', 'pets.id', 'pet_tags.pet_id')
+        .select(['pet_tags.status as status', 'pet_tags.code_ciphertext as code_ciphertext'])
+        .where('pet_tags.id', '=', tagId)
+        .where('pet_tags.pet_id', '=', petId)
+        .where('pets.owner_user_id', '=', dono)
+        .where('pets.deleted_at', 'is', null)
+        .executeTakeFirst();
+
+      if (linha === undefined) return undefined;
+      return {
+        status: linha.status,
+        codeCiphertext:
+          linha.code_ciphertext === null ? null : Uint8Array.from(linha.code_ciphertext),
+      };
     },
 
     /**

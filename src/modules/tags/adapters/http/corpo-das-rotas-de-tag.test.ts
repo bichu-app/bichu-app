@@ -59,6 +59,7 @@ import type {
   UserId,
 } from '../../../../shared/types/brands.js';
 import { criarTagService } from '../../application/tag-service.js';
+import { criarRasterizadorDeQr } from '../external/sharp-rasterizador-de-qr.js';
 import type { Autenticador } from '../../ports/autenticador.js';
 import type {
   NovaTag,
@@ -158,6 +159,7 @@ function montar(): Bancada {
     resolverPorCodigo: () => Promise.resolve(tagAtiva()),
     buscarContextoDoDono: () => naoUsado('buscarContextoDoDono'),
     listarTagsDoPet: () => naoUsado('listarTagsDoPet'),
+    buscarParaReimpressao: () => naoUsado('buscarParaReimpressao'),
     emitir: (nova) => {
       registros.tags.push(nova);
       const tag: TagDoTutor = {
@@ -221,6 +223,7 @@ function montar(): Bancada {
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
     baseDaTag: 'https://tag.exemplo.invalido' as AbsoluteUrl,
     baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
+   rasterizador: criarRasterizadorDeQr(),
   });
 
   const autenticador: Autenticador = {
@@ -256,6 +259,7 @@ function montar(): Bancada {
     clock,
     ipHmacKey: Buffer.alloc(32, 7),
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),
+    baseDaApi: 'https://api.exemplo.invalido',
   };
   void app.register(
     (escopo, _opcoes, pronto) => {

@@ -76,6 +76,24 @@ export interface ContextoDoDono {
   readonly tagId: TagId;
 }
 
+/**
+ * O que a reimpressão do QR precisa, e **só** o que ela precisa.
+ *
+ * Esta é a única forma desta porta que devolve `code_ciphertext` para fora, e
+ * ela existe porque o ADR-0004 dá ao cifrado exatamente um propósito: reimprimir
+ * o QR. Nem o resumo nem o código em claro saem por aqui — quem decifra é a
+ * aplicação, pela porta `SecretCipher`, e o claro morre no fim da requisição.
+ *
+ * `status` vem junto porque a recusa da tag revogada é **410 e não 404**
+ * (ADR-0004): reimprimir uma plaquinha que já não resolve entregaria um arquivo
+ * com aparência de bom para uma coleira que responde "tag desativada".
+ */
+export interface TagParaReimpressao {
+  readonly status: StatusDaTag;
+  /** Nulo quando a revogação já o apagou, que é o que ela faz por restrição do ADR. */
+  readonly codeCiphertext: Uint8Array | null;
+}
+
 export interface NovaTag {
   readonly id: TagId;
   readonly petId: PetId;
@@ -129,6 +147,29 @@ export interface TagRepository {
 
   /** Lista as tags de um pet **deste** tutor. Pet de outro tutor devolve `undefined`. */
   listarTagsDoPet(petId: PetId, dono: UserId): Promise<readonly TagDoTutor[] | undefined>;
+
+  /**
+   * **A segunda busca vinculada.** O cifrado da tag, para reimprimir o QR, com
+   * `pets.owner_user_id` na mesma cláusula `WHERE` que `pet_tags.id` e
+   * `pet_tags.pet_id`.
+   *
+   * Devolve `undefined` para os quatro casos que não são do dono — pet
+   * inexistente, tag inexistente, tag de outro pet, pet de outro tutor — e quem
+   * chama não consegue distingui-los **nem se quiser**, porque a informação não
+   * chega até lá. É a forma do ADR-0021 aplicada à rota que revela credencial:
+   * o `dono` é argumento obrigatório e não existe variante que devolva a linha
+   * para alguém comparar o tutor depois.
+   *
+   * O par `(petId, tagId)` entra inteiro no `WHERE` de propósito. Buscar só por
+   * `tagId` e confiar que o `petId` do caminho bate deixaria a autorização
+   * correta e o endereçamento errado: a tag de um pet respondendo sob o id de
+   * outro pet do mesmo tutor.
+   */
+  buscarParaReimpressao(
+    petId: PetId,
+    tagId: TagId,
+    dono: UserId,
+  ): Promise<TagParaReimpressao | undefined>;
 
   /**
    * Emite, contando os tetos na mesma transação em que insere. Contar antes e

@@ -61,6 +61,7 @@ import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-c
 import { criarAlcanceAindaSemBase } from '../modules/lostfound/adapters/persistence/alcance-ainda-sem-base.js';
 import { criarIdempotencia } from '../shared/http/idempotency.js';
 import { criarSecretCipher } from '../modules/tags/adapters/external/aes-gcm-secret-cipher.js';
+import { criarRasterizadorDeQr } from '../modules/tags/adapters/external/sharp-rasterizador-de-qr.js';
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
 import { criarTagService } from '../modules/tags/application/tag-service.js';
 import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.js';
@@ -223,6 +224,9 @@ export async function main(): Promise<void> {
     // Emenda 1, §3.1). Se ela for a mesma de `tagCodeKey`, `loadAppConfig()`
     // já recusou subir antes desta linha.
     chaveDoIndiceDoCodigo: config.tagCodeIndexKey,
+    // O arquivo do QR. O que decide o que vira plástico está em
+    // `domain/qr-da-tag.ts`; este adaptador só embrulha o desenho em PNG.
+    rasterizador: criarRasterizadorDeQr(),
   });
 
   // Declarado ANTES do cadastro porque o cadastro depende dele: a ficha do pet
@@ -336,6 +340,10 @@ export async function main(): Promise<void> {
     idempotencia: criarIdempotencia(db),
     contrato,
     clock: systemClock,
+    // `API_BASE_URL`, porque `qr_png_url` é rota DESTA API. `TAG_BASE_URL` é o
+    // que vai impresso na coleira e `fiacao-das-bases.test.ts` trava aquela
+    // linha; esta é a terceira base e não se confunde com nenhuma das duas.
+    baseDaApi: config.apiBaseUrl,
     ipHmacKey: config.ipHmacKey,
     chaveDoIndiceDoCodigo: config.tagCodeIndexKey,
   };
