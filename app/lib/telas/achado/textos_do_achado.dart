@@ -13,8 +13,14 @@
 library;
 
 abstract final class TextosDoAchado {
-  /// O titulo da tela, palavra por palavra do criterio 1.
-  static const String titulo = 'Registrar achado';
+  /// O titulo da barra de topo.
+  ///
+  /// **Nao e o rotulo do botao**, e a diferenca e proposital: a barra diz onde
+  /// a pessoa esta e o botao diz o que o toque faz. Titulo e acao com a mesma
+  /// palavra deixam a tela com dois "Registrar achado" -- e quem navega por
+  /// leitor de tela ouve o mesmo texto duas vezes, sem saber qual dos dois
+  /// aciona alguma coisa.
+  static const String titulo = 'Achei um pet';
 
   /// A frase de abertura, palavra por palavra do criterio 1.
   static const String chamada = 'Você achou um pet. Conte o que dá para ver.';
@@ -105,6 +111,14 @@ abstract final class TextosDoAchado {
   static const String registrar = 'Registrar achado';
 
   // -- A tela do achado registrado -----------------------------------------
+
+  /// O titulo da barra de topo do desfecho.
+  ///
+  /// **Neutro, e nao o estado.** A barra e a headline diziam a mesma frase, e
+  /// o resultado era o mesmo texto duas vezes na arvore de semantica: quem usa
+  /// leitor de tela ouve a resposta, ouve de novo, e nao sabe se sao duas
+  /// coisas. O estado mora na headline, que e onde a pessoa olha.
+  static const String tituloDaBarraDoDesfecho = 'Achado';
 
   static const String tituloDoRegistrado = 'Achado registrado';
 

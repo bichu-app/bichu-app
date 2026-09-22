@@ -40,10 +40,8 @@ class TelaAchadoRegistrado extends StatelessWidget {
     final achado = resultado.achado;
 
     return Scaffold(
-      appBar: BarraDeConta(
-        titulo: registrado
-            ? TextosDoAchado.tituloDoRegistrado
-            : TextosDoAchado.tituloDaFila,
+      appBar: const BarraDeConta(
+        titulo: TextosDoAchado.tituloDaBarraDoDesfecho,
         // **Fechar e nao voltar**: voltar devolveria o formulario preenchido
         // de um achado que ja saiu, e o toque seguinte seria um segundo
         // registro do mesmo animal.
