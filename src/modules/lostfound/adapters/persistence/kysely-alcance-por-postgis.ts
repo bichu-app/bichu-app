@@ -72,17 +72,28 @@
  * idiomática de ordenar por distância, **não** está naquele subconjunto e por
  * isso não é usado aqui.
  *
- * ## BICHUS-88: a conta logicamente excluída sai por `deleted_at IS NULL`
+ * ## BICHUS-88: `deleted_at IS NULL` aqui é a SEGUNDA camada, desde 22/09
  *
- * O critério 12 da BICHUS-88 diz que a exclusão lógica é imediata e o expurgo
- * definitivo acontece em 30 dias. Entre os dois, a linha de
- * `user_reference_locations` continua existindo — o `expires_at` dela fala da
- * validade da localização, não da conta — e portanto continua casando com
- * `ST_DWithin`. É por isso que esta consulta junta `users` e exige
- * `deleted_at IS NULL`: **avisar uma conta que pediu para sair é o defeito, e
- * ele morre aqui.** A junção não conserta a BICHUS-88 e não tenta: a linha
- * segue no banco até o expurgo, e qualquer outro caminho que leia
- * `user_reference_locations` sem esta junção continua a vendo.
+ * Esta junção nasceu como a única defesa contra um defeito real: entre a
+ * exclusão lógica (imediata, critério 12) e o expurgo de 30 dias, a linha de
+ * `user_reference_locations` continuava existindo — o `expires_at` dela fala da
+ * validade da captura, não da conta — e portanto continuava casando com
+ * `ST_DWithin`. A junção impedia o alerta de ir para quem pediu para sair, e não
+ * consertava o defeito: qualquer outro caminho que lesse a tabela sem ela
+ * voltava a ver a linha.
+ *
+ * O defeito foi consertado na raiz pela migração `20260922000006`: um gatilho em
+ * `users` apaga a linha no instante em que `deleted_at` deixa de ser nulo. Não
+ * há mais linha para uma consulta distraída encontrar. O ADR-0010 já decidia
+ * assim na tabela de retenção — a localização de referência é "apagada ao sair
+ * da conta e ao excluir a conta", sem janela.
+ *
+ * **A cláusula fica.** Ela deixou de ser a única defesa e virou a segunda, e
+ * tirá-la trocaria duas camadas por uma sem ganho. Mas o que a segura mudou, e
+ * isso precisa estar dito onde alguém vá ler antes de mexer: removê-la já não
+ * reprova nenhum caso de `tests/integration/alcance-e-disparo.test.ts` (medido:
+ * 252 de 252 verdes sem ela). Quem a segura é `sete-criterios-na-consulta.test.ts`,
+ * pelo texto do SQL.
  */
 import { sql } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
