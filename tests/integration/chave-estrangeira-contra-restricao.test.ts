@@ -1527,6 +1527,45 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
   async function comConversa(corpo: () => Promise<void>): Promise<void> {
     await cliente.query('BEGIN');
     try {
+      // OS DOIS CADEADOS FORTES, NA ORDEM GLOBAL, ANTES DE QUALQUER ESCRITA.
+      //
+      // Sem esta linha a isca reprovava com `deadlock detected` (40P01) em
+      // cerca de 1 execução em 9, e a reprovação não tinha defeito nenhum
+      // atrás dela. Medido, e não deduzido:
+      //
+      //   Process 119 waits for AccessExclusiveLock on relation 19812 (users);
+      //     blocked by process 133.
+      //   Process 133 waits for RowExclusiveLock on relation 20495
+      //     (conversation_messages); blocked by process 119.
+      //
+      // A causa é ordem de cadeado, e o pedaço que não é óbvio é este:
+      // `alter table conversation_messages drop constraint ..._sender_user_id_fkey`
+      // toma `AccessExclusiveLock` nas DUAS tabelas, não só na que ela nomeia —
+      // a chave estrangeira tem gatilho dos dois lados, e derrubá-la mexe em
+      // `users` também. Conferido no banco desta pilha:
+      //
+      //   BEGIN; ALTER TABLE conversation_messages DROP CONSTRAINT ...;
+      //   SELECT relname, mode FROM pg_locks ... WHERE pid = pg_backend_pid();
+      //   -> conversation_messages | AccessExclusiveLock
+      //   -> users                 | AccessExclusiveLock
+      //
+      // `node --test` roda os quinze arquivos de integração em paralelo contra
+      // o MESMO banco. Todo arquivo que escreve mensagem precisa criar a conta
+      // primeiro, então a ordem de todo mundo é `users` e depois
+      // `conversation_messages`. A isca ia na ordem inversa, porque o `ALTER`
+      // nomeia a filha: ela escalava `conversation_messages` primeiro e pedia
+      // `users` depois. AB-BA, e o Postgres mata um dos dois.
+      //
+      // Pedir os dois aqui, nesta ordem, como PRIMEIRA instrução da transação,
+      // desfaz o ciclo: neste ponto a transação não segura nada, então ela não
+      // pode fechar ciclo com ninguém, e daqui para a frente ela já tem tudo o
+      // que o `ALTER` vai querer. Quem estiver no meio de uma escrita termina e
+      // a isca espera; a isca não espera por quem espera por ela.
+      //
+      // O custo é serializar estas duas tabelas por cerca de um segundo, que é
+      // o que o caso leva. Afrouxar não era opção: reprovação intermitente numa
+      // isca é pior que isca nenhuma, porque ensina a ignorar vermelho.
+      await cliente.query('lock table users, conversation_messages in access exclusive mode');
       await cliente.query(
         `insert into users (id, email) values
            ($1, 'achadora@isca.test'), ($2, 'tutora@isca.test')`,
