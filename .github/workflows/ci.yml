@@ -55,6 +55,7 @@ jobs:
 
       - name: portabilidade e hostname
         run: python3 infra/verificacao/verificar_portabilidade.py
+
       # BOA-FORMACAO DO XML QUE O BUILD DO APLICATIVO LE (22/09/2026).
       #
       # Duas vezes em dois dias a mesma classe derrubou o build do Android, com
@@ -83,6 +84,7 @@ jobs:
 
       - name: o XML que o build do aplicativo le esta bem formado
         run: python3 infra/verificacao/verificar_manifesto_android.py --raiz .
+
       # O guarda que torna a lista de fechamento obrigatoria: branch `integra/*`
       # so sai da maquina com o recibo de `make fechar-integracao` daquele
       # commit (`.githooks/pre-push`). O gancho e contornavel com `--no-verify`,
