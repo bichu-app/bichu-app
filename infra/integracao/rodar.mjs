@@ -124,7 +124,15 @@ exigir(
   'nao consegui marcar o banco efemero como descartavel',
 );
 
-const suite = compose(['run', '--rm', 'testes', 'npm', 'run', 'test:integration:executar']);
+// O que vier depois de `npm run test:integration --` e repassado ao executor
+// LA DENTRO. E assim que `--lcov coverage/lcov-integracao.info` chega ate ele
+// de dentro de um worktree: a arvore inteira ja esta montada em `/app`, entao
+// o relatorio nasce no proprio worktree, no mesmo caminho relativo.
+const extras = process.argv.slice(2);
+const suite = compose([
+  'run', '--rm', 'testes',
+  'npm', 'run', 'test:integration:executar', '--', ...extras,
+]);
 derrubar();
 
 if (suite.status !== 0) process.exit(suite.status === null ? 1 : suite.status);

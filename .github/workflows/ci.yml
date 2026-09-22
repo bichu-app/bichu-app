@@ -823,8 +823,37 @@ jobs:
       # pilha ja esta de pe, do zero, desde o passo acima. O executor e o mesmo
       # nos dois caminhos, com os mesmos portoes -- inclusive o que reprova
       # quando a suite nao executa nada.
+      # `--lcov` E O QUE FALTAVA CHEGAR AO SONARCLOUD.
+      #
+      # Ate 22/09 esta suite nao emitia cobertura nenhuma e o Sonar era
+      # alimentado so pelo lcov de `npm test`. Consequencia medida: 40 arquivos
+      # de producao de `src` nao apareciam em relatorio algum, e arquivo de
+      # fonte SEM dado de cobertura e, para o Sonar, arquivo com 0%.
+      #
+      # O `-v` monta `coverage/` do runner por cima do `/app/coverage` do
+      # container: `docker compose run --rm` apaga o container no fim, entao
+      # `docker cp` depois nao existe, e o arquivo precisa nascer ja do lado de
+      # fora. `install -d -m 0777` porque o alvo `dev` roda como o usuario
+      # `node` (uid 1000) e o diretorio do runner e do usuario `runner`: sem a
+      # permissao o reporter falha ao abrir o arquivo, e o executor REPROVA
+      # dizendo que a cobertura foi pedida e nao veio.
       - name: suite de integracao (BICHUS-19, BICHUS-56, BICHUS-15 e BICHUS-178)
-        run: docker compose run --rm api npm run test:integration:executar
+        run: |
+          install -d -m 0777 coverage
+          docker compose run --rm -v "$PWD/coverage:/app/coverage" api \
+            npm run test:integration:executar -- --lcov coverage/lcov-integracao.info
+
+      # O job `sonar` roda noutro runner e nao ve este disco. O artefato e a
+      # unica ponte, e ele NAO e condicional: se este passo nao rodar, o job
+      # `sonar` reprova no verificador dizendo que o relatorio nao foi
+      # encontrado, em vez de analisar com 0% em silencio.
+      - name: guarda a cobertura de integracao para o job sonar
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-de-integracao
+          path: coverage/lcov-integracao.info
+          if-no-files-found: error
+          retention-days: 1
 
       - name: diagnostico quando falha
         if: failure()
@@ -1081,7 +1110,15 @@ jobs:
     name: SonarCloud (analise estatica e cobertura)
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    needs: codigo
+    # `integracao` entrou em 22/09: e la que a suite de integracao roda (onde ha
+    # banco de pe) e e de la que vem `coverage/lcov-integracao.info`, pelo
+    # artefato. Sem essa metade, 40 arquivos de producao de `src` chegam ao
+    # Sonar sem dado nenhum -- e sem dado, para ele, e 0%.
+    #
+    # Se `integracao` reprovar, este job e PULADO, e o job `portao` trata
+    # "skipped" como erro ("Portao que nao roda nao aprova"). Nao existe caminho
+    # em que a analise desapareca em silencio.
+    needs: [codigo, integracao]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -1126,16 +1163,36 @@ jobs:
       # (`dist/_tests/**/*.js`), o Sonar nao casa nenhum arquivo, nao reclama, e
       # publica 0% de cobertura. Uma flag, e a diferenca entre medir e fingir
       # que mediu.
-      - name: cobertura em lcov
+      - name: cobertura em lcov (unitaria)
         run: |
           mkdir -p coverage
           npm test -- --lcov coverage/lcov.info
 
-      # As quatro iscas de infra/verificacao/iscas/lcov-* rodam ANTES do
-      # relatorio real, e tres delas precisam reprovar nominalmente. Isca que
-      # passa derruba o job com "o verificador de cobertura parou de verificar".
-      - name: o relatorio de cobertura fala de src/**/*.ts, iscas primeiro
-        run: node infra/verificacao/verificar-cobertura-lcov.mjs coverage/lcov.info
+      # A outra metade da medicao, produzida no job `integracao`. Sem `if:` e
+      # sem tolerancia a ausencia: o download que falha derruba o job, e o
+      # verificador abaixo reprovaria de qualquer jeito com "relatorio de
+      # cobertura nao encontrado".
+      - name: cobertura em lcov (integracao), vinda do job `integracao`
+        uses: actions/download-artifact@v4
+        with:
+          name: cobertura-de-integracao
+          path: coverage
+
+      # As CINCO iscas de infra/verificacao/iscas/lcov-* rodam ANTES dos
+      # relatorios reais, e quatro delas precisam reprovar nominalmente. Isca
+      # que passa derruba o job com "o verificador de cobertura parou de
+      # verificar".
+      #
+      # A quinta isca entrou em 22/09 e e a que faltava: relatorio impecavel em
+      # forma, que simplesmente NAO MENCIONA um arquivo de `src`. As outras
+      # quatro passavam nela, porque todas partem do RELATORIO e so conseguem
+      # errar sobre o que esta nele. A regra nova parte do DISCO.
+      - name: os relatorios falam de src/**/*.ts, e de TODOS eles; iscas primeiro
+        run: |
+          node infra/verificacao/verificar-cobertura-lcov.mjs \
+            coverage/lcov.info coverage/lcov-integracao.info \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
 
       # O modo vem do quality-gates.yml, e nao de um `if` escrito aqui.
       # Secao 5.3: "Para remover a dispensa: apague a entrada. Nao mexa no

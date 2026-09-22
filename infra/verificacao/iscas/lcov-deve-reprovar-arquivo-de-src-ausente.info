@@ -1,0 +1,46 @@
+# ISCA. PRECISA REPROVAR.
+#
+# ESTA E A ISCA QUE AS OUTRAS QUATRO NAO CONSEGUEM SER.
+#
+# Todo caminho aqui tem a forma certa: relativo a raiz, dentro de `src`,
+# terminado em `.ts`, com linhas instrumentadas e linhas cobertas, e com um
+# arquivo que nao e de teste. As tres iscas antigas PASSAM neste arquivo, e a
+# contraprova tambem passaria: pelo criterio delas, este relatorio e impecavel.
+#
+# O defeito nao esta no que ele diz. Esta no que ele NAO diz: o verificador e
+# chamado com DUAS fontes esperadas --
+#
+#   src/exemplo/de/isca-presente.ts   <- declarada abaixo
+#   src/exemplo/de/isca-ausente.ts    <- NAO declarada em lugar nenhum
+#
+# -- e a segunda simplesmente nao aparece. Para o SonarCloud, arquivo de fonte
+# sem dado de cobertura e arquivo com 0%, e ele nao reclama disso: so publica o
+# numero. Foi assim que 40 arquivos de producao de `src` ficaram fora da
+# medicao ate 22/09 com o portao verde.
+#
+# A acusacao precisa citar `ausente do relatorio de cobertura`, porque
+# reprovar sem nomear o que falta devolve o problema sem o conserto.
+#
+# Os dois caminhos sao FICTICIOS de proposito, pelo mesmo motivo que a
+# contraprova nao confere disco: amarrar esta isca a um arquivo real do backend
+# faria este portao quebrar no dia em que alguem renomear um arquivo que nao
+# tem nada a ver com ele.
+TN:
+SF:src/exemplo/de/isca-presente.ts
+FN:7,fazAlgo
+FNDA:2,fazAlgo
+FNF:1
+FNH:1
+DA:7,2
+DA:8,2
+LF:14
+LH:12
+end_of_record
+TN:
+SF:src/exemplo/de/isca-presente.test.ts
+FNF:1
+FNH:1
+DA:3,1
+LF:6
+LH:6
+end_of_record
