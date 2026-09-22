@@ -69,7 +69,7 @@ export interface UserRolesTable {
 export interface VerificationTokensTable {
   id: string;
   user_id: string;
-  purpose: 'email_verify' | 'password_reset' | 'email_change';
+  purpose: 'email_verify' | 'password_reset' | 'email_change' | 'session_disavow';
   token_hash: Buffer;
   sent_to: string;
   expires_at: Date;
@@ -100,6 +100,7 @@ export interface RefreshTokensTable {
     | 'logout_all'
     | 'password_changed'
     | 'account_deleted'
+    | 'not_me'
     | null;
   device_id: string | null;
   user_agent: string | null;

@@ -21,6 +21,7 @@ import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
 import type { Instant, TokenHash, UserId } from '../../../../shared/types/brands.js';
 import type {
   ConsumoDeJanela,
+  ConsequenciasDaExclusao,
   Conta,
   CredencialLocal,
   IdentityRepository,
@@ -672,6 +673,87 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
         })
         .where('id', '=', userId)
         .execute();
+    },
+
+    /**
+     * Exclusão lógica e revogação das tags, numa transação só.
+     *
+     * O `where` da marcação exige `deleted_at is null`: é ele, e não um `if`
+     * antes, que torna a operação idempotente sob concorrência. Duas chamadas
+     * simultâneas leriam as duas a mesma conta ativa; só uma atualiza linha.
+     *
+     * A revogação das tags roda por subconsulta em `pets` do próprio dono. A
+     * autorização vai na cláusula e não num `if` de papel (ADR-0021): não há
+     * caminho, nem por engano de parâmetro, que revogue a tag de outra pessoa.
+     */
+    async registrarPedidoDeExclusao(
+      userId: UserId,
+      agora: Instant,
+    ): Promise<ConsequenciasDaExclusao | undefined> {
+      return db.transaction().execute(async (trx) => {
+        const marcada = await trx
+          .updateTable('users')
+          .set({
+            status: 'deletion_requested',
+            deletion_requested_at: new Date(agora),
+            deleted_at: new Date(agora),
+            updated_at: new Date(agora),
+          })
+          .where('id', '=', userId)
+          .where('deleted_at', 'is', null)
+          .returning('id')
+          .executeTakeFirst();
+        if (marcada === undefined) return undefined;
+
+        const tags = await trx
+          .updateTable('pet_tags')
+          .set({
+            status: 'revoked',
+            revoked_at: new Date(agora),
+            // `owner_request` e não um motivo novo: do ponto de vista da tag,
+            // foi o tutor que pediu. Um `account_deleted` aqui seria um sexto
+            // valor numa lista fechada para dizer o que a trilha da conta já
+            // diz, e a `revocation_reason` é lida por quem investiga a TAG.
+            revocation_reason: 'owner_request',
+            // ADR-0004: a revogação apaga o texto cifrado guardado para
+            // reimpressão. `pet_tags_revogada_nao_guarda_o_codigo` recusa a
+            // versão pela metade, então esquecer esta linha não passa.
+            code_ciphertext: null,
+          })
+          .where('status', '=', 'active')
+          .where((eb) =>
+            eb(
+              'pet_id',
+              'in',
+              eb.selectFrom('pets').select('pets.id').where('pets.owner_user_id', '=', userId),
+            ),
+          )
+          .returning('id')
+          .execute();
+
+        return { tagsRevogadas: tags.length };
+      });
+    },
+
+    async contasAExpurgar(ate: Instant, limite: number): Promise<readonly UserId[]> {
+      const linhas = await db
+        .selectFrom('users')
+        .select('id')
+        .where('deleted_at', 'is not', null)
+        .where('deleted_at', '<=', new Date(ate))
+        .orderBy('deleted_at', 'asc')
+        .limit(limite)
+        .execute();
+      return linhas.map((linha) => linha.id as UserId);
+    },
+
+    async expurgarConta(userId: UserId): Promise<boolean> {
+      const apagadas = await db
+        .deleteFrom('users')
+        .where('id', '=', userId)
+        .where('deleted_at', 'is not', null)
+        .executeTakeFirst();
+      return (apagadas.numDeletedRows ?? 0n) > 0n;
     },
   };
 }

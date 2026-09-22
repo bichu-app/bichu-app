@@ -1696,6 +1696,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/session-alerts/{alertToken}/disavow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alertToken: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "Nao fui eu": derruba todas as sessoes pelo link do aviso
+         * @description O aviso de reuso de refresh chega por e-mail, e quem o le pode ser
+         *     justamente quem **perdeu** a conta: o invasor ja trocou o que precisava
+         *     trocar, ou o celular ficou no bolso de outra pessoa. Um botao que exija
+         *     login e inutil para essa pessoa, e e por isso que esta operacao nao pede
+         *     conta. Mesmo desenho, e pelo mesmo motivo, de
+         *     `cancelTransferByToken`: a operacao existe para **desfazer**, e um
+         *     obstaculo aqui e o dano consumado.
+         *
+         *     O que ela faz, e so isto: revoga todas as familias de refresh da conta e
+         *     empurra `users.sessions_invalid_before`, o que derruba tambem o token de
+         *     acesso ja emitido em menos de um segundo (SEC-006). Ela **nao troca a
+         *     senha** e nao mexe em mais nada: quem tem o link nao provou ser o
+         *     titular, e uma troca de senha a partir daqui trancaria o titular para
+         *     fora com o link que existe para protege-lo. O e-mail que sai em seguida
+         *     convida a redefinir a senha pelo fluxo que exige a caixa de entrada.
+         *
+         *     E **POST, sem GET equivalente**, e isso e defesa: cliente de e-mail e
+         *     antivirus de borda pre-carregam link por GET, e uma revogacao disparada
+         *     por pre-carga derrubaria a sessao de quem nunca clicou.
+         *
+         *     O token e de uso unico, vale 7 dias e e consumido **depois** de a
+         *     revogacao concluir. A ordem e deliberada: revogar duas vezes tem o mesmo
+         *     efeito de revogar uma, entao gastar o token antes deixaria uma falha
+         *     passageira do banco queimar o unico remedio da vitima.
+         *
+         *     Responde 204 tambem quando a conta ja estava sem sessao nenhuma. O
+         *     pedido e o que importa, nao o numero de linhas que caiu.
+         */
+        post: operations["disavowSessionAlert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/transfers/{cancelToken}": {
         parameters: {
             query?: never;
@@ -5784,6 +5832,39 @@ export interface operations {
                 };
             };
             410: components["responses"]["TokenExpired"];
+        };
+    };
+    disavowSessionAlert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alertToken: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Todas as sessoes da conta foram encerradas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /**
+             * @description O link nao vale mais: inexistente, vencido ou ja usado. O corpo e o
+             *     mesmo nos tres casos, porque distinguir contaria a um estranho que
+             *     aquele token existiu.
+             */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     getTransferByCancelToken: {

@@ -36,7 +36,15 @@ export interface CamposDoPerfil {
   readonly referenceState?: string | null | undefined;
 }
 
-export type PropositoDoToken = 'email_verify' | 'password_reset' | 'email_change';
+export type PropositoDoToken =
+  | 'email_verify'
+  | 'password_reset'
+  | 'email_change'
+  /**
+   * O "Nao fui eu" do aviso de reuso (BICHUS-215). Unico proposito que nao
+   * leva a pessoa a digitar nada: o link derruba as sessoes e acaba.
+   */
+  | 'session_disavow';
 
 export interface NovoTokenDeVerificacao {
   readonly id: string;
@@ -75,7 +83,14 @@ export type MotivoDeRevogacao =
   | 'logout'
   | 'logout_all'
   | 'password_changed'
-  | 'account_deleted';
+  | 'account_deleted'
+  /**
+   * A resposta HUMANA a deteccao de reuso, e o quinto gatilho do SEC-006.
+   * Distinto de `reuse_detected`, que e automatico e vale para UMA familia, e
+   * de `logout_all`, que e o titular arrumando a casa: aqui alguem esta
+   * declarando que a conta esta com outra pessoa.
+   */
+  | 'not_me';
 
 export interface RefreshArmazenado {
   readonly id: string;
@@ -115,6 +130,11 @@ export interface NovoRefresh {
   readonly staySignedIn: boolean;
   readonly userAgent: string | undefined;
   readonly ipHmac: Buffer | null;
+}
+
+/** O que a exclusão lógica deixou para trás, para a trilha poder dizer o tamanho. */
+export interface ConsequenciasDaExclusao {
+  readonly tagsRevogadas: number;
 }
 
 export interface IdentityRepository {
@@ -268,6 +288,55 @@ export interface IdentityRepository {
   consumirJanelaDeReautenticacao(
     consumo: ConsumoDeJanela,
   ): Promise<ResultadoDoConsumoDaJanela>;
+  /**
+   * A EXCLUSÃO LÓGICA, e o que ela leva junto na mesma transação.
+   *
+   * O contrato de `deleteMyAccount` diz o que esta operação é: *"Exclusão
+   * lógica imediata, expurgo definitivo em 30 dias"*. Ela não apaga linha
+   * nenhuma — quem apaga é {@link expurgarConta}, 30 dias depois. Aqui a conta
+   * passa a `deletion_requested`, ganha `deleted_at`, e com isso sai do índice
+   * `users_email_unico_ativo`: o endereço fica livre para uma conta nova no
+   * mesmo instante, que é o que faz a exclusão valer para quem a pediu.
+   *
+   * **As tags caem junto, e é por isso que isto é uma transação e não três
+   * chamadas.** O ADR-0010 diz *"casos encerrados e tags revogadas na hora"*, e
+   * a tag é a única coisa deste produto que continua funcionando sozinha depois
+   * que a pessoa some: ela está numa coleira, na rua, e resolve para a página
+   * do achador sem ninguém autenticar. Trinta dias de QR vivo apontando para o
+   * pet de uma conta excluída é o buraco que a exclusão existe para fechar.
+   * Revogação é estado completo (`pet_tags_revogacao_e_completa`) e apaga o
+   * texto cifrado do código (`pet_tags_revogada_nao_guarda_o_codigo`).
+   *
+   * Idempotente: chamada sobre uma conta já marcada, devolve `undefined`.
+   */
+  registrarPedidoDeExclusao(
+    userId: UserId,
+    agora: Instant,
+  ): Promise<ConsequenciasDaExclusao | undefined>;
+
+  /**
+   * As contas cujo prazo de expurgo venceu, para a varredura do worker.
+   *
+   * `limite` existe para a varredura ser um passo e não um evento: uma rodada
+   * que tentasse apagar dez mil contas numa transação só seguraria o banco e,
+   * ao falhar numa, desfaria as nove mil e novecentas que já tinham dado certo.
+   */
+  contasAExpurgar(ate: Instant, limite: number): Promise<readonly UserId[]>;
+
+  /**
+   * O `DELETE FROM users` de verdade, e o ponto em que as cascatas disparam.
+   *
+   * **Esta é a operação que precisa CONCLUIR**, e a classe de defeito que já
+   * apareceu cinco vezes em 22/09 mora exatamente aqui: contradição entre a
+   * ação de deleção de uma chave estrangeira e uma restrição da mesma tabela
+   * (`23514`), ou `SET NULL` de neto revalidando contra um pai que a cascata do
+   * mesmo comando acabou de levar (`23503`). Nenhuma das duas aparece em teste
+   * unitário, e nenhuma aparece em uso normal.
+   *
+   * Devolve `false` quando não havia o que apagar. O worker trata isso como
+   * sucesso: outra rodada pode ter chegado antes.
+   */
+  expurgarConta(userId: UserId): Promise<boolean>;
 }
 
 export interface NovaJanelaDeReautenticacao {

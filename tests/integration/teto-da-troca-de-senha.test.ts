@@ -233,6 +233,8 @@ before(async () => {
     avisarTitular: criarAvisoDeReusoAoTitular({
       repositorio,
       mailer,
+      ids,
+      baseDaWeb: config.publicBaseUrl,
       registrarOcorrencia: () => {
         // idem
       },

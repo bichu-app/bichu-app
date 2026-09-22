@@ -35,6 +35,8 @@ import { criarImageProcessor } from '../modules/media/adapters/external/sharp-im
 import { criarPushSender } from '../modules/notifications/adapters/external/log-push-sender.js';
 import { processarFoto, type CargaDoTrabalho } from '../modules/media/application/processar-foto.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
+import { expurgarContasExcluidas } from '../modules/identity/application/expurgar-contas-excluidas.js';
+import { criarIdentityRepository } from '../modules/identity/adapters/persistence/kysely-identity-repository.js';
 import { criarLocalizacaoDeReferenciaRepository } from '../modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 import { criarRegistroDeAparelhos } from '../modules/notifications/adapters/persistence/kysely-registro-de-aparelhos.js';
 import { RegistroDeAparelhosService } from '../modules/notifications/application/registro-de-aparelhos-service.js';
@@ -351,6 +353,44 @@ export async function main(): Promise<void> {
     }
   };
 
+
+  /**
+   * O expurgo de conta excluída, e ele mora aqui e não na API pelo mesmo motivo
+   * do expurgo da trilha: `DELETE /v1/me` responde 202 porque o efeito completo
+   * tem prazo de 30 dias, e o que tem prazo é do worker.
+   *
+   * A trilha é montada aqui, e não é a mesma dos aparelhos por acaso: ela grava
+   * `privacy.account_purged`, que é a **única** memória de que aquela conta
+   * existiu depois que a linha some. `audit.events` não referencia `users` de
+   * propósito, e é isso que faz o registro sobreviver ao que ele registra.
+   */
+  const contas = criarIdentityRepository(banco.db, ids);
+  const trilhaDoExpurgo = criarTrilhaDeAuditoria({
+    db: banco.db,
+    ids,
+    clock: systemClock,
+    ipHmacKey: config.ipHmacKey,
+    onFailure: (erro, evento) => {
+      console.error(
+        JSON.stringify({ evento: 'audit.write_failed', acao: evento.action, erro: String(erro) }),
+      );
+    },
+  });
+
+  const rodarExpurgoDeContas = async (): Promise<void> => {
+    const r = await expurgarContasExcluidas({
+      repositorio: contas,
+      trilha: trilhaDoExpurgo,
+      clock: systemClock,
+    });
+    // Silêncio quando não há nada, pelo mesmo motivo das outras varreduras. A
+    // exceção é a falha: ela fala SEMPRE, mesmo com zero expurgadas, porque uma
+    // conta que não some no prazo é descumprimento de política e não ruído.
+    if (r.examinadas > 0 || r.falhas > 0) {
+      console.info(JSON.stringify({ evento: 'privacy.account_purge', ...r }));
+    }
+  };
+
   const rodarExpurgo = async (): Promise<void> => {
     const resultado = await expurgarEventosVencidos(banco.db, systemClock.now());
     console.info(
@@ -372,6 +412,7 @@ export async function main(): Promise<void> {
 
   await rodarExpurgo();
   await rodarExpurgoDeLocalizacao();
+  await rodarExpurgoDeContas();
 
   const temporizadorDaVarredura = setInterval(() => {
     if (vida.estaEncerrando) return;
@@ -380,6 +421,14 @@ export async function main(): Promise<void> {
     });
   }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
   temporizadorDaVarredura.unref();
+
+  const temporizadorDasContas = setInterval(() => {
+    if (vida.estaEncerrando) return;
+    rodarExpurgoDeContas().catch((erro: unknown) => {
+      console.error(JSON.stringify({ evento: 'privacy.account_purge_failed', erro: String(erro) }));
+    });
+  }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
+  temporizadorDasContas.unref();
 
   const temporizadorDaLocalizacao = setInterval(() => {
     if (vida.estaEncerrando) return;

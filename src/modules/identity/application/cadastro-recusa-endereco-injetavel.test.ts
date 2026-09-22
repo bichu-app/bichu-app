@@ -81,6 +81,9 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     marcarEmailVerificado: () => naoDeveriaTerChegado('marcarEmailVerificado'),
     criarJanelaDeReautenticacao: () => naoDeveriaTerChegado('criarJanelaDeReautenticacao'),
     consumirJanelaDeReautenticacao: () => naoDeveriaTerChegado('consumirJanelaDeReautenticacao'),
+    registrarPedidoDeExclusao: () => naoDeveriaTerChegado('registrarPedidoDeExclusao'),
+    contasAExpurgar: () => naoDeveriaTerChegado('contasAExpurgar'),
+    expurgarConta: () => naoDeveriaTerChegado('expurgarConta'),
   };
 }
 
