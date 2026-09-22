@@ -1208,6 +1208,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Pet' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -1255,6 +1256,7 @@ paths:
         a diferenca importa para quem esta com o animal na mao.
       responses:
         '204': { description: Excluido. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
 
@@ -1300,6 +1302,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetPhoto' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/UploadNotReceived' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
@@ -1382,6 +1385,7 @@ paths:
       summary: Remove a foto
       responses:
         '204': { description: Removida. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409':
@@ -1622,6 +1626,7 @@ paths:
                   items:
                     type: array
                     items: { $ref: '#/components/schemas/PetTag' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       operationId: issuePetTag
@@ -1645,6 +1650,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetTagIssued' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Teto de tags ativas por pet atingido (5).
@@ -1990,6 +1996,19 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FoundReportCreated' }
+        '400':
+          description: |
+            O texto do codigo **nao normaliza para um codigo bem formado**:
+            tamanho errado depois da normalizacao, ou caractere fora do
+            alfabeto. Responde `tag-code-malformed`, o mesmo tipo de
+            `resolveTagCode`, porque e o mesmo erro do mesmo parametro — e o
+            app decide a tela pelo `type`, nao pelo status.
+
+            Recusado **na borda**, antes de qualquer leitura: um codigo que nao
+            tem a forma de codigo nao chega a virar consulta.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
         '410':
           description: Tag revogada ou pet excluido.
           content:
@@ -2479,6 +2498,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCase' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/LostCaseBlocked' }
 
@@ -2498,6 +2518,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCase' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
@@ -2658,6 +2679,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCase' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /lost-cases/{caseId}/reopen:
@@ -3635,6 +3657,12 @@ components:
       name: code
       in: path
       required: true
+      # O 400 deste parametro NAO e `validation-failed`: as operacoes que o usam
+      # declaram `tag-code-malformed`, e o app decide a tela pelo `type`. A borda
+      # le esta chave para produzir o problema certo; sem ela, ligar a validacao
+      # de parametro trocaria o tipo em silencio e o teto de tentativas invalidas
+      # deixaria de contar a tentativa (ele conta por `type`, nao por status).
+      x-problem-type: tag-code-malformed
       description: |
         Codigo da tag. **A forma canonica** e Crockford Base32, **26
         caracteres**, maiusculas, sem separador: e ela que e hasheada e

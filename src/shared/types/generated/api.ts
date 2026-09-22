@@ -3908,6 +3908,7 @@ export interface operations {
                     "application/json": components["schemas"]["Pet"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
@@ -3931,6 +3932,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -3996,6 +3998,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetPhoto"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["UploadNotReceived"];
             415: components["responses"]["UnsupportedMedia"];
@@ -4049,6 +4052,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             /**
@@ -4248,6 +4252,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -4271,6 +4276,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTagIssued"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Teto de tags ativas por pet atingido (5). */
             409: {
@@ -4588,6 +4594,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["FoundReportCreated"];
+                };
+            };
+            /**
+             * @description O texto do codigo **nao normaliza para um codigo bem formado**:
+             *     tamanho errado depois da normalizacao, ou caractere fora do
+             *     alfabeto. Responde `tag-code-malformed`, o mesmo tipo de
+             *     `resolveTagCode`, porque e o mesmo erro do mesmo parametro — e o
+             *     app decide a tela pelo `type`, nao pelo status.
+             *
+             *     Recusado **na borda**, antes de qualquer leitura: um codigo que nao
+             *     tem a forma de codigo nao chega a virar consulta.
+             */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             /** @description Tag revogada ou pet excluido. */
@@ -4988,6 +5012,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             409: components["responses"]["LostCaseBlocked"];
         };
@@ -5012,6 +5037,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
         };
@@ -5148,6 +5174,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };

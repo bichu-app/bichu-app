@@ -354,7 +354,15 @@ export interface ConfigDeRotaIdempotente {
   readonly idempotencia?: true;
 }
 
-function caminhoDoContrato(url: string, prefixoDaApi: string): string {
+/**
+ * Caminho do Fastify (`/pets/:petId`) na forma do contrato (`/pets/{petId}`),
+ * já sem o prefixo da API.
+ *
+ * Exportado porque a validação de parâmetros precisa da mesma tradução, e duas
+ * cópias dela divergiriam em silêncio: um portão passaria a casar rota com
+ * operação e o outro não, os dois calados.
+ */
+export function caminhoDoContrato(url: string, prefixoDaApi: string): string {
   const semPrefixo =
     prefixoDaApi !== '' && url.startsWith(`${prefixoDaApi}/`) ? url.slice(prefixoDaApi.length) : url;
   return semPrefixo.replace(/:([^/]+)/g, '{$1}');

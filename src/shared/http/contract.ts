@@ -38,6 +38,39 @@ export interface OperacaoDoContrato {
   readonly effects: readonly string[];
   readonly hasRateLimit: boolean;
   readonly raw: Record<string, unknown>;
+  /**
+   * Os parâmetros da operação, com os do **item de caminho** já juntos e todo
+   * `$ref` de parâmetro resolvido.
+   *
+   * A junção acontece aqui porque ela é fácil de esquecer e cara quando
+   * esquecida: neste contrato a maior parte dos parâmetros de caminho está
+   * declarada no nível do item de caminho, e não dentro da operação. Quem
+   * lesse só `raw['parameters']` concluiria que `getPet` não tem parâmetro
+   * nenhum — e validaria nada com toda a aparência de estar validando.
+   */
+  readonly parameters: readonly Record<string, unknown>[];
+}
+
+/**
+ * O que o Fastify precisa para validar parâmetro de caminho e de query string.
+ *
+ * `undefined` em `params` ou `querystring` significa "a operação não declara
+ * nenhum parâmetro desse lugar", e não "não há o que validar": a distinção é o
+ * que permite ao portão de subida saber se ele conferiu alguma coisa.
+ */
+export interface EsquemasDeParametros {
+  readonly params: Record<string, unknown> | undefined;
+  readonly querystring: Record<string, unknown> | undefined;
+  /**
+   * Tipo de problema a devolver quando **aquele** parâmetro reprova, por nome.
+   *
+   * Sai de `x-problem-type` no próprio parâmetro. Existe porque o contrato já
+   * declara, para alguns parâmetros, um 400 com significado próprio — o código
+   * da tag responde `tag-code-malformed`, e não `validation-failed`. Sem isto,
+   * ligar a validação de borda trocaria o `type` que o app lê para decidir a
+   * tela, e o teto de tentativas inválidas deixaria de contar a tentativa.
+   */
+  readonly tiposDeProblema: ReadonlyMap<string, string>;
 }
 
 export interface Contrato {
@@ -46,6 +79,8 @@ export interface Contrato {
   /** Schema de corpo de requisição em JSON Schema puro, quando existe. */
   requestBodySchema(operationId: string): Record<string, unknown> | undefined;
   responseSchema(operationId: string, status: string): Record<string, unknown> | undefined;
+  /** Schemas de `params` e `querystring` em JSON Schema puro, vindos do contrato. */
+  parameterSchemas(operationId: string): EsquemasDeParametros;
 }
 
 function ehObjeto(valor: unknown): valor is Record<string, unknown> {
@@ -187,8 +222,31 @@ export function carregarContrato(caminho: string): Contrato {
   const semSecurity: string[] = [];
   const securityMalformado: string[] = [];
 
+  /** Resolve `$ref` de parâmetro e descarta o que não é um objeto de parâmetro. */
+  const parametrosDe = (valor: unknown): Record<string, unknown>[] => {
+    if (!Array.isArray(valor)) return [];
+    const resolvidos: Record<string, unknown>[] = [];
+    for (const bruto of valor) {
+      if (!ehObjeto(bruto)) continue;
+      const ref = bruto['$ref'];
+      if (typeof ref !== 'string') {
+        resolvidos.push(bruto);
+        continue;
+      }
+      const alvo = resolverRef(spec, ref);
+      if (!ehObjeto(alvo)) {
+        throw new Error(`Referência de parâmetro não resolvida no contrato: ${ref}`);
+      }
+      resolvidos.push(alvo);
+    }
+    return resolvidos;
+  };
+
   for (const [caminhoDaRota, item] of Object.entries(paths)) {
     if (!ehObjeto(item)) continue;
+    // Parâmetros do ITEM DE CAMINHO. É onde a maior parte dos parâmetros de
+    // caminho deste contrato mora, e ignorá-los seria validar quase nada.
+    const parametrosDoCaminho = parametrosDe(item['parameters']);
     for (const metodo of METODOS) {
       const operacao = item[metodo];
       if (!ehObjeto(operacao)) continue;
@@ -229,6 +287,7 @@ export function carregarContrato(caminho: string): Contrato {
         effects: Array.isArray(efeitos) ? efeitos.filter((e): e is string => typeof e === 'string') : [],
         hasRateLimit: Array.isArray(operacao['x-rate-limit']) && operacao['x-rate-limit'].length > 0,
         raw: operacao,
+        parameters: [...parametrosDoCaminho, ...parametrosDe(operacao['parameters'])],
       });
     }
   }
@@ -254,6 +313,7 @@ export function carregarContrato(caminho: string): Contrato {
   }
 
   const cacheDeCorpo = new Map<string, Record<string, unknown> | undefined>();
+  const cacheDeParametros = new Map<string, EsquemasDeParametros>();
 
   return {
     spec,
@@ -274,6 +334,63 @@ export function carregarContrato(caminho: string): Contrato {
         }
       }
       cacheDeCorpo.set(operationId, resultado);
+      return resultado;
+    },
+    parameterSchemas(operationId) {
+      const emCache = cacheDeParametros.get(operationId);
+      if (emCache !== undefined) return emCache;
+
+      const operacao = operacoes.get(operationId);
+      const porLugar = new Map<'path' | 'query', { propriedades: Record<string, unknown>; exigidos: string[] }>();
+      const tiposDeProblema = new Map<string, string>();
+
+      for (const parametro of operacao?.parameters ?? []) {
+        const lugar = parametro['in'];
+        const nome = parametro['name'];
+        if (typeof nome !== 'string') continue;
+        // `header` e `cookie` ficam de fora de propósito. `Idempotency-Key` é
+        // cabeçalho e tem máquina própria (`idempotency.ts`), que faz muito mais
+        // do que conferir formato; duplicar a conferência aqui criaria a segunda
+        // definição, que é o defeito que este módulo inteiro existe para evitar.
+        if (lugar !== 'path' && lugar !== 'query') continue;
+        if (parametro['schema'] === undefined) continue;
+
+        const convertido = paraJsonSchema(parametro['schema'], spec, new Set());
+        if (!ehObjeto(convertido)) continue;
+
+        const grupo = porLugar.get(lugar) ?? { propriedades: {}, exigidos: [] };
+        grupo.propriedades[nome] = convertido;
+        // Parâmetro de caminho é sempre obrigatório por definição da própria
+        // especificação; o de query só quando o contrato disser.
+        if (lugar === 'path' || parametro['required'] === true) grupo.exigidos.push(nome);
+        porLugar.set(lugar, grupo);
+
+        const tipo = parametro['x-problem-type'];
+        if (typeof tipo === 'string') tiposDeProblema.set(nome, tipo);
+      }
+
+      const montar = (lugar: 'path' | 'query'): Record<string, unknown> | undefined => {
+        const grupo = porLugar.get(lugar);
+        if (grupo === undefined) return undefined;
+        return {
+          type: 'object',
+          properties: grupo.propriedades,
+          ...(grupo.exigidos.length > 0 ? { required: grupo.exigidos } : {}),
+          // `additionalProperties` fica ABERTO, e isso é decisão, não descuido.
+          // Em `params` o Fastify só entrega o que a própria rota declarou no
+          // caminho, então fechar não acrescenta nada. Em `querystring`, fechar
+          // recusaria `?utm_source=...` e qualquer parâmetro que um cliente
+          // publicado já mande — uma recusa nova sobre uma requisição que hoje
+          // funciona, sem nenhum ganho de segurança.
+        };
+      };
+
+      const resultado: EsquemasDeParametros = {
+        params: montar('path'),
+        querystring: montar('query'),
+        tiposDeProblema,
+      };
+      cacheDeParametros.set(operationId, resultado);
       return resultado;
     },
     responseSchema(operationId, status) {

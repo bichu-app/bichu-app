@@ -24,6 +24,7 @@ import { systemClock } from '../shared/time/clock.js';
 import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
 import { vigiarIdempotenciaDasRotas } from '../shared/http/idempotency.js';
+import { vigiarParametrosDasRotas } from '../shared/http/validacao-de-parametros.js';
 import { registrarSaude } from '../shared/http/health.js';
 import { identidadeDoArtefato } from '../shared/artefato/identidade-do-artefato.js';
 import { criarTrilhaDeAuditoria } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
@@ -289,6 +290,11 @@ export async function main(): Promise<void> {
   // que for registrado depois dele. A conferência em si roda no fim, quando
   // todas as rotas já existem.
   const conferirIdempotencia = vigiarIdempotenciaDasRotas(app, contrato, PREFIXO_DA_API);
+  // Mesmo par, mesma razao: o gancho `onRoute` so enxerga o que vem depois
+  // dele, e a conferencia so faz sentido quando todas as rotas ja existem. E
+  // ele que instala `schema.params` e `schema.querystring` a partir do
+  // contrato, entao nenhuma rota registrada abaixo precisa lembrar de declarar.
+  const conferirParametros = vigiarParametrosDasRotas(app, contrato, PREFIXO_DA_API);
 
   // Descoberta fica na RAIZ do host da API, fora de `/v1`: quem a consulta é o
   // sistema operacional ou uma biblioteca, e o contrato declara servidor próprio
@@ -337,6 +343,10 @@ export async function main(): Promise<void> {
   // derruba a subida aqui, e não no segundo envio de um cliente offline, que é
   // onde o defeito apareceria sozinho.
   conferirIdempotencia();
+  // Parametro de caminho sem validacao chegava ao Postgres e voltava 500.
+  // Rota sem operacao no contrato, rota que declara o schema por conta propria
+  // e operacao que pode recusar sem 400 declarado derrubam a subida aqui.
+  conferirParametros();
 
   const encerrar = async (sinal: string): Promise<void> => {
     app.log.info({ sinal }, 'encerrando');
