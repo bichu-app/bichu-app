@@ -15,6 +15,37 @@
 # encontra `bichu`.
 #
 # ===========================================================================
+# O NOME DO PROJETO NAO BASTA. A TAG DA IMAGEM TAMBEM E POR WORKTREE.
+# ===========================================================================
+# Isolar o PROJETO isola conteiner, rede e volume. Nao isola IMAGEM: imagem
+# vive no registro local da maquina, que e um so para o Docker inteiro, e o
+# `-p` nao a alcanca. Enquanto estes dois servicos declararam
+# `bichu-migrador:integracao` e `bichu-app:integracao`, cada `compose build` de
+# qualquer worktree ARRANCAVA a tag de quem a tinha, e o `run` seguinte de
+# outro worktree criava o `migracao` a partir da imagem alheia.
+#
+# O `migracao` e o servico onde isso e pior. Ele NAO monta a arvore: o
+# Dockerfile faz `COPY migrations ./migrations`, entao o esquema aplicado vem
+# INTEIRO da imagem. O `testes`, ao contrario, monta `../..` por cima de
+# `/app`. A combinacao da exatamente o sintoma relatado em 22/09: o teste era o
+# do worktree, o esquema era o de outra branch, e nada acusava, porque migracao
+# a mais nao quebra teste nenhum -- so quebra o que depende de coluna que ainda
+# nao existe.
+#
+# A tag agora carrega o MESMO sufixo do nome do projeto (`TAG_DA_PILHA`,
+# escrita por `rodar.mjs` a partir do sha1 do caminho do worktree). Duas pilhas
+# simultaneas referenciam duas tags diferentes, e tag nao se sobrescreve
+# sozinha.
+#
+# `:?` e nao `:-`: sem valor, o comando REPROVA. Um padrao aqui devolveria a
+# tag global no primeiro `docker compose -f ... build` digitado a mao, que e
+# precisamente a forma como este defeito entrou. `rodar.mjs` injeta a variavel
+# em TODAS as invocacoes (build, up, run, exec, down), entao por la nada muda.
+#
+# A prova de que isto isola, e de que sem isto contamina, esta em
+# `isca-de-isolamento.mjs` (`npm run verify:isolamento-da-pilha`).
+#
+# ===========================================================================
 # NENHUMA PORTA PUBLICADA. LEIA ANTES DE ACRESCENTAR UMA.
 # ===========================================================================
 # O `db` da pilha principal NAO publica porta, e isso esta certo. Publicar a
@@ -95,7 +126,7 @@ services:
   migracao:
     # Mesmo alvo do compose.yaml da raiz, pelo mesmo motivo: `node-pg-migrate` e
     # devDependency e a migracao nao muda de forma entre ambientes.
-    image: bichu-migrador:integracao
+    image: bichu-migrador:${TAG_DA_PILHA:?a tag sai de infra/integracao/rodar.mjs (sufixo do caminho do worktree). Tag fixa aqui faz dois worktrees compartilharem a MESMA imagem e um migrar com o esquema do outro: use `npm run test:integration`.}
     build:
       context: ../..
       target: migrador
@@ -122,7 +153,7 @@ services:
     # o Node 22 que `engines` exige. Rodar a integracao no Node do hospedeiro
     # seria provar o comportamento de um runtime que nao sobe em lugar nenhum:
     # esta maquina tem Node 26 instalado.
-    image: bichu-app:integracao
+    image: bichu-app:${TAG_DA_PILHA:?a tag sai de infra/integracao/rodar.mjs (sufixo do caminho do worktree). Tag fixa aqui faz dois worktrees compartilharem a MESMA imagem e um rodar o codigo do outro: use `npm run test:integration`.}
     build:
       context: ../..
       target: dev

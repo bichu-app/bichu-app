@@ -35,10 +35,10 @@
  * e o mesmo que `make reset` prova na pilha principal.
  */
 import { execFileSync, spawnSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
 
 import { gerar } from './gerar-env-de-integracao.mjs';
 import { MARCA } from './guarda-de-banco-descartavel.mjs';
+import { identidadeDaPilha } from './identidade-da-pilha.mjs';
 
 const ARQUIVO = 'infra/integracao/compose.integracao.yaml';
 const ENV = '.env.integracao';
@@ -47,17 +47,14 @@ const raiz = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: '
 process.chdir(raiz);
 
 /**
- * O nome do projeto sai do CAMINHO do worktree, e nao do nome da branch.
+ * Nome do projeto e tag das imagens, os dois derivados do caminho do worktree.
  *
- * Caminho e unico por definicao; nome de branch nao (dois worktrees da mesma
- * branch nao existem, mas um `git worktree move` mudaria o caminho sem mudar a
- * branch e o inverso tambem). O que precisa ser unico e o diretorio de onde a
- * suite roda, porque e ele que carrega o codigo sob teste.
- *
- * Nunca `bichu`: o prefixo garante que esta pilha nao possa, por acidente de
- * nome, resolver para a pilha principal.
+ * A regra mora em `identidade-da-pilha.mjs`, e nao aqui, porque a isca de
+ * isolamento precisa produzir a MESMA identidade para duas arvores. Leia o
+ * cabecalho de la: ele explica por que o `-p` sozinho nao bastava e por que a
+ * tag global fazia esta pilha migrar com o esquema de outra branch.
  */
-const projeto = `bichu-int-${createHash('sha1').update(raiz).digest('hex').slice(0, 10)}`;
+const { projeto, tagDaPilha } = identidadeDaPilha(raiz);
 
 // O Dockerfile EXIGE `BUILD_COMMIT` em todo alvo (BICHUS-210), e o compose desta
 // pilha o declara como `${BUILD_COMMIT:-}`. Sem alguem fornecer, o build reprova --
@@ -75,7 +72,16 @@ const compose = (args, opcoes = {}) =>
   spawnSync('docker', ['compose', '-p', projeto, '-f', ARQUIVO, '--env-file', ENV, ...args], {
     stdio: 'inherit',
     ...opcoes,
-    env: { ...process.env, BUILD_COMMIT: commitDeBuild, ...(opcoes.env ?? {}) },
+    env: {
+      ...process.env,
+      BUILD_COMMIT: commitDeBuild,
+      // Em TODA invocacao, e nao so no `build`: o compose interpola `${TAG_DA_PILHA:?}`
+      // tambem em `down`, `run`, `exec` e `config`, e faltar em qualquer uma delas
+      // derrubaria o comando com a mensagem do `:?`. O `:?` esta la de proposito,
+      // para quem digitar `docker compose -f ...` a mao nao recriar a tag global.
+      TAG_DA_PILHA: tagDaPilha,
+      ...(opcoes.env ?? {}),
+    },
   });
 
 function exigir(resultado, oque) {
@@ -99,6 +105,7 @@ process.on('SIGINT', () => {
 
 console.log(`worktree:  ${raiz}`);
 console.log(`projeto:   ${projeto}  (a pilha principal e \`bichu\`; esta nunca e)`);
+console.log(`imagens:   bichu-app:${tagDaPilha} e bichu-migrador:${tagDaPilha}  (tag por worktree; a fixa \`:integracao\` migrava com o esquema alheio)`);
 
 const { conferidas } = gerar();
 console.log(`ambiente:  ${ENV} gerado, ${String(conferidas)} variaveis exigidas pelo codigo preenchidas`);

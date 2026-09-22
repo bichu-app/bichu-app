@@ -1,0 +1,28 @@
+# A ISCA. Este arquivo REINTRODUZ o defeito de proposito.
+#
+# Ele e sobreposto ao `compose.integracao.yaml` real
+# (`docker compose -f compose.integracao.yaml -f iscas/compose-defeito-tag-global.yaml`)
+# por `isca-de-isolamento.mjs`, que EXIGE que o isolamento quebre com ele
+# aplicado. Prova negativa que vive numa frase evapora: se um dia este arquivo
+# deixar de contaminar, quem reprova e a isca, e a mensagem diz que a isca
+# perdeu a capacidade de detectar o defeito -- nao que o defeito sumiu.
+#
+# ===========================================================================
+# POR QUE A TAG AQUI NAO E `integracao`, QUE FOI A TAG DO DEFEITO REAL
+# ===========================================================================
+# Porque escrever `bichu-migrador:integracao` faria esta isca ARRANCAR a tag de
+# uma suite de integracao em andamento em outro worktree. Ou seja: rodar a
+# prova do defeito causaria o defeito, em cima do trabalho de outra pessoa.
+#
+# O que esta sob teste nao e a string, e a FORMA: uma tag fixa, igual para todo
+# worktree, no lugar de uma derivada do caminho. `isca-defeito-tag-global`
+# reproduz a forma inteira e nao colide com nada que exista de verdade.
+#
+# Sobreposicao so precisa dos campos que ela troca. Os dois servicos mantem
+# build, volume, rede e dependencia do arquivo real, que e o que faz esta isca
+# medir o compose de hoje e nao uma copia dele de ontem.
+services:
+  migracao:
+    image: bichu-migrador:isca-defeito-tag-global
+  testes:
+    image: bichu-app:isca-defeito-tag-global
