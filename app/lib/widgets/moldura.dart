@@ -43,6 +43,16 @@ abstract final class BichuMoldura {
   /// quem manda e a proporcao, porque ela e o token.
   static double get alturaFotoSm => larguraFotoSm * proporcao;
 
+  /// `foto/lg` (design system 5.4): 160 x 176, o tamanho que a tabela publica
+  /// para **"Perfil do pet"** -- que e a tela de detalhe da BICHUS-60 e da
+  /// BICHUS-61.
+  ///
+  /// Vale aqui a mesma ressalva de [larguraFotoSm]: **esta largura nao tem
+  /// token.** A tabela do 5.4 publica os seis tamanhos de foto e
+  /// `design/tokens.json` nao tem grupo `foto`. O numero e o do documento, e
+  /// nao uma invencao do widget. Nomeado no relatorio.
+  static const double larguraFotoLg = 160;
+
   /// O raio composto da forma, para uma largura qualquer.
   ///
   /// Os raios verticais sao os horizontais divididos por [proporcao]: e o que

@@ -51,6 +51,7 @@ import 'dart:ui' show Tristate;
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/pet/resultado_do_cadastro.dart';
+import 'package:bichu/telas/pet/textos_do_detalhe.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:flutter/material.dart';
@@ -60,6 +61,42 @@ import 'package:http/http.dart' as http;
 
 import '../telas/ajuda_de_tela.dart';
 import 'verificador.dart';
+
+/// O pet que T.1 e a edicao precisam existir para serem varridas.
+///
+/// A varredura das outras telas continua com a conta **vazia**: elas nao
+/// dependem de pet nenhum, e encher a lista mudaria a contagem de botoes delas
+/// por um motivo que nao e o do caso.
+const String _idDoPet = '3f1d7a9e-0000-7000-8000-000000000001';
+
+Map<String, dynamic> _petDaVarredura() => <String, dynamic>{
+      'id': _idDoPet,
+      'name': 'Nina',
+      'species': 'dog',
+      'size': 'M',
+      'breed_label': 'Vira-lata (SRD)',
+      'status': 'active',
+      'active_tag_count': 1,
+      'photos': <dynamic>[],
+      'open_case_id': null,
+      'created_at': '2026-09-20T12:00:00Z',
+    };
+
+Future<http.Response> _redeComPet(http.Request req) async {
+  if (req.url.path == '/v1/pets' && req.method == 'GET') {
+    return json200(<String, dynamic>{
+      'items': <dynamic>[_petDaVarredura()],
+    });
+  }
+  if (req.url.path == '/v1/pets/$_idDoPet') {
+    if (req.method == 'DELETE') return http.Response('', 204);
+    return json200(_petDaVarredura());
+  }
+  if (req.url.path.endsWith('/reference-data')) {
+    return json200(referenciaDeTeste());
+  }
+  return http.Response('', 404);
+}
 
 Future<http.Response> _rede(http.Request req) async {
   if (req.url.path == '/v1/pets' && req.method == 'GET') {
@@ -85,11 +122,27 @@ Future<http.Response> _rede(http.Request req) async {
 }
 
 /// O `expect` unico da varredura, para a mensagem ser a mesma em toda tela.
+/// [botoesEsperados] fixa a contagem; [tocaveis] so exige que haja **algum**
+/// botao e que todos tenham acao.
+///
+/// A contagem exata e melhor quando ela e estavel, e e por isso que as telas
+/// antigas a usam: ela reprova quando o portao passa a enxergar menos do que a
+/// tela tem, que e como uma varredura morre em silencio. As telas empilhadas
+/// sobre a casca de abas (T.1, a edicao, a folha) nao tem contagem estavel --
+/// ela muda com o que a casca deixa na arvore por baixo --, e um numero
+/// chutado ali viraria manutencao a cada mexida em outra tela. O que **nao**
+/// pode e o piso virar zero: [tocaveis] reprova a tela sem botao nenhum, que e
+/// como esta varredura ficaria verde por vazio.
 void exigirTodoBotaoComAcao(
   WidgetTester tester, {
   required String tela,
-  required int botoesEsperados,
+  int? botoesEsperados,
+  bool tocaveis = false,
 }) {
+  assert(
+    botoesEsperados != null || tocaveis,
+    'sem contagem e sem `tocaveis` este portao nao confere nada',
+  );
   final v = verificarAcaoDosControles(
     tester,
     tela: tela,
@@ -178,6 +231,63 @@ void main() {
       // tela tem mesmo um controle a menos, e nao porque o portao passou a
       // olhar menos.
       exigirTodoBotaoComAcao(tester, tela: 'meus-pets', botoesEsperados: 8);
+      handle.dispose();
+    });
+
+    // -------------------------------------------------------------------
+    // BICHUS-60 e BICHUS-61: T.1, a edicao e a folha destrutiva
+    // -------------------------------------------------------------------
+    //
+    // As tres entram na varredura porque as tres nasceram com controles que
+    // embrulham o filho em `Semantics(..., excludeSemantics: true)` -- o
+    // cartao de pet, as acoes em texto de T.1 e o botao destrutivo da folha.
+    // E a forma EXATA dos quatro widgets que ja apareceram com
+    // `btn=true tap=false`, e o portao so a enxerga com a tela montada.
+
+    testWidgets('T.1 detalhe do pet', (tester) async {
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
+
+      // **3, e nao 7: a casca de abas NAO esta na arvore aqui.** T.1 e
+      // empilhada no navegador raiz, por cima da casca, e uma rota opaca tira
+      // o que esta embaixo da arvore de semantica. Os tres sao a saida da
+      // barra de topo, `Editar` e `Excluir`.
+      //
+      // `Excluir` entra na conta mesmo nascendo abaixo da dobra: o
+      // verificador nao filtra `isHidden` de proposito, porque o controle do
+      // fim de tela longa volta a aparecer assim que a pessoa rola e precisa
+      // carregar a acao ja -- e e justamente o que ninguem testa a mao.
+      exigirTodoBotaoComAcao(tester, tela: 't.1', botoesEsperados: 3);
+      handle.dispose();
+    });
+
+    testWidgets('a folha destrutiva de excluir o pet', (tester) async {
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
+      await rolarAte(tester, find.text(TextosDoDetalhe.excluir));
+      await tocar(tester, find.text(TextosDoDetalhe.excluir));
+
+      // **A folha e o lugar mais caro deste defeito no app inteiro.** Um
+      // `Excluir mesmo assim` com `btn=true tap=false` deixaria quem usa
+      // leitor de tela ouvindo que existe o botao da exclusao sem ter como
+      // aciona-lo -- e, pior, sem ter como sair da folha pela acao segura.
+      exigirTodoBotaoComAcao(tester, tela: 'folha-destrutiva', tocaveis: true);
+      handle.dispose();
+    });
+
+    testWidgets('a edicao do pet', (tester) async {
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _redeComPet, deposito: depositoLogado());
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perfil'));
+      await irPara(tester, Rotas.detalheDoPetDe(_idDoPet));
+      await rolarAte(tester, find.text(TextosDoDetalhe.editar));
+      await tocar(tester, find.text(TextosDoDetalhe.editar));
+
+      exigirTodoBotaoComAcao(tester, tela: 'editar-pet', tocaveis: true);
       handle.dispose();
     });
   });

@@ -295,7 +295,16 @@ class _MeusPetsState extends State<MeusPets> {
     final saida = <Widget>[];
     for (var i = 0; i < _pets.length; i++) {
       if (i > 0) saida.add(const SizedBox(height: BichuEspaco.e3));
-      saida.add(CartaoDePet(pet: _pets[i]));
+      final pet = _pets[i];
+      saida.add(
+        CartaoDePet(
+          pet: pet,
+          // O cartao passou a ter destino: T.1 (BICHUS-60 e BICHUS-61). Ate
+          // aqui ele era so um container, porque o criterio 2 proibe acao sem
+          // destino -- agora o destino existe e esta registrado em `Rotas`.
+          aoTocar: () => context.push(Rotas.detalheDoPetDe(pet.id)),
+        ),
+      );
     }
     return saida;
   }

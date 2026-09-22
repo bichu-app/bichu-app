@@ -497,11 +497,18 @@ List<Violacao> verificarRotulos(
 /// [botoesEsperados] e a mesma defesa de cobertura das outras travas: portao
 /// que nao enxerga nada devolve lista vazia, e lista vazia e indistinguivel de
 /// "esta tudo certo".
+///
+/// **Nulo NAO desliga a defesa**, e essa e a unica coisa que importa nesta
+/// assinatura. Ele troca a contagem exata pelo piso de **pelo menos um** botao:
+/// telas empilhadas sobre a casca de abas nao tem contagem estavel -- ela muda
+/// com o que a casca deixa na arvore por baixo --, e um numero chutado ali
+/// viraria manutencao a cada mexida em outra tela. O que continua impossivel e
+/// o portao ficar verde sem ter olhado para nada.
 List<Violacao> verificarAcaoDosControles(
   WidgetTester tester, {
   required String tela,
   required String tema,
-  required int botoesEsperados,
+  int? botoesEsperados,
 }) {
   final violacoes = <Violacao>[];
   final nos = _nosTocaveis(tester);
@@ -513,22 +520,42 @@ List<Violacao> verificarAcaoDosControles(
   // formulario longo, que sao os que ninguem testa a mao.
   final botoes = nos.where((n) => n.dados.flagsCollection.isButton).toList();
 
-  final falta = _conferirCobertura(botoes.length, botoesEsperados, tela, tema);
-  if (falta != null) {
+  if (botoesEsperados != null) {
+    final falta =
+        _conferirCobertura(botoes.length, botoesEsperados, tela, tema);
+    if (falta != null) {
+      violacoes.add(
+        Violacao(
+          tipo: TipoDeViolacao.indeterminado,
+          tela: falta.tela,
+          tema: falta.tema,
+          alvo: '(cobertura de botoes)',
+          detalhe:
+              'a tela declara $botoesEsperados no(s) anunciado(s) como botao e '
+              'o portao achou ${botoes.length}. Ou a arvore de semantica nao '
+              'esta ligada (tester.ensureSemantics()), ou a tela mudou e a '
+              'contagem ficou para tras. Nos dois casos um verde aqui seria '
+              'verde por nao estar olhando para nada',
+          medido: botoes.length.toDouble(),
+          piso: botoesEsperados.toDouble(),
+        ),
+      );
+    }
+  } else if (botoes.isEmpty) {
+    // O piso sem contagem: zero botao e o unico desfecho em que esta varredura
+    // nao conferiu nada, e ele reprova alto em vez de passar calado.
     violacoes.add(
       Violacao(
         tipo: TipoDeViolacao.indeterminado,
-        tela: falta.tela,
-        tema: falta.tema,
+        tela: tela,
+        tema: tema,
         alvo: '(cobertura de botoes)',
         detalhe:
-            'a tela declara $botoesEsperados no(s) anunciado(s) como botao e '
-            'o portao achou ${botoes.length}. Ou a arvore de semantica nao '
-            'esta ligada (tester.ensureSemantics()), ou a tela mudou e a '
-            'contagem ficou para tras. Nos dois casos um verde aqui seria '
-            'verde por nao estar olhando para nada',
-        medido: botoes.length.toDouble(),
-        piso: botoesEsperados.toDouble(),
+            'o portao nao achou nenhum no anunciado como botao. Ou a arvore '
+            'de semantica nao esta ligada (tester.ensureSemantics()), ou a '
+            'tela nao chegou a montar. Verde aqui seria verde por vazio',
+        medido: 0,
+        piso: 1,
       ),
     );
   }

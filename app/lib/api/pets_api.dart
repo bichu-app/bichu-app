@@ -4,11 +4,19 @@ import 'modelos_pet.dart';
 /// As operacoes de `/v1/pets`, `/v1/media` e `/v1/public/reference-data` do
 /// contrato.
 ///
-/// **Nenhuma rota desta classe existe no servidor ainda.** Ela e escrita
-/// contra `api/openapi.yaml`, e nao contra uma implementacao: e o contrato que
-/// e a entrada. Enquanto o servidor nao responder, toda chamada daqui termina
-/// em `FalhaDeConexao` ou num `Problem` de 404, e as telas ja tratam os dois.
-/// Nenhum caminho devolve resposta falsa para a tela ficar bonita.
+/// Ela e escrita contra `api/openapi.yaml`, e nao contra uma implementacao: e
+/// o contrato que e a entrada. Onde o servidor ainda nao responde, a chamada
+/// termina em `FalhaDeConexao` ou num `Problem` de 404, e as telas ja tratam
+/// os dois. Nenhum caminho devolve resposta falsa para a tela ficar bonita.
+///
+/// **Esta linha dizia "nenhuma rota desta classe existe no servidor ainda", e
+/// deixou de ser verdade.** `GET /pets/{petId}`, `PATCH /pets/{petId}` e
+/// `DELETE /pets/{petId}` estao implementados em `src/modules/pets/` desde
+/// antes da BICHUS-60 e da BICHUS-61 -- `pet-routes.ts` declara as tres,
+/// `pet-service.ts` as atende e `kysely-pet-repository.ts` as grava. O
+/// comentario ficou para tras e foi corrigido aqui em vez de repetido: um
+/// aviso de "isto nao existe" sobre codigo que existe treina quem le a nao
+/// acreditar no cabecalho.
 class PetsApi {
   const PetsApi(this._api);
 
@@ -109,6 +117,113 @@ class PetsApi {
       },
     );
     return Pet.doJson(json);
+  }
+
+  /// `GET /pets/{petId}` (`operationId: getPet`).
+  ///
+  /// **A autorizacao esta na clausula `WHERE` do servidor, e a resposta de
+  /// "nao e seu" e 404** (ADR-0021; `pet-service.ts`, `buscar`). O app nao
+  /// tenta distinguir "nao existe" de "nao e seu", e nao deve: distinguir as
+  /// duas confirmaria a existencia do registro para quem nao e o dono. Quem
+  /// chama trata o 404 como "este pet nao esta na sua conta", e nada mais.
+  Future<Pet> buscarPet(String petId) async {
+    final json = await _api.get('/pets/${Uri.encodeComponent(petId)}');
+    return Pet.doJson(json);
+  }
+
+  /// `PATCH /pets/{petId}` (`operationId: updatePet`).
+  ///
+  /// **O verbo e `PATCH` e o comportamento e de substituicao inteira.** Nao e
+  /// desatencao de quem escreveu: o contrato declara o corpo como um
+  /// `PetInput` completo (`required: [name, species, size]`) e o repositorio
+  /// grava TODAS as colunas a partir dele
+  /// (`kysely-pet-repository.ts`, `atualizar`), com ausente e nulo tratados
+  /// como a mesma coisa (`ouNulo`, em `pet-routes.ts`).
+  ///
+  /// A consequencia decide a assinatura desta funcao: **enviar so o que mudou
+  /// apaga o resto.** Corrigir o nome de um pet com um corpo de um campo so
+  /// zeraria cor, sexo, sinais particulares e cartao de manejo, no servidor,
+  /// sem erro nenhum e sem nada no app acusando. Por isso todos os campos
+  /// entram aqui, e por isso a tela de edicao carrega o pet inteiro antes de
+  /// abrir: o que ela nao souber ler, ela apaga.
+  ///
+  /// **A regra de vazio tambem muda em relacao a [cadastrarPet].** La, campo
+  /// vazio some do corpo, porque no cadastro "vazio" e "nao informado" sao a
+  /// mesma coisa. Aqui nao: apagar o cartao de manejo e uma edicao legitima, e
+  /// um campo que sumisse do corpo seria um campo que o tutor nao consegue
+  /// esvaziar. Vazio vai como **`null` explicito**, que e o que o contrato
+  /// declara anulavel e o que `ouNulo` transforma em coluna nula.
+  ///
+  /// Sem `Idempotency-Key`: o contrato nao o declara para esta operacao, e
+  /// `ApiClient.patch` nao o aceita. Repetir um `PATCH` identico chega no
+  /// mesmo estado, que e o que idempotencia significa aqui.
+  Future<Pet> atualizarPet({
+    required String petId,
+    required String nome,
+    required Especie especie,
+    required Porte porte,
+    String? breedCode,
+    String? breedFreeText,
+    String? refDataVersion,
+    String? corPrincipalCodigo,
+    String? segundaCorCodigo,
+    Sexo? sexo,
+    String? sinaisParticulares,
+    String? cuidados,
+  }) async {
+    String? semVazio(String? valor) {
+      if (valor == null) return null;
+      final limpo = valor.trim();
+      return limpo.isEmpty ? null : limpo;
+    }
+
+    final json = await _api.patch(
+      '/pets/${Uri.encodeComponent(petId)}',
+      corpo: <String, dynamic>{
+        'name': nome,
+        'species': especie.valor,
+        'size': porte.valor,
+        // Os anulaveis vao SEMPRE, inclusive nulos. Ver o cabecalho: chave
+        // ausente e chave nula significam a mesma coisa para o servidor, e o
+        // que nao viaja e apagado de qualquer jeito. Mandar o nulo explicito
+        // faz o corpo dizer o que a tela quis dizer.
+        'breed_code': semVazio(breedCode),
+        'breed_free_text': semVazio(breedFreeText),
+        'ref_data_version': semVazio(refDataVersion),
+        'primary_color_code': semVazio(corPrincipalCodigo),
+        'secondary_color_code': semVazio(segundaCorCodigo),
+        'sex': sexo?.valor,
+        'distinctive_marks': semVazio(sinaisParticulares),
+        'care_notes': semVazio(cuidados),
+      },
+    );
+    return Pet.doJson(json);
+  }
+
+  /// `DELETE /pets/{petId}` (`operationId: deletePet`).
+  ///
+  /// **Nao tem volta pela interface.** O contrato declara
+  /// `x-effects: [irreversible_write]` e o teto de 10 por conta por dia. O
+  /// registro continua existindo para a trilha (exclusao logica, `deleted_at`),
+  /// e e por isso que o efeito e `irreversible_write` e nao `deletes` -- mas
+  /// nada disso e desfazivel pelo tutor, e a tela nao pode sugerir que seja.
+  ///
+  /// **O que some junto e o que o texto da confirmacao precisa dizer:** o
+  /// servidor revoga todas as tags do pet com `pet_deleted`, e a partir dali o
+  /// codigo daquela plaquinha responde 410 para sempre (ADR-0004). O codigo
+  /// **nao volta ao estoque e nao e reciclado**: "o codigo pertence ao pet e e
+  /// imutavel; nao se edita, nao se transfere para outro pet, nao se reativa".
+  ///
+  /// **Nao exige `X-Reauth-Token`**, e isso e leitura do contrato e nao
+  /// suposicao: `deletePet` declara `security: [bearerAuth]` sozinho, enquanto
+  /// `revokePetTag` declara `bearerAuth` mais `reauth: []` com
+  /// `x-reauth-scope: tag_revocation`. O paragrafo 11.9.1 do design system diz
+  /// o mesmo do lado da tela: para as destruicoes que nao exigem
+  /// reautenticacao nao ha campo nenhum, so as duas acoes, porque "friction
+  /// inventada onde o contrato nao pede e friction que as pessoas aprendem a
+  /// atravessar sem ler".
+  Future<void> excluirPet(String petId) async {
+    await _api.delete('/pets/${Uri.encodeComponent(petId)}');
   }
 
   /// `POST /pets/{petId}/tags`.
