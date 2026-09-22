@@ -244,6 +244,17 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       'logout_all',
       'password_changed',
       'account_deleted',
+      // BICHUS-215. O QUINTO gatilho do SEC-006, que o documento lista desde
+      // sempre e que a restrição não tinha: "sair de todos, troca de senha,
+      // redefinição, 'Não fui eu' e exclusão de conta".
+      //
+      // Não é `logout_all` reaproveitado, e o motivo é o mesmo que separou
+      // `logout` de `logout_all` (emenda 1 do ADR-0002): `logout_all` é o
+      // titular arrumando a casa, `not_me` é alguém declarando que a conta está
+      // com outra pessoa. Também não é `reuse_detected`, que é a detecção
+      // automática de UMA família; este é a resposta HUMANA a ela, e derruba a
+      // conta inteira.
+      'not_me',
     ],
   },
   'public.upload_intents.upload_intents_kind_check': {
@@ -289,7 +300,15 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   },
   'public.verification_tokens.verification_tokens_purpose_check': {
     coluna: 'purpose',
-    valores: ['email_verify', 'password_reset', 'email_change'],
+    // `session_disavow` é o link do "Não fui eu" (BICHUS-215), e é o único
+    // propósito que NÃO leva a pessoa a digitar nada: ele derruba as sessões e
+    // acaba. Reusar a tabela em vez de criar outra foi decisão — ela já é uso
+    // único com prazo, hash no lugar do valor e HMAC do IP de emissão, e uma
+    // segunda implementação disso seria a segunda chance de errar o consumo
+    // atômico. Espelha `PropositoDoToken` em
+    // `src/modules/identity/ports/identity-repository.ts` e o tipo da coluna em
+    // `src/shared/db/schema.ts`. Os três precisam andar juntos.
+    valores: ['email_verify', 'password_reset', 'email_change', 'session_disavow'],
   },
 };
 
