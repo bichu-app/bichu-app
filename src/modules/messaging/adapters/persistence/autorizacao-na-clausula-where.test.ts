@@ -92,26 +92,48 @@ interface Compilada {
 }
 
 /**
- * TODOS os valores ligados às posições que aquele predicado ocupa.
+ * **A cláusula `WHERE`, e nada antes dela.**
  *
- * Plural de propósito: a leitura da conversa menciona `tutor_user_id` duas
- * vezes — uma no `WHERE` e outra no `CASE` que decide o papel do chamador. As
- * duas precisam estar ligadas ao chamador, e uma conferência que olhasse só a
- * primeira aprovaria um `CASE` comparando com o dono e um `WHERE` comparando
- * com outra coisa.
+ * Esta função existe por um furo medido, e o furo é o motivo deste comentário
+ * ser longo. A leitura da conversa menciona `tutor_user_id` DUAS vezes: uma no
+ * `WHERE`, que autoriza, e outra na expressão `CASE` que decide de que lado
+ * está quem chamou, que não autoriza nada. A primeira versão desta bancada
+ * procurava o predicado no SQL inteiro — e, com a cláusula de autorização
+ * REMOVIDA do `WHERE`, ela continuava achando a ocorrência do `CASE` e
+ * **aprovava**. Medido: a suíte inteira ficou verde com o furo de pé, 0 casos
+ * reprovados.
+ *
+ * É a forma exata do defeito que a bancada existe para impedir, um nível acima:
+ * conferir a cláusula que se espera encontrar em vez da que existe. Agora o
+ * recorte é explícito — só o texto a partir do primeiro ` where ` conta, e o
+ * `CASE` da lista de seleção fica de fora dele.
+ */
+function clausulaWhere(sql: string): string {
+  const corte = sql.indexOf(' where ');
+  return corte < 0 ? '' : sql.slice(corte);
+}
+
+/**
+ * TODOS os valores ligados às posições que aquele predicado ocupa NO `WHERE`.
+ *
+ * Plural de propósito: uma consulta pode carregar o chamador em mais de um
+ * predicado, e todos precisam estar ligados a ele. A posição `$n` é lida de
+ * volta contra a lista completa de parâmetros, porque a numeração do Postgres é
+ * do enunciado inteiro e não do recorte.
  */
 function valoresLigadosA(predicado: RegExp, compilada: Compilada): unknown[] {
   const copia = new RegExp(predicado.source, 'g');
+  const clausula = clausulaWhere(compilada.sql);
   const valores: unknown[] = [];
-  let achado = copia.exec(compilada.sql);
+  let achado = copia.exec(clausula);
   while (achado !== null) {
     valores.push(compilada.parameters[Number(achado[1]) - 1]);
-    achado = copia.exec(compilada.sql);
+    achado = copia.exec(clausula);
   }
   return valores;
 }
 
-/** O predicado do chamador existe, e TUDO que ele liga é o chamador. */
+/** O predicado do chamador existe NO `WHERE`, e TUDO que ele liga é o chamador. */
 function exigirChamadorNoWhere(compilada: Compilada, onde: string): void {
   const doTutor = valoresLigadosA(PREDICADO_DO_TUTOR, compilada);
   const doAchador = valoresLigadosA(PREDICADO_DO_ACHADOR, compilada);
@@ -354,6 +376,39 @@ void describe('ISCA: a mesma conferência REPROVA uma consulta sem o chamador', 
       () => exigirChamadorNoWhere(valorErrado, 'a isca'),
       /valor ERRADO/,
       `uma conferência por \`includes\` aprovaria isto: ${valorErrado.sql}`,
+    );
+  });
+
+  void it('ISCA — o predicado que só existe no `CASE` NÃO conta como autorização', () => {
+    // O furo medido, e o motivo de `clausulaWhere` existir. A leitura real
+    // menciona `tutor_user_id` na lista de seleção, dentro do `CASE` que decide
+    // o papel do chamador. Uma bancada que procurasse o predicado no SQL
+    // inteiro acharia essa ocorrência e aprovaria a consulta SEM autorização
+    // nenhuma no `WHERE` — e foi exatamente o que aconteceu na primeira versão
+    // deste arquivo: a mutação que removeu a cláusula reprovou 0 casos.
+    const soNoCase = semBanco
+      .selectFrom('conversations')
+      .select((eb) => [
+        'conversations.id',
+        eb
+          .case()
+          .when('conversations.tutor_user_id', '=', CHAMADOR)
+          .then('tutor')
+          .else('finder')
+          .end()
+          .as('papel_do_chamador'),
+      ])
+      .where('conversations.finder_user_id', '=', CHAMADOR)
+      .compile();
+
+    assert.ok(
+      /"tutor_user_id"\s*=\s*\$\d+/.test(soNoCase.sql),
+      'a isca precisa MESMO ter a coluna no SQL, fora do WHERE, senão não prova nada',
+    );
+    assert.throws(
+      () => exigirChamadorNoWhere(soNoCase, 'a isca do CASE'),
+      /perdeu o predicado do tutor/,
+      `a conferência voltou a olhar o SQL inteiro e aprovou isto: ${soNoCase.sql}`,
     );
   });
 
