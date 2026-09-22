@@ -15,7 +15,6 @@
 
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
-import 'package:bichu/telas/abas.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';

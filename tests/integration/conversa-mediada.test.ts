@@ -90,7 +90,47 @@ async function criarPet(dono: UserId, nome = 'Aurora'): Promise<PetId> {
 }
 
 /**
- * Aviso avulso: `stray_report` não exige tag, e a conversa não depende dela.
+ * O alfabeto de `pet_tags.code_suffix` (`pet_tags_code_suffix_alfabeto`):
+ * base32 de Crockford, sem `I`, `L`, `O` e `U`.
+ */
+const ALFABETO_DA_PLAQUINHA = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/**
+ * A plaquinha do pet, que é o que `found_reports_scan_tem_tag_e_pet` exige.
+ *
+ * `code_hash` sai do id porque `pet_tags_code_hash_unico` é único; o sufixo sai
+ * do mesmo resumo, e não de `Math.random`, para que um caso que reprove reprove
+ * de novo com a mesma entrada.
+ */
+async function criarPlaquinha(pet: PetId): Promise<string> {
+  const id = randomUUID();
+  const resumo = createHash('sha256').update(`tag-${id}`).digest();
+  const sufixo = [...resumo.subarray(0, 4)]
+    .map((b) => ALFABETO_DA_PLAQUINHA[b % ALFABETO_DA_PLAQUINHA.length])
+    .join('');
+  await cliente.query(
+    'INSERT INTO pet_tags (id, pet_id, code_hash, code_suffix) VALUES ($1,$2,$3,$4)',
+    [id, pet, resumo, sufixo],
+  );
+  return id;
+}
+
+/**
+ * O aviso do ESCANEAMENTO DA PLAQUINHA, que é o caminho da maioria deste arquivo.
+ *
+ * `origin = 'tag_scan'`, e não `'stray_report'`: a linha abaixo grava
+ * `finder_token_hash`, e um token ao portador **é** o escaneamento. Quem
+ * escreveu o domínio do achado avulso tirou o `NOT NULL` dessas duas colunas
+ * justamente porque cunhar um token para quem já tem conta é fabricar
+ * credencial que ninguém usa — e, em troca, `stray_report` passou a exigir
+ * `reporter_user_id`, `species`, `size`, lugar e `retention_until`, por quatro
+ * CHECK de `20260922000003_achado-avulso-e-correspondencia.sql`. Nada disso é
+ * verdade de uma linha que se autoriza por token: a fixture é que estava
+ * declarando a origem errada.
+ *
+ * `tag_id` e `pet_id` vêm junto porque `found_reports_scan_tem_tag_e_pet`
+ * recusa aviso de scan sem os dois — aviso de scan órfão não alcança tutor
+ * nenhum.
  *
  * O resumo do token é DERIVADO do id, e não uma constante. `found_reports` tem
  * índice único em `finder_token_hash`, então uma constante faz o segundo aviso
@@ -98,13 +138,38 @@ async function criarPet(dono: UserId, nome = 'Aurora'): Promise<PetId> {
  * aconteceu na primeira execução deste arquivo: 19 casos reprovaram por causa
  * da fixture, e não do código sob teste.
  */
-async function criarAviso(nomeDoAchador: string | null = null): Promise<FoundReportId> {
+async function criarAviso(pet: PetId, nomeDoAchador: string | null = null): Promise<FoundReportId> {
+  const id = randomUUID() as FoundReportId;
+  const tag = await criarPlaquinha(pet);
+  await cliente.query(
+    `INSERT INTO found_reports
+       (id, origin, tag_id, pet_id, finder_display_name,
+        finder_token_hash, finder_token_expires_at, found_at)
+     VALUES ($1, 'tag_scan', $2, $3, $4, $5, now() + interval '30 days', now())`,
+    [id, tag, pet, nomeDoAchador, createHash('sha256').update(id).digest()],
+  );
+  avisosCriados.push(id);
+  return id;
+}
+
+/**
+ * O achado AVULSO: sem plaquinha, sem pet e com conta.
+ *
+ * É o outro caminho que chega em `conversations`, e ele não tem token: quem
+ * registra tem conta, e é `reporter_user_id` que o autoriza
+ * (`found_reports_avulso_tem_conta`). Os demais campos são o preço de
+ * `origin = 'stray_report'`, e cada um tem um CHECK atrás:
+ * `species`/`size` por `found_reports_avulso_tem_atributos`, `found_city` por
+ * `found_reports_avulso_tem_onde` e `retention_until` por
+ * `found_reports_avulso_tem_prazo`.
+ */
+async function criarAchadoAvulso(relator: UserId): Promise<FoundReportId> {
   const id = randomUUID() as FoundReportId;
   await cliente.query(
     `INSERT INTO found_reports
-       (id, origin, finder_display_name, finder_token_hash, finder_token_expires_at, found_at)
-     VALUES ($1, 'stray_report', $2, $3, now() + interval '30 days', now())`,
-    [id, nomeDoAchador, createHash('sha256').update(id).digest()],
+       (id, origin, reporter_user_id, species, size, found_city, found_at, retention_until)
+     VALUES ($1, 'stray_report', $2, $3, $4, 'São Paulo', now(), now() + interval '30 days')`,
+    [id, relator, especie, porte],
   );
   avisosCriados.push(id);
   return id;
@@ -115,7 +180,7 @@ async function abrirConversa(
   achador: UserId | null = null,
   nomeDoAchador: string | null = null,
 ): Promise<{ conversa: ConversationId; aviso: FoundReportId }> {
-  const aviso = await criarAviso(nomeDoAchador);
+  const aviso = await criarAviso(pet, nomeDoAchador);
   await repo.abrirPorAviso({
     id: randomUUID() as ConversationId,
     foundReportId: aviso,
@@ -199,7 +264,7 @@ void describe('a abertura deriva o tutor do pet, e não de quem chamou', () => {
     const tutor = await criarConta();
     const pet = await criarPet(tutor);
     await cliente.query('UPDATE pets SET deleted_at = now() WHERE id = $1', [pet]);
-    const aviso = await criarAviso();
+    const aviso = await criarAviso(pet);
     await repo.abrirPorAviso({
       id: randomUUID() as ConversationId,
       foundReportId: aviso,
@@ -212,7 +277,7 @@ void describe('a abertura deriva o tutor do pet, e não de quem chamou', () => {
   void it('o tutor escaneando a própria plaquinha NÃO abre conversa consigo mesmo', async () => {
     const tutor = await criarConta();
     const pet = await criarPet(tutor);
-    const aviso = await criarAviso();
+    const aviso = await criarAviso(pet);
     await repo.abrirPorAviso({
       id: randomUUID() as ConversationId,
       foundReportId: aviso,
@@ -227,7 +292,7 @@ void describe('a abertura deriva o tutor do pet, e não de quem chamou', () => {
     // o reenvio da fila offline de um cliente sem rede chega duas vezes.
     const tutor = await criarConta();
     const pet = await criarPet(tutor);
-    const aviso = await criarAviso();
+    const aviso = await criarAviso(pet);
     for (let i = 0; i < 2; i += 1) {
       await repo.abrirPorAviso({
         id: randomUUID() as ConversationId,
@@ -246,6 +311,168 @@ void describe('a abertura deriva o tutor do pet, e não de quem chamou', () => {
       [aviso],
     );
     assert.equal(Number(contagem.rows[0]?.n), 1);
+  });
+});
+
+/**
+ * O SEGUNDO caminho até `conversations`, e o que ele muda.
+ *
+ * Um achado avulso não tem plaquinha. Ele chega por `POST /v1/found-reports`, o
+ * cruzamento da seção 4.10 o sugere como candidato de um caso aberto, e a
+ * conversa só existe DEPOIS que o tutor confirma: a descrição de
+ * `POST /v1/lost-cases/{caseId}/candidates/{candidateId}/decision` no contrato é
+ * literalmente "Confirmar abre a conversa mediada com quem registrou o achado".
+ * É a assimetria da seção 20.5 do backlog — o caminho da tag abre a conversa no
+ * `201`, este abre no portão.
+ *
+ * O que muda para a persistência, e é o que está afirmado abaixo: neste caminho
+ * o achador SEMPRE tem conta (`found_reports_avulso_tem_conta`) e NUNCA tem
+ * token. A autorização do lado do achador deixa de ser o portador e passa a ser
+ * `finder_user_id`, isto é, o mesmo predicado do tutor na mesma cláusula
+ * `WHERE`. E o pet não vem do aviso, que não tem `pet_id`: ele vem do CASO que
+ * casou.
+ *
+ * A rota da decisão ainda não existe em `src/`. `abrirPorAviso` existe, é
+ * indiferente a `origin` e é por onde ela vai passar — então sem estes casos o
+ * dia em que ela for escrita é o dia em que alguém descobre se a combinação
+ * "aviso sem token, achador com conta, pet vindo do caso" cabe nos CHECK das
+ * duas tabelas.
+ */
+void describe('o achado avulso também vira conversa, e pelo lado de quem tem conta', () => {
+  async function casoAbertoDe(pet: PetId, tutor: UserId): Promise<string> {
+    const caso = randomUUID();
+    await cliente.query(
+      `INSERT INTO lost_cases (id, pet_id, owner_user_id, status, last_seen_at, last_seen_city, share_token)
+       VALUES ($1,$2,$3,'open', now(), 'São Paulo', $4)`,
+      [caso, pet, tutor, `tok-${caso}`],
+    );
+    return caso;
+  }
+
+  void it('o candidato apenas SUGERIDO não abriu conversa nenhuma', async () => {
+    const tutor = await criarConta();
+    const pet = await criarPet(tutor);
+    const caso = await casoAbertoDe(pet, tutor);
+    const relator = await criarConta('Ana Paula Ribeiro');
+    const achado = await criarAchadoAvulso(relator);
+
+    await cliente.query(
+      `INSERT INTO match_candidates (id, case_id, found_report_id, score, link_origin, strategy_version)
+       VALUES ($1,$2,$3,0.780,'attribute_match','v1')`,
+      [randomUUID(), caso, achado],
+    );
+
+    // "O cruzamento sugere. Ele não confirma, não encerra caso, não avisa a
+    // outra parte e não abre conversa" (seção 4.10, normativa). Gravar o
+    // candidato é tudo o que o cruzamento faz, e depois disso a conversa ainda
+    // não existe.
+    assert.equal(await repo.porAviso(achado), undefined);
+  });
+
+  void it('confirmada a correspondência, a conversa nasce com o relator do lado do achador', async () => {
+    const tutor = await criarConta('Leandro Panegassi');
+    const pet = await criarPet(tutor);
+    const caso = await casoAbertoDe(pet, tutor);
+    const relator = await criarConta('Ana Paula Ribeiro');
+    const achado = await criarAchadoAvulso(relator);
+    const candidato = randomUUID();
+    await cliente.query(
+      `INSERT INTO match_candidates (id, case_id, found_report_id, score, link_origin, strategy_version)
+       VALUES ($1,$2,$3,0.780,'attribute_match','v1')`,
+      [candidato, caso, achado],
+    );
+
+    // A decisão humana do tutor, que é o que `match_candidates_decisao_tem_autor`
+    // exige para sair de `suggested` — e é ela, e só ela, que abre o canal.
+    await cliente.query(
+      `UPDATE match_candidates
+          SET status = 'confirmed', decided_by_user_id = $2, decided_at = now()
+        WHERE id = $1`,
+      [candidato, tutor],
+    );
+    await repo.abrirPorAviso({
+      id: randomUUID() as ConversationId,
+      foundReportId: achado,
+      petId: pet,
+      achadorComConta: relator,
+    });
+
+    const linha = await cliente.query<{
+      tutor_user_id: string;
+      finder_user_id: string | null;
+      pet_id: string;
+      case_id: string | null;
+    }>(
+      `SELECT tutor_user_id, finder_user_id, pet_id, case_id
+         FROM conversations WHERE found_report_id = $1`,
+      [achado],
+    );
+    assert.equal(linha.rows[0]?.tutor_user_id, tutor, 'o tutor continua saindo do pet');
+    assert.equal(
+      linha.rows[0]?.finder_user_id,
+      relator,
+      'sem token, quem não estiver em finder_user_id não volta à conversa nunca mais',
+    );
+    assert.equal(linha.rows[0]?.pet_id, pet);
+    assert.equal(linha.rows[0]?.case_id, caso, 'a conversa precisa cair no caso que casou');
+  });
+
+  void it('o relator lê a conversa pela CONTA, e o aviso não tem token nenhum', async () => {
+    const tutor = await criarConta('Leandro Panegassi');
+    const pet = await criarPet(tutor);
+    await casoAbertoDe(pet, tutor);
+    const relator = await criarConta('Ana Paula Ribeiro');
+    const achado = await criarAchadoAvulso(relator);
+    await repo.abrirPorAviso({
+      id: randomUUID() as ConversationId,
+      foundReportId: achado,
+      petId: pet,
+      achadorComConta: relator,
+    });
+    const conversa = await repo.porAviso(achado);
+    assert.ok(conversa !== undefined, 'a conversa do achado avulso não foi aberta');
+
+    // A metade que importa: a linha do aviso NÃO tem credencial ao portador, e
+    // mesmo assim os dois lados enxergam a conversa. É o `OR` da cláusula
+    // `WHERE` fazendo o trabalho que no caminho da tag o token faz.
+    const aviso = await cliente.query<{ finder_token_hash: Buffer | null; origin: string }>(
+      'SELECT finder_token_hash, origin FROM found_reports WHERE id = $1',
+      [achado],
+    );
+    assert.equal(aviso.rows[0]?.origin, 'stray_report');
+    assert.equal(aviso.rows[0]?.finder_token_hash, null);
+
+    const peloRelator = await repo.buscarDoChamador(conversa, relator);
+    assert.ok(peloRelator !== undefined, 'o relator não enxergou a conversa que é dele');
+    assert.equal(peloRelator.papelDoChamador, 'finder');
+    const peloTutor = await repo.buscarDoChamador(conversa, tutor);
+    assert.equal(peloTutor?.papelDoChamador, 'tutor');
+
+    const terceiro = await criarConta();
+    assert.equal(
+      await repo.buscarDoChamador(conversa, terceiro),
+      undefined,
+      'conversa de terceiro responde ausência, e não 403 (ADR-0021)',
+    );
+  });
+
+  void it('quem registrou o achado do PRÓPRIO pet não abre conversa consigo mesmo', async () => {
+    // No caminho da tag esta guarda quase nunca é exercida, porque o achador
+    // costuma ser anônimo. Aqui ela é o caso comum: o achador SEMPRE tem conta,
+    // e o tutor que registra um achado e cai no próprio caso é uma linha que
+    // `conversations_dois_lados_distintos` recusaria com 23514 se a consulta
+    // deixasse passar.
+    const tutor = await criarConta();
+    const pet = await criarPet(tutor);
+    await casoAbertoDe(pet, tutor);
+    const achado = await criarAchadoAvulso(tutor);
+    await repo.abrirPorAviso({
+      id: randomUUID() as ConversationId,
+      foundReportId: achado,
+      petId: pet,
+      achadorComConta: tutor,
+    });
+    assert.equal(await repo.porAviso(achado), undefined);
   });
 });
 

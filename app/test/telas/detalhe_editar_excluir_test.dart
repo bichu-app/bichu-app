@@ -24,7 +24,6 @@
 // o contrario tambem -- um `DELETE` disparado por engano com a tela parada
 // nao mudaria pixel nenhum.
 
-import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/pet/campos_do_pet.dart';
 import 'package:bichu/telas/pet/tela_detalhe_do_pet.dart';
