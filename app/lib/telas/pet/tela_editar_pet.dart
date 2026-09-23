@@ -123,6 +123,16 @@ class _TelaEditarPetState extends State<TelaEditarPet> {
       // que ela e dificil de refazer.
       if (!mounted) return;
       setState(() => _faixa = _mensagem(falha));
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E FalhaDeChamada. O `finally` ja desligava o carregando,
+      // entao a tela nao gira para sempre -- ela fica CALADA, que e o outro
+      // lado do mesmo defeito: nada aconteceu, nada foi dito, e a pessoa toca
+      // de novo achando que o primeiro toque nao pegou.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao salvar a edicao do pet');
+      if (!mounted) return;
+      setState(
+        () => _faixa = const MensagemDeErro(texto: MensagensDeErro.servidorFora),
+      );
     } finally {
       if (mounted) setState(() => _salvando = false);
     }

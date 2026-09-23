@@ -331,7 +331,40 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// a historia nao encosta em camera, e o diff nao cita `CameraEGaleria`,
 /// `ImagePicker` nem `Permission`. Anterior:
 /// `f14551245240f69cfb43cb67216e2682cdb7684c`.
-const String _arvoreDasTelas = 'ad6fde0e74c94b21c983c286d1557c07be291288';
+/// **Destravado uma nona vez pelo travamento de `Criar conta` em aparelho
+/// fisico de 22/09/2026.** O cliente nao conseguia criar conta nem entrar, e
+/// a varredura que saiu dali achou uma classe inteira: o `setState` que
+/// desliga o carregando morava DENTRO do `catch (FalhaDeChamada)`, que parecia
+/// exaustivo e nao era. Corpo 200 fora do contrato (`Pet.doJson` e
+/// `Sessao.doJson` estouram `TypeError`), `PlatformException` de chaveiro ou
+/// de disco e `MissingPluginException` deixavam a tela girando para sempre com
+/// o erro engolido -- ou, onde havia `finally`, saindo do carregando e sem
+/// dizer nada, que e o outro lado do mesmo defeito.
+///
+/// Nove arquivos de `app/lib/telas` ganharam o ramo que faltava, e nenhum
+/// deles encosta na porta `CameraEGaleria`, que e o que o criterio 10 protege:
+/// `conta/tela_criar_conta.dart`, `conta/tela_entrar.dart`,
+/// `conta/tela_esqueci_minha_senha.dart`, `escanear/tela_leitor_de_qr.dart`,
+/// `perdido/tela_alcance_do_alerta.dart`, `perfil/meus_pets.dart`,
+/// `pet/campos_do_pet.dart`, `pet/tela_cadastrar_sinais.dart`,
+/// `pet/tela_detalhe_do_pet.dart`, `pet/tela_editar_pet.dart` e
+/// `pet/tela_pet_cadastrado.dart`.
+///
+/// **A trava reprovou, como tem de reprovar**, com
+/// `f14551245240f69cfb43cb67216e2682cdb7684c` contra o
+/// `fb8371eecdcfaa014f8f36bf8a4a39df937e3dae` medido pelo indice temporario
+/// deste portao. O que sustenta o comportamento novo nao e esta constante:
+/// e `test/telas/carregar_para_sempre_test.dart`, que reprova se "carregando
+/// para sempre" -- ou o silencio no lugar dele -- voltar a ser alcancavel.
+///
+/// **Remedido no merge de `development` (19115f2) em 22/09/2026.** Os dois
+/// lados destravaram a constante pelo proprio motivo, e por isso nenhum dos
+/// dois valores vale depois do merge: a arvore mesclada nao e a que nenhuma
+/// das duas mediu sozinha. O valor abaixo foi medido sobre a arvore ja
+/// mesclada, com `git rev-parse HEAD:app/lib/telas`. As duas justificativas
+/// acima seguem valendo e por isso ficaram as duas: elas dizem QUE mudou em
+/// cada lado, e e isso que faz a troca continuar sendo um ato deliberado.
+const String _arvoreDasTelas = '657d32ebaf003deec7fa83dd4b25e8d0ec33fc44';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
