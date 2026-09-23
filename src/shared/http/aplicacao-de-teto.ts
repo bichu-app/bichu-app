@@ -47,9 +47,10 @@ import { problemas, type AppError } from './errors.js';
 import { hmacDeEnderecoIp } from '../crypto/digest.js';
 
 /**
- * As dimensões declaradas no contrato. Onze, e não as seis que a BICHUS-178
+ * As dimensões declaradas no contrato. Doze, e não as seis que a BICHUS-178
  * lista: `ip_24`, `origin`, `pet` e `found_report` também são declaradas hoje,
- * e `conversation_participant` entrou com a BICHUS-43.
+ * `conversation_participant` entrou com a BICHUS-43 e `q` entrou com a busca
+ * do diretório.
  *
  * A lista cresce quando uma rota que declara a dimensão passa a existir, e não
  * quando o contrato passa a declará-la: uma dimensão aqui sem rota que a use
@@ -77,7 +78,41 @@ export const DIMENSOES_CONHECIDAS = [
   // não por conta: a mesma pessoa pode registrar vários achados, e um teto por
   // conta faria o segundo animal da noite ficar sem foto nenhuma.
   'found_report',
+  /**
+   * **Presença de busca por texto, e NÃO o termo digitado.** Esta é a única
+   * dimensão da lista cujo valor não identifica ninguém, e a diferença decide
+   * se o teto serve para alguma coisa.
+   *
+   * O resolvedor devolve uma marca constante quando a requisição traz `q`, e
+   * `undefined` quando não traz. As duas metades importam:
+   *
+   * - **`undefined` quando não há `q`** faz `resolverValores` pular a entrada
+   *   inteira, e é isso que dá à busca um teto próprio sem penalizar quem só
+   *   abre a aba e rola a lista. É o mecanismo que já existe, e não um `if`
+   *   novo em algum manipulador.
+   * - **Marca constante quando há `q`** faz o balde ser por CONTA, contando
+   *   toda busca. O reflexo seria pôr o termo no balde, e ele está errado de um
+   *   jeito que passa em revisão: com o termo, cada termo novo abre um balde
+   *   novo com um uso. Quem enumera o diretório varia o termo a cada chamada
+   *   **por definição** — é essa a forma do ataque — e portanto nunca
+   *   encostaria no teto. O único uso que um teto por termo limitaria é
+   *   repetir a mesma busca, que é o que mais parece com gente.
+   *
+   * Por conta e não por IP pelo mesmo motivo do teto de 120 desta rota: ela
+   * exige conta, então `account` existe e é exato, e o CGNAT das operadoras
+   * brasileiras faria um teto por IP pegar vizinho inocente e errar quem raspa.
+   */
+  'q',
 ] as const;
+
+/**
+ * O valor que a dimensão `q` põe no balde quando há busca.
+ *
+ * Constante, e exportada para que o teste afirme a consequência que importa:
+ * **trocar o termo não troca o balde**. Um teste que montasse a sua própria
+ * marca estaria medindo outra chave que a de produção.
+ */
+export const MARCA_DE_BUSCA = 'busca';
 
 export type Dimensao = (typeof DIMENSOES_CONHECIDAS)[number];
 
@@ -85,8 +120,16 @@ export type Dimensao = (typeof DIMENSOES_CONHECIDAS)[number];
  * Dimensões que saem da requisição crua, sem conhecer domínio nem credencial.
  * Estas o registro resolve sozinho; as demais o autor da rota precisa fornecer,
  * e a falta é erro de compilação (ver `registrar-rota.ts`).
+ *
+ * `q` está aqui e as outras três são de rede, o que parece fora de lugar até se
+ * ler o critério, que não é "é de rede" e sim "sai da requisição crua". `q` sai
+ * da query string, que o framework já parseou quando o primeiro gancho roda, e
+ * não conhece domínio nem credencial nenhuma. Deixá-la fora obrigaria **cada**
+ * rota com busca a escrever o próprio resolvedor, e duas rotas escreveriam duas
+ * respostas diferentes para a pergunta "o que `q` conta" — que é exatamente a
+ * decisão que precisa existir num lugar só.
  */
-export const DIMENSOES_GENERICAS = ['ip', 'ip_24', 'origin'] as const;
+export const DIMENSOES_GENERICAS = ['ip', 'ip_24', 'origin', 'q'] as const;
 
 export type DimensaoEspecifica = Exclude<Dimensao, (typeof DIMENSOES_GENERICAS)[number]>;
 
@@ -230,7 +273,9 @@ export function entradasAplicaveis(rota: RouteDefinition): readonly RateLimitEnt
  * quem escreve a rota:
  *
  * - `entrada` — todas as dimensões saem da requisição crua (`ip`, `ip_24`,
- *   `origin`). Roda em `onRequest`, antes de parsear qualquer byte;
+ *   `origin`, `q`). Roda em `onRequest`, antes de parsear qualquer byte. A
+ *   query string já está parseada nesse ponto: quem a parseia é o roteamento,
+ *   antes do primeiro gancho;
  * - `corpo` — alguma dimensão precisa do corpo ou da credencial (`account`,
  *   `email`, `token_family`, `code`, `pet`, `finder_identity`,
  *   `conversation_participant`). Roda em
@@ -278,6 +323,20 @@ export function resolvedoresGenericos(deps: DependenciasDoTeto): Resolvedores {
       return hmac(`${partes[0] ?? ''}.${partes[1] ?? ''}.${partes[2] ?? ''}.0/24`);
     },
     origin: (request) => primeiroValor(request.headers['origin']),
+    /**
+     * **A marca constante, nunca o termo.** O raciocínio inteiro está na
+     * declaração de `q` em `DIMENSOES_CONHECIDAS`; aqui fica a consequência
+     * que se lê no código: `MARCA_DE_BUSCA` não depende de `busca`, então a
+     * chave do balde é a mesma para todo termo, e variar o termo não zera
+     * contagem nenhuma.
+     *
+     * `undefined` quando não há busca: aí `resolverValores` pula a entrada
+     * inteira e a chamada sem `q` só responde ao teto geral da rota.
+     */
+    q: (request) => {
+      const busca = (request.query as { q?: unknown } | undefined)?.q;
+      return typeof busca === 'string' && busca.trim() !== '' ? MARCA_DE_BUSCA : undefined;
+    },
   };
 }
 

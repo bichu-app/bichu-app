@@ -3138,18 +3138,22 @@ paths:
   # ----------------------------------------------------------------------
   #
   # A operacao abaixo e a proposta de `api/diretorio.proposta.yaml` trazida
-  # para o contrato em vigor, com duas diferencas, as duas de MENOS e as duas
-  # declaradas:
+  # para o contrato em vigor, com uma diferenca de MENOS e uma decisao que foi
+  # tomada depois, as duas declaradas:
   #
   # 1. `getDirectoryEntry` e `getDirectoryReferenceData` NAO entraram. As duas
   #    continuam na proposta. Este contrato ja carrega 42 operacoes declaradas
   #    e sem implementacao, e acrescentar duas para nao as implementar hoje
   #    aumenta exatamente a divida que essa conta mede.
-  # 2. O parametro `q` e a entrada de teto `[account, q]` NAO entraram. `q` nao
-  #    esta em `DIMENSOES_CONHECIDAS` de `src/shared/http/aplicacao-de-teto.ts`,
-  #    entao a entrada exige um resolvedor novo -- e uma dimensao de teto nova e
-  #    decisao de politica, nao detalhe de implementacao. A busca por texto
-  #    entra quando a dimensao existir.
+  # 2. O parametro `q` e a entrada de teto `[account, q]` ficaram de fora ate
+  #    22/09 porque `q` nao estava em `DIMENSOES_CONHECIDAS` de
+  #    `src/shared/http/aplicacao-de-teto.ts`, e dimensao nova e decisao de
+  #    politica e nao detalhe de rota. A decisao foi tomada e os dois entraram.
+  #    O que `q` significa como dimensao esta escrito por extenso naquele
+  #    arquivo; o resumo e que ela NAO e o termo digitado, e sim "esta
+  #    requisicao traz busca por texto". Fosse o termo, cada termo novo abriria
+  #    um balde novo, e quem enumera o diretorio -- que por definicao varia o
+  #    termo a cada chamada -- nunca encostaria no teto.
 
   /directory/entries:
     get:
@@ -3201,7 +3205,39 @@ paths:
           window: 1h
           on_exceed: deny_429
           note: "consulta geoespacial: teto por conta, nao por IP, porque a rota exige conta"
+        - dimension: [account, q]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+          note: "busca por texto tem teto proprio, e ele e por CONTA. `q` marca presenca de busca, nao o termo: teto por termo nunca pega enumeracao, que e justamente variar o termo"
       parameters:
+        - name: q
+          in: query
+          description: |
+            **Busca parcial pelo NOME da entrada**, tolerante a acento e a
+            caixa: `veterinaria` acha `Veterinária`.
+
+            **So o nome, e a escolha e de produto.** Todo outro campo que o
+            cartao mostra ja tem controle proprio no topo da mesma tela --
+            `city`, `state`, `neighborhood`, `kind` e `verification_level`.
+            Fazer `q` casar tambem neles poria dois controles disputando o
+            mesmo trabalho e deixaria `applied_filters` ambiguo: a tela nao
+            teria como escrever por que uma linha entrou. `about` e o candidato
+            conhecido para uma segunda fase, e ele custa um indice proprio
+            sobre texto bem maior.
+
+            **`minLength: 3` nao e gosto.** O indice que atende esta busca e
+            GIN de trigrama, e um padrao com menos de tres caracteres nao
+            produz trigrama nenhum: a consulta deixa de usar o indice e volta a
+            varrer a tabela inteira. O piso e o ponto em que o indice deixa de
+            existir. **A tela nao deve enviar `q` antes do terceiro caractere**,
+            sob pena de levar 400 no que a pessoa le como o app quebrado.
+
+            Casa somente sobre `status = 'published'`, como todo o resto da
+            operacao. Quem busca por um nome especifico esta testando se ele
+            existe, entao um rascunho ou um oculto que aparecesse aqui seria
+            resposta a uma pergunta que ninguem tem direito de fazer.
+          schema: { type: string, minLength: 3, maxLength: 60 }
         - name: city
           in: query
           description: |

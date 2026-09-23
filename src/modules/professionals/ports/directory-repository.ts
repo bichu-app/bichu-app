@@ -21,6 +21,16 @@ export interface RecorteDoDiretorio {
    */
   readonly chamador: UserId;
   readonly agora: Instant;
+  /**
+   * **Busca parcial pelo NOME da entrada**, tolerante a acento e a caixa.
+   *
+   * Nao e filtro de campo estruturado como os de baixo: os outros comparam por
+   * igualdade e este casa substring. A normalizacao NAO acontece aqui e nao
+   * acontece em TypeScript nenhum -- ela mora numa funcao do banco, porque a
+   * mesma expressao precisa valer para o indice e para o predicado. Duas
+   * definicoes divergem em silencio, ficando so lentas.
+   */
+  readonly q?: string | undefined;
   readonly city?: string | undefined;
   readonly state?: string | undefined;
   readonly neighborhood?: string | undefined;

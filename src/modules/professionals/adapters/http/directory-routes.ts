@@ -60,13 +60,34 @@ import type { UserId } from '../../../../shared/types/brands.js';
  * `expensive_query` e o efeito: cada chamada mede distancia geoespacial contra
  * o recorte inteiro e ainda o conta. Sem efeito declarado o teto seria
  * opcional, e diretorio sem teto e a porta da raspagem.
+ *
+ * ## A SEGUNDA ENTRADA, `[account, q]`, e o que ela conta
+ *
+ * Sessenta buscas por hora por conta, e nao cento e vinte: busca e a metade
+ * cara e a metade abusavel desta rota, entao ela paga metade do orcamento.
+ *
+ * **`q` marca presenca de busca, nao o termo** (ver `DIMENSOES_CONHECIDAS`).
+ * Fosse o termo, o balde trocaria a cada termo novo e quem enumera o diretorio
+ * -- que varia o termo por definicao -- nunca encostaria no teto. Com a marca
+ * constante, o balde e por conta e conta toda busca; a chamada SEM `q` pula
+ * esta entrada inteira, porque o resolvedor devolve `undefined` e
+ * `resolverValores` pula a entrada quando falta um componente.
+ *
+ * **Sessenta e numero de tela, e nao de planilha.** Com um campo que busca
+ * enquanto se digita, uma unica busca custa mais de uma chamada -- e por isso
+ * a tela precisa esperar o terceiro caractere (o contrato o exige) e represar
+ * a digitacao. Teto que recusa busca legitima nao e visto como teto: e visto
+ * como app quebrado, e esse e o modo de falha que se quis evitar aqui.
  */
 export const rotaDoDiretorio = defineRoute({
   operationId: 'listDirectoryEntries',
   method: 'get',
   path: '/directory/entries',
   effects: ['expensive_query'],
-  rateLimit: [{ dimension: ['account'], limit: 120, window: '1h', onExceed: 'deny_429' }],
+  rateLimit: [
+    { dimension: ['account'], limit: 120, window: '1h', onExceed: 'deny_429' },
+    { dimension: ['account', 'q'], limit: 60, window: '1h', onExceed: 'deny_429' },
+  ],
 });
 
 /** Os mesmos defaults que o contrato declara. Copiados de la, nao escolhidos aqui. */
@@ -85,6 +106,7 @@ export interface DependenciasDasRotasDoDiretorio {
 }
 
 interface QueryDoDiretorio {
+  readonly q?: string;
   readonly city?: string;
   readonly state?: string;
   readonly neighborhood?: string;
@@ -132,6 +154,11 @@ async function contaDoTeto(
  */
 function filtrosAplicados(query: QueryDoDiretorio): Record<string, string> {
   const filtros: Record<string, string> = {};
+  // O TERMO VOLTA COMO CHEGOU, aparado. A tela escreve "resultados para
+  // <termo>" com o que a pessoa digitou, e nao com a forma normalizada: ela
+  // nao reconheceria `veterinaria` como o que escreveu se tinha escrito
+  // `Veterinária`. O que a normalizacao decide e o que CASA, nao o que se le.
+  if (query.q !== undefined) filtros['q'] = query.q;
   if (query.city !== undefined) filtros['city'] = query.city;
   if (query.state !== undefined) filtros['state'] = query.state;
   if (query.neighborhood !== undefined) filtros['neighborhood'] = query.neighborhood;
@@ -161,6 +188,7 @@ export function registrarRotasDoDiretorio(
       const pagina = await deps.diretorio.listarPublicados({
         chamador,
         agora: deps.clock.now(),
+        ...(query.q === undefined ? {} : { q: query.q }),
         ...(query.city === undefined ? {} : { city: query.city }),
         ...(query.state === undefined ? {} : { state: query.state }),
         ...(query.neighborhood === undefined ? {} : { neighborhood: query.neighborhood }),
