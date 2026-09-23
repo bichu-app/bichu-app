@@ -19,6 +19,7 @@
 //    contrato declara.
 
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
@@ -29,6 +30,7 @@ import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/api/fila_offline.dart';
+import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
@@ -72,7 +74,13 @@ const double pisoMinimo = 48;
 /// estados de recusa levam a telas diferentes, e o terceiro (negada
 /// permanentemente) e justamente o que ninguem lembra de exercitar a mao.
 class CameraDeTeste implements CameraEGaleria {
-  CameraDeTeste(this.estado, {this.depoisDePedir, this.foto});
+  CameraDeTeste(
+    this.estado, {
+    this.depoisDePedir,
+    this.foto,
+    this.bytes,
+    this.arquivoSumiu = false,
+  });
 
   EstadoDaPermissao estado;
 
@@ -80,6 +88,20 @@ class CameraDeTeste implements CameraEGaleria {
   final EstadoDaPermissao? depoisDePedir;
 
   final FotoLocal? foto;
+
+  /// Os bytes que [bytesDaFoto] devolve. Nulo devolve um conteudo curto e
+  /// reconhecivel, para o caso poder procurar por ele no corpo da requisicao
+  /// que saiu.
+  final List<int>? bytes;
+
+  /// O arquivo sumiu do aparelho entre a escolha e o envio. Acontece de
+  /// verdade: o sistema limpa o diretorio temporario da camera quando falta
+  /// espaco, e nenhum caso exercitava isso.
+  final bool arquivoSumiu;
+
+  /// Quantas vezes o app leu os bytes do arquivo. Zero prova que nada tentou
+  /// enviar.
+  int vezesQueLeuOsBytes = 0;
 
   bool abriuAjustes = false;
 
@@ -114,7 +136,31 @@ class CameraDeTeste implements CameraEGaleria {
 
   @override
   Future<FotoLocal?> escolherDaGaleria() async => foto;
+
+  @override
+  Future<Uint8List> bytesDaFoto(FotoLocal foto) async {
+    vezesQueLeuOsBytes += 1;
+    if (arquivoSumiu) {
+      throw const FileSystemException('o arquivo sumiu do aparelho');
+    }
+    return Uint8List.fromList(bytes ?? bytesDeFotoDeTeste);
+  }
 }
+
+/// Um conteudo de foto curto e **reconhecivel dentro do corpo que saiu**.
+///
+/// Nao e uma imagem de verdade e nao precisa ser: o que os casos medem e se
+/// estes bytes chegaram ao armazenamento, e um PNG valido nao tornaria a
+/// pergunta mais forte -- so mais dificil de procurar.
+final List<int> bytesDeFotoDeTeste =
+    utf8.encode('bytes-da-foto-de-nina-22-09');
+
+/// Uma [FotoLocal] escolhida, como a porta a devolveria.
+const FotoLocal fotoEscolhidaDeTeste = FotoLocal(
+  caminho: '/tmp/nina.jpg',
+  tipoDeConteudo: 'image/jpeg',
+  tamanhoEmBytes: 27,
+);
 
 /// Um leitor de QR que le o que o caso mandar (BICHUS-54).
 ///
@@ -401,6 +447,41 @@ class DepositoDaFilaEmMemoria implements DepositoDaFila {
   }
 }
 
+/// O registro de fotos pendentes **em memoria, com o conteudo a vista**.
+///
+/// Existe pelo mesmo motivo do [DepositoDaFilaEmMemoria]: o deposito de
+/// verdade chama `getApplicationDocumentsDirectory()`, canal de plataforma que
+/// nao existe em teste de widget -- sem esta injecao qualquer caso em que a
+/// foto nao suba trava num `Future` que nunca resolve.
+///
+/// O conteudo fica publico e cru porque os casos precisam conferir o que foi
+/// gravado NO DISCO, e nao a lista em memoria de uma instancia: e essa a
+/// diferenca entre um logout que limpou e um logout que pareceu limpar.
+class DepositoDeFotosEmMemoria implements DepositoDeFotosPendentes {
+  String? conteudo;
+
+  /// Quantas vezes o app mandou gravar. Zero prova que nada foi lembrado.
+  int gravacoes = 0;
+
+  @override
+  Future<String?> ler() async => conteudo;
+
+  @override
+  Future<void> gravar(String texto) async {
+    gravacoes += 1;
+    conteudo = texto;
+  }
+
+  /// As fotos gravadas, decodificadas.
+  List<Map<String, dynamic>> get fotos {
+    final bruto = conteudo;
+    if (bruto == null || bruto.isEmpty) return const <Map<String, dynamic>>[];
+    return (jsonDecode(bruto) as List<dynamic>)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList(growable: false);
+  }
+}
+
 /// Uma sessao ja aberta no deposito, como a de quem abre o app logado.
 ///
 /// O `id` entra porque o cache de `Meus pets` e trancado por dono: dois casos
@@ -447,6 +528,8 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   CacheDeMeusPets? cacheDeMeusPets,
   /// A fila offline. Em memoria sempre, pelo motivo do proprio tipo.
   DepositoDaFilaEmMemoria? depositoDaFila,
+  /// O registro de fotos pendentes. Em memoria sempre, pelo motivo do tipo.
+  DepositoDeFotosEmMemoria? depositoDeFotos,
   /// O cofre da imagem do QR. Entra por aqui porque o caso do logout precisa
   /// OLHAR dentro dele depois de a sessao cair, e o que ele guarda e uma
   /// credencial.
@@ -496,6 +579,7 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         cacheDeMeusPets: cacheDeMeusPets,
         cofreDoQr: cofreDoQr,
         depositoDaFila: depositoDaFila ?? DepositoDaFilaEmMemoria(),
+        depositoDeFotos: depositoDeFotos ?? DepositoDeFotosEmMemoria(),
         camera: camera ?? const CameraNaoEmbarcada(),
         depositoDeOportunidades:
             oportunidades ?? DepositoDeOportunidadesEmMemoria(),

@@ -45,6 +45,8 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/auth_api.dart';
 import 'package:bichu/api/achados_api.dart';
 import 'package:bichu/api/casos_api.dart';
+import 'package:bichu/api/envio_de_foto.dart';
+import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/api/devices_api.dart';
 import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
@@ -106,6 +108,12 @@ Future<_Caixa> _montar(
 
   final devices = DevicesApi(api);
   final caixa = _Caixa();
+  // O envio de foto entra com a camera ausente: este caso nao sobe foto
+  // nenhuma, e o mecanismo so age quando alguem chama `enviar`.
+  final envioDeFoto = EnvioDeFoto(
+    camera: const CameraNaoEmbarcada(),
+    cliente: MockClient((_) async => http.Response('{}', 200)),
+  );
 
   await tester.pumpWidget(
     Escopo(
@@ -115,6 +123,15 @@ Future<_Caixa> _montar(
       casos: CasosApi(api),
       // BICHUS-35: a camada de achado entrou no escopo junto com F3.5.
       achados: AchadosApi(api),
+      // O envio de foto entra com a camera ausente: este caso nao sobe foto
+      // nenhuma, e um `EnvioDeFoto` com camera de verdade nao mudaria nada
+      // aqui -- ele so age quando alguem chama `enviar`.
+      envioDeFoto: envioDeFoto,
+      retomadaDeFotos: RetomadaDeFotos(
+        envio: envioDeFoto,
+        registro: FotosPendentes(deposito: DepositoDeFotosEmMemoria()),
+        pets: PetsApi(api),
+      ),
       fila: FilaOffline(deposito: DepositoDaFilaEmMemoria()),
       tags: TagsApi(api),
       devices: devices,

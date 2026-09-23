@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'envio_de_foto.dart';
 import 'modelos_achado.dart';
 import 'modelos_localizacao.dart';
 import 'modelos_pet.dart';
@@ -17,7 +18,7 @@ import 'modelos_pet.dart';
 /// a fila montasse um corpo proprio, o achado enfileirado na rua poderia sair
 /// diferente do que sairia com sinal, e a diferenca so apareceria no dia em
 /// que alguem mexesse num dos dois. O mesmo vale para [caminhoDeRegistro].
-class AchadosApi {
+class AchadosApi implements IntencaoDeFotoDeAchado {
   const AchadosApi(this._api);
 
   final ApiClient _api;
@@ -113,5 +114,30 @@ class AchadosApi {
   Future<AchadoRegistrado> buscar(String achadoId) async {
     final json = await _api.get('/found-reports/${Uri.encodeComponent(achadoId)}');
     return AchadoRegistrado.doJson(json);
+  }
+  /// `POST /media/found-report-photo-intents`.
+  ///
+  /// **O `found_report_id` e obrigatorio no corpo, e isso fixa a ordem.** O
+  /// aviso do achado tem de existir antes de a foto poder subir: nao ha valor
+  /// valido para `photo_upload_id` de `StrayFoundReportInput` antes desta
+  /// chamada, porque e ela quem o emite. Registrar primeiro e subir depois nao
+  /// e escolha de implementacao, e o unico caminho que o contrato deixa.
+  ///
+  /// Limites proprios, mais estreitos que os do tutor (SEC-009): tres fotos por
+  /// aviso, para sempre, e 2 MB por foto. O estouro responde 429, e nao 400.
+  @override
+  Future<Map<String, dynamic>> intencaoDeFotoDoAchado({
+    required String foundReportId,
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) {
+    return _api.post(
+      '/media/found-report-photo-intents',
+      corpo: <String, dynamic>{
+        'found_report_id': foundReportId,
+        'content_type': tipoDeConteudo,
+        'byte_size': tamanhoEmBytes,
+      },
+    );
   }
 }

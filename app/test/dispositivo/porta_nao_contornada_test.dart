@@ -303,7 +303,25 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// F3.5 tambem **nao** fala com a porta `Localizacao`: ela embute
 /// `CapturaDeLocalizacao`, que e quem fala, e
 /// `localizacao_no_ponto_de_uso_test.dart` cobra isso por lista de arquivos.
-const String _arvoreDasTelas = '9e4a16491555177e268f50d4b3e5585245135c73';
+///
+/// **Destravado pelo envio de foto do app (22/09/2026, sem chave de issue no
+/// acionamento).** UM arquivo: `pet/tela_pet_cadastrado.dart`. Ate aqui
+/// nenhum caminho do app mandava bytes para lugar nenhum -- F1.6 anunciava "a
+/// foto ainda esta sendo enviada" sobre um envio inexistente, e
+/// `PetsApi.intencaoDeFotoDoPet`, escrita na BICHUS-62, nunca tinha sido
+/// chamada. A tela passou a chamar `EnvioDeFoto` e a dizer a verdade nos
+/// quatro estados do envio, e a chamar `RetomadaDeFotos` em vez do mecanismo
+/// cru -- e ela que guarda a foto no registro quando falta sinal (criterio 6
+/// da BICHUS-87) e a tira de la quando ela sobe.
+///
+/// **Ela NAO encosta na porta `CameraEGaleria`, que e o que o criterio 10
+/// protege.** A tela nao le camera, nao le galeria e nao pede permissao
+/// nenhuma: ela recebe a [FotoLocal] ja escolhida por F1.4 e a entrega ao
+/// mecanismo de envio, que vive em `lib/api/`. Quem le o arquivo do aparelho e
+/// `CameraEGaleria.bytesDaFoto`, atras da porta, e o portao de diretivas
+/// abaixo -- que nao depende desta constante -- continua cobrando que nenhuma
+/// tela importe `image_picker` nem `permission_handler`.
+const String _arvoreDasTelas = '9e055f9f0bb4f10ca17a7c5c3e8ee434ebd6a964';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
