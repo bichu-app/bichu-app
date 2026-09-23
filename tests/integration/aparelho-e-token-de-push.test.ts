@@ -600,3 +600,92 @@ void describe('a exclusão da conta leva os aparelhos junto', () => {
     );
   });
 });
+
+/**
+ * SEC-019, segunda camada: o gatilho da migração `20260923000001`.
+ *
+ * A primeira camada é de aplicação e está em `derrubarTodasAsSessoes`, por onde
+ * `excluirMinhaConta` passa. Esta é a de banco, e existe pelo precedente que o
+ * repositório já escolheu para o mesmo problema em `20260922000006`.
+ *
+ * **Ela é a única prova de que a migração roda.** Uma migração de gatilho sem
+ * caso que a exercite passa despercebida até o dia em que alguém depende dela —
+ * e foi por falta do marcador `-- Up Migration` que "sair de todos" ficou 500
+ * por vinte horas em 22/09.
+ */
+void describe('SEC-019: a exclusão LÓGICA da conta apaga os aparelhos na hora', () => {
+  void it('marcar `deleted_at` leva a linha de `user_devices` junto', async () => {
+    const tutora = await criarConta();
+    await repo.registrar(
+      tutora,
+      {
+        plataforma: 'android',
+        pushToken: token('vai-sumir-na-exclusao'),
+        permissao: 'granted',
+        versaoDoApp: null,
+        versaoDoSistema: null,
+      },
+      AGORA,
+    );
+    assert.equal(await linhasDe(tutora), 1, 'o aparelho não foi registrado: nada a medir');
+
+    // A exclusão LÓGICA, como `registrarPedidoDeExclusao` a escreve. O expurgo
+    // definitivo só acontece 30 dias depois, e esperar por ele deixaria trinta
+    // dias de alerta de pet perdido chegando no aparelho de uma conta que a
+    // pessoa já mandou apagar.
+    await cliente.query(
+      `UPDATE users SET deleted_at = now(), status = 'deletion_requested',
+                        deletion_requested_at = now()
+        WHERE id = $1`,
+      [tutora],
+    );
+
+    assert.equal(
+      await linhasDe(tutora),
+      0,
+      'a conta foi excluída logicamente e o aparelho CONTINUA no cadastro de push. Ele ' +
+        'segue sendo destinatário válido de alerta de pet perdido, com nome do animal e ' +
+        'região, por trinta dias depois do pedido de exclusão. Se o gatilho ' +
+        '`users_exclusao_logica_apaga_aparelhos` não existe, a migração ' +
+        '`20260923000001` não rodou -- confira o marcador `-- Up Migration`.',
+    );
+  });
+
+  void it('CONTRAPESO: a conta VIZINHA não perde o aparelho dela', async () => {
+    // Sem este caso, a implementação mais simples que passa no de cima é um
+    // gatilho sem `WHERE user_id = NEW.id`, que esvazia a tabela inteira na
+    // primeira exclusão de conta do sistema.
+    const queExclui = await criarConta();
+    const vizinha = await criarConta();
+    const registrar = (dono: UserId, sufixo: string): Promise<unknown> =>
+      repo.registrar(
+        dono,
+        {
+          plataforma: 'android',
+          pushToken: token(sufixo),
+          permissao: 'granted',
+          versaoDoApp: null,
+          versaoDoSistema: null,
+        },
+        DEPOIS,
+      );
+    await registrar(queExclui, 'da-que-exclui');
+    await registrar(vizinha, 'da-vizinha');
+
+    await cliente.query('UPDATE users SET deleted_at = now() WHERE id = $1', [queExclui]);
+
+    assert.equal(await linhasDe(vizinha), 1, 'o gatilho alcançou a conta de outra pessoa');
+  });
+
+  void it('a REVERSÃO de `deleted_at` não ressuscita aparelho nenhum', async () => {
+    // A cláusula `WHEN (OLD.deleted_at IS NULL AND NEW.deleted_at IS NOT NULL)`
+    // é o que fecha isto. Um gatilho sem ela dispararia de novo na volta, e o
+    // `DELETE` rodaria sobre uma tabela que já está vazia -- inofensivo hoje,
+    // e a porta para alguém trocar o corpo do gatilho por algo que não seja.
+    const tutora = await criarConta();
+    await cliente.query('UPDATE users SET deleted_at = now() WHERE id = $1', [tutora]);
+    await cliente.query('UPDATE users SET deleted_at = NULL WHERE id = $1', [tutora]);
+
+    assert.equal(await linhasDe(tutora), 0);
+  });
+});
