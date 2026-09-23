@@ -739,9 +739,18 @@ class ControleDaGaveta extends InheritedWidget {
 
   final VoidCallback abrir;
 
+  /// O controle, ou nulo quando nao ha casca acima.
+  ///
+  /// Nao e caso teorico: `rotas.dart` usa `AbaPerfil()` como tela de escape de
+  /// rotas alcancadas sem o `extra` que esperavam, e essas rotas sao IRMAS da
+  /// casca. Uma raiz de secao montada ali existe sem barra de baixo e sem
+  /// gaveta, e o gatilho nao pode ser desenhado la: nao ha o que ele abra.
+  static ControleDaGaveta? maybeOf(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<ControleDaGaveta>();
+  }
+
   static ControleDaGaveta of(BuildContext context) {
-    final controle = context
-        .dependOnInheritedWidgetOfExactType<ControleDaGaveta>();
+    final controle = maybeOf(context);
     if (controle == null) {
       // Falha ruidosa com o motivo, e nunca um gatilho mudo: um botao que
       // nao acha a gaveta e um controle sem acao, que e o defeito que o

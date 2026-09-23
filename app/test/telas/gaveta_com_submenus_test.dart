@@ -472,6 +472,46 @@ void main() {
       );
     });
 
+    testWidgets('raiz de secao montada FORA da casca nao desenha o gatilho', (
+      tester,
+    ) async {
+      // Achado por estas iscas, e nao deduzido: `rotas.dart` usa
+      // `AbaPerfil()` como tela de escape de rotas alcancadas sem o `extra`
+      // que esperavam, e essas rotas sao IRMAS da casca. Ali a raiz de
+      // secao existe sem barra de baixo e sem gaveta. Com o gatilho preso
+      // so a `raizDeSecao`, tres casos de `marcar_como_perdido_test.dart`
+      // reprovaram com o gatilho procurando uma gaveta que nao existe.
+      //
+      // O certo nao e tolerar e abrir nada: e nao desenhar o controle. Um
+      // hamburguer que nao abre gaveta nenhuma e acao sem destino.
+      await abrirOApp(tester, rede: _semServidor);
+      // `casoAberto` sem `extra` cai em `AbaPerfil`, fora da casca.
+      await irPara(tester, Rotas.casoAberto);
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason:
+            'REPROVA: a tela de escape estourou. O gatilho da gaveta '
+            'procurou uma casca que nao existe acima dela.',
+      );
+      expect(
+        find.byType(NavigationBar),
+        findsNothing,
+        reason:
+            'REPROVA: a tela de escape trouxe a barra de baixo. Se ela '
+            'trouxe, este caso deixou de exercitar o cenario sem casca.',
+      );
+      expect(
+        find.byType(BotaoDaGaveta),
+        findsNothing,
+        reason:
+            'REPROVA: a raiz de secao montada fora da casca desenhou o '
+            'gatilho da gaveta. Nao ha gaveta ali, e um controle que nao '
+            'abre nada e acao sem destino (criterio 2 da BICHUS-62).',
+      );
+    });
+
     testWidgets('o alvo do gatilho e 64 x 64 dp, o piso critico do 11.23.1', (
       tester,
     ) async {

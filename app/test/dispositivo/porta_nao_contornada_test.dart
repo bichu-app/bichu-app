@@ -331,7 +331,23 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// a historia nao encosta em camera, e o diff nao cita `CameraEGaleria`,
 /// `ImagePicker` nem `Permission`. Anterior:
 /// `f14551245240f69cfb43cb67216e2682cdb7684c`.
-const String _arvoreDasTelas = 'ad6fde0e74c94b21c983c286d1557c07be291288';
+///
+/// **Destravado pela GAVETA COM SUBMENUS, 22/09.** O pedido do cliente,
+/// repetido duas vezes, acrescentou `app/lib/telas/gaveta_de_secoes.dart` e
+/// alterou `app/lib/telas/casca_com_abas.dart` (a gaveta e o `leading` de 64
+/// dp) e `app/lib/telas/abas.dart` (as cinco raizes se declaram raiz de
+/// secao). Nenhuma das tres encosta na porta `CameraEGaleria`, que e o que o
+/// criterio 10 da BICHUS-161 protege: a gaveta nao le camera, nao pede
+/// permissao e nao cita `ImagePicker` nem `Permission` -- e o portao de
+/// diretivas abaixo, que nao depende desta constante, continua cobrando isso
+/// por conta propria.
+///
+/// O valor foi MEDIDO pelo indice temporario que este portao usa
+/// (`GIT_INDEX_FILE` + `read-tree HEAD` + `add -A app/lib/telas` +
+/// `write-tree --prefix=app/lib/telas`) sobre a arvore ja commitada, e nao
+/// copiado de relato nenhum. Anterior:
+/// `ad6fde0e74c94b21c983c286d1557c07be291288`.
+const String _arvoreDasTelas = '7f35c3ebc4d0050e3348e9c4c4829ead7bca8a89';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

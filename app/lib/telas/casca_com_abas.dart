@@ -445,6 +445,17 @@ class TelaDeAba extends StatelessWidget {
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
+    // O gatilho so existe onde HA gaveta, e a gaveta mora na casca.
+    //
+    // `raizDeSecao` sozinho nao basta: `rotas.dart` usa `AbaPerfil()` como
+    // tela de escape de cinco rotas alcancadas sem o `extra` que esperavam
+    // (`casoAberto`, `marcarPerdido`, `marcarPerdidoAlcance`,
+    // `escolherPetPerdido`), e essas rotas sao IRMAS da casca. Ali a raiz de
+    // secao existe sem barra de baixo e sem gaveta, e desenhar o hamburguer
+    // seria um controle sem nada para abrir -- o criterio 2 da BICHUS-62
+    // quebrado pelo caminho menos exercitado a mao. Medido: tres casos de
+    // `marcar_como_perdido_test.dart` reprovaram assim.
+    final comGaveta = raizDeSecao && ControleDaGaveta.maybeOf(context) != null;
 
     return Scaffold(
       appBar: AppBar(
@@ -477,14 +488,14 @@ class TelaDeAba extends StatelessWidget {
         // tem o que desempilhar. Em `TelaDeAdocoes`, que usa este mesmo
         // widget empilhado, `raizDeSecao` e falso e a seta continua sendo
         // desenhada.
-        leading: raizDeSecao ? const BotaoDaGaveta() : null,
+        leading: comGaveta ? const BotaoDaGaveta() : null,
         // 64 dp, e nao os 56 que o `AppBar` reserva por padrao.
         //
         // O 11.23.1 fixa o alvo da esquerda em 64 x 64 (`target.critico`), e
         // sem esta linha o `AppBar` aperta o `IconButton` num
         // `ConstrainedBox` de 56 e o alvo fica abaixo do piso. Medido: o
         // gatilho saia com 56,0 dp de largura.
-        leadingWidth: raizDeSecao ? BichuAlvoDeToque.critico : null,
+        leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
       ),
       body: SafeArea(
         // `addSemanticIndexes: false` **nao e** microotimizacao. O padrao do
