@@ -635,13 +635,33 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     // barata, e isso nao diz nada sobre o indice. Desligar a sequencial forca a
     // pergunta que interessa: "existe um plano por indice para este LIKE?".
     // Mesmo desenho da prova do GIST em `localizacao-de-referencia.test.ts`.
+    //
+    // DUAS COISAS AQUI FORAM APRENDIDAS MEDINDO, EM 22/09, E CADA UMA FEZ ESTE
+    // CASO APONTAR PARA O INDICE ERRADO ANTES DE ESTAR ASSIM:
+    //
+    // 1. **So com `enable_seqscan = off`** o plano que saiu foi `Index Scan
+    //    using professionals_publicados_por_atividade` com o `LIKE` no
+    //    `Filter` -- percorrer OUTRO indice inteiro e filtrar linha a linha, que
+    //    e a varredura completa com outro nome. Numa tabela de dezenas de
+    //    linhas isso custa menos que o custo fixo de partida do GIN. Por isso o
+    //    percurso de indice tambem e desligado: sobram os planos por mapa de
+    //    bits.
+    // 2. **Com `status = 'published'` na consulta**, o plano virou
+    //    `Bitmap Index Scan on professionals_publicados_por_atividade` -- o
+    //    indice PARCIAL de publicados atende aquela igualdade sozinho e o
+    //    `LIKE` volta para o `Filter`. Por isso esta consulta traz so o
+    //    predicado da busca: a pergunta deste caso e "existe plano por indice
+    //    para ESTE `LIKE`", e nenhum outro indice tem como responde-la.
+    //
+    // A consulta completa, com o `status` junto, e a do caso seguinte, que e
+    // onde ela precisa mesmo ser respondida.
     await cliente.query('BEGIN');
     try {
       await cliente.query('SET LOCAL enable_seqscan = off');
+      await cliente.query('SET LOCAL enable_indexscan = off');
       const r = await cliente.query<Record<string, string>>(
         `EXPLAIN SELECT slug FROM professionals
-          WHERE status = 'published'
-            AND texto_para_busca(display_name) LIKE padrao_de_busca($1)`,
+          WHERE texto_para_busca(display_name) LIKE padrao_de_busca($1)`,
         ['veterinaria'],
       );
       const plano = r.rows.map((linha) => Object.values(linha).join(' ')).join('\n');
@@ -666,11 +686,15 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     // caso, e o `ANALYZE` de dentro dela tambem nao.
     await cliente.query('BEGIN');
     try {
+      // `source = 'import'` com `claim_status = 'unclaimed'` e o UNICO par que o
+      // CHECK `professionals_aceite_antes_do_perfil` admite sem titular, e e o
+      // que esta massa precisa: mil perfis com mil contas seria semear a tabela
+      // de usuarios para medir um plano de consulta.
       await cliente.query(
         `INSERT INTO professionals (id, kind, display_name, city, state, neighborhood,
                                     source, claim_status, verification_level, slug, status, published_at)
          SELECT gen_random_uuid(), 'vet', 'Clinica Massa ' || n, 'São Paulo', 'SP', 'Centro',
-                'self', 'unclaimed', 'none', 'massa-' || n, 'published', now()
+                'import', 'unclaimed', 'none', 'massa-' || n, 'published', now()
            FROM generate_series(1, 1000) AS n`,
       );
       await cliente.query('ANALYZE professionals');
