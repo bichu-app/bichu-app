@@ -514,7 +514,7 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // - `CASCADE` apagaria a vitrine inteira do parceiro. É a mais destrutiva, e
   //   é silenciosa: ninguém fica sabendo que doze itens sumiram junto.
   // - `SET NULL` está fora antes de qualquer opinião, e é decidível pelo
-  //   catálogo: `partner_slug` é `NOT NULL`. É o caso 1 da taxonomia do topo
+  //   catálogo: `partner_id` é `NOT NULL`. É o caso 1 da taxonomia do topo
   //   deste arquivo, e seria contradição entre duas declarações do mesmo banco.
   // - `NO ACTION` recusa apagar o parceiro enquanto houver item apontando para
   //   ele. Não destrói nada e obriga quem apaga a olhar para a vitrine antes.
@@ -530,9 +530,18 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // Parceiro que sai do programa vira `active = false`, a vitrine dele some da
   // leitura pelo índice parcial, e nenhuma linha é destruída. `NO ACTION` é a
   // rede embaixo de uma operação que o desenho já diz que não deve acontecer.
+  //
+  // POR QUE ELA APONTA PARA `partner_id` E NÃO PARA `partner_slug` (ADR-0024):
+  // a primeira versão desta migração apontava para `store_partners.slug`, e era
+  // a ÚNICA chave estrangeira sobre `slug` do esquema inteiro. O critério 2 da
+  // BICHUS-19 proíbe isso, e por dois motivos, não um: slug é valor que o
+  // usuário troca, e é valor que sai público. `store_partners` ganhou
+  // identidade interna — o desenho que `pets` e `professionals` já tinham —, e
+  // a chave estrangeira passou a apontar para ela. O `slug` continua sendo o
+  // que sai na resposta, e nenhum campo do contrato mudou.
   // -------------------------------------------------------------------------
-  'public.store_items.store_items_partner_slug_fkey': {
-    colunas: ['partner_slug'],
+  'public.store_items.store_items_partner_id_fkey': {
+    colunas: ['partner_id'],
     referencia: 'public.store_partners',
     aoApagar: 'NO ACTION',
   },

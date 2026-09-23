@@ -88,7 +88,10 @@ export function comoDataSimples(valor: Date | string | null): string | null {
 export function construtorDaVitrine(db: Db, recorte: RecorteDaVitrine) {
   let consulta = db
     .selectFrom('store_items as i')
-    .innerJoin('store_partners as p', 'p.slug', 'i.partner_slug')
+    // A juncao e pela identidade INTERNA (ADR-0024). O `slug` do parceiro
+    // continua sendo o que sai na resposta, projetado logo abaixo -- o que
+    // mudou foi por onde as duas tabelas se ligam, nao o que a tela recebe.
+    .innerJoin('store_partners as p', 'p.id', 'i.partner_id')
     .where('i.active', '=', true)
     .where('p.active', '=', true);
 

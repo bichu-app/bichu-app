@@ -3279,9 +3279,19 @@ paths:
         conta". Autorizacao na clausula `WHERE` (ADR-0021), sem ramo
         privilegiado.
 
-        **Nenhum UUID sai daqui, e nao por filtragem: nao ha um.**
-        `store_items` e `store_partners` tem `slug` como chave primaria
-        (ADR-0010 item 6).
+        **Nenhum UUID sai daqui.** A chave do item e a do parceiro sao o
+        `slug`, e nao ha campo de UUID nesta resposta -- nem opcional, nem
+        nulavel. O ADR-0010 item 6 proibe UUID interno em saida publica, e
+        quem impede o engano nao e a boa vontade de quem escreve a consulta:
+        `src/tools/portao-contrato-publico.ts` reprova qualquer campo
+        `format: uuid` em operacao alcancavel sem conta (SEC-001).
+
+        As tabelas tem, sim, identidade interna (`store_partners.id`,
+        `store_items.id`), e ela e o alvo da chave estrangeira entre as duas
+        (ADR-0024). Ela nunca e projetada. Separar as duas identidades e o
+        desenho de `pets` e de `professionals`, e existe porque chave
+        estrangeira sobre endereco publico e o que o criterio 2 da BICHUS-19
+        proibe -- endereco publico e valor que muda e que sai impresso.
 
         **NAO EXISTE OPERACAO DE ESCRITA DE CATALOGO NESTE CONTRATO**, e a
         ausencia e o criterio 20 da BICHUS-185. A entrada de dados e a decisao
@@ -5733,8 +5743,11 @@ components:
     StorePartnerRef:
       type: object
       description: |
-        O parceiro que vende o item. **Sem UUID**: `slug` e a chave primaria da
-        tabela, e nao um endereco publico colado ao lado de um `id` interno.
+        O parceiro que vende o item. **Sem UUID**: `slug` e a unica chave do
+        parceiro que sai daqui. A identidade interna (`store_partners.id`)
+        existe no esquema, e o ADR-0024 registra por que ela e separada do
+        endereco publico -- ela nunca e projetada, e o portao de contrato
+        publico reprova quem tentar.
       required: [slug, name, host]
       properties:
         slug: { type: string }
