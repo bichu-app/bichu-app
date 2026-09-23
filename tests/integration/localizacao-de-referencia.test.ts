@@ -41,7 +41,10 @@ import { sql } from 'kysely';
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
 import { criarLocalizacaoDeReferenciaRepository } from '../../src/modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 import { localizacaoAGravar } from '../../src/modules/identity/domain/localizacao-de-referencia.js';
-import type { LocalizacaoDeReferenciaRepository } from '../../src/modules/identity/ports/localizacao-de-referencia-repository.js';
+import {
+  comoFamiliaDeSessao,
+  type LocalizacaoDeReferenciaRepository,
+} from '../../src/modules/identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant, UserId } from '../../src/shared/types/brands.js';
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
@@ -60,6 +63,26 @@ let banco: DbHandle;
 let db: Db;
 let cliente: pg.Client;
 let repo: LocalizacaoDeReferenciaRepository;
+
+/**
+ * SEC-021: a sessão de aparelho que os casos "de uma pessoa só" usam.
+ *
+ * A localização passou a ser do aparelho, então toda chamada carrega a família
+ * de refresh. Os casos deste arquivo que falam da COLUNA e da CONSULTA — o tipo
+ * geográfico, a ordem `(lon, lat)`, o `ST_DWithin`, o `CASCADE` — continuam
+ * falando de uma pessoa com um aparelho só, e amarrá-los todos à mesma família
+ * é o que mantém cada um medindo o que ele foi escrito para medir. Os casos que
+ * PRECISAM de dois aparelhos chamam `repo` direto, com as duas famílias à
+ * vista: um atalho que escondesse a família ali reprovaria pelo motivo errado.
+ */
+const APARELHO_UNICO = comoFamiliaDeSessao('018f3a2b-0000-7000-8000-00000000d001');
+
+const aparelhoUnico = {
+  gravar: (dono: UserId, localizacao: Parameters<LocalizacaoDeReferenciaRepository['gravar']>[2]) =>
+    repo.gravar(dono, APARELHO_UNICO, localizacao),
+  buscarValida: (dono: UserId, agora: Instant) => repo.buscarValida(dono, APARELHO_UNICO, agora),
+  apagar: (dono: UserId) => repo.apagar(dono, APARELHO_UNICO),
+};
 const contasCriadas: UserId[] = [];
 
 async function criarConta(): Promise<UserId> {
@@ -183,9 +206,9 @@ void describe('o ponto vai e volta sem se mexer, e na ordem certa', () => {
   void it('o que foi gravado é lido de volta exatamente igual', async () => {
     const dono = await criarConta();
     const gravar = localizacaoAGravar(PAULISTA, 'device_gps', AGORA);
-    await repo.gravar(dono, gravar);
+    await aparelhoUnico.gravar(dono, gravar);
 
-    const lida = await repo.buscarValida(dono, AGORA);
+    const lida = await aparelhoUnico.buscarValida(dono, AGORA);
     assert.ok(lida !== null);
     assert.equal(lida.lat, gravar.lat);
     assert.equal(lida.lon, gravar.lon);
@@ -195,7 +218,7 @@ void describe('o ponto vai e volta sem se mexer, e na ordem certa', () => {
 
   void it('a ordem é (lon, lat): o ponto está a menos de 100 m de onde deveria', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     const erro = await distanciaAte(dono, PAULISTA);
     assert.ok(
@@ -209,8 +232,8 @@ void describe('o ponto vai e volta sem se mexer, e na ordem certa', () => {
     const a = await criarConta();
     const b = await criarConta();
     // 0.0002 grau de latitude são cerca de 22 m.
-    await repo.gravar(a, localizacaoAGravar({ lat: -23.5613, lon: -46.6559 }, 'device_gps', AGORA));
-    await repo.gravar(b, localizacaoAGravar({ lat: -23.5615, lon: -46.6561 }, 'map_pin', AGORA));
+    await aparelhoUnico.gravar(a, localizacaoAGravar({ lat: -23.5613, lon: -46.6559 }, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(b, localizacaoAGravar({ lat: -23.5615, lon: -46.6561 }, 'map_pin', AGORA));
 
     const r = await cliente.query<{ d: string }>(
       `SELECT ST_Distance(x.reference_point, y.reference_point)::text AS d
@@ -229,8 +252,8 @@ void describe('o ponto vai e volta sem se mexer, e na ordem certa', () => {
 void describe('uma linha por conta, sempre a última, sem histórico', () => {
   void it('gravar duas vezes deixa UMA linha, com a segunda coordenada', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
-    await repo.gravar(
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(
       dono,
       localizacaoAGravar({ lat: -22.9519, lon: -43.2105 }, 'map_pin', (AGORA + 1000) as Instant),
     );
@@ -241,7 +264,7 @@ void describe('uma linha por conta, sempre a última, sem histórico', () => {
     );
     assert.equal(r.rows[0]?.n, '1', 'apareceu histórico, e o critério 5 proíbe');
 
-    const lida = await repo.buscarValida(dono, (AGORA + 1000) as Instant);
+    const lida = await aparelhoUnico.buscarValida(dono, (AGORA + 1000) as Instant);
     assert.equal(lida?.lat, -22.952);
     assert.equal(lida?.origem, 'map_pin');
   });
@@ -252,11 +275,11 @@ void describe('"tutores num raio de 5 km" é calculável, e a conta está certa'
     const perto = await criarConta();
     const longe = await criarConta();
     // 0.036 grau de latitude são cerca de 4,0 km; 0.054 são cerca de 6,0 km.
-    await repo.gravar(
+    await aparelhoUnico.gravar(
       perto,
       localizacaoAGravar({ lat: PAULISTA.lat + 0.036, lon: PAULISTA.lon }, 'device_gps', AGORA),
     );
-    await repo.gravar(
+    await aparelhoUnico.gravar(
       longe,
       localizacaoAGravar({ lat: PAULISTA.lat + 0.054, lon: PAULISTA.lon }, 'device_gps', AGORA),
     );
@@ -284,7 +307,7 @@ void describe('"tutores num raio de 5 km" é calculável, e a conta está certa'
   void it('quem tem a localização vencida NÃO entra no raio', async () => {
     const vencido = await criarConta();
     // Capturada há 31 dias, e portanto vencida agora.
-    await repo.gravar(
+    await aparelhoUnico.gravar(
       vencido,
       localizacaoAGravar(PAULISTA, 'device_gps', (AGORA - 31 * DIA) as Instant),
     );
@@ -305,12 +328,12 @@ void describe('"tutores num raio de 5 km" é calculável, e a conta está certa'
       [vencido, new Date(AGORA), PAULISTA.lon, PAULISTA.lat, RAIO_DO_ALERTA_EM_METROS],
     );
     assert.equal(r.rows[0]?.n, '0', 'a conta continuou na base de alerta depois de 30 dias');
-    assert.equal(await repo.buscarValida(vencido, AGORA), null);
+    assert.equal(await aparelhoUnico.buscarValida(vencido, AGORA), null);
   });
 
   void it('o índice GIST é USADO pela consulta de raio', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     // Com três linhas o planejador escolhe varredura sequencial por ser mais
     // barata, e isso não diz nada sobre o índice. Desligar a sequencial força a
@@ -341,27 +364,27 @@ void describe('a localização de uma conta não chega a outra (ADR-0021, crité
   void it('o repositório de B não lê a linha de A', async () => {
     const a = await criarConta();
     const b = await criarConta();
-    await repo.gravar(a, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(a, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
-    assert.equal(await repo.buscarValida(b, AGORA), null);
-    assert.notEqual(await repo.buscarValida(a, AGORA), null);
+    assert.equal(await aparelhoUnico.buscarValida(b, AGORA), null);
+    assert.notEqual(await aparelhoUnico.buscarValida(a, AGORA), null);
   });
 
   void it('o apagamento de B não toca a linha de A', async () => {
     const a = await criarConta();
     const b = await criarConta();
-    await repo.gravar(a, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(a, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
-    await repo.apagar(b);
-    assert.notEqual(await repo.buscarValida(a, AGORA), null, 'apagou a linha de outra conta');
+    await aparelhoUnico.apagar(b);
+    assert.notEqual(await aparelhoUnico.buscarValida(a, AGORA), null, 'apagou a linha de outra conta');
   });
 });
 
 void describe('exclusão de conta e retenção', () => {
   void it('apagar a conta leva a localização junto (ON DELETE CASCADE)', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
-    assert.notEqual(await repo.buscarValida(dono, AGORA), null);
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    assert.notEqual(await aparelhoUnico.buscarValida(dono, AGORA), null);
 
     await cliente.query('DELETE FROM users WHERE id = $1', [dono]);
     const r = await cliente.query<{ n: string }>(
@@ -378,11 +401,11 @@ void describe('exclusão de conta e retenção', () => {
   void it('o expurgo apaga a vencida e deixa a válida', async () => {
     const vencido = await criarConta();
     const valido = await criarConta();
-    await repo.gravar(
+    await aparelhoUnico.gravar(
       vencido,
       localizacaoAGravar(PAULISTA, 'device_gps', (AGORA - 31 * DIA) as Instant),
     );
-    await repo.gravar(valido, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(valido, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     const apagadas = await repo.expurgarVencidas(AGORA);
     assert.ok(apagadas >= 1, 'o expurgo não apagou nada, e havia uma linha vencida');

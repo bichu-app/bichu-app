@@ -200,6 +200,12 @@ export async function main(): Promise<void> {
   // passada para dentro dele.
   const repositorioDeIdentidade = criarIdentityRepository(db, ids);
   const mailer = criarMailer(config.mail);
+  // SEC-021. Sobe para ca, antes do servico de autenticacao, porque o LOGOUT
+  // passou a apagar a localizacao do aparelho que sai (ADR-0010, tabela de
+  // retencao: "apagada ao sair da conta"). A montagem das rotas de localizacao,
+  // mais abaixo, usa esta mesma instancia -- duas instancias seriam dois
+  // caminhos ate a mesma tabela, e e por ai que um deles envelhece sozinho.
+  const repositorioDeLocalizacao = criarLocalizacaoDeReferenciaRepository(db);
 
   const auth = criarAuthService({
     repositorio: repositorioDeIdentidade,
@@ -209,6 +215,10 @@ export async function main(): Promise<void> {
     clock: systemClock,
     janelas: config.session,
     hmacDeIp: (ip) => hmacDeEnderecoIp(ip, config.ipHmacKey),
+    // SEC-021: o logout apaga a localizacao do aparelho que sai, e so dele. A
+    // falha propaga de proposito -- ver o comentario da porta em
+    // `dependencies.ts`.
+    apagarLocalizacaoDaSessao: (dono, familia) => repositorioDeLocalizacao.apagar(dono, familia),
     mailer,
     // O link do e-mail aponta para a PÁGINA do time web, não para a API: quem
     // abre é uma pessoa num navegador, e o ADR-0017 tirou HTML deste serviço.
@@ -360,12 +370,18 @@ export async function main(): Promise<void> {
   // ver a linha que a monta, abaixo.
   const dependenciasDasRotasDeLocalizacao = {
     localizacao: new LocalizacaoDeReferenciaService({
-      repositorio: criarLocalizacaoDeReferenciaRepository(db),
+      repositorio: repositorioDeLocalizacao,
       clock: systemClock,
       trilha,
     }),
     autenticador: {
-      autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      // O `sid` passa a atravessar esta fiacao (SEC-021): ele e a sessao de
+      // aparelho, e sem ela nao ha de quem e a localizacao. Quem decide o que
+      // fazer com a ausencia e a borda, onde a recusa tem codigo HTTP.
+      autenticar: async (token: string) => {
+        const { conta, sid } = await auth.autenticar(token);
+        return { userId: conta.id, sid };
+      },
     },
     contrato,
   };

@@ -360,6 +360,9 @@ function montar(): Bancada {
   } as unknown as TokenSigner;
 
   const servico = criarAuthService({
+    // SEC-021: quem nao esta medindo o apagamento do logout devolve 0, que e a
+    // resposta honesta de "nao havia localizacao gravada".
+    apagarLocalizacaoDaSessao: async () => 0,
     repositorio: repo,
     assinador,
     trilha,

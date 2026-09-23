@@ -59,24 +59,31 @@ const CAMINHO = '/me/location';
  * apareceria na leitura do outro e o caso que prova o critério 11 passaria por
  * acidente, medindo o dublê em vez do código.
  */
+/** A chave do dublê: o mesmo par que é chave primária da tabela. */
+function chave(dono: string, familia: string): string {
+  return `${dono}\u0000${familia}`;
+}
+
 function repositorio(): LocalizacaoDeReferenciaRepository & {
   readonly linhas: Map<string, LocalizacaoDeReferencia>;
 } {
   const linhas = new Map<string, LocalizacaoDeReferencia>();
   return {
     linhas,
-    gravar: (dono, localizacao) => {
-      linhas.set(dono, localizacao);
+    // SEC-021: a chave do dublê é o PAR, como a chave primária da tabela. Um
+    // dublê chaveado só pelo dono não conseguiria reprovar o caso dos dois
+    // aparelhos: ele daria a resposta certa pelo motivo errado.
+    gravar: (dono, familia, localizacao) => {
+      linhas.set(chave(dono, familia), localizacao);
       return Promise.resolve();
     },
-    buscarValida: (dono, agora) => {
-      const linha = linhas.get(dono);
+    buscarValida: (dono, familia, agora) => {
+      const linha = linhas.get(chave(dono, familia));
       if (linha === undefined || linha.expiraEm <= agora) return Promise.resolve(null);
       return Promise.resolve(linha);
     },
-    apagar: (dono) => {
-      linhas.delete(dono);
-      return Promise.resolve();
+    apagar: (dono, familia) => {
+      return Promise.resolve(linhas.delete(chave(dono, familia)) ? 1 : 0);
     },
     expurgarVencidas: () => Promise.resolve(0),
   };

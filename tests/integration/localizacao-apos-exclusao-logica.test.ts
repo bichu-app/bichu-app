@@ -43,7 +43,10 @@ import pg from 'pg';
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
 import { criarLocalizacaoDeReferenciaRepository } from '../../src/modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 import { localizacaoAGravar } from '../../src/modules/identity/domain/localizacao-de-referencia.js';
-import type { LocalizacaoDeReferenciaRepository } from '../../src/modules/identity/ports/localizacao-de-referencia-repository.js';
+import {
+  comoFamiliaDeSessao,
+  type LocalizacaoDeReferenciaRepository,
+} from '../../src/modules/identity/ports/localizacao-de-referencia-repository.js';
 import type { Instant, UserId } from '../../src/shared/types/brands.js';
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
@@ -61,6 +64,26 @@ let banco: DbHandle;
 let db: Db;
 let cliente: pg.Client;
 let repo: LocalizacaoDeReferenciaRepository;
+
+/**
+ * SEC-021: a sessão de aparelho que os casos "de uma pessoa só" usam.
+ *
+ * A localização passou a ser do aparelho, então toda chamada carrega a família
+ * de refresh. Os casos deste arquivo que falam da COLUNA e da CONSULTA — o tipo
+ * geográfico, a ordem `(lon, lat)`, o `ST_DWithin`, o `CASCADE` — continuam
+ * falando de uma pessoa com um aparelho só, e amarrá-los todos à mesma família
+ * é o que mantém cada um medindo o que ele foi escrito para medir. Os casos que
+ * PRECISAM de dois aparelhos chamam `repo` direto, com as duas famílias à
+ * vista: um atalho que escondesse a família ali reprovaria pelo motivo errado.
+ */
+const APARELHO_UNICO = comoFamiliaDeSessao('018f3a2b-0000-7000-8000-00000000d001');
+
+const aparelhoUnico = {
+  gravar: (dono: UserId, localizacao: Parameters<LocalizacaoDeReferenciaRepository['gravar']>[2]) =>
+    repo.gravar(dono, APARELHO_UNICO, localizacao),
+  buscarValida: (dono: UserId, agora: Instant) => repo.buscarValida(dono, APARELHO_UNICO, agora),
+  apagar: (dono: UserId) => repo.apagar(dono, APARELHO_UNICO),
+};
 const contasCriadas: UserId[] = [];
 
 async function criarConta(): Promise<UserId> {
@@ -136,7 +159,7 @@ void after(async () => {
 void describe('BICHUS-88: entre a exclusão lógica e o expurgo, a linha não existe', () => {
   void it('a conta excluída deixa de casar com ST_DWithin, sem ninguém filtrar por deleted_at', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     // A medida só significa alguma coisa se o ANTES for positivo: sem isto, um
     // ponto gravado no lugar errado faria o DEPOIS passar por motivo nenhum.
@@ -161,7 +184,7 @@ void describe('BICHUS-88: entre a exclusão lógica e o expurgo, a linha não ex
 
   void it('a conta excluída some da tabela, e não só do raio', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
     await excluirLogicamente(dono);
 
     const r = await cliente.query<{ n: string }>(
@@ -180,8 +203,8 @@ void describe('BICHUS-88: entre a exclusão lógica e o expurgo, a linha não ex
   void it('excluir uma conta não apaga a localização de outra', async () => {
     const some = await criarConta();
     const fica = await criarConta();
-    await repo.gravar(some, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
-    await repo.gravar(fica, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(some, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(fica, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     await excluirLogicamente(some);
 
@@ -195,7 +218,7 @@ void describe('BICHUS-88: entre a exclusão lógica e o expurgo, a linha não ex
 
   void it('um UPDATE qualquer em users não apaga a localização', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     await cliente.query('UPDATE users SET email = $2 WHERE id = $1', [
       dono,
@@ -212,7 +235,7 @@ void describe('BICHUS-88: entre a exclusão lógica e o expurgo, a linha não ex
 
   void it('escrever deleted_at = NULL numa conta viva não apaga a localização dela', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     // Este caso existe por causa de uma isca. Com a condição `WHEN` removida, os
     // outros casos deste arquivo continuavam verdes: `AFTER UPDATE OF
@@ -235,7 +258,7 @@ void describe('BICHUS-88: entre a exclusão lógica e o expurgo, a linha não ex
 
   void it('a exclusão que volta atrás leva a localização de volta (critério 7)', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     // O critério 7 da BICHUS-88 é "ou tudo foi apagado, ou nada foi". O gatilho
     // é AFTER e roda dentro da transação de quem marcou a conta, então a
@@ -263,7 +286,7 @@ void describe('BICHUS-88: entre a exclusão lógica e o expurgo, a linha não ex
 
   void it('reverter deleted_at não ressuscita coordenada nenhuma', async () => {
     const dono = await criarConta();
-    await repo.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await aparelhoUnico.gravar(dono, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
 
     await excluirLogicamente(dono);
     await cliente.query('UPDATE users SET deleted_at = NULL WHERE id = $1', [dono]);

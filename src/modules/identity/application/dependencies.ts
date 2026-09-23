@@ -5,7 +5,8 @@
  * objeto, e um contêiner esconderia justamente a fiação que precisa ser óbvia na
  * revisão de segurança.
  */
-import type { Instant } from '../../../shared/types/brands.js';
+import type { Instant, UserId } from '../../../shared/types/brands.js';
+import type { FamiliaDeSessao } from '../ports/localizacao-de-referencia-repository.js';
 import type { Mailer } from '../ports/mailer.js';
 import type { AbsoluteUrl } from '../../../shared/types/brands.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
@@ -56,6 +57,25 @@ export interface DependenciasDeIdentidade {
    * não, e a prova de que o caminho foi percorrido não pode depender de qual
    * deles está ligado.
    */
+  /**
+   * SEC-021: apaga a localização de referência **desta sessão de aparelho**, e
+   * devolve quantas linhas saíram (0 ou 1).
+   *
+   * Entra aqui e não no serviço de localização porque quem sabe que uma sessão
+   * de aparelho terminou é o logout, e ele mora neste módulo. A direção
+   * contrária — o serviço de localização observando a revogação — exigiria que
+   * ele soubesse o que é uma família de refresh, que é conhecimento de
+   * identidade e não de geografia.
+   *
+   * Ela **pode falhar**, e a falha deve propagar: o estado residual é "sessão
+   * morta, localização viva", que é o defeito que ela existe para consertar. Um
+   * `catch` mudo com resposta de sucesso seria a falha silenciosa que este
+   * repositório já registrou cinco vezes.
+   */
+  readonly apagarLocalizacaoDaSessao: (
+    dono: UserId,
+    familia: FamiliaDeSessao,
+  ) => Promise<number>;
   readonly registrarOcorrencia: RegistrarOcorrencia;
   /**
    * Base das páginas públicas do time web. É daqui que saem os links de

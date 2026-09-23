@@ -36,6 +36,7 @@ import { DummyDriver, Kysely, PostgresAdapter, PostgresIntrospector, PostgresQue
 
 import type { Database } from '../../../../shared/db/schema.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
+import { comoFamiliaDeSessao } from '../../ports/localizacao-de-referencia-repository.js';
 import {
   construtorDaLeitura,
   construtorDoApagamento,
@@ -44,6 +45,8 @@ import {
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const AGORA = 1_800_000_000_000 as Instant;
+/** SEC-021: a sessão de aparelho, que entra no WHERE ao lado do dono. */
+const FAMILIA = comoFamiliaDeSessao('018f3a2b-0000-7000-8000-0000000000f1');
 
 /**
  * Kysely sem banco: ele compila a consulta e não a executa.
@@ -80,7 +83,7 @@ function compilar(construtor: { compile(): Compilada }): Compilada {
 
 void describe('toda consulta que toca a localização de alguém carrega o dono no WHERE', () => {
   void it('a leitura tem `"user_id" = $n`, e o valor ligado é o dono', () => {
-    const { sql, parameters } = compilar(construtorDaLeitura(semBanco, DONO, AGORA));
+    const { sql, parameters } = compilar(construtorDaLeitura(semBanco, DONO, FAMILIA, AGORA));
     assert.match(
       sql,
       PREDICADO_DO_DONO,
@@ -93,7 +96,7 @@ void describe('toda consulta que toca a localização de alguém carrega o dono 
   });
 
   void it('o apagamento tem `"user_id" = $n`, e o valor ligado é o dono', () => {
-    const { sql, parameters } = compilar(construtorDoApagamento(semBanco, DONO));
+    const { sql, parameters } = compilar(construtorDoApagamento(semBanco, DONO, FAMILIA));
     assert.match(
       sql,
       PREDICADO_DO_DONO,
@@ -102,8 +105,41 @@ void describe('toda consulta que toca a localização de alguém carrega o dono 
     assert.ok(parameters.includes(DONO));
   });
 
+  void it('SEC-021: o apagamento tem `"session_family_id" = $n` junto do dono', () => {
+    const { sql, parameters } = compilar(construtorDoApagamento(semBanco, DONO, FAMILIA));
+    // ISCA: tire `.where('session_family_id', ...)` de `construtorDoApagamento`
+    // e este caso reprova. É a outra metade da SEC-021, e é a que o teste de
+    // unidade do logout não alcança: lá o repositório é dublê, e um dublê
+    // chaveado pelo par continua se comportando bem enquanto o SQL de verdade
+    // apaga a tabela inteira daquela pessoa.
+    assert.match(
+      sql,
+      /"session_family_id"\s*=\s*\$\d+/,
+      `o apagamento perdeu o predicado da sessão de aparelho. Sem ele, sair no celular ` +
+        `apaga também a localização do tablet, e "Sair" vira "Sair de todos os ` +
+        `aparelhos" com outro nome (ADR-0002, emenda 1). SQL compilado: ${sql}`,
+    );
+    assert.ok(
+      parameters.includes(FAMILIA),
+      'o predicado existe e a família não está entre os parâmetros ligados',
+    );
+  });
+
+  void it('SEC-021: a leitura também é por aparelho, e não pela pessoa', () => {
+    const { sql, parameters } = compilar(construtorDaLeitura(semBanco, DONO, FAMILIA, AGORA));
+    // ISCA: tire o mesmo `.where` de `construtorDaLeitura` e este caso reprova.
+    // Sem ele, o `GET /v1/me/location` de um aparelho devolveria o lugar que o
+    // OUTRO aparelho informou — um lugar em que quem pergunta nunca esteve.
+    assert.match(
+      sql,
+      /"session_family_id"\s*=\s*\$\d+/,
+      `a leitura perdeu o predicado da sessão de aparelho. SQL compilado: ${sql}`,
+    );
+    assert.ok(parameters.includes(FAMILIA));
+  });
+
   void it('a leitura filtra a validade junto, e não depois', () => {
-    const { sql } = compilar(construtorDaLeitura(semBanco, DONO, AGORA));
+    const { sql } = compilar(construtorDaLeitura(semBanco, DONO, FAMILIA, AGORA));
     assert.match(
       sql,
       /"expires_at"\s*>\s*\$\d+/,
@@ -113,7 +149,7 @@ void describe('toda consulta que toca a localização de alguém carrega o dono 
   });
 
   void it('a leitura não seleciona `reference_point` cru: ela sai por ST_Y/ST_X', () => {
-    const { sql } = compilar(construtorDaLeitura(semBanco, DONO, AGORA));
+    const { sql } = compilar(construtorDaLeitura(semBanco, DONO, FAMILIA, AGORA));
     assert.match(sql, /ST_Y\(reference_point::geometry\)/);
     assert.match(sql, /ST_X\(reference_point::geometry\)/);
     assert.ok(

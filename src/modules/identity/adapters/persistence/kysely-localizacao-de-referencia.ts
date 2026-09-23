@@ -31,7 +31,10 @@ import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { OrigemDaLocalizacao } from '../../domain/localizacao-de-referencia.js';
-import type { LocalizacaoDeReferenciaRepository } from '../../ports/localizacao-de-referencia-repository.js';
+import type {
+  FamiliaDeSessao,
+  LocalizacaoDeReferenciaRepository,
+} from '../../ports/localizacao-de-referencia-repository.js';
 
 interface LinhaDaLocalizacao {
   lat: number;
@@ -50,7 +53,12 @@ interface LinhaDaLocalizacao {
  * a conta sair da base de alerta no instante do vencimento, sem depender de o
  * expurgo do worker ter rodado.
  */
-export function construtorDaLeitura(db: DbExecutor, dono: UserId, agora: Instant) {
+export function construtorDaLeitura(
+  db: DbExecutor,
+  dono: UserId,
+  familia: FamiliaDeSessao,
+  agora: Instant,
+) {
   return db
     .selectFrom('user_reference_locations')
     .select([
@@ -65,12 +73,27 @@ export function construtorDaLeitura(db: DbExecutor, dono: UserId, agora: Instant
       'expires_at',
     ])
     .where('user_id', '=', dono)
+    // SEC-021: a sessão de aparelho entra ao lado do dono, e pelo mesmo motivo.
+    // Sem ela, um aparelho leria a localização que outro aparelho da mesma
+    // conta informou, e o `GET` passaria a devolver um lugar em que este
+    // aparelho nunca esteve.
+    .where('session_family_id', '=', familia)
     .where('expires_at', '>', comoData(agora));
 }
 
-/** O apagamento do dono, como consulta ainda não executada. */
-export function construtorDoApagamento(db: DbExecutor, dono: UserId) {
-  return db.deleteFrom('user_reference_locations').where('user_id', '=', dono);
+/**
+ * O apagamento **desta sessão de aparelho**, como consulta ainda não executada.
+ *
+ * Os dois predicados são obrigatórios e cada um responde por uma coisa: o dono
+ * é a autorização (ADR-0021), a família é o alcance. Tirar a família apagaria a
+ * localização de todos os aparelhos da pessoa num logout de um só, que é
+ * exatamente a ambiguidade que a SEC-021 existe para desfazer.
+ */
+export function construtorDoApagamento(db: DbExecutor, dono: UserId, familia: FamiliaDeSessao) {
+  return db
+    .deleteFrom('user_reference_locations')
+    .where('user_id', '=', dono)
+    .where('session_family_id', '=', familia);
 }
 
 /**
@@ -86,7 +109,7 @@ export function construtorDoExpurgo(db: DbExecutor, agora: Instant) {
 
 export function criarLocalizacaoDeReferenciaRepository(db: Db): LocalizacaoDeReferenciaRepository {
   return {
-    async gravar(dono, localizacao) {
+    async gravar(dono, familia, localizacao) {
       // SQL cru e não o construtor tipado: `geography` não é um tipo que o
       // modelo do Kysely represente, e a coluna é declarada em `schema.ts` como
       // não selecionável e não inserível de propósito — o único caminho para
@@ -97,18 +120,26 @@ export function criarLocalizacaoDeReferenciaRepository(db: Db): LocalizacaoDeRef
       // uma consulta de raio que caísse nessa janela tiraria o tutor do alerta
       // sem ninguém ter pedido. "Sempre a última, sem histórico" (critério 5) é
       // a chave primária da tabela; este `ON CONFLICT` é como ela é honrada.
+      //
+      // SEC-021: o alvo do `ON CONFLICT` é o PAR. Deixá-lo em `(user_id)`
+      // depois da migração não daria erro de sintaxe nem de execução — daria
+      // erro de inferência, porque não há mais restrição única sobre `user_id`
+      // sozinho, e o Postgres recusa. A recusa é bem-vinda: um alvo que
+      // continuasse casando reescreveria a linha do OUTRO aparelho.
       await sql`
         INSERT INTO user_reference_locations (
-          user_id, reference_point, precision_m, source, captured_at, expires_at
+          user_id, session_family_id, reference_point, precision_m, source,
+          captured_at, expires_at
         ) VALUES (
           ${dono},
+          ${familia},
           ST_SetSRID(ST_MakePoint(${localizacao.lon}, ${localizacao.lat}), 4326)::geography,
           ${localizacao.precisaoEmMetros},
           ${localizacao.origem},
           ${comoData(localizacao.capturadaEm)},
           ${comoData(localizacao.expiraEm)}
         )
-        ON CONFLICT (user_id) DO UPDATE SET
+        ON CONFLICT (user_id, session_family_id) DO UPDATE SET
           reference_point = EXCLUDED.reference_point,
           precision_m     = EXCLUDED.precision_m,
           source          = EXCLUDED.source,
@@ -117,8 +148,8 @@ export function criarLocalizacaoDeReferenciaRepository(db: Db): LocalizacaoDeRef
       `.execute(db);
     },
 
-    async buscarValida(dono, agora) {
-      const linha = (await construtorDaLeitura(db, dono, agora).executeTakeFirst()) as
+    async buscarValida(dono, familia, agora) {
+      const linha = (await construtorDaLeitura(db, dono, familia, agora).executeTakeFirst()) as
         | LinhaDaLocalizacao
         | undefined;
       if (linha === undefined) return null;
@@ -132,8 +163,9 @@ export function criarLocalizacaoDeReferenciaRepository(db: Db): LocalizacaoDeRef
       };
     },
 
-    async apagar(dono) {
-      await construtorDoApagamento(db, dono).execute();
+    async apagar(dono, familia) {
+      const resultado = await construtorDoApagamento(db, dono, familia).executeTakeFirst();
+      return Number(resultado.numDeletedRows);
     },
 
     async expurgarVencidas(agora) {

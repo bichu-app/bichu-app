@@ -29,6 +29,13 @@
  *   token é o único `user_id` que chega ao `WHERE`. É o que sustenta o critério
  *   11 ("nenhuma coordenada de nenhum usuário é devolvida a outro usuário"):
  *   não há caminho de código que receba um id de terceiro.
+ *
+ * **SEC-021, e ela muda o significado das três sem mudar o contrato:** a
+ * localização passou a ser do APARELHO. O `GET` devolve o que ESTE aparelho
+ * informou, o `PUT` grava para ESTE aparelho, e o `DELETE` tira do raio ESTE
+ * aparelho. O aparelho é a família de refresh que o `sid` do token carrega; o
+ * corpo e as respostas continuam exatamente como `UserLocation` os declara, e
+ * por isso o `oasdiff` continua sem nada a comparar.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
@@ -39,6 +46,7 @@ import type { Contrato } from '../../../../shared/http/contract.js';
 import { comoIso } from '../../../../shared/time/clock.js';
 import type { UserId } from '../../../../shared/types/brands.js';
 import type { LocalizacaoDeReferencia } from '../../domain/localizacao-de-referencia.js';
+import { comoFamiliaDeSessao } from '../../ports/localizacao-de-referencia-repository.js';
 import type {
   ChamadorDaLocalizacao,
   LocalizacaoDeReferenciaService,
@@ -68,7 +76,16 @@ export const rotaDeApagarLocalizacao = defineRoute({
 });
 
 export interface AutenticadorDaLocalizacao {
-  autenticar(token: string): Promise<{ userId: UserId }>;
+  /**
+   * `sid` é opcional aqui porque é opcional no token: o ADR-0002, emenda 1,
+   * seção 2, acrescentou o campo a tokens que já circulavam sem ele, e o
+   * verificador aceita os dois — "aceita o token SEM `sid`: é o que já está no
+   * aparelho das pessoas".
+   *
+   * **Para estas três rotas, um token sem `sid` é recusado**, e o porquê está
+   * em `chamadorAutenticado`.
+   */
+  autenticar(token: string): Promise<{ userId: UserId; sid?: string | undefined }>;
 }
 
 export interface DependenciasDaLocalizacao {
@@ -128,8 +145,28 @@ function chamadorAutenticado(
     }
     const token = cabecalho.slice('Bearer '.length).trim();
     if (token === '') throw problemas.naoAutenticado();
-    const { userId } = await deps.autenticador.autenticar(token);
-    return { userId, correlationId: request.id, ip: request.ip };
+    const { userId, sid } = await deps.autenticador.autenticar(token);
+    // SEC-021: SEM `sid` NÃO HÁ APARELHO, E SEM APARELHO NÃO HÁ LOCALIZAÇÃO.
+    //
+    // A localização passou a ser do aparelho (decisão do cliente, 23/09/2026), e
+    // o aparelho é a família de refresh que o `sid` carrega. Um token emitido
+    // antes da emenda 1 não o carrega, e não há de onde deduzi-lo: `users.id`
+    // responde quem é a pessoa e nada diz sobre qual aparelho.
+    //
+    // As três saídas foram consideradas. Gravar sem família cria uma linha que
+    // nenhum logout alcança — coordenada imortal. Inventar uma família dá o
+    // mesmo resultado, com pior aparência. Recusar devolve a pessoa ao caminho
+    // que já existe: o refresh renova, o token novo nasce com `sid`, e a
+    // requisição seguinte passa. Por isso é `session-expired` e não
+    // `unauthenticated`: é exatamente o que ela significa, e é a resposta a que
+    // o app já reage renovando (BICHUS-81).
+    if (typeof sid !== 'string' || sid === '') throw problemas.sessaoExpirada();
+    return {
+      userId,
+      familia: comoFamiliaDeSessao(sid),
+      correlationId: request.id,
+      ip: request.ip,
+    };
   });
 }
 

@@ -106,6 +106,7 @@ import type {
   VerificadorDeReautenticacao,
 } from '../../src/shared/http/registrar-rota.js';
 import type { RateLimitEntry } from '../../src/shared/http/route-definition.js';
+import { criarLocalizacaoDeReferenciaRepository } from '../../src/modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 
 /** O número do critério 9. Não é meta de desempenho e não afrouxa. */
 const TETO_EM_MS = 1000;
@@ -277,6 +278,11 @@ before(async () => {
   };
 
   const auth = criarAuthService({
+    // SEC-021: o repositório REAL, e não um dublê. Estes casos têm banco de pé,
+    // e um dublê aqui faria o apagamento do logout parecer exercitado sem nunca
+    // tocar a tabela.
+    apagarLocalizacaoDaSessao: (dono, familia) =>
+      criarLocalizacaoDeReferenciaRepository(db).apagar(dono, familia),
     repositorio: repositorioCronometrado,
     assinador,
     trilha,

@@ -87,6 +87,11 @@ import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const OUTRA_PESSOA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f02' as UserId;
 const FAMILIA_DESTE_APARELHO = 'fam-do-celular-da-tutora';
+/**
+ * SEC-021: a MESMA tutora, no tablet de casa. Família diferente, porque é outro
+ * aparelho, e é essa diferença que o caso dos dois aparelhos mede.
+ */
+const FAMILIA_DO_TABLET = 'fam-do-tablet-da-tutora';
 const FAMILIA_ALHEIA = 'fam-de-outra-conta';
 const AGORA = INSTANTE_FIXO;
 
@@ -300,6 +305,21 @@ interface Bancada {
   readonly repo: RepositorioFalso;
   readonly contrato: Contrato;
   readonly eventos: AuditEvent[];
+  /**
+   * SEC-021: as localizações de referência vivas, chaveadas pelo PAR
+   * `(dono, família)` — o mesmo par que é chave primária de
+   * `user_reference_locations` desde a migração `20260923000001`.
+   *
+   * Chavear só pelo dono faria o caso dos dois aparelhos passar por acidente:
+   * um `Map` por pessoa não tem como representar duas regiões, então ele daria
+   * a resposta certa sem que o código estivesse certo.
+   */
+  readonly localizacoes: Map<string, string>;
+}
+
+/** A chave do dublê: o mesmo par da chave primária da tabela. */
+function chaveDaLocalizacao(dono: string, familia: string): string {
+  return `${dono}\u0000${familia}`;
 }
 
 /**
@@ -313,6 +333,13 @@ interface Bancada {
 function montar(): Bancada {
   const repo = new RepositorioFalso(contaAtiva());
   const eventos: AuditEvent[] = [];
+  // SEC-021. Duas linhas, uma pessoa, dois aparelhos: é o estado que a decisão
+  // do cliente de 23/09 tornou possível, e é o estado em que o logout de um
+  // aparelho tem de deixar o outro em paz.
+  const localizacoes = new Map<string, string>([
+    [chaveDaLocalizacao(TUTORA, FAMILIA_DESTE_APARELHO), 'Paulista'],
+    [chaveDaLocalizacao(TUTORA, FAMILIA_DO_TABLET), 'Pinheiros'],
+  ]);
   const contrato = carregarContrato('api/openapi.yaml');
 
   const trilha: AuditLog = {
@@ -351,6 +378,11 @@ function montar(): Bancada {
   };
 
   const auth = criarAuthService({
+    // SEC-021: o dublê apaga pelo PAR, como o `DELETE ... WHERE user_id = $1
+    // AND session_family_id = $2` do repositório de verdade. Apagar só pelo
+    // dono aqui deixaria os dois casos novos verdes com o código errado.
+    apagarLocalizacaoDaSessao: (dono, familia) =>
+      Promise.resolve(localizacoes.delete(chaveDaLocalizacao(dono, familia)) ? 1 : 0),
     repositorio: repo,
     assinador,
     trilha,
@@ -411,7 +443,7 @@ function montar(): Bancada {
     { prefix: '/v1' },
   );
 
-  return { app, repo, contrato, eventos };
+  return { app, repo, contrato, eventos, localizacoes };
 }
 
 /**
@@ -485,6 +517,88 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
       bancada.repo.revogacoes.map((r) => ({ familyId: r.familyId, motivo: r.motivo })),
       [{ familyId: FAMILIA_DESTE_APARELHO, motivo: 'logout' }],
       'sair deste aparelho revoga a família apresentada, no servidor',
+    );
+  });
+
+  void it('SEC-021: a localização de referência NÃO sobrevive ao logout', async () => {
+    const bancada = montar();
+    assert.ok(
+      bancada.localizacoes.has(chaveDaLocalizacao(TUTORA, FAMILIA_DESTE_APARELHO)),
+      'a bancada precisa começar COM a localização, senão o caso não mede nada',
+    );
+
+    const resposta = await pedirLogout(bancada, { refresh_token: REFRESH_DESTE_APARELHO });
+
+    assert.equal(resposta.status, 204);
+    // ISCA: apague a chamada a `apagarLocalizacaoDaSessao` em `sair()`
+    // (auth-service.ts) e este caso reprova com a mensagem abaixo. Era o estado
+    // do repositório até hoje: o ADR-0010 prometia "apagada ao sair da conta" e
+    // o gatilho da migração 20260922000006 cobria só a EXCLUSÃO da conta.
+    assert.ok(
+      !bancada.localizacoes.has(chaveDaLocalizacao(TUTORA, FAMILIA_DESTE_APARELHO)),
+      'a localização de referência SOBREVIVEU ao logout deste aparelho. O ADR-0010 ' +
+        'promete, na tabela de retenção, que ela é "apagada ao sair da conta e ao ' +
+        'excluir a conta"; o gatilho de 20260922000006 cumpre só a segunda metade, ' +
+        'porque a exclusão lógica é um UPDATE em `users` e o logout não toca `users`. ' +
+        'Quem sai da conta no celular emprestado continua, neste estado, dentro do raio ' +
+        'de alerta com a região onde mora.',
+    );
+  });
+
+  void it('SEC-021: dois aparelhos, uma pessoa — sair de um deixa a do outro de pé', async () => {
+    const bancada = montar();
+
+    await pedirLogout(bancada, { refresh_token: REFRESH_DESTE_APARELHO });
+
+    // ISCA DO OUTRO LADO, e ela é a razão de a localização ter deixado de ser
+    // da PESSOA. Troque o `DELETE` por um que apague só pelo dono — em
+    // `construtorDoApagamento`, ou no dublê acima — e este caso reprova: o
+    // tablet perde a localização dele num logout que não foi dele.
+    //
+    // Sem este caso, a regra nova não está provada. O caso de cima passaria
+    // igual com um apagamento por pessoa, porque com UM aparelho os dois
+    // comportamentos são indistinguíveis — que é exatamente a ambiguidade que
+    // travou a SEC-021 até o cliente decidir, em 23/09, que "a localização
+    // deveria ser por aparelho".
+    assert.equal(
+      bancada.localizacoes.get(chaveDaLocalizacao(TUTORA, FAMILIA_DO_TABLET)),
+      'Pinheiros',
+      'o tablet perdeu a localização dele porque o CELULAR saiu da conta. Sair é por ' +
+        'aparelho (ADR-0002, emenda 1): "quem sai no celular da recepção do pet shop ' +
+        'não está pedindo para cair da própria casa", e a localização passou a seguir ' +
+        'a mesma regra.',
+    );
+    assert.equal(
+      bancada.localizacoes.size,
+      1,
+      'sobrou mais de uma linha, ou nenhuma: o logout de um aparelho apaga exatamente uma',
+    );
+  });
+
+  void it('SEC-021: a trilha conta as localizações que saíram, junto da família', async () => {
+    const bancada = montar();
+
+    await pedirLogout(bancada, { refresh_token: REFRESH_DESTE_APARELHO });
+
+    const logout = bancada.eventos.find((e) => e.action === 'auth.logout');
+    assert.ok(logout !== undefined, 'o logout precisa deixar evento');
+    assert.equal(
+      (logout.metadata as { locations_removed?: number } | undefined)?.locations_removed,
+      1,
+      '`locations_removed` ausente ou errado. Sem ele, "o apagamento rodou?" volta a ' +
+        'não ter resposta em lugar nenhum: 0 e 1 são estados diferentes e precisam ser ' +
+        'distinguíveis depois do fato.',
+    );
+    // A COORDENADA NÃO ENTRA NA TRILHA, e a razão está no serviço de
+    // localização: a trilha sobrevive à exclusão da conta de propósito, e
+    // gravar o ponto nela desfaria o direito de apagamento por uma porta
+    // lateral. A família também não entra no metadado — ela já está em
+    // `resourceId`, que é onde ela pertence.
+    assert.deepEqual(
+      Object.keys((logout.metadata ?? {}) as Record<string, unknown>).sort(),
+      ['locations_removed'],
+      'apareceu campo novo no metadado do logout. Confira que ele não é coordenada nem ' +
+        'identificador de aparelho antes de acrescentá-lo a esta lista.',
     );
   });
 

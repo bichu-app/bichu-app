@@ -81,6 +81,7 @@ import { criarAuthService } from '../../src/modules/identity/application/auth-se
 import { criarAvisoDeReusoAoTitular } from '../../src/modules/identity/application/aviso-de-reuso.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
 import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
+import { criarLocalizacaoDeReferenciaRepository } from '../../src/modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -281,6 +282,11 @@ before(async () => {
   };
 
   const auth = criarAuthService({
+    // SEC-021: o repositório REAL, e não um dublê. Estes casos têm banco de pé,
+    // e um dublê aqui faria o apagamento do logout parecer exercitado sem nunca
+    // tocar a tabela.
+    apagarLocalizacaoDaSessao: (dono, familia) =>
+      criarLocalizacaoDeReferenciaRepository(db).apagar(dono, familia),
     repositorio,
     assinador,
     trilha,
