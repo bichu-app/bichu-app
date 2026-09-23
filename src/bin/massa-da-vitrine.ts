@@ -228,9 +228,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
     slug: 'racao-premium-caes',
     partnerSlug: 'petz',
     title: 'Ração super premium para cães adultos de porte médio e grande sabor frango e arroz 15 kg',
+    // **Exatamente 180 caracteres**, que e o teto do `CHECK`. O resumo mais
+    // longo que a coluna aceita e o que mais estica o cartao, e e ele que
+    // precisa estar na tela quando alguem for julgar o desenho.
     summary:
-      'Fórmula com proteína de frango como primeiro ingrediente, prebióticos para a flora intestinal, '
-      + 'ômega 3 e 6 para pelagem, e grãos de tamanho adequado para cães de porte médio a grande.',
+      'Fórmula com proteína de frango como primeiro ingrediente, prebióticos para a flora '
+      + 'intestinal, ômega 3 e 6 para toda a pelagem e grãos no tamanho adequado para cães de porte médio.',
     category: 'food',
     imageUrl: null,
     targetUrl: 'https://petz.com.br/racao-super-premium-caes-adultos-15kg',

@@ -226,13 +226,27 @@ class CascaComAbas extends StatelessWidget {
     ),
     DestinoDeNavegacao(
       rotulo: 'Loja',
-      reforcoAcessivel: 'a loja do Bichu',
+      reforcoAcessivel: 'produtos escolhidos pelo Bichu',
+      // **A plaquinha saiu desta linha**, e a saida e decisao de produto e nao
+      // corte de texto. A secao C da BICHUS-185 decidiu que a plaquinha fica
+      // FORA da Loja no MVP: a vitrine e de parceiro, e nenhum parceiro vende
+      // plaquinha do Bichu. Prometer aqui um item que a lista nunca vai ter e
+      // a mesma classe de defeito do estado vazio que mente.
       reforcoDaPagina:
-          'A loja do Bichu: plaquinha, coleira e o que seu pet precisa.',
+          'Produtos escolhidos pelo Bichu, que abrem no site do parceiro.',
       icone: Icons.shopping_bag_outlined,
       iconeSelecionado: Icons.shopping_bag,
       rota: Rotas.loja,
-      estado: EstadoDaSecao.planejada,
+      // **`existe`, e nao `planejada`, desde a vitrine.**
+      //
+      // Mesma troca de `Perto` e pelas mesmas duas consequencias medidas. A
+      // primeira: `planejada` obriga a secao a dizer "Loja esta em construcao"
+      // (UX 25.7.3), e a frase passou a ser falsa -- ha vitrine, vinda de
+      // `GET /store/items`. A segunda: `visiveisEm` esconde o que e
+      // `planejada` no build de ENTREGA, entao enquanto esta linha dissesse
+      // `planejada` a secao com conteudo nao apareceria na barra do build que
+      // vai para a loja de aplicativos.
+      estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.compra,
     ),
     DestinoDeNavegacao(

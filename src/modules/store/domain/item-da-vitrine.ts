@@ -15,8 +15,9 @@
  * - **Carrinho, pedido, pagamento, estoque.** Nao ha campo, porque nao ha
  *   coluna, porque nao ha o conceito (criterio 5 da BICHUS-185).
  * - **Preco riscado, "de/por", desconto, "menor preco".** Criterio 19. Nao ha
- *   campo para nenhum dos quatro, e o portao `portao-vitrine-sem-comparacao.ts`
- *   reprova se algum nascer.
+ *   campo para nenhum dos quatro, e o ultimo caso de `item-da-vitrine.test.ts`
+ *   reprova se algum nascer. **Nao ha portao de esquema para isto**, e o
+ *   criterio 19 pede um: esta registrado como o que ficou de fora.
  *
  * ## O preco vence, e quem o omite e ESTE arquivo
  *
@@ -36,6 +37,9 @@
  * esta velho -- "R$ 89,90 (desatualizado)" e o pior dos dois mundos, porque a
  * pessoa le o numero e ignora o adjetivo.
  */
+
+import { comoData } from '../../../shared/time/clock.js';
+import type { Instant } from '../../../shared/types/brands.js';
 
 /**
  * As categorias que `store_items.category` admite, **espelhadas** do `CHECK` da
@@ -128,13 +132,17 @@ export type EstadoDoPreco = 'vigente' | 'vencido' | 'sem_preco';
  * faz o resultado depender da hora em que a consulta rodou. Um item semeado com
  * data de exatamente 30 dias atras vencia de manha e nao vencia de tarde.
  */
-export function diasDeCalendario(desde: string, ate: Date): number {
+export function diasDeCalendario(desde: string, ate: Instant): number {
   const [ano, mes, dia] = desde.split('-').map(Number);
   if (ano === undefined || mes === undefined || dia === undefined) {
     throw new TypeError(`price_checked_at fora do formato AAAA-MM-DD: "${desde}"`);
   }
   const inicio = Date.UTC(ano, mes - 1, dia);
-  const fim = Date.UTC(ate.getUTCFullYear(), ate.getUTCMonth(), ate.getUTCDate());
+  // `comoData` e o unico caminho declarado de `Instant` para `Date` neste
+  // repositorio. Construir a data aqui seria a supressao de lint que o
+  // cabecalho de `shared/time/clock.ts` existe para evitar.
+  const instante = comoData(ate);
+  const fim = Date.UTC(instante.getUTCFullYear(), instante.getUTCMonth(), instante.getUTCDate());
   return Math.floor((fim - inicio) / 86_400_000);
 }
 
@@ -146,7 +154,7 @@ export function diasDeCalendario(desde: string, ate: Date): number {
  * a validade ser de vinte e nove, e a divergencia entre o numero escrito e o
  * numero aplicado e a classe de defeito que ninguem procura.
  */
-export function estadoDoPreco(item: ItemDaVitrine, agora: Date): EstadoDoPreco {
+export function estadoDoPreco(item: ItemDaVitrine, agora: Instant): EstadoDoPreco {
   if (item.priceAmount === null || item.priceCheckedAt === null) return 'sem_preco';
   return diasDeCalendario(item.priceCheckedAt, agora) > DIAS_DE_VALIDADE_DO_PRECO
     ? 'vencido'
@@ -161,7 +169,7 @@ export function estadoDoPreco(item: ItemDaVitrine, agora: Date): EstadoDoPreco {
  * reconstruir "o preco era de tal dia", e o que nao chega nao pode ser
  * remontado por build nenhum.
  */
-export function projetarItem(item: ItemDaVitrine, agora: Date): ItemProjetado {
+export function projetarItem(item: ItemDaVitrine, agora: Instant): ItemProjetado {
   const estado = estadoDoPreco(item, agora);
   const vigente = estado === 'vigente';
   return {

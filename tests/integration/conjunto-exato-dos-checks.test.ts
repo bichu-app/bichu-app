@@ -216,6 +216,14 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'kind',
     valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic'],
   },
+  // BICHUS-185 / BICHUS-189. A categoria do produto da vitrine. Espelha
+  // `CategoriaDaVitrine` em `src/modules/store/domain/item-da-vitrine.ts` e o
+  // `enum` `StoreCategory` do contrato -- os tres arquivos que o ADR-0023
+  // secao 3 exige no mesmo commit.
+  'public.store_items.store_items_categoria': {
+    coluna: 'category',
+    valores: ['food', 'toy', 'hygiene', 'accessory', 'health', 'bed'],
+  },
   'public.professionals.professionals_source_check': {
     coluna: 'source',
     // 'community' foi NEGADO pelo cliente em 21/09. Reintroduzir aqui seria
@@ -363,6 +371,54 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
  * escreveu. Diferença entre os dois é o defeito de 22/09 em outra coluna.
  */
 const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
+  // ------------------------------------------------------------------
+  // A vitrine da `Loja` (BICHUS-185 / BICHUS-189, migracao 20260922000009).
+  // Nenhum destes e lista fechada: sao formato, faixa e coerencia entre
+  // colunas. O unico conjunto fechado da vitrine e `store_items_categoria`,
+  // que esta em LISTAS_FECHADAS.
+  // ------------------------------------------------------------------
+  //
+  // Os tres campos de preco andam juntos ou nenhum existe. E este CHECK que
+  // faz "preco sem data" ser inexprimivel, e nao uma regra que alguem precisa
+  // lembrar: um preco vale exatamente o que a data dele vale.
+  'public.store_items.store_items_preco_anda_completo':
+    'CHECK ((((price_amount IS NULL) AND (price_currency IS NULL) AND (price_checked_at IS NULL)) OR ((price_amount IS NOT NULL) AND (price_currency IS NOT NULL) AND (price_checked_at IS NOT NULL))))',
+  // Centavos, inteiro e positivo. Preco zero nao e "de graca": e campo em
+  // branco que alguem gravou como numero.
+  'public.store_items.store_items_preco_e_positivo':
+    'CHECK (((price_amount IS NULL) OR (price_amount > 0)))',
+  // `BRL` no MVP. Nao e lista fechada de verdade -- e um valor unico com a
+  // forma de uma --, e por isso mora aqui: declara-lo como conjunto faria o
+  // registro prometer uma lista que nao existe.
+  'public.store_items.store_items_moeda':
+    "CHECK (((price_currency IS NULL) OR (price_currency = 'BRL'::text)))",
+  // Formato do endereco publico, COPIADO de `pets.slug`. Nao ha UUID nestas
+  // duas tabelas: `slug` e a chave primaria, porque elas so existem para sair
+  // em resposta publica (ADR-0010 item 6).
+  'public.store_items.store_items_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  'public.store_partners.store_partners_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  // O teto do resumo e o que faz dele UMA linha. Um campo sem teto vira
+  // paragrafo no primeiro cadastro, e o cartao da vitrine deixa de caber.
+  'public.store_items.store_items_resumo_tem_tamanho':
+    'CHECK (((char_length(btrim(summary)) >= 2) AND (char_length(btrim(summary)) <= 180)))',
+  'public.store_items.store_items_titulo_tem_tamanho':
+    'CHECK (((char_length(btrim(title)) >= 2) AND (char_length(btrim(title)) <= 120)))',
+  'public.store_partners.store_partners_nome_tem_tamanho':
+    'CHECK (((char_length(btrim(name)) >= 2) AND (char_length(btrim(name)) <= 80)))',
+  // https e nao http: o destino e uma pagina de comercio, e um link em claro
+  // numa vitrine nossa e uma recomendacao nossa de digitar dado em canal
+  // aberto.
+  'public.store_items.store_items_destino_e_https':
+    "CHECK ((target_url ~ '^https://'::text))",
+  'public.store_items.store_items_imagem_e_https':
+    "CHECK (((image_url IS NULL) OR (image_url ~ '^https://'::text)))",
+  // So o HOST, sem esquema, caminho nem consulta. Guardar a URL inteira
+  // convidaria um parametro a viajar junto, e parametro em link de saida e
+  // onde dado pessoal vaza (consequencia 3 da BICHUS-185).
+  'public.store_partners.store_partners_host_e_so_host':
+    "CHECK ((host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text))",
   'audit.events.audit_events_ator_coerente':
     "CHECK (((actor_kind = 'user'::text) = (actor_user_id IS NOT NULL)))",
   // O par mentiroso do alcance: estado não calculado com número, ou `computed`

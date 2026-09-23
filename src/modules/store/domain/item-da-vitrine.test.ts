@@ -32,6 +32,7 @@ import {
   projetarItem,
   type ItemDaVitrine,
 } from './item-da-vitrine.js';
+import type { Instant } from '../../../shared/types/brands.js';
 
 function item(ajustes: Partial<ItemDaVitrine> = {}): ItemDaVitrine {
   return {
@@ -51,11 +52,17 @@ function item(ajustes: Partial<ItemDaVitrine> = {}): ItemDaVitrine {
   };
 }
 
-/** Um instante fixo. Nada aqui depende do relogio de quem roda. */
-const AGORA = new Date('2026-09-22T12:00:00.000Z');
+/**
+ * Um instante fixo. Nada aqui depende do relogio de quem roda.
+ *
+ * E um `Instant` -- milissegundos --, e nao um `Date`, porque e isso que o
+ * dominio recebe. `Date.UTC` e aritmetica de calendario e nao leitura de
+ * relogio, e o `Clock` continua sendo o unico caminho do tempo real.
+ */
+const AGORA = Date.UTC(2026, 8, 22, 12) as Instant;
 
-describe('o vencimento do preco', () => {
-  it('conta em dias de CALENDARIO, e nao em milissegundos', () => {
+void describe('o vencimento do preco', () => {
+  void it('conta em dias de CALENDARIO, e nao em milissegundos', () => {
     assert.equal(diasDeCalendario('2026-09-22', AGORA), 0);
     assert.equal(diasDeCalendario('2026-09-21', AGORA), 1);
     assert.equal(diasDeCalendario('2026-08-23', AGORA), 30);
@@ -63,16 +70,16 @@ describe('o vencimento do preco', () => {
     // A hora de quem pergunta nao muda a resposta. Um item com data de
     // exatamente 30 dias atras vencia de manha e nao vencia de tarde quando a
     // conta passava por milissegundos.
-    for (const hora of ['00:00:00', '03:00:00', '12:00:00', '23:59:59']) {
+    for (const hora of [0, 3, 12, 23]) {
       assert.equal(
-        diasDeCalendario('2026-08-23', new Date(`2026-09-22T${hora}.000Z`)),
+        diasDeCalendario('2026-08-23', Date.UTC(2026, 8, 22, hora, 59, 59) as Instant),
         30,
-        `a hora ${hora} mudou a contagem de dias`,
+        `a hora ${String(hora)} mudou a contagem de dias`,
       );
     }
   });
 
-  it('ISCA -- a fronteira e o trigesimo dia INCLUSIVE', () => {
+  void it('ISCA -- a fronteira e o trigesimo dia INCLUSIVE', () => {
     // 30 dias de validade significa que o trigesimo ainda vale. Recusar nele
     // faria a validade ser de 29, e a divergencia entre o numero escrito e o
     // aplicado e a classe de defeito que ninguem procura.
@@ -81,7 +88,7 @@ describe('o vencimento do preco', () => {
     assert.equal(estadoDoPreco(item({ priceCheckedAt: '2026-08-22' }), AGORA), 'vencido');
   });
 
-  it('distingue TRES estados, e nao dois', () => {
+  void it('distingue TRES estados, e nao dois', () => {
     assert.equal(estadoDoPreco(item({ priceCheckedAt: '2026-09-20' }), AGORA), 'vigente');
     assert.equal(estadoDoPreco(item({ priceCheckedAt: '2026-07-01' }), AGORA), 'vencido');
     assert.equal(
@@ -94,8 +101,8 @@ describe('o vencimento do preco', () => {
   });
 });
 
-describe('a projecao publica', () => {
-  it('ISCA -- o valor VENCIDO nao sai, nem em campo nenhum', () => {
+void describe('a projecao publica', () => {
+  void it('ISCA -- o valor VENCIDO nao sai, nem em campo nenhum', () => {
     const projetado = projetarItem(item({ priceCheckedAt: '2026-07-01' }), AGORA);
 
     assert.equal(projetado.price_status, 'vencido');
@@ -112,7 +119,7 @@ describe('a projecao publica', () => {
     );
   });
 
-  it('ISCA NEGATIVA OBRIGATORIA -- o valor DENTRO do prazo PRECISA sair', () => {
+  void it('ISCA NEGATIVA OBRIGATORIA -- o valor DENTRO do prazo PRECISA sair', () => {
     // Sem este caso, um servidor que nunca envia preco passaria no teste de
     // vencimento. Ele e o que impede "omitir sempre" de ser uma aprovacao.
     const projetado = projetarItem(item({ priceCheckedAt: '2026-09-20' }), AGORA);
@@ -123,7 +130,7 @@ describe('a projecao publica', () => {
     assert.equal(projetado.price_checked_at, '2026-09-20');
   });
 
-  it('ISCA -- nenhum UUID sai na projecao', () => {
+  void it('ISCA -- nenhum UUID sai na projecao', () => {
     const projetado = projetarItem(item(), AGORA);
     const chaves = Object.keys(projetado);
 
@@ -146,7 +153,7 @@ describe('a projecao publica', () => {
     );
   });
 
-  it('o item sem preco projeta os tres campos nulos, e nao some', () => {
+  void it('o item sem preco projeta os tres campos nulos, e nao some', () => {
     const projetado = projetarItem(
       item({ priceAmount: null, priceCurrency: null, priceCheckedAt: null }),
       AGORA,
@@ -159,7 +166,7 @@ describe('a projecao publica', () => {
     assert.equal(projetado.title, 'Ração úmida sachê frango');
   });
 
-  it('nao ha campo de comparacao de preco em lugar nenhum', () => {
+  void it('nao ha campo de comparacao de preco em lugar nenhum', () => {
     const projetado = projetarItem(item(), AGORA);
     // Criterio 19: preco riscado, "de/por", desconto e "menor preco" nao tem
     // campo, e o portao reprova se algum nascer.

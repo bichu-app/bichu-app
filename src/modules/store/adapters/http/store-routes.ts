@@ -142,7 +142,7 @@ export function registrarRotasDaVitrine(
         limit,
       });
 
-      const agora = new Date(deps.clock.now());
+      const agora = deps.clock.now();
 
       return reply.send({
         items: pagina.itens.map((item) => projetarItem(item, agora)),

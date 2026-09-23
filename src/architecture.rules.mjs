@@ -18,6 +18,13 @@ export const MODULES = [
   // em `pet_tags` na mesma transacao. Dentro de `pets` isso viraria um segundo
   // dominio sem fronteira.
   'transfers',
+  // BICHUS-185 / BICHUS-189. A vitrine da `Loja` e modulo proprio e nao um
+  // canto de `professionals`: as duas secoes sao listagens do mesmo formato e
+  // nao compartilham tabela, regra nem publico -- `Perto` e um diretorio de
+  // pessoas que exige conta, e a `Loja` e um catalogo publico de produto de
+  // terceiro. Junta-las faria uma fronteira que a arquitetura nao consegue
+  // vigiar, com `professionals` importando `store_items`.
+  'store',
 ];
 
 /**
