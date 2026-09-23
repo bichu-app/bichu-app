@@ -53,13 +53,18 @@ import { criarTrilhaDeAuditoria } from '../../src/modules/audit/adapters/persist
 import { criarTokenSigner } from '../../src/modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../../src/modules/identity/adapters/persistence/kysely-identity-repository.js';
 import {
+  criarVerificadorDeReautenticacao,
   registrarRotasDeIdentidade,
   rotaDeTrocaDeEmail,
+  type DependenciasDasRotas,
 } from '../../src/modules/identity/adapters/http/routes.js';
 import { criarAuthService } from '../../src/modules/identity/application/auth-service.js';
 import { criarAvisoDeReusoAoTitular } from '../../src/modules/identity/application/aviso-de-reuso.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
-import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
+import type {
+  RegistradorDeRotas,
+  VerificadorDeReautenticacao,
+} from '../../src/shared/http/registrar-rota.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -187,10 +192,31 @@ before(async () => {
   const ids = criarIdGenerator(() => systemClock.now());
   const assinador = criarTokenSigner(config.token);
 
+  // ==========================================================================
+  // O SERVIDOR PRECISA DO VERIFICADOR DE REAUTENTICAÇÃO, E A FALTA DELE ERA UM
+  // VERMELHO DE INTEGRAÇÃO, NÃO UMA OPÇÃO.
+  // ==========================================================================
+  // `requestEmailChange` passou a declarar `reauthScope: 'email_change'` quando
+  // a BICHUS-42 e a maquinaria da BICHUS-48 se encontraram na integração de
+  // 22/09 (merge `6e071a5`). O portão de `registrar-rota.ts` recusa subir uma
+  // rota destrutiva num servidor sem o decorador, e recusar é o que ele deve
+  // fazer: servidor de teste mais permissivo que o de produção mede outra
+  // coisa. Este arquivo continuava montando o servidor como antes do encontro,
+  // então o `before` estourava e os nove casos saíam CANCELADOS.
+  //
+  // A fiação é a mesma de `src/bin/api.ts` e a dos outros quatro arquivos de
+  // integração que sobem rota com `reauthScope`: o verificador precisa das
+  // dependências das rotas, e as dependências só existem depois, então ele
+  // nasce como armadilha e é trocado abaixo.
+  let verificarReautenticacao: VerificadorDeReautenticacao = () => {
+    throw new Error('verificador chamado antes de a fiacao terminar');
+  };
+
   app = criarServidor({
     problemBaseUrl: config.problemBaseUrl,
     isProduction: config.isProduction,
     teto: tetoDeTeste(),
+    reautenticacao: (request, escopo) => verificarReautenticacao(request, escopo),
   });
 
   const trilha = criarTrilhaDeAuditoria({
@@ -237,15 +263,18 @@ before(async () => {
     }),
   });
 
+  const dependenciasDasRotas: DependenciasDasRotas = {
+    auth,
+    assinador,
+    contrato,
+    issuer: config.token.issuer,
+    apiBaseUrl: config.apiBaseUrl,
+  };
+  verificarReautenticacao = criarVerificadorDeReautenticacao(dependenciasDasRotas);
+
   await app.register(
     (escopo, _opcoes, pronto) => {
-      registrarRotasDeIdentidade(escopo, {
-        auth,
-        assinador,
-        contrato,
-        issuer: config.token.issuer,
-        apiBaseUrl: config.apiBaseUrl,
-      });
+      registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
       pronto();
     },
     { prefix: PREFIXO_DA_API },
