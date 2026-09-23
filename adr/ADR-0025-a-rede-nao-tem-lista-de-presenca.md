@@ -1,4 +1,4 @@
-# ADR-0024: A Rede não tem lista de presença, e o check-in é da pessoa e nunca do pet
+# ADR-0025: A Rede não tem lista de presença, e o check-in é da pessoa e nunca do pet
 
 **Status:** aceito
 **Data:** 2026-09-23

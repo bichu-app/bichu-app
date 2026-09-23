@@ -558,7 +558,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// sendo um ato deliberado. Anteriores:
 /// `47d3281e75ece2ffd5e85586047c465868427d6f` (esta branch) e
 /// `72832de16b55beaff488096e442d64b1846bed0c` (`development`).
-// BICHUS-251 (ADR-0024): a secao `Rede` ganhou tela. `app/lib/telas/rede/`
+// BICHUS-251 (ADR-0025): a secao `Rede` ganhou tela. `app/lib/telas/rede/`
 // nasceu com a agenda e o detalhe do encontro, e `abas.dart` perdeu a casca
 // honesta. Nenhuma tela mudou por causa da camera -- que e o que o criterio
 // 10 vigia --, e a porta `CameraEGaleria` nao foi tocada.

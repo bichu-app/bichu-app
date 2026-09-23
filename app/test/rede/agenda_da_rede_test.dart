@@ -384,7 +384,7 @@ void main() {
       expect(find.text('Ninguém confirmou presença ainda'), findsOneWidget);
     });
 
-    // A prova negativa do ADR-0024, do lado da TELA.
+    // A prova negativa do ADR-0025, do lado da TELA.
     //
     // A resposta abaixo e a do contrato -- ela nao tem campo com pessoas. O
     // caso varre o texto inteiro que a tela desenhou e reprova se qualquer nome,

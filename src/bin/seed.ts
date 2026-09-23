@@ -328,7 +328,7 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
 
   for (const foto of FOTOS_DA_REDE) {
     // A COLUNA DE QUEM ENVIOU NAO ENTRA NESTE `insert`, e a ausencia e a
-    // decisao. A galeria desta fatia e CURADA (ADR-0024 decisao 4): ela e
+    // decisao. A galeria desta fatia e CURADA (ADR-0025 decisao 4): ela e
     // exibida e nao enviada, entao nao ha remetente para gravar. E a coluna
     // leva a marca de saida na migracao, entao nomea-la aqui faria o portao de
     // colunas reprovar `src/bin/seed.ts` -- com razao, porque ele nao tem como
@@ -465,7 +465,7 @@ export async function main(): Promise<void> {
       'encontro inativo, e ele e FUTURO: no passado, `when=upcoming` o esconderia',
       'sozinho e o filtro de `active` continuaria sem ser exercido.',
       '',
-      'NENHUM PET foi semeado na Rede, e a ausencia e a decisao 1 do ADR-0024:',
+      'NENHUM PET foi semeado na Rede, e a ausencia e a decisao 1 do ADR-0025:',
       '`network_event_checkins` nao tem `pet_id`, entao nao ha onde guardar um.',
       '',
       'AINDA SEM MASSA: conta de tutor, pet e caso de perdido. Quais sao essas e',

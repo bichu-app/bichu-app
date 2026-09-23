@@ -1634,9 +1634,19 @@ export interface paths {
          *     conta". Autorizacao na clausula `WHERE` (ADR-0021), sem ramo
          *     privilegiado.
          *
-         *     **Nenhum UUID sai daqui, e nao por filtragem: nao ha um.**
-         *     `store_items` e `store_partners` tem `slug` como chave primaria
-         *     (ADR-0010 item 6).
+         *     **Nenhum UUID sai daqui.** A chave do item e a do parceiro sao o
+         *     `slug`, e nao ha campo de UUID nesta resposta -- nem opcional, nem
+         *     nulavel. O ADR-0010 item 6 proibe UUID interno em saida publica, e
+         *     quem impede o engano nao e a boa vontade de quem escreve a consulta:
+         *     `src/tools/portao-contrato-publico.ts` reprova qualquer campo
+         *     `format: uuid` em operacao alcancavel sem conta (SEC-001).
+         *
+         *     As tabelas tem, sim, identidade interna (`store_partners.id`,
+         *     `store_items.id`), e ela e o alvo da chave estrangeira entre as duas
+         *     (ADR-0024). Ela nunca e projetada. Separar as duas identidades e o
+         *     desenho de `pets` e de `professionals`, e existe porque chave
+         *     estrangeira sobre endereco publico e o que o criterio 2 da BICHUS-19
+         *     proibe -- endereco publico e valor que muda e que sai impresso.
          *
          *     **NAO EXISTE OPERACAO DE ESCRITA DE CATALOGO NESTE CONTRATO**, e a
          *     ausencia e o criterio 20 da BICHUS-185. A entrada de dados e a decisao
@@ -1684,7 +1694,7 @@ export interface paths {
          * A agenda de encontros da Rede
          * @description A secao `Rede`: os encontros que a comunidade marca em praca e parque.
          *
-         *     **LEIA O ADR-0024 ANTES DE MEXER NESTA OPERACAO.** As ausencias abaixo
+         *     **LEIA O ADR-0025 ANTES DE MEXER NESTA OPERACAO.** As ausencias abaixo
          *     sao o conteudo dele, e cada uma fecha uma inferencia.
          *
          *     ## Nao ha lista de presenca. Ha um NUMERO
@@ -1733,7 +1743,7 @@ export interface paths {
          *
          *     ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTE CONTRATO
          *
-         *     A ausencia e a decisao 4 do ADR-0024: nao ha moderacao, denuncia nem
+         *     A ausencia e a decisao 4 do ADR-0025: nao ha moderacao, denuncia nem
          *     remocao em lugar nenhum deste repositorio, e o cliente ja negou o
          *     equivalente para o diretorio na emenda 1 do ADR-0011. A criacao pela
          *     comunidade e fase seguinte, com o pacote de moderacao junto. Quando a
@@ -1778,7 +1788,7 @@ export interface paths {
          *     para quem procura, de virem com imagem do lugar.
          *
          *     **Nesta fatia a galeria e EXIBIDA e nao ENVIADA.** Nao ha operacao de
-         *     upload aqui, e a ausencia e a decisao 4 do ADR-0024: o envio pela
+         *     upload aqui, e a ausencia e a decisao 4 do ADR-0025: o envio pela
          *     comunidade depende de moderacao, que nao existe no repositorio, e do
          *     armazenamento de objeto na pilha de integracao, que esta numa branch
          *     ainda nao mesclada.
@@ -1811,7 +1821,7 @@ export interface paths {
          *     unico dado da operacao e quem chama e qual evento.
          *
          *     E a UNICA participacao da comunidade nesta fatia, e a escolha tem razao
-         *     escrita no ADR-0024 secao 4: **check-in nao produz conteudo**. Nao tem
+         *     escrita no ADR-0025 secao 4: **check-in nao produz conteudo**. Nao tem
          *     texto, nao tem imagem, nao tem nada para moderar. Um inteiro que sobe de
          *     um nao precisa de fila de revisao -- e fila de revisao e o que nao
          *     existe neste repositorio.
@@ -3388,8 +3398,11 @@ export interface components {
          */
         StoreCategory: "food" | "toy" | "hygiene" | "accessory" | "health" | "bed";
         /**
-         * @description O parceiro que vende o item. **Sem UUID**: `slug` e a chave primaria da
-         *     tabela, e nao um endereco publico colado ao lado de um `id` interno.
+         * @description O parceiro que vende o item. **Sem UUID**: `slug` e a unica chave do
+         *     parceiro que sai daqui. A identidade interna (`store_partners.id`)
+         *     existe no esquema, e o ADR-0024 registra por que ela e separada do
+         *     endereco publico -- ela nunca e projetada, e o portao de contrato
+         *     publico reprova quem tentar.
          */
         StorePartnerRef: {
             slug: string;
@@ -3482,7 +3495,7 @@ export interface components {
         NetworkEventWhen: "upcoming" | "past" | "all";
         /**
          * @description `proximos` e a data em ordem crescente; `recentes` e decrescente.
-         *     **Nao ha ordem por distancia**, e a ausencia e o ADR-0024 secao 5: o
+         *     **Nao ha ordem por distancia**, e a ausencia e o ADR-0025 secao 5: o
          *     evento nao tem coordenada, entao a distancia nao existe -- e uma ordem
          *     que nunca podera ser cumprida e pior que uma que nao e oferecida.
          *
@@ -3522,7 +3535,7 @@ export interface components {
             state: string;
         };
         /**
-         * @description **Sem autor, e a ausencia e a decisao 3 do ADR-0024.** A foto pertence ao
+         * @description **Sem autor, e a ausencia e a decisao 3 do ADR-0025.** A foto pertence ao
          *     evento. O banco guarda quem a enviou, para remocao e auditoria, e esse
          *     campo nunca e projetado: dez fotos assinadas sao dez nomes presentes.
          */
@@ -3564,7 +3577,7 @@ export interface components {
             cover_image_url?: string | null;
             /**
              * @description **Quantas pessoas, e nunca quais.** Ver a descricao de
-             *     `listNetworkEvents` e o ADR-0024 secao 2 para o motivo, e para o que
+             *     `listNetworkEvents` e o ADR-0025 secao 2 para o motivo, e para o que
              *     o produto paga por isto.
              */
             checkin_count: number;

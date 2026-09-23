@@ -947,7 +947,7 @@ void main() {
       // -- e ai este caso precisa mudar de proposito".
       //
       // Foi o que aconteceu. A `Rede` era a ULTIMA secao `planejada` do
-      // registro, e o ADR-0024 lhe deu tabela, rota e tela. Nao ha mais
+      // registro, e o ADR-0025 lhe deu tabela, rota e tela. Nao ha mais
       // nenhuma.
       //
       // A guarda antiga exigia que existisse ao menos uma secao `planejada`,

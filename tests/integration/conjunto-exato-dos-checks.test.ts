@@ -372,7 +372,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
  */
 const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ------------------------------------------------------------------
-  // A secao `Rede` (ADR-0024, migracao 20260923000001).
+  // A secao `Rede` (ADR-0025, migracao 20260923000001).
   //
   // Os seis abaixo sao os CHECKs da `Rede` que MENCIONAM literal de texto, que
   // e o recorte deste registro. Os outros sete da mesma migracao
@@ -385,7 +385,7 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // banco nao tem mais" reprovar.
   //
   // **Nenhum destes e lista fechada, e nao ha uma unica lista fechada na
-  // `Rede`.** A ausencia e ela propria uma decisao do ADR-0024: `status`
+  // `Rede`.** A ausencia e ela propria uma decisao do ADR-0025: `status`
   // (`upcoming` / `happening` / `ended`) e o unico conjunto fechado da secao e
   // ele **nao e coluna** -- e calculado na projecao, no servidor. Uma coluna
   // `status` aqui seria um rotulo gravado que envelhece sozinho: o encontro de

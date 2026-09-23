@@ -125,7 +125,7 @@ void describe('o encontro SEM fim declarado', () => {
   });
 
   void it('EXATAMENTE no comeco ja e `ended`, e NUNCA `happening`', () => {
-    // ADR-0024 secao 6: sem `ends_at` nao existe `happening`. A alternativa
+    // ADR-0025 secao 6: sem `ends_at` nao existe `happening`. A alternativa
     // seria inventar uma duracao padrao, que e o servidor afirmando
     // `Acontecendo agora` sobre um encontro que ele nao sabe se acabou.
     const agora = AGORA;
@@ -167,7 +167,7 @@ void describe('a projecao do encontro', () => {
   });
 
   void it('a presenca e um INTEIRO, e o corpo nao tem campo com pessoas', () => {
-    // ADR-0024 secao 2. A varredura e sobre o JSON inteiro e nao campo a campo,
+    // ADR-0025 secao 2. A varredura e sobre o JSON inteiro e nao campo a campo,
     // de proposito: uma conferencia que olha os campos que ela conhece nao
     // enxerga o campo que alguem acrescentar amanha.
     const projetado = projetarEncontro(encontro({ checkinCount: 12 }), AGORA);
@@ -191,7 +191,7 @@ void describe('a projecao do encontro', () => {
       assert.equal(
         bruto.toLowerCase().includes(proibido),
         false,
-        `ISCA: "${proibido}" no corpo reconstroi a lista de presenca que o ADR-0024 recusa.`,
+        `ISCA: "${proibido}" no corpo reconstroi a lista de presenca que o ADR-0025 recusa.`,
       );
     }
   });

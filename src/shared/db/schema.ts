@@ -921,7 +921,7 @@ export interface NetworkEventsTable {
 /**
  * Quem confirmou presenca.
  *
- * **NAO HA `pet_id`, e a ausencia e o ADR-0024.** Check-in por pet publicaria
+ * **NAO HA `pet_id`, e a ausencia e o ADR-0025.** Check-in por pet publicaria
  * que dois animais sao do mesmo tutor, que e o item 7 do ADR-0010 -- e num
  * produto de pet perdido essa e a informacao que interessa a quem quer levar um
  * animal. Nao ha coluna, nao ha tabela de ligacao, entao nao ha `join` que
@@ -940,7 +940,7 @@ export interface NetworkEventCheckinsTable {
  * A galeria de um encontro. A foto pertence ao EVENTO.
  *
  * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a decisao 3
- * do ADR-0024. A coluna que guarda quem enviou a foto esta no banco e **nao
+ * do ADR-0025. A coluna que guarda quem enviou a foto esta no banco e **nao
  * aparece aqui**: ela leva a marca de saida no `COMMENT ON COLUMN` da migracao
  * `20260923000001`, e `src/tools/portao-colunas-que-nao-saem.ts` varre o
  * contrato e `src/` inteiro atras do nome dela. Declara-la neste arquivo seria a

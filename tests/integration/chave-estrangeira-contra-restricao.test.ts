@@ -490,7 +490,7 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
-  // a secao `Rede` (ADR-0024)
+  // a secao `Rede` (ADR-0025)
   // -------------------------------------------------------------------------
   //
   // Quatro chaves, e as quatro tem a acao de delecao escolhida pela MESMA
@@ -506,7 +506,7 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'de conta (nada cascateia de `users` para `network_events`), e e por isso que ele nao ' +
       'esta em CASCATAS_QUE_ATRAVESSAM_PESSOAS: quem apaga um encontro e um `DELETE` ' +
       'administrativo, nao uma pessoa pedindo a propria conta de volta. O produto nao apaga ' +
-      'encontro -- ele marca `active = false`, e o ADR-0024 diz por que: apagar levaria os ' +
+      'encontro -- ele marca `active = false`, e o ADR-0025 diz por que: apagar levaria os ' +
       'check-ins junto.',
   },
   'public.network_event_checkins.network_event_checkins_user_id_fkey': {
@@ -515,7 +515,7 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     aoApagar: 'CASCADE',
     levaJunto:
       'as presencas da PROPRIA pessoa, e so elas. `network_event_checkins` nao tem coluna ' +
-      'nenhuma sobre terceiro (nem `pet_id`, que o ADR-0024 recusa), entao a cascata nao ' +
+      'nenhuma sobre terceiro (nem `pet_id`, que o ADR-0025 recusa), entao a cascata nao ' +
       'alcanca a experiencia de mais ninguem. O efeito visivel para os outros e o ' +
       '`checkin_count` do encontro cair de um, que e a contagem deixando de contar quem nao ' +
       'existe mais -- e nao um dado de terceiro sumindo.',
@@ -525,7 +525,7 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.network_events',
     aoApagar: 'CASCADE',
     levaJunto:
-      'a galeria do encontro apagado. A foto pertence ao EVENTO (ADR-0024 decisao 3), entao ' +
+      'a galeria do encontro apagado. A foto pertence ao EVENTO (ADR-0025 decisao 3), entao ' +
       'a linha nao e de ninguem em particular -- mas nesta fatia ela e curada, e o dia em ' +
       'que o envio pela comunidade existir esta cascata passa a apagar trabalho de terceiro. ' +
       'Esta escrito aqui para que esse dia encontre a frase ja escrita.',
@@ -533,7 +533,7 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // O `SET NULL` e DELIBERADO, e e o unico da secao.
   //
   // `submitted_by_user_id` existe para remocao, auditoria e resposta a abuso, e
-  // **nunca e projetado** (ADR-0024 decisao 3). Duas consequencias se encontram
+  // **nunca e projetado** (ADR-0025 decisao 3). Duas consequencias se encontram
   // nesta linha:
   //
   // - a conta de quem enviou pode ser excluida **sem que a foto do encontro

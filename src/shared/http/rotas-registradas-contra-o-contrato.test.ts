@@ -75,7 +75,7 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   vitrine,
-  // ADR-0024. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // ADR-0025. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   rede,
   saude,

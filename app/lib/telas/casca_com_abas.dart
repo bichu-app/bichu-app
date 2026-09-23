@@ -181,7 +181,7 @@ class CascaComAbas extends StatefulWidget {
       icone: Icons.groups_outlined,
       iconeSelecionado: Icons.groups,
       rota: Rotas.rede,
-      // `GET /network/events` (ADR-0024). A casca honesta saiu da TELA e
+      // `GET /network/events` (ADR-0025). A casca honesta saiu da TELA e
       // precisava sair tambem do REGISTRO: enquanto esta linha dissesse
       // `planejada`, o portao do 25.7.3 continuaria procurando a frase "Rede
       // esta em construcao" que a secao nao diz mais.
@@ -316,7 +316,7 @@ class CascaComAbas extends StatefulWidget {
   /// depende de a barra mostrar o destino.
   /// [entre] existe para a REGRA poder ser exercida, e nao por flexibilidade.
   ///
-  /// Desde que a `Rede` ganhou conteudo (ADR-0024) **nao ha mais nenhuma secao
+  /// Desde que a `Rede` ganhou conteudo (ADR-0025) **nao ha mais nenhuma secao
   /// `planejada` no registro**, e com isso o portao do 25.7.3 passou a nao ter
   /// o que filtrar: ele ficava verde por vazio, que e exatamente o que o caso
   /// dele existia para impedir. A alternativa era o teste reescrever o

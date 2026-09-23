@@ -259,7 +259,7 @@ void describe('a massa e integra: nada aponta para o que nao existe', () => {
   });
 
   void it('NENHUMA foto da massa carrega quem a enviou, e isso e a decisao', () => {
-    // A galeria desta fatia e CURADA (ADR-0024 decisao 4): exibida e nao
+    // A galeria desta fatia e CURADA (ADR-0025 decisao 4): exibida e nao
     // enviada. Foto curada nao tem remetente, e inventar um seria inventar um
     // envio que nao aconteceu.
     //

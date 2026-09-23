@@ -3366,7 +3366,7 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   # ----------------------------------------------------------------------
-  # A secao `Rede`: os encontros da comunidade (ADR-0024)
+  # A secao `Rede`: os encontros da comunidade (ADR-0025)
   # ----------------------------------------------------------------------
 
   /network/events:
@@ -3378,7 +3378,7 @@ paths:
       description: |
         A secao `Rede`: os encontros que a comunidade marca em praca e parque.
 
-        **LEIA O ADR-0024 ANTES DE MEXER NESTA OPERACAO.** As ausencias abaixo
+        **LEIA O ADR-0025 ANTES DE MEXER NESTA OPERACAO.** As ausencias abaixo
         sao o conteudo dele, e cada uma fecha uma inferencia.
 
         ## Nao ha lista de presenca. Ha um NUMERO
@@ -3427,7 +3427,7 @@ paths:
 
         ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTE CONTRATO
 
-        A ausencia e a decisao 4 do ADR-0024: nao ha moderacao, denuncia nem
+        A ausencia e a decisao 4 do ADR-0025: nao ha moderacao, denuncia nem
         remocao em lugar nenhum deste repositorio, e o cliente ja negou o
         equivalente para o diretorio na emenda 1 do ADR-0011. A criacao pela
         comunidade e fase seguinte, com o pacote de moderacao junto. Quando a
@@ -3520,7 +3520,7 @@ paths:
         para quem procura, de virem com imagem do lugar.
 
         **Nesta fatia a galeria e EXIBIDA e nao ENVIADA.** Nao ha operacao de
-        upload aqui, e a ausencia e a decisao 4 do ADR-0024: o envio pela
+        upload aqui, e a ausencia e a decisao 4 do ADR-0025: o envio pela
         comunidade depende de moderacao, que nao existe no repositorio, e do
         armazenamento de objeto na pilha de integracao, que esta numa branch
         ainda nao mesclada.
@@ -3568,7 +3568,7 @@ paths:
         unico dado da operacao e quem chama e qual evento.
 
         E a UNICA participacao da comunidade nesta fatia, e a escolha tem razao
-        escrita no ADR-0024 secao 4: **check-in nao produz conteudo**. Nao tem
+        escrita no ADR-0025 secao 4: **check-in nao produz conteudo**. Nao tem
         texto, nao tem imagem, nao tem nada para moderar. Um inteiro que sobe de
         um nao precisa de fila de revisao -- e fila de revisao e o que nao
         existe neste repositorio.
@@ -6103,7 +6103,7 @@ components:
       enum: [proximos, recentes]
       description: |
         `proximos` e a data em ordem crescente; `recentes` e decrescente.
-        **Nao ha ordem por distancia**, e a ausencia e o ADR-0024 secao 5: o
+        **Nao ha ordem por distancia**, e a ausencia e o ADR-0025 secao 5: o
         evento nao tem coordenada, entao a distancia nao existe -- e uma ordem
         que nunca podera ser cumprida e pior que uma que nao e oferecida.
 
@@ -6143,7 +6143,7 @@ components:
       type: object
       required: [slug, image_url]
       description: |
-        **Sem autor, e a ausencia e a decisao 3 do ADR-0024.** A foto pertence ao
+        **Sem autor, e a ausencia e a decisao 3 do ADR-0025.** A foto pertence ao
         evento. O banco guarda quem a enviou, para remocao e auditoria, e esse
         campo nunca e projetado: dez fotos assinadas sao dez nomes presentes.
       properties:
@@ -6186,7 +6186,7 @@ components:
           minimum: 0
           description: |
             **Quantas pessoas, e nunca quais.** Ver a descricao de
-            `listNetworkEvents` e o ADR-0024 secao 2 para o motivo, e para o que
+            `listNetworkEvents` e o ADR-0025 secao 2 para o motivo, e para o que
             o produto paga por isto.
         photo_count: { type: integer, minimum: 0 }
 

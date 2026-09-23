@@ -4,7 +4,7 @@ import 'modelos_rede.dart';
 /// As tres operacoes da secao `Rede` (`tags: [network]` do contrato).
 ///
 /// **NAO HA OPERACAO DE ESCRITA DE EVENTO AQUI, e a ausencia e a decisao 4 do
-/// ADR-0024.** Nao existe criar, editar nem apagar encontro, e nao existe envio
+/// ADR-0025.** Nao existe criar, editar nem apagar encontro, e nao existe envio
 /// de foto: nao ha moderacao, denuncia nem remocao em lugar nenhum deste
 /// repositorio, e o cliente ja negou o equivalente para o diretorio na emenda 1
 /// do ADR-0011. Quando a escrita existir, ela nasce em `/v1/admin/...` como
@@ -68,7 +68,7 @@ class RedeApi {
   /// **Nao ha corpo de requisicao, e nao ha o que escolher.** O check-in e da
   /// PESSOA: o unico dado da operacao e quem chama e qual evento. Nao existe
   /// parametro de pet aqui porque nao existe coluna de pet la, e a ausencia e a
-  /// decisao 1 do ADR-0024.
+  /// decisao 1 do ADR-0025.
   Future<PresencaConfirmada> confirmarPresenca(String slug) async {
     final json = await _api.post('/network/events/$slug/check-in');
     return PresencaConfirmada.doJson(json);

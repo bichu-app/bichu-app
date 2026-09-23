@@ -3,7 +3,7 @@
  *
  * Tres operacoes, e sao exatamente as tres do contrato. **Nao ha escrita de
  * evento**, e a ausencia nao e omissao de conveniencia: e a decisao 4 do
- * ADR-0024. Nao existe moderacao, denuncia nem remocao em lugar nenhum deste
+ * ADR-0025. Nao existe moderacao, denuncia nem remocao em lugar nenhum deste
  * repositorio, e o cliente ja negou o equivalente para o diretorio na emenda 1
  * do ADR-0011. Quando a escrita existir, ela nasce em `/v1/admin/...` como
  * manda o ADR-0023. Porta que declara o que ainda nao existe vira metodo vazio
@@ -12,7 +12,7 @@
  * **Nao ha operacao que leia presenca linha a linha.** A unica leitura de
  * `network_event_checkins` que esta porta admite e a contagem, e o sinal
  * `viewerCheckedIn` sobre quem esta chamando. Nao ha `listarPresentes`, nao ha
- * `presentesDoEvento` e nao ha nada que devolva pessoa: o ADR-0024 secao 2
+ * `presentesDoEvento` e nao ha nada que devolva pessoa: o ADR-0025 secao 2
  * recusa a lista, e uma porta que a declarasse faria a recusa depender de
  * ninguem chamar o metodo.
  */
@@ -31,7 +31,7 @@ export type RecorteNoTempo = 'upcoming' | 'past' | 'all';
 /**
  * As ordens que a rota aceita. `proximos` e crescente, `recentes` e decrescente.
  *
- * **Nao ha ordem por distancia**, e a ausencia e o ADR-0024 secao 5: o evento
+ * **Nao ha ordem por distancia**, e a ausencia e o ADR-0025 secao 5: o evento
  * nao tem coordenada, entao a distancia nao existe -- e uma ordem que nunca
  * podera ser cumprida e pior que uma que nao e oferecida. Ela tambem nao
  * aparece desabilitada.

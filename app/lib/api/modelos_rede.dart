@@ -1,7 +1,7 @@
 /// Os modelos da secao `Rede`: a agenda de encontros de
 /// `GET /v1/network/events`.
 ///
-/// **LEIA O ADR-0024 ANTES DE MEXER AQUI.** As ausencias deste arquivo sao o
+/// **LEIA O ADR-0025 ANTES DE MEXER AQUI.** As ausencias deste arquivo sao o
 /// conteudo dele, e cada uma fecha uma inferencia.
 ///
 /// ## Nao existe pessoa neste arquivo, em forma nenhuma
@@ -63,7 +63,7 @@ enum QuandoDaRede {
 /// A ordem da agenda, espelhada de `NetworkEventSort`.
 ///
 /// **Sao duas, e as ausencias sao decisao.** Nao ha ordem por distancia
-/// (ADR-0024 secao 5: sem coordenada nao ha distancia, e uma ordem que nunca
+/// (ADR-0025 secao 5: sem coordenada nao ha distancia, e uma ordem que nunca
 /// podera ser cumprida e pior que uma que nao e oferecida) e nao ha ordem por
 /// numero de presencas (ela transformaria `checkin_count` numa disputa e daria
 /// a quem enche a contagem o topo da agenda).
@@ -91,7 +91,7 @@ enum OrdemDaRede {
 /// aqui nao existe valor seguro para onde cair. Cair em [aVir] chamaria de
 /// proximo o que passou; cair em [encerrado] daria por encerrado o que ainda
 /// vai acontecer. Os dois seriam uma AFIRMACAO inventada sobre a data, que e
-/// exatamente o que o ADR-0024 tirou do aplicativo. Nulo faz o cartao **nao
+/// exatamente o que o ADR-0025 tirou do aplicativo. Nulo faz o cartao **nao
 /// dizer nada** sobre a situacao, e nao dizer e o unico desfecho honesto de
 /// uma resposta que este app nao entende.
 enum SituacaoDoEncontro {
@@ -160,7 +160,7 @@ class LugarDoEncontro {
 }
 
 /// Uma foto da galeria do encontro. **Sem autor**, e a ausencia e a decisao 3
-/// do ADR-0024: dez fotos assinadas sao dez nomes presentes.
+/// do ADR-0025: dez fotos assinadas sao dez nomes presentes.
 class FotoDoEncontro {
   const FotoDoEncontro({
     required this.slug,
@@ -445,7 +445,7 @@ class EncontroDaRede {
   /// [SituacaoDoEncontro.porCodigo] para por que nao ha valor de fallback.
   final SituacaoDoEncontro? situacao;
 
-  /// **Quantas pessoas confirmaram, e nunca quais.** ADR-0024 secao 2.
+  /// **Quantas pessoas confirmaram, e nunca quais.** ADR-0025 secao 2.
   final int presencas;
 
   final int quantidadeDeFotos;

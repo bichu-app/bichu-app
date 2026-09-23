@@ -6,7 +6,7 @@
 -- construcao", e continuaria dizendo isso enquanto nao houvesse onde guardar um
 -- encontro.
 --
--- A decisao que deu forma a este arquivo e o **ADR-0024**. Leia-o antes de
+-- A decisao que deu forma a este arquivo e o **ADR-0025**. Leia-o antes de
 -- mexer aqui: as tres ausencias abaixo sao o conteudo dele, e desfazer qualquer
 -- uma reabre a inferencia que ele existe para fechar.
 --
@@ -30,7 +30,7 @@
 --    nenhum `join`, nenhum `select *` e nenhum engano de implementacao pode
 --    publicar o que nao foi gravado.
 --
---    O preco esta escrito no ADR-0024 e e real: o produto perde "levei o Thor".
+--    O preco esta escrito no ADR-0025 e e real: o produto perde "levei o Thor".
 --
 -- 2. **`network_events` NAO TEM COORDENADA.**
 --
@@ -91,7 +91,7 @@
 -- escrita existir, ela nasce em `/v1/admin/...` como manda o ADR-0023, e nada
 -- daqui e jogado fora.
 --
--- O que a comunidade faz nesta fatia e **check-in**, e so ele. O ADR-0024
+-- O que a comunidade faz nesta fatia e **check-in**, e so ele. O ADR-0025
 -- secao 4 explica a escolha em uma linha: check-in NAO PRODUZ CONTEUDO. Nao tem
 -- texto, nao tem imagem, nao tem nada para moderar -- e moderacao, denuncia e
 -- remocao nao existem em lugar nenhum deste repositorio.
@@ -252,7 +252,7 @@ CREATE TABLE network_event_checkins (
 );
 
 COMMENT ON TABLE network_event_checkins IS
-  'Quem confirmou presenca. NAO HA `pet_id`, e a ausencia e a decisao do ADR-0024: check-in por pet publicaria que dois animais sao do mesmo tutor, que e o item 7 do ADR-0010. Nenhuma operacao do contrato le esta tabela linha a linha -- a unica leitura e count(*).';
+  'Quem confirmou presenca. NAO HA `pet_id`, e a ausencia e a decisao do ADR-0025: check-in por pet publicaria que dois animais sao do mesmo tutor, que e o item 7 do ADR-0010. Nenhuma operacao do contrato le esta tabela linha a linha -- a unica leitura e count(*).';
 -- ESTA COLUNA NAO LEVA A MARCA `NUNCA sai do servidor`, E A AUSENCIA E
 -- DELIBERADA -- nao e esquecimento e nao e descuido.
 --
@@ -321,11 +321,11 @@ COMMENT ON TABLE network_event_photos IS
 -- pessoa esteve neste lugar), e vinculo entre pessoas nao atravessa a borda --
 -- nem como campo, nem como contagem, nem como existencia.
 --
--- Com a marca, a decisao 3 do ADR-0024 deixa de valer pela disciplina de quem
+-- Com a marca, a decisao 3 do ADR-0025 deixa de valer pela disciplina de quem
 -- escreve a projecao e passa a ter portao. Sem ela, valeria ate o dia em que
 -- alguem acrescentasse o campo "enviada por" achando que estava sendo gentil.
 COMMENT ON COLUMN network_event_photos.submitted_by_user_id IS
-  'QUEM ENVIOU. Vinculo entre duas pessoas -- esta pessoa esteve neste lugar: NUNCA sai do servidor, em nenhuma resposta, nem como contagem nem como existencia (ADR-0024 secao 3). Guardado por `src/tools/portao-colunas-que-nao-saem.ts`. Existe para remocao, auditoria e resposta a abuso.';
+  'QUEM ENVIOU. Vinculo entre duas pessoas -- esta pessoa esteve neste lugar: NUNCA sai do servidor, em nenhuma resposta, nem como contagem nem como existencia (ADR-0025 secao 3). Guardado por `src/tools/portao-colunas-que-nao-saem.ts`. Existe para remocao, auditoria e resposta a abuso.';
 
 CREATE INDEX network_event_photos_da_galeria
   ON network_event_photos (event_slug, sort_order, slug);

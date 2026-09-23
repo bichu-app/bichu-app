@@ -41,7 +41,7 @@
  * ## O que NAO esta aqui, e a ausencia e a decisao
  *
  * **Nao ha pet em lugar nenhum desta massa.** `network_event_checkins` nao tem
- * `pet_id` (ADR-0024 decisao 1), entao nao ha o que semear: o check-in e da
+ * `pet_id` (ADR-0025 decisao 1), entao nao ha o que semear: o check-in e da
  * PESSOA. A massa nao contorna isso guardando o pet noutro canto -- dado que
  * nao pode sair nao deve ser guardado.
  *
@@ -170,7 +170,7 @@ export interface TutorSemeado {
  * As pessoas que confirmaram presenca.
  *
  * Note o que NAO esta aqui: pet. Nao ha coluna, nao ha tabela de ligacao, e a
- * ausencia e a decisao 1 do ADR-0024.
+ * ausencia e a decisao 1 do ADR-0025.
  */
 export interface PresencaSemeada {
   readonly eventSlug: string;

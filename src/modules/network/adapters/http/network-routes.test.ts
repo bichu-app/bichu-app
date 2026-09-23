@@ -382,7 +382,7 @@ void describe('o check-in', () => {
   });
 
   void it('o pet NAO entra: o pedido que chega ao repositorio tem `slug` e chamador', async () => {
-    // ADR-0024 secao 1. Nao ha caminho no banco pelo qual um check-in saiba
+    // ADR-0025 secao 1. Nao ha caminho no banco pelo qual um check-in saiba
     // qual animal foi junto, e nao ha campo no pedido por onde ele entraria.
     pedidosDeCheckIn.length = 0;
     await pedir(servidor(), {

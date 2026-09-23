@@ -169,7 +169,7 @@ class AbaPets extends StatelessWidget {
 /// lista (ver `BarraDeListagem`), como em `Perto` e na `Loja`. Esta e a
 /// TERCEIRA tela a usar o componente, e ela nao mudou uma linha dele.
 ///
-/// **A secao de comunidade NAO mostra a comunidade, e isso e o ADR-0024.**
+/// **A secao de comunidade NAO mostra a comunidade, e isso e o ADR-0025.**
 /// Nao ha lista de presenca, em lugar nenhum: ha um numero. Nao ha escolha de
 /// pet no check-in, nao ha autor na foto da galeria, nao ha mapa e nao ha
 /// ordenacao por distancia. Cada uma dessas ausencias fecha a inferencia que o

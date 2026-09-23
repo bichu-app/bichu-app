@@ -1,7 +1,7 @@
 /**
  * As tres rotas da secao `Rede`.
  *
- * **LEIA O ADR-0024 ANTES DE MEXER AQUI.** As ausencias deste arquivo sao o
+ * **LEIA O ADR-0025 ANTES DE MEXER AQUI.** As ausencias deste arquivo sao o
  * conteudo dele, e cada uma fecha uma inferencia que o produto nao consegue
  * reabrir depois sem pedir consentimento a quem ja confirmou presenca.
  *

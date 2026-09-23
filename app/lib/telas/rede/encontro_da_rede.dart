@@ -15,7 +15,7 @@ import 'agenda_da_rede.dart';
 /// `GET /v1/network/events/{eventSlug}` (`getNetworkEvent`) e
 /// `POST .../check-in` (`checkInNetworkEvent`).
 ///
-/// ## O QUE ESTA TELA NAO TEM, e cada ausencia e o ADR-0024
+/// ## O QUE ESTA TELA NAO TEM, e cada ausencia e o ADR-0025
 ///
 /// - **Nao ha lista de quem confirmou presenca.** Ha [PresencasDoEncontro],
 ///   que desenha um NUMERO. Nao existe nome, primeiro nome, apelido, avatar

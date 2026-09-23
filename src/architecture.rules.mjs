@@ -25,7 +25,7 @@ export const MODULES = [
   // terceiro. Junta-las faria uma fronteira que a arquitetura nao consegue
   // vigiar, com `professionals` importando `store_items`.
   'store',
-  // BICHUS/Rede (ADR-0024). Os encontros da comunidade sao modulo proprio pela
+  // BICHUS/Rede (ADR-0025). Os encontros da comunidade sao modulo proprio pela
   // mesma razao de `store`: e uma listagem do mesmo formato que `Perto` e
   // `Loja` e nao compartilha tabela, regra nem publico com nenhuma das duas.
   // E ha uma razao a mais aqui, que e de privacidade: `network_event_checkins`

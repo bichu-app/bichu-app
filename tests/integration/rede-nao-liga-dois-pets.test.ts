@@ -1,5 +1,5 @@
 /**
- * A PROVA NEGATIVA DO ADR-0024, e ela e uma isca e nao uma frase.
+ * A PROVA NEGATIVA DO ADR-0025, e ela e uma isca e nao uma frase.
  *
  * ===========================================================================
  * O CASO EXATO QUE ESTE ARQUIVO MONTA
@@ -8,7 +8,7 @@
  * **check-in** num encontro que tem **galeria**, e uma das fotos dessa galeria
  * tem `submitted_by_user_id` **preenchido apontando para ela**.
  *
- * E o caso que o ADR-0024 existe para fechar, escrito com as pecas do produto:
+ * E o caso que o ADR-0025 existe para fechar, escrito com as pecas do produto:
  * se qualquer uma das tres respostas publicas da `Rede` deixar escapar o
  * `user_id` dela, o `id` ou o `slug` de um dos pets, ou o nome dela, entao
  * quem abre a agenda descobre que aqueles dois animais moram na mesma casa -- e
@@ -81,7 +81,7 @@
  * - `encontro-da-rede.ts` ganhou `checkedInBy` em `EncontroComGaleria`,
  *   `checked_in_by` em `EncontroComGaleriaProjetado`, e passou a projeta-lo.
  *
- * Ou seja: exatamente a "lista de presenca" que o ADR-0024 recusa, escrita por
+ * Ou seja: exatamente a "lista de presenca" que o ADR-0025 recusa, escrita por
  * alguem convencido de que estava sendo util.
  *
  * **Placar: 375 casos, 361 passaram, 14 falharam, saida 1.** As 3 a mais que a
@@ -105,7 +105,7 @@
  * nao em `src/modules/network/**`, por uma razao de coordenacao e nao de rigor: o
  * worktree e compartilhado com outros agentes, e deixar o modulo mutilado
  * durante os tres minutos da rodada arriscaria o trabalho de quem estivesse
- * lendo. A mutacao reproduz exatamente o defeito que o ADR-0024 descreve -- a
+ * lendo. A mutacao reproduz exatamente o defeito que o ADR-0025 descreve -- a
  * linha crua chegando a resposta, que e o que um `select *` ou um `{ ...foto }`
  * produzem -- e as duas juntas cobrem os seis casos de varredura.
  *
@@ -189,7 +189,7 @@ let checkInCru: unknown;
 before(async () => {
   if (CONEXAO === undefined || CONEXAO === '') {
     throw new Error(
-      'DATABASE_URL nao esta definida. Esta isca monta o caso exato que o ADR-0024 fecha e ' +
+      'DATABASE_URL nao esta definida. Esta isca monta o caso exato que o ADR-0025 fecha e ' +
         'varre as respostas publicas da Rede, e sem banco ela nao varre nada. Passar verde ' +
         'sem conferir e o desfecho que ela existe para impedir. Rode `npm run test:integration`.',
     );
@@ -233,7 +233,7 @@ before(async () => {
   await cliente.query(
     `INSERT INTO network_events (slug, title, summary, place_name, neighborhood, city, state,
                                  starts_at, ends_at, time_zone, cover_image_url, active)
-     VALUES ($1, 'Encontro de bairro da isca', 'O caso exato que o ADR-0024 existe para fechar.',
+     VALUES ($1, 'Encontro de bairro da isca', 'O caso exato que o ADR-0025 existe para fechar.',
              'Praca da Isca', 'Bairro da Isca', 'Cidade da Isca', 'SP',
              now() - interval '1 hour', now() + interval '2 hours',
              'America/Sao_Paulo', 'https://cdn.bichu.app/rede/isca.jpg', true)`,
@@ -340,7 +340,7 @@ function varrer(rotulo: string, corpo: string, proibido: string, oQueE: string):
   assert.ok(
     !corpo.includes(proibido),
     `${rotulo} contem ${oQueE} ("${proibido}").\n` +
-      'ADR-0024: a `Rede` nao publica pessoa, em forma nenhuma. Uma tutora com dois pets que ' +
+      'ADR-0025: a `Rede` nao publica pessoa, em forma nenhuma. Uma tutora com dois pets que ' +
       'confirma presenca num encontro de bairro publicaria, por este campo, que os dois ' +
       'animais moram na mesma casa -- e o lugar do encontro e uma praca do bairro dela.\n' +
       `corpo: ${corpo}`,
@@ -371,7 +371,7 @@ void describe('a isca tem o que morder: o cenario existe, e as respostas nao est
     );
     assert.ok(
       r.rows.every((linha) => linha.publico),
-      'os pets da isca estao sem perfil publico, e o caso do ADR-0024 e com ele ligado',
+      'os pets da isca estao sem perfil publico, e o caso do ADR-0025 e com ele ligado',
     );
   });
 
@@ -433,7 +433,7 @@ void describe('a isca tem o que morder: o cenario existe, e as respostas nao est
   });
 });
 
-void describe('ADR-0024 -- a Rede nao liga dois pets ao mesmo tutor', () => {
+void describe('ADR-0025 -- a Rede nao liga dois pets ao mesmo tutor', () => {
   const corpos = (): readonly (readonly [string, string])[] => [
     ['o corpo de listNetworkEvents', corpoDaAgenda],
     ['o corpo de getNetworkEvent', corpoDoEncontro],
@@ -467,7 +467,7 @@ void describe('ADR-0024 -- a Rede nao liga dois pets ao mesmo tutor', () => {
     for (const [rotulo, corpo] of corpos()) {
       varrer(rotulo, corpo, NOME_DA_TUTORA, 'o nome de quem fez check-in');
     }
-    // Nem o primeiro nome sozinho: o ADR-0024 secao 2 recusa "nem nome, nem
+    // Nem o primeiro nome sozinho: o ADR-0025 secao 2 recusa "nem nome, nem
     // primeiro nome, nem apelido", e um campo que trouxesse so o primeiro nome
     // escaparia da comparacao com o nome inteiro.
     const primeiroNome = NOME_DA_TUTORA.split(' ')[0] as string;
@@ -492,7 +492,7 @@ void describe('ADR-0024 -- a Rede nao liga dois pets ao mesmo tutor', () => {
         `${rotulo} contem um UUID ("${achado?.[0] ?? ''}").\n` +
           'Esta secao e enderecada por `slug` e nao tem UUID para perder: um UUID aqui veio ' +
           'de uma tabela que identifica pessoa, e a unica desta secao que identifica alguem e ' +
-          '`network_event_checkins.user_id`, que NUNCA e projetada (ADR-0024 secao 7).\n' +
+          '`network_event_checkins.user_id`, que NUNCA e projetada (ADR-0025 secao 7).\n' +
           `corpo: ${corpo}`,
       );
     }
@@ -508,7 +508,7 @@ void describe('ADR-0024 -- a Rede nao liga dois pets ao mesmo tutor', () => {
       assert.deepEqual(
         Object.keys(foto).sort(),
         ['caption', 'image_url', 'slug'],
-        'a galeria ganhou um campo. A foto pertence ao EVENTO (ADR-0024 decisao 3): dez fotos ' +
+        'a galeria ganhou um campo. A foto pertence ao EVENTO (ADR-0025 decisao 3): dez fotos ' +
           'assinadas sao dez nomes presentes, com a vantagem, para quem procura, de virem com ' +
           'imagem do lugar.',
       );
@@ -539,7 +539,7 @@ void describe('ADR-0024 -- a Rede nao liga dois pets ao mesmo tutor', () => {
         assert.ok(
           !corpo.includes(`"${campo}"`),
           `${rotulo} tem um campo chamado "${campo}". A presenca e um NUMERO e nunca uma ` +
-            'lista (ADR-0024 secao 2), e nao ha campo com pessoas em forma nenhuma -- nem ' +
+            'lista (ADR-0025 secao 2), e nao ha campo com pessoas em forma nenhuma -- nem ' +
             'vazio, nem com lista vazia. Campo que existe e o que a tela desenha.',
         );
       }

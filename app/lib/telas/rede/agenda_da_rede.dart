@@ -22,7 +22,7 @@ import 'encontro_da_rede.dart';
 ///
 /// ## O QUE ESTA TELA NAO TEM, e nenhuma ausencia e esquecimento
 ///
-/// Todas saem do ADR-0024, e cada uma fecha uma inferencia:
+/// Todas saem do ADR-0025, e cada uma fecha uma inferencia:
 ///
 /// - **Nao ha lista de pessoas presentes.** Ha um NUMERO
 ///   ([EncontroDaRede.presencas]). Nem nome, nem primeiro nome, nem avatar,
@@ -544,7 +544,7 @@ class CartaoDoEncontro extends StatelessWidget {
                 style: textos.bodySmall?.copyWith(color: cores.textSecondary),
               ),
               const SizedBox(height: BichuEspaco.e2),
-              // A CONTAGEM, e nunca quem. Ver ADR-0024 secao 2.
+              // A CONTAGEM, e nunca quem. Ver ADR-0025 secao 2.
               Text(
                 AgendaDaRede.linhaDePresencas(encontro.presencas),
                 style: textos.bodySmall?.copyWith(color: cores.textSecondary),

@@ -1,7 +1,7 @@
 /**
  * A projecao de um encontro da secao `Rede`, e a regra de `status`.
  *
- * ## O que NAO sai daqui, e cada ausencia e a decisao do ADR-0024
+ * ## O que NAO sai daqui, e cada ausencia e a decisao do ADR-0025
  *
  * - **Ninguem.** A presenca e um INTEIRO (`checkin_count`), e nao existe campo
  *   com pessoas em forma nenhuma: nem nome, nem primeiro nome, nem apelido,
@@ -25,7 +25,7 @@
  *
  * ## `status` e calculado no SERVIDOR, e e por isso que ele mora aqui
  *
- * Mesma razao do vencimento do preco da `Loja`, e o ADR-0024 secao 6 a escreve:
+ * Mesma razao do vencimento do preco da `Loja`, e o ADR-0025 secao 6 a escreve:
  * se a regra morasse no aplicativo, um aparelho com relogio errado ou com build
  * antiga chamaria de `upcoming` um encontro de tres semanas atras, e nao
  * haveria como corrigir isso sem passar pela loja de aplicativos -- que leva
@@ -78,7 +78,7 @@ export interface EncontroDaRede {
    */
   readonly timeZone: string;
   readonly coverImageUrl: string | null;
-  /** **Quantas pessoas, e nunca quais.** ADR-0024 secao 2. */
+  /** **Quantas pessoas, e nunca quais.** ADR-0025 secao 2. */
   readonly checkinCount: number;
   readonly photoCount: number;
 }
@@ -147,7 +147,7 @@ export interface EncontroComGaleriaProjetado extends EncontroProjetado {
  *   `agora <= endsAt`, e trocar por `<` faria o intervalo ser aberto num dos
  *   extremos e fechado no outro sem que nada explicasse a assimetria.
  * - **Sem `endsAt` nao existe `happening`.** Passou de `startsAt`, e `ended`.
- *   O ADR-0024 secao 6 escreve assim ("passou de `ends_at`, ou de `starts_at`,
+ *   O ADR-0025 secao 6 escreve assim ("passou de `ends_at`, ou de `starts_at`,
  *   quando nao ha fim"), e a alternativa -- inventar uma duracao padrao --
  *   seria o servidor afirmando `Acontecendo agora` sobre um encontro que ele
  *   nao sabe se acabou.

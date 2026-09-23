@@ -17,7 +17,7 @@
  * ## A presenca e contada, e nunca lida linha a linha
  *
  * `network_event_checkins.user_id` e a unica coluna desta secao que identifica
- * alguem, e o ADR-0024 secao 7 diz o alcance dela em uma frase: nenhuma
+ * alguem, e o ADR-0025 secao 7 diz o alcance dela em uma frase: nenhuma
  * operacao do contrato a le linha a linha, e a unica leitura e `count(*)`.
  *
  * Este arquivo cumpre isso de duas formas, e as duas sao deliberadas:
@@ -264,7 +264,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .selectFrom('network_event_photos as f')
       .where('f.event_slug', '=', pedido.slug)
       // As TRES colunas da galeria, nomeadas uma a uma. Nao ha `selectAll()`
-      // aqui, e a ausencia e a decisao 3 do ADR-0024: um `selectAll` carregaria
+      // aqui, e a ausencia e a decisao 3 do ADR-0025: um `selectAll` carregaria
       // quem enviou a foto para dentro do processo, e o que nao e carregado nao
       // tem como ser projetado depois por um espalhamento distraido.
       .select(['f.slug as slug', 'f.image_url as image_url', 'f.caption as caption'])
