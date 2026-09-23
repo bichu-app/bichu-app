@@ -225,11 +225,24 @@ class ApiClient {
   ///
   /// [tempoLimite] passa a ser o orcamento de **uma resposta inteira**, e nao
   /// o de um aperto de mao: e o que a tela promete a quem toca no botao.
+  ///
+  /// **A chamada comeca AGORA, e nao no proximo giro do laco de eventos.** O
+  /// fecho e invocado na hora (`(){...}()`) em vez de embrulhado num
+  /// `Future(...)`, e a diferenca nao e de estilo: `Future(...)` agenda o
+  /// corpo como TAREFA do laco de eventos, enquanto o prazo comeca a contar
+  /// imediatamente. Em teste de widget, onde o relogio e falso e so anda
+  /// quando alguem bombeia, isso separa o inicio do prazo do inicio da
+  /// requisicao e deixa um temporizador de 20 s pendurado que o
+  /// `pumpAndSettle` precisa queimar -- quatro casos de logout passaram de
+  /// 2 s para minutos por causa disto. O fecho invocado na hora roda ate o
+  /// primeiro `await` de forma sincrona, que e exatamente o que o codigo
+  /// anterior fazia.
   Future<http.Response> _enviarELerOCorpo(http.BaseRequest requisicao) {
-    return Future<http.Response>(() async {
+    return () async {
       final fluxo = await _cliente.send(requisicao);
       return http.Response.fromStream(fluxo);
-    }).timeout(tempoLimite);
+    }()
+        .timeout(tempoLimite);
   }
 
   Map<String, dynamic> _lerResposta(http.Response resposta) {
