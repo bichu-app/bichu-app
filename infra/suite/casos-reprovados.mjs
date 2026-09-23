@@ -72,6 +72,8 @@ export function casosQueReprovaram(tap) {
   const pilha = [];
   /** @type {string[]} */
   const reprovados = [];
+  /** @type {string[]} agregadores reprovados, so usados quando NAO houve folha */
+  const agregadores = [];
 
   for (let i = 0; i < linhas.length; i += 1) {
     const linha = linhas[i] ?? '';
@@ -113,12 +115,20 @@ export function casosQueReprovaram(tap) {
       const onde = /^\s*location: '(.+):\d+:\d+'\s*$/.exec(seguinte);
       if (onde !== null) arquivo = normalizarArquivo(onde[1] ?? '');
     }
-    if (!ehFolha) continue;
-    const caminho = pilha.slice(0, nivel + 1);
-    reprovados.push([...(arquivo === '' ? [] : [arquivo]), ...caminho].join(' > '));
+    const caminho = [...(arquivo === '' ? [] : [arquivo]), ...pilha.slice(0, nivel + 1)].join(' > ');
+    if (ehFolha) reprovados.push(caminho);
+    else agregadores.push(`${caminho} (falha do grupo, sem caso)`);
   }
 
-  return reprovados;
+  // O GRUPO QUE FALHA SEM NENHUM CASO TER FALHADO.
+  //
+  // Um `after` de `describe` que lanca produz `type: 'suite'` com
+  // `failureType: 'hookFailed'` e NENHUMA folha reprovada -- medido no runner.
+  // Devolver lista vazia para uma execucao vermelha seria registrar no livro
+  // "nada reprovou" numa execucao que reprovou, que e a mesma evaporacao que
+  // este mecanismo existe para acabar. Sem folha, o agregador E a resposta, e
+  // ele vai rotulado para ninguem confundi-lo com um caso.
+  return reprovados.length > 0 ? reprovados : agregadores;
 }
 
 /**
@@ -196,6 +206,54 @@ export function autoteste() {
     '# fail 1',
   ].join('\n');
 
+  // `after` de `describe` que lanca: `type: 'suite'` com `failureType:
+  // 'hookFailed'` e NENHUMA folha reprovada. Isola a regra do `type: 'suite'`:
+  // sem ela, o grupo entraria no livro como se fosse um caso.
+  const TAP_HOOK_DO_GRUPO = [
+    'TAP version 13',
+    '# Subtest: grupo cujo after quebra',
+    '    # Subtest: caso que passa',
+    '    ok 1 - caso que passa',
+    '      ---',
+    "      type: 'test'",
+    '      ...',
+    '    1..1',
+    'not ok 1 - grupo cujo after quebra',
+    '  ---',
+    "  type: 'suite'",
+    "  location: '/app/dist/_tests/src/z.test.js:3:6'",
+    "  failureType: 'hookFailed'",
+    '  ...',
+    '# tests 2',
+    '# pass 1',
+    '# fail 1',
+  ].join('\n');
+
+  // `it` com subtestes de `t.test()`: o PAI vem `type: 'test'` com
+  // `failureType: 'subtestsFailed'`. Isola a regra do `failureType`: sem ela,
+  // o pai entraria no livro junto com o filho e a contagem dobraria.
+  const TAP_PAI_COM_SUBTESTE = [
+    'TAP version 13',
+    '# Subtest: caso com subtestes',
+    '    # Subtest: subteste que reprova',
+    '    not ok 1 - subteste que reprova',
+    '      ---',
+    "      type: 'test'",
+    "      location: '/app/dist/_tests/src/y.test.js:9:11'",
+    "      failureType: 'testCodeFailure'",
+    '      ...',
+    '    1..1',
+    'not ok 2 - caso com subtestes',
+    '  ---',
+    "  type: 'test'",
+    "  location: '/app/dist/_tests/src/y.test.js:8:6'",
+    "  failureType: 'subtestsFailed'",
+    '  ...',
+    '# tests 2',
+    '# pass 0',
+    '# fail 2',
+  ].join('\n');
+
   const TAP_VERDE = [
     'TAP version 13',
     '# Subtest: grupo de fora',
@@ -226,6 +284,16 @@ export function autoteste() {
       'o arquivo vem do `location:`, ja como FONTE e relativo a raiz',
       () => [normalizarArquivo('/app/dist/_tests/tests/integration/a.test.js')],
       ['tests/integration/a.test.ts'],
+    ],
+    [
+      'grupo que falha por hook, sem folha nenhuma: entra ROTULADO, e nao some',
+      () => casosQueReprovaram(TAP_HOOK_DO_GRUPO),
+      ['src/z.test.ts > grupo cujo after quebra (falha do grupo, sem caso)'],
+    ],
+    [
+      '`it` com subtestes: o PAI tambem vem `not ok`, e so o filho entra',
+      () => casosQueReprovaram(TAP_PAI_COM_SUBTESTE),
+      ['src/y.test.ts > caso com subtestes > subteste que reprova'],
     ],
     [
       'o lado permissivo: suite verde nao produz nome nenhum',
