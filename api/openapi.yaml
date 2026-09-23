@@ -516,6 +516,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401':
           description: |
             Credencial invalida. A resposta e **identica** para e-mail
@@ -577,6 +578,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401':
           description: Token invalido, expirado ou reutilizado.
           content:
@@ -761,6 +763,7 @@ paths:
                 email: { type: string, format: email }
       responses:
         '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/email-verification/confirm:
@@ -804,6 +807,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '410': { $ref: '#/components/responses/TokenExpired' }
 
   /auth/password-reset:
@@ -847,6 +851,7 @@ paths:
                 email: { type: string, format: email }
       responses:
         '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/password-reset/confirm:
@@ -888,6 +893,7 @@ paths:
             segundo** (SEC-006), nao em 15 minutos, e um e-mail de aviso vai
             para o endereco da conta: e o unico canal pelo qual o dono legitimo
             descobre uma tomada de conta.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '410': { $ref: '#/components/responses/TokenExpired' }
         '422': { $ref: '#/components/responses/WeakPassword' }
 
@@ -978,6 +984,7 @@ paths:
                   reauth_token: { type: string }
                   expires_in: { type: integer, example: 300 }
                   scope: { type: string }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
@@ -1012,6 +1019,7 @@ paths:
                 new_password: { $ref: '#/components/schemas/Password' }
       responses:
         '204': { description: Senha alterada. Demais sessoes revogadas. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/WeakPassword' }
 
@@ -1521,6 +1529,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
 
@@ -2370,6 +2380,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
 
@@ -3596,6 +3608,7 @@ paths:
                 DeliveredAt: { type: string, format: date-time }
       responses:
         '204': { description: Evento processado ou ignorado por duplicidade. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401':
           description: Assinatura ausente ou invalida.
           content:
@@ -4160,7 +4173,7 @@ components:
         next_action:
           type: string
           description: Caminho alternativo, quando existe um.
-          enum: [register_stray_found_report, verify_email, upload_pet_photo, sign_in]
+          enum: [register_stray_found_report, verify_email, upload_pet_photo, sign_in, retry_later]
         errors:
           type: array
           items:

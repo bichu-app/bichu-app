@@ -1958,7 +1958,7 @@ export interface components {
              * @description Caminho alternativo, quando existe um.
              * @enum {string}
              */
-            next_action?: "register_stray_found_report" | "verify_email" | "upload_pet_photo" | "sign_in";
+            next_action?: "register_stray_found_report" | "verify_email" | "upload_pet_photo" | "sign_in" | "retry_later";
             errors?: {
                 field: string;
                 code: string;
@@ -3442,6 +3442,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             /**
              * @description Credencial invalida. A resposta e **identica** para e-mail
              *     inexistente e senha errada: nao revela se a conta existe.
@@ -3481,6 +3482,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             /** @description Token invalido, expirado ou reutilizado. */
             401: {
                 headers: {
@@ -3601,6 +3603,7 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -3639,6 +3642,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             410: components["responses"]["TokenExpired"];
         };
     };
@@ -3686,6 +3690,7 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -3722,6 +3727,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             410: components["responses"]["TokenExpired"];
             422: components["responses"]["WeakPassword"];
         };
@@ -3769,6 +3775,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -3796,6 +3803,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["WeakPassword"];
         };
@@ -4230,8 +4238,10 @@ export interface operations {
                     "application/json": components["schemas"]["UploadIntent"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             415: components["responses"]["UnsupportedMedia"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     deletePetPhoto: {
@@ -5026,8 +5036,10 @@ export interface operations {
                     "application/json": components["schemas"]["UploadIntent"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             415: components["responses"]["UnsupportedMedia"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     enrichFinderFoundReport: {
@@ -5972,6 +5984,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             /** @description Assinatura ausente ou invalida. */
             401: {
                 headers: {
