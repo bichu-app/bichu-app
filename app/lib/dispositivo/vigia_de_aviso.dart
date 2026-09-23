@@ -87,6 +87,51 @@ class VigiaDeAviso extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Esquece o que o app sabia e registra o aparelho de novo.
+  ///
+  /// **Chamado depois de TODO login bem-sucedido, e o motivo e o SEC-019.**
+  ///
+  /// "Sair de todos os aparelhos" passou a apagar a linha de `user_devices` de
+  /// todos os aparelhos da conta, inclusive o de quem pediu. O servidor nao tem
+  /// como poupar um: nao ha vinculo entre a linha e a familia de refresh, e um
+  /// parametro de "nao apague este" seria preenchido por quem esta com o
+  /// telefone roubado.
+  ///
+  /// Quem paga esse preco e este metodo. Sem ele, [reconciliar] nao re-registra
+  /// nada: ela so age quando a permissao do sistema **mudou**, e sair de todos
+  /// nao muda permissao nenhuma -- a do sistema operacional continua
+  /// `concedida`, `_ultimoConhecido` continua `concedida`, e a comparacao
+  /// `antes == agora` devolve na primeira linha. A pessoa entra de novo, ve o
+  /// app funcionando, e fica sem alerta de pet perdido por tempo indeterminado,
+  /// sem nenhum sinal. O registro so voltaria quando o processo do app fosse
+  /// encerrado e reaberto, porque ai `_ultimoConhecido` nasce nulo.
+  ///
+  /// Trocar "o ladrao recebe alerta" por "a vitima nao recebe alerta" e o lado
+  /// pior para um produto cuja funcao e avisar. Por isso este metodo zera o que
+  /// o app sabia **antes** de reconciliar: com `_ultimoConhecido` nulo, a
+  /// permissao concedida volta a ser novidade e o registro sai.
+  ///
+  /// Nao estoura: [reconciliar] ja trata a falta de rede e a falha do aparelho
+  /// por dentro, e quem chama e um caminho de login que nao pode cair por causa
+  /// de um registro de push.
+  Future<void> esquecerEReconciliar() async {
+    _ultimoConhecido = null;
+    await reconciliar();
+  }
+
+  /// Esquece o ultimo estado conhecido, sem registrar nada.
+  ///
+  /// Chamado ao SAIR da conta. O app ja apaga o aparelho no servidor pelo
+  /// criterio 3, e o que sobraria aqui e a lembranca de uma permissao ligada a
+  /// uma conta que nao esta mais neste aparelho. Registrar seria errado
+  /// (nao ha sessao), e guardar seria a mesma comparacao `antes == agora`
+  /// bloqueando o proximo login neste processo.
+  void esquecer() {
+    if (_ultimoConhecido == null) return;
+    _ultimoConhecido = null;
+    notifyListeners();
+  }
+
   void ligar() => WidgetsBinding.instance.addObserver(this);
 
   @override
