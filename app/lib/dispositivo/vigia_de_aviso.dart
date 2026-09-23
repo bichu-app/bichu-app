@@ -119,19 +119,6 @@ class VigiaDeAviso extends ChangeNotifier with WidgetsBindingObserver {
     await reconciliar();
   }
 
-  /// Esquece o ultimo estado conhecido, sem registrar nada.
-  ///
-  /// Chamado ao SAIR da conta. O app ja apaga o aparelho no servidor pelo
-  /// criterio 3, e o que sobraria aqui e a lembranca de uma permissao ligada a
-  /// uma conta que nao esta mais neste aparelho. Registrar seria errado
-  /// (nao ha sessao), e guardar seria a mesma comparacao `antes == agora`
-  /// bloqueando o proximo login neste processo.
-  void esquecer() {
-    if (_ultimoConhecido == null) return;
-    _ultimoConhecido = null;
-    notifyListeners();
-  }
-
   void ligar() => WidgetsBinding.instance.addObserver(this);
 
   @override

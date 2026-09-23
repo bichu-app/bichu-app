@@ -55,7 +55,7 @@
 ///
 /// | o que foi desligado | reprovaram, aqui |
 /// |---|---|
-/// | `await _reporOQueOLoginRepoe();` removido de `ControladorDeSessao.abrir` | 2 casos |
+/// | `await _reporOQueOLoginRepoe();` removido de `ControladorDeSessao.abrir` | 3 casos |
 /// | `_ultimoConhecido = null;` removido de `esquecerEReconciliar` | 1 caso |
 ///
 /// A segunda isca e a que prova que zerar o estado conhecido e o ponto, e nao
@@ -223,22 +223,6 @@ void main() {
               'Entrar na conta nao pode depender de um registro de push.');
     });
 
-    test('sair da conta faz o vigia esquecer o que sabia', () async {
-      // Sem isto, a lembranca de "permissao concedida" presa a uma conta que
-      // saiu bloquearia o re-registro do proximo login neste mesmo processo,
-      // pela mesma comparacao `antes == agora`.
-      vigia.anotar(PermissaoDeAviso.concedida);
-      expect(vigia.ultimoConhecido, PermissaoDeAviso.concedida);
-
-      vigia.esquecer();
-
-      expect(
-        vigia.ultimoConhecido,
-        isNull,
-        reason: 'REPROVA: o vigia continuou achando que sabe a permissao de '
-            'uma conta que nao esta mais neste aparelho.',
-      );
-    });
   });
 
   group('SEC-019 — a FIACAO, pelo app inteiro e pela tela de login', () {

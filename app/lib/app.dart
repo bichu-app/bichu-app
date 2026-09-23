@@ -361,12 +361,6 @@ class _BichuAppState extends State<BichuApp> {
         // esta certo. A isca esta em
         // `test/sessao/registro_do_aviso_de_cadastro_test.dart`.
         _avisoDeCadastro.limpar,
-        // O VIGIA ESQUECE O QUE SABIA AO SAIR (SEC-019). Ele nao apaga nada no
-        // servidor -- disso cuida o criterio 3 -- mas a lembranca de
-        // "permissao concedida" presa a uma conta que saiu bloquearia o
-        // re-registro do proximo login neste mesmo processo, pela comparacao
-        // `antes == agora` de `reconciliar`.
-        () async => _vigiaDeAviso.esquecer(),
       ],
       // O RE-REGISTRO DO APARELHO DEPOIS DE TODO LOGIN (SEC-019), e ele e o que
       // paga o preco da correcao do servidor.
@@ -382,6 +376,15 @@ class _BichuAppState extends State<BichuApp> {
       // Ela mora aqui, e nao no `onPressed` de `tela_entrar.dart`, pelo mesmo
       // motivo de `limpezasAoSair`: sao quatro caminhos de login hoje e nada
       // garante que o quinto lembre.
+      //
+      // O QUE **NAO** ENTRA EM `limpezasAoSair`, e a ausencia e deliberada: o
+      // vigia zerando o que sabia no LOGOUT. Aquela lista e do que e da CONTA
+      // -- dado e credencial de uma pessoa, que nao podem vazar para a proxima
+      // que entrar neste aparelho --, e `_ultimoConhecido` e do APARELHO: e a
+      // permissao de notificacao do sistema operacional, o mesmo argumento que
+      // mantem `OportunidadesDeAviso` fora dela. Zerar no logout tambem seria
+      // redundante, porque `esquecerEReconciliar` zera no login seguinte, que
+      // e o unico momento em que ha sessao para registrar o aparelho.
       aoEntrar: <AoEntrar>[_vigiaDeAviso.esquecerEReconciliar],
     );
     _roteador = criarRoteador(_sessao);
