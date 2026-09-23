@@ -1,4 +1,9 @@
-// A tela de um encontro da `Rede`: a galeria e a confirmacao de presenca.
+// A tela de um encontro da `Rede`.
+//
+// **Check-in e galeria sairam desta versao** (BICHUS-251, decisao do cliente
+// de 23/09/2026). Os casos que exercitavam as duas estao na branch
+// `guarda/rede-checkin-galeria`; aqui fica a ISCA que reprova se qualquer uma
+// voltar para a tela.
 //
 // **Nenhum `expect` deste arquivo compara texto renderizado com a constante
 // que o produz.** Todo esperado esta escrito por extenso, com acento e
@@ -14,11 +19,12 @@ import 'package:http/http.dart' as http;
 import '../telas/ajuda_de_tela.dart';
 import 'agenda_da_rede_test.dart';
 
-/// A resposta de `NetworkEvent`: o resumo mais a galeria e `viewer_checked_in`.
+/// A resposta de `NetworkEvent` **como o servidor desta branch a manda**:
+/// com `gallery`, `viewer_checked_in`, `checkin_count` e `photo_count`.
 ///
-/// **A galeria nao tem autor.** Nao ha `submitted_by`, `author` nem
-/// `uploaded_by` aqui porque nao ha nenhum deles no contrato: o banco guarda
-/// quem enviou para remocao e auditoria, e esse campo nunca e projetado.
+/// O app nao le nenhum dos quatro, e e por isso que eles estao aqui: a ISCA
+/// abaixo precisa de uma resposta que TENHA galeria e contagem, senao ela
+/// passaria por falta de dado e nao por falta de tela.
 Map<String, dynamic> encontroCompletoDoContrato({
   int checkinCount = 0,
   bool viewerCheckedIn = false,
@@ -65,13 +71,16 @@ Future<void> abrirOEncontro(
   await tester.pumpAndSettle();
 }
 
-/// A rede que atende a agenda, o encontro e o check-in.
+/// A rede que atende a agenda e o encontro.
+///
+/// **Responde 200 ao check-in**, de proposito: se o app voltar a chamar
+/// `POST .../check-in`, a chamada tem sucesso e fica registrada em
+/// [chamadas], e a ISCA reprova pelo registro -- e nao por um 404 que a tela
+/// poderia engolir.
 Future<http.Response> Function(http.Request) redeDoEncontro({
   required Map<String, dynamic> encontro,
-  Map<String, dynamic>? checkIn,
   List<http.Request>? chamadas,
 }) {
-  var corpoAtual = encontro;
   return (req) async {
     chamadas?.add(req);
     if (req.url.path == '/v1/network/events' && req.method == 'GET') {
@@ -81,18 +90,15 @@ Future<http.Response> Function(http.Request) redeDoEncontro({
     }
     if (req.url.path == '/v1/network/events/passeio-benedito-calixto' &&
         req.method == 'GET') {
-      return json200(corpoAtual);
+      return json200(encontro);
     }
     if (req.url.path ==
             '/v1/network/events/passeio-benedito-calixto/check-in' &&
         req.method == 'POST') {
-      if (checkIn == null) return problema('not-found', 404);
-      corpoAtual = <String, dynamic>{
-        ...corpoAtual,
-        'checkin_count': checkIn['checkin_count'],
-        'viewer_checked_in': checkIn['viewer_checked_in'],
-      };
-      return json200(checkIn);
+      return json200(<String, dynamic>{
+        'checkin_count': 8,
+        'viewer_checked_in': true,
+      });
     }
     return problema('not-found', 404);
   };
@@ -100,181 +106,108 @@ Future<http.Response> Function(http.Request) redeDoEncontro({
 
 void main() {
   // -------------------------------------------------------------------------
-  // A GALERIA NAO TEM AUTOR
+  // CHECK-IN E GALERIA SAIRAM DESTA VERSAO (BICHUS-251, 23/09/2026)
   // -------------------------------------------------------------------------
 
-  testWidgets('a galeria mostra imagem e legenda, e mais nada', (tester) async {
-    await abrirOEncontro(
-      tester,
-      rede: redeDoEncontro(
-        encontro: encontroCompletoDoContrato(
-          checkinCount: 7,
-          galeria: <Map<String, dynamic>>[
-            fotoDoContrato(caption: 'A turma na sombra da figueira.'),
-            fotoDoContrato(slug: 'foto-2'),
-          ],
-        ),
-      ),
-    );
+  group('check-in e galeria nao estao no detalhe', () {
+    // ISCA -- em `app/lib/telas/rede/encontro_da_rede.dart`, no fim da lista
+    // devolvida por `_corpo()`, acrescente:
+    //     FilledButton(onPressed: () {}, child: const Text('Confirmar presença')),
+    // Este caso reprova no primeiro `expect`. O mesmo vale para a galeria: um
+    // `Image.network` de foto ou o titulo `Fotos do encontro` reprovam nos
+    // `expect` de baixo, e uma chamada a `POST .../check-in` reprova no
+    // ultimo, pelo registro de [chamadas].
+    for (final logado in <bool>[true, false]) {
+      testWidgets(
+        'ISCA -- o detalhe nao tem check-in nem galeria '
+        '(${logado ? 'com' : 'sem'} conta)',
+        (tester) async {
+          final chamadas = <http.Request>[];
+          await abrirOEncontro(
+            tester,
+            logado: logado,
+            rede: redeDoEncontro(
+              chamadas: chamadas,
+              // A resposta TEM o que a tela nao pode mostrar: sete presencas,
+              // quem chama ainda nao confirmou, e duas fotos com legenda.
+              encontro: encontroCompletoDoContrato(
+                checkinCount: 7,
+                galeria: <Map<String, dynamic>>[
+                  fotoDoContrato(caption: 'A turma na sombra da figueira.'),
+                  fotoDoContrato(
+                    slug: 'foto-2',
+                    imageUrl: 'https://midia.bichu.app/rede/foto-2.jpg',
+                  ),
+                ],
+              ),
+            ),
+          );
 
-    expect(find.text('A turma na sombra da figueira.'), findsOneWidget);
-    expect(find.text('Fotos do encontro'), findsOneWidget);
+          // A tela abriu de verdade: sem isto, o caso passaria numa tela de
+          // falha, que tambem nao tem botao nenhum.
+          expect(find.byType(TelaDoEncontro), findsOneWidget);
+          expect(
+            find.text('Passeio matinal na Benedito Calixto'),
+            findsOneWidget,
+          );
 
-    // E nenhuma autoria, em forma nenhuma. Dez fotos assinadas seriam dez
-    // nomes presentes, com imagem do lugar junto.
-    final tudo = textosNaTela(tester).join(' ');
-    for (final palavra in <String>[
-      'enviada por',
-      'Enviada por',
-      'Foto de ',
-      'por Marina',
-      'Autor',
-      'Enviar foto',
-      'Adicionar foto',
-    ]) {
-      expect(
-        tudo.contains(palavra),
-        isFalse,
-        reason: 'a galeria da Rede nao tem autor nem envio, e "$palavra" '
-            'apareceu na tela',
+          // Nenhum controle de check-in, em estado nenhum.
+          expect(find.text('Confirmar presença'), findsNothing);
+          expect(find.byType(FilledButton), findsNothing);
+
+          // Nenhuma galeria: nem titulo, nem legenda, nem imagem. O encontro
+          // desta massa nao tem capa, entao QUALQUER `Image` na tela e foto.
+          expect(find.text('Fotos do encontro'), findsNothing);
+          expect(find.text('A turma na sombra da figueira.'), findsNothing);
+          expect(find.byType(Image), findsNothing);
+
+          // Nenhuma frase das duas funcoes, em forma nenhuma.
+          final tudo = textosNaTela(tester).join(' ');
+          for (final palavra in <String>[
+            'presença',
+            'Presença',
+            'confirmou',
+            'confirmaram',
+            'Entre na sua conta',
+            'galeria',
+            'Galeria',
+            'foto',
+          ]) {
+            expect(
+              tudo.contains(palavra),
+              isFalse,
+              reason: 'check-in e galeria sairam desta versao (BICHUS-251), '
+                  'e "$palavra" apareceu no detalhe',
+            );
+          }
+
+          // E o app nao fala com a rota de check-in.
+          expect(
+            chamadas.where((r) => r.url.path.endsWith('/check-in')),
+            isEmpty,
+          );
+        },
       );
     }
-  });
 
-  testWidgets('encontro sem foto diz que nao tem, e nao oferece enviar', (tester) async {
-    await abrirOEncontro(
-      tester,
-      rede: redeDoEncontro(encontro: encontroCompletoDoContrato()),
-    );
-
-    expect(
-      find.text('Este encontro ainda não tem foto na galeria.'),
-      findsOneWidget,
-    );
-  });
-
-  // -------------------------------------------------------------------------
-  // O CHECK-IN E DA PESSOA, E NAO DO PET
-  // -------------------------------------------------------------------------
-
-  group('a confirmacao de presenca', () {
-    // ISCA -- em `app/lib/telas/rede/encontro_da_rede.dart`, em `_confirmar`,
-    // troque a atribuicao de `presencas` por uma soma local:
-    //     presencas: atual.encontro.presencas + 1,
-    // Este caso reprova: a resposta traz 9 (outra pessoa confirmou no meio) e
-    // a soma local mostraria 8. A contagem do servidor e a que vale.
-    testWidgets('ISCA -- a contagem nova vem da RESPOSTA e nao de somar um', (tester) async {
-      await abrirOEncontro(
-        tester,
-        rede: redeDoEncontro(
-          encontro: encontroCompletoDoContrato(checkinCount: 7),
-          checkIn: <String, dynamic>{
-            // Sete viraram nove: alguem confirmou junto. Uma soma local diria
-            // oito, e oito e um numero que nao existe em lugar nenhum.
-            'checkin_count': 9,
-            'viewer_checked_in': true,
-          },
-        ),
-      );
-
-      expect(find.text('7 pessoas confirmaram presença'), findsOneWidget);
-
-      await tester.tap(find.text('Confirmar presença'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('9 pessoas confirmaram presença'), findsOneWidget);
-      expect(find.text('8 pessoas confirmaram presença'), findsNothing);
-    });
-
-    testWidgets('o botao nao pergunta pet nenhum', (tester) async {
+    testWidgets('o detalhe e lido sem token, mesmo com conta', (tester) async {
       final chamadas = <http.Request>[];
       await abrirOEncontro(
         tester,
         rede: redeDoEncontro(
-          encontro: encontroCompletoDoContrato(checkinCount: 2),
-          checkIn: <String, dynamic>{
-            'checkin_count': 3,
-            'viewer_checked_in': true,
-          },
           chamadas: chamadas,
+          encontro: encontroCompletoDoContrato(),
         ),
       );
 
-      await tester.tap(find.text('Confirmar presença'));
-      await tester.pumpAndSettle();
-
-      final checkIn = chamadas.lastWhere(
-        (r) => r.method == 'POST' && r.url.path.endsWith('/check-in'),
+      final detalhe = chamadas.lastWhere(
+        (r) =>
+            r.method == 'GET' &&
+            r.url.path == '/v1/network/events/passeio-benedito-calixto',
       );
-      // **A requisicao nao tem corpo**: nao ha o que escolher, porque o unico
-      // dado da operacao e quem chama e qual evento. Um corpo aqui seria o
-      // lugar por onde um `pet_id` entraria.
-      expect(checkIn.body, isEmpty);
-      // E nao ha folha, dialogo nem seletor entre o toque e a chamada.
-      expect(find.text('Com qual pet?'), findsNothing);
-      expect(find.byType(Dialog), findsNothing);
-    });
-
-    testWidgets('quem ja confirmou le uma afirmacao, e nao um botao morto', (tester) async {
-      await abrirOEncontro(
-        tester,
-        rede: redeDoEncontro(
-          encontro: encontroCompletoDoContrato(
-            checkinCount: 4,
-            viewerCheckedIn: true,
-          ),
-        ),
-      );
-
-      expect(
-        find.text('Você confirmou presença neste encontro.'),
-        findsOneWidget,
-      );
-      // Sem botao desabilitado: um controle que continua se anunciando e nao
-      // tem desfecho e pior que controle ausente.
-      expect(find.text('Confirmar presença'), findsNothing);
-    });
-
-    testWidgets('quem nao tem conta le o motivo, e nao um 401', (tester) async {
-      await abrirOEncontro(
-        tester,
-        logado: false,
-        rede: redeDoEncontro(encontro: encontroCompletoDoContrato()),
-      );
-
-      expect(
-        find.text('Entre na sua conta para confirmar presença neste encontro.'),
-        findsOneWidget,
-      );
-      expect(find.text('Confirmar presença'), findsNothing);
-    });
-
-    testWidgets('a falha do check-in nao apaga o encontro da tela', (tester) async {
-      await abrirOEncontro(
-        tester,
-        rede: (req) async {
-          if (req.url.path == '/v1/network/events' && req.method == 'GET') {
-            return json200(
-              paginaDoContrato(<Map<String, dynamic>>[encontroDoContrato()]),
-            );
-          }
-          if (req.url.path == '/v1/network/events/passeio-benedito-calixto' &&
-              req.method == 'GET') {
-            return json200(encontroCompletoDoContrato(checkinCount: 5));
-          }
-          if (req.method == 'POST') return problema('server-error', 500);
-          return problema('not-found', 404);
-        },
-      );
-
-      await tester.tap(find.text('Confirmar presença'));
-      await tester.pumpAndSettle();
-
-      // O encontro continua na tela, com a contagem que o servidor deu.
-      expect(find.text('Passeio matinal na Benedito Calixto'), findsOneWidget);
-      expect(find.text('5 pessoas confirmaram presença'), findsOneWidget);
-      // E o toque teve desfecho: ha uma mensagem.
-      expect(find.byType(FaixaDeAviso), findsWidgets);
+      // O `Bearer` so ia por causa de `viewer_checked_in`, que nao e mais
+      // lido. Anexa-lo agora exporia a sessao a uma rota que nao precisa dela.
+      expect(detalhe.headers.containsKey('Authorization'), isFalse);
     });
   });
 
@@ -293,7 +226,6 @@ void main() {
       ),
     );
 
-    expect(find.text('12 pessoas confirmaram presença'), findsOneWidget);
     expect(
       find.text('Praça Benedito Calixto · Pinheiros · São Paulo, SP'),
       findsOneWidget,
@@ -310,6 +242,8 @@ void main() {
       'Como chegar',
       'CEP',
       'Criar evento',
+      'Enviar foto',
+      'Adicionar foto',
     ]) {
       expect(
         tudo.contains(palavra),

@@ -7,10 +7,16 @@
 /// ## Nao existe pessoa neste arquivo, em forma nenhuma
 ///
 /// Nao ha classe de participante, nao ha lista, nao ha nome, apelido, avatar
-/// nem `slug` de pessoa. O que existe e [EncontroDaRede.presencas], que e um
-/// `int`. A galeria ([FotoDoEncontro]) tambem nao tem autor: o servidor guarda
-/// `submitted_by_user_id` para remocao e auditoria e **nunca o projeta**, e um
-/// campo aqui para recebe-lo seria o pedido para ele passar a sair.
+/// nem `slug` de pessoa.
+///
+/// ## Nao existe check-in nem galeria nesta versao
+///
+/// BICHUS-251, decisao do cliente de 23/09/2026: a confirmacao de presenca e a
+/// galeria de fotos saem do app antes do merge. A resposta do contrato ainda
+/// pode trazer `checkin_count`, `photo_count`, `gallery` e `viewer_checked_in`,
+/// e **nenhum deles e lido aqui**: um campo lido e o convite para alguem
+/// desenha-lo. A versao com os quatro esta na branch
+/// `guarda/rede-checkin-galeria`.
 ///
 /// Nao ha UUID: `slug` e a chave primaria das duas tabelas publicas da secao.
 ///
@@ -65,8 +71,8 @@ enum QuandoDaRede {
 /// **Sao duas, e as ausencias sao decisao.** Nao ha ordem por distancia
 /// (ADR-0025 secao 5: sem coordenada nao ha distancia, e uma ordem que nunca
 /// podera ser cumprida e pior que uma que nao e oferecida) e nao ha ordem por
-/// numero de presencas (ela transformaria `checkin_count` numa disputa e daria
-/// a quem enche a contagem o topo da agenda).
+/// numero de presencas (ela transformaria a contagem numa disputa e daria a
+/// quem enche a contagem o topo da agenda).
 enum OrdemDaRede {
   proximos('proximos', 'Data mais próxima'),
   recentes('recentes', 'Mais recente primeiro');
@@ -155,34 +161,6 @@ class LugarDoEncontro {
       bairro: bairro,
       cidade: cidade,
       uf: uf,
-    );
-  }
-}
-
-/// Uma foto da galeria do encontro. **Sem autor**, e a ausencia e a decisao 3
-/// do ADR-0025: dez fotos assinadas sao dez nomes presentes.
-class FotoDoEncontro {
-  const FotoDoEncontro({
-    required this.slug,
-    required this.urlDaImagem,
-    this.legenda,
-  });
-
-  final String slug;
-  final String urlDaImagem;
-  final String? legenda;
-
-  static FotoDoEncontro doJson(Map<String, dynamic> json) {
-    final slug = json['slug'];
-    final url = json['image_url'];
-    if (slug is! String || url is! String) {
-      throw const FormatException('foto da galeria sem slug ou image_url');
-    }
-    final legenda = json['caption'];
-    return FotoDoEncontro(
-      slug: slug,
-      urlDaImagem: url,
-      legenda: legenda is String ? legenda : null,
     );
   }
 }
@@ -418,8 +396,12 @@ class DataDoEncontro {
 
 /// Um encontro da agenda, no formato de `NetworkEventSummary`.
 ///
-/// **Nao ha nenhum campo com pessoas.** [presencas] e um inteiro: quantas, e
-/// nunca quais.
+/// **Nao ha nenhum campo com pessoas**, e nesta versao nao ha nem a contagem
+/// de presencas: sem check-in no app, um numero de confirmados seria um numero
+/// que ninguem aqui consegue mudar.
+///
+/// E tambem o formato de `NetworkEvent`, o detalhe: os campos a mais daquela
+/// resposta sao da galeria e do check-in, e nao sao lidos.
 class EncontroDaRede {
   const EncontroDaRede({
     required this.slug,
@@ -428,8 +410,6 @@ class EncontroDaRede {
     required this.lugar,
     required this.comeca,
     required this.situacao,
-    required this.presencas,
-    required this.quantidadeDeFotos,
     required this.urlDaCapa,
   });
 
@@ -444,11 +424,6 @@ class EncontroDaRede {
   /// Nula quando o servidor mandou um `status` que este app nao conhece. Ver
   /// [SituacaoDoEncontro.porCodigo] para por que nao ha valor de fallback.
   final SituacaoDoEncontro? situacao;
-
-  /// **Quantas pessoas confirmaram, e nunca quais.** ADR-0025 secao 2.
-  final int presencas;
-
-  final int quantidadeDeFotos;
 
   /// Ausencia e estado normal, e nao lacuna: o cartao sabe se desenhar sem ela.
   final String? urlDaCapa;
@@ -476,68 +451,7 @@ class EncontroDaRede {
       lugar: LugarDoEncontro.doJson(json['place']),
       comeca: DataDoEncontro.doJson(inicioEmIso: inicio, nomeIana: zona),
       situacao: SituacaoDoEncontro.porCodigo(json['status'] as String?),
-      presencas: json['checkin_count'] as int? ?? 0,
-      quantidadeDeFotos: json['photo_count'] as int? ?? 0,
       urlDaCapa: capa is String ? capa : null,
-    );
-  }
-}
-
-/// Um encontro com a galeria, no formato de `NetworkEvent`.
-///
-/// [vocePresente] e a UNICA coisa derivada de quem chama, e ela segue o
-/// precedente do campo `viewer` do ADR-0021: e sinal de navegacao, nao
-/// destranca campo nenhum e **nao fala de terceiro**. Para quem chega sem conta
-/// ela e falsa.
-class EncontroComGaleria {
-  const EncontroComGaleria({
-    required this.encontro,
-    required this.galeria,
-    required this.vocePresente,
-  });
-
-  final EncontroDaRede encontro;
-
-  /// As fotos do EVENTO. Nenhuma delas tem autor.
-  final List<FotoDoEncontro> galeria;
-
-  final bool vocePresente;
-
-  static EncontroComGaleria doJson(Map<String, dynamic> json) {
-    final fotos = json['gallery'];
-    return EncontroComGaleria(
-      encontro: EncontroDaRede.doJson(json),
-      galeria: <FotoDoEncontro>[
-        if (fotos is List)
-          for (final bruto in fotos)
-            if (bruto is Map<String, dynamic>) FotoDoEncontro.doJson(bruto),
-      ],
-      vocePresente: json['viewer_checked_in'] as bool? ?? false,
-    );
-  }
-}
-
-/// O desfecho de `POST /v1/network/events/{slug}/check-in`.
-///
-/// Traz a contagem **ja atualizada**: somar um por conta propria diverge da
-/// contagem do servidor no primeiro check-in simultaneo.
-class PresencaConfirmada {
-  const PresencaConfirmada({
-    required this.presencas,
-    required this.vocePresente,
-  });
-
-  final int presencas;
-  final bool vocePresente;
-
-  static PresencaConfirmada doJson(Map<String, dynamic> json) {
-    final contagem = json['checkin_count'];
-    if (contagem is! int) {
-      throw const FormatException('check-in sem `checkin_count`');
-    }
-    return PresencaConfirmada(
-      presencas: contagem,
-      vocePresente: json['viewer_checked_in'] as bool? ?? true,
     );
   }
 }

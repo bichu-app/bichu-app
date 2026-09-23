@@ -24,16 +24,16 @@ import 'encontro_da_rede.dart';
 ///
 /// Todas saem do ADR-0025, e cada uma fecha uma inferencia:
 ///
-/// - **Nao ha lista de pessoas presentes.** Ha um NUMERO
-///   ([EncontroDaRede.presencas]). Nem nome, nem primeiro nome, nem avatar,
-///   nem apelido, nem contagem por bairro. Uma lista de presenca em encontro
-///   de bairro publica que dois pets sao do mesmo tutor -- que e a inferencia
-///   que o item 7 do ADR-0010 proibe --, e o lugar do encontro e uma praca do
-///   bairro da pessoa. Num produto cujo fluxo mais critico e pet perdido, essa
-///   e exatamente a informacao que interessa a quem quer levar um animal.
-/// - **Nao ha escolha de pet no check-in.** O check-in e da PESSOA, e nao ha
-///   seletor de pet em lugar nenhum desta secao: nao ha coluna de pet na
-///   tabela, entao nao ha o que escolher.
+/// - **Nao ha confirmacao de presenca, contagem de presencas nem galeria.**
+///   BICHUS-251, decisao do cliente de 23/09/2026: check-in e galeria saem
+///   desta versao e voltam depois (a versao com elas esta na branch
+///   `guarda/rede-checkin-galeria`). Sem check-in no app, a contagem de quem
+///   confirmou seria um numero que ninguem aqui consegue mudar, e saiu junto.
+/// - **Nao ha lista de pessoas**, em forma nenhuma: nem nome, nem primeiro
+///   nome, nem avatar, nem apelido, nem contagem por bairro. Uma lista de
+///   presenca em encontro de bairro publica que dois pets sao do mesmo tutor
+///   -- que e a inferencia que o item 7 do ADR-0010 proibe --, e o lugar do
+///   encontro e uma praca do bairro da pessoa (ADR-0025).
 /// - **Nao ha mapa, em zoom nenhum**, e nao ha endereco, numero nem CEP. O
 ///   lugar sao quatro rotulos de texto, e a precisao para no bairro.
 /// - **Nao ha ordenacao por distancia, e ela nao aparece desabilitada.** Sem
@@ -42,8 +42,7 @@ import 'encontro_da_rede.dart';
 ///   explicar, e explicar uma impossibilidade PERMANENTE e pior que nao
 ///   oferecer. **Nao ha ordenacao por numero de presencas** pelo mesmo tipo de
 ///   razao: ela transformaria a contagem numa disputa.
-/// - **Nao ha envio de foto nem criacao de evento.** A galeria desta fatia e
-///   exibida e nao enviada.
+/// - **Nao ha envio de foto nem criacao de evento** (ADR-0025 decisao 4).
 ///
 /// ## A SITUACAO DO ENCONTRO VEM DO SERVIDOR, e ela e DITA por extenso
 ///
@@ -108,17 +107,6 @@ class AgendaDaRede extends StatefulWidget {
   static const String ordemTrocadaPeloServidor =
       'O servidor devolveu a agenda em outra ordem. A lista está na ordem '
       'mostrada acima.';
-
-  /// Quantas pessoas confirmaram presenca, **e nunca quais**.
-  ///
-  /// Esta funcao e o unico lugar da tela em que a contagem vira texto, e ela
-  /// nao tem parametro de nome, de lista nem de avatar. Nao ha caminho aqui
-  /// que escreva quem foi, porque nao ha campo com quem foi.
-  static String linhaDePresencas(int quantas) {
-    if (quantas == 0) return 'Ninguém confirmou presença ainda';
-    if (quantas == 1) return '1 pessoa confirmou presença';
-    return '$quantas pessoas confirmaram presença';
-  }
 
   @override
   State<AgendaDaRede> createState() => _AgendaDaRedeState();
@@ -457,8 +445,9 @@ class _LinhaDaPagina extends StatelessWidget {
 
 /// O cartao de um encontro na agenda.
 ///
-/// Mostra titulo, resumo, lugar, data com a hora do fuso do EVENTO, a situacao
-/// por extenso e a CONTAGEM de presencas. Capa quando houver.
+/// Mostra titulo, resumo, lugar, data com a hora do fuso do EVENTO e a situacao
+/// por extenso. Capa quando houver. Sem contagem de presencas nesta versao
+/// (BICHUS-251: check-in saiu do app).
 ///
 /// **Nao mostra pessoa nenhuma**, e nao ha como: [EncontroDaRede] nao tem campo
 /// com pessoas.
@@ -541,12 +530,6 @@ class CartaoDoEncontro extends StatelessWidget {
               const SizedBox(height: BichuEspaco.e1),
               Text(
                 encontro.lugar.linha,
-                style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-              ),
-              const SizedBox(height: BichuEspaco.e2),
-              // A CONTAGEM, e nunca quem. Ver ADR-0025 secao 2.
-              Text(
-                AgendaDaRede.linhaDePresencas(encontro.presencas),
                 style: textos.bodySmall?.copyWith(color: cores.textSecondary),
               ),
             ],

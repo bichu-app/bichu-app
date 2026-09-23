@@ -10,27 +10,24 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/faixa_de_aviso.dart';
 import 'agenda_da_rede.dart';
 
-/// Um encontro da `Rede`, com a galeria e a confirmacao de presenca.
+/// Um encontro da `Rede`: titulo, resumo, data e lugar.
 ///
-/// `GET /v1/network/events/{eventSlug}` (`getNetworkEvent`) e
-/// `POST .../check-in` (`checkInNetworkEvent`).
+/// `GET /v1/network/events/{eventSlug}` (`getNetworkEvent`).
 ///
-/// ## O QUE ESTA TELA NAO TEM, e cada ausencia e o ADR-0025
+/// ## O QUE ESTA TELA NAO TEM
 ///
-/// - **Nao ha lista de quem confirmou presenca.** Ha [PresencasDoEncontro],
-///   que desenha um NUMERO. Nao existe nome, primeiro nome, apelido, avatar
-///   nem `slug` de pessoa em campo nenhum da resposta, e portanto nao existe
-///   widget que pudesse desenha-los.
-/// - **Nao ha escolha de pet no check-in.** O botao e um botao: ele nao abre
-///   folha, nao abre seletor e nao pergunta nada. O check-in e da PESSOA, e a
-///   requisicao nao tem corpo porque nao ha o que escolher.
-/// - **A foto da galeria nao tem autor.** Nao ha "enviada por" e nao ha como
-///   haver: `submitted_by_user_id` existe no banco para remocao e auditoria e
-///   **nunca e projetado**. Dez fotos assinadas seriam dez nomes presentes,
-///   com imagem do lugar junto.
-/// - **Nao ha envio de foto.** A galeria desta fatia e exibida e nao enviada:
-///   o envio pela comunidade depende de moderacao, que nao existe em lugar
-///   nenhum deste repositorio.
+/// - **Nao ha confirmacao de presenca nem galeria de fotos.** BICHUS-251,
+///   decisao do cliente de 23/09/2026: as duas saem desta versao e voltam
+///   depois. Nao ha botao, nao ha texto de "voce confirmou", nao ha contagem
+///   de presencas e nao ha secao de fotos. A versao com elas esta na branch
+///   `guarda/rede-checkin-galeria`. O caso
+///   `ISCA -- o detalhe nao tem check-in nem galeria` em
+///   `test/rede/encontro_da_rede_test.dart` reprova se qualquer uma voltar.
+/// - **Nao ha lista de quem vai**, em forma nenhuma (ADR-0025): nao existe
+///   nome, apelido, avatar nem `slug` de pessoa em campo nenhum que esta tela
+///   leia.
+/// - **Nao ha envio de foto** (ADR-0025 decisao 4): depende de moderacao, que
+///   nao existe em lugar nenhum deste repositorio.
 /// - **Nao ha mapa, nao ha endereco e nao ha CEP.**
 ///
 /// ## A tela e alcancada por `push`, e nao por rota nova
@@ -45,33 +42,6 @@ class TelaDoEncontro extends StatefulWidget {
   final String slug;
 
   static const String tituloDaTela = 'Encontro';
-
-  static const String rotuloDeConfirmar = 'Confirmar presença';
-
-  /// O que a tela mostra enquanto a chamada esta no ar.
-  static const String confirmando = 'Confirmando sua presença…';
-
-  /// O que a tela diz a quem ja confirmou.
-  ///
-  /// **Nao e um botao desabilitado.** Um controle que continua se anunciando e
-  /// nao tem desfecho e o que o criterio 2 da BICHUS-62 proibe; e repetir a
-  /// chamada nao mudaria nada, porque o banco recusa o segundo check-in da
-  /// mesma pessoa. Entao aqui nao ha controle: ha uma afirmacao.
-  static const String jaConfirmou = 'Você confirmou presença neste encontro.';
-
-  /// O que a tela diz a quem nao tem conta.
-  ///
-  /// A operacao exige token e responde 401 sem ele. Desenhar o botao para
-  /// quem nao pode usa-lo produziria um toque que termina em erro, e o erro
-  /// nao e o desfecho: e a consequencia de a tela ter perguntado errado.
-  static const String precisaDeConta =
-      'Entre na sua conta para confirmar presença neste encontro.';
-
-  static const String tituloDaGaleria = 'Fotos do encontro';
-
-  /// O que a galeria diz quando o encontro ainda nao tem foto.
-  static const String galeriaVazia =
-      'Este encontro ainda não tem foto na galeria.';
 
   static const String rotuloDeAtualizar = 'Atualizar';
 
@@ -90,17 +60,8 @@ enum _Fase { carregando, pronto, falha }
 
 class _TelaDoEncontroState extends State<TelaDoEncontro> {
   _Fase _fase = _Fase.carregando;
-  EncontroComGaleria? _encontro;
+  EncontroDaRede? _encontro;
   String? _textoDaFalha;
-
-  /// Uma confirmacao em curso. Existe para o segundo toque nao sair enquanto o
-  /// primeiro nao voltou -- nao por causa da contagem, que o banco protege, mas
-  /// porque dois toques sem resposta sao dois toques sem desfecho.
-  bool _confirmando = false;
-
-  /// A falha da confirmacao, que e **outra** da falha da carga: perder a
-  /// resposta do check-in nao apaga o encontro que ja esta na tela.
-  String? _falhaDaConfirmacao;
 
   bool _cargaAgendada = false;
 
@@ -124,7 +85,6 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
     setState(() {
       _fase = _Fase.carregando;
       _textoDaFalha = null;
-      _falhaDaConfirmacao = null;
     });
 
     try {
@@ -148,56 +108,6 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         _textoDaFalha = MensagensDeErro.servidorFora;
         _encontro = null;
         _fase = _Fase.falha;
-      });
-    }
-  }
-
-  /// Confirma a presenca **de quem esta chamando**, e de mais ninguem.
-  ///
-  /// A contagem nova vem da RESPOSTA e nao de uma soma local: somar um por
-  /// conta propria diverge da contagem do servidor no primeiro check-in
-  /// simultaneo, e a tela passaria a mostrar um numero que nao existe.
-  Future<void> _confirmar() async {
-    final atual = _encontro;
-    if (atual == null || _confirmando) return;
-    setState(() {
-      _confirmando = true;
-      _falhaDaConfirmacao = null;
-    });
-
-    try {
-      final desfecho =
-          await RedeApi(Escopo.of(context).api).confirmarPresenca(widget.slug);
-      if (!mounted) return;
-      setState(() {
-        _encontro = EncontroComGaleria(
-          encontro: EncontroDaRede(
-            slug: atual.encontro.slug,
-            titulo: atual.encontro.titulo,
-            resumo: atual.encontro.resumo,
-            lugar: atual.encontro.lugar,
-            comeca: atual.encontro.comeca,
-            situacao: atual.encontro.situacao,
-            presencas: desfecho.presencas,
-            quantidadeDeFotos: atual.encontro.quantidadeDeFotos,
-            urlDaCapa: atual.encontro.urlDaCapa,
-          ),
-          galeria: atual.galeria,
-          vocePresente: desfecho.vocePresente,
-        );
-        _confirmando = false;
-      });
-    } on FalhaDeChamada catch (falha) {
-      if (!mounted) return;
-      setState(() {
-        _falhaDaConfirmacao = MensagensDeErro.de(falha).texto;
-        _confirmando = false;
-      });
-    } on FormatException {
-      if (!mounted) return;
-      setState(() {
-        _falhaDaConfirmacao = MensagensDeErro.servidorFora;
-        _confirmando = false;
       });
     }
   }
@@ -226,8 +136,8 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       return const <Widget>[_EsqueletoDoEncontro()];
     }
 
-    final comGaleria = _encontro;
-    if (_fase == _Fase.falha || comGaleria == null) {
+    final encontro = _encontro;
+    if (_fase == _Fase.falha || encontro == null) {
       return <Widget>[
         FaixaDeAviso(
           texto: _textoDaFalha ?? MensagensDeErro.servidorFora,
@@ -237,7 +147,6 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       ];
     }
 
-    final encontro = comGaleria.encontro;
     final situacao = CartaoDoEncontro.rotuloDaSituacao(encontro.situacao);
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
@@ -276,147 +185,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         encontro.lugar.linha,
         style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
       ),
-      const SizedBox(height: BichuEspaco.e4),
-      PresencasDoEncontro(quantas: encontro.presencas),
-      const SizedBox(height: BichuEspaco.e4),
-      ..._confirmacao(comGaleria),
-      const SizedBox(height: BichuEspaco.e6),
-      Text(TelaDoEncontro.tituloDaGaleria, style: textos.titleMedium),
-      const SizedBox(height: BichuEspaco.e3),
-      ..._galeria(comGaleria),
     ];
-  }
-
-  List<Widget> _confirmacao(EncontroComGaleria comGaleria) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    if (comGaleria.vocePresente) {
-      return <Widget>[
-        Text(
-          TelaDoEncontro.jaConfirmou,
-          style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
-        ),
-      ];
-    }
-
-    if (!Escopo.of(context).sessao.logado) {
-      return <Widget>[
-        Text(
-          TelaDoEncontro.precisaDeConta,
-          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-        ),
-      ];
-    }
-
-    return <Widget>[
-      // **Sem botao desabilitado enquanto a chamada esta no ar.** Um controle
-      // que continua se anunciando e nao responde e o que o criterio 2 da
-      // BICHUS-62 proibe; no lugar dele entra o desfecho em curso, que e uma
-      // resposta ao toque.
-      if (_confirmando)
-        Row(
-          children: <Widget>[
-            const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(strokeWidth: 2),
-            ),
-            const SizedBox(width: BichuEspaco.e3),
-            Text(
-              TelaDoEncontro.confirmando,
-              style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-            ),
-          ],
-        )
-      else
-        SizedBox(
-          width: double.infinity,
-          height: BichuAlvoDeToque.min,
-          child: FilledButton(
-            onPressed: _confirmar,
-            child: const Text(TelaDoEncontro.rotuloDeConfirmar),
-          ),
-        ),
-      if (_falhaDaConfirmacao != null) ...<Widget>[
-        const SizedBox(height: BichuEspaco.e3),
-        FaixaDeAviso(texto: _falhaDaConfirmacao!),
-      ],
-    ];
-  }
-
-  /// A galeria: imagem e legenda, e **mais nada**.
-  List<Widget> _galeria(EncontroComGaleria comGaleria) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    if (comGaleria.galeria.isEmpty) {
-      return <Widget>[
-        Text(
-          TelaDoEncontro.galeriaVazia,
-          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-        ),
-      ];
-    }
-
-    return <Widget>[
-      for (final foto in comGaleria.galeria) ...<Widget>[
-        ClipRRect(
-          borderRadius: BorderRadius.circular(BichuRaio.md),
-          child: Image.network(
-            foto.urlDaImagem,
-            width: double.infinity,
-            height: 180,
-            fit: BoxFit.cover,
-            // O nome acessivel e a LEGENDA, quando ha. Nao ha autor para
-            // nomear, e um "foto de fulano" aqui seria a lista de presenca
-            // voltando pelo leitor de tela.
-            semanticLabel: foto.legenda ?? 'Foto do encontro',
-            errorBuilder: (_, _, _) => const SizedBox.shrink(),
-          ),
-        ),
-        if (foto.legenda != null) ...<Widget>[
-          const SizedBox(height: BichuEspaco.e1),
-          Text(
-            foto.legenda!,
-            style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-          ),
-        ],
-        const SizedBox(height: BichuEspaco.e3),
-      ],
-    ];
-  }
-}
-
-/// A presenca do encontro: **um numero, e nunca uma lista**.
-///
-/// Esta classe recebe um `int` e nao tem nenhum outro parametro. A forma e a
-/// decisao: nao ha construtor aqui que aceite pessoas, entao nao ha caminho
-/// pelo qual alguem as passe amanha sem reescrever a assinatura e reler este
-/// comentario.
-class PresencasDoEncontro extends StatelessWidget {
-  const PresencasDoEncontro({required this.quantas, super.key});
-
-  final int quantas;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(BichuEspaco.e4),
-      decoration: BoxDecoration(
-        color: cores.surfaceSunken,
-        borderRadius: BorderRadius.circular(BichuRaio.md),
-        border: Border.all(color: cores.outline, width: BichuBorda.hairline),
-      ),
-      child: Text(
-        AgendaDaRede.linhaDePresencas(quantas),
-        style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
-      ),
-    );
   }
 }
 

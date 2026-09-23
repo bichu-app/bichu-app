@@ -170,14 +170,17 @@ class AbaPets extends StatelessWidget {
 /// TERCEIRA tela a usar o componente, e ela nao mudou uma linha dele.
 ///
 /// **A secao de comunidade NAO mostra a comunidade, e isso e o ADR-0025.**
-/// Nao ha lista de presenca, em lugar nenhum: ha um numero. Nao ha escolha de
-/// pet no check-in, nao ha autor na foto da galeria, nao ha mapa e nao ha
+/// Nao ha lista de presenca, em lugar nenhum, nao ha mapa e nao ha
 /// ordenacao por distancia. Cada uma dessas ausencias fecha a inferencia que o
 /// item 7 do ADR-0010 proibe -- que dois pets sao do mesmo tutor --, e o custo
 /// delas esta escrito no ADR: um encontro de cachorros em que nao se sabe quem
 /// vai e mais pobre do que o cliente descreveu, e essa pobreza e deliberada.
 ///
-/// **Criar evento e enviar foto continuam fora**, e agora isso e verificavel e
+/// **Check-in e galeria de fotos sairam desta versao** (BICHUS-251, decisao
+/// do cliente de 23/09/2026) e voltam depois pela branch
+/// `guarda/rede-checkin-galeria`.
+///
+/// **Criar evento e enviar foto continuam fora**, e isso e verificavel e
 /// nao prometido: nao ha operacao no contrato, nao ha metodo em `RedeApi` e nao
 /// ha widget na tela. A criacao pela comunidade depende do pacote de moderacao,
 /// que nao existe em lugar nenhum deste repositorio.

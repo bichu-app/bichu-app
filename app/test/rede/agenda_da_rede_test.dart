@@ -363,11 +363,19 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // NAO HA LISTA DE PRESENCA. HA UM NUMERO
+  // NAO HA LISTA DE PRESENCA, E NESTA VERSAO NAO HA NEM A CONTAGEM
   // -------------------------------------------------------------------------
 
-  group('a presenca e um numero, e nunca uma lista de pessoas', () {
-    testWidgets('a contagem sai por extenso, no plural e no singular', (tester) async {
+  group('a agenda nao mostra presenca, nem em numero', () {
+    // BICHUS-251, decisao do cliente de 23/09/2026: check-in saiu do app, e a
+    // contagem de quem confirmou saiu junto. A resposta abaixo TRAZ
+    // `checkin_count`, porque o servidor desta branch ainda o manda: o caso
+    // prova que a tela nao o desenha, e nao que o dado faltou.
+    //
+    // ISCA -- devolva ao `CartaoDoEncontro` a linha
+    //     Text('${encontro.presencas} pessoas confirmaram presença'),
+    // (com o campo de volta em `EncontroDaRede`) e este caso reprova.
+    testWidgets('ISCA -- a contagem de presencas nao aparece no cartao', (tester) async {
       await abrirRede(
         tester,
         rede: redeDaAgenda(
@@ -379,9 +387,19 @@ void main() {
         ),
       );
 
-      expect(find.text('12 pessoas confirmaram presença'), findsOneWidget);
-      expect(find.text('1 pessoa confirmou presença'), findsOneWidget);
-      expect(find.text('Ninguém confirmou presença ainda'), findsOneWidget);
+      // Os tres cartoes estao na tela; sem isto o caso passaria numa lista
+      // vazia.
+      expect(titulosNaTela(tester), <String>['Doze', 'Uma', 'Zero']);
+
+      final tudo = textosNaTela(tester).join(' ');
+      for (final palavra in <String>['presença', 'confirmou', 'confirmaram']) {
+        expect(
+          tudo.contains(palavra),
+          isFalse,
+          reason: 'check-in saiu desta versao (BICHUS-251), e "$palavra" '
+              'apareceu na agenda',
+        );
+      }
     });
 
     // A prova negativa do ADR-0025, do lado da TELA.
@@ -443,7 +461,7 @@ void main() {
         expect(
           tudo.contains(palavra),
           isFalse,
-          reason: 'a Rede nao tem pet no check-in nem mapa, e "$palavra" '
+          reason: 'a Rede nao tem escolha de pet nem mapa, e "$palavra" '
               'apareceu na tela',
         );
       }
