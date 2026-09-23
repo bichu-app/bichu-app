@@ -4088,6 +4088,7 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -4634,6 +4635,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTransfer"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             /** @description O token e valido, mas nao e para esta conta. */
             403: {
                 headers: {

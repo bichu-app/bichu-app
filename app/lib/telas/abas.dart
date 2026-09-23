@@ -53,6 +53,7 @@ class AbaPets extends StatelessWidget {
           // `casca_com_abas.dart` e `MarcaLockup` continua sendo o logotipo em
           // vetor de `tela_de_abertura.dart`. O que nao fica e ligar a chave
           // AQUI. Ver a pergunta aberta na entrega desta integracao.
+          raizDeSecao: true,
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
@@ -165,6 +166,7 @@ class AbaRede extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.rede);
     return TelaDeAba(
+      raizDeSecao: true,
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
       filhos: const <Widget>[
@@ -207,6 +209,7 @@ class AbaPerto extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.perto);
     return TelaDeAba(
+      raizDeSecao: true,
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
       filhos: const <Widget>[
@@ -248,6 +251,7 @@ class AbaLoja extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.loja);
     return TelaDeAba(
+      raizDeSecao: true,
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
       filhos: const <Widget>[VitrineDaLoja()],
@@ -279,6 +283,7 @@ class AbaPerfil extends StatelessWidget {
       builder: (context, _) {
         if (sessao.estado != EstadoDaSessao.logado) {
           return TelaDeAba(
+            raizDeSecao: true,
             titulo: destino.rotulo,
             reforco: destino.reforcoDaPagina,
             filhos: <Widget>[
@@ -304,6 +309,7 @@ class AbaPerfil extends StatelessWidget {
         }
 
         return TelaDeAba(
+          raizDeSecao: true,
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[

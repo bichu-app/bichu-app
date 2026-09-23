@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-app fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -212,7 +212,14 @@ test: commit-de-build ## testes unitarios (so na arvore principal; de worktree u
 	   echo "          A suite unitaria nao precisa de banco: rode \`npm test\` direto."; \
 	   exit 1; \
 	 fi
-	$(COMPOSE) run --rm api npm test
+# `ferramentas` E NAO `api`, PELO MESMO MOTIVO DA ESTEIRA (23/09): `npm test`
+# COMPILA antes de rodar caso nenhum (`tsc -p tsconfig.json --outDir
+# dist/_tests`), e a `api` tem `mem_limit: 320m` -- teto de RUNTIME. Medido: o
+# compilador estoura o grupo de controle e morre com "Killed", saida 137, sem
+# um caso executado. Este alvo nunca acusou porque quase ninguem o roda da
+# arvore principal; a esteira acusou pelo caminho gemeo, o da integracao.
+# O servico `ferramentas` e o mesmo artefato com teto proprio (compose.yaml).
+	$(COMPOSE) run --rm ferramentas npm test
 
 # Pilha EFEMERA, com nome de projeto derivado do caminho e NENHUMA porta
 # publicada. Roda igual da arvore principal e de qualquer worktree, e nunca
@@ -303,6 +310,54 @@ repetir-integracao: commit-de-build ## 20 execucoes seguidas da integracao, alim
 verificar-associacao: ## roda o monitor dos arquivos de deep link (secao 16.12)
 	python3 infra/verificacao/verificar_associacao.py
 
+# O portao que so a esteira tinha, e que por isso deixou passar.
+#
+# POR QUE ELE ESTA AQUI E NAO SO NO `ci.yml`
+#
+# Em 22/09/2026 o commit 351ae0f acrescentou duas respostas `400` a
+# `api/openapi.yaml` e nao rodou `npm run generate:types`.
+# `make fechar-integracao` ficou VERDE com a divergencia de pe, porque a
+# conferencia existia em UM lugar so: `.github/workflows/ci.yml`, passo `tipos
+# gerados batem com a spec` do job `lint, tipos e teste unitario`. A divergencia
+# atravessou o fechamento local inteiro e so morreu na esteira, depois do push.
+#
+# POR QUE EM `verificar` E NAO EM `fechar-integracao`
+#
+# O criterio da casa e custo, e ja foi aplicado duas vezes: `apk` ficou fora de
+# `verificar` porque leva minutos e exige a cadeia Android;
+# `verificar-subida-da-api` ficou fora porque sobe docker e custa 15-27 s. Os
+# dois moram no fechamento por isso.
+#
+# MEDIDO NESTE WORKTREE, com `/usr/bin/time -p`, Node 22.23.2:
+#
+#   npm run verify:types (geracao + comparacao)                1,06 s
+#   npm run lint                                               8,57 s
+#   npm run typecheck                                          2,28 s
+#
+# Ele nao sobe nada, nao le rede e nao encosta em docker. Contra os 0,22 s que a
+# nota do `fechar-integracao` usou para justificar o que entrou no laco de quem
+# desenvolve, 1,06 s e a mesma ordem de grandeza. Entao ele vai para `verificar`,
+# que e o portao que roda MAIS VEZES -- e portao de divergencia so serve se
+# rodar antes de a divergencia viajar.
+#
+# POR QUE NAO E `npm run verify:types`, QUE JA EXISTIA NO `package.json`
+#
+# Porque `verify:types` termina em `git diff --exit-code`, e isso responde a
+# pergunta da ESTEIRA (arvore limpa no commit), nao a daqui. Medido: com a spec
+# adiantada e os tipos JA REGERADOS -- o estado correto de quem acabou de mexer
+# no contrato e ainda nao commitou -- `npm run verify:types` continua saindo 1.
+# Portao que reprova o fluxo correto e portao que vai ser desligado.
+#
+# `infra/verificacao/verificar-tipos-gerados.mjs` pergunta outra coisa, que nao
+# depende do git: gerar de novo muda algum arquivo? Se muda, o que estava em
+# disco estava velho. Vale com a arvore limpa ou suja. As iscas estao no proprio
+# script (`--autoteste`), como nos vizinhos.
+verificar-tipos-gerados-autoteste: ## as iscas do portao dos tipos gerados reprovam (nao gera nada)
+	node infra/verificacao/verificar-tipos-gerados.mjs --autoteste
+
+verificar-tipos-gerados: ## o gerado de src/shared/types/generated/ bate com api/openapi.yaml (1,06 s)
+	node infra/verificacao/verificar-tipos-gerados.mjs
+
 verificar-limite: ## BICHUS-25: lint de limite de chamada, com as duas iscas do QA
 	node infra/verificacao/verificar-limite-de-chamada.mjs api/openapi.yaml
 
@@ -354,13 +409,54 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+
+verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
+	node infra/verificacao/verificar-subida-da-api.mjs
+
+verificar-subida-da-api-autoteste: ## as iscas do juizo da subida reprovam (nao usa docker)
+	node infra/verificacao/verificar-subida-da-api.mjs --autoteste
 
 verificar-recibo-de-fechamento-autoteste: ## as iscas do guarda de push de `integra/*` reprovam
 	sh infra/verificacao/verificar-recibo-de-fechamento.sh --autoteste
 
-verificar-app: ## a metade Flutter: analise e suite de widget (job `app` da esteira)
-	cd app && flutter pub get && flutter analyze && flutter test
+# O GEMEO DO PORTAO DOS TIPOS GERADOS, e ele desce pelo mesmo motivo.
+#
+# Havia DOIS portoes da forma "regera o derivado e compara" neste repositorio, e
+# os dois so existiam na esteira:
+#
+#   api/openapi.yaml   -> src/shared/types/generated/        (job `codigo`)
+#   design/tokens.json -> app/lib/theme/bichu_tokens.g.dart  (job `tokens`)
+#
+# O primeiro desceu para `make verificar` em 22/09, depois que o commit 351ae0f
+# atravessou um `make fechar-integracao` VERDE com o derivado uma geracao atras
+# da fonte. Este e o outro. Hoje o `.g.dart` esta em dia: e buraco latente, e o
+# momento de tapar buraco latente e antes de ele virar historia.
+#
+# MEDIDO neste worktree: 1,26 s com `/usr/bin/time -p`, contra os 37,0 s de
+# `flutter pub get` + `analyze` + suite de widget. Ele roda ANTES dos dois, e a
+# ordem e o ponto: derivado velho reprova em um segundo, e nao depois de meio
+# minuto de suite que nao tem nada com isso.
+#
+# NAO E `git diff --exit-code`, que e o que a esteira faz, e a diferenca custou
+# uma iteracao no irmao. Com a fonte adiantada e o derivado JA REGERADO -- o
+# estado correto de quem acabou de mexer no token e ainda nao commitou -- a
+# forma da esteira REPROVA. Portao que reprova o fluxo certo e portao que alguem
+# desliga. A pergunta daqui e outra, e nao depende do git: gerar de novo muda
+# algum arquivo?
+verificar-tokens-gerados-autoteste: ## as iscas do portao dos tokens gerados reprovam (nao gera nada)
+	node infra/verificacao/verificar-tokens-gerados.mjs --autoteste
+
+verificar-tokens-gerados: ## o Dart de app/lib/theme/ bate com design/tokens.json (1,26 s)
+	node infra/verificacao/verificar-tokens-gerados.mjs
+
+# `flutter pub get` PRIMEIRO, e nao por habito: `dart run tool/gen_tokens.dart`
+# precisa do pacote resolvido, e sem isso o portao reprovaria por falta de
+# preparo em vez de por divergencia -- que e a reprovacao que ninguem entende.
+verificar-app: verificar-tokens-gerados-autoteste ## a metade Flutter: analise e suite de widget (job `app` da esteira)
+	cd app && flutter pub get
+	@$(MAKE) --no-print-directory verificar-tokens-gerados
+	cd app && flutter analyze && flutter test
 
 # ---------------------------------------------------------------------------
 # A LISTA DE FECHAMENTO DE INTEGRACAO
@@ -418,12 +514,15 @@ verificar-app: ## a metade Flutter: analise e suite de widget (job `app` da este
 # fluxo de tela roda `make e2e` a mais, e o README diz isso.
 RECIBO_DE_FECHAMENTO := fechamento.local.txt
 
-fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + Flutter + APK de verdade
-	@echo "fechamento de integracao: verificar -> verificar-app -> apk."
-	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade."
-	@echo "  Medido neste worktree: apk em 7,6 s quente e 35,6 s com \`build/\` frio."
+fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da API + Flutter + APK
+	@echo "fechamento de integracao: verificar -> verificar-subida-da-api -> verificar-app -> apk."
+	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade"
+	@echo "  e sobe a API numa pilha efemera."
+	@echo "  Medido neste worktree: apk em 7,6 s quente e 35,6 s com \`build/\` frio;"
+	@echo "  subida da API em 15 s quente e 27 s com a camada de codigo invalidada."
 	@rm -f $(RECIBO_DE_FECHAMENTO)
 	@$(MAKE) --no-print-directory verificar
+	@$(MAKE) --no-print-directory verificar-subida-da-api
 	@$(MAKE) --no-print-directory verificar-app
 	@$(MAKE) --no-print-directory apk
 	@$(MAKE) --no-print-directory carimbar-fechamento

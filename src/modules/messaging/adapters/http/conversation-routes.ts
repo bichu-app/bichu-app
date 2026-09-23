@@ -37,7 +37,13 @@ import {
 } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
+import {
+  executarComIdempotencia,
+  exigenciaDeIdempotencia,
+  type Idempotencia,
+} from '../../../../shared/http/idempotency.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
+import type { Clock } from '../../../../shared/ports/index.js';
 import type { ResolvedorDeDimensao } from '../../../../shared/http/aplicacao-de-teto.js';
 import type {
   Chamador,
@@ -103,6 +109,8 @@ export interface DependenciasDasRotasDeConversa {
   readonly conversas: ConversationService;
   readonly autenticador: Autenticador;
   readonly contrato: Contrato;
+  readonly idempotencia: Idempotencia;
+  readonly clock: Clock;
 }
 
 /**
@@ -290,13 +298,38 @@ export function registrarRotasDeConversas(
     rotaDeEnvioDeMensagem,
     {
       schema: { body: corpoDe(deps.contrato, rotaDeEnvioDeMensagem.operationId) },
+      config: { idempotencia: true },
       resolvedores: resolvedoresDoEnvio(deps),
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
       const chamador = await chamadorAutenticado(request, deps);
-      const { body } = request.body as { body: string };
-      const mensagem = await deps.conversas.enviar(conversaDoCaminho(request), body, chamador);
-      return reply.status(201).send(comoMensagem(mensagem));
+      const conversationId = conversaDoCaminho(request);
+      const corpo = request.body as { body: string };
+
+      const resposta = await executarComIdempotencia(
+        deps.idempotencia,
+        {
+          exigencia: exigenciaDeIdempotencia(deps.contrato, rotaDeEnvioDeMensagem.operationId),
+          chaveDoCabecalho: request.headers['idempotency-key'],
+          // O dono da chave é a CONTA, e não a conversa: duas conversas da mesma
+          // pessoa são pedidos diferentes com o MESMO dono. Quem as separa é
+          // `parametrosDeCaminho`, logo abaixo.
+          donoOuToken: chamador.userId,
+          endpoint: `${rotaDeEnvioDeMensagem.method.toUpperCase()} ${rotaDeEnvioDeMensagem.path}`,
+          // A CONVERSA ENTRA NA CHAVE, pelo mecanismo e nao a mao: `endpoint` e
+          // o molde da rota, entao duas conversas da mesma conta com a mesma
+          // chave sao pedidos diferentes que ele nao distingue.
+          parametrosDeCaminho: { conversationId },
+          corpo,
+          agoraEmMilissegundos: deps.clock.now(),
+        },
+        async () => ({
+          status: 201,
+          body: comoMensagem(await deps.conversas.enviar(conversationId, corpo.body, chamador)),
+        }),
+      );
+
+      return reply.status(resposta.status).send(resposta.body);
     },
   );
 }

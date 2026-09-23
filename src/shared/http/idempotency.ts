@@ -274,8 +274,71 @@ export interface PedidoIdempotente {
   /** UUID do usuário, ou o hash da credencial ao portador quando não há conta. */
   readonly donoOuToken: string;
   readonly endpoint: string;
+  /**
+   * Os parâmetros de caminho desta requisição, normalmente `request.params`.
+   *
+   * **Obrigatório, e a obrigatoriedade é o mecanismo.** `endpoint` é o MOLDE da
+   * rota (`POST /pets/:petId/lost-cases`), não a URL: duas requisições para
+   * recursos diferentes têm o mesmo `endpoint`. Sem os valores do caminho no
+   * resumo do corpo, a mesma chave da mesma conta em dois recursos diferentes
+   * devolve a resposta do primeiro dentro do segundo — foi assim em
+   * `openLostCase` e em `cancelTransferByToken`.
+   *
+   * Passar `{}` numa rota com parâmetro não é atalho: `corpoCanonicoDoPedido`
+   * recusa, e a rota deixa de responder até alguém ligar o valor. Uma rota nova
+   * com id no caminho nasce fechada, e não silenciosamente furada.
+   *
+   * Passe o valor **canônico**, não o que chegou na URL, quando a rota tiver uma
+   * forma canônica (a plaquinha com e sem hífen é o mesmo código, e o reenvio da
+   * fila offline precisa casar com a primeira tentativa).
+   */
+  readonly parametrosDeCaminho: unknown;
   readonly corpo: unknown;
   readonly agoraEmMilissegundos: number;
+}
+
+/** Os nomes dos parâmetros de caminho do molde: `/pets/:petId/tags` -> `petId`. */
+export function parametrosDoEndpoint(endpoint: string): string[] {
+  return [...endpoint.matchAll(/:([A-Za-z0-9_]+)/g)].map((achado) => achado[1] as string);
+}
+
+/**
+ * A forma canônica que vai para o hash, **com o id do caminho dentro**.
+ *
+ * A rota sem parâmetro de caminho continua produzindo exatamente o que produzia
+ * antes desta função existir. Isso é deliberado: acrescentar envelope onde não
+ * há defeito invalidaria chave em voo de `createPet` e de
+ * `createStrayFoundReport` sem fechar nada.
+ */
+export function corpoCanonicoDoPedido(pedido: PedidoIdempotente): string {
+  const nomes = parametrosDoEndpoint(pedido.endpoint);
+  if (nomes.length === 0) return canonicalizarCorpo(pedido.corpo);
+
+  const brutos = pedido.parametrosDeCaminho;
+  const caminho: Record<string, string> = {};
+  const faltando: string[] = [];
+  for (const nome of nomes) {
+    const valor =
+      typeof brutos === 'object' && brutos !== null
+        ? (brutos as Record<string, unknown>)[nome]
+        : undefined;
+    if (typeof valor !== 'string' || valor === '') {
+      faltando.push(nome);
+      continue;
+    }
+    caminho[nome] = valor;
+  }
+  if (faltando.length > 0) {
+    // Defeito de fiação, e ele precisa ser ruidoso. Silenciar aqui devolveria a
+    // resposta de um recurso dentro de outro, que é o defeito que esta função
+    // existe para impedir — e ninguém procura o que acredita já ter.
+    throw new Error(
+      `Rota idempotente com id no caminho fora da chave: \`${pedido.endpoint}\` não recebeu ` +
+        `${faltando.join(', ')} em \`parametrosDeCaminho\`. Sem esses valores, a mesma chave em ` +
+        'dois recursos diferentes devolve a resposta do primeiro.',
+    );
+  }
+  return canonicalizarCorpo({ caminho, corpo: pedido.corpo });
 }
 
 function chaveAusente(): AppError {
@@ -317,6 +380,12 @@ export async function executarComIdempotencia(
     );
   }
 
+  // ANTES do caminho sem chave, e a ordem é o ponto. Fiação quebrada que só
+  // reprovasse na requisição COM chave deixaria a rota parecer sã enquanto
+  // ninguém mandasse `Idempotency-Key` — e quem manda é a fila offline, que só
+  // aparece no primeiro cliente sem rede, em produção.
+  const corpoCanonico = corpoCanonicoDoPedido(pedido);
+
   const bruto = typeof pedido.chaveDoCabecalho === 'string' ? pedido.chaveDoCabecalho.trim() : '';
   if (bruto === '') {
     if (pedido.exigencia === 'obrigatoria') throw chaveAusente();
@@ -329,7 +398,7 @@ export async function executarComIdempotencia(
     chave,
     donoOuToken: pedido.donoOuToken,
     endpoint: pedido.endpoint,
-    corpoCanonico: canonicalizarCorpo(pedido.corpo),
+    corpoCanonico,
     agoraEmMilissegundos: pedido.agoraEmMilissegundos,
   });
   if (gravada !== undefined) return gravada;

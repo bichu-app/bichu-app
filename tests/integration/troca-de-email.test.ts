@@ -19,6 +19,27 @@
  * 4. **O teto.** `dimension: account, 5/24h` é aplicado pelo contador real
  *    montado por `tetoDeTeste()`, e a recusa é o 429 que o Fastify devolve.
  *
+ * ## A segunda credencial, e por que ela entrou aqui depois
+ *
+ * `POST /v1/me/email-change` é operação destrutiva: quem toma uma sessão troca
+ * o endereço e captura a conta pela recuperação de senha. O contrato declara
+ * `x-reauth-scope: email_change` na operação e a rota declara
+ * `reauthScope: 'email_change'`, então `registrarRota` instala o portão e a
+ * chamada sem `X-Reauth-Token` responde 401 `reauthentication-required`.
+ *
+ * Este arquivo nasceu antes disso. A BICHUS-42 foi escrita quando a maquinaria
+ * da BICHUS-48 não existia em `src/`, e as duas pontas só se encontraram no
+ * merge de 22/09: a suite continuava chamando a rota só com a sessão, e os sete
+ * casos que pedem a troca passaram a reprovar em 401. O defeito era da suite, e
+ * não da rota — servidor de teste que dispensa a senha mede outra coisa do que
+ * produção serve.
+ *
+ * A janela é de **300 s, uso único, uma finalidade e uma sessão**, então cada
+ * ação pede a sua: `pedirTroca` abre uma em `POST /auth/reauth` e a apresenta.
+ * Token guardado e reaproveitado reprova por "janela já consumida", e o
+ * vermelho passa a dizer outra coisa do que o caso cobra. O caso 11 fixa isso
+ * como afirmação, em vez de deixá-lo como recomendação de comentário.
+ *
  * ## Iscas conferidas
  *
  * Cada mecanismo foi desligado sozinho, com o arquivo alterado no disco antes
@@ -29,7 +50,9 @@
  *   dizer, a troca valendo SEM confirmação): reprova o caso 1 e o caso 5;
  * - o ramo de endereço ocupado passando a responder 409: reprova o caso 6;
  * - `rateLimit` da rota trocado por um teto largo: reprova o caso 7;
- * - a cláusula `expires_at` retirada do consumo do token: reprova o caso 4.
+ * - a cláusula `expires_at` retirada do consumo do token: reprova o caso 4;
+ * - `reauthScope` retirado de `rotaDeTrocaDeEmail`, que é a divergência que a
+ *   integração de 22/09 revelou: reprova o caso 10, e só ele.
  *
  * ## Como rodar
  *
@@ -55,16 +78,19 @@ import { criarIdentityRepository } from '../../src/modules/identity/adapters/per
 import {
   criarVerificadorDeReautenticacao,
   registrarRotasDeIdentidade,
+  rotaDeReautenticacao,
   rotaDeTrocaDeEmail,
   type DependenciasDasRotas,
 } from '../../src/modules/identity/adapters/http/routes.js';
 import { criarAuthService } from '../../src/modules/identity/application/auth-service.js';
 import { criarAvisoDeReusoAoTitular } from '../../src/modules/identity/application/aviso-de-reuso.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
+import { CABECALHO_DE_REAUTENTICACAO } from '../../src/shared/http/registrar-rota.js';
 import type {
   RegistradorDeRotas,
   VerificadorDeReautenticacao,
 } from '../../src/shared/http/registrar-rota.js';
+import type { ReauthScope, RouteDefinition } from '../../src/shared/http/route-definition.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -83,6 +109,38 @@ const SENHA = 'chuva-morna-no-telhado-47';
 const CAMINHO_DA_TROCA = rotaDeTrocaDeEmail.path;
 const TETO_POR_CONTA = rotaDeTrocaDeEmail.rateLimit?.[0]?.limit ?? 0;
 
+/** Onde a janela nasce. Vem da definicao da rota, como o caminho da troca. */
+const CAMINHO_DA_REAUTENTICACAO = rotaDeReautenticacao.path;
+
+/**
+ * A finalidade da janela, escrita aqui à mão **e conferida contra a rota** no
+ * caso 10.
+ *
+ * Derivar de `rotaDeTrocaDeEmail.reauthScope` seria o reflexo certo em qualquer
+ * outra constante deste arquivo, e é errado nesta. Quem apagasse a declaração
+ * faria todo `POST /auth/reauth` deste arquivo sair sem `scope`, e os nove
+ * casos morreriam em 400 de corpo inválido — inclusive o único que existe para
+ * acusar o apagamento, que terminaria vermelho pelo motivo errado. Com o valor
+ * literal, apagar a declaração reprova **um** caso, e é o caso certo.
+ */
+const ESCOPO_DA_TROCA: ReauthScope = 'email_change';
+
+/**
+ * O que a rota declara, lido pelo tipo **largo**, e a largura é o ponto.
+ *
+ * `defineRoute` é genérico em `const`, então `reauthScope` tem tipo literal e
+ * **some do tipo** junto com a linha. Lida pelo tipo estreito, apagar a
+ * declaração vira erro de compilação: a suite inteira não roda e os onze casos
+ * saem cancelados — que é o desfecho que `executar-suite.mjs` existe para
+ * acusar, e não a afirmação que o caso 10 cobra. Uma isca que derruba a
+ * compilação não mede a rota; ela mede o compilador, e de quebra apaga a
+ * evidência dos outros dez casos.
+ *
+ * Pelo tipo largo, apagar a declaração compila, a suite roda inteira, e reprova
+ * **um** caso, com a mensagem que diz o que se perdeu.
+ */
+const ESCOPO_DECLARADO_NA_ROTA = (rotaDeTrocaDeEmail as RouteDefinition).reauthScope;
+
 let app: RegistradorDeRotas;
 let banco: { db: Db; close: () => Promise<void> };
 let base: string;
@@ -98,11 +156,12 @@ function enderecoNovo(rotulo: string): string {
 
 async function chamar(
   caminho: string,
-  opcoes: { metodo: 'GET' | 'POST' | 'PUT'; corpo?: unknown; token?: string },
+  opcoes: { metodo: 'GET' | 'POST' | 'PUT'; corpo?: unknown; token?: string; reauth?: string },
 ): Promise<{ status: number; corpo: unknown }> {
   const cabecalhos: Record<string, string> = { accept: 'application/json' };
   if (opcoes.corpo !== undefined) cabecalhos['content-type'] = 'application/json';
   if (opcoes.token !== undefined) cabecalhos['authorization'] = `Bearer ${opcoes.token}`;
+  if (opcoes.reauth !== undefined) cabecalhos[CABECALHO_DE_REAUTENTICACAO] = opcoes.reauth;
 
   const resposta = await fetch(`${base}${PREFIXO_DA_API}${caminho}`, {
     method: opcoes.metodo,
@@ -172,6 +231,37 @@ function tokenDoLink(corpo: string): string {
   return achado[1] as string;
 }
 
+/**
+ * Abre UMA janela de reautenticação para a troca de e-mail.
+ *
+ * A janela é de 300 segundos, **uso único**, uma finalidade e uma sessão
+ * (BICHUS-48). Guardar o token numa variável de módulo e reaproveitá-lo entre
+ * os casos faria a suite reprovar por "janela já consumida" e o vermelho
+ * diria outra coisa do que o caso cobra. Uma por ação, sempre.
+ */
+async function abrirJanela(tutor: Tutor, senha: string = SENHA): Promise<string> {
+  const resposta = await chamar(CAMINHO_DA_REAUTENTICACAO, {
+    metodo: 'POST',
+    token: tutor.acesso,
+    corpo: { password: senha, scope: ESCOPO_DA_TROCA },
+  });
+  assert.equal(
+    resposta.status,
+    200,
+    `POST ${CAMINHO_DA_REAUTENTICACAO} recusou a senha certa ` +
+      `(${String(resposta.status)}): ${JSON.stringify(resposta.corpo)}`,
+  );
+  return (resposta.corpo as { reauth_token: string }).reauth_token;
+}
+
+/**
+ * O pedido de troca **com** a segunda credencial, que é como o app o faz.
+ *
+ * `POST /me/email-change` declara `reauthScope: 'email_change'`, e o contrato
+ * declara `x-reauth-scope: email_change` na mesma operação. Apresentar a janela
+ * aqui é reproduzir o caminho da pessoa; o caso 10 é quem mede o outro lado,
+ * que é a rota recusando quem não a apresenta.
+ */
 async function pedirTroca(
   tutor: Tutor,
   destino: string,
@@ -180,6 +270,7 @@ async function pedirTroca(
     metodo: 'POST',
     corpo: { new_email: destino },
     token: tutor.acesso,
+    reauth: await abrirJanela(tutor),
   });
 }
 
@@ -581,5 +672,104 @@ void describe(`BICHUS-42 — POST ${CAMINHO_DA_TROCA} contra Postgres`, () => {
       corpo: { new_email: enderecoNovo('sem-sessao') },
     });
     assert.equal(semToken.status, 401, JSON.stringify(semToken.corpo));
+  });
+
+  void it('10. ISCA — com sessão e SEM X-Reauth-Token a rota recusa, e nada é gravado', async () => {
+    // O caso que faltava, e a colisão de integração de 22/09 é quem o pediu.
+    // Os nove acima foram escritos quando a reautenticação não existia em
+    // `src/`, então todos assumiam que uma sessão bastava. Quando a BICHUS-48
+    // chegou e `requestEmailChange` passou a declarar a segunda credencial,
+    // nenhum caso mediu a exigência: o arquivo virou vermelho por não
+    // apresentar o cabeçalho, e não havia um só caso dizendo que apresentá-lo é
+    // obrigatório. É este o caso que teria pego a divergência no dia.
+    assert.equal(
+      ESCOPO_DECLARADO_NA_ROTA,
+      ESCOPO_DA_TROCA,
+      'a rota parou de declarar `reauthScope`. Sem a declaração, `registrarRota` não instala ' +
+        'o portão e a troca de e-mail volta a valer só com a sessão — que é exatamente o que o ' +
+        'contrato proíbe em `x-reauth-scope: email_change`.',
+    );
+
+    const tutor = await criarTutor('sem-janela');
+    const destino = enderecoNovo('destino-sem-janela');
+
+    const antesNoAntigo = mensagensPara(tutor.email).length;
+    const semJanela = await chamar(CAMINHO_DA_TROCA, {
+      metodo: 'POST',
+      corpo: { new_email: destino },
+      token: tutor.acesso,
+    });
+
+    assert.equal(
+      semJanela.status,
+      401,
+      'a troca de e-mail foi aceita só com a sessão. Quem toma uma sessão troca o endereço e ' +
+        'captura a conta pela recuperação de senha: é a operação destrutiva que o contrato ' +
+        'promete sob senha, servida sem ela.',
+    );
+    assert.match(
+      JSON.stringify(semJanela.corpo),
+      /reauthentication-required/,
+      'a recusa não é a da segunda credencial, e o app não sabe abrir a folha de senha por ' +
+        'outro `type`',
+    );
+
+    // Recusa é recusa: nem intenção gravada, nem mensagem saindo.
+    const linha = await banco.db
+      .selectFrom('users')
+      .select(['email', 'pending_email'])
+      .where('id', '=', tutor.id)
+      .executeTakeFirstOrThrow();
+    assert.equal(linha.email, tutor.email);
+    assert.equal(linha.pending_email, null, 'a intenção foi gravada por um pedido recusado');
+    assert.equal(mensagensPara(destino).length, 0, 'o endereço novo recebeu e-mail de um 401');
+    assert.equal(
+      mensagensPara(tutor.email).length,
+      antesNoAntigo,
+      'o endereço antigo recebeu aviso de um pedido que a rota recusou',
+    );
+
+    // E a mesma chamada, com a janela, passa. Sem esta metade o caso mediria
+    // "a rota recusa", que uma rota quebrada também faz.
+    const comJanela = await chamar(CAMINHO_DA_TROCA, {
+      metodo: 'POST',
+      corpo: { new_email: destino },
+      token: tutor.acesso,
+      reauth: await abrirJanela(tutor),
+    });
+    assert.equal(comJanela.status, 202, JSON.stringify(comJanela.corpo));
+    assert.equal((await perfil(tutor.acesso)).pending_email, destino);
+  });
+
+  void it('11. a janela é de uso único: repetir o MESMO X-Reauth-Token recusa', async () => {
+    // Por que isto é caso e não comentário: a suite pede uma janela por ação, e
+    // quem vier depois vai sentir vontade de guardar o token num `before` para
+    // economizar uma chamada. O dia em que alguém fizer isso, os casos
+    // reprovam com "reauthentication-required" e o vermelho parece defeito da
+    // troca de e-mail. Este caso nomeia o motivo antes que isso aconteça.
+    const tutor = await criarTutor('uso-unico');
+    const janela = await abrirJanela(tutor);
+
+    const primeiro = await chamar(CAMINHO_DA_TROCA, {
+      metodo: 'POST',
+      corpo: { new_email: enderecoNovo('destino-uso-um') },
+      token: tutor.acesso,
+      reauth: janela,
+    });
+    assert.equal(primeiro.status, 202, JSON.stringify(primeiro.corpo));
+
+    const segundo = await chamar(CAMINHO_DA_TROCA, {
+      metodo: 'POST',
+      corpo: { new_email: enderecoNovo('destino-uso-dois') },
+      token: tutor.acesso,
+      reauth: janela,
+    });
+    assert.equal(
+      segundo.status,
+      401,
+      `a mesma janela serviu duas vezes (${String(segundo.status)}). Uso único é o que impede ` +
+        'que um token capturado uma vez continue autorizando troca de endereço pelos 300 ' +
+        'segundos inteiros.',
+    );
   });
 });
