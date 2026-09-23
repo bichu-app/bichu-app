@@ -41,7 +41,7 @@ import { criarServidor } from '../../../../shared/http/server.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import { criarContadorDesligado, criarContadorEmMemoria } from '../../../../shared/http/rate-limit.js';
 import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.js';
-import type { AbsoluteUrl, PetId, UserId } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, CaseId, PetId, UserId } from '../../../../shared/types/brands.js';
 import type { AuditLog } from '../../../audit/ports/audit-log.js';
 import type { Clock, IdGenerator, JobQueue } from '../../../../shared/ports/index.js';
 import { LostCaseService } from '../../application/lost-case-service.js';
@@ -84,6 +84,8 @@ interface Cenario {
    * `WHERE` e conferir depois, que é o arranjo que o ADR-0021 elimina.
    */
   readonly autorizacaoDesligada?: boolean;
+  /** O caso que `buscarDoTutor` devolve ao DONO. Sem ele, a leitura é 404. */
+  readonly casoDoDono?: CasoGravado;
 }
 
 /**
@@ -118,7 +120,8 @@ function repositorio(cenario: Cenario): LostCaseRepository {
         },
       }),
     abrir: naoUsado,
-    buscarDoTutor: (): Promise<CasoGravado | null> => Promise.resolve(null),
+    buscarDoTutor: (_caso, dono): Promise<CasoGravado | null> =>
+      Promise.resolve(dono === DONO ? (cenario.casoDoDono ?? null) : null),
     encerrar: (): Promise<CasoGravado | null> => Promise.resolve(null),
     decidirCandidato: naoUsado,
     candidatoDecididoDoTutor: naoUsado,
@@ -542,5 +545,44 @@ void describe('ISCA 3 — o teto de chamada da rota vigora (BICHUS-178)', () => 
       'Se a 31ª for recusada com o contador DESLIGADO, o 429 está vindo de ' +
         'outro lugar e o caso acima não prova o teto desta rota.',
     );
+  });
+});
+
+/**
+ * Os links que a resposta do caso entrega ao tutor apontam para as páginas do
+ * site, nos caminhos do ADR-0017: `/p/{shareToken}` é a página do caso, e
+ * `/c/{finderToken}` é a CONVERSA de quem avisou sem conta. Até esta branch o
+ * `share_url` saía em `/c/`, e o link que o tutor compartilhava no WhatsApp
+ * levaria o site a chamar `getFinderConversation` com um token de outra
+ * natureza. O montador agora é um só, `linksDoCaso`, o mesmo das rotas
+ * públicas, e este caso cobra o resultado na resposta de `getLostCase`.
+ */
+void describe('getLostCase: os links do caso apontam para as páginas do site', () => {
+  void it('share_url é /p/{shareToken} e poster_url é /cartaz/{shareToken}', async () => {
+    const caso: CasoGravado = {
+      id: '018f3a2b-0000-7000-8000-0000000000ee' as CaseId,
+      petId: PET_DO_DONO,
+      status: 'open',
+      lastSeenAt: new Date('2026-09-20T18:30:00.000Z'),
+      hasLocation: false,
+      areaLabel: 'Pinheiros, São Paulo',
+      description: null,
+      shareToken: 'k3J9-share-token-opaco-0001',
+      shareToPublicList: true,
+      openedAt: new Date('2026-09-20T19:00:00.000Z'),
+      closedAt: null,
+      closureOutcome: null,
+      closureChannel: null,
+      closureNote: null,
+    };
+    const resposta = await servidor({ casoDoDono: caso }).inject({
+      method: 'GET',
+      url: `/lost-cases/${caso.id}`,
+      headers: { authorization: comoToken(DONO) },
+    });
+    assert.equal(resposta.statusCode, 200, resposta.body);
+    const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
+    assert.equal(corpo['share_url'], `${BASE_DA_WEB}/p/${caso.shareToken}`);
+    assert.equal(corpo['poster_url'], `${BASE_DA_WEB}/cartaz/${caso.shareToken}`);
   });
 });
