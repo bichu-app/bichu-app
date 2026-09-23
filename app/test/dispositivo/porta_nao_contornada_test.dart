@@ -281,6 +281,16 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
+///
+/// **Destravado uma setima vez pela BICHUS-58 e pela BICHUS-57**, a tela que o
+/// codigo da tag abre: `escanear/tela_do_pet_da_tag.dart` e arquivo novo (F2.2
+/// e F2.3) e `escanear/tela_leitor_de_qr.dart` parou de descartar o retorno de
+/// `tags.resolver` e passou a empilhar a tela do pet. **Nenhuma das duas
+/// encosta na porta** `CameraEGaleria` nem em canal de plataforma, que e o que
+/// o criterio 10 da BICHUS-161 protege, e quem responde por isso e o portao de
+/// diretivas abaixo. Medido pelo indice temporario (`GIT_INDEX_FILE` +
+/// `read-tree HEAD` + `add -A` + `write-tree --prefix=app/lib/telas`) sobre o
+/// commit desta branch.
 /// **Destravado pela BICHUS-35**: a tela do achado avulso nasceu, e ela e uma
 /// pasta nova em `app/lib/telas` -- `telas/achado/`, com
 /// `tela_registrar_achado.dart` (F3.5), `tela_achado_registrado.dart` (o
@@ -403,7 +413,37 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// que este portao usa, sobre a arvore ja mesclada. As justificativas acima
 /// ficaram TODAS: cada uma diz o que mudou de um lado, e e isso que mantem a
 /// troca sendo um ato deliberado.
-const String _arvoreDasTelas = 'fe88e1df9b65dd79f0b0194e0edfabfde71b42fa';
+///
+/// **Destravado uma oitava vez pela mescla de `development` nesta branch, e a
+/// trava disparou por dois motivos somados, nao por um.** Da `development`
+/// entrou a pasta `telas/achado/` inteira e a porta de F3.5 ligada em
+/// `escanear/tela_leitor_de_qr.dart`; desta branch entrou
+/// `escanear/tela_do_pet_da_tag.dart` e a tela do leitor que deixou de
+/// descartar o retorno de `tags.resolver`.
+///
+/// **As duas mudancas na tela do leitor nao se excluem, e o conflito que o Git
+/// mostrou nesse arquivo era de formatacao.** Esta branch reformatou
+/// `tela_leitor_de_qr.dart` inteiro, o alinhamento de linhas deslizou, e o
+/// corpo de `Digitar de novo` (BICHUS-153) foi casado com o corpo da saida de
+/// F3.5 (BICHUS-35) como se fossem o mesmo botao. Sao dois `TextButton`
+/// distintos, em condicoes distintas: `Digitar de novo` so existe enquanto o
+/// 404 do caminho digitado esta na faixa, e `Registrar que achei um pet` existe
+/// sempre. A mescla ficou com os dois, e **nenhum botao novo entrou na tela**.
+///
+/// Nenhuma das pecas encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege, e o portao de diretivas abaixo continua respondendo por isso sem
+/// depender desta constante.
+///
+/// **Remedido no merge de `feat/tela-do-pet-apos-escanear`
+/// para a `development`, 23/09/2026.** Os dois lados do conflito estavam
+/// certos sobre a propria historia e errados sobre o resultado:
+/// `fe88e1df...` e a arvore de um lado, `a4d5b9bf...` e a do
+/// outro, e a arvore que existe depois do merge nao e nenhuma das duas. O
+/// valor abaixo foi MEDIDO com o mesmo indice temporario que este portao usa,
+/// sobre a arvore ja mesclada. As justificativas acima ficaram TODAS: cada
+/// uma diz o que mudou de um lado, e e isso que mantem a troca sendo um ato
+/// deliberado.
+const String _arvoreDasTelas = '72832de16b55beaff488096e442d64b1846bed0c';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

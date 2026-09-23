@@ -21,10 +21,10 @@ enum Especie {
   /// esse sufixo no ponto de uso, espalhado, e como as tres telas que usam a
   /// lista divergem: a regra mora aqui.
   String get codigoDeOutraRaca => switch (this) {
-        Especie.cao => 'outro_dog',
-        Especie.gato => 'outro_cat',
-        Especie.outro => 'outro_other',
-      };
+    Especie.cao => 'outro_dog',
+    Especie.gato => 'outro_cat',
+    Especie.outro => 'outro_other',
+  };
 
   static Especie? de(String? valor) {
     for (final e in Especie.values) {
@@ -124,8 +124,9 @@ class DadosDeReferencia {
   /// e microcopy (`Outra`) e nao dado do servidor.
   List<OpcaoDeReferencia> racasDe(Especie especie) {
     return racas
-        .where((r) =>
-            r.especie == especie && r.codigo != especie.codigoDeOutraRaca)
+        .where(
+          (r) => r.especie == especie && r.codigo != especie.codigoDeOutraRaca,
+        )
         .toList(growable: false);
   }
 
@@ -490,27 +491,89 @@ enum QuemEscaneou {
 }
 
 /// `TagResolution`: o que `GET /v1/tags/{code}` devolve quando o codigo vale.
+///
+/// **Ele le o corpo inteiro, e a razao e de produto.** Ate 22/09 esta classe
+/// lia quatro campos de dez: `viewer`, `display_name`, `species` e `is_lost`.
+/// O servidor mandava `breed_label`, `size`, `primary_color`,
+/// `distinctive_marks`, `care_notes`, `since` e `already_notified`, e o
+/// desserializador os jogava fora antes de qualquer tela poder pedi-los. Quem
+/// esta com o animal no colo precisa da linha de sinais para confirmar que e o
+/// mesmo bicho (F4.1, item 3) e do cartao de manejo para saber o que fazer
+/// agora (F4.1, item 4); nenhum dos dois se reconstroi no aparelho.
 class TagResolvida {
   const TagResolvida({
     required this.quemEscaneou,
     required this.nomeDoPet,
     required this.especie,
+    this.racaRotulo,
+    this.porte,
+    this.corPrincipal,
+    this.sinaisDistintivos,
+    this.notasDeCuidado,
+    this.fotoUrl,
     this.estaPerdido = false,
+    this.perdidoDesde,
+    this.jaAvisouDesteAparelho = false,
   });
 
   final QuemEscaneou quemEscaneou;
   final String nomeDoPet;
   final Especie especie;
+
+  /// `pet.breed_label`: o rotulo ja resolvido pelo servidor.
+  final String? racaRotulo;
+
+  /// `pet.size`. Obrigatorio no contrato; nulo aqui so quando vier um valor
+  /// que este build nao conhece, e ai a linha de sinais o omite em vez de
+  /// quebrar.
+  final Porte? porte;
+
+  /// `pet.primary_color`.
+  final String? corPrincipal;
+
+  /// `pet.distinctive_marks`.
+  final String? sinaisDistintivos;
+
+  /// `pet.care_notes`: o cartao de manejo, **ja redigido pelo tutor**.
+  final String? notasDeCuidado;
+
+  /// `pet.photo_url`.
+  ///
+  /// **Hoje ele vem `null` nesta rota, e isso e desenho do servidor, nao
+  /// pendencia.** O campo existe aqui porque o contrato o declara; a tela
+  /// trata a ausencia pela regra 5.4 do design system e **nunca** promete uma
+  /// foto que nao vai chegar.
+  final String? fotoUrl;
+
   final bool estaPerdido;
 
+  /// `lost.since`.
+  final DateTime? perdidoDesde;
+
+  /// `already_notified`: este mesmo aparelho ja avisou nas ultimas 24 h.
+  ///
+  /// **Muda o texto do botao de avisar; nao impede avisar de novo.** Enquanto
+  /// o botao nao existir no app, ele nao tem onde aparecer -- e continua sendo
+  /// lido, para nao se perder de novo no desserializador.
+  final bool jaAvisouDesteAparelho;
+
   factory TagResolvida.doJson(Map<String, dynamic> json) {
-    final pet = json['pet'] as Map<String, dynamic>? ?? const <String, dynamic>{};
+    final pet =
+        json['pet'] as Map<String, dynamic>? ?? const <String, dynamic>{};
     final perdido = json['lost'] as Map<String, dynamic>?;
     return TagResolvida(
       quemEscaneou: QuemEscaneou.de(json['viewer'] as String?),
       nomeDoPet: pet['display_name'] as String? ?? '',
       especie: Especie.de(pet['species'] as String?) ?? Especie.outro,
+      racaRotulo: pet['breed_label'] as String?,
+      porte: Porte.de(pet['size'] as String?),
+      corPrincipal: pet['primary_color'] as String?,
+      sinaisDistintivos: pet['distinctive_marks'] as String?,
+      notasDeCuidado: pet['care_notes'] as String?,
+      fotoUrl: pet['photo_url'] as String?,
       estaPerdido: perdido?['is_lost'] as bool? ?? false,
+      perdidoDesde: DateTime.tryParse(perdido?['since'] as String? ?? ''),
+      jaAvisouDesteAparelho: json['already_notified'] as bool? ?? false,
     );
   }
 }
