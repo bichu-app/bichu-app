@@ -1730,24 +1730,29 @@ jobs:
         run: |
           c=bichu-web-1
           falhas=0
-          reprova() { echo "::error::$1"; falhas=1; }
-          [ "$(docker inspect $c --format '{{.Config.User}}')" = "node" ] || reprova "o site nao roda como o usuario sem privilegio da imagem (node)"
-          [ "$(docker inspect $c --format '{{.HostConfig.ReadonlyRootfs}}')" = "true" ] || reprova "a raiz do container do site nao e somente leitura"
-          [ "$(docker inspect $c --format '{{.HostConfig.CapDrop}}')" = "[ALL]" ] || reprova "o site nao derrubou todas as capacidades"
-          [ "$(docker inspect $c --format '{{.HostConfig.Memory}}')" = "100663296" ] || reprova "o limite de memoria do site nao e os 96 MB do ADR-0024"
-          [ -z "$(docker inspect $c --format '{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{$p}} {{end}}{{end}}')" ] || reprova "o site publica porta no hospedeiro; so a borda pode alcanca-lo"
+          confere() { # descricao do defeito, valor obtido, valor esperado
+            if [ "$2" != "$3" ]; then echo "::error::$1 (veio '$2', esperado '$3')"; falhas=1; fi
+          }
+          confere "o site nao roda como o usuario sem privilegio da imagem" "$(docker inspect $c --format '{{.Config.User}}')" node
+          confere "a raiz do container do site nao e somente leitura" "$(docker inspect $c --format '{{.HostConfig.ReadonlyRootfs}}')" true
+          confere "o site nao derrubou todas as capacidades" "$(docker inspect $c --format '{{.HostConfig.CapDrop}}')" "[ALL]"
+          confere "o limite de memoria do site nao e os 96 MB do ADR-0024" "$(docker inspect $c --format '{{.HostConfig.Memory}}')" 100663296
+          confere "o site publica porta no hospedeiro; so a borda pode alcanca-lo" "$(docker inspect $c --format '{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{$p}} {{end}}{{end}}')" ""
           # LISTA FECHADA do que o site pode receber de ambiente: o que a
           # propria imagem declara, mais as quatro do ADR-0024 (item 9). Chave
           # nova no container que nao esta aqui reprova, seja segredo ou nao --
           # e e assim que um `env_file: [.env]` acrescentado por engano aparece.
-          permitidas=$( { docker image inspect bichu-web:local --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1; \
-            printf '%s\n' API_INTERNAL_URL MEDIA_PUBLIC_BASE_URL SITE_BASE_URL NODE_OPTIONS; } | sort -u)
-          [ -n "$permitidas" ] || reprova "nao consegui ler o ambiente da imagem; sem lista, a conferencia fica cega"
+          da_imagem=$(docker image inspect bichu-web:local --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sed '/^$/d')
+          if [ -z "$da_imagem" ]; then
+            echo "::error::nao consegui ler o ambiente da imagem; sem lista, a conferencia fica cega"
+            exit 1
+          fi
+          permitidas=$(printf '%s\n' "$da_imagem" API_INTERNAL_URL MEDIA_PUBLIC_BASE_URL SITE_BASE_URL NODE_OPTIONS | sort -u)
           recebidas=$(docker inspect $c --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sed '/^$/d' | sort -u)
           sobra=$(comm -13 <(printf '%s\n' "$permitidas") <(printf '%s\n' "$recebidas"))
-          [ -z "$sobra" ] || reprova "o site recebeu variavel fora da lista do ADR-0024: $(printf '%s\n' "$sobra" | tr '\n' ' ')"
+          confere "o site recebeu variavel fora da lista do ADR-0024" "$(printf '%s\n' "$sobra" | tr '\n' ' ' | sed 's/ *$//')" ""
           echo "ambiente do site: $(printf '%s\n' "$recebidas" | tr '\n' ' ')"
-          exit $falhas
+          if [ "$falhas" != 0 ]; then exit 1; fi
 
       - name: serve a pagina inicial, a rota do servidor e 404 de verdade
         run: |
