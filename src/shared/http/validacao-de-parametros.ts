@@ -127,14 +127,9 @@ import type { RegistradorDeRotas } from './registrar-rota.js';
 import type { Contrato, EsquemasDeParametros } from './contract.js';
 import { AppError, problemas } from './errors.js';
 import { caminhoDoContrato } from './idempotency.js';
+import { campoDoSchema, type ErroDeSchema } from './erros-de-schema.js';
 
-/** O que o Fastify entrega ao formatador de erro de schema. */
-interface ErroDeSchema {
-  readonly instancePath?: string;
-  readonly keyword?: string;
-  readonly message?: string;
-  readonly params?: Record<string, unknown>;
-}
+
 
 /**
  * **A decisão de status, e o único lugar que a contém.**
@@ -152,11 +147,10 @@ function problemaDeParametroMalformado(
   erros: readonly ErroDeSchema[],
   tiposDeProblema: ReadonlyMap<string, string>,
 ): AppError {
-  const campos = erros.map((erro) => ({
-    field: (erro.instancePath ?? '').replace(/^\//, ''),
-    code: erro.keyword ?? 'schema',
-    message: erro.message ?? 'Valor fora do formato que o contrato declara.',
-  }));
+  // O MESMO mapeamento do corpo (`erros-de-schema.ts`). Enquanto eram dois, o de
+  // parâmetro lia só `instancePath` e o de corpo não lia nada — e `required`, que
+  // é o achado mais comum, não aparece em `instancePath` nenhum dos dois casos.
+  const campos = erros.map(campoDoSchema);
 
   for (const campo of campos) {
     const tipo = tiposDeProblema.get(campo.field);
