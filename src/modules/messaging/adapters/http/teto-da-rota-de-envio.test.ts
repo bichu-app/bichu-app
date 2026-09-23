@@ -96,6 +96,8 @@ function dependenciasDeTeste(): DependenciasDasRotasDeConversa {
     autenticador: { autenticar: () => Promise.resolve({ userId: CONTA as UserId }) },
     conversas: undefined as unknown as DependenciasDasRotasDeConversa['conversas'],
     contrato: undefined as unknown as DependenciasDasRotasDeConversa['contrato'],
+    idempotencia: undefined as unknown as DependenciasDasRotasDeConversa['idempotencia'],
+    clock: undefined as unknown as DependenciasDasRotasDeConversa['clock'],
   };
 }
 
