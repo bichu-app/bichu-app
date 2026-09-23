@@ -598,7 +598,20 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// TODAS, dos dois lados. Anteriores:
 /// `59de12f643235735ac6a21249b1408fbf3651c93` (esta branch) e
 /// `65bcd97d9088e6da8668127c8cb4d38f5e19d718` (`development`).
-const String _arvoreDasTelas = 'e113de4b6d5741694bde0b5a3135817229911625';
+///
+/// **Destravado pela emenda da BICHUS-251, 23/09/2026: check-in e galeria
+/// saem do app nesta versao, por decisao do cliente.** Mudam
+/// `rede/encontro_da_rede.dart` (sem botao de confirmar presenca, sem contagem
+/// e sem galeria), `rede/agenda_da_rede.dart` (o cartao perde a linha de
+/// contagem) e `abas.dart` (so o comentario da secao). Nenhuma delas encosta
+/// na porta `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161
+/// protege, e o portao de diretivas abaixo continua cobrando isso sem
+/// depender desta constante. O trabalho removido esta na branch
+/// `guarda/rede-checkin-galeria`. Medido com `git rev-parse
+/// HEAD:app/lib/telas` sobre o commit da emenda (9c9a72d), e conferido contra
+/// o "encontrado" que este portao imprimiu antes da troca. Anterior:
+/// `e113de4b6d5741694bde0b5a3135817229911625`.
+const String _arvoreDasTelas = '5669853d96a90522a1b3689d05d55a3c09f139cd';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
