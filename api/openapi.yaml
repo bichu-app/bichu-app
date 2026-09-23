@@ -1127,6 +1127,7 @@ paths:
                 new_email: { type: string, format: email, maxLength: 254 }
       responses:
         '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
@@ -1766,6 +1767,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetTransfer' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403':
           description: O token e valido, mas nao e para esta conta.
           content:
