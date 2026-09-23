@@ -40,7 +40,7 @@
  * identificador, e a conta volta na rodada seguinte.
  */
 import type { Clock } from '../../../shared/time/clock.js';
-import type { Instant } from '../../../shared/types/brands.js';
+import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { IdentityRepository } from '../ports/identity-repository.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
 import { PRAZO_DE_EXPURGO_EM_MS } from './auth-service.js';
@@ -60,6 +60,20 @@ export interface DependenciasDoExpurgo {
   readonly repositorio: Pick<IdentityRepository, 'contasAExpurgar' | 'expurgarConta'>;
   readonly trilha: AuditLog;
   readonly clock: Clock;
+  /**
+   * Apaga os ARQUIVOS da conta do armazenamento de objeto, e devolve quantos
+   * saíram (SEC-020).
+   *
+   * **Função estreita e não a porta de mídia**, pelo mesmo motivo de
+   * `removerPushDaConta` em `dependencies.ts`: `identity` não importa `media`, e
+   * a fronteira é do ADR-0008. A ligação acontece na composição
+   * (`src/bin/worker.ts`), delegando a `criarApagadorDeObjetosDaConta`.
+   *
+   * **Obrigatória, e não opcional.** Um campo opcional deixaria a composição que
+   * esquecesse dele apagar a conta do banco e deixar as fotos no balde, em
+   * silêncio — que é literalmente o defeito SEC-020 voltando pela fiação.
+   */
+  readonly apagarObjetosDaConta: (dono: UserId) => Promise<number>;
 }
 
 export interface ResultadoDoExpurgo {
@@ -82,6 +96,26 @@ export async function expurgarContasExcluidas(
 
   for (const userId of vencidas) {
     try {
+      // OBJETO PRIMEIRO, LINHA DEPOIS (SEC-020).
+      //
+      // A ordem não é escolha: é a regra que `varrer-envios-vencidos.ts` já
+      // escreveu, e a única novidade é que este expurgo não a seguia. As chaves
+      // dos objetos só vivem dentro das linhas que a cascata apaga
+      // (`upload_intents.object_key`, `pet_photos.original_key`, `thumb_key`,
+      // `card_key`, `conversation_messages.photo_object_key`), então o `DELETE`
+      // destrói o único ponteiro que existia para o arquivo.
+      //
+      // Morrendo entre as duas metades, os resíduos são assimétricos e por isso
+      // a ordem importa: nesta, sobra linha apontando para objeto ausente numa
+      // conta que ninguém autentica (`autenticar()` recusa status != 'active'),
+      // e a rodada seguinte termina o serviço. Na inversa, sobra objeto sem
+      // ponteiro, que só uma varredura do balde inteiro encontraria -- e não
+      // existe varredura de órfãos em lugar nenhum deste repositório.
+      //
+      // A falha aqui cai no `catch` de baixo, conta como falha e **não** apaga
+      // as linhas. É o desejado: a conta volta na rodada seguinte com os
+      // ponteiros de pé.
+      const objetosApagados = await deps.apagarObjetosDaConta(userId);
       const apagou = await deps.repositorio.expurgarConta(userId);
       if (apagou) expurgadas += 1;
       // A trilha entra DEPOIS do `DELETE`, e pode: `audit.events` não tem chave
@@ -94,7 +128,17 @@ export async function expurgarContasExcluidas(
         action: 'privacy.account_purged',
         resourceKind: 'user',
         resourceId: userId,
-        metadata: { deleted_rows: apagou ? 1 : 0 },
+        // `objects_deleted` entra junto de `deleted_rows` e não no lugar dele:
+        // são dois subsistemas, e um evento que só contasse linhas foi
+        // exatamente o que fez o apagamento de BANCO ser lido como apagamento
+        // de DADO PESSOAL por meses.
+        //
+        // O nome é `objects_deleted` e não algo como `fully_erased`: o objeto
+        // saiu da nossa origem, e uma cópia em cache intermediário pode
+        // permanecer alcançável a quem tenha o endereço exato por até 12 meses
+        // (ADR-0014, `max-age=31536000, immutable`, sem operação de
+        // invalidação). Esta linha não pode afirmar mais do que aconteceu.
+        metadata: { deleted_rows: apagou ? 1 : 0, objects_deleted: objetosApagados },
       });
     } catch (erro: unknown) {
       // `catch` que engole a exceção e **não** a silencia. Sem esta linha, a

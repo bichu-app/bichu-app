@@ -10,6 +10,7 @@
  * no lugar da outra em tempo de compilação.
  */
 import type { Instant, ObjectKey, PetId, UserId } from '../../../shared/types/brands.js';
+import type { Classe } from './object-storage.js';
 
 export type StatusDaFoto = 'processing' | 'ready' | 'rejected';
 
@@ -118,6 +119,39 @@ export interface MediaRepository {
 
   /** Some com a linha depois que o objeto saiu. Nesta ordem, nunca na inversa. */
   descartarIntencao(id: string): Promise<void>;
+
+  /**
+   * TODAS as chaves de objeto de uma conta, para o expurgo definitivo
+   * (SEC-020).
+   *
+   * **Lida ANTES do `DELETE FROM users`, e é por isso que ela existe.** As
+   * chaves só vivem dentro das linhas que a cascata apaga — `upload_intents`,
+   * `pet_photos` e `conversation_messages` — então o `DELETE` destrói o único
+   * ponteiro que existia para o arquivo. Um objeto sem linha é lixo que ninguém
+   * consegue nomear, e o custo de encontrá-lo depois é listar o balde inteiro e
+   * cruzar com o banco, que é literalmente o que o cabeçalho de
+   * `varrer-envios-vencidos.ts` diz para evitar.
+   *
+   * **Não recebe dono como segundo argumento porque o dono É o argumento.** Não
+   * há identificador de recurso vindo de fora, então não há 403 nem 404 a
+   * decidir (ADR-0021), e a consulta que alcançaria a foto de outra conta não
+   * existe deste lado da porta.
+   *
+   * Devolve a CLASSE junto com a chave porque são dois baldes fisicamente
+   * separados: o original e a foto de achador no privado, as derivadas `card` e
+   * `thumb` no público. Quem apaga precisa saber em qual, e uma lista só de
+   * chaves obrigaria quem chama a reconstruir essa regra — que é a segunda
+   * definição de onde cada objeto mora.
+   *
+   * Lista vazia é resposta normal: conta sem foto nenhuma é o caso comum.
+   */
+  chavesDaConta(dono: UserId): Promise<readonly ObjetoDaConta[]>;
+}
+
+/** Um objeto de uma conta, com o balde em que ele está. */
+export interface ObjetoDaConta {
+  readonly classe: Classe;
+  readonly chave: ObjectKey;
 }
 
 export interface IntencaoVencida {

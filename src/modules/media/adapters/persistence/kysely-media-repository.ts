@@ -31,6 +31,7 @@ import type {
   IntencaoDeEnvio,
   MediaRepository,
   NovaIntencao,
+  ObjetoDaConta,
   StatusDaFoto,
 } from '../../ports/media-repository.js';
 import type { Instant, PetId, UserId } from '../../../../shared/types/brands.js';
@@ -382,6 +383,74 @@ export function criarMediaRepository(db: Db): MediaRepository {
         .limit(limite)
         .execute();
       return linhas.map((l) => ({ id: l.id, objectKey: comoObjectKey(l.object_key) }));
+    },
+
+    /**
+     * Todas as chaves de objeto da conta, nos dois baldes (SEC-020).
+     *
+     * Quatro consultas e não um `UNION`: as tabelas chegam ao dono por caminhos
+     * diferentes -- `upload_intents` tem `user_id`, `pet_photos` chega por
+     * `pets.owner_user_id`, e `conversation_messages` por `sender_user_id` --,
+     * e um `UNION` com três junções diferentes esconderia justamente qual delas
+     * está errada no dia em que uma estiver.
+     *
+     * **A foto EXCLUÍDA LOGICAMENTE entra**, e é deliberado: `pet_photos` tem
+     * `deleted_at` e `media-service.ts` promete por comentário que "os objetos
+     * saem do armazenamento pelo expurgo". Filtrar por `deleted_at IS NULL`
+     * aqui deixaria no balde exatamente as fotos que a pessoa já tinha mandado
+     * apagar uma vez.
+     *
+     * A derivada nula é pulada: foto ainda em `processing`, ou recusada, não
+     * tem `thumb` nem `card`.
+     */
+    async chavesDaConta(dono: UserId): Promise<readonly ObjetoDaConta[]> {
+      const objetos: ObjetoDaConta[] = [];
+
+      const intencoes = await db
+        .selectFrom('upload_intents')
+        .select('object_key')
+        .where('user_id', '=', dono)
+        .execute();
+      for (const linha of intencoes) {
+        objetos.push({ classe: 'privado', chave: comoObjectKey(linha.object_key) });
+      }
+
+      const fotos = await db
+        .selectFrom('pet_photos')
+        .innerJoin('pets', 'pets.id', 'pet_photos.pet_id')
+        .select(['pet_photos.original_key', 'pet_photos.thumb_key', 'pet_photos.card_key'])
+        .where('pets.owner_user_id', '=', dono)
+        .execute();
+      for (const linha of fotos) {
+        // O ORIGINAL É PRIVADO E AS DUAS DERIVADAS SÃO PÚBLICAS. São três
+        // objetos por foto, e a contagem importa: uma tutora com dois pets e
+        // três fotos cada deixa 18 objetos para trás, seis deles em balde
+        // público servido com `max-age` de um ano.
+        objetos.push({ classe: 'privado', chave: comoObjectKey(linha.original_key) });
+        if (linha.thumb_key !== null) {
+          objetos.push({ classe: 'publico', chave: comoObjectKey(linha.thumb_key) });
+        }
+        if (linha.card_key !== null) {
+          objetos.push({ classe: 'publico', chave: comoObjectKey(linha.card_key) });
+        }
+      }
+
+      // A foto de achador (BICHUS-35): UM objeto, só original, sem derivada, e
+      // no balde privado. Ela chega ao dono por `sender_user_id`, que é nulo
+      // quando quem escreveu não tinha conta -- e nesse caso não há titular
+      // cuja exclusão estejamos cumprindo.
+      const mensagens = await db
+        .selectFrom('conversation_messages')
+        .select('photo_object_key')
+        .where('sender_user_id', '=', dono)
+        .where('photo_object_key', 'is not', null)
+        .execute();
+      for (const linha of mensagens) {
+        if (linha.photo_object_key === null) continue;
+        objetos.push({ classe: 'privado', chave: comoObjectKey(linha.photo_object_key) });
+      }
+
+      return objetos;
     },
 
     async descartarIntencao(id: string): Promise<void> {
