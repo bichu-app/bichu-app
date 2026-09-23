@@ -595,7 +595,7 @@ void describe('POST /v1/auth/logout chamado como o contrato declara (BICHUS-81 c
     // lateral. A família também não entra no metadado — ela já está em
     // `resourceId`, que é onde ela pertence.
     assert.deepEqual(
-      Object.keys((logout.metadata ?? {}) as Record<string, unknown>).sort(),
+      Object.keys(logout.metadata ?? {}).sort(),
       ['locations_removed'],
       'apareceu campo novo no metadado do logout. Confira que ele não é coordenada nem ' +
         'identificador de aparelho antes de acrescentá-lo a esta lista.',

@@ -179,7 +179,7 @@ void describe('o esquema é o que a migração promete', () => {
     assert.match(definicao, /reference_point/);
   });
 
-  void it('a chave primária é `user_id`: histórico é inexprimível', async () => {
+  void it('SEC-021: a chave primária é o PAR `(user_id, session_family_id)`', async () => {
     const r = await cliente.query<{ cols: string }>(
       `SELECT string_agg(a.attname, ',' ORDER BY a.attname) AS cols
          FROM pg_constraint k
@@ -187,7 +187,36 @@ void describe('o esquema é o que a migração promete', () => {
          JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum = ANY(k.conkey)
         WHERE c.relname = 'user_reference_locations' AND k.contype = 'p'`,
     );
-    assert.equal(r.rows[0]?.cols, 'user_id');
+    // ISCA: volte a chave primária para `user_id` sozinho (migração
+    // 20260923000001) e este caso reprova. O par é o que torna "uma linha por
+    // SESSÃO DE APARELHO" uma propriedade do esquema em vez de disciplina de
+    // aplicação — com `user_id` sozinho a pessoa não pode ter duas regiões, e a
+    // decisão do cliente de 23/09 fica sem como ser cumprida.
+    assert.equal(
+      r.rows[0]?.cols,
+      'session_family_id,user_id',
+      'a chave primária deixou de ser o par. Com `user_id` sozinho, o segundo aparelho ' +
+        'sobrescreve a região do primeiro, e "a localização é por aparelho" volta a ser ' +
+        'inexprimível.',
+    );
+  });
+
+  void it('SEC-021: `session_family_id` é NOT NULL, e não há linha sem aparelho', async () => {
+    const r = await cliente.query<{ nulavel: string }>(
+      `SELECT is_nullable AS nulavel
+         FROM information_schema.columns
+        WHERE table_name = 'user_reference_locations' AND column_name = 'session_family_id'`,
+    );
+    // ISCA: deixe a coluna anulável e este caso reprova. Uma linha sem família
+    // é uma linha que nenhum logout alcança: coordenada imortal com aparência
+    // de linha correta, e a volta do predicado que toda consulta futura teria
+    // de lembrar de repetir.
+    assert.equal(
+      r.rows[0]?.nulavel,
+      'NO',
+      'a sessão de aparelho passou a aceitar nulo, e linha sem aparelho é linha que ' +
+        'o logout não tem como apagar.',
+    );
   });
 
   void it('`source` é CHECK e não enum nativo', async () => {
@@ -267,6 +296,69 @@ void describe('uma linha por conta, sempre a última, sem histórico', () => {
     const lida = await aparelhoUnico.buscarValida(dono, (AGORA + 1000) as Instant);
     assert.equal(lida?.lat, -22.952);
     assert.equal(lida?.origem, 'map_pin');
+  });
+});
+
+void describe('SEC-021: duas regiões para a mesma pessoa, uma por aparelho', () => {
+  const CELULAR = comoFamiliaDeSessao('018f3a2b-0000-7000-8000-00000000d0c1');
+  const TABLET = comoFamiliaDeSessao('018f3a2b-0000-7000-8000-00000000d0c2');
+
+  void it('duas linhas convivem: o tablet em casa e o celular no trabalho', async () => {
+    const dona = await criarConta();
+    await repo.gravar(dona, CELULAR, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await repo.gravar(
+      dona,
+      TABLET,
+      localizacaoAGravar({ lat: -22.9519, lon: -43.2105 }, 'map_pin', AGORA),
+    );
+
+    const r = await cliente.query<{ n: string }>(
+      'SELECT count(*)::text AS n FROM user_reference_locations WHERE user_id = $1',
+      [dona],
+    );
+    // ISCA: volte a chave primária para `user_id` e este caso reprova — o
+    // `ON CONFLICT` colapsaria as duas numa, e a pessoa voltaria a poder estar
+    // num lugar só.
+    assert.equal(
+      r.rows[0]?.n,
+      '2',
+      'as duas regiões viraram uma. Desde 23/09 a localização é do aparelho, e a ' +
+        'pessoa com dois aparelhos tem duas.',
+    );
+  });
+
+  void it('apagar a do celular deixa a do tablet de pé, e devolve 1', async () => {
+    const dona = await criarConta();
+    await repo.gravar(dona, CELULAR, localizacaoAGravar(PAULISTA, 'device_gps', AGORA));
+    await repo.gravar(
+      dona,
+      TABLET,
+      localizacaoAGravar({ lat: -22.9519, lon: -43.2105 }, 'map_pin', AGORA),
+    );
+
+    const apagadas = await repo.apagar(dona, CELULAR);
+
+    assert.equal(apagadas, 1, 'o apagamento de um aparelho precisa alcançar exatamente um');
+    // ISCA: tire `.where('session_family_id', ...)` de `construtorDoApagamento`
+    // e este caso reprova — o tablet perde a localização dele num logout que
+    // não foi dele. É o contrapeso do caso acima: sem ele, um `DELETE` por
+    // pessoa passaria pelos dois.
+    assert.equal(
+      await repo.buscarValida(dona, TABLET, AGORA) === null,
+      false,
+      'o tablet perdeu a localização porque o CELULAR saiu da conta. Sair é por ' +
+        'aparelho (ADR-0002, emenda 1).',
+    );
+    assert.equal(
+      await repo.buscarValida(dona, CELULAR, AGORA),
+      null,
+      'a do celular sobreviveu ao próprio apagamento',
+    );
+  });
+
+  void it('apagar o que não existe devolve 0, e não erra', async () => {
+    const dona = await criarConta();
+    assert.equal(await repo.apagar(dona, CELULAR), 0);
   });
 });
 
