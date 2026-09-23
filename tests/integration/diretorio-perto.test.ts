@@ -158,7 +158,14 @@ async function criarVerificacao(
   );
 }
 
-/** A localizacao de referencia de quem chama, com validade explicita. */
+/**
+ * A localizacao de referencia de quem chama, com validade explicita.
+ *
+ * `captured_at` sai de `validaAte` menos os 30 dias da janela, e nao de um
+ * instante fixo: o CHECK `user_reference_locations_validade_no_futuro` exige
+ * `expires_at > captured_at`, e uma linha VENCIDA com captura recente e
+ * inexprimivel no banco -- como tem de ser.
+ */
 async function darLocalizacao(
   dono: UserId,
   ponto: { lat: number; lon: number },
@@ -172,7 +179,7 @@ async function darLocalizacao(
        SET reference_point = EXCLUDED.reference_point,
            captured_at = EXCLUDED.captured_at,
            expires_at = EXCLUDED.expires_at`,
-    [dono, ponto.lon, ponto.lat, new Date(Number(AGORA) - DIA), new Date(validaAte)],
+    [dono, ponto.lon, ponto.lat, new Date(validaAte - 30 * DIA), new Date(validaAte)],
   );
 }
 
@@ -398,8 +405,8 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
   void it('o total e o do RECORTE, e a pagina respeita limite e deslocamento', async () => {
     const titular = await criarConta();
     const bairro = `bairro-${randomUUID().slice(0, 8)}`;
-    for (const nome of ['A', 'B', 'C']) {
-      await criarEntrada({ titular, slug: `pag-${nome}-${randomUUID().slice(0, 8)}`, nome, bairro });
+    for (const nome of ['Aa', 'Bb', 'Cc']) {
+      await criarEntrada({ titular, slug: `pag-${nome.toLowerCase()}-${randomUUID().slice(0, 8)}`, nome, bairro });
     }
 
     const primeira = await repo.listarPublicados(
@@ -415,7 +422,7 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     assert.equal(segunda.itens.length, 1);
     assert.deepEqual(
       [...primeira.itens, ...segunda.itens].map((uma) => uma.displayName),
-      ['A', 'B', 'C'],
+      ['Aa', 'Bb', 'Cc'],
     );
   });
 

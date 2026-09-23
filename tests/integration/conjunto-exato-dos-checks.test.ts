@@ -472,6 +472,11 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((source = 'import'::text) OR (claim_status <> 'unclaimed'::text)))",
   'public.professionals.professionals_cnpj_tamanho':
     "CHECK (((cnpj IS NULL) OR (cnpj ~ '^[0-9]{14}$'::text)))",
+  // BICHUS-234. O endereco publico da entrada do diretorio. Formato COPIADO de
+  // `pets_slug_formato`: os dois sao endereco publico do mesmo produto, e dois
+  // formatos diferentes para a mesma coisa e o defeito que a duplicacao produz.
+  'public.professionals.professionals_slug_formato':
+    "CHECK (((slug IS NULL) OR (slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text)))",
   'public.professionals.professionals_telefone_formato':
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'::text)))",
   'public.professionals.professionals_titularidade_tem_marco':
