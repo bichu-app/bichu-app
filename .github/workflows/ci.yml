@@ -340,10 +340,21 @@ jobs:
       # Sem isto, `src/shared/types/generated/` pode ser editado a mao e o
       # contrato e o codigo divergem SEM QUE O DIFF MOSTRE, porque a proxima
       # geracao desfaz a edicao em silencio.
+      # `npm run verify:types` E NAO OS DOIS COMANDOS INLINE, desde 23/09. O
+      # script existia no `package.json` e NINGUEM o chamava: a esteira
+      # repetia `generate:types` mais `git diff --exit-code` aqui, e a ADR-0004
+      # afirmava por escrito que `verify:types` "ja e o portao que reprova" --
+      # o que era falso, porque um script que ninguem invoca nao reprova nada.
+      # Ou o script vira o portao, ou some; ele virou o portao, e a frase da ADR
+      # foi corrigida para descrever o que existe.
+      #
+      # A forma `git diff --exit-code` esta certa AQUI e so aqui: na esteira a
+      # arvore comeca limpa no commit. Na maquina de quem desenvolve ela
+      # reprovaria o estado correto de quem acabou de mexer no contrato, e por
+      # isso o portao local e outro (`make verificar-tipos-gerados`).
       - name: tipos gerados batem com a spec
         run: |
-          npm run generate:types
-          if ! git diff --exit-code -- src/shared/types/generated/; then
+          if ! npm run verify:types; then
             echo "::error::os tipos gerados divergem de api/openapi.yaml. Rode 'npm run generate:types' e versione o resultado; se o tipo esta errado, o errado e a especificacao"
             exit 1
           fi
@@ -1288,6 +1299,14 @@ jobs:
 
       # Uma fonte (design/tokens.json), um destino gerado, e um portao que
       # reprova na divergencia -- mesma forma do portao de tipos do contrato.
+      #
+      # O GEMEO LOCAL DESTE PASSO e `make verificar-tokens-gerados`, que entrou
+      # em `make verificar-app` em 23/09 e roda em 1,26 s. Ele pergunta a mesma
+      # coisa de outro jeito -- "gerar de novo muda algum arquivo?" em vez de
+      # "o gerado commitado bate com o HEAD?" -- porque a forma daqui depende de
+      # arvore limpa, que so a esteira tem. Os dois precisam continuar
+      # existindo: este pega quem empurrou sem rodar nada, e o local pega antes
+      # de a divergencia viajar.
       # Sem isto, bichu_tokens.g.dart pode ser editado a mao e o token e o
       # codigo divergem SEM QUE O DIFF MOSTRE, porque a proxima geracao desfaz
       # a edicao em silencio.

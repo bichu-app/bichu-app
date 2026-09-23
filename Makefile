@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -420,8 +420,43 @@ verificar-subida-da-api-autoteste: ## as iscas do juizo da subida reprovam (nao 
 verificar-recibo-de-fechamento-autoteste: ## as iscas do guarda de push de `integra/*` reprovam
 	sh infra/verificacao/verificar-recibo-de-fechamento.sh --autoteste
 
-verificar-app: ## a metade Flutter: analise e suite de widget (job `app` da esteira)
-	cd app && flutter pub get && flutter analyze && flutter test
+# O GEMEO DO PORTAO DOS TIPOS GERADOS, e ele desce pelo mesmo motivo.
+#
+# Havia DOIS portoes da forma "regera o derivado e compara" neste repositorio, e
+# os dois so existiam na esteira:
+#
+#   api/openapi.yaml   -> src/shared/types/generated/        (job `codigo`)
+#   design/tokens.json -> app/lib/theme/bichu_tokens.g.dart  (job `tokens`)
+#
+# O primeiro desceu para `make verificar` em 22/09, depois que o commit 351ae0f
+# atravessou um `make fechar-integracao` VERDE com o derivado uma geracao atras
+# da fonte. Este e o outro. Hoje o `.g.dart` esta em dia: e buraco latente, e o
+# momento de tapar buraco latente e antes de ele virar historia.
+#
+# MEDIDO neste worktree: 1,26 s com `/usr/bin/time -p`, contra os 37,0 s de
+# `flutter pub get` + `analyze` + suite de widget. Ele roda ANTES dos dois, e a
+# ordem e o ponto: derivado velho reprova em um segundo, e nao depois de meio
+# minuto de suite que nao tem nada com isso.
+#
+# NAO E `git diff --exit-code`, que e o que a esteira faz, e a diferenca custou
+# uma iteracao no irmao. Com a fonte adiantada e o derivado JA REGERADO -- o
+# estado correto de quem acabou de mexer no token e ainda nao commitou -- a
+# forma da esteira REPROVA. Portao que reprova o fluxo certo e portao que alguem
+# desliga. A pergunta daqui e outra, e nao depende do git: gerar de novo muda
+# algum arquivo?
+verificar-tokens-gerados-autoteste: ## as iscas do portao dos tokens gerados reprovam (nao gera nada)
+	node infra/verificacao/verificar-tokens-gerados.mjs --autoteste
+
+verificar-tokens-gerados: ## o Dart de app/lib/theme/ bate com design/tokens.json (1,26 s)
+	node infra/verificacao/verificar-tokens-gerados.mjs
+
+# `flutter pub get` PRIMEIRO, e nao por habito: `dart run tool/gen_tokens.dart`
+# precisa do pacote resolvido, e sem isso o portao reprovaria por falta de
+# preparo em vez de por divergencia -- que e a reprovacao que ninguem entende.
+verificar-app: verificar-tokens-gerados-autoteste ## a metade Flutter: analise e suite de widget (job `app` da esteira)
+	cd app && flutter pub get
+	@$(MAKE) --no-print-directory verificar-tokens-gerados
+	cd app && flutter analyze && flutter test
 
 # ---------------------------------------------------------------------------
 # A LISTA DE FECHAMENTO DE INTEGRACAO
