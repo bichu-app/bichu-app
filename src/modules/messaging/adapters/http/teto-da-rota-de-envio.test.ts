@@ -155,6 +155,40 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
     }
   });
 
+  /**
+   * O relógio parado em 00:00 UTC, que é quando o defeito aparecia.
+   *
+   * A rota declara DUAS entradas na mesma dimensão: 30/1h (`deny_429`) e
+   * 200/24h (`hold_for_review`). Enquanto a janela não entrava na `bucketKey`,
+   * as duas montavam a mesma chave, e o contador só as separava pelo início da
+   * janela — que coincide **toda madrugada entre 00:00 e 01:00 UTC**, 21h no
+   * Brasil. Nessa hora cada requisição somava dois, e o teto de 30 recusava na
+   * 16ª.
+   *
+   * Este caso congela esse instante. Sem ele o defeito só reprovava a suíte de
+   * quem rodasse dentro daquela hora, que é como ele chegou até aqui: some antes
+   * de alguém conseguir olhar, e volta no dia seguinte.
+   */
+  void it('duas entradas na mesma dimensão não se somam, nem às 00:00 UTC', async () => {
+    zerarInventario();
+    const MEIA_NOITE_UTC = Date.parse('2026-09-23T00:00:00.000Z');
+    const app = servidor(criarContadorEmMemoria(() => MEIA_NOITE_UTC));
+    try {
+      for (let i = 0; i < TETO_POR_HORA; i += 1) {
+        const resposta = await enviar(app, CONVERSA);
+        assert.equal(
+          resposta.statusCode,
+          201,
+          `a ${String(i + 1)}ª foi recusada cedo demais: o balde de 1 h e o de 24 h voltaram ` +
+            'a compartilhar chave, e o teto de 30 virou 15',
+        );
+      }
+      assert.equal((await enviar(app, CONVERSA)).statusCode, 429);
+    } finally {
+      await app.close();
+    }
+  });
+
   void it('ISCA — com o contador DESLIGADO, a 31ª passa, e este arquivo reprova', async () => {
     // Sem esta isca, os dois casos acima passariam num sistema sem teto nenhum.
     zerarInventario();

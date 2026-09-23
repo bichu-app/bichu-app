@@ -206,7 +206,13 @@ export class FoundReportService {
     // ou um caminho interno para a borda ser contornada, e aí o limite vira
     // decoração. As duas contagens são independentes e a mais restritiva vence.
     if ((await this.deps.repositorio.contarIntencoesDeFoto(achado, dono)) >= TETO_DE_FOTOS_POR_ACHADO) {
-      throw problemas.limiteDeChamadas(VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS);
+      // `limiteSemReabertura`, e não `limiteDeChamadas`: este teto é `lifetime`
+      // no contrato — três fotos neste aviso, e acabou. O prazo que estava aqui
+      // era `VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS`, que é quanto tempo uma
+      // autorização de upload vale, e não tem relação nenhuma com quando o teto
+      // reabre; ele saía no `Retry-After` mandando a pessoa voltar em cinco
+      // minutos para receber a mesma recusa.
+      throw problemas.limiteSemReabertura();
     }
 
     const uploadId = this.deps.ids.uuidv7();

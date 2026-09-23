@@ -24,6 +24,7 @@ import type { DependenciasDoTeto } from './aplicacao-de-teto.js';
 import type { RegistradorDeRotas, VerificadorDeReautenticacao } from './registrar-rota.js';
 import { AppError, problemas } from './errors.js';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
+import { camposDoSchema } from './erros-de-schema.js';
 import {
   montarProblema,
   TIPO_DE_CONTEUDO_DO_PROBLEMA,
@@ -68,7 +69,9 @@ function correlacaoDeEntrada(cabecalho: unknown): string | undefined {
   return formato.test(cabecalho) ? cabecalho.toLowerCase() : undefined;
 }
 
-function ehErroDoFastify(erro: unknown): erro is { statusCode?: number; code?: string; message: string } {
+function ehErroDoFastify(
+  erro: unknown,
+): erro is { statusCode?: number; code?: string; message: string; validation?: unknown } {
   return typeof erro === 'object' && erro !== null && 'message' in erro;
 }
 
@@ -86,6 +89,15 @@ function traduzir(erro: unknown): AppError {
 
   const status = erro.statusCode ?? 500;
   if (erro.code === 'FST_ERR_VALIDATION' || status === 400) {
+    // O Fastify entrega o achado do Ajv em `erro.validation`, e é dele que sai o
+    // NOME do campo. Enquanto isto era uma cadeia vazia, o 400 de corpo dizia
+    // "um ou mais campos" sem dizer qual — e `errors[].field` existe no contrato
+    // exatamente para a tela marcar um.
+    const campos = camposDoSchema(erro.validation);
+    if (campos !== undefined) return problemas.validacao(campos, 'Confira os dados enviados.');
+    // Sem achado para ler não há campo a nomear: corpo que nem chegou a ser JSON
+    // (`FST_ERR_CTP_EMPTY_JSON_BODY`, parse que falhou) cai aqui. Inventar um
+    // nome seria mandar a pessoa corrigir o que está certo.
     return problemas.validacao(
       [{ field: '', code: 'schema', message: 'Um ou mais campos não passaram na validação.' }],
       'Confira os dados enviados.',
