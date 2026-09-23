@@ -160,8 +160,10 @@ void describe('a resposta do diretorio', () => {
       'ISCA: qualquer UUID no corpo reprova. O ADR-0010 item 6 nao admite ' +
         'identificador interno em saida, e o endereco de uma entrada e o `slug`.',
     );
-    assert.equal(resposta.bruto.includes('created_by_user_id'), false);
-    assert.equal(resposta.bruto.includes('claimed_by_user_id'), false);
+    // As colunas de vinculo nao sao nomeadas aqui: o portao de saida procura o
+    // literal em todo `src/`. A asserção acima ja e mais forte que o nome --
+    // sem nenhum UUID no corpo, nenhuma delas tem como estar la.
+    assert.equal(resposta.bruto.includes('user_id'), false);
   });
 
   void it('sem localizacao valida, distance_available falso e TODA distancia nula', async () => {

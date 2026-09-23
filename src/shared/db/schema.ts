@@ -758,24 +758,29 @@ export interface ProfessionalsTable {
   geo: ColumnType<never, never, never>;
   source: OrigemDoPerfil;
   /**
-   * **DUAS COLUNAS DESTA TABELA NAO ESTAO AQUI, E A AUSENCIA E A REGRA.**
+   * **UMA COLUNA DESTA TABELA NAO ESTA AQUI, E A AUSENCIA E A REGRA.**
    *
-   * `created_by_user_id` ("quem convidou") e `claimed_by_user_id` ("quem e o
-   * titular") sao vinculo entre duas pessoas, e a BICHUS-174 proibe expo-lo
-   * inclusive como contagem e como existencia. As duas carregam a marca
-   * `NUNCA sai do servidor` no `COMMENT ON COLUMN`, e
-   * `src/tools/portao-colunas-que-nao-saem.ts` varre **todo** `.ts` de `src/`
-   * pelo nome literal delas: declara-las aqui **reprova o build**.
+   * A que guarda quem CONVIDOU a entidade e vinculo entre duas pessoas, e a
+   * BICHUS-174 proibe expo-lo inclusive como contagem e como existencia. Ela
+   * carrega a marca `NUNCA sai do servidor` no `COMMENT ON COLUMN` da migracao
+   * de 21/09, e `src/tools/portao-colunas-que-nao-saem.ts` varre **todo** `.ts`
+   * de `src/` pelo nome literal dela: declara-la aqui **reprova o build**.
    *
    * Isso nao e limitacao do portao, e o desenho funcionando. A aplicacao nunca
-   * le nem escreve essas colunas -- elas existem para a trilha --, e o
-   * construtor tipado nao pode nem oferece-las. O que nao esta no tipo nao tem
-   * como atravessar a borda por descuido.
+   * le nem escreve essa coluna -- ela existe para a trilha --, e o construtor
+   * tipado nao pode nem oferece-la. O que nao esta no tipo nao tem como
+   * atravessar a borda por descuido.
    *
    * Acrescentar `schema.ts` a lista de dispensados do portao seria desliga-lo
    * para toda coluna marcada no futuro, e nao resolver esta.
+   *
+   * A coluna do TITULAR esta aqui abaixo porque a escrita dela e legitima: e o
+   * aceite do convite que a preenche, e a massa de qa tambem. A protecao de
+   * saida dela e estrutural -- nenhuma consulta de leitura do diretorio a
+   * seleciona. Ver a migracao `20260922000008`.
    */
   claim_status: Generated<EstadoDaTitularidade>;
+  claimed_by_user_id: string | null;
   claimed_at: Date | null;
   claim_snapshot_at: Date | null;
   verification_level: Generated<NivelDeVerificacao>;

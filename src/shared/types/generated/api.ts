@@ -3092,9 +3092,12 @@ export interface components {
         };
         /**
          * @description O cartao da listagem. **Nao tem `id`**: o endereco e o `slug` (ADR-0010
-         *     item 6). Nao tem coordenada, nao tem quem convidou e nao tem titular --
-         *     `created_by_user_id` e `claimed_by_user_id` carregam a marca `NUNCA sai
-         *     do servidor` e `src/tools/portao-colunas-que-nao-saem.ts` as vigia.
+         *     item 6). Nao tem coordenada, nao tem quem convidou a entidade e nao tem
+         *     quem e o titular dela -- as duas colunas ligam a entrada a uma conta de
+         *     pessoa, e a BICHUS-174 proibe expor vinculo entre duas pessoas inclusive
+         *     como contagem e como existencia. A primeira e vigiada pelo portao de
+         *     colunas que nao saem; a segunda, por nenhuma consulta de leitura a
+         *     selecionar.
          */
         DirectoryEntrySummary: {
             slug: components["schemas"]["Slug"];

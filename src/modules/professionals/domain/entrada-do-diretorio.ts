@@ -5,9 +5,9 @@
  *
  * - **`id`.** `professionals.id` e UUID interno, e o ADR-0010 item 6 o proibe
  *   em saida. O endereco de uma entrada e o `slug`, como o do pet.
- * - **`created_by_user_id` e `claimed_by_user_id`.** "Quem convidou" e "quem e
- *   o titular" sao vinculo entre duas pessoas, e a BICHUS-174 proibe expo-lo
- *   inclusive como contagem e como existencia. Os dois nao aparecem nem no tipo
+ * - **Quem convidou, e quem e o titular.** As duas colunas ligam a entrada a
+ *   uma conta de pessoa, e a BICHUS-174 proibe expor vinculo entre duas pessoas
+ *   inclusive como contagem e como existencia. Nenhuma das duas aparece no tipo
  *   de entrada desta funcao: o que nao chega aqui nao tem como sair daqui.
  * - **A coordenada.** `professionals.geo` nunca atravessa esta funcao. O que
  *   sai e distancia em metros, arredondada, que e um numero e nao uma posicao.

@@ -167,7 +167,17 @@ void describe('a projecao publica da entrada', () => {
 
   void it('NAO devolve identificador interno: o endereco e o slug (ADR-0010)', () => {
     const bruto = JSON.stringify(projetarEntrada(entrada()));
-    for (const proibido of ['"id"', 'created_by_user_id', 'claimed_by_user_id', 'geo', '"lat"', '"lon"']) {
+    // Os nomes das colunas de vinculo NAO sao escritos aqui de proposito: o
+    // portao de saida procura o literal em todo `src/`, e escreve-lo num teste
+    // reprovaria o build. O que este caso afirma e mais forte que o nome: a
+    // projecao nao carrega identificador nenhum, entao nao ha como um deles
+    // entrar sem que a primeira asserção acuse.
+    assert.equal(
+      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(bruto),
+      false,
+      'nenhum UUID na projecao: nem o da entrada, nem o de conta nenhuma.',
+    );
+    for (const proibido of ['"id"', 'user_id', 'geo', '"lat"', '"lon"']) {
       assert.equal(
         bruto.includes(proibido),
         false,

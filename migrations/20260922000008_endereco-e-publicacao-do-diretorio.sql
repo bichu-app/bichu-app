@@ -6,11 +6,12 @@
 -- ADR-0010 item 6 o proibe em saida publica; sem `slug` a lista sai sem chave
 -- estavel e nenhuma tela de detalhe pode nascer.
 --
--- ELA NAO E UMA IDEIA NOVA. As tres mudancas abaixo estao pedidas, uma a uma e
--- com o motivo, na secao "O QUE FALTA NO BANCO PARA ESTA PROPOSTA COMPILAR" de
+-- ELA NAO E UMA IDEIA NOVA. As mudancas abaixo estao pedidas, uma a uma e com
+-- o motivo, na secao "O QUE FALTA NO BANCO PARA ESTA PROPOSTA COMPILAR" de
 -- `api/diretorio.proposta.yaml` (branch `docs/contrato-do-backoffice-do-diretorio`).
 -- Esta migracao e a execucao daquela lista, e nao uma quarta opiniao sobre o
--- modelo.
+-- modelo. Duas das tres entraram; a terceira NAO, e o motivo esta medido mais
+-- abaixo.
 --
 -- O QUE ELA NAO FAZ, E A AUSENCIA E DELIBERADA:
 --
@@ -64,23 +65,47 @@ COMMENT ON COLUMN professionals.published_at IS
   'Desde quando a entrada esta no ar. Nulo enquanto status <> ''published''. Nao e created_at: perfil nasce rascunho e pode ser publicado meses depois.';
 
 -- ---------------------------------------------------------------------------
--- A marca de saida que faltava em claimed_by_user_id
+-- A TERCEIRA MUDANCA QUE A PROPOSTA PEDIA NAO ENTROU, E O MOTIVO E MEDIDO
 -- ---------------------------------------------------------------------------
--- `created_by_user_id` ("quem convidou") ja carrega a marca desde 21/09, e
--- `claimed_by_user_id` ("quem e o titular") e **a mesma natureza de vinculo**:
--- ligar uma entrada do diretorio a uma conta de pessoa. A BICHUS-174 proibe
--- expor vinculo entre duas pessoas inclusive como contagem e como existencia, e
--- nao ha leitura em que a segunda seja menos sensivel que a primeira.
+-- `api/diretorio.proposta.yaml` pedia um `COMMENT ON COLUMN` marcando o
+-- titular da entrada com `NUNCA sai do servidor`, pelo mesmo raciocinio que
+-- ja vale para quem convidou: as duas colunas ligam uma entrada do diretorio a
+-- uma conta de pessoa, e a BICHUS-174 proibe expor vinculo entre duas pessoas.
 --
--- O `COMMENT` e o mecanismo inteiro: `src/tools/portao-colunas-que-nao-saem.ts`
--- le a marca DAS MIGRACOES, nao de uma lista paralela. Com esta linha, escrever
--- o nome da coluna em qualquer `.ts` de `src/` passa a reprovar o build.
-COMMENT ON COLUMN professionals.claimed_by_user_id IS
-  'QUEM E O TITULAR. Vinculo entre duas pessoas, como created_by_user_id: NUNCA sai do servidor, em nenhuma resposta, nem como contagem nem como existencia (ADR-0011 secao 4, BICHUS-174).';
+-- O raciocinio esta certo e a execucao nao cabe, por uma razao que so aparece
+-- rodando o portao. `src/tools/portao-colunas-que-nao-saem.ts` procura o NOME
+-- LITERAL da coluna marcada em **todo** `.ts` e `.mjs` de `src/`, comentario
+-- inclusive, e dispensa exatamente dois arquivos (ele mesmo e o teste dele).
+--
+-- MEDIDO em 22/09/2026, com o comentario aplicado:
+--
+--   REPROVADO -- 9 saida(s) indevida(s):
+--     src/bin/seed.ts:174: <titular> ...
+--     src/shared/db/schema.ts:763: ...
+--     (e mais sete, quase todas em comentario)
+--
+-- A linha do `seed` e a que decide: **semear a massa do diretorio PRECISA
+-- escrever essa coluna.** O mesmo vale para o fluxo de aceite do convite, que
+-- e justamente o que a emenda 1 do ADR-0011 manda existir. Uma marca que torna
+-- a ESCRITA inexprimivel nao protege a SAIDA: ela proibe a coluna.
+--
+-- Quem convidou nao tem esse problema porque nenhuma escrita a toca hoje --
+-- e e por isso que a marca funciona la e nao funciona aqui.
+--
+-- A saida NAO e dispensar `seed.ts` nem `schema.ts` no portao: isso o
+-- desligaria para toda coluna marcada, presente e futura. A saida e o portao
+-- passar a distinguir "escrita para o banco" de "saida para o cliente", e isso
+-- e mudanca no portao, nao nesta migracao. Fica registrado como pendencia
+-- CONHECIDA, com a medicao junto, em vez de virar um `COMMENT` que alguem
+-- remove daqui a duas semanas sem saber por que ele estava la.
+--
+-- Enquanto isso, a protecao de saida do titular e estrutural e nao declarativa:
+-- a coluna nao esta na interface `ProfessionalsTable` (ver o comentario la) e
+-- nao esta em nenhuma consulta de leitura do diretorio. O que nao e
+-- selecionado nao vaza.
 
 -- Down Migration
 
 DROP INDEX professionals_slug_unico;
 ALTER TABLE professionals DROP COLUMN published_at;
 ALTER TABLE professionals DROP COLUMN slug;
-COMMENT ON COLUMN professionals.claimed_by_user_id IS NULL;
