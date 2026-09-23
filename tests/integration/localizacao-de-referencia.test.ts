@@ -517,8 +517,10 @@ void describe('o banco recusa o que o contrato recusa', () => {
       () =>
         sql`
           INSERT INTO user_reference_locations
-            (user_id, reference_point, precision_m, source, captured_at, expires_at)
-          VALUES (${dono}, ST_SetSRID(ST_MakePoint(-46.656, -23.561), 4326)::geography,
+            (user_id, session_family_id, reference_point, precision_m, source,
+             captured_at, expires_at)
+          VALUES (${dono}, ${APARELHO_UNICO},
+                  ST_SetSRID(ST_MakePoint(-46.656, -23.561), 4326)::geography,
                   100, 'ip_lookup', now(), now() + interval '30 days')
         `.execute(db),
       /user_reference_locations_origem|check/i,
@@ -531,8 +533,10 @@ void describe('o banco recusa o que o contrato recusa', () => {
       () =>
         sql`
           INSERT INTO user_reference_locations
-            (user_id, reference_point, precision_m, source, captured_at, expires_at)
-          VALUES (${dono}, ST_SetSRID(ST_MakePoint(-46.656, -23.561), 4326)::geography,
+            (user_id, session_family_id, reference_point, precision_m, source,
+             captured_at, expires_at)
+          VALUES (${dono}, ${APARELHO_UNICO},
+                  ST_SetSRID(ST_MakePoint(-46.656, -23.561), 4326)::geography,
                   100, 'device_gps', now(), now() - interval '1 day')
         `.execute(db),
       /validade_no_futuro|check/i,
