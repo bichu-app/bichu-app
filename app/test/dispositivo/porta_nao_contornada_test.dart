@@ -347,7 +347,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `write-tree --prefix=app/lib/telas`) sobre a arvore ja commitada, e nao
 /// copiado de relato nenhum. Anterior:
 /// `ad6fde0e74c94b21c983c286d1557c07be291288`.
-const String _arvoreDasTelas = '7f35c3ebc4d0050e3348e9c4c4829ead7bca8a89';
+const String _arvoreDasTelas = '1774532baa910c4cf8f4331631a81698f4c5b0ac';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

@@ -348,7 +348,10 @@ class _CascaComAbasState extends State<CascaComAbas> {
         // pagina, e sem o filete ela **nao existe visualmente**.
         decoration: BoxDecoration(
           border: Border(
-            top: BorderSide(color: cores.outline, width: BichuBorda.hairline),
+            top: BorderSide(
+              color: cores.outline,
+              width: BichuBorda.hairline,
+            ),
           ),
         ),
         child: NavigationBar(
@@ -463,7 +466,10 @@ class TelaDeAba extends StatelessWidget {
         // O `rotulo` continua indo para o leitor de tela: vetor sem nome e
         // vetor mudo.
         title: tituloEmMarca
-            ? MarcaLockup(largura: MarcaLockup.pisoDeLargura, rotulo: titulo)
+            ? MarcaLockup(
+                largura: MarcaLockup.pisoDeLargura,
+                rotulo: titulo,
+              )
             : Text(titulo),
         // 64 dp, e nao os 56 do padrao do M3.
         //
