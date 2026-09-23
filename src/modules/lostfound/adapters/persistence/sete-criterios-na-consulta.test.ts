@@ -236,10 +236,17 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   });
 
   void it('BICHUS-88: a conta logicamente excluída não entra no alcance', () => {
-    // Entre a exclusão lógica (imediata, critério 12 da BICHUS-88) e o expurgo
-    // de 30 dias, a linha de `user_reference_locations` continua casando com
-    // `ST_DWithin`. Esta junção é o que impede o alerta de ir para quem pediu
-    // para sair. Ela não conserta a BICHUS-88 e não tenta.
+    // A BICHUS-88 foi consertada na raiz em 22/09: o gatilho da migração
+    // `20260922000006` apaga a linha de `user_reference_locations` no instante
+    // da exclusão lógica, então ela não chega mais a casar com `ST_DWithin`.
+    //
+    // ESTE CASO PASSOU A SER O ÚNICO QUE SEGURA A JUNÇÃO, e é por isso que ele
+    // ganhou importância em vez de perder. Com o gatilho no lugar, remover
+    // `u.deleted_at IS NULL` da consulta não reprova caso nenhum da suíte de
+    // integração — medido, 252 de 252 verdes sem a cláusula. A segunda camada
+    // deixou de ter consequência observável, e uma proteção sem consequência
+    // observável some na primeira refatoração que a achar redundante. O que
+    // resta para segurá-la é a leitura do texto do SQL, que é o que está aqui.
     const sql = normalizado();
     assert.match(
       sql,
@@ -250,8 +257,11 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
     assert.match(
       sql,
       /u\.deleted_at is null/i,
-      'a consulta voltaria a alertar contas logicamente excluídas: entre a exclusão ' +
-        'e o expurgo de 30 dias a linha de localização ainda casa com `ST_DWithin`.',
+      'a segunda camada da BICHUS-88 saiu da consulta. Hoje o gatilho da migração ' +
+        '`20260922000006` já apaga a linha na exclusão lógica, então nenhuma suíte ' +
+        'de comportamento acusa esta remoção — este caso é o único que acusa. Se a ' +
+        'remoção for deliberada, o gatilho passa a ser a ÚNICA defesa: decida isso ' +
+        'de propósito, e não por parecer redundante aqui.',
     );
   });
 

@@ -12,6 +12,7 @@ import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/cartao_de_pet.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../avisos/aviso_de_cadastro_incompleto.dart';
 import '../../widgets/moldura.dart';
 import '../casca_com_abas.dart';
 import '../perdido/tela_de_quem_e_o_caso.dart';
@@ -414,6 +415,20 @@ class _MeusPetsState extends State<MeusPets> {
           // aqui ele era so um container, porque o criterio 2 proibe acao sem
           // destino -- agora o destino existe e esta registrado em `Rotas`.
           aoTocar: () => context.push(Rotas.detalheDoPetDe(pet.id)),
+          // A TERCEIRA POSICAO do aviso persistente (BICHUS-75, criterio 2).
+          //
+          // A frase e a MESMA da forma encolhida do criterio 4, e isso e
+          // deliberado: o refinamento de 17/09 registrou duas vezes que esta
+          // posicao nao tem microcopy escrita. Inventar uma terceira frase
+          // aqui seria decidir texto de tela, que nao e de quem implementa.
+          // Pergunta fechada na pauta de refinamento de 22/09.
+          //
+          // A condicao e a mesma do criterio 7: quem verificou nao ve nada, em
+          // lugar nenhum -- e o cartao e um dos lugares.
+          linhaDeAviso: (Escopo.of(context).sessao.usuario?.emailVerificado ??
+                  true)
+              ? null
+              : TextosDoAvisoDeCadastro.naoConfirmado,
         ),
       );
     }

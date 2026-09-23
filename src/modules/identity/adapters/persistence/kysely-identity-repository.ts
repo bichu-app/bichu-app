@@ -20,16 +20,21 @@ import { barreiraDeContaNova } from '../../domain/session.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
 import type { Instant, TokenHash, UserId } from '../../../../shared/types/brands.js';
 import type {
+  ConsumoDeJanela,
+  ConsequenciasDaExclusao,
   Conta,
   CredencialLocal,
   IdentityRepository,
   MotivoDeRevogacao,
   NovaConta,
+  NovaJanelaDeReautenticacao,
   NovoRefresh,
   NovoTokenDeVerificacao,
+  ResultadoDoConsumoDaJanela,
   TokenConsumido,
   RefreshArmazenado,
 } from '../../ports/identity-repository.js';
+import { conferirJanela, type JanelaDeReautenticacao } from '../../domain/reautenticacao.js';
 
 const VIOLACAO_DE_UNICIDADE = '23505';
 
@@ -157,6 +162,59 @@ export function construtorDaRevogacaoEmMassa(
     .where('user_id', '=', userId)
     .where('revoked_at', 'is', null)
     .returning('id');
+}
+
+/**
+ * **BICHUS-48: as cinco amarras da janela de reautenticação, todas no `WHERE`.**
+ *
+ * Uma instrução, e ela CONSOME ao mesmo tempo em que confere. Ler a linha,
+ * decidir na aplicação e marcar depois é a forma que o ADR-0021 existe para
+ * eliminar, e aqui ela também perderia o uso único: duas chamadas simultâneas
+ * de `DELETE /me` com a mesma janela passariam as duas pela conferência antes
+ * de qualquer uma marcar.
+ *
+ * Cada predicado responde por uma amarra, e nenhum é redundante:
+ *
+ * | predicado | o que ele impede |
+ * |---|---|
+ * | `token_hash = $n` | endereça a linha, e só ela (256 bits de CSPRNG) |
+ * | `user_id = $n` | janela de OUTRA conta apresentada nesta sessão |
+ * | `scope = $n` | janela aberta para revogar a tag usada para excluir a conta |
+ * | `access_jti = $n` | janela copiada para outro aparelho |
+ * | `consumed_at IS NULL` | segunda apresentação do mesmo valor |
+ * | `expires_at > $agora` | janela vencida |
+ * | `issued_at >= $barreira` | janela anterior a uma troca de senha ou a um logout-all (SEC-006) |
+ *
+ * `reautenticacao-na-clausula-where.test.ts` compila esta função sem executá-la
+ * e cobra os sete, com isca que precisa reprovar quando qualquer um sai.
+ */
+export function construtorDoConsumoDaJanela(db: DbExecutor, consumo: ConsumoDeJanela) {
+  return db
+    .updateTable('reauth_tokens')
+    .set({ consumed_at: new Date(consumo.agora) })
+    .where('token_hash', '=', Buffer.from(consumo.tokenHash))
+    .where('user_id', '=', consumo.userId)
+    .where('scope', '=', consumo.escopoExigido)
+    .where('access_jti', '=', consumo.acessoJti)
+    .where('consumed_at', 'is', null)
+    .where('expires_at', '>', new Date(consumo.agora))
+    .where('issued_at', '>=', new Date(consumo.barreiraDaConta))
+    .returning('id');
+}
+
+/**
+ * A leitura que NOMEIA a recusa, e só ela.
+ *
+ * Endereça pelo hash e por nada mais, de propósito: é assim que ela consegue
+ * dizer "esta janela existe e é de outra conta" em vez de "não achei nada". O
+ * resultado vai para a trilha e **nunca para o corpo da resposta** — quem
+ * apresentou uma janela recusada recebe o mesmo 401 nos seis casos.
+ */
+export function construtorDaLeituraDaJanela(db: DbExecutor, tokenHash: TokenHash) {
+  return db
+    .selectFrom('reauth_tokens')
+    .select(['id', 'user_id', 'scope', 'access_jti', 'issued_at', 'expires_at', 'consumed_at'])
+    .where('token_hash', '=', Buffer.from(tokenHash));
 }
 
 /**
@@ -550,6 +608,59 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       return Number(r.numUpdatedRows);
     },
 
+    async criarJanelaDeReautenticacao(nova: NovaJanelaDeReautenticacao): Promise<void> {
+      await db
+        .insertInto('reauth_tokens')
+        .values({
+          id: nova.id,
+          user_id: nova.userId,
+          access_jti: nova.acessoJti,
+          scope: nova.escopo,
+          token_hash: Buffer.from(nova.tokenHash),
+          issued_at: new Date(nova.emitidaEm),
+          expires_at: new Date(nova.expiraEm),
+          created_ip_hmac: nova.ipHmac === null ? null : Buffer.from(nova.ipHmac),
+        })
+        .execute();
+    },
+
+    /** O predicado mora em {@link construtorDoConsumoDaJanela}. */
+    async consumirJanelaDeReautenticacao(
+      consumo: ConsumoDeJanela,
+    ): Promise<ResultadoDoConsumoDaJanela> {
+      const linha = await construtorDoConsumoDaJanela(db, consumo).executeTakeFirst();
+      if (linha !== undefined) return { consumida: true };
+
+      // Só no caminho de recusa, e só para a trilha. A leitura endereça pelo
+      // hash, que é o que permite distinguir "não existe" de "existe e não
+      // serve" — distinção que fica AQUI DENTRO.
+      const bruta = await construtorDaLeituraDaJanela(db, consumo.tokenHash).executeTakeFirst();
+      if (bruta === undefined) return { consumida: false, motivo: 'inexistente' };
+
+      const janela: JanelaDeReautenticacao = {
+        id: bruta.id,
+        userId: bruta.user_id,
+        escopo: bruta.scope,
+        acessoJti: bruta.access_jti,
+        emitidaEm: bruta.issued_at.getTime() as Instant,
+        expiraEm: bruta.expires_at.getTime() as Instant,
+        consumidaEm: bruta.consumed_at === null ? null : (bruta.consumed_at.getTime() as Instant),
+      };
+      const veredicto = conferirJanela(janela, {
+        userId: consumo.userId,
+        escopoExigido: consumo.escopoExigido,
+        acessoJti: consumo.acessoJti,
+        barreiraDaConta: consumo.barreiraDaConta,
+        agora: consumo.agora,
+      });
+      // `vale: true` aqui significa que o `UPDATE` e a regra do domínio
+      // discordaram, e isso é defeito nosso, não recusa da pessoa. Ele vira
+      // `inexistente` na trilha em vez de um sucesso que a instrução não deu.
+      return veredicto.vale
+        ? { consumida: false, motivo: 'inexistente' }
+        : { consumida: false, motivo: veredicto.motivo };
+    },
+
     async marcarEmailVerificado(userId: UserId, agora: Instant): Promise<void> {
       await db
         .updateTable('users')
@@ -561,6 +672,149 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
           updated_at: new Date(agora),
         })
         .where('id', '=', userId)
+        .execute();
+    },
+
+    /**
+     * Exclusão lógica e revogação das tags, numa transação só.
+     *
+     * O `where` da marcação exige `deleted_at is null`: é ele, e não um `if`
+     * antes, que torna a operação idempotente sob concorrência. Duas chamadas
+     * simultâneas leriam as duas a mesma conta ativa; só uma atualiza linha.
+     *
+     * A revogação das tags roda por subconsulta em `pets` do próprio dono. A
+     * autorização vai na cláusula e não num `if` de papel (ADR-0021): não há
+     * caminho, nem por engano de parâmetro, que revogue a tag de outra pessoa.
+     */
+    async registrarPedidoDeExclusao(
+      userId: UserId,
+      agora: Instant,
+    ): Promise<ConsequenciasDaExclusao | undefined> {
+      return db.transaction().execute(async (trx) => {
+        const marcada = await trx
+          .updateTable('users')
+          .set({
+            status: 'deletion_requested',
+            deletion_requested_at: new Date(agora),
+            deleted_at: new Date(agora),
+            updated_at: new Date(agora),
+          })
+          .where('id', '=', userId)
+          .where('deleted_at', 'is', null)
+          .returning('id')
+          .executeTakeFirst();
+        if (marcada === undefined) return undefined;
+
+        const tags = await trx
+          .updateTable('pet_tags')
+          .set({
+            status: 'revoked',
+            revoked_at: new Date(agora),
+            // `owner_request` e não um motivo novo: do ponto de vista da tag,
+            // foi o tutor que pediu. Um `account_deleted` aqui seria um sexto
+            // valor numa lista fechada para dizer o que a trilha da conta já
+            // diz, e a `revocation_reason` é lida por quem investiga a TAG.
+            revocation_reason: 'owner_request',
+            // ADR-0004: a revogação apaga o texto cifrado guardado para
+            // reimpressão. `pet_tags_revogada_nao_guarda_o_codigo` recusa a
+            // versão pela metade, então esquecer esta linha não passa.
+            code_ciphertext: null,
+          })
+          .where('status', '=', 'active')
+          .where((eb) =>
+            eb(
+              'pet_id',
+              'in',
+              eb.selectFrom('pets').select('pets.id').where('pets.owner_user_id', '=', userId),
+            ),
+          )
+          .returning('id')
+          .execute();
+
+        return { tagsRevogadas: tags.length };
+      });
+    },
+
+    async contasAExpurgar(ate: Instant, limite: number): Promise<readonly UserId[]> {
+      const linhas = await db
+        .selectFrom('users')
+        .select('id')
+        .where('deleted_at', 'is not', null)
+        .where('deleted_at', '<=', new Date(ate))
+        .orderBy('deleted_at', 'asc')
+        .limit(limite)
+        .execute();
+      return linhas.map((linha) => linha.id as UserId);
+    },
+
+    async expurgarConta(userId: UserId): Promise<boolean> {
+      const apagadas = await db
+        .deleteFrom('users')
+        .where('id', '=', userId)
+        .where('deleted_at', 'is not', null)
+        .executeTakeFirst();
+      return (apagadas.numDeletedRows ?? 0n) > 0n;
+    },
+
+    async registrarPedidoDeTrocaDeEmail(
+      userId: UserId,
+      novoEmail: string,
+      agora: Instant,
+    ): Promise<void> {
+      await db
+        .updateTable('users')
+        .set({ pending_email: novoEmail, updated_at: new Date(agora) })
+        .where('id', '=', userId)
+        .where('deleted_at', 'is', null)
+        .execute();
+    },
+
+    async concluirTrocaDeEmail(
+      userId: UserId,
+      novoEmail: string,
+      agora: Instant,
+    ): Promise<Conta | undefined> {
+      // `pending_email` entra no WHERE, e não só no SET. Ele é o que amarra o
+      // token ao ÚLTIMO pedido: quem pediu A, pediu B em seguida e então abriu
+      // o link de A não pode levar a conta para A. O token de A já teria sido
+      // invalidado no pedido de B, mas depender só disso deixaria a regra numa
+      // instrução distante desta, e esta é a que escreve.
+      try {
+        const linha = await db
+          .updateTable('users')
+          .set({
+            email: novoEmail,
+            pending_email: null,
+            // Abrir o link é a prova de alcance que a verificação pede. Exigir
+            // um segundo e-mail de verificação depois desta confirmação seria
+            // pedir duas vezes a mesma prova, e devolveria à conta o estado de
+            // e-mail não verificado que a troca existe para tirar dela.
+            email_verified_at: new Date(agora),
+            email_deliverable: true,
+            updated_at: new Date(agora),
+          })
+          .where('id', '=', userId)
+          .where('deleted_at', 'is', null)
+          .where('pending_email', '=', novoEmail)
+          .returning(COLUNAS_DA_CONTA)
+          .executeTakeFirst();
+
+        return linha === undefined ? undefined : paraConta(linha as LinhaSelecionada);
+      } catch (erro) {
+        // O endereço ganhou dono entre o envio do link e a abertura dele. É
+        // resposta, não incidente: quem chama devolve o mesmo 410 do token
+        // vencido.
+        if (ehViolacaoDeUnicidade(erro)) return undefined;
+        throw erro;
+      }
+    },
+
+    async cancelarTrocaDeEmailPendente(userId: UserId, agora: Instant): Promise<void> {
+      await db
+        .updateTable('users')
+        .set({ pending_email: null, updated_at: new Date(agora) })
+        .where('id', '=', userId)
+        .where('pending_email', 'is not', null)
         .execute();
     },
   };

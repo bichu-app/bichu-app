@@ -13,6 +13,11 @@
 export const MODULES = [
   'identity', 'pets', 'tags', 'lostfound', 'found',
   'messaging', 'media', 'notifications', 'professionals', 'audit',
+  // BICHUS-66. A transferencia e modulo proprio e nao um canto de `pets`: ela
+  // tem maquina de estado, tokens, fila e dois tutores, e escreve em `pets` e
+  // em `pet_tags` na mesma transacao. Dentro de `pets` isso viraria um segundo
+  // dominio sem fronteira.
+  'transfers',
 ];
 
 /**

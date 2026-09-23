@@ -19,7 +19,20 @@ export type NextAction =
   | 'register_stray_found_report'
   | 'verify_email'
   | 'upload_pet_photo'
-  | 'sign_in';
+  | 'sign_in'
+  /**
+   * O 429 de janela que reabre. A saída é esperar, e ela só vira caminho quando
+   * o cliente sabe que pode esperar: sem `next_action` a tela do teto era a
+   * única do vocabulário que terminava sem nada para fazer, embora a resposta
+   * já carregasse o `Retry-After` que a destrava. Com este valor, o app arma o
+   * reenvio (ou a contagem regressiva) em cima do cabeçalho em vez de oferecer
+   * um botão que recusa de novo.
+   *
+   * **Não** acompanha o teto que não reabre (`problemas.limiteSemReabertura`):
+   * ali esperar não resolve, e mandar esperar seria a mesma mentira que este
+   * trabalho veio tirar do corpo.
+   */
+  | 'retry_later';
 
 export interface ProblemFieldError {
   readonly field: string;

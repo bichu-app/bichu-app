@@ -78,6 +78,21 @@ abstract class CameraEGaleria {
   Future<FotoLocal?> tirarFoto();
 
   Future<FotoLocal?> escolherDaGaleria();
+
+  /// Os bytes do arquivo que [tirarFoto] ou [escolherDaGaleria] produziram.
+  ///
+  /// **Mora aqui, e nao no mecanismo de envio, porque ler o arquivo do seletor
+  /// e trabalho do aparelho.** E a mesma razao pela qual esta porta existe: o
+  /// teste de widget nao tem disco de aparelho, e sem este metodo na porta o
+  /// envio inteiro so seria exercitavel com um arquivo de verdade em disco --
+  /// ou seja, nao seria.
+  ///
+  /// **Estoura quando o arquivo nao esta la**, e nao devolve vazio. O sistema
+  /// limpa o diretorio temporario da camera quando falta espaco, e isso
+  /// acontece entre a escolha e o envio; quem chama precisa distinguir
+  /// "arquivo sumiu" de "arquivo de zero byte", e nulo ou vazio juntaria os
+  /// dois num silencio so.
+  Future<Uint8List> bytesDaFoto(FotoLocal foto);
 }
 
 /// O aparelho que **nao tem camera** -- e o duble que os testes montam.
@@ -126,6 +141,19 @@ class CameraNaoEmbarcada implements CameraEGaleria {
 
   @override
   Future<FotoLocal?> escolherDaGaleria() async => null;
+
+  /// **Estoura, e e o certo.** Esta implementacao nunca devolve [FotoLocal],
+  /// entao chegar aqui com uma significa que ela veio de outro lugar -- e
+  /// devolver bytes vazios faria o envio recusar em silencio, escondendo a
+  /// fiacao errada.
+  @override
+  Future<Uint8List> bytesDaFoto(FotoLocal foto) async {
+    throw StateError(
+      'CameraNaoEmbarcada nao produz foto, entao nao ha bytes para ler de '
+      '"${foto.caminho}". Chegar aqui significa que a FotoLocal veio de outra '
+      'porta que nao esta montada.',
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -313,6 +341,16 @@ class CameraDoAparelho implements CameraEGaleria {
 
   @override
   Future<FotoLocal?> escolherDaGaleria() => _escolher(ImageSource.gallery);
+
+  /// **Sem `_semExplodir` aqui, de proposito.** As outras operacoes degradam
+  /// para "ausencia de recurso" porque a tela tem caminho alternativo; um
+  /// arquivo que nao abre nao tem alternativa nenhuma, e devolver vazio faria
+  /// o envio recusar sem ninguem saber por que. A excecao sobe e quem chama
+  /// decide.
+  @override
+  Future<Uint8List> bytesDaFoto(FotoLocal foto) {
+    return File(foto.caminho).readAsBytes();
+  }
 
   Future<FotoLocal?> _escolher(ImageSource origem) async {
     if (!_plataformaTemCamera) return null;

@@ -57,6 +57,11 @@ const TABELAS_ESPERADAS = [
   // BICHUS-91, pela mesma razao: sem exigir a tabela aqui, uma base sem a
   // migracao do aparelho passaria verde em toda inspecao abaixo.
   'public.user_devices',
+  // BICHUS-66, pela mesma razao das duas acima: sem exigir a tabela aqui, uma
+  // base sem a migracao da transferencia passaria verde em toda inspecao
+  // abaixo -- inclusive nos casos de chave estrangeira, que sao os que decidem
+  // se a exclusao de conta funciona.
+  'public.pet_transfers',
 ];
 
 /**

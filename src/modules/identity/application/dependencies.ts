@@ -71,4 +71,12 @@ export interface AvisoAoTitular {
   readonly userId: string;
   readonly ocorridoEm: Instant;
   readonly correlationId: string;
+  /**
+   * O HMAC do endereço de quem APRESENTOU o refresh reusado — quer dizer, de
+   * quem provavelmente copiou a credencial, e não da vítima. É o único rastro
+   * forense que existe daquele instante, e ele vai para
+   * `verification_tokens.created_ip_hmac` junto com o token do "Não fui eu".
+   * Sempre resumido (SEC-010); endereço em claro não atravessa esta porta.
+   */
+  readonly ipHmac: Buffer | null;
 }

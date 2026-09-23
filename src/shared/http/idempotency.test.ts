@@ -152,6 +152,9 @@ function pedido(sobrescrita: Partial<Pedido> = {}): Pedido {
     chaveDoCabecalho: CHAVE,
     donoOuToken: DONO,
     endpoint: 'POST /v1/pets',
+    // `/v1/pets` nao tem parametro de caminho. A rota COM parametro tem casos
+    // proprios em `id-do-caminho-entra-na-chave.test.ts`.
+    parametrosDeCaminho: {},
     corpo: { name: 'Bichu', species_code: 'dog' },
     agoraEmMilissegundos: Date.parse('2026-09-17T12:00:00Z'),
     ...sobrescrita,

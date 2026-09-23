@@ -29,10 +29,18 @@ import type {
   CamposDoPerfil,
   Conta,
   MotivoDeRevogacao,
+  PropositoDoToken,
 } from '../ports/identity-repository.js';
+import type { ReauthScope } from '../../../shared/http/route-definition.js';
+import {
+  expiracaoDaJanela,
+  JANELA_DE_REAUTENTICACAO_EM_SEGUNDOS,
+} from '../domain/reautenticacao.js';
 
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
+import type { Mensagem } from '../ports/mailer.js';
+import { comoIso } from '../../../shared/time/clock.js';
 
 /**
  * Os motivos que derrubam a conta INTEIRA — os gatilhos do SEC-006.
@@ -44,7 +52,7 @@ import { projetarSessao, type ParDeTokens, type SessionView } from './session-vi
  */
 type MotivoDeRevogacaoEmMassa = Extract<
   MotivoDeRevogacao,
-  'logout_all' | 'password_changed' | 'account_deleted'
+  'logout_all' | 'password_changed' | 'account_deleted' | 'not_me'
 >;
 
 export interface EntradaDeCadastro {
@@ -70,14 +78,146 @@ function comoTokenHash(valor: string): TokenHash {
 }
 
 /** Quanto vale cada token. Os números vêm das histórias, não daqui. */
-const VALIDADE_EM_MS: Record<'email_verify' | 'password_reset', number> = {
+const VALIDADE_EM_MS: Record<PropositoDoToken, number> = {
   // 24 h (BICHUS-79 critério 6): o e-mail pode ser lido no dia seguinte.
   email_verify: 24 * 60 * 60 * 1000,
+  // 24 h também, e pelo mesmo motivo do `email_verify`: o ato é o mesmo, que é
+  // provar alcance a um endereço, e quem acabou de errar uma letra no cadastro
+  // pode só abrir aquela caixa no dia seguinte. A janela curta do
+  // `password_reset` protege contra caixa de entrada vazada ontem; aqui ela não
+  // protegeria de nada, porque quem pede a troca com a sessão tomada controla o
+  // endereço novo e abre o link no mesmo minuto. O que defende esta operação é
+  // o aviso que sai para o endereço ANTIGO no instante do pedido, e não um
+  // prazo apertado que só atinge quem é dono da conta de verdade.
+  email_change: 24 * 60 * 60 * 1000,
   // 30 min (BICHUS-77 critério 4): é uma credencial de troca de senha, e a
   // janela curta é a diferença entre uma caixa de entrada vazada ontem servir
   // ou não servir hoje.
   password_reset: 30 * 60 * 1000,
+  // 7 dias (BICHUS-215). Mais longo que os outros dois de propósito: quem
+  // recebe este aviso pode estar sem o aparelho, sem a caixa de entrada à mão,
+  // ou pode simplesmente não ter entendido na primeira leitura o que aconteceu.
+  // O que a janela expõe é pequeno — o link só derruba sessão, e derrubar
+  // sessão de quem já não deveria estar lá é o resultado desejado, não o dano.
+  session_disavow: 7 * 24 * 60 * 60 * 1000,
 };
+
+/**
+ * Trinta dias entre a exclusão lógica e o expurgo (ADR-0010, e a descrição de
+ * `deleteMyAccount` no contrato). O número está aqui e no worker lê daqui: duas
+ * cópias dele seriam duas promessas de prazo que divergem sem ninguém notar.
+ */
+export const PRAZO_DE_EXPURGO_EM_MS = 30 * 24 * 60 * 60 * 1000;
+
+/**
+ * O corpo de cada e-mail que carrega um token, num lugar só.
+ *
+ * Fora do factory porque não depende de nenhuma dependência injetada: é função
+ * dos argumentos e de mais nada, e isso a torna testável sem bancada.
+ *
+ * O endereço de destino da troca é o endereço NOVO, e o link vai só para ele.
+ * O aviso ao endereço antigo é outra mensagem, montada em
+ * {@link montarAvisoDeTrocaAoEnderecoAntigo}, e sai no mesmo pedido.
+ */
+function montarMensagemDoToken(
+  proposito: PropositoDoToken,
+  email: string,
+  tokenBruto: string,
+  base: string,
+): Mensagem {
+  if (proposito === 'email_verify') {
+    return {
+      para: email,
+      assunto: 'Confirme seu e-mail no Bichu',
+      corpo:
+        `Confirme seu e-mail para liberar o aviso de pet perdido:\n\n` +
+        `${base}/verificar-email?token=${tokenBruto}\n\n` +
+        `O link vale por 24 horas. Se você não criou uma conta no Bichu, ignore esta mensagem.`,
+    };
+  }
+
+  if (proposito === 'email_change') {
+    return {
+      para: email,
+      assunto: 'Confirme seu novo e-mail no Bichu',
+      corpo:
+        `Alguém pediu para passar a usar este endereço na conta do Bichu.\n\n` +
+        `Para confirmar, abra:\n\n` +
+        `${base}/verificar-email?token=${tokenBruto}\n\n` +
+        `O link vale por 24 horas e só pode ser usado uma vez. Até você abrir, ` +
+        `a conta continua usando o endereço anterior.\n` +
+        `Se não foi você que pediu, ignore esta mensagem — nada muda.`,
+    };
+  }
+
+  return {
+    para: email,
+    assunto: 'Redefinir sua senha do Bichu',
+    corpo:
+      `Para escolher uma senha nova, abra:\n\n` +
+      `${base}/redefinir-senha?token=${tokenBruto}\n\n` +
+      `O link vale por 30 minutos e só pode ser usado uma vez.\n` +
+      `Se não foi você que pediu, ignore — a sua senha continua a mesma.`,
+  };
+}
+
+/**
+ * O aviso que sai para o endereço ANTIGO, e a razão de ele existir.
+ *
+ * Trocar o e-mail é o gesto clássico de tomada de conta: quem toma a sessão
+ * troca o endereço e captura a conta pela recuperação de senha. O endereço
+ * antigo é a única testemunha que sobra, e por isso este aviso sai no instante
+ * do PEDIDO e não depois da troca — depois é tarde, porque a essa altura a
+ * recuperação de senha já aponta para o invasor.
+ *
+ * O endereço novo vai no corpo por extenso. Ele não é segredo de ninguém: esta
+ * mensagem só chega a quem já é dono do endereço da conta, e é lendo QUAL
+ * endereço foi pedido que a pessoa reconhece o que não pediu.
+ */
+export function montarAvisoDeTrocaAoEnderecoAntigo(
+  enderecoAntigo: string,
+  enderecoNovo: string,
+): Mensagem {
+  return {
+    para: enderecoAntigo,
+    assunto: 'Pediram para trocar o e-mail da sua conta no Bichu',
+    corpo:
+      `Alguém pediu para a sua conta do Bichu passar a usar este endereço:\n\n` +
+      `${enderecoNovo}\n\n` +
+      `A troca só vale depois que esse endereço for confirmado. Até lá, a conta ` +
+      `continua neste e-mail, e é por ele que a recuperação de senha passa.\n\n` +
+      `Se não foi você, troque a sua senha agora: isso derruba as sessões abertas ` +
+      `e cancela o pedido.`,
+  };
+}
+
+/**
+ * O segundo aviso ao endereço antigo: a troca ACONTECEU.
+ *
+ * O primeiro aviso sai no pedido e é o que dá tempo de reagir. Este sai na
+ * conclusão e fecha o par, porque sem ele o endereço antigo fica sabendo que
+ * alguém PEDIU e nunca se a troca valeu — e "pediram" sem desfecho é o tipo de
+ * aviso que a pessoa aprende a ignorar.
+ *
+ * Ele é a última mensagem que este endereço recebe da conta: daqui em diante a
+ * recuperação de senha passa pelo endereço novo.
+ */
+export function montarAvisoDeTrocaConcluida(
+  enderecoAntigo: string,
+  enderecoNovo: string,
+): Mensagem {
+  return {
+    para: enderecoAntigo,
+    assunto: 'O e-mail da sua conta no Bichu foi trocado',
+    corpo:
+      `A sua conta do Bichu passou a usar este endereço:\n\n` +
+      `${enderecoNovo}\n\n` +
+      `Esta é a última mensagem que enviamos para o endereço anterior. A partir ` +
+      `de agora, entrar e recuperar a senha passam pelo endereço novo.\n\n` +
+      `Se não foi você, fale com a gente agora: quem controla o e-mail da conta ` +
+      `controla a recuperação de senha.`,
+  };
+}
 
 export function criarAuthService(deps: DependenciasDeIdentidade) {
   /**
@@ -95,7 +235,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
   async function emitirEEnviarToken(
     userId: UserId,
     email: string,
-    proposito: 'email_verify' | 'password_reset',
+    proposito: PropositoDoToken,
     contexto: ContextoDaRequisicao,
   ): Promise<void> {
     const agora = deps.clock.now();
@@ -113,25 +253,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     });
 
     const base = deps.baseDaWeb.replace(/\/$/, '');
-    const mensagem =
-      proposito === 'email_verify'
-        ? {
-            para: email,
-            assunto: 'Confirme seu e-mail no Bichu',
-            corpo:
-              `Confirme seu e-mail para liberar o aviso de pet perdido:\n\n` +
-              `${base}/verificar-email?token=${tokenBruto}\n\n` +
-              `O link vale por 24 horas. Se você não criou uma conta no Bichu, ignore esta mensagem.`,
-          }
-        : {
-            para: email,
-            assunto: 'Redefinir sua senha do Bichu',
-            corpo:
-              `Para escolher uma senha nova, abra:\n\n` +
-              `${base}/redefinir-senha?token=${tokenBruto}\n\n` +
-              `O link vale por 30 minutos e só pode ser usado uma vez.\n` +
-              `Se não foi você que pediu, ignore — a sua senha continua a mesma.`,
-          };
+    const mensagem = montarMensagemDoToken(proposito, email, tokenBruto, base);
 
     await deps.mailer.enviar(mensagem);
 
@@ -194,6 +316,102 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         'o e-mail de verificação do cadastro não saiu; a conta e a sessão seguem de pé',
       );
     }
+  }
+
+  /**
+   * Manda um aviso e **não deixa a falha dele derrubar a operação**.
+   *
+   * O engolir é deliberado e tem um caso concreto atrás: o endereço antigo pode
+   * ser justamente o que não entrega — é a conta com `email_deliverable: false`,
+   * que é quem mais precisa trocar de e-mail. Propagar a falha aqui faria o
+   * aviso ao endereço morto **bloquear a troca**, e a pessoa que digitou o
+   * endereço errado no cadastro ficaria sem saída de novo, que é exatamente o
+   * defeito que esta operação existe para fechar.
+   *
+   * O que a falha não pode ser é silenciosa: sem o registro, um aviso que parou
+   * de sair vira a tomada de conta sem testemunha.
+   */
+  async function avisarSemDerrubar(
+    mensagem: Mensagem,
+    userId: UserId,
+    contexto: ContextoDaRequisicao,
+    evento: string,
+  ): Promise<void> {
+    try {
+      await deps.mailer.enviar(mensagem);
+      deps.registrarOcorrencia(
+        { evento: 'email.send', proposito: evento, userId, correlationId: contexto.correlationId },
+        'e-mail transacional enviado',
+      );
+    } catch (erro) {
+      deps.registrarOcorrencia(
+        {
+          evento: 'email.send_failed',
+          proposito: evento,
+          userId,
+          correlationId: contexto.correlationId,
+          motivo: erro instanceof Error ? erro.message : String(erro),
+        },
+        'o aviso de troca de e-mail não saiu; a operação seguiu',
+      );
+    }
+  }
+
+  /**
+   * A outra metade de {@link solicitarTrocaDeEmail}: o token de troca foi
+   * apresentado, e agora a conta muda de endereço.
+   *
+   * Lê a conta ANTES de escrever porque o endereço antigo precisa ser conhecido
+   * depois da troca — é para ele que sai o aviso de conclusão, e depois do
+   * `UPDATE` ele não existe mais em lugar nenhum.
+   */
+  async function concluirTrocaDeEmail(
+    hash: TokenHash,
+    agora: Instant,
+    contexto: ContextoDaRequisicao,
+  ): Promise<UserId> {
+    const consumido = await deps.repositorio.consumirTokenDeVerificacao(
+      hash,
+      'email_change',
+      agora,
+    );
+    // Inexistente, vencido, já consumido e de outro propósito viram o mesmo
+    // 410: distinguir contaria a um estranho se aquele token existiu.
+    if (consumido === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+    const antes = await deps.repositorio.buscarContaPorId(consumido.userId);
+    if (antes === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+    const atualizada = await deps.repositorio.concluirTrocaDeEmail(
+      consumido.userId,
+      consumido.enviadoPara,
+      agora,
+    );
+
+    // `undefined` aqui é o endereço que ganhou dono no meio do caminho, ou o
+    // pedido que foi substituído por outro. Os dois viram o MESMO 410 do token
+    // vencido — um 409 contaria a quem tem o link que aquele endereço passou a
+    // existir, que é o oráculo que o SEC-003 fecha no cadastro.
+    if (atualizada === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+    await avisarSemDerrubar(
+      montarAvisoDeTrocaConcluida(antes.email, atualizada.email),
+      consumido.userId,
+      contexto,
+      'email_change_done',
+    );
+
+    await deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: consumido.userId,
+      actorIp: contexto.ip,
+      correlationId: contexto.correlationId,
+      action: 'auth.email_changed',
+      resourceKind: 'user',
+      resourceId: consumido.userId,
+    });
+
+    return consumido.userId;
   }
 
   /**
@@ -324,6 +542,43 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       resourceId: userId,
       metadata: { reason: motivo, revoked_families: familiasCaidas },
     });
+  }
+
+
+  /**
+   * O aviso que NÃO pode derrubar o efeito que ele anuncia.
+   *
+   * Medido em 22/09 na forma irmã desta: "sair de todos os aparelhos" abortava
+   * antes de o e-mail sair, e quem tinha perdido o aparelho ficava sem o
+   * remédio **e** sem o aviso. A lição não é mudar o e-mail de lugar — ele
+   * precisa vir depois, porque anuncia o que já aconteceu. É que a falha dele
+   * não pode desfazer, nem esconder, o que já está gravado no banco.
+   *
+   * O `catch` engole e **não silencia**: sem o registro, um SMTP fora do ar
+   * vira uma revogação que ninguém soube que aconteceu, que é o defeito de
+   * detecção silenciosa outra vez, um nível acima.
+   */
+  async function avisarSemDerrubarOEfeito(
+    mensagem: Mensagem,
+    contexto: { readonly evento: string; readonly correlationId: string },
+  ): Promise<void> {
+    try {
+      await deps.mailer.enviar(mensagem);
+      deps.registrarOcorrencia(
+        { evento: contexto.evento, correlationId: contexto.correlationId, enviado: true },
+        'aviso de seguranca enviado',
+      );
+    } catch (erro: unknown) {
+      deps.registrarOcorrencia(
+        {
+          evento: contexto.evento,
+          correlationId: contexto.correlationId,
+          enviado: false,
+          erro: erro instanceof Error ? erro.message : String(erro),
+        },
+        'aviso de seguranca NAO saiu; o efeito no banco esta feito',
+      );
+    }
   }
 
   return {
@@ -517,6 +772,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
             userId: armazenado.userId,
             ocorridoEm: agora,
             correlationId: contexto.correlationId,
+            ipHmac: deps.hmacDeIp(contexto.ip),
           });
         }
         throw problemas.sessaoExpirada();
@@ -785,24 +1041,162 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       contexto: ContextoDaRequisicao,
     ): Promise<UserId> {
       const agora = deps.clock.now();
-      const consumido = await deps.repositorio.consumirTokenDeVerificacao(
-        comoTokenHash(tokenBruto),
+      const hash = comoTokenHash(tokenBruto);
+
+      // Os dois propósitos entram pela MESMA porta, e é o token que diz qual
+      // deles é. O valor em claro é opaco: quem abre o link não escolhe rota, e
+      // uma segunda operação pública para a troca seria um segundo lugar onde
+      // errar a mesma coisa. A consulta por `email_verify` não escreve nada
+      // quando o token é de troca — `purpose` está no `WHERE` —, então tentar
+      // na ordem não gasta o token do outro propósito.
+      const verificacao = await deps.repositorio.consumirTokenDeVerificacao(
+        hash,
         'email_verify',
         agora,
       );
-      if (consumido === undefined) throw problemas.tokenDeVerificacaoVencido();
 
-      await deps.repositorio.marcarEmailVerificado(consumido.userId, agora);
+      if (verificacao !== undefined) {
+        await deps.repositorio.marcarEmailVerificado(verificacao.userId, agora);
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: verificacao.userId,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.email_verified',
+          resourceKind: 'user',
+          resourceId: verificacao.userId,
+        });
+        return verificacao.userId;
+      }
+
+      return await concluirTrocaDeEmail(hash, agora, contexto);
+    },
+
+    /**
+     * Pede a troca do e-mail da conta. Responde **sempre** 202.
+     *
+     * ## O que decide o desenho é o título: "com confirmação no endereço novo"
+     *
+     * A troca NÃO vale aqui. O que esta operação faz é declarar uma intenção em
+     * `pending_email` e mandar um link para o endereço novo. Enquanto ele não
+     * for aberto, `users.email` não muda — e é isso que impede que quem tomou a
+     * sessão troque o endereço e capture a conta pela recuperação de senha, que
+     * é o gesto clássico de tomada de conta.
+     *
+     * ## Qual e-mail vale entre pedir e confirmar
+     *
+     * O ANTIGO, para tudo: entrar, recuperar senha, receber aviso. `pending_email`
+     * não entra em nenhuma cláusula de busca do repositório, e essa ausência é a
+     * regra — um `OR pending_email = $1` em `buscarCredencialLocalPorEmail`
+     * daria login pelo endereço não confirmado e tornaria esta confirmação
+     * decorativa.
+     *
+     * ## O aviso ao endereço antigo sai AQUI, no pedido
+     *
+     * Antes do link, e não depois da troca. Depois é tarde: a essa altura a
+     * recuperação de senha já aponta para o invasor, e o endereço antigo é a
+     * única testemunha que a conta tem. O texto é o MESMO nos dois ramos abaixo,
+     * porque variar com a existência do endereço novo transformaria a caixa de
+     * entrada do titular num oráculo.
+     *
+     * ## O endereço novo já pertencer a outra conta não aparece na resposta
+     *
+     * O ramo existe — não emitimos token nem gravamos `pending_email` —, mas ele
+     * não muda nem o status, nem o corpo, nem o que o endereço antigo recebe. É
+     * a mesma opacidade que o SEC-003 exige do cadastro: aceitar a troca em
+     * `PATCH /me` foi recusado justamente porque o erro de unicidade viraria um
+     * oráculo de existência consultável por qualquer pessoa logada.
+     */
+    async solicitarTrocaDeEmail(
+      userId: UserId,
+      novoEmailBruto: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const conta = await deps.repositorio.buscarContaPorId(userId);
+      if (conta === undefined) return;
+
+      // Normalizar ANTES de conferir, nunca depois: a normalização pode
+      // produzir caractere proibido a partir de ponto de código que passaria
+      // na conferência (`normalizacao-nao-pode-vir-depois.test.ts`).
+      const novoEmail = normalizarEmail(novoEmailBruto);
+
+      // Segunda barreira de forma do produto, e a primeira fora do cadastro.
+      // O endereço aqui é DIGITADO por quem chama, ao contrário do que as
+      // outras mensagens usam, que vem do banco e já passou por aqui uma vez.
+      // A regra é a de `gramatica-de-endereco.ts`, lida também pelo fio.
+      if (!emailTemFormaValida(novoEmail)) {
+        deps.registrarOcorrencia(
+          {
+            evento: 'email_change.refused',
+            userId,
+            correlationId: contexto.correlationId,
+            motivo: 'forma de endereço recusada',
+          },
+          'pedido de troca de e-mail recusado na borda do domínio',
+        );
+        return;
+      }
+
+      // Pedir o endereço que a conta já usa não é troca, e não gasta e-mail
+      // nenhum. Sair aqui não conta nada a ninguém: quem chama já sabe qual é o
+      // próprio endereço, porque ele vem em `GET /v1/me`.
+      if (novoEmail === normalizarEmail(conta.email)) return;
+
+      // O aviso à testemunha sai PRIMEIRO, e sai igual nos dois ramos.
+      await avisarSemDerrubar(
+        montarAvisoDeTrocaAoEnderecoAntigo(conta.email, novoEmail),
+        userId,
+        contexto,
+        'email_change_requested',
+      );
+
       await deps.trilha.record({
         actorKind: 'user',
-        actorUserId: consumido.userId,
+        actorUserId: userId,
         actorIp: contexto.ip,
         correlationId: contexto.correlationId,
-        action: 'auth.email_verified',
+        action: 'auth.email_change_requested',
         resourceKind: 'user',
-        resourceId: consumido.userId,
+        resourceId: userId,
       });
-      return consumido.userId;
+
+      const jaTemDono = await deps.repositorio.buscarContaPorEmail(novoEmail);
+      if (jaTemDono !== undefined) {
+        // Nada é gravado e nada é enviado ao endereço novo. Mandar qualquer
+        // coisa para ele entregaria a quem tem a sessão um jeito de usar o
+        // nosso servidor para sondar endereços alheios.
+        deps.registrarOcorrencia(
+          {
+            evento: 'email_change.refused',
+            userId,
+            correlationId: contexto.correlationId,
+            motivo: 'endereço novo já pertence a uma conta viva',
+          },
+          'pedido de troca de e-mail encerrado sem token; a resposta não muda',
+        );
+        return;
+      }
+
+      await deps.repositorio.registrarPedidoDeTrocaDeEmail(userId, novoEmail, agora);
+
+      try {
+        await emitirEEnviarToken(userId, novoEmail, 'email_change', contexto);
+      } catch (erro) {
+        // Mesma decisão do cadastro: a falha de envio não vira 500 numa
+        // operação que o contrato declara como sempre 202. O que ela não pode
+        // ser é invisível.
+        deps.registrarOcorrencia(
+          {
+            evento: 'email.send_failed',
+            proposito: 'email_change',
+            userId,
+            correlationId: contexto.correlationId,
+            motivo: erro instanceof Error ? erro.message : String(erro),
+          },
+          'o link de confirmação da troca não saiu; o pedido ficou registrado',
+        );
+      }
     },
 
     /**
@@ -873,6 +1267,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // emitido antes da troca continuaria valendo depois dela, e é por ele
       // que quem tomou a conta volta.
       await deps.repositorio.invalidarTokensPendentes(consumido.userId, agora);
+      await deps.repositorio.cancelarTrocaDeEmailPendente(consumido.userId, agora);
       // Critério 5: todas as sessões e todos os refresh. As DUAS metades
       // (BICHUS-125): a barreira derruba o token de acesso em menos de um
       // segundo, e a revogação das famílias mata o refresh copiado antes da
@@ -970,6 +1365,153 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
     },
 
     /**
+     * **Abre a janela de reautenticação.** A única operação do sistema que
+     * confere a senha de alguém já autenticado (critério 10 da BICHUS-48).
+     *
+     * O desenho concentra por três razões, e as três são o motivo de ela
+     * existir em vez de cada operação destrutiva pedir a senha do seu jeito: a
+     * senha trafega para **um** endpoint; o teto contra força bruta existe em
+     * **um** lugar; e `DELETE /me` não precisa de corpo.
+     *
+     * ## A senha errada não diz nada além de "não confere"
+     *
+     * Conta sem credencial local e senha errada recebem a **mesma** recusa, e o
+     * mesmo tempo de CPU. Hoje toda conta deste produto tem senha — `provider`
+     * aceita `google`, `apple` e `keycloak` na restrição do banco e **nenhum
+     * caminho de `src/` cria identidade com esses valores**, medido em 22/09. A
+     * simetria não é para hoje: ela é o que faz o primeiro provedor externo
+     * entrar sem transformar esta rota num oráculo de "aquela conta tem senha
+     * local?", que é a pergunta que decide onde o ataque insiste.
+     *
+     * Não há resposta diferente para conta inexistente porque não existe esse
+     * caso: quem chega aqui já apresentou um token de acesso válido.
+     */
+    async reautenticar(
+      autenticado: Autenticado,
+      senha: string,
+      escopo: ReauthScope,
+      contexto: ContextoDaRequisicao,
+    ): Promise<{ reauthToken: OpaqueToken; expiresIn: number; scope: ReauthScope }> {
+      const agora = deps.clock.now();
+      const conta = autenticado.conta;
+      const credencial = await deps.repositorio.buscarCredencialLocalPorEmail(conta.email);
+
+      if (credencial === undefined || !(await verificarSenha(senha, credencial.passwordPhc))) {
+        // O hash de descarte roda quando não há credencial: sem ele a diferença
+        // entre "não derivei nada" e "derivei 210.000 iterações" é um oráculo de
+        // centenas de milissegundos.
+        if (credencial === undefined) await consumirTempoDeVerificacao(senha);
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: conta.id,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.reauth_refused',
+          resourceKind: 'user',
+          resourceId: conta.id,
+          metadata: { scope: escopo },
+        });
+        // `invalid-credentials`, que é um dos tipos que `registrarRota` conta
+        // como tentativa inválida: é assim que o teto de 5 por hora do contrato
+        // passa a valer sem ninguém precisar chamar o contador.
+        throw problemas.credencialRecusada();
+      }
+
+      const tokenBruto: OpaqueToken = deps.ids.opaqueToken();
+      await deps.repositorio.criarJanelaDeReautenticacao({
+        id: deps.ids.uuidv7(),
+        userId: conta.id,
+        escopo,
+        acessoJti: autenticado.jti,
+        tokenHash: comoTokenHash(tokenBruto),
+        emitidaEm: agora,
+        expiraEm: expiracaoDaJanela(agora),
+        ipHmac: deps.hmacDeIp(contexto.ip),
+      });
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.reauth_granted',
+        resourceKind: 'user',
+        resourceId: conta.id,
+        metadata: { scope: escopo },
+      });
+
+      return {
+        reauthToken: tokenBruto,
+        expiresIn: JANELA_DE_REAUTENTICACAO_EM_SEGUNDOS,
+        scope: escopo,
+      };
+    },
+
+    /**
+     * **Consome a janela, ou recusa.** É o que a borda chama antes de deixar
+     * qualquer das seis operações destrutivas rodar.
+     *
+     * Lança `reautenticacaoNecessaria` (401, `reauthentication-required`) em
+     * todos os casos de recusa, e o corpo é idêntico nos seis. O motivo
+     * distinguido vai para a trilha: dizer "o escopo era outro" ou "essa janela
+     * já foi usada" descreve a máquina para quem a está atacando, e quem
+     * apresentou a janela certa nunca vê nenhuma dessas mensagens.
+     *
+     * A ausência do cabeçalho e um cabeçalho que não serve são o **mesmo** 401,
+     * e isso é o critério 11: o app abre a folha de senha sem perder o que a
+     * pessoa estava fazendo, e ele não precisa de dois caminhos para isso.
+     */
+    async consumirReautenticacao(
+      autenticado: Autenticado,
+      tokenApresentado: string | undefined,
+      escopo: ReauthScope,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const conta = autenticado.conta;
+
+      const registrarRecusa = async (motivo: string): Promise<never> => {
+        await deps.trilha.record({
+          actorKind: 'user',
+          actorUserId: conta.id,
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'auth.reauth_window_refused',
+          resourceKind: 'user',
+          resourceId: conta.id,
+          metadata: { scope: escopo, reason: motivo },
+        });
+        throw problemas.reautenticacaoNecessaria();
+      };
+
+      if (tokenApresentado === undefined || tokenApresentado === '') {
+        return registrarRecusa('ausente');
+      }
+
+      const resultado = await deps.repositorio.consumirJanelaDeReautenticacao({
+        tokenHash: comoTokenHash(tokenApresentado),
+        userId: conta.id,
+        escopoExigido: escopo,
+        acessoJti: autenticado.jti,
+        barreiraDaConta: conta.sessionsInvalidBefore,
+        agora,
+      });
+
+      if (!resultado.consumida) return registrarRecusa(resultado.motivo);
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.reauth_window_used',
+        resourceKind: 'user',
+        resourceId: conta.id,
+        metadata: { scope: escopo },
+      });
+    },
+
+    /**
      * Troca a senha de quem está autenticado, conferindo a senha atual.
      *
      * A senha atual é conferida aqui — e não via `X-Reauth-Token` — porque é o
@@ -1028,6 +1570,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       // Mesmo par da redefinição: link pendente cai junto, senão quem tomou a
       // conta volta por um `password_reset` pedido antes da troca.
       await deps.repositorio.invalidarTokensPendentes(conta.id, agora);
+      await deps.repositorio.cancelarTrocaDeEmailPendente(conta.id, agora);
       await derrubarTodasAsSessoes(conta.id, 'password_changed', contexto, agora);
 
       await deps.trilha.record({
@@ -1049,6 +1592,182 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           'Se foi voce, e so entrar de novo com a senha nova.\n\n' +
           'Se nao foi, peca uma nova senha agora mesmo pelo aplicativo.',
       });
+    },
+
+
+    /**
+     * `DELETE /v1/me` — a exclusão de conta, gatilho 3 do SEC-006.
+     *
+     * ## O que ela é, e o que ela não é
+     *
+     * Ela **não apaga linha nenhuma**. O contrato diz o que ela faz, e a
+     * palavra está lá: *"Exclusão lógica imediata, expurgo definitivo em 30
+     * dias"*. O apagamento físico é {@link expurgarContasExcluidas}, no worker,
+     * e é ele que dispara as cascatas do banco. Responder 202 e não 204 é
+     * exatamente isso: o pedido foi aceito e o efeito completo tem prazo.
+     *
+     * ## A ORDEM, que não é estilo
+     *
+     * A revogação vem **antes** da marcação, e o cenário (1) do SEC-006 é o
+     * motivo literal: *"a pessoa exclui a conta e o atacante que tomou a sessão
+     * continua lendo conversas e exportando dados por mais 15 minutos"*. Se a
+     * marcação viesse primeiro e a revogação falhasse, o estado resultante
+     * seria o pior possível — conta marcada como excluída, com sessão viva
+     * dentro dela. Na ordem escrita aqui, a falha da revogação aborta sem ter
+     * marcado nada, e a falha da marcação deixa a pessoa deslogada de uma conta
+     * que ainda existe: ela entra de novo e repete. As duas falhas são
+     * recuperáveis; a ordem inversa tem uma que não é.
+     *
+     * O e-mail é o último, e a falha dele é **isolada**. O remédio já aconteceu
+     * e está gravado; deixar uma indisponibilidade do SMTP devolver 500 sobre
+     * uma exclusão consumada faria a pessoa repetir o gesto mais destrutivo do
+     * produto achando que ele não tinha funcionado.
+     *
+     * ## Reautenticação
+     *
+     * O contrato declara `x-reauth-scope: account_deletion` e a rota declara o
+     * mesmo escopo. **A verificação não é implementada aqui**, e não é
+     * esquecimento: ela é a BICHUS-48, que ainda não foi mesclada. Enquanto as
+     * duas branches não se encontrarem, o que protege esta rota é o token de
+     * acesso e o teto de 3 por 24 h.
+     */
+    async excluirMinhaConta(
+      autenticado: Autenticado,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const conta = autenticado.conta;
+
+      await derrubarTodasAsSessoes(conta.id, 'account_deleted', contexto, agora);
+
+      const consequencias = await deps.repositorio.registrarPedidoDeExclusao(conta.id, agora);
+
+      // Link de redefinição ou de verificação emitido antes do pedido
+      // continuaria valendo depois dele, e é por ele que se volta a uma conta
+      // que a pessoa acredita ter fechado. Mesmo critério 9 da BICHUS-77.
+      await deps.repositorio.invalidarTokensPendentes(conta.id, agora);
+
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'privacy.account_deletion_requested',
+        resourceKind: 'user',
+        resourceId: conta.id,
+        // Sem e-mail, sem nome e sem coordenada: a trilha sobrevive ao expurgo
+        // de propósito, e o que sobrevive não pode reconstituir o perfil que a
+        // exclusão existe para apagar (ADR-0010, cabeçalho de `audit-log.ts`).
+        metadata: {
+          tags_revoked: consequencias?.tagsRevogadas ?? 0,
+          already_requested: consequencias === undefined,
+          purge_after: comoIso((agora + PRAZO_DE_EXPURGO_EM_MS) as Instant),
+        },
+      });
+
+      await avisarSemDerrubarOEfeito(
+        {
+          para: conta.email,
+          assunto: 'Sua conta do Bichu foi excluida',
+          corpo:
+            'Recebemos o seu pedido de exclusao e a sua conta ja foi desativada: ' +
+            'as sessoes foram encerradas em todos os aparelhos e as plaquinhas dos ' +
+            'seus pets pararam de responder.\n\n' +
+            'Os dados serao apagados definitivamente em 30 dias.\n\n' +
+            'Se nao foi voce que pediu, responda esta mensagem agora: dentro desse ' +
+            'prazo ainda da para desfazer.',
+        },
+        { evento: 'account.deletion_requested', correlationId: contexto.correlationId },
+      );
+    },
+
+    /**
+     * O "Nao fui eu" — gatilho 4 do SEC-006, e o único alcançável sem conta.
+     *
+     * ## De onde ele é acionado, e por que não pede login
+     *
+     * Do link do e-mail de reuso de refresh. Quem lê aquele e-mail pode ser
+     * justamente quem **perdeu** a conta: o invasor já trocou o que precisava
+     * trocar, ou o aparelho ficou com outra pessoa. Um botão que exija login é
+     * inútil para ela, e o produto já resolveu esse mesmo problema uma vez, em
+     * `cancelTransferByToken`: a operação existe para desfazer, e pedir
+     * credencial para desfazer é a proteção trabalhando contra quem ela
+     * protege.
+     *
+     * ## A ORDEM, e por que o token é gasto DEPOIS
+     *
+     * Uso único antes do efeito é a regra certa para efeito **não idempotente**
+     * — uma redefinição de senha aplicada duas vezes são duas senhas. Esta não
+     * é: revogar as sessões duas vezes tem o mesmo resultado de revogar uma,
+     * porque `derrubarTodasAsSessoes` é idempotente e `sessions_invalid_before`
+     * só anda para a frente. Com o efeito idempotente, a ordem pode ser
+     * escolhida pelo modo de falhar — e gastar o token antes faria uma falha
+     * passageira do banco queimar o único remédio da vítima, que não tem como
+     * pedir outro link (quem dispara o aviso é o invasor).
+     *
+     * Por isso: confere sem consumir, revoga, e só então consome. A corrida de
+     * dois cliques revoga duas vezes, que é o mesmo que uma, e o segundo recebe
+     * 410.
+     *
+     * ## O que ele NÃO faz
+     *
+     * Não troca a senha. Quem tem o link não provou ser o titular, e uma troca
+     * de senha a partir daqui trancaria o titular para fora usando exatamente o
+     * link que existe para protegê-lo. O e-mail seguinte convida a redefinir
+     * pelo fluxo que exige a caixa de entrada.
+     */
+    async recusarSessaoAvisada(
+      tokenApresentado: string,
+      contexto: ContextoDaRequisicao,
+    ): Promise<void> {
+      const agora = deps.clock.now();
+      const hash = comoTokenHash(tokenApresentado);
+
+      const alvo = await deps.repositorio.conferirTokenDeVerificacao(
+        hash,
+        'session_disavow',
+        agora,
+      );
+      // Inexistente, vencido e já usado respondem igual. Distinguir contaria a
+      // um estranho que aquele token existiu, e esta rota é pública.
+      if (alvo === undefined) throw problemas.tokenDeVerificacaoVencido();
+
+      await derrubarTodasAsSessoes(alvo.userId, 'not_me', contexto, agora);
+      await deps.repositorio.consumirTokenDeVerificacao(hash, 'session_disavow', agora);
+
+      // Um segundo evento, e ele registra a PROVENIÊNCIA que o primeiro não
+      // consegue registrar. `derrubarTodasAsSessoes` grava `auth.sessions_revoked`
+      // com `actorKind: 'user'`, porque a porta da trilha exige o titular quando
+      // o ator é uma conta. Aqui quem agiu provou ter a caixa de entrada e NÃO
+      // provou ser o titular, e `anonymous` é a única forma honesta de escrever
+      // isso. Quem investigar precisa conseguir distinguir uma revogação pedida
+      // de dentro da conta de uma pedida por um link.
+      await deps.trilha.record({
+        actorKind: 'anonymous',
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.session_disavowed',
+        resourceKind: 'user',
+        resourceId: alvo.userId,
+      });
+
+      // Redefinição pendente emitida por quem tomou a conta é a porta de
+      // volta, e ela sobreviveria a esta revogação sem esta linha.
+      await deps.repositorio.invalidarTokensPendentes(alvo.userId, agora);
+
+      await avisarSemDerrubarOEfeito(
+        {
+          para: alvo.enviadoPara,
+          assunto: 'Encerramos tudo. Agora troque a sua senha',
+          corpo:
+            'Voce respondeu que nao reconhece o acesso, e nos encerramos todas as ' +
+            'sessoes da sua conta, em todos os aparelhos.\n\n' +
+            'Falta uma coisa, e ela e importante: escolha uma senha nova. Enquanto ' +
+            'a senha atual valer, quem a conhece entra de novo.\n\n' +
+            'Peca a troca pela tela de entrar, em "Esqueci minha senha".',
+        },
+        { evento: 'session.disavowed', correlationId: contexto.correlationId },
+      );
     },
 
     segundosAteExpirar: (ate: Instant, agora: Instant) => segundosRestantes(agora, ate),

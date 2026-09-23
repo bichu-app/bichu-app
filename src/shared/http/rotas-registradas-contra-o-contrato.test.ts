@@ -16,15 +16,22 @@
  * de `defineRoute` que existem em `src/`. Um módulo novo que não entre na lista
  * reprova, em vez de passar despercebido — que é exatamente o modo de falhar de
  * uma lista escrita à mão.
+ *
+ * O que cada caso confere: método e caminho, o 400 de parâmetro, o escopo de
+ * reautenticação e — desde 22/09 — o **teto de chamada**, entrada por entrada.
+ * O do teto tem cabeçalho próprio, no corpo do caso, com o motivo de ele não ser
+ * tautologia e com o risco que ele deliberadamente não cobre.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 import { carregarContrato } from './contract.js';
 import { _decisaoDeStatus } from './validacao-de-parametros.js';
-import type { RouteDefinition } from './route-definition.js';
+import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
 
 import * as identidade from '../../modules/identity/adapters/http/routes.js';
 import * as localizacao from '../../modules/identity/adapters/http/localizacao-de-referencia-routes.js';
@@ -35,6 +42,7 @@ import * as casos from '../../modules/lostfound/adapters/http/lost-case-routes.j
 import * as achados from '../../modules/found/adapters/http/found-report-routes.js';
 import * as tags from '../../modules/tags/adapters/http/tag-routes.js';
 import * as conversas from '../../modules/messaging/adapters/http/conversation-routes.js';
+import * as transferencias from '../../modules/transfers/adapters/http/transfer-routes.js';
 import * as webhook from '../../modules/notifications/adapters/http/webhook-de-entrega.js';
 import * as aparelhos from '../../modules/notifications/adapters/http/device-routes.js';
 import * as saude from './health.js';
@@ -53,6 +61,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   achados,
   tags,
   conversas,
+  // BICHUS-66. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
+  transferencias,
   webhook,
   aparelhos,
   saude,
@@ -76,6 +87,77 @@ function rotasDeclaradas(): RouteDefinition[] {
 /** `/pets/:petId` na forma do contrato. Mesma tradução de `caminhoDoContrato`. */
 function comoNoContrato(caminho: string): string {
   return caminho.replace(/:([^/]+)/g, '{$1}');
+}
+
+/**
+ * Os campos que uma entrada de `x-rate-limit` pode ter no contrato.
+ *
+ * `note` e o unico ignorado, e e ignorado NOMEADAMENTE: ele e prosa para quem
+ * le o documento (por exemplo "SEC-003, o desafio e verificado ANTES da consulta
+ * de unicidade") e nao tem contrapartida em `RateLimitEntry`. Campo novo que
+ * apareca aqui reprova em vez de ser comparado contra nada.
+ */
+const CAMPOS_DA_ENTRADA_DO_CONTRATO: ReadonlySet<string> = new Set([
+  'dimension',
+  'counts',
+  'applies_to',
+  'when',
+  'limit',
+  'window',
+  'on_exceed',
+  'note',
+]);
+
+/** A forma comparavel de uma entrada de teto. Os dois lados chegam nela. */
+interface EntradaComparavel {
+  readonly dimension: readonly unknown[];
+  readonly counts: unknown;
+  readonly appliesTo: unknown;
+  readonly when: unknown;
+  readonly limit: unknown;
+  readonly window: unknown;
+  readonly onExceed: unknown;
+}
+
+/**
+ * A entrada do contrato na forma comparavel.
+ *
+ * O contrato escreve `on_exceed` e `applies_to`; o codigo escreve `onExceed` e
+ * `appliesTo`. A traducao e so de grafia, e esta escrita num lugar so.
+ *
+ * `applies_to: all` vira ausencia, e esta e a unica equivalencia que esta
+ * funcao declara. Motivo: `all` e o PADRAO no proprio contrato ("quais
+ * requisicoes entram na conta. Padrao, todas", `info.description`), e
+ * `RateLimitEntry.appliesTo` nao tem como expressa-lo — o tipo so admite
+ * `invalid_attempts`. Sem a equivalencia, escrever o padrao explicitamente no
+ * YAML reprovaria uma rota correta. Com ela, trocar `invalid_attempts` por
+ * `all` continua reprovando, que e a direcao que importa: e essa troca que faz
+ * a entrada passar a contar a tentativa VALIDA junto.
+ */
+function doContratoParaComparacao(entrada: Record<string, unknown>): EntradaComparavel {
+  const appliesTo = entrada['applies_to'];
+  return {
+    dimension: Array.isArray(entrada['dimension']) ? [...(entrada['dimension'] as unknown[])] : entrada['dimension'] as never,
+    counts: entrada['counts'],
+    appliesTo: appliesTo === 'all' ? undefined : appliesTo,
+    when: entrada['when'],
+    limit: entrada['limit'],
+    window: entrada['window'],
+    onExceed: entrada['on_exceed'],
+  };
+}
+
+/** A entrada da rota na mesma forma. `dimension` e copiada: a da rota e tupla. */
+function daDeclaracaoParaComparacao(entrada: RateLimitEntry): EntradaComparavel {
+  return {
+    dimension: [...entrada.dimension],
+    counts: entrada.counts,
+    appliesTo: entrada.appliesTo,
+    when: entrada.when,
+    limit: entrada.limit,
+    window: entrada.window,
+    onExceed: entrada.onExceed,
+  };
 }
 
 void describe('rotas declaradas no código contra api/openapi.yaml', () => {
@@ -136,6 +218,260 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
       [],
       'Operações registradas que podem recusar parâmetro e não declaram 400 em ' +
         `api/openapi.yaml: ${semQuatrocentos.join(', ')}. A aplicação não sobe assim.`,
+    );
+  });
+
+  void it('a exigência de X-Reauth-Token bate nos dois sentidos: contrato e código', () => {
+    // ===================================================================
+    // ESTE É O CASO QUE IMPEDE UMA DAS SEIS DE FICAR SEM SENHA (BICHUS-48)
+    // ===================================================================
+    //
+    // `registrarRota` instala a conferência a partir de `rota.reauthScope`.
+    // Isso torna "esqueci de exigir a senha no manipulador" inexprimível, e
+    // deixa UM buraco: esquecer o `reauthScope` na declaração. É esse buraco
+    // que este caso fecha, e ele o fecha nos dois sentidos.
+    //
+    // A direção óbvia: operação que o contrato marca com `reauth: []` e cuja
+    // rota existe em `src/` PRECISA declarar o escopo. Sem ela, `Desativar a
+    // tag` poderia entrar sem senha nenhuma, que é o desfecho que esta
+    // história existe para impedir.
+    //
+    // A direção que ninguém olha: rota que declara um escopo que o contrato
+    // não exige. Ela não quebra ninguém — apenas pede uma senha que o
+    // documento não promete — e é exatamente por isso que atravessaria a
+    // revisão. Quem lê o contrato acreditaria numa coisa e quem chama a API
+    // encontraria outra, os dois com razão.
+    //
+    // A comparação é do VALOR do escopo, e não da presença dele: um
+    // `reauthScope: 'tag_revocation'` numa operação que o contrato marca como
+    // `account_deletion` passaria por uma conferência que só perguntasse "tem
+    // escopo?", e a janela aberta para revogar uma plaquinha valeria para
+    // apagar a conta.
+    const contrato = carregarContrato(CAMINHO_DA_SPEC);
+    const divergentes: string[] = [];
+
+    for (const rota of rotasDeclaradas()) {
+      const operacao = contrato.operacoes.get(rota.operationId);
+      if (operacao === undefined) continue; // o primeiro caso já reprovou.
+
+      const doContrato = operacao.raw['x-reauth-scope'];
+      const doCodigo = rota.reauthScope;
+
+      const exigidoNoContrato = typeof doContrato === 'string' ? doContrato : undefined;
+      if (exigidoNoContrato === doCodigo) continue;
+
+      divergentes.push(
+        `${rota.operationId}: contrato diz ${exigidoNoContrato ?? 'nenhum escopo'}, ` +
+          `código diz ${doCodigo ?? 'nenhum escopo'}`,
+      );
+    }
+
+    assert.deepEqual(
+      divergentes,
+      [],
+      'A exigência de reautenticação diverge entre api/openapi.yaml e a declaração da rota. ' +
+        'Escopo no contrato e ausente no código é operação destrutiva servida sem senha; ' +
+        'escopo no código e ausente no contrato é senha pedida sem o documento prometer.\n' +
+        divergentes.join('\n'),
+    );
+  });
+
+  void it('toda operação com `reauth: []` no contrato declara o mesmo escopo em `x-reauth-scope`', () => {
+    // A metade do contrato que o caso acima não alcança: operação marcada com
+    // `reauth: []` cuja rota ainda NÃO existe em `src/`. São quatro hoje
+    // (excluir a conta, trocar o e-mail, exportar os dados, transferir o pet),
+    // e elas precisam chegar ao código já com o escopo escrito — senão o caso
+    // acima aprova por ausência, que é a forma de portão que este projeto já
+    // pagou para aprender.
+    const spec = parseYaml(readFileSync(CAMINHO_DA_SPEC, 'utf8')) as {
+      paths: Record<string, Record<string, Record<string, unknown>>>;
+    };
+    const semEscopo: string[] = [];
+    const comEscopoSemExigencia: string[] = [];
+    let marcadas = 0;
+
+    for (const [caminho, item] of Object.entries(spec.paths)) {
+      for (const [metodo, operacao] of Object.entries(item)) {
+        if (typeof operacao !== 'object' || operacao === null) continue;
+        const seguranca = operacao['security'];
+        const pedeReauth =
+          Array.isArray(seguranca) &&
+          seguranca.some(
+            (req) => typeof req === 'object' && req !== null && 'reauth' in (req as object),
+          );
+        const escopo = operacao['x-reauth-scope'];
+        const id = typeof operacao['operationId'] === 'string'
+          ? operacao['operationId']
+          : `${metodo.toUpperCase()} ${caminho}`;
+
+        if (pedeReauth) {
+          marcadas += 1;
+          if (typeof escopo !== 'string') semEscopo.push(id);
+        } else if (typeof escopo === 'string') {
+          comEscopoSemExigencia.push(id);
+        }
+      }
+    }
+
+    // Portão que não acha alvo reprova. Um `security` que mudasse de forma
+    // deixaria `marcadas` em zero e todas as asserções acima passariam por
+    // percorrer lista vazia.
+    assert.ok(
+      marcadas >= 6,
+      `só ${String(marcadas)} operações com \`reauth: []\` encontradas no contrato, e as seis ` +
+        'ações sensíveis da BICHUS-48 estão marcadas. A leitura do `security` deixou de casar.',
+    );
+    assert.deepEqual(semEscopo, [], `operações com \`reauth: []\` e sem \`x-reauth-scope\`: ${semEscopo.join(', ')}`);
+    assert.deepEqual(
+      comEscopoSemExigencia,
+      [],
+      `operações com \`x-reauth-scope\` e sem \`reauth: []\`: ${comEscopoSemExigencia.join(', ')}. ` +
+        'O escopo sozinho não exige nada — ele só diz QUAL janela serve.',
+    );
+  });
+
+  void it('o teto de chamada bate entrada por entrada, nos dois sentidos', () => {
+    // =====================================================================
+    // POR QUE ISTO NAO E TAUTOLOGIA
+    // =====================================================================
+    //
+    // O esperado sai de `api/openapi.yaml`, que e **artefato independente**:
+    // ele tem portao proprio (`infra/verificacao/verificar-limite-de-chamada.mjs`,
+    // BICHUS-25), vocabulario proprio (`x-rate-limit-vocabulary`) e caminho de
+    // revisao proprio — mexer num numero la e mexer no contrato, e isso e lido
+    // como contrato. A declaracao da rota sai de `src/`, e e ela que
+    // `registrar-rota.ts` aplica de fato.
+    //
+    // **Hoje ninguem cruza os dois.** O verificador do contrato nunca abre
+    // `src/` (esta escrito no cabecalho dele, e ele passou com "80 operacoes, 0
+    // achados" durante todo o periodo em que nenhuma rota aplicava nada). E os
+    // casos deste mesmo arquivo comparam metodo, caminho, 400 e escopo de
+    // reautenticacao — nao o teto.
+    //
+    // =====================================================================
+    // O QUE O COMPILADOR NAO VE, E QUE E O MOTIVO DESTE CASO
+    // =====================================================================
+    //
+    // `defineRoute` recusa `rateLimit: []` numa rota com `effects`, entao APAGAR
+    // o teto de 25 das 34 entradas aplicaveis nao compila. Isso nao e
+    // vigilancia: e o tipo impedindo uma forma de escrever. O tipo continua
+    // satisfeito quando a entrada MUDA:
+    //
+    //   - `onExceed: 'deny_429'` vira `'log_and_alert'` — tipo valido, a rota
+    //     continua declarando teto, e `recusa()` simplesmente para de recusar;
+    //   - `limit: 5` vira `limit: 500`;
+    //   - `window: '10m'` vira `'24h'`;
+    //   - `appliesTo: 'invalid_attempts'` some, e a entrada passa a contar toda
+    //     requisicao em vez de so as invalidas.
+    //
+    // Medido em 22/09: trocar `deny_429` por `log_and_alert` em `deletePet`,
+    // `updateMe` e `issuePetTag` deixou as duas suites VERDES. Tres de quatro
+    // amostras passavam em silencio.
+    //
+    // =====================================================================
+    // O RISCO RESIDUAL, E POR QUE ISTO NAO SUBSTITUI AS ISCAS DE POSICAO
+    // =====================================================================
+    //
+    // Uma edicao COORDENADA nos dois arquivos passa aqui: quem baixar o teto no
+    // contrato e na rota tem os dois lados concordando, e concordancia e tudo o
+    // que este caso mede. Ele tambem nao alcanca COMPORTAMENTO: se
+    // `aplicacao-de-teto.ts` parar de chamar `hit()`, ou se a ordem dos ganchos
+    // de `registrar-rota.ts` inverter, as duas declaracoes continuam iguais e
+    // este caso fica verde com o teto desligado.
+    //
+    // Quem cobre essas duas coisas sao as iscas de POSICAO, por rota, que medem
+    // em qual chamada o 429 chega (`tests/integration/teto-da-troca-de-senha.test.ts`,
+    // `tests/integration/teto-por-pet-achado-e-plaquinha.test.ts`,
+    // `src/tools/portao-de-vigencia-do-teto.ts`). Este caso e o outro lado da
+    // pinca: ele cobre as 65 entradas de uma vez, sem banco; elas cobrem o
+    // mecanismo, uma rota de cada vez.
+    const contrato = carregarContrato(CAMINHO_DA_SPEC);
+    const divergentes: string[] = [];
+    const camposDesconhecidos: string[] = [];
+    let conferidas = 0;
+
+    for (const rota of rotasDeclaradas()) {
+      const operacao = contrato.operacoes.get(rota.operationId);
+      if (operacao === undefined) continue; // o primeiro caso ja reprovou.
+
+      const doContrato = operacao.raw['x-rate-limit'];
+      const bruto: unknown[] = Array.isArray(doContrato) ? doContrato : [];
+      const declarado = rota.rateLimit ?? [];
+
+      // Presenca, nos dois sentidos, antes de comparar valor: sem isto uma
+      // lista vazia de um lado casaria por vacuidade com a do outro.
+      if (bruto.length !== declarado.length) {
+        divergentes.push(
+          `${rota.operationId}: o contrato declara ${String(bruto.length)} entrada(s) de ` +
+            `\`x-rate-limit\` e a rota declara ${String(declarado.length)}. ` +
+            'Entrada a mais no codigo e teto que o documento nao promete; entrada a menos e ' +
+            'teto que o documento promete e o servico nao aplica.',
+        );
+        continue;
+      }
+
+      for (const [indice, entradaBruta] of bruto.entries()) {
+        if (typeof entradaBruta !== 'object' || entradaBruta === null) {
+          divergentes.push(`${rota.operationId}: \`x-rate-limit[${String(indice)}]\` nao e um mapa no contrato.`);
+          continue;
+        }
+        const desconhecidos = Object.keys(entradaBruta).filter(
+          (campo) => !CAMPOS_DA_ENTRADA_DO_CONTRATO.has(campo),
+        );
+        if (desconhecidos.length > 0) {
+          camposDesconhecidos.push(
+            `${rota.operationId}: \`x-rate-limit[${String(indice)}]\` traz ${desconhecidos.join(', ')}`,
+          );
+        }
+
+        const daRota = declarado[indice];
+        if (daRota === undefined) continue; // impossivel: os tamanhos ja casaram.
+        const esperado = doContratoParaComparacao(entradaBruta as Record<string, unknown>);
+        const obtido = daDeclaracaoParaComparacao(daRota);
+        conferidas += 1;
+        try {
+          assert.deepEqual(obtido, esperado);
+        } catch {
+          divergentes.push(
+            `${rota.operationId}: \`x-rate-limit[${String(indice)}]\`\n` +
+              `      contrato: ${JSON.stringify(esperado)}\n` +
+              `      codigo:   ${JSON.stringify(obtido)}`,
+          );
+        }
+      }
+    }
+
+    assert.deepEqual(
+      camposDesconhecidos,
+      [],
+      'Entradas de `x-rate-limit` com campo que esta comparacao nao conhece:\n' +
+        `${camposDesconhecidos.join('\n')}\n` +
+        'Campo que ela nao conhece e campo que ela ignora, e comparacao que ignora aprova por ' +
+        'nao ter olhado. O campo novo entra em `CAMPOS_DA_ENTRADA_DO_CONTRATO` e em ' +
+        '`doContratoParaComparacao`, ou entra em `RateLimitEntry` — nunca so no YAML.',
+    );
+
+    // Comparacao que nao comparou nada aprova em silencio. `rotasDeclaradas()`
+    // ja e guardado pelo ultimo caso deste arquivo, mas a lista de entradas nao:
+    // uma mudanca na leitura de `x-rate-limit` deixaria `bruto` vazio em TODAS as
+    // operacoes e os tamanhos casariam com as rotas que tambem nao declaram nada.
+    assert.ok(
+      conferidas > 0,
+      'nenhuma entrada de `x-rate-limit` foi comparada. A leitura do contrato deixou de casar, ' +
+        'e a partir daqui este caso aprovaria qualquer teto.',
+    );
+
+    assert.deepEqual(
+      divergentes,
+      [],
+      `O teto declarado em src/ diverge de api/openapi.yaml (${String(conferidas)} entradas ` +
+        'conferidas):\n' +
+        `${divergentes.join('\n')}\n\n` +
+        'O contrato e a fonte do numero e do comportamento. Divergencia aqui e uma das duas ' +
+        'coisas, e nenhuma delas e refatoracao: ou o servico aplica um teto que o documento nao ' +
+        'promete, ou ele promete um teto que nao aplica. `on_exceed` merece atencao especial — ' +
+        'so `deny_429` recusa (`aplicacao-de-teto.ts`, `recusa()`), e trocar por qualquer outra ' +
+        'palavra do vocabulario deixa a rota declarando teto e servindo sem teto.',
     );
   });
 

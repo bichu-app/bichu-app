@@ -42,7 +42,7 @@ import { createHmac } from 'node:crypto';
 import type { FastifyRequest } from 'fastify';
 import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
 import type { RateLimitStore } from '../ports/rate-limit-store.js';
-import { janelaEmSegundos } from './rate-limit.js';
+import { ehJanelaVitalicia, janelaEmSegundos } from './rate-limit.js';
 import { problemas, type AppError } from './errors.js';
 import { hmacDeEnderecoIp } from '../crypto/digest.js';
 
@@ -281,14 +281,33 @@ export function resolvedoresGenericos(deps: DependenciasDoTeto): Resolvedores {
   };
 }
 
-/** A chave do balde. A dimensão entra no nome para que dois tetos não se somem. */
+/**
+ * A chave do balde. A dimensão entra no nome para que dois tetos não se somem.
+ *
+ * **A janela entra pelo mesmo motivo, e a falta dela era um defeito de relógio.**
+ * `postConversationMessage` declara duas entradas na MESMA dimensão
+ * (`conversation_participant`): 30 por hora e 200 por 24 h. Sem a janela no
+ * nome, as duas montavam a mesma `bucketKey`. O contador ainda separava os
+ * baldes pelo início da janela — até o instante em que os dois inícios
+ * coincidem, que é **toda madrugada entre 00:00 e 01:00 UTC** (21h no Brasil,
+ * horário de pico). Nessa hora as duas entradas passavam a incrementar o mesmo
+ * balde, duas vezes por requisição, e o teto de 30 recusava na 16ª.
+ *
+ * O sintoma é raro e volta todo dia, que é o pior formato: some antes de alguém
+ * conseguir olhar. Encontrado porque a suíte deste repositório reprovou às
+ * 00:03 UTC com "a 16ª foi recusada cedo demais".
+ *
+ * Trocar a chave **zera os contadores uma vez**, no deploy. É o custo certo: o
+ * contador antigo estava somando entradas que não deviam se somar.
+ */
 export function montarChave(
   operationId: string,
   entrada: RateLimitEntry,
   valores: readonly string[],
 ): string {
   const sufixo = entrada.appliesTo === undefined ? '' : `:${entrada.appliesTo}`;
-  return `${operationId}:${entrada.dimension.join('+')}${sufixo}|${valores.join('|')}`;
+  const janela = entrada.window.trim();
+  return `${operationId}:${entrada.dimension.join('+')}@${janela}${sufixo}|${valores.join('|')}`;
 }
 
 /**
@@ -316,8 +335,14 @@ export interface ResultadoDaAplicacao {
  * O 429 sai pelo construtor canônico de `errors.ts`, e não por um `AppError`
  * montado aqui: título, `detail` e `type` do 429 já são contrato, e uma segunda
  * redação deles divergiria da primeira sem nada acusar.
+ *
+ * **Qual dos dois construtores depende da janela, não do número.** Janela
+ * `lifetime` não reabre, e `decisao.retryAfterSeconds` ali é o teto de formato
+ * de 24 h de `rate-limit.ts` — obedecê-lo no texto faria a resposta prometer
+ * uma reabertura que não acontece.
  */
-function erroDeTeto(segundos: number | undefined): AppError {
+function erroDeTeto(entrada: RateLimitEntry, segundos: number | undefined): AppError {
+  if (ehJanelaVitalicia(entrada.window)) return problemas.limiteSemReabertura();
   return problemas.limiteDeChamadas(segundos ?? 1);
 }
 
@@ -353,7 +378,7 @@ export async function aplicarNaEntrada(
           { operation_id: rota.operationId, dimension: entrada.dimension, on_exceed: entrada.onExceed },
           'teto de tentativas invalidas atingido',
         );
-        if (recusa(entrada)) return { erro: erroDeTeto(decisao.retryAfterSeconds) };
+        if (recusa(entrada)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
       }
       continue;
     }
@@ -364,7 +389,7 @@ export async function aplicarNaEntrada(
         { operation_id: rota.operationId, dimension: entrada.dimension, on_exceed: entrada.onExceed },
         'teto de chamada atingido',
       );
-      if (recusa(entrada)) return { erro: erroDeTeto(decisao.retryAfterSeconds) };
+      if (recusa(entrada)) return { erro: erroDeTeto(entrada, decisao.retryAfterSeconds) };
     }
   }
   return {};

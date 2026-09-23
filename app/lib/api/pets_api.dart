@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'envio_de_foto.dart';
 import 'modelos_pet.dart';
 
 /// As operacoes de `/v1/pets`, `/v1/media` e `/v1/public/reference-data` do
@@ -17,7 +18,7 @@ import 'modelos_pet.dart';
 /// comentario ficou para tras e foi corrigido aqui em vez de repetido: um
 /// aviso de "isto nao existe" sobre codigo que existe treina quem le a nao
 /// acreditar no cabecalho.
-class PetsApi {
+class PetsApi implements IntencaoEConfirmacaoDePet {
   const PetsApi(this._api);
 
   final ApiClient _api;
@@ -249,6 +250,7 @@ class PetsApi {
   /// backend nunca recebe os bytes -- ele assina a requisicao de upload para o
   /// armazenamento, e o cliente **le** o campo `method` em vez de presumir a
   /// forma.
+  @override
   Future<Map<String, dynamic>> intencaoDeFotoDoPet({
     required String petId,
     required String tipoDeConteudo,
@@ -268,6 +270,7 @@ class PetsApi {
   ///
   /// E **esta** chamada que enfileira o processamento, e nao a chegada dos
   /// bytes no armazenamento: o produto nao depende de notificacao de bucket.
+  @override
   Future<void> confirmarFotoDoPet({
     required String petId,
     required String uploadId,

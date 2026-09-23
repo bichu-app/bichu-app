@@ -54,6 +54,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
 import '../api/pets_api_listar_test.dart' show petDoContrato;
+import '../telas/a_foto_sobe_de_verdade_test.dart'
+    show grupoDaIscaDaFotoPendente;
 import '../telas/ajuda_de_tela.dart';
 
 /// O nome do grupo desta isca, escrito uma vez so.
@@ -91,6 +93,44 @@ const Map<String, ({String arquivo, String grupo})> iscasDaLista =
   '_fila': (
     arquivo: 'test/telas/marcar_como_perdido_test.dart',
     grupo: 'a fila offline morre no logout',
+  ),
+  // ACRESCENTADA COM O ENVIO DE FOTO DO APP (BICHUS-87, criterios 6 e 7).
+  //
+  // A quarta entrada, e a SEGUNDA em disco. O que ela apaga e o registro de
+  // qual arquivo local pertence a qual pet: o caminho de uma foto do animal de
+  // uma pessoa, guardado porque o criterio 6 manda o arquivo permanecer no
+  // aparelho quando o envio falha por falta de sinal.
+  //
+  // O dano de esquecer esta entrada e MAIOR que o das outras tres, e vale
+  // dizer por que: alem de o dado ficar, a varredura de arranque
+  // (`_retomarAsFotos`) sobe o que estiver no registro assim que houver
+  // sessao. Sobrevivendo ao logout, a foto do pet da tutora anterior seria
+  // enviada **para a conta de quem entrasse depois naquele aparelho**.
+  '_fotosPendentes': (
+    arquivo: 'test/telas/a_foto_sobe_de_verdade_test.dart',
+    grupo: grupoDaIscaDaFotoPendente,
+  ),
+  // ACRESCENTADA PELA BICHUS-75, o aviso persistente de cadastro.
+  //
+  // Ela e a quarta entrada e a segunda em DISCO. O que ela apaga e o registro
+  // de dispensas do aviso: quando a pessoa tocou em `Agora nao` pela ultima
+  // vez, e quantas vezes ja tocou.
+  //
+  // Parece contagem inocua e nao e. O e-mail sobre o qual a pessoa pediu
+  // silencio e dado dela, e o CONTADOR decide o texto: a partir da terceira
+  // dispensa o app passa a perguntar se o endereco esta certo. Herdado, o
+  // proximo tutor deste celular ganha duas coisas que nunca pediu -- sete dias
+  // de silencio sobre um aviso que ele precisa ler, e a suspeita sobre um
+  // endereco que e dele e esta correto.
+  //
+  // A isca dela aponta para o lado OPOSTO da de
+  // `test/dispositivo/oportunidades_de_aviso_test.dart`, que reprova se a
+  // entrada dela APARECER nesta lista: aquele registro e do APARELHO (o
+  // dialogo do iOS e gasto uma vez por instalacao) e este e da CONTA. As duas
+  // iscas existem para que ninguem uniformize uma pela outra.
+  '_avisoDeCadastro': (
+    arquivo: 'test/sessao/registro_do_aviso_de_cadastro_test.dart',
+    grupo: 'ISCA — o registro SOME no logout',
   ),
 };
 
