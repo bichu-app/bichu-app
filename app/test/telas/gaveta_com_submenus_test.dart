@@ -810,6 +810,87 @@ void main() {
       );
     });
 
+    test('o inventario de 27.5 tem 48 linhas, 15 destinos e 6 atalhos vivos',
+        () {
+      // Os quatro numeros estao escritos A MAO, e e de proposito: eles sao a
+      // segunda fonte da verdade contra o registro, como `ordemDecidida` e
+      // contra `CascaComAbas.destinos` na BICHUS-164.
+      //
+      // Eles existem porque as contas divergiram em 22/09. Circularam "49" e
+      // "48" sub-destinos e "8 de 49" atalhos vivos. **48 e o numero certo**,
+      // e o 49 e um artefato de contagem: `grep -c 'SubDestino('` no arquivo
+      // do registro conta tambem a declaracao `const SubDestino({` do
+      // construtor, que nao e linha de inventario nenhuma. Medir por texto
+      // conta o que esta escrito; medir pelo registro conta o que existe.
+      //
+      // Quando um destes numeros mudar, ele deve mudar aqui tambem, e a
+      // mudanca e o ponto: ninguem acrescenta sub-destino a um mapa de 48
+      // linhas sem que alguem veja.
+      final todos = RegistroDeSubDestinos.porSecao.values
+          .expand((lista) => lista)
+          .toList(growable: false);
+
+      expect(
+        RegistroDeSubDestinos.porSecao.keys.length,
+        5,
+        reason: 'REPROVA: o registro deixou de ter uma entrada por secao. '
+            'Sao cinco secoes, e uma secao sem entrada some da gaveta sem '
+            'que nenhum outro caso acuse.',
+      );
+      expect(
+        todos.length,
+        48,
+        reason: 'REPROVA: o inventario de 27.5 saiu de 48 linhas e foi para '
+            '${todos.length}. Se a UX acrescentou sub-destino, este numero '
+            'sobe junto e de proposito; se alguem apagou linha, este caso e '
+            'o unico lugar que acusa.',
+      );
+
+      final destinos = todos
+          .where((d) => d.forma == FormaDoSubDestino.destino)
+          .toList(growable: false);
+      expect(
+        destinos.length,
+        15,
+        reason: 'REPROVA: os destinos de MENU sairam de 15 e foram para '
+            '${destinos.length}. A maioria das 48 linhas nunca foi item de '
+            'menu -- filtro e folha, busca e campo, aviso e faixa -- e e a '
+            'FORMA que decide. Mudanca aqui significa que alguem reclassificou '
+            'uma linha, e reclassificar filtro como destino e exatamente como '
+            'a gaveta ganharia um item que nao tem endereco.',
+      );
+
+      final vivos = todos.where((d) => d.viraItem).toList(growable: false);
+      expect(
+        vivos.length,
+        6,
+        reason: 'REPROVA: os atalhos VIVOS sairam de 6 e foram para '
+            '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
+            'Subir e o caminho normal, e so quando a tela do outro lado '
+            'existir; descer significa que um atalho da gaveta morreu.',
+      );
+
+      final porConstruir = todos.where((d) => d.pendente).toList(growable: false);
+      expect(
+        porConstruir.length,
+        9,
+        reason: 'REPROVA: os destinos de menu POR CONSTRUIR sairam de 9 e '
+            'foram para ${porConstruir.length}. Estes sao os que a gaveta '
+            'NOMEIA em texto e nunca renderiza como controle; o numero cair '
+            'sem que `vivos` suba e um nome que desapareceu da tela.',
+      );
+
+      expect(
+        vivos.length + porConstruir.length,
+        destinos.length,
+        reason: 'REPROVA: ha destino de menu que nao e nem vivo nem pendente. '
+            'A unica maneira de isso acontecer e um `destino` marcado '
+            '`existe` com rota nula, que e um atalho que a gaveta esconde sem '
+            'nomear: ele nao vira item e tambem nao entra na linha de '
+            '`Em construção`.',
+      );
+    });
+
     testWidgets('toda rota de item vivo esta REGISTRADA no roteador', (
       tester,
     ) async {
