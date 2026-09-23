@@ -3574,7 +3574,7 @@ paths:
         existe neste repositorio.
 
         **Idempotente pelo BANCO, e nao pela aplicacao.** A chave primaria de
-        `network_event_checkins` e `(event_slug, user_id)`: o segundo check-in da
+        `network_event_checkins` e `(event_id, user_id)`: o segundo check-in da
         mesma pessoa no mesmo evento deixa de ser algo que alguem precisa
         conferir e passa a ser um estado que o banco recusa. A resposta e 200 nas
         duas vezes, com a mesma contagem.

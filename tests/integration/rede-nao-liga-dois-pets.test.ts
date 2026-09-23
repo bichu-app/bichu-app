@@ -29,10 +29,19 @@
  * identificador que ninguem previu, em campo que ninguem declarou, dentro de
  * objeto aninhado que ninguem olhou.
  *
- * `network_events` e `network_event_photos` tem `slug` como chave primaria e
- * NAO tem `id uuid` (ADR-0010 item 6), entao a resposta correta desta secao nao
- * tem UUID nenhum para perder -- e a regra pode ser absoluta em vez de ter
- * excecao, o que e o que a torna dificil de burlar por engano.
+ * `network_events` e `network_event_photos` TEM `id uuid`, e e por ele que as
+ * chaves estrangeiras da secao ligam (ADR-0024): chave estrangeira sobre `slug`
+ * e o que o criterio 2 da BICHUS-19 proibe. O que o ADR-0010 item 6 proibe e o
+ * UUID na SAIDA publica, e ali a regra nao afrouxou -- ela ficou com mais o que
+ * guardar. A secao inteira e ENDERECADA por `slug`, e nenhuma das tres
+ * respostas tem campo que carregue identidade interna: nem a do encontro, nem a
+ * da foto, nem a de quem fez check-in.
+ *
+ * Entao a regra continua absoluta -- qualquer UUID, em qualquer posicao -- e e
+ * ESTE caso que prova que o `id` novo nao escapou junto com o esquema novo. Um
+ * `select *`, um `{ ...linha }` ou um campo acrescentado por gentileza fariam o
+ * `id` sair, e a absoluta e o que os pega sem depender de alguem ter previsto o
+ * nome do campo.
  *
  * ===========================================================================
  * O QUE ESTA ISCA EXERCE, E CONTRA O QUE
@@ -173,6 +182,14 @@ let tutoraId = '';
 let petUmId = '';
 let petDoisId = '';
 let fotoComRemetente = '';
+/**
+ * O `id` INTERNO do encontro da isca, e ele e um UUID de verdade de proposito.
+ *
+ * A secao liga por ele (ADR-0024) e nunca o projeta. Gerado aqui, ele e mais um
+ * UUID que o caso "nenhum UUID, em posicao nenhuma" precisa nao achar -- e e
+ * por isso que a mudanca de esquema passa por esta isca em vez de contorna-la.
+ */
+let encontroId = '';
 
 let agora = 0 as Instant;
 
@@ -204,6 +221,7 @@ before(async () => {
   tutoraId = randomUUID();
   petUmId = randomUUID();
   petDoisId = randomUUID();
+  encontroId = randomUUID();
   fotoComRemetente = 'isca-foto-com-remetente';
 
   await cliente.query('INSERT INTO users (id, email, display_name) VALUES ($1, $2, $3)', [
@@ -231,36 +249,36 @@ before(async () => {
   // Assim os tres estados do recorte (`upcoming`, `past`, `all`) tem o mesmo
   // encontro para trazer, e a agenda nao some por causa de um filtro de tempo.
   await cliente.query(
-    `INSERT INTO network_events (slug, title, summary, place_name, neighborhood, city, state,
+    `INSERT INTO network_events (id, slug, title, summary, place_name, neighborhood, city, state,
                                  starts_at, ends_at, time_zone, cover_image_url, active)
-     VALUES ($1, 'Encontro de bairro da isca', 'O caso exato que o ADR-0025 existe para fechar.',
+     VALUES ($1, $2, 'Encontro de bairro da isca', 'O caso exato que o ADR-0025 existe para fechar.',
              'Praca da Isca', 'Bairro da Isca', 'Cidade da Isca', 'SP',
              now() - interval '1 hour', now() + interval '2 hours',
              'America/Sao_Paulo', 'https://cdn.bichu.app/rede/isca.jpg', true)`,
-    [ENCONTRO],
+    [encontroId, ENCONTRO],
   );
 
   // O CHECK-IN DA TUTORA. E ele que liga a pessoa ao encontro no banco, e e
   // dele que a contagem sai -- sem nunca virar lista.
   await cliente.query(
-    'INSERT INTO network_event_checkins (event_slug, user_id) VALUES ($1, $2)',
-    [ENCONTRO, tutoraId],
+    'INSERT INTO network_event_checkins (event_id, user_id) VALUES ($1, $2)',
+    [encontroId, tutoraId],
   );
 
   // A GALERIA, e a primeira foto tem REMETENTE PREENCHIDO apontando para a
   // tutora. E ela que da a esta isca o que morder: provar que o campo nao sai
   // quando ele esta NULO nao prova nada.
   await cliente.query(
-    `INSERT INTO network_event_photos (slug, event_slug, image_url, caption,
+    `INSERT INTO network_event_photos (id, slug, event_id, image_url, caption,
                                        submitted_by_user_id, sort_order)
-     VALUES ($1, $2, 'https://cdn.bichu.app/rede/isca-1.jpg', 'A roda embaixo da arvore.', $3, 1)`,
-    [fotoComRemetente, ENCONTRO, tutoraId],
+     VALUES ($1, $2, $3, 'https://cdn.bichu.app/rede/isca-1.jpg', 'A roda embaixo da arvore.', $4, 1)`,
+    [randomUUID(), fotoComRemetente, encontroId, tutoraId],
   );
   await cliente.query(
-    `INSERT INTO network_event_photos (slug, event_slug, image_url, caption,
+    `INSERT INTO network_event_photos (id, slug, event_id, image_url, caption,
                                        submitted_by_user_id, sort_order)
-     VALUES ('isca-foto-sem-remetente', $1, 'https://cdn.bichu.app/rede/isca-2.jpg', NULL, NULL, 2)`,
-    [ENCONTRO],
+     VALUES ($1, 'isca-foto-sem-remetente', $2, 'https://cdn.bichu.app/rede/isca-2.jpg', NULL, NULL, 2)`,
+    [randomUUID(), encontroId],
   );
 
   const relogio = await cliente.query<{ agora: string }>(
@@ -320,8 +338,8 @@ after(async () => {
     // A ordem e a das chaves estrangeiras. `network_events` cascateia fotos e
     // presencas, e os `DELETE` explicitos estao aqui assim mesmo: cascata que
     // faz o trabalho em silencio e cascata que ninguem confere.
-    await cliente.query('DELETE FROM network_event_photos WHERE event_slug = $1', [ENCONTRO]);
-    await cliente.query('DELETE FROM network_event_checkins WHERE event_slug = $1', [ENCONTRO]);
+    await cliente.query('DELETE FROM network_event_photos WHERE event_id = $1', [encontroId]);
+    await cliente.query('DELETE FROM network_event_checkins WHERE event_id = $1', [encontroId]);
     await cliente.query('DELETE FROM network_events WHERE slug = $1', [ENCONTRO]);
     await cliente.query('DELETE FROM pets WHERE id = any($1::uuid[])', [[petUmId, petDoisId]]);
     await cliente.query('DELETE FROM users WHERE id = $1', [tutoraId]);
@@ -394,8 +412,8 @@ void describe('a isca tem o que morder: o cenario existe, e as respostas nao est
 
   void it('o check-in da tutora esta gravado', async () => {
     const r = await cliente.query<{ quantos: string }>(
-      'select count(*)::text as quantos from network_event_checkins where event_slug = $1 and user_id = $2',
-      [ENCONTRO, tutoraId],
+      'select count(*)::text as quantos from network_event_checkins where event_id = $1 and user_id = $2',
+      [encontroId, tutoraId],
     );
     assert.equal(r.rows[0]?.quantos, '1', 'o check-in da isca nao esta no banco');
   });
@@ -481,17 +499,22 @@ void describe('ADR-0025 -- a Rede nao liga dois pets ao mesmo tutor', () => {
     // amanha. Ela nao depende de ninguem ter previsto o nome do campo, o tipo
     // do objeto nem a profundidade do aninhamento.
     //
-    // Ela pode ser absoluta porque a secao inteira e enderecada por `slug`:
-    // `network_events` e `network_event_photos` nao tem `id uuid` (ADR-0010
-    // item 6), entao a resposta correta nao tem um UUID para perder.
+    // Ela pode ser absoluta porque a secao inteira e ENDERECADA por `slug`: as
+    // tabelas tem `id uuid` e ligam por ele (ADR-0024), mas nenhuma das tres
+    // respostas tem campo que o carregue -- o ADR-0010 item 6 proibe UUID na
+    // SAIDA, e e a saida que este caso le. Entao a resposta correta nao tem um
+    // UUID para perder, e o `id` do encontro da isca esta gravado no banco
+    // justamente para que este caso tenha o que nao achar.
     for (const [rotulo, corpo] of corpos()) {
       const achado = QUALQUER_UUID.exec(corpo);
       assert.equal(
         achado,
         null,
         `${rotulo} contem um UUID ("${achado?.[0] ?? ''}").\n` +
-          'Esta secao e enderecada por `slug` e nao tem UUID para perder: um UUID aqui veio ' +
-          'de uma tabela que identifica pessoa, e a unica desta secao que identifica alguem e ' +
+          'Esta secao e enderecada por `slug` e nao tem UUID para perder. Um UUID aqui e uma ' +
+          'de duas coisas, e as duas sao defeito: a identidade INTERNA de um encontro ou de ' +
+          'uma foto, que liga as tabelas e nunca sai (ADR-0024); ou uma coluna que identifica ' +
+          'pessoa, e a unica desta secao que identifica alguem e ' +
           '`network_event_checkins.user_id`, que NUNCA e projetada (ADR-0025 secao 7).\n' +
           `corpo: ${corpo}`,
       );

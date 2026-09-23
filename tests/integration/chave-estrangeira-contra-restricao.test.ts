@@ -496,8 +496,32 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // Quatro chaves, e as quatro tem a acao de delecao escolhida pela MESMA
   // pergunta: o que a pessoa que apaga a conta espera que suma junto, e o que
   // ela nao espera.
-  'public.network_event_checkins.network_event_checkins_event_slug_fkey': {
-    colunas: ['event_slug'],
+  //
+  // DUAS DELAS APONTAM PARA `network_events.id`, E NAO PARA O `slug` (ADR-0024).
+  //
+  // A primeira versao desta secao fez `slug` ser a chave primaria do encontro, e
+  // as duas chaves de baixo apontavam para ele. O criterio 2 da BICHUS-19 proibe
+  // chave estrangeira sobre `slug`, e o portao de `esquema.test.ts` estava
+  // acusando a `Rede` -- como acusou a `Loja` antes dela.
+  //
+  // O motivo nao e um, sao dois, e o segundo e o que decide. O primeiro: `slug`
+  // e valor que o usuario TROCA (ADR-0005), e uma chave estrangeira sobre valor
+  // mutavel obriga a atualizacao a atravessar as tabelas filhas. Contra ele
+  // sempre houve a resposta de que ninguem troca o `slug` de um encontro curado
+  // -- e ela e boa. O segundo sobrevive a ela: `slug` e valor que sai IMPRESSO.
+  // Uma coluna que e ao mesmo tempo o endereco publico do encontro e a chave que
+  // liga a presenca e a galeria a ele entrega a juncao junto com o endereco.
+  //
+  // Concretamente, e e o que esta secao nao pode permitir: quem tem o endereco
+  // publico de um encontro tem, com ele, o valor exato que a tabela de presenca
+  // guarda na coluna que liga as duas. O `id` corta isso pela raiz -- para
+  // ligar uma pessoa a um encontro passa a ser preciso um valor que resposta
+  // nenhuma publica.
+  //
+  // O que a tela recebe nao mudou: o `slug` continua sendo a unica chave da
+  // secao que sai em resposta, e nenhum campo do contrato mudou.
+  'public.network_event_checkins.network_event_checkins_event_id_fkey': {
+    colunas: ['event_id'],
     referencia: 'public.network_events',
     aoApagar: 'CASCADE',
     levaJunto:
@@ -520,8 +544,8 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       '`checkin_count` do encontro cair de um, que e a contagem deixando de contar quem nao ' +
       'existe mais -- e nao um dado de terceiro sumindo.',
   },
-  'public.network_event_photos.network_event_photos_event_slug_fkey': {
-    colunas: ['event_slug'],
+  'public.network_event_photos.network_event_photos_event_id_fkey': {
+    colunas: ['event_id'],
     referencia: 'public.network_events',
     aoApagar: 'CASCADE',
     levaJunto:
@@ -553,11 +577,13 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // que o banco nao tem mais" reprovar.
   //
   // A quinta forma tambem nao alcanca esta chave, e a razao e estrutural:
-  // a vizinha desta linha e `network_event_photos.event_slug`, cujo pai e
+  // a vizinha desta linha e `network_event_photos.event_id`, cujo pai e
   // `network_events` -- uma tabela que **nao tem chave estrangeira nenhuma**,
   // e portanto nunca e filha de cascata. Nao existe caminho de `users` ate ela,
-  // entao o UPDATE do `SET NULL` nunca revalida `event_slug` contra um pai que
-  // a mesma instrucao apagou.
+  // entao o UPDATE do `SET NULL` nunca revalida `event_id` contra um pai que
+  // a mesma instrucao apagou. A troca da coluna que liga a foto ao encontro nao
+  // mexeu nisto: o que decide e quem e o PAI da coluna vizinha, e ele continua
+  // sendo `network_events`.
   'public.network_event_photos.network_event_photos_submitted_by_user_id_fkey': {
     colunas: ['submitted_by_user_id'],
     referencia: 'public.users',

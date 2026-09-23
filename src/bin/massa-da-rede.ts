@@ -585,8 +585,12 @@ export const FOTOS_DA_REDE: readonly FotoSemeada[] = [
  * da secao, e o zero e o caso que ninguem desenha.
  *
  * Nenhum par `(evento, tutor)` se repete -- a chave primaria de
- * `network_event_checkins` e `(event_slug, user_id)`, e o segundo check-in da
+ * `network_event_checkins` e `(event_id, user_id)`, e o segundo check-in da
  * mesma pessoa no mesmo encontro e um estado que o banco recusa.
+ *
+ * O `eventSlug` daqui e o do CATALOGO: a massa descreve o que a tela mostra, e
+ * o encontro se chama pelo endereco publico dele. O `id` interno nao e catalogo
+ * e por isso nao mora aqui -- quem o gera e `seed.ts`, na hora de gravar.
  */
 export const PRESENCAS_DA_REDE: readonly PresencaSemeada[] = [
   // Cinco: a segunda maior contagem.

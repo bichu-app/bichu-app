@@ -1,6 +1,6 @@
 # ADR-0025: A Rede não tem lista de presença, e o check-in é da pessoa e nunca do pet
 
-**Status:** aceito
+**Status:** aceito, com emenda 1 — a seção 7 foi reescrita
 **Data:** 2026-09-23
 
 ## Contexto
@@ -187,14 +187,58 @@ o default**, exatamente porque uma agenda que mistura passado e futuro em ordem
 
 ### 7. Nenhum UUID sai, e não por filtragem
 
-`network_events` e `network_event_photos` têm **`slug` como chave primária**,
-copiando a forma de `store_items` e `store_partners` (ADR-0010 item 6). Não há
-`id uuid` esperando alguém projetá-lo por engano.
+> **Emenda 1, 23/09/2026 — esta seção foi REESCRITA, e a versão original estava
+> errada.** Ela dizia que `network_events` e `network_event_photos` tinham
+> `slug` como chave primária e que isso era o que garantia a regra. O
+> argumento — "um `id uuid` seria uma coluna que nunca pode ser projetada,
+> esperando alguém projetá-la por engano" — é bom, e **a conclusão não segue
+> dele**. A `Loja` cometeu e corrigiu o mesmo erro no ADR-0024 e no commit
+> `69c6a27`, e eu copiei o desenho dela antes de ela o corrigir.
+>
+> Duas razões, medidas, e a segunda é a que decide:
+>
+> 1. **O ADR-0010 item 6 proíbe UUID na SAÍDA PÚBLICA, não no esquema.** `pets`
+>    e `professionals` têm `id uuid` primária com `slug` único ao lado. O engano
+>    que o argumento teme já tem portão próprio —
+>    `src/tools/portao-contrato-publico.ts` reprova `format: uuid` em operação
+>    alcançável sem conta, e as duas leituras desta seção são alcançáveis sem
+>    conta. Medo coberto por mecanismo não justifica torcer o esquema.
+> 2. **Chave estrangeira sobre `slug` é proibida pelo critério 2 da BICHUS-19,
+>    e por DOIS motivos** — o portão nomeia os dois: `slug` é *valor que o
+>    usuário troca* **e** *valor que sai impresso*. O primeiro não sobrevive ao
+>    argumento de que ninguém troca o slug de um encontro curado; **o segundo
+>    sobrevive**: uma coluna que é ao mesmo tempo endereço público e chave que
+>    liga as tabelas **entrega a junção junto com o endereço**.
+>
+> A isenção foi descartada porque o portão compara por **nome exato**: isentar
+> `slug` o tornaria cego ao caso exato para o qual foi escrito.
+>
+> **O que muda:** `network_events` e `network_event_photos` ganham `id uuid`
+> primária com `slug` único ao lado; `network_event_checkins` liga por
+> `event_id` e a chave é `(event_id, user_id)`. **O contrato não muda em um
+> campo sequer** — `slug` continua sendo a única chave da seção que sai em
+> resposta, e o `id` nunca é projetado.
+>
+> **O que NÃO muda:** tudo o que este ADR decide sobre privacidade. O check-in
+> continua sendo da pessoa e sem `pet_id`, a presença continua sendo um número,
+> a foto continua sem autor. A identidade interna não afrouxa nenhuma das três
+> — e a isca continua procurando **qualquer UUID** no corpo, o que agora vale
+> para os `id` novos também.
 
-`network_event_checkins` é a exceção e a razão é que ela **nunca** é projetada:
-ela tem `user_id uuid`, porque a chave é `(event_slug, user_id)` e ela existe
-para contar e para impedir o segundo check-in da mesma pessoa. Nenhuma operação
-do contrato a lê linha a linha; a única leitura é `count(*)`.
+
+`network_events` e `network_event_photos` têm **`id uuid` como chave primária e
+`slug` único ao lado**, como `pets`, `professionals` e a vitrine da `Loja`. O
+`id` é alvo das chaves estrangeiras da seção e **nunca é projetado**; o `slug` é
+a única chave da seção que sai em resposta.
+
+*(Este parágrafo dizia o contrário até a emenda 1 acima. O texto antigo afirmava
+que `slug` era a chave primária das duas tabelas — e era isso que punha chave
+estrangeira sobre `slug`, que é o que o critério 2 da BICHUS-19 proíbe.)*
+
+`network_event_checkins` não tem `slug` próprio: ela é ligada por `event_id`, e a
+chave é `(event_id, user_id)`. Ela tem `user_id uuid` e **nunca** é projetada —
+existe para contar e para impedir o segundo check-in da mesma pessoa. Nenhuma
+operação do contrato a lê linha a linha; a única leitura é `count(*)`.
 
 ## A prova negativa, e ela é uma isca e não uma frase
 
