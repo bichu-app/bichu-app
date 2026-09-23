@@ -212,7 +212,14 @@ test: commit-de-build ## testes unitarios (so na arvore principal; de worktree u
 	   echo "          A suite unitaria nao precisa de banco: rode \`npm test\` direto."; \
 	   exit 1; \
 	 fi
-	$(COMPOSE) run --rm api npm test
+# `ferramentas` E NAO `api`, PELO MESMO MOTIVO DA ESTEIRA (23/09): `npm test`
+# COMPILA antes de rodar caso nenhum (`tsc -p tsconfig.json --outDir
+# dist/_tests`), e a `api` tem `mem_limit: 320m` -- teto de RUNTIME. Medido: o
+# compilador estoura o grupo de controle e morre com "Killed", saida 137, sem
+# um caso executado. Este alvo nunca acusou porque quase ninguem o roda da
+# arvore principal; a esteira acusou pelo caminho gemeo, o da integracao.
+# O servico `ferramentas` e o mesmo artefato com teto proprio (compose.yaml).
+	$(COMPOSE) run --rm ferramentas npm test
 
 # Pilha EFEMERA, com nome de projeto derivado do caminho e NENHUMA porta
 # publicada. Roda igual da arvore principal e de qualquer worktree, e nunca

@@ -1051,10 +1051,31 @@ jobs:
       # `node` (uid 1000) e o diretorio do runner e do usuario `runner`: sem a
       # permissao o reporter falha ao abrir o arquivo, e o executor REPROVA
       # dizendo que a cobertura foi pedida e nao veio.
+      # `ferramentas` E NAO `api`, E A TROCA TEM DATA: 23/09, execucao 35812754457.
+      #
+      # O executor COMPILA antes de rodar caso nenhum (`npx tsc -p tsconfig.json
+      # --outDir dist/_tests`), e a `api` tem `mem_limit: 320m` -- teto
+      # dimensionado para RODAR `node dist/bin/api.js`, nao para compilar. O
+      # compilador estourava o grupo de controle, o passo reprovava com "a
+      # compilacao falhou; a suite de integracao nao chegou a rodar", e o placar
+      # saia SEM UM CASO SEQUER. Reproduzido a mao pelas duas vias: por este
+      # mesmo comando com `api` (saida 1, a frase identica) e pelo `tsc` cru
+      # (saida 137, "Killed").
+      #
+      # Inflar o teto da `api` era a saida errada, porque o passo `limites de
+      # memoria estao valendo de verdade`, alguns passos acima, confere que o
+      # teto da `api` ESTA aplicado -- e o que ele aplica e o numero do
+      # `compose.yaml`. Subi-lo para caber um compilador faria aquele passo
+      # abencoar, em producao, uma api com o dobro do teto de que ela precisa.
+      # Ver o bloco do servico `ferramentas` em `compose.yaml`.
+      #
+      # `ferramentas` nao sobe com a pilha (`profiles: [ferramentas]`), usa a
+      # MESMA imagem da api e do worker, e tem teto proprio de 1 GB -- o mesmo
+      # do servico `testes` da pilha efemera, que ja separava assim.
       - name: suite de integracao (BICHUS-19, BICHUS-56, BICHUS-15 e BICHUS-178)
         run: |
           install -d -m 0777 coverage placar
-          docker compose run --rm -v "$PWD/coverage:/app/coverage" -v "$PWD/placar:/app/placar" api \
+          docker compose run --rm -v "$PWD/coverage:/app/coverage" -v "$PWD/placar:/app/placar" ferramentas \
             npm run test:integration:executar -- --lcov coverage/lcov-integracao.info --placar placar
 
       # O LIVRO DOS CASOS QUE PISCAM. Ver o bloco de mesmo nome no job `codigo`:

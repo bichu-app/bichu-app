@@ -348,6 +348,97 @@ services:
       start_period: 20s
     restart: unless-stopped
 
+  # ===========================================================================
+  # COMPILAR NAO E SERVIR, E POR ISSO ESTE SERVICO EXISTE
+  # ===========================================================================
+  # A esteira roda a suite de integracao com `docker compose run --rm <servico>
+  # npm run test:integration:executar`, e a PRIMEIRA coisa que o executor faz e
+  # compilar (`infra/integracao/executar-suite.mjs`, `npx tsc -p tsconfig.json
+  # --outDir dist/_tests`).
+  #
+  # Ate 23/09 o servico escolhido era `api`, que tem `mem_limit: 320m`. Esse
+  # teto foi dimensionado para RODAR `node dist/bin/api.js`, nao para compilar o
+  # projeto inteiro. Resultado medido na execucao 35812754457 e reproduzido aqui
+  # (`docker compose run --rm --no-deps api npx tsc ...`, saida 137, "Killed"):
+  # o compilador estoura o grupo de controle, o executor reprova com "a
+  # compilacao falhou; a suite de integracao nao chegou a rodar", e NENHUM caso
+  # roda. Placar sem caso nenhum, job `portao` vermelho por agregacao.
+  #
+  # A saida errada seria inflar o teto da `api`. Duas razoes:
+  #
+  #  1. O passo `limites de memoria estao valendo de verdade` (ci.yml) confere
+  #     que o limite da `api` ESTA aplicado, e o que ele aplica e o numero que
+  #     estiver aqui. Subir 320m para caber um compilador faz o portao passar a
+  #     abencoar, em producao, uma api com o dobro do teto que ela precisa -- e
+  #     ele existe justamente para o teto ser real.
+  #  2. A soma no topo deste arquivo (1792 MB, ~256 MB para o sistema) e o
+  #     orcamento da e2-small de 2 GB. `api` em 700m levaria a soma a 2172 MB, e
+  #     o limite deixaria de caber na maquina que ele protege.
+  #
+  # Entao a compilacao sai do servico com teto de runtime e ganha o seu.
+  # Nao e desenho novo: `infra/integracao/compose.integracao.yaml` ja separa
+  # assim, com o servico `testes` em `mem_limit: 1g`. Este aqui e o mesmo
+  # servico para a pilha da raiz, e o MESMO numero de proposito -- duas formas
+  # para a mesma coisa divergem, e a que diverge para menos morre primeiro.
+  #
+  # PICO MEDIDO do `tsc` neste worktree, com `dist/_tests` APAGADO a cada
+  # rodada: ver o comentario `mem_limit` abaixo.
+  #
+  # `profiles: [ferramentas]` e o que mantem a soma de cima verdadeira: este
+  # servico NUNCA sobe junto com a pilha. `make up`, `--profile dev up` e
+  # `--profile qa up` nao o enxergam; `docker compose run ferramentas` liga o
+  # perfil sozinho, que e o unico jeito de ele existir.
+  ferramentas:
+    # A MESMA imagem da api e do worker. O que muda e o teto e o fato de este
+    # servico nao ficar de pe: o artefato conferido pela esteira continua sendo
+    # um so.
+    image: bichu-app:${IMAGE_TAG:-local}
+    build:
+      context: .
+      target: ${BUILD_TARGET:-dev}
+      args:
+        # IDENTICO ao da api e ao do worker. Os tres apontam para o mesmo
+        # `image:`, e `infra/verificacao/verificar_commit_de_build.py` exige
+        # que todo servico que constroi declare este argumento.
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+    # 1 GB, o mesmo do servico `testes` da pilha efemera.
+    #
+    # MEDIDO neste worktree em 23/09/2026, `dist/_tests` apagado a cada rodada
+    # (apagado, e nao `touch`: o `COPY` do Docker casa por CONTEUDO, e tocar
+    # arquivo nao invalida camada nem cache):
+    #
+    #   teto 320m (o da api)   -> saida 137, "Killed", nenhum caso roda
+    #   teto 1g                -> compila, saida 0, e o pico do grupo de
+    #                             controle (`/sys/fs/cgroup/memory.peak`) fica
+    #                             em 548, 556 e 550 MiB em tres rodadas
+    #
+    # A folga entre o pico e o teto e deliberada: o pico do `tsc` varia com o
+    # tamanho do grafo de tipos, e esse grafo cresce a cada arquivo novo. Teto
+    # colado no pico de hoje e uma reprovacao marcada para o mes que vem, num
+    # passo que nao tem nada a ver com quem a causou.
+    mem_limit: 1g
+    profiles: [ferramentas]
+    env_file: [.env]
+    environment:
+      # O alvo `dev` da imagem ja traz `NODE_ENV=development`, e a suite depende
+      # disso: o `reset()` do contador de limite recusa rodar em producao, de
+      # proposito. Declarado aqui para a dependencia ficar visivel de fora da
+      # imagem, como em `compose.integracao.yaml`.
+      NODE_ENV: development
+    # AS MESMAS dependencias da api, e nao menos: a suite de integracao fala com
+    # o banco migrado e com o armazenamento de objeto. Com a pilha de pe (que e
+    # o caso da esteira) elas ja estao satisfeitas e nada sobe a mais.
+    depends_on:
+      db: {condition: service_healthy}
+      objeto: {condition: service_healthy}
+      migracao: {condition: service_completed_successfully}
+      objeto_init: {condition: service_completed_successfully}
+    # Nada por padrao. Este servico existe para `docker compose run --rm`, e um
+    # comando util aqui seria um servico a mais de pe no dia em que alguem
+    # esquecer o perfil.
+    command: ["node", "-e", "console.error('servico de ferramenta: use `docker compose run --rm ferramentas <comando>`'); process.exit(1)"]
+    restart: "no"
+
   mail:
     # Captura SMTP em dev e qa. NAO prova entregabilidade: isso e reputacao de
     # dominio, SPF, DKIM e DMARC, e so existe com provedor real. No perfil de
