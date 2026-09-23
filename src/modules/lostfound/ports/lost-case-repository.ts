@@ -12,7 +12,13 @@
  * Nenhum método devolve coordenada para fora da visão do dono. A projeção
  * pública tem porta própria e carrega `share_token`, nunca `case_id`.
  */
-import type { CaseId, Instant, PetId, UserId } from '../../../shared/types/brands.js';
+import type {
+  CaseId,
+  FoundReportId,
+  Instant,
+  PetId,
+  UserId,
+} from '../../../shared/types/brands.js';
 
 export type StatusDoCaso = 'open' | 'closed_reunited' | 'closed_not_found' | 'closed_false_alarm';
 export type DesfechoDoCaso = 'reunited' | 'not_found' | 'false_alarm';
@@ -75,7 +81,7 @@ export interface CasoGravado {
   readonly closureNote: string | null;
 }
 
-export interface LostCaseRepository {
+export interface LostCaseRepository extends DecisorDeCandidatos {
   /**
    * Tudo que decide a abertura, numa consulta só.
    *
@@ -121,4 +127,95 @@ export interface LostCaseRepository {
     readonly nota: string | undefined;
     readonly agora: Instant;
   }): Promise<CasoGravado | null>;
+}
+
+/**
+ * A decisão humana sobre um candidato. Os dois valores do contrato, e só eles.
+ *
+ * `suggested` **não** está aqui de propósito: sair de `suggested` é o que esta
+ * operação faz, e voltar para lá é o que `match_candidates_decisao_tem_autor`
+ * recusa. Um terceiro valor neste tipo seria a porta para desfazer uma rejeição,
+ * e a seção 4.10 de `docs/03-arquitetura.md` fecha isso em uma frase:
+ * *"Rejeitado não volta"*.
+ */
+export type DecisaoDoCandidato = 'confirmed' | 'rejected';
+
+/** O achado, como ele sai junto da decisão. Mesmas colunas de `FoundReport`. */
+export interface AchadoDoCandidato {
+  readonly id: FoundReportId;
+  readonly origin: 'tag_scan' | 'stray_report';
+  readonly status: 'open' | 'matched' | 'closed';
+  readonly especie: string | null;
+  readonly porte: string | null;
+  readonly cidade: string | null;
+  readonly bairro: string | null;
+  readonly achadoEm: Date;
+  readonly observacao: string | null;
+  readonly criadoEm: Date;
+}
+
+/**
+ * O candidato depois de decidido.
+ *
+ * `petId` e `relatorUserId` não vão para a resposta: eles existem porque
+ * **confirmar abre a conversa mediada** com quem registrou o achado, e a
+ * abertura precisa dos dois. O pet vem do CASO que casou, porque o aviso avulso
+ * não tem `pet_id`; o relator vem de `found_reports.reporter_user_id`.
+ */
+export interface CandidatoDecidido {
+  readonly id: string;
+  readonly caseId: CaseId;
+  readonly foundReportId: FoundReportId;
+  readonly petId: PetId;
+  readonly nomeDoPet: string;
+  readonly relatorUserId: UserId | null;
+  readonly score: number;
+  readonly atributosQuePontuaram: readonly string[];
+  readonly distanciaEmMetros: number | null;
+  readonly linkOrigin: 'attribute_match' | 'share_token';
+  readonly versaoDaEstrategia: string;
+  readonly status: DecisaoDoCandidato;
+  readonly criadoEm: Date;
+  readonly achado: AchadoDoCandidato;
+}
+
+export interface DecisaoSobreCandidato {
+  readonly caso: CaseId;
+  readonly candidato: string;
+  readonly dono: UserId;
+  readonly decisao: DecisaoDoCandidato;
+  readonly agora: Instant;
+}
+
+/**
+ * Registra a decisão humana do tutor sobre um candidato.
+ *
+ * **`null` cobre quatro coisas, e cobre de propósito:** o candidato não existe,
+ * ele não é de um caso deste tutor, o caso não está aberto, ou ele já foi
+ * decidido. As quatro viram 404, nunca 403 (ADR-0021) — e aqui isso vale duas
+ * vezes, porque um 403 confirmaria a existência de uma correspondência entre o
+ * pet de outra pessoa e um achado, que é exatamente o que a decisão humana
+ * existe para não afirmar sozinha.
+ *
+ * Quem decide é **o tutor do caso**, e esse predicado mora na cláusula `WHERE`
+ * da própria escrita. O banco não o exige: `match_candidates_decisao_tem_autor`
+ * cobra *uma pessoa e um instante*, e qualquer `users.id` satisfaz o CHECK.
+ * `autorizacao-do-decisor-na-clausula-where.test.ts` compila este SQL e confere
+ * a posição `$n` do predicado do dono.
+ */
+export interface DecisorDeCandidatos {
+  decidirCandidato(entrada: DecisaoSobreCandidato): Promise<CandidatoDecidido | null>;
+
+  /**
+   * O candidato JÁ DECIDIDO deste tutor, para o reenvio da fila offline.
+   *
+   * O critério 7 da BICHUS-86 põe a confirmação numa fila quando falta conexão,
+   * e fila reenvia. Sem esta leitura, o reenvio de uma confirmação que já deu
+   * certo responderia 404 e a tela diria que o achado sumiu.
+   */
+  candidatoDecididoDoTutor(
+    caso: CaseId,
+    candidato: string,
+    dono: UserId,
+  ): Promise<CandidatoDecidido | null>;
 }

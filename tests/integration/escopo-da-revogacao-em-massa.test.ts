@@ -176,13 +176,39 @@ async function retrato(tabela: string, coluna: string): Promise<Map<string, stri
   return new Map(r.rows.map((l) => [l.id, l.marca === null ? null : l.marca.toISOString()]));
 }
 
+/**
+ * As linhas que MUDARAM entre os dois retratos, e só elas.
+ *
+ * O universo é a interseção dos dois retratos: linha que existe no `antes` e
+ * ainda existe no `depois`. As duas exclusões são o conserto de um
+ * intermitente medido, e nenhuma delas afrouxa o que o caso prova.
+ *
+ * **Linha que NASCEU entre os dois retratos não é resposta para esta
+ * pergunta.** `node --test` roda os quinze arquivos de integração em paralelo
+ * contra o MESMO banco, e `sair-de-todos-pelo-http`, `conjunto-exato-dos-checks`
+ * e `esquema` também gravam em `refresh_tokens`. Uma linha nova aparece só no
+ * `depois`; a versão anterior comparava `antes.get(id)` — que é `undefined` —
+ * com `revoked_at` nulo, e `undefined !== null` contava a linha do vizinho como
+ * atingida pelo `UPDATE` deste caso. Era falha sem defeito, e ela reprovava o
+ * caso que existe para provar escopo.
+ *
+ * **Linha que SUMIU entre os dois retratos, idem.** O `after` dos outros
+ * arquivos apaga as contas que criou, e o `ON DELETE CASCADE` leva o refresh
+ * junto.
+ *
+ * O que a interseção NÃO cobre: um `UPDATE` sem `WHERE user_id` que atingisse
+ * uma linha nascida depois do primeiro retrato. Isso está coberto de sobra pelo
+ * resto — um `UPDATE` sem escopo acende TODAS as linhas vivas pré-existentes da
+ * tabela, que são dezenas, e bastaria uma para reprovar.
+ */
 function idsQueMudaram(
   antes: Map<string, string | null>,
   depois: Map<string, string | null>,
 ): Set<string> {
   const mudaram = new Set<string>();
-  for (const [id, valor] of depois) {
-    if (antes.get(id) !== valor) mudaram.add(id);
+  for (const [id, valor] of antes) {
+    if (!depois.has(id)) continue;
+    if (depois.get(id) !== valor) mudaram.add(id);
   }
   return mudaram;
 }

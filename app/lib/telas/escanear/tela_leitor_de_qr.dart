@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
@@ -658,9 +659,23 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
         // precisa do codigo, e descobrir isso **antes** de errar tres vezes
         // e o que impede o beco.
         TextButton(
-          // F3.5 e de outra historia.
-          onPressed: null,
-          child: Text(MensagensDeErro.registrarAchado),
+          // **F3.5 EXISTE** (BICHUS-35). Esta porta nasceu desabilitada, com
+          // o comentario "F3.5 e de outra historia" ao lado do `onPressed:
+          // null`. A historia chegou, e o `null` virou `context.push`.
+          //
+          // **Os dois controles nao disputam lugar, e nunca disputaram.** A
+          // mescla os apresentou como disputa porque esta branch reformatou o
+          // arquivo inteiro e o alinhamento de linhas do Git casou o corpo de
+          // `Digitar de novo` com o corpo desta porta. Sao botoes diferentes,
+          // com condicoes diferentes: `Digitar de novo` so existe enquanto o
+          // 404 do caminho digitado esta na faixa, e esta saida existe sempre,
+          // porque quem esta com um animal agora pode nunca chegar a errar o
+          // codigo. Nenhum botao novo entrou na tela.
+          //
+          // `push` e nao `go`: quem esta com um animal no colo e nao achou o
+          // codigo precisa voltar para o leitor se mudar de ideia.
+          onPressed: () => context.push(Rotas.registrarAchado),
+          child: const Text(MensagensDeErro.registrarAchado),
         ),
       ],
     };

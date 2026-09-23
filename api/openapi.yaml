@@ -292,6 +292,8 @@ x-problem-types:
   - { slug: contact-channel-unverified,    status: 409 }
   - { slug: pet-photo-missing,             status: 409 }
   - { slug: transfer-not-for-this-account, status: 409 }
+  - { slug: transfer-already-in-progress,  status: 409, note: "BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite" }
+  - { slug: transfer-already-effective,    status: 409, note: "BICHUS-66: a transferencia ja se consumou, e depois disso o caminho e transferir de volta, nao cancelar. E 409 e nao 410 de proposito: a rota EXIGE conta e o tutor tem direito de saber em que pe esta a propria transferencia -- o 410 sem distincao e da superficie PUBLICA do token, onde dizer qual dos tres casos ocorreu entregaria a um estranho o estado de uma transferencia alheia" }
   - { slug: conversation-closed,           status: 410 }
   - { slug: tag-revoked,                   status: 410, note: "tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)" }
   - { slug: tag-code-not-found,            status: 404 }
@@ -516,6 +518,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401':
           description: |
             Credencial invalida. A resposta e **identica** para e-mail
@@ -577,6 +580,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401':
           description: Token invalido, expirado ou reutilizado.
           content:
@@ -681,6 +685,8 @@ paths:
       operationId: logoutAllDevices
       security:
         - bearerAuth: []
+          reauth: []
+      x-reauth-scope: session_revocation
       tags: [auth]
       x-effects: [notifies]
       x-rate-limit:
@@ -704,18 +710,23 @@ paths:
         E o remedio de quem perdeu o aparelho, e o unico que fecha a janela de ate
         15 minutos que o logout comum deixa aberta.
 
-        **Reautenticacao:** BICHUS-48 decide que esta operacao exige
-        `X-Reauth-Token`. A maquinaria de reautenticacao (`POST /auth/reauth`)
-        ainda nao existe em `src/`, e o enum `scope` daquela operacao tem quatro
-        valores, nenhum deles de revogacao de sessao. O cabecalho **nao** e
-        declarado aqui enquanto nao for aplicado: declarar exigencia que o codigo
-        nao impoe e a divergencia que este projeto ja pagou duas vezes. BICHUS-48
-        acrescenta o `reauth: []` e o escopo junto com o codigo que os aplica.
+        **Reautenticacao:** esta operacao exige `X-Reauth-Token` no escopo
+        `session_revocation`, e a exigencia esta aplicada em `src/` desde a
+        BICHUS-48 -- o cabecalho foi declarado aqui junto com o codigo que o
+        impoe, e nao antes dele. O escopo e proprio e nao reaproveita nenhum dos
+        outros: um token aberto para excluir a conta nao derruba as sessoes, e
+        vice-versa.
+
+        O escopo tambem e o que mantem a operacao utilizavel por quem acabou de
+        perder o aparelho. Derrubar as sessoes e a acao de REMEDIO, e ela e a
+        unica da lista que a propria pessoa precisa conseguir fazer as pressas:
+        os 5 minutos da janela valem a partir da senha conferida, e nao a partir
+        do login.
 
         Idempotente: chamada com a conta ja sem sessao nenhuma, responde 204.
       responses:
         '204': { description: Todas as sessoes da conta foram encerradas. }
-        '401': { $ref: '#/components/responses/Unauthorized' }
+        '401': { $ref: '#/components/responses/ReauthRequired' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/email-verification:
@@ -754,6 +765,7 @@ paths:
                 email: { type: string, format: email }
       responses:
         '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/email-verification/confirm:
@@ -797,6 +809,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/SessionResponse' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '410': { $ref: '#/components/responses/TokenExpired' }
 
   /auth/password-reset:
@@ -840,6 +853,7 @@ paths:
                 email: { type: string, format: email }
       responses:
         '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /auth/password-reset/confirm:
@@ -881,6 +895,7 @@ paths:
             segundo** (SEC-006), nao em 15 minutos, e um e-mail de aviso vai
             para o endereco da conta: e o unico canal pelo qual o dono legitimo
             descobre uma tomada de conta.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '410': { $ref: '#/components/responses/TokenExpired' }
         '422': { $ref: '#/components/responses/WeakPassword' }
 
@@ -893,15 +908,26 @@ paths:
       x-effects: [verifies_secret]
       summary: Reautentica com a senha e abre a janela de operacao destrutiva
       description: |
-        As quatro operacoes destrutivas do produto — excluir a conta, exportar
-        os dados, transferir o pet e revogar a tag — exigem a senha de novo, e
-        **nao a pedem cada uma do seu jeito**. Esta e a unica operacao do
-        sistema que verifica a senha de um usuario ja autenticado, e devolve um
+        As operacoes destrutivas do produto exigem a senha de novo, e **nao a
+        pedem cada uma do seu jeito**. Esta e a unica operacao do sistema que
+        verifica a senha de um usuario ja autenticado, e devolve um
         `reauth_token` de **5 minutos** que as outras aceitam no cabecalho
         `X-Reauth-Token`.
 
+        Quem exige o cabecalho esta declarado em `x-reauth-scope`, operacao por
+        operacao, e o valor de `scope` aqui precisa ser o mesmo da operacao que
+        vai receber o token. Sao seis, e a lista e a da secao 7.5 de
+        `docs/04-seguranca.md` acrescida da revogacao de sessao:
+        `account_deletion`, `email_change`, `data_export`, `pet_transfer`,
+        `tag_revocation` e `session_revocation`. **Trocar a senha fica de fora**,
+        e a ausencia e deliberada: `PUT /auth/password` ja conferia
+        `current_password` no proprio corpo antes desta operacao existir, entao
+        exigir as duas coisas pediria a mesma senha duas vezes na mesma
+        requisicao. A divergencia contra a secao 7.5, que lista trocar senha
+        entre as seis, esta registrada na BICHUS-48.
+
         Concentrar aqui tem tres consequencias, e as tres sao o motivo do
-        desenho: a senha trafega para **um** endpoint em vez de quatro; o limite
+        desenho: a senha trafega para **um** endpoint em vez de seis; o limite
         contra forca bruta existe em **um** lugar; e `DELETE /me` nao precisa de
         corpo, o que evita a requisicao com corpo em DELETE que proxy e
         biblioteca tratam de formas diferentes.
@@ -930,11 +956,24 @@ paths:
                 password: { type: string, maxLength: 256 }
                 scope:
                   type: string
-                  enum: [account_deletion, data_export, pet_transfer, tag_revocation]
+                  enum:
+                    - account_deletion
+                    - email_change
+                    - data_export
+                    - pet_transfer
+                    - tag_revocation
+                    - session_revocation
                   description: |
                     A finalidade unica deste token. Apresenta-lo em operacao de
                     outro escopo responde 401, e nao 403: a janela para aquela
                     finalidade simplesmente nao foi aberta.
+
+                    `email_change` estava faltando aqui enquanto
+                    `POST /me/email-change` ja declarava
+                    `x-reauth-scope: email_change`: nenhum token podia ser
+                    emitido para aquela operacao, entao ela era inalcancavel por
+                    contrato. `session_revocation` entra com a exigencia nova de
+                    `POST /auth/logout-all`.
       responses:
         '200':
           description: Janela aberta.
@@ -947,6 +986,7 @@ paths:
                   reauth_token: { type: string }
                   expires_in: { type: integer, example: 300 }
                   scope: { type: string }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
@@ -981,6 +1021,7 @@ paths:
                 new_password: { $ref: '#/components/schemas/Password' }
       responses:
         '204': { description: Senha alterada. Demais sessoes revogadas. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '422': { $ref: '#/components/responses/WeakPassword' }
 
@@ -1086,6 +1127,7 @@ paths:
                 new_email: { type: string, format: email, maxLength: 254 }
       responses:
         '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
@@ -1490,6 +1532,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
 
@@ -1624,6 +1668,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetTransfer' }
+        # BICHUS-66: `petId` e `format: uuid`, entao a borda recusa o malformado
+        # com 400 antes de qualquer autorizacao. Sem esta linha a subida morre em
+        # `vigiarParametrosDasRotas`: o servidor emitia um status que o contrato
+        # nao declarava. Mesma forma de `getPet` e `deletePet`.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/ReauthRequired' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
@@ -1660,6 +1709,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetTransfer' }
+        # BICHUS-66: mesmo motivo do 400 de `startPetTransfer`. `transferId` e
+        # `format: uuid`.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Ja consumada. Depois disso o caminho e transferir de volta.
@@ -1715,6 +1767,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetTransfer' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403':
           description: O token e valido, mas nao e para esta conta.
           content:
@@ -2339,6 +2392,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
 
@@ -2827,7 +2882,9 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/MatchCandidate' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /lost-cases/{caseId}/close:
     parameters:
@@ -3310,6 +3367,64 @@ paths:
                   valid: { type: boolean, enum: [true] }
         '410': { $ref: '#/components/responses/TokenExpired' }
 
+
+  /public/session-alerts/{alertToken}/disavow:
+    parameters:
+      - name: alertToken
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: disavowSessionAlert
+      tags: [auth]
+      x-effects: [verifies_secret, notifies, irreversible_write]
+      summary: '"Nao fui eu": derruba todas as sessoes pelo link do aviso'
+      description: |
+        O aviso de reuso de refresh chega por e-mail, e quem o le pode ser
+        justamente quem **perdeu** a conta: o invasor ja trocou o que precisava
+        trocar, ou o celular ficou no bolso de outra pessoa. Um botao que exija
+        login e inutil para essa pessoa, e e por isso que esta operacao nao pede
+        conta. Mesmo desenho, e pelo mesmo motivo, de
+        `cancelTransferByToken`: a operacao existe para **desfazer**, e um
+        obstaculo aqui e o dano consumado.
+
+        O que ela faz, e so isto: revoga todas as familias de refresh da conta e
+        empurra `users.sessions_invalid_before`, o que derruba tambem o token de
+        acesso ja emitido em menos de um segundo (SEC-006). Ela **nao troca a
+        senha** e nao mexe em mais nada: quem tem o link nao provou ser o
+        titular, e uma troca de senha a partir daqui trancaria o titular para
+        fora com o link que existe para protege-lo. O e-mail que sai em seguida
+        convida a redefinir a senha pelo fluxo que exige a caixa de entrada.
+
+        E **POST, sem GET equivalente**, e isso e defesa: cliente de e-mail e
+        antivirus de borda pre-carregam link por GET, e uma revogacao disparada
+        por pre-carga derrubaria a sessao de quem nunca clicou.
+
+        O token e de uso unico, vale 7 dias e e consumido **depois** de a
+        revogacao concluir. A ordem e deliberada: revogar duas vezes tem o mesmo
+        efeito de revogar uma, entao gastar o token antes deixaria uma falha
+        passageira do banco queimar o unico remedio da vitima.
+
+        Responde 204 tambem quando a conta ja estava sem sessao nenhuma. O
+        pedido e o que importa, nao o numero de linhas que caiu.
+      security: []
+      x-no-challenge: true
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 10
+          window: 1h
+          on_exceed: log_and_alert
+          note: "recusar aqui trabalharia contra quem a rota protege; o teto existe para o laco, e o alerta e o que importa. O token de 256 bits e a defesa real"
+      responses:
+        '204': { description: Todas as sessoes da conta foram encerradas. }
+        '410':
+          description: |
+            O link nao vale mais: inexistente, vencido ou ja usado. O corpo e o
+            mesmo nos tres casos, porque distinguir contaria a um estranho que
+            aquele token existiu.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
   /public/transfers/{cancelToken}:
     parameters:
       - name: cancelToken
@@ -3565,6 +3680,7 @@ paths:
                 DeliveredAt: { type: string, format: date-time }
       responses:
         '204': { description: Evento processado ou ignorado por duplicidade. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401':
           description: Assinatura ausente ou invalida.
           content:
@@ -4129,7 +4245,7 @@ components:
         next_action:
           type: string
           description: Caminho alternativo, quando existe um.
-          enum: [register_stray_found_report, verify_email, upload_pet_photo, sign_in]
+          enum: [register_stray_found_report, verify_email, upload_pet_photo, sign_in, retry_later]
         errors:
           type: array
           items:

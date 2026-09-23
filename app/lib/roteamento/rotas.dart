@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../api/modelos_pet.dart';
 import '../intencao/cadastro_de_pet_como_intencao.dart';
 import '../intencao/caso_de_perdido_como_intencao.dart';
+import '../achado/rascunho_do_achado.dart';
 import '../perdido/rascunho_do_caso.dart';
 import '../sessao/controlador_de_sessao.dart';
 import '../telas/abas.dart';
@@ -27,6 +28,11 @@ import '../telas/perdido/tela_alcance_do_alerta.dart';
 import '../telas/perdido/tela_de_quem_e_o_caso.dart';
 import '../telas/perdido/tela_de_retomada.dart';
 import '../telas/perdido/tela_onde_e_quando.dart';
+import '../telas/achado/resultado_do_achado.dart';
+import '../telas/achado/tela_achado_registrado.dart';
+import '../telas/achado/tela_do_achado.dart';
+import '../telas/achado/tela_registrar_achado.dart';
+import '../intencao/achado_como_intencao.dart';
 import '../telas/tela_de_abertura.dart';
 
 /// Os enderecos do app.
@@ -140,6 +146,31 @@ abstract final class Rotas {
   static const String marcarPerdidoAlcance = '/pets/perdido/alcance';
   static const String casoAberto = '/pets/perdido/caso';
 
+  /// O achado avulso (F3.5, BICHUS-35).
+  ///
+  /// **`/achados/novo` nao foi escolhido agora**: e o endereco que
+  /// `guarda_de_acao_test.dart` ja traduzia de `F3.5` antes de esta tela
+  /// existir. Mudar o caminho aqui deixaria envelopes gravados apontando para
+  /// o nada.
+  ///
+  /// **A ordem importa**, pelo mesmo motivo de `/pets/:petId`: `/achados/novo`
+  /// e `/achados/registrado` sao declarados ANTES de `/achados/:achadoId`,
+  /// porque um parametro casa com qualquer segmento e engoliria os dois.
+  static const String registrarAchado = '/achados/novo';
+
+  /// O desfecho de F3.5, nos dois estados (registrado e na fila).
+  static const String achadoRegistrado = '/achados/registrado';
+
+  /// O padrao do achado pelo endereco dele. Use [achadoDe] para montar.
+  static const String achado = '/achados/:achadoId';
+
+  /// O nome do parametro de caminho, num lugar so.
+  static const String parametroDoAchadoId = 'achadoId';
+
+  /// O endereco do achado [achadoId].
+  static String achadoDe(String achadoId) =>
+      '/achados/${Uri.encodeComponent(achadoId)}';
+
   // -- T.1, a edicao e a exclusao (BICHUS-60 e BICHUS-61) -------------------
   //
   // **`/pets/:petId` vem DEPOIS de `/pets/novo` e `/pets/cadastrado` na
@@ -193,6 +224,10 @@ abstract final class Rotas {
       'F3.1' => marcarPerdido,
       'F3.2' => marcarPerdidoAlcance,
       'F3.3' => casoAberto,
+      // F3.5 e a tela de retorno de `registrar_achado`: e onde o rascunho
+      // mora, e e de la que a pessoa segue em frente de novo depois de um
+      // registro que falhou (UX 8.3, regra 4).
+      'F3.5' => registrarAchado,
       _ => null,
     };
   }
@@ -380,6 +415,59 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           final rascunho = estado.extra;
           if (rascunho is! RascunhoDoCaso) return const AbaPerfil();
           return TelaAlcanceDoAlerta(rascunho: rascunho);
+        },
+      ),
+      // ---------------------------------------------------------------
+      // O achado avulso (F3.5, BICHUS-35)
+      // ---------------------------------------------------------------
+      //
+      // As tres sao irmas da casca, e nao filhas dela: quem esta na rua com um
+      // animal no colo esta numa tarefa, e a barra de abas abaixo do
+      // formulario ofereceria quatro saidas para o meio do preenchimento.
+      //
+      // **`/achados/novo` e `/achados/registrado` vem ANTES de
+      // `/achados/:achadoId`.** `go_router` casa na ordem em que as rotas sao
+      // registradas, e um parametro casa com qualquer segmento: declarado
+      // antes, `/achados/:achadoId` engoliria os dois e o formulario abriria o
+      // detalhe de um achado chamado "novo".
+      GoRoute(
+        path: Rotas.registrarAchado,
+        builder: (context, estado) {
+          final extra = estado.extra;
+          // A volta de uma intencao que falhou (UX 8.3, regra 4) chega com o
+          // rascunho inteiro e o erro. Sem isto, a pessoa que autenticou e viu
+          // o registro falhar cairia num formulario em branco -- que e perder
+          // o rascunho pelo outro caminho.
+          if (extra is RetomadaDoAchado) {
+            return TelaRegistrarAchado(
+              rascunho: extra.rascunho,
+              erroInicial: extra.erro?.texto,
+            );
+          }
+          return TelaRegistrarAchado(
+            rascunho: extra is RascunhoDoAchado ? extra : null,
+          );
+        },
+      ),
+      GoRoute(
+        path: Rotas.achadoRegistrado,
+        builder: (context, estado) {
+          final resultado = estado.extra;
+          // Alcancada por link direto, sem desfecho nenhum para mostrar, ela
+          // devolve o formulario em vez de afirmar que alguma coisa foi
+          // registrada. Tela de sucesso sem sucesso e o defeito que o criterio
+          // 2 da BICHUS-31 proibe, e link direto e um caminho para ele.
+          if (resultado is! ResultadoDoAchado) {
+            return const TelaRegistrarAchado();
+          }
+          return TelaAchadoRegistrado(resultado: resultado);
+        },
+      ),
+      GoRoute(
+        path: Rotas.achado,
+        builder: (context, estado) {
+          final id = estado.pathParameters[Rotas.parametroDoAchadoId] ?? '';
+          return TelaDoAchado(achadoId: id);
         },
       ),
       GoRoute(

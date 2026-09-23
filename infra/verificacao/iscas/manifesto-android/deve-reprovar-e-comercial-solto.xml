@@ -1,0 +1,6 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- `&` solto e ilegal: ele abre uma entidade que nunca fecha. Entra numa
+         string de interface no dia em que alguem escrever "Cao & Gato" sem
+         escapar, e o build do Android morre igual ao traco duplo. -->
+    <application android:label="Cao & Gato" />
+</manifest>

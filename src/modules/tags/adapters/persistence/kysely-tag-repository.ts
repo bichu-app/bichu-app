@@ -305,11 +305,25 @@ export function criarTagRepository(db: Db): TagRepository {
         const doDia = await trx
           .selectFrom('pet_tags')
           .select(({ fn }) => fn.countAll<string>().as('total'))
+          // A mais ANTIGA dentro da janela é quem decide quando o balde volta a
+          // ter vaga: é ela que sai da contagem primeiro. Enquanto o retorno era
+          // a janela inteira, o corpo do 429 dizia "24 horas" para quem tinha
+          // dez minutos de espera, e o texto novo transforma esse arredondamento
+          // em um número que a pessoa lê e obedece.
+          .select(({ fn }) => fn.min<Date>('created_at').as('mais_antiga'))
           .where('pet_id', '=', nova.petId)
           .where('created_at', '>=', inicioDaJanela)
           .executeTakeFirstOrThrow();
         if (Number(doDia.total) >= TETO_DE_EMISSOES_POR_DIA) {
-          return { tipo: 'teto_diario', retryAfterSeconds: JANELA_DE_EMISSAO_EM_MS / 1000 };
+          const maisAntiga = doDia.mais_antiga;
+          const liberaEm =
+            maisAntiga === null || maisAntiga === undefined
+              ? agora + JANELA_DE_EMISSAO_EM_MS
+              : new Date(maisAntiga).getTime() + JANELA_DE_EMISSAO_EM_MS;
+          return {
+            tipo: 'teto_diario',
+            retryAfterSeconds: Math.max(1, Math.ceil((liberaEm - agora) / 1000)),
+          };
         }
 
         const linha = await trx

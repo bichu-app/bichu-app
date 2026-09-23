@@ -21,9 +21,10 @@ import Fastify, {
 import { randomUUID } from 'node:crypto';
 import type { AbsoluteUrl } from '../types/brands.js';
 import type { DependenciasDoTeto } from './aplicacao-de-teto.js';
-import type { RegistradorDeRotas } from './registrar-rota.js';
+import type { RegistradorDeRotas, VerificadorDeReautenticacao } from './registrar-rota.js';
 import { AppError, problemas } from './errors.js';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
+import { camposDoSchema } from './erros-de-schema.js';
 import {
   montarProblema,
   TIPO_DE_CONTEUDO_DO_PROBLEMA,
@@ -48,6 +49,17 @@ export interface OpcoesDoServidor {
    * `RATE_LIMIT_DRIVER`, e `disabled` fora de `dev` não sobe.
    */
   readonly teto: DependenciasDoTeto;
+  /**
+   * Confere e consome `X-Reauth-Token` nas operações que declaram
+   * `reauthScope` (BICHUS-48).
+   *
+   * **Opcional aqui e obrigatório lá.** Um servidor que não registra nenhuma
+   * rota destrutiva não precisa dele, e exigi-lo de todas as bancadas de teste
+   * seria ruído. Mas `registrarRota` derruba a subida quando uma rota declara
+   * `reauthScope` e este campo não veio: a operação destrutiva nunca chega a
+   * ser servida sem a segunda credencial.
+   */
+  readonly reautenticacao?: VerificadorDeReautenticacao;
 }
 
 /** Só aceita correlação vinda de fora se ela tiver a forma de um UUID. */
@@ -57,7 +69,9 @@ function correlacaoDeEntrada(cabecalho: unknown): string | undefined {
   return formato.test(cabecalho) ? cabecalho.toLowerCase() : undefined;
 }
 
-function ehErroDoFastify(erro: unknown): erro is { statusCode?: number; code?: string; message: string } {
+function ehErroDoFastify(
+  erro: unknown,
+): erro is { statusCode?: number; code?: string; message: string; validation?: unknown } {
   return typeof erro === 'object' && erro !== null && 'message' in erro;
 }
 
@@ -75,6 +89,15 @@ function traduzir(erro: unknown): AppError {
 
   const status = erro.statusCode ?? 500;
   if (erro.code === 'FST_ERR_VALIDATION' || status === 400) {
+    // O Fastify entrega o achado do Ajv em `erro.validation`, e é dele que sai o
+    // NOME do campo. Enquanto isto era uma cadeia vazia, o 400 de corpo dizia
+    // "um ou mais campos" sem dizer qual — e `errors[].field` existe no contrato
+    // exatamente para a tela marcar um.
+    const campos = camposDoSchema(erro.validation);
+    if (campos !== undefined) return problemas.validacao(campos, 'Confira os dados enviados.');
+    // Sem achado para ler não há campo a nomear: corpo que nem chegou a ser JSON
+    // (`FST_ERR_CTP_EMPTY_JSON_BODY`, parse que falhou) cai aqui. Inventar um
+    // nome seria mandar a pessoa corrigir o que está certo.
     return problemas.validacao(
       [{ field: '', code: 'schema', message: 'Um ou mais campos não passaram na validação.' }],
       'Confira os dados enviados.',
@@ -166,6 +189,9 @@ export function criarServidor(opcoes: OpcoesDoServidor): RegistradorDeRotas {
   // módulo precisaria receber. `registrarRota` o lê daqui, e um servidor sem
   // ele derruba o registro na subida em vez de servir rota sem teto.
   app.decorate('tetoDeChamada', opcoes.teto);
+  if (opcoes.reautenticacao !== undefined) {
+    app.decorate('reautenticacao', opcoes.reautenticacao);
+  }
 
   app.addHook('onSend', (request, reply, payload, done) => {
     void reply.header(CABECALHO_DE_CORRELACAO, request.id);

@@ -38,8 +38,15 @@ import {
   RAIO_DO_ALERTA_EM_METROS,
   type CentroDoAlcance,
 } from '../../domain/previa-do-alcance.js';
+import { rotuloDaArea } from '../../domain/abertura-do-caso.js';
 import type { DisparoGravado } from '../../ports/registro-de-disparos.js';
-import type { CasoGravado, DesfechoDoCaso, CanalDoReencontro } from '../../ports/lost-case-repository.js';
+import type {
+  CandidatoDecidido,
+  CasoGravado,
+  DecisaoDoCandidato,
+  DesfechoDoCaso,
+  CanalDoReencontro,
+} from '../../ports/lost-case-repository.js';
 import type { AbsoluteUrl, CaseId, Instant, PetId, UserId } from '../../../../shared/types/brands.js';
 
 export const rotaDeAberturaDeCaso = defineRoute({
@@ -102,6 +109,25 @@ export const rotaDeEncerramento = defineRoute({
   operationId: 'closeLostCase',
   method: 'post',
   path: '/lost-cases/:caseId/close',
+  effects: ['notifies'],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * A decisão humana sobre uma correspondência (BICHUS-86, critérios 4, 5 e 12).
+ *
+ * **Os dois tetos vêm do contrato**, que declara `x-effects: [notifies]` e
+ * `account 60/1h deny_429`. Não são escolha desta linha: com efeito não vazio,
+ * `defineRoute` torna a ausência de `rateLimit` erro de compilação (ADR-0016).
+ *
+ * `notifies` é verdade e precisa estar declarado: confirmar abre a conversa
+ * mediada, e a abertura grava a primeira mensagem do sistema, que é o que o
+ * tutor e quem achou recebem.
+ */
+export const rotaDaDecisaoDoCandidato = defineRoute({
+  operationId: 'decideLostCaseCandidate',
+  method: 'post',
+  path: '/lost-cases/:caseId/candidates/:candidateId/decision',
   effects: ['notifies'],
   rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
 });
@@ -365,6 +391,51 @@ function comoRespostaDaPrevia(previa: PreviaDoCaso): Record<string, unknown> {
   };
 }
 
+/**
+ * `MatchCandidate`, campo a campo como o contrato declara.
+ *
+ * **O `score` VAI no corpo e não vai para a tela.** Ele é obrigatório no schema
+ * (`required: [id, found_report, score, status]`) e o critério 2 da BICHUS-86
+ * proíbe exibi-lo — "o número ordena a lista e não vai para a tela, porque
+ * número inventa precisão que o sistema não tem". Quem cumpre o critério 2 é o
+ * app; tirá-lo daqui quebraria o contrato para resolver um problema de outra
+ * camada.
+ *
+ * **O que NÃO sai:** `pet_id`, `case_id` e o identificador de quem registrou o
+ * achado. Nenhum dos três está em `MatchCandidate`, e o portão de contrato só
+ * procura o que sumiu — propriedade a mais passa por ele. O `case_id` é o mais
+ * tentador, porque quem chama acabou de mandá-lo no caminho; devolvê-lo
+ * começaria o agrupamento que o item 7 do ADR-0010 proíbe.
+ */
+function comoRespostaDoCandidato(candidato: CandidatoDecidido): Record<string, unknown> {
+  return {
+    id: candidato.id,
+    found_report: {
+      id: candidato.achado.id,
+      origin: candidato.achado.origin,
+      status: candidato.achado.status,
+      ...(candidato.achado.especie === null ? {} : { species: candidato.achado.especie }),
+      ...(candidato.achado.porte === null ? {} : { size: candidato.achado.porte }),
+      area_label: rotuloDaArea({
+        city: candidato.achado.cidade ?? undefined,
+        neighborhood: candidato.achado.bairro ?? undefined,
+      }),
+      found_at: candidato.achado.achadoEm.toISOString(),
+      photo_url: null,
+      notes: candidato.achado.observacao,
+      conversation_id: null,
+      created_at: candidato.achado.criadoEm.toISOString(),
+    },
+    score: candidato.score,
+    matched_attributes: candidato.atributosQuePontuaram,
+    distance_m: candidato.distanciaEmMetros,
+    link_origin: candidato.linkOrigin,
+    strategy_version: candidato.versaoDaEstrategia,
+    status: candidato.status,
+    created_at: candidato.criadoEm.toISOString(),
+  };
+}
+
 export function registrarRotasDeCasos(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotasDeCaso,
@@ -421,6 +492,12 @@ export function registrarRotasDeCasos(
           chaveDoCabecalho: request.headers['idempotency-key'],
           donoOuToken: chamador.userId,
           endpoint: `${rotaDeAberturaDeCaso.method.toUpperCase()} ${rotaDeAberturaDeCaso.path}`,
+          // O PET ENTRA NA CHAVE. `endpoint` e o molde da rota
+          // (`POST /pets/:petId/lost-cases`) e nao a URL: sem `petId` aqui, o
+          // mesmo tutor abrindo caso para dois pets com a mesma chave receberia
+          // o caso do PRIMEIRO pet como resposta do segundo, e o segundo animal
+          // ficaria sem alerta nenhum sem nada acusar.
+          parametrosDeCaminho: { petId },
           corpo,
           agoraEmMilissegundos: deps.clock.now(),
         },
@@ -484,6 +561,39 @@ export function registrarRotasDeCasos(
         chamador,
       );
       return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDaDecisaoDoCandidato,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDaDecisaoDoCandidato.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await donoAutenticado(request, deps);
+      const { caseId, candidateId } = request.params as {
+        caseId?: string;
+        candidateId?: string;
+      };
+      // A forma dos dois já foi conferida contra `format: uuid` do contrato por
+      // `vigiarParametrosDasRotas`, que instala o schema no registro. O que
+      // sobra aqui é o caso de o parâmetro não ter chegado, que vira 404 e não
+      // 400: ausência de segmento não é valor malformado.
+      if (typeof caseId !== 'string' || caseId === '') throw problemas.naoEncontrado();
+      if (typeof candidateId !== 'string' || candidateId === '') {
+        throw problemas.naoEncontrado();
+      }
+
+      const corpo = request.body as { decision: DecisaoDoCandidato };
+      const decidido = await deps.casos.decidirCandidato(
+        caseId as CaseId,
+        candidateId,
+        corpo.decision,
+        chamador,
+      );
+      return reply.status(200).send(comoRespostaDoCandidato(decidido));
     },
   );
 }

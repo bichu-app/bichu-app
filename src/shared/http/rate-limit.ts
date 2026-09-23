@@ -32,6 +32,19 @@ import type { RateLimitDecision, RateLimitStore } from '../ports/rate-limit-stor
  */
 export const JANELA_VITALICIA_EM_SEGUNDOS = 100 * 365 * 86400;
 
+/**
+ * A janela declarada é a vitalícia?
+ *
+ * Existe porque o **corpo do 429 muda** quando ela é: um teto vitalício
+ * estourado não reabre, e o texto que promete prazo estaria mentindo. A
+ * pergunta se responde aqui, ao lado de `janelaEmSegundos`, para que a grafia
+ * aceita seja uma só — comparar `entrada.window === 'lifetime'` no chamador
+ * voltaria a divergir no dia em que esta função passasse a aceitar outra forma.
+ */
+export function ehJanelaVitalicia(janela: string): boolean {
+  return janela.trim() === 'lifetime';
+}
+
 export function janelaEmSegundos(janela: string): number {
   const limpa = janela.trim();
   if (limpa === 'lifetime') return JANELA_VITALICIA_EM_SEGUNDOS;

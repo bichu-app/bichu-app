@@ -273,6 +273,8 @@ export function registrarRotasDeAchado(
           chaveDoCabecalho: request.headers['idempotency-key'],
           donoOuToken: relator,
           endpoint: `${rotaDeRegistroDeAchado.method.toUpperCase()} ${rotaDeRegistroDeAchado.path}`,
+          // `/found-reports` nao tem parametro de caminho.
+          parametrosDeCaminho: {},
           corpo,
           agoraEmMilissegundos: deps.clock.now(),
         },

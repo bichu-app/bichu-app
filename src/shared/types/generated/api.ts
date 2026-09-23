@@ -163,13 +163,18 @@ export interface paths {
          *     E o remedio de quem perdeu o aparelho, e o unico que fecha a janela de ate
          *     15 minutos que o logout comum deixa aberta.
          *
-         *     **Reautenticacao:** BICHUS-48 decide que esta operacao exige
-         *     `X-Reauth-Token`. A maquinaria de reautenticacao (`POST /auth/reauth`)
-         *     ainda nao existe em `src/`, e o enum `scope` daquela operacao tem quatro
-         *     valores, nenhum deles de revogacao de sessao. O cabecalho **nao** e
-         *     declarado aqui enquanto nao for aplicado: declarar exigencia que o codigo
-         *     nao impoe e a divergencia que este projeto ja pagou duas vezes. BICHUS-48
-         *     acrescenta o `reauth: []` e o escopo junto com o codigo que os aplica.
+         *     **Reautenticacao:** esta operacao exige `X-Reauth-Token` no escopo
+         *     `session_revocation`, e a exigencia esta aplicada em `src/` desde a
+         *     BICHUS-48 -- o cabecalho foi declarado aqui junto com o codigo que o
+         *     impoe, e nao antes dele. O escopo e proprio e nao reaproveita nenhum dos
+         *     outros: um token aberto para excluir a conta nao derruba as sessoes, e
+         *     vice-versa.
+         *
+         *     O escopo tambem e o que mantem a operacao utilizavel por quem acabou de
+         *     perder o aparelho. Derrubar as sessoes e a acao de REMEDIO, e ela e a
+         *     unica da lista que a propria pessoa precisa conseguir fazer as pressas:
+         *     os 5 minutos da janela valem a partir da senha conferida, e nao a partir
+         *     do login.
          *
          *     Idempotente: chamada com a conta ja sem sessao nenhuma, responde 204.
          */
@@ -282,15 +287,26 @@ export interface paths {
         put?: never;
         /**
          * Reautentica com a senha e abre a janela de operacao destrutiva
-         * @description As quatro operacoes destrutivas do produto — excluir a conta, exportar
-         *     os dados, transferir o pet e revogar a tag — exigem a senha de novo, e
-         *     **nao a pedem cada uma do seu jeito**. Esta e a unica operacao do
-         *     sistema que verifica a senha de um usuario ja autenticado, e devolve um
+         * @description As operacoes destrutivas do produto exigem a senha de novo, e **nao a
+         *     pedem cada uma do seu jeito**. Esta e a unica operacao do sistema que
+         *     verifica a senha de um usuario ja autenticado, e devolve um
          *     `reauth_token` de **5 minutos** que as outras aceitam no cabecalho
          *     `X-Reauth-Token`.
          *
+         *     Quem exige o cabecalho esta declarado em `x-reauth-scope`, operacao por
+         *     operacao, e o valor de `scope` aqui precisa ser o mesmo da operacao que
+         *     vai receber o token. Sao seis, e a lista e a da secao 7.5 de
+         *     `docs/04-seguranca.md` acrescida da revogacao de sessao:
+         *     `account_deletion`, `email_change`, `data_export`, `pet_transfer`,
+         *     `tag_revocation` e `session_revocation`. **Trocar a senha fica de fora**,
+         *     e a ausencia e deliberada: `PUT /auth/password` ja conferia
+         *     `current_password` no proprio corpo antes desta operacao existir, entao
+         *     exigir as duas coisas pediria a mesma senha duas vezes na mesma
+         *     requisicao. A divergencia contra a secao 7.5, que lista trocar senha
+         *     entre as seis, esta registrada na BICHUS-48.
+         *
          *     Concentrar aqui tem tres consequencias, e as tres sao o motivo do
-         *     desenho: a senha trafega para **um** endpoint em vez de quatro; o limite
+         *     desenho: a senha trafega para **um** endpoint em vez de seis; o limite
          *     contra forca bruta existe em **um** lugar; e `DELETE /me` nao precisa de
          *     corpo, o que evita a requisicao com corpo em DELETE que proxy e
          *     biblioteca tratam de formas diferentes.
@@ -1680,6 +1696,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/public/session-alerts/{alertToken}/disavow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alertToken: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "Nao fui eu": derruba todas as sessoes pelo link do aviso
+         * @description O aviso de reuso de refresh chega por e-mail, e quem o le pode ser
+         *     justamente quem **perdeu** a conta: o invasor ja trocou o que precisava
+         *     trocar, ou o celular ficou no bolso de outra pessoa. Um botao que exija
+         *     login e inutil para essa pessoa, e e por isso que esta operacao nao pede
+         *     conta. Mesmo desenho, e pelo mesmo motivo, de
+         *     `cancelTransferByToken`: a operacao existe para **desfazer**, e um
+         *     obstaculo aqui e o dano consumado.
+         *
+         *     O que ela faz, e so isto: revoga todas as familias de refresh da conta e
+         *     empurra `users.sessions_invalid_before`, o que derruba tambem o token de
+         *     acesso ja emitido em menos de um segundo (SEC-006). Ela **nao troca a
+         *     senha** e nao mexe em mais nada: quem tem o link nao provou ser o
+         *     titular, e uma troca de senha a partir daqui trancaria o titular para
+         *     fora com o link que existe para protege-lo. O e-mail que sai em seguida
+         *     convida a redefinir a senha pelo fluxo que exige a caixa de entrada.
+         *
+         *     E **POST, sem GET equivalente**, e isso e defesa: cliente de e-mail e
+         *     antivirus de borda pre-carregam link por GET, e uma revogacao disparada
+         *     por pre-carga derrubaria a sessao de quem nunca clicou.
+         *
+         *     O token e de uso unico, vale 7 dias e e consumido **depois** de a
+         *     revogacao concluir. A ordem e deliberada: revogar duas vezes tem o mesmo
+         *     efeito de revogar uma, entao gastar o token antes deixaria uma falha
+         *     passageira do banco queimar o unico remedio da vitima.
+         *
+         *     Responde 204 tambem quando a conta ja estava sem sessao nenhuma. O
+         *     pedido e o que importa, nao o numero de linhas que caiu.
+         */
+        post: operations["disavowSessionAlert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/transfers/{cancelToken}": {
         parameters: {
             query?: never;
@@ -1942,7 +2006,7 @@ export interface components {
              * @description Caminho alternativo, quando existe um.
              * @enum {string}
              */
-            next_action?: "register_stray_found_report" | "verify_email" | "upload_pet_photo" | "sign_in";
+            next_action?: "register_stray_found_report" | "verify_email" | "upload_pet_photo" | "sign_in" | "retry_later";
             errors?: {
                 field: string;
                 code: string;
@@ -3426,6 +3490,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             /**
              * @description Credencial invalida. A resposta e **identica** para e-mail
              *     inexistente e senha errada: nao revela se a conta existe.
@@ -3465,6 +3530,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             /** @description Token invalido, expirado ou reutilizado. */
             401: {
                 headers: {
@@ -3537,7 +3603,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            401: components["responses"]["Unauthorized"];
+            401: components["responses"]["ReauthRequired"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -3585,6 +3651,7 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -3623,6 +3690,7 @@ export interface operations {
                     "application/json": components["schemas"]["SessionResponse"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             410: components["responses"]["TokenExpired"];
         };
     };
@@ -3670,6 +3738,7 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -3706,6 +3775,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             410: components["responses"]["TokenExpired"];
             422: components["responses"]["WeakPassword"];
         };
@@ -3725,9 +3795,16 @@ export interface operations {
                      * @description A finalidade unica deste token. Apresenta-lo em operacao de
                      *     outro escopo responde 401, e nao 403: a janela para aquela
                      *     finalidade simplesmente nao foi aberta.
+                     *
+                     *     `email_change` estava faltando aqui enquanto
+                     *     `POST /me/email-change` ja declarava
+                     *     `x-reauth-scope: email_change`: nenhum token podia ser
+                     *     emitido para aquela operacao, entao ela era inalcancavel por
+                     *     contrato. `session_revocation` entra com a exigencia nova de
+                     *     `POST /auth/logout-all`.
                      * @enum {string}
                      */
-                    scope: "account_deletion" | "data_export" | "pet_transfer" | "tag_revocation";
+                    scope: "account_deletion" | "email_change" | "data_export" | "pet_transfer" | "tag_revocation" | "session_revocation";
                 };
             };
         };
@@ -3746,6 +3823,7 @@ export interface operations {
                     };
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -3773,6 +3851,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             422: components["responses"]["WeakPassword"];
         };
@@ -3854,6 +3933,7 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -4207,8 +4287,10 @@ export interface operations {
                     "application/json": components["schemas"]["UploadIntent"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             415: components["responses"]["UnsupportedMedia"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     deletePetPhoto: {
@@ -4323,6 +4405,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTransfer"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["ReauthRequired"];
             403: components["responses"]["Forbidden"];
             /** @description Pet com caso aberto, ou transferencia ja em andamento. */
@@ -4356,6 +4439,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTransfer"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Ja consumada. Depois disso o caminho e transferir de volta. */
             409: {
@@ -4396,6 +4480,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTransfer"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             /** @description O token e valido, mas nao e para esta conta. */
             403: {
                 headers: {
@@ -5003,8 +5088,10 @@ export interface operations {
                     "application/json": components["schemas"]["UploadIntent"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             415: components["responses"]["UnsupportedMedia"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     enrichFinderFoundReport: {
@@ -5375,7 +5462,9 @@ export interface operations {
                     "application/json": components["schemas"]["MatchCandidate"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     closeLostCase: {
@@ -5761,6 +5850,39 @@ export interface operations {
             410: components["responses"]["TokenExpired"];
         };
     };
+    disavowSessionAlert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                alertToken: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Todas as sessoes da conta foram encerradas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /**
+             * @description O link nao vale mais: inexistente, vencido ou ja usado. O corpo e o
+             *     mesmo nos tres casos, porque distinguir contaria a um estranho que
+             *     aquele token existiu.
+             */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
     getTransferByCancelToken: {
         parameters: {
             query?: never;
@@ -5949,6 +6071,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             /** @description Assinatura ausente ou invalida. */
             401: {
                 headers: {

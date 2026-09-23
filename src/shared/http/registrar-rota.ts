@@ -70,12 +70,40 @@ import {
 } from './aplicacao-de-teto.js';
 import { AppError } from './errors.js';
 import type { ProblemType } from './problem.js';
-import type { RateLimitEntry, RouteDefinition } from './route-definition.js';
+import type { RateLimitEntry, ReauthScope, RouteDefinition } from './route-definition.js';
+
+/**
+ * O cabeçalho da segunda credencial, como o contrato o declara no esquema de
+ * segurança `reauth`. Em minúsculas porque é assim que o Fastify normaliza.
+ */
+export const CABECALHO_DE_REAUTENTICACAO = 'x-reauth-token';
+
+/**
+ * Quem sabe se a janela de reautenticação vale, e a consome.
+ *
+ * Assinatura e não objeto: o que o registro precisa é de uma função, e o módulo
+ * `identity` é quem a fornece. `shared/http` continua sem conhecer o serviço de
+ * identidade — a dependência anda na direção certa, como a do contador de teto.
+ *
+ * Recusa **lançando** `AppError('reauthentication-required')`. Devolver um
+ * booleano deixaria o chamador esquecer de olhar, que é a forma do defeito que
+ * este arquivo inteiro existe para eliminar.
+ */
+export type VerificadorDeReautenticacao = (
+  request: FastifyRequest,
+  escopo: ReauthScope,
+) => Promise<void>;
 
 declare module 'fastify' {
   interface FastifyInstance {
     /** Instalado por `criarServidor`. Ver `OpcoesDoServidor.teto`. */
     tetoDeChamada?: DependenciasDoTeto;
+    /**
+     * Instalado por `criarServidor` quando `OpcoesDoServidor.reautenticacao`
+     * vem preenchido. Rota que declara `reauthScope` num servidor sem ele
+     * **não sobe**, e o motivo sai escrito.
+     */
+    reautenticacao?: VerificadorDeReautenticacao;
   }
   interface FastifyRequest {
     /**
@@ -257,6 +285,45 @@ function tetoDe(app: RegistradorDeRotas): DependenciasDoTeto {
 }
 
 /**
+ * O portão da segunda credencial, e **ele nasce da declaração da rota**.
+ *
+ * `rota.reauthScope` é o mesmo `x-reauth-scope` do contrato, e
+ * `rotas-registradas-contra-o-contrato.test.ts` cobra a equivalência nos dois
+ * sentidos: operação com `reauth: []` cuja rota não declara o escopo reprova, e
+ * rota que declara um escopo que o contrato não exige também.
+ *
+ * Isso é o que torna "esqueci de exigir a senha" inexprimível. Não existe passo
+ * a lembrar no manipulador: quem escreve a rota declara a finalidade, e o
+ * registro instala a conferência. `Desativar a tag` não pode entrar sem ela.
+ *
+ * Servidor sem o decorador derruba o registro **na subida**, e não na primeira
+ * requisição destrutiva. Uma rota destrutiva que subisse sem verificador seria
+ * uma rota destrutiva sem senha, e o silêncio é exatamente o desfecho que este
+ * arquivo recusa.
+ */
+function portaoDeReautenticacao(
+  app: RegistradorDeRotas,
+  rota: RouteDefinition,
+): onRequestAsyncHookHandler | undefined {
+  const escopo = rota.reauthScope;
+  if (escopo === undefined) return undefined;
+
+  const verificador = app.reautenticacao;
+  if (verificador === undefined) {
+    throw new Error(
+      `A rota ${rota.operationId} declara reauthScope '${escopo}' e o servidor não tem o ` +
+        'decorador `reautenticacao`: ele não foi criado por `criarServidor({ reautenticacao })`. ' +
+        'Subir assim serviria uma operação destrutiva sem a segunda credencial que o contrato ' +
+        'exige (BICHUS-48, esquema de segurança `reauth` de api/openapi.yaml).',
+    );
+  }
+
+  return async (request) => {
+    await verificador(request, escopo);
+  };
+}
+
+/**
  * Registra a rota e liga os tetos dela.
  *
  * `rota.method` finalmente é consumido: era o único campo do objeto, junto com
@@ -270,6 +337,7 @@ export function registrarRota<const T extends RouteDefinition>(
   handler: Handler,
 ): void {
   const deps = tetoDe(app);
+  const portaoDeReauth = portaoDeReautenticacao(app, rota);
   naoAplicadas.push(...inventariarNaoAplicaveis(rota));
 
   const resolvedores: Resolvedores = {
@@ -295,7 +363,15 @@ export function registrarRota<const T extends RouteDefinition>(
     url: rota.path,
     ...(opcoes.schema === undefined ? {} : { schema: opcoes.schema }),
     ...(opcoes.config === undefined ? {} : { config: opcoes.config }),
-    onRequest: [tetoDeEntrada, ...(opcoes.onRequest ?? [])],
+    // A ordem é a do cabeçalho deste arquivo, com o portão da segunda
+    // credencial entre o teto e os ganchos da rota: a chamada recusada por teto
+    // não chega a custar a leitura do banco que a conferência da janela faz, e
+    // nenhum gancho da rota roda antes de a senha ter sido conferida.
+    onRequest: [
+      tetoDeEntrada,
+      ...(portaoDeReauth === undefined ? [] : [portaoDeReauth]),
+      ...(opcoes.onRequest ?? []),
+    ],
     preValidation: [tetoDoCorpo, ...(opcoes.preValidation ?? [])],
     onError: (request, _reply, erro, pronto) => {
       if (erro instanceof AppError && TIPOS_DE_TENTATIVA_INVALIDA.has(erro.problemType)) {

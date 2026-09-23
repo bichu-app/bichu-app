@@ -61,6 +61,29 @@ export class AppError extends Error {
 }
 
 /**
+ * O prazo do 429 em palavras, a partir do **mesmo número** que vai no
+ * `Retry-After`.
+ *
+ * Uma fonte só para o cabeçalho e para a frase. Enquanto a frase era um texto
+ * fixo ("em instantes") e o cabeçalho era um número, os dois diziam coisas
+ * diferentes sobre o mesmo fato, e só o cabeçalho estava certo.
+ *
+ * Arredonda **para cima**, sempre: um prazo curto demais convida ao reenvio que
+ * volta a ser recusado, e o custo de mandar alguém esperar cinco segundos a
+ * mais é nenhum.
+ */
+export function prazoEmPalavras(segundos: number): string {
+  const total = Math.max(1, Math.ceil(segundos));
+  if (total < 60) return total === 1 ? '1 segundo' : `${total} segundos`;
+  const minutos = Math.ceil(total / 60);
+  if (minutos < 60) return minutos === 1 ? '1 minuto' : `${minutos} minutos`;
+  const horas = Math.ceil(minutos / 60);
+  if (horas < 24) return horas === 1 ? '1 hora' : `${horas} horas`;
+  const dias = Math.ceil(horas / 24);
+  return dias === 1 ? '1 dia' : `${dias} dias`;
+}
+
+/**
  * Os construtores abaixo existem para que o título de cada tipo fique num lugar
  * só. Texto de erro repetido em quatro chamadas diverge, e a divergência
  * aparece como duas telas diferentes para o mesmo problema.
@@ -246,6 +269,60 @@ export const problemas = {
     }),
 
   /**
+   * 409. Este pet já tem transferência viva (BICHUS-66).
+   *
+   * O texto oferece a saída, porque ela existe e não é óbvia: o tutor cancela
+   * a que está em andamento e começa de novo. Sem isso a tela diria "já existe"
+   * e deixaria a pessoa sem o próximo passo.
+   */
+  transferenciaEmAndamento: (): AppError =>
+    new AppError('transfer-already-in-progress', 'Este pet já está sendo transferido', {
+      detail: 'Cancele a transferência em andamento antes de começar outra.',
+    }),
+
+  /**
+   * 409. Não dá para transferir um pet com caso de perdido aberto.
+   *
+   * O tipo é `pet-already-lost`, que é literalmente "este pet já tem caso
+   * aberto" — e é o fato. A transferência espera o reencontro: consumar no meio
+   * de um caso revogaria a plaquinha da coleira justamente enquanto ela é a
+   * única coisa ligando o animal ao tutor (ADR-0004).
+   */
+  transferenciaComCasoAberto: (): AppError =>
+    new AppError('pet-already-lost', 'Encerre o caso antes de transferir', {
+      detail: 'Este pet está marcado como perdido. A plaquinha precisa continuar funcionando até ele voltar.',
+    }),
+
+  /**
+   * 409. A transferência já se consumou, e cancelar deixou de ser o caminho.
+   *
+   * Só a rota autenticada usa este tipo. A superfície pública do token responde
+   * 410 sem distinguir os três casos, de propósito: ver o 410 de
+   * `getTransferByCancelToken` no contrato.
+   */
+  transferenciaJaConsumada: (): AppError =>
+    new AppError('transfer-already-effective', 'Esta transferência já se concluiu', {
+      detail: 'O pet já está na conta da outra pessoa. Para tê-lo de volta, peça que ela transfira para você.',
+    }),
+
+  /**
+   * 403. O token do convite é válido, mas quem o apresenta não é o
+   * destinatário — ou não tem e-mail verificado.
+   *
+   * **403 e não 410**, e o contrato é explícito: o token não está errado, quem
+   * apresenta é que não é o destinatário. Um 410 mandaria a pessoa certa, logada
+   * na conta errada, pedir um convite novo que não resolveria nada.
+   *
+   * Os dois casos — outra conta e conta sem e-mail verificado — respondem
+   * idêntico. Separá-los daria a quem tem o token uma pista sobre o cadastro do
+   * destinatário.
+   */
+  transferenciaNaoEDestaConta: (): AppError =>
+    new AppError('forbidden', 'Este convite não é para esta conta', {
+      detail: 'Entre com a conta do e-mail que recebeu o convite, e confirme esse e-mail antes de aceitar.',
+    }),
+
+  /**
    * 409. Teto de três casos abertos simultâneos na conta.
    *
    * Separado de `pet-already-lost` porque a **saída é diferente**: lá a pessoa
@@ -381,10 +458,84 @@ export const problemas = {
       detail: 'O caso terminou, então não dá mais para acrescentar detalhes aqui.',
     }),
 
-  limiteDeChamadas: (retryAfterSeconds: number): AppError =>
-    new AppError('rate-limited', 'Tente de novo em instantes', {
-      detail: 'Recebemos muitos pedidos deste aparelho em pouco tempo.',
+  /**
+   * 429 de janela que REABRE.
+   *
+   * ## O texto anterior mentia duas vezes
+   *
+   * Ele dizia *"Recebemos muitos pedidos **deste aparelho**"* e *"Tente de novo
+   * **em instantes**"*. As duas afirmações eram falsas, e cada uma por um
+   * motivo diferente.
+   *
+   * **"Deste aparelho" nomeia uma dimensão que este construtor não conhece.**
+   * O mesmo 429 sai de onze dimensões declaradas em `x-rate-limit`
+   * (`DIMENSOES_CONHECIDAS`, em `aplicacao-de-teto.ts`): `ip`, `ip_24`,
+   * `origin`, `account`, `email`, `code`, `pet`, `token_family`,
+   * `finder_identity`, `conversation_participant` e `found_report`. Duas são de
+   * rede e nenhuma é de aparelho. No balde de IP o texto era pior do que
+   * impreciso: sob CGNAT de operadora, ou atrás do NAT de um escritório, o
+   * balde é compartilhado por gente que não tem relação nenhuma entre si, e a
+   * frase acusava quem estava fazendo o primeiro pedido do dia.
+   *
+   * **"Em instantes" contradizia o `Retry-After` da própria resposta.** A
+   * janela menor do produto é de uma hora; o cabeçalho já carregava o número
+   * certo e o corpo dizia outra coisa a quem lê.
+   *
+   * ## O que o texto NÃO diz, e por quê
+   *
+   * Ele não diz "desta rede", que seria verdadeiro em `ip` e `ip_24` e falso
+   * nas outras nove. E não diria só por isso: **a dimensão do balde é
+   * informação operacional**, e este corpo é alcançável sem credencial nenhuma
+   * (login, leitura de tag, webhook). Dizer por onde a contagem acontece diz a
+   * quem está sondando o que rotacionar — laço de proxy para `ip`, faixas
+   * diferentes para `ip_24`, contas novas para `account` — e diz isso
+   * exatamente no momento em que ele está medindo o teto. É também o que o
+   * SEC-010 tira do banco ao guardar o endereço só em HMAC: devolver em prosa o
+   * que o resumo protege na `bucket_key` desfaz a proteção pelo outro lado.
+   *
+   * Para quem lê de boa-fé a dimensão também não serve de nada: não há ação
+   * legítima que ela habilite. O que serve é **quanto falta** e **que nada se
+   * perdeu**, e é isso que sai.
+   *
+   * A voz é impessoal de propósito. "Recebemos muitos pedidos como este" é
+   * verdade em qualquer dimensão e **não atribui o volume a quem lê**, que é a
+   * correção do caso do CGNAT.
+   */
+  limiteDeChamadas: (retryAfterSeconds: number): AppError => {
+    const prazo = prazoEmPalavras(retryAfterSeconds);
+    return new AppError('rate-limited', `Tente de novo em ${prazo}`, {
+      detail:
+        `Recebemos muitos pedidos como este em pouco tempo e pausamos os próximos por ${prazo}. ` +
+        'Nada do que você já enviou se perdeu.',
+      nextAction: 'retry_later',
       retryAfterSeconds,
+    });
+  },
+
+  /**
+   * 429 de teto que **não reabre** — a janela `lifetime` do contrato, hoje só
+   * em `createFoundReportPhotoUploadIntent` (três fotos por aviso, SEC-009).
+   *
+   * Existe separado porque `limiteDeChamadas` promete um prazo, e aqui não há
+   * prazo nenhum: esperar não libera outro envio, nem em cem anos. Reusar o
+   * outro construtor teria trocado "em instantes" por "em 24 horas", que é a
+   * mesma mentira com um número mais convincente — 24 h é o teto de FORMATO do
+   * `Retry-After` (ver `TETO_DO_RETRY_AFTER_EM_SEGUNDOS`), e não uma promessa
+   * de reabertura.
+   *
+   * **Sem `retryAfterSeconds`, e por isso sem `Retry-After`.** A RFC 9110 pede
+   * o cabeçalho no 429 como SHOULD, não como MUST, e um número que o servidor
+   * sabe estar errado é pior que a ausência dele: o cliente que o obedecesse
+   * agendaria um reenvio que já nasce recusado.
+   *
+   * **Sem `next_action`, também de propósito.** `retry_later` seria falso aqui,
+   * e uma saída falsa é pior que nenhuma. A saída verdadeira está no texto.
+   */
+  limiteSemReabertura: (): AppError =>
+    new AppError('rate-limited', 'Você chegou ao total permitido', {
+      detail:
+        'Este total não reinicia com o tempo, então esperar não libera outro. ' +
+        'Se você precisa de mais, fale com a gente.',
     }),
 
   interno: (cause?: unknown): AppError =>

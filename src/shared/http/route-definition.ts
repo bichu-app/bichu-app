@@ -43,11 +43,28 @@ export type OnExceed =
   | 'accept_and_defer_dispatch'
   | 'deny_429';
 
+/**
+ * As finalidades de `X-Reauth-Token`, como o contrato as enumera em
+ * `POST /auth/reauth` e as exige em `x-reauth-scope`.
+ *
+ * `email_change` e `session_revocation` entraram na BICHUS-48. O primeiro
+ * estava declarado em `POST /me/email-change` e ausente do enum de `scope`, o
+ * que tornava aquela operacao inalcancavel: nenhum token podia ser emitido para
+ * ela. O segundo e a exigencia nova de `POST /auth/logout-all`.
+ *
+ * **Trocar a senha nao esta aqui**, e a secao 7.5 de `docs/04-seguranca.md` a
+ * lista entre as seis. `PUT /auth/password` confere `current_password` no
+ * proprio corpo desde a BICHUS-77, entao exigir as duas coisas pediria a mesma
+ * senha duas vezes na mesma requisicao. A divergencia esta registrada na
+ * BICHUS-48 e na pauta de refinamento.
+ */
 export type ReauthScope =
   | 'account_deletion'
+  | 'email_change'
   | 'data_export'
   | 'pet_transfer'
-  | 'tag_revocation';
+  | 'tag_revocation'
+  | 'session_revocation';
 
 export interface RateLimitEntry {
   readonly dimension: readonly string[];

@@ -34,7 +34,12 @@ import 'moldura.dart';
 /// [rotuloAcessivelDe]. Nao ha controle dentro de controle porque nao ha
 /// controle nenhum.
 class CartaoDePet extends StatelessWidget {
-  const CartaoDePet({required this.pet, super.key, this.aoTocar});
+  const CartaoDePet({
+    required this.pet,
+    super.key,
+    this.aoTocar,
+    this.linhaDeAviso,
+  });
 
   final Pet pet;
 
@@ -55,6 +60,20 @@ class CartaoDePet extends StatelessWidget {
   /// aqui abriria para nada. O verbo tambem sai do texto: convidar alguem a
   /// agir sem dar o caminho e pior que informar o estado.
   static const String convitePlaquinha = 'Ainda sem plaquinha com QR.';
+
+  /// A TERCEIRA POSICAO do aviso persistente de cadastro (BICHUS-75, criterio
+  /// 2): "no cartao de cada pet ele aparece como uma linha discreta".
+  ///
+  /// **Texto, e nao botao, e nao por economia.** O cartao e `excludeSemantics`
+  /// com um rotulo composto, e um controle aqui dentro ou vira uma segunda
+  /// parada de leitor de tela -- o que o criterio 5 da BICHUS-62 proibe -- ou
+  /// e apagado pelo `excludeSemantics` e vira `btn=true tap=false`, que a
+  /// suite de acessibilidade reprova. A acao mora nas posicoes 1 e 2, que sao
+  /// as unicas duas telas em que a historia a pede.
+  ///
+  /// **A frase vem de fora**, e nao e montada aqui: o cartao nao sabe nada
+  /// sobre verificacao de e-mail, e nao deve passar a saber.
+  final String? linhaDeAviso;
 
   /// A linha de atributos, do jeito que o 11.3 manda: separados por " · ".
   ///
@@ -82,12 +101,16 @@ class CartaoDePet extends StatelessWidget {
   ///
   /// Uma frase so, porque o cartao e um no so. O selo entra por **texto**, e
   /// nao por cor: quem usa leitor de tela nao recebe a borda de urgencia.
-  static String rotuloAcessivelDe(Pet pet) {
+  static String rotuloAcessivelDe(Pet pet, {String? linhaDeAviso}) {
     final partes = <String>[
       if (pet.status == StatusDoPet.perdido) 'Perdido',
       pet.nome,
       atributosDe(pet),
       if (pet.semTag) convitePlaquinha,
+      // A linha do aviso entra no ROTULO tambem. Uma linha visivel que nao
+      // entrasse aqui seria informacao que so existe para quem enxerga, e o
+      // `excludeSemantics` do cartao a apagaria em silencio.
+      if (linhaDeAviso != null && linhaDeAviso.isNotEmpty) linhaDeAviso,
     ];
     return partes.where((p) => p.isNotEmpty).join(', ');
   }
@@ -108,7 +131,7 @@ class CartaoDePet extends StatelessWidget {
       // acao que o `InkWell` publica, entao ela precisa ser redeclarada aqui.
       button: aoTocar != null,
       onTap: aoTocar,
-      label: rotuloAcessivelDe(pet),
+      label: rotuloAcessivelDe(pet, linhaDeAviso: linhaDeAviso),
       // **Uma parada de leitor de tela, e uma so** (criterio 5). O rotulo
       // acima e composto por `rotuloAcessivelDe`, e os textos de dentro saem
       // da arvore: sem isto o nome, os atributos, o selo e o convite viram
@@ -167,6 +190,16 @@ class CartaoDePet extends StatelessWidget {
                               const SizedBox(height: BichuEspaco.e1),
                               Text(
                                 convitePlaquinha,
+                                style: textos.bodySmall?.copyWith(
+                                  color: cores.textMuted,
+                                ),
+                              ),
+                            ],
+                            if (linhaDeAviso != null &&
+                                linhaDeAviso!.isNotEmpty) ...<Widget>[
+                              const SizedBox(height: BichuEspaco.e1),
+                              Text(
+                                linhaDeAviso!,
                                 style: textos.bodySmall?.copyWith(
                                   color: cores.textMuted,
                                 ),

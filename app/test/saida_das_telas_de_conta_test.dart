@@ -23,6 +23,7 @@ import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
+import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:flutter/material.dart';
 import 'package:bichu/widgets/marca.dart';
@@ -46,6 +47,13 @@ void main() {
       BichuApp(
         config: AppConfig.carregar(apiBaseUrlDeTeste: 'http://localhost:3000'),
         deposito: deposito ?? DepositoEmMemoria(),
+        // EM MEMORIA, sempre, e o sintoma de esquecer nao aponta para a causa
+        // (BICHUS-75). O padrao do app e `DepositoDoAvisoEmArquivo`, que chama
+        // `getApplicationDocumentsDirectory()` -- um canal de plataforma que
+        // nao existe em teste de widget. O `Future` nunca resolve, o aviso
+        // nunca termina de carregar, e o caso reprova dizendo que nao achou um
+        // texto, sem nenhuma pista de que o problema e o disco.
+        depositoDoAvisoDeCadastro: DepositoDoAvisoEmMemoria(),
       ),
     );
     await tester.pumpAndSettle();
@@ -204,7 +212,20 @@ void main() {
       'Pets', (tester) async {
     await abrirOApp(tester, deposito: await depositoLogado());
 
-    await tester.tap(find.text('Confirmar meu e-mail'));
+    // A PORTA PARA ESTA TELA MUDOU NA BICHUS-75, e a mudanca e da historia.
+    //
+    // A faixa antiga tinha um unico botao, `Confirmar meu e-mail`, que abria
+    // esta tela. O criterio 1 da BICHUS-75 fixa outras duas acoes na faixa
+    // cheia -- `Reenviar` e `Agora nao` -- e nenhuma delas navega: o reenvio
+    // acontece na propria faixa, sem tirar a pessoa de onde ela estava.
+    //
+    // Quem abre esta tela agora e a forma ENCOLHIDA do criterio 4, cuja acao
+    // e `Confirmar`. Entao o caminho ate aqui passa por `Agora nao` primeiro.
+    // O que este caso mede -- que a tela tem saida anunciavel e que ela
+    // devolve a aba `Pets` -- nao mudou.
+    await tester.tap(find.text('Agora não'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Confirmar'));
     await tester.pumpAndSettle();
 
     expect(find.widgetWithText(AppBar, 'Verifique seu e-mail'), findsOne);

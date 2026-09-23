@@ -183,8 +183,40 @@ class RepositorioDeCadastro implements IdentityRepository {
   invalidarTokensPendentes(): Promise<number> {
     return naoUsado('invalidarTokensPendentes');
   }
+  criarJanelaDeReautenticacao(): Promise<void> {
+    return naoUsado('criarJanelaDeReautenticacao');
+  }
+
+  consumirJanelaDeReautenticacao(): never {
+    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo chega aqui');
+  }
+
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
+  }
+
+  registrarPedidoDeExclusao(): Promise<undefined> {
+    return naoUsado('registrarPedidoDeExclusao');
+  }
+
+  contasAExpurgar(): Promise<readonly UserId[]> {
+    return naoUsado('contasAExpurgar');
+  }
+
+  expurgarConta(): Promise<boolean> {
+    return naoUsado('expurgarConta');
+  }
+
+  registrarPedidoDeTrocaDeEmail(): Promise<void> {
+    return naoUsado('registrarPedidoDeTrocaDeEmail');
+  }
+
+  concluirTrocaDeEmail(): Promise<Conta | undefined> {
+    return naoUsado('concluirTrocaDeEmail');
+  }
+
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return naoUsado('cancelarTrocaDeEmailPendente');
   }
 }
 

@@ -260,8 +260,40 @@ class RepositorioFalso implements IdentityRepository {
     this.invalidacoesDeTokens.push({ userId, agora });
     return Promise.resolve(1);
   }
+  criarJanelaDeReautenticacao(): Promise<void> {
+    return naoUsado('criarJanelaDeReautenticacao');
+  }
+
+  consumirJanelaDeReautenticacao(): never {
+    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo chega aqui');
+  }
+
   marcarEmailVerificado(): Promise<void> {
     return naoUsado('marcarEmailVerificado');
+  }
+
+  registrarPedidoDeExclusao(): Promise<undefined> {
+    return naoUsado('registrarPedidoDeExclusao');
+  }
+
+  contasAExpurgar(): Promise<readonly UserId[]> {
+    return naoUsado('contasAExpurgar');
+  }
+
+  expurgarConta(): Promise<boolean> {
+    return naoUsado('expurgarConta');
+  }
+
+  registrarPedidoDeTrocaDeEmail(): Promise<void> {
+    return naoUsado('registrarPedidoDeTrocaDeEmail');
+  }
+
+  concluirTrocaDeEmail(): Promise<Conta | undefined> {
+    return naoUsado('concluirTrocaDeEmail');
+  }
+
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return Promise.resolve();
   }
 }
 
@@ -440,6 +472,10 @@ void describe('reuso de refresh token (BICHUS-15, critérios 4 e 10)', () => {
         userId: VITIMA,
         ocorridoEm: AGORA,
         correlationId: CONTEXTO.correlationId,
+        // BICHUS-215: o aviso carrega o HMAC de quem APRESENTOU o token
+        // reusado, e nao da vitima. E o unico rastro forense daquele instante,
+        // e ele so existe aqui -- a bancada nao configura HMAC, entao e nulo.
+        ipHmac: null,
       },
     ]);
 

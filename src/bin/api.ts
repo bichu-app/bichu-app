@@ -23,6 +23,7 @@ import { criarMailer } from '../modules/identity/adapters/external/smtp-mailer.j
 import { systemClock } from '../shared/time/clock.js';
 import { carregarContrato } from '../shared/http/contract.js';
 import { criarServidor } from '../shared/http/server.js';
+import type { VerificadorDeReautenticacao } from '../shared/http/registrar-rota.js';
 import { dependenciasDoTeto } from '../shared/http/aplicacao-de-teto.js';
 import { escoparRotas, inventarioDoQueNaoEAplicado } from '../shared/http/registrar-rota.js';
 import {
@@ -45,6 +46,7 @@ import { criarRegistroDeAparelhos } from '../modules/notifications/adapters/pers
 import { RegistroDeAparelhosService } from '../modules/notifications/application/registro-de-aparelhos-service.js';
 import { registrarRotasDeAparelho } from '../modules/notifications/adapters/http/device-routes.js';
 import {
+  criarVerificadorDeReautenticacao,
   registrarRotasDeDescoberta,
   registrarRotasDeIdentidade,
 } from '../modules/identity/adapters/http/routes.js';
@@ -79,6 +81,13 @@ import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.j
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
 import { ConversationService } from '../modules/messaging/application/conversation-service.js';
 import { registrarRotasDeConversas } from '../modules/messaging/adapters/http/conversation-routes.js';
+import { criarTransferRepository } from '../modules/transfers/adapters/persistence/kysely-transfer-repository.js';
+import { PetTransferService } from '../modules/transfers/application/pet-transfer-service.js';
+import { registrarRotasDeTransferencia } from '../modules/transfers/adapters/http/transfer-routes.js';
+import {
+  criarEmailVerificadoDoChamador,
+  criarNomeDoPet,
+} from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -136,6 +145,24 @@ export async function main(): Promise<void> {
   // um teto sem log. Antes da primeira requisição ele já aponta para o logger.
   let registrarNoLog: (evento: Record<string, unknown>, mensagem: string) => void = () => {};
 
+  // MESMO INDIRETO DO LOGGER, e pelo mesmo motivo de ordem: o verificador de
+  // `X-Reauth-Token` precisa do serviço de identidade, que precisa do banco e
+  // da trilha, que sao construidos abaixo -- e o servidor precisa existir antes
+  // de qualquer rota ser registrada.
+  //
+  // O valor inicial LANCA, e nao e um `() => {}`. Um no-op aqui seria uma
+  // porta destrutiva aberta caso a fiacao mudasse de ordem, e ela ficaria
+  // aberta em silencio: nenhuma requisicao falharia, nenhuma senha seria
+  // pedida, e o portao existiria so no nome. Verificacao que nao consegue
+  // verificar precisa reprovar.
+  let verificarReautenticacao: VerificadorDeReautenticacao = () => {
+    throw new Error(
+      'Verificador de reautenticacao chamado antes de a fiacao das rotas de identidade ' +
+        'terminar. Nenhuma requisicao devia alcancar este ponto: as rotas so sao registradas ' +
+        'depois. Corrija a ordem em src/bin/api.ts em vez de afrouxar isto (BICHUS-48).',
+    );
+  };
+
   const app = criarServidor({
     problemBaseUrl: config.problemBaseUrl,
     isProduction: config.isProduction,
@@ -146,6 +173,7 @@ export async function main(): Promise<void> {
         registrarNoLog(evento, mensagem);
       },
     }),
+    reautenticacao: (request, escopo) => verificarReautenticacao(request, escopo),
   });
 
   registrarNoLog = (evento, mensagem) => {
@@ -204,6 +232,11 @@ export async function main(): Promise<void> {
     avisarTitular: criarAvisoDeReusoAoTitular({
       repositorio: repositorioDeIdentidade,
       mailer,
+      // O aviso passou a emitir a credencial do "Nao fui eu" (BICHUS-215), e por
+      // isso precisa do gerador e da base publica. O link e montado na HORA do
+      // envio, nunca guardado.
+      ids,
+      baseDaWeb: config.webBaseUrl,
       registrarOcorrencia: (dados, mensagem) => {
         app.log.warn(dados, mensagem);
       },
@@ -217,6 +250,10 @@ export async function main(): Promise<void> {
     issuer: config.token.issuer,
     apiBaseUrl: config.apiBaseUrl,
   };
+
+  // A partir daqui `X-Reauth-Token` e conferido de verdade. Quem o chama e
+  // `registrarRota`, em toda rota que declara `reauthScope`.
+  verificarReautenticacao = criarVerificadorDeReautenticacao(dependenciasDasRotas);
 
   // BICHUS-43. A conversa mediada. Declarada ANTES das tags porque o aviso da
   // plaquinha e o unico fato que abre uma conversa no produto: a linha
@@ -374,6 +411,38 @@ export async function main(): Promise<void> {
     baseDeMidia: config.mediaPublicBaseUrl,
   };
 
+  // BICHUS-66. A transferencia de pet, declarada ANTES dos casos de perdido
+  // porque a abertura de um caso CANCELA a transferencia viva daquele pet -- e
+  // essa direcao e a decisao de desenho da historia, nao um detalhe de ordem.
+  //
+  // Por que o caso ganha: consumar com caso aberto revogaria todas as tags do
+  // pet (ADR-0004, irreversivel) no minuto em que a plaquinha da coleira e a
+  // unica coisa ligando o animal ao tutor. O contrato ja tinha escolhido esse
+  // lado na direcao inversa (`startPetTransfer` responde 409 para pet com caso
+  // aberto); aqui ele vale tambem quando o caso chega depois.
+  const transferencias = new PetTransferService({
+    repositorio: criarTransferRepository(db),
+    ids,
+    clock: systemClock,
+    trilha,
+    // O MESMO transporte do cadastro e da redefinicao de senha. O convite sai
+    // SINCRONO e nao pela fila, porque o payload de `jobs` e gravado e o que
+    // precisa chegar ao e-mail e o token em claro (ports/mailer.ts).
+    mailer,
+    // "O e-mail que esta conta PROVOU ser dela", e nao `users.email` cru: a
+    // camada 2 da transferencia inteira depende de VERIFICADO. Sem isso,
+    // bastaria cadastrar uma conta com o endereco do destinatario para aceitar
+    // a transferencia dele.
+    contas: criarEmailVerificadoDoChamador(db),
+    // Nome lido na hora, nunca copiado para a linha da transferencia: uma copia
+    // congelaria o nome que o pet tinha no dia do convite.
+    pets: criarNomeDoPet(db),
+    // So para AGENDAR a consumacao (`case.transfer_consummate`). O payload leva
+    // identificador e nada mais -- nenhum token, nenhum endereco.
+    fila: criarJobQueue(db, ids),
+    baseDaWeb: config.webBaseUrl,
+  });
+
   const dependenciasDasRotasDeCaso = {
     casos: new LostCaseService({
       repositorio: criarLostCaseRepository(db),
@@ -399,6 +468,22 @@ export async function main(): Promise<void> {
       // esta e a outra metade daquela decisao: o que a API faz com o alerta e
       // pedir que ele saia.
       fila: criarJobQueue(db, ids),
+      // BICHUS-66: a porta de UM metodo. Ver o bloco de `transferencias`, acima.
+      transferencias,
+      // BICHUS-86 criterio 4. **ESTA LINHA e a ligacao entre a decisao humana e
+      // a conversa mediada**, e e o unico lugar do sistema que conhece os dois
+      // lados. O modulo do caso perdido nao conhece `conversations`: ele entrega
+      // os dados do achado confirmado a uma porta de um metodo so.
+      //
+      // Do outro lado esta `abrirPorAviso`, o MESMO metodo que a plaquinha usa.
+      // Ele e indiferente a origem do achado de proposito: o que muda entre os
+      // dois caminhos e QUANDO a conversa nasce (o QR abre ao registrar, o
+      // achado avulso abre no portao da decisao), e nao COMO.
+      conversaDaCorrespondencia: {
+        aoConfirmarCorrespondencia: async (aviso) => {
+          await conversas.abrirPorAviso(aviso);
+        },
+      },
     }),
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
@@ -508,12 +593,23 @@ export async function main(): Promise<void> {
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     registrarRotasDeAchado(escopo, dependenciasDasRotasDeAchado);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
+    registrarRotasDeTransferencia(escopo, {
+      transferencias,
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      contrato,
+      idempotencia: criarIdempotencia(db),
+      clock: systemClock,
+    });
     registrarRotasDeConversas(escopo, {
       conversas,
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       contrato,
+      idempotencia: criarIdempotencia(db),
+      clock: systemClock,
     });
     registrarSaude(escopo, {
       version: config.version,

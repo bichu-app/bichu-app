@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Comentario que nunca fecha engole o resto do arquivo. O sintoma que
+         chega ao build e "fim de arquivo inesperado", longe da linha culpada.
+    <application android:label="bichu" />
+</manifest>

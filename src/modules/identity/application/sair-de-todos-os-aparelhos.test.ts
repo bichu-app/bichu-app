@@ -270,8 +270,40 @@ class BancoDeMentira implements IdentityRepository {
   conferirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
     throw new Error('conferirTokenDeVerificacao: nenhum caso deste arquivo deveria chegar aqui');
   }
+  criarJanelaDeReautenticacao(): Promise<void> {
+    throw new Error('criarJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  consumirJanelaDeReautenticacao(): never {
+    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
   marcarEmailVerificado(): Promise<void> {
     throw new Error('marcarEmailVerificado: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  registrarPedidoDeExclusao(): Promise<undefined> {
+    throw new Error('registrarPedidoDeExclusao: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  contasAExpurgar(): Promise<readonly UserId[]> {
+    throw new Error('contasAExpurgar: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  expurgarConta(): Promise<boolean> {
+    throw new Error('expurgarConta: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  registrarPedidoDeTrocaDeEmail(): Promise<void> {
+    throw new Error('registrarPedidoDeTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  concluirTrocaDeEmail(): Promise<Conta | undefined> {
+    throw new Error('concluirTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  cancelarTrocaDeEmailPendente(): Promise<void> {
+    return Promise.resolve();
   }
 }
 

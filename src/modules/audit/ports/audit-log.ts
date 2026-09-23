@@ -34,9 +34,31 @@ export type AuditAction =
   | 'auth.password_changed'
   /** Tentativa de troca de senha recusada por senha atual errada (BICHUS-125). */
   | 'auth.password_change_refused'
+  /**
+   * BICHUS-48. A janela de reautenticacao de 5 minutos.
+   *
+   * Sao quatro eventos e nao dois, porque as duas metades respondem perguntas
+   * diferentes numa investigacao de tomada de conta: `reauth_refused` em
+   * sequencia e alguem testando senhas de dentro de uma sessao tomada;
+   * `reauth_window_refused` em sequencia e alguem tentando reaproveitar,
+   * mover de aparelho ou trocar o escopo de uma janela. O `metadata` carrega o
+   * escopo e o motivo interno da recusa -- que nunca sai no corpo da resposta.
+   */
+  | 'auth.reauth_granted'
+  | 'auth.reauth_refused'
+  | 'auth.reauth_window_used'
+  | 'auth.reauth_window_refused'
   | 'auth.password_rehashed'
   | 'auth.password_reset_completed'
   | 'auth.email_verified'
+  /**
+   * Pediram a troca do e-mail da conta (BICHUS-42). Fica na trilha mesmo
+   * quando nenhum token é emitido — o pedido para um endereço que já tem dono
+   * é indistinguível na resposta, e a trilha é o único lugar onde ele aparece.
+   */
+  | 'auth.email_change_requested'
+  /** A troca foi confirmada no endereço novo e `users.email` mudou. */
+  | 'auth.email_changed'
   // Autorização
   | 'authz.denied'
   | 'profile.updated'
@@ -62,6 +84,25 @@ export type AuditAction =
   | 'conversation.blocked'
   | 'moderation.decided'
   | 'privacy.account_deletion_requested'
+  /**
+   * BICHUS-215. O expurgo definitivo de 30 dias concluiu e a linha de `users`
+   * deixou de existir.
+   *
+   * `audit.events` nao referencia `users` de proposito, entao este evento
+   * sobrevive ao que ele registra: e a UNICA memoria de que aquela conta
+   * existiu e de quando ela foi apagada, e e o que torna o prazo do ADR-0010
+   * verificavel por quem audita de fora. O metadado nao carrega e-mail, nome
+   * nem coordenada -- o que sobrevive a exclusao nao pode reconstituir o
+   * perfil que a exclusao existe para apagar.
+   */
+  | 'privacy.account_purged'
+  /**
+   * BICHUS-215, gatilho 4 do SEC-006. Alguem respondeu "Nao fui eu" ao aviso
+   * de reuso, pelo link do e-mail, sem conta. `actorKind` e `anonymous`: quem
+   * apresentou o token provou ter a caixa de entrada, e nao provou ser o
+   * titular.
+   */
+  | 'auth.session_disavowed'
   | 'privacy.data_export_requested'
   /**
    * BICHUS-92. A conta entrou (ou atualizou) a localizacao de referencia.
@@ -85,7 +126,24 @@ export type AuditAction =
    * `users`, entao ela responde "por que este aparelho parou de receber?"
    * inclusive depois de a conta ter sido apagada.
    */
-  | 'device.revoked';
+  | 'device.revoked'
+  // Transferencia de pet (BICHUS-66). Quatro eventos e nao um com `status`: a
+  // pergunta que a trilha responde e "quando cada coisa aconteceu", e um evento
+  // unico com estado obrigaria a reconstruir a ordem por carimbo.
+  //
+  // O metadado NUNCA carrega token nem endereco em claro: `pet_transfer.started`
+  // grava `recipient_email_masked`, e a razao e que a trilha sobrevive a
+  // exclusao da conta -- o endereco em claro ficaria ali depois de a pessoa ter
+  // pedido para sumir, e ela pode nem ter tido conta.
+  | 'pet_transfer.started'
+  | 'pet_transfer.accepted'
+  /** Ator anonimo quando o cancelamento veio pelo link do e-mail, sem conta. */
+  | 'pet_transfer.cancelled'
+  /**
+   * A posse mudou e as tags cairam. Ator `system`: quem executa e o trabalho
+   * agendado 24 h antes, e nao a pessoa que aceitou.
+   */
+  | 'pet_transfer.consummated';
 
 export type ActorKind = 'user' | 'anonymous' | 'system';
 

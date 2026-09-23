@@ -2,14 +2,18 @@ import 'package:flutter/widgets.dart';
 
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
+import 'api/achados_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/envio_de_foto.dart';
+import 'api/fotos_pendentes.dart';
 import 'api/fila_offline.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
@@ -29,6 +33,9 @@ class Escopo extends InheritedWidget {
     required this.auth,
     required this.pets,
     required this.casos,
+    required this.achados,
+    required this.envioDeFoto,
+    required this.retomadaDeFotos,
     required this.fila,
     required this.tags,
     required this.devices,
@@ -42,6 +49,7 @@ class Escopo extends InheritedWidget {
     required this.guarda,
     required this.cacheDeMeusPets,
     required this.cofreDoQr,
+    required this.avisoDeCadastro,
     required super.child,
     super.key,
   });
@@ -52,6 +60,31 @@ class Escopo extends InheritedWidget {
 
   /// As rotas de caso de perdido (`tags: [lost]` do contrato).
   final CasosApi casos;
+
+  /// As rotas de achado avulso (`tags: [found]` do contrato), ligadas pela
+  /// BICHUS-35.
+  final AchadosApi achados;
+
+  /// **O unico caminho de bytes do app** (22/09/2026).
+  ///
+  /// Fica no escopo, e nao dentro da tela, pelo mesmo motivo do [cofreDoQr] e
+  /// com uma razao a mais: ele carrega um cliente HTTP proprio, que existe
+  /// para os bytes sairem **sem o token da sessao** para o host que o servidor
+  /// nomeou. Um envio construido dentro de cada tela seria um cliente por
+  /// tela, e a proxima pessoa passaria o cliente da API "para reaproveitar".
+  ///
+  /// Um so no app inteiro, e dois consumidores: a foto do pet (F1.6) e a foto
+  /// do achado avulso, quando F3.5 existir.
+  final EnvioDeFoto envioDeFoto;
+
+  /// O envio da foto **mais o registro do que ficou pendente** (BICHUS-87,
+  /// criterios 6 e 7).
+  ///
+  /// Fica no escopo, e nao na tela, com a mesma razao da fila offline e uma a
+  /// mais: o registro vive em DISCO, e duas instancias sobre o mesmo arquivo
+  /// guardariam listas diferentes em memoria e uma sobrescreveria a outra. A
+  /// limpeza dele esta em `limpezasAoSair`, no `app.dart`.
+  final RetomadaDeFotos retomadaDeFotos;
 
   /// A fila de acoes sem conexao (BICHUS-31), **ligada pela BICHUS-21**.
   ///
@@ -133,6 +166,19 @@ class Escopo extends InheritedWidget {
   /// anterior continuaria no cache global de imagem.
   final CofreDaImagemDoQr cofreDoQr;
 
+  /// O registro de dispensas do aviso persistente de cadastro (BICHUS-75).
+  ///
+  /// Fica no escopo porque o aviso aparece em TRES lugares -- a faixa de
+  /// `Inicio`, o item do topo de `Perfil` e a linha do cartao de cada pet -- e
+  /// os tres precisam contar a MESMA dispensa. Duas instancias sobre o mesmo
+  /// arquivo perderiam uma da outra, e "dispensei uma vez" viraria "dispensei
+  /// em cada tela, separadamente": a faixa de `Inicio` encolheria e a de
+  /// `Perfil` continuaria cheia.
+  ///
+  /// A limpeza dele esta em `limpezasAoSair` no `app.dart`, pelo motivo escrito
+  /// em [AvisoDeCadastro]: o que ele guarda e da CONTA.
+  final AvisoDeCadastro avisoDeCadastro;
+
   static Escopo of(BuildContext context) {
     final escopo = context.dependOnInheritedWidgetOfExactType<Escopo>();
     if (escopo == null) {
@@ -150,6 +196,9 @@ class Escopo extends InheritedWidget {
       auth != anterior.auth ||
       pets != anterior.pets ||
       casos != anterior.casos ||
+      achados != anterior.achados ||
+      envioDeFoto != anterior.envioDeFoto ||
+      retomadaDeFotos != anterior.retomadaDeFotos ||
       fila != anterior.fila ||
       tags != anterior.tags ||
       devices != anterior.devices ||
@@ -162,5 +211,6 @@ class Escopo extends InheritedWidget {
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
       cacheDeMeusPets != anterior.cacheDeMeusPets ||
-      cofreDoQr != anterior.cofreDoQr;
+      cofreDoQr != anterior.cofreDoQr ||
+      avisoDeCadastro != anterior.avisoDeCadastro;
 }

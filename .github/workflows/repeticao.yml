@@ -1,0 +1,197 @@
+# Repeticao da suite de integracao, FORA do caminho critico.
+#
+# ===========================================================================
+# POR QUE AGENDADO, E NAO A CADA PR NEM SO NO FECHAMENTO
+# ===========================================================================
+# Em 22/09 a suite reprovava 1 execucao em 8 (4 em 31, 12,9%) por impasse de
+# cadeado, sem defeito nenhum atras. Pegar isso exige repetir; a pergunta e
+# quando. As tres opcoes foram pesadas com o custo medido, e nao por gosto:
+#
+#   - **A cada PR.** 20 execucoes sao 12 a 18 minutos de runner acrescentados a
+#     TODA revisao, inclusive a que muda um texto de tela. E o preco nao e so o
+#     relogio: revisao que demora meia hora e revisao que as pessoas param de
+#     esperar, e ai a esteira vira formalidade. Recusado.
+#   - **So no fechamento da integracao.** Barato e tardio. A intermitencia
+#     entra numa branch, atravessa dias de trabalho de outros agentes em cima
+#     dela, e so aparece quando o custo de desfazer ja e alto. Recusado.
+#   - **Periodico.** Pega cedo (o pior atraso e um dia), nao bloqueia ninguem, e
+#     o custo e fixo e conhecido: ~15 min de runner por dia. **Escolhido.**
+#
+# ===========================================================================
+# O QUE ESTA ESCOLHA DEIXA PASSAR -- DITO AQUI, E NAO DESCOBERTO DEPOIS
+# ===========================================================================
+#   1. **Ate 24 horas de atraso.** Uma intermitencia mesclada logo depois da
+#      execucao de hoje so aparece amanha, e os PRs mesclados nessa janela nao
+#      foram cobertos. O `workflow_dispatch` existe para encurtar isso a mao
+#      quando alguem tem motivo para suspeitar.
+#   2. **Taxas abaixo de ~5%.** 20 execucoes descartam 12,9% com ~94% de
+#      confianca e descartam 1,2% com 21%. Para a classe estatistica (o caso
+#      unitario de 22/09, 12 reprovacoes em 1000) repeticao e a ferramenta
+#      ERRADA: pegar 1,2% com 95% custaria 250 execucoes da unitaria, 64
+#      minutos. Quem cuida dessa classe e
+#      `infra/verificacao/verificar-sorteio-sem-semente.mjs`, que le em vez de
+#      medir -- e que e raso, como o cabecalho dele declara.
+#   3. **A suite unitaria e a do Flutter.** Este job repete SO a de integracao.
+#   4. **O que depende do ambiente do runner.** Imagem do runner, relogio, DNS,
+#      versao do Docker: as 20 repeticoes rodam no MESMO runner, entao elas
+#      repetem tambem a mesma configuracao. Intermitencia que so aparece noutra
+#      maquina continua invisivel aqui.
+#   5. **Concorrencia que so existe sob carga da aplicacao.** O que se repete e
+#      a corrida entre os quinze arquivos de teste contra um banco recem-migrado,
+#      que e a forma do defeito de 22/09. Carga de api e worker nao entra.
+#
+# Sem `continue-on-error` e sem `|| true` em lugar nenhum deste arquivo. Uma
+# repeticao que reprova precisa deixar este workflow vermelho: e por ele ficar
+# vermelho que alguem olha, e o livro dos casos que piscam e o que ele vai ler
+# quando olhar.
+
+name: repeticao
+
+on:
+  schedule:
+    # 05:40 UTC, que sao 02:40 em Brasilia. Depois do fim do dia de trabalho e
+    # antes do comeco do seguinte: a lista esta pronta quando alguem senta.
+    # O agendador do GitHub atrasa sob carga, e aqui isso e tolerado -- a janela
+    # que importa e "antes de amanha", nao "no minuto".
+    - cron: "40 5 * * *"
+  workflow_dispatch:
+    inputs:
+      vezes:
+        description: "quantas execucoes seguidas da suite de integracao"
+        required: false
+        default: "20"
+  # A propria maquinaria da repeticao tambem precisa ser exercitada quando
+  # muda. Sem isto, um erro de digitacao neste arquivo so apareceria na
+  # madrugada seguinte, e a evidencia da causa ja teria rolado para fora do log.
+  push:
+    paths:
+      - "infra/integracao/repetir.mjs"
+      - "infra/suite/acumular-reprovados.mjs"
+      - "infra/suite/casos-reprovados.mjs"
+      - ".github/workflows/repeticao.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  # `cancel-in-progress: false`: cancelar uma repeticao pela metade descartaria
+  # as execucoes ja registradas em silencio e estragaria o denominador do livro.
+  group: repeticao
+  cancel-in-progress: false
+
+jobs:
+  repetir:
+    name: 20 execucoes seguidas da suite de integracao
+    runs-on: ubuntu-latest
+    # 20 execucoes medidas em 22 s cada na maquina de desenvolvimento; num
+    # runner do GitHub, entre 12 e 18 min. O teto de 45 existe para que uma
+    # pilha travada morra com nome, e nao com "cancelado".
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      # `rodar.mjs` importa `pg` para a guarda de banco descartavel, e precisa
+      # do node_modules do hospedeiro. O `.env` NAO e montado a mao aqui: esta e
+      # a pilha efemera, e `gerar-env-de-integracao.mjs` gera o dela com valores
+      # falsos que se anunciam como falsos.
+      - run: npm ci
+
+      # O LIVRO VEM DE ANTES. Sem este passo o acumulado nasce vazio a cada
+      # execucao, e "acumulado" passa a ser o nome de um relatorio de uma
+      # execucao so -- que e exatamente o que ja existia e nao resolvia nada.
+      #
+      # `restore-keys` casa por PREFIXO e devolve o cache mais recente que
+      # comeca com ele; a chave de gravacao e unica por execucao porque o
+      # GitHub nao sobrescreve chave existente.
+      #
+      # O PRECO DESTA ESCOLHA, QUE E REAL: cache do GitHub expira em 7 dias sem
+      # uso e e por ESCOPO DE BRANCH -- uma execucao numa branch le o cache da
+      # branch padrao, mas o que ela grava fica so no escopo dela. Por isso o
+      # acumulado de verdade se forma AQUI e nas execucoes da `development`, e
+      # nao no PR de cada um. As outras duas moradas foram pesadas: artefato nao
+      # se acrescenta (e imutavel por execucao, e juntar exigiria a API para
+      # listar execucoes anteriores), e arquivo versionado precisaria de
+      # `contents: write` e de um commit por execucao numa branch protegida --
+      # credencial de escrita na esteira e ruido no historico, os dois recusados.
+      - name: restaura o livro dos casos que piscam
+        uses: actions/cache/restore@v4
+        with:
+          path: .livro
+          key: livro-integracao-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            livro-integracao-
+
+      # O CONTEINER ESCREVE NA ARVORE DO RUNNER, E O DONO DELA NAO E ELE.
+      #
+      # `compose.integracao.yaml` monta `../..:/app` -- a arvore inteira, e nao
+      # dois diretorios escolhidos como faz o job `integracao` da `ci.yml`. O
+      # alvo `dev` roda como `node` (uid 1000) e o checkout do runner e do
+      # usuario `runner` (uid 1001), entao a PRIMEIRA escrita do conteiner na
+      # raiz de `/app` leva EACCES. Foi assim que este fluxo morreu na estreia
+      # (execucao 35807224049): `EACCES: permission denied, mkdir '/app/dist'`,
+      # na repeticao 1 de 20, antes de qualquer teste.
+      #
+      # Na maquina de quem desenvolve isto nunca aparece: o Docker Desktop
+      # mapeia o dono do bind mount para o usuario do conteiner. E defeito que
+      # so existe em Linux, e por isso so a esteira o encontra.
+      #
+      # Sao exatamente DOIS diretorios, e nao a arvore em 0777:
+      #   - `dist/`, onde `npx tsc --outDir dist/_tests` compila a suite;
+      #   - `placar/`, onde `executar-suite.mjs` deixa a copia do TAP que
+      #     `repetir.mjs` le de volta do lado de fora para alimentar o livro.
+      # Nada mais e criado na raiz de `/app` pelo conteiner: `coverage/` so
+      # nasce com `--lcov`, que esta repeticao nao passa, e `node_modules` e
+      # volume anonimo, com o dono da imagem.
+      #
+      # Criados PELO RUNNER e com 0777, e nao `chmod` depois: criar antes
+      # significa que o conteiner nunca precisa escrever na RAIZ, que continua
+      # 0755. Mesmo remedio e mesmo motivo do passo "suite de integracao" da
+      # `ci.yml`, que ja fazia `install -d -m 0777 coverage placar`.
+      #
+      # Medido, nos dois sentidos, contra a imagem do alvo `dev`: com o
+      # diretorio do usuario 1001 em 0755, `mkdir dist` como uid 1000 sai 1 com
+      # "Permission denied"; com 0777, `mkdir -p dist/_tests` sai 0.
+      - name: os diretorios que o conteiner escreve nascem do lado de fora
+        run: install -d -m 0777 dist placar
+
+      - name: repetir
+        run: |
+          node infra/integracao/repetir.mjs \
+            --vezes "${{ github.event.inputs.vezes || '20' }}" \
+            --livro .livro/integracao.jsonl \
+            --rotulo "agendada ${{ github.run_id }}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+          exit "${PIPESTATUS[0]}"
+
+      # `always()`: o acumulado existe PARA a execucao que reprovou. Guardar so
+      # quando tudo passa seria manter uma lista de nada.
+      - name: o acumulado, no sumario deste job
+        if: always()
+        run: |
+          node infra/suite/acumular-reprovados.mjs render \
+            --livro .livro/integracao.jsonl --suite integracao \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: guarda o livro para a proxima execucao
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .livro
+          key: livro-integracao-${{ github.run_id }}-${{ github.run_attempt }}
+
+      # O cache e a morada que ACUMULA; o artefato e a que se baixa. Ele
+      # existe porque cache nao se le de fora do runner, e alguem vai querer
+      # abrir o livro inteiro num dia em que a tabela do sumario nao bastar.
+      - name: o livro, para baixar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livro-dos-casos-que-piscam
+          path: .livro/integracao.jsonl
+          if-no-files-found: error
+          retention-days: 30

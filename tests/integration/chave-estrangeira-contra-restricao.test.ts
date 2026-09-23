@@ -274,6 +274,25 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     aoApagar: 'CASCADE',
     levaJunto: 'a senha da identidade apagada. Da própria pessoa.',
   },
+  // BICHUS-48. A janela de reautenticação de 5 minutos.
+  //
+  // A cascata é o comportamento certo, e ela já está provada por medição: o caso
+  // "a linha da janela morre junto com a conta" de
+  // `reautenticacao-pelo-http.test.ts` abre a janela, apaga a conta e conta as
+  // linhas que sobraram. A migração `20260922000005_reautenticacao-com-senha.sql`
+  // declara `REFERENCES users (id) ON DELETE CASCADE`.
+  //
+  // O que faltava era a linha AQUI. O veredito deste registro é escrito à mão —
+  // o catálogo sabe que a linha some, não sabe de quem ela é — e sem ela o caso
+  // "toda chave estrangeira do banco está declarada aqui" reprovava a suíte.
+  'public.reauth_tokens.reauth_tokens_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a janela de reautenticação da própria pessoa. Deixá-la para trás seria guardar, depois ' +
+      'da conta apagada, a autorização que ela abriu para apagá-la.',
+  },
   'public.refresh_tokens.refresh_tokens_rotated_to_id_fkey': {
     colunas: ['rotated_to_id'],
     referencia: 'public.refresh_tokens',
@@ -378,6 +397,41 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     aoApagar: 'CASCADE',
     levaJunto: 'as tags do pet apagado, e com elas os `tag_scans` delas. Da própria pessoa.',
   },
+  // -------------------------------------------------------------------------
+  // transferência de pet
+  //
+  // As três chegaram com `20260922000005_transferencia-de-pet.sql` e ficaram
+  // sem entrada aqui até o fechamento da segunda integração de 22/09 — que é
+  // precisamente o silêncio que este arquivo existe para quebrar. A
+  // `to_user_id` é ainda a ponta da QUINTA forma nova deste banco: leia o
+  // veredito em `NULOS_CONTRA_CASCATA_DE_TERCEIRO` antes de mexer em qualquer
+  // uma das três.
+  // -------------------------------------------------------------------------
+  'public.pet_transfers.pet_transfers_pet_id_fkey': {
+    colunas: ['pet_id'],
+    referencia: 'public.pets',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a transferência do pet apagado. O pet é do tutor, e a linha também é sobre o ' +
+      'DESTINATÁRIO: com ela some o registro de que um convite foi feito a ele, e ele não é ' +
+      'avisado por nada. É esta a chave que o UPDATE da quinta forma revalida.',
+  },
+  'public.pet_transfers.pet_transfers_from_user_id_fkey': {
+    colunas: ['from_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as transferências que a própria pessoa iniciou. É o SEGUNDO caminho até a mesma ' +
+      'linha: o primeiro é `users -> pets -> pet_transfers`, e ele só alcança enquanto o pet ' +
+      'ainda for dela. Depois da consumação o pet é do outro, e sem esta chave a linha ' +
+      'sobreviveria apontando para uma conta que não existe mais.',
+  },
+  'public.pet_transfers.pet_transfers_to_user_id_fkey': {
+    colunas: ['to_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+
   'public.pets.pets_owner_user_id_fkey': {
     colunas: ['owner_user_id'],
     referencia: 'public.users',
@@ -627,6 +681,51 @@ const NULOS_CONTRA_CASCATA_DE_TERCEIRO: Readonly<Record<string, NuloContraCascat
       'ANTES de o SET NULL precisar dela, e o nulo sobre uma linha que já saiu é operação ' +
       'sobre zero linhas, não erro. Difere do caso da mensagem porque aqui a linha do nulo e ' +
       'a linha apagada são A MESMA: não há neto para revalidar nada.',
+  },
+  // =========================================================================
+  // A TERCEIRA OCORRÊNCIA DA QUINTA FORMA, E A PRIMEIRA QUE CONCLUI POR ORDEM
+  // DE GATILHO. LEIA ISTO ANTES DE MEXER EM `pet_transfers`.
+  // =========================================================================
+  // `conclui` aqui NÃO quer dizer que o desenho garante que conclua, e a
+  // diferença é a coisa mais importante escrita neste objeto.
+  //
+  // Medido com gatilho de trilha (`after insert or update or delete ... for
+  // each row`) nas duas tabelas, apagando a conta de quem RECEBEU o pet e
+  // depois da consumação passou a ser dono dele. A ordem dos eventos dentro da
+  // MESMA instrução `DELETE FROM users`:
+  //
+  //   1. DELETE em pets            (cascata `users -> pets`)
+  //   2. UPDATE em pet_transfers   (o SET NULL de `to_user_id`) -- a linha
+  //                                AINDA EXISTE, e o pet dela já não existe
+  //   3. DELETE em pet_transfers   (cascata `pets -> pet_transfers`)
+  //
+  // O passo 2 é exatamente a situação que produz `23503` em
+  // `conversation_messages`: um UPDATE que revalida uma chave estrangeira
+  // contra um pai que a mesma instrução já apagou. Aqui ele não estoura porque
+  // o passo 3 chega ANTES de a verificação diferida de
+  // `pet_transfers_pet_id_fkey` rodar, e verificação de linha que deixou de
+  // existir não roda. **É ordem de gatilho, e ordem de gatilho não é desenho.**
+  //
+  // O que sustenta a ordem é `pet_id` ser `CASCADE`: é ela que garante que a
+  // linha atualizada some na mesma instrução. Trocar `pet_transfers.pet_id`
+  // para `RESTRICT` ou `NO ACTION` — que é a correção natural do dia em que
+  // alguém decidir que apagar um pet não deve apagar o histórico de
+  // transferência dele — deixa a linha de pé depois do passo 2, e este veredito
+  // vira `contradiz` sem que ninguém tenha tocado em `to_user_id`. Registrado
+  // em Riscos.
+  'public.pet_transfers.pet_transfers_to_user_id_fkey + pet_transfers_pet_id_fkey': {
+    veredito: 'compativel',
+    medicao:
+      'DELETE FROM users de quem RECEBEU o pet e virou dono dele: conclui, sem linha ' +
+      'sobrando em `pet_transfers`. Medido também o caso em que o pet é de OUTRA pessoa ' +
+      '(convite aceito e ainda não consumado): conclui, e a linha sobrevive com ' +
+      '`to_user_id = NULL`, que é o nulo que `cancellation_reason = recipient_gone` lê. ' +
+      'O que fazia o primeiro concluir era ORDEM DE GATILHO, e isso foi RESOLVIDO pela ' +
+      'migração `20260922000008`: `pet_transfers_pet_id_fkey` é DEFERRABLE INITIALLY ' +
+      'DEFERRED, então a conferência de `pet_id` sai do meio da instrução e roda no fim da ' +
+      'transação, quando a linha já foi apagada pela cascata em QUALQUER ordem. Medido nas ' +
+      'duas ordens, com a inversão forçada: conclui nas duas. O caso ' +
+      '`ISCA — a chave de pet_id é DIFERÍVEL` é quem cobra isso.',
   },
   'public.conversations.conversations_finder_user_id_fkey + conversations_pet_id_fkey': {
     veredito: 'compativel',
@@ -1517,6 +1616,195 @@ const AVISO_DA_ACHADORA = '9e1f0000-0000-4000-8000-0000000000cc';
 const CONVERSA = '9e1f0000-0000-4000-8000-0000000000cd';
 const MENSAGEM = '9e1f0000-0000-4000-8000-0000000000ce';
 
+const DE = '9e1f0000-0000-4000-8000-0000000000e1';
+const PARA = '9e1f0000-0000-4000-8000-0000000000e2';
+const PET_TRANSFERIDO = '9e1f0000-0000-4000-8000-0000000000eb';
+const TRANSFERENCIA = '9e1f0000-0000-4000-8000-0000000000ec';
+
+/**
+ * A MEDIÇÃO do veredito de `pet_transfers`, reexecutada a cada rodada.
+ *
+ * O veredito escrito em `NULOS_CONTRA_CASCATA_DE_TERCEIRO` é `compativel`, e
+ * ele conclui por ORDEM DE GATILHO e não por garantia de desenho. Veredito que
+ * depende de ordem e vive só num comentário é veredito que envelhece calado: no
+ * dia em que `pet_transfers.pet_id` deixar de ser `CASCADE`, o comentário
+ * continua dizendo `compativel` e o banco passa a responder `23503`.
+ *
+ * Por isso os dois lados são medidos aqui, com `DELETE` de verdade:
+ * o caminho que a ordem salva, e o caminho em que o nulo é o desfecho normal.
+ */
+void describe('a quinta forma de `pet_transfers`, medida e não lida', () => {
+  async function comTransferencia(
+    dono: string,
+    corpo: () => Promise<void>,
+  ): Promise<void> {
+    await cliente.query('BEGIN');
+    try {
+      await cliente.query(
+        `insert into users (id, email) values ($1, 'de@transfere.test'), ($2, 'para@transfere.test')`,
+        [DE, PARA],
+      );
+      await cliente.query(
+        `insert into pets (id, owner_user_id, name, species_code, size_code)
+         values ($1, $2, 'Rex', 'dog', 'M')`,
+        [PET_TRANSFERIDO, dono],
+      );
+      await cliente.query(
+        `insert into pet_transfers
+           (id, pet_id, from_user_id, recipient_email, to_user_id, invite_token_hash,
+            status, invite_expires_at, accepted_at, effective_at)
+         values ($1, $2, $3, 'para@transfere.test', $4, sha256('transfere'::bytea),
+                 $5, now() + interval '72 hours', now(), now() + interval '24 hours')`,
+        [TRANSFERENCIA, PET_TRANSFERIDO, DE, PARA, dono === PARA ? 'effective' : 'accepted'],
+      );
+      await corpo();
+    } finally {
+      await cliente.query('ROLLBACK');
+    }
+  }
+
+  void it('apagar a conta de quem RECEBEU e virou dono do pet CONCLUI', async () => {
+    // O caminho que a descoberta acusou. `dono === PARA` é o que faz a cascata
+    // `users -> pets` alcançar a MESMA linha que o `SET NULL` de `to_user_id`
+    // está atualizando, que é a condição inteira do defeito.
+    await comTransferencia(PARA, async () => {
+      try {
+        await cliente.query('delete from users where id = $1', [PARA]);
+      } catch (erro) {
+        assert.fail(
+          `a exclusão da conta do destinatário FALHOU com ${codigoDoErro(erro)}. O veredito ` +
+            '`compativel` de `pet_transfers_to_user_id_fkey + pet_transfers_pet_id_fkey` ' +
+            'deixou de valer, e isto é defeito VIVO na exclusão de conta: o UPDATE do SET ' +
+            'NULL revalidou `pet_id` contra um pet que a cascata já apagou. A causa mais ' +
+            'provável é `pet_transfers.pet_id` ter deixado de ser CASCADE — era ela que ' +
+            'apagava a linha antes de a revalidação rodar. ' +
+            `Mensagem: ${erro instanceof Error ? erro.message : String(erro)}`,
+        );
+      }
+
+      const { rows } = await cliente.query<{ n: string }>(
+        'select count(*)::text as n from pet_transfers where id = $1',
+        [TRANSFERENCIA],
+      );
+      assert.equal(
+        rows[0]?.n,
+        '0',
+        'a conta saiu e a transferência ficou. A linha aponta para um pet que não existe ' +
+          'mais: ou a cascata de `pet_id` mudou, ou alguém a desligou.',
+      );
+    });
+  });
+
+  void it('apagar a conta de quem RECEBEU sem ser dono deixa o nulo, e a linha sobrevive', async () => {
+    // O lado permissivo, e ele é permissivo de verdade: o convite aceito e
+    // ainda não consumado. Aqui o `SET NULL` é o desfecho NORMAL, e é este nulo
+    // que `cancellation_reason = 'recipient_gone'` lê. Sem este caso, o anterior
+    // continuaria passando num banco que apagasse a linha por engano.
+    await comTransferencia(DE, async () => {
+      await cliente.query('delete from users where id = $1', [PARA]);
+
+      const { rows } = await cliente.query<{
+        to_user_id: string | null;
+        status: string;
+      }>('select to_user_id, status from pet_transfers where id = $1', [TRANSFERENCIA]);
+      assert.deepEqual(
+        rows[0],
+        { to_user_id: null, status: 'accepted' },
+        'o destinatário saiu e a transferência não ficou com `to_user_id` nulo. É por esse ' +
+          'nulo que a consumação sabe que não há para quem entregar o pet.',
+      );
+    });
+  });
+
+  void it('ISCA — `pet_transfers_pet_id_fkey` é DIFERÍVEL, e é isso que tira a ordem de gatilho do caminho', async () => {
+    // ====================================================================
+    // POR QUE ESTE CASO LÊ O CATÁLOGO EM VEZ DE INVERTER A ORDEM
+    // ====================================================================
+    // A prova behavioral existe e foi feita: inverter a ordem de gatilho
+    // dentro da transação (recriar `pets_owner_user_id_fkey`, que a torna a
+    // mais nova das ações que `users` dispara) e apagar a conta. Medido na
+    // pilha efêmera, com a chave NÃO diferível:
+    //
+    //   ERROR: insert or update on table "pet_transfers" violates foreign key
+    //          constraint "pet_transfers_pet_id_fkey"
+    //   DETAIL: Key (pet_id)=(...) is not present in table "pets".
+    //
+    // e, com ela diferível, conclui. Matriz completa, cenário "apaga quem
+    // recebeu o pet e virou dono", com COMMIT de verdade:
+    //
+    //   ordem       CASCADE  CASCADE DEFER  RESTRICT  NO ACTION  NO ACTION DEFER
+    //   atual       conclui  conclui        23503     23503      23503 (no commit)
+    //   invertida   23503    conclui        23503     23503      23503 (no commit)
+    //
+    // Esse caso NÃO ficou no repositório, e a razão é medida e não estética:
+    // `ALTER TABLE pets` toma ACCESS EXCLUSIVE, os arquivos desta suíte rodam
+    // em paralelo e todos tocam `pets`. Na execução em que a isca foi
+    // exercitada, ela reprovou por `deadlock detected` em vez do 23503 que
+    // devia mostrar. Caso que reprova pelo motivo errado é caso que um dia
+    // reprova sem motivo nenhum, e teste intermitente custa mais do que a
+    // cobertura que ele traz.
+    //
+    // O que fica aqui é a condição que sustenta o resultado, lida do catálogo:
+    // a conferência de `pet_id` roda no FIM DA TRANSAÇÃO, quando a cascata já
+    // apagou a linha em qualquer ordem. Descer a migração `20260922000008`
+    // reprova este caso — exercitado: com a subida devolvendo a chave não
+    // diferível, foi o único caso das 350 a reprovar.
+    const { rows } = await cliente.query<{
+      condeferrable: boolean;
+      condeferred: boolean;
+      confdeltype: string;
+    }>(
+      `select condeferrable, condeferred, confdeltype
+         from pg_constraint
+        where conrelid = 'pet_transfers'::regclass
+          and conname = 'pet_transfers_pet_id_fkey'`,
+    );
+
+    const chave = rows[0];
+    assert.ok(chave, 'a chave `pet_transfers_pet_id_fkey` não existe mais');
+    assert.equal(
+      chave.confdeltype,
+      'c',
+      'a ação de `pet_transfers.pet_id` deixou de ser CASCADE. `RESTRICT` e `NO ACTION` foram ' +
+        'medidos e reprovam a exclusão de conta nas DUAS ordens de gatilho: os dois deixam a ' +
+        'linha de pé apontando para um pet apagado, que é exatamente o que a chave recusa.',
+    );
+    assert.equal(
+      chave.condeferrable,
+      true,
+      'a chave deixou de ser DEFERRABLE. Sem diferir, a conferência de `pet_id` volta para o ' +
+        'meio do `DELETE FROM users`, e a exclusão de conta volta a concluir por ORDEM DE ' +
+        'GATILHO — que muda sozinha na próxima migração que recriar uma chave de `pets`.',
+    );
+    assert.equal(
+      chave.condeferred,
+      true,
+      'a chave é diferível mas não está INITIALLY DEFERRED, e diferível sem estar diferida não ' +
+        'difere nada: seria preciso `SET CONSTRAINTS` em cada transação que apaga conta, que é ' +
+        'o passo a lembrar que este esquema existe para não ter.',
+    );
+  });
+
+  void it('apagar a conta de quem ENVIOU leva a transferência junto', async () => {
+    // A outra CASCADE declarada, medida. `from_user_id` é o segundo caminho até
+    // a linha, e ele existe para o caso em que o pet já não é de quem enviou.
+    await comTransferencia(PARA, async () => {
+      await cliente.query('delete from users where id = $1', [DE]);
+
+      const { rows } = await cliente.query<{ n: string }>(
+        'select count(*)::text as n from pet_transfers where id = $1',
+        [TRANSFERENCIA],
+      );
+      assert.equal(
+        rows[0]?.n,
+        '0',
+        'a conta de quem enviou saiu e a transferência ficou, apontando para uma conta que ' +
+          'não existe mais.',
+      );
+    });
+  });
+});
+
 void describe('a isca da quinta forma: com o SET NULL de volta, o portão precisa acusar', () => {
   /**
    * A massa mínima do defeito: a achadora registra o aviso, a conversa nasce
@@ -1524,9 +1812,81 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
    * para revalidar nada, e o caminho conclui — foi assim que o defeito passou
    * despercebido nas duas branches de origem.
    */
+  /**
+   * Quantas vezes a montagem é tentada antes de desistir.
+   *
+   * Limitado de propósito: `40P01` que não passa em cinco tentativas não é mais
+   * contenção, é contenção permanente, e aí o caso precisa reprovar dizendo
+   * isso. Repetição sem teto transformaria impedimento em teste pendurado.
+   */
+  const TENTATIVAS = 5;
+
   async function comConversa(corpo: () => Promise<void>): Promise<void> {
+    // ========================================================================
+    // POR QUE ISTO TEM CADEADO EXPLÍCITO **E** REPETIÇÃO
+    // ========================================================================
+    // A isca reprovava com `deadlock detected` (40P01) em 4 de 31 execuções da
+    // suíte inteira, sem defeito nenhum atrás. Medido, e não deduzido:
+    //
+    //   Process 119 waits for AccessExclusiveLock on relation 19812 (users);
+    //     blocked by process 133.
+    //   Process 133 waits for RowExclusiveLock on relation 20495
+    //     (conversation_messages); blocked by process 119.
+    //
+    // O pedaço que não é óbvio: `alter table conversation_messages drop
+    // constraint ..._sender_user_id_fkey` toma `AccessExclusiveLock` nas DUAS
+    // tabelas, e não só na que ela nomeia — a chave estrangeira tem gatilho dos
+    // dois lados, e derrubá-la mexe em `users` também. Conferido em `pg_locks`
+    // nesta pilha:
+    //
+    //   conversation_messages | AccessExclusiveLock
+    //   users                 | AccessExclusiveLock
+    //
+    // `node --test` roda os quinze arquivos de integração em paralelo contra o
+    // MESMO banco, então essa DDL disputa com o que os outros estão escrevendo.
+    //
+    // **E não existe ordem de cadeado que resolva isto sozinha.** Essa era a
+    // saída óbvia, e ela está errada; as duas ordens já convivem na suíte, e as
+    // duas foram medidas em `pg_locks` com uma sessão segurando a outra tabela:
+    //
+    //   insert into conversation_messages ...
+    //     -> SEGURA conversation_messages (RowExclusive), ESPERA users (RowShare)
+    //   delete from users ...          (o `after` dos outros arquivos)
+    //     -> SEGURA users (RowExclusive), ESPERA conversation_messages (RowExclusive)
+    //
+    // Filha→pai numa, pai→filha na outra. Qualquer ordem que esta função
+    // escolhesse fecharia ciclo com uma das duas. Pedir as duas num `lock table`
+    // só também não é atômico: ele adquire em sequência e pode ficar segurando a
+    // primeira enquanto espera a segunda.
+    //
+    // Então são duas medidas, e cada uma faz uma coisa:
+    //
+    // 1. `lock table` como PRIMEIRA instrução encolhe a janela: em vez de
+    //    disputar durante o segundo inteiro que a montagem mais a DDL levam, a
+    //    disputa fica restrita à aquisição dos dois cadeados.
+    // 2. A repetição cobre o resto. Impasse é transitório por definição — o
+    //    Postgres mata um dos participantes e **garante que o outro conclui** —
+    //    e repetir a transação vítima é o remédio que a própria documentação do
+    //    Postgres indica. Como tudo aqui termina em `ROLLBACK`, repetir parte do
+    //    mesmo estado.
+    //
+    // A repetição NÃO afrouxa a isca: só `40P01` é repetido. Falha de asserção
+    // sobe na primeira vez, e `23503`, `23514` ou qualquer outro código do
+    // Postgres também — que é o que a isca existe para ver.
+    for (let tentativa = 1; ; tentativa += 1) {
+      try {
+        await montarERodar(corpo);
+        return;
+      } catch (erro) {
+        if (codigoDoErro(erro) !== '40P01' || tentativa >= TENTATIVAS) throw erro;
+      }
+    }
+  }
+
+  async function montarERodar(corpo: () => Promise<void>): Promise<void> {
     await cliente.query('BEGIN');
     try {
+      await cliente.query('lock table conversation_messages, users in access exclusive mode');
       await cliente.query(
         `insert into users (id, email) values
            ($1, 'achadora@isca.test'), ($2, 'tutora@isca.test')`,

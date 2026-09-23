@@ -6,6 +6,8 @@
  * do domínio — conta, credencial, família de sessão — e não de tabela.
  */
 import type { Instant, TokenHash, UserId } from '../../../shared/types/brands.js';
+import type { ReauthScope } from '../../../shared/http/route-definition.js';
+import type { MotivoDaRecusa } from '../domain/reautenticacao.js';
 
 export interface Conta {
   readonly id: UserId;
@@ -34,7 +36,15 @@ export interface CamposDoPerfil {
   readonly referenceState?: string | null | undefined;
 }
 
-export type PropositoDoToken = 'email_verify' | 'password_reset' | 'email_change';
+export type PropositoDoToken =
+  | 'email_verify'
+  | 'password_reset'
+  | 'email_change'
+  /**
+   * O "Nao fui eu" do aviso de reuso (BICHUS-215). Unico proposito que nao
+   * leva a pessoa a digitar nada: o link derruba as sessoes e acaba.
+   */
+  | 'session_disavow';
 
 export interface NovoTokenDeVerificacao {
   readonly id: string;
@@ -73,7 +83,14 @@ export type MotivoDeRevogacao =
   | 'logout'
   | 'logout_all'
   | 'password_changed'
-  | 'account_deleted';
+  | 'account_deleted'
+  /**
+   * A resposta HUMANA a deteccao de reuso, e o quinto gatilho do SEC-006.
+   * Distinto de `reuse_detected`, que e automatico e vale para UMA familia, e
+   * de `logout_all`, que e o titular arrumando a casa: aqui alguem esta
+   * declarando que a conta esta com outra pessoa.
+   */
+  | 'not_me';
 
 export interface RefreshArmazenado {
   readonly id: string;
@@ -113,6 +130,11 @@ export interface NovoRefresh {
   readonly staySignedIn: boolean;
   readonly userAgent: string | undefined;
   readonly ipHmac: Buffer | null;
+}
+
+/** O que a exclusão lógica deixou para trás, para a trilha poder dizer o tamanho. */
+export interface ConsequenciasDaExclusao {
+  readonly tagsRevogadas: number;
 }
 
 export interface IdentityRepository {
@@ -239,4 +261,156 @@ export interface IdentityRepository {
   invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number>;
 
   marcarEmailVerificado(userId: UserId, agora: Instant): Promise<void>;
+
+  // --- Janela de reautenticacao (BICHUS-48) -------------------------------
+
+  /** Grava o HASH. O valor em claro so existe na resposta de `POST /auth/reauth`. */
+  criarJanelaDeReautenticacao(nova: NovaJanelaDeReautenticacao): Promise<void>;
+
+  /**
+   * Consome a janela em **UMA instrução**, com as cinco amarras na cláusula
+   * `WHERE` (ADR-0021: a autorização vai na cláusula, nunca num `if` depois de
+   * ler a linha).
+   *
+   * `UPDATE reauth_tokens SET consumed_at = $agora WHERE token_hash = $1 AND
+   * user_id = $2 AND scope = $3 AND access_jti = $4 AND consumed_at IS NULL AND
+   * expires_at > $agora AND issued_at >= $barreira RETURNING id`.
+   *
+   * Conferir e depois consumir em dois passos permite corrida, e aqui a corrida
+   * é o ataque: duas chamadas simultâneas de `DELETE /me` com a mesma janela
+   * passariam as duas pela conferência antes de qualquer uma marcar, e o uso
+   * único deixaria de ser único.
+   *
+   * O `motivo` da recusa sai de uma leitura SEPARADA, e só no caminho de recusa:
+   * ele existe para a trilha, nunca para o corpo da resposta — as seis recusas
+   * viram o mesmo 401 na borda.
+   */
+  consumirJanelaDeReautenticacao(
+    consumo: ConsumoDeJanela,
+  ): Promise<ResultadoDoConsumoDaJanela>;
+  /**
+   * A EXCLUSÃO LÓGICA, e o que ela leva junto na mesma transação.
+   *
+   * O contrato de `deleteMyAccount` diz o que esta operação é: *"Exclusão
+   * lógica imediata, expurgo definitivo em 30 dias"*. Ela não apaga linha
+   * nenhuma — quem apaga é {@link expurgarConta}, 30 dias depois. Aqui a conta
+   * passa a `deletion_requested`, ganha `deleted_at`, e com isso sai do índice
+   * `users_email_unico_ativo`: o endereço fica livre para uma conta nova no
+   * mesmo instante, que é o que faz a exclusão valer para quem a pediu.
+   *
+   * **As tags caem junto, e é por isso que isto é uma transação e não três
+   * chamadas.** O ADR-0010 diz *"casos encerrados e tags revogadas na hora"*, e
+   * a tag é a única coisa deste produto que continua funcionando sozinha depois
+   * que a pessoa some: ela está numa coleira, na rua, e resolve para a página
+   * do achador sem ninguém autenticar. Trinta dias de QR vivo apontando para o
+   * pet de uma conta excluída é o buraco que a exclusão existe para fechar.
+   * Revogação é estado completo (`pet_tags_revogacao_e_completa`) e apaga o
+   * texto cifrado do código (`pet_tags_revogada_nao_guarda_o_codigo`).
+   *
+   * Idempotente: chamada sobre uma conta já marcada, devolve `undefined`.
+   */
+  registrarPedidoDeExclusao(
+    userId: UserId,
+    agora: Instant,
+  ): Promise<ConsequenciasDaExclusao | undefined>;
+
+  /**
+   * As contas cujo prazo de expurgo venceu, para a varredura do worker.
+   *
+   * `limite` existe para a varredura ser um passo e não um evento: uma rodada
+   * que tentasse apagar dez mil contas numa transação só seguraria o banco e,
+   * ao falhar numa, desfaria as nove mil e novecentas que já tinham dado certo.
+   */
+  contasAExpurgar(ate: Instant, limite: number): Promise<readonly UserId[]>;
+
+  /**
+   * O `DELETE FROM users` de verdade, e o ponto em que as cascatas disparam.
+   *
+   * **Esta é a operação que precisa CONCLUIR**, e a classe de defeito que já
+   * apareceu cinco vezes em 22/09 mora exatamente aqui: contradição entre a
+   * ação de deleção de uma chave estrangeira e uma restrição da mesma tabela
+   * (`23514`), ou `SET NULL` de neto revalidando contra um pai que a cascata do
+   * mesmo comando acabou de levar (`23503`). Nenhuma das duas aparece em teste
+   * unitário, e nenhuma aparece em uso normal.
+   *
+   * Devolve `false` quando não havia o que apagar. O worker trata isso como
+   * sucesso: outra rodada pode ter chegado antes.
+   */
+  expurgarConta(userId: UserId): Promise<boolean>;
+  // --- Troca de e-mail ----------------------------------------------------
+
+  /**
+   * Guarda o endereço que a pessoa QUER, sem tocar no que a conta USA.
+   *
+   * Os dois endereços coexistem de propósito, e é essa coexistência que faz a
+   * troca valer só depois da confirmação: `users.email` continua sendo o
+   * endereço que entra, que recupera senha e que recebe aviso, e
+   * `pending_email` é só uma intenção declarada. Enquanto a confirmação não
+   * chega, quem tomou a sessão não ganhou canal nenhum.
+   *
+   * `pending_email` **não** tem índice único, e a ausência é decisão: duas
+   * contas podem querer o mesmo endereço ao mesmo tempo, e quem o leva é quem
+   * confirmar primeiro. Reservar o endereço no pedido deixaria qualquer pessoa
+   * logada bloquear o cadastro alheio escrevendo o endereço de outro.
+   */
+  registrarPedidoDeTrocaDeEmail(userId: UserId, novoEmail: string, agora: Instant): Promise<void>;
+
+  /**
+   * Efetiva a troca, e devolve `undefined` se o endereço deixou de estar livre.
+   *
+   * A conferência de unicidade é o índice `users_email_unico_ativo`, e não um
+   * `SELECT` antes do `UPDATE`: entre ler e escrever cabe o cadastro de outra
+   * pessoa, e o caso REAL é justamente esse, porque o link fica 24 horas
+   * parado numa caixa de entrada. Quem chama traduz `undefined` em 410 — o
+   * mesmo 410 do token vencido, porque distinguir os dois contaria a quem tem
+   * o link que aquele endereço passou a ter dono.
+   *
+   * Na mesma instrução o e-mail passa a valer como verificado e
+   * `email_deliverable` volta a `true`: a pessoa acabou de PROVAR que alcança
+   * o endereço, e uma devolução registrada contra o endereço ANTIGO não pode
+   * seguir marcando a conta como inalcançável depois disso.
+   */
+  concluirTrocaDeEmail(
+    userId: UserId,
+    novoEmail: string,
+    agora: Instant,
+  ): Promise<Conta | undefined>;
+
+  /**
+   * Apaga a intenção de troca, sem tocar no e-mail que a conta usa.
+   *
+   * É a outra metade do critério 9: trocar a senha por qualquer caminho
+   * invalida os pedidos de troca de e-mail pendentes. `invalidarTokensPendentes`
+   * mata o TOKEN, e isso já impede a troca de se concluir — mas `pending_email`
+   * sobreviveria, e a tela continuaria mostrando uma troca pendente que nenhum
+   * link consegue mais concluir. Aviso que não corresponde a nada é o que ensina
+   * a pessoa a ignorar aviso.
+   */
+  cancelarTrocaDeEmailPendente(userId: UserId, agora: Instant): Promise<void>;
 }
+
+export interface NovaJanelaDeReautenticacao {
+  readonly id: string;
+  readonly userId: UserId;
+  readonly escopo: ReauthScope;
+  /** `jti` do token de acesso que pediu a janela. */
+  readonly acessoJti: string;
+  readonly tokenHash: TokenHash;
+  readonly emitidaEm: Instant;
+  readonly expiraEm: Instant;
+  readonly ipHmac: Buffer | null;
+}
+
+export interface ConsumoDeJanela {
+  readonly tokenHash: TokenHash;
+  readonly userId: UserId;
+  readonly escopoExigido: ReauthScope;
+  readonly acessoJti: string;
+  /** `users.sessions_invalid_before` da conta que apresenta (SEC-006). */
+  readonly barreiraDaConta: Instant;
+  readonly agora: Instant;
+}
+
+export type ResultadoDoConsumoDaJanela =
+  | { readonly consumida: true }
+  | { readonly consumida: false; readonly motivo: MotivoDaRecusa | 'inexistente' };
