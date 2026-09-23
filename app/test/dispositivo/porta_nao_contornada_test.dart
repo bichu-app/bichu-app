@@ -469,7 +469,28 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// portao usa, sobre a arvore ja mesclada. As justificativas acima ficaram
 /// TODAS, dos dois lados: cada uma diz o que mudou de um lado, e e isso que
 /// mantem a troca sendo um ato deliberado.
-const String _arvoreDasTelas = '74dc7b2c06f3ee25b139b9517824614656db73c2';
+///
+/// **Destravado pela ancoragem do botao de `Criar conta`, 23/09/2026 (sem
+/// chave de issue no acionamento).** UM arquivo de `app/lib/telas` muda:
+/// `conta/tela_criar_conta.dart`. Tres coisas nele, e nenhuma encosta na
+/// porta `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161 protege:
+///
+///  - o botao saiu do corpo rolavel e foi para `BarraDeAcaoFixa`, no
+///    `bottomNavigationBar` (design system 11.8), porque medido em 360 x 640
+///    dp com o teclado aberto ele ficava 500 dp abaixo da dobra e o `ListView`
+///    nem chegava a constru-lo;
+///  - o corpo virou `SingleChildScrollView` com `Column`, pelo mesmo motivo
+///    registrado em `pet/tela_editar_pet.dart`: controle obrigatorio que nao
+///    e construido nao pode ser marcado, focado nem lido por leitor de tela;
+///  - cada recusa passou a trazer o campo recusado para a janela, porque um
+///    botao alcancavel de qualquer ponto pode ser tocado de um ponto onde o
+///    campo recusado esta fora da tela.
+///
+/// A tela continua sem ler camera, galeria ou localizacao, e quem cobra isso e
+/// o portao de diretivas abaixo, que nao depende desta constante. Medido pelo
+/// indice temporario que este portao usa, sobre a arvore de trabalho.
+/// Anterior: `74dc7b2c06f3ee25b139b9517824614656db73c2`.
+const String _arvoreDasTelas = '65bcd97d9088e6da8668127c8cb4d38f5e19d718';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

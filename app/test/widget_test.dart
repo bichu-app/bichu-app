@@ -124,16 +124,8 @@ void main() {
       'marina@exemplo.com.br',
     );
     await tester.enterText(find.byType(TextField).at(2), 'curta');
-    // Rolagem: a lista de requisitos (BICHUS-29) empurrou o botao para fora da
-    // janela do teste, e `ListView` nao constroi o que nao esta visivel.
-    final botao = find.widgetWithText(FilledButton, 'Criar conta');
-    await tester.dragUntilVisible(
-      botao,
-      find.byType(ListView),
-      const Offset(0, -100),
-    );
-    await tester.pumpAndSettle();
-    await tester.tap(botao);
+    // Sem rolagem: o botao mora na barra fixa do rodape desde 23/09/2026.
+    await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
     await tester.pumpAndSettle();
 
     expect(find.text('A senha precisa de pelo menos 10 caracteres.'), findsOne);

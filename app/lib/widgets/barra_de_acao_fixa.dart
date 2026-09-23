@@ -14,8 +14,23 @@ import '../theme/bichu_tokens.g.dart';
 ///
 /// O M3 nao tem "barra de acao fixa": e layout, e nao componente (tabela do
 /// paragrafo 11 do design system). Ela vive em `Scaffold.bottomNavigationBar`
-/// para que o `Scaffold` a levante junto com o teclado e respeite a area
-/// segura inferior, que muda em tempo de execucao com a barra de gestos.
+/// para respeitar a area segura inferior, que muda em tempo de execucao com a
+/// barra de gestos.
+///
+/// **O que ela NAO faz, e este comentario ja afirmou o contrario.** O
+/// `Scaffold` nao levanta esta barra junto com o teclado: o
+/// `_ScaffoldLayout.performLayout` ancora a `bottomNavigationBar` em
+/// `size.height`, que e a altura inteira da tela, e so o `body` recebe o
+/// recuo do teclado (`contentBottom = bottom - max(minInsets.bottom,
+/// bottomWidgetsHeight)`). Com o teclado aberto a barra fica ATRAS dele.
+///
+/// Medido em 360 x 640 dp com teclado de 270 dp, em 23/09/2026: a barra ocupa
+/// 543..640 e o teclado cobre 370..640. A consequencia pratica e boa e e o
+/// motivo de a barra caber em tela de formulario: como o `Scaffold` toma o
+/// MAIOR dos dois recuos, a barra custa **zero** de area rolavel enquanto o
+/// teclado esta aberto (282 dp com e sem barra, no mesmo gabarito), e custa a
+/// propria altura -- 97 dp -- so quando o teclado esta fechado e ha 552 dp
+/// para gastar.
 class BarraDeAcaoFixa extends StatelessWidget {
   const BarraDeAcaoFixa({required this.acoes, super.key});
 

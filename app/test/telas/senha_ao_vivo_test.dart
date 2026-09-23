@@ -109,17 +109,25 @@ void main() {
   String rotuloAnunciado(WidgetTester tester) =>
       tester.getSemantics(find.byType(RequisitosDaSenha)).label;
 
-  /// A lista ficou mais longa com os requisitos, e o `ListView` constroi sob
-  /// demanda: o botao pode nem existir na arvore ate a rolagem chegar nele.
+  /// O botao mora na barra fixa do rodape desde 23/09/2026, fora da rolagem.
+  ///
+  /// A rolagem que estava aqui existia porque ele ficava no fim do formulario
+  /// e o `ListView` nao construia o que nao cabia na janela. Nao ha mais o que
+  /// rolar para alcanca-lo, e manter a rolagem esconderia uma regressao: se
+  /// ele voltar para dentro do conteudo, este caso precisa reprovar.
   Future<void> tocarEmCriarConta(WidgetTester tester) async {
-    final botao = find.widgetWithText(FilledButton, 'Criar conta');
-    await tester.dragUntilVisible(
-      botao,
-      find.byType(ListView),
-      const Offset(0, -80),
-    );
+    await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
     await tester.pumpAndSettle();
-    await tester.tap(botao);
+  }
+
+  /// Marca a caixa do aceite, trazendo-a para a janela antes.
+  ///
+  /// A caixa continua DENTRO da rolagem, e num formulario que nao cabe na
+  /// tela: uma pessoa rola ate ela para marca-la, e o caso faz o mesmo.
+  Future<void> marcarOAceite(WidgetTester tester) async {
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
   }
 
@@ -222,8 +230,7 @@ void main() {
     await tester.enterText(campoEmail, 'marina@exemplo.com.br');
     await tester.enterText(campoSenha, 'marina1998xyz');
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox));
-    await tester.pumpAndSettle();
+    await marcarOAceite(tester);
     await tocarEmCriarConta(tester);
 
     expect(
@@ -268,8 +275,7 @@ void main() {
       );
     }
 
-    await tester.tap(find.byType(Checkbox));
-    await tester.pumpAndSettle();
+    await marcarOAceite(tester);
     await tocarEmCriarConta(tester);
 
     expect(
@@ -380,8 +386,7 @@ void main() {
     await tester.enterText(campoEmail, 'marina@exemplo.com.br');
     await tester.enterText(campoSenha, 'o gato subiu no telhado');
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(Checkbox));
-    await tester.pumpAndSettle();
+    await marcarOAceite(tester);
     await tocarEmCriarConta(tester);
 
     expect(cadastros, hasLength(1));

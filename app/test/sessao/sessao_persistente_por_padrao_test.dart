@@ -132,19 +132,16 @@ void main() {
       await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
       // A unica caixa da F1.1 e a do aceite dos termos. Marca-la e o que
       // libera o cadastro; ela nao tem nada a ver com a sessao.
+      //
+      // A caixa continua dentro da rolagem, num formulario mais alto que a
+      // janela do teste, entao ela vem para a janela antes do toque -- que e
+      // o que uma pessoa faz. O BOTAO nao precisa disso desde 23/09/2026:
+      // ele mora na barra fixa do rodape.
+      await tester.ensureVisible(find.byType(Checkbox));
+      await tester.pumpAndSettle();
       await tester.tap(find.byType(Checkbox));
       await tester.pumpAndSettle();
-      // A lista de requisitos da senha (BICHUS-29) deixou o formulario mais
-      // alto que a janela do teste, e `ListView` nao constroi o que esta fora
-      // da area visivel: sem a rolagem o botao nao existe na arvore.
-      final botao = find.widgetWithText(FilledButton, 'Criar conta');
-      await tester.dragUntilVisible(
-        botao,
-        find.byType(ListView),
-        const Offset(0, -100),
-      );
-      await tester.pumpAndSettle();
-      await tester.tap(botao);
+      await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
       await tester.pumpAndSettle();
 
       expect(
