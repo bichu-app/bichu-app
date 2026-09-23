@@ -56,6 +56,46 @@
 }
 
 # --------------------------------------------------------------------------
+# Arquivos de associacao de deep link, como TRECHO importado por host
+# --------------------------------------------------------------------------
+# ADR-0017, emenda 1: todo host que aparece num link nosso que precisa abrir o
+# app serve a SUA copia destes dois arquivos, com conteudo identico. Hoje sao
+# dois blocos que os servem (a origem da aplicacao e a do site), e o trecho
+# existe para que os dois NAO possam divergir: uma copia escrita duas vezes e a
+# que um dia ganha um redirecionamento num lado so.
+#
+# Os arquivos de associacao de deep link. Servidos ESTATICOS, com tipo
+# exato e SEM redirecionamento: o Android e a Apple exigem 200 direto e
+# application/json, e quem busca e o sistema operacional, nao o navegador.
+# Um redirecionamento aqui invalida o deep link nas duas plataformas sem
+# produzir erro em lugar nenhum. Ver docs/07-devops.md 7 e 16.12.
+#
+# Quem hospeda: ate 23/09 este comentario dizia que, em producao, os dois
+# arquivos seriam servidos por um time web noutro servidor. A decisao do
+# cliente de 23/09 trouxe o site para esta mesma borda, em container proprio,
+# e com ela os arquivos ficam AQUI, servidos pela borda e nao pelo container
+# do site: o conteudo e nosso (identificador do app e impressao digital da
+# chave do APK), e um deploy do site nao pode apagar a associacao por engano.
+# Os tres requisitos continuam: HTTPS, 200 direto com application/json, e
+# zero redirecionamento.
+(associacao_deep_link) {
+	handle /.well-known/assetlinks.json {
+		header Content-Type application/json
+		header Cache-Control "public, max-age=3600"
+		root * /srv/well-known
+		rewrite * /assetlinks.json
+		file_server
+	}
+	handle /.well-known/apple-app-site-association {
+		header Content-Type application/json
+		header Cache-Control "public, max-age=3600"
+		root * /srv/well-known
+		rewrite * /apple-app-site-association
+		file_server
+	}
+}
+
+# --------------------------------------------------------------------------
 # Origem da aplicacao
 # --------------------------------------------------------------------------
 # `HOSTS_EXTRA_APP` existe para o corte de DNS da BICHUS-146, e a forma dele nao
@@ -86,34 +126,7 @@
 		Referrer-Policy no-referrer
 	}
 
-	# Os arquivos de associacao de deep link. Servidos ESTATICOS, com tipo
-	# exato e SEM redirecionamento: o Android e a Apple exigem 200 direto e
-	# application/json, e quem busca e o sistema operacional, nao o navegador.
-	# Um redirecionamento aqui invalida o deep link nas duas plataformas sem
-	# produzir erro em lugar nenhum. Ver docs/07-devops.md 7 e 16.12.
-	#
-	# EM PRODUCAO ESTES DOIS BLOCOS NAO SAO NOSSOS (ADR-0017). Eles precisam
-	# ser servidos no host do deep link, que e o host da plaquinha
-	# (TAG_BASE_URL = WEB_BASE_URL), e esse host passou a ser do time web. O
-	# conteudo continua nosso (identificador do app e impressao digital da
-	# chave do APK); a hospedagem e deles, com os mesmos tres requisitos:
-	# HTTPS, 200 direto com application/json, e zero redirecionamento.
-	# Aqui os blocos ficam para o ambiente LOCAL, onde tudo mora no mesmo
-	# host e o deep link precisa continuar exercitado.
-	handle /.well-known/assetlinks.json {
-		header Content-Type application/json
-		header Cache-Control "public, max-age=3600"
-		root * /srv/well-known
-		rewrite * /assetlinks.json
-		file_server
-	}
-	handle /.well-known/apple-app-site-association {
-		header Content-Type application/json
-		header Cache-Control "public, max-age=3600"
-		root * /srv/well-known
-		rewrite * /apple-app-site-association
-		file_server
-	}
+	import associacao_deep_link
 
 	# JWKS e a descoberta OIDC. Servidos PELO SERVICO, e nao estaticos: as
 	# chaves rodam, e um arquivo estatico com chave rotacionada e uma chave
@@ -233,6 +246,68 @@
 	# verificavel de fora.
 	handle {
 		respond "nao encontrado" 404
+	}
+}
+
+# --------------------------------------------------------------------------
+# Origem do site (institucional e paginas publicas)
+# --------------------------------------------------------------------------
+# Decisao do cliente de 23/09/2026: o site roda nesta mesma maquina, atras
+# desta mesma borda, num container proprio (`web`). A borda decide QUAL host
+# chega nele; o container decide como os bytes saem.
+#
+# ROTEAMENTO POR HOST, e nao por caminho. O site nao divide host com a API:
+# um bloco de site proprio, com a lista de hosts em `WEB_SITE_HOSTS`. Isso
+# mantem as duas regras do cabecalho de pe sem excecao -- nada aqui reescreve
+# caminho de API (nao ha API aqui) e nada aqui aplica teto de operacao -- e
+# faz a migracao futura do site ser trocar `web:8080` por outro endereco NESTA
+# linha, ou tirar o bloco inteiro.
+#
+# O VALOR PADRAO NAO E UM DOMINIO, de proposito. `http://web.localhost` e um
+# nome que nenhum DNS publico resolve e que nao pede certificado: o bloco
+# existe, o container e alcancavel pela porta 80 da borda com esse `Host`, e o
+# apex continua exatamente onde esta. E assim que o encanamento se prova sem
+# o placeholder tecnico aparecer em `bichu.app`.
+#
+# PARA O APEX PASSAR A SERVIR O SITE, tres mudancas no `.env` do host, juntas,
+# e o edge RECRIADO (a borda roda com `admin off`, entao nao ha `caddy reload`;
+# e variavel de ambiente so entra em container novo):
+#
+#   1. tirar `,https://bichu.app` de `HOSTS_EXTRA_APP`;
+#   2. `WEB_SITE_HOSTS=https://bichu.app`;
+#   3. `docker compose up -d --no-deps web edge`.
+#
+# O nome sai de um bloco e entra no outro NA MESMA configuracao, entao o
+# certificado ja emitido para o apex (volume `caddy_dados`) continua valendo:
+# nao ha nova emissao e nao ha janela de handshake quebrado. Um nome em DOIS
+# blocos, ao contrario, e erro de configuracao e a borda nao sobe -- que e o
+# desfecho certo para o passo 1 esquecido.
+#
+# `/v1/*` NAO e servido neste bloco. Hoje `https://bichu.app/v1/*` responde
+# porque o apex esta no bloco da aplicacao; nenhum consumidor conhecido usa
+# isso (o app fala com `API_BASE_URL`), e o site chamar a API pelo proprio
+# host ou pelo host da API e decisao de arquitetura do site, nao da borda.
+{$WEB_SITE_HOSTS:http://web.localhost} {
+	encode zstd gzip
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+	}
+
+	# Emenda 1 do ADR-0017: o apex carrega link nosso (e-mail, cartaz, caso),
+	# entao serve a sua copia dos arquivos de associacao. Servidos pela BORDA,
+	# antes do container: um deploy do site nao alcanca estes dois caminhos.
+	import associacao_deep_link
+
+	# Sem `request_body` proprio, e a ausencia e a regra nº 2 do cabecalho: os
+	# numeros de protecao grossa desta borda espelham `x-edge-limits` do
+	# contrato, e `verificar_borda.py` le o primeiro `max_size` que acha. Um
+	# numero so do site aqui seria numero sem dono no contrato.
+	request_header -X-Internal-*
+
+	handle {
+		reverse_proxy web:8080
 	}
 }
 

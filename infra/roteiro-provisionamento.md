@@ -1,5 +1,5 @@
 > **Status:** pronto para aplicar
-> **Atualizado:** 2026-09-19
+> **Atualizado:** 2026-09-23
 > **Issue:** BICHUS-135 (destrava BICHUS-13, critérios 3, 6, 7, 8, 9, 10 e 12)
 > **Decisão que este roteiro executa:** `docs/07-devops.md` 16.1, 16.2 e 16.3 — ADR-0013.
 
@@ -757,6 +757,74 @@ A segunda linha é a verificação que importa: a recusa do `make reset` é a ú
 proteção automática entre um comando de hábito e a massa de teste do QA. Se ela
 não recusar, o `ENVIRONMENT` do host ficou em `dev` e o passo 7 falhou em
 silêncio.
+
+---
+
+### Passo 14 — O site (container `web`), e o corte do apex para ele
+
+Decisão do cliente de 23/09/2026: o site (institucional e páginas públicas)
+roda **nesta mesma VM**, em **imagem separada** da API (`web/Dockerfile`),
+atrás da mesma borda. O mecanismo de implantação é o do passo 7, e não outro:
+os arquivos vão para o host e o compose constrói lá. Não há registry no
+caminho, nem para a API nem para o site.
+
+**Implantar ou atualizar o site** (não toca API, banco nem borda):
+
+```bash
+gcloud compute scp --project=bichu-app-508914 --zone=southamerica-east1-a \
+  --tunnel-through-iap --recurse ./web bichu-hml:~/bichu/
+# no host, em ~/bichu, com o commit de que os arquivos saíram:
+BUILD_COMMIT=<sha> docker compose build web
+docker compose up -d --no-deps --wait web
+```
+
+Enquanto `WEB_SITE_HOSTS` não estiver no `.env`, a borda atende o site só pelo
+nome `web.localhost`, que nenhum DNS resolve. O apex continua no bloco da
+aplicação, respondendo 404 fora de `/v1` e dos arquivos de associação.
+
+**Verificação — o apex não mudou, e o site está atrás da borda:**
+
+```bash
+# o site, pelo host de teste, atravessando a borda de verdade
+curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' \
+  --resolve web.localhost:80:$IP http://web.localhost/
+# 200 text/html
+curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://bichu.app/
+# 404 text/plain -- igual a antes, até o corte abaixo
+curl -sS https://hml.bichu.app/v1/health    # 200, status ok
+```
+
+**O corte do apex para o site.** Só quando o site real existir; o placeholder
+técnico de `web/public/` **não** vai para o apex. O DNS já aponta para cá desde
+a BICHUS-146 e o certificado do apex já está no volume `caddy_dados`, então o
+corte é só de configuração, e a ordem é a de sempre: config primeiro.
+
+0. O `compose.yaml` e o `Caddyfile` do host precisam ser os que declaram
+   `WEB_SITE_HOSTS` (o serviço `edge` repassa a variável). Com o `compose.yaml`
+   antigo, o passo 2 não chega à borda e o apex some dos dois blocos.
+1. No `.env` do host, tirar `https://bichu.app` de `HOSTS_EXTRA_APP` (hoje
+   `, https://bichu.app, https://tag.bichu.app`; fica `, https://tag.bichu.app`).
+2. No mesmo `.env`, `WEB_SITE_HOSTS=https://bichu.app`.
+3. `docker compose up -d --no-deps --wait web edge`.
+
+O passo 3 **recria** o edge, e é inevitável: a borda roda com `admin off`, sem
+`caddy reload`, e variável de ambiente só entra em container novo. São alguns
+segundos sem resposta em `hml` também; faça fora de sessão de teste do cliente.
+Um nome nos dois blocos (passo 1 esquecido) é configuração inválida e a borda
+**não sobe**: confira antes com
+
+```bash
+docker run --rm --env-file .env -v "$PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+  caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17 \
+  caddy validate --config /etc/caddy/Caddyfile
+```
+
+`tag.bichu.app` fica no bloco da aplicação neste corte. Se `/t/{code}` passar a
+ser página do site, o nome muda de bloco do mesmo jeito (sai de
+`HOSTS_EXTRA_APP`, entra em `WEB_SITE_HOSTS`), e é decisão de arquitetura do
+site, não deste roteiro.
+
+**Reverter:** desfazer 1 e 2 e repetir 3. O apex volta ao 404 de hoje.
 
 ---
 

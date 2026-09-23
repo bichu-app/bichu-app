@@ -26,7 +26,8 @@
 # nucleo mata dentro daquele grupo, e o Postgres nem fica sabendo. O worker
 # morre, reinicia, e o trabalho volta para a tabela `jobs`.
 #
-# Soma dos limites: 1792 MB, deixando ~256 MB para o sistema operacional.
+# Soma dos limites: 1840 MB, deixando ~208 MB para o sistema operacional.
+# (1792 ate 23/09; o `web`, com 48 MB, entrou nessa data.)
 # Se apertar, e2-medium e REINICIO e nao migracao: parar, trocar o tipo,
 # religar. Dura minutos.
 #
@@ -452,6 +453,49 @@ services:
       - "127.0.0.1:8025:8025"
     restart: unless-stopped
 
+  web:
+    # O SITE: institucional e paginas publicas (`/t/{code}`, `/redefinir-senha`
+    # e as outras que o ADR-0017 tirou da API). Decisao do cliente de
+    # 23/09/2026: mesma VM, IMAGEM SEPARADA, para que mudar o site de lugar seja
+    # mover este servico e trocar um upstream na borda.
+    #
+    # O que ele NAO tem, e cada ausencia e a regra:
+    #   - sem `env_file` e sem `environment`: o site nao le `.env`, entao nao ha
+    #     como um segredo da API vazar para uma pagina estatica;
+    #   - sem `depends_on` de `db`/`api`: ele sobe e serve sozinho, e cair a API
+    #     nao derruba a home;
+    #   - sem `ports`: so a borda o alcanca, pela rede interna do compose.
+    #
+    # Contexto de build `./web`, e so ele. A imagem nao enxerga o resto do
+    # repositorio. Ver `web/Dockerfile`.
+    image: bichu-web:${IMAGE_TAG:-local}
+    build:
+      context: ./web
+      args:
+        # Mesma regra da api (BICHUS-210): `verificar_commit_de_build.py` exige
+        # o argumento em todo servico que constroi, e `web/Dockerfile` reprova
+        # o build sem ele.
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+    # Medido em 23/09: 16 MiB servindo o placeholder. 48m e folga para o site
+    # real sem mexer no orcamento: a soma do topo passa de 1792 para 1840 MB,
+    # ~208 MB para o sistema na e2-small.
+    mem_limit: 48m
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # A mesma sonda declarada na imagem, repetida aqui para ficar visivel de
+      # fora dela: pede a pagina inicial, entao so passa com conteudo servido.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    restart: unless-stopped
+
   edge:
     # Duas origens distintas desde o primeiro dia, porque o ADR-0007 proibe
     # servir midia de usuario na origem da aplicacao. Se a separacao so
@@ -529,6 +573,13 @@ services:
       # colapsa para a base sozinha e nada muda.
       HOSTS_EXTRA_APP: ${HOSTS_EXTRA_APP:-}
       HOSTS_EXTRA_MIDIA: ${HOSTS_EXTRA_MIDIA:-}
+      # Os hosts do SITE (container `web`). Padrao `http://web.localhost`, que
+      # nao e dominio de ninguem: o bloco existe e e exercitado, e o apex fica
+      # onde esta. PADRAO AQUI, e nao vazio como as duas de cima: vazio chega
+      # ao Caddy como variavel DEFINIDA, o padrao do Caddyfile nao se aplica, e
+      # a borda recusa subir com um bloco sem endereco (medido em 23/09).
+      # O corte do apex esta no comentario do bloco, em infra/caddy/Caddyfile.
+      WEB_SITE_HOSTS: ${WEB_SITE_HOSTS:-http://web.localhost}
     depends_on: [api, objeto]
     restart: unless-stopped
 

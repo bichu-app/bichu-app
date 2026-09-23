@@ -833,6 +833,31 @@ jobs:
       - name: os quatro /.well-known respondem pela borda, sem redirecionamento
         run: python3 infra/verificacao/verificar_borda_local.py http://localhost:3000 .
 
+      # O SITE PELA BORDA, roteado por HOST. O bloco do site no Caddyfile tem
+      # como padrao `http://web.localhost`, na porta 80 de dentro da borda, que
+      # esta pilha nao publica: a requisicao sai de dentro do container `edge`,
+      # atravessa o Caddy de verdade e chega ao `web`. Confere as tres coisas
+      # que o roteamento por host promete: o host do site chega ao site, o
+      # host do site NAO alcanca a API, e o host da API NAO recebe o site.
+      - name: a borda entrega o site pelo host dele, e so por ele
+        run: |
+          pede() { # host, caminho -> "status tipo"
+            docker compose exec -T edge wget -S -O /dev/null --header "Host: $1" "http://127.0.0.1:80$2" 2>&1 \
+              | tr -d '\r' | awk '/^ *HTTP\//{s=$2} tolower($1)=="content-type:"{t=$2} END{print s" "t}'
+          }
+          r=$(pede web.localhost /); echo "web.localhost / -> $r"
+          case "$r" in "200 text/html"*) ;; *) echo "::error::o host do site nao chegou ao container web: '$r'"; exit 1 ;; esac
+          r=$(pede web.localhost /.well-known/assetlinks.json); echo "web.localhost /.well-known/assetlinks.json -> $r"
+          case "$r" in "200 application/json"*) ;; *) echo "::error::o host do site nao serve o arquivo de associacao (ADR-0017, emenda 1): '$r'"; exit 1 ;; esac
+          r=$(pede web.localhost /v1/health); echo "web.localhost /v1/health -> $r"
+          case "$r" in "200 "*) echo "::error::o host do site alcancou a API. O bloco do site nao roteia /v1"; exit 1 ;; esac
+          corpo=$(curl -sS --max-time 10 -o - -w '\n%{http_code}' http://localhost:3000/)
+          echo "localhost:3000 / -> $(printf '%s' "$corpo" | tail -1)"
+          if printf '%s' "$corpo" | grep -q '<title>'; then
+            echo "::error::o host da API esta servindo o site. O catch-all do bloco da aplicacao deixou de ser 404 (ADR-0017 item 5)"
+            exit 1
+          fi
+
       - name: api e worker rodam a MESMA imagem
         # A frase "uma imagem, dois pontos de entrada" (ADR-0001) so vale
         # enquanto for verdade no runtime. Aqui ela vira verificacao.
@@ -904,7 +929,7 @@ jobs:
           # `deploy.resources.limits` fora do Swarm e ignorado EM SILENCIO e o
           # arquivo parece correto. Conferir no runtime, nao no YAML.
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | tee -a "$GITHUB_STEP_SUMMARY"
-          for c in bichu-db-1 bichu-api-1 bichu-worker-1; do
+          for c in bichu-db-1 bichu-api-1 bichu-worker-1 bichu-web-1; do
             limite=$(docker inspect "$c" --format '{{.HostConfig.Memory}}')
             if [ "$limite" = "0" ]; then
               echo "::error::o limite de memoria de $c nao esta valendo. Ver o bloco no topo do compose.yaml"
@@ -1635,15 +1660,114 @@ jobs:
       - name: isca de isolamento da pilha de integracao
         run: npm run verify:isolamento-da-pilha
 
+  # ===========================================================================
+  # A IMAGEM DO SITE (web/), decisao do cliente de 23/09/2026
+  # ===========================================================================
+  # O site roda na mesma VM, em imagem SEPARADA da API. Este job constroi essa
+  # imagem pelo MESMO caminho que o host usa (`docker compose build web`) e a
+  # sobe com as MESMAS restricoes que o compose declara, porque restricao que so
+  # vale no YAML e restricao que ninguem viu funcionar.
+  #
+  # NAO PUBLICA EM REGISTRY, e nao e esquecimento: a API tambem nao publica. O
+  # mecanismo de hoje e o do roteiro (`infra/roteiro-provisionamento.md`, passo
+  # 7): o repositorio vai para o host e o compose constroi la. Inventar registry
+  # so para o site daria dois mecanismos de implantacao para uma maquina so.
+  #
+  # SEM FILTRO DE CAMINHO, pelo mesmo motivo do job `isolamento`: `skipped` e o
+  # que o `portao` recusa, e o job e barato (placeholder: segundos).
+  web:
+    name: imagem do site constroi, sobe restrita e serve
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: o commit de que esta imagem vai sair
+        run: echo "BUILD_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      # A isca primeiro: sem BUILD_COMMIT o build do site PRECISA reprovar,
+      # como o da API. Se passar, o portao do Dockerfile parou de valer.
+      - name: isca -- sem commit, o build do site reprova
+        run: |
+          if docker build --quiet web >/dev/null 2>isca.err; then
+            echo "::error::web/Dockerfile construiu SEM BUILD_COMMIT. A conferencia do commit parou de valer"
+            exit 1
+          fi
+          grep -q 'BUILD_COMMIT nao foi injetado' isca.err || {
+            echo "::error::o build sem commit reprovou, mas por outro motivo:"; cat isca.err; exit 1; }
+          echo "isca reprovada pelo motivo certo"
+
+      # O compose precisa renderizar para construir, e ele exige quatro chaves
+      # com `:?` que o site nem usa. Valores descartaveis, num arquivo fora do
+      # repositorio: o site nao le `.env`, e este job prova isso abaixo.
+      - name: constroi pelo compose, como no host
+        run: |
+          printf '%s\n' POSTGRES_PASSWORD=x OBJECT_STORAGE_ACCESS_KEY_ID=x \
+            OBJECT_STORAGE_SECRET_ACCESS_KEY=x OBJECT_STORAGE_KMS_KEY=x > "$RUNNER_TEMP/web.env"
+          docker compose --env-file "$RUNNER_TEMP/web.env" build web
+          docker compose --env-file "$RUNNER_TEMP/web.env" up -d --wait --no-deps web
+
+      - name: sobe com as restricoes declaradas, e sem segredo nenhum
+        run: |
+          c=bichu-web-1
+          falhas=0
+          reprova() { echo "::error::$1"; falhas=1; }
+          [ "$(docker inspect $c --format '{{.Config.User}}')" = "65532:65532" ] || reprova "o site nao roda como usuario sem privilegio"
+          [ "$(docker inspect $c --format '{{.HostConfig.ReadonlyRootfs}}')" = "true" ] || reprova "a raiz do container do site nao e somente leitura"
+          [ "$(docker inspect $c --format '{{.HostConfig.CapDrop}}')" = "[ALL]" ] || reprova "o site nao derrubou todas as capacidades"
+          [ "$(docker inspect $c --format '{{.HostConfig.Memory}}')" != "0" ] || reprova "o limite de memoria do site nao esta valendo"
+          [ -z "$(docker inspect $c --format '{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{$p}} {{end}}{{end}}')" ] || reprova "o site publica porta no hospedeiro; so a borda pode alcanca-lo"
+          # Nenhuma chave do `.env.example` pode aparecer no ambiente do site.
+          # Lista tirada do arquivo, e nao escrita aqui: variavel nova na API
+          # entra na conferencia sem ninguem lembrar deste job.
+          chaves=$(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' .env.example)
+          [ -n "$chaves" ] || reprova "nao consegui ler as chaves do .env.example; sem lista, a conferencia de segredo fica cega"
+          ambiente=$(docker inspect $c --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1)
+          for k in $chaves; do
+            if printf '%s\n' "$ambiente" | grep -qx "$k"; then reprova "o site recebeu \`$k\` do ambiente da API"; fi
+          done
+          echo "ambiente do site: $(printf '%s\n' "$ambiente" | tr '\n' ' ')"
+          exit $falhas
+
+      - name: serve a pagina inicial, e 404 de verdade no que nao existe
+        run: |
+          # Pelo NOME DO SERVICO na rede do compose (`web:8080`), que e como a
+          # borda o alcanca -- e nao por 127.0.0.1, que a sonda da imagem ja
+          # cobre. O cliente e o `wget` que ja esta na imagem: nenhuma imagem
+          # a mais so para testar.
+          sonda() {
+            docker compose --env-file "$RUNNER_TEMP/web.env" exec -T web \
+              wget -S -O /dev/null "http://web:8080$1" 2>&1 | tr -d '\r' || true
+          }
+          # O `wget` da imagem nao mostra cabecalho de resposta de erro, entao o
+          # cache-control so e conferido no 200; no 404 o que se cobra e o status.
+          confere() { # caminho, status esperado, cache-control esperado (vazio: nao confere)
+            saida=$(sonda "$1")
+            status=$(printf '%s\n' "$saida" | sed -n 's/^ *HTTP\/[0-9.]* \([0-9]*\).*/\1/p' | tail -1)
+            tipo=$(printf '%s\n' "$saida" | sed -n 's/^ *[Cc]ontent-[Tt]ype: *//p' | tail -1)
+            cache=$(printf '%s\n' "$saida" | sed -n 's/^ *[Cc]ache-[Cc]ontrol: *//p' | tail -1)
+            echo "$1 -> status=$status tipo=$tipo cache=$cache"
+            if [ "$status" != "$2" ] || { [ -n "$3" ] && [ "$cache" != "$3" ]; }; then
+              echo "::error::$1 respondeu status=$status cache=$cache; esperado $2 e ${3:-qualquer cache}"
+              printf '%s\n' "$saida"
+              return 1
+            fi
+          }
+          confere / 200 no-cache
+          case "$tipo" in text/html*) ;; *) echo "::error::a pagina inicial nao e text/html: $tipo"; exit 1 ;; esac
+          # Caminho inexistente e 404 sem cache, nunca a home com 200.
+          confere "/nao-existe-$GITHUB_RUN_ID" 404 ""
+
   portao:
     name: portao
     runs-on: ubuntu-latest
-    needs: [rapidos, codigo, contrato, integracao, isolamento, app, apk, tokens, contraste, sonar]
+    needs: [rapidos, codigo, contrato, integracao, isolamento, web, app, apk, tokens, contraste, sonar]
     if: always()
     steps:
       - name: consolidar
         run: |
-          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.isolamento.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.isolamento.result }} ${{ needs.web.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
           echo "estados: $estados"
           for e in $estados; do
             case "$e" in

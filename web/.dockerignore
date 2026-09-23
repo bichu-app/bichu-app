@@ -1,0 +1,7 @@
+# O contexto de build do site e `web/`, e so ele. Dependencia e saida de build
+# sao refeitas DENTRO da imagem: copiar do laptop levaria binario de outra
+# arquitetura e um `dist/` que ninguem garante que saiu deste commit.
+node_modules
+dist
+.astro
+*.md
