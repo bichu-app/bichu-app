@@ -281,7 +281,17 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
-const String _arvoreDasTelas = 'f14551245240f69cfb43cb67216e2682cdb7684c';
+///
+/// **Destravado uma setima vez pela BICHUS-58 e pela BICHUS-57**, a tela que o
+/// codigo da tag abre: `escanear/tela_do_pet_da_tag.dart` e arquivo novo (F2.2
+/// e F2.3) e `escanear/tela_leitor_de_qr.dart` parou de descartar o retorno de
+/// `tags.resolver` e passou a empilhar a tela do pet. **Nenhuma das duas
+/// encosta na porta** `CameraEGaleria` nem em canal de plataforma, que e o que
+/// o criterio 10 da BICHUS-161 protege, e quem responde por isso e o portao de
+/// diretivas abaixo. Medido pelo indice temporario (`GIT_INDEX_FILE` +
+/// `read-tree HEAD` + `add -A` + `write-tree --prefix=app/lib/telas`) sobre o
+/// commit desta branch.
+const String _arvoreDasTelas = 'b83d470f505d2d077c677480d42081680a333c87';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
