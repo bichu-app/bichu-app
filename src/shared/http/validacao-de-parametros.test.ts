@@ -70,6 +70,7 @@ import type {
   PetRepository,
 } from '../../modules/pets/ports/pet-repository.js';
 import { registrarRotasDePets } from '../../modules/pets/adapters/http/pet-routes.js';
+import { rotaDeIntencaoDeFoto } from '../../modules/media/adapters/http/media-routes.js';
 import type { Idempotencia } from './idempotency.js';
 import { relogioParado } from '../time/relogio-de-teste.js';
 import type { AbsoluteUrl, PetId, UserId } from '../types/brands.js';
@@ -469,6 +470,55 @@ void describe('o contrato de verdade produz os schemas de verdade', () => {
   });
 });
 
+/**
+ * Uma cópia do contrato de verdade com UM status apagado de UMA operação.
+ *
+ * É o recorte mínimo que faz a isca reprovar: tudo o mais continua sendo o
+ * documento do disco. Escrever um contrato de mentira inteiro provaria que o
+ * portão funciona contra o contrato de mentira.
+ */
+function semOStatus(contrato: Contrato, operationId: string, status: string): Contrato {
+  return {
+    ...contrato,
+    operacoes: new Map(
+      [...contrato.operacoes].map(([id, operacao]) =>
+        id !== operationId
+          ? [id, operacao]
+          : [
+              id,
+              {
+                ...operacao,
+                raw: {
+                  ...operacao.raw,
+                  responses: Object.fromEntries(
+                    Object.entries((operacao.raw['responses'] ?? {}) as Record<string, unknown>).filter(
+                      ([codigo]) => codigo !== status,
+                    ),
+                  ),
+                },
+              },
+            ],
+      ),
+    ),
+    parameterSchemas: (id) => contrato.parameterSchemas(id),
+    requestBodySchema: (id) => contrato.requestBodySchema(id),
+    responseSchema: (id, codigo) => contrato.responseSchema(id, codigo),
+  };
+}
+
+/** A rota de verdade da intenção de foto, com o corpo que o contrato declara. */
+function registrarIntencaoDeFoto(escopo: RegistradorDeRotas, contrato: Contrato): void {
+  registrarRota(
+    escopo,
+    rotaDeIntencaoDeFoto,
+    {
+      schema: { body: contrato.requestBodySchema(rotaDeIntencaoDeFoto.operationId) },
+      resolvedores: { account: () => 'uma-conta' },
+    },
+    (_request, reply) => Promise.resolve(reply.status(201).send({})),
+  );
+}
+
 void describe('a conferência de subida reprova em vez de aprovar calada', () => {
   async function subir(
     registrar: (escopo: RegistradorDeRotas) => void,
@@ -570,7 +620,67 @@ void describe('a conferência de subida reprova em vez de aprovar calada', () =>
     });
     await app.ready();
     try {
-      assert.throws(() => conferir(), /não declaram 400/);
+      assert.throws(() => conferir(), /não o declaram/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  /**
+   * A isca do CORPO, que é a metade que o portão não tinha.
+   *
+   * `createPetPhotoUploadIntent` não tem parâmetro nenhum: até 22/09 ela saía do
+   * laço do vigia antes de qualquer conferência, e por isso passou verde durante
+   * meses sem declarar o 400 que o `enum` de `content_type` produz. Aqui a rota é
+   * a de verdade, o corpo é o do contrato de verdade, e o único desvio é apagar
+   * o `400` de uma CÓPIA do contrato — o mesmo recorte do caso de parâmetro logo
+   * acima, e a mesma razão: uma bancada com contrato inventado provaria que o
+   * portão funciona contra um contrato inventado.
+   */
+  void it('operação que valida CORPO e não declara 400 derruba a subida', async () => {
+    const contrato = contratoDoDisco();
+    const semQuatrocentos = semOStatus(contrato, 'createPetPhotoUploadIntent', '400');
+
+    const app = criarServidor({
+      problemBaseUrl: BASE_DE_PROBLEMAS,
+      isProduction: false,
+      teto: tetoDeTeste(),
+    });
+    const conferir = vigiarParametrosDasRotas(app, semQuatrocentos, PREFIXO);
+    await escoparRotas(app, PREFIXO, (escopo) => {
+      registrarIntencaoDeFoto(escopo, contrato);
+      // Uma rota com parâmetro junto: sem ela `cobertas` seria zero e o portão
+      // reprovaria por OUTRO motivo, e a isca passaria sem provar nada.
+      registrarRota(escopo, ROTA_DE_PET, {}, (_r, reply) => Promise.resolve(reply.send({})));
+    });
+    await app.ready();
+    try {
+      assert.throws(() => conferir(), /createPetPhotoUploadIntent .* valida corpo/);
+    } finally {
+      await app.close();
+    }
+  });
+
+  /**
+   * O lado permissivo, que é metade do valor de um portão: ele não pode passar a
+   * reprovar quem está certo. Portão que acusa o inocente é desligado na primeira
+   * semana, e aí vale menos que não existir.
+   */
+  void it('a mesma rota, com o 400 declarado no contrato de verdade, APROVA', async () => {
+    const contrato = contratoDoDisco();
+    const app = criarServidor({
+      problemBaseUrl: BASE_DE_PROBLEMAS,
+      isProduction: false,
+      teto: tetoDeTeste(),
+    });
+    const conferir = vigiarParametrosDasRotas(app, contrato, PREFIXO);
+    await escoparRotas(app, PREFIXO, (escopo) => {
+      registrarIntencaoDeFoto(escopo, contrato);
+      registrarRota(escopo, ROTA_DE_PET, {}, (_r, reply) => Promise.resolve(reply.send({})));
+    });
+    await app.ready();
+    try {
+      assert.doesNotThrow(conferir);
     } finally {
       await app.close();
     }

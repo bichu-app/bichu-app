@@ -88,11 +88,39 @@
  * 1. rota registrada sem operação correspondente no contrato;
  * 2. rota que declara `params`/`querystring` por conta própria, criando a
  *    segunda definição que o contrato existe para não ter;
- * 3. operação cujos parâmetros podem recusar e que **não declara 400** — erro
- *    é contrato também, e responder um status que a especificação não promete
- *    é a mesma divergência, na direção oposta;
+ * 3. operação que **pode responder 400 e não o declara** — erro é contrato
+ *    também, e responder um status que a especificação não promete é a mesma
+ *    divergência, na direção oposta;
  * 4. nenhuma rota coberta. Verificação que não consegue verificar precisa
  *    reprovar: silêncio aqui seria confiança falsa.
+ *
+ * ## O item 3 era cego para corpo, e essa cegueira era a causa raiz
+ *
+ * Até 22/09/2026 o item 3 só olhava **esquema de parâmetro**. A checagem inteira
+ * ficava atrás de um `continue`:
+ *
+ * ```ts
+ * if (esquemas.params === undefined && esquemas.querystring === undefined) continue;
+ * ```
+ *
+ * Operação sem parâmetro nenhum saía do laço antes de ser conferida, mesmo
+ * registrando `schema: { body }` vindo do contrato — que é de onde o 400 mais
+ * comum da API sai, porque é ali que estão os `enum`, os `required` e os
+ * `format`. `createPetPhotoUploadIntent` e `createFoundReportPhotoUploadIntent`
+ * são as duas: nenhuma tem parâmetro, as duas validam corpo, e o `enum` de
+ * `content_type` recusa com 400 desde sempre. O portão passou verde sobre as
+ * duas porque nunca chegou a olhá-las.
+ *
+ * Corrigir as duas declarações à mão deixaria o padrão pronto para divergir na
+ * terceira. Por isso a correção é no portão: ele passou a perguntar, para cada
+ * rota registrada, **se ela instalou um esquema de corpo**. Instalou, então 400
+ * é alcançável e a especificação precisa prometê-lo — e aí as duas operações são
+ * acusadas por ele, e não por quem lembrou de olhar.
+ *
+ * A pergunta é sobre a rota REGISTRADA (`rota.schema.body`), e não sobre o que
+ * o contrato declara, de propósito: o que produz 400 é o validador instalado, e
+ * cobrar `400` de uma operação cujo corpo ninguém valida seria ruído. Ruído é
+ * como portão perde credibilidade, e portão sem credibilidade é desligado.
  */
 import type { FastifySchema } from 'fastify';
 import type { RegistradorDeRotas } from './registrar-rota.js';
@@ -202,6 +230,8 @@ export function vigiarParametrosDasRotas(
   const comSchemaProprio: string[] = [];
   const semQuatrocentos: string[] = [];
   let cobertas = 0;
+  /** Quantas rotas registradas instalaram esquema de corpo. Vai para o log. */
+  let corposConferidos = 0;
 
   app.addHook('onRoute', (rota) => {
     const metodos = Array.isArray(rota.method) ? rota.method : [rota.method];
@@ -220,21 +250,40 @@ export function vigiarParametrosDasRotas(
       }
 
       const esquemas = contrato.parameterSchemas(operationId);
+      const schema: FastifySchema = rota.schema ?? {};
+      const operacao = contrato.operacoes.get(operationId);
+
+      // O CORPO. Esta é a metade que faltava: a rota que instala `schema.body`
+      // responde 400 a corpo fora do esquema, tenha ela parâmetro ou não.
+      if (schema.body !== undefined) {
+        corposConferidos += 1;
+        if (operacao !== undefined && !declaraStatus(operacao.raw, '400')) {
+          semQuatrocentos.push(
+            `${operationId} (${metodo.toUpperCase()} ${caminho}) — valida corpo`,
+          );
+        }
+      }
+
       if (esquemas.params === undefined && esquemas.querystring === undefined) continue;
 
-      const schema: FastifySchema = rota.schema ?? {};
       if (schema.params !== undefined || schema.querystring !== undefined) {
         comSchemaProprio.push(operationId);
         continue;
       }
 
-      const operacao = contrato.operacoes.get(operationId);
       if (
         operacao !== undefined &&
         algumParametroPodeRecusar(esquemas) &&
         !declaraStatus(operacao.raw, '400')
       ) {
-        semQuatrocentos.push(`${operationId} (${metodo.toUpperCase()} ${caminho})`);
+        // Já acusada pelo corpo? Uma linha basta: o conserto é o mesmo, e duas
+        // linhas sobre a mesma operação fazem a lista parecer maior do que o
+        // trabalho que ela representa.
+        if (!semQuatrocentos.some((linha) => linha.startsWith(`${operationId} (`))) {
+          semQuatrocentos.push(
+            `${operationId} (${metodo.toUpperCase()} ${caminho}) — valida parâmetro`,
+          );
+        }
         continue;
       }
 
@@ -277,7 +326,7 @@ export function vigiarParametrosDasRotas(
     }
     if (semQuatrocentos.length > 0) {
       queixas.push(
-        'Operações cujos parâmetros podem recusar e que não declaram 400 em ' +
+        'Operações que podem responder 400 e não o declaram em ' +
           `api/openapi.yaml: ${semQuatrocentos.join(', ')}. ` +
           'Erro é contrato também: responder um status que a especificação não ' +
           'promete é a mesma divergência que não validar, na direção oposta. ' +
@@ -297,7 +346,10 @@ export function vigiarParametrosDasRotas(
           'portão estava prestes a terminar calado.',
       );
     }
-    app.log.info({ rotasComParametrosValidados: cobertas }, 'parâmetros conferidos contra o contrato');
+    app.log.info(
+      { rotasComParametrosValidados: cobertas, rotasComCorpoConferido: corposConferidos },
+      'parâmetros e corpos conferidos contra o contrato',
+    );
   };
 }
 
