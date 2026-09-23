@@ -90,7 +90,7 @@ import type {
   RegistradorDeRotas,
   VerificadorDeReautenticacao,
 } from '../../src/shared/http/registrar-rota.js';
-import type { ReauthScope } from '../../src/shared/http/route-definition.js';
+import type { ReauthScope, RouteDefinition } from '../../src/shared/http/route-definition.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -124,6 +124,22 @@ const CAMINHO_DA_REAUTENTICACAO = rotaDeReautenticacao.path;
  * literal, apagar a declaração reprova **um** caso, e é o caso certo.
  */
 const ESCOPO_DA_TROCA: ReauthScope = 'email_change';
+
+/**
+ * O que a rota declara, lido pelo tipo **largo**, e a largura é o ponto.
+ *
+ * `defineRoute` é genérico em `const`, então `reauthScope` tem tipo literal e
+ * **some do tipo** junto com a linha. Lida pelo tipo estreito, apagar a
+ * declaração vira erro de compilação: a suite inteira não roda e os onze casos
+ * saem cancelados — que é o desfecho que `executar-suite.mjs` existe para
+ * acusar, e não a afirmação que o caso 10 cobra. Uma isca que derruba a
+ * compilação não mede a rota; ela mede o compilador, e de quebra apaga a
+ * evidência dos outros dez casos.
+ *
+ * Pelo tipo largo, apagar a declaração compila, a suite roda inteira, e reprova
+ * **um** caso, com a mensagem que diz o que se perdeu.
+ */
+const ESCOPO_DECLARADO_NA_ROTA = (rotaDeTrocaDeEmail as RouteDefinition).reauthScope;
 
 let app: RegistradorDeRotas;
 let banco: { db: Db; close: () => Promise<void> };
@@ -667,7 +683,7 @@ void describe(`BICHUS-42 — POST ${CAMINHO_DA_TROCA} contra Postgres`, () => {
     // apresentar o cabeçalho, e não havia um só caso dizendo que apresentá-lo é
     // obrigatório. É este o caso que teria pego a divergência no dia.
     assert.equal(
-      rotaDeTrocaDeEmail.reauthScope,
+      ESCOPO_DECLARADO_NA_ROTA,
       ESCOPO_DA_TROCA,
       'a rota parou de declarar `reauthScope`. Sem a declaração, `registrarRota` não instala ' +
         'o portão e a troca de e-mail volta a valer só com a sessão — que é exatamente o que o ' +
