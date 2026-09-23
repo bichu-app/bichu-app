@@ -12,6 +12,7 @@ import '../telas/conta/tela_criar_conta.dart';
 import '../telas/conta/tela_entrar.dart';
 import '../telas/conta/tela_esqueci_minha_senha.dart';
 import '../telas/conta/tela_verifique_seu_email.dart';
+import '../telas/escanear/tela_do_pet_da_tag.dart';
 import '../telas/escanear/tela_leitor_de_qr.dart';
 import '../telas/pet/rascunho_de_pet.dart';
 import '../telas/pet/resultado_do_cadastro.dart';
@@ -65,6 +66,26 @@ abstract final class Rotas {
   /// escondesse a propria barra seria uma aba que nao existe. As duas portas
   /// (`Pets` e `Perfil`) usam `push`, entao ele sempre tem volta.
   static const String escanear = '/escanear';
+
+  /// `/t/<codigo>`: F2.2 e F2.3, o pet que o codigo da tag resolveu.
+  ///
+  /// **O endereco e o mesmo que vai impresso na plaquinha**, e e por isso que
+  /// ele existe antes de os App Links e os Universal Links (BICHUS-38 e
+  /// BICHUS-39) entrarem: quando eles entrarem, o link da tag ja tem onde
+  /// chegar, e nao vai precisar de uma navegacao imperativa paralela.
+  ///
+  /// O que **nao** atravessa o endereco e a resolucao, pela mesma razao do
+  /// rascunho do assistente: `TagResolvida` vai em `extra`, porque quem chega
+  /// por link direto chega sem ela. Esse caminho cai no leitor, que e onde se
+  /// resolve um codigo -- e nao numa tela montada com os campos em branco.
+  static const String petDaTag = '/t/:codigo';
+
+  /// O nome do parametro de caminho, num lugar so.
+  static const String parametroDoCodigoDaTag = 'codigo';
+
+  /// O endereco de F2.2/F2.3 para [codigo].
+  static String petDaTagDe(String codigo) =>
+      '/t/${Uri.encodeComponent(codigo)}';
 
   static const String entrar = '/entrar';
   static const String criarConta = '/criar-conta';
@@ -145,8 +166,7 @@ abstract final class Rotas {
   static String detalheDoPetDe(String petId) =>
       '/pets/${Uri.encodeComponent(petId)}';
 
-  static String editarPetDe(String petId) =>
-      '${detalheDoPetDe(petId)}/editar';
+  static String editarPetDe(String petId) => '${detalheDoPetDe(petId)}/editar';
 
   /// O endereco da tela de retorno de um envelope de intencao (UX 8.3).
   ///
@@ -192,8 +212,9 @@ RascunhoDePet? _rascunhoDoExtra(Object? extra) {
   };
 }
 
-final GlobalKey<NavigatorState> _navegadorRaiz =
-    GlobalKey<NavigatorState>(debugLabel: 'raiz');
+final GlobalKey<NavigatorState> _navegadorRaiz = GlobalKey<NavigatorState>(
+  debugLabel: 'raiz',
+);
 
 /// Monta o roteador.
 ///
@@ -234,27 +255,23 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       ),
       GoRoute(
         path: Rotas.entrar,
-        builder: (context, estado) => TelaEntrar(
-          emailInicial: estado.extra as String?,
-        ),
+        builder: (context, estado) =>
+            TelaEntrar(emailInicial: estado.extra as String?),
       ),
       GoRoute(
         path: Rotas.criarConta,
-        builder: (context, estado) => TelaCriarConta(
-          emailInicial: estado.extra as String?,
-        ),
+        builder: (context, estado) =>
+            TelaCriarConta(emailInicial: estado.extra as String?),
       ),
       GoRoute(
         path: Rotas.verifiqueSeuEmail,
-        builder: (context, estado) => TelaVerifiqueSeuEmail(
-          email: estado.extra as String? ?? '',
-        ),
+        builder: (context, estado) =>
+            TelaVerifiqueSeuEmail(email: estado.extra as String? ?? ''),
       ),
       GoRoute(
         path: Rotas.esqueciMinhaSenha,
-        builder: (context, estado) => TelaEsqueciMinhaSenha(
-          emailInicial: estado.extra as String?,
-        ),
+        builder: (context, estado) =>
+            TelaEsqueciMinhaSenha(emailInicial: estado.extra as String?),
       ),
       // O leitor de QR (F2.1). **Irmao da casca, e nao filho dela.**
       //
@@ -266,6 +283,18 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       GoRoute(
         path: Rotas.escanear,
         builder: (context, estado) => const TelaLeitorDeQr(),
+      ),
+      GoRoute(
+        path: Rotas.petDaTag,
+        // Sem `extra` nao ha resolucao, e a tela nao a inventa: quem chegou
+        // por link direto vai para o leitor, que sabe resolver um codigo.
+        // Uma tela montada com nome vazio e sinais em branco seria uma
+        // afirmacao falsa sobre um animal.
+        builder: (context, estado) {
+          final tag = estado.extra;
+          if (tag is! TagResolvida) return const TelaLeitorDeQr();
+          return TelaDoPetDaTag(tag: tag);
+        },
       ),
       // `Pets` > `Adoções`. Sub-destino com pagina propria, alcancado tambem
       // pela porta das ONGs em `Perto`.

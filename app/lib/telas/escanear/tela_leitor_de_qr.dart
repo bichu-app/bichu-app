@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter/services.dart';
 
 import '../../acessibilidade/anunciar.dart';
@@ -9,6 +10,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../dispositivo/camera_e_galeria.dart';
 import '../../dispositivo/leitor_de_qr.dart';
 import '../../escopo.dart';
+import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -125,10 +127,14 @@ enum EstadoDoLeitor {
 /// estados em que a camera nao funciona ele e a acao **principal**, e nao a
 /// alternativa: a acao principal e a que resolve, e nao a que a tela preferia.
 ///
-/// **`GET /v1/tags/{code}` ainda nao existe no servidor.** A tela chama o
-/// contrato e trata os desfechos por `type`; enquanto nao houver rota, a
-/// chamada termina em falha e a tela mostra o texto da falha. Nenhuma resposta
-/// e simulada.
+/// **`GET /v1/tags/{code}` existe e esta montada.** Ate 22/09 este cabecalho
+/// afirmava o contrario, e a afirmacao induzia quem lesse depois: a rota esta
+/// declarada em `api/openapi.yaml` (`operationId: resolveTagCode`), o servidor
+/// a implementa e a autenticacao nela e **opcional** -- e e o token, quando ha
+/// um, que faz a resposta vir com `viewer: owner` e o app abrir o modo dono.
+/// A tela chama o contrato, trata os quatro desfechos de erro por `type` e, no
+/// sucesso, **abre a tela do pet** (F2.2 ou F2.3, em `TelaDoPetDaTag`).
+/// Nenhuma resposta e simulada.
 class TelaLeitorDeQr extends StatefulWidget {
   const TelaLeitorDeQr({super.key});
 
@@ -179,7 +185,8 @@ class TelaLeitorDeQr extends StatefulWidget {
   static const String ligarACamera = 'Ligar a câmera';
 
   /// O criterio 3: o QR lido nao e do Bichu. **Dito sem sair da camera.**
-  static const String naoEDoBichu = 'Este código não é do Bichu. Tente de novo.';
+  static const String naoEDoBichu =
+      'Este código não é do Bichu. Tente de novo.';
 
   /// Criterio 6, regiao viva: o leitor esta procurando.
   static const String procurandoCodigo = 'Procurando código';
@@ -310,8 +317,7 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     return switch (permissao) {
       EstadoDaPermissao.concedida => EstadoDoLeitor.procurando,
       EstadoDaPermissao.negada ||
-      EstadoDaPermissao.negadaPermanentemente =>
-        EstadoDoLeitor.permissaoNegada,
+      EstadoDaPermissao.negadaPermanentemente => EstadoDoLeitor.permissaoNegada,
       // Nao ha permissao a conceder: o sistema bloqueou por politica, ou nao
       // ha camera. Mandar aos ajustes faria procurar o que nao esta la.
       EstadoDaPermissao.indisponivel => EstadoDoLeitor.semLeitor,
@@ -427,19 +433,20 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     });
 
     try {
-      await Escopo.of(context).tags.resolver(codigo);
+      // **O retorno e o produto desta chamada, e nao um efeito colateral.**
+      // Ate 22/09 esta linha era `await ...resolver(codigo);` sem atribuicao:
+      // o app pagava a ida ao servidor, recebia o nome do pet, os sinais, o
+      // cartao de manejo e `viewer`, e jogava tudo fora para desenhar uma
+      // faixa de texto dizendo que a tela do pet chegava depois.
+      final tag = await Escopo.of(context).tags.resolver(codigo);
       if (!mounted) return;
       setState(() {
         _resolvendo = false;
         _tentativa = 0;
-        // F2.2 (achei este pet) e F2.3 (modo dono) sao de outras historias e
-        // nao estao desenhadas nesta rodada. O codigo resolveu e a tela diz
-        // isso sem abrir uma tela que nao existe.
-        _faixa = const MensagemDeErro(
-          texto: 'Este código é de uma tag do Bichu. A tela do pet chega na '
-              'próxima entrega.',
-        );
       });
+      // `push`, e nao `go`: o leitor continua na pilha, e quem escaneou a
+      // plaquinha errada volta para a camera sem reabrir o fluxo.
+      await context.push(Rotas.petDaTagDe(codigo), extra: tag);
     } on FalhaDeConexao {
       if (!mounted) return;
       setState(() {
@@ -531,39 +538,38 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       // Nem moldura nem fundo de visor: ver o comentario do proprio valor.
       EstadoDoLeitor.consultando => const SizedBox.expand(),
       EstadoDoLeitor.procurando => _Visor(
-          visor: Escopo.of(context).leitorDeQr.visor(aoLer: _aoLer),
-          aviso: _avisoEfemero,
-          demorou: _demorou,
-          resolvendo: _resolvendo,
-          faixa: _faixa,
-        ),
+        visor: Escopo.of(context).leitorDeQr.visor(aoLer: _aoLer),
+        aviso: _avisoEfemero,
+        demorou: _demorou,
+        resolvendo: _resolvendo,
+        faixa: _faixa,
+      ),
       EstadoDoLeitor.permissaoNegada => _SemCamera(
-          titulo: TelaLeitorDeQr.tituloPermissaoNegada,
-          explicacao: TelaLeitorDeQr.explicacaoPermissaoNegada,
-          // O unico caminho de volta quando pedir de novo nao abre dialogo. A
-          // faixa e o texto sao os mesmos de F1.4, lidos de
-          // `TextosDoCadastro`: e a mesma permissao e a mesma frase.
-          faixaDosAjustes:
-              _permissao == EstadoDaPermissao.negadaPermanentemente,
-        ),
+        titulo: TelaLeitorDeQr.tituloPermissaoNegada,
+        explicacao: TelaLeitorDeQr.explicacaoPermissaoNegada,
+        // O unico caminho de volta quando pedir de novo nao abre dialogo. A
+        // faixa e o texto sao os mesmos de F1.4, lidos de
+        // `TextosDoCadastro`: e a mesma permissao e a mesma frase.
+        faixaDosAjustes: _permissao == EstadoDaPermissao.negadaPermanentemente,
+      ),
       EstadoDoLeitor.semLeitor => _SemCamera(
-          titulo: TelaLeitorDeQr.tituloSemLeitura,
-          explicacao: TelaLeitorDeQr.explicacaoSemLeitura,
-          faixaDosAjustes: false,
-          // Informativo, e nao erro: nada deu errado e ninguem errou.
-          faixaDeAusencia: TextosDoCadastro.cameraNaoEmbarcada,
-        ),
+        titulo: TelaLeitorDeQr.tituloSemLeitura,
+        explicacao: TelaLeitorDeQr.explicacaoSemLeitura,
+        faixaDosAjustes: false,
+        // Informativo, e nao erro: nada deu errado e ninguem errou.
+        faixaDeAusencia: TextosDoCadastro.cameraNaoEmbarcada,
+      ),
       EstadoDoLeitor.semConexao => _SemConexao(
-          codigo: _codigoLido ?? '',
-          tentativa: _tentativa,
-          maximo: _maximoDeTentativas,
-          segundos: _segundosParaTentar,
-        ),
+        codigo: _codigoLido ?? '',
+        tentativa: _tentativa,
+        maximo: _maximoDeTentativas,
+        segundos: _segundosParaTentar,
+      ),
       EstadoDoLeitor.digitando => _Digitacao(
-          controlador: _codigo,
-          foco: _focoDoCodigo,
-          faixa: _faixa,
-        ),
+        controlador: _codigo,
+        foco: _focoDoCodigo,
+        faixa: _faixa,
+      ),
     };
   }
 
@@ -590,77 +596,73 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
     return switch (_estado) {
       // Ainda sem resposta da porta. A saida nao aparece e some: ela existiria
       // por dois ou tres quadros e piscaria na tela.
-      EstadoDoLeitor.consultando => <Widget>[
-          _acaoDeDigitar(principal: true),
-        ],
+      EstadoDoLeitor.consultando => <Widget>[_acaoDeDigitar(principal: true)],
       // Criterio 1: `Digitar o código` fica ABAIXO do visor, e existe mesmo
       // com a camera funcionando.
       EstadoDoLeitor.procurando => <Widget>[
-          _acaoDeDigitar(principal: _demorou),
-        ],
+        _acaoDeDigitar(principal: _demorou),
+      ],
       // Criterio 4: com a permissao negada, `Digitar o código` **vira a acao
       // principal**. `Ligar a câmera` fica embaixo, e e ele -- e so ele -- que
       // abre o dialogo do sistema.
       EstadoDoLeitor.permissaoNegada => <Widget>[
-          _acaoDeDigitar(principal: true),
-          if (_permissao == EstadoDaPermissao.negada)
-            BotaoSecundario(
-              rotulo: TelaLeitorDeQr.ligarACamera,
-              aoTocar: _ligarACamera,
-            ),
-        ],
-      EstadoDoLeitor.semLeitor => <Widget>[
-          _acaoDeDigitar(principal: true),
-        ],
+        _acaoDeDigitar(principal: true),
+        if (_permissao == EstadoDaPermissao.negada)
+          BotaoSecundario(
+            rotulo: TelaLeitorDeQr.ligarACamera,
+            aoTocar: _ligarACamera,
+          ),
+      ],
+      EstadoDoLeitor.semLeitor => <Widget>[_acaoDeDigitar(principal: true)],
       EstadoDoLeitor.semConexao => <Widget>[
-          BotaoPrimario(
-            rotulo: MensagensDeErro.tentarDeNovo,
-            critico: true,
-            carregando: _resolvendo,
-            aoTocar: () {
-              final codigo = _codigoLido;
-              if (codigo != null) _resolver(codigo, digitado: _codigoFoiDigitado);
-            },
-          ),
-          TextButton(
-            onPressed: _copiarCodigoLido,
-            child: const Text(TextosDoCadastro.copiarOCodigo),
-          ),
-        ],
+        BotaoPrimario(
+          rotulo: MensagensDeErro.tentarDeNovo,
+          critico: true,
+          carregando: _resolvendo,
+          aoTocar: () {
+            final codigo = _codigoLido;
+            if (codigo != null) _resolver(codigo, digitado: _codigoFoiDigitado);
+          },
+        ),
+        TextButton(
+          onPressed: _copiarCodigoLido,
+          child: const Text(TextosDoCadastro.copiarOCodigo),
+        ),
+      ],
       EstadoDoLeitor.digitando => <Widget>[
-          BotaoPrimario(
-            rotulo: 'Continuar',
-            critico: true,
-            carregando: _resolvendo,
-            aoTocar: () {
-              final digitado = _codigo.text.trim();
-              if (digitado.isEmpty) return;
-              _resolver(digitado, digitado: true);
-            },
-          ),
-          // `Digitar de novo` (BICHUS-153, criterio 3). Ela aparece **so
-          // quando o 404 do caminho digitado esta na tela**: em qualquer outro
-          // momento ela seria um botao que repete o que o cursor ja faz.
-          //
-          // Ela **nao limpa o campo**, e isso e o ponto dela (criterio 4). A
-          // pessoa errou um caractere em dezesseis; devolver o foco com o
-          // texto preservado e oferecer a correcao, e limpar e cobrar de novo
-          // o trabalho que ja falhou uma vez.
-          if (_faixa?.texto == MensagensDeErro.codigoNaoEncontradoDigitado)
-            TextButton(
-              onPressed: _voltarAoCampo,
-              child: const Text(MensagensDeErro.digitarDeNovo),
-            ),
-          // A saida comum as quatro telas de falha do codigo (UX 12.4). Ela
-          // fica aqui, e nao so no erro: quem esta com um animal agora nao
-          // precisa do codigo, e descobrir isso **antes** de errar tres vezes
-          // e o que impede o beco.
+        BotaoPrimario(
+          rotulo: 'Continuar',
+          critico: true,
+          carregando: _resolvendo,
+          aoTocar: () {
+            final digitado = _codigo.text.trim();
+            if (digitado.isEmpty) return;
+            _resolver(digitado, digitado: true);
+          },
+        ),
+        // `Digitar de novo` (BICHUS-153, criterio 3). Ela aparece **so
+        // quando o 404 do caminho digitado esta na tela**: em qualquer outro
+        // momento ela seria um botao que repete o que o cursor ja faz.
+        //
+        // Ela **nao limpa o campo**, e isso e o ponto dela (criterio 4). A
+        // pessoa errou um caractere em dezesseis; devolver o foco com o
+        // texto preservado e oferecer a correcao, e limpar e cobrar de novo
+        // o trabalho que ja falhou uma vez.
+        if (_faixa?.texto == MensagensDeErro.codigoNaoEncontradoDigitado)
           TextButton(
-            // F3.5 e de outra historia.
-            onPressed: null,
-            child: Text(MensagensDeErro.registrarAchado),
+            onPressed: _voltarAoCampo,
+            child: const Text(MensagensDeErro.digitarDeNovo),
           ),
-        ],
+        // A saida comum as quatro telas de falha do codigo (UX 12.4). Ela
+        // fica aqui, e nao so no erro: quem esta com um animal agora nao
+        // precisa do codigo, e descobrir isso **antes** de errar tres vezes
+        // e o que impede o beco.
+        TextButton(
+          // F3.5 e de outra historia.
+          onPressed: null,
+          child: Text(MensagensDeErro.registrarAchado),
+        ),
+      ],
     };
   }
 }
@@ -745,9 +747,14 @@ class _Visor extends StatelessWidget {
             ((limites.maxHeight - lado) / 2 - alturaDaSaidaSobreposta / 2)
                 .clamp(alturaDaSaidaSobreposta, limites.maxHeight - lado);
 
-        Widget escuridao(
-          {double? left, double? top, double? right, double? bottom,
-          double? width, double? height}) {
+        Widget escuridao({
+          double? left,
+          double? top,
+          double? right,
+          double? bottom,
+          double? width,
+          double? height,
+        }) {
           return Positioned(
             left: left,
             top: top,
@@ -824,8 +831,9 @@ class _Visor extends StatelessWidget {
                           Text(
                             TelaLeitorDeQr.instrucaoDoVisor,
                             textAlign: TextAlign.center,
-                            style: textos.titleMedium
-                                ?.copyWith(color: cores.textOnInverse),
+                            style: textos.titleMedium?.copyWith(
+                              color: cores.textOnInverse,
+                            ),
                           ),
                           if (demorou) ...<Widget>[
                             const SizedBox(height: BichuEspaco.e2),
@@ -837,8 +845,9 @@ class _Visor extends StatelessWidget {
                               child: Text(
                                 TelaLeitorDeQr.aindaProcurando,
                                 textAlign: TextAlign.center,
-                                style: textos.bodyMedium
-                                    ?.copyWith(color: cores.textOnInverse),
+                                style: textos.bodyMedium?.copyWith(
+                                  color: cores.textOnInverse,
+                                ),
                               ),
                             ),
                           ],
@@ -1049,8 +1058,10 @@ class _SemConexao extends StatelessWidget {
             decoration: BoxDecoration(
               color: cores.surfaceSunken,
               borderRadius: BorderRadius.circular(BichuRaio.md),
-              border:
-                  Border.all(color: cores.outline, width: BichuBorda.hairline),
+              border: Border.all(
+                color: cores.outline,
+                width: BichuBorda.hairline,
+              ),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
