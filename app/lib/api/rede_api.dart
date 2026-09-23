@@ -27,7 +27,7 @@ import 'modelos_rede.dart';
 /// ## Nao ha `Idempotency-Key` no check-in, e a ausencia e do contrato
 ///
 /// A idempotencia e do BANCO: a chave primaria de `network_event_checkins` e
-/// `(event_slug, user_id)`, entao o segundo check-in da mesma pessoa no mesmo
+/// `(event_id, user_id)`, entao o segundo check-in da mesma pessoa no mesmo
 /// evento deixa de ser algo que alguem confere e passa a ser um estado que o
 /// banco recusa. Uma chave de idempotencia aqui seria um segundo mecanismo
 /// para a mesma garantia, com uma janela de 24 h que a primeira nao tem.

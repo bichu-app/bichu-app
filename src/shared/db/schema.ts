@@ -887,8 +887,18 @@ export interface StoreItemsTable {
 /**
  * O encontro da secao `Rede`.
  *
- * **Sem `id`, pela mesma razao de `StorePartnersTable`:** `slug` e a chave
- * primaria, porque esta tabela so existe para sair em resposta publica.
+ * **Identidade interna separada da publica** (ADR-0024, e o desenho de `pets`,
+ * de `professionals` e da `Loja`): `id` e a chave primaria, alvo das chaves
+ * estrangeiras da secao, e **nunca sai em resposta**; `slug` e o endereco
+ * publico e e a unica chave do encontro que sai. O ADR-0010 item 6 proibe UUID
+ * na SAIDA publica, nao no esquema, e quem impede o engano e o portao de
+ * `src/tools/portao-contrato-publico.ts`.
+ *
+ * O que a chave primaria em `slug` custava era concreto: as chaves
+ * estrangeiras precisavam apontar para ela, e chave estrangeira sobre `slug` e
+ * o que o criterio 2 da BICHUS-19 proibe -- `slug` e valor que o usuario troca
+ * **e** valor que sai impresso, e uma coluna que e as duas coisas entrega a
+ * juncao junto com o endereco.
  *
  * **Sem coordenada, e a ausencia e a decisao.** O ADR-0006 proibe
  * geocodificacao no MVP e so aceita coordenada de `device_gps` ou `map_pin`;
@@ -897,6 +907,9 @@ export interface StoreItemsTable {
  * campo de latitude, de longitude nem de distancia, em precisao nenhuma.
  */
 export interface NetworkEventsTable {
+  /** Identidade interna. Alvo das chaves estrangeiras, e nunca projetada. */
+  id: string;
+  /** O endereco publico. Unico, e a unica chave do encontro que sai em resposta. */
   slug: string;
   title: string;
   summary: string;
@@ -927,11 +940,14 @@ export interface NetworkEventsTable {
  * animal. Nao ha coluna, nao ha tabela de ligacao, entao nao ha `join` que
  * possa publicar o que nao foi gravado.
  *
+ * A chave e `(event_id, user_id)`, e a composta e a idempotencia do check-in.
+ *
  * `user_id` NUNCA e projetado: a unica leitura do contrato sobre esta tabela e
  * `count(*)`.
  */
 export interface NetworkEventCheckinsTable {
-  event_slug: string;
+  /** Aponta para `network_events.id`, nunca para o `slug` dele. */
+  event_id: string;
   user_id: string;
   checked_in_at: Generated<Date>;
 }
@@ -961,8 +977,12 @@ export interface NetworkEventCheckinsTable {
  * faria reprovar o comentario que explica por que elas nao estao nele.)
  */
 export interface NetworkEventPhotosTable {
+  /** Identidade interna. Nunca projetada. */
+  id: string;
+  /** O endereco publico da foto. Unico. */
   slug: string;
-  event_slug: string;
+  /** Aponta para `network_events.id`, nunca para o `slug` dele. */
+  event_id: string;
   image_url: string;
   caption: string | null;
   published_at: Generated<Date>;

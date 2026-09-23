@@ -180,10 +180,23 @@ async function limparMassaAnterior(db: Db): Promise<void> {
   // Os tutores saem por ULTIMO, e so eles: os identificadores estao literais em
   // `massa-da-rede.ts` e nenhum outro usuario do banco os tem. Nunca
   // `truncate` -- a massa fixa convive com o que quem desenvolve criou a mao.
+  //
+  // As duas filhas ligam por `event_id` (ADR-0024) e o `id` e gerado a cada
+  // semeadura, entao ele nao existe aqui para ser comparado -- e nem deveria:
+  // o identificador que ESTE arquivo conhece e o `slug`, que e o do catalogo. A
+  // subconsulta traduz um no outro sem mudar quais linhas somem: exatamente as
+  // dos encontros da massa, e nenhuma a mais. Apagar pelo `id` do tutor, por
+  // exemplo, alcancaria a presenca que alguem criou a mao num encontro proprio.
   const encontros = MASSA_DA_REDE.map((um) => um.slug);
   const tutores = TUTORES_DA_REDE.map((um) => um.id);
-  await sql`delete from network_event_photos where event_slug = any(${sql.val(encontros)}::text[])`.execute(db);
-  await sql`delete from network_event_checkins where event_slug = any(${sql.val(encontros)}::text[])`.execute(db);
+  await sql`
+    delete from network_event_photos
+    where event_id in (select id from network_events where slug = any(${sql.val(encontros)}::text[]))
+  `.execute(db);
+  await sql`
+    delete from network_event_checkins
+    where event_id in (select id from network_events where slug = any(${sql.val(encontros)}::text[]))
+  `.execute(db);
   await sql`delete from network_events where slug = any(${sql.val(encontros)}::text[])`.execute(db);
   await sql`delete from users where id = any(${sql.val(tutores)}::uuid[])`.execute(db);
 }
@@ -291,6 +304,15 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
  * "confirmou antes do encontro" sem fixar dia nenhum.
  */
 export async function semearRede(db: Db, hoje: Date): Promise<void> {
+  // A identidade interna e gerada AQUI, e de proposito nao esta na massa
+  // (ADR-0024, e a mesma forma de `semearVitrine`). A massa descreve o catalogo
+  // -- o que a tela mostra --, e o `id` nao e catalogo: ele nunca sai em
+  // resposta. Gerar na hora tambem prova a decisao pelo caminho mais curto: se
+  // alguma consulta, algum teste ou algum campo de contrato dependesse do valor
+  // do `id`, esta semeadura quebraria a cada execucao. Ela nao quebra.
+  const ids = criarIdGenerator(() => Date.now());
+  const idDoEncontro = new Map<string, string>();
+
   for (const tutor of TUTORES_DA_REDE) {
     await sql`
       insert into users (id, email, display_name, email_verified_at, created_at, updated_at)
@@ -302,12 +324,14 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
 
   for (const encontro of MASSA_DA_REDE) {
     const momento = momentoDoEncontro(encontro, hoje);
+    const id = ids.uuidv7();
+    idDoEncontro.set(encontro.slug, id);
     await sql`
       insert into network_events (
-        slug, title, summary, place_name, neighborhood, city, state,
+        id, slug, title, summary, place_name, neighborhood, city, state,
         starts_at, ends_at, time_zone, cover_image_url, active
       ) values (
-        ${encontro.slug}, ${encontro.title}, ${encontro.summary},
+        ${id}::uuid, ${encontro.slug}, ${encontro.title}, ${encontro.summary},
         ${encontro.placeName}, ${encontro.neighborhood}, ${encontro.city}, ${encontro.state},
         ${momento.inicioLocal}::timestamp at time zone ${momento.zonaDeLeitura},
         ${momento.fimLocal}::timestamp at time zone ${momento.zonaDeLeitura},
@@ -320,9 +344,19 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
   // massa, e depois do que ja passou ha nove dias.
   const confirmadoEm = new Date(hoje.getTime() - 12 * 60 * 60 * 1000).toISOString();
   for (const presenca of PRESENCAS_DA_REDE) {
+    const eventId = idDoEncontro.get(presenca.eventSlug);
+    if (eventId === undefined) {
+      // Massa que aponta para encontro inexistente precisa PARAR a semeadura, e
+      // nao seguir sem a presenca: um `continue` aqui produziria uma contagem
+      // menor do que a massa declara, e o teste que conta `checkin_count`
+      // acusaria o sintoma sem nomear a causa.
+      throw new Error(
+        `a presenca aponta para o encontro '${presenca.eventSlug}', que nao esta em MASSA_DA_REDE`,
+      );
+    }
     await sql`
-      insert into network_event_checkins (event_slug, user_id, checked_in_at)
-      values (${presenca.eventSlug}, ${presenca.tutorId}::uuid, ${confirmadoEm}::timestamptz)
+      insert into network_event_checkins (event_id, user_id, checked_in_at)
+      values (${eventId}::uuid, ${presenca.tutorId}::uuid, ${confirmadoEm}::timestamptz)
     `.execute(db);
   }
 
@@ -336,11 +370,17 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
     //
     // Quem precisa de uma foto COM remetente e a isca de integracao, que monta
     // a propria em `tests/`.
+    const eventId = idDoEncontro.get(foto.eventSlug);
+    if (eventId === undefined) {
+      throw new Error(
+        `a foto '${foto.slug}' aponta para o encontro '${foto.eventSlug}', que nao esta em MASSA_DA_REDE`,
+      );
+    }
     await sql`
       insert into network_event_photos (
-        slug, event_slug, image_url, caption, published_at, sort_order
+        id, slug, event_id, image_url, caption, published_at, sort_order
       ) values (
-        ${foto.slug}, ${foto.eventSlug}, ${foto.imageUrl}, ${foto.caption},
+        ${ids.uuidv7()}::uuid, ${foto.slug}, ${eventId}::uuid, ${foto.imageUrl}, ${foto.caption},
         ${MOMENTO_DA_REDE}::timestamptz, ${foto.sortOrder}
       )
     `.execute(db);

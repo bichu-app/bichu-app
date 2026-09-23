@@ -236,7 +236,7 @@ void describe('a massa e integra: nada aponta para o que nao existe', () => {
   });
 
   void it('ISCA -- ninguem confirma presenca duas vezes no mesmo encontro', () => {
-    // A chave primaria de `network_event_checkins` e `(event_slug, user_id)`. O
+    // A chave primaria de `network_event_checkins` e `(event_id, user_id)`. O
     // par repetido estoura o `INSERT` no meio da massa.
     const pares = PRESENCAS_DA_REDE.map((uma) => `${uma.eventSlug}|${uma.tutorId}`);
     const repetidos = pares.filter((par, indice) => pares.indexOf(par) !== indice);

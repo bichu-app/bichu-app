@@ -598,7 +598,23 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// TODAS, dos dois lados. Anteriores:
 /// `59de12f643235735ac6a21249b1408fbf3651c93` (esta branch) e
 /// `65bcd97d9088e6da8668127c8cb4d38f5e19d718` (`development`).
-const String _arvoreDasTelas = 'e113de4b6d5741694bde0b5a3135817229911625';
+///
+/// **Destravado pela RENUMERACAO do ADR da `Rede`, 23/09/2026 (BICHUS-251).**
+/// A `feat/tela-de-loja` trouxe um `ADR-0024` e esta branch ja tinha outro com
+/// o mesmo numero -- dois arquivos de nomes diferentes, entao o git os juntou
+/// sem conflito e ninguem teria percebido. O da Rede virou `ADR-0025`, e a
+/// troca alcancou quatro arquivos de `app/lib/telas`: `abas.dart`,
+/// `casca_com_abas.dart`, `rede/agenda_da_rede.dart` e
+/// `rede/encontro_da_rede.dart`.
+///
+/// **Sao quatro CITACOES em comentario, e nada mais.** Nenhuma linha de codigo
+/// mudou, e nenhuma delas encosta na porta `CameraEGaleria`, que e o que o
+/// criterio 10 da BICHUS-161 protege -- o portao de diretivas abaixo continua
+/// cobrando isso por conta propria, sem depender desta constante.
+///
+/// Medido com o indice temporario deste portao sobre a arvore ja commitada.
+/// Anterior: `e113de4b6d5741694bde0b5a3135817229911625`.
+const String _arvoreDasTelas = '5a3f2775f9af1bc629c056d3669468cc218ea065';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

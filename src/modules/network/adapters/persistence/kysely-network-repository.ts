@@ -32,12 +32,27 @@
  *
  * ## A idempotencia do check-in e do BANCO
  *
- * `insert ... on conflict (event_slug, user_id) do nothing`. A chave primaria e
- * `(event_slug, user_id)`, entao o segundo check-in da mesma pessoa no mesmo
+ * `insert ... on conflict (event_id, user_id) do nothing`. A chave primaria e
+ * `(event_id, user_id)`, entao o segundo check-in da mesma pessoa no mesmo
  * evento deixa de ser algo que a aplicacao precisa conferir e passa a ser um
  * estado que o banco recusa. Um `if` na aplicacao teria janela entre a leitura
  * e a escrita, e e justamente na chamada dupla -- o toque repetido do dedo, a
  * repeticao do cliente offline -- que essa janela e exercida.
+ *
+ * ## O `slug` chega do contrato, e o `id` e resolvido DENTRO da consulta
+ *
+ * As tabelas desta secao se ligam por `network_events.id` (ADR-0024): chave
+ * estrangeira sobre `slug` e o que o criterio 2 da BICHUS-19 proibe, porque
+ * `slug` e ao mesmo tempo endereco publico e valor que o usuario troca.
+ *
+ * O contrato, porem, continua enderecando o encontro por `slug`, e e ele que
+ * `buscarEncontro` e `confirmarPresenca` recebem. A traducao de um para o outro
+ * acontece **dentro da mesma consulta**, por subconsulta ou por referencia de
+ * coluna -- nunca por uma leitura previa cujo resultado o manipulador compara.
+ * Duas consultas com comparacao no meio seriam autorizacao fora da clausula
+ * `WHERE`, que e o que a ADR-0021 recusa, e abririam janela entre a leitura e a
+ * escrita. E o `id` resolvido assim nunca entra num `select` que alimente
+ * resposta: ele fica dentro da consulta, e o que sai continua sendo o `slug`.
  *
  * ## A busca e `ILIKE` com escape, e nao busca de texto completo
  *
@@ -207,12 +222,12 @@ export class KyselyNetworkRepository implements NetworkRepository {
         // um numero.
         eb
           .selectFrom('network_event_checkins as c')
-          .whereRef('c.event_slug', '=', 'e.slug')
+          .whereRef('c.event_id', '=', 'e.id')
           .select(eb.fn.countAll<string>().as('total'))
           .as('checkin_count'),
         eb
           .selectFrom('network_event_photos as f')
-          .whereRef('f.event_slug', '=', 'e.slug')
+          .whereRef('f.event_id', '=', 'e.id')
           .select(eb.fn.countAll<string>().as('total'))
           .as('photo_count'),
       ])
@@ -247,12 +262,12 @@ export class KyselyNetworkRepository implements NetworkRepository {
         'e.cover_image_url as cover_image_url',
         eb
           .selectFrom('network_event_checkins as c')
-          .whereRef('c.event_slug', '=', 'e.slug')
+          .whereRef('c.event_id', '=', 'e.id')
           .select(eb.fn.countAll<string>().as('total'))
           .as('checkin_count'),
         eb
           .selectFrom('network_event_photos as f')
-          .whereRef('f.event_slug', '=', 'e.slug')
+          .whereRef('f.event_id', '=', 'e.id')
           .select(eb.fn.countAll<string>().as('total'))
           .as('photo_count'),
       ])
@@ -262,7 +277,17 @@ export class KyselyNetworkRepository implements NetworkRepository {
 
     const fotos = (await this.db
       .selectFrom('network_event_photos as f')
-      .where('f.event_slug', '=', pedido.slug)
+      // O `slug` do contrato vira `id` AQUI DENTRO, por subconsulta, e nao numa
+      // leitura previa cujo resultado fosse comparado no manipulador. O
+      // `active` viaja junto: galeria de evento retirado nao e leitura valida,
+      // e repetir o predicado custa menos que confiar em quem chamou antes.
+      .where('f.event_id', '=', (eb) =>
+        eb
+          .selectFrom('network_events as e')
+          .where('e.slug', '=', pedido.slug)
+          .where('e.active', '=', true)
+          .select('e.id'),
+      )
       // As TRES colunas da galeria, nomeadas uma a uma. Nao ha `selectAll()`
       // aqui, e a ausencia e a decisao 3 do ADR-0025: um `selectAll` carregaria
       // quem enviou a foto para dentro do processo, e o que nao e carregado nao
@@ -297,7 +322,15 @@ export class KyselyNetworkRepository implements NetworkRepository {
     if (chamador === undefined) return false;
     const achado = await this.db
       .selectFrom('network_event_checkins as c')
-      .where('c.event_slug', '=', slug)
+      // Mesma traducao da galeria, pelo mesmo motivo: o `slug` vira `id` dentro
+      // da consulta, e o `active` mora no `WHERE`.
+      .where('c.event_id', '=', (eb) =>
+        eb
+          .selectFrom('network_events as e')
+          .where('e.slug', '=', slug)
+          .where('e.active', '=', true)
+          .select('e.id'),
+      )
       .where('c.user_id', '=', chamador)
       .select(sql<number>`1`.as('presente'))
       .executeTakeFirst();
@@ -312,18 +345,21 @@ export class KyselyNetworkRepository implements NetworkRepository {
       // comparacao no manipulador e nao ha 403 -- ADR-0021.
       await trx
         .insertInto('network_event_checkins')
-        .columns(['event_slug', 'user_id'])
+        .columns(['event_id', 'user_id'])
         .expression(
           trx
             .selectFrom('network_events as e')
             .where('e.slug', '=', pedido.slug)
             .where('e.active', '=', true)
-            .select(['e.slug', sql<string>`${pedido.chamador}::uuid`.as('quem')]),
+            // O `id` sai deste `select` para dentro do `INSERT`, e para lugar
+            // nenhum alem dele: e a mesma consulta que autoriza a escrita, e o
+            // valor nao atravessa o processo nem chega a projecao.
+            .select(['e.id', sql<string>`${pedido.chamador}::uuid`.as('quem')]),
         )
         // A IDEMPOTENCIA, e ela e do banco. A segunda chamada da mesma pessoa
         // no mesmo evento nao escreve e nao levanta: o contrato promete 200 nas
         // duas vezes, com a mesma contagem.
-        .onConflict((oc) => oc.columns(['event_slug', 'user_id']).doNothing())
+        .onConflict((oc) => oc.columns(['event_id', 'user_id']).doNothing())
         .execute();
 
       // A contagem JA ATUALIZADA, e o mesmo `WHERE` de novo -- e e ele que
@@ -336,7 +372,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
         .select((eb) =>
           eb
             .selectFrom('network_event_checkins as c')
-            .whereRef('c.event_slug', '=', 'e.slug')
+            .whereRef('c.event_id', '=', 'e.id')
             .select(eb.fn.countAll<string>().as('total'))
             .as('checkin_count'),
         )
