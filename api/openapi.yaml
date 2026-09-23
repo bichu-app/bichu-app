@@ -209,6 +209,8 @@ tags:
     description: Contato mediado entre tutor e achador.
   - name: public
     description: Superficie publica, listagem de perdidos e dados de referencia.
+  - name: directory
+    description: O diretorio de profissionais e estabelecimentos da secao `Perto`.
   - name: web
     description: Rotas HTML servidas pelo proprio backend.
   - name: ops
@@ -3132,6 +3134,129 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
 
   # ----------------------------------------------------------------------
+  # O diretorio de `Perto` (BICHUS-234)
+  # ----------------------------------------------------------------------
+  #
+  # A operacao abaixo e a proposta de `api/diretorio.proposta.yaml` trazida
+  # para o contrato em vigor, com duas diferencas, as duas de MENOS e as duas
+  # declaradas:
+  #
+  # 1. `getDirectoryEntry` e `getDirectoryReferenceData` NAO entraram. As duas
+  #    continuam na proposta. Este contrato ja carrega 42 operacoes declaradas
+  #    e sem implementacao, e acrescentar duas para nao as implementar hoje
+  #    aumenta exatamente a divida que essa conta mede.
+  # 2. O parametro `q` e a entrada de teto `[account, q]` NAO entraram. `q` nao
+  #    esta em `DIMENSOES_CONHECIDAS` de `src/shared/http/aplicacao-de-teto.ts`,
+  #    entao a entrada exige um resolvedor novo -- e uma dimensao de teto nova e
+  #    decisao de politica, nao detalhe de implementacao. A busca por texto
+  #    entra quando a dimensao existir.
+
+  /directory/entries:
+    get:
+      operationId: listDirectoryEntries
+      tags: [directory]
+      x-effects: [expensive_query]
+      summary: Profissionais e estabelecimentos da regiao
+      description: |
+        O diretorio de `Perto`. Devolve apenas entradas publicadas.
+
+        **EXIGE CONTA, e isso e o que torna a resposta possivel.**
+        `src/tools/portao-contrato-publico.ts` reprova `phone_e164` e
+        `distance_m` em qualquer operacao alcancavel sem conta, e reprova com
+        razao. Telefone comercial e distancia sao o conteudo util do diretorio;
+        numa rota publica eles nao podem existir. Afrouxar este `security` para
+        `[bearerAuth, {}]` faz o portao reprovar os dois, nominalmente.
+
+        **Ordenacao por distancia usa a localizacao de referencia de quem
+        chama**, que o servidor ja guarda (BICHUS-92). Ela NAO e enviada na
+        requisicao: coordenada em URL vai para log de acesso, para o historico
+        do aparelho e para o cabecalho `Referer`.
+
+        Sem localizacao conhecida, ou com mais de 30 dias (ADR-0006), a
+        resposta traz `distance_available: false`, a ordenacao cai para `name`
+        e `distance_m` vem nulo em todos os itens. **Falha de calculo nao vira
+        zero e nao vira ordem aleatoria**: a tela diz que nao consegue ordenar
+        por distancia e oferece ligar a localizacao. E a mesma regra do
+        `reach_status: unavailable` do alerta.
+
+        **Entrada sem coordenada aparece por ultimo, com `distance_m` nulo, e
+        nao some.** A proposta original a excluia de `sort=distance`; excluir
+        esconderia uma entrada publicada por causa de um campo que hoje NINGUEM
+        consegue preencher -- nao ha painel de cadastro --, que e a mesma classe
+        de defeito do zero silencioso, um nivel acima.
+
+        Nao ha geocodificacao neste produto (ADR-0006): `city`, `state` e
+        `neighborhood` sao rotulo de exibicao e filtro de texto, jamais fonte
+        de coordenada. Quem alimenta o diretorio informa o ponto, e o painel
+        precisa captura-lo com **mapa de toque** -- ninguem sabe a propria
+        coordenada, e um par de campos de latitude e longitude nao serve.
+
+        Paginacao numerada com total, como a listagem publica de perdidos,
+        porque a tela precisa dizer "1 a 20 de 87" e chegar ao fim da lista.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 1h
+          on_exceed: deny_429
+          note: "consulta geoespacial: teto por conta, nao por IP, porque a rota exige conta"
+      parameters:
+        - name: city
+          in: query
+          description: |
+            **Opcional**, e aqui esta proposta e o contrato divergem de
+            proposito. A busca de perdidos comeca com alguem digitando onde
+            perdeu; `Perto` e uma aba que abre sozinha, e exigir cidade a
+            deixaria vazia ate a pessoa digitar algo. O recorte que falta e
+            suprido pela ordenacao por distancia, que e o que a secao promete.
+            Sem cidade e sem localizacao valida, `applied_filters` diz
+            `scope: all` e a tela sabe que nao esta mostrando "perto" coisa
+            nenhuma.
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: state
+          in: query
+          description: UF, duas letras.
+          schema: { type: string, minLength: 2, maxLength: 2 }
+        - name: neighborhood
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: kind
+          in: query
+          description: Filtra por atividade.
+          schema: { $ref: '#/components/schemas/ProfessionalKind' }
+        - name: verification_level
+          in: query
+          description: |
+            Piso, nao igualdade: `contact_verified` traz tambem
+            `document_verified`. Filtro por igualdade esconderia o registro
+            mais forte de quem pediu o mais fraco.
+          schema: { $ref: '#/components/schemas/VerificationLevel' }
+        - name: sort
+          in: query
+          description: |
+            `distance` exige localizacao de referencia valida de quem chama.
+            Sem ela, a resposta usa `name` e diz isso em `distance_available`.
+          schema: { type: string, enum: [distance, name], default: distance }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+      responses:
+        '200':
+          description: |
+            Pagina do diretorio. `total` alimenta "Mostrando 1 a 20 de 87" e
+            `applied_filters` alimenta a linha que explica o recorte.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectoryEntryPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ----------------------------------------------------------------------
   # Superficie publica
   # ----------------------------------------------------------------------
 
@@ -5380,6 +5505,119 @@ components:
                 e o botao "vi este pet", que cria o achado ja vinculado pelo
                 `share_token`.
             poster_url: { type: string, format: uri }
+
+    ProfessionalKind:
+      type: string
+      description: |
+        A atividade. Espelha `professionals.kind` e a entrada
+        `public.professionals.professionals_kind_check` do teste de conjunto
+        exato. **Nao ha valor para ONG**, e a ausencia e decisao pendente do
+        modelo, nao esquecimento: `professionals` nao tem `entity_kind` e
+        `kind` nao tem valor para organizacao. A porta das ONGs em `Perto` leva
+        hoje a lista de pets filtrada em adocao (UX 27.2.4), que e outra coisa.
+      enum: [vet, groomer, walker, sitter, trainer, clinic]
+
+    VerificationLevel:
+      type: string
+      description: |
+        O que foi provado, derivado da verificacao aprovada mais forte da
+        entidade. `none` e estado legitimo e publicavel: passeador, hospedagem,
+        tosa e adestramento nao tem conselho nem registro obrigatorio
+        (ADR-0011). Selo generico e proibido: a interface diz O QUE foi
+        verificado, e foi por isso que a BICHUS-165 nao passou.
+      enum: [none, contact_verified, document_verified]
+
+    EvidenceKind:
+      type: string
+      description: |
+        O tipo de prova aceita. A resposta devolve o TIPO, nunca o numero: a
+        interface precisa dizer o que foi verificado e nao precisa publicar o
+        numero de registro de um terceiro para isso.
+      enum: [crmv, cnpj, phone_callback, document]
+
+    DirectoryVerification:
+      type: object
+      description: |
+        O que sustenta o selo. `evidence_kinds` e a lista dos tipos de prova
+        APROVADOS daquela entidade. Vazia quando `level` e `none`.
+      required: [level, evidence_kinds]
+      properties:
+        level: { $ref: '#/components/schemas/VerificationLevel' }
+        evidence_kinds:
+          type: array
+          items: { $ref: '#/components/schemas/EvidenceKind' }
+
+    DirectoryEntrySummary:
+      type: object
+      description: |
+        O cartao da listagem. **Nao tem `id`**: o endereco e o `slug` (ADR-0010
+        item 6). Nao tem coordenada, nao tem quem convidou e nao tem titular --
+        `created_by_user_id` e `claimed_by_user_id` carregam a marca `NUNCA sai
+        do servidor` e `src/tools/portao-colunas-que-nao-saem.ts` as vigia.
+      required: [slug, kind, display_name, verification]
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        display_name: { type: string, maxLength: 120 }
+        city: { type: string, nullable: true }
+        state: { type: string, nullable: true, minLength: 2, maxLength: 2 }
+        neighborhood: { type: string, nullable: true }
+        about: { type: string, nullable: true, maxLength: 2000 }
+        phone_e164:
+          type: string
+          nullable: true
+          description: |
+            Telefone **comercial**, publicado de proposito pela entidade que
+            aceitou aparecer para ser contratada (ADR-0011 secao 4). Formato
+            internacional (`+` e 8 a 15 digitos), deliberadamente diferente do
+            telefone de conta de usuario, que aceita so Brasil.
+
+            **Este campo so pode existir porque a operacao exige conta.** Ele
+            esta na lista de campos proibidos de
+            `src/tools/portao-contrato-publico.ts`.
+        verification: { $ref: '#/components/schemas/DirectoryVerification' }
+        distance_m:
+          type: integer
+          nullable: true
+          description: |
+            Distancia ate a localizacao de referencia de quem chama,
+            **arredondada a 100 m**. Nulo quando a entrada nao tem coordenada
+            ou quando o chamador nao tem localizacao valida.
+
+            Os 100 m nao sao arredondamento defensivo: e a propria grade em que
+            o produto quantiza a localizacao do usuario (ADR-0006), entao
+            precisao maior nao existe na origem. **Nunca sai o ponto**: um
+            ponto por entrada permite montar o mapa que o ADR-0010 item 4
+            existe para impedir.
+
+            Mesmo aviso do `phone_e164`: so pode existir porque a operacao
+            exige conta.
+
+    DirectoryEntryPage:
+      type: object
+      required: [items, page, limit, total, distance_available]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DirectoryEntrySummary' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        distance_available:
+          type: boolean
+          description: |
+            `false` quando o chamador nao tem localizacao de referencia valida,
+            ou quando `sort=name`. Com `false`, todo `distance_m` vem nulo e a
+            ordenacao foi por nome. **A tela diz isso.** Devolver zero ou
+            ordenar por outra coisa em silencio e a forma mais barata de mentir
+            sobre proximidade.
+        applied_filters:
+          type: object
+          description: |
+            O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
+            foi informado, porque "nada filtrado" e uma informacao e nao uma
+            ausencia.
+          additionalProperties: { type: string }
 
     PublicLostPetPage:
       type: object
