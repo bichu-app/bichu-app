@@ -49,6 +49,7 @@
 import 'dart:ui' show Tristate;
 
 import 'package:bichu/api/modelos_pet.dart';
+import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/pet/resultado_do_cadastro.dart';
 import 'package:bichu/telas/pet/textos_do_detalhe.dart';
@@ -294,6 +295,60 @@ void main() {
       await tocar(tester, find.text(TextosDoDetalhe.editar));
 
       exigirTodoBotaoComAcao(tester, tela: 'editar-pet', tocaveis: true);
+      handle.dispose();
+    });
+
+    // -------------------------------------------------------------------
+    // F2.1, o leitor de QR
+    // -------------------------------------------------------------------
+    //
+    // **Ela nao estava aqui, e um comentario dela ja contava com esta
+    // varredura.** `tela_leitor_de_qr.dart` justifica uma decisao dizendo que
+    // "nenhum botao novo entra na tela -- o que importa para a varredura de
+    // acessibilidade, que conta os controles de cada tela", e a varredura
+    // nunca montou esta tela. O comentario descrevia um portao que nao
+    // existia.
+    //
+    // Ela entra por DOIS estados porque os controles sao outros em cada um, e
+    // porque o defeito desta classe mora justamente no controle embrulhado:
+    //
+    //  - `semLeitor` e o estado que o teste de widget alcanca sozinho
+    //    (`LeitorDeQrNaoEmbarcado` e o padrao de `abrirOApp`). E o mesmo
+    //    estado do macOS e da web;
+    //  - `procurando` e o estado com camera, e e o unico em que a
+    //    [SaidaDaTela] sobreposta esta na arvore. Sem camera nao ha visor, e
+    //    sem visor a saida nao e a mesma.
+
+    testWidgets('F2.1 leitor de QR, sem leitor embarcado', (tester) async {
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _rede, deposito: depositoLogado());
+      await irPara(tester, Rotas.escanear);
+
+      // A saida sobreposta + `Digitar o codigo`. Sao dois, e dois e o piso: a
+      // tela nao tem barra de topo nem barra de abas (design system 11.11), e
+      // os outros controles desta tela (`Digitar de novo`, `Registrar achado`)
+      // so existem depois de um codigo recusado. O piso reprova o dia em que a
+      // arvore de semantica nao subir, que e como esta varredura ficaria verde
+      // por nao estar olhando para nada.
+      exigirTodoBotaoComAcao(tester, tela: 'f2.1-sem-leitor', botoesEsperados: 2);
+      handle.dispose();
+    });
+
+    testWidgets('F2.1 leitor de QR, com a camera procurando', (tester) async {
+      final handle = tester.ensureSemantics();
+      await abrirOApp(
+        tester,
+        rede: _rede,
+        deposito: depositoLogado(),
+        camera: CameraDeTeste(EstadoDaPermissao.concedida),
+        leitorDeQr: LeitorDeQrDeTeste(),
+      );
+      await irPara(tester, Rotas.escanear);
+
+      // Os mesmos dois, e aqui a saida sobreposta e o unico jeito de sair: sem
+      // barra e sem abas, um `btn=true tap=false` nela deixaria quem usa leitor
+      // de tela preso na camera.
+      exigirTodoBotaoComAcao(tester, tela: 'f2.1-procurando', botoesEsperados: 2);
       handle.dispose();
     });
   });
