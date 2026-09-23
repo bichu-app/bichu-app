@@ -291,6 +291,13 @@ export function registrarRotasDeTransferencia(
           // vira coluna de `idempotency_keys`.
           donoOuToken: hashDeToken(cancelToken).toString('base64'),
           endpoint: `${rotaDeCancelamentoPorToken.method.toUpperCase()} ${rotaDeCancelamentoPorToken.path}`,
+          // A TRANSFERENCIA ENTRA NA CHAVE, pelo RESUMO do token e nao por ele.
+          // Hoje `donoOuToken` acima ja e derivado deste mesmo token, entao as
+          // duas travas dizem a mesma coisa -- e e exatamente por isso que esta
+          // precisa existir: a de cima e coincidencia desta rota (a unica sem
+          // conta), e no dia em que o escopo virar a conta de quem cancela, o
+          // corpo canonico continua sendo `null` para TODA transferencia.
+          parametrosDeCaminho: { cancelToken: hashDeToken(cancelToken).toString('base64') },
           corpo: null,
           agoraEmMilissegundos: deps.clock.now(),
         },

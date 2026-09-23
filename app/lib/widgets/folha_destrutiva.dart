@@ -118,6 +118,15 @@ class _FolhaDestrutivaState extends State<FolhaDestrutiva> {
         _emAndamento = false;
         _erro = MensagensDeErro.de(falha).texto;
       });
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E FalhaDeChamada. Sem este ramo, o `_emAndamento` ficava
+      // ligado para sempre e a folha girava sem resultado e sem saida.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao confirmar a folha');
+      if (!mounted) return;
+      setState(() {
+        _emAndamento = false;
+        _erro = MensagensDeErro.servidorFora;
+      });
     }
   }
 

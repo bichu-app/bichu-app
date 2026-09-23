@@ -165,9 +165,14 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/pets/ports/fotos-do-pet.ts', SO_TIPO],
   ['src/modules/pets/ports/pet-repository.ts', SO_TIPO],
   ['src/modules/pets/ports/reference-data-repository.ts', SO_TIPO],
+  // Chegou com o `Perto` com dados (23/09). Conferida pelo MESMO criterio das
+  // outras: nao declara `const`, `function`, `class` nem `enum`, e o compilado
+  // em `dist/_tests` e `export {};` -- 59 bytes, nenhuma instrucao.
+  ['src/modules/professionals/ports/directory-repository.ts', SO_TIPO],
   ['src/modules/tags/ports/autenticador.ts', SO_TIPO],
   ['src/modules/tags/ports/rasterizador-de-qr.ts', SO_TIPO],
   ['src/modules/tags/ports/tag-repository.ts', SO_TIPO],
+  ['src/modules/transfers/ports/transfer-repository.ts', SO_TIPO],
   ['src/shared/db/schema.ts', SO_TIPO],
   ['src/shared/ports/id-generator.ts', SO_TIPO],
   ['src/shared/ports/job-queue.ts', SO_TIPO],
@@ -178,7 +183,11 @@ const AUSENCIAS_ACEITAS = new Map([
   // -- pontos de entrada -----------------------------------------------------
   ['src/bin/api.ts', PONTO_DE_ENTRADA],
   ['src/bin/worker.ts', PONTO_DE_ENTRADA],
-  ['src/bin/seed.ts', PONTO_DE_ENTRADA],
+  // `src/bin/seed.ts` SAIU em 23/09, pela invariante 2 desta lista. Ele passou
+  // a APARECER nos dois relatorios (`src/bin/seed.test.ts` chegou com o `Perto`
+  // com dados), e dispensa que sobra depois de o teste chegar e o comeco de uma
+  // lista que so cresce. Quem acusou foi o proprio verificador, e ele acusou no
+  // fechamento -- que e onde ele tem de acusar.
 
   // -- adaptadores que nenhuma suite carrega ---------------------------------
   //
@@ -186,8 +195,9 @@ const AUSENCIAS_ACEITAS = new Map([
   // `kysely-tag-repository.ts` passaram a APARECER no relatorio de integracao
   // (`autorizacao-de-pets-e-fotos.test.ts` e `reimpressao-do-qr-e-do-dono.
   // test.ts` carregam os dois), e dispensa que sobra depois de o teste chegar e
-  // o comeco de uma lista que so cresce.
-  ['src/modules/lostfound/adapters/persistence/kysely-lost-case-repository.ts', SEM_SUITE_QUE_CARREGUE],
+  // o comeco de uma lista que so cresce. No fechamento do dia saiu tambem
+  // `kysely-lost-case-repository.ts`, pelo mesmo motivo: o proprio verificador
+  // acusou a excecao como obsoleta.
   ['src/modules/media/application/media-service.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/media/application/processar-foto.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/notifications/adapters/persistence/kysely-registro-de-entregas.ts', SEM_SUITE_QUE_CARREGUE],

@@ -250,6 +250,19 @@ class _TelaAlcanceDoAlertaState extends State<TelaAlcanceDoAlerta> {
         _fase = _Fase.pronta;
         _erro = MensagensDeErro.de(falha);
       });
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E FalhaDeChamada. Sem este ramo `_Fase.enviando` ficava de
+      // pe para sempre, e o caso de um pet perdido ficava preso num botao que
+      // gira. Nao ha desfecho pior neste produto.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao abrir o caso de perdido');
+      if (!mounted) return;
+      setState(() {
+        _fase = _Fase.pronta;
+        _erro = const MensagemDeErro(
+          texto: MensagensDeErro.servidorFora,
+          acao: MensagensDeErro.tentarDeNovo,
+        );
+      });
     }
   }
 

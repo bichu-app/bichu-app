@@ -199,3 +199,59 @@ services:
     # Nada por padrao: este servico existe para `docker compose run --rm testes`.
     command: ["node", "-e", "console.error('use `npm run test:integration`'); process.exit(1)"]
     restart: "no"
+
+  api:
+    # ===========================================================================
+    # A API SOBE DE VERDADE, E ESTE SERVICO EXISTE SO PARA PROVAR ISSO
+    # ===========================================================================
+    # A suite unitaria e a de integracao nao provam que o processo SOBE. Elas
+    # registram rotas numa instancia montada a mao, e a sequencia de subida de
+    # `src/bin/api.ts` -- que e onde moram as conferencias que derrubam a
+    # aplicacao quando codigo e contrato divergem -- nunca roda. Em 22/09 foi
+    # exatamente assim: `vigiarIdempotenciaDasRotas` recusava a subida, as duas
+    # suites estavam verdes, e o defeito so apareceria em `docker compose up`.
+    #
+    # Mesma IMAGEM do servico `testes` (alvo `dev`, que carrega `dist/`), entao
+    # este servico nao acrescenta build nenhum: o que ele acrescenta e a subida.
+    #
+    # SEM VOLUME, ao contrario de `testes`. Aqui o que se prova e a imagem, e
+    # montar a arvore por cima dela trocaria o artefato pelo diretorio de quem
+    # roda -- que e precisamente a diferenca entre "sobe" e "sobe aqui".
+    #
+    # SEM PORTA PUBLICADA, pelo mesmo motivo do cabecalho deste arquivo: a sonda
+    # e feita de DENTRO da rede, por `docker compose exec`. Publicar uma porta
+    # aqui poria esta pilha em disputa com a principal, que e o que este arquivo
+    # inteiro existe para evitar.
+    image: "bichu-app:${TAG_DA_PILHA:?sem TAG_DA_PILHA a tag seria fixa para todo worktree, e dois worktrees subiriam a imagem um do outro. Rode `make verificar-subida-da-api`, que a injeta.}"
+    build:
+      context: ../..
+      target: dev
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+    mem_limit: 320m
+    env_file: [../../.env.integracao]
+    environment:
+      NODE_ENV: development
+      PORT: "3000"
+      # Dentro do conteiner, ouvir em todas as interfaces. O padrao do codigo e
+      # 127.0.0.1, correto para processo no laptop e errado aqui: a sonda entra
+      # por `exec` no proprio conteiner, mas um `depends_on` de outro servico
+      # nao alcancaria.
+      BIND_HOST: "0.0.0.0"
+    command: ["node", "dist/bin/api.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+      migracao:
+        condition: service_completed_successfully
+    healthcheck:
+      # A MESMA sonda do `compose.yaml` da raiz: `/v1/health` sob o prefixo de
+      # versao, e ela toca o banco. `--wait` reprova quando ela nao fica verde,
+      # e reprova tambem quando o processo MORRE -- que e o caso que este
+      # servico existe para pegar.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+    restart: "no"

@@ -126,8 +126,7 @@ class ApiClient {
 
     late final http.Response resposta;
     try {
-      final fluxo = await _cliente.send(requisicao).timeout(tempoLimite);
-      resposta = await http.Response.fromStream(fluxo);
+      resposta = await _enviarELerOCorpo(requisicao);
     } on TimeoutException {
       throw FalhaDeTempo(tempoLimite);
     } on SocketException catch (e) {
@@ -198,8 +197,7 @@ class ApiClient {
 
     late final http.Response resposta;
     try {
-      final fluxo = await _cliente.send(requisicao).timeout(tempoLimite);
-      resposta = await http.Response.fromStream(fluxo);
+      resposta = await _enviarELerOCorpo(requisicao);
     } on TimeoutException {
       throw FalhaDeTempo(tempoLimite);
     } on SocketException catch (e) {
@@ -211,6 +209,40 @@ class ApiClient {
     }
 
     return _lerResposta(resposta);
+  }
+
+  /// Manda a requisicao e le o corpo INTEIRO, sob **um** prazo so.
+  ///
+  /// O prazo cobre as duas metades de proposito, e essa e a correcao: antes
+  /// ele vivia em `_cliente.send(...).timeout(tempoLimite)` e cobria apenas
+  /// ate os CABECALHOS chegarem. `http.Response.fromStream` ficava de fora, e
+  /// resposta que abre e nao fecha -- portal cativo, proxy que segura o corpo,
+  /// conexao que morre com os cabecalhos ja entregues -- pendurava a chamada
+  /// **para sempre**, sem `FalhaDeTempo` e sem mensagem. A tela que esperava
+  /// por ela ficava girando sem saida, que e o estado que este app nao pode
+  /// ter. Medido: com `tempoLimite` de 2 s, a chamada seguia viva depois de
+  /// 6 s. A isca esta em `test/api/prazo_cobre_o_corpo_test.dart`.
+  ///
+  /// [tempoLimite] passa a ser o orcamento de **uma resposta inteira**, e nao
+  /// o de um aperto de mao: e o que a tela promete a quem toca no botao.
+  ///
+  /// **A chamada comeca AGORA, e nao no proximo giro do laco de eventos.** O
+  /// fecho e invocado na hora (`(){...}()`) em vez de embrulhado num
+  /// `Future(...)`, e a diferenca nao e de estilo: `Future(...)` agenda o
+  /// corpo como TAREFA do laco de eventos, enquanto o prazo comeca a contar
+  /// imediatamente. Em teste de widget, onde o relogio e falso e so anda
+  /// quando alguem bombeia, isso separa o inicio do prazo do inicio da
+  /// requisicao e deixa um temporizador de 20 s pendurado que o
+  /// `pumpAndSettle` precisa queimar -- quatro casos de logout passaram de
+  /// 2 s para minutos por causa disto. O fecho invocado na hora roda ate o
+  /// primeiro `await` de forma sincrona, que e exatamente o que o codigo
+  /// anterior fazia.
+  Future<http.Response> _enviarELerOCorpo(http.BaseRequest requisicao) {
+    return () async {
+      final fluxo = await _cliente.send(requisicao);
+      return http.Response.fromStream(fluxo);
+    }()
+        .timeout(tempoLimite);
   }
 
   Map<String, dynamic> _lerResposta(http.Response resposta) {

@@ -434,15 +434,30 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // que esta em LISTAS_FECHADAS.
   // ------------------------------------------------------------------
   //
-  // Os tres campos de preco andam juntos ou nenhum existe. E este CHECK que
-  // faz "preco sem data" ser inexprimivel, e nao uma regra que alguem precisa
-  // lembrar: um preco vale exatamente o que a data dele vale.
-  'public.store_items.store_items_preco_anda_completo':
-    'CHECK ((((price_amount IS NULL) AND (price_currency IS NULL) AND (price_checked_at IS NULL)) OR ((price_amount IS NOT NULL) AND (price_currency IS NOT NULL) AND (price_checked_at IS NOT NULL))))',
-  // Centavos, inteiro e positivo. Preco zero nao e "de graca": e campo em
-  // branco que alguem gravou como numero.
-  'public.store_items.store_items_preco_e_positivo':
-    'CHECK (((price_amount IS NULL) OR (price_amount > 0)))',
+  // CINCO CHECKS DA VITRINE **NAO** ESTAO AQUI, E A AUSENCIA E DELIBERADA.
+  //
+  // `store_items_preco_anda_completo`, `store_items_preco_e_positivo`,
+  // `store_items_resumo_tem_tamanho`, `store_items_titulo_tem_tamanho` e
+  // `store_partners_nome_tem_tamanho` foram declarados aqui e **reprovaram**:
+  // nenhum deles menciona literal de texto, entao `MENCIONA_LITERAL` nao casa,
+  // o classificador nunca os poe em `naoSimples`, e eles ficavam como entrada
+  // fantasma -- declarada aqui e inexistente para o portao.
+  //
+  // O estrago nao era so a reprovacao. `cada CHECK nao-lista tem exatamente a
+  // definicao declarada` faz `naoSimples.get(chave)` e, achando `undefined`,
+  // segue adiante com `continue`. A entrada PARECIA fixar a definicao e nao
+  // fixava nada: o portao cobrava a coisa errada, em silencio, que e
+  // exatamente a classe que este arquivo existe para fechar.
+  //
+  // Os dois registros deste arquivo cobrem CHECK com literal de texto: o
+  // primeiro a lista fechada simples, o segundo todo o resto que mencione
+  // literal. Faixa numerica e coerencia entre colunas nao sao dominio de
+  // valores e nao pertencem a nenhum dos dois. Quem responde por elas e a
+  // propria migracao, e o caso de banco que tenta violar cada uma.
+  //
+  // **Nao reponha estas cinco aqui.** Repor devolve a reprovacao e, pior,
+  // devolve o silencio do `continue`.
+  //
   // `BRL` no MVP. Nao e lista fechada de verdade -- e um valor unico com a
   // forma de uma --, e por isso mora aqui: declara-lo como conjunto faria o
   // registro prometer uma lista que nao existe.
@@ -455,14 +470,6 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
   'public.store_partners.store_partners_slug_formato':
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
-  // O teto do resumo e o que faz dele UMA linha. Um campo sem teto vira
-  // paragrafo no primeiro cadastro, e o cartao da vitrine deixa de caber.
-  'public.store_items.store_items_resumo_tem_tamanho':
-    'CHECK (((char_length(btrim(summary)) >= 2) AND (char_length(btrim(summary)) <= 180)))',
-  'public.store_items.store_items_titulo_tem_tamanho':
-    'CHECK (((char_length(btrim(title)) >= 2) AND (char_length(btrim(title)) <= 120)))',
-  'public.store_partners.store_partners_nome_tem_tamanho':
-    'CHECK (((char_length(btrim(name)) >= 2) AND (char_length(btrim(name)) <= 80)))',
   // https e nao http: o destino e uma pagina de comercio, e um link em claro
   // numa vitrine nossa e uma recomendacao nossa de digitar dado em canal
   // aberto.

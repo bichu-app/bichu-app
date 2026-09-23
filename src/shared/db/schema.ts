@@ -844,13 +844,16 @@ export interface StoreCatalogVersionsTable {
 /**
  * O parceiro da vitrine.
  *
- * **Sem `id`, e a ausencia e o desenho.** `slug` e a chave primaria da tabela.
- * O ADR-0010 item 6 proibe UUID interno em saida publica, e esta tabela so
- * existe para sair em saida publica -- um `id uuid` aqui seria uma coluna que
- * nunca pode ser projetada, esperando alguem projeta-la por engano. Foi o que
- * obrigou a `20260922000008` a acrescentar `slug` a `professionals` depois.
+ * **Identidade interna separada da publica** (ADR-0024), que e o desenho de
+ * `pets` e de `professionals`: `id` e a chave primaria e nunca sai em resposta;
+ * `slug` e o endereco publico e e a unica chave do parceiro que sai. O ADR-0010
+ * item 6 proibe UUID na SAIDA publica, nao no esquema, e quem impede o engano e
+ * o portao de `src/tools/portao-contrato-publico.ts`.
  */
 export interface StorePartnersTable {
+  /** Identidade interna. Nunca projetada em resposta. */
+  id: string;
+  /** O endereco publico do parceiro. Unico. */
   slug: string;
   name: string;
   /** Apenas o host, sem esquema nem caminho nem consulta. */
@@ -859,10 +862,14 @@ export interface StorePartnersTable {
   sort_order: Generated<number>;
 }
 
-/** O item da vitrine. Sem `id`, pela mesma razao de `StorePartnersTable`. */
+/** O item da vitrine. Mesmo desenho de `StorePartnersTable`. */
 export interface StoreItemsTable {
+  /** Identidade interna. Nunca projetada em resposta. */
+  id: string;
+  /** O endereco publico do item. Unico. */
   slug: string;
-  partner_slug: string;
+  /** Aponta para `store_partners.id`, nunca para o `slug` dele. */
+  partner_id: string;
   title: string;
   summary: string;
   category: CategoriaDaVitrine;

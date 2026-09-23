@@ -99,6 +99,15 @@ export const SERVICOS_AUSENTES_NO_HOSPEDADO: ReadonlyMap<string, string> = new M
       'adaptador do Postmark ainda não existe (ADR-0009). Ele não prova entregabilidade em ' +
       'nenhum dos dois destinos: isso é reputação de domínio, SPF, DKIM e DMARC',
   ],
+  [
+    'ferramentas',
+    'serviço de ferramenta, e não de runtime: mesma imagem da `api` e do `worker`, teto ' +
+      'próprio de 1 GB e nenhum comando útil por padrão. Ele existe para `docker compose run ' +
+      '--rm ferramentas <comando>` compilar fora de um serviço com teto de runtime — a `api` ' +
+      'tem 320 MB, dimensionados para rodar `node dist/bin/api.js`, e o `tsc` estoura isso. ' +
+      'Não sobe em destino nenhum, hospedado ou local: se subisse, entraria na soma de 1792 MB ' +
+      'que é o orçamento da e2-small',
+  ],
 ]);
 
 // ---------------------------------------------------------------------------

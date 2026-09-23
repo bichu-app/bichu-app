@@ -113,6 +113,15 @@ class _TelaDetalheDoPetState extends State<TelaDetalheDoPet> {
           _fase = _Fase.falha;
         }
       });
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E FalhaDeChamada. Sem este ramo a tela ficava em
+      // `_Fase.carregando` para sempre, sem pet e sem saida.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao carregar o detalhe do pet');
+      if (!mounted) return;
+      setState(() {
+        _textoDaFalha = MensagensDeErro.servidorFora;
+        _fase = _Fase.falha;
+      });
     }
   }
 

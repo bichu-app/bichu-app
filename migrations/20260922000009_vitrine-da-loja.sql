@@ -92,18 +92,37 @@ COMMENT ON TABLE store_catalog_versions IS
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE store_partners (
-  -- `slug` e a CHAVE PRIMARIA, e nao um UUID com slug ao lado.
+  -- IDENTIDADE INTERNA, SEPARADA DA PUBLICA (ADR-0024, 23/09).
   --
-  -- O ADR-0010 item 6 proibe UUID interno em saida publica, e esta tabela so
-  -- existe para sair em saida publica. Um `id uuid` aqui seria uma coluna que
-  -- nunca pode ser projetada, esperando alguem projeta-la por engano -- foi
-  -- exatamente o que obrigou a `20260922000008` a acrescentar `slug` a
-  -- `professionals` depois. Aqui o problema nao chega a existir.
+  -- A primeira versao desta migracao fez `slug` ser a chave primaria, com o
+  -- argumento de que um `id uuid` seria "uma coluna que nunca pode ser
+  -- projetada, esperando alguem projeta-la por engano". O argumento e bom e a
+  -- conclusao nao segue dele, por duas razoes medidas:
   --
-  -- Formato COPIADO de `pets.slug` (20260917000006) e de `professionals.slug`
-  -- (20260922000008). Tres formatos diferentes de endereco publico no mesmo
-  -- produto seriam tres regras para alguem decorar.
-  slug        text     PRIMARY KEY
+  -- 1. O ADR-0010 item 6 proibe UUID na SAIDA PUBLICA, nao no esquema. `pets`
+  --    e `professionals` -- as outras duas tabelas do produto com endereco
+  --    publico -- tem `id uuid` como chave primaria e o `slug` ao lado, unico.
+  --    Esta era a unica tabela fora desse desenho.
+  -- 2. O engano que o argumento teme ja tem portao proprio:
+  --    `src/tools/portao-contrato-publico.ts` reprova qualquer campo
+  --    `format: uuid` em operacao alcancavel sem conta (SEC-001), e tem isca
+  --    que prova que ele continua enxergando. Medo coberto por mecanismo nao
+  --    justifica torcer o esquema.
+  --
+  -- O que a chave primaria em `slug` custava: `store_items` precisava apontar
+  -- para ela, e chave estrangeira sobre `slug` e o que o criterio 2 da
+  -- BICHUS-19 proibe. Era a UNICA chave estrangeira sobre `slug` no esquema
+  -- inteiro.
+  id          uuid     PRIMARY KEY,
+
+  -- O endereco publico. Formato COPIADO de `pets.slug` (20260917000006) e de
+  -- `professionals.slug` (20260922000008). Tres formatos diferentes de
+  -- endereco publico no mesmo produto seriam tres regras para alguem decorar.
+  --
+  -- `NOT NULL` aqui e nao anulavel como em `professionals`: la a entrada nasce
+  -- sem endereco e ganha um ao ser publicada; aqui o parceiro so existe depois
+  -- de curado, e parceiro sem endereco publico nao teria como aparecer.
+  slug        text     NOT NULL
               CONSTRAINT store_partners_slug_formato
               CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'),
 
@@ -126,8 +145,14 @@ CREATE TABLE store_partners (
   sort_order  smallint NOT NULL DEFAULT 0
 );
 
+-- Unicidade global, com o nome que `pets_slug_unico` e `professionals_slug_unico`
+-- ja usam. Sem `WHERE`, porque aqui `slug` e `NOT NULL`.
+CREATE UNIQUE INDEX store_partners_slug_unico ON store_partners (slug);
+
+COMMENT ON COLUMN store_partners.id IS
+  'A identidade interna do parceiro. NUNCA sai em resposta: o ADR-0010 item 6 proibe UUID em saida publica, e o portao de contrato publico reprova quem tentar. Existe para que a chave estrangeira de `store_items` aponte para um valor que nao e endereco publico.';
 COMMENT ON COLUMN store_partners.slug IS
-  'O endereco publico do parceiro, e a chave primaria. Nao ha UUID nesta tabela: ela so existe para sair em resposta publica, e o ADR-0010 item 6 proibe UUID interno la.';
+  'O endereco publico do parceiro. Unico, e e a unica chave do parceiro que sai em resposta. Mesmo formato de `pets.slug` e de `professionals.slug`.';
 COMMENT ON COLUMN store_partners.host IS
   'Apenas o host do parceiro, sem esquema nem caminho nem consulta. A URL de saida de um item precisa terminar neste host, e a conferencia mora na aplicacao.';
 
@@ -136,12 +161,26 @@ COMMENT ON COLUMN store_partners.host IS
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE store_items (
-  -- Mesma decisao de `store_partners.slug`, pelo mesmo motivo.
-  slug           text     PRIMARY KEY
+  -- Mesma decisao de `store_partners.id`, e pelo mesmo motivo.
+  --
+  -- Hoje nada aponta para `store_items`, entao uma chave primaria em `slug`
+  -- aqui nao faria o portao da BICHUS-19 reprovar. Ela passaria por SORTE, e a
+  -- sorte acaba no primeiro `/v1/admin/...` que o ADR-0023 ja preve: uma linha
+  -- de auditoria de catalogo, um registro de saida, um favorito. Deixar duas
+  -- convencoes dentro da MESMA migracao e o que o cabecalho dela chama de
+  -- "uma segunda convencao para o mesmo problema", que e a convencao que
+  -- diverge.
+  id             uuid     PRIMARY KEY,
+
+  slug           text     NOT NULL
                  CONSTRAINT store_items_slug_formato
                  CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'),
 
-  partner_slug   text     NOT NULL REFERENCES store_partners (slug),
+  -- Aponta para a identidade INTERNA do parceiro, nunca para o endereco
+  -- publico dele. E o que separa "quem e o parceiro" de "como o parceiro e
+  -- chamado la fora": trocar o endereco publico de um parceiro passa a ser um
+  -- UPDATE de uma coluna, e nao uma cascata por doze itens.
+  partner_id     uuid     NOT NULL REFERENCES store_partners (id),
 
   title          text     NOT NULL
                  CONSTRAINT store_items_titulo_tem_tamanho
@@ -209,6 +248,16 @@ CREATE TABLE store_items (
   sort_order     smallint NOT NULL DEFAULT 0
 );
 
+-- O endereco publico do item e unico, pelo mesmo motivo do parceiro. Sem
+-- `WHERE`, porque `slug` e `NOT NULL`.
+CREATE UNIQUE INDEX store_items_slug_unico ON store_items (slug);
+
+COMMENT ON COLUMN store_items.id IS
+  'A identidade interna do item. NUNCA sai em resposta, pela mesma razao de `store_partners.id`.';
+COMMENT ON COLUMN store_items.slug IS
+  'O endereco publico do item. Unico, e e a unica chave do item que sai em resposta.';
+COMMENT ON COLUMN store_items.partner_id IS
+  'Aponta para `store_partners.id`, a identidade interna. Nunca para o `slug`: chave estrangeira sobre endereco publico e o que o criterio 2 da BICHUS-19 proibe (ADR-0024).';
 COMMENT ON COLUMN store_items.price_amount IS
   'Preco de referencia em CENTAVOS, inteiro. Nunca ponto flutuante: binario flutuante para dinheiro erra na soma e o erro aparece meses depois. Opcional -- item sem preco e estado normal.';
 COMMENT ON COLUMN store_items.price_checked_at IS
@@ -252,9 +301,11 @@ CREATE INDEX store_items_por_categoria
 
 DROP INDEX store_items_por_categoria;
 DROP INDEX store_items_vitrine;
+DROP INDEX store_items_slug_unico;
 DROP TRIGGER store_items_data_de_consulta_nao_e_futura ON store_items;
 DROP FUNCTION store_items_recusa_data_futura();
 DROP TABLE store_items;
+DROP INDEX store_partners_slug_unico;
 DROP TABLE store_partners;
 DROP INDEX store_catalog_versions_uma_corrente;
 DROP TABLE store_catalog_versions;

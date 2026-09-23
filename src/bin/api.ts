@@ -633,6 +633,8 @@ export async function main(): Promise<void> {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       contrato,
+      idempotencia: criarIdempotencia(db),
+      clock: systemClock,
     });
     registrarSaude(escopo, {
       version: config.version,

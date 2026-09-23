@@ -579,6 +579,49 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
+  // vitrine da Loja (BICHUS-185 / BICHUS-189, migração 20260922000009)
+  //
+  // A PERGUNTA QUE ESTA ENTRADA OBRIGA A RESPONDER: quando o parceiro sai, o
+  // que acontece com os itens dele?
+  //
+  // As três ações eram defensáveis e nenhuma é óbvia:
+  //
+  // - `CASCADE` apagaria a vitrine inteira do parceiro. É a mais destrutiva, e
+  //   é silenciosa: ninguém fica sabendo que doze itens sumiram junto.
+  // - `SET NULL` está fora antes de qualquer opinião, e é decidível pelo
+  //   catálogo: `partner_id` é `NOT NULL`. É o caso 1 da taxonomia do topo
+  //   deste arquivo, e seria contradição entre duas declarações do mesmo banco.
+  // - `NO ACTION` recusa apagar o parceiro enquanto houver item apontando para
+  //   ele. Não destrói nada e obriga quem apaga a olhar para a vitrine antes.
+  //
+  // `NO ACTION` é a escolha, e ela é a MESMA classe do dado de referência logo
+  // acima: `store_partners` é catálogo curado (a forma da migração é copiada de
+  // `dados-de-referencia.sql`), não identidade de pessoa. Apagar um parceiro
+  // com item apontando para ele precisa FALHAR, exatamente como apagar uma raça
+  // com pet apontando para ela.
+  //
+  // E o produto já diz que a exclusão não é o caminho: as duas tabelas têm
+  // `active boolean`, e o item retirado é marcado inativo em vez de apagado.
+  // Parceiro que sai do programa vira `active = false`, a vitrine dele some da
+  // leitura pelo índice parcial, e nenhuma linha é destruída. `NO ACTION` é a
+  // rede embaixo de uma operação que o desenho já diz que não deve acontecer.
+  //
+  // POR QUE ELA APONTA PARA `partner_id` E NÃO PARA `partner_slug` (ADR-0024):
+  // a primeira versão desta migração apontava para `store_partners.slug`, e era
+  // a ÚNICA chave estrangeira sobre `slug` do esquema inteiro. O critério 2 da
+  // BICHUS-19 proíbe isso, e por dois motivos, não um: slug é valor que o
+  // usuário troca, e é valor que sai público. `store_partners` ganhou
+  // identidade interna — o desenho que `pets` e `professionals` já tinham —, e
+  // a chave estrangeira passou a apontar para ela. O `slug` continua sendo o
+  // que sai na resposta, e nenhum campo do contrato mudou.
+  // -------------------------------------------------------------------------
+  'public.store_items.store_items_partner_id_fkey': {
+    colunas: ['partner_id'],
+    referencia: 'public.store_partners',
+    aoApagar: 'NO ACTION',
+  },
+
+  // -------------------------------------------------------------------------
   // upload_intents
   // -------------------------------------------------------------------------
   'public.upload_intents.upload_intents_found_report_id_fkey': {
@@ -795,9 +838,12 @@ const NULOS_CONTRA_CASCATA_DE_TERCEIRO: Readonly<Record<string, NuloContraCascat
       'sobrando em `pet_transfers`. Medido também o caso em que o pet é de OUTRA pessoa ' +
       '(convite aceito e ainda não consumado): conclui, e a linha sobrevive com ' +
       '`to_user_id = NULL`, que é o nulo que `cancellation_reason = recipient_gone` lê. ' +
-      'O que faz o primeiro concluir é ORDEM DE GATILHO: a cascata `pets -> pet_transfers` ' +
-      'apaga a linha atualizada antes de a revalidação de `pet_transfers_pet_id_fkey` rodar. ' +
-      'Não é garantia de desenho — ver o comentário acima.',
+      'O que fazia o primeiro concluir era ORDEM DE GATILHO, e isso foi RESOLVIDO pela ' +
+      'migração `20260922000008`: `pet_transfers_pet_id_fkey` é DEFERRABLE INITIALLY ' +
+      'DEFERRED, então a conferência de `pet_id` sai do meio da instrução e roda no fim da ' +
+      'transação, quando a linha já foi apagada pela cascata em QUALQUER ordem. Medido nas ' +
+      'duas ordens, com a inversão forçada: conclui nas duas. O caso ' +
+      '`ISCA — a chave de pet_id é DIFERÍVEL` é quem cobra isso.',
   },
   'public.conversations.conversations_finder_user_id_fkey + conversations_pet_id_fkey': {
     veredito: 'compativel',
@@ -1786,6 +1832,75 @@ void describe('a quinta forma de `pet_transfers`, medida e não lida', () => {
           'nulo que a consumação sabe que não há para quem entregar o pet.',
       );
     });
+  });
+
+  void it('ISCA — `pet_transfers_pet_id_fkey` é DIFERÍVEL, e é isso que tira a ordem de gatilho do caminho', async () => {
+    // ====================================================================
+    // POR QUE ESTE CASO LÊ O CATÁLOGO EM VEZ DE INVERTER A ORDEM
+    // ====================================================================
+    // A prova behavioral existe e foi feita: inverter a ordem de gatilho
+    // dentro da transação (recriar `pets_owner_user_id_fkey`, que a torna a
+    // mais nova das ações que `users` dispara) e apagar a conta. Medido na
+    // pilha efêmera, com a chave NÃO diferível:
+    //
+    //   ERROR: insert or update on table "pet_transfers" violates foreign key
+    //          constraint "pet_transfers_pet_id_fkey"
+    //   DETAIL: Key (pet_id)=(...) is not present in table "pets".
+    //
+    // e, com ela diferível, conclui. Matriz completa, cenário "apaga quem
+    // recebeu o pet e virou dono", com COMMIT de verdade:
+    //
+    //   ordem       CASCADE  CASCADE DEFER  RESTRICT  NO ACTION  NO ACTION DEFER
+    //   atual       conclui  conclui        23503     23503      23503 (no commit)
+    //   invertida   23503    conclui        23503     23503      23503 (no commit)
+    //
+    // Esse caso NÃO ficou no repositório, e a razão é medida e não estética:
+    // `ALTER TABLE pets` toma ACCESS EXCLUSIVE, os arquivos desta suíte rodam
+    // em paralelo e todos tocam `pets`. Na execução em que a isca foi
+    // exercitada, ela reprovou por `deadlock detected` em vez do 23503 que
+    // devia mostrar. Caso que reprova pelo motivo errado é caso que um dia
+    // reprova sem motivo nenhum, e teste intermitente custa mais do que a
+    // cobertura que ele traz.
+    //
+    // O que fica aqui é a condição que sustenta o resultado, lida do catálogo:
+    // a conferência de `pet_id` roda no FIM DA TRANSAÇÃO, quando a cascata já
+    // apagou a linha em qualquer ordem. Descer a migração `20260922000008`
+    // reprova este caso — exercitado: com a subida devolvendo a chave não
+    // diferível, foi o único caso das 350 a reprovar.
+    const { rows } = await cliente.query<{
+      condeferrable: boolean;
+      condeferred: boolean;
+      confdeltype: string;
+    }>(
+      `select condeferrable, condeferred, confdeltype
+         from pg_constraint
+        where conrelid = 'pet_transfers'::regclass
+          and conname = 'pet_transfers_pet_id_fkey'`,
+    );
+
+    const chave = rows[0];
+    assert.ok(chave, 'a chave `pet_transfers_pet_id_fkey` não existe mais');
+    assert.equal(
+      chave.confdeltype,
+      'c',
+      'a ação de `pet_transfers.pet_id` deixou de ser CASCADE. `RESTRICT` e `NO ACTION` foram ' +
+        'medidos e reprovam a exclusão de conta nas DUAS ordens de gatilho: os dois deixam a ' +
+        'linha de pé apontando para um pet apagado, que é exatamente o que a chave recusa.',
+    );
+    assert.equal(
+      chave.condeferrable,
+      true,
+      'a chave deixou de ser DEFERRABLE. Sem diferir, a conferência de `pet_id` volta para o ' +
+        'meio do `DELETE FROM users`, e a exclusão de conta volta a concluir por ORDEM DE ' +
+        'GATILHO — que muda sozinha na próxima migração que recriar uma chave de `pets`.',
+    );
+    assert.equal(
+      chave.condeferred,
+      true,
+      'a chave é diferível mas não está INITIALLY DEFERRED, e diferível sem estar diferida não ' +
+        'difere nada: seria preciso `SET CONSTRAINTS` em cada transação que apaga conta, que é ' +
+        'o passo a lembrar que este esquema existe para não ter.',
+    );
   });
 
   void it('apagar a conta de quem ENVIOU leva a transferência junto', async () => {

@@ -43,6 +43,7 @@ import { sql } from 'kysely';
 import { optionalEnv, requireEnv } from '../shared/config/env.js';
 import { createDb } from '../shared/db/pool.js';
 import type { Db } from '../shared/db/pool.js';
+import { criarIdGenerator } from '../shared/id/uuidv7.js';
 import { nivelDerivado } from '../modules/professionals/domain/nivel-de-verificacao.js';
 import {
   MASSA_DO_DIRETORIO,
@@ -215,10 +216,21 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
     values (${VERSAO_DA_VITRINE}, true)
   `.execute(db);
 
+  // A identidade interna e gerada AQUI, e de proposito nao esta na massa
+  // (ADR-0024). A massa descreve o catalogo -- o que a tela mostra --, e o `id`
+  // nao e catalogo: ele nunca sai em resposta. Gerar na hora tambem prova a
+  // decisao pelo caminho mais curto: se alguma consulta, algum teste ou algum
+  // campo de contrato dependesse do valor do `id`, esta semeadura quebraria a
+  // cada execucao. Ela nao quebra.
+  const ids = criarIdGenerator(() => Date.now());
+  const idDoParceiro = new Map<string, string>();
+
   for (const parceiro of PARCEIROS_DA_VITRINE) {
+    const id = ids.uuidv7();
+    idDoParceiro.set(parceiro.slug, id);
     await sql`
-      insert into store_partners (slug, name, host, active, sort_order)
-      values (${parceiro.slug}, ${parceiro.name}, ${parceiro.host},
+      insert into store_partners (id, slug, name, host, active, sort_order)
+      values (${id}::uuid, ${parceiro.slug}, ${parceiro.name}, ${parceiro.host},
               ${parceiro.active}, ${parceiro.sortOrder})
     `.execute(db);
   }
@@ -230,12 +242,22 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
     const data = item.precoConsultadoHaDias === null
       ? null
       : dataDaConsulta(item.precoConsultadoHaDias, hoje);
+    const partnerId = idDoParceiro.get(item.partnerSlug);
+    if (partnerId === undefined) {
+      // Massa que aponta para parceiro inexistente precisa PARAR a semeadura,
+      // e nao seguir sem o item: um `continue` aqui produziria uma vitrine
+      // menor do que a massa declara, e o teste que conta itens acusaria o
+      // sintoma sem nomear a causa.
+      throw new Error(
+        `o item '${item.slug}' aponta para o parceiro '${item.partnerSlug}', que nao esta em PARCEIROS_DA_VITRINE`,
+      );
+    }
     await sql`
       insert into store_items (
-        slug, partner_slug, title, summary, category, image_url, target_url,
+        id, slug, partner_id, title, summary, category, image_url, target_url,
         price_amount, price_currency, price_checked_at, active, sort_order
       ) values (
-        ${item.slug}, ${item.partnerSlug}, ${item.title}, ${item.summary},
+        ${ids.uuidv7()}::uuid, ${item.slug}, ${partnerId}::uuid, ${item.title}, ${item.summary},
         ${item.category}, ${item.imageUrl}, ${item.targetUrl},
         ${item.priceAmount}, ${item.priceAmount === null ? null : 'BRL'},
         ${data}::date, ${item.active}, ${item.sortOrder}
