@@ -1,0 +1,17 @@
+.pagina {
+  box-sizing: border-box;
+  min-height: 100dvh;
+  padding: var(--bichu-space-6) var(--bichu-layout-margem-celular);
+  max-width: var(--bichu-layout-coluna-max);
+  margin-inline: auto;
+}
+
+.titulo {
+  margin: 0;
+  color: var(--bichu-cor-text-primary);
+  font-family: var(--bichu-type-headline-font-family), var(--bichu-font-family-sistema);
+  font-weight: var(--bichu-type-headline-font-weight);
+  font-size: var(--bichu-type-headline-font-size);
+  line-height: var(--bichu-type-headline-line-height);
+  letter-spacing: var(--bichu-type-headline-letter-spacing);
+}
