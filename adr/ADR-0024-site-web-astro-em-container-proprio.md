@@ -1,9 +1,10 @@
 # ADR-0024: O site web é um container Astro próprio, renderizado no servidor onde o link é compartilhado, e a borda separa os hosts
 
-**Status:** aceito. Três perguntas ao cliente no fim; nenhuma bloqueia o início
+**Status:** aceito. As três perguntas foram respondidas pelo cliente em 23/09 (fim do documento)
 **Data:** 2026-09-23
 **Depende de:** ADR-0016 (o gateway `/v1`), ADR-0017 com a emenda 3 (o site é nosso)
 **Revisa:** ADR-0017 emenda 1, item 4 (um arquivo de associação por host, ver item 6 abaixo)
+**Revisado por:** ADR-0025 (produção e homologação separadas: os nomes `api` e `web` deste documento viram `api-prod` e `web-prod`, e `hml.bichu.app` ganha o site de homologação)
 
 ## Contexto
 
@@ -107,12 +108,12 @@ de otimização de imagem. Tabela em *Alternativas*.
 
 | Rota | Renderização | `og:` | Indexação | Cache-Control | Operações do contrato |
 |---|---|---|---|---|---|
-| `/` e institucional (`/sobre`, `/termos`, `/privacidade` etc.) | pré-renderizada | institucional | sim | `public, max-age=0, must-revalidate` | nenhuma |
+| `/` e institucional (`/sobre`, `/termos`, `/privacidade` etc.), `/robots.txt`, `/sitemap.xml` | pré-renderizada (o mapa do site, no servidor: item 11) | institucional | sim | `public, max-age=0, must-revalidate` | nenhuma |
 | `/t/{code}` | servidor | **genérica** (BICHUS-119) | `noindex` | `no-store` | `resolveTagCode`, `createFoundReportFromTag`; com JS, `createFinderPhotoUploadIntent` e `enrichFinderFoundReport` |
 | `/c/{finderToken}` | servidor | genérica | `noindex` | `no-store` | `getFinderConversation`, `postFinderMessage`, `blockFinderConversation`, `reportFinderConversation` |
 | `/cartaz/{shareToken}` | servidor | genérica (BICHUS-119) | `noindex` | `public, max-age=60` | `getLostCasePoster` |
-| `/p/{shareToken}` | servidor | **do caso**: nome, foto derivada pública, bairro | `noindex` (pergunta 1) | `public, max-age=60` | `getPublicLostCase` |
-| `/@{slug}` | servidor | **do pet**, só com o perfil público ligado | `noindex` (pergunta 1) | `public, max-age=60` | `getPublicPetBySlug` |
+| `/p/{shareToken}` | servidor | **do caso**: nome, foto derivada pública, bairro | **indexável**, item 11 | `public, max-age=60` | `getPublicLostCase` |
+| `/@{slug}` | servidor | **do pet**, só com o perfil público ligado | **indexável**, item 11 | `public, max-age=60` | `getPublicPetBySlug` |
 | `/verificar-email` | servidor | genérica | `noindex` | `no-store` | `POST` do formulário: `confirmEmailVerification` |
 | `/redefinir-senha` | servidor | genérica | `noindex` | `no-store` | `GET`: `checkPasswordResetToken`; `POST` do formulário: `confirmPasswordReset` |
 | `/transferencia/{cancelToken}` | servidor | genérica | `noindex` | `no-store` | `getTransferByCancelToken`, `cancelTransferByToken` |
@@ -207,9 +208,11 @@ e cabeçalhos exatos das operações usadas pelas ilhas e `Access-Control-Max-Ag
 
 ### 5. Roteamento de hosts
 
-**`hml.bichu.app` não muda em nada.** Mesmo bloco, mesmos caminhos, mesmo 404 no
-resto. O cliente testa no aparelho por ele, e o `API_BASE_URL` do app que está
-no aparelho dele aponta para lá.
+**`hml.bichu.app` não muda para o app.** Mesmos caminhos de API. O cliente testa
+no aparelho por ele, e o `API_BASE_URL` do app que está no aparelho dele aponta
+para lá. Com a separação do ADR-0025, ele passa a ser a API **de homologação** e
+ganha o site de homologação no que hoje é 404; a tabela abaixo é a de
+**produção**, e os destinos `api` e `web` são `api-prod` e `web-prod`.
 
 | Host | Caminho | Destino | Por quê |
 |---|---|---|---|
@@ -219,7 +222,7 @@ no aparelho dele aponta para lá.
 | `bichu.app` | todo o resto | `web:4321` | institucional e as rotas públicas |
 | `www.bichu.app` | tudo | **308** para `https://bichu.app{uri}` | nenhum link nosso usa `www`, então ele não precisa de arquivo de associação. DNS a criar |
 | `tag.bichu.app` | os dois arquivos de `/.well-known/` | borda, estático, mesmo arquivo | é o host impresso na plaquinha (emenda 1) |
-| `tag.bichu.app` | `/t/*`, `/_astro/*` | `web:4321` | a página da tag e os artefatos dela, na mesma origem |
+| `tag.bichu.app` | `/t/*`, `/_astro/*`, `/robots.txt` | `web:4321` | a página da tag e os artefatos dela, na mesma origem |
 | `tag.bichu.app` | `/v1/docs*`, `/v1/openapi.yaml` | 404 na borda | idem `bichu.app` |
 | `tag.bichu.app` | `/v1/*` | `api:3000` | as ilhas da página da tag |
 | `tag.bichu.app` | `/` | **308** para `https://bichu.app/` | quem digita o host impresso cai no site |
@@ -398,6 +401,77 @@ Requisitos para quem monta o pipeline; o desenho do job não é meu.
 8. A imagem construída e o container subindo saudável, no mesmo padrão do job
    que já sobe a API.
 
+### 11. Indexação (resposta do cliente em 23/09: `/p/` e `/@` aparecem no Google)
+
+**O que é indexável, e como:**
+
+| Rota | `robots` | No mapa do site | Observação |
+|---|---|---|---|
+| institucional | `index, follow` | sim | |
+| `/p/{shareToken}` de caso aberto | `index, follow, max-image-preview:standard` | sim, com `lastmod` | `<link rel="canonical">` para `https://bichu.app/p/{shareToken}` |
+| `/@{slug}` com perfil público ligado | `index, follow, max-image-preview:standard` | **não** | slug trocado: a API responde 301, e o site repassa 301 para o slug atual |
+| `/t/`, `/c/`, `/cartaz/`, `/verificar-email`, `/redefinir-senha`, `/transferencia/` | `noindex, nofollow` | não | token na URL ou página de uso único |
+| tudo em `hml.bichu.app` | `noindex` | não existe mapa | ADR-0025 |
+
+- **`noindex` por cabeçalho (`X-Robots-Tag`) e pela meta, nunca por `Disallow`
+  no `robots.txt`.** Com `Disallow` o buscador não busca a página e, por isso,
+  não vê o `noindex`; a URL pode entrar no índice só pelo link, sem conteúdo. O
+  `robots.txt` de produção libera tudo e aponta o mapa do site.
+- **O mapa do site** é rota do servidor (`/sitemap.xml`), montado a partir de
+  `listPublicLostPets`, que está no contrato e **não está implementada**; até
+  ela existir, o mapa traz só o institucional. **Perfis de pet ficam fora do
+  mapa de propósito**: listar todo perfil público num arquivo é entregar a
+  qualquer um a enumeração de todos os pets com nome e foto, e o contrato não
+  tem essa operação. O perfil entra no índice quando alguém o linka.
+- **Open Graph** continua como no item 2: do caso em `/p/`, do pet em `/@`.
+  Indexação não muda a prévia.
+
+**O dado exposto, revisto.** Uma página indexada deixa de ser "quem tem o link
+vê" e passa a ser **cópia de terceiro**: o buscador guarda o texto, a miniatura e
+a data por um tempo que não controlamos, e raspadores copiam o que o buscador
+achou. Com isso, campo por campo do que as duas páginas mostram (`PublicLostCase`
+e `PublicPetProfile` do contrato):
+
+| Campo | Indexado? | Decisão |
+|---|---|---|
+| nome do pet, espécie, raça, porte, cor, sinais | sim | é o que a página existe para mostrar |
+| bairro (`area_label`) e data arredondada | sim | nunca o ponto exato (já é regra do contrato) |
+| foto derivada pública | a página sim; **a imagem não entra na busca de imagens** | `img.bichu.app` passa a responder `X-Robots-Tag: noindex` em todo objeto. A prévia do WhatsApp continua funcionando, porque quem a monta não obedece a esse cabeçalho. Sem isso, a foto do pet vive no Google Imagens desligada da página, e some só quando o robô de imagem voltar |
+| `description` e `care_notes` (texto livre do tutor, já com contato redigido) | sim, **fora do trecho de resultado** | marcados com `data-nosnippet`. Texto livre pode trazer o que a redação não pega (nome do tutor, "casa amarela da esquina", remédio que o pet toma) |
+| telefone, endereço, nome do tutor | não existem na resposta | o site só mostra o que a API devolve (item 3) |
+
+E um requisito que não é deste ADR, e sim de produto e de desenho: **a tela do
+app que abre o caso e a que liga o perfil público precisam dizer que a página
+aparece no Google.** Consentimento para "link compartilhável" não é
+consentimento para "buscável por qualquer um".
+
+**O caso encerrado e a despublicação:**
+
+- **Caso encerrado:** a API responde 410 com `next_action`, e o site responde
+  **HTTP 410** com a página do desfecho, `X-Robots-Tag: noindex` e `og:`
+  genérica. O 410 é o sinal mais forte de remoção que existe, mas a remoção só
+  acontece **quando o robô volta**, e isso leva de dias a semanas num site
+  pequeno. Até lá, o resultado antigo continua na busca, com o texto de quando o
+  caso estava aberto. Para o robô voltar mais cedo, o caso encerrado **fica no
+  mapa do site por 30 dias** com `lastmod` na data do encerramento, e depois
+  sai.
+- **Caso reaberto** ganha `shareToken` novo (BICHUS-76); a URL antiga continua 410.
+- **Perfil desligado ou conta apagada:** a API responde 404, e o site repassa
+  404 com `noindex`. Mesmo efeito do 410, um pouco mais lento.
+- **Remoção urgente** (tutor pedindo que suma já): só a ferramenta de remoção do
+  Google Search Console, que bloqueia a URL por cerca de 6 meses. Ela exige a
+  propriedade `bichu.app` verificada por registro TXT no DNS, e o pedido é
+  manual, feito por quem opera a conta. Fica como procedimento de operação.
+- **O que não tem volta:** prévia de link já enviada no WhatsApp fica guardada na
+  conversa de quem recebeu, com a foto e o nome, e nenhum 410 alcança isso. O
+  cache de 60 s do site (item 2) é o único atraso nosso entre encerrar o caso e o
+  410 aparecer.
+
+**Na esteira** (item 10, asserção de cabeçalho): `/p/` de caso aberto sem
+`noindex`, `/p/` encerrado com 410 e `noindex`, `/@` desligado com 404 e
+`noindex`, todo objeto de `img.bichu.app` com `noindex`, e todo host de
+homologação com `noindex`.
+
 ## Alternativas consideradas
 
 | Opção | Prós | Contras | Por que não |
@@ -424,11 +498,10 @@ defeito em "abri o link e não apareceu nada" agora pode estar na borda, no site
 ou na API; o `x-correlation-id` atravessando os três é o que torna isso
 investigável.
 
-**Orçamento da máquina:** a soma dos tetos vai de 1792 para **1888 MB**, e a folga
-para o sistema cai de ~256 para ~160 MB na e2-small. Cabe, com swap configurado
-(ADR-0013). O gatilho do ADR-0013 continua sendo o que decide a troca para
-e2-medium: memória sustentada acima de 70%. Mudar de máquina é custo, e custo é
-do cliente (pergunta 2).
+**Orçamento da máquina:** só com este ADR, a soma dos tetos iria de 1792 para
+**1888 MB** e caberia na e2-small. Com a separação de ambientes do ADR-0025, ela
+vai a **2752 MB** e deixa de caber. A conta e a pergunta estão lá, seção 3, junto
+com o alerta de memória de 70% (onde mora e o que dispara).
 
 **Irreversível:** nada neste ADR. O host impresso continua sendo o único item
 irreversível do produto, e ele não muda aqui.
@@ -441,7 +514,8 @@ irreversível do produto, e ele não muda aqui.
    com um caso que envia `X-Forwarded-For` forjado de fora e precisa ser
    ignorado.
 2. Artefato de build servido pelo container, sem CDN (item 9).
-3. Homologação e produção são a mesma API e o mesmo banco (pergunta 3).
+3. ~~Homologação e produção são a mesma API e o mesmo banco.~~ Resolvida pela
+   resposta do cliente: separação antes de o site subir (ADR-0025).
 
 **O que muda em outros documentos, e não é deste PR:**
 
@@ -454,27 +528,14 @@ irreversível do produto, e ele não muda aqui.
   `hml.bichu.app` para homologação, que hoje aparece como `api.hml.{dominio}` e
   não resolve).
 
-## Perguntas ao cliente
+## Respostas do cliente, 23/09/2026
 
-**1. As páginas do caso perdido (`/p/`) e do perfil público do pet (`/@nome`)
-aparecem no Google?**
-(a) Não: `noindex` nas duas; o link compartilhado continua com a prévia do pet no
-WhatsApp. (b) Sim, as duas. (c) Só o perfil do pet.
-**Recomendo (a).** A página do caso mostra o bairro de uma casa onde um animal
-sumiu, e o caso é encerrado depois; buscador guarda cópia por meses, e tirar do
-índice depois é pedido, não comando. A prévia no WhatsApp, que é o que a
-BICHUS-76 pede, não depende de indexação.
-
-**2. O site ocupa ~96 MB da máquina de 2 GB. Troca de máquina agora?**
-(a) Não: fica na e2-small e troca quando a memória passar de 70% sustentado,
-como o ADR-0013 já prevê. (b) Sim: e2-medium antes de o site ir ao ar, pelo
-dobro do preço da máquina.
-**Recomendo (a).** Medido, o site usa ~47 MB sob carga, e o teto de 96 MB é folga.
-
-**3. `bichu.app` e `hml.bichu.app` usam o mesmo banco. Os pets e casos de teste
-que você cria no aparelho vão aparecer nas páginas públicas de `bichu.app`.**
-(a) Aceitar até o primeiro usuário real, com todas as páginas públicas em
-`noindex` até lá. (b) Separar produção de homologação antes de o site ir ao ar:
-segunda pilha, mais memória ou segunda máquina.
-**Recomendo (a).** O gatilho do ADR-0013 (primeiro cadastro que não seja de
-teste) já obriga a separação no momento em que ela passa a importar.
+1. **`/p/` e `/@slug` aparecem no Google** (opção b, contra a minha
+   recomendação). Registrado no item 11, com a revisão do dado exposto e o
+   comportamento do 410.
+2. **A máquina fica na e2-small**, com alerta de memória em 70% sustentado. A
+   resposta foi dada antes da 3, e a 3 muda a conta: com os dois ambientes, os
+   tetos somam 2752 MB. A pergunta volta ao cliente no ADR-0025, seção 3, onde
+   também está o alerta.
+3. **Produção e homologação separadas antes de o site subir** (opção b).
+   Desenho e plano de execução no ADR-0025.
