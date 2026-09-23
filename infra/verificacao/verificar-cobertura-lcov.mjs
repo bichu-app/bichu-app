@@ -168,6 +168,7 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/tags/ports/autenticador.ts', SO_TIPO],
   ['src/modules/tags/ports/rasterizador-de-qr.ts', SO_TIPO],
   ['src/modules/tags/ports/tag-repository.ts', SO_TIPO],
+  ['src/modules/transfers/ports/transfer-repository.ts', SO_TIPO],
   ['src/shared/db/schema.ts', SO_TIPO],
   ['src/shared/ports/id-generator.ts', SO_TIPO],
   ['src/shared/ports/job-queue.ts', SO_TIPO],
@@ -186,8 +187,9 @@ const AUSENCIAS_ACEITAS = new Map([
   // `kysely-tag-repository.ts` passaram a APARECER no relatorio de integracao
   // (`autorizacao-de-pets-e-fotos.test.ts` e `reimpressao-do-qr-e-do-dono.
   // test.ts` carregam os dois), e dispensa que sobra depois de o teste chegar e
-  // o comeco de uma lista que so cresce.
-  ['src/modules/lostfound/adapters/persistence/kysely-lost-case-repository.ts', SEM_SUITE_QUE_CARREGUE],
+  // o comeco de uma lista que so cresce. No fechamento do dia saiu tambem
+  // `kysely-lost-case-repository.ts`, pelo mesmo motivo: o proprio verificador
+  // acusou a excecao como obsoleta.
   ['src/modules/media/application/media-service.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/media/application/processar-foto.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/notifications/adapters/persistence/kysely-registro-de-entregas.ts', SEM_SUITE_QUE_CARREGUE],
