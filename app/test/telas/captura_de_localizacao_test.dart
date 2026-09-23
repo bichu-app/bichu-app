@@ -58,6 +58,7 @@ import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
 import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
+import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/dispositivo/vigia_de_aviso.dart';
 import 'package:bichu/escopo.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
@@ -153,6 +154,8 @@ Future<_Caixa> _montar(
       guarda: guarda,
       cacheDeMeusPets: CacheDeMeusPets(),
       cofreDoQr: CofreDaImagemDoQr(),
+      avisoDeCadastro:
+          AvisoDeCadastro(deposito: DepositoDoAvisoEmMemoria()),
       child: MaterialApp(
         theme: BichuTheme.claro,
         home: Scaffold(

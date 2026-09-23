@@ -36,6 +36,7 @@ import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
+import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/telas/perfil/meus_pets.dart';
 import 'package:bichu/telas/pet/rascunho_de_pet.dart';
 import 'package:flutter/material.dart';
@@ -491,6 +492,13 @@ DepositoEmMemoria depositoLogado({
   String id = 'u-1',
   String email = 'marina@exemplo.com.br',
   bool emailVerificado = true,
+  /// `Me.email_deliverable`: falso apos devolucao definitiva do provedor
+  /// (BICHUS-75, criterios 6 e 9).
+  bool emailEntregavel = true,
+  /// `Me.pending_email`: ha uma troca de endereco em curso (criterio 10).
+  String? emailPendente,
+  /// `Me.pending_profile_fields`.
+  List<PendenciaDeCadastro> pendencias = const <PendenciaDeCadastro>[],
   /// A regiao cadastrada pelo tutor (`Me.reference_area`, BICHUS-92). E ela
   /// que preenche o bairro em F3.1 sem geocodificar nada (criterio 2 da
   /// BICHUS-21); nula, o campo abre vazio e com o foco dentro dele.
@@ -506,7 +514,9 @@ DepositoEmMemoria depositoLogado({
           id: id,
           email: email,
           emailVerificado: emailVerificado,
-          pendencias: const <PendenciaDeCadastro>[],
+          emailEntregavel: emailEntregavel,
+          emailPendente: emailPendente,
+          pendencias: pendencias,
           podeAbrirCaso: true,
           regiaoDeReferencia: regiaoDeReferencia,
         ),
@@ -544,6 +554,17 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   /// isso nao se produz passando pelo fluxo duas vezes, porque cada
   /// `pumpWidget` e um app novo, com disco novo.
   DepositoDeOportunidadesEmMemoria? oportunidades,
+  /// O registro de dispensas do aviso persistente (BICHUS-75).
+  ///
+  /// Entra por aqui pelos mesmos motivos do registro de oportunidades, e por
+  /// um terceiro: os casos do criterio 4 precisam montar o app com uma
+  /// dispensa JA gravada -- o estado de quem tocou em `Agora nao` ontem --, e
+  /// isso nao se produz passando pelo fluxo, porque cada `pumpWidget` e um app
+  /// novo com disco novo.
+  DepositoDoAvisoEmMemoria? depositoDoAviso,
+  /// O relogio do ciclo de 7 dias. Sem ele, o criterio 4 so seria observavel
+  /// deixando a suite rodando por treze dias.
+  DateTime Function()? agora,
   /// A escala de fonte do sistema. `null` usa a do ambiente (1,0).
   ///
   /// Entra por aqui, e nao por um `pumpWidget` proprio no caso, porque o
@@ -583,6 +604,9 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         camera: camera ?? const CameraNaoEmbarcada(),
         depositoDeOportunidades:
             oportunidades ?? DepositoDeOportunidadesEmMemoria(),
+        depositoDoAvisoDeCadastro:
+            depositoDoAviso ?? DepositoDoAvisoEmMemoria(),
+        agora: agora,
         // O padrao e o build SEM leitor, pelo mesmo motivo do da camera: o
         // caso que nao fala de leitura nao deve ganhar uma camera de
         // surpresa. Quem precisa de uma passa [LeitorDeQrDeTeste].

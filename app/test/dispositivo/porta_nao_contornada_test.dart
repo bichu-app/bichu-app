@@ -321,7 +321,17 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `CameraEGaleria.bytesDaFoto`, atras da porta, e o portao de diretivas
 /// abaixo -- que nao depende desta constante -- continua cobrando que nenhuma
 /// tela importe `image_picker` nem `permission_handler`.
-const String _arvoreDasTelas = '9e055f9f0bb4f10ca17a7c5c3e8ee434ebd6a964';
+///
+///
+/// **BICHUS-75, 22/09**: superado de novo. O aviso persistente de cadastro
+/// acrescentou `app/lib/telas/avisos/aviso_de_cadastro_incompleto.dart` e
+/// alterou `app/lib/telas/abas.dart` e
+/// `app/lib/telas/perfil/meus_pets.dart`. Nenhuma das tres mudancas contorna
+/// a porta `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161 protege:
+/// a historia nao encosta em camera, e o diff nao cita `CameraEGaleria`,
+/// `ImagePicker` nem `Permission`. Anterior:
+/// `f14551245240f69cfb43cb67216e2682cdb7684c`.
+const String _arvoreDasTelas = 'ad6fde0e74c94b21c983c286d1557c07be291288';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
