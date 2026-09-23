@@ -347,7 +347,21 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `write-tree --prefix=app/lib/telas`) sobre a arvore ja commitada, e nao
 /// copiado de relato nenhum. Anterior:
 /// `ad6fde0e74c94b21c983c286d1557c07be291288`.
-const String _arvoreDasTelas = '1774532baa910c4cf8f4331631a81698f4c5b0ac';
+///
+/// **Destravado de novo pela BICHUS-234, 22/09**, e por UM arquivo:
+/// `app/lib/telas/gaveta_de_secoes.dart`. Duas linhas do inventario de 27.5
+/// da secao `Perto` estavam desatualizadas contra a tela que foi construida:
+/// `Profissionais e estabelecimentos` saiu de `planejada` para `existe`, e
+/// `Filtros` saiu de folha inferior `planejada` para `acaoNaTela` `existe`,
+/// porque o controle de filtro daquela tela vive no corpo e nao em folha.
+/// Nenhuma das duas encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 da BICHUS-161 protege: sao linhas de um mapa, sem camera, sem galeria e
+/// sem permissao, e o portao de diretivas abaixo continua cobrando isso por
+/// conta propria, sem depender desta constante.
+///
+/// Medido pelo mesmo indice temporario descrito acima, sobre a arvore de
+/// trabalho. Anterior: `1774532baa910c4cf8f4331631a81698f4c5b0ac`.
+const String _arvoreDasTelas = '5fe2df53162923f80bdd5c921a6a5b3bd0032ca9';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

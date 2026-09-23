@@ -245,7 +245,16 @@ abstract final class RegistroDeSubDestinos {
       SubDestino(
         rotulo: 'Profissionais e estabelecimentos',
         forma: FormaDoSubDestino.conteudoDaSecao,
-        estado: EstadoDoSubDestino.planejada,
+        // A UX 27.5.3 escreve `planejada`, e o documento fechou em 21/09. A
+        // secao `Perto` foi construida depois disso: `PaginaDoDiretorio` lista
+        // profissional e estabelecimento com nivel de verificacao, e a lista e
+        // o CORPO da secao. Vale o que o repositorio sustenta, como ja valeu
+        // para `Registrar achado avulso`.
+        //
+        // Continua sendo `conteudoDaSecao`, e a forma e que decide: a propria
+        // aba ja mostra o diretorio, entao ele nao vira item de gaveta nem
+        // depois de existir. Mudou o estado, nao a regra.
+        estado: EstadoDoSubDestino.existe,
       ),
       SubDestino(
         rotulo: 'ONGs',
@@ -268,8 +277,17 @@ abstract final class RegistroDeSubDestinos {
       ),
       SubDestino(
         rotulo: 'Filtros',
-        forma: FormaDoSubDestino.folhaInferior,
-        estado: EstadoDoSubDestino.planejada,
+        // **Nao e folha inferior, e nao e mais `planejada`.** A 27.5.3
+        // herdou de 25.6 a folha inferior para filtro; a tela que foi
+        // construida poe o controle de filtro NO CORPO, logo acima da lista,
+        // junto da ordenacao, que e o padrao de listagem deste app. Onde o
+        // documento e o codigo divergem, vale o codigo.
+        //
+        // `acaoNaTela` e a forma certa e ela mantem o item FORA da gaveta
+        // pelo mesmo motivo de antes: filtro nao tem endereco. A regra nao
+        // afrouxou; o que mudou foi onde o controle mora.
+        forma: FormaDoSubDestino.acaoNaTela,
+        estado: EstadoDoSubDestino.existe,
       ),
       SubDestino(
         rotulo: 'Detalhe do profissional ou da ONG',
