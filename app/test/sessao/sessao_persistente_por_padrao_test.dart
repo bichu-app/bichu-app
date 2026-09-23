@@ -134,7 +134,17 @@ void main() {
       // libera o cadastro; ela nao tem nada a ver com a sessao.
       await tester.tap(find.byType(Checkbox));
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
+      // A lista de requisitos da senha (BICHUS-29) deixou o formulario mais
+      // alto que a janela do teste, e `ListView` nao constroi o que esta fora
+      // da area visivel: sem a rolagem o botao nao existe na arvore.
+      final botao = find.widgetWithText(FilledButton, 'Criar conta');
+      await tester.dragUntilVisible(
+        botao,
+        find.byType(ListView),
+        const Offset(0, -100),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(botao);
       await tester.pumpAndSettle();
 
       expect(

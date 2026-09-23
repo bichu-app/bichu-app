@@ -114,6 +114,23 @@ void main() {
   }
 
   final Finder caixaDeAceite = find.byType(Checkbox);
+  final Finder botaoCriarConta = find.widgetWithText(FilledButton, 'Criar conta');
+
+  /// Rola ate o alvo, e **constroi** o que o `ListView` ainda nao construiu.
+  ///
+  /// Passou a ser necessario em 22/09/2026, quando a lista de requisitos da
+  /// senha (`RequisitosDaSenha`) entrou sob o campo: o formulario ficou mais
+  /// alto que a janela do teste, e `ListView` nao constroi o que esta fora da
+  /// area visivel. Sem isto os casos abaixo reprovam por "0 widgets", que e
+  /// sobre o tamanho da tela e nao sobre o que eles conferem.
+  Future<void> rolarAte(WidgetTester tester, Finder alvo) async {
+    await tester.dragUntilVisible(
+      alvo,
+      find.byType(ListView),
+      const Offset(0, -100),
+    );
+    await tester.pumpAndSettle();
+  }
 
   Future<void> preencherETocar(
     WidgetTester tester, {
@@ -125,10 +142,12 @@ void main() {
     );
     await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
     if (aceitar) {
+      await rolarAte(tester, caixaDeAceite);
       await tester.tap(caixaDeAceite);
       await tester.pumpAndSettle();
     }
-    await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
+    await rolarAte(tester, botaoCriarConta);
+    await tester.tap(botaoCriarConta);
     await tester.pumpAndSettle();
   }
 
@@ -195,6 +214,69 @@ void main() {
         findsOneWidget,
         reason: 'A recusa precisa ser visivel. Recusa muda e indistinguivel '
             'de um botao quebrado.',
+      );
+    });
+
+    testWidgets(
+        'SEM versao declarada: a recusa esta na tela ANTES de qualquer toque',
+        (tester) async {
+      // ACHADO DO APARELHO, 22/09/2026: o cliente relatou que nao consegue
+      // criar conta, com a API de homologacao no ar. O comando de build de
+      // homologacao do `README.md` da raiz passa so `API_BASE_URL`, e sem
+      // `TERMS_VERSION` a tela recusa -- corretamente.
+      //
+      // O que estava errado era a HORA: a frase so aparecia depois de
+      // preencher tudo e tocar no botao, e a faixa nascia abaixo da dobra.
+      // Recusa que chega depois do esforco inteiro e indistinguivel de botao
+      // quebrado, que foi exatamente como ela chegou ate nos.
+      await abrirCriarConta(tester);
+
+      expect(
+        find.textContaining('Não conseguimos registrar o aceite'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela abre sem dizer que este build nao consegue '
+            'criar conta. A pessoa preenche nome, e-mail e senha, aceita os '
+            'termos, toca no botao e so entao descobre que nao havia caminho '
+            'nenhum.',
+      );
+
+      // Depois do toque a frase continua UMA. A guarda de `_criarConta` nao
+      // reimprime: ela leva a pessoa ate a faixa que ja estava la.
+      await preencherETocar(tester, aceitar: true);
+      expect(
+        find.textContaining('Não conseguimos registrar o aceite'),
+        findsOneWidget,
+        reason: 'REPROVA: ou a frase sumiu, ou ela aparece duas vezes.',
+      );
+      expect(cadastros, isEmpty);
+
+      // E ela esta DENTRO da janela. Quem toca no botao esta no fim da lista;
+      // uma recusa que acontece no topo, fora da area visivel, e a definicao
+      // de "o botao nao faz nada" -- que foi como o cliente relatou.
+      final faixa =
+          tester.getRect(find.textContaining('Não conseguimos registrar'));
+      final altura =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      expect(
+        faixa.top,
+        greaterThanOrEqualTo(0),
+        reason: 'REPROVA: a recusa ficou acima da area visivel depois do '
+            'toque. A tela recusou num lugar que a pessoa nao esta olhando.',
+      );
+      expect(faixa.bottom, lessThanOrEqualTo(altura));
+    });
+
+    testWidgets(
+        'COM versao declarada, a faixa de recusa nao aparece', (tester) async {
+      // O outro lado: um build configurado nao pode abrir a tela com um aviso
+      // que nao vale para ele.
+      await abrirCriarConta(tester, versaoDosTermos: versao);
+      expect(
+        find.textContaining('Não conseguimos registrar o aceite'),
+        findsNothing,
+        reason: 'REPROVA: o build tem a versao dos termos e a tela avisa que '
+            'nao consegue registrar o aceite. Aviso que nao vale e ruido que '
+            'se aprende a ignorar, inclusive quando passar a valer.',
       );
     });
 
@@ -289,6 +371,7 @@ void main() {
 
     testWidgets('o alvo de toque tem pelo menos 48 dp', (tester) async {
       await abrirCriarConta(tester, versaoDosTermos: versao);
+      await rolarAte(tester, caixaDeAceite);
       final tamanho = tester.getSize(caixaDeAceite);
       expect(tamanho.width, greaterThanOrEqualTo(48));
       expect(tamanho.height, greaterThanOrEqualTo(48));
@@ -299,13 +382,13 @@ void main() {
       // Uma regra que se aceita ao apertar um botao precisa estar legivel
       // antes do aperto.
       await abrirCriarConta(tester, versaoDosTermos: versao);
+      // Rola ate o botao primeiro: as duas medidas saem da MESMA rolagem, e a
+      // caixa pode ter subido para fora da janela, o que so torna o `dy` dela
+      // menor ainda.
+      await rolarAte(tester, botaoCriarConta);
       expect(
         tester.getTopLeft(caixaDeAceite).dy,
-        lessThan(
-          tester
-              .getTopLeft(find.widgetWithText(FilledButton, 'Criar conta'))
-              .dy,
-        ),
+        lessThan(tester.getTopLeft(botaoCriarConta).dy),
       );
     });
 
@@ -333,12 +416,8 @@ void main() {
       await abrirCriarConta(tester, versaoDosTermos: versao);
 
       final altura = tester.view.physicalSize.height / dpr;
-      for (final alvo in <Finder>[
-        caixaDeAceite,
-        find.widgetWithText(FilledButton, 'Criar conta'),
-      ]) {
-        await tester.ensureVisible(alvo);
-        await tester.pumpAndSettle();
+      for (final alvo in <Finder>[caixaDeAceite, botaoCriarConta]) {
+        await rolarAte(tester, alvo);
         final caixa = tester.getRect(alvo);
         expect(
           caixa.top,

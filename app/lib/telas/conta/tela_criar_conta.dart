@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/problem.dart';
@@ -11,9 +12,11 @@ import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../validacao/politica_de_senha.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/requisitos_da_senha.dart';
 import '../../widgets/saida_da_tela.dart';
 
 /// A recusa de criar conta sem ter o que registrar como aceite.
@@ -65,6 +68,14 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   final TextEditingController _senha = TextEditingController();
   final FocusNode _focoDoEmail = FocusNode();
 
+  /// Existe por uma razao so: **levar a pessoa ate a recusa**.
+  ///
+  /// A faixa de "este build nao registra aceite" mora no topo do formulario, e
+  /// o botao mora no fim dele. Quem toca no botao esta no fim: sem esta
+  /// rolagem a tela recusa num lugar que a pessoa nao esta olhando, e o
+  /// resultado, do lado de ca, e um botao que nao faz nada.
+  final ScrollController _rolagem = ScrollController();
+
   bool _senhaVisivel = false;
   bool _aceitouOsTermos = false;
   bool _enviando = false;
@@ -79,6 +90,7 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     _email.dispose();
     _senha.dispose();
     _focoDoEmail.dispose();
+    _rolagem.dispose();
     super.dispose();
   }
 
@@ -97,8 +109,22 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
       _focoDoEmail.requestFocus();
       return;
     }
-    if (_senha.text.length < 10) {
-      setState(() => _erroDaSenha = MensagensDeErro.senhaCurta);
+    // A politica INTEIRA, e nao so o tamanho. Enquanto isto era
+    // `_senha.text.length < 10`, a tela deixava passar a senha igual ao
+    // e-mail e a senha de 300 caracteres, e a recusa vinha do servidor depois
+    // da ida a rede -- com o texto errado, porque o `_tratar` abaixo
+    // respondia "pelo menos 10 caracteres" a qualquer recusa.
+    //
+    // A lista de `RequisitosDaSenha` ja mostrou isto enquanto a pessoa
+    // digitava; aqui a mesma fonte decide, e e por isso que as duas nao tem
+    // como divergir.
+    final violacoes = PoliticaDeSenha.violacoes(
+      senha: _senha.text,
+      email: _email.text.trim(),
+      nome: _nome.text.trim(),
+    );
+    if (violacoes.isNotEmpty) {
+      setState(() => _erroDaSenha = violacoes.first.mensagemDeErro);
       return;
     }
 
@@ -119,7 +145,21 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     // pedir um gesto que nao vale nada.
     final String? versaoDosTermos = AppConfig.instancia.versaoDosTermos;
     if (versaoDosTermos == null) {
-      setState(() => _faixa = const MensagemDeErro(texto: _semVersaoDosTermos));
+      // A faixa JA ESTA na tela desde que ela abriu (ver `build`), entao aqui
+      // nao ha nada a acrescentar -- so a anunciar. Escrever `_faixa` neste
+      // ponto imprimiria a mesma frase duas vezes.
+      //
+      // O anuncio e urgente porque o gesto acabou de falhar: quem usa leitor
+      // de tela tocou no botao e precisa saber agora, e nao ao percorrer a
+      // tela de novo procurando o que houve.
+      anunciar(context, _semVersaoDosTermos, urgente: true);
+      if (_rolagem.hasClients) {
+        await _rolagem.animateTo(
+          0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
       return;
     }
     if (!_aceitouOsTermos) {
@@ -169,9 +209,28 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
         setState(() => _erroDoEmail = MensagensDeErro.emailJaCadastrado);
         return;
       }
+      // A RECUSA DE SENHA E DITA PELO `code`, E NAO POR UM TEXTO FIXO.
+      //
+      // Aqui estava `_erroDaSenha = MensagensDeErro.senhaCurta` para QUALQUER
+      // recusa de senha. A politica emite quatro codigos hoje
+      // (`too_short`, `too_long`, `blank`, `similar_to_identity`) e vai emitir
+      // mais quando a lista de vazamento sair da porta: dizer "pelo menos 10
+      // caracteres" a quem foi recusado por vazamento manda a pessoa
+      // acrescentar caracteres e ser recusada de novo.
+      //
+      // `code` desconhecido cai no texto generico, que e sempre melhor que uma
+      // frase errada dita com confianca -- e e o caso que a versao antiga
+      // deste app vai viver por semanas depois de o servidor ganhar uma regra.
       final campoDaSenha = falha.problem.campo('password');
-      if (campoDaSenha != null || falha.problem.status == 422) {
-        setState(() => _erroDaSenha = MensagensDeErro.senhaCurta);
+      if (campoDaSenha != null) {
+        final regra = PoliticaDeSenha.porCodigoDoServidor(campoDaSenha.codigo);
+        setState(
+          () => _erroDaSenha = regra?.mensagemDeErro ?? senhaRecusadaPeloServidor,
+        );
+        return;
+      }
+      if (falha.problem.status == 422) {
+        setState(() => _erroDaSenha = senhaRecusadaPeloServidor);
         return;
       }
     }
@@ -199,6 +258,28 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
 
   @override
   Widget build(BuildContext context) {
+    // O BUILD SEM `TERMS_VERSION` NAO PODE CRIAR CONTA, E DIZ ISSO NA ABERTURA.
+    //
+    // Achado do teste em aparelho de 22/09/2026: o cliente relatou que nao
+    // consegue criar conta, e a API de homologacao estava no ar. O comando de
+    // build de homologacao publicado no `README.md` da raiz passa **so**
+    // `--dart-define=API_BASE_URL`, e sem `TERMS_VERSION` a guarda de
+    // `_criarConta` recusa -- corretamente, porque o aceite nao teria o que
+    // registrar (ver o bloco de comentario la).
+    //
+    // O defeito nao e a recusa, e a HORA dela: a pessoa preenchia tres campos,
+    // marcava a caixa, tocava no botao e so entao a frase aparecia, numa
+    // faixa que a lista de requisitos empurrou para longe da dobra. Recusa que
+    // chega depois do esforco inteiro e indistinguivel de botao quebrado, que
+    // e literalmente como ela foi relatada.
+    //
+    // O requisito e dito ANTES do erro (UX secao 13), e este e o unico caso
+    // desta tela em que o requisito nao e da pessoa: nao ha nada que ela possa
+    // digitar para resolver, entao a frase precisa estar no topo, desde o
+    // primeiro segundo.
+    final bool semVersaoDosTermos =
+        AppConfig.instancia.versaoDosTermos == null;
+
     return Scaffold(
       appBar: const BarraDeConta(
         titulo: 'Criar conta',
@@ -206,8 +287,13 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
       ),
       body: SafeArea(
         child: ListView(
+          controller: _rolagem,
           padding: const EdgeInsets.all(BichuEspaco.e4),
           children: <Widget>[
+            if (semVersaoDosTermos) ...<Widget>[
+              const FaixaDeAviso(texto: _semVersaoDosTermos),
+              const SizedBox(height: BichuEspaco.e6),
+            ],
             BichuField(
               rotulo: 'Nome',
               controlador: _nome,
@@ -245,8 +331,12 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
               rotulo: 'Senha',
               controlador: _senha,
               erro: _erroDaSenha,
-              ajuda: 'Pelo menos 10 caracteres. Uma frase curta funciona '
-                  'melhor que uma senha complicada.',
+              // Sem `ajuda`: o requisito nao cabe mais numa frase estatica.
+              // Ele saiu daqui para `RequisitosDaSenha`, logo abaixo, que diz
+              // os QUATRO e responde a cada tecla. O texto que estava aqui
+              // dizia um so ("Pelo menos 10 caracteres. Uma frase curta
+              // funciona melhor que uma senha complicada.") e os outros tres
+              // so apareciam como erro do servidor, depois do envio.
               obscurecer: !_senhaVisivel,
               autofill: const <String>[AutofillHints.newPassword],
               correcaoAutomatica: false,
@@ -258,6 +348,15 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
                     setState(() => _senhaVisivel = !_senhaVisivel),
               ),
             ),
+            const SizedBox(height: BichuEspaco.e2),
+            // A LISTA AO VIVO, logo abaixo do campo que ela descreve.
+            //
+            // Ela escuta os tres controladores por conta propria, entao nao ha
+            // `onChanged` a encadear aqui e nao ha como esquecer de ligar um
+            // campo novo: a regra `similar_to_identity` compara a senha com o
+            // e-mail e com o nome, e corrigir o e-mail depois da senha muda o
+            // que a lista mostra.
+            RequisitosDaSenha(senha: _senha, email: _email, nome: _nome),
             if (_faixa != null) ...<Widget>[
               const SizedBox(height: BichuEspaco.e6),
               FaixaDeAviso(texto: _faixa!.texto),

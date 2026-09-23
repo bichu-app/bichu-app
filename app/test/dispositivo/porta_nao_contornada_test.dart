@@ -281,7 +281,22 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
-const String _arvoreDasTelas = 'f14551245240f69cfb43cb67216e2682cdb7684c';
+///
+/// **Destravado pela BICHUS-29** (validacao de senha ao vivo, 22/09/2026).
+/// Um arquivo muda: `conta/tela_criar_conta.dart`. Tres coisas nele:
+/// o texto de ajuda fixo do campo de senha saiu e no lugar entrou
+/// `RequisitosDaSenha`; a recusa de senha passou a ser decidida pela politica
+/// inteira e pelo `code` do servidor, em vez de um teste de tamanho e de um
+/// texto fixo; e a faixa de "este build nao registra aceite" passou a aparecer
+/// na abertura da tela, com rolagem ate ela no toque do botao.
+///
+/// Nenhuma das tres encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege: a tela continua sem ler camera, galeria ou localizacao, e quem
+/// cobra isso e o portao de diretivas abaixo, que nao depende desta constante.
+///
+/// Medido com o indice temporario, na arvore de trabalho:
+/// `4be08548b405759c524cf6336451b53d03b2d184`.
+const String _arvoreDasTelas = '4be08548b405759c524cf6336451b53d03b2d184';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
