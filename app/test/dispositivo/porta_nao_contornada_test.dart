@@ -348,7 +348,25 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `casca_com_abas.dart` entrou na mesma mudanca: `Perto` deixou de ser
 /// `EstadoDaSecao.planejada` e virou `existe`, porque a secao tem conteudo e
 /// porque `planejada` a esconderia da barra no build de entrega.
-const String _arvoreDasTelas = '4a29c9d07d3aaf5c4067be2885b3efbd8b4876e6';
+///
+/// **Destravado uma oitava vez pela vitrine da `Loja`** (a Loja do MVP, que a
+/// BICHUS-185 descreve, com a regra de listagem de 22/09/2026):
+/// `telas/loja/` e pasta nova, com `vitrine_da_loja.dart`, e `abas.dart`
+/// mudou porque `AbaLoja` deixou de ser casca honesta -- `GET /store/items`
+/// existe, e o `EstadoVazio` "Loja esta em construcao" passou a ser uma
+/// afirmacao falsa sobre uma secao que tem dado. `casca_com_abas.dart` entrou
+/// junto, pela mesma razao de `Perto`: `Loja` virou `existe`, e o reforco da
+/// pagina perdeu a promessa da plaquinha, que a secao C da BICHUS-185 tirou
+/// da Loja no MVP.
+///
+/// Nenhuma das tres encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege: a vitrine nao tira foto, nao abre galeria e nao pede permissao
+/// nenhuma. Quem responde por isso e o portao de diretivas abaixo, que nao
+/// depende desta constante.
+///
+/// **O valor anterior desta constante era `4a29c9d07d3aaf5c4067be2885b3efbd8b4876e6`**,
+/// medido na base `feat/tela-de-perto` (`98a91a2`).
+const String _arvoreDasTelas = '47d3281e75ece2ffd5e85586047c465868427d6f';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
