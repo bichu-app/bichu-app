@@ -49,6 +49,13 @@ Future<DadosDeReferencia?> _buscarReferencia(BuildContext context) async {
     return await Escopo.of(context).pets.dadosDeReferencia();
   } on FalhaDeChamada {
     return null;
+  } on Object catch (erro, pilha) {
+    // Falha que nao e de chamada tambem e lista que nao chegou, e quem chama
+    // ja sabe tratar nulo. Antes ela escapava daqui e deixava
+    // `_carregandoReferencia` ligado para sempre nas duas telas que usam este
+    // ajudante (F1.3 e F1.5).
+    registrarFalhaInesperada(erro, pilha, onde: 'ao buscar a lista de referencia');
+    return null;
   }
 }
 

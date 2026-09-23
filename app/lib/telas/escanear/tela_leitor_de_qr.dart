@@ -460,6 +460,24 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
       // A camera continua ligada: quem leu a plaquinha errada aponta para a
       // proxima sem tocar em nada. A contagem da oferta manual recomeca.
       if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E FalhaDeChamada. Sem este ramo `_resolvendo` ficava ligado
+      // para sempre com a camera parada: a pessoa esta na rua, com o animal
+      // no colo, olhando um circulo girar.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao resolver o codigo da tag');
+      if (!mounted) return;
+      setState(() {
+        _resolvendo = false;
+        _tentativa = 0;
+        _faixa = const MensagemDeErro(
+          texto: MensagensDeErro.servidorFora,
+          acao: MensagensDeErro.tentarDeNovo,
+        );
+        if (_estado == EstadoDoLeitor.semConexao) {
+          _estado = EstadoDoLeitor.digitando;
+        }
+      });
+      if (_estado == EstadoDoLeitor.procurando) _comecarAProcurar();
     }
   }
 

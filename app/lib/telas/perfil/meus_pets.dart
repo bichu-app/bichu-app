@@ -246,6 +246,23 @@ class _MeusPetsState extends State<MeusPets> {
           _fase = _Fase.falhaSemCache;
         }
       });
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E FalhaDeChamada -- `Pet.doJson` sobre um corpo 200 fora do
+      // contrato, por exemplo. Sem este ramo a lista ficava em
+      // `_Fase.carregando` para sempre.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao listar meus pets');
+      if (!mounted) return;
+      final cache = widget.cache.pets(idDoDono);
+      setState(() {
+        _textoDaFalha = MensagensDeErro.servidorFora;
+        if (cache != null && cache.isNotEmpty) {
+          _pets = cache;
+          _fase = _Fase.falhaComCache;
+        } else {
+          _pets = const <Pet>[];
+          _fase = _Fase.falhaSemCache;
+        }
+      });
     }
   }
 

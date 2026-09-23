@@ -126,8 +126,7 @@ class ApiClient {
 
     late final http.Response resposta;
     try {
-      final fluxo = await _cliente.send(requisicao).timeout(tempoLimite);
-      resposta = await http.Response.fromStream(fluxo);
+      resposta = await _enviarELerOCorpo(requisicao);
     } on TimeoutException {
       throw FalhaDeTempo(tempoLimite);
     } on SocketException catch (e) {
@@ -198,8 +197,7 @@ class ApiClient {
 
     late final http.Response resposta;
     try {
-      final fluxo = await _cliente.send(requisicao).timeout(tempoLimite);
-      resposta = await http.Response.fromStream(fluxo);
+      resposta = await _enviarELerOCorpo(requisicao);
     } on TimeoutException {
       throw FalhaDeTempo(tempoLimite);
     } on SocketException catch (e) {
@@ -211,6 +209,27 @@ class ApiClient {
     }
 
     return _lerResposta(resposta);
+  }
+
+  /// Manda a requisicao e le o corpo INTEIRO, sob **um** prazo so.
+  ///
+  /// O prazo cobre as duas metades de proposito, e essa e a correcao: antes
+  /// ele vivia em `_cliente.send(...).timeout(tempoLimite)` e cobria apenas
+  /// ate os CABECALHOS chegarem. `http.Response.fromStream` ficava de fora, e
+  /// resposta que abre e nao fecha -- portal cativo, proxy que segura o corpo,
+  /// conexao que morre com os cabecalhos ja entregues -- pendurava a chamada
+  /// **para sempre**, sem `FalhaDeTempo` e sem mensagem. A tela que esperava
+  /// por ela ficava girando sem saida, que e o estado que este app nao pode
+  /// ter. Medido: com `tempoLimite` de 2 s, a chamada seguia viva depois de
+  /// 6 s. A isca esta em `test/api/prazo_cobre_o_corpo_test.dart`.
+  ///
+  /// [tempoLimite] passa a ser o orcamento de **uma resposta inteira**, e nao
+  /// o de um aperto de mao: e o que a tela promete a quem toca no botao.
+  Future<http.Response> _enviarELerOCorpo(http.BaseRequest requisicao) {
+    return Future<http.Response>(() async {
+      final fluxo = await _cliente.send(requisicao);
+      return http.Response.fromStream(fluxo);
+    }).timeout(tempoLimite);
   }
 
   Map<String, dynamic> _lerResposta(http.Response resposta) {
