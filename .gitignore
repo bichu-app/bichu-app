@@ -92,6 +92,17 @@ app/ios/Pods/
 app/ios/.symlinks/
 *.iml
 
+# O livro dos casos que piscam e a copia do TAP que o alimenta.
+#
+# NAO SAO VERSIONADOS, E A ESCOLHA E DELIBERADA. Versionar o livro faria dele o
+# unico acumulado que sobrevive para sempre e que `git log` sabe ler, mas
+# exigiria que a esteira escrevesse no repositorio -- `contents: write` num
+# workflow e um commit por execucao numa branch protegida. Credencial de escrita
+# na esteira e ruido no historico: os dois recusados. A morada que acumula e o
+# cache do GitHub, com o preco dito em `.github/workflows/repeticao.yml`.
+.livro/
+placar/
+
 # Volumes e dados locais
 .data/
 tmp/

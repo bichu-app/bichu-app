@@ -253,6 +253,25 @@ jobs:
       # A terceira existe porque a segunda-feira 17/09 terminou com
       # `/.well-known/jwks.json` respondendo 404 pela borda enquanto o servico
       # o servia com 200 por dentro. Nada acusou: nao havia nada olhando.
+      # Portao de intermitencia, classe "assercao de tolerancia zero sobre
+      # quantidade sorteada". AQUI, no `rapidos`: ele le arquivo, nao precisa de
+      # npm nem de docker, e roda em milissegundos. Portao que so acusa vinte
+      # minutos adiante chega tarde.
+      #
+      # ELE E RASO, E O CABECALHO DELE DIZ ISSO EM VOZ ALTA. Ele pega a FORMA
+      # das duas assercoes que reprovavam em 22/09 (contador de coincidencia
+      # igual a zero; N sorteios que deram N distintos) e NAO pega assercao que
+      # mede outra propriedade que nao a que o nome promete -- o furo que custou
+      # o dia, e que e semantico. Ver `verificar-sorteio-sem-semente.mjs`.
+      #
+      # As iscas rodam DENTRO do comando, antes da varredura de verdade, e a
+      # mais forte delas e o proprio `tag-code.test.ts` como ele era antes do
+      # conserto: o portao precisa achar as duas assercoes que reprovavam e
+      # NAO achar os dois casos estatisticos legitimos, de margens 10^-53 e
+      # 8 sigma, que ja estavam no mesmo arquivo no mesmo dia.
+      - name: nenhuma assercao de tolerancia zero sobre sorteio, iscas primeiro
+        run: node infra/verificacao/verificar-sorteio-sem-semente.mjs
+
       - name: a borda concorda com o contrato
         run: python3 infra/verificacao/verificar_borda.py
 
@@ -338,8 +357,55 @@ jobs:
       - name: as iscas do executor da suite unitaria reprovam
         run: node infra/suite/executar-unitaria.mjs --autoteste
 
+      # `--placar placar` nao muda o que a suite faz: ela so deixa uma COPIA do
+      # relatorio TAP fora de `dist/`, para o passo seguinte conseguir ler
+      # QUAIS casos reprovaram.
       - name: suite unitaria
-        run: npm test
+        run: npm test -- --placar placar
+
+      # O LIVRO DOS CASOS QUE PISCAM, e ele existe por causa de uma resposta
+      # cultural e nao de um defeito de codigo: quando a suite reprova sem
+      # defeito atras, a resposta que funciona e "roda de novo", e ela nao custa
+      # nada porque a reprovacao EVAPORA -- o relatorio daquela execucao e
+      # substituido pelo da seguinte. No dia em que a suite reprovar COM defeito,
+      # alguem vai rodar de novo e seguir em frente.
+      #
+      # Os tres passos abaixo tiram o de graca. Eles nao impedem ninguem de
+      # rodar de novo; eles fazem o caso APARECER numa lista que sobrevive a
+      # execucao seguinte. Custo medido: menos de 2 s no runner.
+      #
+      # `restore-keys` casa por PREFIXO e devolve o cache mais recente. O preco
+      # desta morada esta dito em `.github/workflows/repeticao.yml`: cache
+      # expira em 7 dias sem uso e e por escopo de branch, entao o acumulado de
+      # verdade se forma nas execucoes da `development` e na repeticao agendada.
+      - name: restaura o livro dos casos que piscam (unitaria)
+        if: always()
+        uses: actions/cache/restore@v4
+        with:
+          path: .livro
+          key: livro-unitaria-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            livro-unitaria-
+
+      # `always()` e o ponto inteiro: o livro existe PARA a execucao que
+      # reprovou. Registrar so quando a suite passa seria manter uma lista de
+      # nada. E `registrar` REPROVA quando nao acha placar para ler -- execucao
+      # pulada em silencio estraga o denominador de todas as outras.
+      - name: registra esta execucao no livro, e mostra o acumulado
+        if: always()
+        run: |
+          node infra/suite/acumular-reprovados.mjs registrar \
+            --livro .livro/unitaria.jsonl --tap placar/unitaria.tap --suite unitaria \
+            --rotulo "ci ${{ github.run_id }}/${{ github.run_attempt }} ${{ github.ref_name }}"
+          node infra/suite/acumular-reprovados.mjs render \
+            --livro .livro/unitaria.jsonl --suite unitaria | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: guarda o livro (unitaria)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .livro
+          key: livro-unitaria-${{ github.run_id }}-${{ github.run_attempt }}
 
   contrato:
     name: spec OpenAPI e compatibilidade
@@ -987,9 +1053,42 @@ jobs:
       # dizendo que a cobertura foi pedida e nao veio.
       - name: suite de integracao (BICHUS-19, BICHUS-56, BICHUS-15 e BICHUS-178)
         run: |
-          install -d -m 0777 coverage
-          docker compose run --rm -v "$PWD/coverage:/app/coverage" api \
-            npm run test:integration:executar -- --lcov coverage/lcov-integracao.info
+          install -d -m 0777 coverage placar
+          docker compose run --rm -v "$PWD/coverage:/app/coverage" -v "$PWD/placar:/app/placar" api \
+            npm run test:integration:executar -- --lcov coverage/lcov-integracao.info --placar placar
+
+      # O LIVRO DOS CASOS QUE PISCAM. Ver o bloco de mesmo nome no job `codigo`:
+      # o motivo e o mesmo e a morada tambem. O `placar/` montado acima existe
+      # pelo mesmo motivo do `coverage/`: `docker compose run --rm` apaga o
+      # container no fim, `docker cp` depois nao existe, e `dist/` nao pode ser
+      # montado por cima sem cobrir o `dist/` compilado da imagem.
+      #
+      # Esta suite e a que mais importa aqui: foi ela que reprovava 1 vez em 8
+      # em 22/09, por impasse de cadeado, sem defeito nenhum atras.
+      - name: restaura o livro dos casos que piscam (integracao)
+        if: always()
+        uses: actions/cache/restore@v4
+        with:
+          path: .livro
+          key: livro-integracao-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            livro-integracao-
+
+      - name: registra esta execucao no livro, e mostra o acumulado
+        if: always()
+        run: |
+          node infra/suite/acumular-reprovados.mjs registrar \
+            --livro .livro/integracao.jsonl --tap placar/integracao.tap --suite integracao \
+            --rotulo "ci ${{ github.run_id }}/${{ github.run_attempt }} ${{ github.ref_name }}"
+          node infra/suite/acumular-reprovados.mjs render \
+            --livro .livro/integracao.jsonl --suite integracao | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: guarda o livro (integracao)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: .livro
+          key: livro-integracao-${{ github.run_id }}-${{ github.run_attempt }}
 
       # O job `sonar` roda noutro runner e nao ve este disco. O artefato e a
       # unica ponte, e ele NAO e condicional: se este passo nao rodar, o job
