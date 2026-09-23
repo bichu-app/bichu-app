@@ -720,9 +720,12 @@ const NULOS_CONTRA_CASCATA_DE_TERCEIRO: Readonly<Record<string, NuloContraCascat
       'sobrando em `pet_transfers`. Medido também o caso em que o pet é de OUTRA pessoa ' +
       '(convite aceito e ainda não consumado): conclui, e a linha sobrevive com ' +
       '`to_user_id = NULL`, que é o nulo que `cancellation_reason = recipient_gone` lê. ' +
-      'O que faz o primeiro concluir é ORDEM DE GATILHO: a cascata `pets -> pet_transfers` ' +
-      'apaga a linha atualizada antes de a revalidação de `pet_transfers_pet_id_fkey` rodar. ' +
-      'Não é garantia de desenho — ver o comentário acima.',
+      'O que fazia o primeiro concluir era ORDEM DE GATILHO, e isso foi RESOLVIDO pela ' +
+      'migração `20260922000008`: `pet_transfers_pet_id_fkey` é DEFERRABLE INITIALLY ' +
+      'DEFERRED, então a conferência de `pet_id` sai do meio da instrução e roda no fim da ' +
+      'transação, quando a linha já foi apagada pela cascata em QUALQUER ordem. Medido nas ' +
+      'duas ordens, com a inversão forçada: conclui nas duas. O caso ' +
+      '`ISCA — com a ordem de gatilho INVERTIDA` é quem cobra isso.',
   },
   'public.conversations.conversations_finder_user_id_fkey + conversations_pet_id_fkey': {
     veredito: 'compativel',
@@ -1710,6 +1713,63 @@ void describe('a quinta forma de `pet_transfers`, medida e não lida', () => {
         'o destinatário saiu e a transferência não ficou com `to_user_id` nulo. É por esse ' +
           'nulo que a consumação sabe que não há para quem entregar o pet.',
       );
+    });
+  });
+
+  void it('ISCA — com a ordem de gatilho INVERTIDA, apagar a conta de quem recebeu ainda CONCLUI', async () => {
+    // ====================================================================
+    // A ISCA QUE FALTAVA: ela INVERTE a ordem em vez de torcer por ela.
+    // ====================================================================
+    // Os três casos acima medem o esquema como ele está, e o primeiro conclui
+    // por ORDEM DE GATILHO: a cascata `pets -> pet_transfers` apaga a linha
+    // antes de a revalidação de `pet_id` rodar. Ordem de gatilho é ordem de
+    // CRIAÇÃO das restrições, e ela muda com qualquer migração que recrie uma
+    // chave — nenhum dos três acusaria isso, porque todos rodam na ordem de
+    // hoje.
+    //
+    // Aqui a ordem é invertida DE PROPÓSITO, dentro da transação que o
+    // `ROLLBACK` desfaz: recriar `pets_owner_user_id_fkey` a torna a mais nova
+    // das ações que `users` dispara, e a cascata `users -> pets` passa a rodar
+    // DEPOIS do `SET NULL` de `to_user_id`. Medido na pilha efêmera: com
+    // `pet_transfers_pet_id_fkey` NÃO diferível, esta inversão produz
+    //
+    //   ERROR: insert or update on table "pet_transfers" violates foreign key
+    //          constraint "pet_transfers_pet_id_fkey"
+    //   DETAIL: Key (pet_id)=(...) is not present in table "pets".
+    //
+    // e a exclusão de conta passa a falhar — no caminho que é direito da
+    // pessoa. Com a chave `DEFERRABLE INITIALLY DEFERRED` (migração
+    // `20260922000008`) a conferência sai do meio da instrução, a linha já foi
+    // apagada quando ela roda, e a ordem deixa de importar.
+    //
+    // Este caso reprova no dia em que alguém descer aquela migração. É a
+    // diferença entre "hoje funciona" e "não depende de ordem".
+    await comTransferencia(PARA, async () => {
+      await cliente.query('alter table pets drop constraint pets_owner_user_id_fkey');
+      await cliente.query(
+        `alter table pets add constraint pets_owner_user_id_fkey
+           foreign key (owner_user_id) references users (id) on delete cascade`,
+      );
+
+      try {
+        await cliente.query('delete from users where id = $1', [PARA]);
+      } catch (erro) {
+        assert.fail(
+          `com a ordem de gatilho invertida, a exclusão da conta do destinatário FALHOU com ` +
+            `${codigoDoErro(erro)}. A exclusão de conta voltou a depender da ordem em que as ` +
+            'restrições foram criadas, e ordem de criação muda sozinha na próxima migração que ' +
+            'recriar uma chave de `pets` ou de `pet_transfers`. A causa mais provável é ' +
+            '`pet_transfers_pet_id_fkey` ter deixado de ser DEFERRABLE INITIALLY DEFERRED ' +
+            '(migração 20260922000008). ' +
+            `Mensagem: ${erro instanceof Error ? erro.message : String(erro)}`,
+        );
+      }
+
+      const { rows } = await cliente.query<{ n: string }>(
+        'select count(*)::text as n from pet_transfers where id = $1',
+        [TRANSFERENCIA],
+      );
+      assert.equal(rows[0]?.n, '0', 'a conta saiu e a transferência ficou órfã do pet');
     });
   });
 
