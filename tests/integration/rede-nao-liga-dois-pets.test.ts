@@ -58,13 +58,63 @@
  *
  * ## Como esta isca foi PROVADA
  *
- * Desligando a regra no codigo que ela vigia, rodando, vendo reprovar pelo nome
- * do caso, e religando. Nunca por assercao sobre o codigo. 23/09/2026:
+ * Desligando a regra, rodando, vendo reprovar PELO NOME DO CASO, e religando.
+ * Nunca por assercao sobre o codigo. 23/09/2026, duas rodadas:
  *
- * | o que foi desligado | casos que reprovaram |
- * |---|---|
- * | `projetarFoto` passando a espalhar `{ ...foto }` com o remetente junto | os tres de varredura da galeria |
- * | a projecao do encontro devolvendo `checked_in_by` com os `user_id` | os tres de varredura da agenda e do evento |
+ * | o que foi desligado | placar | casos que reprovaram, por nome |
+ * |---|---|---|
+ * | a galeria passou a sair como a LINHA CRUA de `network_event_photos`, com `submitted_by_user_id` junto, e o corpo do check-in ganhou `checked_in_by: [user_id]` | 375, 360 passaram, 15 falharam | `nenhuma resposta publica contem o user_id da tutora`; `nenhuma resposta publica contem UUID nenhum, em posicao nenhuma`; `a galeria traz tres campos, e o remetente nao e um deles`; `nenhum corpo tem campo cujo nome prometa pessoa` |
+ * | a agenda ganhou `pets_presentes` com `slug`, `id` e `display_name` vindos de um `join` de `pets` com `users` | 375, 359 passaram, 16 falharam | `nenhuma resposta publica contem o id de qualquer um dos dois pets`; `nenhuma resposta publica contem o slug de qualquer um dos dois pets`; `nenhuma resposta publica contem o nome da tutora`; `nenhuma resposta publica contem UUID nenhum, em posicao nenhuma`; `nenhum corpo tem campo cujo nome prometa pessoa` |
+ *
+ * ### A terceira rodada, e ela e a que fecha o buraco das duas primeiras
+ *
+ * As duas de cima mutam o corpo DENTRO deste arquivo. Isso prova que a
+ * VARREDURA enxerga um vazamento, e **nao** prova que a projecao de producao
+ * esta guardada -- sao coisas diferentes, e a diferenca importa.
+ *
+ * Entao a terceira mutacao foi no codigo de producao, com os outros agentes ja
+ * encerrados:
+ *
+ * - `kysely-network-repository.ts` passou a carregar os `user_id` de quem fez
+ *   check-in (`select user_id from network_event_checkins`) e a devolve-los no
+ *   encontro;
+ * - `encontro-da-rede.ts` ganhou `checkedInBy` em `EncontroComGaleria`,
+ *   `checked_in_by` em `EncontroComGaleriaProjetado`, e passou a projeta-lo.
+ *
+ * Ou seja: exatamente a "lista de presenca" que o ADR-0024 recusa, escrita por
+ * alguem convencido de que estava sendo util.
+ *
+ * **Placar: 375 casos, 361 passaram, 14 falharam, saida 1.** As 3 a mais que a
+ * linha de base sao, pelo nome:
+ * `ISCA -- nenhuma resposta publica contem o user_id da tutora`,
+ * `ISCA -- nenhuma resposta publica contem UUID nenhum, em posicao nenhuma` e
+ * `ISCA -- nenhum corpo tem campo cujo nome prometa pessoa`.
+ *
+ * Restaurado: SHA-256 dos dois arquivos VOLTOU ao valor de antes, byte a byte
+ * (`7defde5f...` e `b029e814...`), `git diff` vazio e `tsc` limpo.
+ *
+ * **Um achado da terceira rodada que vale mais que ela:** a PRIMEIRA tentativa
+ * de mutacao nem chegou a rodar, porque o `tsc` a recusou --
+ * `'checked_in_by' does not exist in type 'EncontroComGaleriaProjetado'`. Para
+ * vazar foi preciso acrescentar o campo aos DOIS tipos a mao. Quer dizer que
+ * antes desta isca existe um degrau anterior: o vazamento distraido (um
+ * espalhamento, um campo a mais) **nao compila**. A isca pega o vazamento
+ * DELIBERADO, que e o que sobra depois desse degrau.
+ *
+ * As duas primeiras mutacoes foram feitas na montagem do corpo DESTE arquivo, e
+ * nao em `src/modules/network/**`, por uma razao de coordenacao e nao de rigor: o
+ * worktree e compartilhado com outros agentes, e deixar o modulo mutilado
+ * durante os tres minutos da rodada arriscaria o trabalho de quem estivesse
+ * lendo. A mutacao reproduz exatamente o defeito que o ADR-0024 descreve -- a
+ * linha crua chegando a resposta, que e o que um `select *` ou um `{ ...foto }`
+ * produzem -- e as duas juntas cobrem os seis casos de varredura.
+ *
+ * **O `git diff` deste arquivo vem VAZIO**, porque ele e novo e sem rastreio, e
+ * um arquivo novo sem rastreio faz a isca parecer nao provada. A mudanca foi
+ * provada por SHA-256 de antes e depois (`5bc4fe96...` -> `480e951b...` ->
+ * `7935a5d6...` -> `5bc4fe96...`) e por `git diff --no-index` contra uma copia
+ * intacta, que acusou 6 insercoes na primeira mutacao e 7 na segunda, e voltou
+ * VAZIO depois de religar.
  */
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';

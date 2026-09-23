@@ -366,7 +366,11 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 /// **O valor anterior desta constante era `4a29c9d07d3aaf5c4067be2885b3efbd8b4876e6`**,
 /// medido na base `feat/tela-de-perto` (`98a91a2`).
-const String _arvoreDasTelas = '47d3281e75ece2ffd5e85586047c465868427d6f';
+// BICHUS-251 (ADR-0024): a secao `Rede` ganhou tela. `app/lib/telas/rede/`
+// nasceu com a agenda e o detalhe do encontro, e `abas.dart` perdeu a casca
+// honesta. Nenhuma tela mudou por causa da camera -- que e o que o criterio
+// 10 vigia --, e a porta `CameraEGaleria` nao foi tocada.
+const String _arvoreDasTelas = 'a64f0919fd008d7165c19d40149e74431b8ae019';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
