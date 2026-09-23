@@ -364,7 +364,46 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// mesclada, com `git rev-parse HEAD:app/lib/telas`. As duas justificativas
 /// acima seguem valendo e por isso ficaram as duas: elas dizem QUE mudou em
 /// cada lado, e e isso que faz a troca continuar sendo um ato deliberado.
-const String _arvoreDasTelas = '657d32ebaf003deec7fa83dd4b25e8d0ec33fc44';
+///
+/// **Destravado pela GAVETA COM SUBMENUS, 22/09.** O pedido do cliente,
+/// repetido duas vezes, acrescentou `app/lib/telas/gaveta_de_secoes.dart` e
+/// alterou `app/lib/telas/casca_com_abas.dart` (a gaveta e o `leading` de 64
+/// dp) e `app/lib/telas/abas.dart` (as cinco raizes se declaram raiz de
+/// secao). Nenhuma das tres encosta na porta `CameraEGaleria`, que e o que o
+/// criterio 10 da BICHUS-161 protege: a gaveta nao le camera, nao pede
+/// permissao e nao cita `ImagePicker` nem `Permission` -- e o portao de
+/// diretivas abaixo, que nao depende desta constante, continua cobrando isso
+/// por conta propria.
+///
+/// O valor foi MEDIDO pelo indice temporario que este portao usa
+/// (`GIT_INDEX_FILE` + `read-tree HEAD` + `add -A app/lib/telas` +
+/// `write-tree --prefix=app/lib/telas`) sobre a arvore ja commitada, e nao
+/// copiado de relato nenhum. Anterior:
+/// `ad6fde0e74c94b21c983c286d1557c07be291288`.
+///
+/// **Destravado de novo pela BICHUS-234, 22/09**, e por UM arquivo:
+/// `app/lib/telas/gaveta_de_secoes.dart`. Duas linhas do inventario de 27.5
+/// da secao `Perto` estavam desatualizadas contra a tela que foi construida:
+/// `Profissionais e estabelecimentos` saiu de `planejada` para `existe`, e
+/// `Filtros` saiu de folha inferior `planejada` para `acaoNaTela` `existe`,
+/// porque o controle de filtro daquela tela vive no corpo e nao em folha.
+/// Nenhuma das duas encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 da BICHUS-161 protege: sao linhas de um mapa, sem camera, sem galeria e
+/// sem permissao, e o portao de diretivas abaixo continua cobrando isso por
+/// conta propria, sem depender desta constante.
+///
+/// Medido pelo mesmo indice temporario descrito acima, sobre a arvore de
+/// trabalho. Anterior: `1774532baa910c4cf8f4331631a81698f4c5b0ac`.
+///
+/// **Remedido no merge de `feat/gaveta-com-submenus` para a `development`,
+/// 23/09/2026.** Os dois lados do conflito estavam certos sobre a propria
+/// historia e errados sobre o resultado: `657d32eb...` e a arvore de um lado,
+/// `5fe2df53...` e a do outro, e a arvore que existe depois do merge nao e
+/// nenhuma das duas. O valor abaixo foi MEDIDO com o mesmo indice temporario
+/// que este portao usa, sobre a arvore ja mesclada. As justificativas acima
+/// ficaram TODAS: cada uma diz o que mudou de um lado, e e isso que mantem a
+/// troca sendo um ato deliberado.
+const String _arvoreDasTelas = 'fe88e1df9b65dd79f0b0194e0edfabfde71b42fa';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

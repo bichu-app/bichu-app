@@ -19,6 +19,13 @@
 // 4. `a semantica`    — o nome acessivel de cada destino, e o
 //                       `addSemanticIndexes: false` que a BICHUS-62 descobriu,
 //                       por dois caminhos independentes.
+//
+// E dentro de `a anatomia desenhada no Figma`, a isca da GAVETA (BICHUS-234,
+// 22/09): ela reprova quem TIRAR a gaveta da casca. Ate 21/09 a recomendacao
+// medida era a oposta, e a decisao que vale agora e a do cliente, tomada
+// depois de ler o argumento contra. Trocou o sentido do portao, nao a
+// existencia dele: a forma da casca continua vigiada, so mudou qual forma e a
+// certa.
 // 5. `25.7.3`         — nenhuma secao `planejada` vaza para o build de entrega,
 //                       e o portao reprova quando nao ha `planejada` nenhuma.
 // 6. `criterio 2`     — varredura: nenhum toque termina sem resposta.
@@ -28,6 +35,7 @@ import 'dart:ui' show Tristate;
 
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/casca_com_abas.dart';
+import 'package:bichu/telas/gaveta_de_secoes.dart';
 import 'package:bichu/theme/bichu_colors.dart';
 import 'package:bichu/theme/bichu_tokens.g.dart';
 import 'package:bichu/telas/escanear/tela_leitor_de_qr.dart';
@@ -553,6 +561,86 @@ void main() {
         reason: 'REPROVA: a raiz de aba ganhou saida. Quem chega numa aba '
             'chegou pela barra de baixo, e uma seta ali competiria com ela '
             '(design system 23.4).',
+      );
+    });
+
+    testWidgets('a casca TEM a gaveta lateral, e ela abre pelo botao',
+        (tester) async {
+      // ISCA INVERTIDA — BICHUS-234, decisao do cliente de 22/09.
+      //
+      // Em 21/09 a recomendacao medida era NAO ter gaveta, e o portao daquele
+      // dia vigiava a ausencia dela. Em 22/09 o cliente pediu a gaveta duas
+      // vezes, a segunda depois de ler o argumento contra, e a decisao dele
+      // prevalece. Este caso e o mesmo portao virado: ele reprova quem TIRAR
+      // a gaveta da casca.
+      //
+      // Ele existe porque a gaveta e facil de perder sem querer. Ela nao tem
+      // controle proprio na arvore quando esta fechada, nenhuma tela quebra
+      // sem ela, e o `drawer:` do `Scaffold` da casca e uma linha que
+      // desaparece numa refatoracao sem deixar rastro na tela. Sem isca, a
+      // decisao do cliente valeria ate o proximo diff grande.
+      await abrirOApp(tester, rede: _semServidor);
+
+      final comGaveta = tester
+          .widgetList<Scaffold>(find.byType(Scaffold))
+          .where((s) => s.drawer != null)
+          .toList();
+      expect(
+        comGaveta,
+        hasLength(1),
+        reason: 'REPROVA: a casca esta sem gaveta, ou com mais de uma. O '
+            'cliente pediu a gaveta em 22/09, depois de ler a recomendacao '
+            'contra, e ela mora no MESMO `Scaffold` da barra de baixo -- e '
+            'so nele. Montada na tela de dentro, a cortina modal deixa de '
+            'bloquear a barra de baixo e os cinco destinos continuam '
+            'tocaveis pelo leitor de tela com a gaveta aberta.',
+      );
+      expect(
+        comGaveta.single.drawer,
+        isA<GavetaDeSecoes>(),
+        reason: 'REPROVA: a casca tem gaveta, e nao e a `GavetaDeSecoes`. '
+            'Uma gaveta qualquer nao carrega a divisao entre os dois menus '
+            'nem a regra de nao renderizar o que nao existe.',
+      );
+
+      // O PRECO que o cliente aceitou junto com a gaveta, parte 1: ela nao
+      // abre por arrasto de borda. No iOS a borda esquerda ja e o voltar
+      // deste app, e no Android o voltar por gesto sai das duas bordas.
+      // Religar este padrao e a forma silenciosa de a gaveta voltar a brigar
+      // com o gesto do sistema em toda tela de secao.
+      expect(
+        comGaveta.single.drawerEnableOpenDragGesture,
+        isFalse,
+        reason: 'REPROVA: a gaveta voltou a abrir por arrasto de borda. O '
+            'padrao do Flutter e `true`, entao isto regride sozinho quando '
+            'alguem reescreve o `Scaffold` da casca.',
+      );
+
+      // O PRECO, parte 2: com o arrasto desligado, o botao da barra de topo e
+      // o UNICO jeito de abrir. Declarar o `drawer:` e nao desenhar o gatilho
+      // deixaria os submenus inalcancaveis, e o caso acima, sozinho, passaria.
+      //
+      // O rotulo esta escrito a mao, com acento, e NAO lido de
+      // `TextosDaGaveta`: comparar o texto renderizado com a constante que o
+      // produz aprovaria qualquer troca de palavra.
+      final gatilho = find.byTooltip('Abrir os atalhos das seções');
+      expect(
+        gatilho,
+        findsOneWidget,
+        reason: 'REPROVA: a raiz de secao nao tem o gatilho da gaveta na '
+            'barra de topo. Sem ele a gaveta existe na arvore e nao abre por '
+            'caminho nenhum.',
+      );
+
+      await tester.tap(gatilho);
+      await tester.pumpAndSettle();
+      expect(
+        find.byType(Drawer),
+        findsOneWidget,
+        reason: 'REPROVA: o gatilho existe e nao abriu a gaveta. A prova '
+            'deste caso e o comportamento, e nao a declaracao: `drawer:` '
+            'preenchido com o gatilho apontando para o `Scaffold` errado '
+            'passa na leitura do widget e falha no aparelho.',
       );
     });
 
