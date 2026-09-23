@@ -51,6 +51,7 @@ class AbaPets extends StatelessWidget {
           // `casca_com_abas.dart` e `MarcaLockup` continua sendo o logotipo em
           // vetor de `tela_de_abertura.dart`. O que nao fica e ligar a chave
           // AQUI. Ver a pergunta aberta na entrega desta integracao.
+          raizDeSecao: true,
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
@@ -133,7 +134,8 @@ class AbaPets extends StatelessWidget {
             // trezentos. Diz o que vai existir e que ainda nao existe (25.7.3).
             const EstadoVazio(
               titulo: 'A lista de pets perdidos está em construção',
-              explicacao: 'Aqui vão ficar os pets perdidos e achados da sua '
+              explicacao:
+                  'Aqui vão ficar os pets perdidos e achados da sua '
                   'região, com a foto e o bairro onde foram vistos.',
             ),
             // `Entrou como <e-mail>` e `Ja tenho conta` TAMBEM SAIRAM
@@ -163,12 +165,14 @@ class AbaRede extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.rede);
     return TelaDeAba(
+      raizDeSecao: true,
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
       filhos: const <Widget>[
         EstadoVazio(
           titulo: 'Rede está em construção',
-          explicacao: 'Aqui vão ficar os encontros e eventos marcados por quem '
+          explicacao:
+              'Aqui vão ficar os encontros e eventos marcados por quem '
               'mora perto de você.',
         ),
       ],
@@ -193,12 +197,14 @@ class AbaPerto extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.perto);
     return TelaDeAba(
+      raizDeSecao: true,
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
       filhos: const <Widget>[
         EstadoVazio(
           titulo: 'Perto está em construção',
-          explicacao: 'Aqui vão ficar os veterinários, banhos e tosas e pet '
+          explicacao:
+              'Aqui vão ficar os veterinários, banhos e tosas e pet '
               'shops recomendados pela comunidade.',
         ),
         SizedBox(height: BichuEspaco.e6),
@@ -225,12 +231,14 @@ class AbaLoja extends StatelessWidget {
   Widget build(BuildContext context) {
     final destino = CascaComAbas.porRota(Rotas.loja);
     return TelaDeAba(
+      raizDeSecao: true,
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
       filhos: const <Widget>[
         EstadoVazio(
           titulo: 'Loja está em construção',
-          explicacao: 'Aqui vai ficar a plaquinha de reposição e os produtos '
+          explicacao:
+              'Aqui vai ficar a plaquinha de reposição e os produtos '
               'escolhidos pelo Bichu.',
         ),
       ],
@@ -262,6 +270,7 @@ class AbaPerfil extends StatelessWidget {
       builder: (context, _) {
         if (sessao.estado != EstadoDaSessao.logado) {
           return TelaDeAba(
+            raizDeSecao: true,
             titulo: destino.rotulo,
             reforco: destino.reforcoDaPagina,
             filhos: <Widget>[
@@ -287,6 +296,7 @@ class AbaPerfil extends StatelessWidget {
         }
 
         return TelaDeAba(
+          raizDeSecao: true,
           titulo: destino.rotulo,
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
@@ -349,12 +359,14 @@ class TelaDeAdocoes extends StatelessWidget {
   Widget build(BuildContext context) {
     return const TelaDeAba(
       titulo: 'Adoções',
-      reforco: 'Os pets da sua região que estão procurando uma casa, '
+      reforco:
+          'Os pets da sua região que estão procurando uma casa, '
           'incluindo os das ONGs parceiras.',
       filhos: <Widget>[
         EstadoVazio(
           titulo: 'A lista de adoções está em construção',
-          explicacao: 'Aqui vão ficar os pets para adoção da sua região, no '
+          explicacao:
+              'Aqui vão ficar os pets para adoção da sua região, no '
               'mesmo cartão e na mesma lista dos perdidos.',
         ),
       ],
@@ -478,7 +490,8 @@ class _AvisoPorPertoDesligado extends StatelessWidget {
             // e a escolha dela nao e um defeito a ser corrigido com cor de
             // alarme.
             peso: PesoDaFaixa.informativo,
-            texto: '${TextosDaAntessala.semAvisoPorPerto} '
+            texto:
+                '${TextosDaAntessala.semAvisoPorPerto} '
                 '${TextosDaAntessala.oEmailCobreOCasoProprio}',
             rotuloDaAcao: TextosDaAntessala.ligarNosAjustes,
             aoTocarNaAcao: () =>

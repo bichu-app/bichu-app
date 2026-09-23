@@ -5,6 +5,7 @@ import '../roteamento/rotas.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/marca.dart';
+import 'gaveta_de_secoes.dart';
 
 /// O estado de uma secao no registro (UX 27.5).
 ///
@@ -118,7 +119,7 @@ class DestinoDeNavegacao {
 /// isso a porta que nao pode faltar e a de `Pets`. O leitor em si e rota de
 /// tela inteira e **nao leva a barra**, pela regra do design system 11.11
 /// ("quando a barra nao aparece: ... no leitor de camera").
-class CascaComAbas extends StatelessWidget {
+class CascaComAbas extends StatefulWidget {
   const CascaComAbas({required this.navegacao, super.key});
 
   final StatefulNavigationShell navegacao;
@@ -288,9 +289,26 @@ class CascaComAbas extends StatelessWidget {
   }
 
   @override
+  State<CascaComAbas> createState() => _CascaComAbasState();
+}
+
+class _CascaComAbasState extends State<CascaComAbas> {
+  /// A chave do `Scaffold` da casca.
+  ///
+  /// Ela existe para o gatilho da barra de topo alcancar ESTA gaveta, e nao a
+  /// do `Scaffold` de dentro. De instancia, e nao estatica: chave global
+  /// estatica reaproveitada entre duas arvores vivas estoura, e a suite monta
+  /// o app dezenas de vezes.
+  final GlobalKey<ScaffoldState> _casca = GlobalKey<ScaffoldState>(
+    debugLabel: 'casca-com-abas',
+  );
+
+  @override
   Widget build(BuildContext context) {
+    final navegacao = widget.navegacao;
     final cores = BichuColors.of(context).cores;
-    final visiveis = visiveisEm(configuracao);
+    final visiveis = CascaComAbas.visiveisEm(CascaComAbas.configuracao);
+    final destinos = CascaComAbas.destinos;
     // O indice do ramo e a posicao em `destinos`, nao em `visiveis`: no build
     // de entrega a barra esconde destinos e as duas listas deixam de casar.
     // Sem esta traducao, tocar em `Perfil` abriria `Rede`.
@@ -300,17 +318,37 @@ class CascaComAbas extends StatelessWidget {
     final selecionado = ramos.indexOf(navegacao.currentIndex);
 
     return Scaffold(
-      body: navegacao,
+      key: _casca,
+      // A GAVETA (pedido do cliente, duas vezes).
+      //
+      // **Ela mora AQUI, no mesmo `Scaffold` da barra de baixo**, e nao na
+      // `TelaDeAba` de dentro. Nao e arrumacao: a cortina modal da gaveta
+      // bloqueia a semantica dos IRMAOS dela, e a barra de baixo so e irma da
+      // gaveta neste `Scaffold`. Com a gaveta montada na tela de dentro, os
+      // cinco destinos continuavam tocaveis pelo leitor de tela com a gaveta
+      // aberta -- medido, e e a armadilha classica de gaveta.
+      //
+      // Efeito colateral desejado: `Adoções` e as outras telas empilhadas no
+      // navegador raiz cobrem a casca e portanto nao tem gaveta nenhuma.
+      drawer: const GavetaDeSecoes(),
+      // **O GESTO DE VOLTAR.** O padrao do Flutter e `true`, e com ele a
+      // borda esquerda passaria a abrir a gaveta. No iOS a borda esquerda ja
+      // E o voltar deste app; no Android o voltar por gesto sai de QUALQUER
+      // uma das duas bordas. Uma gaveta que abrisse por arrasto brigaria com
+      // o gesto em toda tela de secao. Ela abre so pelo botao da barra de
+      // topo.
+      drawerEnableOpenDragGesture: false,
+      body: ControleDaGaveta(
+        abrir: () => _casca.currentState?.openDrawer(),
+        child: navegacao,
+      ),
       bottomNavigationBar: DecoratedBox(
         // O filete de 1px em `outline` e obrigatorio, nao decorativo (design
         // system 22.1): a barra usa `surface`, que esta a 1,04:1 do corpo da
         // pagina, e sem o filete ela **nao existe visualmente**.
         decoration: BoxDecoration(
           border: Border(
-            top: BorderSide(
-              color: cores.outline,
-              width: BichuBorda.hairline,
-            ),
+            top: BorderSide(color: cores.outline, width: BichuBorda.hairline),
           ),
         ),
         child: NavigationBar(
@@ -366,6 +404,7 @@ class TelaDeAba extends StatelessWidget {
     super.key,
     this.reforco,
     this.tituloEmMarca = false,
+    this.raizDeSecao = false,
   });
 
   /// O **nome curto** da secao, igual ao rotulo da aba (UX 25.7.2 e 27.4.2).
@@ -390,6 +429,18 @@ class TelaDeAba extends StatelessWidget {
   /// anuncia. Imagem de marca sem rotulo e barra muda para quem nao ve.
   final bool tituloEmMarca;
 
+  /// Se esta tela e uma das CINCO raizes de secao.
+  ///
+  /// So a raiz de secao ganha a gaveta e o hamburguer, e a condicao nao e
+  /// estetica: a raiz de aba e a unica tela do app cuja variante e
+  /// `Saida=Nenhuma` (design system 23.4), e por isso o slot da ESQUERDA
+  /// esta livre nela. Numa tela empilhada -- `Adoções`, por exemplo -- o
+  /// mesmo slot e o `Voltar`, e por o hamburguer ali apagaria a saida.
+  ///
+  /// **A composicao `Saida + titulo + hamburguer` nao existe neste app**, e e
+  /// esta linha que garante isso por construcao, e nao por disciplina.
+  final bool raizDeSecao;
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -401,10 +452,7 @@ class TelaDeAba extends StatelessWidget {
         // O `rotulo` continua indo para o leitor de tela: vetor sem nome e
         // vetor mudo.
         title: tituloEmMarca
-            ? MarcaLockup(
-                largura: MarcaLockup.pisoDeLargura,
-                rotulo: titulo,
-              )
+            ? MarcaLockup(largura: MarcaLockup.pisoDeLargura, rotulo: titulo)
             : Text(titulo),
         // 64 dp, e nao os 56 do padrao do M3.
         //
@@ -417,6 +465,26 @@ class TelaDeAba extends StatelessWidget {
         // e por isso aqui nao entra `SaidaDaTela`. Quem chega numa aba chegou
         // pela barra de baixo.
         toolbarHeight: BichuAlvoDeToque.critico,
+        // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
+        //
+        // O 11.23.1 desenha `[ saida 64x64 ][ 8 ][ titulo ] ... [ acao 64x64 ]`
+        // e da UMA acao a direita. Em `Pets` e em `Perto` essa acao e o
+        // `Filtros`, e ela CONTINUA sendo: o hamburguer ocupa o slot da
+        // saida, que na raiz de secao esta vazio por desenho (23.4).
+        //
+        // `leading` explicito tambem desliga a seta automatica do `AppBar`
+        // nesta tela -- o que aqui nao tira nada, porque a raiz de ramo nao
+        // tem o que desempilhar. Em `TelaDeAdocoes`, que usa este mesmo
+        // widget empilhado, `raizDeSecao` e falso e a seta continua sendo
+        // desenhada.
+        leading: raizDeSecao ? const BotaoDaGaveta() : null,
+        // 64 dp, e nao os 56 que o `AppBar` reserva por padrao.
+        //
+        // O 11.23.1 fixa o alvo da esquerda em 64 x 64 (`target.critico`), e
+        // sem esta linha o `AppBar` aperta o `IconButton` num
+        // `ConstrainedBox` de 56 e o alvo fica abaixo do piso. Medido: o
+        // gatilho saia com 56,0 dp de largura.
+        leadingWidth: raizDeSecao ? BichuAlvoDeToque.critico : null,
       ),
       body: SafeArea(
         // `addSemanticIndexes: false` **nao e** microotimizacao. O padrao do
