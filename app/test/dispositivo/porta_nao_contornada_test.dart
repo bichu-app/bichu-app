@@ -281,6 +281,56 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
+/// **Destravado pela BICHUS-35**: a tela do achado avulso nasceu, e ela e uma
+/// pasta nova em `app/lib/telas` -- `telas/achado/`, com
+/// `tela_registrar_achado.dart` (F3.5), `tela_achado_registrado.dart` (o
+/// desfecho, nos dois estados), `tela_do_achado.dart` (o achado pelo endereco
+/// dele), `resultado_do_achado.dart` e `textos_do_achado.dart`.
+///
+/// Uma tela existente mudou, e a mudanca e **uma linha**:
+/// `escanear/tela_leitor_de_qr.dart` tinha a porta de F3.5 desabilitada, com
+/// o comentario "F3.5 e de outra historia" ao lado do `onPressed: null`. A
+/// historia chegou, e o `null` virou `context.push`. **Nenhum botao novo
+/// entrou na tela**, e isso foi escolha e nao sorte: a varredura de
+/// `test/a11y/acao_de_controle_test.dart` conta os controles de cada tela, e
+/// ela mora fora de `app/`.
+///
+/// Nenhuma das seis encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege: F3.5 pede foto **pela porta**, pelo escopo, do mesmo jeito que
+/// `pet/tela_cadastrar_foto.dart` -- e o portao de diretivas abaixo continua
+/// respondendo por isso, sem depender desta constante.
+///
+/// F3.5 tambem **nao** fala com a porta `Localizacao`: ela embute
+/// `CapturaDeLocalizacao`, que e quem fala, e
+/// `localizacao_no_ponto_de_uso_test.dart` cobra isso por lista de arquivos.
+///
+/// **Destravado pelo envio de foto do app (22/09/2026, sem chave de issue no
+/// acionamento).** UM arquivo: `pet/tela_pet_cadastrado.dart`. Ate aqui
+/// nenhum caminho do app mandava bytes para lugar nenhum -- F1.6 anunciava "a
+/// foto ainda esta sendo enviada" sobre um envio inexistente, e
+/// `PetsApi.intencaoDeFotoDoPet`, escrita na BICHUS-62, nunca tinha sido
+/// chamada. A tela passou a chamar `EnvioDeFoto` e a dizer a verdade nos
+/// quatro estados do envio, e a chamar `RetomadaDeFotos` em vez do mecanismo
+/// cru -- e ela que guarda a foto no registro quando falta sinal (criterio 6
+/// da BICHUS-87) e a tira de la quando ela sobe.
+///
+/// **Ela NAO encosta na porta `CameraEGaleria`, que e o que o criterio 10
+/// protege.** A tela nao le camera, nao le galeria e nao pede permissao
+/// nenhuma: ela recebe a [FotoLocal] ja escolhida por F1.4 e a entrega ao
+/// mecanismo de envio, que vive em `lib/api/`. Quem le o arquivo do aparelho e
+/// `CameraEGaleria.bytesDaFoto`, atras da porta, e o portao de diretivas
+/// abaixo -- que nao depende desta constante -- continua cobrando que nenhuma
+/// tela importe `image_picker` nem `permission_handler`.
+///
+///
+/// **BICHUS-75, 22/09**: superado de novo. O aviso persistente de cadastro
+/// acrescentou `app/lib/telas/avisos/aviso_de_cadastro_incompleto.dart` e
+/// alterou `app/lib/telas/abas.dart` e
+/// `app/lib/telas/perfil/meus_pets.dart`. Nenhuma das tres mudancas contorna
+/// a porta `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161 protege:
+/// a historia nao encosta em camera, e o diff nao cita `CameraEGaleria`,
+/// `ImagePicker` nem `Permission`. Anterior:
+/// `f14551245240f69cfb43cb67216e2682cdb7684c`.
 ///
 /// **Destravado pela BICHUS-29** (validacao de senha ao vivo, 22/09/2026).
 /// Um arquivo muda: `conta/tela_criar_conta.dart`. Tres coisas nele:
@@ -296,7 +346,15 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 /// Medido com o indice temporario, na arvore de trabalho:
 /// `4be08548b405759c524cf6336451b53d03b2d184`.
-const String _arvoreDasTelas = '4be08548b405759c524cf6336451b53d03b2d184';
+///
+/// **Remedido no merge de `development` (19115f2) em 22/09/2026.** Os dois
+/// lados destravaram a constante pelo proprio motivo, e por isso nenhum dos
+/// dois valores vale depois do merge: a arvore mesclada nao e a que nenhuma
+/// das duas mediu sozinha. O valor abaixo foi medido sobre a arvore ja
+/// mesclada, com `git rev-parse HEAD:app/lib/telas`. As duas justificativas
+/// acima seguem valendo e por isso ficaram as duas: elas dizem QUE mudou em
+/// cada lado, e e isso que faz a troca continuar sendo um ato deliberado.
+const String _arvoreDasTelas = 'da86c7e4f32392f54c088b25bd9307581eefda49';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

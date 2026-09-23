@@ -112,6 +112,18 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'evidence_kind',
     valores: ['crmv', 'cnpj', 'phone_callback', 'document'],
   },
+  // BICHUS-66. As duas listas fechadas da transferencia de pet. Escritas POR
+  // EXTENSO e a mao: derivar do proprio banco compararia o banco com ele mesmo.
+  'public.pet_transfers.pet_transfers_status_conhecido': {
+    coluna: 'status',
+    // `StatusDaTransferencia` em
+    // `src/modules/transfers/domain/janela-da-transferencia.ts`, espelhado em
+    // `src/shared/db/schema.ts`. Os cinco sao distintos: `accepted` e o UNICO
+    // que carrega prazo -- dele para `effective` passam 24 h em que nada foi
+    // revogado --, e `expired` e "ninguem aceitou em 72 h", que nao e a mesma
+    // coisa que `cancelled`, "alguem desfez".
+    valores: ['pending_acceptance', 'accepted', 'effective', 'cancelled', 'expired'],
+  },
   'public.found_reports.found_reports_origin_check': {
     coluna: 'origin',
     valores: ['tag_scan', 'stray_report'],
@@ -227,6 +239,31 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'code',
     valores: ['dog', 'cat', 'other'],
   },
+  'public.reauth_tokens.reauth_tokens_escopo': {
+    coluna: 'scope',
+    // As seis finalidades de `X-Reauth-Token` (BICHUS-48). Espelha `ReauthScope`
+    // em `src/shared/http/route-definition.ts`, o enum de `scope` em
+    // `POST /auth/reauth` no contrato e o tipo da coluna em
+    // `src/shared/db/schema.ts`. Os quatro precisam andar juntos.
+    //
+    // `email_change` e `session_revocation` sao os dois que entraram. O
+    // primeiro porque `POST /me/email-change` ja exigia o cabecalho e o enum do
+    // contrato nao tinha o valor: a operacao era inalcancavel. O segundo porque
+    // `POST /auth/logout-all` passou a exigir a janela.
+    //
+    // `password_change` NAO esta aqui, e a ausencia e a divergencia registrada
+    // na BICHUS-48 contra a secao 7.5 de `docs/04-seguranca.md`. Acrescenta-lo
+    // sem a decisao do cliente faria `PUT /auth/password` pedir a mesma senha
+    // duas vezes na mesma requisicao.
+    valores: [
+      'account_deletion',
+      'email_change',
+      'data_export',
+      'pet_transfer',
+      'tag_revocation',
+      'session_revocation',
+    ],
+  },
   'public.refresh_tokens.refresh_tokens_revoked_reason_check': {
     coluna: 'revoked_reason',
     // O DEFEITO DE 22/09 MORA AQUI. `logout_all` é o valor que a rota de "sair
@@ -244,6 +281,17 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       'logout_all',
       'password_changed',
       'account_deleted',
+      // BICHUS-215. O QUINTO gatilho do SEC-006, que o documento lista desde
+      // sempre e que a restrição não tinha: "sair de todos, troca de senha,
+      // redefinição, 'Não fui eu' e exclusão de conta".
+      //
+      // Não é `logout_all` reaproveitado, e o motivo é o mesmo que separou
+      // `logout` de `logout_all` (emenda 1 do ADR-0002): `logout_all` é o
+      // titular arrumando a casa, `not_me` é alguém declarando que a conta está
+      // com outra pessoa. Também não é `reuse_detected`, que é a detecção
+      // automática de UMA família; este é a resposta HUMANA a ela, e derruba a
+      // conta inteira.
+      'not_me',
     ],
   },
   'public.upload_intents.upload_intents_kind_check': {
@@ -289,7 +337,15 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   },
   'public.verification_tokens.verification_tokens_purpose_check': {
     coluna: 'purpose',
-    valores: ['email_verify', 'password_reset', 'email_change'],
+    // `session_disavow` é o link do "Não fui eu" (BICHUS-215), e é o único
+    // propósito que NÃO leva a pessoa a digitar nada: ele derruba as sessões e
+    // acaba. Reusar a tabela em vez de criar outra foi decisão — ela já é uso
+    // único com prazo, hash no lugar do valor e HMAC do IP de emissão, e uma
+    // segunda implementação disso seria a segunda chance de errar o consumo
+    // atômico. Espelha `PropositoDoToken` em
+    // `src/modules/identity/ports/identity-repository.ts` e o tipo da coluna em
+    // `src/shared/db/schema.ts`. Os três precisam andar juntos.
+    valores: ['email_verify', 'password_reset', 'email_change', 'session_disavow'],
   },
 };
 
@@ -420,6 +476,26 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+[1-9][0-9]{7,14}$'::text)))",
   'public.professionals.professionals_titularidade_tem_marco':
     "CHECK ((((claim_status = 'unclaimed'::text) AND (claimed_at IS NULL) AND (claimed_by_user_id IS NULL)) OR ((claim_status <> 'unclaimed'::text) AND (claimed_at IS NOT NULL))))",
+  // BICHUS-66. `cancellation_reason` e lista fechada, mas NAO e da forma
+  // simples: a coluna e anulavel, entao a restricao e `IS NULL OR ... IN (...)`
+  // e o catalogo a escreve como uma disjuncao. Ela cai aqui, onde a definicao
+  // inteira fica fixada -- que e o registro mais estrito dos dois, e nao o mais
+  // frouxo. Mesma forma de `conversations_closure_reason_conhecida`.
+  //
+  // `lost_case_opened` e a resposta da BICHUS-66 ao caso que nem ela nem a
+  // BICHUS-21 previram: o pet marcado como perdido no meio da janela.
+  // `recipient_gone` e o `ON DELETE SET NULL` de `to_user_id` chegando ao
+  // dominio. `MotivoDoCancelamento` em
+  // `src/modules/transfers/domain/janela-da-transferencia.ts`.
+  'public.pet_transfers.pet_transfers_motivo_conhecido':
+    "CHECK (((cancellation_reason IS NULL) OR (cancellation_reason = ANY (ARRAY['current_owner'::text, 'cancel_token'::text, 'lost_case_opened'::text, 'recipient_gone'::text]))))",
+  // BICHUS-66. A regra nas DUAS direcoes: cancelada tem motivo, e nao-cancelada
+  // NAO tem. A segunda metade e a que ninguem olha -- um CHECK que so cobrasse
+  // a presenca deixaria passar uma linha `effective` carregando
+  // `lost_case_opened`, que e o tipo de lixo em cima do qual alguem constroi um
+  // relatorio meses depois.
+  'public.pet_transfers.pet_transfers_motivo_acompanha_o_cancelamento':
+    "CHECK (((status = 'cancelled'::text) = (cancellation_reason IS NOT NULL)))",
   'public.ref_breeds.ref_breeds_code_check': "CHECK ((code ~ '^[a-z][a-z0-9_]{1,39}$'::text))",
   'public.ref_colors.ref_colors_code_check': "CHECK ((code ~ '^[a-z][a-z0-9_]{1,29}$'::text))",
   // `upload_intents.kind` previa `found_report_photo` desde 18/09 e não havia

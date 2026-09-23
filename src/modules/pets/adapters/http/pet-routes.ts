@@ -282,6 +282,10 @@ export function registrarRotasDePets(
           // o pet de outro.
           donoOuToken: chamador.userId,
           endpoint: `${rotaDeCadastroDePet.method.toUpperCase()} ${rotaDeCadastroDePet.path}`,
+          // `/pets` nao tem parametro de caminho, e `{}` aqui e o fato, nao
+          // omissao: `corpoCanonicoDoPedido` so exige valor para o que o molde
+          // da rota declara.
+          parametrosDeCaminho: {},
           corpo,
           agoraEmMilissegundos: deps.clock.now(),
         },

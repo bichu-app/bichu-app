@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Travessao de verdade (—), hifen simples (-) e ate tres hifens
+         seguidos no MEIO de uma palavra sao legais. Sem esta isca, um portao
+         que reprovasse qualquer hifen passaria no resto do autoteste e
+         reprovaria arquivo correto, que e como portao morre. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+    </style>
+</resources>

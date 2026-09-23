@@ -47,7 +47,7 @@
  * |---|---|
  * | o `EXISTS` de `user_devices` (critério 4) | 3 casos |
  * | o `count(*)` de fadiga (critério 6) | 45 casos |
- * | `u.deleted_at IS NULL` (BICHUS-88) | 1 caso |
+ * | `u.deleted_at IS NULL` (BICHUS-88) | **0 casos, desde 22/09** — ver abaixo |
  * | `url.user_id <> ...` (critério 5) | 1 caso |
  * | `url.expires_at > ...` (critério 2) | 1 caso |
  * | `concluir` virado `no-op` | 3 casos |
@@ -55,6 +55,18 @@
  * A fadiga derruba 45 porque, sem ela, cada caso passa a enxergar as contas que
  * os outros criaram: a asserção de lista exata deixa de casar em quase toda a
  * suíte. Reprovação barulhenta, e é o que se quer de uma isca.
+ *
+ * **A linha da BICHUS-88 mudou de veredito em 22/09, e a mudança está medida.**
+ * Com o gatilho da migração `20260922000006` no lugar, a linha de localização da
+ * conta excluída deixa de existir no instante da exclusão lógica. Tirar
+ * `u.deleted_at IS NULL` da consulta passou a NÃO reprovar caso nenhum desta
+ * suíte: medido, 252 de 252 verdes com a cláusula removida. Isso não quer dizer
+ * que a cláusula sobre; quer dizer que ela virou a SEGUNDA camada, e que esta
+ * suíte deixou de ser quem a segura. Quem a segura agora é
+ * `src/modules/lostfound/adapters/persistence/sete-criterios-na-consulta.test.ts`,
+ * pelo texto do SQL — a mesma isca derruba 2 casos lá. Registrado aqui porque
+ * uma tabela de iscas que promete uma reprovação que não acontece mais é pior
+ * que nenhuma tabela: ela é a confiança falsa que ninguém vai conferir.
  *
  * **A última linha é a razão de este arquivo existir.** Com `concluir`
  * transformado em `no-op`, a suíte unitária inteira ficou **verde — 1106 casos,
@@ -468,11 +480,23 @@ void describe('BICHUS-88: a conta logicamente excluída sai do alcance', () => {
     );
   });
 
-  void it('e a linha de localização dela CONTINUA casando com ST_DWithin', async () => {
-    // A outra metade da prova, e a razão de a junção com `users` existir. O
-    // defeito da BICHUS-88 é real e continua real: esta consulta não o
-    // conserta, ela só não cai nele. Qualquer outro caminho que leia
-    // `user_reference_locations` sem esta junção continua vendo a linha.
+  void it('e a linha de localização dela também não casa mais com ST_DWithin', async () => {
+    // ESTE CASO ESTAVA INVERTIDO ATÉ 22/09/2026, E DE PROPÓSITO. Ele exigia
+    // `count = '1'` e a mensagem dizia: "a linha de localização da conta
+    // excluída sumiu sozinha. Se isso mudou, a BICHUS-88 foi consertada em
+    // outro lugar e a junção com `users` desta consulta merece ser revisitada
+    // — mas não removida sem prova." Ele era o registro do defeito, não uma
+    // regra: quem o escreveu provou os dois lados e não consertou de lado.
+    //
+    // O defeito foi consertado, e em outro lugar mesmo: a migração
+    // `20260922000006` apaga a linha no instante da exclusão lógica, por
+    // gatilho em `users`. A prova pedida está em
+    // `tests/integration/localizacao-apos-exclusao-logica.test.ts`, que mede
+    // com consultas que NÃO juntam `users` e NÃO mencionam `deleted_at`.
+    //
+    // A junção com `users` desta consulta fica onde está. Ela deixou de ser a
+    // única defesa e virou a segunda; tirá-la agora trocaria duas camadas por
+    // uma, sem ganho nenhum.
     const saindo = await vizinhoEm(aNorteDoCentro(500));
     await cliente.query('UPDATE users SET deleted_at = now() WHERE id = $1', [saindo]);
 
@@ -486,10 +510,10 @@ void describe('BICHUS-88: a conta logicamente excluída sai do alcance', () => {
     );
     assert.equal(
       r.rows[0]?.n,
-      '1',
-      'a linha de localização da conta excluída sumiu sozinha. Se isso mudou, a ' +
-        'BICHUS-88 foi consertada em outro lugar e a junção com `users` desta ' +
-        'consulta merece ser revisitada — mas não removida sem prova.',
+      '0',
+      'a linha de localização sobreviveu à exclusão lógica. O gatilho da migração ' +
+        '`20260922000006` saiu, e a proteção voltou a morar na cláusula `u.deleted_at ' +
+        'IS NULL` da consulta de quem lê — que é o defeito da BICHUS-88 de volta.',
     );
   });
 });

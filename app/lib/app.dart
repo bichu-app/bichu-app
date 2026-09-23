@@ -3,22 +3,27 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
+import 'api/achados_api.dart';
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
+import 'api/fotos_pendentes.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
 import 'dispositivo/localizacao.dart';
 import 'escopo.dart';
 import 'intencao/cadastro_de_pet_como_intencao.dart';
+import 'intencao/achado_como_intencao.dart';
 import 'intencao/caso_de_perdido_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
 import 'intencao/guarda_de_acao.dart';
@@ -44,7 +49,10 @@ class BichuApp extends StatefulWidget {
     this.cacheDeMeusPets,
     this.cofreDoQr,
     this.depositoDeOportunidades,
+    this.depositoDoAvisoDeCadastro,
+    this.agora,
     this.depositoDaFila,
+    this.depositoDeFotos,
   });
 
   final AppConfig config;
@@ -138,6 +146,21 @@ class BichuApp extends StatefulWidget {
   /// quem cadastrou um pet ontem -- e nenhum teste consegue produzir isso
   /// passando pelo fluxo duas vezes, porque cada `pumpWidget` e um app novo.
   final DepositoDeOportunidades? depositoDeOportunidades;
+
+  /// Onde o registro de dispensas do aviso persistente mora (BICHUS-75).
+  ///
+  /// Entra por aqui pelos mesmos dois motivos do registro de oportunidades: o
+  /// padrao e um arquivo, e `getApplicationDocumentsDirectory()` trava o
+  /// `pumpAndSettle` para sempre em teste de widget.
+  final DepositoDoAvisoDeCadastro? depositoDoAvisoDeCadastro;
+
+  /// O relogio do ciclo de 7 dias do criterio 4 da BICHUS-75.
+  ///
+  /// **Entra pela porta, e a razao esta escrita no refinamento de 17/09:** "o
+  /// ciclo de 7 dias nao e observavel em treze dias sem relogio injetavel". Um
+  /// `DateTime.now()` dentro do registro tornaria o criterio 4 uma frase --
+  /// verdadeira ou falsa, ninguem saberia antes do oitavo dia de producao.
+  final DateTime Function()? agora;
   /// Injetavel para teste. Em producao e um arquivo no diretorio do app.
   ///
   /// Entra por aqui pela mesma razao do [depositoDeIntencao], e com o mesmo
@@ -148,6 +171,13 @@ class BichuApp extends StatefulWidget {
   /// espera um `Future` que nunca resolve.
   final DepositoDaFila? depositoDaFila;
 
+  /// Onde o registro de fotos pendentes mora. Injetavel pelo mesmo motivo do
+  /// [depositoDaFila], e com o mesmo sintoma quando falta: `DepositoDeFotosEmArquivo`
+  /// chama `getApplicationDocumentsDirectory()`, canal de plataforma que nao
+  /// existe em teste de widget, e o `pumpAndSettle` esperaria para sempre um
+  /// `Future` que nunca resolve.
+  final DepositoDeFotosPendentes? depositoDeFotos;
+
   @override
   State<BichuApp> createState() => _BichuAppState();
 }
@@ -157,6 +187,10 @@ class _BichuAppState extends State<BichuApp> {
   late final AuthApi _auth;
   late final PetsApi _pets;
   late final CasosApi _casos;
+  late final AchadosApi _achados;
+  late final EnvioDeFoto _envioDeFoto;
+  late final FotosPendentes _fotosPendentes;
+  late final RetomadaDeFotos _retomadaDeFotos;
   late final FilaOffline _fila;
   late final TagsApi _tags;
   late final DevicesApi _devices;
@@ -170,6 +204,7 @@ class _BichuAppState extends State<BichuApp> {
   late final CacheDeMeusPets _cacheDeMeusPets;
   late final CofreDaImagemDoQr _cofreDoQr;
   late final OportunidadesDeAviso _oportunidades;
+  late final AvisoDeCadastro _avisoDeCadastro;
   late final VigiaDeAviso _vigiaDeAviso;
 
   @override
@@ -188,6 +223,7 @@ class _BichuAppState extends State<BichuApp> {
     _auth = AuthApi(_api);
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
+    _achados = AchadosApi(_api);
     // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
     // nada no app a construia: o criterio 6 desta historia -- "sem conexao a
     // tela inteira funciona: o envio acontece em F3.2" -- so e verdade com
@@ -199,11 +235,36 @@ class _BichuAppState extends State<BichuApp> {
     _tags = TagsApi(_api);
     _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraDoAparelho();
+    // **O caminho de bytes, ligado** (22/09/2026). Ele existia como ideia e
+    // nao existia como codigo: `intencaoDeFotoDoPet` estava escrita desde a
+    // BICHUS-62 e nunca era chamada, e a foto escolhida em F1.4 morria no
+    // aparelho.
+    //
+    // O cliente HTTP e o mesmo objeto injetado em teste, e em producao e um
+    // `http.Client` PROPRIO -- `widget.clienteHttp` e nulo la. A separacao
+    // importa: este cliente nao conhece o token da sessao, e o endereco para
+    // onde os bytes vao e outro host, escolhido pelo servidor.
+    _envioDeFoto = EnvioDeFoto(
+      camera: _camera,
+      cliente: widget.clienteHttp,
+    );
+    _fotosPendentes = FotosPendentes(
+      deposito: widget.depositoDeFotos ?? DepositoDeFotosEmArquivo(),
+    );
+    _retomadaDeFotos = RetomadaDeFotos(
+      envio: _envioDeFoto,
+      registro: _fotosPendentes,
+      pets: _pets,
+    );
     _leitorDeQr = widget.leitorDeQr ?? const LeitorDeQrDoAparelho();
     _avisos = widget.avisos ?? const AvisosNaoEmbarcados();
     _oportunidades = OportunidadesDeAviso(
       deposito: widget.depositoDeOportunidades ??
           DepositoDeOportunidadesEmArquivo(),
+    );
+    _avisoDeCadastro = AvisoDeCadastro(
+      deposito: widget.depositoDoAvisoDeCadastro ?? DepositoDoAvisoEmArquivo(),
+      agora: widget.agora ?? DateTime.now,
     );
     _vigiaDeAviso = VigiaDeAviso(avisos: _avisos, devices: _devices)..ligar();
     _localizacao = widget.localizacao ?? const LocalizacaoNaoEmbarcada();
@@ -221,6 +282,15 @@ class _BichuAppState extends State<BichuApp> {
         // CRIADO e a pessoa cai em F3.3 -- nunca no formulario de novo e nunca
         // na home.
         AcaoDeIntencao.marcarPerdido: casoDePerdidoExecutavel(_pets, _casos),
+        // `registrar_achado` e a TERCEIRA acao executavel deste build, e o
+        // criterio 3 da BICHUS-35 e o que ela cumpre: depois de autenticar, o
+        // achado e REGISTRADO e a pessoa cai na tela do achado registrado --
+        // nunca no formulario de novo e nunca na home.
+        //
+        // Ela precisa de UMA camada so, e a diferenca em relacao a
+        // `marcar_perdido` e o proprio desenho da acao: la ha um alvo (o pet)
+        // que precisa ser buscado antes; aqui o alvo e o que a execucao cria.
+        AcaoDeIntencao.registrarAchado: achadoExecutavel(_achados),
       },
     );
     _sessao = ControladorDeSessao(
@@ -269,20 +339,74 @@ class _BichuAppState extends State<BichuApp> {
       //
       // `limpar` e assincrono e devolve `Future<void>`, entao o tear-off
       // direto tipa: nao ha fecho aqui porque nao ha nada a adiar.
+      // O REGISTRO DE FOTOS PENDENTES ENTRA NA MESMA LISTA, e pelo mesmo
+      // motivo da fila: ele vive em DISCO e carrega o caminho de um arquivo no
+      // aparelho -- a foto do animal da tutora anterior. Sobrevivendo ao
+      // logout, ela espera a proxima pessoa que entrar neste aparelho, e a
+      // varredura de arranque a subiria para a conta dela.
       limpezasAoSair: <LimpezaAoSair>[
         () async => _cacheDeMeusPets.limpar(),
         _cofreDoQr.limpar,
         _fila.limpar,
+        _fotosPendentes.limpar,
+        // O REGISTRO DE DISPENSAS DO AVISO PERSISTENTE ENTRA AQUI (BICHUS-75),
+        // e a diferenca em relacao ao registro de oportunidades logo acima e a
+        // razao de as duas decisoes serem opostas. Aquele e do APARELHO: o
+        // dialogo de notificacao do iOS e gasto uma vez por instalacao. Este e
+        // da CONTA: ele guarda que a Marina pediu silencio sobre o e-mail DELA.
+        //
+        // Sem esta linha, o tutor seguinte neste aparelho herdaria o silencio
+        // de sete dias comprado pela anterior -- e com tres dispensas herdadas
+        // veria de cara "O e-mail <o dele> esta certo?" sobre um endereco que
+        // esta certo. A isca esta em
+        // `test/sessao/registro_do_aviso_de_cadastro_test.dart`.
+        _avisoDeCadastro.limpar,
       ],
     );
     _roteador = criarRoteador(_sessao);
-    _sessao.iniciar();
+    _arrancar();
+  }
+
+  /// O arranque: ler o chaveiro e, **so depois disso**, retomar a foto que
+  /// ficou.
+  ///
+  /// **A ordem e o ponto.** `iniciar()` le a sessao do chaveiro de forma
+  /// assincrona, e ate ela terminar `tokenValido()` responde nulo -- nao
+  /// porque a pessoa esta deslogada, mas porque o app ainda nao sabe. Uma
+  /// varredura disparada em paralelo veria sempre "sem sessao" e nunca
+  /// enviaria nada, com a frase da tela prometendo o contrario. O defeito
+  /// ficaria invisivel em teste manual: basta tocar no botao `Tentar agora`
+  /// para a foto subir.
+  Future<void> _arrancar() async {
+    await _sessao.iniciar();
+    await _retomarAsFotos();
+  }
+
+  /// O criterio 7 da BICHUS-87: a foto que nao subiu sobe quando da.
+  ///
+  /// **Atras da sessao, e isso nao e detalhe.** A rota de intencao e
+  /// `bearerAuth`; sem token ela responde 401, que o mecanismo classifica como
+  /// recusa -- e recusa DESCARTA o pendente. Uma varredura sem esta guarda
+  /// apagaria, no arranque de quem esta deslogado, exatamente a foto que ela
+  /// existe para salvar.
+  ///
+  /// A falha inteira e engolida de proposito: isto roda antes de qualquer tela
+  /// existir, e uma excecao aqui derrubaria o arranque do app por causa de uma
+  /// foto.
+  Future<void> _retomarAsFotos() async {
+    try {
+      if (await _sessao.tokenValido() == null) return;
+      await _retomadaDeFotos.retomarTudo();
+    } on Object {
+      return;
+    }
   }
 
   @override
   void dispose() {
     _vigiaDeAviso.dispose();
     _sessao.dispose();
+    _envioDeFoto.fechar();
     _api.fechar();
     super.dispose();
   }
@@ -294,6 +418,9 @@ class _BichuAppState extends State<BichuApp> {
       auth: _auth,
       pets: _pets,
       casos: _casos,
+      achados: _achados,
+      envioDeFoto: _envioDeFoto,
+      retomadaDeFotos: _retomadaDeFotos,
       fila: _fila,
       tags: _tags,
       devices: _devices,
@@ -307,6 +434,7 @@ class _BichuAppState extends State<BichuApp> {
       guarda: _guarda,
       cacheDeMeusPets: _cacheDeMeusPets,
       cofreDoQr: _cofreDoQr,
+      avisoDeCadastro: _avisoDeCadastro,
       child: MaterialApp.router(
         title: 'Bichu',
         debugShowCheckedModeBanner: false,

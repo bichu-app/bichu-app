@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Nao e a familia do traco duplo. Esta isca existe para que o portao
+         continue sendo boa-formacao de XML, e nao um detector de `--`: uma
+         regressao que trocasse o analisador por uma busca de texto passaria
+         nas duas iscas historicas e cegaria para tudo o mais. -->
+    <application android:label="bichu">
+        <activity android:name=".MainActivity" android:exported="true">
+    </application>
+</manifest>

@@ -15,7 +15,23 @@
 
 protegida="main"
 
-while read -r _local_ref _local_sha remote_ref _remote_sha; do
+# O segundo guarda (22/09/2026): branch `integra/*` so sai da maquina com o
+# recibo de `make fechar-integracao` DAQUELE commit. A regra inteira, as iscas
+# e o que ela NAO alcanca estao no script; aqui fica so a chamada.
+#
+# Ele e resolvido a partir do checkout PRINCIPAL, que e onde `core.hooksPath`
+# aponta (ver `make setup`), com queda para a arvore de onde o push sai. Se
+# nenhum dos dois tiver o script, o guarda RECUSA a branch de integracao em vez
+# de deixar passar: portao que nao consegue conferir nao aprova.
+principal="$(dirname "$0")/.."
+aqui="$(git rev-parse --show-toplevel)"
+recibo_sh=""
+for c in "$principal/infra/verificacao/verificar-recibo-de-fechamento.sh" \
+	"$aqui/infra/verificacao/verificar-recibo-de-fechamento.sh"; do
+	[ -f "$c" ] && recibo_sh="$c" && break
+done
+
+while read -r _local_ref local_sha remote_ref _remote_sha; do
 	case "$remote_ref" in
 	"refs/heads/$protegida")
 		echo "pre-push: push direto em '$protegida' recusado." >&2
@@ -24,6 +40,16 @@ while read -r _local_ref _local_sha remote_ref _remote_sha; do
 		echo "  Regra do que vale como pronto: docs/07-devops.md secao 13.3" >&2
 		echo "" >&2
 		exit 1
+		;;
+	refs/heads/integra/*)
+		if [ -z "$recibo_sh" ]; then
+			echo "pre-push: nao achei verificar-recibo-de-fechamento.sh nem em" >&2
+			echo "  $principal nem em $aqui." >&2
+			echo "  Recusando '$remote_ref': deixar passar seria afirmar que a lista de" >&2
+			echo "  fechamento rodou sem ter tido como olhar." >&2
+			exit 1
+		fi
+		sh "$recibo_sh" "$remote_ref" "$local_sha" "$aqui" || exit 1
 		;;
 	esac
 done

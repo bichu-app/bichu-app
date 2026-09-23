@@ -21,11 +21,14 @@
  * barato de garantir que ela não vaze é ela não estar disponível.
  */
 import { sql } from 'kysely';
-import type { Db } from '../../../../shared/db/pool.js';
+import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { rotuloDaArea } from '../../domain/abertura-do-caso.js';
 import type {
   CanalDoReencontro,
+  CandidatoDecidido,
   CasoGravado,
+  DecisaoDoCandidato,
+  DecisaoSobreCandidato,
   DesfechoDoCaso,
   EstadoDoPetParaAbertura,
   EstadoDoPetParaPrevia,
@@ -33,7 +36,7 @@ import type {
   NovoCaso,
   StatusDoCaso,
 } from '../../ports/lost-case-repository.js';
-import type { CaseId, PetId, UserId } from '../../../../shared/types/brands.js';
+import type { CaseId, FoundReportId, PetId, UserId } from '../../../../shared/types/brands.js';
 
 interface LinhaDoCaso {
   id: string;
@@ -272,5 +275,219 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
       const linha = r.rows[0];
       return linha === undefined ? null : comoCaso(linha);
     },
+
+    async decidirCandidato(entrada): Promise<CandidatoDecidido | null> {
+      const linha = await construtorDaDecisaoDoCandidato(db, entrada).executeTakeFirst();
+      return linha === undefined ? null : comoCandidato(linha);
+    },
+
+    async candidatoDecididoDoTutor(caso, candidato, dono): Promise<CandidatoDecidido | null> {
+      const linha = await construtorDoCandidatoDecidido(
+        db,
+        caso,
+        candidato,
+        dono,
+      ).executeTakeFirst();
+      return linha === undefined ? null : comoCandidato(linha);
+    },
   };
+}
+
+// ----------------------------------------------------------------------
+// A decisão humana sobre um candidato (BICHUS-86, critérios 4, 5 e 12)
+// ----------------------------------------------------------------------
+
+/** As colunas do achado que viajam junto do candidato. */
+const COLUNAS_DO_ACHADO = [
+  'found_reports.id as achado_id',
+  'found_reports.origin as achado_origin',
+  'found_reports.status as achado_status',
+  'found_reports.species as achado_species',
+  'found_reports.size as achado_size',
+  'found_reports.found_city as achado_city',
+  'found_reports.found_neighborhood as achado_neighborhood',
+  'found_reports.found_at as achado_found_at',
+  'found_reports.notes as achado_notes',
+  'found_reports.created_at as achado_created_at',
+] as const;
+
+const COLUNAS_DO_CANDIDATO = [
+  'match_candidates.id',
+  'match_candidates.case_id',
+  'match_candidates.found_report_id',
+  'match_candidates.score',
+  'match_candidates.matched_attributes',
+  'match_candidates.distance_m',
+  'match_candidates.link_origin',
+  'match_candidates.strategy_version',
+  'match_candidates.status',
+  'match_candidates.created_at',
+] as const;
+
+interface LinhaDoCandidato {
+  id: string;
+  case_id: string;
+  found_report_id: string;
+  score: string;
+  matched_attributes: Record<string, number> | string;
+  distance_m: number | null;
+  link_origin: 'attribute_match' | 'share_token';
+  strategy_version: string;
+  status: 'suggested' | 'confirmed' | 'rejected';
+  created_at: Date;
+  pet_id: string;
+  pet_name: string;
+  relator_user_id: string | null;
+  achado_id: string;
+  achado_origin: 'tag_scan' | 'stray_report';
+  achado_status: 'open' | 'matched' | 'closed';
+  achado_species: string | null;
+  achado_size: string | null;
+  achado_city: string | null;
+  achado_neighborhood: string | null;
+  achado_found_at: Date;
+  achado_notes: string | null;
+  achado_created_at: Date;
+}
+
+/**
+ * `matched_attributes` é `jsonb` e o driver pode entregá-lo como objeto ou como
+ * texto. O contrato declara `matched_attributes` como **lista de strings**: o
+ * que vai para a tela é *o que bateu*, e não quanto cada coisa pesou. O peso é
+ * a metade do `score`, e o critério 2 da BICHUS-86 tira o `score` da tela.
+ */
+function atributosQuePontuaram(bruto: Record<string, number> | string): readonly string[] {
+  const objeto = typeof bruto === 'string' ? (JSON.parse(bruto) as Record<string, number>) : bruto;
+  return Object.keys(objeto).filter((chave) => (objeto[chave] ?? 0) > 0);
+}
+
+function comoCandidato(l: LinhaDoCandidato): CandidatoDecidido {
+  return {
+    id: l.id,
+    caseId: l.case_id as CaseId,
+    foundReportId: l.found_report_id as FoundReportId,
+    petId: l.pet_id as PetId,
+    nomeDoPet: l.pet_name,
+    relatorUserId: l.relator_user_id === null ? null : (l.relator_user_id as UserId),
+    score: Number(l.score),
+    atributosQuePontuaram: atributosQuePontuaram(l.matched_attributes),
+    distanciaEmMetros: l.distance_m === null ? null : Number(l.distance_m),
+    linkOrigin: l.link_origin,
+    versaoDaEstrategia: l.strategy_version,
+    // O `WHERE` da escrita já recusou tudo que não sai de `suggested`, então a
+    // linha devolvida nunca está em `suggested`. O estreitamento é asserção, e
+    // não conveniência: `DecisaoDoCandidato` não tem o terceiro valor.
+    status: l.status as DecisaoDoCandidato,
+    criadoEm: l.created_at,
+    achado: {
+      id: l.achado_id as FoundReportId,
+      origin: l.achado_origin,
+      status: l.achado_status,
+      especie: l.achado_species,
+      porte: l.achado_size,
+      cidade: l.achado_city,
+      bairro: l.achado_neighborhood,
+      achadoEm: l.achado_found_at,
+      observacao: l.achado_notes,
+      criadoEm: l.achado_created_at,
+    },
+  };
+}
+
+/**
+ * A escrita da decisão, como consulta ainda não executada.
+ *
+ * ## A autorização é `lost_cases.owner_user_id = :dono`, e ela está AQUI
+ *
+ * Não num `if` antes, e não no banco. A migração
+ * `20260922000003_achado-avulso-e-correspondencia.sql` escreve na prosa que
+ * *"quem decide é o tutor"*, mas o CHECK que ela cria
+ * (`match_candidates_decisao_tem_autor`) cobra apenas **uma pessoa e um
+ * instante** — qualquer `users.id` o satisfaz. Medido contra o Postgres: sem o
+ * predicado abaixo, uma terceira conta decide a correspondência do caso de
+ * outra pessoa e o banco aprova.
+ *
+ * `match_candidates` não tem coluna de dono, e por desenho: o dono do candidato
+ * é o dono do CASO. Por isso a autorização entra por `from('lost_cases')` com a
+ * correlação `lost_cases.id = match_candidates.case_id` — sem essa correlação o
+ * mesmo SQL, com o mesmo dono ligado, passaria a perguntar *"esta conta tem
+ * algum caso?"*, que é a armadilha do produto cartesiano.
+ *
+ * ## Os outros três predicados
+ *
+ * - **`match_candidates.case_id = :caso`**: o `candidateId` sozinho já é único,
+ *   e o `caseId` do caminho é filtro **a mais**, nunca no lugar do dono. Sem
+ *   ele, um candidato de outro caso do mesmo tutor seria decidido pelo endereço
+ *   errado, e a trilha registraria a decisão no caso errado.
+ * - **`match_candidates.status = 'suggested'`**: está no `WHERE` e não num `if`
+ *   antes porque duas confirmações simultâneas — que é o que a fila offline
+ *   produz quando o sinal volta — passariam as duas pela conferência antes de
+ *   qualquer uma gravar. E é ele que faz *"rejeitado não volta"* (seção 4.10)
+ *   ser uma propriedade da escrita, e não uma promessa.
+ * - **`lost_cases.status = 'open'`**: decidir correspondência de caso encerrado
+ *   abriria conversa sobre um caso que acabou.
+ */
+export function construtorDaDecisaoDoCandidato(
+  db: DbExecutor,
+  entrada: DecisaoSobreCandidato,
+) {
+  return db
+    .updateTable('match_candidates')
+    .from(['lost_cases', 'found_reports', 'pets'])
+    .set({
+      status: entrada.decisao,
+      decided_by_user_id: entrada.dono,
+      decided_at: new Date(Number(entrada.agora)),
+    })
+    .whereRef('lost_cases.id', '=', 'match_candidates.case_id')
+    .whereRef('found_reports.id', '=', 'match_candidates.found_report_id')
+    .whereRef('pets.id', '=', 'lost_cases.pet_id')
+    .where('pets.deleted_at', 'is', null)
+    .where('match_candidates.id', '=', entrada.candidato)
+    .where('match_candidates.case_id', '=', entrada.caso)
+    .where('match_candidates.status', '=', 'suggested')
+    .where('lost_cases.owner_user_id', '=', entrada.dono)
+    .where('lost_cases.status', '=', 'open')
+    .returning([
+      ...COLUNAS_DO_CANDIDATO,
+      'lost_cases.pet_id as pet_id',
+      'pets.name as pet_name',
+      'found_reports.reporter_user_id as relator_user_id',
+      ...COLUNAS_DO_ACHADO,
+    ]);
+}
+
+/**
+ * A leitura do candidato JÁ DECIDIDO, com o mesmo predicado do dono.
+ *
+ * Ela existe para o reenvio da fila offline (critério 7) e **não** relaxa nada:
+ * a autorização é a mesma cláusula, na mesma posição lógica. O que muda é só o
+ * predicado de status, que aqui é o complementar.
+ */
+export function construtorDoCandidatoDecidido(
+  db: DbExecutor,
+  caso: CaseId,
+  candidato: string,
+  dono: UserId,
+) {
+  return db
+    .selectFrom('match_candidates')
+    .innerJoin('lost_cases', (join) =>
+      join.onRef('lost_cases.id', '=', 'match_candidates.case_id'),
+    )
+    .innerJoin('found_reports', (join) =>
+      join.onRef('found_reports.id', '=', 'match_candidates.found_report_id'),
+    )
+    .innerJoin('pets', (join) => join.onRef('pets.id', '=', 'lost_cases.pet_id'))
+    .select([
+      ...COLUNAS_DO_CANDIDATO,
+      'lost_cases.pet_id as pet_id',
+      'pets.name as pet_name',
+      'found_reports.reporter_user_id as relator_user_id',
+      ...COLUNAS_DO_ACHADO,
+    ])
+    .where('match_candidates.id', '=', candidato)
+    .where('match_candidates.case_id', '=', caso)
+    .where('match_candidates.status', '<>', 'suggested')
+    .where('lost_cases.owner_user_id', '=', dono);
 }

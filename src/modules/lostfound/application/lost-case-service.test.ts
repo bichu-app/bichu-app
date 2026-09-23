@@ -32,21 +32,35 @@ import { comoData } from '../../../shared/time/clock.js';
 import { LostCaseService, type ContextoDoChamador, type EntradaDoCaso } from './lost-case-service.js';
 import type {
   CanalDoReencontro,
+  CandidatoDecidido,
   CasoGravado,
+  DecisaoDoCandidato,
   DesfechoDoCaso,
   EstadoDoPetParaAbertura,
   LostCaseRepository,
   NovoCaso,
 } from '../ports/lost-case-repository.js';
+import type { AberturaDeConversaPorCorrespondencia } from './lost-case-service.js';
 import type { AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
 import type { DisparoGravado, RegistroDeDisparos } from '../ports/registro-de-disparos.js';
 import type { CentroDoAlcance } from '../domain/previa-do-alcance.js';
-import type { CaseId, Instant, OpaqueToken, PetId, UserId } from '../../../shared/types/brands.js';
+import type {
+  CaseId,
+  FoundReportId,
+  Instant,
+  OpaqueToken,
+  PetId,
+  UserId,
+} from '../../../shared/types/brands.js';
 
 const DONO = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const OUTRO_TUTOR = '018f3a2b-0000-7000-8000-0000000000bb' as UserId;
 const PET = '018f3a2b-0000-7000-8000-0000000000cc' as PetId;
 const CASO = '018f3a2b-0000-7000-8000-0000000000dd' as CaseId;
+
+const CANDIDATO = '018f3a2b-0000-7000-8000-0000000000ee';
+const ACHADO = '018f3a2b-0000-7000-8000-0000000000f1' as FoundReportId;
+const RELATOR = '018f3a2b-0000-7000-8000-0000000000f2' as UserId;
 
 const AGORA = 1_800_000_000_000 as Instant;
 const ONTEM = (1_800_000_000_000 - 24 * 3600 * 1000) as Instant;
@@ -75,6 +89,20 @@ interface EstadoDoRepositorio {
    * padrao numerico aqui faria os testes exercitarem um mundo que nao existe.
    */
   contagemDeAlcance?: number | null;
+  /**
+   * Um candidato de `match_candidates`, com o dono do CASO dele.
+   *
+   * O dono mora aqui e não no candidato porque `match_candidates` **não tem
+   * coluna de dono**: quem decide é o tutor do caso, e o duplo aqui precisa ter
+   * a mesma forma para que a asserção "um terceiro não decide" signifique a
+   * mesma coisa que no banco.
+   */
+  candidato?: {
+    readonly dono: UserId;
+    readonly casoAberto?: boolean;
+    readonly status: 'suggested' | DecisaoDoCandidato;
+    readonly decididoPor?: UserId;
+  };
 }
 
 interface Registro {
@@ -88,6 +116,14 @@ interface Registro {
     agora: Instant;
   }[];
   readonly buscou: { caso: CaseId; dono: UserId }[];
+  /** BICHUS-66: os pets cuja transferencia viva o servico mandou cancelar. */
+  readonly transferenciasCanceladas: PetId[];
+  /** O que o serviço pediu ao repositório ao decidir, dono incluído. */
+  readonly decidiu: { caso: CaseId; candidato: string; dono: UserId; decisao: string }[];
+  /** As conversas que a decisão mandou abrir. Vazio prova que NÃO abriu. */
+  readonly conversasAbertas: Parameters<
+    AberturaDeConversaPorCorrespondencia['aoConfirmarCorrespondencia']
+  >[0][];
   readonly conferiuAbertura: { pet: PetId; dono: UserId }[];
   readonly conferiuPrevia: { pet: PetId; dono: UserId }[];
   /** O que o servico pediu a porta de alcance, incluindo quem ele excluiu. */
@@ -123,11 +159,14 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
     abriu: [],
     encerrou: [],
     buscou: [],
+    decidiu: [],
+    conversasAbertas: [],
     conferiuAbertura: [],
     conferiuPrevia: [],
     contou: [],
     disparosAbertos: [],
     enfileirados: [],
+    transferenciasCanceladas: [],
   };
   const indice = new Set<PetId>(estado.petsComCasoAbertoNoIndice ?? []);
   // Cópia mutável: encerrar de verdade muda o estado, e é essa mudança que faz
@@ -217,6 +256,40 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       guardado = { dono: guardado.dono, gravado: encerrado };
       return Promise.resolve(encerrado);
     },
+
+    /**
+     * A decisão, com o mesmo `WHERE` que o SQL carrega.
+     *
+     * As quatro recusas saem como o MESMO `null`, e é isso que faz 404 e não
+     * 403: não existe caminho em que a linha de outro tutor chegue à camada de
+     * cima para ser descartada por um `if`.
+     */
+    decidirCandidato: (entrada) => {
+      registro.decidiu.push({
+        caso: entrada.caso,
+        candidato: entrada.candidato,
+        dono: entrada.dono,
+        decisao: entrada.decisao,
+      });
+      const c = estado.candidato;
+      if (c === undefined || entrada.caso !== CASO || entrada.candidato !== CANDIDATO) {
+        return Promise.resolve(null);
+      }
+      if (c.dono !== entrada.dono) return Promise.resolve(null);
+      if ((c.casoAberto ?? true) === false) return Promise.resolve(null);
+      if (c.status !== 'suggested') return Promise.resolve(null);
+      estado.candidato = { ...c, status: entrada.decisao, decididoPor: entrada.dono };
+      return Promise.resolve(candidatoGravado(entrada.decisao));
+    },
+
+    candidatoDecididoDoTutor: (caso, candidato, dono) => {
+      const c = estado.candidato;
+      if (c === undefined || caso !== CASO || candidato !== CANDIDATO) {
+        return Promise.resolve(null);
+      }
+      if (c.dono !== dono || c.status === 'suggested') return Promise.resolve(null);
+      return Promise.resolve(candidatoGravado(c.status));
+    },
   };
 
   return { repositorio, registro };
@@ -297,10 +370,67 @@ function servico(estado: EstadoDoRepositorio = {}): {
     fail: () => Promise.resolve(),
   };
 
+  // BICHUS-66. Nao e dublê mudo: ele REGISTRA, para que o caso de "abrir caso
+  // cancela a transferencia" possa afirmar que a chamada aconteceu em vez de
+  // apenas compilar.
+  const transferencias = {
+    cancelarPorCasoAberto: (pet: PetId) => {
+      registro.transferenciasCanceladas.push(pet);
+      return Promise.resolve();
+    },
+  };
+
   return {
-    casos: new LostCaseService({ repositorio, ids, clock, trilha, alcance, disparos, fila }),
+    casos: new LostCaseService({
+      repositorio,
+      ids,
+      clock,
+      trilha,
+      alcance,
+      disparos,
+      fila,
+      transferencias,
+      conversaDaCorrespondencia: {
+        aoConfirmarCorrespondencia: (aviso) => {
+          registro.conversasAbertas.push(aviso);
+          return Promise.resolve();
+        },
+      },
+    }),
     registro,
     eventos,
+  };
+}
+
+
+/** O candidato como o repositório o devolve depois de decidido. */
+function candidatoGravado(status: DecisaoDoCandidato): CandidatoDecidido {
+  return {
+    id: CANDIDATO,
+    caseId: CASO,
+    foundReportId: ACHADO,
+    petId: PET,
+    nomeDoPet: 'Nina',
+    relatorUserId: RELATOR,
+    score: 0.78,
+    atributosQuePontuaram: ['size', 'primary_color'],
+    distanciaEmMetros: 800,
+    linkOrigin: 'attribute_match',
+    versaoDaEstrategia: 'v1',
+    status,
+    criadoEm: comoData(ONTEM),
+    achado: {
+      id: ACHADO,
+      origin: 'stray_report',
+      status: 'open',
+      especie: 'dog',
+      porte: 'M',
+      cidade: 'São Paulo',
+      bairro: 'Vila Madalena',
+      achadoEm: comoData(ONTEM),
+      observacao: 'Estava com coleira vermelha.',
+      criadoEm: comoData(ONTEM),
+    },
   };
 }
 
@@ -647,6 +777,56 @@ void describe('openLostCase: a conferência dá a mensagem, o índice dá a gara
  * suíte e reprovaria neste bloco — que é a única forma de acusar a diferença
  * entre autorização na consulta e autorização num `if`.
  */
+/**
+ * BICHUS-66. Abrir um caso de perdido DERRUBA a transferencia viva daquele pet.
+ *
+ * Este bloco e a isca dessa ligacao, e ela existe porque a primeira medicao
+ * mostrou que ela faltava: com `cancelarPorCasoAberto` trocado por um `no-op`,
+ * os 1389 casos unitarios continuaram VERDES. O caso da transferencia chamava o
+ * servico dela diretamente e nao passava por aqui, entao a unica coisa que
+ * segurava a ligacao era o tipo -- e tipo prova que a fiacao existe, nao que
+ * ela e usada.
+ *
+ * A assimetria que decide o desenho: consumar com caso aberto revogaria todas
+ * as tags do pet (ADR-0004, irreversivel) no minuto em que a plaquinha da
+ * coleira e a unica coisa ligando o animal ao tutor. Cancelar custa refazer o
+ * convite depois do reencontro.
+ */
+void describe('BICHUS-66: abrir o caso cancela a transferencia viva do pet', () => {
+  void it('o caso aberto avisa o modulo de transferencia, com o pet certo', async () => {
+    const { casos, registro } = servico();
+    await casos.abrir(PET, entradaPadrao(), chamador(DONO));
+
+    assert.deepEqual(
+      registro.transferenciasCanceladas,
+      [PET],
+      'abrir um caso de perdido deixou de derrubar a transferencia em curso: a janela de 24 h ' +
+        'continua correndo e, quando fechar, o QR da coleira e revogado com o animal na rua',
+    );
+  });
+
+  void it('o aviso sai DEPOIS de o caso existir, e nao antes', async () => {
+    // A ordem importa: cancelar antes e ver a abertura falhar por corrida no
+    // indice unico deixaria o tutor sem caso E sem transferencia, que e o pior
+    // dos tres desfechos.
+    const { casos, registro } = servico();
+    await casos.abrir(PET, entradaPadrao(), chamador(DONO));
+
+    assert.equal(registro.abriu.length, 1);
+    assert.equal(registro.transferenciasCanceladas.length, 1);
+  });
+
+  void it('abertura RECUSADA nao avisa ninguem', async () => {
+    // Pet de outro tutor: nao houve caso, entao nao ha transferencia a derrubar.
+    // Avisar aqui deixaria qualquer conta cancelar a transferencia de qualquer
+    // pet, usando a abertura recusada como gatilho.
+    const { casos, registro } = servico({ abertura: { existeEhDoTutor: false } });
+    await capturar(() => casos.abrir(PET, entradaPadrao(), chamador(OUTRO_TUTOR)));
+
+    assert.deepEqual(registro.transferenciasCanceladas, []);
+  });
+});
+
 void describe('previa do alcance — o vínculo com o dono e a honestidade do número', () => {
   void it('o dono viaja no argumento da consulta, e não é conferido depois', async () => {
     const { casos, registro } = servico();
@@ -824,5 +1004,188 @@ void describe('o alerta nasce junto do caso, e diz a verdade desde o primeiro in
     // em pânico.
     const estados = new Set(['computed', 'unavailable', 'queued', 'no_location']);
     assert.equal(estados.size, 4);
+  });
+});
+
+/**
+ * A decisão humana sobre o candidato (BICHUS-86, critérios 4, 5 e 12).
+ *
+ * O que se prova aqui é **o efeito da decisão sobre a conversa**, que é a parte
+ * que nenhum banco pega: se `aoConfirmarCorrespondencia` sai do `if`, o Postgres
+ * continua feliz e o tutor passa a receber o canal aberto de alguém que ele
+ * acabou de dizer que não achou o pet dele.
+ *
+ * A autorização também está aqui, e é deliberadamente redundante com
+ * `autorizacao-do-decisor-na-clausula-where.test.ts` e com a integração: aquele
+ * lê o SQL, a integração o executa, e este cobra que a camada de cima **não
+ * invente um segundo caminho** — um `if` que devolvesse a linha do terceiro
+ * antes de o repositório recusar passaria nos outros dois.
+ */
+void describe('a decisão do candidato', () => {
+  const contextoDoDono = chamador(DONO);
+
+  function comCandidato(
+    extra: Partial<NonNullable<EstadoDoRepositorio['candidato']>> = {},
+  ): EstadoDoRepositorio {
+    return { candidato: { dono: DONO, status: 'suggested', ...extra } };
+  }
+
+  void it('confirmar abre a conversa mediada com quem registrou o achado', async () => {
+    const { casos, registro } = servico(comCandidato());
+
+    const decidido = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
+
+    assert.equal(decidido.status, 'confirmed');
+    assert.equal(registro.conversasAbertas.length, 1, 'confirmar não abriu a conversa');
+    const aberta = registro.conversasAbertas[0];
+    assert.equal(aberta?.foundReportId, ACHADO);
+    assert.equal(
+      aberta?.achadorComConta,
+      RELATOR,
+      'a conversa nasceu sem o lado de quem achou: sem token e sem `finder_user_id`, ' +
+        'quem registrou o achado não volta a ela nunca mais',
+    );
+    assert.equal(
+      aberta?.petId,
+      PET,
+      'o pet precisa vir do CASO que casou: o achado avulso não tem `pet_id`',
+    );
+    assert.equal(aberta?.nomeDoPet, 'Nina');
+    assert.equal(
+      aberta?.rotuloDaArea,
+      'Vila Madalena, São Paulo',
+      'a primeira mensagem do sistema precisa dizer ONDE, e o rótulo sai do achado',
+    );
+  });
+
+  void it('rejeitar NÃO abre conversa nenhuma', async () => {
+    const { casos, registro } = servico(comCandidato());
+
+    const decidido = await casos.decidirCandidato(CASO, CANDIDATO, 'rejected', contextoDoDono);
+
+    assert.equal(decidido.status, 'rejected');
+    assert.deepEqual(
+      registro.conversasAbertas,
+      [],
+      'rejeitar abriu o canal com quem o tutor acabou de dizer que não achou o pet dele',
+    );
+  });
+
+  void it('um TERCEIRO não decide, e recebe 404 e não 403', async () => {
+    const { casos, registro } = servico(comCandidato());
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', chamador(OUTRO_TUTOR)),
+    );
+
+    assert.equal(erro.status, 404);
+    assert.notEqual(
+      erro.status,
+      403,
+      'um 403 confirmaria a existência de uma correspondência entre o pet de outra ' +
+        'pessoa e um achado, que é exatamente o que a decisão humana existe para não ' +
+        'afirmar sozinha (ADR-0021)',
+    );
+    assert.deepEqual(registro.conversasAbertas, []);
+    // O dono viajou no argumento: um `decidirCandidato` que esquecesse de
+    // passá-lo passaria numa asserção de resultado e reprova nesta.
+    assert.equal(registro.decidiu[0]?.dono, OUTRO_TUTOR);
+  });
+
+  void it('o candidato de outro caso do MESMO tutor não é decidido por este endereço', async () => {
+    const { casos } = servico(comCandidato());
+    const outroCaso = '018f3a2b-0000-7000-8000-0000000000d9' as CaseId;
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(outroCaso, CANDIDATO, 'confirmed', contextoDoDono),
+    );
+
+    assert.equal(erro.status, 404);
+  });
+
+  void it('REJEITADO NÃO VOLTA: confirmar depois de rejeitar é recusado', async () => {
+    // Seção 4.10 de `docs/03-arquitetura.md` e critério 12 da BICHUS-86, com a
+    // mesma frase nos dois: "rejeitado não volta".
+    const { casos, registro } = servico(comCandidato({ status: 'rejected', decididoPor: DONO }));
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono),
+    );
+
+    assert.equal(erro.status, 404);
+    assert.deepEqual(
+      registro.conversasAbertas,
+      [],
+      'desfazer uma rejeição abriu a conversa que a rejeição existia para não abrir',
+    );
+  });
+
+  void it('o reenvio da MESMA decisão devolve o mesmo candidato, e não 404', async () => {
+    // Critério 7: sem conexão, a confirmação entra numa fila — e fila reenvia.
+    // Um 404 aqui diria "não encontramos isso" logo depois de a ação ter dado
+    // certo, que é a tela quebrada que a fila offline produz.
+    const { casos, registro } = servico(comCandidato());
+
+    const primeira = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
+    const reenvio = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
+
+    assert.equal(reenvio.id, primeira.id);
+    assert.equal(reenvio.status, 'confirmed');
+    assert.equal(
+      registro.conversasAbertas.length,
+      1,
+      'o reenvio abriu uma SEGUNDA conversa, e o tutor passou a ver duas linhas para a ' +
+        'mesma pessoa',
+    );
+  });
+
+  void it('o reenvio do TERCEIRO continua 404, e a leitura do já decidido não o relaxa', async () => {
+    const { casos } = servico(comCandidato({ status: 'confirmed', decididoPor: DONO }));
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', chamador(OUTRO_TUTOR)),
+    );
+
+    assert.equal(erro.status, 404);
+  });
+
+  void it('a decisão de caso já encerrado é recusada', async () => {
+    const { casos, registro } = servico(comCandidato({ casoAberto: false }));
+
+    const erro = await capturar(() =>
+      casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono),
+    );
+
+    assert.equal(erro.status, 404);
+    assert.deepEqual(registro.conversasAbertas, []);
+  });
+
+  void it('as DUAS decisões entram na trilha, com quem decidiu e o que decidiu', async () => {
+    // Rejeição é irreversível: ela precisa de autor e instante em lugar
+    // auditável, que é a mesma razão de `match_candidates_decisao_tem_autor`.
+    for (const decisao of ['confirmed', 'rejected'] as const) {
+      const { casos, eventos } = servico(comCandidato());
+      await casos.decidirCandidato(CASO, CANDIDATO, decisao, contextoDoDono);
+
+      const evento = eventos.find((e) => e.action === 'match.candidate_decided');
+      assert.ok(evento !== undefined, `a decisão \`${decisao}\` não entrou na trilha`);
+      assert.equal(evento.actorUserId, DONO);
+      assert.equal(evento.resourceId, CANDIDATO);
+      assert.equal((evento.metadata as { decision?: string }).decision, decisao);
+    }
+  });
+
+  void it('a resposta da decisão não carrega o dono do achado nem o id do caso do pet', async () => {
+    // O que sai é `MatchCandidate`. `pet_id` e o identificador de quem
+    // registrou o achado não estão no schema, e o portão de contrato só procura
+    // o que SUMIU — propriedade a mais passa por ele.
+    const { casos } = servico(comCandidato());
+    const decidido = await casos.decidirCandidato(CASO, CANDIDATO, 'confirmed', contextoDoDono);
+
+    // A camada de aplicação ainda os carrega, de propósito: é com eles que ela
+    // abre a conversa. Quem os deixa de fora é `comoRespostaDoCandidato`, e o
+    // que se cobra aqui é que eles CHEGUEM, para que a borda tenha o que omitir.
+    assert.equal(decidido.petId, PET);
+    assert.equal(decidido.relatorUserId, RELATOR);
   });
 });
