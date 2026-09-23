@@ -504,6 +504,40 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
+  // vitrine da Loja (BICHUS-185 / BICHUS-189, migração 20260922000009)
+  //
+  // A PERGUNTA QUE ESTA ENTRADA OBRIGA A RESPONDER: quando o parceiro sai, o
+  // que acontece com os itens dele?
+  //
+  // As três ações eram defensáveis e nenhuma é óbvia:
+  //
+  // - `CASCADE` apagaria a vitrine inteira do parceiro. É a mais destrutiva, e
+  //   é silenciosa: ninguém fica sabendo que doze itens sumiram junto.
+  // - `SET NULL` está fora antes de qualquer opinião, e é decidível pelo
+  //   catálogo: `partner_slug` é `NOT NULL`. É o caso 1 da taxonomia do topo
+  //   deste arquivo, e seria contradição entre duas declarações do mesmo banco.
+  // - `NO ACTION` recusa apagar o parceiro enquanto houver item apontando para
+  //   ele. Não destrói nada e obriga quem apaga a olhar para a vitrine antes.
+  //
+  // `NO ACTION` é a escolha, e ela é a MESMA classe do dado de referência logo
+  // acima: `store_partners` é catálogo curado (a forma da migração é copiada de
+  // `dados-de-referencia.sql`), não identidade de pessoa. Apagar um parceiro
+  // com item apontando para ele precisa FALHAR, exatamente como apagar uma raça
+  // com pet apontando para ela.
+  //
+  // E o produto já diz que a exclusão não é o caminho: as duas tabelas têm
+  // `active boolean`, e o item retirado é marcado inativo em vez de apagado.
+  // Parceiro que sai do programa vira `active = false`, a vitrine dele some da
+  // leitura pelo índice parcial, e nenhuma linha é destruída. `NO ACTION` é a
+  // rede embaixo de uma operação que o desenho já diz que não deve acontecer.
+  // -------------------------------------------------------------------------
+  'public.store_items.store_items_partner_slug_fkey': {
+    colunas: ['partner_slug'],
+    referencia: 'public.store_partners',
+    aoApagar: 'NO ACTION',
+  },
+
+  // -------------------------------------------------------------------------
   // upload_intents
   // -------------------------------------------------------------------------
   'public.upload_intents.upload_intents_found_report_id_fkey': {
