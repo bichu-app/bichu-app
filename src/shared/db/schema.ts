@@ -829,6 +829,54 @@ export interface EntityVerificationsTable {
   created_at: CriadoEm;
 }
 
+/** Espelha `CategoriaDaVitrine` de `modules/store/domain/item-da-vitrine.ts`. */
+export type CategoriaDaVitrine = 'food' | 'toy' | 'hygiene' | 'accessory' | 'health' | 'bed';
+
+/**
+ * A versao corrente da vitrine da `Loja`. Mesma forma de `ref_data_versions`.
+ */
+export interface StoreCatalogVersionsTable {
+  version: string;
+  published_at: Generated<Date>;
+  is_current: Generated<boolean>;
+}
+
+/**
+ * O parceiro da vitrine.
+ *
+ * **Sem `id`, e a ausencia e o desenho.** `slug` e a chave primaria da tabela.
+ * O ADR-0010 item 6 proibe UUID interno em saida publica, e esta tabela so
+ * existe para sair em saida publica -- um `id uuid` aqui seria uma coluna que
+ * nunca pode ser projetada, esperando alguem projeta-la por engano. Foi o que
+ * obrigou a `20260922000008` a acrescentar `slug` a `professionals` depois.
+ */
+export interface StorePartnersTable {
+  slug: string;
+  name: string;
+  /** Apenas o host, sem esquema nem caminho nem consulta. */
+  host: string;
+  active: Generated<boolean>;
+  sort_order: Generated<number>;
+}
+
+/** O item da vitrine. Sem `id`, pela mesma razao de `StorePartnersTable`. */
+export interface StoreItemsTable {
+  slug: string;
+  partner_slug: string;
+  title: string;
+  summary: string;
+  category: CategoriaDaVitrine;
+  image_url: string | null;
+  target_url: string;
+  /** Centavos, inteiro. Nunca ponto flutuante. */
+  price_amount: number | null;
+  price_currency: string | null;
+  /** Data pura: a da consulta HUMANA ao preco, nunca derivada de carimbo. */
+  price_checked_at: Date | null;
+  active: Generated<boolean>;
+  sort_order: Generated<number>;
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
@@ -863,6 +911,9 @@ export interface Database {
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;
   entity_verifications: EntityVerificationsTable;
+  store_catalog_versions: StoreCatalogVersionsTable;
+  store_partners: StorePartnersTable;
+  store_items: StoreItemsTable;
   'audit.events': AuditEventsTable;
 }
 
