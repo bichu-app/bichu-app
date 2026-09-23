@@ -1028,8 +1028,11 @@ jobs:
       # passo acima. Job separado subiria a mesma pilha de novo para provar a
       # mesma coisa.
       #
-      # `docker compose run --rm api` e o mesmo caminho de `make test-int`: a
-      # imagem `dev` carrega `tests/`, os tsconfig e o node_modules completo.
+      # `docker compose run --rm <servico da pilha>` e o mesmo caminho de
+      # `make test-int`: a imagem `dev` carrega `tests/`, os tsconfig e o
+      # node_modules completo. O servico e `ferramentas` desde 23/09 -- era
+      # `api`, e o teto de runtime dela derrubava o compilador antes do
+      # primeiro caso. Ver o bloco do passo da suite, mais abaixo.
       # Rodar do runner exigiria publicar a porta do banco, que hoje nao e
       # publicada -- e publicar porta para poder testar e trocar a topologia
       # pelo teste.
