@@ -107,6 +107,53 @@ void describe('a massa do diretorio', () => {
     assert.equal(new Set(slugs).size, slugs.length);
   });
 
+  void it('todo slug cabe no formato que o banco impoe', () => {
+    // `professionals_slug_formato` e `^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$`: no
+    // maximo 30 caracteres, minusculas, sem hifen nas pontas. Este caso existe
+    // porque a massa ja estourou o limite uma vez, e o unico lugar que acusou
+    // foi o banco -- no meio da suite de integracao, com a metade das linhas
+    // gravadas.
+    const formato = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+    for (const entrada of MASSA_DO_DIRETORIO) {
+      assert.match(entrada.slug, formato, `slug '${entrada.slug}' nao passa no CHECK do banco`);
+    }
+  });
+
+  void it('todo nome de exibicao cabe entre 2 e 120 caracteres', () => {
+    // `professionals_display_name_tamanho`. O teto de 120 e o mesmo do
+    // contrato, e o piso de 2 e o que impede um nome de uma letra.
+    for (const entrada of MASSA_DO_DIRETORIO) {
+      assert.ok(
+        entrada.displayName.length >= 2 && entrada.displayName.length <= 120,
+        `'${entrada.displayName}' tem ${String(entrada.displayName.length)} caracteres`,
+      );
+    }
+  });
+
+  void it('todo telefone cabe no formato internacional que a coluna impoe', () => {
+    // `professionals_telefone_formato` e `^\+[1-9][0-9]{7,14}$`, e ele e
+    // DIFERENTE do telefone de conta de usuario, que aceita so o Brasil.
+    const formato = /^\+[1-9][0-9]{7,14}$/;
+    for (const entrada of MASSA_DO_DIRETORIO) {
+      if (entrada.phoneE164 === null) continue;
+      assert.match(entrada.phoneE164, formato, entrada.slug);
+    }
+  });
+
+  void it('todo CNPJ tem os catorze digitos que a coluna exige', () => {
+    for (const entrada of MASSA_DO_DIRETORIO) {
+      if (entrada.cnpj === null) continue;
+      assert.match(entrada.cnpj, /^[0-9]{14}$/, entrada.slug);
+    }
+  });
+
+  void it('toda UF tem exatamente duas letras', () => {
+    for (const entrada of MASSA_DO_DIRETORIO) {
+      if (entrada.state === null) continue;
+      assert.equal(entrada.state.length, 2, entrada.slug);
+    }
+  });
+
   void it('nenhum identificador se repete, nem de entrada, nem de titular, nem de prova', () => {
     const entradas = MASSA_DO_DIRETORIO.map((uma) => uma.id);
     const titulares = MASSA_DO_DIRETORIO.map((uma) => uma.titularId);

@@ -56,6 +56,8 @@ import { randomUUID } from 'node:crypto';
 import pg from 'pg';
 
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
+import { semear } from '../../src/bin/seed.js';
+import { MASSA_DO_DIRETORIO, PUBLICADAS } from '../../src/bin/massa-do-diretorio.js';
 import { criarDirectoryRepository } from '../../src/modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { projetarEntrada } from '../../src/modules/professionals/domain/entrada-do-diretorio.js';
 import type { DirectoryRepository } from '../../src/modules/professionals/ports/directory-repository.js';
@@ -181,6 +183,27 @@ async function darLocalizacao(
            expires_at = EXCLUDED.expires_at`,
     [dono, ponto.lon, ponto.lat, new Date(validaAte - 30 * DIA), new Date(validaAte)],
   );
+}
+
+/**
+ * Todas as paginas de São Paulo, por nome.
+ *
+ * Por nome e nao por distancia porque a ordem precisa ser ESTAVEL entre duas
+ * chamadas para a paginacao por deslocamento significar alguma coisa, e o
+ * chamador deste auxiliar nao tem localizacao.
+ */
+async function todasAsPaginas(chamador: UserId): Promise<{ slug: string; nivel: string }[]> {
+  const todas: { slug: string; nivel: string }[] = [];
+  for (let pagina = 1; pagina <= 10; pagina += 1) {
+    const resultado = await repo.listarPublicados(
+      recorte(chamador, { city: 'São Paulo', sort: 'name', page: pagina }),
+    );
+    for (const item of resultado.itens) {
+      todas.push({ slug: item.slug, nivel: projetarEntrada(item).verification.level });
+    }
+    if (todas.length >= resultado.total) break;
+  }
+  return todas;
 }
 
 function recorte(chamador: UserId, ajustes: Record<string, unknown> = {}) {
@@ -435,6 +458,62 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
       recorte(titular, { neighborhood: bairro.toUpperCase(), city: 'são paulo', state: 'sp' }),
     );
     assert.equal(achou.total, 1);
+  });
+
+  void it('a MASSA DE QA grava e a secao aparece ocupada: dez entradas publicadas', async () => {
+    // Este caso e o unico que roda `semear` de verdade. Massa que ninguem
+    // executa e massa que se descobre quebrada no dia da demonstracao, contra
+    // um CHECK que o teste unitario nao tem como conhecer: `display_name` de 2
+    // a 120, formato do slug, `claim_status` com marco, `phone_e164` no padrao
+    // internacional. Todos so existem no banco.
+    await semear(db);
+    for (const entrada of MASSA_DO_DIRETORIO) {
+      entradasCriadas.push(entrada.id);
+      contasCriadas.push(entrada.titularId as UserId);
+    }
+
+    const chamador = await criarConta();
+    // As paginas inteiras, e nao a primeira: os casos acima deste tambem
+    // criaram entradas em São Paulo, e o teto de 20 do contrato e real. Um
+    // caso que olha so a primeira pagina passa hoje e reprova no dia em que
+    // alguem acrescentar um cenario antes dele -- que e ruido, nao defeito.
+    const todas = await todasAsPaginas(chamador);
+    assert.ok(
+      todas.length >= PUBLICADAS.filter((uma) => uma.city === 'São Paulo').length,
+      `a secao precisa aparecer ocupada: ${String(todas.length)} entradas em São Paulo.`,
+    );
+    const slugs = new Set(todas.map((uma) => uma.slug));
+    for (const publicada of PUBLICADAS.filter((uma) => uma.city === 'São Paulo')) {
+      assert.ok(slugs.has(publicada.slug), `${publicada.slug} nao apareceu na lista`);
+    }
+    for (const escondida of MASSA_DO_DIRETORIO.filter((uma) => uma.status !== 'published')) {
+      assert.equal(
+        slugs.has(escondida.slug),
+        false,
+        `${escondida.slug} esta em '${escondida.status}' e apareceu na vitrine`,
+      );
+    }
+
+    // O selo de cada uma sai da FONTE, e a massa tem os tres niveis.
+    const niveis = new Set(todas.map((uma) => uma.nivel));
+    assert.deepEqual(
+      [...niveis].sort(),
+      ['contact_verified', 'document_verified', 'none'],
+      'os tres niveis precisam chegar a tela: e o selo que o cliente vai julgar.',
+    );
+  });
+
+  void it('semear duas vezes deixa o mesmo estado: a massa e fixa', async () => {
+    await semear(db);
+    await semear(db);
+    const chamador = await criarConta();
+    const slugs = (await todasAsPaginas(chamador)).map((uma) => uma.slug);
+    assert.equal(
+      new Set(slugs).size,
+      slugs.length,
+      'ISCA: sem a limpeza da massa anterior, a segunda semeadura duplicaria ' +
+        '-- ou estouraria na unicidade do slug, que e o mesmo defeito acusando mais cedo.',
+    );
   });
 
   void it('nenhuma coluna de vinculo atravessa o repositorio', async () => {

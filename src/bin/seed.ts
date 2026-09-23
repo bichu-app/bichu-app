@@ -152,7 +152,13 @@ function pontoDaEntrada(entrada: EntradaSemeada) {
   return sql`ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326)::geography`;
 }
 
-async function semear(db: Db): Promise<void> {
+/**
+ * Grava a massa. **Exportada** para que a suite de integracao a rode contra o
+ * Postgres efemero: uma massa que ninguem executa e uma massa que se descobre
+ * quebrada no dia da demonstracao, contra um CHECK que o teste unitario nao
+ * tem como conhecer.
+ */
+export async function semear(db: Db): Promise<void> {
   await limparMassaAnterior(db);
 
   for (const entrada of MASSA_DO_DIRETORIO) {

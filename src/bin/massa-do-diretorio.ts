@@ -90,7 +90,7 @@ export const MASSA_DO_DIRETORIO: readonly EntradaSemeada[] = [
     id: '0199c3a0-0000-7000-8000-0000000000d1',
     titularId: '0199c3a0-0000-7000-8000-0000000000a1',
     titularEmail: `clinica.santa-barbara@${DOMINIO}`,
-    slug: 'clinica-veterinaria-santa-barbara',
+    slug: 'clinica-santa-barbara',
     kind: 'clinic',
     // NOME LONGO DE PROPOSITO: 61 caracteres, quebra em duas linhas no cartao.
     displayName: 'Clínica Veterinária Santa Bárbara 24 Horas — Pinheiros',
