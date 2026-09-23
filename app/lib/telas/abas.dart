@@ -12,6 +12,7 @@ import 'avisos/aviso_de_cadastro_incompleto.dart';
 import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
 import 'perfil/meus_pets.dart';
+import 'perto/lista_do_diretorio.dart';
 
 /// Secao 1 — `Pets`. A casa dos perdidos, dos achados e das adocoes.
 ///
@@ -178,10 +179,22 @@ class AbaRede extends StatelessWidget {
 
 /// Secao 3 — `Perto`. Profissionais e estabelecimentos indicados.
 ///
-/// Casca honesta, **com a porta das ONGs** (criterio 6): ela leva a `Pets`
-/// pre-filtrado em adocao e nao duplica listagem nenhuma. A porta fica fora do
-/// `EstadoVazio` de proposito: o 11.10 manda o estado vazio nascer sem acao, e
-/// a porta nao e acao do vazio, e um caminho da secao.
+/// **A casca honesta saiu: a secao tem dado.** O `EstadoVazio` "Perto esta em
+/// construcao" era o certo enquanto nao havia rota; `GET /directory/entries`
+/// existe, e a listagem e `ListaDoDiretorio`. O estado vazio nao sumiu, mudou
+/// de dono: quem o mostra agora e a propria lista, e so quando o servidor
+/// responde que nao ha entrada -- que e afirmacao medida, e nao afirmacao
+/// sobre dado que a tela nao carrega.
+///
+/// **A porta das ONGs continua** (criterio 6): ela leva a `Pets` pre-filtrado
+/// em adocao e nao duplica listagem nenhuma. Ela fica **abaixo** da lista
+/// porque o conteudo da secao passou a existir, e porta para outra secao acima
+/// do conteudo proprio inverteria a ordem de leitura.
+///
+/// **O slot unico de acao da barra de topo continua LIVRE.** Os tres controles
+/// de listagem -- busca, filtro e ordenacao -- moram no corpo, no topo da
+/// lista (ver `BarraDeListagem`): o 11.23.1 da UMA acao na `AppBar`, e tres
+/// nao cabem numa. O `Filtros` desceu junto com os outros dois.
 ///
 /// **Sem mapa**, por decisao de 17/09: o Maps cobra por carregamento de mapa e
 /// o componente criaria precedente contra o ADR-0010. E perfil de profissional
@@ -196,11 +209,7 @@ class AbaPerto extends StatelessWidget {
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
       filhos: const <Widget>[
-        EstadoVazio(
-          titulo: 'Perto está em construção',
-          explicacao: 'Aqui vão ficar os veterinários, banhos e tosas e pet '
-              'shops recomendados pela comunidade.',
-        ),
+        ListaDoDiretorio(),
         SizedBox(height: BichuEspaco.e6),
         _PortaDeSubDestino(
           icone: Icons.favorite_outline,

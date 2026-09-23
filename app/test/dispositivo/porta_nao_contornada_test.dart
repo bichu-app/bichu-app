@@ -331,7 +331,24 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// a historia nao encosta em camera, e o diff nao cita `CameraEGaleria`,
 /// `ImagePicker` nem `Permission`. Anterior:
 /// `f14551245240f69cfb43cb67216e2682cdb7684c`.
-const String _arvoreDasTelas = 'ad6fde0e74c94b21c983c286d1557c07be291288';
+///
+/// **Destravado uma setima vez pela listagem de `Perto`** (regra de listagem
+/// de 22/09/2026): `telas/perto/` e pasta nova, com
+/// `lista_do_diretorio.dart`, e `abas.dart` mudou porque `AbaPerto` deixou de
+/// ser casca honesta -- `GET /directory/entries` existe, e o `EstadoVazio`
+/// "Perto esta em construcao" passou a ser uma afirmacao falsa sobre uma
+/// secao que tem dado. Nenhuma das duas encosta na porta `CameraEGaleria`,
+/// que e o que o criterio 10 protege, e quem responde por isso e o portao de
+/// diretivas abaixo, que nao depende desta constante.
+///
+/// **O valor anterior desta constante era `ad6fde0e74c94b21c983c286d1557c07be291288`**,
+/// medido pelo indice temporario na base `feat/perto-com-dados`. O
+/// `f145512...` citado acima e de uma base anterior e ja nao valia.
+///
+/// `casca_com_abas.dart` entrou na mesma mudanca: `Perto` deixou de ser
+/// `EstadoDaSecao.planejada` e virou `existe`, porque a secao tem conteudo e
+/// porque `planejada` a esconderia da barra no build de entrega.
+const String _arvoreDasTelas = '4a29c9d07d3aaf5c4067be2885b3efbd8b4876e6';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

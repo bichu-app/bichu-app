@@ -212,7 +212,16 @@ class CascaComAbas extends StatelessWidget {
       icone: Icons.place_outlined,
       iconeSelecionado: Icons.place,
       rota: Rotas.perto,
-      estado: EstadoDaSecao.planejada,
+      // **`existe`, e nao `planejada`, desde a listagem do diretorio.**
+      //
+      // A troca nao e cosmetica e tem duas consequencias medidas. A primeira:
+      // `planejada` obriga a secao a dizer "Perto esta em construcao"
+      // (UX 25.7.3), e essa frase passou a ser falsa -- ha lista, vinda de
+      // `GET /directory/entries`. A segunda: `visiveisEm` esconde o que e
+      // `planejada` no build de ENTREGA, entao enquanto esta linha dissesse
+      // `planejada` a secao com conteudo nao apareceria na barra do build que
+      // vai para a loja.
+      estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.lugar,
     ),
     DestinoDeNavegacao(
