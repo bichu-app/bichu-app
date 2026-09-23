@@ -26,6 +26,12 @@ const List<String> arquivosDaHistoria = <String>[
   'lib/widgets/cartao_de_pet.dart',
   'lib/widgets/moldura.dart',
   'lib/telas/perfil/meus_pets.dart',
+  // A listagem de `Perto` e o componente de topo de listagem entram na mesma
+  // lista: eles sao a primeira tela do app com filtro e ordenacao, e o
+  // distintivo de filtros e o selo de verificacao sao exatamente o tipo de
+  // peca em que um hex literal entra sem ninguem notar.
+  'lib/widgets/barra_de_listagem.dart',
+  'lib/telas/perto/lista_do_diretorio.dart',
 ];
 
 /// Um achado do portao: o arquivo, a linha e o motivo.

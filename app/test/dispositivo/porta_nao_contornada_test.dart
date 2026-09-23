@@ -357,6 +357,40 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Medido com o indice temporario, na arvore de trabalho:
 /// `4be08548b405759c524cf6336451b53d03b2d184`.
 ///
+/// **Destravado uma setima vez pela listagem de `Perto`** (regra de listagem
+/// de 22/09/2026): `telas/perto/` e pasta nova, com
+/// `lista_do_diretorio.dart`, e `abas.dart` mudou porque `AbaPerto` deixou de
+/// ser casca honesta -- `GET /directory/entries` existe, e o `EstadoVazio`
+/// "Perto esta em construcao" passou a ser uma afirmacao falsa sobre uma
+/// secao que tem dado. Nenhuma das duas encosta na porta `CameraEGaleria`,
+/// que e o que o criterio 10 protege, e quem responde por isso e o portao de
+/// diretivas abaixo, que nao depende desta constante.
+///
+/// **O valor anterior desta constante era `ad6fde0e74c94b21c983c286d1557c07be291288`**,
+/// medido pelo indice temporario na base `feat/perto-com-dados`. O
+/// `f145512...` citado acima e de uma base anterior e ja nao valia.
+///
+/// `casca_com_abas.dart` entrou na mesma mudanca: `Perto` deixou de ser
+/// `EstadoDaSecao.planejada` e virou `existe`, porque a secao tem conteudo e
+/// porque `planejada` a esconderia da barra no build de entrega.
+///
+/// **Destravado uma oitava vez pela vitrine da `Loja`** (a Loja do MVP, que a
+/// BICHUS-185 descreve, com a regra de listagem de 22/09/2026):
+/// `telas/loja/` e pasta nova, com `vitrine_da_loja.dart`, e `abas.dart`
+/// mudou porque `AbaLoja` deixou de ser casca honesta -- `GET /store/items`
+/// existe, e o `EstadoVazio` "Loja esta em construcao" passou a ser uma
+/// afirmacao falsa sobre uma secao que tem dado. `casca_com_abas.dart` entrou
+/// junto, pela mesma razao de `Perto`: `Loja` virou `existe`, e o reforco da
+/// pagina perdeu a promessa da plaquinha, que a secao C da BICHUS-185 tirou
+/// da Loja no MVP.
+///
+/// Nenhuma das tres encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege: a vitrine nao tira foto, nao abre galeria e nao pede permissao
+/// nenhuma. Quem responde por isso e o portao de diretivas abaixo, que nao
+/// depende desta constante.
+///
+/// **O valor anterior desta constante era `4a29c9d07d3aaf5c4067be2885b3efbd8b4876e6`**,
+/// medido na base `feat/tela-de-perto` (`98a91a2`).
 /// **Destravado uma nona vez pelo travamento de `Criar conta` em aparelho
 /// fisico de 22/09/2026.** O cliente nao conseguia criar conta nem entrar, e
 /// a varredura que saiu dali achou uma classe inteira: o `setState` que
@@ -490,7 +524,51 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// o portao de diretivas abaixo, que nao depende desta constante. Medido pelo
 /// indice temporario que este portao usa, sobre a arvore de trabalho.
 /// Anterior: `74dc7b2c06f3ee25b139b9517824614656db73c2`.
-const String _arvoreDasTelas = '65bcd97d9088e6da8668127c8cb4d38f5e19d718';
+/// **Remedido na mescla de `development` (38371aa) nesta branch, 23/09/2026.**
+/// Os dois lados destravaram a constante pelo proprio motivo, e por isso
+/// nenhum dos dois valores vale depois da mescla: a arvore mesclada nao e a
+/// que nenhum dos dois mediu sozinho. Desta branch veio a vitrine da `Loja`
+/// (`telas/loja/`, com `abas.dart` e `casca_com_abas.dart`); da `development`
+/// vieram a gaveta de secoes, os nove ramos de erro que tiravam o
+/// `carregando para sempre` e a tela do pet da tag.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, que e
+/// o que o criterio 10 da BICHUS-161 protege: a vitrine nao tira foto, nao
+/// abre galeria e nao pede permissao, e o portao de diretivas abaixo, que nao
+/// depende desta constante, continua cobrando isso por conta propria.
+///
+/// O valor abaixo foi MEDIDO com o mesmo indice temporario que este portao
+/// usa (`GIT_INDEX_FILE` + `read-tree HEAD` + `add -A app/lib/telas` +
+/// `write-tree` + `rev-parse <arvore>:app/lib/telas`) sobre a arvore ja
+/// mesclada, e nao copiado de relato nenhum. As justificativas acima ficaram
+/// TODAS: cada uma diz o que mudou de um lado, e e isso que mantem a troca
+/// sendo um ato deliberado. Anteriores:
+/// `47d3281e75ece2ffd5e85586047c465868427d6f` (esta branch) e
+/// `72832de16b55beaff488096e442d64b1846bed0c` (`development`).
+/// **Remedido no merge de `feat/tela-de-loja` para a `development`,
+/// 23/09/2026, e pela terceira vez seguida pelo mesmo motivo.** Os dois
+/// lados estavam certos sobre a propria historia e errados sobre o
+/// resultado: `65bcd97d9088e6da8668127c8cb4d38f5e19d718` e a arvore de um
+/// lado (a validacao de senha ao vivo, ja na `development`),
+/// `77a37422c91cce0d6d91b979bbdc2835da0ea585` e a do outro (a vitrine da
+/// `Loja`), e a arvore que existe depois do merge nao e nenhuma das duas:
+/// `telas/loja/` e `telas/perto/` entram inteiras ao lado do
+/// `conta/tela_criar_conta.dart` reescrito, e nenhuma soma de dois hashes
+/// produz o terceiro.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, que e
+/// o que o criterio 10 da BICHUS-161 protege: nem a vitrine, nem a listagem
+/// de `Perto`, nem a barra de acao fixa de `Criar conta` leem camera ou
+/// galeria ou pedem permissao. Quem cobra isso e o portao de diretivas
+/// abaixo, que nao depende desta constante.
+///
+/// O valor abaixo foi MEDIDO com o mesmo indice temporario que este portao
+/// usa (`GIT_INDEX_FILE` + `read-tree HEAD` + `add -A app/lib/telas` +
+/// `write-tree` + `rev-parse <arvore>:app/lib/telas`) sobre a arvore ja
+/// mesclada, e nao copiado de relato nenhum. As justificativas acima ficaram
+/// TODAS, dos dois lados: cada uma diz o que mudou de um lado, e e isso que
+/// mantem a troca sendo um ato deliberado.
+const String _arvoreDasTelas = '883961325403f0e22fe845c4442014e93ff1e479';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
