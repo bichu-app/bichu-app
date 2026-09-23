@@ -516,6 +516,187 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     );
   });
 
+  // =========================================================================
+  // A BUSCA POR NOME (`q`)
+  // =========================================================================
+  //
+  // Nada disto existe fora do Postgres. A normalizacao de acento e caixa e uma
+  // funcao do banco, o escape dos curingas e outra, e o indice que torna a
+  // busca viavel e um GIN de trigrama -- um dobre em memoria aprovaria os tres
+  // com qualquer implementacao, inclusive com nenhuma.
+
+  void it('acha sem acento e sem caixa: `veterinaria` acha `Veterinária`', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    await criarEntrada({
+      titular,
+      slug: `ac-${randomUUID().slice(0, 8)}`,
+      nome: 'Clínica Veterinária Santa Bárbara',
+      bairro,
+    });
+
+    for (const termo of ['veterinaria', 'VETERINÁRIA', 'Veterinaria', 'bárbara', 'barbara']) {
+      const pagina = await repo.listarPublicados(recorte(titular, { neighborhood: bairro, q: termo }));
+      assert.equal(
+        pagina.total,
+        1,
+        `ISCA: o termo '${termo}' nao achou. Sem \`texto_para_busca\` nos DOIS ` +
+          'lados da comparacao, quem digita sem acento -- que e como se digita ' +
+          'no celular -- nao acha nada e conclui que o diretorio esta vazio.',
+      );
+    }
+  });
+
+  void it('BUSCA NAO ENXERGA RASCUNHO, OCULTO NEM REMOVIDO', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    // O MESMO nome nos quatro estados. E esta a forma do vazamento: quem busca
+    // por um nome especifico ja sabe o nome, e so quer saber se ele existe.
+    const nome = `Petshop Sigiloso ${randomUUID().slice(0, 8)}`;
+    await criarEntrada({ titular, slug: `bp-${randomUUID().slice(0, 8)}`, nome, bairro, status: 'published' });
+    await criarEntrada({ titular, slug: `bd-${randomUUID().slice(0, 8)}`, nome, bairro, status: 'draft' });
+    await criarEntrada({ titular, slug: `bh-${randomUUID().slice(0, 8)}`, nome, bairro, status: 'hidden' });
+    await criarEntrada({ titular, slug: `br-${randomUUID().slice(0, 8)}`, nome, bairro, status: 'removed' });
+
+    const pagina = await repo.listarPublicados(recorte(titular, { q: nome }));
+
+    assert.equal(
+      pagina.total,
+      1,
+      'ISCA: se a busca deixar de casar sobre o mesmo `where status = ' +
+        "'published'`, as quatro saem -- e a resposta vira um oraculo de " +
+        'existencia: "este cadastro existe, so nao esta publicado". Um rascunho ' +
+        'e um cadastro que ninguem terminou; um oculto e alguem que PEDIU para ' +
+        'sair da vitrine.',
+    );
+    assert.ok(pagina.itens[0]?.slug.startsWith('bp-'));
+  });
+
+  void it('`%` e `_` do termo sao literais, e nao curingas', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    await criarEntrada({ titular, slug: `cu-${randomUUID().slice(0, 8)}`, nome: 'Abcdef Pet', bairro });
+
+    const comSublinhado = await repo.listarPublicados(
+      recorte(titular, { neighborhood: bairro, q: 'a_cdef' }),
+    );
+    assert.equal(
+      comSublinhado.total,
+      0,
+      'ISCA: sem o escape, `_` casa qualquer caractere e `a_cdef` acha `Abcdef`.',
+    );
+
+    const comPorcento = await repo.listarPublicados(
+      recorte(titular, { neighborhood: bairro, q: 'a%f' }),
+    );
+    assert.equal(
+      comPorcento.total,
+      0,
+      'ISCA: sem o escape, `%` casa qualquer coisa. O caso extremo e `q=%` ' +
+        'sozinho, que devolve a tabela inteira com uma varredura completa -- e ' +
+        'sem nenhum caractere suspeito na URL.',
+    );
+
+    const literal = await repo.listarPublicados(recorte(titular, { neighborhood: bairro, q: 'bcdef' }));
+    assert.equal(literal.total, 1, 'o termo sem curinga continua achando');
+  });
+
+  void it('`q` casa SO no nome: nem em `about`, nem no bairro', async () => {
+    const titular = await criarConta();
+    const marca = `zzz${randomUUID().slice(0, 8)}`;
+    const bairro = `bairro-${marca}`;
+    const entrada = await criarEntrada({
+      titular,
+      slug: `so-${randomUUID().slice(0, 8)}`,
+      nome: 'Alfa Pet',
+      bairro,
+    });
+    await cliente.query('UPDATE professionals SET about = $1 WHERE id = $2', [
+      `Atendimento ${marca} 24 horas`,
+      entrada,
+    ]);
+
+    const pagina = await repo.listarPublicados(recorte(titular, { neighborhood: bairro, q: marca }));
+    assert.equal(
+      pagina.total,
+      0,
+      'a decisao e de produto e esta no contrato: todo campo do cartao alem do ' +
+        'nome ja tem controle proprio no topo da tela. Casar tambem neles poria ' +
+        'dois controles disputando o mesmo trabalho e deixaria `applied_filters` ' +
+        'sem como explicar por que a linha entrou.',
+    );
+
+    const porNome = await repo.listarPublicados(recorte(titular, { neighborhood: bairro, q: 'alfa' }));
+    assert.equal(porNome.total, 1);
+  });
+
+  void it('o indice GIN de trigrama e USADO pela busca', async () => {
+    // Com poucas linhas o planejador escolhe varredura sequencial por ser mais
+    // barata, e isso nao diz nada sobre o indice. Desligar a sequencial forca a
+    // pergunta que interessa: "existe um plano por indice para este LIKE?".
+    // Mesmo desenho da prova do GIST em `localizacao-de-referencia.test.ts`.
+    await cliente.query('BEGIN');
+    try {
+      await cliente.query('SET LOCAL enable_seqscan = off');
+      const r = await cliente.query<Record<string, string>>(
+        `EXPLAIN SELECT slug FROM professionals
+          WHERE status = 'published'
+            AND texto_para_busca(display_name) LIKE padrao_de_busca($1)`,
+        ['veterinaria'],
+      );
+      const plano = r.rows.map((linha) => Object.values(linha).join(' ')).join('\n');
+      assert.match(
+        plano,
+        /professionals_busca_por_nome/,
+        'ISCA: o predicado precisa ser a MESMA expressao do indice, caractere a ' +
+          'caractere. Normalizar em TypeScript e comparar com a coluna crua ' +
+          `deixa a busca CORRETA e lenta, sem erro nenhum. Plano:\n${plano}`,
+      );
+    } finally {
+      await cliente.query('ROLLBACK');
+    }
+  });
+
+  void it('com mil entradas o planejador escolhe o indice SOZINHO', async () => {
+    // O caso acima prova que o plano por indice existe. Este prova que ele e o
+    // escolhido quando a tabela cresce -- que e a pergunta de producao, e a
+    // unica que responde "o que acontece quando o diretorio tiver mil linhas".
+    //
+    // Tudo dentro de uma transacao revertida: mil linhas nao sobrevivem a este
+    // caso, e o `ANALYZE` de dentro dela tambem nao.
+    await cliente.query('BEGIN');
+    try {
+      await cliente.query(
+        `INSERT INTO professionals (id, kind, display_name, city, state, neighborhood,
+                                    source, claim_status, verification_level, slug, status, published_at)
+         SELECT gen_random_uuid(), 'vet', 'Clinica Massa ' || n, 'São Paulo', 'SP', 'Centro',
+                'self', 'unclaimed', 'none', 'massa-' || n, 'published', now()
+           FROM generate_series(1, 1000) AS n`,
+      );
+      await cliente.query('ANALYZE professionals');
+      const r = await cliente.query<Record<string, string>>(
+        `EXPLAIN SELECT slug FROM professionals
+          WHERE status = 'published'
+            AND texto_para_busca(display_name) LIKE padrao_de_busca($1)`,
+        ['massa 777'],
+      );
+      const plano = r.rows.map((linha) => Object.values(linha).join(' ')).join('\n');
+      assert.match(
+        plano,
+        /professionals_busca_por_nome/,
+        'ISCA: sem o indice, esta consulta e uma varredura completa POR ' +
+          `REQUISICAO. Plano com mil linhas:\n${plano}`,
+      );
+      assert.doesNotMatch(
+        plano,
+        /Seq Scan on professionals/,
+        `o planejador voltou a varrer a tabela inteira. Plano:\n${plano}`,
+      );
+    } finally {
+      await cliente.query('ROLLBACK');
+    }
+  });
+
   void it('nenhuma coluna de vinculo atravessa o repositorio', async () => {
     const titular = await criarConta();
     const bairro = `bairro-${randomUUID().slice(0, 8)}`;
