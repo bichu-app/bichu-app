@@ -134,6 +134,20 @@ services:
     # despercebida -- nao havia onde a foto chegar, entao nao havia isca capaz
     # de pegar.
     #
+    # QUANTO ELE CUSTA, MEDIDO E NAO ESTIMADO. Um servico a mais pesa em TODA
+    # execucao, entao o numero vem com o metodo -- numero sem metodo vira lenda
+    # na terceira vez que alguem o repete.
+    #
+    #   3 pares alternados nesta maquina, pilha derrubada com `down -v` antes
+    #   de cada medicao, imagens quentes:
+    #     `up -d --wait db mail`                        5,75 / 5,78 / 5,83 s
+    #     `up -d --wait db mail objeto` + os baldes     6,83 / 6,82 / 7,00 s
+    #
+    # +1,05 s na fase de subida (mediana), que e ~5% do `npm run
+    # test:integration` inteiro (19,3-21,0 s antes, 19,6-21,0 s depois: a
+    # diferenca no total fica DENTRO da dispersao entre execucoes, e a fase
+    # isolada e o unico lugar onde ela aparece limpa).
+    #
     # O MESMO digest do compose.yaml da raiz, pelo mesmo motivo do `db`: provar
     # o comportamento de um armazenamento que ninguem roda nao prova nada. E o
     # MinIO NAO esta no Docker Hub (`minio/minio` responde "pull access
