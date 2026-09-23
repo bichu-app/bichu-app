@@ -199,6 +199,18 @@ export async function main(): Promise<void> {
   const repositorioDeIdentidade = criarIdentityRepository(db, ids);
   const mailer = criarMailer(config.mail);
 
+  // O SERVIÇO DE APARELHOS SOBE ANTES DO DE IDENTIDADE, e a ordem é o SEC-019.
+  //
+  // Ele era construído lá embaixo, junto das rotas de `/me/devices`, e por isso
+  // não havia como `criarAuthService` alcançá-lo. A instância é UMA: duas sobre
+  // a mesma tabela não quebrariam nada hoje, mas dariam duas trilhas e duas
+  // leituras de "quem é o dono do registro de aparelho" para quem revisar.
+  const aparelhos = new RegistroDeAparelhosService({
+    repositorio: criarRegistroDeAparelhos(db, ids),
+    clock: systemClock,
+    trilha,
+  });
+
   const auth = criarAuthService({
     repositorio: repositorioDeIdentidade,
     assinador,
@@ -208,6 +220,11 @@ export async function main(): Promise<void> {
     janelas: config.session,
     hmacDeIp: (ip) => hmacDeEnderecoIp(ip, config.ipHmacKey),
     mailer,
+    // A TRAVESSIA DE `identity` PARA `notifications`, e ela é uma função e não
+    // um módulo (ADR-0008). É esta linha que faz "Sair de todos os aparelhos",
+    // a troca de senha, a redefinição, o "não fui eu" e a exclusão de conta
+    // apagarem o endereço de entrega do push, e não só a sessão (SEC-019).
+    removerPushDaConta: (dono) => aparelhos.removerTodosDaConta(dono),
     // O link do e-mail aponta para a PÁGINA do time web, não para a API: quem
     // abre é uma pessoa num navegador, e o ADR-0017 tirou HTML deste serviço.
     // Desde 19/09 isto é `WEB_BASE_URL` e não mais o endereço deste processo:
@@ -383,11 +400,9 @@ export async function main(): Promise<void> {
   // ligar so os dois daqui devolveria um numero que ignora os outros cinco, que
   // e a mesma classe de mentira. Quem decide ligar e a BICHUS-20.
   const dependenciasDasRotasDeAparelho = {
-    aparelhos: new RegistroDeAparelhosService({
-      repositorio: criarRegistroDeAparelhos(db, ids),
-      clock: systemClock,
-      trilha,
-    }),
+    // A MESMA instância que `criarAuthService` recebeu lá em cima. Ver o
+    // comentário de lá.
+    aparelhos,
     autenticador: {
       autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
     },

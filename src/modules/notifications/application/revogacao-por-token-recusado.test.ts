@@ -99,6 +99,11 @@ function montar(): {
       linhas.delete(id);
       return Promise.resolve(linha);
     },
+    revogarTodosDoDono: (dono) => {
+      const alvos = [...linhas.values()].filter((a) => a.dono === dono);
+      for (const alvo of alvos) linhas.delete(alvo.id);
+      return Promise.resolve(alvos.length);
+    },
     revogarPorToken: (token) => {
       const linha = [...linhas.values()].find((a) => a.pushToken === token);
       if (linha === undefined) return Promise.resolve(null);

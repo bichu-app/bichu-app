@@ -138,6 +138,26 @@ export class RegistroDeAparelhosService {
   }
 
   /**
+   * Todos os aparelhos da conta saem, porque a identidade revogou tudo
+   * (SEC-019). Devolve quantos saíram.
+   *
+   * **Não grava `device.revoked` por aparelho, e a ausência é deliberada.** Os
+   * outros quatro disparadores revogam UM endereço e a pergunta que a trilha
+   * responde é "por que este aparelho parou de receber". Aqui a pergunta é
+   * outra, e ela já tem dono: `auth.sessions_revoked` é o evento do gesto, e é
+   * nele que a contagem entra como `devices_removed`. Uma segunda família de
+   * eventos para o mesmo ato faria a trilha contar o mesmo fato duas vezes, com
+   * dois atores diferentes, e a leitura de "o que aconteceu nesta conta" passa
+   * a depender de qual dos dois quem consulta encontrou primeiro.
+   *
+   * O motivo `session_revoked` não existe em {@link MotivoDaRevogacao} por essa
+   * mesma razão: ele não seria lido por ninguém.
+   */
+  removerTodosDaConta(dono: UserId): Promise<number> {
+    return this.deps.repositorio.revogarTodosDoDono(dono);
+  }
+
+  /**
    * O FCM recusou este token: o aparelho sai agora (critério 4).
    *
    * **Quem chama é o caminho de envio**, e ele ainda não existe — é a

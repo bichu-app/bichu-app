@@ -505,8 +505,12 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
   }
 
   /**
-   * As DUAS metades da revogação em massa, num lugar só. Ver o comentário de
+   * As TRÊS metades da revogação em massa, num lugar só. Ver o comentário de
    * `invalidarTodasAsSessoes`, que é a porta pública desta função.
+   *
+   * Eram duas até 23/09, e a terceira é o SEC-019: revogar a credencial não
+   * apagava o endereço de entrega do push. O comentário do terceiro passo, lá
+   * embaixo, tem o caso inteiro.
    *
    * Existe como função interna, e não como chamada repetida em cada gatilho,
    * porque quatro cópias de "revoga e empurra" são quatro chances de alguém
@@ -532,6 +536,28 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       instanteDeRevogacao(agora, await barreiraAtualDe(userId)),
       agora,
     );
+    // O TERCEIRO PASSO, e ele é o SEC-019.
+    //
+    // Revogar credencial e apagar endereço de entrega eram tratados aqui como
+    // a mesma palavra, e não são. Até 23/09 os seis caminhos que passam por
+    // esta função derrubavam a sessão e deixavam `user_devices` intacta, com
+    // `push_token` e `push_permission = granted`: quem teve o telefone levado
+    // usava "Sair de todos os aparelhos", via as sessões caírem, e o aparelho
+    // roubado continuava sendo destinatário válido de alerta de pet perdido —
+    // com nome do animal e região dentro da notificação.
+    //
+    // ELE VEM DEPOIS DA BARREIRA, e a ordem não é estilo: `invalidarSessoes` é
+    // o que fecha a janela de 15 minutos do token de acesso e é sensível a
+    // tempo. Nada em push a afeta, e pôr uma chamada de rede ao banco de
+    // aparelhos antes dela atrasaria a única metade que corre contra o relógio.
+    //
+    // A FALHA PROPAGA, e é deliberado: os passos 1 e 2 já estão duráveis,
+    // repetir a operação inteira é idempotente, e o estado residual de uma
+    // falha aqui ("sessão morta, push vivo") é exatamente o estado de hoje —
+    // agora visível como erro em vez de silencioso. Um `catch` mudo com
+    // resposta de sucesso seria a falha silenciosa que este repositório já
+    // registrou cinco vezes.
+    const aparelhosRemovidos = await deps.removerPushDaConta(userId);
     await deps.trilha.record({
       actorKind: 'user',
       actorUserId: userId,
@@ -540,7 +566,14 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       action: 'auth.sessions_revoked',
       resourceKind: 'user',
       resourceId: userId,
-      metadata: { reason: motivo, revoked_families: familiasCaidas },
+      // `devices_removed` soma-se a `revoked_families` e não a substitui: são
+      // dois subsistemas, e um evento que só contasse famílias voltaria a
+      // deixar "o endereço de entrega saiu?" sem resposta em lugar nenhum.
+      metadata: {
+        reason: motivo,
+        revoked_families: familiasCaidas,
+        devices_removed: aparelhosRemovidos,
+      },
     });
   }
 

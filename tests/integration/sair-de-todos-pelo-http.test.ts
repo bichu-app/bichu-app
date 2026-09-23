@@ -79,6 +79,8 @@ import {
 import type { VerificadorDeReautenticacao } from '../../src/shared/http/registrar-rota.js';
 import { criarAuthService } from '../../src/modules/identity/application/auth-service.js';
 import { criarAvisoDeReusoAoTitular } from '../../src/modules/identity/application/aviso-de-reuso.js';
+import { criarRegistroDeAparelhos } from '../../src/modules/notifications/adapters/persistence/kysely-registro-de-aparelhos.js';
+import { RegistroDeAparelhosService } from '../../src/modules/notifications/application/registro-de-aparelhos-service.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
 import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
 
@@ -237,6 +239,43 @@ async function refreshDe(userId: UserId): Promise<LinhaDeRefresh[]> {
     .execute();
 }
 
+/**
+ * Um aparelho no cadastro de push, escrito direto na tabela (SEC-019).
+ *
+ * Pela tabela e não pela rota `POST /me/devices` de propósito: este arquivo
+ * registra só as rotas de identidade, e subir o módulo de notificações inteiro
+ * para pôr uma linha seria acoplar a prova da revogação à fiação daquelas
+ * rotas. O que precisa ser verdade é o estado da tabela antes do botão, e é o
+ * que o `INSERT` estabelece.
+ *
+ * `push_permission = 'granted'` com token: é a combinação que faz o aparelho
+ * ser destinatário válido de alerta (critérios 1 e 4 do ADR-0006). Sem ela a
+ * linha existiria e não provaria nada, porque ninguém mandaria nada para ela.
+ */
+async function inserirAparelho(dono: UserId, token: string): Promise<void> {
+  await banco.db
+    .insertInto('user_devices')
+    .values({
+      id: randomUUID(),
+      user_id: dono,
+      platform: 'android',
+      push_token: token,
+      push_permission: 'granted',
+      registered_at: new Date(),
+      last_seen_at: new Date(),
+    })
+    .execute();
+}
+
+async function contarAparelhos(dono: UserId): Promise<number> {
+  const linhas = await banco.db
+    .selectFrom('user_devices')
+    .select('id')
+    .where('user_id', '=', dono)
+    .execute();
+  return linhas.length;
+}
+
 before(async () => {
   const config = loadAppConfig();
   const contrato = carregarContrato(config.openapiSpecPath);
@@ -280,8 +319,21 @@ before(async () => {
     },
   };
 
+  // O CADASTRO DE APARELHOS DE VERDADE, contra a mesma tabela (SEC-019).
+  //
+  // Dublê nenhum serve aqui, e o motivo é o mesmo do `CHECK` de `revoked_reason`
+  // logo acima: o que precisa ser provado é que a LINHA de `user_devices` sai do
+  // Postgres. Um dublê em memória devolveria a contagem e o arquivo ficaria
+  // verde com o `DELETE` errado embaixo.
+  const aparelhos = new RegistroDeAparelhosService({
+    repositorio: criarRegistroDeAparelhos(db, ids),
+    clock: systemClock,
+    trilha,
+  });
+
   const auth = criarAuthService({
     repositorio,
+    removerPushDaConta: (dono) => aparelhos.removerTodosDaConta(dono),
     assinador,
     trilha,
     ids,
@@ -344,10 +396,23 @@ void describe(`BICHUS-125 — POST ${CAMINHO_DO_LOGOUT_TOTAL} derruba a conta, c
   let respostaDoBotao: { status: number; corpo: unknown };
   let semJanela: { status: number; corpo: unknown };
   let vivasDepoisDaRecusa: number;
+  /** SEC-019: os aparelhos no cadastro de push, lidos DEPOIS do botão. */
+  let aparelhosDoTitularDepois: number;
+  let aparelhosDoVizinhoDepois: number;
 
   before(async () => {
     titular = await criarConta(emailPrincipal);
     vizinho = await criarConta(emailVizinho);
+
+    // SEC-019: DOIS aparelhos no cadastro de push do titular, e um do vizinho.
+    //
+    // Dois para o titular porque "todos" só é mensurável com mais de um. Um
+    // para o vizinho porque o contrapeso é o que separa o conserto de um
+    // `DELETE FROM user_devices` sem `WHERE`: a conta ao lado não pode perder o
+    // alerta porque alguém saiu de todos os aparelhos na dela.
+    await inserirAparelho(titular, 'fcm-do-telefone-levado');
+    await inserirAparelho(titular, 'fcm-do-tablet-de-casa');
+    await inserirAparelho(vizinho, 'fcm-do-vizinho');
 
     sessoes = [];
     for (let i = 0; i < APARELHOS; i += 1) {
@@ -389,6 +454,9 @@ void describe(`BICHUS-125 — POST ${CAMINHO_DO_LOGOUT_TOTAL} derruba a conta, c
       token: sessoes[0]!.access_token,
       reauth: janela,
     });
+
+    aparelhosDoTitularDepois = await contarAparelhos(titular);
+    aparelhosDoVizinhoDepois = await contarAparelhos(vizinho);
   });
 
   void it('BICHUS-48: sem `X-Reauth-Token` responde 401 `reauthentication-required`', () => {
@@ -539,6 +607,43 @@ void describe(`BICHUS-125 — POST ${CAMINHO_DO_LOGOUT_TOTAL} derruba a conta, c
         `(${String(renovacao.status)}: ${JSON.stringify(renovacao.corpo)}). ` +
         `O botão respondeu, a tela disse que deu certo, e o aparelho perdido continua ` +
         `com sessão renovável — que é o incidente inteiro da emenda 1 do ADR-0002.`,
+    );
+  });
+  /**
+   * SEC-019, contra a tabela de verdade.
+   *
+   * A pilha de integração sobe `db`, então esta metade é provável hoje — ao
+   * contrário do apagamento de objeto do SEC-020, que não tem armazenamento
+   * nesta pilha.
+   *
+   * Isca rodada em 23/09/2026: com `deps.removerPushDaConta(userId)` comentada
+   * em `derrubarTodasAsSessoes`, o primeiro caso abaixo reprovou pelo nome e
+   * pela mensagem. Com `revogarTodosDoDono` compilando sem o
+   * `.where('user_id', '=', dono)`, reprovou o segundo.
+   */
+  void it('SEC-019: o aparelho ROUBADO sai do cadastro de push, e não só a sessão', () => {
+    assert.equal(
+      aparelhosDoTitularDepois,
+      0,
+      `sobraram ${String(aparelhosDoTitularDepois)} aparelhos em \`user_devices\` depois de ` +
+        '"sair de todos os aparelhos". O aparelho continuaria recebendo alerta de pet ' +
+        'perdido: a sessão caiu em menos de um segundo, como o SEC-006 promete, e a linha ' +
+        'do aparelho ficou com `push_token` e `push_permission = granted` intactos. Quem ' +
+        'está com o telefone levado segue recebendo o nome do animal e a região de quem ' +
+        'acabou de usar o remédio que o produto indica para o roubo. É o SEC-019, e o ' +
+        'gesto que a pessoa acredita ter resolvido é o que não resolve.',
+    );
+  });
+
+  void it('SEC-019: o aparelho da conta VIZINHA continua no cadastro de push', () => {
+    // O contrapeso. Sem ele, a implementação mais simples que passa no caso
+    // acima é `DELETE FROM user_devices` sem `WHERE` — e a conta ao lado perde
+    // o alerta de pet perdido porque outra pessoa saiu de todos os aparelhos.
+    assert.equal(
+      aparelhosDoVizinhoDepois,
+      1,
+      'o "sair de todos os aparelhos" de UMA conta apagou o aparelho de OUTRA. A ' +
+        'autorização precisa estar na cláusula `WHERE` (ADR-0021), e aqui ela sumiu.',
     );
   });
 });

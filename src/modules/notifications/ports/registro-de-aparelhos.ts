@@ -94,6 +94,27 @@ export interface RegistroDeAparelhos {
   revogarDoDono(dono: UserId, aparelhoId: string): Promise<Aparelho | null>;
 
   /**
+   * Apaga **TODOS** os aparelhos do dono. Devolve quantas linhas saíram, para a
+   * trilha. Zero é sucesso: conta sem aparelho registrado é estado normal.
+   *
+   * Quem chama é a camada de identidade, por injeção e nunca por importação, e
+   * o motivo é o SEC-019: revogar sessão não apagava o endereço de entrega, e a
+   * pessoa que teve o aparelho roubado continuava mandando o nome do pet e a
+   * região dela para quem está com o telefone. Os seis caminhos de revogação em
+   * massa passam por `derrubarTodasAsSessoes`, e é lá que esta chamada entra.
+   *
+   * **Não recebe identificador de recurso, e por isso não há 403 nem 404 a
+   * decidir** (ADR-0021): a autorização é o próprio `WHERE user_id = :dono`, e
+   * a consulta que alcançaria o aparelho de outra conta não existe deste lado.
+   *
+   * O aparelho de quem PEDIU cai junto, e a decisão está no §19 do documento de
+   * segurança: sem vínculo entre a linha e a família de refresh, o servidor não
+   * tem como saber qual linha é o telefone que está pedindo, e um parâmetro de
+   * "não apague este" seria preenchido por quem está com o aparelho roubado.
+   */
+  revogarTodosDoDono(dono: UserId): Promise<number>;
+
+  /**
    * Apaga o aparelho pelo token que o FCM recusou (critério 4).
    *
    * Uma linha, pelo token. Não recebe dono — ver o cabeçalho. Devolve `null`

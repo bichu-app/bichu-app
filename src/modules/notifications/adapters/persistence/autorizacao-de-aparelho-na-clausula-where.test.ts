@@ -68,6 +68,7 @@ import type { UserId } from '../../../../shared/types/brands.js';
 import type { TokenDeAparelho } from '../../ports/push-sender.js';
 import {
   construtorDaListagem,
+  construtorDaRemocaoDeTodosDoDono,
   construtorDaRemocaoPeloDono,
   construtorDaRemocaoPorToken,
   construtorDoEnderecoDeEnvio,
@@ -140,6 +141,36 @@ void describe('toda consulta endereçada pelo identificador carrega o dono no WH
     const { sql, parameters } = compilar(construtorDaListagem(semBanco, DONO));
     assert.match(sql, PREDICADO_DO_DONO, `a listagem perdeu o predicado do dono. SQL: ${sql}`);
     assert.ok(parameters.includes(DONO));
+  });
+
+  void it('SEC-019: a remoção de TODOS do dono é endereçada pelo dono, e por nada mais', () => {
+    // Sem o predicado, isto é `DELETE FROM user_devices` — "sair de todos os
+    // aparelhos" de uma conta apagaria o endereço de entrega de todo mundo, e o
+    // produto inteiro pararia de avisar sobre pet perdido.
+    const { sql, parameters } = compilar(construtorDaRemocaoDeTodosDoDono(semBanco, DONO));
+    assert.match(
+      sql,
+      PREDICADO_DO_DONO,
+      `a remoção em massa perdeu o predicado do dono: ela apaga a tabela. SQL: ${sql}`,
+    );
+    assert.ok(
+      parameters.includes(DONO),
+      'o dono não está entre os parâmetros ligados: o predicado existe e compara outra coisa',
+    );
+  });
+
+  void it('SEC-019: a remoção de todos NÃO carrega identificador de aparelho', () => {
+    // O `WHERE` é a autorização inteira (ADR-0021), e não há recurso vindo de
+    // fora. Um `"id" = $n` aqui significaria que alguém passou a aceitar do
+    // cliente qual aparelho poupar — que é a porta para quem está com o
+    // telefone roubado informar o dele.
+    const { sql } = compilar(construtorDaRemocaoDeTodosDoDono(semBanco, DONO));
+    const comando = sql.split(/\breturning\b/i)[0] ?? sql;
+    assert.doesNotMatch(
+      comando,
+      /"id"\s*=\s*\$\d+/,
+      `a remoção em massa ganhou um alvo por identificador. Comando: ${comando}`,
+    );
   });
 
   void it('ISCA: uma consulta SEM o predicado do dono reprova a mesma conferência', () => {

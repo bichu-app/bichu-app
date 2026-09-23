@@ -312,9 +312,34 @@ class BancoDeMentira implements IdentityRepository {
   }
 }
 
+/**
+ * O cadastro de push como um CONJUNTO de linhas, e não um espião de chamada.
+ *
+ * SEC-019, caminhos 4 e 5 da tabela do §19: "não fui eu" e exclusão de conta
+ * passam por `derrubarTodasAsSessoes`, e até 23/09 nenhum dos dois tocava
+ * `user_devices`. O que os casos leem é a linha, nunca a chamada.
+ */
+interface CadastroDePushDeMentira {
+  readonly linhas: Set<string>;
+  readonly removerPushDaConta: () => Promise<number>;
+}
+
+function cadastroDePush(): CadastroDePushDeMentira {
+  const linhas = new Set<string>(['aparelho-levado', 'aparelho-de-casa']);
+  return {
+    linhas,
+    removerPushDaConta: () => {
+      const quantas = linhas.size;
+      linhas.clear();
+      return Promise.resolve(quantas);
+    },
+  };
+}
+
 interface Bancada {
   readonly servico: ReturnType<typeof criarAuthService>;
   readonly repo: BancoDeMentira;
+  readonly push: CadastroDePushDeMentira;
   readonly mensagens: Mensagem[];
   readonly eventos: AuditEvent[];
   readonly registros: { dados: Record<string, unknown>; mensagem: string }[];
@@ -324,6 +349,7 @@ interface Bancada {
 
 function montar(): Bancada {
   const repo = new BancoDeMentira();
+  const push = cadastroDePush();
   const mensagens: Mensagem[] = [];
   const eventos: AuditEvent[] = [];
   const registros: { dados: Record<string, unknown>; mensagem: string }[] = [];
@@ -376,12 +402,14 @@ function montar(): Bancada {
     registrarOcorrencia: (dados, mensagem) => {
       registros.push({ dados, mensagem });
     },
+    removerPushDaConta: push.removerPushDaConta,
     baseDaWeb: 'https://bichu.exemplo.invalid' as AbsoluteUrl,
   });
 
   return {
     servico,
     repo,
+    push,
     mensagens,
     eventos,
     registros,
@@ -694,5 +722,44 @@ void describe('"Não fui eu" (BICHUS-215, critério 4 — gatilho 4 do SEC-006)'
     );
     const falha = bancada.registros.find((r) => r.dados['enviado'] === false);
     assert.equal(falha?.dados['evento'], 'session.disavowed');
+  });
+});
+
+/**
+ * SEC-019, caminhos 4 e 5: "não fui eu" e exclusão de conta também apagam o
+ * cadastro de push.
+ *
+ * Os dois herdam de `derrubarTodasAsSessoes`, e é por isso que não há
+ * implementação nova aqui. O que estes casos guardam é a HERANÇA: quem separar
+ * um dos dois caminhos da função comum, para tratá-lo à parte, reabre o buraco
+ * naquele caminho e só naquele — que é exatamente como a redefinição de senha
+ * ficou meses empurrando a barreira sem revogar família nenhuma.
+ *
+ * Isca rodada em 23/09/2026: com a chamada `deps.removerPushDaConta(userId)`
+ * comentada em `derrubarTodasAsSessoes`, os dois casos abaixo reprovaram.
+ */
+const AINDA_RECEBE_APOS =
+  'o aparelho continuaria recebendo alerta de pet perdido: a sessão caiu e a linha de ' +
+  '`user_devices` ficou, com o token e a permissão intactos. É o SEC-019.';
+
+void describe('SEC-019: exclusão e "não fui eu" apagam o endereço de entrega', () => {
+  void it('a exclusão da conta tira os aparelhos do push na hora, e não em 30 dias', async () => {
+    // §19, item 4: os aparelhos precisam sair na exclusão LÓGICA. Esperar o
+    // expurgo deixaria trinta dias de alerta chegando num aparelho de uma conta
+    // que a pessoa já mandou apagar.
+    const bancada = montar();
+    await bancada.servico.excluirMinhaConta(autenticada(bancada.repo), CONTEXTO);
+    assert.equal(bancada.push.linhas.size, 0, AINDA_RECEBE_APOS);
+  });
+
+  void it('"não fui eu" tira os aparelhos do push', async () => {
+    // É o caminho de quem foi avisado de reuso de refresh: alguém está com a
+    // credencial dela. Derrubar a sessão e deixar o push é entregar o alerta
+    // de pet perdido justamente a esse alguém.
+    const bancada = montar();
+    darUmLinkValido(bancada.repo);
+
+    await bancada.servico.recusarSessaoAvisada(LINK_EM_CLARO, CONTEXTO);
+    assert.equal(bancada.push.linhas.size, 0, AINDA_RECEBE_APOS);
   });
 });

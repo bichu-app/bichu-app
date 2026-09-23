@@ -115,6 +115,20 @@ export function construtorDaRemocaoPeloDono(db: DbExecutor, dono: UserId, aparel
 }
 
 /**
+ * A remoção de TODOS os aparelhos do dono, como consulta ainda não executada.
+ *
+ * O `WHERE` é a autorização e é só ele (ADR-0021): não há identificador de
+ * recurso vindo de fora para conferir, então não há a forma "leia, compare,
+ * apague" para escrever errado. O `RETURNING` é o que permite CONTAR o que
+ * saiu, e a contagem é o que vai para a trilha de `auth.sessions_revoked` como
+ * `devices_removed` — sem ela, o evento diria que a sessão caiu e não diria se
+ * o endereço de entrega caiu junto, que é exatamente o SEC-019.
+ */
+export function construtorDaRemocaoDeTodosDoDono(db: DbExecutor, dono: UserId) {
+  return db.deleteFrom('user_devices').where('user_id', '=', dono).returning('id');
+}
+
+/**
  * A remoção pelo token recusado pelo FCM. **Não recebe dono** — o argumento
  * está no cabeçalho da porta: o token é a autorização, e ele endereça uma linha
  * só (índice `user_devices_um_token_uma_conta`).
@@ -286,6 +300,11 @@ export function criarRegistroDeAparelhos(
         aparelhoId,
       ).executeTakeFirst()) as LinhaDoAparelho | undefined;
       return linha === undefined ? null : comoAparelho(linha);
+    },
+
+    async revogarTodosDoDono(dono) {
+      const linhas = await construtorDaRemocaoDeTodosDoDono(db, dono).execute();
+      return linhas.length;
     },
 
     async revogarPorToken(token) {
