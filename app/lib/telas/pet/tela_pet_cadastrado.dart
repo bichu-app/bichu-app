@@ -137,6 +137,22 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
                 acao: MensagensDeErro.tentarDeNovo,
               );
       });
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E FalhaDeChamada. Alem do 201 fora do contrato, este bloco
+      // ainda espera por `_baixarOQr` e `_resolverAviso`, que encostam em
+      // canal de plataforma: `PlatformException` de cache de imagem ou de
+      // notificacao cai aqui. Sem este ramo `_emitindo` ficava ligado para
+      // sempre -- a pessoa acabou de cadastrar o pet e fica olhando o lugar
+      // da plaquinha girar, sem QR, sem codigo e sem saber se a tag saiu.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao emitir a plaquinha');
+      if (!mounted) return;
+      setState(() {
+        _emitindo = false;
+        _faixa = MensagemDeErro(
+          texto: TextosDoCadastro.tagNaoSaiu(_pet.nome),
+          acao: MensagensDeErro.tentarDeNovo,
+        );
+      });
     }
   }
 
