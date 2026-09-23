@@ -157,6 +157,18 @@ class _TelaEntrarState extends State<TelaEntrar> {
       // Nada e apagado: nem o e-mail, nem a senha. O caso dominante e um
       // caractere trocado, e quem digita de novo do zero erra de novo.
       setState(() => _faixa = MensagensDeErro.deEntrar(falha));
+    } on Object catch (erro, pilha) {
+      // O QUE NAO E FalhaDeChamada -- 201 fora do contrato faz `Sessao.doJson`
+      // estourar `TypeError`, e o chaveiro pode estourar `PlatformException`.
+      // O `finally` abaixo ja desligava o carregando, entao a tela nao girava
+      // para sempre; ela ficava CALADA, que e o outro lado do mesmo defeito.
+      // A pessoa ve o formulario do jeito que estava e toca de novo achando
+      // que o primeiro toque nao pegou.
+      registrarFalhaInesperada(erro, pilha, onde: 'ao entrar na conta');
+      if (!mounted) return;
+      setState(
+        () => _faixa = const MensagemDeErro(texto: MensagensDeErro.servidorFora),
+      );
     } finally {
       if (mounted) setState(() => _enviando = false);
     }

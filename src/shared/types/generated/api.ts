@@ -1557,6 +1557,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/directory/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profissionais e estabelecimentos da regiao
+         * @description O diretorio de `Perto`. Devolve apenas entradas publicadas.
+         *
+         *     **EXIGE CONTA, e isso e o que torna a resposta possivel.**
+         *     `src/tools/portao-contrato-publico.ts` reprova `phone_e164` e
+         *     `distance_m` em qualquer operacao alcancavel sem conta, e reprova com
+         *     razao. Telefone comercial e distancia sao o conteudo util do diretorio;
+         *     numa rota publica eles nao podem existir. Afrouxar este `security` para
+         *     `[bearerAuth, {}]` faz o portao reprovar os dois, nominalmente.
+         *
+         *     **Ordenacao por distancia usa a localizacao de referencia de quem
+         *     chama**, que o servidor ja guarda (BICHUS-92). Ela NAO e enviada na
+         *     requisicao: coordenada em URL vai para log de acesso, para o historico
+         *     do aparelho e para o cabecalho `Referer`.
+         *
+         *     Sem localizacao conhecida, ou com mais de 30 dias (ADR-0006), a
+         *     resposta traz `distance_available: false`, a ordenacao cai para `name`
+         *     e `distance_m` vem nulo em todos os itens. **Falha de calculo nao vira
+         *     zero e nao vira ordem aleatoria**: a tela diz que nao consegue ordenar
+         *     por distancia e oferece ligar a localizacao. E a mesma regra do
+         *     `reach_status: unavailable` do alerta.
+         *
+         *     **Entrada sem coordenada aparece por ultimo, com `distance_m` nulo, e
+         *     nao some.** A proposta original a excluia de `sort=distance`; excluir
+         *     esconderia uma entrada publicada por causa de um campo que hoje NINGUEM
+         *     consegue preencher -- nao ha painel de cadastro --, que e a mesma classe
+         *     de defeito do zero silencioso, um nivel acima.
+         *
+         *     Nao ha geocodificacao neste produto (ADR-0006): `city`, `state` e
+         *     `neighborhood` sao rotulo de exibicao e filtro de texto, jamais fonte
+         *     de coordenada. Quem alimenta o diretorio informa o ponto, e o painel
+         *     precisa captura-lo com **mapa de toque** -- ninguem sabe a propria
+         *     coordenada, e um par de campos de latitude e longitude nao serve.
+         *
+         *     Paginacao numerada com total, como a listagem publica de perdidos,
+         *     porque a tela precisa dizer "1 a 20 de 87" e chegar ao fim da lista.
+         */
+        get: operations["listDirectoryEntries"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/lost-pets": {
         parameters: {
             query?: never;
@@ -3002,6 +3056,107 @@ export interface components {
             /** Format: uri */
             poster_url?: string;
         };
+        /**
+         * @description A atividade. Espelha `professionals.kind` e a entrada
+         *     `public.professionals.professionals_kind_check` do teste de conjunto
+         *     exato. **Nao ha valor para ONG**, e a ausencia e decisao pendente do
+         *     modelo, nao esquecimento: `professionals` nao tem `entity_kind` e
+         *     `kind` nao tem valor para organizacao. A porta das ONGs em `Perto` leva
+         *     hoje a lista de pets filtrada em adocao (UX 27.2.4), que e outra coisa.
+         * @enum {string}
+         */
+        ProfessionalKind: "vet" | "groomer" | "walker" | "sitter" | "trainer" | "clinic";
+        /**
+         * @description O que foi provado, derivado da verificacao aprovada mais forte da
+         *     entidade. `none` e estado legitimo e publicavel: passeador, hospedagem,
+         *     tosa e adestramento nao tem conselho nem registro obrigatorio
+         *     (ADR-0011). Selo generico e proibido: a interface diz O QUE foi
+         *     verificado, e foi por isso que a BICHUS-165 nao passou.
+         * @enum {string}
+         */
+        VerificationLevel: "none" | "contact_verified" | "document_verified";
+        /**
+         * @description O tipo de prova aceita. A resposta devolve o TIPO, nunca o numero: a
+         *     interface precisa dizer o que foi verificado e nao precisa publicar o
+         *     numero de registro de um terceiro para isso.
+         * @enum {string}
+         */
+        EvidenceKind: "crmv" | "cnpj" | "phone_callback" | "document";
+        /**
+         * @description O que sustenta o selo. `evidence_kinds` e a lista dos tipos de prova
+         *     APROVADOS daquela entidade. Vazia quando `level` e `none`.
+         */
+        DirectoryVerification: {
+            level: components["schemas"]["VerificationLevel"];
+            evidence_kinds: components["schemas"]["EvidenceKind"][];
+        };
+        /**
+         * @description O cartao da listagem. **Nao tem `id`**: o endereco e o `slug` (ADR-0010
+         *     item 6). Nao tem coordenada, nao tem quem convidou a entidade e nao tem
+         *     quem e o titular dela -- as duas colunas ligam a entrada a uma conta de
+         *     pessoa, e a BICHUS-174 proibe expor vinculo entre duas pessoas inclusive
+         *     como contagem e como existencia. A primeira e vigiada pelo portao de
+         *     colunas que nao saem; a segunda, por nenhuma consulta de leitura a
+         *     selecionar.
+         */
+        DirectoryEntrySummary: {
+            slug: components["schemas"]["Slug"];
+            kind: components["schemas"]["ProfessionalKind"];
+            display_name: string;
+            city?: string | null;
+            state?: string | null;
+            neighborhood?: string | null;
+            about?: string | null;
+            /**
+             * @description Telefone **comercial**, publicado de proposito pela entidade que
+             *     aceitou aparecer para ser contratada (ADR-0011 secao 4). Formato
+             *     internacional (`+` e 8 a 15 digitos), deliberadamente diferente do
+             *     telefone de conta de usuario, que aceita so Brasil.
+             *
+             *     **Este campo so pode existir porque a operacao exige conta.** Ele
+             *     esta na lista de campos proibidos de
+             *     `src/tools/portao-contrato-publico.ts`.
+             */
+            phone_e164?: string | null;
+            verification: components["schemas"]["DirectoryVerification"];
+            /**
+             * @description Distancia ate a localizacao de referencia de quem chama,
+             *     **arredondada a 100 m**. Nulo quando a entrada nao tem coordenada
+             *     ou quando o chamador nao tem localizacao valida.
+             *
+             *     Os 100 m nao sao arredondamento defensivo: e a propria grade em que
+             *     o produto quantiza a localizacao do usuario (ADR-0006), entao
+             *     precisao maior nao existe na origem. **Nunca sai o ponto**: um
+             *     ponto por entrada permite montar o mapa que o ADR-0010 item 4
+             *     existe para impedir.
+             *
+             *     Mesmo aviso do `phone_e164`: so pode existir porque a operacao
+             *     exige conta.
+             */
+            distance_m?: number | null;
+        };
+        DirectoryEntryPage: {
+            items: components["schemas"]["DirectoryEntrySummary"][];
+            page: number;
+            limit: number;
+            total: number;
+            /**
+             * @description `false` quando o chamador nao tem localizacao de referencia valida,
+             *     ou quando `sort=name`. Com `false`, todo `distance_m` vem nulo e a
+             *     ordenacao foi por nome. **A tela diz isso.** Devolver zero ou
+             *     ordenar por outra coisa em silencio e a forma mais barata de mentir
+             *     sobre proximidade.
+             */
+            distance_available: boolean;
+            /**
+             * @description O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
+             *     foi informado, porque "nada filtrado" e uma informacao e nao uma
+             *     ausencia.
+             */
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
         PublicLostPetPage: {
             items: components["schemas"]["PublicLostPet"][];
             page: number;
@@ -3933,6 +4088,7 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -4479,6 +4635,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTransfer"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             /** @description O token e valido, mas nao e para esta conta. */
             403: {
                 headers: {
@@ -5684,6 +5841,62 @@ export interface operations {
         responses: {
             202: components["responses"]["Accepted"];
             403: components["responses"]["Forbidden"];
+        };
+    };
+    listDirectoryEntries: {
+        parameters: {
+            query?: {
+                /**
+                 * @description **Opcional**, e aqui esta proposta e o contrato divergem de
+                 *     proposito. A busca de perdidos comeca com alguem digitando onde
+                 *     perdeu; `Perto` e uma aba que abre sozinha, e exigir cidade a
+                 *     deixaria vazia ate a pessoa digitar algo. O recorte que falta e
+                 *     suprido pela ordenacao por distancia, que e o que a secao promete.
+                 *     Sem cidade e sem localizacao valida, `applied_filters` diz
+                 *     `scope: all` e a tela sabe que nao esta mostrando "perto" coisa
+                 *     nenhuma.
+                 */
+                city?: string;
+                /** @description UF, duas letras. */
+                state?: string;
+                neighborhood?: string;
+                /** @description Filtra por atividade. */
+                kind?: components["schemas"]["ProfessionalKind"];
+                /**
+                 * @description Piso, nao igualdade: `contact_verified` traz tambem
+                 *     `document_verified`. Filtro por igualdade esconderia o registro
+                 *     mais forte de quem pediu o mais fraco.
+                 */
+                verification_level?: components["schemas"]["VerificationLevel"];
+                /**
+                 * @description `distance` exige localizacao de referencia valida de quem chama.
+                 *     Sem ela, a resposta usa `name` e diz isso em `distance_available`.
+                 */
+                sort?: "distance" | "name";
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina do diretorio. `total` alimenta "Mostrando 1 a 20 de 87" e
+             *     `applied_filters` alimenta a linha que explica o recorte.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DirectoryEntryPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     listPublicLostPets: {

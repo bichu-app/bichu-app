@@ -688,7 +688,7 @@ Levantado por inspeção, não por estimativa. Nenhum destes arquivos foi altera
 | Arquivo | O que muda |
 |---|---|
 | `api/openapi.yaml` | **Dois pontos, e só dois.** O parâmetro `TagCode` (descrição, o passo 4 da normalização, o `pattern` `^[0-9A-Za-z][0-9A-Za-z-]{25,39}$` que passa a `{15,23}`, e o `example`); e a descrição do 400 em `resolveTagCode`, que menciona "26 depois da normalizacao". O passo 5 do símbolo de verificação entra na descrição |
-| `src/shared/types/generated/api.ts` | **Nenhuma edição à mão.** As oito ocorrências de "26 caracteres" são geradas: `npm run generate:types` as refaz a partir do `openapi.yaml`, e `npm run verify:types` já é o portão que reprova se alguém editar o gerado. O custo aqui é rodar um comando, e não oito correções |
+| `src/shared/types/generated/api.ts` | **Nenhuma edição à mão.** As oito ocorrências de "26 caracteres" são geradas: `npm run generate:types` as refaz a partir do `openapi.yaml`. **Esta frase já foi falsa e está corrigida em 23/09/2026:** ela dizia que `npm run verify:types` "já é o portão que reprova", e até 23/09 nada chamava esse script — o `package.json` o declarava, a esteira inlineava os mesmos comandos e o `Makefile` não o conhecia. Quem existe hoje, e pode ser conferido: o passo `tipos gerados batem com a spec` do job `codigo` em `.github/workflows/ci.yml`, que agora chama `npm run verify:types` de verdade; e `make verificar-tipos-gerados` (dentro de `make verificar`), que pergunta a mesma coisa sem depender do git. O custo aqui é rodar um comando, e não oito correções |
 
 ### Testes
 

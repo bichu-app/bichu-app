@@ -31,8 +31,21 @@ from contextlib import ExitStack
 from pathlib import Path
 
 # Faixa efemera alta, fora do alcance de qualquer servico deste projeto.
-OCUPADO = (45000, 45001)
-LIVRE = (45100, 45101)
+#
+# AS QUATRO PORTAS SAO PROCURADAS, E NAO FIXAS. O motivo tem data: em 23/09 o
+# job `portoes rapidos` reprovou com `[Errno 98] Address already in use` ao
+# montar o cenario, num runner do GitHub. Nao foi defeito do que ele verifica:
+# 45000-45101 caem dentro da faixa efemera do Linux (32768-60999), entao
+# qualquer conexao de saida do proprio runner pode estar segurando uma delas no
+# instante em que este portao roda.
+#
+# Reprovar ali estava CERTO -- verificacao que nao consegue montar o cenario nao
+# pode aprovar --, mas reprovar por sorteio de porta e ruido, e portao que
+# reprova por ruido e portao que alguem manda repetir ate passar. A saida nao e
+# afrouxar o criterio: e nao depender de um numero especifico estar livre.
+# Procura-se a primeira base em que as QUATRO portas ligam de verdade.
+BASES = tuple(range(45000, 46000, 100))
+PASSO_ATE_O_PAR_LIVRE = 50
 
 
 def _carregar_escolha(raiz: Path):
@@ -57,6 +70,29 @@ def _ocupar(pilha: ExitStack, portas: tuple[int, int]) -> None:
         s.listen(1)
 
 
+def _duplas_utilizaveis(escolha) -> tuple[tuple[int, int], tuple[int, int]] | None:
+    """A primeira base em que as quatro portas do cenario ligam de verdade.
+
+    Ligar e o teste, e nao perguntar: `par_livre` responde sobre o instante em
+    que foi chamado, e o cenario precisa das portas NA MAO. As quatro sao
+    amarradas juntas e soltas em seguida; `main` volta a amarrar as duas de
+    `OCUPADO` logo depois, e confere a precondicao pelo mecanismo, como sempre
+    conferiu.
+    """
+    for base in BASES:
+        ocupado = (base, base + 1)
+        livre = (base + PASSO_ATE_O_PAR_LIVRE, base + PASSO_ATE_O_PAR_LIVRE + 1)
+        try:
+            with ExitStack() as pilha:
+                _ocupar(pilha, ocupado)
+                _ocupar(pilha, livre)
+        except OSError:
+            continue
+        if escolha.par_livre(ocupado) and escolha.par_livre(livre):
+            return ocupado, livre
+    return None
+
+
 def _criterio(escolha, par) -> tuple[bool, str]:
     if par is None:
         return False, "a escolha nao devolveu par nenhum"
@@ -72,9 +108,19 @@ def main(argv: list[str]) -> int:
     raiz = Path(a.raiz).resolve()
     escolha = _carregar_escolha(raiz)
 
-    candidatos = [OCUPADO, LIVRE]
     falhas: list[str] = []
     print("escolha de portas - cenario: o primeiro candidato esta ocupado e existe par livre")
+
+    duplas = _duplas_utilizaveis(escolha)
+    if duplas is None:
+        print(f"REPROVA: nenhuma das {len(BASES)} bases entre {BASES[0]} e {BASES[-1]} tinha as "
+              "quatro portas do cenario livres. Sem elas nao ha cenario, e verificacao que nao "
+              "consegue verificar reprova, nunca aprova")
+        return 1
+    OCUPADO, LIVRE = duplas
+    print(f"  cenario montado em {OCUPADO[0]}/{OCUPADO[1]} (ocupadas) e "
+          f"{LIVRE[0]}/{LIVRE[1]} (livres)")
+    candidatos = [OCUPADO, LIVRE]
 
     try:
         with ExitStack() as pilha:

@@ -704,6 +704,131 @@ export interface PetTransfersTable {
   created_at: CriadoEm;
 }
 
+/**
+ * O diretorio de `Perto`, mapeado um dia depois de a migracao existir.
+ *
+ * As tabelas nasceram em `migrations/20260921000002` e ficaram **fora deste
+ * arquivo**: nenhuma linha de `src/` as conhecia. Elas entram aqui agora porque
+ * a leitura publica do diretorio passou a existir -- e entram com a mesma regra
+ * dos outros mapeamentos deste arquivo: nome de coluna e o nome do banco, e a
+ * traducao para a forma do dominio mora no adaptador.
+ */
+/** Espelha `TipoDeProfissional` de `modules/professionals/domain/perfil-publico.ts`. */
+export type TipoDeProfissional = 'vet' | 'groomer' | 'walker' | 'sitter' | 'trainer' | 'clinic';
+
+/**
+ * Sem `'community'`. A emenda 1 do ADR-0011 negou a criacao pela comunidade em
+ * 21/09 e pos `'invited'` no lugar; reintroduzir o valor aqui seria desfazer a
+ * decisao do cliente, e nao corrigir um esquecimento.
+ */
+export type OrigemDoPerfil = 'self' | 'invited' | 'import';
+
+export type EstadoDaTitularidade = 'unclaimed' | 'claim_pending' | 'claimed' | 'disputed';
+
+export type StatusDoPerfil = 'draft' | 'published' | 'hidden' | 'removed';
+
+/**
+ * O que foi verificado, e nao um selo generico (BICHUS-165). **Derivado** da
+ * verificacao aprovada mais forte em `entity_verifications`, nunca escrito por
+ * rota de escrita de perfil: perfil que declara o proprio nivel torna a
+ * verificacao decorativa.
+ */
+export type NivelDeVerificacao = 'none' | 'contact_verified' | 'document_verified';
+
+export interface ProfessionalsTable {
+  /** UUIDv7 gerado pela aplicacao. Sem `DEFAULT` no banco, como em `pets`. */
+  id: string;
+  kind: TipoDeProfissional;
+  display_name: string;
+  about: string | null;
+  city: string | null;
+  state: string | null;
+  neighborhood: string | null;
+  /**
+   * `geography(Point,4326)`. `never` nos tres sentidos, como
+   * `user_reference_locations.reference_point` e `found_reports.found_point`: o
+   * tipo impede a coluna de ser selecionada crua ou inserida pelo construtor
+   * tipado, e o unico caminho ate ela e SQL onde `ST_MakePoint` fica a vista.
+   *
+   * **Hoje ninguem escreve nesta coluna.** Nao ha painel de cadastro, e a
+   * ADR-0006 proibe geocodificacao: bairro digitado nao vira ponto. Enquanto
+   * isso valer, `Perto` recorta por texto e nao ordena por distancia.
+   */
+  geo: ColumnType<never, never, never>;
+  source: OrigemDoPerfil;
+  /**
+   * **UMA COLUNA DESTA TABELA NAO ESTA AQUI, E A AUSENCIA E A REGRA.**
+   *
+   * A que guarda quem CONVIDOU a entidade e vinculo entre duas pessoas, e a
+   * BICHUS-174 proibe expo-lo inclusive como contagem e como existencia. Ela
+   * carrega a marca `NUNCA sai do servidor` no `COMMENT ON COLUMN` da migracao
+   * de 21/09, e `src/tools/portao-colunas-que-nao-saem.ts` varre **todo** `.ts`
+   * de `src/` pelo nome literal dela: declara-la aqui **reprova o build**.
+   *
+   * Isso nao e limitacao do portao, e o desenho funcionando. A aplicacao nunca
+   * le nem escreve essa coluna -- ela existe para a trilha --, e o construtor
+   * tipado nao pode nem oferece-la. O que nao esta no tipo nao tem como
+   * atravessar a borda por descuido.
+   *
+   * Acrescentar `schema.ts` a lista de dispensados do portao seria desliga-lo
+   * para toda coluna marcada no futuro, e nao resolver esta.
+   *
+   * A coluna do TITULAR esta aqui abaixo porque a escrita dela e legitima: e o
+   * aceite do convite que a preenche, e a massa de qa tambem. A protecao de
+   * saida dela e estrutural -- nenhuma consulta de leitura do diretorio a
+   * seleciona. Ver a migracao `20260922000008`.
+   */
+  claim_status: Generated<EstadoDaTitularidade>;
+  claimed_by_user_id: string | null;
+  claimed_at: Date | null;
+  claim_snapshot_at: Date | null;
+  verification_level: Generated<NivelDeVerificacao>;
+  crmv_number: string | null;
+  crmv_uf: string | null;
+  cnpj: string | null;
+  /** Telefone COMERCIAL, publicado de proposito por quem aceitou aparecer. */
+  phone_e164: string | null;
+  /**
+   * O endereco publico de uma entrada, no lugar do `id` (ADR-0010 item 6).
+   * Acrescentada pela migracao `20260922000008`; formato e unicidade global
+   * sobre nao-nulo, iguais aos de `pets.slug`.
+   */
+  slug: string | null;
+  status: Generated<StatusDoPerfil>;
+  /** Desde quando a entrada esta no ar. `created_at` responde outra pergunta. */
+  published_at: Date | null;
+  created_at: CriadoEm;
+  updated_at: AtualizadoEm;
+}
+
+export type TipoDeEntidade = 'professional' | 'organization';
+
+export type TipoDeEvidencia = 'crmv' | 'cnpj' | 'phone_callback' | 'document';
+
+export type DecisaoDaVerificacao = 'pending' | 'approved' | 'rejected';
+
+export interface EntityVerificationsTable {
+  id: string;
+  entity_kind: TipoDeEntidade;
+  /**
+   * **Sem chave estrangeira, e isso e decisao** (ADR-0011, revisao de 17/09): a
+   * tabela e polimorfica e o Postgres nao expressa FK condicional ao valor de
+   * outra coluna. A integridade fica na aplicacao, e o caso `entity_id nao tem
+   * chave estrangeira` de `tests/integration/esquema.test.ts` a vigia.
+   */
+  entity_id: string;
+  claimant_user_id: string;
+  evidence_kind: TipoDeEvidencia;
+  /** Referencia ao documento, NUNCA o documento (ADR-0007). */
+  evidence_ref: string | null;
+  submitted_at: Generated<Date>;
+  decision: Generated<DecisaoDaVerificacao>;
+  reviewed_by_user_id: string | null;
+  reviewed_at: Date | null;
+  rejection_reason: string | null;
+  created_at: CriadoEm;
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
@@ -736,6 +861,8 @@ export interface Database {
   conversations: ConversationsTable;
   conversation_messages: ConversationMessagesTable;
   pet_transfers: PetTransfersTable;
+  professionals: ProfessionalsTable;
+  entity_verifications: EntityVerificationsTable;
   'audit.events': AuditEventsTable;
 }
 

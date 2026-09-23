@@ -281,6 +281,16 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
+///
+/// **Destravado uma setima vez pela BICHUS-58 e pela BICHUS-57**, a tela que o
+/// codigo da tag abre: `escanear/tela_do_pet_da_tag.dart` e arquivo novo (F2.2
+/// e F2.3) e `escanear/tela_leitor_de_qr.dart` parou de descartar o retorno de
+/// `tags.resolver` e passou a empilhar a tela do pet. **Nenhuma das duas
+/// encosta na porta** `CameraEGaleria` nem em canal de plataforma, que e o que
+/// o criterio 10 da BICHUS-161 protege, e quem responde por isso e o portao de
+/// diretivas abaixo. Medido pelo indice temporario (`GIT_INDEX_FILE` +
+/// `read-tree HEAD` + `add -A` + `write-tree --prefix=app/lib/telas`) sobre o
+/// commit desta branch.
 /// **Destravado pela BICHUS-35**: a tela do achado avulso nasceu, e ela e uma
 /// pasta nova em `app/lib/telas` -- `telas/achado/`, com
 /// `tela_registrar_achado.dart` (F3.5), `tela_achado_registrado.dart` (o
@@ -347,6 +357,32 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Medido com o indice temporario, na arvore de trabalho:
 /// `4be08548b405759c524cf6336451b53d03b2d184`.
 ///
+/// **Destravado uma nona vez pelo travamento de `Criar conta` em aparelho
+/// fisico de 22/09/2026.** O cliente nao conseguia criar conta nem entrar, e
+/// a varredura que saiu dali achou uma classe inteira: o `setState` que
+/// desliga o carregando morava DENTRO do `catch (FalhaDeChamada)`, que parecia
+/// exaustivo e nao era. Corpo 200 fora do contrato (`Pet.doJson` e
+/// `Sessao.doJson` estouram `TypeError`), `PlatformException` de chaveiro ou
+/// de disco e `MissingPluginException` deixavam a tela girando para sempre com
+/// o erro engolido -- ou, onde havia `finally`, saindo do carregando e sem
+/// dizer nada, que e o outro lado do mesmo defeito.
+///
+/// Nove arquivos de `app/lib/telas` ganharam o ramo que faltava, e nenhum
+/// deles encosta na porta `CameraEGaleria`, que e o que o criterio 10 protege:
+/// `conta/tela_criar_conta.dart`, `conta/tela_entrar.dart`,
+/// `conta/tela_esqueci_minha_senha.dart`, `escanear/tela_leitor_de_qr.dart`,
+/// `perdido/tela_alcance_do_alerta.dart`, `perfil/meus_pets.dart`,
+/// `pet/campos_do_pet.dart`, `pet/tela_cadastrar_sinais.dart`,
+/// `pet/tela_detalhe_do_pet.dart`, `pet/tela_editar_pet.dart` e
+/// `pet/tela_pet_cadastrado.dart`.
+///
+/// **A trava reprovou, como tem de reprovar**, com
+/// `f14551245240f69cfb43cb67216e2682cdb7684c` contra o
+/// `fb8371eecdcfaa014f8f36bf8a4a39df937e3dae` medido pelo indice temporario
+/// deste portao. O que sustenta o comportamento novo nao e esta constante:
+/// e `test/telas/carregar_para_sempre_test.dart`, que reprova se "carregando
+/// para sempre" -- ou o silencio no lugar dele -- voltar a ser alcancavel.
+///
 /// **Remedido no merge de `development` (19115f2) em 22/09/2026.** Os dois
 /// lados destravaram a constante pelo proprio motivo, e por isso nenhum dos
 /// dois valores vale depois do merge: a arvore mesclada nao e a que nenhuma
@@ -354,7 +390,86 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// mesclada, com `git rev-parse HEAD:app/lib/telas`. As duas justificativas
 /// acima seguem valendo e por isso ficaram as duas: elas dizem QUE mudou em
 /// cada lado, e e isso que faz a troca continuar sendo um ato deliberado.
-const String _arvoreDasTelas = 'da86c7e4f32392f54c088b25bd9307581eefda49';
+///
+/// **Destravado pela GAVETA COM SUBMENUS, 22/09.** O pedido do cliente,
+/// repetido duas vezes, acrescentou `app/lib/telas/gaveta_de_secoes.dart` e
+/// alterou `app/lib/telas/casca_com_abas.dart` (a gaveta e o `leading` de 64
+/// dp) e `app/lib/telas/abas.dart` (as cinco raizes se declaram raiz de
+/// secao). Nenhuma das tres encosta na porta `CameraEGaleria`, que e o que o
+/// criterio 10 da BICHUS-161 protege: a gaveta nao le camera, nao pede
+/// permissao e nao cita `ImagePicker` nem `Permission` -- e o portao de
+/// diretivas abaixo, que nao depende desta constante, continua cobrando isso
+/// por conta propria.
+///
+/// O valor foi MEDIDO pelo indice temporario que este portao usa
+/// (`GIT_INDEX_FILE` + `read-tree HEAD` + `add -A app/lib/telas` +
+/// `write-tree --prefix=app/lib/telas`) sobre a arvore ja commitada, e nao
+/// copiado de relato nenhum. Anterior:
+/// `ad6fde0e74c94b21c983c286d1557c07be291288`.
+///
+/// **Destravado de novo pela BICHUS-234, 22/09**, e por UM arquivo:
+/// `app/lib/telas/gaveta_de_secoes.dart`. Duas linhas do inventario de 27.5
+/// da secao `Perto` estavam desatualizadas contra a tela que foi construida:
+/// `Profissionais e estabelecimentos` saiu de `planejada` para `existe`, e
+/// `Filtros` saiu de folha inferior `planejada` para `acaoNaTela` `existe`,
+/// porque o controle de filtro daquela tela vive no corpo e nao em folha.
+/// Nenhuma das duas encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 da BICHUS-161 protege: sao linhas de um mapa, sem camera, sem galeria e
+/// sem permissao, e o portao de diretivas abaixo continua cobrando isso por
+/// conta propria, sem depender desta constante.
+///
+/// Medido pelo mesmo indice temporario descrito acima, sobre a arvore de
+/// trabalho. Anterior: `1774532baa910c4cf8f4331631a81698f4c5b0ac`.
+///
+/// **Remedido no merge de `feat/gaveta-com-submenus` para a `development`,
+/// 23/09/2026.** Os dois lados do conflito estavam certos sobre a propria
+/// historia e errados sobre o resultado: `657d32eb...` e a arvore de um lado,
+/// `5fe2df53...` e a do outro, e a arvore que existe depois do merge nao e
+/// nenhuma das duas. O valor abaixo foi MEDIDO com o mesmo indice temporario
+/// que este portao usa, sobre a arvore ja mesclada. As justificativas acima
+/// ficaram TODAS: cada uma diz o que mudou de um lado, e e isso que mantem a
+/// troca sendo um ato deliberado.
+///
+/// **Destravado uma oitava vez pela mescla de `development` nesta branch, e a
+/// trava disparou por dois motivos somados, nao por um.** Da `development`
+/// entrou a pasta `telas/achado/` inteira e a porta de F3.5 ligada em
+/// `escanear/tela_leitor_de_qr.dart`; desta branch entrou
+/// `escanear/tela_do_pet_da_tag.dart` e a tela do leitor que deixou de
+/// descartar o retorno de `tags.resolver`.
+///
+/// **As duas mudancas na tela do leitor nao se excluem, e o conflito que o Git
+/// mostrou nesse arquivo era de formatacao.** Esta branch reformatou
+/// `tela_leitor_de_qr.dart` inteiro, o alinhamento de linhas deslizou, e o
+/// corpo de `Digitar de novo` (BICHUS-153) foi casado com o corpo da saida de
+/// F3.5 (BICHUS-35) como se fossem o mesmo botao. Sao dois `TextButton`
+/// distintos, em condicoes distintas: `Digitar de novo` so existe enquanto o
+/// 404 do caminho digitado esta na faixa, e `Registrar que achei um pet` existe
+/// sempre. A mescla ficou com os dois, e **nenhum botao novo entrou na tela**.
+///
+/// Nenhuma das pecas encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege, e o portao de diretivas abaixo continua respondendo por isso sem
+/// depender desta constante.
+///
+/// **Remedido no merge de `feat/tela-do-pet-apos-escanear`
+/// para a `development`, 23/09/2026.** Os dois lados do conflito estavam
+/// certos sobre a propria historia e errados sobre o resultado:
+/// `fe88e1df...` e a arvore de um lado, `a4d5b9bf...` e a do
+/// outro, e a arvore que existe depois do merge nao e nenhuma das duas. O
+/// valor abaixo foi MEDIDO com o mesmo indice temporario que este portao usa,
+/// sobre a arvore ja mesclada. As justificativas acima ficaram TODAS: cada
+/// uma diz o que mudou de um lado, e e isso que mantem a troca sendo um ato
+/// deliberado.
+///
+/// **Remedido no merge de `development` (38371aa) nesta branch, 23/09/2026.**
+/// Os dois lados destravaram a constante pelo proprio motivo e os dois valores
+/// morreram no merge: `da86c7e4f32392f54c088b25bd9307581eefda49` e a arvore
+/// desta branch sozinha, `72832de16b55beaff488096e442d64b1846bed0c` e a da
+/// `development` sozinha, e a arvore que existe depois do merge nao e nenhuma
+/// das duas. O valor abaixo foi MEDIDO com o mesmo indice temporario que este
+/// portao usa, sobre a arvore ja mesclada. As justificativas acima ficaram
+/// TODAS, dos dois lados: cada uma diz o que mudou de um lado, e e isso que
+/// mantem a troca sendo um ato deliberado.
+const String _arvoreDasTelas = '74dc7b2c06f3ee25b139b9517824614656db73c2';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

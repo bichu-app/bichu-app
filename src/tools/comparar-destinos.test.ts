@@ -156,9 +156,26 @@ void describe('comparação entre destinos', () => {
 });
 
 void describe('topologia declarada', () => {
+  // A LISTA DESTE BLOCO É DO BLOCO, E NÃO A DE PRODUÇÃO.
+  //
+  // Estes casos passavam a lista real por omissão, e isso os amarrava ao
+  // TAMANHO dela: enquanto `SERVICOS_AUSENTES_NO_HOSPEDADO` teve uma entrada
+  // só, o compose de mentira com `api` e `mail` casava por acaso. Em 23/09 o
+  // serviço `ferramentas` entrou na lista real (serviço de ferramenta, com
+  // `profiles:`, que compila fora do teto de runtime da `api`) e dois casos
+  // deste bloco reprovaram — não por o comparador ter parado de funcionar, mas
+  // por o compose de mentira não ter um serviço que a lista real citava.
+  //
+  // Caso que reprova quando outra pessoa acrescenta um serviço legítimo é caso
+  // que mede a lista em vez de medir a regra. Com a lista explícita aqui, cada
+  // caso volta a dizer exatamente o que quer dizer, e a lista real continua
+  // conferida onde ela precisa ser: `node dist/tools/comparar-destinos.js`, no
+  // job `contrato`, roda contra o `compose.yaml` de verdade.
+  const DECLARADOS = new Map([['mail', 'motivo escrito, só deste bloco de casos']]);
+
   void it('aprova quando o serviço com perfil está declarado', () => {
     assert.deepEqual(
-      conferirTopologia('services:\n  api: {}\n  mail:\n    profiles: [dev, qa]\n'),
+      conferirTopologia('services:\n  api: {}\n  mail:\n    profiles: [dev, qa]\n', DECLARADOS),
       [],
     );
   });
@@ -168,6 +185,7 @@ void describe('topologia declarada', () => {
   void it('REPROVA um serviço com `profiles:` fora da lista fechada', () => {
     const falhas = conferirTopologia(
       'services:\n  api: {}\n  mail:\n    profiles: [dev]\n  metricas:\n    profiles: [dev]\n',
+      DECLARADOS,
     );
     assert.equal(falhas.length, 1);
     assert.match(falhas[0] as string, /metricas/);
@@ -175,12 +193,12 @@ void describe('topologia declarada', () => {
 
   // ISCA da outra direção: declaração que envelheceu protege o que não existe.
   void it('REPROVA quando o serviço declarado sumiu do compose', () => {
-    const falhas = conferirTopologia('services:\n  api: {}\n');
+    const falhas = conferirTopologia('services:\n  api: {}\n', DECLARADOS);
     assert.ok(falhas.some((f) => f.includes('mail')));
   });
 
   void it('REPROVA quando o declarado perdeu o `profiles:` e passou a subir nos dois', () => {
-    const falhas = conferirTopologia('services:\n  api: {}\n  mail: {}\n');
+    const falhas = conferirTopologia('services:\n  api: {}\n  mail: {}\n', DECLARADOS);
     assert.ok(falhas.some((f) => f.includes('NÃO tem')));
   });
 

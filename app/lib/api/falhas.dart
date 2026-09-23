@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'problem.dart';
 
 /// Tudo que pode dar errado numa chamada de API, em tres formas e nao mais.
@@ -66,4 +68,47 @@ class FalhaDeEnderecoRecusado extends FalhaDeChamada {
 
   @override
   String toString() => 'FalhaDeEnderecoRecusado(origem diferente de API_BASE_URL)';
+}
+
+/// O que fazer com um erro que **nao** e [FalhaDeChamada] no meio de uma acao
+/// de tela.
+///
+/// Existe porque o `catch (FalhaDeChamada)` de cada tela parecia exaustivo e
+/// nao era. Ele cobre as quatro formas declaradas acima, e nao cobre o que
+/// vem de fora delas: corpo 200 fora do contrato (`Sessao.doJson` e
+/// `Pet.doJson` estouram `TypeError`), `PlatformException` de chaveiro ou de
+/// disco, `MissingPluginException`. Medido: um `POST /auth/register` que
+/// responde 201 com outro formato devolve um mapa que nao e `FalhaDeChamada`
+/// e estoura acima da camada de API.
+///
+/// A consequencia era sempre a mesma e sempre a pior: o `setState` que
+/// desliga o carregando morava **dentro** do `catch`, entao a excecao nao
+/// prevista deixava a tela girando para sempre com o erro engolido. Quem
+/// toca no botao nao recebe nem resultado nem saida.
+///
+/// Quem chama isto captura `Object`, sai do estado de carregando com
+/// [MensagensDeErro.servidorFora] e passa o erro por aqui. **Capturar nao e
+/// engolir**: o erro vai para o canal que a observabilidade escuta
+/// (Sentry, ADR-0008), porque erro que so vira texto de tela e um defeito que
+/// ninguem nunca ve.
+void registrarFalhaInesperada(
+  Object erro,
+  StackTrace pilha, {
+  required String onde,
+}) {
+  FlutterError.reportError(
+    FlutterErrorDetails(
+      exception: erro,
+      stack: pilha,
+      library: 'bichu/api',
+      context: ErrorDescription(onde),
+      informationCollector: () => <DiagnosticsNode>[
+        ErrorDescription(
+          'Erro que nao e FalhaDeChamada no meio de uma acao de tela. A tela '
+          'saiu do carregando e mostrou o texto de servidor fora; a causa '
+          'esta aqui.',
+        ),
+      ],
+    ),
+  );
 }

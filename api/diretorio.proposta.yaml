@@ -1,0 +1,487 @@
+## PROPOSTA — NÃO É O CONTRATO EM VIGOR.
+##
+## Este arquivo é a proposta das rotas de leitura de `Perto`, escrita para ser
+## lida antes de ser implementada. Ele NÃO é carregado por nada: os quatro
+## portões de contrato da esteira apontam nominalmente para `api/openapi.yaml`
+## (o lint de teto, o portão de contrato público, o comparador de quebra e o
+## gerador de tipos), e nenhum deles varre o diretório `api/`. Enquanto este
+## arquivo existir separado, ele não obriga ninguém e não quebra nada.
+##
+## O caminho para ele valer: recortar estes blocos para dentro de
+## `api/openapi.yaml` — `paths` em `paths`, `schemas` em `components/schemas` —
+## num PR próprio, e só então escrever a implementação.
+##
+## Trabalhado contra: OpenAPI 3.1, RFC 9457 (Problem Details), ADR-0006,
+## ADR-0010, ADR-0011 (emenda 1), ADR-0016 e ADR-0021.
+##
+## =========================================================================
+## AS QUATRO DECISÕES QUE ESTA PROPOSTA TOMA, E POR QUÊ
+## =========================================================================
+##
+## 1. O DIRETÓRIO É AUTENTICADO. `security: [bearerAuth]`, sem alternativa
+##    vazia. Isto não é zelo: é o que torna a resposta possível.
+##    `src/tools/portao-contrato-publico.ts` percorre TODA operação cujo
+##    chamador não tem conta (`security: []`, qualquer alternativa `{}`, ou
+##    `finderToken`) e reprova a resposta que declare qualquer um destes
+##    nomes: `phone`, `phone_e164`, `email`, `address`, `street`, `geo`,
+##    `lat`, `lon`, `distance_m`, `distance_km`, entre outros.
+##
+##    O diretório precisa de telefone comercial e de distância — são o
+##    conteúdo útil dele. Numa operação pública, o portão reprova os dois, e
+##    reprova com razão. Autenticada, a mesma resposta é legítima, porque o
+##    ADR-0011 seção 4 distingue: o tutor é uma pessoa que não pediu para ser
+##    achada; o profissional é uma entidade que ACEITOU aparecer para ser
+##    contratada.
+##
+##    CONSEQUÊNCIA QUE PRECISA SER LIDA ANTES DE ALGUÉM "MELHORAR" ISTO:
+##    afrouxar o `security` destas operações para `[bearerAuth, {}]` faz o
+##    portão reprovar `phone_e164` e `distance_m` nominalmente. Isto não é
+##    previsão: foi executado em 22/09/2026 contra este arquivo mesclado em
+##    `api/openapi.yaml`, e a saída do portão foi, literalmente:
+##
+##      REPROVADO — 3 achado(s):
+##        listDirectoryEntries | ... DirectoryEntrySummary | distance_m
+##        getDirectoryEntry    | ... DirectoryEntrySummary | distance_m
+##        getDirectoryEntry    | ... DirectoryEntry.allOf  | phone_e164
+##
+##    Com o `security` como está escrito abaixo, a mesma execução dá
+##    APROVADO, com 25 operações sem conta percorridas e nenhum achado.
+##
+## VERIFICAÇÃO EXECUTADA (e reexecutável)
+##   1. mesclar este arquivo em `api/openapi.yaml` num arquivo temporário;
+##   2. `node infra/verificacao/verificar-limite-de-chamada.mjs <temp>`
+##      → `[ok] contrato (85 operacoes, 0 achado(s))` e `APROVADO`;
+##   3. `node dist/tools/portao-contrato-publico.js <temp>`
+##      → `APROVADO — nenhuma resposta sem conta declara campo privado`.
+##   O passo 2 confere o vocabulário de `x-rate-limit`; o passo 3 confere o
+##   que esta proposta afirma sobre privacidade. Nenhum dos dois foi lido:
+##   os dois foram rodados.
+##
+## 2. NENHUM UUID SAI. ADR-0010, item 6, sem exceção. O endereço de uma
+##    entrada é um `slug` — o produto já tem esse tipo, com esse formato
+##    exato, e já tem o 409 `slug-taken` para o conflito. A COLUNA `slug` NÃO
+##    EXISTE em `professionals`: é a migração que esta proposta pede, e ela
+##    não foi escrita.
+##
+## 3. NENHUMA COORDENADA SAI, E NENHUMA ENTRA. Sai: a resposta devolve
+##    `distance_m` arredondado a 100 m, nunca o ponto — um ponto por entrada
+##    permite montar o mapa que o ADR-0010 item 4 existe para impedir. Entra:
+##    o chamador NÃO manda a própria coordenada em parâmetro de consulta. O
+##    servidor usa a localização de referência que ele já guarda
+##    (`user_reference_locations`, quantizada em ~100 m, validade de 30 dias,
+##    ADR-0006). Coordenada em URL vai para log de acesso, para histórico do
+##    cliente e para cabeçalho `Referer`.
+##
+## 4. 404, NUNCA 403 (ADR-0021). Entrada em `draft`, `hidden` ou `removed`
+##    responde 404, com o mesmo corpo de "não existe". A autorização vive no
+##    `WHERE status = 'published'` do repositório, não num ramo do
+##    manipulador. Os três índices da tabela já são parciais sobre essa
+##    condição.
+##
+## =========================================================================
+## O QUE ESTA PROPOSTA **NÃO** COBRE, E A AUSÊNCIA É DELIBERADA
+## =========================================================================
+##
+## - ONG e adoção: `professionals.kind` não tem valor para ONG e não há
+##   tabela de adoção. Escrever a rota antes da decisão a faria nascer com a
+##   forma errada.
+## - Avaliações: `professional_reviews` não existe, por decisão do ADR-0011
+##   seção 5.4.
+## - `Rede` e `Loja`: zero tabelas. Não há o que ler.
+## - As operações de escrita `/v1/admin/...`: dependem da decisão 1 do
+##   ADR-0023 (API ou banco direto). O esboço está no fim deste arquivo, como
+##   comentário, para dimensionar o trabalho — não como contrato.
+
+paths:
+  /directory/entries:
+    get:
+      operationId: listDirectoryEntries
+      tags: [public]
+      x-effects: [expensive_query]
+      summary: Profissionais e estabelecimentos da regiao
+      description: |
+        O diretorio de `Perto`. Devolve apenas entradas publicadas.
+
+        **Ordenacao por distancia usa a localizacao de referencia de quem
+        chama**, que o servidor ja guarda. Ela nao e enviada na requisicao. Se
+        o chamador nao tiver localizacao conhecida, ou se ela tiver mais de 30
+        dias (ADR-0006), a resposta traz `distance_available: false`, a
+        ordenacao cai para `name`, e `distance_m` vem nulo em todos os itens.
+        **Falha de calculo nao vira zero e nao vira ordem aleatoria**: a tela
+        diz que nao consegue ordenar por distancia e oferece ligar a
+        localizacao. E a mesma regra do `reach_status: unavailable` do alerta.
+
+        Entrada sem coordenada nunca aparece em `sort=distance`. Nao ha
+        geocodificacao neste produto (ADR-0006): `city`, `state` e
+        `neighborhood` sao rotulo de exibicao e filtro de texto, jamais fonte
+        de coordenada. Quem alimenta o diretorio informa o ponto.
+
+        Paginacao numerada com total, como a listagem publica de perdidos,
+        porque a tela precisa dizer "1 a 20 de 87" e chegar ao fim da lista.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 1h
+          on_exceed: deny_429
+          note: "consulta geoespacial: teto por conta, nao por IP, porque a rota exige conta"
+        - dimension: [account, q]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+          note: >-
+            busca por texto tem teto proprio, como em listPublicLostPets.
+            ATENCAO A QUEM IMPLEMENTAR: `q` NAO esta em DIMENSOES_CONHECIDAS
+            de src/shared/http/aplicacao-de-teto.ts, entao esta entrada exige
+            um resolvedor novo -- sem ele a rota nao compila. O contrato ja
+            usa [ip, q] em listPublicLostPets, que tambem nao tem rota em src/,
+            entao o precedente existe e a divida tambem.
+      parameters:
+        - name: city
+          in: query
+          required: true
+          description: |
+            Obrigatorio, como na listagem publica de perdidos. Diretorio sem
+            recorte devolve o pais inteiro, que nao e resposta para ninguem.
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: neighborhood
+          in: query
+          schema: { type: string, maxLength: 80 }
+        - name: kind
+          in: query
+          description: Filtra por atividade. Repetivel.
+          schema:
+            type: array
+            maxItems: 6
+            items: { $ref: '#/components/schemas/ProfessionalKind' }
+        - name: verification_level
+          in: query
+          description: |
+            Piso, nao igualdade: `contact_verified` traz tambem
+            `document_verified`. Filtro por igualdade esconderia o registro
+            mais forte de quem pediu o mais fraco.
+          schema: { $ref: '#/components/schemas/VerificationLevel' }
+        - name: q
+          in: query
+          description: Busca parcial por nome de exibicao, tolerante a acento e a caixa.
+          schema: { type: string, maxLength: 60 }
+        - name: sort
+          in: query
+          description: |
+            `distance` exige localizacao de referencia valida de quem chama.
+            Sem ela, a resposta usa `name` e diz isso em `distance_available`.
+          schema: { type: string, enum: [distance, name], default: distance }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+      responses:
+        '200':
+          description: |
+            Pagina do diretorio. `total` alimenta "Mostrando 1 a 20 de 87" e
+            `applied_filters` alimenta a linha que explica o recorte.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectoryEntryPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /directory/entries/{slug}:
+    parameters:
+      - name: slug
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Slug' }
+    get:
+      operationId: getDirectoryEntry
+      tags: [public]
+      x-effects: []
+      summary: Detalhe de uma entrada do diretorio
+      description: |
+        **404 para tudo que nao esta publicado**, e o corpo e identico ao de
+        "nao existe": rascunho, oculto, removido e inexistente sao a mesma
+        resposta. Distinguir confirmaria a existencia de um registro que a
+        entidade tirou do ar, a qualquer pessoa com conta (ADR-0021, e o item
+        9 do ADR-0010).
+
+        A autorizacao vive no `WHERE status = 'published'` da consulta, nao
+        num ramo do manipulador. Duas consultas e uma comparacao no
+        manipulador e o arranjo que o SEC-001 reprovou em outra rota.
+
+        **Esta resposta nunca referencia pet nem tutor** (ADR-0011 emenda 1,
+        secao 4.2): nada de "pets atendidos", nada de quem convidou, nem como
+        contagem nem como existencia. O vetor de agrupamento que o item 7 do
+        ADR-0010 proibe entraria por aqui como terceira porta.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+      responses:
+        '200':
+          description: A entrada publicada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectoryEntry' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /directory/reference-data:
+    get:
+      operationId: getDirectoryReferenceData
+      tags: [public]
+      x-effects: []
+      summary: Rotulos das listas fechadas do diretorio
+      description: |
+        Alimenta a folha de filtros. Existe pelo mesmo motivo de
+        `getReferenceData`: rotulo de lista fechada escrito no cliente
+        diverge do banco na primeira vez que a lista cresce, e o cliente
+        publicado continua instalado por meses.
+
+        Resposta cacheavel. Os valores saem das mesmas listas que
+        `tests/integration/conjunto-exato-dos-checks.test.ts` afirma contra o
+        banco.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 24h
+          on_exceed: serve_cache
+          note: "dado que quase nao muda: servir do cache e melhor resposta que recusar"
+      responses:
+        '200':
+          description: Rotulos das listas fechadas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectoryReferenceData' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+components:
+  schemas:
+    ProfessionalKind:
+      type: string
+      description: |
+        A atividade. Espelha `professionals.kind` e a entrada
+        `public.professionals.professionals_kind_check` do teste de conjunto
+        exato. **Nao ha valor para ONG**, e a ausencia e a decisao 9.1 do
+        contrato de escrita, nao um esquecimento.
+      enum: [vet, groomer, walker, sitter, trainer, clinic]
+
+    VerificationLevel:
+      type: string
+      description: |
+        O que foi provado, derivado da verificacao aprovada mais forte da
+        entidade. `none` e estado legitimo e publicavel: passeador,
+        hospedagem, tosa e adestramento nao tem conselho nem registro
+        obrigatorio (ADR-0011).
+      enum: [none, contact_verified, document_verified]
+
+    EvidenceKind:
+      type: string
+      description: |
+        O tipo de prova aceita. A resposta publica devolve o TIPO, nunca o
+        numero: a interface precisa dizer O QUE foi verificado (ADR-0011,
+        selo generico e proibido) e nao precisa publicar um numero de
+        registro para isso.
+      enum: [crmv, cnpj, phone_callback, document]
+
+    DirectoryVerification:
+      type: object
+      description: |
+        O que sustenta o selo. `evidence_kinds` e a lista dos tipos de prova
+        APROVADOS daquela entidade, em ordem decrescente de forca. Vazia
+        quando `level` e `none`.
+      required: [level, evidence_kinds]
+      properties:
+        level: { $ref: '#/components/schemas/VerificationLevel' }
+        evidence_kinds:
+          type: array
+          items: { $ref: '#/components/schemas/EvidenceKind' }
+        verified_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: Quando a prova mais forte foi aprovada. Nulo em `none`.
+
+    DirectoryEntrySummary:
+      type: object
+      description: |
+        O cartao da listagem. **Nao tem `id`**: o endereco e o `slug`
+        (ADR-0010 item 6). Nao tem coordenada, nao tem quem convidou e nao
+        tem titular.
+      required: [slug, kind, display_name, verification]
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        display_name: { type: string, maxLength: 120 }
+        city: { type: string, nullable: true }
+        state: { type: string, nullable: true, minLength: 2, maxLength: 2 }
+        neighborhood: { type: string, nullable: true }
+        verification: { $ref: '#/components/schemas/DirectoryVerification' }
+        distance_m:
+          type: integer
+          nullable: true
+          description: |
+            Distancia ate a localizacao de referencia de quem chama,
+            **arredondada a 100 m**. Nulo quando a entrada nao tem coordenada
+            ou quando o chamador nao tem localizacao valida.
+
+            Os 100 m nao sao arredondamento defensivo: e a propria grade em
+            que o produto quantiza a localizacao do usuario (ADR-0006), entao
+            precisao maior nao existe na origem.
+
+            **Este campo so pode existir porque a operacao exige conta.** Ele
+            esta na lista de campos proibidos de
+            `src/tools/portao-contrato-publico.ts`, e o portao o reprova em
+            qualquer operacao alcancavel sem conta.
+
+    DirectoryEntry:
+      type: object
+      description: |
+        O detalhe. Acrescenta ao cartao o texto de apresentacao e o telefone
+        comercial, pelo mesmo motivo do ADR-0011 secao 4: a entidade aceitou
+        aparecer para ser contratada, e onde ela atende e como falar com ela
+        sao o conteudo util do diretorio.
+      allOf:
+        - $ref: '#/components/schemas/DirectoryEntrySummary'
+        - type: object
+          properties:
+            about: { type: string, nullable: true, maxLength: 2000 }
+            phone_e164:
+              type: string
+              nullable: true
+              description: |
+                Telefone **comercial**, publicado de proposito pela entidade.
+                Formato internacional (`+` e 8 a 15 digitos), que e
+                deliberadamente diferente do telefone de conta de usuario, que
+                aceita so Brasil.
+
+                Mesmo aviso do `distance_m`: este campo so pode existir porque
+                a operacao exige conta.
+            published_at:
+              type: string
+              format: date-time
+              nullable: true
+
+    DirectoryEntryPage:
+      type: object
+      required: [items, page, limit, total, distance_available]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DirectoryEntrySummary' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        distance_available:
+          type: boolean
+          description: |
+            `false` quando o chamador nao tem localizacao de referencia valida.
+            Nesse caso a ordenacao caiu para `name` e todo `distance_m` vem
+            nulo. **A tela diz isso.** Devolver zero ou ordenar por outra coisa
+            em silencio e a forma mais barata de mentir sobre proximidade.
+        applied_filters:
+          type: object
+          description: Devolvido para a tela poder dizer o que esta filtrado.
+          additionalProperties: { type: string }
+
+    DirectoryReferenceData:
+      type: object
+      required: [kinds, verification_levels, evidence_kinds]
+      properties:
+        kinds:
+          type: array
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code: { $ref: '#/components/schemas/ProfessionalKind' }
+              label: { type: string }
+        verification_levels:
+          type: array
+          items:
+            type: object
+            required: [code, label, explanation]
+            properties:
+              code: { $ref: '#/components/schemas/VerificationLevel' }
+              label: { type: string }
+              explanation:
+                type: string
+                description: |
+                  O texto que diz O QUE foi verificado. Exigido, e nao
+                  opcional: selo sem explicacao e exatamente o que o ADR-0011
+                  proibe.
+        evidence_kinds:
+          type: array
+          items:
+            type: object
+            required: [code, label]
+            properties:
+              code: { $ref: '#/components/schemas/EvidenceKind' }
+              label: { type: string }
+
+## =========================================================================
+## O QUE FALTA NO BANCO PARA ESTA PROPOSTA COMPILAR
+## =========================================================================
+##
+## Uma migracao, e ela NAO foi escrita:
+##
+##   1. `professionals.slug` — texto, unico entre publicados, formato do
+##      `Slug` que o produto ja tem. Sem ela nao ha endereco publico, porque
+##      `id` nao pode sair.
+##   2. `professionals.published_at` — hoje so existe `created_at` e
+##      `updated_at`, e nenhum dos dois responde "desde quando esta no ar".
+##   3. `COMMENT ON COLUMN professionals.claimed_by_user_id IS '... NUNCA sai
+##      do servidor ...'`. Hoje so `created_by_user_id` carrega a marca, e as
+##      duas sao a mesma natureza de vinculo. O portao le a marca direto das
+##      migracoes; basta o comentario.
+##
+## ARMADILHA MEDIDA, para quem for implementar:
+## `src/tools/portao-colunas-que-nao-saem.ts` varre **todo** `.ts` e `.mjs`
+## de `src/` procurando o nome literal da coluna marcada, e so dispensa dois
+## arquivos (ele mesmo e o teste dele). Escrever `created_by_user_id` numa
+## interface `ProfessionalsTable` em `src/shared/db/schema.ts` **reprova o
+## build**. A saida certa e omitir a coluna da interface — a aplicacao nunca
+## a le nem a escreve, que e o ponto — e nao acrescentar o arquivo a lista de
+## dispensados, que desligaria o portao.
+##
+## =========================================================================
+## ESBOCO DAS OPERACOES DE ESCRITA — PARA DIMENSIONAR, NAO PARA IMPLEMENTAR
+## =========================================================================
+##
+## Depende da decisao 1 do ADR-0023. Se o backoffice escrever por API:
+##
+##   POST   /v1/admin/directory/entries            createDirectoryEntry
+##   PATCH  /v1/admin/directory/entries/{id}       updateDirectoryEntry
+##   POST   /v1/admin/directory/entries/{id}/publish   publishDirectoryEntry
+##   POST   /v1/admin/directory/entries/{id}/unpublish unpublishDirectoryEntry
+##   GET    /v1/admin/verifications                listPendingVerifications
+##   POST   /v1/admin/verifications/{id}/decision  decideVerification
+##
+## Tres regras que essas operacoes precisam impor, e que o banco nao impoe:
+##
+##   - `verification_level` nao e parametro de entrada em nenhuma delas. Ele
+##     e recalculado por `decideVerification`, a partir das verificacoes
+##     aprovadas da entidade. Um `CHECK` nao enxerga outra tabela.
+##   - `publishDirectoryEntry` e a unica que exige o conjunto completo:
+##     `city`, `state`, ao menos um canal de contato, e `geo` se a entrada
+##     quiser aparecer ordenada por distancia. `createDirectoryEntry` aceita
+##     incompleto e nasce `draft`.
+##   - `createDirectoryEntry` valida que `entity_id` existe antes de gravar
+##     qualquer verificacao: `entity_verifications.entity_id` nao tem chave
+##     estrangeira, por desenho, e a integridade vive na aplicacao.
+##
+## Estas operacoes sao autenticadas com `bearerAuth` e papel administrativo
+## em `user_roles`, e carregam `x-effects: [human_work, irreversible_write]`
+## conforme o caso — o que, por `src/shared/http/route-definition.ts`, torna
+## `x-rate-limit` obrigatorio nelas tambem: rota com efeito e sem teto nao
+## compila.
