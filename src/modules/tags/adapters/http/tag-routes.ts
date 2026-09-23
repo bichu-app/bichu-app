@@ -555,6 +555,13 @@ export function registrarRotasDeTags(
           donoOuToken:
             chamador.userId ?? `tag:${hashDoCodigoDaTag(canonico, deps.chaveDoIndiceDoCodigo).toString('base64')}`,
           endpoint: `${rotaDeAvisoPelaTag.method.toUpperCase()} ${rotaDeAvisoPelaTag.path}`,
+          // O CODIGO ENTRA NA CHAVE, e o valor e o CANONICO. Sem ele, um tutor
+          // autenticado que le duas plaquinhas com a mesma chave recebe o aviso
+          // da primeira como resposta da segunda -- `donoOuToken` so separa as
+          // duas quando NAO ha conta. Com o codigo cru, a mesma plaquinha
+          // digitada com e sem hifen viraria dois pedidos, e o reenvio da fila
+          // offline executaria o efeito de novo.
+          parametrosDeCaminho: { code: canonico },
           corpo,
           agoraEmMilissegundos: deps.clock.now(),
         },

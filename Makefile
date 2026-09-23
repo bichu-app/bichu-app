@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-app fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -356,6 +356,12 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
 verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
+verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
+	node infra/verificacao/verificar-subida-da-api.mjs
+
+verificar-subida-da-api-autoteste: ## as iscas do juizo da subida reprovam (nao usa docker)
+	node infra/verificacao/verificar-subida-da-api.mjs --autoteste
+
 verificar-recibo-de-fechamento-autoteste: ## as iscas do guarda de push de `integra/*` reprovam
 	sh infra/verificacao/verificar-recibo-de-fechamento.sh --autoteste
 
@@ -418,12 +424,15 @@ verificar-app: ## a metade Flutter: analise e suite de widget (job `app` da este
 # fluxo de tela roda `make e2e` a mais, e o README diz isso.
 RECIBO_DE_FECHAMENTO := fechamento.local.txt
 
-fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + Flutter + APK de verdade
-	@echo "fechamento de integracao: verificar -> verificar-app -> apk."
-	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade."
-	@echo "  Medido neste worktree: apk em 7,6 s quente e 35,6 s com \`build/\` frio."
+fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da API + Flutter + APK
+	@echo "fechamento de integracao: verificar -> verificar-subida-da-api -> verificar-app -> apk."
+	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade"
+	@echo "  e sobe a API numa pilha efemera."
+	@echo "  Medido neste worktree: apk em 7,6 s quente e 35,6 s com \`build/\` frio;"
+	@echo "  subida da API em 15 s quente e 27 s com a camada de codigo invalidada."
 	@rm -f $(RECIBO_DE_FECHAMENTO)
 	@$(MAKE) --no-print-directory verificar
+	@$(MAKE) --no-print-directory verificar-subida-da-api
 	@$(MAKE) --no-print-directory verificar-app
 	@$(MAKE) --no-print-directory apk
 	@$(MAKE) --no-print-directory carimbar-fechamento
