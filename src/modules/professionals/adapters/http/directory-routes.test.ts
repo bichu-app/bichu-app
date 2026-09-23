@@ -22,6 +22,13 @@
  * | `rateLimit` removido da rota (tem efeito) | **nao compila** |
  * | dimensao `account` declarada sem resolvedor | **nao compila** |
  * | `app.get` direto, fora de `registrarRota` | o portao de registro reprova |
+ *
+ * A isca da BUSCA, provada do mesmo jeito em 22/09: o resolvedor de `q` em
+ * `aplicacao-de-teto.ts` passou a devolver o TERMO no lugar de
+ * `MARCA_DE_BUSCA`, a suite rodou e saiu `1549 casos, 1548 passaram, 1
+ * falharam` -- a falha foi `a 61a busca e recusada com 429 AINDA QUE cada
+ * termo seja diferente`, e so ela. E a diferenca entre um teto que pega
+ * enumeracao e um que so pega quem repete a mesma busca.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';

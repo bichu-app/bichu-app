@@ -46,6 +46,22 @@
  * | `nulls last` na ordenacao por distancia | 1 |
  * | `ST_MakePoint(lon, lat)` invertido no `seed` | 2 |
  *
+ * As iscas da BUSCA, provadas do mesmo jeito em 22/09. A troca so acontece se
+ * o trecho casar exatamente uma vez e se o arquivo mudar no disco; o placar da
+ * base e `367 casos, 360 passaram, 7 falharam`, e os 7 sao de `troca-de-email`
+ * e nao desta historia.
+ *
+ * | o que foi desligado | `fail` alem dos 7 da base |
+ * |---|---|
+ * | `where('status', '=', 'published')` em `construtorDaListagem` | 3, uma delas `BUSCA NAO ENXERGA RASCUNHO, OCULTO NEM REMOVIDO` |
+ * | `unaccent` dentro de `texto_para_busca` | 2: a busca sem acento e o plano com mil linhas |
+ * | o `replace` dos curingas em `padrao_de_busca` | 1: `%` e `_` deixam de ser literais |
+ * | o indice GIN trocado por um B-tree de `slug` | 2: as duas provas de plano |
+ *
+ * A linha do `unaccent` merece nota, porque ela nao era esperada e e o proprio
+ * assunto do caso do indice: mexer na funcao muda a expressao dos DOIS lados,
+ * e o plano por indice some junto. Normalizacao e indice sao uma coisa so.
+ *
  * ## O que sobrevive a execucao
  *
  * Nada. As contas e as entradas criadas sao apagadas no `after`.
