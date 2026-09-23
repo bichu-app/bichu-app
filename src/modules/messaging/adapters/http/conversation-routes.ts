@@ -312,13 +312,15 @@ export function registrarRotasDeConversas(
           exigencia: exigenciaDeIdempotencia(deps.contrato, rotaDeEnvioDeMensagem.operationId),
           chaveDoCabecalho: request.headers['idempotency-key'],
           // O dono da chave é a CONTA, e não a conversa: duas conversas da mesma
-          // pessoa com a mesma chave são pedidos diferentes, e o `endpoint`
-          // abaixo não as distingue porque ele é o molde da rota, não a URL.
-          // Quem separa uma da outra é o resumo do corpo somado ao caminho, e
-          // por isso `conversation_id` entra no corpo canônico.
+          // pessoa são pedidos diferentes com o MESMO dono. Quem as separa é
+          // `parametrosDeCaminho`, logo abaixo.
           donoOuToken: chamador.userId,
           endpoint: `${rotaDeEnvioDeMensagem.method.toUpperCase()} ${rotaDeEnvioDeMensagem.path}`,
-          corpo: { conversation_id: conversationId, body: corpo.body },
+          // A CONVERSA ENTRA NA CHAVE, pelo mecanismo e nao a mao: `endpoint` e
+          // o molde da rota, entao duas conversas da mesma conta com a mesma
+          // chave sao pedidos diferentes que ele nao distingue.
+          parametrosDeCaminho: { conversationId },
+          corpo,
           agoraEmMilissegundos: deps.clock.now(),
         },
         async () => ({

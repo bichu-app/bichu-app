@@ -492,6 +492,12 @@ export function registrarRotasDeCasos(
           chaveDoCabecalho: request.headers['idempotency-key'],
           donoOuToken: chamador.userId,
           endpoint: `${rotaDeAberturaDeCaso.method.toUpperCase()} ${rotaDeAberturaDeCaso.path}`,
+          // O PET ENTRA NA CHAVE. `endpoint` e o molde da rota
+          // (`POST /pets/:petId/lost-cases`) e nao a URL: sem `petId` aqui, o
+          // mesmo tutor abrindo caso para dois pets com a mesma chave receberia
+          // o caso do PRIMEIRO pet como resposta do segundo, e o segundo animal
+          // ficaria sem alerta nenhum sem nada acusar.
+          parametrosDeCaminho: { petId },
           corpo,
           agoraEmMilissegundos: deps.clock.now(),
         },
