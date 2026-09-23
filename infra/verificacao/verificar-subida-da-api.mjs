@@ -24,10 +24,15 @@
  * ===========================================================================
  * POR QUE NO FECHAMENTO, E NAO EM `make verificar`
  * ===========================================================================
- * Medido neste worktree: 22 s com a camada de codigo invalidada. O laco de quem
- * desenvolve custa 0,22 s hoje, e 22 s ali e laco desligado. E o mesmo
- * argumento que o proprio `Makefile` faz sobre o `apk`: o alvo caro tem um
- * momento, e ele e o fechamento.
+ * Medido neste worktree, com `time make verificar-subida-da-api`: 15 s com a
+ * camada de codigo quente e 27 s com ela invalidada (uma linha a mais em
+ * `src/bin/api.ts`; `touch` nao serve, porque o `COPY` do Docker casa por
+ * CONTEUDO e nao por data -- medir com `touch` teria dado o numero da camada
+ * quente com o nome do numero frio).
+ *
+ * O laco de quem desenvolve custa 0,22 s hoje, e 15 a 27 s ali e laco
+ * desligado. E o mesmo argumento que o proprio `Makefile` faz sobre o `apk`: o
+ * alvo caro tem um momento, e ele e o fechamento.
  *
  * ===========================================================================
  * POR QUE O JUIZO E SEPARADO DO DOCKER (o padrao de verificar_boot_do_alvo_prod)

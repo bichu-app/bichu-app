@@ -356,7 +356,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
 verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
-verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (22 s; so no fechamento)
+verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
 
 verificar-subida-da-api-autoteste: ## as iscas do juizo da subida reprovam (nao usa docker)
@@ -429,7 +429,7 @@ fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da
 	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade"
 	@echo "  e sobe a API numa pilha efemera."
 	@echo "  Medido neste worktree: apk em 7,6 s quente e 35,6 s com \`build/\` frio;"
-	@echo "  subida da API em 22 s com a camada de codigo invalidada."
+	@echo "  subida da API em 15 s quente e 27 s com a camada de codigo invalidada."
 	@rm -f $(RECIBO_DE_FECHAMENTO)
 	@$(MAKE) --no-print-directory verificar
 	@$(MAKE) --no-print-directory verificar-subida-da-api
