@@ -361,7 +361,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Nenhuma das pecas encosta na porta `CameraEGaleria`, que e o que o criterio
 /// 10 protege, e o portao de diretivas abaixo continua respondendo por isso sem
 /// depender desta constante.
-const String _arvoreDasTelas = 'd29bad6ab2b36583c6000764e10c8b157b45b41d';
+const String _arvoreDasTelas = 'a4d5b9bf3fca3df453219ce0c6b659ba3cc8b457';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
