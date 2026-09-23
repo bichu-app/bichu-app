@@ -877,6 +877,91 @@ export interface StoreItemsTable {
   sort_order: Generated<number>;
 }
 
+/**
+ * O encontro da secao `Rede`.
+ *
+ * **Sem `id`, pela mesma razao de `StorePartnersTable`:** `slug` e a chave
+ * primaria, porque esta tabela so existe para sair em resposta publica.
+ *
+ * **Sem coordenada, e a ausencia e a decisao.** O ADR-0006 proibe
+ * geocodificacao no MVP e so aceita coordenada de `device_gps` ou `map_pin`;
+ * quem cadastra uma praca nao tem nenhuma das duas. O lugar sao tres rotulos de
+ * texto, no teto de bairro que o ADR-0010 permite em superficie publica. Nao ha
+ * campo de latitude, de longitude nem de distancia, em precisao nenhuma.
+ */
+export interface NetworkEventsTable {
+  slug: string;
+  title: string;
+  summary: string;
+  /** O nome do lugar PUBLICO. Nao e logradouro, numero nem CEP. */
+  place_name: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  starts_at: Date;
+  ends_at: Date | null;
+  /**
+   * O nome IANA da zona, e ele anda junto de `starts_at` por necessidade:
+   * `timestamptz` sozinho diz o instante e nao diz a hora de parede. Um
+   * aparelho em UTC renderizaria um encontro das 9h como 12h, sem nada acusar.
+   */
+  time_zone: Generated<string>;
+  cover_image_url: string | null;
+  active: Generated<boolean>;
+  created_at: Generated<Date>;
+}
+
+/**
+ * Quem confirmou presenca.
+ *
+ * **NAO HA `pet_id`, e a ausencia e o ADR-0024.** Check-in por pet publicaria
+ * que dois animais sao do mesmo tutor, que e o item 7 do ADR-0010 -- e num
+ * produto de pet perdido essa e a informacao que interessa a quem quer levar um
+ * animal. Nao ha coluna, nao ha tabela de ligacao, entao nao ha `join` que
+ * possa publicar o que nao foi gravado.
+ *
+ * `user_id` NUNCA e projetado: a unica leitura do contrato sobre esta tabela e
+ * `count(*)`.
+ */
+export interface NetworkEventCheckinsTable {
+  event_slug: string;
+  user_id: string;
+  checked_in_at: Generated<Date>;
+}
+
+/**
+ * A galeria de um encontro. A foto pertence ao EVENTO.
+ *
+ * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a decisao 3
+ * do ADR-0024. A coluna que guarda quem enviou a foto esta no banco e **nao
+ * aparece aqui**: ela leva a marca de saida no `COMMENT ON COLUMN` da migracao
+ * `20260923000001`, e `src/tools/portao-colunas-que-nao-saem.ts` varre o
+ * contrato e `src/` inteiro atras do nome dela. Declara-la neste arquivo seria a
+ * primeira ocorrencia, e o portao reprovaria -- com razao, porque um campo no
+ * tipo e um `select` a uma tecla de distancia.
+ *
+ * E o mesmo tratamento que a coluna de quem convidou, em `ProfessionalsTable`,
+ * ja recebe desde a emenda 1 do ADR-0011, e pela mesma razao: e um vinculo entre
+ * duas pessoas, e vinculo entre pessoas nao atravessa a borda.
+ *
+ * Quem precisa dela -- remocao, auditoria, resposta a abuso -- a le por SQL cru,
+ * que e como a massa a escreve. Nenhuma consulta da aplicacao a projeta, e a
+ * partir deste arquivo isso e erro de compilacao, e nao disciplina de quem
+ * escreve a projecao.
+ *
+ * (Os nomes das duas colunas nao aparecem escritos aqui de proposito: o portao
+ * busca por nome e nao distingue mencao de uso, entao cita-las neste arquivo o
+ * faria reprovar o comentario que explica por que elas nao estao nele.)
+ */
+export interface NetworkEventPhotosTable {
+  slug: string;
+  event_slug: string;
+  image_url: string;
+  caption: string | null;
+  published_at: Generated<Date>;
+  sort_order: Generated<number>;
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
@@ -914,6 +999,9 @@ export interface Database {
   store_catalog_versions: StoreCatalogVersionsTable;
   store_partners: StorePartnersTable;
   store_items: StoreItemsTable;
+  network_events: NetworkEventsTable;
+  network_event_checkins: NetworkEventCheckinsTable;
+  network_event_photos: NetworkEventPhotosTable;
   'audit.events': AuditEventsTable;
 }
 

@@ -253,8 +253,27 @@ CREATE TABLE network_event_checkins (
 
 COMMENT ON TABLE network_event_checkins IS
   'Quem confirmou presenca. NAO HA `pet_id`, e a ausencia e a decisao do ADR-0024: check-in por pet publicaria que dois animais sao do mesmo tutor, que e o item 7 do ADR-0010. Nenhuma operacao do contrato le esta tabela linha a linha -- a unica leitura e count(*).';
+-- ESTA COLUNA NAO LEVA A MARCA `NUNCA sai do servidor`, E A AUSENCIA E
+-- DELIBERADA -- nao e esquecimento e nao e descuido.
+--
+-- O portao de `src/tools/portao-colunas-que-nao-saem.ts` busca pelo NOME da
+-- coluna marcada, no contrato inteiro e em `src/` inteiro. `user_id` e um dos
+-- nomes mais comuns do produto: marca-lo aqui faria o portao acusar dezenas de
+-- usos legitimos em outros modulos e, pior, faria alguem desligar o portao para
+-- voltar a trabalhar. Portao que acusa demais morre igual a portao que nao
+-- acusa -- e o que morre junto e a protecao de `submitted_by_user_id`, que
+-- depende do mesmo mecanismo.
+--
+-- O que guarda esta coluna, entao, esta escrito e e verificavel:
+--   1. o contrato nao tem campo para ela (`NetworkEventSummary` e `NetworkEvent`
+--      trazem `checkin_count`, um inteiro, e nenhum campo com pessoas);
+--   2. `tests/integration/rede-nao-liga-dois-pets.test.ts` varre o CORPO INTEIRO
+--      serializado das respostas publicas da secao atras de qualquer UUID, e nao
+--      campo a campo -- e por campo A MAIS que uma resposta se afasta do
+--      documento sem alarme;
+--   3. a unica leitura desta tabela na camada de persistencia e `count(*)`.
 COMMENT ON COLUMN network_event_checkins.user_id IS
-  'NUNCA PROJETADO. A resposta publica de um evento traz `checkin_count`, um inteiro, e nenhum campo com pessoas -- nem nome, nem primeiro nome, nem apelido, nem slug, nem avatar.';
+  'NUNCA PROJETADO. A resposta publica de um evento traz `checkin_count`, um inteiro, e nenhum campo com pessoas -- nem nome, nem primeiro nome, nem apelido, nem slug, nem avatar. Nao leva a marca do portao de colunas porque `user_id` e nome comum demais para ser buscado por nome; quem guarda esta coluna e a isca `rede-nao-liga-dois-pets`, que varre o corpo inteiro das respostas.';
 
 -- ---------------------------------------------------------------------------
 -- A galeria. A foto e do EVENTO, e nao de quem a enviou.
@@ -294,8 +313,19 @@ CREATE TABLE network_event_photos (
 
 COMMENT ON TABLE network_event_photos IS
   'A galeria de um encontro. A foto pertence ao EVENTO: a resposta publica tem imagem e legenda, e mais nada. Nesta fatia ela e EXIBIDA e nao ENVIADA -- o envio pela comunidade depende de moderacao, que nao existe no repositorio, e do armazenamento de objeto na pilha de integracao.';
+-- A MARCA `NUNCA sai do servidor` NAO E PROSA: ela e lida por
+-- `src/tools/portao-colunas-que-nao-saem.ts`, que varre o contrato e `src/`
+-- atras do NOME desta coluna e reprova quem a projetar. E o mesmo mecanismo que
+-- guarda `professionals.created_by_user_id` desde a emenda 1 do ADR-0011, e
+-- pela mesma razao: quem enviou a foto e um VINCULO ENTRE DUAS PESSOAS (esta
+-- pessoa esteve neste lugar), e vinculo entre pessoas nao atravessa a borda --
+-- nem como campo, nem como contagem, nem como existencia.
+--
+-- Com a marca, a decisao 3 do ADR-0024 deixa de valer pela disciplina de quem
+-- escreve a projecao e passa a ter portao. Sem ela, valeria ate o dia em que
+-- alguem acrescentasse o campo "enviada por" achando que estava sendo gentil.
 COMMENT ON COLUMN network_event_photos.submitted_by_user_id IS
-  'NUNCA PROJETADO. Existe para remocao, auditoria e resposta a abuso. Atribuir foto a pessoa reconstruiria a lista de presenca que o ADR-0024 recusa.';
+  'QUEM ENVIOU. Vinculo entre duas pessoas -- esta pessoa esteve neste lugar: NUNCA sai do servidor, em nenhuma resposta, nem como contagem nem como existencia (ADR-0024 secao 3). Guardado por `src/tools/portao-colunas-que-nao-saem.ts`. Existe para remocao, auditoria e resposta a abuso.';
 
 CREATE INDEX network_event_photos_da_galeria
   ON network_event_photos (event_slug, sort_order, slug);
