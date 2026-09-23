@@ -13,6 +13,7 @@ import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
 import 'perfil/meus_pets.dart';
 import 'perto/lista_do_diretorio.dart';
+import 'rede/agenda_da_rede.dart';
 import 'loja/vitrine_da_loja.dart';
 
 /// Secao 1 — `Pets`. A casa dos perdidos, dos achados e das adocoes.
@@ -153,11 +154,32 @@ class AbaPets extends StatelessWidget {
 
 /// Secao 2 — `Rede`. Eventos e encontros da comunidade.
 ///
-/// **Casca honesta.** A secao nao tem uma linha de especificacao de ninguem
-/// (UX 27.5.2): nao ha tela, ordem de leitura, estados nem microcopy. O que
-/// esta tela faz e nomear o que vai existir e dizer que ainda nao existe, que
-/// e o minimo que 25.7.3 exige de um destino visivel. **Sem acao**, pelo
-/// 11.10: sem desfecho possivel, nenhum botao.
+/// **A casca honesta saiu: a secao tem dado.** O `EstadoVazio` "Rede esta em
+/// construcao" era o certo enquanto nao havia tabela nem rota;
+/// `GET /network/events` existe, e a agenda e [AgendaDaRede]. O estado vazio
+/// nao sumiu, mudou de dono: quem o mostra agora e a propria lista, e so
+/// quando o servidor responde que nao ha encontro -- que e afirmacao medida, e
+/// nao afirmacao sobre dado que a tela nao carrega. E ele virou **dois**, como
+/// na `Loja`: "a Rede ainda nao tem encontro" e "nada com esse recorte" dizem
+/// coisas opostas.
+///
+/// **O slot unico de acao da barra de topo continua LIVRE.** Os tres controles
+/// de listagem -- busca, filtro e ordenacao -- moram no corpo, no topo da
+/// lista (ver `BarraDeListagem`), como em `Perto` e na `Loja`. Esta e a
+/// TERCEIRA tela a usar o componente, e ela nao mudou uma linha dele.
+///
+/// **A secao de comunidade NAO mostra a comunidade, e isso e o ADR-0024.**
+/// Nao ha lista de presenca, em lugar nenhum: ha um numero. Nao ha escolha de
+/// pet no check-in, nao ha autor na foto da galeria, nao ha mapa e nao ha
+/// ordenacao por distancia. Cada uma dessas ausencias fecha a inferencia que o
+/// item 7 do ADR-0010 proibe -- que dois pets sao do mesmo tutor --, e o custo
+/// delas esta escrito no ADR: um encontro de cachorros em que nao se sabe quem
+/// vai e mais pobre do que o cliente descreveu, e essa pobreza e deliberada.
+///
+/// **Criar evento e enviar foto continuam fora**, e agora isso e verificavel e
+/// nao prometido: nao ha operacao no contrato, nao ha metodo em `RedeApi` e nao
+/// ha widget na tela. A criacao pela comunidade depende do pacote de moderacao,
+/// que nao existe em lugar nenhum deste repositorio.
 class AbaRede extends StatelessWidget {
   const AbaRede({super.key});
 
@@ -167,13 +189,7 @@ class AbaRede extends StatelessWidget {
     return TelaDeAba(
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
-      filhos: const <Widget>[
-        EstadoVazio(
-          titulo: 'Rede está em construção',
-          explicacao: 'Aqui vão ficar os encontros e eventos marcados por quem '
-              'mora perto de você.',
-        ),
-      ],
+      filhos: const <Widget>[AgendaDaRede()],
     );
   }
 }

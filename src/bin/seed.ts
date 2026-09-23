@@ -56,6 +56,15 @@ import {
   PARCEIROS_DA_VITRINE,
   VERSAO_DA_VITRINE,
 } from './massa-da-vitrine.js';
+import {
+  ENCONTROS_VISIVEIS,
+  FOTOS_DA_REDE,
+  MASSA_DA_REDE,
+  MOMENTO_DA_REDE,
+  PRESENCAS_DA_REDE,
+  TUTORES_DA_REDE,
+  momentoDoEncontro,
+} from './massa-da-rede.js';
 
 /** Sai 2, e nao 1: separa "recusei" de "quebrei" para quem le em esteira. */
 const SAIDA_MASSA_NAO_DEFINIDA = 2;
@@ -73,6 +82,9 @@ const TABELAS_EXIGIDAS = [
   'store_catalog_versions',
   'store_partners',
   'store_items',
+  'network_events',
+  'network_event_checkins',
+  'network_event_photos',
 ] as const;
 
 /**
@@ -153,6 +165,26 @@ async function limparMassaAnterior(db: Db): Promise<void> {
   await sql`delete from store_items where slug = any(${sql.val(itens)}::text[])`.execute(db);
   await sql`delete from store_partners where slug = any(${sql.val(parceiros)}::text[])`.execute(db);
   await sql`delete from store_catalog_versions where version = ${VERSAO_DA_VITRINE}`.execute(db);
+
+  // A `Rede`. A ordem e a das chaves estrangeiras, de fora para dentro: as
+  // fotos e as presencas dependem do encontro, e a presenca depende tambem do
+  // tutor.
+  //
+  // As duas tabelas filhas sao `ON DELETE CASCADE`, entao apagar o encontro
+  // bastaria -- e as linhas estao aqui assim mesmo, de proposito. Cascata que
+  // faz o trabalho em silencio e cascata que ninguem confere: se um dia o
+  // encontro deixar de ser apagado por esta funcao (porque alguem renomeou um
+  // `slug`, por exemplo), a foto orfa continuaria no banco sem nada acusar.
+  //
+  // Os tutores saem por ULTIMO, e so eles: os identificadores estao literais em
+  // `massa-da-rede.ts` e nenhum outro usuario do banco os tem. Nunca
+  // `truncate` -- a massa fixa convive com o que quem desenvolve criou a mao.
+  const encontros = MASSA_DA_REDE.map((um) => um.slug);
+  const tutores = TUTORES_DA_REDE.map((um) => um.id);
+  await sql`delete from network_event_photos where event_slug = any(${sql.val(encontros)}::text[])`.execute(db);
+  await sql`delete from network_event_checkins where event_slug = any(${sql.val(encontros)}::text[])`.execute(db);
+  await sql`delete from network_events where slug = any(${sql.val(encontros)}::text[])`.execute(db);
+  await sql`delete from users where id = any(${sql.val(tutores)}::uuid[])`.execute(db);
 }
 
 /**
@@ -213,6 +245,87 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
 }
 
 /**
+ * Grava os encontros da `Rede`. Idempotente pelo `limparMassaAnterior`.
+ *
+ * ## O INSTANTE E MONTADO PELO POSTGRES, e nao aqui
+ *
+ * `massa-da-rede.ts` produz o TEXTO da hora de parede (`'2026-09-27 09:00:00'`)
+ * e o nome IANA da zona em que esse texto deve ser lido; quem resolve o
+ * deslocamento e o `::timestamp AT TIME ZONE` abaixo. As duas razoes estao
+ * escritas por extenso no cabecalho da massa, e a segunda e a que decide:
+ * somar `-03:00` a mao em JavaScript seria reimplementar horario de verao, que
+ * e a regra que envelhece em silencio -- exatamente o defeito que a coluna
+ * `time_zone` existe para impedir.
+ *
+ * O gatilho `network_events_fuso_existe` confere, linha a linha, que a zona
+ * EXISTE em `pg_timezone_names`. Ele e a autoridade, e por isso a conversao
+ * acontece do lado dele.
+ *
+ * ## `checked_in_at` tambem e calculado
+ *
+ * Ele nao pode ser `now()` cru e nao pode ser literal: check-in gravado depois
+ * do fim do encontro e um estado que a vida nao produz, e literal envelhece
+ * junto com o resto. Sai do proprio `hoje`, recuado, o que preserva a relacao
+ * "confirmou antes do encontro" sem fixar dia nenhum.
+ */
+export async function semearRede(db: Db, hoje: Date): Promise<void> {
+  for (const tutor of TUTORES_DA_REDE) {
+    await sql`
+      insert into users (id, email, display_name, email_verified_at, created_at, updated_at)
+      values (${tutor.id}::uuid, ${tutor.email}, ${tutor.displayName},
+              ${MOMENTO_DA_REDE}::timestamptz, ${MOMENTO_DA_REDE}::timestamptz,
+              ${MOMENTO_DA_REDE}::timestamptz)
+    `.execute(db);
+  }
+
+  for (const encontro of MASSA_DA_REDE) {
+    const momento = momentoDoEncontro(encontro, hoje);
+    await sql`
+      insert into network_events (
+        slug, title, summary, place_name, neighborhood, city, state,
+        starts_at, ends_at, time_zone, cover_image_url, active
+      ) values (
+        ${encontro.slug}, ${encontro.title}, ${encontro.summary},
+        ${encontro.placeName}, ${encontro.neighborhood}, ${encontro.city}, ${encontro.state},
+        ${momento.inicioLocal}::timestamp at time zone ${momento.zonaDeLeitura},
+        ${momento.fimLocal}::timestamp at time zone ${momento.zonaDeLeitura},
+        ${encontro.timeZone}, ${encontro.coverImageUrl}, ${encontro.active}
+      )
+    `.execute(db);
+  }
+
+  // Meio dia antes do `hoje` injetado: antes de qualquer encontro futuro da
+  // massa, e depois do que ja passou ha nove dias.
+  const confirmadoEm = new Date(hoje.getTime() - 12 * 60 * 60 * 1000).toISOString();
+  for (const presenca of PRESENCAS_DA_REDE) {
+    await sql`
+      insert into network_event_checkins (event_slug, user_id, checked_in_at)
+      values (${presenca.eventSlug}, ${presenca.tutorId}::uuid, ${confirmadoEm}::timestamptz)
+    `.execute(db);
+  }
+
+  for (const foto of FOTOS_DA_REDE) {
+    // A COLUNA DE QUEM ENVIOU NAO ENTRA NESTE `insert`, e a ausencia e a
+    // decisao. A galeria desta fatia e CURADA (ADR-0024 decisao 4): ela e
+    // exibida e nao enviada, entao nao ha remetente para gravar. E a coluna
+    // leva a marca de saida na migracao, entao nomea-la aqui faria o portao de
+    // colunas reprovar `src/bin/seed.ts` -- com razao, porque ele nao tem como
+    // saber que este `insert` e de massa.
+    //
+    // Quem precisa de uma foto COM remetente e a isca de integracao, que monta
+    // a propria em `tests/`.
+    await sql`
+      insert into network_event_photos (
+        slug, event_slug, image_url, caption, published_at, sort_order
+      ) values (
+        ${foto.slug}, ${foto.eventSlug}, ${foto.imageUrl}, ${foto.caption},
+        ${MOMENTO_DA_REDE}::timestamptz, ${foto.sortOrder}
+      )
+    `.execute(db);
+  }
+}
+
+/**
  * O ponto entra por SQL, e a ORDEM E (lon, lat).
  *
  * `ST_MakePoint` recebe X antes de Y, e trocar os dois e o erro classico do
@@ -235,6 +348,7 @@ function pontoDaEntrada(entrada: EntradaSemeada) {
 export async function semear(db: Db, hoje: Date = new Date()): Promise<void> {
   await limparMassaAnterior(db);
   await semearVitrine(db, hoje);
+  await semearRede(db, hoje);
 
   for (const entrada of MASSA_DO_DIRETORIO) {
     await sql`
@@ -318,9 +432,19 @@ export async function main(): Promise<void> {
       `massa da vitrine semeada: ${String(MASSA_DA_VITRINE.length)} itens, ` +
         `${String(ITENS_VISIVEIS.length)} visiveis, ` +
         `${String(PARCEIROS_DA_VITRINE.length)} parceiros.`,
+      `massa da Rede semeada: ${String(MASSA_DA_REDE.length)} encontros, ` +
+        `${String(ENCONTROS_VISIVEIS.length)} visiveis, ` +
+        `${String(FOTOS_DA_REDE.length)} fotos na galeria, ` +
+        `${String(PRESENCAS_DA_REDE.length)} presencas de ` +
+        `${String(TUTORES_DA_REDE.length)} tutores.`,
       '',
       'As duas nao publicadas (um rascunho e um oculto) existem de proposito: sao o',
-      'que da o que medir a isca do filtro de `status`.',
+      'que da o que medir a isca do filtro de `status`. Na Rede o equivalente e o',
+      'encontro inativo, e ele e FUTURO: no passado, `when=upcoming` o esconderia',
+      'sozinho e o filtro de `active` continuaria sem ser exercido.',
+      '',
+      'NENHUM PET foi semeado na Rede, e a ausencia e a decisao 1 do ADR-0024:',
+      '`network_event_checkins` nao tem `pet_id`, entao nao ha onde guardar um.',
       '',
       'AINDA SEM MASSA: conta de tutor, pet e caso de perdido. Quais sao essas e',
       'decisao de QA com produto, nao de quem escreveu o comando.',

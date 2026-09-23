@@ -6479,6 +6479,7 @@ export interface operations {
                     "application/json": components["schemas"]["NetworkEvent"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -6507,6 +6508,7 @@ export interface operations {
                     "application/json": components["schemas"]["NetworkCheckIn"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];

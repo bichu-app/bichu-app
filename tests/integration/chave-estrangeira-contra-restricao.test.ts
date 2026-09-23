@@ -490,6 +490,81 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
+  // a secao `Rede` (ADR-0024)
+  // -------------------------------------------------------------------------
+  //
+  // Quatro chaves, e as quatro tem a acao de delecao escolhida pela MESMA
+  // pergunta: o que a pessoa que apaga a conta espera que suma junto, e o que
+  // ela nao espera.
+  'public.network_event_checkins.network_event_checkins_event_slug_fkey': {
+    colunas: ['event_slug'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as presencas do encontro apagado, e elas sao de OUTRAS pessoas: cada linha e o ' +
+      'registro de que alguem confirmou presenca. Este caminho nao e alcancado pela exclusao ' +
+      'de conta (nada cascateia de `users` para `network_events`), e e por isso que ele nao ' +
+      'esta em CASCATAS_QUE_ATRAVESSAM_PESSOAS: quem apaga um encontro e um `DELETE` ' +
+      'administrativo, nao uma pessoa pedindo a propria conta de volta. O produto nao apaga ' +
+      'encontro -- ele marca `active = false`, e o ADR-0024 diz por que: apagar levaria os ' +
+      'check-ins junto.',
+  },
+  'public.network_event_checkins.network_event_checkins_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as presencas da PROPRIA pessoa, e so elas. `network_event_checkins` nao tem coluna ' +
+      'nenhuma sobre terceiro (nem `pet_id`, que o ADR-0024 recusa), entao a cascata nao ' +
+      'alcanca a experiencia de mais ninguem. O efeito visivel para os outros e o ' +
+      '`checkin_count` do encontro cair de um, que e a contagem deixando de contar quem nao ' +
+      'existe mais -- e nao um dado de terceiro sumindo.',
+  },
+  'public.network_event_photos.network_event_photos_event_slug_fkey': {
+    colunas: ['event_slug'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a galeria do encontro apagado. A foto pertence ao EVENTO (ADR-0024 decisao 3), entao ' +
+      'a linha nao e de ninguem em particular -- mas nesta fatia ela e curada, e o dia em ' +
+      'que o envio pela comunidade existir esta cascata passa a apagar trabalho de terceiro. ' +
+      'Esta escrito aqui para que esse dia encontre a frase ja escrita.',
+  },
+  // O `SET NULL` e DELIBERADO, e e o unico da secao.
+  //
+  // `submitted_by_user_id` existe para remocao, auditoria e resposta a abuso, e
+  // **nunca e projetado** (ADR-0024 decisao 3). Duas consequencias se encontram
+  // nesta linha:
+  //
+  // - a conta de quem enviou pode ser excluida **sem que a foto do encontro
+  //   suma junto**. `CASCADE` aqui faria a exclusao de uma conta abrir buracos
+  //   na galeria de encontros publicos dos quais aquela pessoa participou, o
+  //   que e apagar o registro de um evento coletivo por causa de um pedido
+  //   individual;
+  // - `RESTRICT` seria pior ainda: travaria a exclusao de conta, que e direito
+  //   da pessoa e obrigacao legal, por causa de um campo que a resposta publica
+  //   nunca mostra.
+  //
+  // O nulo CABE: a coluna e anulavel por desenho (a foto desta fatia e curada e
+  // nao tem remetente), e nenhum CHECK de `network_event_photos` nomeia
+  // `submitted_by_user_id` -- os tres que a tabela tem sao sobre `slug`,
+  // `image_url` e `caption`. Por isso nao ha par a declarar em
+  // PARES_DE_NULO_CONTRA_RESTRICAO, e declarar um faria o caso "par declarado
+  // que o banco nao tem mais" reprovar.
+  //
+  // A quinta forma tambem nao alcanca esta chave, e a razao e estrutural:
+  // a vizinha desta linha e `network_event_photos.event_slug`, cujo pai e
+  // `network_events` -- uma tabela que **nao tem chave estrangeira nenhuma**,
+  // e portanto nunca e filha de cascata. Nao existe caminho de `users` ate ela,
+  // entao o UPDATE do `SET NULL` nunca revalida `event_slug` contra um pai que
+  // a mesma instrucao apagou.
+  'public.network_event_photos.network_event_photos_submitted_by_user_id_fkey': {
+    colunas: ['submitted_by_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+
+  // -------------------------------------------------------------------------
   // professionals
   // -------------------------------------------------------------------------
   'public.professionals.professionals_claimed_by_user_id_fkey': {

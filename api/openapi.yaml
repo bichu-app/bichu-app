@@ -3536,6 +3536,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NetworkEvent' }
+        # `eventSlug` tem forma declarada, entao a validacao de parametro pode
+        # recusar -- e operacao que pode recusar declara 400. Sem esta linha a
+        # aplicacao NAO SOBE: `rotas-registradas-contra-o-contrato` compara o que
+        # o registro instala com o que o contrato promete, e reprova nominalmente.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
@@ -3587,6 +3592,8 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/NetworkCheckIn' }
+        # Mesma razao de `getNetworkEvent`: `eventSlug` tem forma declarada.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }

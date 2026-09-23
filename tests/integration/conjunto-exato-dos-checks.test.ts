@@ -372,6 +372,62 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
  */
 const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ------------------------------------------------------------------
+  // A secao `Rede` (ADR-0024, migracao 20260923000001).
+  //
+  // Os seis abaixo sao os CHECKs da `Rede` que MENCIONAM literal de texto, que
+  // e o recorte deste registro. Os outros sete da mesma migracao
+  // (`..._titulo_tem_tamanho`, `..._resumo_tem_tamanho`,
+  // `..._lugar_tem_tamanho`, `..._bairro_tem_tamanho`,
+  // `..._cidade_tem_tamanho`, `..._legenda_tem_tamanho` e
+  // `network_events_fim_depois_do_comeco`) sao faixa numerica e comparacao
+  // entre colunas: nao ha literal de texto neles, a classificacao do cabecalho
+  // nao os colhe, e declara-los aqui faria o caso "restricao declarada que o
+  // banco nao tem mais" reprovar.
+  //
+  // **Nenhum destes e lista fechada, e nao ha uma unica lista fechada na
+  // `Rede`.** A ausencia e ela propria uma decisao do ADR-0024: `status`
+  // (`upcoming` / `happening` / `ended`) e o unico conjunto fechado da secao e
+  // ele **nao e coluna** -- e calculado na projecao, no servidor. Uma coluna
+  // `status` aqui seria um rotulo gravado que envelhece sozinho: o encontro de
+  // ontem continuaria dizendo `upcoming` ate alguem rodar alguma coisa.
+  // ------------------------------------------------------------------
+  //
+  // Formato do endereco publico, COPIADO de `pets.slug` e identico ao de
+  // `store_items`. Nao ha UUID nestas duas tabelas: `slug` e a chave primaria,
+  // porque elas so existem para sair em resposta publica (ADR-0010 item 6), e
+  // um `id uuid` seria uma coluna que nunca pode ser projetada esperando alguem
+  // projeta-la por engano.
+  'public.network_events.network_events_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  'public.network_event_photos.network_event_photos_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  // Duas maiusculas, e so. Nao e lista fechada das 27 UFs de proposito:
+  // enumera-las poria o domicilio politico do Brasil numa restricao de banco,
+  // que muda por lei e nao por migracao. O formato e o que o cartao precisa
+  // para caber.
+  'public.network_events.network_events_uf_tem_duas_letras':
+    "CHECK ((state ~ '^[A-Z]{2}$'::text))",
+  // A FORMA do nome IANA, e so a forma. Que a zona EXISTA e conferido pelo
+  // gatilho `network_events_fuso_existe`, e a divisao de trabalho e deliberada:
+  // consultar `pg_timezone_names` nao e imutavel, e o Postgres recusa funcao
+  // volatil em restricao -- um CHECK com ela nem chega a ser criado.
+  //
+  // Os dois juntos sao o que separa `America/Sao_Paulo` de `America/Sao_Pualo`,
+  // que passa na forma e renderiza a hora errada para sempre sem nada acusar.
+  'public.network_events.network_events_fuso_tem_forma_iana':
+    "CHECK ((time_zone ~ '^[A-Za-z]+/[A-Za-z_]+$'::text))",
+  // https e nao http, pela mesma razao da vitrine: imagem em claro numa tela
+  // nossa e uma recomendacao nossa de abrir canal aberto. A capa e opcional, e
+  // a ausencia e estado normal e nao lacuna -- o cartao sabe se desenhar sem
+  // ela, e a massa tem os dois casos de proposito.
+  'public.network_events.network_events_capa_e_https':
+    "CHECK (((cover_image_url IS NULL) OR (cover_image_url ~ '^https://'::text)))",
+  // A foto da galeria, ao contrario da capa, e obrigatoria: uma linha de
+  // `network_event_photos` sem imagem nao e foto nenhuma.
+  'public.network_event_photos.network_event_photos_imagem_e_https':
+    "CHECK ((image_url ~ '^https://'::text))",
+
+  // ------------------------------------------------------------------
   // A vitrine da `Loja` (BICHUS-185 / BICHUS-189, migracao 20260922000009).
   // Nenhum destes e lista fechada: sao formato, faixa e coerencia entre
   // colunas. O unico conjunto fechado da vitrine e `store_items_categoria`,

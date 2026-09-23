@@ -180,7 +180,17 @@ class CascaComAbas extends StatelessWidget {
       icone: Icons.groups_outlined,
       iconeSelecionado: Icons.groups,
       rota: Rotas.rede,
-      estado: EstadoDaSecao.planejada,
+      // `GET /network/events` (ADR-0024). A casca honesta saiu da TELA e
+      // precisava sair tambem do REGISTRO: enquanto esta linha dissesse
+      // `planejada`, o portao do 25.7.3 continuaria procurando a frase "Rede
+      // esta em construcao" que a secao nao diz mais.
+      //
+      // E ha a segunda razao, que e a cara: `visiveisEm` ESCONDE o que e
+      // `planejada` no build de ENTREGA. Com esta linha errada, a secao com
+      // conteudo simplesmente nao apareceria na barra do build que vai para a
+      // loja de aplicativos -- e o defeito so apareceria no aparelho de quem
+      // instalasse. E o mesmo passo que `Perto` e `Loja` ja deram.
+      estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.comunidade,
     ),
     DestinoDeNavegacao(
@@ -303,9 +313,25 @@ class CascaComAbas extends StatelessWidget {
   /// No build de entrega, secao `planejada` **nao e renderizada** (UX 25.7.3).
   /// A rota dela continua existindo, porque link profundo e endereco e nao
   /// depende de a barra mostrar o destino.
-  static List<DestinoDeNavegacao> visiveisEm(ConfiguracaoDeBuild qual) {
-    if (qual == ConfiguracaoDeBuild.referencia) return destinos;
-    return destinos
+  /// [entre] existe para a REGRA poder ser exercida, e nao por flexibilidade.
+  ///
+  /// Desde que a `Rede` ganhou conteudo (ADR-0024) **nao ha mais nenhuma secao
+  /// `planejada` no registro**, e com isso o portao do 25.7.3 passou a nao ter
+  /// o que filtrar: ele ficava verde por vazio, que e exatamente o que o caso
+  /// dele existia para impedir. A alternativa era o teste reescrever o
+  /// predicado, e regra duplicada nos dois lados diverge -- no dia em que
+  /// divergir, ninguem sabe qual das duas esta certa.
+  ///
+  /// Com o parametro, o caso passa a sua PROPRIA lista, com uma secao
+  /// `planejada` de mentira, e prova que este filtro a remove. A producao
+  /// continua chamando sem argumento.
+  static List<DestinoDeNavegacao> visiveisEm(
+    ConfiguracaoDeBuild qual, {
+    List<DestinoDeNavegacao>? entre,
+  }) {
+    final lista = entre ?? destinos;
+    if (qual == ConfiguracaoDeBuild.referencia) return lista;
+    return lista
         .where((d) => d.estado != EstadoDaSecao.planejada)
         .toList(growable: false);
   }

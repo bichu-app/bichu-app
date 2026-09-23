@@ -92,6 +92,8 @@ import { criarDirectoryRepository } from '../modules/professionals/adapters/pers
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
 import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
+import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
+import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -598,6 +600,17 @@ export async function main(): Promise<void> {
       clock: systemClock,
     });
     registrarRotasDaVitrine(escopo, { vitrine: criarStoreRepository(db), clock: systemClock });
+    // A `Rede` tem as tres rotas no mesmo registrador: duas leituras alcancaveis
+    // sem conta e o check-in, que exige uma. O autenticador e o mesmo do
+    // diretorio e o da transferencia -- o modulo recebe a funcao e continua sem
+    // conhecer o servico de identidade.
+    registrarRotasDaRede(escopo, {
+      rede: criarNetworkRepository(db),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      clock: systemClock,
+    });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
