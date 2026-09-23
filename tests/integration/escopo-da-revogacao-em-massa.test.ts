@@ -25,18 +25,47 @@
  *
  * Nenhum caso aqui afirma um número absoluto sobre a tabela: a pilha efêmera é
  * compartilhada pelos outros arquivos de integração, e um total é refém do que
- * eles deixaram. O que se mede é o **conjunto de linhas que mudaram**:
+ * eles deixaram. O que se mede é o **conjunto de linhas que a instrução
+ * marcou**, lido da tabela INTEIRA:
  *
- * 1. tira-se um retrato de `(id, revoked_at)` da tabela INTEIRA antes;
- * 2. roda-se a revogação de UMA conta;
- * 3. tira-se o retrato de novo e compara-se linha a linha.
+ * 1. a revogação de UMA conta roda com um instante SÓ DELA;
+ * 2. pergunta-se à tabela inteira quem ficou com aquele instante em
+ *    `revoked_at`;
+ * 3. o conjunto tem de ser **exatamente** o das linhas vivas daquela conta.
  *
- * O conjunto que mudou tem de ser **exatamente** o das linhas vivas daquela
- * conta. Uma linha a mais, de qualquer outra conta, é o incidente. É a
- * pergunta certa: não "a conta B foi atingida?", que depende de escolher a
- * vítima com sorte, mas "quem MAIS foi atingido?", que não depende de nada.
+ * Uma linha a mais, de qualquer outra conta, é o incidente. É a pergunta
+ * certa: não "a conta B foi atingida?", que depende de escolher a vítima com
+ * sorte, mas "quem MAIS foi atingido?", que não depende de nada.
  *
- * Além do retrato, o caso central é comportamental e é o que uma pessoa
+ * ### Por que a marca, e não mais o retrato de antes e depois
+ *
+ * A primeira forma deste arquivo tirava dois retratos de `(id, revoked_at)` da
+ * tabela inteira — um antes da revogação, outro depois — e chamava de atingida
+ * toda linha cujo valor tivesse mudado entre os dois. **Isso fazia o arquivo
+ * acusar escrita alheia como se fosse a sua.** A pilha efêmera é uma só e
+ * `node --test` roda os quinze arquivos de integração em PARALELO: um
+ * `/auth/login` de `revogacao-de-sessao.test.ts` ou de
+ * `sair-de-todos-pelo-http.test.ts` insere uma linha em `refresh_tokens` a
+ * qualquer momento, e uma linha que NASCEU entre os dois retratos não está no
+ * primeiro (`antes.get(id)` é `undefined`), tem `revoked_at` nulo no segundo, e
+ * `undefined !== null` a contava como mudada.
+ *
+ * Não é teoria: com um escritor concorrente fazendo o que aquele `/auth/login`
+ * faz, este arquivo reprovou 6 vezes em 6; sem ele, passou 6 em 6. O caso ficava
+ * vermelho acusando o `UPDATE` de ter perdido o escopo da conta — a acusação
+ * mais cara deste repositório — por causa de uma linha que o `UPDATE` nunca
+ * tocou. Verificação que acusa por sorte não é verificação, e a acusação errada
+ * é pior do que o silêncio: manda alguém procurar defeito onde não há.
+ *
+ * A marca resolve sem abrir mão de nada. O `UPDATE` grava `revoked_at` com o
+ * instante que ELE recebeu (`construtorDaRevogacaoEmMassa`), então perguntar
+ * quem carrega aquele instante é perguntar exatamente o que aquela instrução
+ * escreveu — na tabela inteira, sem janela nenhuma onde caiba escrita de
+ * terceiro. Cada chamada daqui usa um instante próprio ({@link marcaNova}),
+ * bem longe dos instantes que o resto do arquivo usa, para que a marca de um
+ * caso nunca seja lida como a de outro.
+ *
+ * Além da contagem, o caso central é comportamental e é o que uma pessoa
  * entende: **duas contas, revoga uma, a outra continua entrando** — o refresh
  * da conta B ainda rotaciona depois de a conta A ter saído de todos os
  * aparelhos.
@@ -97,7 +126,29 @@ const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
 
 const AGORA = 1_800_000_000_000 as Instant;
 const MINUTO = 60 * 1000;
+const HORA = 60 * MINUTO;
 const DIA = 24 * 60 * 60 * 1000;
+
+/**
+ * Um instante exclusivo por escrita em massa.
+ *
+ * É ele que identifica as linhas atingidas, então duas chamadas não podem
+ * compartilhá-lo: as contas deste arquivo só são apagadas no `after`, e um
+ * instante repetido faria a marca de um caso aparecer na leitura do seguinte.
+ *
+ * O passo é de HORA, e não de minuto, para ficar fora da faixa que o resto do
+ * arquivo usa (`AGORA + MINUTO`, `AGORA + 2 * MINUTO`, `AGORA + 10 * MINUTO`) —
+ * inclusive o `revoked_at` que a rotação grava no refresh que ela substitui.
+ *
+ * Nenhum outro arquivo da suíte pode produzir um destes: todos os outros que
+ * escrevem nestas tabelas passam pelo relógio de verdade (a rota HTTP) ou por
+ * `now()`, e `AGORA` é 15/01/2027.
+ */
+let marcasEmitidas = 0;
+function marcaNova(): Instant {
+  marcasEmitidas += 1;
+  return (AGORA + marcasEmitidas * HORA) as Instant;
+}
 
 /** `.invalid` é reservado por RFC 2606: nenhum e-mail sai daqui para o mundo. */
 const DOMINIO_DE_TESTE = 'exemplo.invalid';
@@ -163,54 +214,23 @@ async function darTokenPendente(dono: UserId): Promise<TokenHash> {
 }
 
 /**
- * Retrato da tabela INTEIRA: id da linha e o instante que marca a morte dela.
+ * Quem, na tabela INTEIRA, ficou com aquele instante na coluna da morte.
  *
  * A tabela inteira, e não as linhas das contas do caso, porque a pergunta é
  * "quem MAIS foi atingido" e a resposta não pode depender de o caso ter
  * adivinhado quem seria a vítima.
+ *
+ * O instante é a assinatura da instrução: o `UPDATE` grava nas linhas que
+ * atinge exatamente o valor que recebeu. Linha alheia escrita em paralelo tem
+ * outro instante e não aparece aqui — que é a diferença entre esta leitura e o
+ * retrato de antes e depois que ela substituiu (ver o cabeçalho).
  */
-async function retrato(tabela: string, coluna: string): Promise<Map<string, string | null>> {
-  const r = await cliente.query<{ id: string; marca: Date | null }>(
-    `SELECT id, ${coluna} AS marca FROM ${tabela}`,
+async function idsComAMarca(tabela: string, coluna: string, marca: Instant): Promise<string[]> {
+  const r = await cliente.query<{ id: string }>(
+    `SELECT id FROM ${tabela} WHERE ${coluna} = $1`,
+    [new Date(marca)],
   );
-  return new Map(r.rows.map((l) => [l.id, l.marca === null ? null : l.marca.toISOString()]));
-}
-
-/**
- * As linhas que MUDARAM entre os dois retratos, e só elas.
- *
- * O universo é a interseção dos dois retratos: linha que existe no `antes` e
- * ainda existe no `depois`. As duas exclusões são o conserto de um
- * intermitente medido, e nenhuma delas afrouxa o que o caso prova.
- *
- * **Linha que NASCEU entre os dois retratos não é resposta para esta
- * pergunta.** `node --test` roda os quinze arquivos de integração em paralelo
- * contra o MESMO banco, e `sair-de-todos-pelo-http`, `conjunto-exato-dos-checks`
- * e `esquema` também gravam em `refresh_tokens`. Uma linha nova aparece só no
- * `depois`; a versão anterior comparava `antes.get(id)` — que é `undefined` —
- * com `revoked_at` nulo, e `undefined !== null` contava a linha do vizinho como
- * atingida pelo `UPDATE` deste caso. Era falha sem defeito, e ela reprovava o
- * caso que existe para provar escopo.
- *
- * **Linha que SUMIU entre os dois retratos, idem.** O `after` dos outros
- * arquivos apaga as contas que criou, e o `ON DELETE CASCADE` leva o refresh
- * junto.
- *
- * O que a interseção NÃO cobre: um `UPDATE` sem `WHERE user_id` que atingisse
- * uma linha nascida depois do primeiro retrato. Isso está coberto de sobra pelo
- * resto — um `UPDATE` sem escopo acende TODAS as linhas vivas pré-existentes da
- * tabela, que são dezenas, e bastaria uma para reprovar.
- */
-function idsQueMudaram(
-  antes: Map<string, string | null>,
-  depois: Map<string, string | null>,
-): Set<string> {
-  const mudaram = new Set<string>();
-  for (const [id, valor] of antes) {
-    if (!depois.has(id)) continue;
-    if (depois.get(id) !== valor) mudaram.add(id);
-  }
-  return mudaram;
+  return r.rows.map((l) => l.id).sort();
 }
 
 void before(async () => {
@@ -248,7 +268,7 @@ void describe('sair de todos os aparelhos para na conta de quem saiu', () => {
     await darRefreshVivo(tutora);
     const refreshDaOutra = await darRefreshVivo(outra);
 
-    await repo.revogarTodasAsFamilias(tutora, 'password_changed', (AGORA + MINUTO) as Instant);
+    await repo.revogarTodasAsFamilias(tutora, 'password_changed', marcaNova());
 
     // O refresh da outra tutora ainda está vivo E ainda ROTACIONA. Conferir só
     // `revoked_at is null` provaria menos: a renovação é o que a pessoa faz,
@@ -293,16 +313,11 @@ void describe('sair de todos os aparelhos para na conta de quem saiu', () => {
     await darRefreshVivo(outra);
     await darRefreshVivo(terceira);
 
-    const antes = await retrato('refresh_tokens', 'revoked_at');
-    const caidas = await repo.revogarTodasAsFamilias(
-      tutora,
-      'password_changed',
-      (AGORA + MINUTO) as Instant,
-    );
-    const depois = await retrato('refresh_tokens', 'revoked_at');
+    const marca = marcaNova();
+    const caidas = await repo.revogarTodasAsFamilias(tutora, 'password_changed', marca);
 
     assert.deepEqual(
-      [...idsQueMudaram(antes, depois)].sort(),
+      await idsComAMarca('refresh_tokens', 'revoked_at', marca),
       daTutora.map((r) => r.id).sort(),
       'o UPDATE atingiu linhas que não são da conta que saiu. Esta é a falha que nenhum ' +
         'dublê acusa e que nenhuma resposta de rota revela: quem chamou recebeu o efeito ' +
@@ -322,22 +337,26 @@ void describe('sair de todos os aparelhos para na conta de quem saiu', () => {
     const tutora = await criarConta();
     const refresh = await darRefreshVivo(tutora);
 
-    const primeira = await repo.revogarTodasAsFamilias(
-      tutora,
-      'password_changed',
-      (AGORA + MINUTO) as Instant,
-    );
-    const antes = await retrato('refresh_tokens', 'revoked_at');
-    const segunda = await repo.revogarTodasAsFamilias(
-      tutora,
-      'account_deleted',
-      (AGORA + 10 * MINUTO) as Instant,
-    );
-    const depois = await retrato('refresh_tokens', 'revoked_at');
+    const marcaDaPrimeira = marcaNova();
+    const marcaDaSegunda = marcaNova();
+    const primeira = await repo.revogarTodasAsFamilias(tutora, 'password_changed', marcaDaPrimeira);
+    const segunda = await repo.revogarTodasAsFamilias(tutora, 'account_deleted', marcaDaSegunda);
 
     assert.equal(primeira, 1);
     assert.equal(segunda, 0, 'a revogação deixou de ser idempotente');
-    assert.equal(idsQueMudaram(antes, depois).size, 0, 'a segunda chamada reescreveu linhas');
+    assert.deepEqual(
+      await idsComAMarca('refresh_tokens', 'revoked_at', marcaDaSegunda),
+      [],
+      'a segunda chamada escreveu a hora dela em alguma linha da tabela',
+    );
+    // O outro lado da mesma afirmação: a linha da primeira continua com a hora
+    // da primeira. Sem isto, uma segunda chamada que gravasse `now()` em vez do
+    // instante recebido passaria na asserção acima, que só procura pela marca.
+    assert.deepEqual(
+      await idsComAMarca('refresh_tokens', 'revoked_at', marcaDaPrimeira),
+      [refresh.id],
+      'a hora gravada pela primeira revogação não está mais onde ela a escreveu',
+    );
 
     const motivo = await cliente.query<{ revoked_reason: string }>(
       'SELECT revoked_reason FROM refresh_tokens WHERE id = $1',
@@ -359,7 +378,7 @@ void describe('a troca de senha queima os links pendentes de UMA conta', () => {
     await darTokenPendente(tutora);
     const linkDaOutra = await darTokenPendente(outra);
 
-    await repo.invalidarTokensPendentes(tutora, (AGORA + MINUTO) as Instant);
+    await repo.invalidarTokensPendentes(tutora, marcaNova());
 
     const consumido = await repo.consumirTokenDeVerificacao(
       linkDaOutra,
@@ -388,12 +407,11 @@ void describe('a troca de senha queima os links pendentes de UMA conta', () => {
       [tutora],
     );
 
-    const antes = await retrato('verification_tokens', 'consumed_at');
-    const queimados = await repo.invalidarTokensPendentes(tutora, (AGORA + MINUTO) as Instant);
-    const depois = await retrato('verification_tokens', 'consumed_at');
+    const marca = marcaNova();
+    const queimados = await repo.invalidarTokensPendentes(tutora, marca);
 
     assert.deepEqual(
-      [...idsQueMudaram(antes, depois)].sort(),
+      await idsComAMarca('verification_tokens', 'consumed_at', marca),
       daTutora.rows.map((l) => l.id).sort(),
       'a invalidação atingiu tokens que não são da conta cuja senha mudou',
     );
@@ -404,17 +422,22 @@ void describe('a troca de senha queima os links pendentes de UMA conta', () => {
     const tutora = await criarConta();
     await darTokenPendente(tutora);
 
-    const primeira = await repo.invalidarTokensPendentes(tutora, (AGORA + MINUTO) as Instant);
-    const antes = await retrato('verification_tokens', 'consumed_at');
-    const segunda = await repo.invalidarTokensPendentes(tutora, (AGORA + 10 * MINUTO) as Instant);
-    const depois = await retrato('verification_tokens', 'consumed_at');
+    const marcaDaPrimeira = marcaNova();
+    const marcaDaSegunda = marcaNova();
+    const primeira = await repo.invalidarTokensPendentes(tutora, marcaDaPrimeira);
+    const segunda = await repo.invalidarTokensPendentes(tutora, marcaDaSegunda);
 
     assert.equal(primeira, 1);
     assert.equal(segunda, 0, 'a invalidação deixou de ser idempotente');
-    assert.equal(
-      idsQueMudaram(antes, depois).size,
-      0,
+    assert.deepEqual(
+      await idsComAMarca('verification_tokens', 'consumed_at', marcaDaSegunda),
+      [],
       'a segunda chamada reescreveu a hora de consumo de um token já gasto',
+    );
+    assert.equal(
+      (await idsComAMarca('verification_tokens', 'consumed_at', marcaDaPrimeira)).length,
+      1,
+      'a hora gravada pela primeira invalidação não está mais onde ela a escreveu',
     );
   });
 });
