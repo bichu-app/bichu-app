@@ -833,30 +833,40 @@ jobs:
       - name: os quatro /.well-known respondem pela borda, sem redirecionamento
         run: python3 infra/verificacao/verificar_borda_local.py http://localhost:3000 .
 
-      # O SITE PELA BORDA, roteado por HOST. O bloco do site no Caddyfile tem
-      # como padrao `http://web.localhost`, na porta 80 de dentro da borda, que
-      # esta pilha nao publica: a requisicao sai de dentro do container `edge`,
-      # atravessa o Caddy de verdade e chega ao `web`. Confere as tres coisas
-      # que o roteamento por host promete: o host do site chega ao site, o
-      # host do site NAO alcanca a API, e o host da API NAO recebe o site.
-      - name: a borda entrega o site pelo host dele, e so por ele
+      # OS HOSTS DO SITE PELA BORDA (ADR-0024, item 5). Os blocos do site no
+      # Caddyfile tem como padrao `site.localhost`, `tag.localhost` e
+      # `www.localhost`, na porta 80 de dentro da borda, que esta pilha nao
+      # publica: a requisicao sai do container `web`, atravessa o Caddy de
+      # verdade e chega ao `web` e a `api` reais. A tabela e a lista estao em
+      # `infra/verificacao/verificar-hosts-do-site.mjs`.
+      #
+      # A isca vem primeiro: a mesma tabela contra a porta da ORIGEM DA
+      # APLICACAO (3000), onde nenhum host do site existe, PRECISA reprovar.
+      # Se passar, o script parou de distinguir um host do outro.
+      - name: a borda entrega cada host do site pela tabela do ADR-0024
         run: |
-          pede() { # host, caminho -> "status tipo"
-            docker compose exec -T edge wget -S -O /dev/null --header "Host: $1" "http://127.0.0.1:80$2" 2>&1 \
-              | tr -d '\r' | awk '/^ *HTTP\//{s=$2} tolower($1)=="content-type:"{t=$2} END{print s" "t}'
-          }
-          r=$(pede web.localhost /); echo "web.localhost / -> $r"
-          case "$r" in "200 text/html"*) ;; *) echo "::error::o host do site nao chegou ao container web: '$r'"; exit 1 ;; esac
-          r=$(pede web.localhost /.well-known/assetlinks.json); echo "web.localhost /.well-known/assetlinks.json -> $r"
-          case "$r" in "200 application/json"*) ;; *) echo "::error::o host do site nao serve o arquivo de associacao (ADR-0017, emenda 1): '$r'"; exit 1 ;; esac
-          r=$(pede web.localhost /v1/health); echo "web.localhost /v1/health -> $r"
-          case "$r" in "200 "*) echo "::error::o host do site alcancou a API. O bloco do site nao roteia /v1"; exit 1 ;; esac
-          corpo=$(curl -sS --max-time 10 -o - -w '\n%{http_code}' http://localhost:3000/)
-          echo "localhost:3000 / -> $(printf '%s' "$corpo" | tail -1)"
-          if printf '%s' "$corpo" | grep -q '<title>'; then
-            echo "::error::o host da API esta servindo o site. O catch-all do bloco da aplicacao deixou de ser 404 (ADR-0017 item 5)"
+          if docker compose exec -T web node --input-type=module - http://edge:3000 \
+              < infra/verificacao/verificar-hosts-do-site.mjs > isca.out 2>&1; then
+            cat isca.out
+            echo "::error::a tabela de hosts APROVOU contra a origem da aplicacao, onde os hosts do site nao existem. A verificacao parou de enxergar"
             exit 1
           fi
+          echo "isca reprovada, como devia ($(tail -1 isca.out))"
+          docker compose exec -T web node --input-type=module - http://edge:80 \
+            < infra/verificacao/verificar-hosts-do-site.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Em desenvolvimento os quatro papeis dividem `localhost:3000`, e o que
+      # nao e rota da API vai para o site (`BORDA_RESTO_DA_APP=site` no
+      # `.env.example`). Nos hosts hospedados da API o padrao e `fechado`, e
+      # isso e conferido de fora pelo passo 14 do roteiro.
+      - name: em desenvolvimento, localhost entrega API e site juntos
+        run: |
+          r=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code} %{content_type}' http://localhost:3000/)
+          echo "localhost:3000/ -> $r"
+          case "$r" in "200 text/html"*) ;; *) echo "::error::o catch-all local nao chegou ao site: '$r'. Ver BORDA_RESTO_DA_APP"; exit 1 ;; esac
+          r=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code} %{content_type}' http://localhost:3000/v1/health)
+          echo "localhost:3000/v1/health -> $r"
+          case "$r" in "200 application/json"*) ;; *) echo "::error::/v1 deixou de ir para a API no host local: '$r'"; exit 1 ;; esac
 
       - name: api e worker rodam a MESMA imagem
         # A frase "uma imagem, dois pontos de entrada" (ADR-0001) so vale
@@ -1661,9 +1671,10 @@ jobs:
         run: npm run verify:isolamento-da-pilha
 
   # ===========================================================================
-  # A IMAGEM DO SITE (web/), decisao do cliente de 23/09/2026
+  # A IMAGEM DO SITE (web/), decisao do cliente de 23/09/2026 e ADR-0024
   # ===========================================================================
-  # O site roda na mesma VM, em imagem SEPARADA da API. Este job constroi essa
+  # O site (Astro com renderizacao no servidor, Node na 4321) roda na mesma VM,
+  # em imagem SEPARADA da API. Este job constroi essa
   # imagem pelo MESMO caminho que o host usa (`docker compose build web`) e a
   # sobe com as MESMAS restricoes que o compose declara, porque restricao que so
   # vale no YAML e restricao que ninguem viu funcionar.
@@ -1674,7 +1685,14 @@ jobs:
   # so para o site daria dois mecanismos de implantacao para uma maquina so.
   #
   # SEM FILTRO DE CAMINHO, pelo mesmo motivo do job `isolamento`: `skipped` e o
-  # que o `portao` recusa, e o job e barato (placeholder: segundos).
+  # que o `portao` recusa.
+  #
+  # O QUE ESTE JOB AINDA NAO FAZ, e o ADR-0024 (item 10) pede: `astro check`,
+  # tipos do contrato regenerados, portao dos tokens com isca, orcamento de
+  # 30 KB por rota, LCP/CLS/INP, cabecalho por rota e o toque sem JavaScript.
+  # Cada um precisa de uma pagina real para medir, e o site hoje e um
+  # placeholder tecnico. Entram com as paginas; este job e o item 8 (imagem
+  # construida e container saudavel).
   web:
     name: imagem do site constroi, sobe restrita e serve
     runs-on: ubuntu-latest
@@ -1713,51 +1731,51 @@ jobs:
           c=bichu-web-1
           falhas=0
           reprova() { echo "::error::$1"; falhas=1; }
-          [ "$(docker inspect $c --format '{{.Config.User}}')" = "65532:65532" ] || reprova "o site nao roda como usuario sem privilegio"
+          [ "$(docker inspect $c --format '{{.Config.User}}')" = "node" ] || reprova "o site nao roda como o usuario sem privilegio da imagem (node)"
           [ "$(docker inspect $c --format '{{.HostConfig.ReadonlyRootfs}}')" = "true" ] || reprova "a raiz do container do site nao e somente leitura"
           [ "$(docker inspect $c --format '{{.HostConfig.CapDrop}}')" = "[ALL]" ] || reprova "o site nao derrubou todas as capacidades"
-          [ "$(docker inspect $c --format '{{.HostConfig.Memory}}')" != "0" ] || reprova "o limite de memoria do site nao esta valendo"
+          [ "$(docker inspect $c --format '{{.HostConfig.Memory}}')" = "100663296" ] || reprova "o limite de memoria do site nao e os 96 MB do ADR-0024"
           [ -z "$(docker inspect $c --format '{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{$p}} {{end}}{{end}}')" ] || reprova "o site publica porta no hospedeiro; so a borda pode alcanca-lo"
-          # Nenhuma chave do `.env.example` pode aparecer no ambiente do site.
-          # Lista tirada do arquivo, e nao escrita aqui: variavel nova na API
-          # entra na conferencia sem ninguem lembrar deste job.
-          chaves=$(sed -n 's/^\([A-Z_][A-Z0-9_]*\)=.*/\1/p' .env.example)
-          [ -n "$chaves" ] || reprova "nao consegui ler as chaves do .env.example; sem lista, a conferencia de segredo fica cega"
-          ambiente=$(docker inspect $c --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1)
-          for k in $chaves; do
-            if printf '%s\n' "$ambiente" | grep -qx "$k"; then reprova "o site recebeu \`$k\` do ambiente da API"; fi
-          done
-          echo "ambiente do site: $(printf '%s\n' "$ambiente" | tr '\n' ' ')"
+          # LISTA FECHADA do que o site pode receber de ambiente: o que a
+          # propria imagem declara, mais as quatro do ADR-0024 (item 9). Chave
+          # nova no container que nao esta aqui reprova, seja segredo ou nao --
+          # e e assim que um `env_file: [.env]` acrescentado por engano aparece.
+          permitidas=$( { docker image inspect bichu-web:local --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1; \
+            printf '%s\n' API_INTERNAL_URL MEDIA_PUBLIC_BASE_URL SITE_BASE_URL NODE_OPTIONS; } | sort -u)
+          [ -n "$permitidas" ] || reprova "nao consegui ler o ambiente da imagem; sem lista, a conferencia fica cega"
+          recebidas=$(docker inspect $c --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sed '/^$/d' | sort -u)
+          sobra=$(comm -13 <(printf '%s\n' "$permitidas") <(printf '%s\n' "$recebidas"))
+          [ -z "$sobra" ] || reprova "o site recebeu variavel fora da lista do ADR-0024: $(printf '%s\n' "$sobra" | tr '\n' ' ')"
+          echo "ambiente do site: $(printf '%s\n' "$recebidas" | tr '\n' ' ')"
           exit $falhas
 
-      - name: serve a pagina inicial, e 404 de verdade no que nao existe
+      - name: serve a pagina inicial, a rota do servidor e 404 de verdade
         run: |
-          # Pelo NOME DO SERVICO na rede do compose (`web:8080`), que e como a
-          # borda o alcanca -- e nao por 127.0.0.1, que a sonda da imagem ja
-          # cobre. O cliente e o `wget` que ja esta na imagem: nenhuma imagem
-          # a mais so para testar.
-          sonda() {
-            docker compose --env-file "$RUNNER_TEMP/web.env" exec -T web \
-              wget -S -O /dev/null "http://web:8080$1" 2>&1 | tr -d '\r' || true
-          }
-          # O `wget` da imagem nao mostra cabecalho de resposta de erro, entao o
-          # cache-control so e conferido no 200; no 404 o que se cobra e o status.
-          confere() { # caminho, status esperado, cache-control esperado (vazio: nao confere)
-            saida=$(sonda "$1")
-            status=$(printf '%s\n' "$saida" | sed -n 's/^ *HTTP\/[0-9.]* \([0-9]*\).*/\1/p' | tail -1)
-            tipo=$(printf '%s\n' "$saida" | sed -n 's/^ *[Cc]ontent-[Tt]ype: *//p' | tail -1)
-            cache=$(printf '%s\n' "$saida" | sed -n 's/^ *[Cc]ache-[Cc]ontrol: *//p' | tail -1)
-            echo "$1 -> status=$status tipo=$tipo cache=$cache"
-            if [ "$status" != "$2" ] || { [ -n "$3" ] && [ "$cache" != "$3" ]; }; then
-              echo "::error::$1 respondeu status=$status cache=$cache; esperado $2 e ${3:-qualquer cache}"
-              printf '%s\n' "$saida"
-              return 1
-            fi
-          }
-          confere / 200 no-cache
-          case "$tipo" in text/html*) ;; *) echo "::error::a pagina inicial nao e text/html: $tipo"; exit 1 ;; esac
-          # Caminho inexistente e 404 sem cache, nunca a home com 200.
-          confere "/nao-existe-$GITHUB_RUN_ID" 404 ""
+          # Pelo NOME DO SERVICO na rede do compose (`web:4321`), que e como a
+          # borda o alcanca. O cliente e o Node da propria imagem: nenhuma
+          # imagem a mais so para testar.
+          docker compose --env-file "$RUNNER_TEMP/web.env" exec -T web node --input-type=module -e '
+            const casos = [
+              ["/", 200, "text/html", "public, max-age=0, must-revalidate"],
+              ["/healthz", 200, "text/plain", "no-store"],
+              ["/t/CODIGO-DE-TESTE", 404, "text/html", "no-store"],
+              ["/nao-existe-'"$GITHUB_RUN_ID"'", 404, null, "no-store"],
+            ];
+            let falhas = 0;
+            for (const [caminho, status, tipo, cache] of casos) {
+              const r = await fetch("http://web:4321" + caminho, { redirect: "manual" });
+              const t = r.headers.get("content-type") ?? "", c = r.headers.get("cache-control") ?? "";
+              const csp = r.headers.get("content-security-policy") ?? "";
+              const erros = [];
+              if (r.status !== status) erros.push(`status ${r.status}, esperado ${status}`);
+              if (tipo && !t.startsWith(tipo)) erros.push(`tipo ${t}, esperado ${tipo}`);
+              if (c !== cache) erros.push(`cache-control "${c}", esperado "${cache}"`);
+              if (!csp.includes("frame-ancestors")) erros.push("sem frame-ancestors (ADR-0024, item 7)");
+              console.log(`${erros.length ? "::error::" : ""}${caminho} -> ${r.status} ${t} | ${c}${erros.length ? " | " + erros.join("; ") : ""}`);
+              falhas += erros.length ? 1 : 0;
+            }
+            process.exit(falhas ? 1 : 0);
+          '
 
   portao:
     name: portao

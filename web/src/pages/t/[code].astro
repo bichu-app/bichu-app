@@ -1,0 +1,21 @@
+---
+// Placeholder TECNICO de rota renderizada no servidor. Existe so para que a
+// imagem exercite o caminho do adaptador Node (o mesmo que `/t/{code}` real
+// vai usar) e a borda tenha o que rotear em `tag.bichu.app/t/*`. Nao chama a
+// API e nao decide nada: responde 404, que e o que um codigo desconhecido
+// recebe. A pagina real e do front.
+export const prerender = false;
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.status = 404;
+---
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="robots" content="noindex" />
+    <title>Bichu</title>
+  </head>
+  <body>
+    <p>Bichu</p>
+  </body>
+</html>

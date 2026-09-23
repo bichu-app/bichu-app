@@ -760,13 +760,14 @@ silêncio.
 
 ---
 
-### Passo 14 — O site (container `web`), e o corte do apex para ele
+### Passo 14 — O site (container `web`), e o corte dos hosts para ele
 
-Decisão do cliente de 23/09/2026: o site (institucional e páginas públicas)
-roda **nesta mesma VM**, em **imagem separada** da API (`web/Dockerfile`),
-atrás da mesma borda. O mecanismo de implantação é o do passo 7, e não outro:
-os arquivos vão para o host e o compose constrói lá. Não há registry no
-caminho, nem para a API nem para o site.
+Decisão do cliente de 23/09/2026 e ADR-0024: o site (institucional e páginas
+públicas) é um container Astro com renderização no servidor, **nesta mesma
+VM**, em **imagem separada** da API (`web/Dockerfile`), atrás da mesma borda.
+O mecanismo de implantação é o do passo 7, e não outro: os arquivos vão para o
+host e o compose constrói lá. Não há registry no caminho, nem para a API nem
+para o site.
 
 **Implantar ou atualizar o site** (não toca API, banco nem borda):
 
@@ -778,53 +779,89 @@ BUILD_COMMIT=<sha> docker compose build web
 docker compose up -d --no-deps --wait web
 ```
 
-Enquanto `WEB_SITE_HOSTS` não estiver no `.env`, a borda atende o site só pelo
-nome `web.localhost`, que nenhum DNS resolve. O apex continua no bloco da
-aplicação, respondendo 404 fora de `/v1` e dos arquivos de associação.
+`--wait` é a metade que importa: a borda só pode passar a mandar um host para
+o `web` depois de ele estar saudável. Na ordem contrária o host responde 502.
 
-**Verificação — o apex não mudou, e o site está atrás da borda:**
+Enquanto as variáveis `SITE_*` não estiverem no `.env`, os blocos do site na
+borda existem só com os nomes de teste (`site.localhost`, `tag.localhost`,
+`www.localhost`), que nenhum DNS resolve. `bichu.app` e `tag.bichu.app`
+continuam em `HOSTS_EXTRA_APP`, respondendo como hoje.
 
-```bash
-# o site, pelo host de teste, atravessando a borda de verdade
-curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' \
-  --resolve web.localhost:80:$IP http://web.localhost/
-# 200 text/html
-curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://bichu.app/
-# 404 text/plain -- igual a antes, até o corte abaixo
-curl -sS https://hml.bichu.app/v1/health    # 200, status ok
-```
-
-**O corte do apex para o site.** Só quando o site real existir; o placeholder
-técnico de `web/public/` **não** vai para o apex. O DNS já aponta para cá desde
-a BICHUS-146 e o certificado do apex já está no volume `caddy_dados`, então o
-corte é só de configuração, e a ordem é a de sempre: config primeiro.
-
-0. O `compose.yaml` e o `Caddyfile` do host precisam ser os que declaram
-   `WEB_SITE_HOSTS` (o serviço `edge` repassa a variável). Com o `compose.yaml`
-   antigo, o passo 2 não chega à borda e o apex some dos dois blocos.
-1. No `.env` do host, tirar `https://bichu.app` de `HOSTS_EXTRA_APP` (hoje
-   `, https://bichu.app, https://tag.bichu.app`; fica `, https://tag.bichu.app`).
-2. No mesmo `.env`, `WEB_SITE_HOSTS=https://bichu.app`.
-3. `docker compose up -d --no-deps --wait web edge`.
-
-O passo 3 **recria** o edge, e é inevitável: a borda roda com `admin off`, sem
-`caddy reload`, e variável de ambiente só entra em container novo. São alguns
-segundos sem resposta em `hml` também; faça fora de sessão de teste do cliente.
-Um nome nos dois blocos (passo 1 esquecido) é configuração inválida e a borda
-**não sobe**: confira antes com
+**Verificação — o site responde pela rede interna, e nada público mudou:**
 
 ```bash
-docker run --rm --env-file .env -v "$PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
-  caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17 \
-  caddy validate --config /etc/caddy/Caddyfile
+docker compose exec -T web node -e "fetch('http://web:4321/healthz').then(r=>console.log(r.status))"   # 200
+curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://bichu.app/   # 404 text/plain, igual a antes
+curl -sS https://hml.bichu.app/v1/health                                       # 200, status ok
 ```
 
-`tag.bichu.app` fica no bloco da aplicação neste corte. Se `/t/{code}` passar a
-ser página do site, o nome muda de bloco do mesmo jeito (sai de
-`HOSTS_EXTRA_APP`, entra em `WEB_SITE_HOSTS`), e é decisão de arquitetura do
-site, não deste roteiro.
+**Ensaiar a tabela do ADR-0024 sem tocar a borda que está no ar.** Uma borda
+descartável, na mesma rede do compose, com a configuração do corte e
+certificado interno (`local_certs`, só na cópia de ensaio): ela alcança o `web`
+e a `api` reais, não publica 80 nem 443, e some ao final.
 
-**Reverter:** desfazer 1 e 2 e repetir 3. O apex volta ao 404 de hoje.
+```bash
+sed 's/^\tadmin off$/\tadmin off\n\tlocal_certs/' infra/caddy/Caddyfile > /tmp/Caddyfile.ensaio
+docker run -d --name borda-ensaio --network bichu_default -p 127.0.0.1:18443:443 \
+  -v /tmp/Caddyfile.ensaio:/etc/caddy/Caddyfile:ro -v "$PWD/infra/caddy/well-known:/srv/well-known:ro" \
+  -e PUBLIC_BASE_URL=https://hml.bichu.app -e 'HOSTS_EXTRA_APP=, https://api.bichu.app' \
+  -e MEDIA_PUBLIC_BASE_URL=https://img-hml.bichu.app -e 'HOSTS_EXTRA_MIDIA=, https://img.bichu.app' \
+  -e OBJECT_BUCKET_PUBLIC=bichu-media-public -e SITE_HOSTS=https://bichu.app \
+  -e SITE_TAG_HOSTS=https://tag.bichu.app -e SITE_WWW_HOSTS=https://www.bichu.app \
+  -e SITE_BASE_URL=https://bichu.app \
+  caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
+curl -sk -o /dev/null -w '%{http_code} %{content_type}\n' --resolve bichu.app:18443:127.0.0.1 https://bichu.app:18443/
+docker rm -f borda-ensaio
+```
+
+**O corte.** Só quando o site real existir; o placeholder técnico **não** vai
+para `bichu.app`. `bichu.app` e `tag.bichu.app` já resolvem para esta máquina
+e já têm certificado no volume `caddy_dados`, então para eles o corte é só de
+configuração. `www` e `api` ainda não resolvem: configuração primeiro, DNS
+logo depois, na mesma janela.
+
+0. `compose.yaml` e `infra/caddy/Caddyfile` do host são os deste repositório
+   (o serviço `edge` repassa as variáveis `SITE_*` e `BORDA_RESTO_DA_APP`).
+   Com o `compose.yaml` antigo, as variáveis abaixo não chegam à borda.
+1. `docker compose up -d --no-deps --wait web` e `web` saudável.
+2. No `.env` do host:
+
+   ```
+   HOSTS_EXTRA_APP=, https://api.bichu.app
+   SITE_HOSTS=https://bichu.app
+   SITE_TAG_HOSTS=https://tag.bichu.app
+   SITE_WWW_HOSTS=https://www.bichu.app
+   SITE_BASE_URL=https://bichu.app
+   ```
+
+   `BORDA_RESTO_DA_APP` **não** entra: sem ela o catch-all de `hml` e `api`
+   continua 404.
+3. Validar antes de aplicar (um nome em dois blocos reprova aqui, e não com a
+   borda fora do ar):
+
+   ```bash
+   docker compose config edge --format json | python3 -c "import json,sys; print('\n'.join(f'{k}={v}' for k,v in json.load(sys.stdin)['services']['edge']['environment'].items()))" > /tmp/edge.env
+   docker run --rm --env-file /tmp/edge.env -v "$PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+     caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17 \
+     caddy validate --config /etc/caddy/Caddyfile && rm /tmp/edge.env
+   ```
+
+4. `docker compose up -d --no-deps edge`. **Recria** o edge, e é inevitável: a
+   borda roda com `admin off`, sem `caddy reload`, e variável de ambiente só
+   entra em container novo. São alguns segundos sem resposta em `hml` também;
+   fora de sessão de teste do cliente.
+5. Criar no DNS `www` e `api` (A para o IP do passo 2, `proxied:false`).
+
+**Conferência depois, de fora** (ADR-0024, item 5): `hml.bichu.app/v1/health`
+200 e `hml.bichu.app/t/x` 404; `bichu.app/` 200 `text/html`;
+`bichu.app/v1/health` 200; `bichu.app/v1/docs` 404 sem pedir credencial;
+`tag.bichu.app/t/<código inexistente>` respondendo pela página do site;
+`tag.bichu.app/` 308 para `https://bichu.app/`; os quatro alvos de
+`infra/verificacao/associacao.yml` em 200.
+
+**Reverter:** voltar as cinco linhas do passo 2 ao valor anterior
+(`HOSTS_EXTRA_APP=, https://bichu.app, https://tag.bichu.app` e sem as `SITE_*`)
+e repetir o passo 4.
 
 ---
 
