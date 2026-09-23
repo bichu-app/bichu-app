@@ -303,6 +303,54 @@ repetir-integracao: commit-de-build ## 20 execucoes seguidas da integracao, alim
 verificar-associacao: ## roda o monitor dos arquivos de deep link (secao 16.12)
 	python3 infra/verificacao/verificar_associacao.py
 
+# O portao que so a esteira tinha, e que por isso deixou passar.
+#
+# POR QUE ELE ESTA AQUI E NAO SO NO `ci.yml`
+#
+# Em 22/09/2026 o commit 351ae0f acrescentou duas respostas `400` a
+# `api/openapi.yaml` e nao rodou `npm run generate:types`.
+# `make fechar-integracao` ficou VERDE com a divergencia de pe, porque a
+# conferencia existia em UM lugar so: `.github/workflows/ci.yml`, passo `tipos
+# gerados batem com a spec` do job `lint, tipos e teste unitario`. A divergencia
+# atravessou o fechamento local inteiro e so morreu na esteira, depois do push.
+#
+# POR QUE EM `verificar` E NAO EM `fechar-integracao`
+#
+# O criterio da casa e custo, e ja foi aplicado duas vezes: `apk` ficou fora de
+# `verificar` porque leva minutos e exige a cadeia Android;
+# `verificar-subida-da-api` ficou fora porque sobe docker e custa 15-27 s. Os
+# dois moram no fechamento por isso.
+#
+# MEDIDO NESTE WORKTREE, com `/usr/bin/time -p`, Node 22.23.2:
+#
+#   npm run verify:types (geracao + comparacao)                1,06 s
+#   npm run lint                                               8,57 s
+#   npm run typecheck                                          2,28 s
+#
+# Ele nao sobe nada, nao le rede e nao encosta em docker. Contra os 0,22 s que a
+# nota do `fechar-integracao` usou para justificar o que entrou no laco de quem
+# desenvolve, 1,06 s e a mesma ordem de grandeza. Entao ele vai para `verificar`,
+# que e o portao que roda MAIS VEZES -- e portao de divergencia so serve se
+# rodar antes de a divergencia viajar.
+#
+# POR QUE NAO E `npm run verify:types`, QUE JA EXISTIA NO `package.json`
+#
+# Porque `verify:types` termina em `git diff --exit-code`, e isso responde a
+# pergunta da ESTEIRA (arvore limpa no commit), nao a daqui. Medido: com a spec
+# adiantada e os tipos JA REGERADOS -- o estado correto de quem acabou de mexer
+# no contrato e ainda nao commitou -- `npm run verify:types` continua saindo 1.
+# Portao que reprova o fluxo correto e portao que vai ser desligado.
+#
+# `infra/verificacao/verificar-tipos-gerados.mjs` pergunta outra coisa, que nao
+# depende do git: gerar de novo muda algum arquivo? Se muda, o que estava em
+# disco estava velho. Vale com a arvore limpa ou suja. As iscas estao no proprio
+# script (`--autoteste`), como nos vizinhos.
+verificar-tipos-gerados-autoteste: ## as iscas do portao dos tipos gerados reprovam (nao gera nada)
+	node infra/verificacao/verificar-tipos-gerados.mjs --autoteste
+
+verificar-tipos-gerados: ## o gerado de src/shared/types/generated/ bate com api/openapi.yaml (1,06 s)
+	node infra/verificacao/verificar-tipos-gerados.mjs
+
 verificar-limite: ## BICHUS-25: lint de limite de chamada, com as duas iscas do QA
 	node infra/verificacao/verificar-limite-de-chamada.mjs api/openapi.yaml
 
@@ -354,7 +402,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
