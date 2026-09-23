@@ -281,7 +281,32 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// A autora mediu `e2263ed05357bf22b31f1b177fcdb3d5b28f710b` sobre a base;
 /// esse valor foi superado pela integracao de 22/09, que mediu a arvore com
 /// as seis historias juntas.
-const String _arvoreDasTelas = 'f14551245240f69cfb43cb67216e2682cdb7684c';
+/// **Destravado uma nona vez pelo travamento de `Criar conta` em aparelho
+/// fisico de 22/09/2026.** O cliente nao conseguia criar conta nem entrar, e
+/// a varredura que saiu dali achou uma classe inteira: o `setState` que
+/// desliga o carregando morava DENTRO do `catch (FalhaDeChamada)`, que parecia
+/// exaustivo e nao era. Corpo 200 fora do contrato (`Pet.doJson` e
+/// `Sessao.doJson` estouram `TypeError`), `PlatformException` de chaveiro ou
+/// de disco e `MissingPluginException` deixavam a tela girando para sempre com
+/// o erro engolido -- ou, onde havia `finally`, saindo do carregando e sem
+/// dizer nada, que e o outro lado do mesmo defeito.
+///
+/// Nove arquivos de `app/lib/telas` ganharam o ramo que faltava, e nenhum
+/// deles encosta na porta `CameraEGaleria`, que e o que o criterio 10 protege:
+/// `conta/tela_criar_conta.dart`, `conta/tela_entrar.dart`,
+/// `conta/tela_esqueci_minha_senha.dart`, `escanear/tela_leitor_de_qr.dart`,
+/// `perdido/tela_alcance_do_alerta.dart`, `perfil/meus_pets.dart`,
+/// `pet/campos_do_pet.dart`, `pet/tela_cadastrar_sinais.dart`,
+/// `pet/tela_detalhe_do_pet.dart`, `pet/tela_editar_pet.dart` e
+/// `pet/tela_pet_cadastrado.dart`.
+///
+/// **A trava reprovou, como tem de reprovar**, com
+/// `f14551245240f69cfb43cb67216e2682cdb7684c` contra o
+/// `fb8371eecdcfaa014f8f36bf8a4a39df937e3dae` medido pelo indice temporario
+/// deste portao. O que sustenta o comportamento novo nao e esta constante:
+/// e `test/telas/carregar_para_sempre_test.dart`, que reprova se "carregando
+/// para sempre" -- ou o silencio no lugar dele -- voltar a ser alcancavel.
+const String _arvoreDasTelas = 'fb8371eecdcfaa014f8f36bf8a4a39df937e3dae';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
