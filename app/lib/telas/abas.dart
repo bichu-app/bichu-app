@@ -13,6 +13,7 @@ import 'avisos/antessala_de_aviso.dart';
 import 'casca_com_abas.dart';
 import 'perfil/meus_pets.dart';
 import 'perto/lista_do_diretorio.dart';
+import 'loja/vitrine_da_loja.dart';
 
 /// Secao 1 — `Pets`. A casa dos perdidos, dos achados e das adocoes.
 ///
@@ -222,11 +223,24 @@ class AbaPerto extends StatelessWidget {
   }
 }
 
-/// Secao 4 — `Loja`. A loja do Bichu.
+/// Secao 4 — `Loja`. A vitrine curada que leva a loja do parceiro.
 ///
-/// Casca honesta. O carrinho e o pedido nao tem especificacao de ninguem, e a
-/// decisao de provedor de pagamento nao existe (UX 27.5.4) -- desenhar aqui
-/// seria inventar produto no codigo, que e o inverso da regra do projeto.
+/// **A casca honesta saiu: a secao tem dado.** O `EstadoVazio` "Loja esta em
+/// construcao" era o certo enquanto nao havia tabela nem rota;
+/// `GET /store/items` existe, e a vitrine e [VitrineDaLoja]. O estado vazio
+/// nao sumiu, mudou de dono: quem o mostra agora e a propria lista, e so
+/// quando o servidor responde que nao ha produto.
+///
+/// **A plaquinha NAO entra aqui, e a ausencia e decisao de produto.** A
+/// explicacao antiga prometia "a plaquinha de reposicao", e a secao C da
+/// BICHUS-185 decidiu o contrario: a Loja do MVP e vitrine de parceiro, e
+/// nenhum parceiro vende plaquinha do Bichu. Um item sem destino seria o unico
+/// da vitrine que nao abre nada, num componente cuja unica acao e abrir algo.
+/// Como um tutor consegue uma plaquinha continua em aberto, e e do cliente.
+///
+/// **Carrinho, pedido e pagamento continuam fora** (criterio 5), e agora isso
+/// e verificavel e nao prometido: nao ha campo no contrato, coluna no banco
+/// nem widget na tela.
 class AbaLoja extends StatelessWidget {
   const AbaLoja({super.key});
 
@@ -236,13 +250,7 @@ class AbaLoja extends StatelessWidget {
     return TelaDeAba(
       titulo: destino.rotulo,
       reforco: destino.reforcoDaPagina,
-      filhos: const <Widget>[
-        EstadoVazio(
-          titulo: 'Loja está em construção',
-          explicacao: 'Aqui vai ficar a plaquinha de reposição e os produtos '
-              'escolhidos pelo Bichu.',
-        ),
-      ],
+      filhos: const <Widget>[VitrineDaLoja()],
     );
   }
 }

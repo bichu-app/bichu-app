@@ -49,6 +49,7 @@ import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/api/devices_api.dart';
 import 'package:bichu/api/diretorio_api.dart';
+import 'package:bichu/api/loja_api.dart';
 import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos_localizacao.dart';
@@ -125,6 +126,8 @@ Future<_Caixa> _montar(
       casos: CasosApi(api),
       // O diretorio de `Perto` entrou no escopo junto com a listagem.
       diretorio: DiretorioApi(api),
+      // A vitrine de `Loja` entrou no escopo junto com a listagem dela.
+      loja: LojaApi(api),
       // BICHUS-35: a camada de achado entrou no escopo junto com F3.5.
       achados: AchadosApi(api),
       // O envio de foto entra com a camera ausente: este caso nao sobe foto
