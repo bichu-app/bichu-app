@@ -1,6 +1,6 @@
 # ADR-0017: O serviço Node não renderiza HTML, e quem serve o domínio da tag
 
-**Status:** aceito, com emenda 1; emenda 2 proposta em 22/09/2026
+**Status:** aceito, com emendas 1 e 3; emenda 2 superada pela 3 em 23/09/2026
 **Data:** 2026-09-17
 **Depende de:** ADR-0016 (a borda que torna a separação roteável)
 **Revisa:** ADR-0005 ("uma página, duas portas"), ADR-0004 (o que o QR codifica)
@@ -17,12 +17,21 @@ Todo o resto (zero `text/html`, as três variáveis, os três requisitos do arqu
 de associação, o gatilho datado do item 4 e a borda fechada do item 5) continua
 valendo sem alteração.
 
-**Emenda 2, PROPOSTA em 22/09/2026, aguardando o cliente:** nada é revogado. A
+**Emenda 2, SUPERADA pela emenda 3 em 23/09/2026 (era proposta em 22/09):** nada é revogado. A
 emenda registra que as oito rotas deste quadro respondem **404 em produção**
 (medido de fora em 21/09) e que o gatilho datado do item 4 cobre **uma** delas.
 Ela estende esse gatilho a `/verificar-email` e `/redefinir-senha`, cujos links
 o back-end **já emite** por e-mail, e deixa para o cliente a escolha de onde as
 páginas moram. Está no fim deste documento.
+
+**Emenda 3, ACEITA em 23/09/2026 (decisão do cliente):** o "outro time web"
+passa a ser **este squad**. O site (institucional e as oito rotas públicas) é
+construído aqui, roda na mesma VM em **imagem separada** da API e vai ao ar em
+`bichu.app`. O serviço Node da API **continua sem servir HTML**: o item 1 fica
+de pé sem exceção, e a exceção de back-end prevista no item 4 e estendida pela
+emenda 2 **deixa de existir**. A emenda 2 fica como registro do diagnóstico, e a
+decisão dela é substituída. Stack, forma do site e roteamento de hosts estão no
+ADR-0024. A emenda está no fim deste documento.
 
 ## Contexto
 
@@ -378,7 +387,7 @@ fechadas ou nomeadas na própria issue.
 
 ---
 
-# Emenda 2 (PROPOSTA, aguarda o cliente) — 22/09/2026: o gatilho do item 4 cobre uma das oito páginas, e duas já estão sangrando
+# Emenda 2 (SUPERADA pela emenda 3 em 23/09; o diagnóstico continua valendo) — 22/09/2026: o gatilho do item 4 cobre uma das oito páginas, e duas já estão sangrando
 
 **Provocação:** uma apuração de 21/09 constatou que o repositório não tem projeto
 web nenhum (`adr/ api/ app/ coverage/ cypress/ design/ dist/ docs/ infra/
@@ -518,3 +527,163 @@ responsável, o que a deixava a caminho de ser descoberta em 21/10 — o desfech
 que ela foi escrita para evitar. Virou a **BICHUS-197**, em `Tarefas pendentes`,
 com os critérios de medição e a regra de que verificação que não consegue
 verificar reprova.
+
+
+---
+
+# Emenda 3 (ACEITA) — 23/09/2026: o time web é este squad
+
+**Provocação:** a pergunta 2 de `.jarvis/DECISOES-PARA-23-09.md` ("o time web tem
+nome e data?") e a seção 14 de `.jarvis/DECISOES-PARA-22-09.md`, que a emenda 2
+deixou para o cliente.
+
+## 1. O que o cliente decidiu, por escrito, e não se reabre
+
+1. O squad constrói o **site web do Bichu**: o institucional **mais** as oito
+   rotas públicas do quadro da seção *Contexto*. Isso **reverte** a decisão de
+   22/09, que deixava as páginas com um time web externo.
+2. O site roda na **mesma VM** de hoje (`bichu-hml`, projeto `bichu-app-508914`,
+   `southamerica-east1-a`), em **imagem Docker separada** da API, para que migrar
+   depois seja fácil.
+3. O site vai ao ar **direto em `bichu.app`**.
+4. O designer desenha no Figma antes; o front web implementa só o que estiver
+   desenhado e aprovado.
+
+## 2. O que muda neste ADR, item por item
+
+| Item | Antes | Depois |
+|---|---|---|
+| 1. Zero `text/html` | vale | **vale, sem exceção**. O site é outro serviço, com imagem própria (ADR-0024). Nenhuma linha de HTML volta para `src/` |
+| 2. As três variáveis | `TAG_BASE_URL=https://tag.bichu.app`, `WEB_BASE_URL=https://bichu.app` (emenda 1) | **inalterado**. Os links que a API emite já apontam para onde o site vai responder |
+| 3. Arquivos de associação | "a hospedagem é deles" | a hospedagem é **nossa**, pela borda, a partir de `infra/caddy/well-known/`, o mesmo arquivo em `tag.bichu.app`, `bichu.app` e `hml.bichu.app` (ADR-0024 item 6). Os três requisitos continuam inegociáveis |
+| 4. Gatilho de 07/10 e exceção de back-end | se o outro time não entregar `/t/{code}`, a API volta a servir uma página mínima | **a exceção de back-end deixa de existir.** O gatilho vira **prazo com dono**: seção 3 abaixo |
+| 5. Borda fechada | tudo que não é `/v1` responde 404 | continua assim nos hosts da API (`hml.bichu.app`, `api.bichu.app`). Nos hosts do site, o que não é `/v1` nem arquivo de associação vai para o container do site (ADR-0024 item 5) |
+| *Consequências*, "o que fica em aberto e não é meu" | contrato de entrega com o time web; subdomínio | **fechado.** Não há fronteira de time; a entrega passa pela nossa esteira e pela nossa revisão |
+
+A exceção do item 4 existia porque a página estava fora do nosso alcance, e ela
+seria uma página de back-end escrita às pressas **pelo mesmo squad** que agora
+escreve a página de verdade. Com o site sendo nosso, a página mínima mais
+barata é a própria `/t/{code}` do site, e manter o plano B seria escrever a
+mesma tela duas vezes, uma delas no lugar que este ADR proíbe.
+
+## 3. O destino da emenda 2 e do gatilho datado
+
+**A emenda 2 sai de "proposta" para "superada pela emenda 3".** O que ela
+mediu continua valendo como registro: as oito rotas respondiam 404 em 21/09, e
+a API já emite quatro endereços que caem nelas (verificação de e-mail,
+redefinição de senha, `conversation_url` e `poster_url`). O que ela **decidia**
+(estender a exceção de back-end a três páginas) é substituído pelo seguinte.
+
+**O gatilho passa a ter dono: o front web deste squad.** São dois prazos, com
+naturezas diferentes, e os dois continuam sendo condições e não esperanças:
+
+1. **`/verificar-email` e `/redefinir-senha` antes da BICHUS-147 em produção.**
+   Precondição, não data: a 147 **não vai a produção** enquanto as duas páginas
+   não responderem em `bichu.app` com o `GET` que não executa e o `POST` que
+   confirma. Sem isso, o e-mail passa a sair e o botão dele leva a 404. São as
+   primeiras da fila do site, porque o back-end delas está pronto (seção 5).
+2. **`/t/{code}` em 07/10/2026**, em `tag.bichu.app`, respondendo 200, 404 e 410
+   corretamente, em ambiente acessível de fora. A **BICHUS-197** continua sendo
+   a conferência, agora do nosso container, com a mesma regra: verificação que
+   não consegue verificar reprova. **Se 07/10 chegar sem a página, não há plano
+   B de back-end:** o que o gatilho garante é que o cliente saiba em 07/10, e não
+   em 21/10, e que a fila do site seja reordenada para pôr `/t/` na frente de
+   tudo.
+
+**As duas perguntas ao cliente sobre o time web se fecham** com a decisão 1:
+`DECISOES-PARA-22-09.md` seção 14 (opção "projeto web nosso") e
+`DECISOES-PARA-23-09.md` pergunta 2.
+
+**A pergunta 1 de `DECISOES-PARA-23-09.md` (a plaquinha) muda de natureza, e
+tem um erro de host.** A data em que o endereço impresso passa a funcionar
+deixa de depender de terceiro: é o prazo 2 acima. E o texto da pergunta diz que
+o QR leva `bichu.app/t/<código>`; o que o QR codifica é `{TAG_BASE_URL}/t/{código}`
+(`src/shared/config/app-config.ts`), e o valor decidido em 19/09 é
+`https://tag.bichu.app`. O valor efetivo na VM só se confere dentro dela
+(`docker compose exec -T api printenv TAG_BASE_URL`), e precisa ser conferido
+antes de qualquer resposta a essa pergunta. O site serve `/t/` também no apex
+(ADR-0024 item 5), então as duas formas abrem; a que vai para o plástico é a
+de `TAG_BASE_URL`.
+
+**Os itens 4 e 5 da emenda 2 viram trabalho do site:** as três regras de
+`src/web/README.md` passam para o README de `web/`, e `src/web/` sai quando
+`web/` nascer. O critério 1 da **BICHUS-59** ("o backend serve HTML renderizado
+no servidor") precisa ser reescrito para "o site serve", e o mesmo vale para o
+critério da BICHUS-76 que diz "servida em HTML pelo backend".
+
+## 4. As 13 issues que esperavam o time web
+
+Elas saem da coluna "esperando o time web" (`.jarvis/FILA-FINAL-22-09.md`, D.1)
+e entram na fila do front web do squad. **Nenhuma fica livre só por isso**: a
+decisão 4 do cliente põe o Figma aprovado antes de qualquer linha, e várias
+dependem de operação que o contrato declara e o código não tem (seção 5).
+
+| Chave | O que é | O que ainda bloqueia |
+|---|---|---|
+| BICHUS-120 | páginas de confirmar e-mail e redefinir senha | **só o Figma**. Back-end pronto. Primeira da fila (seção 3, prazo 1) |
+| BICHUS-59 | página pública do QR, `/t/{code}` | Figma; critério 1 reescrito. Back-end pronto (`resolveTagCode`, `createFoundReportFromTag`). Prazo de 07/10 |
+| BICHUS-71 | avisar o tutor sem login, em um toque | Figma. Back-end pronto. Anda junto com a 59 |
+| BICHUS-70 | aviso enviado, com as três ofertas opcionais | Figma. Back-end pronto |
+| BICHUS-47 | código não encontrado ou tag desativada | Figma. Back-end pronto (404 e 410 com `next_action`) |
+| BICHUS-119 | cabeçalhos de segurança e `og:` em `/t/`, `/c/`, `/cartaz/` | nada além do próprio site: é o item 7 do ADR-0024 e a asserção de cabeçalho da esteira |
+| BICHUS-72 | contar mais: foto do lugar, recado, contato | Figma **e back-end**: `createFinderPhotoUploadIntent` e `enrichFinderFoundReport` não estão implementadas |
+| BICHUS-41 | conversa por token na web, `/c/{token}` | Figma **e back-end**: as quatro operações de `/v1/finder/conversation*` não estão implementadas |
+| BICHUS-76 | cartaz automático e link compartilhável | Figma **e back-end**: `getPublicLostCase` e `getLostCasePoster` não estão implementadas |
+| BICHUS-45 | rota `/@slug` com perfil público desligado | Figma **e back-end**: `getPublicPetBySlug` não está implementada |
+| BICHUS-30 | termos acessíveis sem conta | Figma e **o texto dos termos**, que é do cliente. É página pré-renderizada do institucional |
+| BICHUS-174 | perfil fatia C: página do tutor | Figma **e o ADR da exceção ao contato mediado**, que não existe. Continua bloqueada por ele |
+| BICHUS-197 | gatilho de 07/10 | muda de objeto (seção 3): passa a conferir o nosso container. Mantém a data |
+
+**Lacuna de backlog:** a página `/transferencia/{cancelToken}` não tem história.
+O back-end dela está pronto (seção 5) e o link já sai por e-mail na transferência
+de pet (BICHUS-66). O **institucional** também não tem história nenhuma.
+
+## 5. O contrato que as páginas consomem: o que existe e o que falta
+
+Conferido em `origin/development` (`38371aa`), lendo `api/openapi.yaml` e a
+declaração de rota em `src/` (`defineRoute`/`registrarRota`), não o nome do
+arquivo.
+
+**As quatro operações que o item 1 disse que "entram no contrato nesta rodada":**
+
+| Operação | No contrato | No código |
+|---|---|---|
+| `GET /v1/public/lost-cases/{shareToken}/poster` (`getLostCasePoster`) | sim | **não** |
+| `GET /v1/public/transfers/{cancelToken}` (`getTransferByCancelToken`) | sim | sim, `src/modules/transfers/adapters/http/transfer-routes.ts` |
+| `POST /v1/public/transfers/{cancelToken}/cancel` (`cancelTransferByToken`) | sim | sim, mesmo arquivo, com idempotência |
+| `GET /v1/public/password-reset/{token}` (`checkPasswordResetToken`) | sim | sim, `src/modules/identity/adapters/http/routes.ts` |
+
+**As operações do quadro do item 1, que as páginas também consomem:**
+
+| Operação | No contrato | No código | Página |
+|---|---|---|---|
+| `GET /v1/tags/{code}` (`resolveTagCode`) | sim | sim | `/t/` |
+| `POST /v1/tags/{code}/found-reports` (`createFoundReportFromTag`) | sim | sim | `/t/` |
+| `POST /v1/auth/email-verification/confirm` | sim | sim | `/verificar-email` |
+| `POST /v1/auth/password-reset/confirm` | sim | sim | `/redefinir-senha` |
+| `GET /v1/finder/conversation` (`getFinderConversation`) | sim | **não** | `/c/` |
+| `POST /v1/finder/conversation/messages` (`postFinderMessage`) | sim | **não** | `/c/` |
+| `POST /v1/finder/conversation/block` (`blockFinderConversation`) | sim | **não** | `/c/` |
+| `POST /v1/finder/conversation/report` (`reportFinderConversation`) | sim | **não** | `/c/` |
+| `GET /v1/public/lost-cases/{shareToken}` (`getPublicLostCase`) | sim | **não** | `/p/` |
+| `GET /v1/public/pets/{slug}` (`getPublicPetBySlug`) | sim | **não** | `/@` |
+| `POST /v1/media/finder-photo-intents` (`createFinderPhotoUploadIntent`) | sim | **não** | `/t/`, foto do achador |
+| `PATCH /v1/finder/found-report` (`enrichFinderFoundReport`) | sim | **não** | `/t/`, contar mais |
+
+**Falta, e é trabalho de back-end, não deste ADR:** nove operações, todas já no
+contrato. Nenhuma operação que as páginas precisam está fora do contrato. Por
+ordem de qual página destravam primeiro: `getLostCasePoster` e
+`getPublicLostCase` (cartaz e caso, BICHUS-76); as quatro de
+`/v1/finder/conversation*` (BICHUS-41); `createFinderPhotoUploadIntent` e
+`enrichFinderFoundReport` (BICHUS-72); `getPublicPetBySlug` (BICHUS-45).
+
+Uma conferência a mais que vale fazer junto: a API **já emite** `conversation_url`
+(resposta do aviso) e `poster_url` (resposta do caso) apontando para páginas
+cujas operações de leitura não existem. Os dois links vão continuar em 404 **no
+site** até essas operações existirem, mesmo com o site no ar.
+
+## 6. O que esta emenda NÃO decide
+
+Nada sobre impressão de plaquinha (ADR-0004 e emenda 1 item 5 continuam valendo
+sem alteração). Nada sobre o conteúdo das páginas, que é do Figma aprovado. A
+stack, a forma da imagem, o roteamento de hosts e a CSP estão no ADR-0024.
