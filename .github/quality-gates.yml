@@ -152,24 +152,32 @@ dispensas:
     responsavel: squad
     vence_em: 2026-09-28
 
-  # O portao do paragrafo 7 do design system
-  # (test/a11y/documento_secao7_test.dart) compara a tabela e a prosa de
-  # docs/06-design-system.md com design/contrast-pairs.json. Ele existe porque
-  # o paragrafo 7 afirmava ter esse portao e NAO tinha: quatro razoes da rampa
-  # anterior sobreviveram na prosa por dias com a esteira verde (BICHUS-194).
+  # A DISPENSA `documento-secao7` SAIU EM 23/09/2026, E NAO FOI RENOVADA.
   #
-  # Aqui ele nao roda, e o motivo nao e tecnico: `docs/` esta fora do
-  # repositorio por decisao do cliente de 17/09/2026, entao o checkout da CI
-  # nao traz o arquivo. Sem esta entrada o teste REPROVA por ausencia, que e o
-  # comportamento correto de uma verificacao que nao consegue verificar.
+  # Ela segurava `test/a11y/documento_secao7_test.dart`, que comparava a tabela
+  # e a prosa do paragrafo 7 de `docs/06-design-system.md` com
+  # `design/contrast-pairs.json`. Esse teste nunca teve o que ler na esteira:
+  # `docs/` esta fora do repositorio desde 17/09/2026, e em 23/09/2026 o
+  # cliente reafirmou a decisao com a arquitetura inteira, e nao com uma data
+  # nova: documentacao de projeto no Confluence, documentacao de design no
+  # Figma, trabalho no Jira. Nao existe data em que o arquivo chegue ao
+  # checkout, entao nao existe data que devolva o portao.
   #
-  # A saida esta em .jarvis/DECISOES-PARA-22-09.md: ou `docs/` (ou so este
-  # arquivo) entra no repositorio, ou o portao passa a rodar no passo de
-  # publicacao no Confluence, ou se aceita que o paragrafo 7 nao tem portao e
-  # o texto dele diz isso. Enquanto esta entrada existir, a tabela do
-  # documento NAO e conferida pela esteira, e o teste imprime `::warning::`
-  # dizendo isso em cada execucao.
-  - portao: documento-secao7
-    motivo: "docs/ fora do repositorio por decisao de 17/09/2026: o checkout da CI nao traz docs/06-design-system.md e o portao do paragrafo 7 nao tem o que ler"
-    responsavel: cliente
-    vence_em: 2026-09-24
+  # Dispensa e a forma de registrar ausencia TEMPORARIA, com dono e com saida.
+  # Redatar esta aqui seria transformar decisao permanente em dispensa perpetua
+  # com aparencia de prazo, que e a saida preguicosa que este arquivo existe
+  # para impedir. Por isso o portao foi removido junto com a dispensa.
+  #
+  # O QUE CONTINUA GUARDADO, e e o ponto: os 86 pares do paragrafo 7 vivem em
+  # `design/contrast-pairs.json`, que e rastreado, e
+  # `test/a11y/contraste_tokens_test.dart` os RECALCULA a partir de
+  # `design/tokens.json` contra a `razao_esperada`, o piso e o veredito de cada
+  # um, no job `contraste`. Nenhum valor do paragrafo 7 deixou de ser conferido.
+  # O que deixou de ser conferido e a prosa de um arquivo que o repositorio nao
+  # tem e nao vai ter.
+  #
+  # O QUE FICOU SEM PORTAO, dito em voz alta: numero velho na prosa do
+  # paragrafo 7, que e o defeito da BICHUS-194, nao e mais pego por ninguem.
+  # Isso e a opcao (b) da secao 12 de `.jarvis/DECISOES-PARA-23-09.md`, e ela
+  # pede que o texto do paragrafo 7 pare de afirmar que tem portao. Esse texto
+  # vive fora do repositorio. O registro fica em `docs/07-devops.md` secao 5.3.
