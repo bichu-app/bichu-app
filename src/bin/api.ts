@@ -88,6 +88,8 @@ import {
   criarEmailVerificadoDoChamador,
   criarNomeDoPet,
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
+import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
+import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -586,6 +588,13 @@ export async function main(): Promise<void> {
   await escoparRotas(app, PREFIXO_DA_API, (escopo) => {
     registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
     registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
+    registrarRotasDoDiretorio(escopo, {
+      diretorio: criarDirectoryRepository(db),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      clock: systemClock,
+    });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
