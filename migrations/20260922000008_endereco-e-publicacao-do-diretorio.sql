@@ -1,4 +1,4 @@
--- BICHUS-234 -- o diretorio de `Perto` ganha endereco publico e marco de
+-- A leitura do diretorio de `Perto` ganha endereco publico e marco de
 -- publicacao.
 --
 -- POR QUE ESTA MIGRACAO EXISTE, EM UMA FRASE: a rota de leitura do diretorio

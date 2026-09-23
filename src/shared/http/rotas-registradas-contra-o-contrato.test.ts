@@ -67,7 +67,7 @@ const MODULOS: readonly Record<string, unknown>[] = [
   transferencias,
   webhook,
   aparelhos,
-  // BICHUS-234. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   diretorio,
   saude,

@@ -1,5 +1,5 @@
 /**
- * O diretorio de `Perto` contra Postgres de verdade (BICHUS-234).
+ * O diretorio de `Perto` contra Postgres de verdade (a leitura do diretorio de `Perto`).
  *
  * ## Por que este arquivo nao pode ser unitario
  *

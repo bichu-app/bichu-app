@@ -705,8 +705,7 @@ export interface PetTransfersTable {
 }
 
 /**
- * BICHUS-234. O diretorio de `Perto`, mapeado um ano e um dia depois de a
- * migracao existir.
+ * O diretorio de `Perto`, mapeado um dia depois de a migracao existir.
  *
  * As tabelas nasceram em `migrations/20260921000002` e ficaram **fora deste
  * arquivo**: nenhuma linha de `src/` as conhecia. Elas entram aqui agora porque
