@@ -1611,6 +1611,228 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/store/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A vitrine curada da Loja
+         * @description A secao `Loja`: uma vitrine curada de produtos de parceiro, cada um com
+         *     o link que abre a loja do parceiro. **A compra acontece la, nao aqui.**
+         *
+         *     **E PUBLICA, e a divergencia em relacao a `listDirectoryEntries` e
+         *     deliberada.** `Perto` exige conta porque `phone_e164` e `distance_m`
+         *     sao o conteudo util dela, e o portao de contrato publico reprova os
+         *     dois em operacao alcancavel sem conta. **A Loja nao tem nenhum dos
+         *     dois.** Um item e titulo, resumo, imagem, preco de referencia e o link
+         *     publico do parceiro -- tudo ja publicado no site dele. O criterio 24 da
+         *     BICHUS-185 pede esta operacao publica por extenso, e a BICHUS-189
+         *     repete: "a Loja e navegavel deslogado, entao a operacao nao exige
+         *     conta". Autorizacao na clausula `WHERE` (ADR-0021), sem ramo
+         *     privilegiado.
+         *
+         *     **Nenhum UUID sai daqui, e nao por filtragem: nao ha um.**
+         *     `store_items` e `store_partners` tem `slug` como chave primaria
+         *     (ADR-0010 item 6).
+         *
+         *     **NAO EXISTE OPERACAO DE ESCRITA DE CATALOGO NESTE CONTRATO**, e a
+         *     ausencia e o criterio 20 da BICHUS-185. A entrada de dados e a decisao
+         *     9.6 de `api/contrato-de-escrita-do-diretorio.md`, pendente do cliente:
+         *     catalogo versionado no repositorio (BICHUS-189) ou backoffice de outra
+         *     esteira. Nos dois caminhos o esquema e o mesmo; no segundo a escrita
+         *     nasce em `/v1/admin/...` como manda o ADR-0023.
+         *
+         *     ## O preco de referencia, e o vencimento que o SERVIDOR aplica
+         *
+         *     `price_amount` e **inteiro em centavos**, nunca ponto flutuante.
+         *     Ele e **opcional**, e item sem preco e estado normal, nao lacuna.
+         *
+         *     Quando ha preco, `price_currency` e `price_checked_at` vem junto,
+         *     sempre -- e `price_checked_at` e a data em que uma PESSOA abriu a
+         *     pagina do parceiro e leu aquele numero.
+         *
+         *     **Passados 30 dias da consulta, o servidor OMITE o valor** e
+         *     `price_status` vem `vencido`. Nao e a tela que esconde: se a regra
+         *     morasse no aplicativo, um aparelho com build antigo mostraria preco
+         *     vencido para sempre, e nao haveria como parar isso sem passar pela loja
+         *     de aplicativos. O item **continua na vitrine**; o que some e o numero.
+         *
+         *     **Nao ha preco riscado, "de/por", desconto nem comparacao** (criterio
+         *     19): nao ha campo para nenhum deles, e um portao reprova se algum
+         *     nascer.
+         */
+        get: operations["listStoreItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A agenda de encontros da Rede
+         * @description A secao `Rede`: os encontros que a comunidade marca em praca e parque.
+         *
+         *     **LEIA O ADR-0024 ANTES DE MEXER NESTA OPERACAO.** As ausencias abaixo
+         *     sao o conteudo dele, e cada uma fecha uma inferencia.
+         *
+         *     ## Nao ha lista de presenca. Ha um NUMERO
+         *
+         *     `checkin_count` e um inteiro. **Nao existe campo com pessoas**, em forma
+         *     nenhuma: nem nome, nem primeiro nome, nem apelido, nem `slug`, nem
+         *     avatar, nem contagem por bairro.
+         *
+         *     O motivo e o item 7 do ADR-0010, que proibe a superficie publica de
+         *     deixar inferir que dois pets sao do mesmo tutor. Uma lista de presenca
+         *     num encontro de bairro faz essa inferencia de graca: quem confirma
+         *     presenca com dois animais publica que os dois moram na mesma casa, e o
+         *     lugar do encontro e uma praca do bairro dela. Num produto cujo fluxo
+         *     mais critico e pet perdido, essa e exatamente a informacao que interessa
+         *     a quem quer levar um animal.
+         *
+         *     Por isso **o check-in e da PESSOA e nunca do pet**, e a tabela
+         *     `network_event_checkins` nao tem `pet_id`: nao ha caminho no banco pelo
+         *     qual um check-in saiba qual animal foi junto.
+         *
+         *     ## Nao ha coordenada, nao ha mapa e nao ha ordem por distancia
+         *
+         *     O ADR-0006 proibe geocodificacao no MVP e so aceita coordenada vinda de
+         *     `device_gps` ou de `map_pin`; quem cadastra uma praca nao tem nenhuma
+         *     das duas. O lugar sao tres rotulos de texto -- `place_name`,
+         *     `neighborhood`, `city`/`state` --, que e o teto de precisao que o
+         *     ADR-0010 permite em superficie publica.
+         *
+         *     **A ordem por distancia nao existe e nao aparece desabilitada.** Sem
+         *     coordenada nao ha distancia, e oferecer uma ordem que nunca podera ser
+         *     cumprida e pior que nao oferece-la. O filtro de lugar e por `city`
+         *     digitada, como a listagem publica de perdidos.
+         *
+         *     ## A agenda nao mistura passado e futuro sem dizer qual e qual
+         *
+         *     `when` tem default `upcoming`: a lista abre com o que ainda vai
+         *     acontecer. `past` traz o que passou, `all` traz os dois e **nao e o
+         *     default**, porque agenda que mistura os dois em ordem unica e o defeito
+         *     mais comum de agenda.
+         *
+         *     **`status` e calculado no SERVIDOR**, nunca no aplicativo. Se a regra
+         *     morasse la, um aparelho com relogio errado ou com build antiga chamaria
+         *     de "proximo" um encontro de tres semanas atras, e nao haveria como
+         *     corrigir isso sem passar pela loja de aplicativos. E a mesma razao pela
+         *     qual o vencimento do preco da `Loja` e aplicado aqui.
+         *
+         *     ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTE CONTRATO
+         *
+         *     A ausencia e a decisao 4 do ADR-0024: nao ha moderacao, denuncia nem
+         *     remocao em lugar nenhum deste repositorio, e o cliente ja negou o
+         *     equivalente para o diretorio na emenda 1 do ADR-0011. A criacao pela
+         *     comunidade e fase seguinte, com o pacote de moderacao junto. Quando a
+         *     escrita existir, ela nasce em `/v1/admin/...` como manda o ADR-0023.
+         */
+        get: operations["listNetworkEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Um encontro, com a galeria dele
+         * @description **Um corpo so, e esse corpo e o publico** (ADR-0021). A autenticacao e
+         *     opcional porque a `Rede` e navegavel deslogado, e o corpo e identico nos
+         *     dois casos.
+         *
+         *     `viewer_checked_in` e a UNICA coisa derivada de quem chama, e ela segue
+         *     exatamente o precedente do campo `viewer` do ADR-0021: e sinal de
+         *     navegacao, nao destranca campo nenhum, e nao fala de terceiro -- ela
+         *     responde "**voce** ja confirmou presenca?" a partir do token de quem ja
+         *     esta chamando. Para quem chega sem conta ela e `false`.
+         *
+         *     ## A galeria nao tem autor
+         *
+         *     `network_event_photos` guarda `submitted_by_user_id` para remocao,
+         *     auditoria e resposta a abuso, e **esse campo nunca e projetado**. A foto
+         *     pertence ao EVENTO: a resposta tem imagem e legenda, e mais nada.
+         *
+         *     Atribuir foto a pessoa reconstruiria a lista de presenca por outro
+         *     caminho -- dez fotos assinadas sao dez nomes presentes, com a vantagem,
+         *     para quem procura, de virem com imagem do lugar.
+         *
+         *     **Nesta fatia a galeria e EXIBIDA e nao ENVIADA.** Nao ha operacao de
+         *     upload aqui, e a ausencia e a decisao 4 do ADR-0024: o envio pela
+         *     comunidade depende de moderacao, que nao existe no repositorio, e do
+         *     armazenamento de objeto na pilha de integracao, que esta numa branch
+         *     ainda nao mesclada.
+         *
+         *     Evento inativo ou inexistente responde **404 nos dois casos**, com o
+         *     mesmo corpo: distinguir contaria a um estranho que aquele `slug` existiu.
+         */
+        get: operations["getNetworkEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}/check-in": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmar presenca num encontro
+         * @description Confirma que **voce** vai (ou foi) ao encontro. **O pet nao entra
+         *     nisto**, e nao ha corpo de requisicao: nao ha o que escolher, porque o
+         *     unico dado da operacao e quem chama e qual evento.
+         *
+         *     E a UNICA participacao da comunidade nesta fatia, e a escolha tem razao
+         *     escrita no ADR-0024 secao 4: **check-in nao produz conteudo**. Nao tem
+         *     texto, nao tem imagem, nao tem nada para moderar. Um inteiro que sobe de
+         *     um nao precisa de fila de revisao -- e fila de revisao e o que nao
+         *     existe neste repositorio.
+         *
+         *     **Idempotente pelo BANCO, e nao pela aplicacao.** A chave primaria de
+         *     `network_event_checkins` e `(event_slug, user_id)`: o segundo check-in da
+         *     mesma pessoa no mesmo evento deixa de ser algo que alguem precisa
+         *     conferir e passa a ser um estado que o banco recusa. A resposta e 200 nas
+         *     duas vezes, com a mesma contagem.
+         *
+         *     Evento inativo, inexistente, ou `slug` de evento que nunca existiu:
+         *     **404 nos tres casos** (ADR-0021), com a autorizacao na clausula `WHERE`
+         *     e nunca 403.
+         */
+        post: operations["checkInNetworkEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/lost-pets": {
         parameters: {
             query?: never;
@@ -3156,6 +3378,240 @@ export interface components {
             applied_filters?: {
                 [key: string]: string;
             };
+        };
+        /**
+         * @description A categoria do produto. Lista fechada, imposta por `CHECK` no banco e
+         *     nao por `enum` nativo do Postgres: acrescentar valor a um `enum` nativo
+         *     exige alterar o tipo com o produto no ar. Acrescentar valor aqui e
+         *     sempre tres arquivos no mesmo commit (ADR-0023 secao 3).
+         * @enum {string}
+         */
+        StoreCategory: "food" | "toy" | "hygiene" | "accessory" | "health" | "bed";
+        /**
+         * @description O parceiro que vende o item. **Sem UUID**: `slug` e a chave primaria da
+         *     tabela, e nao um endereco publico colado ao lado de um `id` interno.
+         */
+        StorePartnerRef: {
+            slug: string;
+            name: string;
+            /**
+             * @description Apenas o host, sem esquema, caminho nem consulta. E o que permite a
+             *     tela nomear o destino ANTES da saida ("Abrir na Cobasi"), como manda
+             *     a consequencia 1 da BICHUS-185.
+             */
+            host: string;
+        };
+        /**
+         * @description **Tres estados, e nao dois.** `sem_preco` e `vencido` produzem a mesma
+         *     ausencia de numero e pedem textos diferentes: item que nunca teve preco
+         *     nao mostra a linha (ausencia de preco e estado normal); item com preco
+         *     vencido diz que o preco nao esta confirmado e aponta o parceiro. Um
+         *     booleano faria a tela escolher uma frase so para os dois casos.
+         * @enum {string}
+         */
+        StorePriceStatus: "vigente" | "vencido" | "sem_preco";
+        StoreItemSummary: {
+            /** @description O endereco publico do item. Nao ha UUID nesta tabela. */
+            slug: string;
+            title: string;
+            /** @description Uma linha. O teto de 180 caracteres e o que a mantem uma linha. */
+            summary: string;
+            category: components["schemas"]["StoreCategory"];
+            /**
+             * Format: uri
+             * @description Sempre https. Nulo e estado normal, e o cartao sabe se desenhar sem imagem.
+             */
+            image_url?: string | null;
+            /**
+             * Format: uri
+             * @description O destino no site do parceiro. **Nenhum identificador de pessoa
+             *     entra aqui, em codificacao nenhuma** (consequencia 3 da
+             *     BICHUS-185). A tela abre no navegador do sistema, nunca em webview
+             *     embutida: webview com a nossa moldura em volta faz o Bichu parecer
+             *     o vendedor.
+             */
+            target_url: string;
+            partner: components["schemas"]["StorePartnerRef"];
+            /**
+             * @description **Centavos, inteiro.** Ponto flutuante para dinheiro erra na soma e
+             *     o erro aparece meses depois. Nulo quando nao ha preco **e tambem
+             *     quando o preco venceu** -- `price_status` distingue os dois.
+             */
+            price_amount?: number | null;
+            /** @enum {string|null} */
+            price_currency?: "BRL" | null;
+            /**
+             * Format: date
+             * @description A data em que uma PESSOA leu aquele numero na pagina do parceiro.
+             *     Nunca a data do commit, do deploy nem `now()`. **Sai junto com o
+             *     valor quando o preco vence**: manter a data sem o valor entregaria
+             *     ao aplicativo o que ele precisa para reconstruir o preco antigo.
+             */
+            price_checked_at?: string | null;
+            price_status: components["schemas"]["StorePriceStatus"];
+        };
+        StoreItemPage: {
+            items: components["schemas"]["StoreItemSummary"][];
+            page: number;
+            limit: number;
+            total: number;
+            /**
+             * @description **A ordem em que a lista de fato saiu**, e nao a que foi pedida. A
+             *     barra de listagem mostra a ordem REAL; uma tela que lesse a ordem do
+             *     proprio estado local afirmaria a pedida sobre uma lista que o
+             *     servidor pode ter ordenado de outro jeito.
+             * @enum {string}
+             */
+            effective_sort: "curadoria" | "nome";
+            /**
+             * @description O recorte que de fato valeu. Traz `scope: all` quando nada foi
+             *     recortado, porque "nada filtrado" e uma informacao e nao uma
+             *     ausencia.
+             */
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description O recorte no tempo da agenda. `all` existe e **nao e o default**: uma
+         *     lista que mistura passado e futuro sem dizer qual e qual e o defeito mais
+         *     comum de agenda.
+         * @default upcoming
+         * @enum {string}
+         */
+        NetworkEventWhen: "upcoming" | "past" | "all";
+        /**
+         * @description `proximos` e a data em ordem crescente; `recentes` e decrescente.
+         *     **Nao ha ordem por distancia**, e a ausencia e o ADR-0024 secao 5: o
+         *     evento nao tem coordenada, entao a distancia nao existe -- e uma ordem
+         *     que nunca podera ser cumprida e pior que uma que nao e oferecida.
+         *
+         *     **Nao ha ordem por numero de presencas.** Ordenar por presenca
+         *     transformaria `checkin_count` numa disputa e daria a quem enche a
+         *     contagem o topo da agenda.
+         * @enum {string}
+         */
+        NetworkEventSort: "proximos" | "recentes";
+        /**
+         * @description **Calculado no servidor, sempre.** `ended` e o rotulo que a tela escreve
+         *     por extenso (`Encerrado`) num encontro que ja passou. Se a regra morasse
+         *     no aplicativo, um aparelho com relogio errado ou com build antiga
+         *     chamaria de `upcoming` um encontro de tres semanas atras, e a correcao
+         *     passaria pela loja de aplicativos.
+         * @enum {string}
+         */
+        NetworkEventStatus: "upcoming" | "happening" | "ended";
+        /**
+         * @description O lugar, em rotulo e **nunca em coordenada**. ADR-0006: nao ha
+         *     geocodificacao no MVP. `place_name` e o nome do lugar publico como as
+         *     pessoas o chamam, e nao logradouro, numero nem CEP -- os tres sao
+         *     endereco, e o ADR-0010 item 2 os proibe aqui.
+         *
+         *     A precisao para no bairro, que e o teto que o ADR-0010 declara para
+         *     superficie publica. **Nao ha campo de latitude, de longitude nem de
+         *     distancia, em nenhuma precisao e em nenhum arredondamento.**
+         */
+        NetworkEventPlace: {
+            /** @example Praça Benedito Calixto */
+            place_name: string;
+            /** @example Pinheiros */
+            neighborhood: string;
+            /** @example São Paulo */
+            city: string;
+            /** @example SP */
+            state: string;
+        };
+        /**
+         * @description **Sem autor, e a ausencia e a decisao 3 do ADR-0024.** A foto pertence ao
+         *     evento. O banco guarda quem a enviou, para remocao e auditoria, e esse
+         *     campo nunca e projetado: dez fotos assinadas sao dez nomes presentes.
+         */
+        NetworkEventPhoto: {
+            slug: string;
+            /** Format: uri */
+            image_url: string;
+            caption?: string | null;
+        };
+        /**
+         * @description O cartao de um encontro na agenda. **Nao ha nenhum campo com pessoas**, e
+         *     nao ha UUID: `slug` e a chave primaria de `network_events`.
+         */
+        NetworkEventSummary: {
+            slug: string;
+            title: string;
+            summary: string;
+            place: components["schemas"]["NetworkEventPlace"];
+            /**
+             * Format: date-time
+             * @description O instante absoluto. A hora de PAREDE sai de `time_zone`.
+             */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /**
+             * @description O nome IANA da zona do evento, e ele nao e enfeite: `starts_at`
+             *     sozinho diz o instante e nao diz que horas o cartaz da praca dizia.
+             *     Um aparelho configurado em UTC renderizaria um encontro das 9h como
+             *     12h, sem nada acusar, e o Brasil tem mais de uma zona.
+             * @example America/Sao_Paulo
+             */
+            time_zone: string;
+            status: components["schemas"]["NetworkEventStatus"];
+            /**
+             * Format: uri
+             * @description Ausencia e estado normal, nao lacuna. O cartao sabe se desenhar sem ela.
+             */
+            cover_image_url?: string | null;
+            /**
+             * @description **Quantas pessoas, e nunca quais.** Ver a descricao de
+             *     `listNetworkEvents` e o ADR-0024 secao 2 para o motivo, e para o que
+             *     o produto paga por isto.
+             */
+            checkin_count: number;
+            photo_count: number;
+        };
+        NetworkEvent: components["schemas"]["NetworkEventSummary"] & {
+            gallery: components["schemas"]["NetworkEventPhoto"][];
+            /**
+             * @description Se **quem esta chamando** ja confirmou presenca. Derivado do
+             *     proprio token de quem chama, pelo precedente do campo `viewer` do
+             *     ADR-0021: e sinal de navegacao, nao destranca campo nenhum e nao
+             *     fala de terceiro. `false` para quem chega sem conta.
+             */
+            viewer_checked_in: boolean;
+        };
+        NetworkEventPage: {
+            items: components["schemas"]["NetworkEventSummary"][];
+            page: number;
+            limit: number;
+            total: number;
+            /**
+             * @description **A ordem em que a lista de fato saiu.** Aqui ela nao e decoracao: o
+             *     default de `sort` DEPENDE de `when`, entao um cliente que nao mandou
+             *     `sort` nao tem como saber qual ordem valeu sem este campo. A barra de
+             *     listagem mostra a ordem REAL.
+             */
+            effective_sort: components["schemas"]["NetworkEventSort"];
+            /** @description O recorte de tempo que valeu, pelo mesmo motivo de `effective_sort`. */
+            effective_when: components["schemas"]["NetworkEventWhen"];
+            /**
+             * @description O recorte que de fato valeu. Traz `scope: all` quando nada foi
+             *     recortado, porque "nada filtrado" e uma informacao e nao uma
+             *     ausencia.
+             */
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description O desfecho de um check-in. **Nao ha lista de quem confirmou**, aqui nem em
+         *     lugar nenhum desta secao.
+         */
+        NetworkCheckIn: {
+            /** @description A contagem JA ATUALIZADA, para a tela nao somar um por conta propria. */
+            checkin_count: number;
+            /** @description Sempre `true` numa resposta 200 desta operacao, inclusive na segunda chamada. */
+            viewer_checked_in: boolean;
         };
         PublicLostPetPage: {
             items: components["schemas"]["PublicLostPet"][];
@@ -5894,6 +6350,165 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listStoreItems: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Busca por texto em titulo e resumo, **no servidor**. A tela declara
+                 *     alcance de servidor por causa disto; filtrar em memoria os itens da
+                 *     pagina seria uma busca que funciona com 10 registros e mente com
+                 *     200.
+                 */
+                q?: string;
+                /** @description Filtra por categoria do produto. */
+                category?: components["schemas"]["StoreCategory"];
+                /**
+                 * @description `curadoria` e a ordem da vitrine, escolhida a mao, e e o default: a
+                 *     Loja e uma lista curada e a primeira coisa que ela comunica e a
+                 *     escolha. **Nao ha ordem por preco**, porque o preco e opcional e
+                 *     vence: a lista se reordenaria sozinha, e "do mais barato" e uma
+                 *     afirmacao comparativa que o criterio 19 proibe.
+                 */
+                sort?: "curadoria" | "nome";
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina da vitrine. `total` alimenta a linha de resumo da barra de
+             *     listagem e `applied_filters` alimenta a distincao entre "a vitrine
+             *     esta vazia" e "o seu recorte esvaziou a vitrine".
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreItemPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listNetworkEvents: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Busca por texto em titulo e resumo, **no servidor**. A tela declara
+                 *     alcance de servidor por causa disto; filtrar em memoria os itens da
+                 *     pagina seria uma busca que funciona com 10 registros e mente com
+                 *     200.
+                 */
+                q?: string;
+                /**
+                 * @description Filtra pela cidade DIGITADA, nunca por coordenada. ADR-0006: rotulo
+                 *     e filtro de listagem, e nao fonte de coordenada.
+                 */
+                city?: string;
+                /**
+                 * @description O recorte no tempo. `upcoming` e o default e **isso importa**: uma
+                 *     agenda que abre misturando o que passou com o que vem e o defeito
+                 *     mais comum de agenda.
+                 */
+                when?: components["schemas"]["NetworkEventWhen"];
+                /**
+                 * @description **O default depende de `when`, e por isso `effective_sort` existe.**
+                 *     Com `upcoming`, o default e `proximos` (o que vem primeiro, em
+                 *     ordem crescente de data); com `past`, e `recentes` (o mais recente
+                 *     primeiro), porque a pergunta "o que houve" se responde de tras para
+                 *     frente. Com `all`, `proximos`.
+                 *
+                 *     Um cliente que nao manda `sort` **nao tem como saber** qual ordem
+                 *     valeu sem perguntar, e e essa a informacao que `effective_sort`
+                 *     devolve. A barra de listagem mostra a ordem REAL.
+                 */
+                sort?: components["schemas"]["NetworkEventSort"];
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina da agenda. `total` alimenta a linha de resumo da barra de
+             *     listagem e `applied_filters` alimenta a distincao entre "a Rede
+             *     ainda nao tem encontro" e "o seu recorte esvaziou a agenda".
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. Nao ha UUID nesta secao. */
+                eventSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O encontro e a galeria dele. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEvent"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    checkInNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eventSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description A presenca esta confirmada. Devolve a contagem JA ATUALIZADA, para a
+             *     tela nao precisar somar um por conta propria -- soma local diverge da
+             *     do servidor no primeiro check-in simultaneo.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkCheckIn"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
