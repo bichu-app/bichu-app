@@ -98,8 +98,13 @@ function idempotenciaEmMemoria(): Idempotencia {
 
 interface Bancada {
   readonly app: RegistradorDeRotas;
-  /** Quantas vezes o SERVIÇO foi chamado. É este número que a isca observa. */
-  envios(): number;
+  /**
+   * Quantas vezes o SERVIÇO foi chamado. É este número que a isca observa.
+   *
+   * Propriedade de função e não método: ela é desestruturada de `bancada()`,
+   * e método desestruturado perde o `this` (`@typescript-eslint/unbound-method`).
+   */
+  readonly envios: () => number;
 }
 
 function bancada(): Bancada {
