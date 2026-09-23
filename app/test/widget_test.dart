@@ -104,7 +104,11 @@ void main() {
     expect(find.widgetWithText(AppBar, 'Criar conta'), findsOne);
     expect(find.text('E-mail'), findsOne);
     expect(find.text('Senha'), findsOne);
-    // O requisito e dito antes do erro.
+    // O requisito e dito antes do erro, e desde 22/09 (BICHUS-29) ele e uma
+    // lista ao vivo com as QUATRO recusas da politica, e nao uma frase fixa
+    // com uma delas. A cobranca das quatro esta em
+    // `test/telas/senha_ao_vivo_test.dart`; aqui basta que a tela abra com o
+    // requisito a vista.
     expect(find.textContaining('Pelo menos 10 caracteres'), findsOne);
   });
 
@@ -120,6 +124,7 @@ void main() {
       'marina@exemplo.com.br',
     );
     await tester.enterText(find.byType(TextField).at(2), 'curta');
+    // Sem rolagem: o botao mora na barra fixa do rodape desde 23/09/2026.
     await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
     await tester.pumpAndSettle();
 

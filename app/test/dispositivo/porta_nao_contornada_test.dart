@@ -342,6 +342,21 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `ImagePicker` nem `Permission`. Anterior:
 /// `f14551245240f69cfb43cb67216e2682cdb7684c`.
 ///
+/// **Destravado pela BICHUS-29** (validacao de senha ao vivo, 22/09/2026).
+/// Um arquivo muda: `conta/tela_criar_conta.dart`. Tres coisas nele:
+/// o texto de ajuda fixo do campo de senha saiu e no lugar entrou
+/// `RequisitosDaSenha`; a recusa de senha passou a ser decidida pela politica
+/// inteira e pelo `code` do servidor, em vez de um teste de tamanho e de um
+/// texto fixo; e a faixa de "este build nao registra aceite" passou a aparecer
+/// na abertura da tela, com rolagem ate ela no toque do botao.
+///
+/// Nenhuma das tres encosta na porta `CameraEGaleria`, que e o que o criterio
+/// 10 protege: a tela continua sem ler camera, galeria ou localizacao, e quem
+/// cobra isso e o portao de diretivas abaixo, que nao depende desta constante.
+///
+/// Medido com o indice temporario, na arvore de trabalho:
+/// `4be08548b405759c524cf6336451b53d03b2d184`.
+///
 /// **Destravado uma setima vez pela listagem de `Perto`** (regra de listagem
 /// de 22/09/2026): `telas/perto/` e pasta nova, com
 /// `lista_do_diretorio.dart`, e `abas.dart` mudou porque `AbaPerto` deixou de
@@ -376,6 +391,20 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 /// **O valor anterior desta constante era `4a29c9d07d3aaf5c4067be2885b3efbd8b4876e6`**,
 /// medido na base `feat/tela-de-perto` (`98a91a2`).
+///
+/// **Remedido na mescla de `development` (920a221) nesta branch, 23/09/2026.**
+/// Pelo mesmo motivo de sempre, e ele nao cansa de valer: os dois lados
+/// destravaram a constante pela propria historia, e **a arvore que existe
+/// depois da mescla nao e nenhuma das duas**. Desta branch veio a secao
+/// `Rede`; da `development` veio a ancoragem do botao de criar conta no
+/// rodape, que mexe em `telas/conta/`.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, e o
+/// portao de diretivas abaixo continua cobrando isso sem depender desta
+/// constante. Medido com o indice temporario deste portao sobre a arvore ja
+/// mesclada. Anteriores: `59de12f643235735ac6a21249b1408fbf3651c93` (esta
+/// branch) e `65bcd97d9088e6da8668127c8cb4d38f5e19d718` (`development`).
+const String _arvoreDasTelas = 'e113de4b6d5741694bde0b5a3135817229911625';
 /// **Destravado uma nona vez pelo travamento de `Criar conta` em aparelho
 /// fisico de 22/09/2026.** O cliente nao conseguia criar conta nem entrar, e
 /// a varredura que saiu dali achou uma classe inteira: o `setState` que
@@ -479,6 +508,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// uma diz o que mudou de um lado, e e isso que mantem a troca sendo um ato
 /// deliberado.
 ///
+<<<<<<< HEAD
 /// **Remedido na mescla de `development` (38371aa) nesta branch, 23/09/2026.**
 /// Os dois lados destravaram a constante pelo proprio motivo, e por isso
 /// nenhum dos dois valores vale depois da mescla: a arvore mesclada nao e a
@@ -526,6 +556,39 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `a64f0919fd008d7165c19d40149e74431b8ae019` (esta branch) e
 /// `77a37422c91cce0d6d91b979bbdc2835da0ea585` (`feat/tela-de-loja`).
 const String _arvoreDasTelas = '59de12f643235735ac6a21249b1408fbf3651c93';
+=======
+/// **Remedido no merge de `development` (38371aa) nesta branch, 23/09/2026.**
+/// Os dois lados destravaram a constante pelo proprio motivo e os dois valores
+/// morreram no merge: `da86c7e4f32392f54c088b25bd9307581eefda49` e a arvore
+/// desta branch sozinha, `72832de16b55beaff488096e442d64b1846bed0c` e a da
+/// `development` sozinha, e a arvore que existe depois do merge nao e nenhuma
+/// das duas. O valor abaixo foi MEDIDO com o mesmo indice temporario que este
+/// portao usa, sobre a arvore ja mesclada. As justificativas acima ficaram
+/// TODAS, dos dois lados: cada uma diz o que mudou de um lado, e e isso que
+/// mantem a troca sendo um ato deliberado.
+///
+/// **Destravado pela ancoragem do botao de `Criar conta`, 23/09/2026 (sem
+/// chave de issue no acionamento).** UM arquivo de `app/lib/telas` muda:
+/// `conta/tela_criar_conta.dart`. Tres coisas nele, e nenhuma encosta na
+/// porta `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161 protege:
+///
+///  - o botao saiu do corpo rolavel e foi para `BarraDeAcaoFixa`, no
+///    `bottomNavigationBar` (design system 11.8), porque medido em 360 x 640
+///    dp com o teclado aberto ele ficava 500 dp abaixo da dobra e o `ListView`
+///    nem chegava a constru-lo;
+///  - o corpo virou `SingleChildScrollView` com `Column`, pelo mesmo motivo
+///    registrado em `pet/tela_editar_pet.dart`: controle obrigatorio que nao
+///    e construido nao pode ser marcado, focado nem lido por leitor de tela;
+///  - cada recusa passou a trazer o campo recusado para a janela, porque um
+///    botao alcancavel de qualquer ponto pode ser tocado de um ponto onde o
+///    campo recusado esta fora da tela.
+///
+/// A tela continua sem ler camera, galeria ou localizacao, e quem cobra isso e
+/// o portao de diretivas abaixo, que nao depende desta constante. Medido pelo
+/// indice temporario que este portao usa, sobre a arvore de trabalho.
+/// Anterior: `74dc7b2c06f3ee25b139b9517824614656db73c2`.
+const String _arvoreDasTelas = '65bcd97d9088e6da8668127c8cb4d38f5e19d718';
+>>>>>>> development
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
