@@ -259,11 +259,30 @@ existe. Escopos da v1, e o motivo de cada um:
 | `network_event_relocation` | mudar data, horário ou local de evento **publicado** | é o ataque de T11: reunir cães num lugar e horário escolhidos por quem tomou a conta |
 | `network_event_cancellation` | cancelar evento publicado | desfaz um encontro que pessoas planejaram |
 | `network_event_removal` | remover evento (estado terminal) | não tem volta |
+| `store_item_retirement` | retirar da vitrine item publicado | é o "excluir publicado" de D40 para a `Loja`: nada é apagado, mas um roteiro com a senha roubada esvaziaria a vitrine |
 
-**Retirar um item da vitrine não exige reautenticação**, e é divergência
-declarada com D40 ("apagar item publicado"): no desenho deste ADR nada é
-apagado; retirar é `active = false`, reversível pela operação de publicar, e
-com trilha. Não há operação em lote na v1; a que vier exige reautenticação.
+Não há operação em lote na v1; a que vier exige reautenticação. O item em
+rascunho (nunca publicado) não tem o que retirar.
+
+**Por que não reaproveitar `X-Reauth-Token`.** O token do app é preso ao `jti`
+do JWT móvel (`reauth` em `components/securitySchemes`), e a conta
+administrativa não tem JWT móvel (D42). Um cabeçalho com o mesmo nome e duas
+amarrações diferentes seria um token que vale num lugar e não no outro sem que
+o nome diga. Por isso `adminReauth` / `X-Admin-Reauth-Token` e a extensão
+`x-admin-reauth-scope`, com a mesma semântica (5 minutos, uso único, escopo),
+presos à sessão administrativa.
+
+**Redefinição de senha da conta administrativa: o fluxo que já existe.**
+`POST /v1/auth/password-reset` e `POST /v1/auth/password-reset/confirm`, com a
+página `/redefinir-senha` do site. D42 recusa a conta administrativa no
+**login** e na **renovação** do app, e não na redefinição: redefinir não abre
+sessão, só troca o segredo. Um segundo fluxo seria uma segunda porta para o
+mesmo segredo, com os mesmos riscos e metade do teste. Para conta com papel
+`admin`, a confirmação (1) recusa senha abaixo de 15 caracteres ou presente na
+base de vazadas com `422 weak-password`; (2) empurra `sessions_invalid_before`,
+o que derruba toda sessão administrativa da conta; e (3) avisa **todos** os
+administradores (D46). O e-mail de redefinição é o ponto sem mitigação do item
+9.
 
 **Sair**: `POST /v1/admin/auth/logout` revoga a sessão;
 `POST /v1/admin/auth/logout-all` empurra `sessions_invalid_before` e derruba
@@ -385,7 +404,7 @@ está decidido: conta dedicada; reCAPTCHA e teto no login; senha de 15 com
 recusa de vazada; aviso a cada sessão com "não fui eu"; sessão de 30 minutos e
 12 horas; revogação na próxima requisição; reautenticação para mover e cancelar
 encontro; teto de dano por conta (item 11); aviso a todos os administradores a
-cada publicação ou mudança de encontro; trilha de toda escrita. O registro
+cada encontro criado, movido ou cancelado; trilha de toda escrita. O registro
 formal é o RA-01 de `04-seguranca.md` 22.7, e os gatilhos de revisão são os
 dele.
 
@@ -420,8 +439,8 @@ operação (D52):
 
 - `admin_write`: **120 escritas em 10 minutos**, somadas todas as escritas
   administrativas de catálogo e de evento;
-- `admin_publication`: **30 publicações por hora**, somadas as de item e de
-  evento;
+- `admin_publication`: **30 publicações por hora**, somadas a publicação de
+  item e a criação de evento (que é publicação);
 - estouro: `429` com `Retry-After`, e alerta.
 
 **Limite na borda (D45): aceito para o host administrativo**, e o ADR-0016
@@ -525,8 +544,17 @@ mapa, em zoom nenhum") fica **superado** por este ADR e pela emenda 1 do
 ADR-0010, e a branch registra isso no ADR-0025 antes do merge. Os itens 1 a 4 e
 6 continuam.
 
-**12.8 A massa.** `publication_status = 'published'`, `origin = 'admin'`, e
+**12.8 A massa.** `publication_status = 'published'`, `published_at`
+preenchido, `origin = 'admin'`, e
 pelo menos um evento com ponto e um sem, para a tela mostrar os dois casos.
+
+**12.9 O evento não tem rascunho**, como a designer propôs: criar é publicar
+(`publication_status = 'published'` na criação). O modelo concorda, com uma
+consequência que precisa estar dita: criar evento dispara o aviso a todos os
+administradores e conta no teto de publicações, e corrigir o lugar ou o
+horário de um evento recém-criado já é mudança de evento publicado, com
+reautenticação. Título, resumo e capa se editam livremente. Salvar pela metade
+fica no formulário do painel, não no banco.
 
 ### 13. Como a regra "lugar público, nunca residência" é garantida
 
@@ -540,7 +568,7 @@ contrário seria mentir. A garantia é humana e rastreável:
    operação pela qual outra conta grave ponto.
 2. O formulário do painel diz que o local é logradouro público e nunca
    residência (D52).
-3. **Publicar, mover e cancelar avisa todos os administradores** por e-mail,
+3. **Criar, mover e cancelar evento avisa todos os administradores** por e-mail,
    com o que mudou (D52); mover e cancelar exigem reautenticação.
 4. Toda escrita fica na trilha, com a sessão.
 5. **Quando a comunidade criar evento**, o ponto de evento `origin =
@@ -559,9 +587,13 @@ proibido na superfície pública sem conta.
 A BICHUS-189 está superada. As tabelas de `20260922000009` servem sem mudança
 de forma, só com acréscimos (apêndice A.2):
 
-- O painel cria e edita parceiro e item. **Item nasce retirado** (`active =
-  false`, mesmo com o padrão da coluna em `true`, que é da massa); publicar e
-  retirar são operações próprias, com teto próprio. Nada é apagado.
+- O painel cria e edita parceiro e item. **O item tem rascunho**, como a
+  designer propôs: nasce com `active = false` e `published_at` nulo (o padrão
+  `true` da coluna é da massa). O estado que a resposta mostra é derivado:
+  `draft` (nunca publicado), `published` (`active`), `retired` (publicado antes,
+  retirado agora). Publicar e retirar são operações próprias, com teto próprio;
+  retirar exige reautenticação. `published_at` grava a **primeira** publicação
+  e não é reescrito (a regra do ADR-0026 seção 3). Nada é apagado.
 - O preço continua como decidido: centavos, `price_checked_at` como a data em
   que uma pessoa leu o número, data futura recusada, vencimento de 30 dias no
   servidor (`DIAS_DE_VALIDADE_DO_PRECO`). O preço entra como objeto único
@@ -586,7 +618,6 @@ motivo no item citado:
 
 | Ponto | ARGOS | Aqui | Item |
 |---|---|---|---|
-| Reautenticação para retirar item publicado | exige (D40, "apagar") | não exige: nada é apagado, retirar é reversível e rastreado | 5 |
 | Aviso de login | dispositivo ou rede nova | toda sessão | 5 |
 | Mídia anexada | só já processada | anexada em processamento, servida só pronta | 10 |
 
@@ -686,7 +717,9 @@ Nas duas:
 | `version` | `integer` | `NOT NULL DEFAULT 1 CHECK (version > 0)`, incrementada a cada escrita; é o `ETag` |
 
 Só em `store_items`: `image_id uuid REFERENCES catalog_images (id)`, nulo, com
-`CHECK (num_nonnulls(image_url, image_id) <= 1)`. Nenhuma coluna de autor:
+`CHECK (num_nonnulls(image_url, image_id) <= 1)`; e `published_at timestamptz`,
+nulo, a primeira publicação, com `CHECK (NOT active OR published_at IS NOT NULL)`.
+A massa grava `published_at` junto com `active = true`. Nenhuma coluna de autor:
 quem criou e quem mudou está em `audit.events`, o único lugar onde isso é
 imutável.
 
@@ -719,7 +752,7 @@ Na migração da `Rede`, além de 12.1 e 12.2:
 |---|---|---|
 | `origin` | `text` | `NOT NULL DEFAULT 'admin' CHECK (origin IN ('admin', 'community'))` |
 | `created_by_user_id` | `uuid` | nulo, `REFERENCES users (id) ON DELETE SET NULL`; **nunca projetado**, com a marca do portão |
-| `publication_status` | `text` | `NOT NULL DEFAULT 'draft' CHECK (publication_status IN ('draft', 'pending_review', 'published', 'cancelled', 'removed'))` |
+| `publication_status` | `text` | `NOT NULL CHECK (publication_status IN ('pending_review', 'published', 'cancelled', 'removed'))`, sem padrão: quem cria diz |
 | `published_at` | `timestamptz` | nulo |
 | `cancelled_at` | `timestamptz` | nulo |
 | `cancellation_note` | `text` | nulo, `CHECK (cancellation_note IS NULL OR char_length(btrim(cancellation_note)) BETWEEN 2 AND 280)` |
@@ -730,6 +763,9 @@ Na migração da `Rede`, além de 12.1 e 12.2:
   que atualizar só uma.
 - `CHECK (publication_status <> 'cancelled' OR cancelled_at IS NOT NULL)`.
 - `CHECK (publication_status NOT IN ('published', 'cancelled') OR published_at IS NOT NULL)`.
+- Não há `draft` (12.9): o evento de administrador nasce `published`, e o da
+  comunidade nascerá `pending_review`. Um rascunho no futuro é valor novo na
+  lista, aditivo.
 - `CHECK (origin = 'community' OR publication_status <> 'pending_review')`.
 
 Na migração do backoffice:
@@ -737,7 +773,7 @@ Na migração do backoffice:
 `CHECK (num_nonnulls(cover_image_url, cover_image_id) <= 1)`.
 
 Regras que o `CHECK` não expressa, no caso de uso, com `400 validation-failed`:
-publicar exige que o fim (ou o início, sem fim) não tenha passado
+criar exige que o fim (ou o início, sem fim) não tenha passado
 (`code: event_in_past`); `PATCH` de evento publicado não muda data, horário,
 fuso nem lugar (`code: use_relocation`); cancelar só a partir de `published`;
 `removed` é terminal.
@@ -751,8 +787,7 @@ Sem mudança de esquema. As ações novas entram na união `AuditAction`:
 `admin.store_partner.updated`, `admin.store_item.created`,
 `admin.store_item.updated`, `admin.store_item.published`,
 `admin.store_item.retired`, `admin.network_event.created`,
-`admin.network_event.updated`, `admin.network_event.published`,
-`admin.network_event.relocated`, `admin.network_event.cancelled`,
+`admin.network_event.updated`, `admin.network_event.relocated`, `admin.network_event.cancelled`,
 `admin.network_event.removed`, `admin.catalog_image.intent_created`.
 
 ---
