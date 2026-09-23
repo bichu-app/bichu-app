@@ -211,6 +211,13 @@ tags:
     description: Superficie publica, listagem de perdidos e dados de referencia.
   - name: directory
     description: O diretorio de profissionais e estabelecimentos da secao `Perto`.
+  - name: store
+    description: A vitrine curada da secao `Loja`.
+  - name: admin
+    description: |
+      O backoffice em `admin.bichu.app` (ADR-0027). So existe naquele host, so
+      aceita a sessao administrativa em cookie, e toda escrita grava na trilha
+      na mesma transacao.
   - name: web
     description: Rotas HTML servidas pelo proprio backend.
   - name: ops
@@ -303,7 +310,11 @@ x-problem-types:
   - { slug: unsupported-media-type,        status: 415, note: "quatro operacoes ja respondiam 415 e nenhum slug significava isso: o corpo do problema saia com um `type` fora desta lista fechada, que e exatamente o que ela existe para impedir" }
   - { slug: verification-token-expired,    status: 410, note: "token de USO UNICO (verificacao de e-mail, redefinicao de senha) expirado, ja usado ou inexistente. Separado de `token-expired`, que e 401: as duas operacoes declaram 410 e o slug de 401 nao podia responder por elas. Os tres casos sao a MESMA resposta de proposito -- distinguir contaria a um estranho se aquele token existiu" }
   - { slug: upload-not-received,           status: 409, note: "o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar" }
+  - { slug: precondition-failed,           status: 412, note: "ADR-0027: `If-Match` nao corresponde a versao atual do recurso do backoffice. Outra pessoa salvou depois da leitura, e nada foi gravado" }
+  - { slug: captcha-rejected,              status: 403, note: "ADR-0027 / D41: login administrativo sem X-Captcha-Token ou com nota abaixo de 0,5. So existe no login do backoffice; no login do tutor a ausencia do token nunca recusa (ADR-0020)" }
+  - { slug: password-reset-required,       status: 403, note: "ADR-0027 / D43: senha correta de conta administrativa que aparece numa base de senhas vazadas. O caminho e a redefinicao por e-mail que ja existe" }
   - { slug: weak-password,                 status: 422 }
+  - { slug: precondition-required,         status: 428, note: "ADR-0027: escrita sobre recurso existente do backoffice sem `If-Match`" }
   - { slug: rate-limited,                  status: 429 }
   - { slug: internal,                      status: 500 }
 
@@ -491,6 +502,12 @@ paths:
            link por e-mail que ja existe, e que a camada 1 torna alcancavel
            para a mesma pessoa. Nao ha operacao nova de entrada por link: o
            ADR-0020 diz por que ela foi recusada e qual gatilho a traz de volta.
+
+        **Conta administrativa nao entra aqui** (ADR-0027, D42). Conta com
+        papel `admin` ou `moderator` recebe o mesmo 401 de credencial invalida,
+        com o mesmo corpo e no mesmo tempo, mesmo com a senha certa: a porta do
+        tutor, mais frouxa por decisao, nao pode servir de oraculo da senha de
+        quem publica no app. O login do painel e `openAdminSession`.
       security: []
       parameters:
         - $ref: '#/components/parameters/CaptchaToken'
@@ -566,6 +583,10 @@ paths:
         Rotacao obrigatoria: cada refresh token vale **uma** vez e a resposta
         traz um novo. Apresentar um token ja consumido revoga a familia inteira
         e responde 401 — e assim que o roubo de token e detectado.
+
+        Refresh de conta com papel `admin` ou `moderator` responde 401 (ADR-0027,
+        D42): conceder o papel revoga as sessoes moveis da conta, e esta recusa
+        cobre a familia que tenha escapado da revogacao.
       security: []
       requestBody:
         required: true
@@ -871,7 +892,15 @@ paths:
           applies_to: invalid_attempts
           note: "o token tem 256 bits e nao e adivinhavel; o limite existe por defesa em profundidade e para nao servir de oraculo"
       summary: Define a nova senha pelo token
-      description: Revoga todas as sessoes ativas da conta.
+      description: |
+        Revoga todas as sessoes ativas da conta.
+
+        **E tambem a redefinicao da conta administrativa** (ADR-0027 item 5):
+        nao ha segundo fluxo. Para conta com papel `admin`, a nova senha precisa
+        ter **15 caracteres ou mais** e nao estar em base de senhas vazadas
+        (D43), senao `422 weak-password` com `errors[].code` dizendo qual; a
+        revogacao derruba tambem as sessoes administrativas; e **todos** os
+        administradores recebem aviso da redefinicao (D46).
       security: []
       requestBody:
         required: true
@@ -4105,6 +4134,1069 @@ paths:
 # ==========================================================================
 # Componentes
 # ==========================================================================
+  # ----------------------------------------------------------------------
+  # Backoffice (ADR-0027)
+  # ----------------------------------------------------------------------
+  #
+  # Tudo abaixo so existe em `admin.bichu.app`: a borda responde 404 da borda a
+  # `/v1/admin/*` em qualquer outro host, e a aplicacao responde 404 a toda
+  # requisicao sem `X-Internal-Surface: admin` (D33). Nenhuma operacao daqui
+  # aceita `bearerAuth`: com JWT valido, inclusive de conta `admin`, a resposta
+  # e 401 (D36). A credencial e a sessao em cookie `__Host-bichu_adm`
+  # (`adminSession`), e todo metodo nao seguro exige tambem `X-CSRF-Token`
+  # (`adminCsrf`) e `Origin` exato (D39).
+  #
+  # Extensoes proprias desta superficie, e cada uma vira portao (ADR-0027 item 7):
+  #
+  # - `x-admin-roles`: papel minimo. Na v1, so `admin`.
+  # - `x-audit`: acao e tipo de recurso gravados em `audit.events` NA MESMA
+  #   transacao da escrita. Falha da trilha desfaz a escrita (D49).
+  # - `x-admin-reauth-scope`: exige `X-Admin-Reauth-Token` do escopo nomeado.
+
+  /admin/auth/login:
+    post:
+      operationId: openAdminSession
+      tags: [admin]
+      x-effects: [verifies_secret, notifies]
+      summary: Abre a sessao administrativa
+      description: |
+        O login do painel. **Nao e o login do app**, e as duas portas nao se
+        cruzam: conta com papel `admin` ou `moderator` e recusada em
+        `POST /auth/login` e `POST /auth/refresh` com o mesmo 401 de credencial
+        invalida (D42), e esta operacao so abre sessao para conta com papel
+        `admin` (decisao do cliente de 23/09: `moderator` nao entra na v1).
+
+        **Ordem, e ela importa:**
+
+        1. `X-Captcha-Token` e **obrigatorio** aqui, ao contrario do login do
+           tutor (ADR-0020). Ausente, ou com nota abaixo de 0,5: `403
+           captcha-rejected`. Sao poucas pessoas conhecidas, sem emergencia, e
+           a faixa cinzenta vai para o alerta (D41). A pagina que colhe o token
+           e o documento `/entrar`, isolado da origem da sessao.
+        2. Os tetos de `x-rate-limit` sao conferidos **antes** de derivar o hash
+           (D44).
+        3. Conta inexistente, senha errada e senha certa de conta sem papel
+           `admin` respondem **o mesmo 401, no mesmo tempo** (hash de descarte):
+           o login nao conta a ninguem quem e administrador.
+        4. Senha correta que esta na base de senhas vazadas: `403
+           password-reset-required` (D43). A redefinicao e o fluxo que ja
+           existe (`POST /auth/password-reset`).
+
+        **Sucesso:** `Set-Cookie: __Host-bichu_adm=...; Path=/; Secure;
+        HttpOnly; SameSite=Strict`, sem `Domain` e sem `Max-Age`. O corpo traz
+        o `csrf_token` e os dois prazos da sessao. Um e-mail vai para o dono da
+        conta a cada sessao aberta, com o link "nao fui eu" de
+        `disavowSessionAlert` (D46).
+      security: []
+      x-audit: { action: admin.session.opened, resource_kind: admin_session }
+      parameters:
+        - name: X-Captcha-Token
+          in: header
+          required: true
+          description: Token do reCAPTCHA v3 colhido em `/entrar`. Obrigatorio nesta operacao.
+          schema: { type: string, minLength: 20, maxLength: 4096 }
+      x-rate-limit:
+        - dimension: [email]
+          limit: 5
+          window: 15m
+          on_exceed: deny_429
+          applies_to: invalid_attempts
+          note: "D44: bloqueio de 15 min por conta"
+        - dimension: [email]
+          limit: 10
+          window: 24h
+          on_exceed: deny_429
+          applies_to: invalid_attempts
+          note: "D44: o bloqueio so cai com redefinicao por e-mail ou desbloqueio operacional, e nao com o fim da janela"
+        - dimension: [ip]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+          applies_to: invalid_attempts
+        - dimension: [ip_24]
+          limit: 50
+          window: 10m
+          on_exceed: log_and_alert
+          applies_to: invalid_attempts
+          note: "observacao. O alerta global de D44 (mais de 50 falhas em 10 min somando todas as origens) e metrica, nao balde"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminLoginRequest' }
+            examples:
+              entrar:
+                value: { email: operacao@exemplo.com.br, password: uma frase longa de verdade }
+      responses:
+        '200':
+          description: Sessao aberta. O cookie vai no `Set-Cookie`; o corpo traz o que o painel precisa guardar em memoria.
+          headers:
+            Set-Cookie:
+              description: '`__Host-bichu_adm=<256 bits>; Path=/; Secure; HttpOnly; SameSite=Strict`'
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSession' }
+              examples:
+                aberta:
+                  $ref: '#/components/examples/AdminSessionAberta'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401':
+          description: |
+            Credencial invalida. **Identica** para conta inexistente, senha
+            errada e conta sem papel `admin`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                naoConfere:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/invalid-credentials
+                    title: E-mail ou senha nao conferem
+                    status: 401
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '403':
+          description: |
+            Dois tipos, e o painel mostra texto diferente para cada um:
+            `captcha-rejected` (tente de outra rede e fale com o responsavel) e
+            `password-reset-required` (a senha esta numa base de vazadas;
+            redefina por e-mail).
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                desafio:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/captcha-rejected
+                    title: Nao conseguimos confirmar este acesso
+                    status: 403
+                    detail: Tente de outra rede. Se continuar, fale com o responsavel pelo painel.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+                senhaVazada:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/password-reset-required
+                    title: Troque a sua senha antes de entrar
+                    status: 403
+                    detail: Esta senha aparece numa lista de senhas vazadas. Redefina pelo e-mail.
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/session:
+    get:
+      operationId: getAdminSession
+      tags: [admin]
+      x-effects: []
+      summary: A sessao administrativa corrente
+      description: |
+        O que o painel pede ao carregar e depois de um F5: quem esta na sessao,
+        os papeis, os prazos e o `csrf_token` (D39). O token anti-CSRF vem
+        **no corpo**, nunca em cookie, e o painel o guarda em memoria.
+
+        Sessao ausente, vencida por inatividade ou pelo teto, revogada, ou
+        anterior a `sessions_invalid_before`: `401`. O painel decide pelo
+        `type`: `unauthenticated` manda entrar; `token-expired` diz que a
+        sessao venceu e manda entrar. Conta que perdeu o papel `admin`: `403`,
+        na proxima requisicao depois da remocao (D37).
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      responses:
+        '200':
+          description: Sessao valida.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminSession' }
+              examples:
+                aberta:
+                  $ref: '#/components/examples/AdminSessionAberta'
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+
+  /admin/auth/logout:
+    post:
+      operationId: closeAdminSession
+      tags: [admin]
+      x-effects: []
+      summary: Encerra esta sessao administrativa
+      description: |
+        Revoga a sessao no servidor e responde com `Set-Cookie` que apaga o
+        cookie. Idempotente: sessao ja revogada responde 204.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.session.closed, resource_kind: admin_session }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+      responses:
+        '204': { description: Sessao encerrada. }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/auth/logout-all:
+    post:
+      operationId: closeAllAdminSessions
+      tags: [admin]
+      x-effects: [irreversible_write]
+      summary: Encerra todas as sessoes da conta administrativa
+      description: |
+        Empurra `users.sessions_invalid_before`: toda sessao administrativa da
+        conta cai na proxima requisicao, em menos de um segundo. A conta
+        administrativa e dedicada (D42) e nao tem sessao do app a perder.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.session.all_closed, resource_kind: admin_session }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 10
+          window: 1h
+          on_exceed: deny_429
+      responses:
+        '204': { description: Todas as sessoes da conta foram encerradas. }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/auth/reauth:
+    post:
+      operationId: reauthenticateAdmin
+      tags: [admin]
+      x-effects: [verifies_secret]
+      summary: Confere a senha de novo e abre a janela de uma operacao sensivel
+      description: |
+        Devolve um `reauth_token` de **5 minutos**, de **uso unico** e de
+        **um escopo**, que a operacao sensivel recebe em `X-Admin-Reauth-Token`
+        (D40). O escopo exigido por operacao esta em `x-admin-reauth-scope`.
+
+        **Nao e o `POST /auth/reauth` do app**, e o cabecalho tem outro nome de
+        proposito: o token do app e preso ao `jti` do JWT movel, e a conta
+        administrativa nao tem JWT movel (D42). Mesmo nome com duas amarracoes
+        seria um token que vale num lugar e nao no outro sem que o nome diga.
+
+        **Rotaciona a sessao:** a resposta traz `Set-Cookie` com identificador
+        novo e um `csrf_token` novo; o anterior deixa de valer (D38). O teto
+        absoluto de 12 horas **nao** renasce.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.session.reauthenticated, resource_kind: admin_session }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 10
+          window: 1h
+          on_exceed: deny_429
+        - dimension: [account]
+          limit: 5
+          window: 1h
+          on_exceed: deny_429
+          applies_to: invalid_attempts
+          note: "senha errada cinco vezes fecha a janela sensivel por uma hora, sem derrubar a sessao"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminReauthRequest' }
+            examples:
+              mover:
+                value: { password: uma frase longa de verdade, scope: network_event_relocation }
+      responses:
+        '200':
+          description: Janela aberta, e sessao rotacionada.
+          headers:
+            Set-Cookie:
+              description: O novo identificador da sessao, com os mesmos atributos do login.
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminReauthGrant' }
+              examples:
+                aberta:
+                  value:
+                    reauth_token: 7yJq2mW9cV4xR8tL1pZ6nB3kH5sD0fG2
+                    expires_in: 300
+                    scope: network_event_relocation
+                    csrf_token: Qm9uZGlhLCBpc3RvIGUgc28gdW0gZXhlbXBsbw
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ---------------------------- Loja ------------------------------------
+
+  /admin/store/partners:
+    get:
+      operationId: listAdminStorePartners
+      tags: [admin]
+      x-effects: []
+      summary: Parceiros da vitrine, inclusive os inativos
+      description: A lista do painel, com `item_count` para o administrador ver quem tem itens antes de desativar.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      parameters:
+        - name: q
+          in: query
+          description: Busca por nome ou host, no servidor.
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: active
+          in: query
+          description: Filtra por situacao. Sem o parametro, vem todos.
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminLimit'
+      responses:
+        '200':
+          description: Pagina de parceiros, na ordem da vitrine.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStorePartnerPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+    post:
+      operationId: createAdminStorePartner
+      tags: [admin]
+      x-effects: []
+      summary: Cadastra um parceiro
+      description: O parceiro nasce ativo. `host` e so o host, e e contra ele que o destino de cada item e conferido.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.store_partner.created, resource_kind: store_partner }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52): a chave e (conta, admin_write), somando todas as escritas administrativas"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStorePartnerInput' }
+            examples:
+              parceiro:
+                value: { slug: loja-do-bairro, name: Loja do Bairro, host: lojadobairro.com.br }
+      responses:
+        '201':
+          description: Parceiro criado, ativo.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStorePartner' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/SlugTaken' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/store/partners/{partnerSlug}:
+    parameters:
+      - $ref: '#/components/parameters/PartnerSlug'
+    get:
+      operationId: getAdminStorePartner
+      tags: [admin]
+      x-effects: []
+      summary: Um parceiro
+      description: O parceiro em qualquer situacao, com o `ETag` para a proxima escrita.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      responses:
+        '200':
+          description: O parceiro. O `ETag` e o que o `PATCH` apresenta em `If-Match`.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStorePartner' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: updateAdminStorePartner
+      tags: [admin]
+      x-effects: []
+      summary: Altera um parceiro
+      description: |
+        `If-Match` obrigatorio: dois administradores editando o mesmo parceiro
+        nao se sobrescrevem em silencio. Trocar `host` e recusado com `400`
+        (`code: host_mismatch_items`) se algum item do parceiro deixaria de
+        apontar para o host dele. Trocar `slug` e permitido; o caminho muda, e a
+        resposta traz o novo.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.store_partner.updated, resource_kind: store_partner }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStorePartnerPatch' }
+      responses:
+        '200':
+          description: Parceiro alterado.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStorePartner' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SlugTaken' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/store/items:
+    get:
+      operationId: listAdminStoreItems
+      tags: [admin]
+      x-effects: []
+      summary: Itens da vitrine, em todos os estados
+      description: |
+        A lista do painel, com rascunho, publicado e retirado. **O preco vem com
+        o valor mesmo vencido** (ver `AdminStoreItem`): a omissao do valor
+        vencido e regra da superficie publica (`listStoreItems`), e continua la.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      parameters:
+        - name: q
+          in: query
+          description: Busca em titulo e resumo, no servidor.
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: category
+          in: query
+          schema: { $ref: '#/components/schemas/StoreCategory' }
+        - name: partner
+          in: query
+          description: '`slug` do parceiro.'
+          schema: { $ref: '#/components/schemas/Slug' }
+        - name: publication_state
+          in: query
+          schema: { $ref: '#/components/schemas/AdminStoreItemPublicationState' }
+        - name: price_status
+          in: query
+          description: '`vencido` e o filtro de quem reconfere precos.'
+          schema: { $ref: '#/components/schemas/StorePriceStatus' }
+        - name: sort
+          in: query
+          description: '`curadoria` e a ordem da vitrine; `atualizado` poe o que mudou por ultimo primeiro; `validade` poe primeiro o preco que vence antes.'
+          schema: { type: string, enum: [curadoria, nome, atualizado, validade], default: curadoria }
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminLimit'
+      responses:
+        '200':
+          description: Pagina de itens.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreItemPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+    post:
+      operationId: createAdminStoreItem
+      tags: [admin]
+      x-effects: []
+      summary: Cria um item em rascunho
+      description: |
+        **O item nasce em rascunho** e nao aparece no app ate
+        `publishAdminStoreItem`. `target_url` precisa terminar no host do
+        parceiro (`400`, `code: host_mismatch`). O preco e objeto unico ou
+        ausente: "preco sem data" nao cabe no corpo. `checked_at` no futuro e
+        recusado. A imagem, se houver, e um envio de
+        `createAdminCatalogImageIntent` com `purpose: store_item`; qualquer
+        outro envio e recusado com `400` (T9). **URL de imagem externa nao e
+        aceita** (ADR-0027 item 6).
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.store_item.created, resource_kind: store_item }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStoreItemInput' }
+            examples:
+              racao:
+                value:
+                  slug: racao-adulto-10kg
+                  partner_slug: loja-do-bairro
+                  title: Racao para cao adulto, 10 kg
+                  summary: Racao seca para caes adultos de porte medio.
+                  category: food
+                  target_url: https://lojadobairro.com.br/racao-adulto-10kg
+                  price: { amount: 18990, currency: BRL, checked_at: '2026-09-22' }
+      responses:
+        '201':
+          description: Item criado em rascunho.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreItem' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/SlugTaken' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/store/items/{itemSlug}:
+    parameters:
+      - $ref: '#/components/parameters/ItemSlug'
+    get:
+      operationId: getAdminStoreItem
+      tags: [admin]
+      x-effects: []
+      summary: Um item, com o preco mesmo vencido
+      description: |
+        O item em qualquer estado. O preco vem com `amount` mesmo depois de
+        `valid_until`: quem reconfere precisa do numero antigo. A omissao do
+        valor vencido e regra de `listStoreItems`, a superficie publica.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      responses:
+        '200':
+          description: O item.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreItem' }
+              examples:
+                vencido:
+                  $ref: '#/components/examples/AdminStoreItemVencido'
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: updateAdminStoreItem
+      tags: [admin]
+      x-effects: []
+      summary: Altera um item, em qualquer estado
+      description: |
+        Editar nao publica nem retira: o estado so muda pelas operacoes de
+        `publication`. Renovar o preco e mandar `price` com `checked_at` novo;
+        `price: null` tira o preco. `image_upload_id: null` tira a imagem.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.store_item.updated, resource_kind: store_item }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStoreItemPatch' }
+            examples:
+              renovarPreco:
+                value: { price: { amount: 18490, currency: BRL, checked_at: '2026-09-23' } }
+      responses:
+        '200':
+          description: Item alterado.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreItem' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SlugTaken' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/store/items/{itemSlug}/publication:
+    parameters:
+      - $ref: '#/components/parameters/ItemSlug'
+    put:
+      operationId: publishAdminStoreItem
+      tags: [admin]
+      x-effects: []
+      summary: Publica o item na vitrine
+      description: |
+        Rascunho ou retirado passa a publicado. Idempotente: item ja publicado
+        responde 200 sem nova linha de trilha. `published_at` grava a primeira
+        publicacao e nao e reescrito.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.store_item.published, resource_kind: store_item }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+          note: "balde compartilhado admin_publication (D52): publicacao de item e criacao de evento"
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: Item publicado.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreItem' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    delete:
+      operationId: retireAdminStoreItem
+      tags: [admin]
+      x-effects: []
+      summary: Retira o item da vitrine
+      description: |
+        O "excluir publicado" da `Loja` (D40). **Nada e apagado**: o item passa a
+        `retired`, some do app, continua no painel e volta com
+        `publishAdminStoreItem`. Exige `X-Admin-Reauth-Token` do escopo
+        `store_item_retirement`: um roteiro com a senha roubada esvaziaria a
+        vitrine. Item em rascunho responde `400` (`code: not_published`).
+      security:
+        - adminSession: []
+          adminCsrf: []
+          adminReauth: []
+      x-admin-roles: [admin]
+      x-admin-reauth-scope: store_item_retirement
+      x-audit: { action: admin.store_item.retired, resource_kind: store_item }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          description: Item retirado.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreItem' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminReauthRequired' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ---------------------------- Rede ------------------------------------
+
+  /admin/network/events:
+    get:
+      operationId: listAdminNetworkEvents
+      tags: [admin]
+      x-effects: []
+      summary: Encontros da Rede, em todos os estados
+      description: A lista do painel, com publicados, cancelados e removidos, e o estado temporal calculado no servidor.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      parameters:
+        - name: q
+          in: query
+          description: Busca em titulo, resumo e nome do lugar, no servidor.
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: publication_status
+          in: query
+          schema: { $ref: '#/components/schemas/AdminNetworkEventPublicationStatus' }
+        - name: timing
+          in: query
+          schema: { $ref: '#/components/schemas/AdminNetworkEventTiming' }
+        - name: city
+          in: query
+          schema: { type: string, minLength: 2, maxLength: 60 }
+        - name: sort
+          in: query
+          description: '`agenda` e por inicio, do mais proximo; `atualizado` poe o que mudou por ultimo primeiro.'
+          schema: { type: string, enum: [agenda, atualizado], default: agenda }
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminLimit'
+      responses:
+        '200':
+          description: Pagina de encontros.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminNetworkEventPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+    post:
+      operationId: createAdminNetworkEvent
+      tags: [admin]
+      x-effects: [notifies]
+      summary: Cria e publica um encontro
+      description: |
+        **Criar e publicar** (ADR-0027 12.9): o encontro nao tem rascunho, e
+        nasce `published`, com `origin: admin`. Por isso esta operacao conta no
+        teto de publicacoes e **avisa todos os administradores** por e-mail com
+        o que foi criado (D52).
+
+        O lugar sao tres rotulos obrigatorios e um ponto **opcional**, marcado
+        no mapa (`geo_source = map_pin`, ADR-0006). O local e **logradouro
+        publico, nunca residencia**, e o formulario diz isso (ADR-0027 item
+        13). O ponto sai para o tutor autenticado em
+        `getNetworkEventLocation` (ADR-0010 emenda 1).
+
+        Recusas de regra, todas `400 validation-failed` com o campo: fim antes
+        do inicio; encontro que ja terminou (`code: event_in_past`); fuso que
+        nao existe; ponto fora dos limites do Brasil.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.network_event.created, resource_kind: network_event }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 30
+          window: 1h
+          on_exceed: deny_429
+          note: "balde compartilhado admin_publication (D52): publicacao de item e criacao de evento"
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminNetworkEventInput' }
+            examples:
+              encontro:
+                $ref: '#/components/examples/AdminNetworkEventInputPraca'
+      responses:
+        '201':
+          description: Encontro criado e publicado.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminNetworkEvent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/SlugTaken' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/network/events/{eventSlug}:
+    parameters:
+      - $ref: '#/components/parameters/EventSlug'
+    get:
+      operationId: getAdminNetworkEvent
+      tags: [admin]
+      x-effects: []
+      summary: Um encontro, em qualquer estado
+      description: O encontro com o ponto do mapa, quando houver, e sem autor.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      responses:
+        '200':
+          description: O encontro.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminNetworkEvent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      operationId: updateAdminNetworkEvent
+      tags: [admin]
+      x-effects: []
+      summary: Altera titulo, resumo, capa ou endereco publico de um encontro
+      description: |
+        **Data, horario, fuso e lugar nao mudam aqui**, porque todo encontro
+        esta publicado desde a criacao: mudar onde e quando as pessoas levam
+        os caes e `relocateAdminNetworkEvent`, com reautenticacao e aviso a
+        todos os administradores. O corpo nao tem esses campos. Encontro
+        `removed` responde `400` (`code: event_removed`).
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.network_event.updated, resource_kind: network_event }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminNetworkEventPatch' }
+      responses:
+        '200':
+          description: Encontro alterado.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminNetworkEvent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SlugTaken' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    delete:
+      operationId: removeAdminNetworkEvent
+      tags: [admin]
+      x-effects: [irreversible_write]
+      summary: Remove um encontro, sem volta
+      description: |
+        Estado terminal `removed`: some do app e do painel de leitura publica,
+        a linha continua no banco para a trilha. Exige
+        `X-Admin-Reauth-Token` do escopo `network_event_removal` (D40). Para
+        desmarcar um encontro que as pessoas precisam saber que nao vai
+        acontecer, a operacao certa e `cancelAdminNetworkEvent`.
+      security:
+        - adminSession: []
+          adminCsrf: []
+          adminReauth: []
+      x-admin-roles: [admin]
+      x-admin-reauth-scope: network_event_removal
+      x-audit: { action: admin.network_event.removed, resource_kind: network_event }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204': { description: Encontro removido. }
+        '401': { $ref: '#/components/responses/AdminReauthRequired' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/network/events/{eventSlug}/relocation:
+    parameters:
+      - $ref: '#/components/parameters/EventSlug'
+    post:
+      operationId: relocateAdminNetworkEvent
+      tags: [admin]
+      x-effects: [notifies]
+      summary: Muda data, horario ou lugar de um encontro publicado
+      description: |
+        E a operacao que um invasor com a senha usaria para reunir caes num
+        lugar e horario escolhidos por ele (T11), e por isso ela tem as tres
+        travas: `X-Admin-Reauth-Token` do escopo `network_event_relocation`
+        (D40), aviso por e-mail a **todos** os administradores com o antes e o
+        depois (D52), e linha na trilha (sem a coordenada bruta: a trilha grava
+        `point_changed`).
+
+        Pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`. O
+        `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
+        responde `400` (`code: event_not_published`).
+      security:
+        - adminSession: []
+          adminCsrf: []
+          adminReauth: []
+      x-admin-roles: [admin]
+      x-admin-reauth-scope: network_event_relocation
+      x-audit: { action: admin.network_event.relocated, resource_kind: network_event }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminNetworkEventRelocation' }
+            examples:
+              chuva:
+                value:
+                  starts_at: '2026-10-11T12:00:00Z'
+                  ends_at: '2026-10-11T14:00:00Z'
+                  reason: Previsao de chuva no sabado; o encontro passa para domingo.
+      responses:
+        '200':
+          description: Encontro movido.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminNetworkEvent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminReauthRequired' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/network/events/{eventSlug}/cancellation:
+    parameters:
+      - $ref: '#/components/parameters/EventSlug'
+    post:
+      operationId: cancelAdminNetworkEvent
+      tags: [admin]
+      x-effects: [notifies]
+      summary: Cancela um encontro publicado
+      description: |
+        O encontro passa a `cancelled` e **continua visivel no app como
+        cancelado** ate o fim previsto (padrao enquanto o cliente nao responder
+        a pergunta 1 do ADR-0027). Exige `X-Admin-Reauth-Token` do escopo
+        `network_event_cancellation` e avisa todos os administradores. Sem
+        volta: um encontro cancelado que vai acontecer de novo e um encontro
+        novo.
+      security:
+        - adminSession: []
+          adminCsrf: []
+          adminReauth: []
+      x-admin-roles: [admin]
+      x-admin-reauth-scope: network_event_cancellation
+      x-audit: { action: admin.network_event.cancelled, resource_kind: network_event }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminNetworkEventCancellation' }
+            examples:
+              cancelar:
+                value: { note: A praca vai estar interditada para obra neste fim de semana. }
+      responses:
+        '200':
+          description: Encontro cancelado.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminNetworkEvent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminReauthRequired' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ---------------------------- Imagem ----------------------------------
+
+  /admin/media/catalog-image-intents:
+    post:
+      operationId: createAdminCatalogImageIntent
+      tags: [admin]
+      x-effects: [irreversible_write]
+      summary: Pede a politica de envio direto de uma imagem de catalogo
+      description: |
+        ADR-0007 a letra, com `kind = catalog_image` e `purpose` gravados no
+        envio. O backend nunca recebe os bytes. JPEG, PNG e WebP; **SVG
+        recusado sempre** (`415`). A confirmacao e a escrita do item
+        (`image_upload_id`) ou do encontro (`cover_upload_id`) com o mesmo
+        `purpose`; e ela que enfileira o processamento. A derivada publica so e
+        servida pronta.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.catalog_image.intent_created, resource_kind: upload_intent }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminCatalogImageIntentInput' }
+            examples:
+              capa:
+                value: { purpose: network_event, content_type: image/jpeg, byte_size: 834112 }
+      responses:
+        '201':
+          description: Politica de envio, valida por 10 minutos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/UploadIntent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
 components:
 
   securitySchemes:
@@ -4151,6 +5243,39 @@ components:
         Escopo de **uma** conversa, valido enquanto o caso estiver aberto mais
         30 dias. Nao e JWT e nao carrega dado pessoal.
 
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: __Host-bichu_adm
+      description: |
+        Sessao do backoffice (ADR-0027 item 2). Token opaco de 256 bits,
+        guardado no servidor so como SHA-256, em cookie `__Host-` `HttpOnly`,
+        `Secure`, `SameSite=Strict`, sem `Domain` e sem `Max-Age`. 30 minutos
+        de inatividade e 12 horas de teto desde a senha. O papel e lido do
+        banco a cada requisicao, nunca de claim.
+
+        **Vale so em `/v1/admin/*`**, e so ele vale ali: `bearerAuth` em
+        `/v1/admin/*` responde 401, e este cookie e ignorado fora do prefixo.
+    adminCsrf:
+      type: apiKey
+      in: header
+      name: X-CSRF-Token
+      description: |
+        Token sincronizador da sessao administrativa (D39), exigido em todo
+        metodo nao seguro de `/v1/admin/*` junto com `Origin` exatamente igual
+        a `https://admin.bichu.app`. Entregue no corpo de `openAdminSession`,
+        `getAdminSession` e `reauthenticateAdmin`, **nunca em cookie**. Troca
+        junto com o identificador da sessao. Ausente ou divergente: 403.
+    adminReauth:
+      type: apiKey
+      in: header
+      name: X-Admin-Reauth-Token
+      description: |
+        Segunda credencial das operacoes sensiveis do backoffice (D40), obtida
+        em `POST /v1/admin/auth/reauth`: 5 minutos, uso unico, um escopo,
+        presa a sessao administrativa. O escopo exigido esta em
+        `x-admin-reauth-scope`. Nao e o `X-Reauth-Token` do app, que e preso ao
+        `jti` do JWT movel.
   parameters:
     PetId:
       name: petId
@@ -4311,6 +5436,43 @@ components:
         pode receber o mesmo aviso varias vezes.
       schema: { type: string, format: uuid }
 
+    PartnerSlug:
+      name: partnerSlug
+      in: path
+      required: true
+      description: O endereco publico do parceiro. Nenhum UUID no caminho.
+      schema: { $ref: '#/components/schemas/Slug' }
+    ItemSlug:
+      name: itemSlug
+      in: path
+      required: true
+      description: O endereco publico do item.
+      schema: { $ref: '#/components/schemas/Slug' }
+    EventSlug:
+      name: eventSlug
+      in: path
+      required: true
+      description: O endereco publico do encontro.
+      schema: { $ref: '#/components/schemas/Slug' }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: |
+        O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+        existente do backoffice: dois administradores editando o mesmo recurso
+        nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+        atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+      schema: { type: string, example: '"7"' }
+    AdminPage:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    AdminLimit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+
   responses:
     Accepted:
       description: Pedido aceito para processamento.
@@ -4457,6 +5619,156 @@ components:
                 status: 409
                 detail: Sem foto, ninguem reconhece o animal na rua.
                 correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+
+    AdminUnauthorized:
+      description: |
+        Sem sessao administrativa valida. `unauthenticated`: nao ha cookie, ou
+        ele nao corresponde a sessao nenhuma, ou veio `Authorization: Bearer`
+        no lugar dele (D36). `token-expired`: a sessao venceu por inatividade
+        ou pelo teto, foi revogada, ou e anterior a `sessions_invalid_before`.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            semSessao:
+              value:
+                type: https://dominio-a-definir.com.br/problems/unauthenticated
+                title: Entre para continuar
+                status: 401
+                next_action: sign_in
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+            sessaoVencida:
+              value:
+                type: https://dominio-a-definir.com.br/problems/token-expired
+                title: A sua sessao terminou
+                status: 401
+                next_action: sign_in
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+    AdminForbidden:
+      description: |
+        Sessao valida, e a requisicao recusada pela guarda: conta sem o papel
+        exigido em `x-admin-roles` (inclusive papel removido depois do login,
+        D37), ou, em metodo nao seguro, `Origin` diferente de
+        `https://admin.bichu.app` ou `X-CSRF-Token` ausente ou divergente
+        (D39). A guarda decide antes de ler o recurso, entao o 403 nao diz nada
+        sobre ele.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            semPermissao:
+              value:
+                type: https://dominio-a-definir.com.br/problems/forbidden
+                title: Voce nao tem permissao para isto
+                status: 403
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+    AdminReauthRequired:
+      description: |
+        Dois casos. Sem sessao valida: os mesmos tipos de `AdminUnauthorized`.
+        Sessao valida sem `X-Admin-Reauth-Token` do escopo da operacao, com
+        token vencido, ja usado ou de outro escopo:
+        `reauthentication-required`, e o painel pede a senha sem perder o que
+        estava na tela.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            precisaDaSenha:
+              value:
+                type: https://dominio-a-definir.com.br/problems/reauthentication-required
+                title: Confirme sua senha
+                status: 401
+                detail: Mudar onde e quando as pessoas levam os caes pede a senha de novo.
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+    SlugTaken:
+      description: O `slug` pedido ja e de outro recurso do mesmo tipo.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            ocupado:
+              value:
+                type: https://dominio-a-definir.com.br/problems/slug-taken
+                title: Este endereco ja esta em uso
+                status: 409
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+    PreconditionFailed:
+      description: |
+        `If-Match` nao corresponde a versao atual: outra pessoa salvou depois
+        da sua leitura. Nada foi gravado.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            mudouAntes:
+              value:
+                type: https://dominio-a-definir.com.br/problems/precondition-failed
+                title: Alguem alterou isto antes de voce
+                status: 412
+                detail: Recarregue para ver a versao atual antes de salvar.
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+    PreconditionRequired:
+      description: Escrita sobre recurso existente sem `If-Match`. Nada foi gravado.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            semVersao:
+              value:
+                type: https://dominio-a-definir.com.br/problems/precondition-required
+                title: Falta a versao que voce leu
+                status: 428
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+
+  headers:
+    ETag:
+      description: |
+        A versao do recurso (`version` no banco), entre aspas. Muda a cada
+        escrita. E o valor que a proxima escrita apresenta em `If-Match`.
+      schema: { type: string, example: '"7"' }
+
+  examples:
+    AdminSessionAberta:
+      summary: Sessao recem-aberta
+      value:
+        display_name: Operacao Bichu
+        roles: [admin]
+        csrf_token: Qm9uZGlhLCBpc3RvIGUgc28gdW0gZXhlbXBsbw
+        idle_expires_at: '2026-09-23T15:30:00Z'
+        absolute_expires_at: '2026-09-24T03:00:00Z'
+    AdminStoreItemVencido:
+      summary: Item publicado com preco vencido. O valor vem, e o app publico o omite
+      value:
+        slug: racao-adulto-10kg
+        partner: { slug: loja-do-bairro, name: Loja do Bairro, host: lojadobairro.com.br }
+        title: Racao para cao adulto, 10 kg
+        summary: Racao seca para caes adultos de porte medio.
+        category: food
+        target_url: https://lojadobairro.com.br/racao-adulto-10kg
+        image: { source: uploaded, status: ready, url: 'https://img.bichu.app/c/8f3a1c0e9b2d4f6a8c1e3b5d7f9a0c2e.webp' }
+        price: { amount: 18990, currency: BRL, checked_at: '2026-08-10', valid_until: '2026-09-09' }
+        price_status: vencido
+        publication_state: published
+        published_at: '2026-08-10T13:02:11Z'
+        sort_order: 10
+        created_at: '2026-08-10T12:58:40Z'
+        updated_at: '2026-08-10T13:02:11Z'
+        version: 3
+    AdminNetworkEventInputPraca:
+      summary: Encontro numa praca, com ponto marcado no mapa
+      value:
+        slug: encontro-praca-benedito
+        title: Encontro de caes na Praca Benedito Calixto
+        summary: Manha de sabado para os caes do bairro se conhecerem.
+        place:
+          place_name: Praca Benedito Calixto
+          neighborhood: Pinheiros
+          city: Sao Paulo
+          state: SP
+          point: { lat: -23.5586, lon: -46.6814 }
+        starts_at: '2026-10-10T12:00:00Z'
+        ends_at: '2026-10-10T14:00:00Z'
+        time_zone: America/Sao_Paulo
 
   schemas:
 
@@ -5935,3 +7247,501 @@ components:
           description: |
             24 h apos o aceite. **Ate este instante nada foi revogado.**
         cancelled_at: { type: string, format: date-time, nullable: true }
+
+    # ------------------------------------------------------------------
+    # Backoffice (ADR-0027)
+    # ------------------------------------------------------------------
+
+    AdminRole:
+      type: string
+      description: |
+        Papel que abre sessao administrativa. Na v1 so `admin` (decisao do
+        cliente de 23/09). `moderator` existe em `user_roles` e entra aqui
+        quando a moderacao entrar, como valor novo, pelo caminho de lista
+        fechada do ADR-0023 secao 3.
+      enum: [admin]
+
+    AdminLoginRequest:
+      type: object
+      required: [email, password]
+      additionalProperties: false
+      properties:
+        email: { type: string, format: email, maxLength: 254 }
+        password:
+          type: string
+          maxLength: 256
+          description: |
+            Sem `minLength` de proposito: o login nao ensina a politica a quem
+            testa senha. O minimo de 15 da conta administrativa (D43) e cobrado
+            na definicao, em `confirmPasswordReset`.
+
+    AdminSession:
+      type: object
+      description: |
+        O que o painel guarda em memoria. **Sem e-mail, sem UUID, sem
+        telefone** (D51). `csrf_token` vai em `X-CSRF-Token` em todo metodo
+        nao seguro.
+      required: [display_name, roles, csrf_token, idle_expires_at, absolute_expires_at]
+      properties:
+        display_name: { type: string }
+        roles:
+          type: array
+          minItems: 1
+          items: { $ref: '#/components/schemas/AdminRole' }
+        csrf_token: { type: string, minLength: 32 }
+        idle_expires_at:
+          type: string
+          format: date-time
+          description: Quando a sessao vence se nada acontecer. Renova com o uso, ate o teto.
+        absolute_expires_at:
+          type: string
+          format: date-time
+          description: O teto de 12 horas desde a senha. O uso nao o empurra.
+
+    AdminReauthScope:
+      type: string
+      description: |
+        As operacoes sensiveis do backoffice (D40). Um token de um escopo nao
+        abre operacao de outro.
+      enum: [store_item_retirement, network_event_relocation, network_event_cancellation, network_event_removal]
+
+    AdminReauthRequest:
+      type: object
+      required: [password, scope]
+      additionalProperties: false
+      properties:
+        password: { type: string, maxLength: 256 }
+        scope: { $ref: '#/components/schemas/AdminReauthScope' }
+
+    AdminReauthGrant:
+      type: object
+      required: [reauth_token, expires_in, scope, csrf_token]
+      properties:
+        reauth_token: { type: string }
+        expires_in: { type: integer, example: 300 }
+        scope: { $ref: '#/components/schemas/AdminReauthScope' }
+        csrf_token:
+          type: string
+          description: O token anti-CSRF novo. A sessao foi rotacionada, e o anterior deixou de valer.
+
+    HttpsUrl:
+      type: string
+      format: uri
+      maxLength: 2048
+      pattern: '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[^\s]*)?$'
+      description: |
+        So `https:`, sem `userinfo`, ate 2048 caracteres (D47). Host que seja
+        IP literal e recusado pelo servidor com `400`, porque a expressao nao
+        tem como separar `10.0.0.1` de um nome.
+
+    AdminCatalogImage:
+      type: object
+      description: |
+        A imagem de um item ou de um encontro, como o painel a ve. `external`
+        so aparece em dado da massa (URL do parceiro); o painel nao escreve
+        URL externa.
+      required: [source, status]
+      properties:
+        source: { type: string, enum: [uploaded, external] }
+        status:
+          type: string
+          enum: [processing, ready, rejected]
+          description: So `ready` e servido pelo app. `external` e sempre `ready`.
+        url:
+          type: string
+          format: uri
+          nullable: true
+          description: A derivada publica, quando pronta.
+        rejection_reason:
+          type: string
+          nullable: true
+
+    AdminCatalogImageIntentInput:
+      type: object
+      required: [purpose, content_type, byte_size]
+      additionalProperties: false
+      properties:
+        purpose:
+          type: string
+          enum: [store_item, network_event]
+          description: |
+            Fica gravado no envio. A escrita que confirma o envio exige o mesmo
+            proposito, e recusa foto de pet, de achador ou de outro proposito
+            (T9).
+        content_type:
+          type: string
+          enum: [image/jpeg, image/png, image/webp]
+          description: SVG nunca. HEIC nao, porque a origem e um computador de mesa.
+        byte_size: { type: integer, minimum: 1, maximum: 10485760 }
+
+    AdminStorePartnerInput:
+      type: object
+      required: [slug, name, host]
+      additionalProperties: false
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        name: { type: string, minLength: 2, maxLength: 80 }
+        host:
+          type: string
+          maxLength: 253
+          pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+          description: So o host, sem esquema, caminho nem consulta. Mesmo formato do `CHECK` de `store_partners.host`.
+        sort_order: { type: integer, minimum: -32768, maximum: 32767, default: 0 }
+
+    AdminStorePartnerPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        name: { type: string, minLength: 2, maxLength: 80 }
+        host:
+          type: string
+          maxLength: 253
+          pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+        sort_order: { type: integer, minimum: -32768, maximum: 32767 }
+        active:
+          type: boolean
+          description: Parceiro inativo tira todos os itens dele da vitrine publica, sem mudar o estado de cada item.
+
+    AdminStorePartner:
+      type: object
+      required: [slug, name, host, active, sort_order, item_count, created_at, updated_at, version]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        host: { type: string }
+        active: { type: boolean }
+        sort_order: { type: integer }
+        item_count:
+          type: integer
+          description: Itens do parceiro em qualquer estado.
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+
+    AdminStorePartnerPage:
+      type: object
+      required: [items, page, limit, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminStorePartner' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+
+    AdminPriceInput:
+      type: object
+      description: |
+        O preco de referencia, **inteiro ou ausente**: os tres campos andam
+        juntos, e "preco sem data" nao cabe neste corpo (o `CHECK`
+        `store_items_preco_anda_completo` diz o mesmo no banco).
+      required: [amount, currency, checked_at]
+      additionalProperties: false
+      properties:
+        amount:
+          type: integer
+          minimum: 1
+          maximum: 100000000
+          description: Centavos, inteiro. Nunca ponto flutuante.
+        currency: { type: string, enum: [BRL] }
+        checked_at:
+          type: string
+          format: date
+          description: |
+            A data em que uma PESSOA leu o numero na pagina do parceiro. Data
+            futura e recusada com `400`.
+
+    AdminPrice:
+      type: object
+      description: |
+        O preco como o painel o ve: **com o valor mesmo vencido**, para quem
+        reconfere comparar. `valid_until` e o ultimo dia em que o app mostra o
+        valor (`checked_at` + 30 dias, `DIAS_DE_VALIDADE_DO_PRECO`). Depois dele
+        o app recebe `price_amount` nulo e `price_status: vencido`
+        (`listStoreItems`); esta resposta continua trazendo `amount`.
+      required: [amount, currency, checked_at, valid_until]
+      properties:
+        amount: { type: integer }
+        currency: { type: string, enum: [BRL] }
+        checked_at: { type: string, format: date }
+        valid_until: { type: string, format: date }
+
+    AdminStoreItemPublicationState:
+      type: string
+      description: |
+        Derivado no servidor: `draft` nunca foi publicado; `published` esta na
+        vitrine; `retired` foi publicado e esta fora. Ha rascunho no item e nao
+        ha no encontro (ADR-0027, itens 12.9 e 14).
+      enum: [draft, published, retired]
+
+    AdminStoreItemInput:
+      type: object
+      required: [slug, partner_slug, title, summary, category, target_url]
+      additionalProperties: false
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        partner_slug: { $ref: '#/components/schemas/Slug' }
+        title: { type: string, minLength: 2, maxLength: 120 }
+        summary:
+          type: string
+          minLength: 2
+          maxLength: 180
+          description: Uma linha. Texto puro, renderizado como texto no app (D47).
+        category: { $ref: '#/components/schemas/StoreCategory' }
+        target_url:
+          allOf:
+            - $ref: '#/components/schemas/HttpsUrl'
+          description: |
+            Precisa terminar no host do parceiro (`400`, `code: host_mismatch`).
+            Nenhum identificador de pessoa, em codificacao nenhuma.
+        price:
+          allOf:
+            - $ref: '#/components/schemas/AdminPriceInput'
+        image_upload_id:
+          type: string
+          format: uuid
+          description: Envio de `createAdminCatalogImageIntent` com `purpose` `store_item`.
+        sort_order: { type: integer, minimum: -32768, maximum: 32767, default: 0 }
+
+    AdminStoreItemPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: |
+        Nao muda o estado de publicacao (isso e `publication`). `price: null`
+        tira o preco; `image_upload_id: null` tira a imagem.
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        partner_slug: { $ref: '#/components/schemas/Slug' }
+        title: { type: string, minLength: 2, maxLength: 120 }
+        summary: { type: string, minLength: 2, maxLength: 180 }
+        category: { $ref: '#/components/schemas/StoreCategory' }
+        target_url: { $ref: '#/components/schemas/HttpsUrl' }
+        price:
+          oneOf:
+            - $ref: '#/components/schemas/AdminPriceInput'
+            - type: 'null'
+        image_upload_id:
+          type: [string, 'null']
+          format: uuid
+        sort_order: { type: integer, minimum: -32768, maximum: 32767 }
+
+    AdminStoreItem:
+      type: object
+      required: [slug, partner, title, summary, category, target_url, price_status, publication_state, sort_order, created_at, updated_at, version]
+      properties:
+        slug: { type: string }
+        partner: { $ref: '#/components/schemas/StorePartnerRef' }
+        title: { type: string }
+        summary: { type: string }
+        category: { $ref: '#/components/schemas/StoreCategory' }
+        target_url: { type: string, format: uri }
+        image:
+          oneOf:
+            - $ref: '#/components/schemas/AdminCatalogImage'
+            - type: 'null'
+        price:
+          description: Nulo quando o item nao tem preco. **Presente mesmo vencido.**
+          oneOf:
+            - $ref: '#/components/schemas/AdminPrice'
+            - type: 'null'
+        price_status: { $ref: '#/components/schemas/StorePriceStatus' }
+        publication_state: { $ref: '#/components/schemas/AdminStoreItemPublicationState' }
+        published_at:
+          type: [string, 'null']
+          format: date-time
+          description: A primeira publicacao. Nao e reescrita.
+        sort_order: { type: integer }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+
+    AdminStoreItemPage:
+      type: object
+      required: [items, page, limit, total, effective_sort]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminStoreItem' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        effective_sort:
+          type: string
+          enum: [curadoria, nome, atualizado, validade]
+        applied_filters:
+          type: object
+          additionalProperties: { type: string }
+
+    AdminMapPin:
+      type: object
+      description: |
+        O ponto tocado no mapa do painel. A origem e sempre `map_pin`
+        (ADR-0006), e por isso nao ha campo de origem nem de precisao. Os
+        limites sao os de `GeoPoint`.
+      required: [lat, lon]
+      additionalProperties: false
+      properties:
+        lat: { type: number, format: double, minimum: -34, maximum: 6 }
+        lon: { type: number, format: double, minimum: -74, maximum: -32 }
+
+    AdminNetworkEventPlaceInput:
+      type: object
+      description: |
+        **Logradouro publico, nunca residencia** (ADR-0027 item 13). Os tres
+        rotulos sao obrigatorios; o ponto e opcional, como tolerancia (D.4).
+        Nao ha logradouro, numero nem CEP.
+      required: [place_name, neighborhood, city, state]
+      additionalProperties: false
+      properties:
+        place_name: { type: string, minLength: 2, maxLength: 80 }
+        neighborhood: { type: string, minLength: 2, maxLength: 60 }
+        city: { type: string, minLength: 2, maxLength: 60 }
+        state: { type: string, pattern: '^[A-Z]{2}$' }
+        point:
+          oneOf:
+            - $ref: '#/components/schemas/AdminMapPin'
+            - type: 'null'
+
+    AdminNetworkEventPlace:
+      type: object
+      required: [place_name, neighborhood, city, state, point]
+      properties:
+        place_name: { type: string }
+        neighborhood: { type: string }
+        city: { type: string }
+        state: { type: string }
+        point:
+          oneOf:
+            - $ref: '#/components/schemas/AdminMapPin'
+            - type: 'null'
+
+    TimeZoneName:
+      type: string
+      pattern: '^[A-Za-z]+/[A-Za-z_]+$'
+      description: Nome IANA da zona. Que a zona exista de verdade e conferido no servidor.
+      example: America/Sao_Paulo
+
+    AdminNetworkEventInput:
+      type: object
+      required: [slug, title, summary, place, starts_at, time_zone]
+      additionalProperties: false
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        title: { type: string, minLength: 2, maxLength: 120 }
+        summary: { type: string, minLength: 2, maxLength: 180 }
+        place: { $ref: '#/components/schemas/AdminNetworkEventPlaceInput' }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time }
+        time_zone: { $ref: '#/components/schemas/TimeZoneName' }
+        cover_upload_id:
+          type: string
+          format: uuid
+          description: Envio de `createAdminCatalogImageIntent` com `purpose` `network_event`.
+
+    AdminNetworkEventPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      description: |
+        **Sem data, horario, fuso nem lugar**: mudar onde e quando e
+        `relocateAdminNetworkEvent`. `cover_upload_id: null` tira a capa.
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        title: { type: string, minLength: 2, maxLength: 120 }
+        summary: { type: string, minLength: 2, maxLength: 180 }
+        cover_upload_id:
+          type: [string, 'null']
+          format: uuid
+
+    AdminNetworkEventRelocation:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      minProperties: 2
+      description: '`reason` e pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`.'
+      properties:
+        place: { $ref: '#/components/schemas/AdminNetworkEventPlaceInput' }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: [string, 'null'], format: date-time }
+        time_zone: { $ref: '#/components/schemas/TimeZoneName' }
+        reason:
+          type: string
+          minLength: 2
+          maxLength: 280
+          description: Vai no aviso a todos os administradores.
+
+    AdminNetworkEventCancellation:
+      type: object
+      required: [note]
+      additionalProperties: false
+      properties:
+        note:
+          type: string
+          minLength: 2
+          maxLength: 280
+          description: O motivo, que o app mostra junto do "cancelado".
+
+    AdminNetworkEventPublicationStatus:
+      type: string
+      description: |
+        `published` desde a criacao (nao ha rascunho, ADR-0027 12.9);
+        `cancelled` continua visivel no app como cancelado; `removed` e
+        terminal. `pending_review` existe no banco para o encontro criado pela
+        comunidade, que nao existe na v1, e por isso nao aparece aqui.
+      enum: [published, cancelled, removed]
+
+    AdminNetworkEventTiming:
+      type: string
+      description: |
+        Calculado no servidor pelo relogio dele (ADR-0025 item 6). Mesmos
+        valores de `NetworkEventStatus` da leitura da `Rede`, sem `cancelled`,
+        que aqui e estado de publicacao.
+      enum: [upcoming, happening, ended]
+
+    AdminNetworkEvent:
+      type: object
+      description: |
+        O encontro como o painel o ve. **Sem autor**: `created_by_user_id` nunca
+        e projetado (ADR-0025 secao 3, ADR-0027 item 10).
+      required: [slug, title, summary, place, starts_at, time_zone, origin, publication_status, timing, published_at, created_at, updated_at, version]
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        place: { $ref: '#/components/schemas/AdminNetworkEventPlace' }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: [string, 'null'], format: date-time }
+        time_zone: { type: string }
+        cover:
+          oneOf:
+            - $ref: '#/components/schemas/AdminCatalogImage'
+            - type: 'null'
+        origin: { type: string, enum: [admin] }
+        publication_status: { $ref: '#/components/schemas/AdminNetworkEventPublicationStatus' }
+        timing: { $ref: '#/components/schemas/AdminNetworkEventTiming' }
+        published_at: { type: string, format: date-time }
+        cancelled_at: { type: [string, 'null'], format: date-time }
+        cancellation_note: { type: [string, 'null'] }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+
+    AdminNetworkEventPage:
+      type: object
+      required: [items, page, limit, total, effective_sort]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminNetworkEvent' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        effective_sort:
+          type: string
+          enum: [agenda, atualizado]
+        applied_filters:
+          type: object
+          additionalProperties: { type: string }
