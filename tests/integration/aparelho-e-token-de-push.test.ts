@@ -544,6 +544,28 @@ void describe('os dois critérios do ADR-0006, medidos no banco', () => {
     // em que ele importa. `enable_seqscan = off` porque a tabela de teste é
     // pequena e o Postgres varre por ser mais barato: o que se mede aqui é se o
     // índice PODE ser usado pela consulta, ou seja, se o predicado dele casa.
+    //
+    // O `BEGIN`/`ROLLBACK` em volta NÃO é enfeite, e a falta dele deixou este
+    // caso ser aprovado ou reprovado por sorte. `SET LOCAL` fora de um bloco de
+    // transação é recusado pelo Postgres:
+    //
+    //   WARNING:  SET LOCAL can only be used in transaction blocks
+    //   SHOW enable_seqscan -> on
+    //
+    // Sem a transação, portanto, a varredura sequencial continuava ligada e a
+    // escolha do plano passava a depender da ESTATÍSTICA da tabela — que a
+    // suíte não controla. Medido nesta pilha, com a mesma consulta e a mesma
+    // tabela: sem `ANALYZE`, `Index Only Scan using user_devices_alcancaveis`,
+    // e o caso passa; depois de um `ANALYZE`, `Seq Scan on user_devices`, e o
+    // caso reprova. Quem roda o `ANALYZE` na suíte não é ninguém: é o
+    // autoanalyze, na hora que ele quiser, e ele cai antes ou depois deste caso
+    // conforme o que os outros arquivos escreveram em `user_devices` e conforme
+    // quanto tempo a pilha ficou de pé antes dos testes.
+    //
+    // O irmão `localizacao-de-referencia.test.ts` já fazia certo, e é a forma
+    // que este caso passa a usar. A pergunta continua sendo a mesma — "existe
+    // plano por índice para esta consulta?" —, e agora ela é respondida pelo
+    // predicado do índice, e não pelo humor do planejador.
     const dono = await criarConta();
     await repo.registrar(
       dono,
@@ -557,21 +579,26 @@ void describe('os dois critérios do ADR-0006, medidos no banco', () => {
       AGORA,
     );
 
-    await cliente.query('SET LOCAL enable_seqscan = off');
-    const plano = await cliente.query<Record<string, string>>(
-      `EXPLAIN SELECT DISTINCT user_id FROM user_devices
-        WHERE user_id = ANY($1::uuid[])
-          AND push_permission = 'granted'
-          AND push_token IS NOT NULL`,
-      [[dono]],
-    );
-    const texto = plano.rows.map((linha) => linha['QUERY PLAN'] ?? '').join('\n');
-    assert.match(
-      texto,
-      /user_devices_alcancaveis/,
-      'o planejador não alcança o índice parcial dos alcançáveis. O predicado dele ' +
-        `deixou de casar com o da consulta. Plano:\n${texto}`,
-    );
+    await cliente.query('BEGIN');
+    try {
+      await cliente.query('SET LOCAL enable_seqscan = off');
+      const plano = await cliente.query<Record<string, string>>(
+        `EXPLAIN SELECT DISTINCT user_id FROM user_devices
+          WHERE user_id = ANY($1::uuid[])
+            AND push_permission = 'granted'
+            AND push_token IS NOT NULL`,
+        [[dono]],
+      );
+      const texto = plano.rows.map((linha) => linha['QUERY PLAN'] ?? '').join('\n');
+      assert.match(
+        texto,
+        /user_devices_alcancaveis/,
+        'o planejador não alcança o índice parcial dos alcançáveis. O predicado dele ' +
+          `deixou de casar com o da consulta. Plano:\n${texto}`,
+      );
+    } finally {
+      await cliente.query('ROLLBACK');
+    }
   });
 });
 
