@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-numero-de-adr verificar-numero-de-adr-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: verificar-cd verificar-cd-isca verificar-numero-de-adr verificar-numero-de-adr-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -448,7 +448,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-cd verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
@@ -552,6 +552,15 @@ verificar-app: verificar-tokens-gerados-autoteste ## a metade Flutter: analise e
 # precisa rodar numa maquina sem nenhum. Quem fecha uma integracao que mexeu em
 # fluxo de tela roda `make e2e` a mais, e o README diz isso.
 RECIBO_DE_FECHAMENTO := fechamento.local.txt
+
+# O CD (.github/workflows/cd.yml). O autoteste do script de deploy e barato e
+# sem docker, e por isso entra no `verificar`; a isca do digest errado sobe um
+# registro local e fica no alvo proprio e no job `portoes` do CD.
+verificar-cd: ## as iscas do script de deploy (digest errado, reversao bloqueada por migracao, pilha)
+	ACAO=autoteste bash infra/cd/implantar.sh
+
+verificar-cd-isca: ## um deploy com digest errado reprova nomeando a divergencia (registro local, docker)
+	bash infra/cd/isca-digest-errado.sh
 
 fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da API + Flutter + APK
 	@echo "fechamento de integracao: verificar -> verificar-subida-da-api -> verificar-app -> apk."
