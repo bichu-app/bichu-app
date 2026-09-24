@@ -3405,6 +3405,30 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /store/tags:
+    get:
+      operationId: listStoreTags
+      tags: [store]
+      x-effects: []
+      summary: As tags que o filtro da Loja oferece
+      description: |
+        As opcoes do grupo de filtro de tags do app: so tags **ativas** com
+        pelo menos um item publicado, em ordem alfabetica, ate 40. O filtro e
+        de lista fechada, sem campo digitavel (ADR-0027 item 16).
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+      responses:
+        '200':
+          description: O vocabulario visivel.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreTagPage' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /store/items/{itemSlug}:
     parameters:
       - name: itemSlug
@@ -5045,6 +5069,9 @@ paths:
         - name: timing
           in: query
           schema: { $ref: '#/components/schemas/AdminNetworkEventTiming' }
+        - name: visibility
+          in: query
+          schema: { $ref: '#/components/schemas/NetworkEventVisibility' }
         - name: city
           in: query
           schema: { type: string, minLength: 2, maxLength: 60 }
@@ -5082,7 +5109,14 @@ paths:
 
         Recusas de regra, todas `400 validation-failed` com o campo: fim antes
         do inicio; encontro que ja terminou (`code: event_in_past`); fuso que
-        nao existe; ponto fora dos limites do Brasil.
+        nao existe; ponto fora dos limites do Brasil; encontro pago sem preco
+        ou sem nenhuma forma de pagar (`code: admission_incomplete`).
+
+        `visibility: private` faz o encontro aparecer no app **so com titulo
+        e data** ate a conta ter o pedido aprovado na fila
+        (`listAdminNetworkJoinRequests`). **O Bichu nao cobra**: preco e forma
+        de pagar sao o que o organizador informa, e o link abre fora do app
+        (ADR-0027 item 17).
       security:
         - adminSession: []
           adminCsrf: []
@@ -5154,8 +5188,10 @@ paths:
         **Data, horario, fuso e lugar nao mudam aqui**, porque todo encontro
         esta publicado desde a criacao: mudar onde e quando as pessoas levam
         os caes e `relocateAdminNetworkEvent`, com reautenticacao e aviso a
-        todos os administradores. O corpo nao tem esses campos. Encontro
-        `removed` responde `400` (`code: event_removed`).
+        todos os administradores. **Visibilidade e condicao de acesso
+        tambem nao**: sao `changeAdminNetworkEventAccess`, pelo mesmo motivo.
+        O corpo nao tem esses campos. Encontro `removed` responde `400`
+        (`code: event_removed`).
       security:
         - adminSession: []
           adminCsrf: []
@@ -5341,6 +5377,171 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   # ---------------------------- Imagem ----------------------------------
+
+  /admin/network/events/{eventSlug}/access:
+    parameters:
+      - $ref: '#/components/parameters/EventSlug'
+    post:
+      operationId: changeAdminNetworkEventAccess
+      tags: [admin]
+      x-effects: [notifies]
+      summary: Muda visibilidade, gratuidade, preco ou forma de pagar de um encontro
+      description: |
+        Trocar o link de pagamento de um encontro publicado e o golpe mais
+        barato com uma conta tomada, e tornar publico um encontro privado
+        entrega o lugar a quem nao foi aprovado. Por isso as mesmas travas de
+        `relocateAdminNetworkEvent`: `X-Admin-Reauth-Token` do escopo
+        `network_event_access_change`, aviso a todos os administradores com o
+        antes e o depois, e trilha. Privado que vira publico deixa os pedidos
+        como estao, sem efeito; publico que vira privado passa a exigir pedido
+        de todos.
+      security:
+        - adminSession: []
+          adminCsrf: []
+          adminReauth: []
+      x-admin-roles: [admin]
+      x-admin-reauth-scope: network_event_access_change
+      x-audit: { action: admin.network_event.access_changed, resource_kind: network_event }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminNetworkEventAccessChange' }
+            examples:
+              pago:
+                value:
+                  admission:
+                    kind: paid
+                    price: { amount: 2000, currency: BRL }
+                    payment_instructions: Pagamento na entrada, em dinheiro ou Pix para a organizacao.
+                  reason: O parque passou a cobrar pela area cercada.
+      responses:
+        '200':
+          description: Condicao de acesso alterada.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminNetworkEvent' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminReauthRequired' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/network/join-requests:
+    get:
+      operationId: listAdminNetworkJoinRequests
+      tags: [admin]
+      x-effects: []
+      summary: A fila de pedidos para participar de encontros privados
+      description: |
+        So existe no painel: nenhuma operacao do app lista pedidos ou aprovados
+        de ninguem, nem como contagem (ADR-0010 item 7). Sem filtro, vem a fila
+        de pendentes, do pedido mais antigo para o mais novo.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      parameters:
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AdminJoinRequestStatus' }
+        - name: event
+          in: query
+          description: '`slug` do encontro.'
+          schema: { $ref: '#/components/schemas/Slug' }
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminLimit'
+      responses:
+        '200':
+          description: Pagina da fila.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminJoinRequestPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+
+  /admin/network/join-requests/{requestRef}/approval:
+    parameters:
+      - $ref: '#/components/parameters/JoinRequestRef'
+    post:
+      operationId: approveAdminNetworkJoinRequest
+      tags: [admin]
+      x-effects: [notifies]
+      summary: Aprova o pedido, e o tutor passa a ver o encontro inteiro
+      description: |
+        So a partir de `pending` (`400`, `code: request_not_pending`, nos
+        outros estados). O tutor recebe push. A partir daqui
+        `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
+        para a conta dele.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.network_join_request.approved, resource_kind: network_join_request }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      responses:
+        '200':
+          description: Pedido aprovado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminJoinRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/network/join-requests/{requestRef}/decline:
+    parameters:
+      - $ref: '#/components/parameters/JoinRequestRef'
+    post:
+      operationId: declineAdminNetworkJoinRequest
+      tags: [admin]
+      x-effects: [notifies]
+      summary: Recusa o pedido
+      description: |
+        So a partir de `pending`. O tutor recebe push. A recusa e final para
+        aquele encontro (pergunta 2 do ADR-0027, padrao enquanto nao
+        respondida). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.network_join_request.declined, resource_kind: network_join_request }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      responses:
+        '200':
+          description: Pedido recusado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminJoinRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /admin/media/catalog-image-intents:
     post:
@@ -5642,6 +5843,12 @@ components:
       required: true
       description: O endereco publico do encontro.
       schema: { $ref: '#/components/schemas/Slug' }
+    JoinRequestRef:
+      name: requestRef
+      in: path
+      required: true
+      description: O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID.
+      schema: { type: string, minLength: 20, maxLength: 32, pattern: '^[A-Za-z0-9_-]+$' }
     IfMatch:
       name: If-Match
       in: header
@@ -7511,7 +7718,7 @@ components:
       description: |
         As operacoes sensiveis do backoffice (D40). Um token de um escopo nao
         abre operacao de outro.
-      enum: [store_item_retirement, network_event_relocation, network_event_cancellation, network_event_removal]
+      enum: [store_item_retirement, network_event_relocation, network_event_cancellation, network_event_removal, network_event_access_change]
 
     AdminReauthRequest:
       type: object
@@ -7854,6 +8061,11 @@ components:
           type: string
           format: uuid
           description: Envio de `createAdminCatalogImageIntent` com `purpose` `network_event`.
+        visibility: { $ref: '#/components/schemas/NetworkEventVisibility' }
+        admission: { $ref: '#/components/schemas/AdminNetworkEventAdmissionInput' }
+        bring_items: { $ref: '#/components/schemas/NetworkEventBringItems' }
+        bring_other: { $ref: '#/components/schemas/NetworkEventBringOther' }
+        notes: { $ref: '#/components/schemas/NetworkEventNotes' }
 
     AdminNetworkEventPatch:
       type: object
@@ -7861,7 +8073,9 @@ components:
       minProperties: 1
       description: |
         **Sem data, horario, fuso nem lugar**: mudar onde e quando e
-        `relocateAdminNetworkEvent`. `cover_upload_id: null` tira a capa.
+        `relocateAdminNetworkEvent`; sem visibilidade nem condicao de acesso:
+        `changeAdminNetworkEventAccess`. `cover_upload_id: null` tira a capa;
+        `notes: null` tira as observacoes; as listas substituem o conjunto.
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
         title: { type: string, minLength: 2, maxLength: 120 }
@@ -7869,6 +8083,12 @@ components:
         cover_upload_id:
           type: [string, 'null']
           format: uuid
+        bring_items: { $ref: '#/components/schemas/NetworkEventBringItems' }
+        bring_other: { $ref: '#/components/schemas/NetworkEventBringOther' }
+        notes:
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventNotes'
+            - type: 'null'
 
     AdminNetworkEventRelocation:
       type: object
@@ -7920,7 +8140,7 @@ components:
       description: |
         O encontro como o painel o ve. **Sem autor**: `created_by_user_id` nunca
         e projetado (ADR-0025 secao 3, ADR-0027 item 10).
-      required: [slug, title, summary, place, starts_at, time_zone, origin, publication_status, timing, published_at, created_at, updated_at, version]
+      required: [slug, title, summary, place, starts_at, time_zone, origin, visibility, admission, bring_items, bring_other, notes, pending_request_count, publication_status, timing, published_at, created_at, updated_at, version]
       properties:
         slug: { type: string }
         title: { type: string }
@@ -7934,6 +8154,18 @@ components:
             - $ref: '#/components/schemas/AdminCatalogImage'
             - type: 'null'
         origin: { type: string, enum: [admin] }
+        visibility: { $ref: '#/components/schemas/NetworkEventVisibility' }
+        admission: { $ref: '#/components/schemas/AdminNetworkEventAdmission' }
+        bring_items:
+          type: array
+          items: { $ref: '#/components/schemas/NetworkEventBringItem' }
+        bring_other:
+          type: array
+          items: { type: string }
+        notes: { type: [string, 'null'] }
+        pending_request_count:
+          type: integer
+          description: Pedidos pendentes na fila. Sempre 0 em encontro publico. So existe no painel.
         publication_status: { $ref: '#/components/schemas/AdminNetworkEventPublicationStatus' }
         timing: { $ref: '#/components/schemas/AdminNetworkEventTiming' }
         published_at: { type: string, format: date-time }
@@ -8096,3 +8328,154 @@ components:
                 Todas as imagens prontas, na ordem do painel; a primeira e a
                 mesma de `image_url`. Vazia e estado normal.
               items: { $ref: '#/components/schemas/StoreItemImage' }
+
+    NetworkEventVisibility:
+      type: string
+      description: |
+        `private`: para quem nao tem pedido aprovado, o app recebe so titulo e
+        data; o resto sai em operacao separada, so para conta aprovada
+        (ADR-0027 item 17 e 12.10 a 12.12).
+      enum: [public, private]
+      default: public
+
+    NetworkEventBringItem:
+      type: string
+      description: |
+        O que levar, na parte fechada: o que se repete em todo encontro, com
+        icone e texto do app. Lista fechada por `CHECK` em
+        `network_event_bring_items`; acrescentar valor e tres arquivos no mesmo
+        commit (ADR-0023 secao 3).
+      enum: [water, water_bowl, leash, poop_bags, treats, towel, vaccination_card, toy]
+
+    NetworkEventBringItems:
+      type: array
+      maxItems: 8
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/NetworkEventBringItem' }
+
+    NetworkEventBringOther:
+      type: array
+      maxItems: 3
+      description: A excecao, ate tres itens livres. Texto puro.
+      items: { type: string, minLength: 2, maxLength: 40 }
+
+    NetworkEventNotes:
+      type: string
+      minLength: 2
+      maxLength: 1000
+      description: Observacoes, so como complemento. O que tem forma propria (acesso, o que levar) nao vai aqui.
+
+    AdminNetworkEventAdmissionInput:
+      type: object
+      description: |
+        Gratuito ou pago. Pago exige `price` e pelo menos um de
+        `payment_instructions` e `payment_url` (`400`, `code:
+        admission_incomplete`); gratuito recusa os tres. **O Bichu nao cobra e
+        nao tem provedor de pagamento**: o link abre no navegador do sistema.
+      required: [kind]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [free, paid], default: free }
+        price:
+          oneOf:
+            - $ref: '#/components/schemas/AdminEventPrice'
+            - type: 'null'
+        payment_instructions: { type: [string, 'null'], minLength: 2, maxLength: 500 }
+        payment_url:
+          oneOf:
+            - $ref: '#/components/schemas/HttpsUrl'
+            - type: 'null'
+
+    AdminEventPrice:
+      type: object
+      description: O valor que o organizador informa. Sem vencimento, porque nao e preco de referencia de terceiro.
+      required: [amount, currency]
+      additionalProperties: false
+      properties:
+        amount: { type: integer, minimum: 1, maximum: 100000000, description: Centavos. }
+        currency: { type: string, enum: [BRL] }
+
+    AdminNetworkEventAdmission:
+      type: object
+      required: [kind, price, payment_instructions, payment_url]
+      properties:
+        kind: { type: string, enum: [free, paid] }
+        price:
+          oneOf:
+            - $ref: '#/components/schemas/AdminEventPrice'
+            - type: 'null'
+        payment_instructions: { type: [string, 'null'] }
+        payment_url: { type: [string, 'null'], format: uri }
+
+    AdminNetworkEventAccessChange:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      minProperties: 2
+      description: '`reason` e pelo menos um de `visibility` e `admission`. `admission` substitui a condicao inteira.'
+      properties:
+        visibility: { $ref: '#/components/schemas/NetworkEventVisibility' }
+        admission: { $ref: '#/components/schemas/AdminNetworkEventAdmissionInput' }
+        reason:
+          type: string
+          minLength: 2
+          maxLength: 280
+          description: Vai no aviso a todos os administradores.
+
+    AdminJoinRequestStatus:
+      type: string
+      enum: [pending, approved, declined, withdrawn]
+
+    AdminJoinRequest:
+      type: object
+      description: |
+        Um pedido para participar de encontro privado. **O pedido e da conta,
+        nunca do pet** (ADR-0010 item 7). Do solicitante sai **so** o nome de
+        exibicao que a pessoa escolheu e o mes em que a conta foi criada: sem
+        e-mail, telefone, pets, UUID nem historico. **Esta e a unica leitura de
+        pessoa no backoffice v1, e ela reabre o RA-01** (ADR-0027 item 17).
+      required: [ref, event, requester, status, requested_at]
+      properties:
+        ref:
+          type: string
+          description: Identificador opaco do pedido, 128 bits aleatorios. Nao e o UUID.
+        event:
+          type: object
+          required: [slug, title, starts_at, time_zone]
+          properties:
+            slug: { type: string }
+            title: { type: string }
+            starts_at: { type: string, format: date-time }
+            time_zone: { type: string }
+        requester:
+          type: object
+          required: [display_name, member_since]
+          properties:
+            display_name: { type: string }
+            member_since:
+              type: string
+              pattern: '^[0-9]{4}-[0-9]{2}$'
+              description: Ano e mes de criacao da conta, e nada mais fino.
+        status: { $ref: '#/components/schemas/AdminJoinRequestStatus' }
+        requested_at: { type: string, format: date-time }
+        decided_at: { type: [string, 'null'], format: date-time }
+
+    AdminJoinRequestPage:
+      type: object
+      required: [items, page, limit, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminJoinRequest' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+
+    StoreTagPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 40
+          items: { $ref: '#/components/schemas/StoreTagRef' }
