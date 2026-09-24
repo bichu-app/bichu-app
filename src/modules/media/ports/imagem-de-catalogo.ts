@@ -5,19 +5,17 @@
  *
  * - `PreparadorDeEnvioDeCatalogo` assina a politica de envio direto. E chamada
  *   de rede a um servico externo, e roda FORA de transacao.
- * - `RegistroDeImagemDeCatalogo` grava a intencao. Recebe o executor de quem
- *   chama porque a intencao e a trilha dela vao na MESMA transacao.
- *
- * **A confirmacao do envio nao esta aqui ainda.** Ela e a escrita do item com a
- * imagem, e o cliente pediu em 23/09 varias imagens por produto; a arquitetura
- * vai emendar o modelo (uma tabela de imagens do produto no lugar do
- * `image_id` unico do apendice A.2), e a confirmacao entra com a emenda.
+ * - `RegistroDeImagemDeCatalogo` grava a intencao, acha o envio e o confirma.
+ *   Recebe o executor de quem chama porque a confirmacao e a propria escrita do
+ *   item (ou do encontro), e precisa estar na MESMA transacao dela e da trilha:
+ *   um repositorio com transacao propria confirmaria a imagem de um item que
+ *   depois nao foi gravado.
  *
  * `purpose` e o que amarra o envio ao destino (T9): a escrita do item so aceita
  * `store_item`, e a do encontro so aceitara `network_event`.
  */
 import type { DbExecutor } from '../../../shared/db/pool.js';
-import type { ObjectKey } from '../../../shared/types/brands.js';
+import type { Instant, ObjectKey } from '../../../shared/types/brands.js';
 import type { AutorizacaoDeEnvio } from './object-storage.js';
 
 export type PropositoDaImagem = 'store_item' | 'network_event';
@@ -61,6 +59,50 @@ export interface NovaIntencaoDeCatalogo {
   readonly expiresAt: Date;
 }
 
+export interface EnvioDeCatalogo {
+  readonly id: string;
+  readonly kind: string;
+  readonly purpose: PropositoDaImagem | null;
+  readonly expiresAt: Date;
+  readonly confirmedAt: Date | null;
+  /** A imagem que ja nasceu deste envio, quando ele ja foi confirmado. */
+  readonly catalogImageId: string | null;
+}
+
+export interface ConfirmacaoDeCatalogo {
+  readonly imagemId: string;
+  readonly trabalhoId: string;
+  readonly envioId: string;
+  readonly purpose: PropositoDaImagem;
+  readonly agora: Instant;
+}
+
+/** O job que o worker trata. Mesmo prefixo de `media.process_upload`. */
+export const TRABALHO_DE_IMAGEM_DE_CATALOGO = 'media.process_catalog_image' as const;
+
 export interface RegistroDeImagemDeCatalogo {
   registrarIntencao(db: DbExecutor, nova: NovaIntencaoDeCatalogo): Promise<void>;
+  /**
+   * O envio, com trava de linha: duas escritas com o mesmo `upload_id` nao
+   * podem as duas acha-lo aberto e criar duas imagens. `null` quando nao existe
+   * ou o id nao e UUID.
+   */
+  envio(db: DbExecutor, uploadId: string): Promise<EnvioDeCatalogo | null>;
+  /** Imagem em `processing`, envio confirmado e trabalho enfileirado, os tres juntos. */
+  confirmar(db: DbExecutor, entrada: ConfirmacaoDeCatalogo): Promise<void>;
+}
+
+/** A imagem como o worker precisa dela: a chave do original, e nada que sirva de resposta. */
+export interface ImagemParaProcessar {
+  readonly id: string;
+  readonly status: 'processing' | 'ready' | 'rejected';
+  readonly originalKey: ObjectKey;
+}
+
+/** O que o processamento da imagem de catalogo le e grava. Sem transacao de fora. */
+export interface ImagensDeCatalogoDoWorker {
+  paraProcessar(imagemId: string): Promise<ImagemParaProcessar | null>;
+  /** So a partir de `processing`: estado final nao volta. */
+  marcarPronta(imagemId: string, chavePublica: ObjectKey): Promise<void>;
+  marcarRecusada(imagemId: string, motivo: string): Promise<void>;
 }

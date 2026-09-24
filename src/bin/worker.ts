@@ -34,6 +34,12 @@ import { criarObjectStorage } from '../modules/media/adapters/external/s3-object
 import { criarImageProcessor } from '../modules/media/adapters/external/sharp-image-processor.js';
 import { criarPushSender } from '../modules/notifications/adapters/external/log-push-sender.js';
 import { processarFoto, type CargaDoTrabalho } from '../modules/media/application/processar-foto.js';
+import {
+  processarImagemDeCatalogo,
+  type CargaDaImagemDeCatalogo,
+} from '../modules/media/application/processar-imagem-de-catalogo.js';
+import { criarImagensDeCatalogoDoWorker } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
+import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../modules/media/ports/imagem-de-catalogo.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
 import { expurgarContasExcluidas } from '../modules/identity/application/expurgar-contas-excluidas.js';
 import { criarIdentityRepository } from '../modules/identity/adapters/persistence/kysely-identity-repository.js';
@@ -167,6 +173,15 @@ export async function main(): Promise<void> {
     clock: systemClock,
   };
 
+  // ADR-0027 item 10 (BICHUS-267). A imagem de catalogo do painel, pelo mesmo
+  // armazenamento e o mesmo processador da foto do pet.
+  const dependenciasDaImagemDeCatalogo = {
+    imagens: criarImagensDeCatalogoDoWorker(banco.db),
+    armazenamento: dependenciasDaFoto.armazenamento,
+    processador: dependenciasDaFoto.imagens,
+    ids,
+  };
+
   // BICHUS-18. O DISPARO DO ALERTA DE 5 KM, montado aqui e em lugar nenhum
   // mais. É esta fiação que liga as três funções que a BICHUS-91 deixou com o
   // chamador nomeado e ausente: `enderecoDeEnvio` e `revogarPorTokenRecusado`
@@ -277,6 +292,16 @@ export async function main(): Promise<void> {
               ...desfecho,
             }),
           );
+          continue;
+        }
+
+        if (trabalho.kind === TRABALHO_DE_IMAGEM_DE_CATALOGO) {
+          const imagem = await processarImagemDeCatalogo(
+            dependenciasDaImagemDeCatalogo,
+            trabalho.payload as CargaDaImagemDeCatalogo,
+          );
+          await fila.complete(trabalho.id);
+          console.info(JSON.stringify({ evento: `catalogo.${imagem.tipo}`, imagem: imagem.imagemId }));
           continue;
         }
 
