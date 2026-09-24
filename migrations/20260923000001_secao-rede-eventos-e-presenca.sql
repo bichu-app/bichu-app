@@ -48,18 +48,34 @@
 --    ela nao aparece desabilitada. Sem coordenada nao ha distancia, e oferecer
 --    uma ordem que nunca podera ser cumprida e pior que nao oferece-la.
 --
--- 3. **NAO HA `id uuid` EM `network_events` NEM EM `network_event_photos`.**
+-- 3. **A IDENTIDADE INTERNA E SEPARADA DA PUBLICA** (ADR-0024, o da Loja).
 --
---    `slug` e a chave primaria nas duas, copiando a forma de `store_items` e
---    `store_partners` (20260922000009), que por sua vez copiaram `pets.slug`.
---    Um `id uuid` aqui seria uma coluna que nunca pode ser projetada esperando
---    alguem projeta-la por engano -- foi o que obrigou a 20260922000008 a
---    acrescentar `slug` a `professionals` depois.
+--    A primeira versao desta migracao fez `slug` ser a chave primaria das duas
+--    tabelas, com o argumento de que um `id uuid` seria "uma coluna que nunca
+--    pode ser projetada, esperando alguem projeta-la por engano". **O
+--    argumento e bom e a conclusao nao segue dele**, e quem mostrou isso foi a
+--    `Loja`, que cometeu e corrigiu o mesmo erro em 69c6a27:
 --
---    `network_event_checkins` tem `user_id uuid`, e a excecao tem razao: ela
---    NUNCA e projetada. A chave e `(event_slug, user_id)` e a tabela existe
---    para contar e para impedir o segundo check-in da mesma pessoa. A unica
---    leitura do contrato sobre ela e `count(*)`.
+--    a) o ADR-0010 item 6 proibe UUID na **SAIDA PUBLICA**, nao no esquema.
+--       `pets` e `professionals` -- as outras tabelas do produto com endereco
+--       publico -- tem `id uuid` primaria e `slug` unico ao lado;
+--    b) o engano que o argumento teme **ja tem portao proprio**:
+--       `src/tools/portao-contrato-publico.ts` reprova qualquer campo
+--       `format: uuid` em operacao alcancavel sem conta, e as duas leituras
+--       desta secao sao alcancaveis sem conta. Medo coberto por mecanismo nao
+--       justifica torcer o esquema.
+--
+--    E o que a chave primaria em `slug` custava era concreto: as chaves
+--    estrangeiras precisavam apontar para ela, e **chave estrangeira sobre
+--    `slug` e o que o criterio 2 da BICHUS-19 proibe** -- por dois motivos, e o
+--    segundo e o que decide: `slug` e valor que o usuario troca **e** valor que
+--    sai impresso. Uma coluna que e ao mesmo tempo endereco publico e chave que
+--    liga as tabelas entrega a juncao junto com o endereco.
+--
+--    `network_event_checkins` nao tem `slug` proprio: ela e ligada por
+--    `event_id` e a chave e `(event_id, user_id)`. `user_id` continua sendo a
+--    unica coluna que identifica alguem aqui, e continua NUNCA sendo projetada
+--    -- a unica leitura do contrato sobre ela e `count(*)`.
 --
 -- ====================================================================
 -- A DATA, QUE E A ARMADILHA DESTA SECAO
@@ -107,10 +123,18 @@
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE network_events (
-  -- Mesma decisao de `store_items.slug`, pelo mesmo motivo, e com o MESMO
-  -- formato. Tres formatos de endereco publico no mesmo produto seriam tres
-  -- regras para alguem decorar.
-  slug            text        PRIMARY KEY
+  -- A IDENTIDADE INTERNA. Alvo das chaves estrangeiras desta secao, e **nunca
+  -- projetada**. Ver a ausencia 3 no cabecalho.
+  id              uuid        PRIMARY KEY,
+
+  -- O ENDERECO PUBLICO. Formato COPIADO de `pets.slug`, de `professionals.slug`
+  -- e de `store_items.slug`. Quatro formatos diferentes de endereco publico no
+  -- mesmo produto seriam quatro regras para alguem decorar.
+  --
+  -- `NOT NULL` e nao anulavel como em `professionals`: la a entrada nasce sem
+  -- endereco e ganha um ao ser publicada; aqui o encontro so existe depois de
+  -- curado, e encontro sem endereco publico nao teria como aparecer.
+  slug            text        NOT NULL
                   CONSTRAINT network_events_slug_formato
                   CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'),
 
@@ -184,10 +208,17 @@ CREATE TABLE network_events (
   created_at      timestamptz NOT NULL DEFAULT now()
 );
 
+-- Unicidade global, com o nome que `pets_slug_unico`, `professionals_slug_unico`
+-- e `store_partners_slug_unico` ja usam. Sem `WHERE`, porque aqui e `NOT NULL`.
+CREATE UNIQUE INDEX network_events_slug_unico ON network_events (slug);
+
+COMMENT ON COLUMN network_events.id IS
+  'A identidade interna do encontro. NUNCA sai em resposta: o ADR-0010 item 6 proibe UUID em saida publica, e o portao de contrato publico reprova quem tentar. Existe para que as chaves estrangeiras da secao apontem para um valor que nao e endereco publico.';
+
 COMMENT ON TABLE network_events IS
   'Os encontros da secao `Rede`. Sem coordenada, por decisao: ADR-0006 proibe geocodificacao e o lugar e rotulo (place_name + neighborhood + city/state), no teto de precisao que o ADR-0010 permite em superficie publica.';
 COMMENT ON COLUMN network_events.slug IS
-  'O endereco publico do evento, e a chave primaria. Nao ha UUID nesta tabela: ela so existe para sair em resposta publica, e o ADR-0010 item 6 proibe UUID interno la.';
+  'O endereco publico do encontro. Unico, e e a unica chave do encontro que sai em resposta. Mesmo formato de `pets.slug`, `professionals.slug` e `store_items.slug`.';
 COMMENT ON COLUMN network_events.place_name IS
   'O nome do lugar publico, como as pessoas o chamam. NAO e logradouro, numero nem CEP: os tres sao endereco, e o ADR-0010 item 2 os proibe em superficie publica.';
 COMMENT ON COLUMN network_events.time_zone IS
@@ -223,11 +254,11 @@ CREATE TRIGGER network_events_fuso_existe
 -- decide o sentido (crescente para o que vem, decrescente para o que passou) e
 -- o Postgres percorre o mesmo indice nos dois sentidos.
 CREATE INDEX network_events_agenda
-  ON network_events (starts_at, slug)
+  ON network_events (starts_at, id)
   WHERE active;
 
 CREATE INDEX network_events_por_cidade
-  ON network_events (city, starts_at, slug)
+  ON network_events (city, starts_at, id)
   WHERE active;
 
 -- ---------------------------------------------------------------------------
@@ -235,7 +266,10 @@ CREATE INDEX network_events_por_cidade
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE network_event_checkins (
-  event_slug    text        NOT NULL REFERENCES network_events (slug) ON DELETE CASCADE,
+  -- Aponta para a identidade INTERNA do encontro, nunca para o endereco publico
+  -- dele. E o que separa "qual encontro" de "como o encontro e enderecado", e e
+  -- o que o criterio 2 da BICHUS-19 cobra.
+  event_id      uuid        NOT NULL REFERENCES network_events (id) ON DELETE CASCADE,
 
   -- A unica coluna que identifica alguem nesta secao inteira, e ela NUNCA e
   -- projetada. O contrato le esta tabela por `count(*)` e por mais nada.
@@ -248,7 +282,7 @@ CREATE TABLE network_event_checkins (
   -- ser um estado que o banco recusa. Mesma forma de
   -- `store_catalog_versions_uma_corrente`: a regra mora onde ela nao pode ser
   -- contornada por caminho que ninguem previu.
-  PRIMARY KEY (event_slug, user_id)
+  PRIMARY KEY (event_id, user_id)
 );
 
 COMMENT ON TABLE network_event_checkins IS
@@ -280,11 +314,21 @@ COMMENT ON COLUMN network_event_checkins.user_id IS
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE network_event_photos (
-  slug                 text        PRIMARY KEY
+  -- Mesma decisao de `network_events.id`, e pelo mesmo motivo.
+  --
+  -- Hoje nada aponta para esta tabela, entao uma chave primaria em `slug` aqui
+  -- nao faria o portao da BICHUS-19 reprovar. Ela passaria por SORTE, e a sorte
+  -- acaba na primeira coisa que apontar para uma foto -- uma denuncia, uma fila
+  -- de moderacao, um registro de remocao, que e exatamente a fase seguinte
+  -- desta secao. Duas convencoes dentro da MESMA migracao e a convencao que
+  -- diverge.
+  id                   uuid        PRIMARY KEY,
+
+  slug                 text        NOT NULL
                        CONSTRAINT network_event_photos_slug_formato
                        CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'),
 
-  event_slug           text        NOT NULL REFERENCES network_events (slug) ON DELETE CASCADE,
+  event_id             uuid        NOT NULL REFERENCES network_events (id) ON DELETE CASCADE,
 
   image_url            text        NOT NULL
                        CONSTRAINT network_event_photos_imagem_e_https
@@ -327,16 +371,20 @@ COMMENT ON TABLE network_event_photos IS
 COMMENT ON COLUMN network_event_photos.submitted_by_user_id IS
   'QUEM ENVIOU. Vinculo entre duas pessoas -- esta pessoa esteve neste lugar: NUNCA sai do servidor, em nenhuma resposta, nem como contagem nem como existencia (ADR-0025 secao 3). Guardado por `src/tools/portao-colunas-que-nao-saem.ts`. Existe para remocao, auditoria e resposta a abuso.';
 
+CREATE UNIQUE INDEX network_event_photos_slug_unico ON network_event_photos (slug);
+
 CREATE INDEX network_event_photos_da_galeria
-  ON network_event_photos (event_slug, sort_order, slug);
+  ON network_event_photos (event_id, sort_order, id);
 
 -- Down Migration
 
 DROP INDEX network_event_photos_da_galeria;
+DROP INDEX network_event_photos_slug_unico;
 DROP TABLE network_event_photos;
 DROP TABLE network_event_checkins;
 DROP INDEX network_events_por_cidade;
 DROP INDEX network_events_agenda;
+DROP INDEX network_events_slug_unico;
 DROP TRIGGER network_events_fuso_existe ON network_events;
 DROP FUNCTION network_events_recusa_fuso_inexistente();
 DROP TABLE network_events;
