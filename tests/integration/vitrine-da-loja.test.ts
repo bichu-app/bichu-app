@@ -76,8 +76,8 @@ async function criarItem(partnerId: string, slug: string): Promise<string> {
   const id = randomUUID();
   await cliente.query(
     `INSERT INTO store_items (
-       id, slug, partner_id, title, summary, category, target_url, active, sort_order
-     ) VALUES ($1, $2, $3, $4, $5, 'toy', 'https://exemplo.invalid/item', true, 0)`,
+       id, slug, partner_id, title, summary, category, target_path, active, sort_order
+     ) VALUES ($1, $2, $3, $4, $5, 'toy', '/item', true, 0)`,
     [id, slug, partnerId, `Item ${slug}`, `Resumo de ${slug}`],
   );
   itensCriados.push(id);

@@ -206,18 +206,33 @@ CREATE TABLE store_items (
                  CHECK (category IN ('food', 'toy', 'hygiene', 'accessory', 'health', 'bed')),
 
   -- A imagem. Opcional, e a ausencia e estado normal e nao lacuna: o cartao
-  -- sabe se desenhar sem ela. `text` e nao `uuid` porque a imagem da vitrine e
-  -- uma URL publica do parceiro ou nossa, e nao um objeto do nosso
-  -- armazenamento de fotos de pet.
-  image_url      text
-                 CONSTRAINT store_items_imagem_e_https
-                 CHECK (image_url IS NULL OR image_url ~ '^https://'),
+  -- sabe se desenhar sem ela. `text` e nao `uuid` porque a imagem da vitrine
+  -- mora no site do parceiro, e nao e um objeto do nosso armazenamento de
+  -- fotos de pet.
+  --
+  -- CAMINHO, e nao URL. A secao 3.6 de `docs/07-devops.md` e normativa nisto:
+  -- o banco guarda codigo, chave e caminho; o endereco absoluto e composto na
+  -- leitura, aqui a partir de `store_partners.host`. Guardar o endereco
+  -- inteiro em cada item faria a troca do dominio de um parceiro ser uma
+  -- cascata por doze linhas -- exatamente o que a chave estrangeira acima
+  -- promete evitar, e o que a coluna `host` foi criada para concentrar.
+  image_path     text
+                 CONSTRAINT store_items_imagem_e_caminho
+                 CHECK (image_path IS NULL OR image_path ~ '^/[^[:space:]?#]*$'),
 
-  -- O destino. Sempre https, e sempre no host do parceiro -- a segunda metade
-  -- e conferida na aplicacao, porque um CHECK nao enxerga a outra tabela.
-  target_url     text     NOT NULL
-                 CONSTRAINT store_items_destino_e_https
-                 CHECK (target_url ~ '^https://'),
+  -- O destino, no site do parceiro. Mesma regra do caminho da imagem, e aqui
+  -- ela fecha as duas metades que antes moravam em lugares diferentes: o
+  -- esquema (https, imposto na composicao) e o host (o do parceiro, imposto
+  -- pela juncao). Nenhuma das duas volta a depender de conferencia solta na
+  -- aplicacao, e o item deixa de ter como apontar para fora do parceiro que
+  -- ele declara.
+  --
+  -- Sem `?` e sem `#`: parametro em link de saida e onde dado pessoal vaza
+  -- (consequencia 3 da BICHUS-185), e e a mesma razao que ja fazia
+  -- `store_partners.host` guardar so o host.
+  target_path    text     NOT NULL
+                 CONSTRAINT store_items_destino_e_caminho
+                 CHECK (target_path ~ '^/[^[:space:]?#]*$'),
 
   -- ---------------------------------------------------------------------
   -- Preco: os tres campos andam juntos, e o banco exige os tres ou nenhum
@@ -262,8 +277,10 @@ COMMENT ON COLUMN store_items.price_amount IS
   'Preco de referencia em CENTAVOS, inteiro. Nunca ponto flutuante: binario flutuante para dinheiro erra na soma e o erro aparece meses depois. Opcional -- item sem preco e estado normal.';
 COMMENT ON COLUMN store_items.price_checked_at IS
   'A data em que uma PESSOA abriu a pagina do parceiro e leu aquele numero. Nao e a data do commit, nem a do deploy, nem now(). Derivar de carimbo automatico faz o numero envelhecer e a data ficar sempre nova, que e a mentira que a Emenda 1 da BICHUS-185 existe para impedir.';
-COMMENT ON COLUMN store_items.target_url IS
-  'O destino no site do parceiro. Nenhum identificador de pessoa entra aqui, em codificacao nenhuma (consequencia 3 da BICHUS-185).';
+COMMENT ON COLUMN store_items.image_path IS
+  'O caminho da imagem no site do parceiro, com a barra inicial. A URL absoluta e composta na leitura a partir de `store_partners.host`: o banco nao guarda endereco (docs/07-devops.md secao 3.6).';
+COMMENT ON COLUMN store_items.target_path IS
+  'O caminho do destino no site do parceiro, com a barra inicial. Nenhum identificador de pessoa entra aqui, em codificacao nenhuma (consequencia 3 da BICHUS-185): o CHECK recusa `?` e `#`, entao nao ha onde um parametro viajar.';
 
 -- Data futura e recusada (criterio 14). Nao e CHECK porque `CURRENT_DATE` nao e
 -- imutavel e o Postgres recusa funcao volatil em restricao: um CHECK com ela

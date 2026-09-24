@@ -29,7 +29,11 @@ import {
   MASSA_DA_VITRINE,
   PARCEIROS_DA_VITRINE,
 } from './massa-da-vitrine.js';
-import { CATEGORIAS_DA_VITRINE, DIAS_DE_VALIDADE_DO_PRECO } from '../modules/store/domain/item-da-vitrine.js';
+import {
+  CATEGORIAS_DA_VITRINE,
+  DIAS_DE_VALIDADE_DO_PRECO,
+  enderecoNoParceiro,
+} from '../modules/store/domain/item-da-vitrine.js';
 
 /** Copiado do `CHECK` da migracao, e nao importado: duas copias divergem, e e
  * a divergencia que este teste existe para acusar. */
@@ -60,19 +64,32 @@ void describe('a massa cabe nos CHECK da migracao', () => {
     }
   });
 
-  void it('todo destino e https, e no host do parceiro que o item declara', () => {
+  void it('todo caminho tem a forma que o CHECK da migracao exige', () => {
+    // `^/[^[:space:]?#]*$`, escrito aqui na forma de JavaScript. O banco
+    // continua sendo a autoridade; isto reprova em segundos e sem Postgres.
+    const formaDeCaminho = /^\/[^\s?#]*$/u;
+    for (const item of MASSA_DA_VITRINE) {
+      assert.match(item.targetPath, formaDeCaminho, `destino de "${item.slug}" nao e um caminho`);
+      if (item.imagePath !== null) {
+        assert.match(item.imagePath, formaDeCaminho, `imagem de "${item.slug}" nao e um caminho`);
+      }
+    }
+  });
+
+  void it('o endereco composto e https e cai no host do parceiro que o item declara', () => {
+    // Antes da `20260922000009` guardar caminho, esta era a unica coisa que
+    // mantinha o destino dentro do parceiro -- o `CHECK` nao enxerga a outra
+    // tabela. Hoje quem a garante e a composicao, e este caso e o que prova
+    // que ela faz o que promete: o host NAO vem do item.
     const hosts = new Map(PARCEIROS_DA_VITRINE.map((p) => [p.slug, p.host]));
     for (const item of MASSA_DA_VITRINE) {
-      const url = new URL(item.targetUrl);
+      const host = hosts.get(item.partnerSlug);
+      assert.ok(host !== undefined, `"${item.slug}" aponta para parceiro que nao esta na massa`);
+      const url = new URL(enderecoNoParceiro(host, item.targetPath));
       assert.equal(url.protocol, 'https:', `destino de "${item.slug}" nao e https`);
-      // O `CHECK` nao consegue conferir isto: ele nao enxerga a outra tabela.
-      assert.equal(
-        url.hostname,
-        hosts.get(item.partnerSlug),
-        `"${item.slug}" aponta para fora do host do parceiro que ele declara`,
-      );
-      if (item.imageUrl !== null) {
-        assert.equal(new URL(item.imageUrl).protocol, 'https:');
+      assert.equal(url.hostname, host);
+      if (item.imagePath !== null) {
+        assert.equal(new URL(enderecoNoParceiro(host, item.imagePath)).hostname, host);
       }
     }
   });
@@ -134,8 +151,8 @@ void describe('a massa serve para JULGAR O VISUAL', () => {
     // Dez linhas iguais com sufixo numerico atenderiam a contagem e nao
     // mostrariam nada. Cada afirmacao abaixo e um caso de desenho que uma
     // lista homogenea esconderia.
-    const comImagem = ITENS_VISIVEIS.filter((i) => i.imageUrl !== null);
-    const semImagem = ITENS_VISIVEIS.filter((i) => i.imageUrl === null);
+    const comImagem = ITENS_VISIVEIS.filter((i) => i.imagePath !== null);
+    const semImagem = ITENS_VISIVEIS.filter((i) => i.imagePath === null);
     assert.ok(comImagem.length >= 3, 'faltam itens com imagem');
     assert.ok(semImagem.length >= 3, 'faltam itens sem imagem');
 
@@ -200,7 +217,7 @@ void describe('a massa serve para JULGAR O VISUAL', () => {
         (i) =>
           i.title.length >= 80 &&
           i.summary.length >= 170 &&
-          i.imageUrl === null &&
+          i.imagePath === null &&
           i.priceAmount === null,
       ),
       'falta o caso feio -- e para isso que serve olhar',
@@ -233,13 +250,14 @@ void describe('a massa serve para JULGAR O VISUAL', () => {
         `a massa carrega algo que parece dado pessoal ou segredo: "${agulha}"`,
       );
     }
-    // E nenhuma URL de saida leva parametro de consulta: e por parametro que
-    // identificador de pessoa vaza (consequencia 3 da BICHUS-185).
+    // E nenhum caminho de saida leva parametro de consulta nem fragmento: e
+    // por parametro que identificador de pessoa vaza (consequencia 3 da
+    // BICHUS-185). O `CHECK` da migracao recusa os dois caracteres, e aqui a
+    // mesma regra reprova antes do banco.
     for (const item of MASSA_DA_VITRINE) {
-      assert.equal(
-        new URL(item.targetUrl).search,
-        '',
-        `"${item.slug}" tem parametro na URL de saida`,
+      assert.ok(
+        !item.targetPath.includes('?') && !item.targetPath.includes('#'),
+        `"${item.slug}" tem parametro ou fragmento no caminho de saida`,
       );
     }
   });
