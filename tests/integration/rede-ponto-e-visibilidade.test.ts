@@ -25,6 +25,12 @@
  * O 401 do `location` sem token e a prova do `network-routes.test.ts`, sobre um
  * Fastify de verdade; aqui o assunto e o que a consulta devolve.
  *
+ * **A isca foi medida, e nao afirmada** (23/09, Node 22, pilha efemera de
+ * `npm run test:integration`): com `VISIVEL` alargado para os quatro estados
+ * em `kysely-network-repository.ts`, a suite saiu 1 com 390 de 393 e reprovou
+ * os tres casos de "a visibilidade e a mesma nas tres leituras" pelo nome;
+ * restaurado, 393 de 393.
+ *
  * **Verificacao que nao consegue verificar REPROVA.** Sem `DATABASE_URL` o
  * `before` levanta, e o bloco "o cenario existe" confere que as linhas estao
  * gravadas antes de afirmar que elas nao aparecem.
