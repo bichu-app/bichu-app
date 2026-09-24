@@ -28,6 +28,12 @@ cd "$raiz"
 
 NODE_IMAGEM='node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5'
 projeto="${PROJETO_DA_SONDA:-bichu-sonda-backoffice}"
+# Tag PROPRIA, e nao `local`: `bichu-edge:local` e `bichu-admin-web:local` sao
+# as imagens da pilha `bichu` de quem esta desenvolvendo, e o compose sobe a
+# imagem que achar com a tag, sem reconstruir. Construir aqui com `local`
+# trocaria, em silencio, o que a proxima `make up` da arvore principal sobe.
+# Medido em 23/09 com `bichu-app:local`, antes desta linha existir.
+export IMAGE_TAG="${IMAGE_TAG_DA_SONDA:-sonda-backoffice}"
 commit="${BUILD_COMMIT:-$(git rev-parse HEAD)}"
 trabalho=$(mktemp -d)
 falhas=0
@@ -57,12 +63,12 @@ fi
 # A borda tambem: desde a emenda 2 do ADR-0016 ela e imagem propria, com o
 # plugin de taxa, e a sonda do passo 6 prova o teto do login nela.
 dc build --quiet admin-web edge
-docker run --rm "bichu-edge:${IMAGE_TAG:-local}" caddy list-modules --skip-standard > "$trabalho/modulos.txt" 2>&1
+docker run --rm "bichu-edge:$IMAGE_TAG" caddy list-modules --skip-standard > "$trabalho/modulos.txt" 2>&1
 nao_padrao=$(grep -E '^[a-z]+\.' "$trabalho/modulos.txt" | sort | tr '\n' ' ')
 [ "$nao_padrao" = "http.handlers.rate_limit " ] || reprova "a borda tem modulos nao-padrao diferentes de exatamente \`http.handlers.rate_limit\`: '$nao_padrao'. Modulo novo na borda e superficie nova, e entra por decisao"
 echo "modulos nao-padrao da borda: $nao_padrao"
-tamanho=$(docker image inspect "bichu-admin-web:${IMAGE_TAG:-local}" --format '{{.Size}}')
-echo "imagem bichu-admin-web:${IMAGE_TAG:-local}: $((tamanho / 1024 / 1024)) MiB ($tamanho bytes)"
+tamanho=$(docker image inspect "bichu-admin-web:$IMAGE_TAG" --format '{{.Size}}')
+echo "imagem bichu-admin-web:$IMAGE_TAG: $((tamanho / 1024 / 1024)) MiB ($tamanho bytes)"
 
 echo "== 3. as iscas de build reprovam, cada uma pelo motivo dela"
 isca_de_build() { # nome, contexto, frase esperada, [BUILD_COMMIT]
