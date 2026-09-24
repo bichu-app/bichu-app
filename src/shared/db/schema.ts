@@ -66,6 +66,48 @@ export interface UserRolesTable {
   role: 'tutor' | 'moderator' | 'admin';
 }
 
+/**
+ * Sessao do backoffice (ADR-0027 item 2, apendice A.1). O cookie guarda o valor;
+ * aqui fica so o SHA-256 dele e o do token anti-CSRF.
+ */
+export interface AdminSessionsTable {
+  id: string;
+  user_id: string;
+  token_hash: Buffer;
+  csrf_token_hash: Buffer;
+  /** O instante da senha, herdado na rotacao. */
+  created_at: Date;
+  last_seen_at: Date;
+  idle_expires_at: Date;
+  absolute_expires_at: Date;
+  revoked_at: Date | null;
+  revoked_reason:
+    | 'logout'
+    | 'rotated'
+    | 'role_removed'
+    | 'account_invalidated'
+    | 'disavowed'
+    | null;
+  user_agent: string | null;
+  ip_hmac: Buffer | null;
+}
+
+/** Janela de reautenticacao administrativa (D40), presa a sessao. */
+export interface AdminReauthTokensTable {
+  id: string;
+  session_id: string;
+  user_id: string;
+  scope:
+    | 'store_item_retirement'
+    | 'network_event_relocation'
+    | 'network_event_cancellation'
+    | 'network_event_removal';
+  token_hash: Buffer;
+  issued_at: Date;
+  expires_at: Date;
+  consumed_at: Date | null;
+}
+
 export interface VerificationTokensTable {
   id: string;
   user_id: string;
@@ -896,6 +938,8 @@ export interface Database {
   verification_tokens: VerificationTokensTable;
   refresh_tokens: RefreshTokensTable;
   reauth_tokens: ReauthTokensTable;
+  admin_sessions: AdminSessionsTable;
+  admin_reauth_tokens: AdminReauthTokensTable;
   idempotency_keys: IdempotencyKeysTable;
   rate_limit_counters: RateLimitCountersTable;
   ref_data_versions: RefDataVersionsTable;

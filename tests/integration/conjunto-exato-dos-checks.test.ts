@@ -76,6 +76,27 @@ interface ListaFechada {
  * conjunto inteiro em vez de para o valor que está acrescentando.
  */
 const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
+  // BICHUS-259 (ADR-0027, apendice A.1). Os cinco motivos de revogacao da
+  // sessao administrativa. Espelha `MotivoDeRevogacaoAdministrativa` em
+  // `src/modules/identity/ports/sessao-administrativa-repository.ts` e o tipo
+  // da coluna em `src/shared/db/schema.ts`. Os tres andam juntos.
+  'public.admin_sessions.admin_sessions_revoked_reason_check': {
+    coluna: 'revoked_reason',
+    valores: ['logout', 'rotated', 'role_removed', 'account_invalidated', 'disavowed'],
+  },
+  // BICHUS-259 (D40). Os quatro escopos de `X-Admin-Reauth-Token`. Espelha
+  // `AdminReauthScope` do contrato, `EscopoDeReautenticacaoAdministrativa` em
+  // `src/shared/http/route-definition.ts` e o tipo da coluna em
+  // `src/shared/db/schema.ts`.
+  'public.admin_reauth_tokens.admin_reauth_tokens_escopo': {
+    coluna: 'scope',
+    valores: [
+      'store_item_retirement',
+      'network_event_relocation',
+      'network_event_cancellation',
+      'network_event_removal',
+    ],
+  },
   'public.alert_dispatches.alert_dispatches_estado': {
     coluna: 'reach_status',
     // `EstadoDoDisparo` em `src/modules/lostfound/domain/disparo-do-alerta.ts`,
@@ -426,6 +447,11 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // onde dado pessoal vaza (consequencia 3 da BICHUS-185).
   'public.store_partners.store_partners_host_e_so_host':
     "CHECK ((host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text))",
+  // BICHUS-259 (ADR-0027, apendice A.1): o teto de 12 horas desde a senha.
+  // Nao e lista de valores; esta aqui porque o intervalo vira literal de texto
+  // no catalogo, e literal de texto sem registro reprova.
+  'public.admin_sessions.admin_sessions_teto_de_doze_horas':
+    "CHECK ((absolute_expires_at <= (created_at + '12:00:00'::interval)))",
   'audit.events.audit_events_ator_coerente':
     "CHECK (((actor_kind = 'user'::text) = (actor_user_id IS NOT NULL)))",
   // O par mentiroso do alcance: estado não calculado com número, ou `computed`
