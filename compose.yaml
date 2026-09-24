@@ -28,6 +28,13 @@
 #
 # Soma dos limites: 1824 MB, deixando ~224 MB para o sistema operacional.
 # (1792 ate 23/09; o `admin-web`, com 32 MB medidos, entrou nessa data.)
+#
+# NO MERGE, ESTA LINHA NAO SE RESOLVE ESCOLHENDO UM LADO. Duas branches que
+# acrescentam servico produzem dois numeros certos para a arvore de cada uma e
+# um numero errado para a juncao, e o conflito some sem ninguem ver se alguem
+# ficar com o "nosso" ou o "deles". Quem integra SOMA os `mem_limit` do que roda
+# de fato (fora `migracao`, `mail`, `ferramentas`) e MEDE de novo com
+# `docker stats` na pilha juntada.
 # Se apertar, e2-medium e REINICIO e nao migracao: parar, trocar o tipo,
 # religar. Dura minutos.
 #
