@@ -743,7 +743,10 @@ sem região, responde a mesma lista em ordem de data e diz isso em
 com distância nula (P.3); **encontro privado não entra**, porque a posição
 dele numa lista por distância já é localização. Aceita os mesmos filtros da
 pública e **`max_km`** (`2`, `5`, `10`), que exclui encontro sem ponto (a nota
-da §24.14.3). **A posição do tutor não vai na requisição**: a operação usa a
+da §24.14.3), e **`sort`** com `distancia` (padrão) **ou `proximos`**
+(aprovado pela coordenação em 23/09, APP-2): com `proximos`, a lista sai em
+ordem de data e cada cartão traz a distância, que é o que a agenda do app
+mostra com a região cadastrada. **A posição do tutor não vai na requisição**: a operação usa a
 região de referência já gravada (`user_reference_locations`, quantizada em
 100 m), e não latitude e longitude em parâmetro de consulta. Isso responde a
 preocupação da §24.14.6: nenhuma coordenada sai do aparelho a cada busca, e
@@ -865,8 +868,16 @@ filtra: `Ração`, `racao` e `ração ` viram três filtros. O desenho:
   são a mesma tag, e a segunda é recusada com `409 slug-taken`;
 - **até 5 tags por item**; **até 40 tags ativas** no vocabulário, porque um
   filtro com duzentas opções não filtra;
-- não há exclusão: desativar tira a tag do app (do item e do filtro) e a
-  mantém ligada, para voltar sem refazer.
+- não há exclusão: **desativar tira a tag de toda a leitura pública** (do
+  item, de `listStoreTags` e do filtro) e a **mantém ligada por dentro**;
+  reativar a devolve a todos os itens sem o administrador refazer nada;
+- **o teto de 5 por item conta todas as tags ligadas, ativas e
+  desativadas** (decisão de 23/09). Contar só as ativas faria a reativação
+  empurrar um item para 6 em silêncio, ou obrigaria a reativação a falhar; do
+  jeito escolhido, reativar sempre funciona e nenhum item passa de 5. O custo
+  é a desativada ocupar uma vaga, e o painel a mostra como desativada para o
+  administrador tirar do item se quiser. Ligar de novo uma tag desativada é
+  recusado (`code: inactive_tag`); manter a que já estava ligada é permitido.
 
 **A escolha, explícita para o app: lista curada, portanto filtro de lista
 fechada.** O componente de listagem do app já filtra por lista fechada e não
@@ -1081,22 +1092,35 @@ no mapa, não obrigar imagem no produto, e tirar os itens livres de "o que
 levar" do app. **O que o contrato tem sem tela**, e é lacuna de produto:
 cancelar encontro (o cliente decidiu que o cancelado aparece até o fim
 previsto, e nenhuma tela cancela), cadastro de parceiro, vocabulário de tags,
-sair de todas as sessões e desistir do pedido no app. **Uma questão aberta**
-(APP-2): a distância no cartão da agenda em ordem por data; a proposta é
-`listNearbyNetworkEvents` aceitar `sort=proximos`.
+sair de todas as sessões e desistir do pedido no app. A questão APP-2 (distância no
+cartão em ordem por data) foi aprovada: `listNearbyNetworkEvents` aceita
+`sort=proximos` (12.14). **Decisão da coordenação, 23/09:** cancelar encontro,
+sair de todas as sessões, cadastro de parceiro e vocabulário de tags ganham
+tela no painel, e desistir do pedido ganha gesto no app, com texto a aprovar
+pela UX. Na matriz eles ficam em `contrato_sem_tela` com "resolvido quando a
+tela existir", e saem de lá no commit em que o protótipo os desenhar.
 
-**O portão proposto** (a implementar por quem monta a esteira, com a isca que
-precisa reprovar): lê a matriz e o contrato e reprova quando um `operationId`
+**O portão existe:** `src/tools/portao-rastreabilidade.ts`, com a isca
+permanente `src/tools/iscas/rastreabilidade-deve-reprovar.yaml` (quatro
+defeitos de propósito, e o portão reprova se deixar de achar qualquer um) e o
+teste `portao-rastreabilidade.test.ts`, que roda **na suíte unitária** (`npm
+test`, job `codigo`) contra a matriz e o contrato de verdade, e varia uma
+regra por caso. Executável: `node dist/tools/portao-rastreabilidade.js`
+depois de `npm run build`. **A fiação em `make verificar` e no job
+`contrato`** é de quem é dono do `Makefile` e de `.github/workflows/`, e está
+pedida na entrega com as linhas exatas. O que ele faz: lê a matriz e o contrato e reprova quando um `operationId`
 de situação `contrato` não existe; quando uma referência de campo, parâmetro,
 cabeçalho, problema ou valor de lista fechada não resolve, seguindo `$ref`,
 `allOf`, `oneOf` e itens de lista; quando uma lacuna marcada `resolucao:
 contrato` já resolve e continua listada; quando uma operação de `/admin/` ou
 da `Rede` não aparece nem em `telas` nem em `contrato_sem_tela`; e quando a
-matriz tem zero telas. Operação `pendente` (ainda em outra branch) exige
-`onde`, e passa a ser resolvida quando a branch mesclar. A isca: uma cópia da
-matriz com um `operationId` renomeado e um `req:` que não existe, que precisa
-reprovar pelos dois motivos. Medido nesta rodada com um resolvedor
-descartável: todas as referências de situação `contrato` resolvem.
+matriz tem zero telas; e quando uma correspondência código → rótulo cita código
+fora da lista fechada, ou declara `um_para_um` e deixa valor sem rótulo.
+Operação ou correspondência `pendente` (ainda em outra branch) exige `onde`, e
+passa a ser resolvida quando a branch mesclar. Medido em 23/09: 9 telas, 250
+referências resolvidas, 9 pendentes com `onde`, e a isca reprovando pelos
+quatro motivos; com a isca desarmada, o portão reprova dizendo que ficou
+cego.
 
 ### 19. Fronteira da v1
 

@@ -28,7 +28,7 @@
 #   pendente   ainda nao esta nesta branch; `onde` diz onde ela esta decidida.
 #              O portao lista, nao resolve, e reprova se `onde` faltar.
 #
-# O PORTAO PROPOSTO (ADR-0027 item 18): le este arquivo e api/openapi.yaml e
+# O PORTAO (src/tools/portao-rastreabilidade.ts, ADR-0027 item 18): le este arquivo e api/openapi.yaml e
 # reprova quando (1) um operationId de situacao `contrato` nao existe; (2) uma
 # referencia `req`, `resp`, `query`, `path`, `header`, `problem` ou `enum` nao
 # resolve (seguindo $ref, allOf, oneOf e itens de lista); (3) uma lacuna de
@@ -476,6 +476,7 @@ telas:
         onde: "ADR-0027 12.14"
         usa:
           - query:max_km
+          - query:sort
           - resp:items[].distance_m
       - operationId: listMyNetworkEventJoinRequests
         situacao: pendente
@@ -564,6 +565,8 @@ correspondencias:
     um_para_um: true
     valores: { level_ground_or_ramp: Piso plano ou rampa, accessible_restroom: Banheiro acessível, public_restroom_nearby: Banheiro público próximo, shade: Sombra, benches: Bancos, dog_water_fountain: Bebedouro para cães, parking_nearby: Estacionamento próximo }
   JoinRequestAppState:
+    situacao: pendente
+    onde: "ADR-0027 12.11 (BICHUS-251)"
     um_para_um: true
     valores: { requested: Pedido enviado, approved: Pedido aprovado, withdrawn: Pedido cancelado, expired: O encontro passou }
     nota: "nao ha `declined` no app, de proposito (ADR-0027 12.11)"
@@ -639,26 +642,42 @@ tela_sem_contrato:
   - id: APP-2
     tela: "Agenda, aba Proximos"
     o_que: "distancia no cartao na ordem por data, com a localizacao permitida"
-    resolucao: decidir
-    motivo: "distance_m so sai em listNearbyNetworkEvents, que ordena por distancia. Proposta: a operacao autenticada aceita sort=proximos, para o app com regiao cadastrada ter a distancia no cartao sem mudar de ordem"
+    resolucao: contrato
+    situacao: "aprovado pela coordenacao em 23/09; entra no contrato com a BICHUS-251"
+    motivo: "listNearbyNetworkEvents aceita sort=proximos alem da ordem por distancia (ADR-0027 12.14), e o app com regiao cadastrada mostra a distancia no cartao sem mudar de ordem"
 
 # ======================================================================
-# O que existe no contrato e NENHUMA tela usa.
+# O que existe no contrato e NENHUMA tela usa. Decisao da coordenacao, 23/09:
+# todas as operacoes abaixo sao funcionalidade de verdade e GANHAM TELA. Cada
+# uma fica aqui ate a tela existir no prototipo, e sai daqui para `telas` no
+# mesmo commit em que o prototipo a desenhar ("resolvido quando a tela
+# existir").
 # ======================================================================
 
 contrato_sem_tela:
   - operationId: createAdminStorePartner
+    resolucao: "tela: resolvido quando a tela existir"
     nota: "nao ha tela de parceiros; o select so lista os cadastrados. Ou a tela nasce, ou parceiro entra por comando de linha"
   - operationId: getAdminStorePartner
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "tela de parceiros (lista, cadastro e edicao)"
   - operationId: updateAdminStorePartner
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "tela de parceiros (lista, cadastro e edicao)"
   - operationId: updateAdminStoreTag
+    resolucao: "tela: resolvido quando a tela existir"
     nota: "nao ha tela de vocabulario: renomear e desativar tag nao tem onde acontecer"
   - operationId: cancelAdminNetworkEvent
+    resolucao: "tela: resolvido quando a tela existir"
     nota: "nenhuma tela cancela encontro, e o cliente decidiu que o cancelado aparece no app ate o fim previsto. Falta o item de menu Cancelar, com senha"
   - operationId: closeAllAdminSessions
+    resolucao: "tela: resolvido quando a tela existir"
     nota: "sair de todas as sessoes administrativas nao tem botao"
   - operationId: withdrawNetworkEventJoinRequest
-    nota: "o app nao tem o gesto de desistir do pedido"
+    situacao: pendente
+    onde: "ADR-0027 12.11 (BICHUS-251)"
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "o app ganha o gesto de desistir do pedido, com texto a aprovar pela UX"
   - campo: "AdminStorePartner.sort_order, AdminStoreItem.sort_order"
     nota: "a ordem de curadoria nao e editavel em tela"
   - campo: "listAdminStoreItems query:publication_state=retired"

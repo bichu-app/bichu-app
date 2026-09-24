@@ -2428,10 +2428,14 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Renomeia ou desativa uma tag
-         * @description Nao ha exclusao: desativar tira a tag do app (dos itens e do filtro) e a
-         *     mantem ligada aos itens, para voltar sem refazer nada. Renomear troca o
-         *     `slug` junto.
+         * Renomeia, desativa ou reativa uma tag
+         * @description Nao ha exclusao. **Desativar tira a tag de toda a leitura publica**:
+         *     ela nao sai em `StoreItemSummary.tags`, nao aparece em
+         *     `listStoreTags` e o filtro `tag` com ela devolve lista vazia. **Por
+         *     dentro ela continua ligada aos itens**, e reativar a devolve a todos
+         *     eles sem o administrador refazer nada. O teto de 5 por item conta a tag
+         *     desativada (ver `StoreItemTagSlugs`), entao reativar nunca estoura o
+         *     teto. Renomear troca o `slug` junto.
          */
         patch: operations["updateAdminStoreTag"];
         trace?: never;
@@ -4593,6 +4597,15 @@ export interface components {
          * @description Ate 5 tags do vocabulario curado (`createAdminStoreTag`). Tag que nao
          *     existe e recusada com `400` (`code: unknown_tag`): tag nao nasce por
          *     digitacao no formulario do item.
+         *
+         *     **O teto de 5 conta todas as tags ligadas, ativas e desativadas.** Tag
+         *     desativada continua ligada ao item por dentro e some da leitura publica;
+         *     contar so as ativas faria reativar uma tag empurrar um item para 6 em
+         *     silencio, ou obrigaria a reativacao a falhar. Assim, reativar sempre
+         *     funciona e o item nunca passa de 5. Ligar **de novo** uma tag
+         *     desativada e recusado (`400`, `code: inactive_tag`); manter na lista
+         *     uma desativada que ja estava ligada e permitido, e e o que preserva o
+         *     vinculo.
          */
         StoreItemTagSlugs: components["schemas"]["Slug"][];
         /**
