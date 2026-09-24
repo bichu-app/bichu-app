@@ -98,6 +98,38 @@ Future<http.Response> _redeComPet(http.Request req) async {
   return http.Response('', 404);
 }
 
+/// A rede de `Perto`: uma entrada COM telefone, para o botao de ligar entrar
+/// na varredura, e `distance_available: true`, para nao haver faixa de ordem.
+Future<http.Response> _redeComDiretorio(http.Request req) async {
+  if (req.url.path == '/v1/directory/entries' && req.method == 'GET') {
+    return json200(<String, dynamic>{
+      'items': <dynamic>[
+        <String, dynamic>{
+          'slug': 'clinica-santa-barbara',
+          'kind': 'clinic',
+          'display_name': 'Clinica Santa Barbara',
+          'city': 'Sao Paulo',
+          'state': 'SP',
+          'neighborhood': 'Pinheiros',
+          'about': null,
+          'phone_e164': '+5511987654321',
+          'verification': <String, dynamic>{
+            'level': 'document_verified',
+            'evidence_kinds': <dynamic>['cnpj', 'crmv'],
+          },
+          'distance_m': 2700,
+        },
+      ],
+      'page': 1,
+      'limit': 20,
+      'total': 1,
+      'distance_available': true,
+      'applied_filters': <String, dynamic>{'scope': 'all'},
+    });
+  }
+  return _rede(req);
+}
+
 Future<http.Response> _rede(http.Request req) async {
   if (req.url.path == '/v1/pets' && req.method == 'GET') {
     return json200(<String, dynamic>{'items': <dynamic>[]});
@@ -180,6 +212,58 @@ void main() {
       // cosmetico:** e ele que faz este portao reprovar quando a arvore de
       // semantica nao sobe, em vez de ficar verde por nao ter o que olhar.
       exigirTodoBotaoComAcao(tester, tela: 'aterrissagem', botoesEsperados: 6);
+      handle.dispose();
+    });
+
+    // -------------------------------------------------------------------
+    // `Perto`: os controles de listagem, no app montado
+    // -------------------------------------------------------------------
+    //
+    // Os tres controles novos -- o campo de busca, o icone de filtro e o de
+    // ordenacao -- e as duas folhas que eles abrem. As pastilhas de filtro e
+    // as linhas de ordenacao usam `Semantics(button: true, excludeSemantics:
+    // true)`, que e a forma EXATA dos quatro `btn=true tap=false` que este
+    // app ja teve. So a tela montada enxerga isso.
+
+    testWidgets('Perto, com a lista carregada', (tester) async {
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
+
+      // 5 destinos da barra + `Filtrar` + `Ordenar` + `Ligar para ...`.
+      //
+      // A porta `Pets de ONGs para adoção` **nao entra na conta**: ela e um
+      // `InkWell` cru, que publica a acao de toque sem declarar o papel de
+      // botao, e este portao conta os nos ANUNCIADOS como botao. Ela nao e
+      // defeito desta classe -- tem acao --, e arruma-la e da historia dela.
+      //
+      // **Nao ha nono controle, e a ausencia e medida aqui:** o cartao do
+      // diretorio NAO e tocavel, porque a tela de detalhe do profissional nao
+      // existe nesta versao.
+      exigirTodoBotaoComAcao(tester, tela: 'perto', botoesEsperados: 8);
+      handle.dispose();
+    });
+
+    testWidgets('Perto, a folha de filtros aberta', (tester) async {
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
+      await tocar(tester, find.byTooltip('Filtrar'));
+
+      // As pastilhas de atividade e de verificacao. `tocaveis` e nao contagem:
+      // a folha fica sobre a casca e o que sobra embaixo na arvore nao e
+      // estavel.
+      exigirTodoBotaoComAcao(tester, tela: 'perto-filtros', tocaveis: true);
+      handle.dispose();
+    });
+
+    testWidgets('Perto, a folha de ordenacao aberta', (tester) async {
+      final handle = tester.ensureSemantics();
+      await abrirOApp(tester, rede: _redeComDiretorio, deposito: depositoLogado());
+      await tocar(tester, find.widgetWithText(NavigationDestination, 'Perto'));
+      await tocar(tester, find.byTooltip('Ordenar, Mais perto'));
+
+      exigirTodoBotaoComAcao(tester, tela: 'perto-ordenacao', tocaveis: true);
       handle.dispose();
     });
 

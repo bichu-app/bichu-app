@@ -48,6 +48,7 @@ import * as transferencias from '../../modules/transfers/adapters/http/transfer-
 import * as webhook from '../../modules/notifications/adapters/http/webhook-de-entrega.js';
 import * as aparelhos from '../../modules/notifications/adapters/http/device-routes.js';
 import * as diretorio from '../../modules/professionals/adapters/http/directory-routes.js';
+import * as vitrine from '../../modules/store/adapters/http/store-routes.js';
 import * as saude from './health.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
@@ -75,6 +76,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   diretorio,
+  // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
+  vitrine,
   saude,
 ];
 

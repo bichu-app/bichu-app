@@ -8,6 +8,8 @@ import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/diretorio_api.dart';
+import 'api/loja_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
@@ -188,6 +190,8 @@ class _BichuAppState extends State<BichuApp> {
   late final PetsApi _pets;
   late final CasosApi _casos;
   late final AchadosApi _achados;
+  late final DiretorioApi _diretorio;
+  late final LojaApi _loja;
   late final EnvioDeFoto _envioDeFoto;
   late final FotosPendentes _fotosPendentes;
   late final RetomadaDeFotos _retomadaDeFotos;
@@ -224,6 +228,8 @@ class _BichuAppState extends State<BichuApp> {
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
     _achados = AchadosApi(_api);
+    _diretorio = DiretorioApi(_api);
+    _loja = LojaApi(_api);
     // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
     // nada no app a construia: o criterio 6 desta historia -- "sem conexao a
     // tela inteira funciona: o envio acontece em F3.2" -- so e verdade com
@@ -418,6 +424,8 @@ class _BichuAppState extends State<BichuApp> {
       auth: _auth,
       pets: _pets,
       casos: _casos,
+      diretorio: _diretorio,
+      loja: _loja,
       achados: _achados,
       envioDeFoto: _envioDeFoto,
       retomadaDeFotos: _retomadaDeFotos,

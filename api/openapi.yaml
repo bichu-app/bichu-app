@@ -3259,6 +3259,113 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /store/items:
+    get:
+      operationId: listStoreItems
+      tags: [store]
+      x-effects: [expensive_query]
+      summary: A vitrine curada da Loja
+      description: |
+        A secao `Loja`: uma vitrine curada de produtos de parceiro, cada um com
+        o link que abre a loja do parceiro. **A compra acontece la, nao aqui.**
+
+        **E PUBLICA, e a divergencia em relacao a `listDirectoryEntries` e
+        deliberada.** `Perto` exige conta porque `phone_e164` e `distance_m`
+        sao o conteudo util dela, e o portao de contrato publico reprova os
+        dois em operacao alcancavel sem conta. **A Loja nao tem nenhum dos
+        dois.** Um item e titulo, resumo, imagem, preco de referencia e o link
+        publico do parceiro -- tudo ja publicado no site dele. O criterio 24 da
+        BICHUS-185 pede esta operacao publica por extenso, e a BICHUS-189
+        repete: "a Loja e navegavel deslogado, entao a operacao nao exige
+        conta". Autorizacao na clausula `WHERE` (ADR-0021), sem ramo
+        privilegiado.
+
+        **Nenhum UUID sai daqui.** A chave do item e a do parceiro sao o
+        `slug`, e nao ha campo de UUID nesta resposta -- nem opcional, nem
+        nulavel. O ADR-0010 item 6 proibe UUID interno em saida publica, e
+        quem impede o engano nao e a boa vontade de quem escreve a consulta:
+        `src/tools/portao-contrato-publico.ts` reprova qualquer campo
+        `format: uuid` em operacao alcancavel sem conta (SEC-001).
+
+        As tabelas tem, sim, identidade interna (`store_partners.id`,
+        `store_items.id`), e ela e o alvo da chave estrangeira entre as duas
+        (ADR-0024). Ela nunca e projetada. Separar as duas identidades e o
+        desenho de `pets` e de `professionals`, e existe porque chave
+        estrangeira sobre endereco publico e o que o criterio 2 da BICHUS-19
+        proibe -- endereco publico e valor que muda e que sai impresso.
+
+        **NAO EXISTE OPERACAO DE ESCRITA DE CATALOGO NESTE CONTRATO**, e a
+        ausencia e o criterio 20 da BICHUS-185. A entrada de dados e a decisao
+        9.6 de `api/contrato-de-escrita-do-diretorio.md`, pendente do cliente:
+        catalogo versionado no repositorio (BICHUS-189) ou backoffice de outra
+        esteira. Nos dois caminhos o esquema e o mesmo; no segundo a escrita
+        nasce em `/v1/admin/...` como manda o ADR-0023.
+
+        ## O preco de referencia, e o vencimento que o SERVIDOR aplica
+
+        `price_amount` e **inteiro em centavos**, nunca ponto flutuante.
+        Ele e **opcional**, e item sem preco e estado normal, nao lacuna.
+
+        Quando ha preco, `price_currency` e `price_checked_at` vem junto,
+        sempre -- e `price_checked_at` e a data em que uma PESSOA abriu a
+        pagina do parceiro e leu aquele numero.
+
+        **Passados 30 dias da consulta, o servidor OMITE o valor** e
+        `price_status` vem `vencido`. Nao e a tela que esconde: se a regra
+        morasse no aplicativo, um aparelho com build antigo mostraria preco
+        vencido para sempre, e nao haveria como parar isso sem passar pela loja
+        de aplicativos. O item **continua na vitrine**; o que some e o numero.
+
+        **Nao ha preco riscado, "de/por", desconto nem comparacao** (criterio
+        19): nao ha campo para nenhum deles, e um portao reprova se algum
+        nascer.
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "vitrine publica: nao ha conta para contar, entao o teto e por IP, e generoso porque a aba recarrega a cada troca de filtro"
+      parameters:
+        - name: q
+          in: query
+          description: |
+            Busca por texto em titulo e resumo, **no servidor**. A tela declara
+            alcance de servidor por causa disto; filtrar em memoria os itens da
+            pagina seria uma busca que funciona com 10 registros e mente com
+            200.
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: category
+          in: query
+          description: Filtra por categoria do produto.
+          schema: { $ref: '#/components/schemas/StoreCategory' }
+        - name: sort
+          in: query
+          description: |
+            `curadoria` e a ordem da vitrine, escolhida a mao, e e o default: a
+            Loja e uma lista curada e a primeira coisa que ela comunica e a
+            escolha. **Nao ha ordem por preco**, porque o preco e opcional e
+            vence: a lista se reordenaria sozinha, e "do mais barato" e uma
+            afirmacao comparativa que o criterio 19 proibe.
+          schema: { type: string, enum: [curadoria, nome], default: curadoria }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+      responses:
+        '200':
+          description: |
+            Pagina da vitrine. `total` alimenta a linha de resumo da barra de
+            listagem e `applied_filters` alimenta a distincao entre "a vitrine
+            esta vazia" e "o seu recorte esvaziou a vitrine".
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreItemPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   # ----------------------------------------------------------------------
   # Superficie publica
   # ----------------------------------------------------------------------
@@ -5721,6 +5828,119 @@ components:
           description: |
             O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
             foi informado, porque "nada filtrado" e uma informacao e nao uma
+            ausencia.
+          additionalProperties: { type: string }
+
+    StoreCategory:
+      type: string
+      description: |
+        A categoria do produto. Lista fechada, imposta por `CHECK` no banco e
+        nao por `enum` nativo do Postgres: acrescentar valor a um `enum` nativo
+        exige alterar o tipo com o produto no ar. Acrescentar valor aqui e
+        sempre tres arquivos no mesmo commit (ADR-0023 secao 3).
+      enum: [food, toy, hygiene, accessory, health, bed]
+
+    StorePartnerRef:
+      type: object
+      description: |
+        O parceiro que vende o item. **Sem UUID**: `slug` e a unica chave do
+        parceiro que sai daqui. A identidade interna (`store_partners.id`)
+        existe no esquema, e o ADR-0024 registra por que ela e separada do
+        endereco publico -- ela nunca e projetada, e o portao de contrato
+        publico reprova quem tentar.
+      required: [slug, name, host]
+      properties:
+        slug: { type: string }
+        name: { type: string }
+        host:
+          type: string
+          description: |
+            Apenas o host, sem esquema, caminho nem consulta. E o que permite a
+            tela nomear o destino ANTES da saida ("Abrir na Cobasi"), como manda
+            a consequencia 1 da BICHUS-185.
+
+    StorePriceStatus:
+      type: string
+      description: |
+        **Tres estados, e nao dois.** `sem_preco` e `vencido` produzem a mesma
+        ausencia de numero e pedem textos diferentes: item que nunca teve preco
+        nao mostra a linha (ausencia de preco e estado normal); item com preco
+        vencido diz que o preco nao esta confirmado e aponta o parceiro. Um
+        booleano faria a tela escolher uma frase so para os dois casos.
+      enum: [vigente, vencido, sem_preco]
+
+    StoreItemSummary:
+      type: object
+      required: [slug, title, summary, category, target_url, partner, price_status]
+      properties:
+        slug:
+          type: string
+          description: O endereco publico do item. Nao ha UUID nesta tabela.
+        title: { type: string }
+        summary:
+          type: string
+          description: Uma linha. O teto de 180 caracteres e o que a mantem uma linha.
+        category: { $ref: '#/components/schemas/StoreCategory' }
+        image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: Sempre https. Nulo e estado normal, e o cartao sabe se desenhar sem imagem.
+        target_url:
+          type: string
+          format: uri
+          description: |
+            O destino no site do parceiro. **Nenhum identificador de pessoa
+            entra aqui, em codificacao nenhuma** (consequencia 3 da
+            BICHUS-185). A tela abre no navegador do sistema, nunca em webview
+            embutida: webview com a nossa moldura em volta faz o Bichu parecer
+            o vendedor.
+        partner: { $ref: '#/components/schemas/StorePartnerRef' }
+        price_amount:
+          type: integer
+          nullable: true
+          description: |
+            **Centavos, inteiro.** Ponto flutuante para dinheiro erra na soma e
+            o erro aparece meses depois. Nulo quando nao ha preco **e tambem
+            quando o preco venceu** -- `price_status` distingue os dois.
+        price_currency:
+          type: string
+          nullable: true
+          enum: [BRL, null]
+        price_checked_at:
+          type: string
+          format: date
+          nullable: true
+          description: |
+            A data em que uma PESSOA leu aquele numero na pagina do parceiro.
+            Nunca a data do commit, do deploy nem `now()`. **Sai junto com o
+            valor quando o preco vence**: manter a data sem o valor entregaria
+            ao aplicativo o que ele precisa para reconstruir o preco antigo.
+        price_status: { $ref: '#/components/schemas/StorePriceStatus' }
+
+    StoreItemPage:
+      type: object
+      required: [items, page, limit, total, effective_sort]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/StoreItemSummary' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        effective_sort:
+          type: string
+          enum: [curadoria, nome]
+          description: |
+            **A ordem em que a lista de fato saiu**, e nao a que foi pedida. A
+            barra de listagem mostra a ordem REAL; uma tela que lesse a ordem do
+            proprio estado local afirmaria a pedida sobre uma lista que o
+            servidor pode ter ordenado de outro jeito.
+        applied_filters:
+          type: object
+          description: |
+            O recorte que de fato valeu. Traz `scope: all` quando nada foi
+            recortado, porque "nada filtrado" e uma informacao e nao uma
             ausencia.
           additionalProperties: { type: string }
 

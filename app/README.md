@@ -28,9 +28,22 @@ flutter run --dart-define=API_BASE_URL=http://SEU_IP:3000
 Build para instalar no aparelho:
 
 ```bash
-flutter build apk --debug --dart-define=API_BASE_URL=http://SEU_IP:3000
+flutter build apk --debug \
+  --dart-define=API_BASE_URL=http://SEU_IP:3000 \
+  --dart-define=TERMS_VERSION=2026-09-17
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
+
+**`TERMS_VERSION` está aqui de propósito, e não é enfeite.** Um APK construído
+só com `API_BASE_URL` sobe, navega e faz login, mas **não cria conta**: a tela
+de cadastro recusa, porque sem essa variável não há o que gravar como aceite. O
+motivo inteiro está em [As três configurações opcionais](#as-três-configurações-opcionais),
+logo abaixo. Foi assim que o cadastro chegou travado no aparelho em 22/09/2026,
+com a API de homologação no ar.
+
+O mesmo vale para o build de homologação do `README.md` da raiz, que hoje passa
+apenas `API_BASE_URL`: quem instalar por aquele comando recebe um app que não
+cria conta.
 
 O endereço aparece como marcador, e não como IP de exemplo: endereço privado
 escrito no repositório é amarração de ambiente, e o portão de portabilidade

@@ -5,6 +5,8 @@ import 'api/auth_api.dart';
 import 'api/achados_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/diretorio_api.dart';
+import 'api/loja_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/fila_offline.dart';
@@ -33,6 +35,8 @@ class Escopo extends InheritedWidget {
     required this.auth,
     required this.pets,
     required this.casos,
+    required this.diretorio,
+    required this.loja,
     required this.achados,
     required this.envioDeFoto,
     required this.retomadaDeFotos,
@@ -60,6 +64,16 @@ class Escopo extends InheritedWidget {
 
   /// As rotas de caso de perdido (`tags: [lost]` do contrato).
   final CasosApi casos;
+
+  /// O diretorio de `Perto` (`tags: [directory]` do contrato).
+  final DiretorioApi diretorio;
+
+  /// A vitrine de `Loja` (`tags: [store]` do contrato).
+  ///
+  /// **A unica rota do escopo que nao exige conta.** A vitrine e navegavel
+  /// deslogado (criterio 24 da BICHUS-185), e nada na resposta dela e privado
+  /// de ninguem: tudo ja esta publicado no site do parceiro.
+  final LojaApi loja;
 
   /// As rotas de achado avulso (`tags: [found]` do contrato), ligadas pela
   /// BICHUS-35.

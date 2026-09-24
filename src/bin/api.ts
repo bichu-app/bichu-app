@@ -95,6 +95,8 @@ import {
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
+import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
+import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -600,6 +602,7 @@ export async function main(): Promise<void> {
       },
       clock: systemClock,
     });
+    registrarRotasDaVitrine(escopo, { vitrine: criarStoreRepository(db), clock: systemClock });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     // BICHUS-45. O perfil publico por `/@{slug}`, sem conta.
     registrarRotaDoPerfilPublico(escopo, {
