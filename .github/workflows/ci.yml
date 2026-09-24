@@ -1759,7 +1759,10 @@ jobs:
           # Pelo NOME DO SERVICO na rede do compose (`web:4321`), que e como a
           # borda o alcanca. O cliente e o Node da propria imagem: nenhuma
           # imagem a mais so para testar.
-          docker compose --env-file "$RUNNER_TEMP/web.env" exec -T web node --input-type=module -e '
+          # `docker exec` e nao `docker compose exec`: o compose confere o
+          # `env_file: [.env]` dos OUTROS servicos ate para um `exec`, e este
+          # job nao tem `.env` -- de proposito, o site nao usa.
+          docker exec bichu-web-1 node --input-type=module -e '
             const casos = [
               ["/", 200, "text/html", "public, max-age=0, must-revalidate"],
               ["/healthz", 200, "text/plain", "no-store"],
