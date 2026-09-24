@@ -26,7 +26,7 @@ páginas moram. Está no fim deste documento.
 
 **Emenda 3, ACEITA em 23/09/2026 (decisão do cliente):** o "outro time web"
 passa a ser **este squad**. O site (institucional e as oito rotas públicas) é
-construído aqui, roda na mesma VM em **imagem separada** da API e vai ao ar em
+construído aqui, roda na mesma VM da API do seu ambiente (ADR-0025), em **imagem separada**, e vai ao ar em
 `bichu.app`. O serviço Node da API **continua sem servir HTML**: o item 1 fica
 de pé sem exceção, e a exceção de back-end prevista no item 4 e estendida pela
 emenda 2 **deixa de existir**. A emenda 2 fica como registro do diagnóstico, e a

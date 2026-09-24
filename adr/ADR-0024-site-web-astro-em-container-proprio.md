@@ -4,7 +4,7 @@
 **Data:** 2026-09-23
 **Depende de:** ADR-0016 (o gateway `/v1`), ADR-0017 com a emenda 3 (o site é nosso)
 **Revisa:** ADR-0017 emenda 1, item 4 (um arquivo de associação por host, ver item 6 abaixo)
-**Revisado por:** ADR-0025 (produção e homologação separadas: os nomes `api` e `web` deste documento viram `api-prod` e `web-prod`, e `hml.bichu.app` ganha o site de homologação)
+**Revisado por:** ADR-0025 (produção e homologação em VMs separadas: a tabela do item 5 é a da VM de produção, e `hml.bichu.app`, na VM de homologação, ganha o site de homologação)
 
 ## Contexto
 
@@ -15,7 +15,10 @@ ADR-0017:
    públicas que o ADR-0017 tirou do back-end;
 2. o site roda na mesma VM (`bichu-hml`, `bichu-app-508914`,
    `southamerica-east1-a`), em **imagem Docker separada** da API, para que
-   migrar depois seja trocar onde a imagem roda e não reescrever nada;
+   migrar depois seja trocar onde a imagem roda e não reescrever nada. Com o
+   ADR-0025, "a mesma VM" passou a valer **por ambiente**: o site de produção
+   roda na `bichu-prod` junto da API de produção, e o de homologação na
+   `bichu-hml`;
 3. o site vai ao ar direto em `bichu.app`;
 4. o designer desenha no Figma antes; o front web implementa só o que estiver
    desenhado e aprovado.
@@ -208,11 +211,11 @@ e cabeçalhos exatos das operações usadas pelas ilhas e `Access-Control-Max-Ag
 
 ### 5. Roteamento de hosts
 
-**`hml.bichu.app` não muda para o app.** Mesmos caminhos de API. O cliente testa
-no aparelho por ele, e o `API_BASE_URL` do app que está no aparelho dele aponta
-para lá. Com a separação do ADR-0025, ele passa a ser a API **de homologação** e
-ganha o site de homologação no que hoje é 404; a tabela abaixo é a de
-**produção**, e os destinos `api` e `web` são `api-prod` e `web-prod`.
+**`hml.bichu.app` não muda para o app.** Mesmos caminhos de API, mesma máquina. O
+cliente testa no aparelho por ele, e o `API_BASE_URL` do app que está no
+aparelho dele aponta para lá. Com o ADR-0025, ele é a API **de homologação**, na
+VM `bichu-hml`, e ganha o site de homologação no que hoje é 404. A tabela abaixo
+é a da **VM de produção**, `bichu-prod`.
 
 | Host | Caminho | Destino | Por quê |
 |---|---|---|---|
@@ -498,10 +501,10 @@ defeito em "abri o link e não apareceu nada" agora pode estar na borda, no site
 ou na API; o `x-correlation-id` atravessando os três é o que torna isso
 investigável.
 
-**Orçamento da máquina:** só com este ADR, a soma dos tetos iria de 1792 para
-**1888 MB** e caberia na e2-small. Com a separação de ambientes do ADR-0025, ela
-vai a **2752 MB** e deixa de caber. A conta e a pergunta estão lá, seção 3, junto
-com o alerta de memória de 70% (onde mora e o que dispara).
+**Orçamento da máquina:** em cada VM (ADR-0025), a soma dos tetos em regime vai
+de 1792 para **1888 MB** e cabe na e2-small, com 160 MB para o sistema. No
+redeploy, o `worker` para antes da migração, senão o pico passa de 2 GB. A conta
+completa e o alerta de 70% estão no ADR-0025, seções 2 e 11.
 
 **Irreversível:** nada neste ADR. O host impresso continua sendo o único item
 irreversível do produto, e ele não muda aqui.
@@ -533,9 +536,8 @@ irreversível do produto, e ele não muda aqui.
 1. **`/p/` e `/@slug` aparecem no Google** (opção b, contra a minha
    recomendação). Registrado no item 11, com a revisão do dado exposto e o
    comportamento do 410.
-2. **A máquina fica na e2-small**, com alerta de memória em 70% sustentado. A
-   resposta foi dada antes da 3, e a 3 muda a conta: com os dois ambientes, os
-   tetos somam 2752 MB. A pergunta volta ao cliente no ADR-0025, seção 3, onde
-   também está o alerta.
-3. **Produção e homologação separadas antes de o site subir** (opção b).
+2. **A máquina fica na e2-small**, com alerta de memória em 70% sustentado.
+   Depois, com a separação de ambientes, o cliente escolheu **uma e2-small por
+   ambiente**. Conta de memória e alerta no ADR-0025, seções 2 e 11.
+3. **Produção e homologação separadas antes de o site subir**, em VMs separadas.
    Desenho e plano de execução no ADR-0025.
