@@ -1,0 +1,33 @@
+---
+// Ilustracao do cliente recortada por forma organica (a mascara SVG do
+// prototipo), em AVIF e WebP responsivos. No prototipo ela vinha como SVG de
+// 1,4 MB com o PNG embutido; aqui o navegador escolhe o tamanho pela tela.
+import { Picture } from 'astro:assets';
+import tresPessoas from '../assets/ilustracoes/ilustracao-tres-pessoas.png';
+import encontro from '../assets/ilustracoes/ilustracao-evento-no-bairro.png';
+import cao from '../assets/ilustracoes/ilustracao-cao-cartao-06.png';
+
+const FONTES = {
+  'tres-pessoas': tresPessoas,
+  encontro,
+  moldura: cao,
+} as const;
+
+interface Props {
+  recorte: keyof typeof FONTES;
+  alt: string;
+  /** Acima da dobra: carrega com prioridade (LCP). */
+  principal?: boolean;
+}
+const { recorte, alt, principal = false } = Astro.props;
+---
+<Picture
+  src={FONTES[recorte]}
+  alt={alt}
+  formats={['avif', 'webp']}
+  widths={[480, 800, 1200]}
+  sizes="(min-width: 905px) 55vw, 100vw"
+  class={`recorte recorte--${recorte}`}
+  loading={principal ? 'eager' : 'lazy'}
+  fetchpriority={principal ? 'high' : 'auto'}
+/>

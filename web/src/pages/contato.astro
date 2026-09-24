@@ -1,0 +1,29 @@
+---
+import Institucional from '../layouts/Institucional.astro';
+import Icone from '../componentes/Icone.astro';
+import IconeEmail from '../componentes/IconeEmail.astro';
+import { CONTATO_PAGINA as T } from '../conteudo/institucional.ts';
+import { CONTATO, RODAPE } from '../conteudo/comum.ts';
+---
+<Institucional titulo={T.titulo} descricao={T.descricao} atual="/contato">
+  <section class="hero hero--pagina hero--sem-ilustracao" aria-labelledby="hero-titulo">
+    <div class="hero__texto">
+      <h1 class="hero__titulo titulo-display" id="hero-titulo">{T.hero.titulo}</h1>
+      <p class="hero__lead">{T.hero.lead}</p>
+    </div>
+  </section>
+  <section class="secao contato" aria-labelledby="canais-titulo">
+    <h2 class="sr-only" id="canais-titulo">{T.canaisTitulo}</h2>
+    <ul class="contato__lista">
+      <li class="contato__item">
+        <h3 class="titulo-item">{T.email}</h3>
+        <a class="link" href={`mailto:${CONTATO.email}`} aria-label={RODAPE.emailRotulo}><IconeEmail /><span>{CONTATO.email}</span></a>
+      </li>
+      <li class="contato__item contato__item--socorro">
+        <span class="contato__icone"><Icone nome="qr_code_scanner" /></span>
+        <h3 class="titulo-item">{T.socorro.titulo}</h3>
+        <p class="texto-grande">{T.socorro.texto}</p>
+      </li>
+    </ul>
+  </section>
+</Institucional>

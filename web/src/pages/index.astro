@@ -1,4 +1,98 @@
 ---
-import Publica from '../layouts/Publica.astro';
+// Home v2: a rede dos pets, comunidade primeiro (decisao do cliente de 23/09).
+// Traducao de index.html do prototipo (direcao A) com o texto da revisao de UX.
+import Institucional from '../layouts/Institucional.astro';
+import Icone from '../componentes/Icone.astro';
+import Ilustracao from '../componentes/Ilustracao.astro';
+import Manuscrito from '../componentes/Manuscrito.astro';
+import Passos from '../componentes/Passos.astro';
+import Instagram from '../componentes/Instagram.astro';
+import CartaoIlustrado from '../componentes/CartaoIlustrado.astro';
+import BaixeApp from '../componentes/BaixeApp.astro';
+import EmBreveLojas from '../componentes/EmBreveLojas.astro';
+import iconeEncontros from '../assets/marca/icone-pilar-encontros.svg';
+import iconeProximidade from '../assets/marca/icone-pilar-proximidade.svg';
+import type { NomeDoSimbolo } from '../icones/simbolos.ts';
+import { HOME as T } from '../conteudo/home.ts';
+
+const icones = { eventos: iconeEncontros, profissionais: iconeProximidade };
 ---
-<Publica titulo="Bichu" descricao="provisorio"><p>provisorio</p></Publica>
+<Institucional titulo={T.titulo} descricao={T.descricao} atual="/" temBaixeApp>
+  <section class="hero hero--home" aria-labelledby="hero-titulo">
+    <span class="blob blob--1" aria-hidden="true"></span>
+    <span class="blob blob--2" aria-hidden="true"></span>
+    <div class="hero__texto">
+      <h1 class="hero__titulo titulo-display" id="hero-titulo">{T.hero.titulo}</h1>
+      <Manuscrito>{T.hero.manuscrito}</Manuscrito>
+      <p class="hero__lead">{T.hero.lead}</p>
+      <EmBreveLojas />
+    </div>
+    <div class="hero__ilustracao">
+      <Ilustracao recorte="tres-pessoas" alt={T.hero.alt} principal />
+    </div>
+  </section>
+
+  <section class="secao pilares" aria-labelledby="pilares-titulo">
+    <div class="secao__cabecalho">
+      <h2 class="titulo-secao" id="pilares-titulo">{T.pilares.titulo}</h2>
+    </div>
+    <ul class="pilares__lista">
+      {T.pilares.itens.map((p) => (
+        <li class={`pilar pilar--${p.chave}`}>
+          <img class="pilar__icone" src={icones[p.chave].src} alt="" width="96" height="96" loading="lazy" />
+          <h3 class="titulo-item">{p.titulo}</h3>
+          <p class="pilar__texto">{p.texto}</p>
+          <a class="link" href={p.link.href}>{p.link.texto}</a>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <span class="divisor-onda" aria-hidden="true"></span>
+  <section class="secao secao--comunidade rede" id="rede" aria-labelledby="rede-titulo">
+    <span class="blob blob--3" aria-hidden="true"></span>
+    <div class="secao__cabecalho">
+      <p class="secao__sobretitulo sobretitulo">{T.rede.sobretitulo}</p>
+      <h2 class="titulo-secao" id="rede-titulo">{T.rede.titulo}</h2>
+      <p class="secao__lead texto-grande">{T.rede.lead}</p>
+    </div>
+    <Passos passos={T.rede.passos} />
+    <CartaoIlustrado titulo={T.rede.cartao.titulo} href={T.rede.cartao.href} />
+    <Instagram />
+    <a class="botao botao--secundario" href={T.rede.botao.href}>{T.rede.botao.texto}</a>
+  </section>
+
+  <section class="secao secao--alternada vantagens" aria-labelledby="vantagens-titulo">
+    <div class="secao__cabecalho">
+      <h2 class="titulo-secao" id="vantagens-titulo">{T.vantagens.titulo}</h2>
+      <span class="trilha-patinhas" aria-hidden="true"></span>
+    </div>
+    <ul class="vantagens__lista">
+      {T.vantagens.itens.map((v) => (
+        <li class="vantagem">
+          <span class="vantagem__icone"><Icone nome={v.icone as NomeDoSimbolo} /></span>
+          <h3 class="titulo-item">{v.titulo}</h3>
+          <p class="vantagem__texto">{v.texto}</p>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="secao faixa-privacidade" aria-labelledby="privacidade-titulo">
+    <span class="faixa-privacidade__icone"><Icone nome="lock" /></span>
+    <div class="faixa-privacidade__texto">
+      <h2 class="titulo-secao" id="privacidade-titulo">{T.privacidade.titulo}</h2>
+      <p class="texto-grande">{T.privacidade.texto}</p>
+    </div>
+  </section>
+
+  <section class="secao chamada-profissionais" aria-labelledby="profissionais-titulo">
+    <div class="chamada-profissionais__texto">
+      <h2 class="titulo-secao" id="profissionais-titulo">{T.profissionais.titulo}</h2>
+      <p class="texto-grande">{T.profissionais.texto}</p>
+    </div>
+    <a class="botao botao--secundario" href={T.profissionais.botao.href}>{T.profissionais.botao.texto}</a>
+  </section>
+
+  <BaixeApp titulo={T.baixeApp.titulo} texto={T.baixeApp.texto} />
+</Institucional>

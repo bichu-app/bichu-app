@@ -1,0 +1,46 @@
+---
+import Institucional from '../layouts/Institucional.astro';
+import Icone from '../componentes/Icone.astro';
+import Ilustracao from '../componentes/Ilustracao.astro';
+import Passos from '../componentes/Passos.astro';
+import BaixeApp from '../componentes/BaixeApp.astro';
+import type { NomeDoSimbolo } from '../icones/simbolos.ts';
+import { COMO_FUNCIONA as T } from '../conteudo/institucional.ts';
+---
+<Institucional titulo={T.titulo} descricao={T.descricao} atual="/como-funciona" temBaixeApp>
+  <section class="hero hero--pagina" aria-labelledby="hero-titulo">
+    <span class="blob blob--1" aria-hidden="true"></span>
+    <span class="blob blob--2" aria-hidden="true"></span>
+    <div class="hero__texto">
+      <h1 class="hero__titulo titulo-display" id="hero-titulo">{T.hero.titulo}</h1>
+      <p class="hero__lead">{T.hero.lead}</p>
+    </div>
+    <div class="hero__ilustracao">
+      <Ilustracao recorte="tres-pessoas" alt={T.hero.alt} principal />
+    </div>
+  </section>
+
+  <section class="secao como-funciona" aria-labelledby="passos-titulo">
+    <h2 class="sr-only" id="passos-titulo">{T.passosTitulo}</h2>
+    <Passos passos={T.passos} numerados />
+  </section>
+
+  <span class="divisor-onda" aria-hidden="true"></span>
+  <section class="secao secao--comunidade vantagens" aria-labelledby="sumiu-titulo">
+    <div class="secao__cabecalho">
+      <h2 class="titulo-secao" id="sumiu-titulo">{T.sumiu.titulo}</h2>
+      <span class="trilha-patinhas" aria-hidden="true"></span>
+    </div>
+    <ul class="vantagens__lista vantagens__lista--duas">
+      {T.sumiu.itens.map((v) => (
+        <li class="vantagem">
+          <span class="vantagem__icone"><Icone nome={v.icone as NomeDoSimbolo} /></span>
+          <h3 class="titulo-item">{v.titulo}</h3>
+          <p class="vantagem__texto">{v.texto}</p>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <BaixeApp titulo={T.baixeApp.titulo} />
+</Institucional>

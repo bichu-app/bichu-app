@@ -15,6 +15,7 @@ import Estado from '../../componentes/Estado.astro';
 import Icone from '../../componentes/Icone.astro';
 import BotaoEnviar from '../../componentes/BotaoEnviar.astro';
 import RegistrarAchado from '../../componentes/RegistrarAchado.astro';
+import ProcurarCodigo from '../../componentes/ProcurarCodigo.astro';
 import EmBreveLojas from '../../componentes/EmBreveLojas.astro';
 import ScriptDeEnvio from '../../componentes/ScriptDeEnvio.astro';
 import { clienteDaApi, executar } from '../../api/chamar.ts';
@@ -166,22 +167,7 @@ const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
     </Estado>
   )}
 
-  {tela.tela === 'codigo-malformado' && (
-    <Estado icone="edit" titulo={TAG.malformadoTitulo}>
-      <p class="estado__texto">{TAG.malformadoTexto}</p>
-    </Estado>
-    <form class="formulario" method="get" action="/t">
-      <div class="campo">
-        <label class="campo__rotulo" for="codigo">{TAG.campoCodigo}</label>
-        <input class="campo__entrada" id="codigo" name="codigo" type="text" value={codigo} required
-          autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="codigo-ajuda" />
-        <p class="campo__ajuda" id="codigo-ajuda">{TAG.ajudaCodigo}</p>
-      </div>
-      <button class="botao botao--primario botao--largo" type="submit">{TAG.botaoProcurar}</button>
-    </form>
-    <hr class="separador" />
-    <RegistrarAchado destaque={false} />
-  )}
+  {tela.tela === 'codigo-malformado' && <ProcurarCodigo codigo={codigo} />}
 
   {tela.tela === 'codigo-inexistente' && (
     <Estado icone="search_off" titulo={TAG.inexistenteTitulo}>

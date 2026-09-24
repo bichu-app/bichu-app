@@ -1,8 +1,11 @@
 ---
-// /t?codigo=...: o formulario "Procurar este codigo" (tela 400) funciona sem
-// JavaScript por GET, e aqui ele vira o endereco da tag. Nenhuma decisao sobre
-// o codigo: quem diz se ele vale e a API, na pagina de destino.
+// /t e /t?codigo=...: o formulario "Procurar este codigo" funciona sem
+// JavaScript por GET, e aqui ele vira o endereco da tag (303). Sem codigo, a
+// pagina pede o codigo. Nenhuma decisao sobre ele: quem diz se vale e a API.
 export const prerender = false;
+import Publica from '../../layouts/Publica.astro';
+import ProcurarCodigo from '../../componentes/ProcurarCodigo.astro';
+import { TAG } from '../../conteudo/tag.ts';
 
 const codigo = (Astro.url.searchParams.get('codigo') ?? '').trim();
 if (codigo) {
@@ -11,5 +14,10 @@ if (codigo) {
     headers: { Location: `/t/${encodeURIComponent(codigo)}`, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' },
   });
 }
-return Astro.rewrite('/404');
+Astro.response.status = 400;
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
 ---
+<Publica titulo={TAG.tituloDaPagina} descricao={TAG.descricaoDaPagina}>
+  <ProcurarCodigo codigo="" />
+</Publica>
