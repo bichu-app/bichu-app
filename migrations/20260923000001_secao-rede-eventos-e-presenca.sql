@@ -93,9 +93,13 @@
 -- ====================================================================
 --
 -- Esta migracao nao cria rota de escrita. A escrita nasce no backoffice
--- (`/v1/admin/network/*`, ADR-0027), numa migracao posterior a esta, que
--- acrescenta `cover_image_id` -- ele aponta para `catalog_images`, que ainda
--- nao existe aqui.
+-- (`/v1/admin/network/*`, ADR-0027), numa migracao posterior a esta.
+--
+-- **Nao ha coluna de capa.** A primeira versao guardava `cover_image_url`, e o
+-- banco guarda chave, nunca URL (`docs/07-devops.md` 3.6). A capa passa a ser
+-- a posicao 0 das imagens do encontro, no mesmo modelo das imagens do produto
+-- da `Loja` (ADR-0027), e a tabela de imagens nasce na fatia seguinte, junto
+-- dos campos novos do encontro. Decisao do coordenador de 23/09.
 
 -- Up Migration
 
@@ -168,10 +172,6 @@ CREATE TABLE network_events (
   time_zone       text        NOT NULL DEFAULT 'America/Sao_Paulo'
                   CONSTRAINT network_events_fuso_tem_forma_iana
                   CHECK (time_zone ~ '^[A-Za-z]+/[A-Za-z_]+$'),
-
-  cover_image_url text
-                  CONSTRAINT network_events_capa_e_https
-                  CHECK (cover_image_url IS NULL OR cover_image_url ~ '^https://'),
 
   -- ---------------------------------------------------------------------
   -- PUBLICACAO, ORIGEM E AUTOR (ADR-0027 12.3 e apendice A.4)

@@ -287,7 +287,7 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
     await sql`
       insert into network_events (
         id, slug, title, summary, place_name, neighborhood, city, state,
-        geo, geo_source, starts_at, ends_at, time_zone, cover_image_url,
+        geo, geo_source, starts_at, ends_at, time_zone,
         origin, publication_status, published_at
       ) values (
         ${ids.uuidv7()}::uuid, ${encontro.slug}, ${encontro.title}, ${encontro.summary},
@@ -295,7 +295,7 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
         ${ponto}, ${origemDoPonto},
         ${momento.inicioLocal}::timestamp at time zone ${momento.zonaDeLeitura},
         ${momento.fimLocal}::timestamp at time zone ${momento.zonaDeLeitura},
-        ${encontro.timeZone}, ${encontro.coverImageUrl},
+        ${encontro.timeZone},
         'admin', ${encontro.publicationStatus}, ${MOMENTO_DA_REDE}::timestamptz
       )
     `.execute(db);

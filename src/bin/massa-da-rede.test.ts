@@ -27,8 +27,8 @@
  * o que ela existe: ser OLHADA. Onze cartoes que passassem em todos os tetos e
  * fossem iguais entre si atenderiam o banco e nao mostrariam nada.
  *
- * Entao o segundo bloco afirma a VARIEDADE: que existe encontro sem capa, que
- * existe encontro com e sem ponto no mapa, que existe um acontecendo
+ * Entao o segundo bloco afirma a VARIEDADE: que existe encontro com e sem
+ * ponto no mapa, que existe um acontecendo
  * agora e um que ja passou, que ha mais de uma cidade para o filtro filtrar, e
  * que o caso feio continua feio. Cada uma dessas linhas e um caso de desenho
  * que someria em silencio se alguem "arrumasse" a massa.
@@ -125,17 +125,6 @@ void describe('a massa da Rede cabe nos CHECK da migracao', () => {
         `cidade de "${encontro.slug}" tem ${String(cidade)} caracteres, e o teto e ${String(TETO_DA_CIDADE)}`,
       );
       assert.match(encontro.state, FORMATO_DA_UF, `UF de "${encontro.slug}" nao tem duas maiusculas`);
-    }
-  });
-
-  void it('toda capa e https', () => {
-    for (const encontro of MASSA_DA_REDE) {
-      if (encontro.coverImageUrl === null) continue;
-      assert.equal(
-        new URL(encontro.coverImageUrl).protocol,
-        'https:',
-        `capa de "${encontro.slug}" nao e https`,
-      );
     }
   });
 
@@ -281,18 +270,6 @@ void describe('as datas sao calculadas, e a RELACAO entre elas e o que a massa p
 });
 
 void describe('a massa presta para ser OLHADA, que e para o que ela existe', () => {
-  void it('ha encontro com capa e encontro SEM capa', () => {
-    assert.ok(
-      ENCONTROS_VISIVEIS.some((um) => um.coverImageUrl !== null),
-      'nenhum encontro visivel tem capa',
-    );
-    assert.ok(
-      ENCONTROS_VISIVEIS.some((um) => um.coverImageUrl === null),
-      'todo encontro tem capa: o cartao sem foto nunca seria visto, e a ausencia de capa e ' +
-        'estado normal e nao lacuna',
-    );
-  });
-
   void it('ha encontro COM ponto no mapa e encontro SEM ponto (ADR-0027 12.8)', () => {
     // A tela do encontro, com conta, desenha o mapa quando ha ponto e so os
     // rotulos quando nao ha. Os dois casos precisam estar na massa para o
@@ -333,21 +310,20 @@ void describe('a massa presta para ser OLHADA, que e para o que ela existe', () 
 
   void it('ISCA -- o caso feio continua feio', () => {
     // Ele e o pior cartao que a secao consegue produzir: titulo e resumo
-    // encostados no teto, nome de lugar encostado no teto, nenhuma capa e
+    // encostados no teto, nome de lugar encostado no teto e
     // nenhum ponto. Se alguem "arrumar" a massa, e aqui que isso aparece.
     const feios = ENCONTROS_VISIVEIS.filter(
       (um) =>
         comprimido(um.title) >= TETO_DO_TITULO - 15 &&
         comprimido(um.summary) >= TETO_DO_RESUMO - 15 &&
         comprimido(um.placeName) >= TETO_DO_LUGAR - 15 &&
-        um.coverImageUrl === null &&
         um.ponto === null,
     );
     assert.equal(
       feios.length,
       1,
       'a massa precisa de exatamente um caso feio: titulo, resumo e lugar encostados nos ' +
-        'tetos, sem capa e sem ponto',
+        'tetos, e sem ponto',
     );
   });
 

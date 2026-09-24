@@ -70,7 +70,6 @@ export interface EncontroDaRede {
   readonly endsAt: Instant | null;
   /** O nome IANA da zona. Sem ele o instante esta certo e a hora de parede, errada. */
   readonly timeZone: string;
-  readonly coverImageUrl: string | null;
   readonly publicacao: PublicacaoVisivel;
 }
 
@@ -89,7 +88,7 @@ export interface EncontroProjetado {
   readonly ends_at: string | null;
   readonly time_zone: string;
   readonly status: StatusDoEncontro;
-  readonly cover_image_url: string | null;
+  readonly cover_image_url: null;
 }
 
 /**
@@ -166,7 +165,11 @@ export function projetarEncontro(encontro: EncontroDaRede, agora: Instant): Enco
     ends_at: encontro.endsAt === null ? null : comoIso(encontro.endsAt),
     time_zone: encontro.timeZone,
     status: statusDoEncontro(encontro, agora),
-    cover_image_url: encontro.coverImageUrl,
+    // Sempre nulo nesta fatia. A coluna saiu (o banco nao guarda URL,
+    // `docs/07-devops.md` 3.6), e a capa volta como a posicao 0 das imagens do
+    // encontro na fatia seguinte, preenchendo este mesmo campo. Ele fica no
+    // contrato para o app, que ja o le como opcional, nao mudar duas vezes.
+    cover_image_url: null,
   };
 }
 

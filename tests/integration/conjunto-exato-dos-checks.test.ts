@@ -426,12 +426,6 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // que passa na forma e renderiza a hora errada para sempre sem nada acusar.
   'public.network_events.network_events_fuso_tem_forma_iana':
     "CHECK ((time_zone ~ '^[A-Za-z]+/[A-Za-z_]+$'::text))",
-  // https e nao http, pela mesma razao da vitrine: imagem em claro numa tela
-  // nossa e uma recomendacao nossa de abrir canal aberto. A capa e opcional, e
-  // a ausencia e estado normal e nao lacuna -- o cartao sabe se desenhar sem
-  // ela, e a massa tem os dois casos de proposito.
-  'public.network_events.network_events_capa_e_https':
-    "CHECK (((cover_image_url IS NULL) OR (cover_image_url ~ '^https://'::text)))",
   // A origem do ponto: so `map_pin`, a que o ADR-0006 admite e a unica que um
   // operador produz tocando o mapa. Nao ha geocodificacao. Uma lista de um
   // valor so escrita como igualdade, e nao como `IN`, por isso mora aqui.

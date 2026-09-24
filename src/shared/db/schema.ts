@@ -929,7 +929,6 @@ export interface NetworkEventsTable {
    * `timestamptz` sozinho diz o instante e nao diz a hora de parede.
    */
   time_zone: Generated<string>;
-  cover_image_url: string | null;
   origin: Generated<OrigemDoEncontro>;
   publication_status: PublicacaoDoEncontro;
   published_at: Date | null;

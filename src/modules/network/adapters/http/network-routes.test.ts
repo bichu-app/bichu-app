@@ -67,7 +67,6 @@ const ENCONTRO: EncontroDaRede = {
   startsAt: (AGORA + UMA_HORA) as Instant,
   endsAt: (AGORA + 3 * UMA_HORA) as Instant,
   timeZone: 'America/Sao_Paulo',
-  coverImageUrl: null,
   publicacao: 'published',
 };
 

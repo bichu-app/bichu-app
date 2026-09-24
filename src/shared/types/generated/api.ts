@@ -3546,7 +3546,9 @@ export interface components {
             status: components["schemas"]["NetworkEventStatus"];
             /**
              * Format: uri
-             * @description Ausencia e estado normal, nao lacuna. O cartao sabe se desenhar sem ela.
+             * @description **Sempre nulo nesta versao.** A capa volta como a posicao 0 das
+             *     imagens do encontro (ADR-0027), preenchendo este mesmo campo; o
+             *     banco nao guarda URL. O cartao ja sabe se desenhar sem ela.
              */
             cover_image_url?: string | null;
         };

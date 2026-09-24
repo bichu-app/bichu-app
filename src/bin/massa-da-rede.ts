@@ -14,14 +14,13 @@
  *
  * - titulo curto ao lado de um que **quebra em duas linhas** e do que encosta
  *   no teto de 120;
- * - encontros **com e sem capa**;
  * - encontros **com e sem ponto no mapa** (ADR-0027 12.8): a tela do encontro,
  *   com conta, desenha o mapa quando ha ponto e so os rotulos quando nao ha;
  * - **hoje, semana que vem e ja passado**, e um **ACONTECENDO AGORA**;
  * - acento e cedilha em toda parte;
  * - **seis cidades e tres fusos**;
  * - **o caso feio**: `encontro-do-mindu-em-manaus` junta titulo, resumo e nome
- *   de lugar nos tetos, bairro comprido, nenhuma capa e nenhum ponto.
+ *   de lugar nos tetos, bairro comprido, e nenhum ponto.
  *
  * ## O que NAO esta aqui
  *
@@ -40,12 +39,11 @@
  * alguem (ADR-0027 secao 13). Vale tambem para massa: um ponto de massa copiado
  * para um ambiente de demonstracao continua sendo um ponto no mapa.
  *
- * ## As capas apontam para `.example`, e de proposito
+ * ## Nao ha capa
  *
- * `.example` e reservado pela RFC 2606 e nao resolve em lugar nenhum, como os
- * parceiros da massa da `Loja`. Um host real em `src/` e achado do portao de
- * portabilidade (`docs/07-devops.md` 3.6), e a capa desta fatia e so para o
- * cartao se desenhar com e sem imagem.
+ * A coluna saiu da migracao (o banco nao guarda URL); a capa volta como a
+ * posicao 0 das imagens do encontro, na fatia seguinte, e a massa ganha imagem
+ * junto. Ate la todo cartao sai sem capa, que o app ja sabe desenhar.
  *
  * ## AS DATAS SAO CALCULADAS, E NUNCA LITERAIS
  *
@@ -103,7 +101,6 @@ export interface EncontroSemeado {
   readonly quando: QuandoAcontece;
   /** Nome IANA. Precisa EXISTIR no catalogo do Postgres, e nao so parecer um. */
   readonly timeZone: string;
-  readonly coverImageUrl: string | null;
   /**
    * O ponto no mapa, ou nulo. Sempre de lugar publico (ADR-0027 secao 13), e a
    * origem e sempre `map_pin`: e o ponto que o administrador tocaria no mapa.
@@ -137,7 +134,7 @@ export const MOMENTO_DA_REDE = '2026-09-23T12:00:00.000Z';
 export const FUSOS_DA_REDE = ['America/Sao_Paulo', 'America/Manaus', 'America/Recife'] as const;
 
 export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
-  // 1. SEMANA QUE VEM, capa e PONTO NO MAPA. O cartao mais completo que a
+  // 1. SEMANA QUE VEM e PONTO NO MAPA. O cartao mais completo que a
   //    secao produz, e e ele que da a medida dos outros.
   {
     slug: 'benedito-calixto-de-manha',
@@ -149,11 +146,10 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 4, horaLocal: '09:00', duracaoEmMinutos: 180 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://midia.bichu.example/rede/benedito-calixto.jpg',
     ponto: { lat: -23.5634, lon: -46.6821 },
     publicationStatus: 'published',
   },
-  // 2. TITULO QUE QUEBRA EM DUAS LINHAS, capa e ponto.
+  // 2. TITULO QUE QUEBRA EM DUAS LINHAS, e ponto.
   {
     slug: 'caminhada-no-ibirapuera',
     title: 'Caminhada coletiva com cães de porte grande no Parque Ibirapuera, com veterinária',
@@ -164,7 +160,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 10, horaLocal: '15:30', duracaoEmMinutos: 120 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://midia.bichu.example/rede/ibirapuera-portao-7.jpg',
     ponto: { lat: -23.5874, lon: -46.6576 },
     publicationStatus: 'published',
   },
@@ -184,7 +179,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'PR',
     quando: { ancora: 'parede', diasAPartirDeHoje: 11, horaLocal: '14:00', duracaoEmMinutos: null },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: null,
     ponto: null,
     publicationStatus: 'published',
   },
@@ -205,7 +199,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'MG',
     quando: { ancora: 'instante', comecaEmMinutos: -45, duracaoEmMinutos: 180 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://midia.bichu.example/rede/praca-da-liberdade.jpg',
     ponto: { lat: -19.932, lon: -43.938 },
     publicationStatus: 'published',
   },
@@ -224,7 +217,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: -9, horaLocal: '10:00', duracaoEmMinutos: 300 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://midia.bichu.example/rede/roosevelt-adocao.jpg',
     ponto: { lat: -23.5486, lon: -46.6461 },
     publicationStatus: 'published',
   },
@@ -244,15 +236,14 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'PE',
     quando: { ancora: 'instante', comecaEmMinutos: 300, duracaoEmMinutos: 150 },
     timeZone: 'America/Recife',
-    coverImageUrl: null,
     ponto: { lat: -8.1197, lon: -34.8979 },
     publicationStatus: 'published',
   },
   // 7. **O CASO FEIO, e ele e deliberado.**
   //
   //    Titulo ENCOSTADO no teto de 120, resumo ENCOSTADO no teto de 180, nome
-  //    de lugar ENCOSTADO no teto de 80, bairro comprido, nenhuma capa e
-  //    nenhum ponto. E o pior cartao que esta secao consegue
+  //    de lugar ENCOSTADO no teto de 80, bairro comprido e nenhum
+  //    ponto. E o pior cartao que esta secao consegue
   //    produzir: se o desenho aguenta este, aguenta os outros dez.
   //
   //    Os tetos sao cobrados por `massa-da-rede.test.ts` em segundos, e pelo
@@ -278,11 +269,10 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'AM',
     quando: { ancora: 'parede', diasAPartirDeHoje: 14, horaLocal: '08:00', duracaoEmMinutos: 240 },
     timeZone: 'America/Manaus',
-    coverImageUrl: null,
     ponto: null,
     publicationStatus: 'published',
   },
-  // 8. Titulo curto com capa e sem ponto.
+  // 8. Titulo curto e sem ponto.
   //
   //    Quarta cidade. Gato e de proposito: a `Rede` nao e so de cachorro, e um
   //    cartao inteiro de gato e a unica forma de isso aparecer na tela.
@@ -296,7 +286,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 18, horaLocal: '17:00', duracaoEmMinutos: 90 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://midia.bichu.example/rede/orla-de-santos.jpg',
     ponto: null,
     publicationStatus: 'published',
   },
@@ -314,11 +303,10 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'RS',
     quando: { ancora: 'parede', diasAPartirDeHoje: 25, horaLocal: '19:00', duracaoEmMinutos: null },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: null,
     ponto: null,
     publicationStatus: 'published',
   },
-  // 10. Capa e ponto, no fim de semana que vem.
+  // 10. Ponto, no fim de semana que vem.
   {
     slug: 'piquenique-na-villa-lobos',
     title: 'Piquenique no Villa-Lobos',
@@ -329,7 +317,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 6, horaLocal: '11:00', duracaoEmMinutos: 210 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://midia.bichu.example/rede/villa-lobos.jpg',
     ponto: { lat: -23.5466, lon: -46.7236 },
     publicationStatus: 'published',
   },
@@ -356,7 +343,6 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 8, horaLocal: '10:00', duracaoEmMinutos: 120 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: null,
     ponto: { lat: -23.5445, lon: -46.6579 },
     publicationStatus: 'removed',
   },

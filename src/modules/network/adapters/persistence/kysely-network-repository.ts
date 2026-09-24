@@ -66,7 +66,6 @@ interface LinhaDoEncontro {
   starts_at: Date;
   ends_at: Date | null;
   time_zone: string;
-  cover_image_url: string | null;
   publication_status: PublicacaoVisivel;
 }
 
@@ -92,7 +91,6 @@ const COLUNAS_DO_CARTAO = [
   'e.starts_at as starts_at',
   'e.ends_at as ends_at',
   'e.time_zone as time_zone',
-  'e.cover_image_url as cover_image_url',
   'e.publication_status as publication_status',
 ] as const;
 
@@ -248,7 +246,6 @@ function comoEncontro(linha: LinhaDoEncontro): EncontroDaRede {
     startsAt: linha.starts_at.getTime() as Instant,
     endsAt: linha.ends_at === null ? null : (linha.ends_at.getTime() as Instant),
     timeZone: linha.time_zone,
-    coverImageUrl: linha.cover_image_url,
     publicacao: linha.publication_status,
   };
 }
