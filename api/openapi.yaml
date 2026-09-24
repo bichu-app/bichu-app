@@ -91,9 +91,12 @@ info:
       mede o que interessa, que e a mesma pessoa insistindo no mesmo pet, e e
       imune ao CGNAT.
     - `limit` e `window`.
-    - `counts`: **o que** e contado **dentro do balde**. Sao quatro valores, e
-      nao ha um quinto: `requests` (padrao), `distinct_identities`,
-      `distinct_cases`, `distinct_emails`. Sem este campo, `limit: 3` numa
+    - `counts`: **o que** e contado **dentro do balde**. Sao cinco valores, e
+      nao ha um sexto: `requests` (padrao), `distinct_identities`,
+      `distinct_cases`, `distinct_emails` e `rows_returned` (linhas devolvidas
+      na resposta, e nao requisicoes; entrou com a D56 de `04-seguranca.md`
+      para a fila de pedidos do backoffice, onde o que se mede e quanto dado
+      de pessoa sai, e nao quantas vezes se pediu). Sem este campo, `limit: 3` numa
       dimensao de conta se leria como tres mensagens quando o que a politica
       quer dizer e tres **casos distintos**.
 
@@ -252,6 +255,7 @@ x-rate-limit-vocabulary:
     - distinct_identities
     - distinct_cases
     - distinct_emails
+    - rows_returned
   applies_to:
     - all
     - invalid_attempts
@@ -5116,7 +5120,7 @@ paths:
         `visibility: private` faz o encontro aparecer no app **so com titulo
         e data** ate a conta ter o pedido aprovado na fila
         (`listAdminNetworkJoinRequests`). **O Bichu nao cobra**: o valor e so
-        informativo (ADR-0027 item 17).
+        informativo, numero mais unidade fechada (ADR-0027 item 17).
       security:
         - adminSession: []
           adminCsrf: []
@@ -5182,7 +5186,7 @@ paths:
     patch:
       operationId: updateAdminNetworkEvent
       tags: [admin]
-      x-effects: []
+      x-effects: [notifies]
       summary: Altera titulo, resumo, capa ou endereco publico de um encontro
       description: |
         **Data, horario, fuso e lugar nao mudam aqui**, porque todo encontro
@@ -5192,6 +5196,11 @@ paths:
         tambem nao**: sao `changeAdminNetworkEventAccess`, pelo mesmo motivo.
         O corpo nao tem esses campos. Encontro `removed` responde `400`
         (`code: event_removed`).
+
+        **Mudar `notes` avisa todos os administradores** com o antes e o
+        depois (D60), sem reautenticacao: o detector de D59 ja tira o valor do
+        golpe, e o aviso cobre o resto. **Encontro privado nao troca de
+        `slug`** (`400`, `code: private_slug_is_generated`).
       security:
         - adminSession: []
           adminCsrf: []
@@ -5392,8 +5401,10 @@ paths:
         `relocateAdminNetworkEvent`: `X-Admin-Reauth-Token` do escopo
         `network_event_access_change`, aviso a todos os administradores com o
         antes e o depois, e trilha. Privado que vira publico deixa os pedidos
-        como estao, sem efeito; publico que vira privado passa a exigir pedido
-        de todos.
+        como estao, sem efeito, e mantem o `slug` gerado. Publico que vira
+        privado passa a exigir pedido de todos e **ganha `slug` novo, gerado**:
+        o antigo ja circulou e pode dizer o lugar, e ele passa a responder 404,
+        sem redirecionamento.
       security:
         - adminSession: []
           adminCsrf: []
@@ -5419,7 +5430,7 @@ paths:
                 value:
                   admission:
                     kind: paid
-                    price: { amount: 2000, currency: BRL }
+                    price: { amount: 2000, currency: BRL, unit: per_dog }
                   reason: O parque passou a cobrar pela area cercada.
       responses:
         '200':
@@ -5447,9 +5458,29 @@ paths:
         So existe no painel: nenhuma operacao do app lista pedidos ou aprovados
         de ninguem, nem como contagem (ADR-0010 item 7). Sem filtro, vem a fila
         de pendentes, do pedido mais antigo para o mais novo.
+
+        **E a unica leitura de pessoa do backoffice, coberta pelo RA-01 com
+        D53 a D57** (decisao do cliente, 23/09). Por isso tres coisas que as
+        outras leituras nao tem:
+
+        - **toda chamada grava na trilha** (D55), com os filtros e a
+          quantidade devolvida, nunca os nomes. E a unica operacao `GET`
+          administrativa com `x-audit`, e a excecao e deliberada;
+        - **teto por linhas devolvidas** (D56): 300 por hora por conta,
+          paginas de no maximo 50;
+        - **nenhum filtro por solicitante** e nenhum identificador estavel da
+          pessoa (D53): o painel nao monta "todos os encontros da Maria".
       security:
         - adminSession: []
       x-admin-roles: [admin]
+      x-audit: { action: admin.network_join_request.listed, resource_kind: network_join_request }
+      x-rate-limit:
+        - dimension: [account]
+          counts: rows_returned
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "D56: conta LINHAS devolvidas; estouro dispara alerta ao plantao alem do 429"
       parameters:
         - name: status
           in: query
@@ -5459,7 +5490,10 @@ paths:
           description: '`slug` do encontro.'
           schema: { $ref: '#/components/schemas/Slug' }
         - $ref: '#/components/parameters/AdminPage'
-        - $ref: '#/components/parameters/AdminLimit'
+        - name: limit
+          in: query
+          description: D56. Teto de 50 por pagina, e nao 100 como nas outras listas.
+          schema: { type: integer, minimum: 1, maximum: 50, default: 50 }
       responses:
         '200':
           description: Pagina da fila.
@@ -5469,6 +5503,7 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/AdminUnauthorized' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /admin/network/join-requests/{requestRef}/approval:
     parameters:
@@ -5480,7 +5515,9 @@ paths:
       summary: Aprova o pedido, e o tutor passa a ver o encontro inteiro
       description: |
         So a partir de `pending` sem desistencia (`400`, `code:
-        request_not_pending`, nos outros casos). O tutor recebe push. A partir daqui
+        request_not_pending`, nos outros casos). O tutor recebe push **so com
+        o titulo do encontro**, nunca lugar nem horario: o conteudo passa pelo
+        provedor de push e aparece na tela bloqueada (22.10.1). A partir daqui
         `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
         para a conta dele.
       security:
@@ -8051,10 +8088,18 @@ components:
 
     AdminNetworkEventInput:
       type: object
-      required: [slug, title, summary, place, starts_at, time_zone]
+      required: [title, summary, place, starts_at, time_zone]
       additionalProperties: false
       properties:
-        slug: { $ref: '#/components/schemas/Slug' }
+        slug:
+          allOf:
+            - $ref: '#/components/schemas/Slug'
+          description: |
+            Obrigatorio no encontro **publico**. No **privado** ele e gerado
+            pelo servidor, aleatorio, e mandar um e recusado com `400`
+            (`code: private_slug_is_generated`): o `slug` sai no teaser para
+            todo mundo, e um `slug` digitado como `caminhada-rua-das-flores`
+            entregaria o lugar pelo identificador.
         title: { type: string, minLength: 2, maxLength: 120 }
         summary: { type: string, minLength: 2, maxLength: 180 }
         place: { $ref: '#/components/schemas/AdminNetworkEventPlaceInput' }
@@ -8065,12 +8110,16 @@ components:
         accepted_sizes: { $ref: '#/components/schemas/NetworkEventAcceptedSizes' }
         dog_age: { $ref: '#/components/schemas/NetworkEventDogAge' }
         vaccination_required: { type: boolean, default: true }
-        off_leash_allowed: { type: boolean, default: false }
+        fenced_off_leash_area:
+          type: boolean
+          default: false
+          description: |
+            O local **tem area cercada para caes soltos**. E um atributo do
+            lugar, e nao uma permissao dada pelo Bichu (ADR-0027 item 17).
         amenities: { $ref: '#/components/schemas/NetworkEventAmenities' }
         visibility: { $ref: '#/components/schemas/NetworkEventVisibility' }
         admission: { $ref: '#/components/schemas/AdminNetworkEventAdmissionInput' }
         bring_items: { $ref: '#/components/schemas/NetworkEventBringItems' }
-        bring_other: { $ref: '#/components/schemas/NetworkEventBringOther' }
         notes: { $ref: '#/components/schemas/NetworkEventNotes' }
 
     AdminNetworkEventPatch:
@@ -8091,10 +8140,9 @@ components:
         accepted_sizes: { $ref: '#/components/schemas/NetworkEventAcceptedSizes' }
         dog_age: { $ref: '#/components/schemas/NetworkEventDogAge' }
         vaccination_required: { type: boolean }
-        off_leash_allowed: { type: boolean }
+        fenced_off_leash_area: { type: boolean }
         amenities: { $ref: '#/components/schemas/NetworkEventAmenities' }
         bring_items: { $ref: '#/components/schemas/NetworkEventBringItems' }
-        bring_other: { $ref: '#/components/schemas/NetworkEventBringOther' }
         notes:
           oneOf:
             - $ref: '#/components/schemas/NetworkEventNotes'
@@ -8150,7 +8198,7 @@ components:
       description: |
         O encontro como o painel o ve. **Sem autor**: `created_by_user_id` nunca
         e projetado (ADR-0025 secao 3, ADR-0027 item 10).
-      required: [slug, title, summary, place, starts_at, time_zone, images, accepted_sizes, dog_age, vaccination_required, off_leash_allowed, amenities, origin, visibility, admission, bring_items, bring_other, notes, pending_request_count, publication_status, timing, published_at, created_at, updated_at, version]
+      required: [slug, title, summary, place, starts_at, time_zone, images, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, origin, visibility, admission, bring_items, notes, pending_request_count, publication_status, timing, published_at, created_at, updated_at, version]
       properties:
         slug: { type: string }
         title: { type: string }
@@ -8169,7 +8217,7 @@ components:
           items: { $ref: '#/components/schemas/PetSize' }
         dog_age: { $ref: '#/components/schemas/NetworkEventDogAge' }
         vaccination_required: { type: boolean }
-        off_leash_allowed: { type: boolean }
+        fenced_off_leash_area: { type: boolean }
         amenities:
           type: array
           items: { $ref: '#/components/schemas/NetworkEventAmenity' }
@@ -8179,9 +8227,6 @@ components:
         bring_items:
           type: array
           items: { $ref: '#/components/schemas/NetworkEventBringItem' }
-        bring_other:
-          type: array
-          items: { type: string }
         notes: { type: [string, 'null'] }
         pending_request_count:
           type: integer
@@ -8394,17 +8439,20 @@ components:
       uniqueItems: true
       items: { $ref: '#/components/schemas/NetworkEventBringItem' }
 
-    NetworkEventBringOther:
-      type: array
-      maxItems: 3
-      description: A excecao, ate tres itens livres. Texto puro.
-      items: { type: string, minLength: 2, maxLength: 40 }
-
     NetworkEventNotes:
       type: string
       minLength: 2
-      maxLength: 1000
-      description: Observacoes, so como complemento. O que tem forma propria (acesso, o que levar) nao vai aqui.
+      maxLength: 500
+      description: |
+        Observacoes, so como complemento, ate 500 caracteres (o numero da
+        designer, e o mesmo em que o detector e medido). **Texto puro, sem
+        canal de contato nem de pagamento** (D59): telefone, e-mail, URL,
+        endereco, CEP e chave PIX sao **recusados** com `400` (`code:
+        contact_or_payment_detected`), pelo detector do canal mediado, com
+        normalizacao NFKC e remocao de largura zero. Caractere de controle
+        bidirecional (U+202A a U+202E, U+2066 a U+2069) e recusado em todo
+        texto administrativo (`code: bidi_control`). O app nao transforma nada
+        em link. Mudar as observacoes avisa todos os administradores (D60).
 
     AdminNetworkEventAdmissionInput:
       type: object
@@ -8425,12 +8473,24 @@ components:
 
     AdminEventPrice:
       type: object
-      description: O valor que o organizador informa. Sem vencimento, porque nao e preco de referencia de terceiro.
-      required: [amount, currency]
+      description: |
+        O valor que o organizador informa, informativo. Sem vencimento, porque
+        nao e preco de referencia de terceiro. Numero mais unidade de lista
+        fechada, para o app escrever sempre no mesmo formato ("R$ 15 por
+        cao"), sem texto livre.
+      required: [amount, currency, unit]
       additionalProperties: false
       properties:
         amount: { type: integer, minimum: 1, maximum: 100000000, description: Centavos. }
         currency: { type: string, enum: [BRL] }
+        unit: { $ref: '#/components/schemas/EventPriceUnit' }
+
+    EventPriceUnit:
+      type: string
+      description: |
+        A que o valor se refere. Lista fechada por `CHECK`; o rotulo e do app.
+        `per_pair` e tutor e cao juntos.
+      enum: [per_dog, per_person, per_pair]
 
     AdminNetworkEventAdmission:
       type: object
@@ -8475,10 +8535,13 @@ components:
       description: |
         Um pedido para participar de encontro privado. **O pedido e da conta,
         nunca do pet** (ADR-0010 item 7). Do solicitante sai **so** o nome de
-        exibicao que a pessoa escolheu e o mes em que a conta foi criada: sem
-        e-mail, telefone, pets, UUID nem historico. **Esta e a unica leitura de
-        pessoa no backoffice v1, e ela reabre o RA-01** (ADR-0027 item 17).
+        exibicao, o mes em que a conta foi criada e se o e-mail foi
+        confirmado: sem e-mail, telefone, pets, UUID, identificador estavel nem
+        historico (D53). E a unica leitura de pessoa no backoffice v1, coberta
+        pelo RA-01 por decisao do cliente de 23/09 (ADR-0027 item 17). O pedido
+        some 30 dias depois do fim do encontro (D54).
       required: [ref, event, requester, status, requested_at]
+      additionalProperties: false
       properties:
         ref:
           type: string
@@ -8493,9 +8556,19 @@ components:
             time_zone: { type: string }
         requester:
           type: object
-          required: [display_name, member_since]
+          description: D53. Projecao minima fechada, e nada alem destes tres campos.
+          required: [display_name, member_since, email_verified]
+          additionalProperties: false
           properties:
-            display_name: { type: string }
+            display_name:
+              type: string
+              description: |
+                O nome de exibicao que a pessoa escolheu. Quando ele e nulo na
+                conta, sai o texto fixo `Sem nome de exibicao`, **nunca** o
+                e-mail nem parte dele.
+            email_verified:
+              type: boolean
+              description: Se a conta confirmou o e-mail. So o booleano, nunca o endereco nem a data.
             member_since:
               type: string
               pattern: '^[0-9]{4}-[0-9]{2}$'

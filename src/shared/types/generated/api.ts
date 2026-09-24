@@ -2573,7 +2573,7 @@ export interface paths {
          *     `visibility: private` faz o encontro aparecer no app **so com titulo
          *     e data** ate a conta ter o pedido aprovado na fila
          *     (`listAdminNetworkJoinRequests`). **O Bichu nao cobra**: o valor e so
-         *     informativo (ADR-0027 item 17).
+         *     informativo, numero mais unidade fechada (ADR-0027 item 17).
          */
         post: operations["createAdminNetworkEvent"];
         delete?: never;
@@ -2619,6 +2619,11 @@ export interface paths {
          *     tambem nao**: sao `changeAdminNetworkEventAccess`, pelo mesmo motivo.
          *     O corpo nao tem esses campos. Encontro `removed` responde `400`
          *     (`code: event_removed`).
+         *
+         *     **Mudar `notes` avisa todos os administradores** com o antes e o
+         *     depois (D60), sem reautenticacao: o detector de D59 ja tira o valor do
+         *     golpe, e o aviso cobre o resto. **Encontro privado nao troca de
+         *     `slug`** (`400`, `code: private_slug_is_generated`).
          */
         patch: operations["updateAdminNetworkEvent"];
         trace?: never;
@@ -2702,8 +2707,10 @@ export interface paths {
          *     `relocateAdminNetworkEvent`: `X-Admin-Reauth-Token` do escopo
          *     `network_event_access_change`, aviso a todos os administradores com o
          *     antes e o depois, e trilha. Privado que vira publico deixa os pedidos
-         *     como estao, sem efeito; publico que vira privado passa a exigir pedido
-         *     de todos.
+         *     como estao, sem efeito, e mantem o `slug` gerado. Publico que vira
+         *     privado passa a exigir pedido de todos e **ganha `slug` novo, gerado**:
+         *     o antigo ja circulou e pode dizer o lugar, e ele passa a responder 404,
+         *     sem redirecionamento.
          */
         post: operations["changeAdminNetworkEventAccess"];
         delete?: never;
@@ -2724,6 +2731,18 @@ export interface paths {
          * @description So existe no painel: nenhuma operacao do app lista pedidos ou aprovados
          *     de ninguem, nem como contagem (ADR-0010 item 7). Sem filtro, vem a fila
          *     de pendentes, do pedido mais antigo para o mais novo.
+         *
+         *     **E a unica leitura de pessoa do backoffice, coberta pelo RA-01 com
+         *     D53 a D57** (decisao do cliente, 23/09). Por isso tres coisas que as
+         *     outras leituras nao tem:
+         *
+         *     - **toda chamada grava na trilha** (D55), com os filtros e a
+         *       quantidade devolvida, nunca os nomes. E a unica operacao `GET`
+         *       administrativa com `x-audit`, e a excecao e deliberada;
+         *     - **teto por linhas devolvidas** (D56): 300 por hora por conta,
+         *       paginas de no maximo 50;
+         *     - **nenhum filtro por solicitante** e nenhum identificador estavel da
+         *       pessoa (D53): o painel nao monta "todos os encontros da Maria".
          */
         get: operations["listAdminNetworkJoinRequests"];
         put?: never;
@@ -2749,7 +2768,9 @@ export interface paths {
         /**
          * Aprova o pedido, e o tutor passa a ver o encontro inteiro
          * @description So a partir de `pending` sem desistencia (`400`, `code:
-         *     request_not_pending`, nos outros casos). O tutor recebe push. A partir daqui
+         *     request_not_pending`, nos outros casos). O tutor recebe push **so com
+         *     o titulo do encontro**, nunca lugar nem horario: o conteudo passa pelo
+         *     provedor de push e aparece na tela bloqueada (22.10.1). A partir daqui
          *     `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
          *     para a conta dele.
          */
@@ -4396,7 +4417,14 @@ export interface components {
          */
         TimeZoneName: string;
         AdminNetworkEventInput: {
-            slug: components["schemas"]["Slug"];
+            /**
+             * @description Obrigatorio no encontro **publico**. No **privado** ele e gerado
+             *     pelo servidor, aleatorio, e mandar um e recusado com `400`
+             *     (`code: private_slug_is_generated`): o `slug` sai no teaser para
+             *     todo mundo, e um `slug` digitado como `caminhada-rua-das-flores`
+             *     entregaria o lugar pelo identificador.
+             */
+            slug?: components["schemas"]["Slug"];
             title: string;
             summary: string;
             place: components["schemas"]["AdminNetworkEventPlaceInput"];
@@ -4410,13 +4438,16 @@ export interface components {
             dog_age?: components["schemas"]["NetworkEventDogAge"];
             /** @default true */
             vaccination_required: boolean;
-            /** @default false */
-            off_leash_allowed: boolean;
+            /**
+             * @description O local **tem area cercada para caes soltos**. E um atributo do
+             *     lugar, e nao uma permissao dada pelo Bichu (ADR-0027 item 17).
+             * @default false
+             */
+            fenced_off_leash_area: boolean;
             amenities?: components["schemas"]["NetworkEventAmenities"];
             visibility?: components["schemas"]["NetworkEventVisibility"];
             admission?: components["schemas"]["AdminNetworkEventAdmissionInput"];
             bring_items?: components["schemas"]["NetworkEventBringItems"];
-            bring_other?: components["schemas"]["NetworkEventBringOther"];
             notes?: components["schemas"]["NetworkEventNotes"];
         };
         /**
@@ -4434,10 +4465,9 @@ export interface components {
             accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
             dog_age?: components["schemas"]["NetworkEventDogAge"];
             vaccination_required?: boolean;
-            off_leash_allowed?: boolean;
+            fenced_off_leash_area?: boolean;
             amenities?: components["schemas"]["NetworkEventAmenities"];
             bring_items?: components["schemas"]["NetworkEventBringItems"];
-            bring_other?: components["schemas"]["NetworkEventBringOther"];
             notes?: components["schemas"]["NetworkEventNotes"] | null;
         };
         /** @description `reason` e pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`. */
@@ -4489,14 +4519,13 @@ export interface components {
             accepted_sizes: components["schemas"]["PetSize"][];
             dog_age: components["schemas"]["NetworkEventDogAge"];
             vaccination_required: boolean;
-            off_leash_allowed: boolean;
+            fenced_off_leash_area: boolean;
             amenities: components["schemas"]["NetworkEventAmenity"][];
             /** @enum {string} */
             origin: "admin";
             visibility: components["schemas"]["NetworkEventVisibility"];
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];
-            bring_other: string[];
             notes: string | null;
             /** @description Pedidos pendentes na fila. Sempre 0 em encontro publico. So existe no painel. */
             pending_request_count: number;
@@ -4643,9 +4672,17 @@ export interface components {
          */
         NetworkEventBringItem: "water" | "water_bowl" | "leash" | "poop_bags" | "treats" | "towel" | "vaccination_card" | "toy";
         NetworkEventBringItems: components["schemas"]["NetworkEventBringItem"][];
-        /** @description A excecao, ate tres itens livres. Texto puro. */
-        NetworkEventBringOther: string[];
-        /** @description Observacoes, so como complemento. O que tem forma propria (acesso, o que levar) nao vai aqui. */
+        /**
+         * @description Observacoes, so como complemento, ate 500 caracteres (o numero da
+         *     designer, e o mesmo em que o detector e medido). **Texto puro, sem
+         *     canal de contato nem de pagamento** (D59): telefone, e-mail, URL,
+         *     endereco, CEP e chave PIX sao **recusados** com `400` (`code:
+         *     contact_or_payment_detected`), pelo detector do canal mediado, com
+         *     normalizacao NFKC e remocao de largura zero. Caractere de controle
+         *     bidirecional (U+202A a U+202E, U+2066 a U+2069) e recusado em todo
+         *     texto administrativo (`code: bidi_control`). O app nao transforma nada
+         *     em link. Mudar as observacoes avisa todos os administradores (D60).
+         */
         NetworkEventNotes: string;
         /**
          * @description Gratuito ou pago, e **pago e so o valor, informativo** (decisao do
@@ -4662,13 +4699,25 @@ export interface components {
             kind: "free" | "paid";
             price?: components["schemas"]["AdminEventPrice"] | null;
         };
-        /** @description O valor que o organizador informa. Sem vencimento, porque nao e preco de referencia de terceiro. */
+        /**
+         * @description O valor que o organizador informa, informativo. Sem vencimento, porque
+         *     nao e preco de referencia de terceiro. Numero mais unidade de lista
+         *     fechada, para o app escrever sempre no mesmo formato ("R$ 15 por
+         *     cao"), sem texto livre.
+         */
         AdminEventPrice: {
             /** @description Centavos. */
             amount: number;
             /** @enum {string} */
             currency: "BRL";
+            unit: components["schemas"]["EventPriceUnit"];
         };
+        /**
+         * @description A que o valor se refere. Lista fechada por `CHECK`; o rotulo e do app.
+         *     `per_pair` e tutor e cao juntos.
+         * @enum {string}
+         */
+        EventPriceUnit: "per_dog" | "per_person" | "per_pair";
         AdminNetworkEventAdmission: {
             /** @enum {string} */
             kind: "free" | "paid";
@@ -4696,9 +4745,11 @@ export interface components {
         /**
          * @description Um pedido para participar de encontro privado. **O pedido e da conta,
          *     nunca do pet** (ADR-0010 item 7). Do solicitante sai **so** o nome de
-         *     exibicao que a pessoa escolheu e o mes em que a conta foi criada: sem
-         *     e-mail, telefone, pets, UUID nem historico. **Esta e a unica leitura de
-         *     pessoa no backoffice v1, e ela reabre o RA-01** (ADR-0027 item 17).
+         *     exibicao, o mes em que a conta foi criada e se o e-mail foi
+         *     confirmado: sem e-mail, telefone, pets, UUID, identificador estavel nem
+         *     historico (D53). E a unica leitura de pessoa no backoffice v1, coberta
+         *     pelo RA-01 por decisao do cliente de 23/09 (ADR-0027 item 17). O pedido
+         *     some 30 dias depois do fim do encontro (D54).
          */
         AdminJoinRequest: {
             /** @description Identificador opaco do pedido, 128 bits aleatorios. Nao e o UUID. */
@@ -4710,8 +4761,16 @@ export interface components {
                 starts_at: string;
                 time_zone: string;
             };
+            /** @description D53. Projecao minima fechada, e nada alem destes tres campos. */
             requester: {
+                /**
+                 * @description O nome de exibicao que a pessoa escolheu. Quando ele e nulo na
+                 *     conta, sai o texto fixo `Sem nome de exibicao`, **nunca** o
+                 *     e-mail nem parte dele.
+                 */
                 display_name: string;
+                /** @description Se a conta confirmou o e-mail. So o booleano, nunca o endereco nem a data. */
+                email_verified: boolean;
                 /** @description Ano e mes de criacao da conta, e nada mais fino. */
                 member_since: string;
             };
@@ -9094,7 +9153,8 @@ export interface operations {
                 /** @description `slug` do encontro. */
                 event?: components["schemas"]["Slug"];
                 page?: components["parameters"]["AdminPage"];
-                limit?: components["parameters"]["AdminLimit"];
+                /** @description D56. Teto de 50 por pagina, e nao 100 como nas outras listas. */
+                limit?: number;
             };
             header?: never;
             path?: never;
@@ -9114,6 +9174,7 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     approveAdminNetworkJoinRequest: {
