@@ -307,7 +307,12 @@ export function montarChave(
 ): string {
   const sufixo = entrada.appliesTo === undefined ? '' : `:${entrada.appliesTo}`;
   const janela = entrada.window.trim();
-  return `${operationId}:${entrada.dimension.join('+')}@${janela}${sufixo}|${valores.join('|')}`;
+  // O balde compartilhado entra NO LUGAR da operacao, e so ele (D52): a chave
+  // passa a ser (balde, dimensao, janela, valor), e todas as operacoes que
+  // declaram o mesmo balde somam no mesmo contador. Com `bucket:` como prefixo
+  // proprio, nenhum `operationId` consegue colidir com um balde.
+  const dono = entrada.bucket === undefined ? operationId : `bucket:${entrada.bucket}`;
+  return `${dono}:${entrada.dimension.join('+')}@${janela}${sufixo}|${valores.join('|')}`;
 }
 
 /**
