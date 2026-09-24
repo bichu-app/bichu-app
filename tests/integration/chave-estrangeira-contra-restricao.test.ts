@@ -490,102 +490,24 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
-  // a secao `Rede` (ADR-0025)
+  // a secao `Rede` (ADR-0025, emendada pela secao 12 do ADR-0027)
   // -------------------------------------------------------------------------
   //
-  // Quatro chaves, e as quatro tem a acao de delecao escolhida pela MESMA
-  // pergunta: o que a pessoa que apaga a conta espera que suma junto, e o que
-  // ela nao espera.
+  // Uma chave so. A presenca e a galeria sairam desta versao (ADR-0027 12.4),
+  // com as quatro chaves que elas tinham; quando voltarem, voltam apontando
+  // para `network_events.id`, e nunca para o `slug` (criterio 2 da BICHUS-19).
   //
-  // DUAS DELAS APONTAM PARA `network_events.id`, E NAO PARA O `slug` (ADR-0024).
+  // O `SET NULL` e DELIBERADO, pela mesma razao da coluna homonima de
+  // `professionals`: quem criou o encontro e dado de trilha, a exclusao da conta
+  // do administrador nao pode apagar um encontro publico nem ser travada por
+  // ele. O nulo CABE: a coluna e anulavel, e nenhum CHECK de `network_events` a
+  // nomeia -- por isso nao ha par em PARES_DE_NULO_CONTRA_RESTRICAO.
   //
-  // A primeira versao desta secao fez `slug` ser a chave primaria do encontro, e
-  // as duas chaves de baixo apontavam para ele. O criterio 2 da BICHUS-19 proibe
-  // chave estrangeira sobre `slug`, e o portao de `esquema.test.ts` estava
-  // acusando a `Rede` -- como acusou a `Loja` antes dela.
-  //
-  // O motivo nao e um, sao dois, e o segundo e o que decide. O primeiro: `slug`
-  // e valor que o usuario TROCA (ADR-0005), e uma chave estrangeira sobre valor
-  // mutavel obriga a atualizacao a atravessar as tabelas filhas. Contra ele
-  // sempre houve a resposta de que ninguem troca o `slug` de um encontro curado
-  // -- e ela e boa. O segundo sobrevive a ela: `slug` e valor que sai IMPRESSO.
-  // Uma coluna que e ao mesmo tempo o endereco publico do encontro e a chave que
-  // liga a presenca e a galeria a ele entrega a juncao junto com o endereco.
-  //
-  // Concretamente, e e o que esta secao nao pode permitir: quem tem o endereco
-  // publico de um encontro tem, com ele, o valor exato que a tabela de presenca
-  // guarda na coluna que liga as duas. O `id` corta isso pela raiz -- para
-  // ligar uma pessoa a um encontro passa a ser preciso um valor que resposta
-  // nenhuma publica.
-  //
-  // O que a tela recebe nao mudou: o `slug` continua sendo a unica chave da
-  // secao que sai em resposta, e nenhum campo do contrato mudou.
-  'public.network_event_checkins.network_event_checkins_event_id_fkey': {
-    colunas: ['event_id'],
-    referencia: 'public.network_events',
-    aoApagar: 'CASCADE',
-    levaJunto:
-      'as presencas do encontro apagado, e elas sao de OUTRAS pessoas: cada linha e o ' +
-      'registro de que alguem confirmou presenca. Este caminho nao e alcancado pela exclusao ' +
-      'de conta (nada cascateia de `users` para `network_events`), e e por isso que ele nao ' +
-      'esta em CASCATAS_QUE_ATRAVESSAM_PESSOAS: quem apaga um encontro e um `DELETE` ' +
-      'administrativo, nao uma pessoa pedindo a propria conta de volta. O produto nao apaga ' +
-      'encontro -- ele marca `active = false`, e o ADR-0025 diz por que: apagar levaria os ' +
-      'check-ins junto.',
-  },
-  'public.network_event_checkins.network_event_checkins_user_id_fkey': {
-    colunas: ['user_id'],
-    referencia: 'public.users',
-    aoApagar: 'CASCADE',
-    levaJunto:
-      'as presencas da PROPRIA pessoa, e so elas. `network_event_checkins` nao tem coluna ' +
-      'nenhuma sobre terceiro (nem `pet_id`, que o ADR-0025 recusa), entao a cascata nao ' +
-      'alcanca a experiencia de mais ninguem. O efeito visivel para os outros e o ' +
-      '`checkin_count` do encontro cair de um, que e a contagem deixando de contar quem nao ' +
-      'existe mais -- e nao um dado de terceiro sumindo.',
-  },
-  'public.network_event_photos.network_event_photos_event_id_fkey': {
-    colunas: ['event_id'],
-    referencia: 'public.network_events',
-    aoApagar: 'CASCADE',
-    levaJunto:
-      'a galeria do encontro apagado. A foto pertence ao EVENTO (ADR-0025 decisao 3), entao ' +
-      'a linha nao e de ninguem em particular -- mas nesta fatia ela e curada, e o dia em ' +
-      'que o envio pela comunidade existir esta cascata passa a apagar trabalho de terceiro. ' +
-      'Esta escrito aqui para que esse dia encontre a frase ja escrita.',
-  },
-  // O `SET NULL` e DELIBERADO, e e o unico da secao.
-  //
-  // `submitted_by_user_id` existe para remocao, auditoria e resposta a abuso, e
-  // **nunca e projetado** (ADR-0025 decisao 3). Duas consequencias se encontram
-  // nesta linha:
-  //
-  // - a conta de quem enviou pode ser excluida **sem que a foto do encontro
-  //   suma junto**. `CASCADE` aqui faria a exclusao de uma conta abrir buracos
-  //   na galeria de encontros publicos dos quais aquela pessoa participou, o
-  //   que e apagar o registro de um evento coletivo por causa de um pedido
-  //   individual;
-  // - `RESTRICT` seria pior ainda: travaria a exclusao de conta, que e direito
-  //   da pessoa e obrigacao legal, por causa de um campo que a resposta publica
-  //   nunca mostra.
-  //
-  // O nulo CABE: a coluna e anulavel por desenho (a foto desta fatia e curada e
-  // nao tem remetente), e nenhum CHECK de `network_event_photos` nomeia
-  // `submitted_by_user_id` -- os tres que a tabela tem sao sobre `slug`,
-  // `image_url` e `caption`. Por isso nao ha par a declarar em
-  // PARES_DE_NULO_CONTRA_RESTRICAO, e declarar um faria o caso "par declarado
-  // que o banco nao tem mais" reprovar.
-  //
-  // A quinta forma tambem nao alcanca esta chave, e a razao e estrutural:
-  // a vizinha desta linha e `network_event_photos.event_id`, cujo pai e
-  // `network_events` -- uma tabela que **nao tem chave estrangeira nenhuma**,
-  // e portanto nunca e filha de cascata. Nao existe caminho de `users` ate ela,
-  // entao o UPDATE do `SET NULL` nunca revalida `event_id` contra um pai que
-  // a mesma instrucao apagou. A troca da coluna que liga a foto ao encontro nao
-  // mexeu nisto: o que decide e quem e o PAI da coluna vizinha, e ele continua
-  // sendo `network_events`.
-  'public.network_event_photos.network_event_photos_submitted_by_user_id_fkey': {
-    colunas: ['submitted_by_user_id'],
+  // A quinta forma nao alcanca esta chave: `network_events` nao tem outra chave
+  // estrangeira nesta migracao (`cover_image_id` nasce na do backoffice), entao
+  // o UPDATE do `SET NULL` nao revalida vizinha nenhuma.
+  'public.network_events.network_events_created_by_user_id_fkey': {
+    colunas: ['created_by_user_id'],
     referencia: 'public.users',
     aoApagar: 'SET NULL',
   },

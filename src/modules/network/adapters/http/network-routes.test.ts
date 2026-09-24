@@ -19,8 +19,8 @@
  * | `ordemPadraoDe` devolvendo `proximos` tambem para `past` | 2 |
  * | `effective_when` saindo fixo em `upcoming` | 1 |
  * | `deny_429` virando `log_and_alert` no teto da agenda | 1 |
- * | 23/09, emenda: `location` sem `chamadorAutenticado` (responde sem conta) | 3 |
- * | 23/09, emenda: `location` consultando ANTES de autenticar | 1 |
+ * | 23/09, emenda: `location` sem `chamadorAutenticado` (responde sem conta) | 4 |
+ * | 23/09, emenda: `location` consultando ANTES de autenticar | 2 |
  * | 23/09, emenda: o 404 do `location` virando 403 | 1 |
  * | 23/09, emenda: o detalhe levando o ponto junto (`point` no corpo publico) | 1 |
  * | `rateLimit` removido da agenda (tem efeito) | **nao compila** |

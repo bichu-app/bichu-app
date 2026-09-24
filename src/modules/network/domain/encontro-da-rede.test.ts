@@ -15,7 +15,7 @@
  * | `agora <= endsAt` virando `<` (a borda de fechamento) | 1 |
  * | sem `endsAt`, devolver `happening` em vez de `ended` | 2 |
  * | `statusDoEncontro` devolvendo `ended` SEMPRE (a isca negativa) | 3 |
- * | 23/09, emenda: o cancelado ignorado (sempre temporal) | 3 |
+ * | 23/09, emenda: o cancelado ignorado (sempre temporal) | 5 |
  * | 23/09, emenda: o cancelado sempre `cancelled`, mesmo depois do fim | 2 |
  *
  * **A isca negativa da quarta linha e obrigatoria.** Provar que um encontro de

@@ -224,6 +224,22 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'category',
     valores: ['food', 'toy', 'hygiene', 'accessory', 'health', 'bed'],
   },
+  // A `Rede` (ADR-0027 12.3 e apendice A.4). Tres arquivos no mesmo commit,
+  // como o ADR-0023 secao 3 exige: a migracao, esta entrada e o `enum` do
+  // contrato -- que, para estas duas colunas, e o de `AdminNetworkEvent` em
+  // `/admin/network/*` (ADR-0027), e nao o da leitura publica, que nao as
+  // projeta. `pending_review` nao esta no `enum` administrativo de proposito:
+  // o encontro da comunidade nao existe na v1, e o `CHECK`
+  // `network_events_revisao_so_da_comunidade` impede o administrador de cair
+  // nele.
+  'public.network_events.network_events_origem_conhecida': {
+    coluna: 'origin',
+    valores: ['admin', 'community'],
+  },
+  'public.network_events.network_events_publicacao_conhecida': {
+    coluna: 'publication_status',
+    valores: ['pending_review', 'published', 'cancelled', 'removed'],
+  },
   'public.professionals.professionals_source_check': {
     coluna: 'source',
     // 'community' foi NEGADO pelo cliente em 21/09. Reintroduzir aqui seria
@@ -372,34 +388,28 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
  */
 const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ------------------------------------------------------------------
-  // A secao `Rede` (ADR-0025, migracao 20260923000001).
+  // A secao `Rede` (ADR-0025, migracao 20260923000001, emendada pela secao
+  // 12 do ADR-0027).
   //
-  // Os seis abaixo sao os CHECKs da `Rede` que MENCIONAM literal de texto, que
-  // e o recorte deste registro. Os outros sete da mesma migracao
+  // Os abaixo sao os CHECKs da `Rede` que MENCIONAM literal de texto e nao
+  // sao lista fechada simples. Os de faixa numerica e comparacao entre colunas
   // (`..._titulo_tem_tamanho`, `..._resumo_tem_tamanho`,
   // `..._lugar_tem_tamanho`, `..._bairro_tem_tamanho`,
-  // `..._cidade_tem_tamanho`, `..._legenda_tem_tamanho` e
-  // `network_events_fim_depois_do_comeco`) sao faixa numerica e comparacao
-  // entre colunas: nao ha literal de texto neles, a classificacao do cabecalho
-  // nao os colhe, e declara-los aqui faria o caso "restricao declarada que o
-  // banco nao tem mais" reprovar.
+  // `..._cidade_tem_tamanho`, `..._nota_de_cancelamento_tem_tamanho`,
+  // `..._versao_positiva`, `..._ponto_anda_com_origem` e
+  // `network_events_fim_depois_do_comeco`) nao tem literal de texto, a
+  // classificacao do cabecalho nao os colhe, e declara-los aqui faria o caso
+  // "restricao declarada que o banco nao tem mais" reprovar.
   //
-  // **Nenhum destes e lista fechada, e nao ha uma unica lista fechada na
-  // `Rede`.** A ausencia e ela propria uma decisao do ADR-0025: `status`
-  // (`upcoming` / `happening` / `ended`) e o unico conjunto fechado da secao e
-  // ele **nao e coluna** -- e calculado na projecao, no servidor. Uma coluna
-  // `status` aqui seria um rotulo gravado que envelhece sozinho: o encontro de
-  // ontem continuaria dizendo `upcoming` ate alguem rodar alguma coisa.
+  // As duas listas fechadas da secao (`origin` e `publication_status`) estao
+  // em LISTAS_FECHADAS. `status` (`upcoming` / `happening` / `ended` /
+  // `cancelled`) continua **nao sendo coluna**: e calculado na projecao, no
+  // servidor, porque um rotulo gravado envelhece sozinho.
   // ------------------------------------------------------------------
   //
   // Formato do endereco publico, COPIADO de `pets.slug` e identico ao de
-  // `store_items`. Nao ha UUID nestas duas tabelas: `slug` e a chave primaria,
-  // porque elas so existem para sair em resposta publica (ADR-0010 item 6), e
-  // um `id uuid` seria uma coluna que nunca pode ser projetada esperando alguem
-  // projeta-la por engano.
+  // `store_items`. `slug` e unico ao lado de `id uuid` primaria (ADR-0024).
   'public.network_events.network_events_slug_formato':
-    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
-  'public.network_event_photos.network_event_photos_slug_formato':
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
   // Duas maiusculas, e so. Nao e lista fechada das 27 UFs de proposito:
   // enumera-las poria o domicilio politico do Brasil numa restricao de banco,
@@ -422,10 +432,23 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ela, e a massa tem os dois casos de proposito.
   'public.network_events.network_events_capa_e_https':
     "CHECK (((cover_image_url IS NULL) OR (cover_image_url ~ '^https://'::text)))",
-  // A foto da galeria, ao contrario da capa, e obrigatoria: uma linha de
-  // `network_event_photos` sem imagem nao e foto nenhuma.
-  'public.network_event_photos.network_event_photos_imagem_e_https':
-    "CHECK ((image_url ~ '^https://'::text))",
+  // A origem do ponto: so `map_pin`, a que o ADR-0006 admite e a unica que um
+  // operador produz tocando o mapa. Nao ha geocodificacao. Uma lista de um
+  // valor so escrita como igualdade, e nao como `IN`, por isso mora aqui.
+  'public.network_events.network_events_origem_do_ponto':
+    "CHECK (((geo_source IS NULL) OR (geo_source = 'map_pin'::text)))",
+  // Cancelado tem o instante do cancelamento.
+  'public.network_events.network_events_cancelado_tem_instante':
+    "CHECK (((publication_status <> 'cancelled'::text) OR (cancelled_at IS NOT NULL)))",
+  // O que e visivel foi publicado algum dia: `published_at` e a primeira
+  // publicacao, e o cancelado tambem a tem.
+  'public.network_events.network_events_visivel_foi_publicado':
+    "CHECK (((publication_status <> ALL (ARRAY['published'::text, 'cancelled'::text])) OR (published_at IS NOT NULL)))",
+  // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
+  // que torna "o ponto de evento da comunidade so aparece depois de revisao
+  // humana" um estado do banco, porque `pending_review` nunca e visivel.
+  'public.network_events.network_events_revisao_so_da_comunidade':
+    "CHECK (((origin = 'community'::text) OR (publication_status <> 'pending_review'::text)))",
 
   // ------------------------------------------------------------------
   // A vitrine da `Loja` (BICHUS-185 / BICHUS-189, migracao 20260922000009).

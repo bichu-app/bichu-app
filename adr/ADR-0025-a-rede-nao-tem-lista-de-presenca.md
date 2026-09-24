@@ -1,7 +1,39 @@
 # ADR-0025: A Rede não tem lista de presença, e o check-in é da pessoa e nunca do pet
 
-**Status:** aceito, com emenda 1 — a seção 7 foi reescrita
+**Status:** **suspenso por decisão do cliente de 23/09/2026**, não revogado. Aceito, com emenda 1 (a seção 7 foi reescrita) e emenda 2 (a suspensão, abaixo)
 **Data:** 2026-09-23
+
+## Emenda 2 (23/09/2026): suspenso nesta versão, e o desenho continua valendo
+
+Antes do merge da `feat/secao-rede`, o cliente tirou da versão o **check-in** e
+a **galeria**. Com eles saíram as tabelas `network_event_checkins` e
+`network_event_photos`, a operação `checkInNetworkEvent`, os campos
+`checkin_count`, `photo_count`, `gallery` e `viewer_checked_in`, e a isca
+`rede-nao-liga-dois-pets` (ADR-0027 seção 12.4). O servidor emendado está em
+`feat/secao-rede-emenda-servidor` (BICHUS-251, BICHUS-271).
+
+**Este ADR fica suspenso, e não revogado.** Não há hoje nada para ele governar,
+e é por isso que ele não vale nesta versão. Quando check-in e galeria voltarem,
+**as decisões 1, 2 e 3 voltam valendo como estão escritas**: o check-in é da
+pessoa e nunca do pet, a presença é um número e nunca uma lista, a foto não tem
+autor na saída. A isca volta com a operação que ela vigia. O trabalho anterior
+(app e servidor) está preservado na branch **`guarda/rede-checkin-galeria`**.
+
+Duas partes deste texto não voltam como estão:
+
+- **A seção 5 está superada** pelo ADR-0027 (seção 12.2 e 12.5) e pela emenda 1
+  do ADR-0010: o encontro ganhou ponto opcional, marcado no mapa pelo
+  administrador (`geo_source = map_pin`), e o aplicativo o mostra só a quem
+  está logado, por uma operação própria
+  (`GET /v1/network/events/{eventSlug}/location`). "O evento não tem
+  coordenada" e "não há mapa, em zoom nenhum" deixaram de valer. Continua
+  valendo que a agenda e o detalhe, alcançáveis sem conta, não carregam
+  coordenada, e que não há ordem por distância.
+- **A seção 4** continua valendo na regra (na v1 só o administrador cria
+  evento), mas o caminho de escrita agora é o backoffice do ADR-0027, e
+  `active` virou `publication_status`.
+
+O texto abaixo é o da decisão original, mantido inteiro.
 
 ## Contexto
 
@@ -124,6 +156,8 @@ pela comunidade é fase seguinte, junto da moderação que ele exige.
 
 ### 5. O local do evento, sem geocodificação
 
+> **Superada** pela emenda 2 acima (ADR-0027 12.2 e 12.5, emenda 1 do ADR-0010).
+
 O **ADR-0006 proíbe geocodificação no MVP**, e é explícito sobre a origem de
 coordenada: só `device_gps` e `map_pin`. Um administrador cadastrando uma praça
 não tem nenhuma das duas — ele não está lá, e não há fluxo de toque no mapa fora
@@ -241,6 +275,8 @@ existe para contar e para impedir o segundo check-in da mesma pessoa. Nenhuma
 operação do contrato a lê linha a linha; a única leitura é `count(*)`.
 
 ## A prova negativa, e ela é uma isca e não uma frase
+
+> **Suspensa** com o check-in (emenda 2). A isca saiu da árvore com a operação que ela vigia e está em `guarda/rede-checkin-galeria`.
 
 `tests/integration/rede-nao-liga-dois-pets.test.ts` monta o caso exato do
 problema: **um tutor com dois pets**, os dois com `slug` público, o tutor com
