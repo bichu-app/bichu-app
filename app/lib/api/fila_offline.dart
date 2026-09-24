@@ -156,6 +156,9 @@ class DepositoEmArquivo implements DepositoDaFila {
   }
 }
 
+/// Local: resultado de uma tentativa da fila, decidido no aparelho. Nao
+/// trafega e nao espelha lista fechada do contrato.
+///
 /// O resultado de tentar enviar uma ação.
 enum ResultadoDoEnvio {
   /// Saiu. Some da fila.

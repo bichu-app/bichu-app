@@ -5,6 +5,8 @@
 /// que nao esta la nao aparece aqui.
 library;
 
+/// `#/components/schemas/Me/properties/pending_profile_fields/items` do contrato.
+///
 /// O que o contrato chama de `pending_profile_fields`: o que alimenta o aviso
 /// persistente de cadastro incompleto.
 enum PendenciaDeCadastro {
@@ -63,7 +65,7 @@ class RegiaoDeReferencia {
   }
 }
 
-/// `Me` do contrato: quem esta usando o app.
+/// `#/components/schemas/Me` do contrato.
 class Usuario {
   const Usuario({
     required this.id,
@@ -123,7 +125,7 @@ class Usuario {
   }
 }
 
-/// `SessionResponse` do contrato.
+/// `#/components/schemas/SessionResponse` do contrato.
 class Sessao {
   const Sessao({
     required this.accessToken,

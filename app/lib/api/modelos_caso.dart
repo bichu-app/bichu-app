@@ -11,6 +11,8 @@
 /// preenche-lo.
 library;
 
+/// `#/components/schemas/AlertDispatch/properties/reach_status` do contrato.
+///
 /// `LostCaseReachPreview.reach_status` e `AlertDispatch.reach_status`.
 ///
 /// **As quatro respostas nao se confundem, e e nisto que esta o produto.** O
@@ -47,6 +49,8 @@ enum EstadoDoAlcance {
   }
 }
 
+/// `#/components/schemas/LostCaseReachPreview/properties/blockers/items` do contrato.
+///
 /// `LostCaseReachPreview.blockers`: o que impede abrir o caso.
 ///
 /// **Falta de coordenada nao esta aqui**, e o contrato diz isso por escrito:
