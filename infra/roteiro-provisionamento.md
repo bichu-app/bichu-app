@@ -762,7 +762,7 @@ silêncio.
 
 ### Passo 14 — O site (container `web`), e o corte dos hosts para ele
 
-Decisão do cliente de 23/09/2026 e ADR-0024: o site (institucional e páginas
+Decisão do cliente de 23/09/2026 e ADR-0028: o site (institucional e páginas
 públicas) é um container Astro com renderização no servidor, **nesta mesma
 VM**, em **imagem separada** da API (`web/Dockerfile`), atrás da mesma borda.
 O mecanismo de implantação é o do passo 7, e não outro: os arquivos vão para o
@@ -795,7 +795,7 @@ curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://bichu.app/   #
 curl -sS https://hml.bichu.app/v1/health                                       # 200, status ok
 ```
 
-**Ensaiar a tabela do ADR-0024 sem tocar a borda que está no ar.** Uma borda
+**Ensaiar a tabela do ADR-0028 sem tocar a borda que está no ar.** Uma borda
 descartável, na mesma rede do compose, com a configuração do corte e
 certificado interno (`local_certs`, só na cópia de ensaio): ela alcança o `web`
 e a `api` reais, não publica 80 nem 443, e some ao final.
@@ -852,7 +852,7 @@ logo depois, na mesma janela.
    fora de sessão de teste do cliente.
 5. Criar no DNS `www` e `api` (A para o IP do passo 2, `proxied:false`).
 
-**Conferência depois, de fora** (ADR-0024, item 5): `hml.bichu.app/v1/health`
+**Conferência depois, de fora** (ADR-0028, item 5): `hml.bichu.app/v1/health`
 200 e `hml.bichu.app/t/x` 404; `bichu.app/` 200 `text/html`;
 `bichu.app/v1/health` 200; `bichu.app/v1/docs` 404 sem pedir credencial;
 `tag.bichu.app/t/<código inexistente>` respondendo pela página do site;

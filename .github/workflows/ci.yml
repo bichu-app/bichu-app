@@ -833,7 +833,7 @@ jobs:
       - name: os quatro /.well-known respondem pela borda, sem redirecionamento
         run: python3 infra/verificacao/verificar_borda_local.py http://localhost:3000 .
 
-      # OS HOSTS DO SITE PELA BORDA (ADR-0024, item 5). Os blocos do site no
+      # OS HOSTS DO SITE PELA BORDA (ADR-0028, item 5). Os blocos do site no
       # Caddyfile tem como padrao `site.localhost`, `tag.localhost` e
       # `www.localhost`, na porta 80 de dentro da borda, que esta pilha nao
       # publica: a requisicao sai do container `web`, atravessa o Caddy de
@@ -843,7 +843,7 @@ jobs:
       # A isca vem primeiro: a mesma tabela contra a porta da ORIGEM DA
       # APLICACAO (3000), onde nenhum host do site existe, PRECISA reprovar.
       # Se passar, o script parou de distinguir um host do outro.
-      - name: a borda entrega cada host do site pela tabela do ADR-0024
+      - name: a borda entrega cada host do site pela tabela do ADR-0028
         run: |
           if docker compose exec -T web node --input-type=module - http://edge:3000 \
               < infra/verificacao/verificar-hosts-do-site.mjs > isca.out 2>&1; then
@@ -1671,7 +1671,7 @@ jobs:
         run: npm run verify:isolamento-da-pilha
 
   # ===========================================================================
-  # A IMAGEM DO SITE (web/), decisao do cliente de 23/09/2026 e ADR-0024
+  # A IMAGEM DO SITE (web/), decisao do cliente de 23/09/2026 e ADR-0028
   # ===========================================================================
   # O site (Astro com renderizacao no servidor, Node na 4321) roda na mesma VM,
   # em imagem SEPARADA da API. Este job constroi essa
@@ -1687,7 +1687,7 @@ jobs:
   # SEM FILTRO DE CAMINHO, pelo mesmo motivo do job `isolamento`: `skipped` e o
   # que o `portao` recusa.
   #
-  # O QUE ESTE JOB AINDA NAO FAZ, e o ADR-0024 (item 10) pede: `astro check`,
+  # O QUE ESTE JOB AINDA NAO FAZ, e o ADR-0028 (item 10) pede: `astro check`,
   # tipos do contrato regenerados, portao dos tokens com isca, orcamento de
   # 30 KB por rota, LCP/CLS/INP, cabecalho por rota e o toque sem JavaScript.
   # Cada um precisa de uma pagina real para medir, e o site hoje e um
@@ -1736,10 +1736,10 @@ jobs:
           confere "o site nao roda como o usuario sem privilegio da imagem" "$(docker inspect $c --format '{{.Config.User}}')" node
           confere "a raiz do container do site nao e somente leitura" "$(docker inspect $c --format '{{.HostConfig.ReadonlyRootfs}}')" true
           confere "o site nao derrubou todas as capacidades" "$(docker inspect $c --format '{{.HostConfig.CapDrop}}')" "[ALL]"
-          confere "o limite de memoria do site nao e os 96 MB do ADR-0024" "$(docker inspect $c --format '{{.HostConfig.Memory}}')" 100663296
+          confere "o limite de memoria do site nao e os 96 MB do ADR-0028" "$(docker inspect $c --format '{{.HostConfig.Memory}}')" 100663296
           confere "o site publica porta no hospedeiro; so a borda pode alcanca-lo" "$(docker inspect $c --format '{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{$p}} {{end}}{{end}}')" ""
           # LISTA FECHADA do que o site pode receber de ambiente: o que a
-          # propria imagem declara, mais as quatro do ADR-0024 (item 9). Chave
+          # propria imagem declara, mais as quatro do ADR-0028 (item 9). Chave
           # nova no container que nao esta aqui reprova, seja segredo ou nao --
           # e e assim que um `env_file: [.env]` acrescentado por engano aparece.
           da_imagem=$(docker image inspect bichu-web:local --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sed '/^$/d')
@@ -1750,7 +1750,7 @@ jobs:
           permitidas=$(printf '%s\n' "$da_imagem" API_INTERNAL_URL MEDIA_PUBLIC_BASE_URL SITE_BASE_URL NODE_OPTIONS | sort -u)
           recebidas=$(docker inspect $c --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sed '/^$/d' | sort -u)
           sobra=$(comm -13 <(printf '%s\n' "$permitidas") <(printf '%s\n' "$recebidas"))
-          confere "o site recebeu variavel fora da lista do ADR-0024" "$(printf '%s\n' "$sobra" | tr '\n' ' ' | sed 's/ *$//')" ""
+          confere "o site recebeu variavel fora da lista do ADR-0028" "$(printf '%s\n' "$sobra" | tr '\n' ' ' | sed 's/ *$//')" ""
           echo "ambiente do site: $(printf '%s\n' "$recebidas" | tr '\n' ' ')"
           if [ "$falhas" != 0 ]; then exit 1; fi
 
@@ -1778,7 +1778,7 @@ jobs:
               if (r.status !== status) erros.push(`status ${r.status}, esperado ${status}`);
               if (tipo && !t.startsWith(tipo)) erros.push(`tipo ${t}, esperado ${tipo}`);
               if (c !== cache) erros.push(`cache-control "${c}", esperado "${cache}"`);
-              if (!csp.includes("frame-ancestors")) erros.push("sem frame-ancestors (ADR-0024, item 7)");
+              if (!csp.includes("frame-ancestors")) erros.push("sem frame-ancestors (ADR-0028, item 7)");
               console.log(`${erros.length ? "::error::" : ""}${caminho} -> ${r.status} ${t} | ${c}${erros.length ? " | " + erros.join("; ") : ""}`);
               falhas += erros.length ? 1 : 0;
             }

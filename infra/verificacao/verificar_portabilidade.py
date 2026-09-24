@@ -110,7 +110,7 @@ def motivo_anotado(linha: str) -> str | None:
 
 # Lockfile e gerado pelo gerenciador de pacotes e carrega, por natureza, a URL
 # do registro de onde cada pacote veio. Ele nao e codigo nosso e nao decide host
-# nenhum em tempo de execucao. Entrou com `web/` (ADR-0024), a primeira raiz
+# nenhum em tempo de execucao. Entrou com `web/` (ADR-0028), a primeira raiz
 # varrida que tem `package.json` proprio. Isento pelo NOME exato, e nao por
 # extensao: um `.json` qualquer em `web/` continua varrido.
 ARQUIVOS_GERADOS = ("package-lock.json",)

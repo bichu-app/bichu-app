@@ -60,7 +60,7 @@
 # --------------------------------------------------------------------------
 # ADR-0017, emenda 1: todo host que aparece num link nosso que precisa abrir o
 # app serve a SUA copia destes dois arquivos, com conteudo identico. Com o
-# ADR-0024 sao tres blocos que os servem (a origem da aplicacao, o apex do site
+# ADR-0028 sao tres blocos que os servem (a origem da aplicacao, o apex do site
 # e o host da tag), e o trecho existe para que eles NAO possam divergir: uma
 # copia escrita tres vezes e a que um dia ganha um redirecionamento num lado so.
 #
@@ -72,7 +72,7 @@
 #
 # Quem hospeda: ate 23/09 este comentario dizia que, em producao, os dois
 # arquivos seriam servidos por um time web noutro servidor. A decisao do
-# cliente de 23/09 trouxe o site para esta mesma borda (ADR-0024), e o item 6
+# cliente de 23/09 trouxe o site para esta mesma borda (ADR-0028), e o item 6
 # dele manda os arquivos ficarem AQUI, servidos pela borda e fora da imagem do
 # site: o conteudo e do app (identificador e impressao digital da chave do
 # APK), e um deploy do site nao pode apagar a associacao por engano. Os tres
@@ -98,7 +98,7 @@
 # --------------------------------------------------------------------------
 # O gateway `/v1` (ADR-0016), como TRECHO importado por host
 # --------------------------------------------------------------------------
-# ADR-0024: `/v1/*` e servido em mais de um host (o da API e os do site, na
+# ADR-0028: `/v1/*` e servido em mais de um host (o da API e os do site, na
 # mesma origem da pagina). O trecho existe para que a protecao grossa e a
 # tabela de `/v1` sejam UMA so: importada, e nao copiada. Uma copia por host e
 # a que um dia fica com outro `max_size`, e `verificar_borda.py` le o primeiro
@@ -153,7 +153,7 @@
 }
 
 # --------------------------------------------------------------------------
-# A documentacao fora do host da API (ADR-0024, item 5)
+# A documentacao fora do host da API (ADR-0028, item 5)
 # --------------------------------------------------------------------------
 # Nos hosts do site, `/v1/*` vai para a API. Sem este trecho, `/v1/docs` e
 # `/v1/openapi.yaml` iriam junto -- e SEM o `basic_auth`, que so existe no
@@ -169,7 +169,7 @@
 # --------------------------------------------------------------------------
 # O que a origem da aplicacao responde fora das rotas conhecidas
 # --------------------------------------------------------------------------
-# ADR-0024, item 5: em desenvolvimento os quatro papeis dividem um host
+# ADR-0028, item 5: em desenvolvimento os quatro papeis dividem um host
 # (`localhost:3000`), entao o catch-all LOCAL e o site. Nos hosts da API
 # hospedados (`hml`, `api`) ele continua 404 (ADR-0017, item 5).
 #
@@ -302,17 +302,17 @@
 }
 
 # --------------------------------------------------------------------------
-# Os hosts do site (ADR-0024, item 5)
+# Os hosts do site (ADR-0028, item 5)
 # --------------------------------------------------------------------------
 # Decisao do cliente de 23/09/2026: o site roda nesta mesma maquina, atras
 # desta mesma borda, num container proprio (`web:4321`). Tres blocos, um por
-# papel de host, e a tabela deles esta no item 5 do ADR-0024.
+# papel de host, e a tabela deles esta no item 5 do ADR-0028.
 #
 # AS DUAS REGRAS DO CABECALHO VALEM IGUAL AQUI: nada reescreve caminho (so
 # `handle`, e o 308 abaixo e redirecionamento, nao reescrita), e nenhum numero
 # de limite novo -- o de `/v1` vem de `gateway_v1`, o mesmo do bloco da API.
 #
-# A BORDA NAO ACRESCENTA CABECALHO DE PAGINA (ADR-0024, item 7). CSP,
+# A BORDA NAO ACRESCENTA CABECALHO DE PAGINA (ADR-0028, item 7). CSP,
 # `Referrer-Policy`, `X-Robots-Tag` e cache das paginas saem do container do
 # site, para a politica viajar com a imagem quando ele mudar de lugar. Aqui so
 # as respostas de `/v1` recebem os mesmos cabecalhos que recebem no host da
@@ -343,7 +343,7 @@
 # certificado sai por HTTP-01 e cada tentativa sem DNS consome o limite do
 # emissor.
 
-# bichu.app: o site, com `/v1` na mesma origem da pagina (ADR-0024, item 4).
+# bichu.app: o site, com `/v1` na mesma origem da pagina (ADR-0028, item 4).
 {$SITE_HOSTS:http://site.localhost} {
 	encode zstd gzip
 

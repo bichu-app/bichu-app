@@ -1,5 +1,5 @@
 /* global console, process, URL */
-// A tabela de hosts do site (ADR-0024, item 5), conferida contra a borda DE
+// A tabela de hosts do site (ADR-0028, item 5), conferida contra a borda DE
 // VERDADE, atravessando o Caddy ate o `web` e a `api`.
 //
 // Por que um script e nao tres `curl` no YAML da esteira: a tabela tem doze

@@ -1,5 +1,5 @@
 /* global process, URL, performance */
-// Servidor minimo do site (ADR-0024, item 7). Tres responsabilidades, e so
+// Servidor minimo do site (ADR-0028, item 7). Tres responsabilidades, e so
 // elas:
 //
 //   1. cabecalhos de seguranca em TODA resposta, inclusive nas paginas

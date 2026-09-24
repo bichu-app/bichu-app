@@ -1,11 +1,11 @@
-# Imagem do SITE (institucional e paginas publicas), ADR-0024. Separada da
+# Imagem do SITE (institucional e paginas publicas), ADR-0028. Separada da
 # imagem da API por decisao do cliente de 23/09/2026: roda hoje na mesma VM,
 # atras da mesma borda, e a separacao existe para que mudar o site de maquina
 # seja mover UMA imagem, sem desmontar a pilha da API.
 #
 # Contexto de build: `web/`, e nada acima dele. A imagem nao enxerga `.env`,
 # `src/`, `api/` nem `design/`: os derivados de que o site precisa (tipos do
-# contrato, tokens) sao versionados dentro de `web/` (ADR-0024, item 9).
+# contrato, tokens) sao versionados dentro de `web/` (ADR-0028, item 9).
 #
 #   docker compose build web          (o caminho da esteira e do host)
 #   docker build --build-arg BUILD_COMMIT=$(git rev-parse HEAD) -t bichu-web:local web
@@ -73,7 +73,7 @@ COPY package.json servidor.mjs ./
 USER node
 EXPOSE 4321
 
-# `/healthz` e respondido pelo servidor minimo (ADR-0024, item 7). O Node da
+# `/healthz` e respondido pelo servidor minimo (ADR-0028, item 7). O Node da
 # imagem slim nao tem curl nem wget, e a sonda usa o proprio runtime -- o
 # mesmo padrao da sonda da API.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \

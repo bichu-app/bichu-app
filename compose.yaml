@@ -27,7 +27,7 @@
 # morre, reinicia, e o trabalho volta para a tabela `jobs`.
 #
 # Soma dos limites: 1888 MB, deixando ~160 MB para o sistema operacional.
-# (1792 ate 23/09; o `web`, com 96 MB, entrou nessa data pelo ADR-0024.)
+# (1792 ate 23/09; o `web`, com 96 MB, entrou nessa data pelo ADR-0028.)
 # Se apertar, e2-medium e REINICIO e nao migracao: parar, trocar o tipo,
 # religar. Dura minutos.
 #
@@ -455,14 +455,14 @@ services:
 
   web:
     # O SITE: institucional e as paginas publicas que o ADR-0017 tirou da API
-    # (`/t/{code}`, `/redefinir-senha` e as outras). ADR-0024: Astro com
+    # (`/t/{code}`, `/redefinir-senha` e as outras). ADR-0028: Astro com
     # renderizacao no servidor nas rotas com parametro, num processo Node
     # proprio. Decisao do cliente de 23/09/2026: mesma VM, IMAGEM SEPARADA,
     # para que mudar o site de lugar seja mover este servico.
     #
     # O que ele NAO tem, e cada ausencia e a regra:
     #   - sem `env_file`: o site nao le `.env`. As tres variaveis abaixo sao
-    #     as unicas que ele recebe, e nenhuma e segredo (ADR-0024, item 9);
+    #     as unicas que ele recebe, e nenhuma e segredo (ADR-0028, item 9);
     #   - sem `depends_on`: ele sobe e serve sozinho. API fora do ar vira 503
     #     na pagina que precisa dela, e a home pre-renderizada continua de pe;
     #   - sem `ports`: so a borda o alcanca, pela rede interna do compose.
@@ -478,15 +478,15 @@ services:
         BUILD_COMMIT: ${BUILD_COMMIT:-}
     environment:
       # A API pela rede interna, nunca pelo host publico: a chamada da
-      # renderizacao fica dentro da maquina (ADR-0024, item 3).
+      # renderizacao fica dentro da maquina (ADR-0028, item 3).
       API_INTERNAL_URL: http://api:3000
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       SITE_BASE_URL: ${SITE_BASE_URL:-${PUBLIC_BASE_URL:-http://localhost:3000}}
       # Heap em 48 MB dentro de um teto de 96 MB: o resto e codigo, buffers e
-      # a pilha do Node. Medido pelo ADR-0024 (47 MiB depois de 1000
+      # a pilha do Node. Medido pelo ADR-0028 (47 MiB depois de 1000
       # renderizacoes) e aqui em 23/09 (37 MiB depois de 300 no placeholder).
       NODE_OPTIONS: --max-old-space-size=48
-    # ADR-0024: a soma do topo passa de 1792 para 1888 MB, ~160 MB para o
+    # ADR-0028: a soma do topo passa de 1792 para 1888 MB, ~160 MB para o
     # sistema na e2-small. O gatilho de troca de maquina e o do ADR-0013.
     mem_limit: 96m
     read_only: true
@@ -498,7 +498,7 @@ services:
     healthcheck:
       # A mesma sonda da imagem, repetida aqui para ficar visivel de fora.
       # A borda so pode passar a mandar um host para ca DEPOIS disto ficar
-      # verde: na ordem contraria o host responde 502 (ADR-0024, item 5).
+      # verde: na ordem contraria o host responde 502 (ADR-0028, item 5).
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4321/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
       timeout: 3s
@@ -583,7 +583,7 @@ services:
       # colapsa para a base sozinha e nada muda.
       HOSTS_EXTRA_APP: ${HOSTS_EXTRA_APP:-}
       HOSTS_EXTRA_MIDIA: ${HOSTS_EXTRA_MIDIA:-}
-      # Os hosts do SITE (ADR-0024, item 5). Os padroes `*.localhost` nao sao
+      # Os hosts do SITE (ADR-0028, item 5). Os padroes `*.localhost` nao sao
       # dominio de ninguem: os blocos existem e sao exercitados, e `bichu.app`
       # e `tag.bichu.app` ficam onde estao ate o corte (roteiro, passo 14).
       #
