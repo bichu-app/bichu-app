@@ -1,0 +1,377 @@
+# Entrega continua do Bichu: api, web, admin e a borda, por digest.
+#
+# DESENHO (o resto do arquivo so executa isto):
+#   1. `portoes`: marcador de migracao, iscas da sonda de commit, iscas do
+#      script de deploy e a isca do digest errado. Roda tambem em PR.
+#   2. uma imagem por container, construida UMA vez e publicada no Artifact
+#      Registry. Arvore ja construida e reaproveitada: e assim que a `main`
+#      promove para producao o digest que a `development` testou em hml.
+#   3. um job de deploy por container (`cd-implantar.yml`), que roda
+#      `infra/cd/implantar.sh` NA VM por IAP, sem nada construido la.
+#   4. `development` -> `hml`, automatico. `main` -> `producao`, com o
+#      `environment` pedindo aprovacao humana.
+#   5. ordem: api (com migracao, worker parado antes) -> web -> admin -> borda.
+#      A borda por ultimo: o site precisa estar saudavel antes (ADR-0028).
+#   6. reverter e um comando: `gh workflow run cd.yml -f ambiente=hml
+#      -f acao=reverter -f servico=api`, que promove o digest anterior.
+#
+# NADA AQUI E SEGREDO. Autenticacao por Workload Identity Federation, sem
+# chave (a organizacao bloqueia chave de conta de servico). As variaveis dos
+# environments sao nomes: VM, zona, URL, provedor e conta do CD.
+
+name: cd
+
+on:
+  push:
+    branches: [development, main]
+  pull_request:
+    branches: [development, main]
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: onde
+        type: choice
+        options: [hml, producao]
+        required: true
+      acao:
+        description: implantar o commit desta branch, ou reverter para a implantacao anterior
+        type: choice
+        options: [implantar, reverter]
+        required: true
+      servico:
+        description: qual container (implantar implanta todos; reverter, so este)
+        type: choice
+        options: [api, web, admin, borda]
+        required: true
+      descer_migracoes:
+        description: "so para reverter a api: rodar a DESCIDA das migracoes que o destino nao conhece (apaga o que elas criaram)"
+        type: choice
+        options: [nao, sim]
+        default: nao
+
+permissions:
+  contents: read
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+# Um deploy por ambiente de cada vez, e nunca cancelado no meio: cancelar entre
+# a migracao e a troca da imagem deixaria o worker parado.
+concurrency:
+  group: cd-${{ github.event_name == 'workflow_dispatch' && inputs.ambiente || github.ref }}
+  cancel-in-progress: false
+
+env:
+  REGISTRO: ${{ vars.REGISTRO }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  portoes:
+    name: portoes do CD (marcador de migracao, sonda, script, digest errado)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+
+      # Migracao sem `-- Up Migration` faz o node-pg-migrate rodar subida e
+      # descida juntas e registrar como aplicada. Nada vai para um banco sem
+      # passar aqui antes.
+      - name: toda migracao separa subida e descida
+        run: |
+          set -euo pipefail
+          node infra/verificacao/verificar-marcador-de-migracao.mjs migrations
+
+      # As iscas da sonda que encerra cada deploy da api. Sonda cega nao sai
+      # daqui para um destino.
+      - name: as iscas da sonda de commit reprovam
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016  # o trecho e JavaScript, e o `${}` e dele
+          node --input-type=module -e '
+            const m = await import("./infra/verificacao/verificar-commit-no-health.mjs");
+            const cegueiras = m.autoteste();
+            if (m.ISCAS_EXERCIDAS === 0) { console.log("nenhuma isca exercida: o autoteste nao verificou nada"); process.exit(1); }
+            if (cegueiras.length) { console.log(cegueiras.join("\n")); process.exit(1); }
+            console.log(`iscas da sonda: ${m.ISCAS_EXERCIDAS} casos, todos com o resultado exigido`);'
+
+      - name: o script de deploy passa no shellcheck e nas proprias iscas
+        run: |
+          set -euo pipefail
+          shellcheck infra/cd/*.sh infra/bootstrap-cd.sh
+          ACAO=autoteste bash infra/cd/implantar.sh
+
+      - name: isca -- deploy com digest errado reprova nomeando a divergencia
+        run: |
+          set -euo pipefail
+          bash infra/cd/isca-digest-errado.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # Sem o bootstrap (infra/bootstrap-cd.sh) nao ha provedor de identidade nem
+  # registro, e todo job abaixo morreria na autenticacao com uma mensagem que
+  # nao diz isso. Aqui ele reprova dizendo.
+  pre-requisitos:
+    name: o bootstrap do CD foi aplicado
+    if: github.event_name != 'pull_request'
+    needs: portoes
+    runs-on: ubuntu-latest
+    steps:
+      - name: variaveis do repositorio
+        env:
+          WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+          CD_SA: ${{ vars.CD_SA }}
+        run: |
+          set -euo pipefail
+          falta=""
+          [ -n "$REGISTRO" ] || falta="$falta REGISTRO"
+          [ -n "$WIF_PROVIDER" ] || falta="$falta WIF_PROVIDER"
+          [ -n "$CD_SA" ] || falta="$falta CD_SA"
+          if [ -n "$falta" ]; then
+            echo "::error::faltam variaveis do repositorio:$falta. O bootstrap do CD (infra/bootstrap-cd.sh) nao foi aplicado"
+            exit 1
+          fi
+          if [ "${{ github.event_name }}" = workflow_dispatch ] && [ "${{ inputs.ambiente }}" = producao ] && [ "${{ github.ref }}" != refs/heads/main ]; then
+            echo "::error::producao so recebe o que esta na main (disparado de ${{ github.ref }})"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # IMAGENS: uma por container. Contexto que nao existe nesta arvore REPROVA
+  # (web entra com o PR #5; admin e a borda com imagem propria entram com a
+  # branch do backoffice). Os jobs sao separados para que a falta de uma nao
+  # segure o deploy das outras -- e o run inteiro fica vermelho, que e o aviso.
+  imagem-app:
+    name: imagem api/worker e migrador
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.acao == 'implantar')
+    needs: pre-requisitos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      ref: ${{ steps.app.outputs.ref }}
+      ref_migrador: ${{ steps.migrador.outputs.ref }}
+      commit: ${{ steps.app.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CD_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker "${REGISTRO%%/*}" --quiet
+      - id: app
+        run: bash infra/cd/construir-imagem.sh bichu-app . prod
+      - id: migrador
+        run: bash infra/cd/construir-imagem.sh bichu-migrador . migrador
+      # As duas saem da mesma arvore; commit gravado diferente e defeito.
+      - name: api e migrador vieram do mesmo commit
+        run: |
+          set -euo pipefail
+          [ "${{ steps.app.outputs.commit }}" = "${{ steps.migrador.outputs.commit }}" ] || {
+            echo "::error::a imagem da api veio de ${{ steps.app.outputs.commit }} e a do migrador de ${{ steps.migrador.outputs.commit }}"; exit 1; }
+
+  imagem-web:
+    name: imagem do site
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.acao == 'implantar')
+    needs: pre-requisitos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      ref: ${{ steps.img.outputs.ref }}
+      commit: ${{ steps.img.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CD_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker "${REGISTRO%%/*}" --quiet
+      - id: img
+        run: bash infra/cd/construir-imagem.sh bichu-web web
+
+  imagem-admin:
+    name: imagem do backoffice
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.acao == 'implantar')
+    needs: pre-requisitos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      ref: ${{ steps.img.outputs.ref }}
+      commit: ${{ steps.img.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CD_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker "${REGISTRO%%/*}" --quiet
+      - id: img
+        run: bash infra/cd/construir-imagem.sh bichu-admin-web admin
+
+  imagem-borda:
+    name: imagem da borda
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.acao == 'implantar')
+    needs: pre-requisitos
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      ref: ${{ steps.img.outputs.ref }}
+      commit: ${{ steps.img.outputs.commit }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CD_SA }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - run: gcloud auth configure-docker "${REGISTRO%%/*}" --quiet
+      - id: img
+        run: bash infra/cd/construir-imagem.sh bichu-edge infra/caddy
+
+  # ---------------------------------------------------------------------------
+  # HOMOLOGACAO: automatico a partir da `development`, ou por dispatch.
+  hml-api:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/development') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'hml' && inputs.acao == 'implantar')
+    needs: imagem-app
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: hml
+      servico: api
+      acao: implantar
+      commit: ${{ needs.imagem-app.outputs.commit }}
+      ref: ${{ needs.imagem-app.outputs.ref }}
+      ref_migrador: ${{ needs.imagem-app.outputs.ref_migrador }}
+
+  hml-web:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/development') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'hml' && inputs.acao == 'implantar')
+    needs: [imagem-web, hml-api]
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: hml
+      servico: web
+      acao: implantar
+      commit: ${{ needs.imagem-web.outputs.commit }}
+      ref: ${{ needs.imagem-web.outputs.ref }}
+
+  # DESLIGADO por condicao explicita ate a sessao App mesclar o backoffice na
+  # `development` e confirmar: variavel de repositorio CD_ADMIN_HML=ligado.
+  # O job aparece como pulado, com o motivo no nome.
+  hml-admin:
+    name: admin em hml (so com CD_ADMIN_HML=ligado)
+    if: >-
+      vars.CD_ADMIN_HML == 'ligado' && (
+      (github.event_name == 'push' && github.ref == 'refs/heads/development') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'hml' && inputs.acao == 'implantar'))
+    needs: [imagem-admin, hml-api]
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: hml
+      servico: admin
+      acao: implantar
+      commit: ${{ needs.imagem-admin.outputs.commit }}
+      ref: ${{ needs.imagem-admin.outputs.ref }}
+
+  # A borda so depois do site saudavel; o admin pode estar desligado (pulado),
+  # mas nao falho.
+  hml-borda:
+    if: >-
+      !cancelled() && needs.hml-web.result == 'success' && needs.imagem-borda.result == 'success' &&
+      (needs.hml-admin.result == 'success' || needs.hml-admin.result == 'skipped') && (
+      (github.event_name == 'push' && github.ref == 'refs/heads/development') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'hml' && inputs.acao == 'implantar'))
+    needs: [imagem-borda, hml-web, hml-admin]
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: hml
+      servico: borda
+      acao: implantar
+      commit: ${{ needs.imagem-borda.outputs.commit }}
+      ref: ${{ needs.imagem-borda.outputs.ref }}
+
+  # ---------------------------------------------------------------------------
+  # PRODUCAO: a partir da `main`, sempre pela aprovacao do environment
+  # `producao` (revisores obrigatorios, configurados pelo bootstrap).
+  producao-api:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'producao' && inputs.acao == 'implantar')
+    needs: imagem-app
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: producao
+      servico: api
+      acao: implantar
+      commit: ${{ needs.imagem-app.outputs.commit }}
+      ref: ${{ needs.imagem-app.outputs.ref }}
+      ref_migrador: ${{ needs.imagem-app.outputs.ref_migrador }}
+
+  producao-web:
+    if: >-
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'producao' && inputs.acao == 'implantar')
+    needs: [imagem-web, producao-api]
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: producao
+      servico: web
+      acao: implantar
+      commit: ${{ needs.imagem-web.outputs.commit }}
+      ref: ${{ needs.imagem-web.outputs.ref }}
+
+  # A v1 do backoffice NAO esta pronta para producao. Desligado ate o ok do
+  # cliente, confirmado pela sessao App: CD_ADMIN_PRODUCAO=ligado.
+  producao-admin:
+    name: admin em producao (so com CD_ADMIN_PRODUCAO=ligado)
+    if: >-
+      vars.CD_ADMIN_PRODUCAO == 'ligado' && (
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'producao' && inputs.acao == 'implantar'))
+    needs: [imagem-admin, producao-api]
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: producao
+      servico: admin
+      acao: implantar
+      commit: ${{ needs.imagem-admin.outputs.commit }}
+      ref: ${{ needs.imagem-admin.outputs.ref }}
+
+  producao-borda:
+    if: >-
+      !cancelled() && needs.producao-web.result == 'success' && needs.imagem-borda.result == 'success' &&
+      (needs.producao-admin.result == 'success' || needs.producao-admin.result == 'skipped') && (
+      (github.event_name == 'push' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_dispatch' && inputs.ambiente == 'producao' && inputs.acao == 'implantar'))
+    needs: [imagem-borda, producao-web, producao-admin]
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: producao
+      servico: borda
+      acao: implantar
+      commit: ${{ needs.imagem-borda.outputs.commit }}
+      ref: ${{ needs.imagem-borda.outputs.ref }}
+
+  # ---------------------------------------------------------------------------
+  # REVERTER: um comando, que promove o digest anterior daquele servico.
+  #   gh workflow run cd.yml --ref main -f ambiente=producao -f acao=reverter -f servico=api
+  # Em producao passa pela mesma aprovacao. Depois de migracao, ver
+  # `descer_migracoes` e a regra em infra/cd/implantar.sh (reverter_api).
+  reverter:
+    if: github.event_name == 'workflow_dispatch' && inputs.acao == 'reverter'
+    needs: pre-requisitos
+    uses: ./.github/workflows/cd-implantar.yml
+    with:
+      ambiente: ${{ inputs.ambiente }}
+      servico: ${{ inputs.servico }}
+      acao: reverter
+      descer_migracoes: ${{ inputs.descer_migracoes }}

@@ -1,0 +1,131 @@
+# Implanta (ou reverte) UM servico num ambiente. Chamado por `cd.yml`; nao
+# dispara sozinho. O trabalho de verdade e de `infra/cd/implantar.sh`, que roda
+# NA VM: este arquivo so autentica, entrega o script e a release, e no fim roda
+# a sonda de commit contra o endereco publico.
+#
+# O `environment` do job e o do ambiente (`hml` ou `producao`). E ele que
+# guarda as variaveis do destino (VM, zona, URL) e, em producao, a aprovacao
+# humana obrigatoria. Nenhuma variavel aqui e segredo: a autenticacao e por
+# Workload Identity Federation, sem chave, e o que vem do GitHub e o nome do
+# provedor e da conta, que nao dao acesso a nada sozinhos.
+
+name: cd-implantar
+
+on:
+  workflow_call:
+    inputs:
+      ambiente: {type: string, required: true}        # hml | producao
+      servico: {type: string, required: true}         # api | web | admin | borda
+      acao: {type: string, required: true}            # implantar | reverter
+      commit: {type: string, required: false, default: ''}
+      ref: {type: string, required: false, default: ''}
+      ref_migrador: {type: string, required: false, default: ''}
+      descer_migracoes: {type: string, required: false, default: nao}
+
+permissions:
+  contents: read
+  id-token: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  implantar:
+    name: ${{ inputs.acao }} ${{ inputs.servico }} em ${{ inputs.ambiente }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: ${{ inputs.ambiente }}
+    env:
+      VM: ${{ vars.VM }}
+      ZONA: ${{ vars.ZONA }}
+      BICHU_DIR: ${{ vars.BICHU_DIR }}
+      URL_API: ${{ vars.URL_API }}
+      HOST_SONDA: ${{ vars.HOST_SONDA }}
+      PROJETO: ${{ vars.PROJETO_GCP }}
+      WIF_PROVIDER: ${{ vars.WIF_PROVIDER }}
+      CD_SA: ${{ vars.CD_SA }}
+      ACAO: ${{ inputs.acao }}
+      SERVICO: ${{ inputs.servico }}
+      COMMIT: ${{ inputs.commit }}
+      REF: ${{ inputs.ref }}
+      REF_MIGRADOR: ${{ inputs.ref_migrador }}
+      DESCER_MIGRACOES: ${{ inputs.descer_migracoes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Variavel de ambiente que falta REPROVA. Um `gcloud compute ssh` com VM
+      # vazia erraria longe daqui, com mensagem que nao diz o que faltou.
+      - name: o ambiente declara tudo que o deploy usa
+        run: |
+          set -euo pipefail
+          falta=""
+          for v in VM ZONA BICHU_DIR URL_API HOST_SONDA PROJETO WIF_PROVIDER CD_SA; do
+            if [ -z "${!v}" ]; then falta="$falta $v"; fi
+          done
+          if [ -n "$falta" ]; then
+            echo "::error::o environment '${{ inputs.ambiente }}' nao declara:$falta. Ver infra/bootstrap-cd.sh (secao GitHub)"
+            exit 1
+          fi
+          # O que vai para a linha de comando na VM so pode ter forma de commit e de digest.
+          if [ "$ACAO" = implantar ]; then
+            [[ "$COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::commit sem forma de commit: '$COMMIT'"; exit 1; }
+            [[ "$REF" =~ ^[a-z0-9./-]+@sha256:[0-9a-f]{64}$ ]] || { echo "::error::imagem sem digest: '$REF'"; exit 1; }
+            if [ "$SERVICO" = api ]; then
+              [[ "$REF_MIGRADOR" =~ ^[a-z0-9./-]+@sha256:[0-9a-f]{64}$ ]] || { echo "::error::migrador sem digest: '$REF_MIGRADOR'"; exit 1; }
+            fi
+          fi
+          [[ "$DESCER_MIGRACOES" =~ ^(sim|nao)$ ]] || { echo "::error::descer_migracoes invalido"; exit 1; }
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.CD_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # A release e o que o host precisa ALEM das imagens: o compose.yaml (a
+      # definicao dos servicos) e infra/caddy (a configuracao da borda, que e
+      # montada e nao vai na imagem). Sai do mesmo commit das imagens.
+      - name: entrega o script e a release na VM
+        run: |
+          set -euo pipefail
+          # A release sai do commit checado (o da branch que dispara), mesmo
+          # quando a imagem foi REAPROVEITADA de outro commit com a mesma arvore.
+          git archive -o "$RUNNER_TEMP/release.tar" HEAD compose.yaml infra/caddy
+          gcloud compute ssh "$VM" --zone "$ZONA" --project "$PROJETO" --tunnel-through-iap \
+            --command 'mkdir -p /tmp/bichu-cd'
+          gcloud compute scp --zone "$ZONA" --project "$PROJETO" --tunnel-through-iap \
+            infra/cd/implantar.sh "$RUNNER_TEMP/release.tar" "$VM:/tmp/bichu-cd/"
+
+      - id: vm
+        name: roda infra/cd/implantar.sh na VM
+        run: |
+          set -euo pipefail
+          plano="ACAO=$ACAO SERVICO=$SERVICO DESCER_MIGRACOES=$DESCER_MIGRACOES BICHU_DIR=$BICHU_DIR HOST_SONDA=$HOST_SONDA"
+          if [ "$ACAO" = implantar ]; then
+            plano="$plano COMMIT=$COMMIT RELEASE=/tmp/bichu-cd/release.tar"
+            if [ "$SERVICO" = api ]; then plano="$plano REF_APP=$REF REF_MIGRADOR=$REF_MIGRADOR"; else plano="$plano REF=$REF"; fi
+          fi
+          gcloud compute ssh "$VM" --zone "$ZONA" --project "$PROJETO" --tunnel-through-iap \
+            --command "sudo env $plano bash /tmp/bichu-cd/implantar.sh" 2>&1 | tee "$RUNNER_TEMP/vm.log"
+          no_ar=$(sed -n 's/^COMMIT_NO_AR=\([0-9a-f]\{40\}\)$/\1/p' "$RUNNER_TEMP/vm.log" | tail -1)
+          if [ "$ACAO" = reverter ]; then
+            [ -n "$no_ar" ] || { echo "::error::a reversao nao disse para qual commit voltou"; exit 1; }
+            echo "commit=$no_ar" >> "$GITHUB_OUTPUT"
+          else
+            echo "commit=$COMMIT" >> "$GITHUB_OUTPUT"
+          fi
+
+      # A CONDICAO 1: o job termina na sonda de commit, e ela reprova se o que
+      # responde no endereco publico nao for o commit que se pretendia.
+      # So a API tem `/v1/health` com `build.commit`; o site e o backoffice
+      # ainda nao expoem o commit (ver o relatorio da CD), e para eles o portao
+      # final e o do script: container de pe com a imagem do digest pedido.
+      - name: a sonda de commit, pelo endereco publico
+        if: inputs.servico == 'api'
+        run: |
+          set -euo pipefail
+          node infra/verificacao/verificar-commit-no-health.mjs "$URL_API" "${{ steps.vm.outputs.commit }}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"

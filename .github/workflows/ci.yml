@@ -40,6 +40,15 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# `shell: bash` EXPLICITO muda o que o GitHub executa: sem ele o passo roda com
+# `bash -e {0}`, SEM `pipefail`, e todo `comando | tee` fica verde com o comando
+# reprovado -- era o caso de `verificar-arquivos-no-container.mjs ... | tee` e
+# da propria sonda de commit (`verificar-commit-no-health.mjs ... | tee`). Com
+# ele, o GitHub usa `bash --noprofile --norc -eo pipefail {0}` em todo passo.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   rapidos:
     name: portoes rapidos (portabilidade, dispensas, segredo)
