@@ -535,6 +535,15 @@ O evento é visível para esta operação sob a mesma regra de `getNetworkEvent`
 (`publication_status IN ('published', 'cancelled')`), com a autorização na
 cláusula `WHERE`. O `x-rate-limit` é por conta.
 
+**Linha para o mobile:** escolha (a), por operação separada. O ponto do
+encontro sai só em `GET /v1/network/events/{eventSlug}/location`, com
+`bearerAuth` obrigatório; `getNetworkEvent` continua sem ponto e com
+autenticação opcional, então a retirada do token da chamada de detalhe em
+`feat/secao-rede-emenda-app` (`9b8caa2`) **fica como está**, e o app acrescenta
+a chamada de `location`, com token, na tela do encontro. Sem conta, a tela
+mostra os rótulos e não mostra mapa. O P5 de `04-seguranca.md` não precisa de
+emenda: nenhuma operação com alternativa `{}` carrega `lat`/`lon`.
+
 **12.6 Cancelado.** `NetworkEventStatus` ganha `cancelled`, que prevalece sobre
 o estado temporal. Por quanto tempo o evento cancelado continua na lista é a
 pergunta 1 no fim; até a resposta, o padrão é continuar até o fim previsto.
