@@ -199,6 +199,15 @@ export function comoObjectKey(valor: string): ObjectKey {
     return valor as ObjectKey;
   }
 
+  // A imagem de catalogo do backoffice (ADR-0027 item 10, BICHUS-267). Sem
+  // segmento de dono, porque ela nao tem dono: e conteudo do produto, nao de uma
+  // pessoa. O prefixo proprio e o que deixa uma politica de bucket, um ciclo de
+  // vida e o CORS do envio pelo navegador (ADR-0027 item 4: "so no prefixo do
+  // catalogo") valerem para ela e para nada mais.
+  if (segmentos.length === 3 && segmentos[0] === 'catalog' && segmentos[1] === 'original') {
+    return valor as ObjectKey;
+  }
+
   if (segmentos.length === 2 && (segmentos[0] === 'thumb' || segmentos[0] === 'card')) {
     const nome = segmentos[1] ?? '';
     const ponto = nome.lastIndexOf('.');
@@ -296,4 +305,15 @@ export function chaveDaFotoDoAchado(foundReportId: string, aleatorio: Uint8Array
   return comoObjectKey(
     `found-reports/${foundReportId}/original/${Buffer.from(aleatorio).toString('base64url')}`,
   );
+}
+
+/**
+ * A chave do original de uma imagem de catalogo, no bucket PRIVADO.
+ *
+ * Mesmo piso de 128 bits das outras: o navegador do administrador envia direto
+ * para esta chave, e ela nao pode ser adivinhavel por quem conhece o formato.
+ */
+export function chaveDoOriginalDeCatalogo(aleatorio: Uint8Array): ObjectKey {
+  exigirAleatorioForte('do original de catalogo', aleatorio);
+  return comoObjectKey(`catalog/original/${Buffer.from(aleatorio).toString('base64url')}`);
 }
