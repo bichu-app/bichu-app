@@ -285,6 +285,31 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // O que faltava era a linha AQUI. O veredito deste registro é escrito à mão —
   // o catálogo sabe que a linha some, não sabe de quem ela é — e sem ela o caso
   // "toda chave estrangeira do banco está declarada aqui" reprovava a suíte.
+  // BICHUS-259 (ADR-0027). As tres chaves da sessao administrativa levam a
+  // linha junto, e nenhuma delas guarda memoria: quem agiu esta em
+  // `audit.events`, que nao referencia `users` de proposito.
+  'public.admin_sessions.admin_sessions_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as sessoes administrativas da conta. Uma sessao que sobrevivesse a conta seria uma ' +
+      'credencial sem dono lida a cada requisicao.',
+  },
+  'public.admin_reauth_tokens.admin_reauth_tokens_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a janela de reautenticacao administrativa da conta, pelo mesmo motivo de reauth_tokens.',
+  },
+  'public.admin_reauth_tokens.admin_reauth_tokens_session_id_fkey': {
+    colunas: ['session_id'],
+    referencia: 'public.admin_sessions',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a janela aberta dentro da sessao. Ela so vale presa a sessao que a pediu, entao nao ha ' +
+      'o que guardar sem ela.',
+  },
   'public.reauth_tokens.reauth_tokens_user_id_fkey': {
     colunas: ['user_id'],
     referencia: 'public.users',

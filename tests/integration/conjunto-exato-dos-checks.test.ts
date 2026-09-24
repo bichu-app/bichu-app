@@ -447,11 +447,6 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // onde dado pessoal vaza (consequencia 3 da BICHUS-185).
   'public.store_partners.store_partners_host_e_so_host':
     "CHECK ((host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text))",
-  // BICHUS-259 (ADR-0027, apendice A.1): o teto de 12 horas desde a senha.
-  // Nao e lista de valores; esta aqui porque o intervalo vira literal de texto
-  // no catalogo, e literal de texto sem registro reprova.
-  'public.admin_sessions.admin_sessions_teto_de_doze_horas':
-    "CHECK ((absolute_expires_at <= (created_at + '12:00:00'::interval)))",
   'audit.events.audit_events_ator_coerente':
     "CHECK (((actor_kind = 'user'::text) = (actor_user_id IS NOT NULL)))",
   // O par mentiroso do alcance: estado não calculado com número, ou `computed`

@@ -12,11 +12,16 @@
  * conexão ao pool.
  */
 import { sql } from 'kysely';
-import { assumirPapel, type Db } from '../../../../shared/db/pool.js';
+import { assumirPapel, type Db, type DbTransaction } from '../../../../shared/db/pool.js';
 import { hmacDeEnderecoIp } from '../../../../shared/crypto/digest.js';
 import type { IdGenerator } from '../../../../shared/ports/id-generator.js';
 import type { Clock } from '../../../../shared/time/clock.js';
-import type { AuditEvent, AuditLog } from '../../ports/audit-log.js';
+import type {
+  AuditEvent,
+  AuditLog,
+  EscritaAuditada,
+  TrilhaTransacional,
+} from '../../ports/audit-log.js';
 
 export const PAPEL_DE_ESCRITA = 'bichu_audit_writer';
 export const PAPEL_DE_EXPURGO = 'bichu_audit_purger';
@@ -43,41 +48,111 @@ function comoJson(valor: Record<string, unknown> | undefined): unknown {
   return valor === undefined ? null : valor;
 }
 
+function exigirAtorCoerente(evento: AuditEvent): void {
+  if ((evento.actorKind === 'user') !== (evento.actorUserId !== undefined)) {
+    throw new Error(
+      `Evento de auditoria incoerente: actor_kind=${evento.actorKind} com ` +
+        `${evento.actorUserId === undefined ? 'nenhum' : 'um'} actor_user_id.`,
+    );
+  }
+}
+
+type DependenciasDaGravacao = Pick<DependenciasDaTrilha, 'ids' | 'clock' | 'ipHmacKey'>;
+
+/** O `INSERT`, sob o papel que ja foi assumido por quem chama. */
+async function inserirEvento(
+  trx: DbTransaction,
+  deps: DependenciasDaGravacao,
+  evento: AuditEvent,
+): Promise<void> {
+  await trx
+    .insertInto('audit.events')
+    .values({
+      id: deps.ids.uuidv7(),
+      occurred_at: new Date(deps.clock.now()),
+      actor_kind: evento.actorKind,
+      actor_user_id: evento.actorUserId ?? null,
+      actor_ip_hmac: hmacDeEnderecoIp(evento.actorIp, deps.ipHmacKey),
+      correlation_id: evento.correlationId ?? null,
+      action: evento.action,
+      resource_kind: evento.resourceKind,
+      resource_id: evento.resourceId ?? null,
+      before: comoJson(evento.before),
+      after: comoJson(evento.after),
+      metadata: comoJson(evento.metadata),
+    })
+    .execute();
+}
+
 export function criarTrilhaDeAuditoria(deps: DependenciasDaTrilha): AuditLog {
   return {
     async record(evento) {
-      if ((evento.actorKind === 'user') !== (evento.actorUserId !== undefined)) {
-        throw new Error(
-          `Evento de auditoria incoerente: actor_kind=${evento.actorKind} com ` +
-            `${evento.actorUserId === undefined ? 'nenhum' : 'um'} actor_user_id.`,
-        );
-      }
+      exigirAtorCoerente(evento);
 
       try {
         await deps.db.transaction().execute(async (trx) => {
           await assumirPapel(trx, PAPEL_DE_ESCRITA);
-          await trx
-            .insertInto('audit.events')
-            .values({
-              id: deps.ids.uuidv7(),
-              occurred_at: new Date(deps.clock.now()),
-              actor_kind: evento.actorKind,
-              actor_user_id: evento.actorUserId ?? null,
-              actor_ip_hmac: hmacDeEnderecoIp(evento.actorIp, deps.ipHmacKey),
-              correlation_id: evento.correlationId ?? null,
-              action: evento.action,
-              resource_kind: evento.resourceKind,
-              resource_id: evento.resourceId ?? null,
-              before: comoJson(evento.before),
-              after: comoJson(evento.after),
-              metadata: comoJson(evento.metadata),
-            })
-            .execute();
+          await inserirEvento(trx, deps, evento);
         });
       } catch (erro) {
         deps.onFailure(erro, evento);
       }
     },
+  };
+}
+
+/**
+ * A trilha que grava DENTRO da transacao de quem chama (ADR-0027 item 8, D49).
+ *
+ * ## Por que o papel e devolvido
+ *
+ * `SET LOCAL ROLE` vale ate o fim da transacao, e a transacao aqui nao e da
+ * trilha: e da escrita administrativa. Se o papel ficasse, qualquer comando
+ * depois do evento rodaria como `bichu_audit_writer`, que so tem `INSERT` e
+ * `SELECT` em `audit.events`, e a escrita falharia por permissao num lugar que
+ * ninguem associaria a trilha. O papel anterior e lido antes e reposto logo
+ * depois do `INSERT`, tambem com `LOCAL`: se a transacao cair no meio, o banco
+ * desfaz os dois.
+ *
+ * ## Por que lanca
+ *
+ * Nao ha `onFailure`. A falha sobe, a transacao da escrita e desfeita, e a
+ * escrita de conteudo publico sem autor gravado deixa de ser um estado
+ * possivel. E exatamente o que o `record` do app faz ao contrario, e pelo
+ * motivo oposto.
+ */
+export function criarTrilhaTransacional(deps: DependenciasDaGravacao): TrilhaTransacional {
+  return {
+    async recordIn(trx, evento) {
+      exigirAtorCoerente(evento);
+      const atual = await sql<{ papel: string }>`select current_user as papel`.execute(trx);
+      const papelAnterior = atual.rows[0]?.papel;
+      if (papelAnterior === undefined) {
+        throw new Error('O banco nao respondeu current_user; a trilha nao sabe que papel repor.');
+      }
+      await assumirPapel(trx, PAPEL_DE_ESCRITA);
+      await inserirEvento(trx, deps, evento);
+      await assumirPapel(trx, papelAnterior);
+    },
+  };
+}
+
+/**
+ * A unidade de trabalho de toda escrita administrativa. Ver `EscritaAuditada`
+ * na porta: uma transacao, o trabalho, o evento por ULTIMO, e o `COMMIT` so
+ * depois dos dois.
+ */
+export function criarEscritaAuditada(deps: {
+  readonly db: Db;
+  readonly trilha: TrilhaTransacional;
+}): EscritaAuditada {
+  return {
+    executar: (trabalho) =>
+      deps.db.transaction().execute(async (trx) => {
+        const { resultado, evento } = await trabalho(trx);
+        await deps.trilha.recordIn(trx, evento);
+        return resultado;
+      }),
   };
 }
 
