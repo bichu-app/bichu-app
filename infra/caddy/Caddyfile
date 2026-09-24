@@ -143,6 +143,19 @@
 	# trocar `api:3000` por `media:3000` NESTA LINHA, sem versao nova do app
 	# e sem mudanca no contrato. Costura escrita no dia da extracao e costura
 	# inventada sob pressao, com o app ja publicado em loja.
+	# `/v1/admin*` NAO passa por aqui, em host nenhum que importe este trecho
+	# (docs/04-seguranca.md, D33). O backoffice tem host proprio, com bloco
+	# proprio que serve `/v1/admin/*` antes de qualquer outra coisa; em todo
+	# outro host (hml, api, apex, tag) a rota administrativa responde 404 da
+	# borda. Sem barra no fim, de proposito: pega `/v1/admin` e `/v1/admin/...`.
+	# Primeiro no trecho porque a ordem entre `handle` e a ordem do arquivo.
+	# Resolucao combinada com a borda do backoffice (branch
+	# infra/backoffice-container): a regra mora AQUI, e o verificador de la le
+	# regra de dentro de trecho importado.
+	handle /v1/admin* {
+		respond "nao encontrado" 404
+	}
+
 	handle /v1/media/* {
 		reverse_proxy api:3000
 	}

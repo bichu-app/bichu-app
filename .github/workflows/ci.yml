@@ -867,6 +867,12 @@ jobs:
           r=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code} %{content_type}' http://localhost:3000/v1/health)
           echo "localhost:3000/v1/health -> $r"
           case "$r" in "200 application/json"*) ;; *) echo "::error::/v1 deixou de ir para a API no host local: '$r'"; exit 1 ;; esac
+          # D33: a rota administrativa e 404 da borda fora do host do backoffice,
+          # tambem no host da API. Vale igual em hml e producao, que importam o
+          # mesmo trecho `gateway_v1`.
+          r=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code} %{content_type}' http://localhost:3000/v1/admin/qualquer)
+          echo "localhost:3000/v1/admin/qualquer -> $r"
+          case "$r" in "404 text/plain"*) ;; *) echo "::error::/v1/admin chegou alem da borda no host da API: '$r'"; exit 1 ;; esac
 
       - name: api e worker rodam a MESMA imagem
         # A frase "uma imagem, dois pontos de entrada" (ADR-0001) so vale
