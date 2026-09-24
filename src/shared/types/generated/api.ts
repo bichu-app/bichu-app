@@ -449,6 +449,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/found-report-claims": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vincula a esta conta um aviso feito sem conta (ADR-0030)
+         * @description Quem avisou sem conta e depois criou conta ou entrou apresenta o
+         *     `finder_token` do aviso. O aviso passa a ter `reporter_user_id`, e os
+         *     pontos que ele ja gerou, e os que ainda gerar, passam a esta conta.
+         *
+         *     - **uma conta por aviso, para sempre.** A mesma conta apresentando o
+         *       mesmo token de novo recebe 200 (idempotente); outra conta, 409
+         *       `found-report-already-claimed`;
+         *     - **o token continua valendo** para a conversa em `/c/`: vincular nao
+         *       troca a credencial de quem ainda esta com a pagina aberta;
+         *     - **token inexistente, expirado ou de outro aviso** respondem o mesmo
+         *       404, para a rota nao servir de oraculo;
+         *     - **o dono do pet nao pontua pelo proprio pet.** O vinculo acontece, e
+         *       `credit_status` diz `not_creditable` com o motivo. Recusar o vinculo
+         *       esconderia do tutor a propria acao; pontuar pagaria o autoaviso.
+         */
+        post: operations["claimFoundReport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/points": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Saldo de pontos e os ultimos lancamentos (ADR-0030)
+         * @description **Privado**, por decisao do cliente de 17/09 (pontuacao privada). Nao
+         *     existe operacao que devolva os pontos de outra pessoa. Niveis e selos
+         *     sao fase 2 e nao estao aqui.
+         */
+        get: operations["getMyPoints"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/location": {
         parameters: {
             query?: never;
@@ -1055,9 +1110,15 @@ export interface paths {
         put?: never;
         /**
          * Registra um achado avulso, sem QR
-         * @description **Exige conta** (regra fechada no briefing). O cruzamento com casos
-         *     abertos e por atributos e por distancia, e toda correspondencia passa
-         *     por confirmacao humana do tutor.
+         * @description **O caminho COM conta.** O cruzamento com casos abertos e por atributos
+         *     e por distancia, e toda correspondencia passa por confirmacao humana do
+         *     tutor.
+         *
+         *     Quem nao tem conta registra pelo `POST /public/found-reports`
+         *     (`createPublicFoundReport`, ADR-0030), que devolve `finder_token` em vez
+         *     de exigir `bearerAuth`. As duas operacoes gravam na mesma tabela e
+         *     alimentam o mesmo cruzamento; o que muda e a credencial, e a regra desta
+         *     casa e que a credencial exigida seja legivel operacao a operacao.
          */
         post: operations["createStrayFoundReport"];
         delete?: never;
@@ -1378,7 +1439,13 @@ export interface paths {
         put?: never;
         /**
          * Confirma ou descarta uma correspondencia
-         * @description Confirmar abre a conversa mediada com quem registrou o achado.
+         * @description Confirmar abre a conversa mediada com quem registrou o achado. Se o
+         *     achado veio sem conta (`createPublicFoundReport`), a conversa do
+         *     achador deixa de estar em `awaiting_owner`.
+         *
+         *     Confirmar tambem e o evento que credita `help_acknowledged` a quem
+         *     registrou o achado, se ele tiver conta ou vincular depois (ADR-0030).
+         *     Descartar nao credita nem estorna nada.
          */
         post: operations["decideLostCaseCandidate"];
         delete?: never;
@@ -1605,6 +1672,67 @@ export interface paths {
         get: operations["listDirectoryEntries"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/public/found-reports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registra um achado SEM conta, avulso ou "vi este pet" (ADR-0030)
+         * @description **Sem conta, por decisao do cliente de 23/09.** E o destino de dois
+         *     botoes do site: "Registrar que achei um pet" (saida da pagina da tag
+         *     quando ela responde 404, 410 ou 429) e "Vi este pet" (pagina publica do
+         *     caso). O aviso pela tag continua sendo `createFoundReportFromTag`.
+         *
+         *     Duas formas de corpo, e so duas (`PublicFoundReportInput`):
+         *
+         *     - **com `share_token`** ("vi este pet"): o achado nasce vinculado ao
+         *       caso, o tutor e **notificado** e a conversa mediada **abre na hora**,
+         *       como no aviso pela tag. Nada alem do `share_token` e obrigatorio;
+         *     - **sem `share_token`** (achado avulso): especie, porte e onde. O
+         *       achado entra no cruzamento por atributos; o tutor so e avisado quando
+         *       houver candidato, e a conversa so abre quando ele **confirmar** o
+         *       candidato (`decideLostCaseCandidate`). Ate la, a conversa do achador
+         *       responde `awaiting_owner: true`.
+         *
+         *     **Tag revogada nao vincula.** O botao da saida de 410 cria achado
+         *     avulso, sem ligacao com o pet da tag: vincular devolveria a quem tem a
+         *     plaquinha revogada o caminho que a revogacao existe para fechar.
+         *
+         *     **O invariante nº 1 vale aqui inteiro: nenhum aviso ao tutor e
+         *     descartado por limite.** Nao ha `deny_429` nesta operacao, e nao ha
+         *     `challenge`, porque `challenge` degenera em `deny_429` quando o token
+         *     do desafio nao chega. O excesso e tratado pelo que os tetos abaixo
+         *     fazem com o DISPARO: agrupar, resumir ou reter para revisao. O aviso
+         *     sempre e gravado, e a tela sempre diz a verdade sobre o que aconteceu.
+         *
+         *     **reCAPTCHA Enterprise decide o disparo, nunca a entrada.** Score abaixo
+         *     de 0,3 retem o disparo e abre revisao (mesma semantica de
+         *     `accept_and_defer_dispatch`); de 0,3 a 0,5 dispara e entra na fila de
+         *     revisao; ausencia do token e gravada como sinal e nao bloqueia. O
+         *     formulario que carrega o script do provedor vive numa pagina propria
+         *     do site, e nao em `/t/` nem em `/c/`, cuja politica de conteudo
+         *     proibe script de terceiro (ADR-0028 item 7).
+         *
+         *     **Foto:** depois do 201, pelo `finder_token`, pelos mesmos caminhos do
+         *     aviso pela tag: `createFinderPhotoUploadIntent` e
+         *     `enrichFinderFoundReport`. Teto de 3 fotos por aviso (SEC-009).
+         *
+         *     **Pontos:** quem registra sem conta nao pontua. Se criar conta ou
+         *     entrar depois, `claimFoundReport` vincula este aviso a conta, e os
+         *     pontos que o aviso gerou passam a ser dela (ADR-0030).
+         */
+        post: operations["createPublicFoundReport"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2547,6 +2675,90 @@ export interface components {
             owner_notified: boolean;
             pet_display_name?: string;
         };
+        /**
+         * @description As duas formas de `createPublicFoundReport`, e so elas. Com
+         *     `share_token` e "vi este pet"; sem, e achado avulso. A forma avulsa
+         *     proibe `share_token` para que um corpo nunca case com as duas.
+         */
+        PublicFoundReportInput: components["schemas"]["PublicSightingInput"] | components["schemas"]["PublicStrayReportInput"];
+        PublicSightingInput: {
+            /** @description O token opaco do link do caso (o mesmo de `/p/{shareToken}`). */
+            share_token: string;
+            /** Format: date-time */
+            found_at?: string;
+            location?: components["schemas"]["GeoPoint"];
+            area?: components["schemas"]["Area"];
+            notes?: string;
+        };
+        PublicStrayReportInput: {
+            species: components["schemas"]["Species"];
+            breed_code?: string;
+            size: components["schemas"]["PetSize"];
+            primary_color_code?: string;
+            sex?: components["schemas"]["Sex"];
+            /** Format: date-time */
+            found_at: string;
+            location?: components["schemas"]["GeoPoint"];
+            area?: components["schemas"]["Area"];
+            notes?: string;
+        } | unknown | unknown;
+        /**
+         * @description Sem identificador interno (SEC-001), pela mesma razao de
+         *     `FoundReportCreated`.
+         */
+        PublicFoundReportCreated: {
+            finder_token: string;
+            /** Format: uri */
+            conversation_url: string;
+            /**
+             * @description `linked_to_case`: veio com `share_token`, o tutor foi avisado (ou o
+             *     aviso foi agrupado, ver `owner_notified`) e a conversa esta aberta.
+             *     `awaiting_match`: achado avulso; a conversa abre quando um tutor
+             *     confirmar o candidato.
+             * @enum {string}
+             */
+            link: "linked_to_case" | "awaiting_match";
+            /**
+             * @description So com `linked_to_case`. Falso quando a notificacao foi agrupada a
+             *     um aviso recente ou retida para revisao. O aviso em si nunca e
+             *     descartado.
+             */
+            owner_notified?: boolean;
+            pet_display_name?: string;
+        };
+        FoundReportClaimInput: {
+            finder_token: string;
+        };
+        FoundReportClaimResult: {
+            claimed: boolean;
+            /** @enum {string} */
+            credit_status: "creditable" | "not_creditable";
+            /**
+             * @description `email_unverified`: o vinculo vale, e os pontos ficam pendentes ate
+             *     o e-mail ser confirmado (pontuar e D2, visao de produto 8.6).
+             * @enum {string|null}
+             */
+            not_creditable_reason?: "own_pet" | "email_unverified" | null;
+            /** @description Pontos ja gerados pelo aviso e creditados agora. */
+            points_credited: number;
+        };
+        PointsSummary: {
+            balance: number;
+            entries: components["schemas"]["PointEntry"][];
+            next_cursor?: string | null;
+        };
+        /**
+         * @description Um lancamento. O livro e so de acrescimo: estorno e um lancamento
+         *     negativo com `kind: reversal`, nunca a remocao do original.
+         */
+        PointEntry: {
+            /** @enum {string} */
+            kind: "help_acknowledged" | "reunion_credited" | "reversal";
+            points: number;
+            pet_display_name?: string | null;
+            /** Format: date-time */
+            created_at: string;
+        };
         FoundReportEnrichment: {
             message?: string;
             /**
@@ -2658,6 +2870,16 @@ export interface components {
             pet_display_name?: string;
             /** @enum {string} */
             status: "open" | "blocked" | "closed";
+            /**
+             * @description ADR-0030. Verdadeiro no achado avulso registrado sem conta que ainda
+             *     nao tem tutor: a conversa existe (`status: open`), so o outro lado
+             *     nao chegou. Vira falso quando um tutor confirma o candidato. A
+             *     pagina mostra o estado de espera e nao mostra caixa de mensagem.
+             *     Campo e nao valor novo de `status` de proposito: valor novo num
+             *     enum de resposta quebra quem ja trata os tres de hoje.
+             * @default false
+             */
+            awaiting_owner: boolean;
             participants: {
                 /** @enum {string} */
                 role: "tutor" | "finder" | "system";
@@ -2827,6 +3049,15 @@ export interface components {
              */
             reunion_channel?: "tag_scan" | "bichu_alert" | "poster_or_link" | "on_my_own" | "other" | null;
             note?: string | null;
+            /**
+             * @description ADR-0030. So com `outcome: reunited`. As conversas de quem ajudou,
+             *     escolhidas pelo tutor. Cada uma credita pontos a quem avisou, se o
+             *     aviso tiver conta (ou for vinculado depois por `claimFoundReport`).
+             *     O ponto de reencontro cai na confirmacao do tutor, nunca na
+             *     declaracao de quem achou (visao de produto 8.5). Conversa que nao e
+             *     deste caso responde 400.
+             */
+            helped_by?: string[];
         } | null;
         AlertDispatch: {
             /**
@@ -4176,6 +4407,67 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+        };
+    };
+    claimFoundReport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FoundReportClaimInput"];
+            };
+        };
+        responses: {
+            /** @description Aviso vinculado a esta conta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FoundReportClaimResult"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            /** @description O aviso ja pertence a outra conta. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+        };
+    };
+    getMyPoints: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Saldo e lancamentos, do mais novo para o mais antigo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointsSummary"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
         };
     };
     getMyLocation: {
@@ -5897,6 +6189,90 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createPublicFoundReport: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description Obrigatorio. A pagina publica reenvia por fila offline e o tutor nao
+                 *     pode receber o mesmo aviso varias vezes.
+                 */
+                "Idempotency-Key": components["parameters"]["IdempotencyKeyRequired"];
+                /**
+                 * @description Token do reCAPTCHA Enterprise, verificado **no servidor** contra o
+                 *     provedor. Limiar 0,5, com a faixa de 0,3 a 0,5 prosseguindo e entrando
+                 *     na fila de revisao (secao 18.6 de `docs/04-seguranca.md`). Token
+                 *     validado no cliente nao vale nada.
+                 *
+                 *     Declarado nas quatro operacoes de `auth` que a politica nomeia:
+                 *     cadastro, login, pedido de redefinicao de senha e reenvio de
+                 *     verificacao. Sao as que **disparam envio pago** ou **verificam um
+                 *     segredo por tentativa**. A operacao que **consome** um token de alta
+                 *     entropia (`/auth/password-reset/confirm`,
+                 *     `/auth/email-verification/confirm`) nao leva desafio, e isso e decisao:
+                 *     ali os 256 bits ja sao o controle, e o desafio so acrescenta uma forma
+                 *     de falhar para quem ja esta trancado do lado de fora.
+                 *
+                 *     **`required: false` e a parte que faz trabalho.** O cliente manda o
+                 *     cabecalho em toda chamada a essas quatro operacoes e o omite
+                 *     **somente** quando nao conseguiu obter um token: SDK que nao
+                 *     inicializa, rede que bloqueia o dominio do provedor, aparelho sem os
+                 *     servicos do Google, extensao de privacidade. Nesse caso o servidor
+                 *     atende assim mesmo, pela regra de degradacao descrita em
+                 *     `info.description`. Marcar este cabecalho como obrigatorio
+                 *     transformaria a disponibilidade de um terceiro na porta de entrada do
+                 *     produto, e e exatamente o que o ADR-0020 recusa.
+                 */
+                "X-Captcha-Token"?: components["parameters"]["CaptchaToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublicFoundReportInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description Achado registrado. `finder_token` e `conversation_url` permitem voltar
+             *     sem conta; o site guarda no armazenamento local.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicFoundReportCreated"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            /**
+             * @description `share_token` que nao corresponde a caso nenhum. Mesma resposta para
+             *     token inexistente e para caso apagado.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Caso ja encerrado. Vem com `next_action`, e o site oferece registrar
+             *     como achado avulso: o animal pode ser outro parecido.
+             */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
         };
     };
     listPublicLostPets: {
