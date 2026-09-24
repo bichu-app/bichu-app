@@ -240,6 +240,44 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'publication_status',
     valores: ['pending_review', 'published', 'cancelled', 'removed'],
   },
+  // Os campos do encontro e o pedido para participar (ADR-0027 item 17, A.4.1
+  // e A.6). O `enum` do contrato de cada um: `NetworkEventVisibility`,
+  // `NetworkEventAdmission.kind`, `NetworkEventDogAge`, `NetworkEventBringItem`,
+  // `NetworkEventAmenity`. A decisao do pedido nao tem `enum` no app de
+  // proposito: o app ve `JoinRequestAppState`, sem `declined`; o `enum` dela e
+  // o `AdminJoinRequestStatus` do painel (ADR-0027).
+  'public.network_events.network_events_visibilidade_conhecida': {
+    coluna: 'visibility',
+    valores: ['public', 'private'],
+  },
+  'public.network_events.network_events_entrada_conhecida': {
+    coluna: 'admission_kind',
+    valores: ['free', 'paid'],
+  },
+  'public.network_events.network_events_idade_conhecida': {
+    coluna: 'dog_age',
+    valores: ['any', 'from_4_months', 'from_1_year', 'up_to_1_year'],
+  },
+  'public.network_event_bring_items.network_event_bring_items_item_conhecido': {
+    coluna: 'item',
+    valores: ['water', 'water_bowl', 'leash', 'poop_bags', 'treats', 'towel', 'vaccination_card', 'toy'],
+  },
+  'public.network_event_amenities.network_event_amenities_estrutura_conhecida': {
+    coluna: 'amenity',
+    valores: [
+      'level_ground_or_ramp',
+      'accessible_restroom',
+      'public_restroom_nearby',
+      'shade',
+      'benches',
+      'dog_water_fountain',
+      'parking_nearby',
+    ],
+  },
+  'public.network_event_join_requests.network_event_join_requests_decisao_conhecida': {
+    coluna: 'status',
+    valores: ['pending', 'approved', 'declined'],
+  },
   'public.professionals.professionals_source_check': {
     coluna: 'source',
     // 'community' foi NEGADO pelo cliente em 21/09. Reintroduzir aqui seria
@@ -438,6 +476,24 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // publicacao, e o cancelado tambem a tem.
   'public.network_events.network_events_visivel_foi_publicado':
     "CHECK (((publication_status <> ALL (ARRAY['published'::text, 'cancelled'::text])) OR (published_at IS NOT NULL)))",
+  // A moeda: so BRL, e so quando ha valor.
+  'public.network_events.network_events_moeda_conhecida':
+    "CHECK (((admission_currency IS NULL) OR (admission_currency = 'BRL'::text)))",
+  // A unidade do valor, lista fechada escrita com `IS NULL OR`, por isso aqui.
+  'public.network_events.network_events_unidade_do_valor_conhecida':
+    "CHECK (((admission_unit IS NULL) OR (admission_unit = ANY (ARRAY['per_dog'::text, 'per_person'::text, 'per_pair'::text]))))",
+  // Gratuito nao tem valor; pago tem.
+  'public.network_events.network_events_valor_so_quando_pago':
+    "CHECK (((admission_kind = 'free'::text) = (admission_amount IS NULL)))",
+  // O identificador opaco do pedido, base64url.
+  'public.network_event_join_requests.network_event_join_requests_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
+  // Decidido tem instante.
+  'public.network_event_join_requests.network_event_join_requests_decidido_tem_instante':
+    "CHECK (((status = ANY (ARRAY['approved'::text, 'declined'::text])) = (decided_at IS NOT NULL)))",
+  // So o recusado guarda desistencia (D54, 12.11).
+  'public.network_event_join_requests.network_event_join_requests_desistencia_so_do_recusado':
+    "CHECK (((withdrawn_at IS NULL) OR (status = 'declined'::text)))",
   // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
   // que torna "o ponto de evento da comunidade so aparece depois de revisao
   // humana" um estado do banco, porque `pending_review` nunca e visivel.

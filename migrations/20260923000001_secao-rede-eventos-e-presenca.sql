@@ -174,6 +174,58 @@ CREATE TABLE network_events (
                   CHECK (time_zone ~ '^[A-Za-z]+/[A-Za-z_]+$'),
 
   -- ---------------------------------------------------------------------
+  -- OS CAMPOS DO ENCONTRO (ADR-0027 item 17 e apendice A.4.1)
+  -- ---------------------------------------------------------------------
+  --
+  -- Um campo por coluna ou lista, e nenhum saco `jsonb` de "detalhes": ele
+  -- seria texto em observacoes com outro nome, sem validacao e sem portao.
+  --
+  -- `private`: para quem nao tem pedido aprovado, a leitura publica traz so
+  -- titulo, data local e estado (o teaser de 12.10). O resto sai em
+  -- `getNetworkEventPrivateDetails`, com a autorizacao na clausula `WHERE`.
+  visibility          text        NOT NULL DEFAULT 'public'
+                      CONSTRAINT network_events_visibilidade_conhecida
+                      CHECK (visibility IN ('public', 'private')),
+
+  -- Pago e so o valor, informativo (decisao do cliente de 23/09). O Bichu nao
+  -- cobra e nao guarda forma de pagar: nao ha coluna de instrucao nem de link.
+  -- Sem coluna de capacidade: nao ha limite de vagas.
+  admission_kind      text        NOT NULL DEFAULT 'free'
+                      CONSTRAINT network_events_entrada_conhecida
+                      CHECK (admission_kind IN ('free', 'paid')),
+
+  -- Centavos, como todo dinheiro deste produto.
+  admission_amount    integer
+                      CONSTRAINT network_events_valor_em_faixa
+                      CHECK (admission_amount IS NULL OR admission_amount BETWEEN 1 AND 100000000),
+
+  admission_currency  text
+                      CONSTRAINT network_events_moeda_conhecida
+                      CHECK (admission_currency IS NULL OR admission_currency = 'BRL'),
+
+  -- A que o valor se refere, para o app escrever sempre "R$ 15 por cao".
+  admission_unit      text
+                      CONSTRAINT network_events_unidade_do_valor_conhecida
+                      CHECK (admission_unit IS NULL OR admission_unit IN ('per_dog', 'per_person', 'per_pair')),
+
+  dog_age             text        NOT NULL DEFAULT 'any'
+                      CONSTRAINT network_events_idade_conhecida
+                      CHECK (dog_age IN ('any', 'from_4_months', 'from_1_year', 'up_to_1_year')),
+
+  vaccination_required boolean    NOT NULL DEFAULT true,
+
+  -- Atributo do LUGAR, e nao permissao: o Bichu nao autoriza ninguem a soltar
+  -- cao. O campo diz se existe a area cercada.
+  fenced_off_leash_area boolean   NOT NULL DEFAULT false,
+
+  -- Complemento, ate 500 caracteres. O detector de contato e pagamento (D59)
+  -- e do caso de uso de escrita, no backoffice: um `CHECK` nao sabe o que e um
+  -- telefone escrito por extenso.
+  notes               text
+                      CONSTRAINT network_events_observacoes_tem_tamanho
+                      CHECK (notes IS NULL OR char_length(btrim(notes)) BETWEEN 2 AND 500),
+
+  -- ---------------------------------------------------------------------
   -- PUBLICACAO, ORIGEM E AUTOR (ADR-0027 12.3 e apendice A.4)
   -- ---------------------------------------------------------------------
   --
@@ -215,6 +267,14 @@ CREATE TABLE network_events (
 
   CONSTRAINT network_events_visivel_foi_publicado
     CHECK (publication_status NOT IN ('published', 'cancelled') OR published_at IS NOT NULL),
+
+  -- Gratuito nao tem valor; pago tem valor, moeda e unidade, os tres juntos.
+  CONSTRAINT network_events_valor_so_quando_pago
+    CHECK ((admission_kind = 'free') = (admission_amount IS NULL)),
+  CONSTRAINT network_events_valor_anda_com_moeda
+    CHECK ((admission_amount IS NULL) = (admission_currency IS NULL)),
+  CONSTRAINT network_events_valor_anda_com_unidade
+    CHECK ((admission_amount IS NULL) = (admission_unit IS NULL)),
 
   -- So o encontro da COMUNIDADE espera revisao. E esta linha que faz da regra
   -- "o ponto de evento da comunidade so aparece depois de revisao humana"
@@ -287,7 +347,119 @@ CREATE INDEX network_events_por_ponto
   ON network_events USING GIST (geo)
   WHERE publication_status IN ('published', 'cancelled') AND geo IS NOT NULL;
 
+-- ---------------------------------------------------------------------------
+-- As listas do encontro (A.4.1). Tabela por lista, e nao array: lista fechada
+-- por `CHECK` linha a linha, e o filtro por porte vira `EXISTS` com indice.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE network_event_bring_items (
+  event_id  uuid NOT NULL REFERENCES network_events (id) ON DELETE CASCADE,
+  item      text NOT NULL
+            CONSTRAINT network_event_bring_items_item_conhecido
+            CHECK (item IN ('water', 'water_bowl', 'leash', 'poop_bags', 'treats', 'towel', 'vaccination_card', 'toy')),
+  PRIMARY KEY (event_id, item)
+);
+
+COMMENT ON TABLE network_event_bring_items IS
+  'O que levar, so lista fechada (ADR-0027 item 17). Os itens livres sairam: texto livre do administrador iria direto para a pagina publica.';
+
+-- Chave estrangeira para `code` de dado de referencia, a forma que o portao da
+-- BICHUS-19 admite: os portes sao os do cadastro de pet. Pelo menos um e regra
+-- do caso de uso; a criacao sem o campo grava os quatro.
+CREATE TABLE network_event_sizes (
+  event_id  uuid NOT NULL REFERENCES network_events (id) ON DELETE CASCADE,
+  size      text NOT NULL REFERENCES ref_sizes (code),
+  PRIMARY KEY (event_id, size)
+);
+
+-- O filtro `size` da agenda procura encontros por porte.
+CREATE INDEX network_event_sizes_por_porte ON network_event_sizes (size, event_id);
+
+COMMENT ON TABLE network_event_sizes IS
+  'Os portes aceitos no encontro, com os codigos de `ref_sizes`. No encontro privado, e oculto: o filtro `size` exclui o privado, porque aparecer no recorte entregaria o valor (ADR-0027 12.10).';
+
+CREATE TABLE network_event_amenities (
+  event_id  uuid NOT NULL REFERENCES network_events (id) ON DELETE CASCADE,
+  amenity   text NOT NULL
+            CONSTRAINT network_event_amenities_estrutura_conhecida
+            CHECK (amenity IN ('level_ground_or_ramp', 'accessible_restroom', 'public_restroom_nearby', 'shade', 'benches', 'dog_water_fountain', 'parking_nearby')),
+  PRIMARY KEY (event_id, amenity)
+);
+
+COMMENT ON TABLE network_event_amenities IS
+  'Acessibilidade e estrutura do local, lista fechada (ADR-0027 item 17).';
+
+-- ---------------------------------------------------------------------------
+-- O pedido para participar de encontro privado (A.6).
+--
+-- Da CONTA, nunca do pet (ADR-0010 item 7): sem `pet_id` e sem texto livre.
+-- Ninguem ve quem mais pediu, nem como contagem. `status` e a DECISAO, e so
+-- ela; o que o app ve (`JoinRequestAppState`) e derivado na leitura, e
+-- `declined` nunca e projetado para o app: o recusado aparece como `requested`
+-- ate o encontro passar, e depois como `expired`.
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE network_event_join_requests (
+  id                  uuid        PRIMARY KEY,
+
+  -- O identificador que o painel usa no caminho: 128 bits aleatorios em
+  -- base64url, porque um UUIDv7 carrega o instante do pedido.
+  ref                 text        NOT NULL
+                      CONSTRAINT network_event_join_requests_ref_formato
+                      CHECK (ref ~ '^[A-Za-z0-9_-]{20,32}$'),
+
+  event_id            uuid        NOT NULL REFERENCES network_events (id) ON DELETE CASCADE,
+  user_id             uuid        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+
+  status              text        NOT NULL DEFAULT 'pending'
+                      CONSTRAINT network_event_join_requests_decisao_conhecida
+                      CHECK (status IN ('pending', 'approved', 'declined')),
+
+  requested_at        timestamptz NOT NULL DEFAULT now(),
+  decided_at          timestamptz,
+
+  -- So existe em pedido RECUSADO do qual o tutor desistiu. Pedido pendente
+  -- desistido e apagado na hora (D54); o recusado fica, para que desistir e
+  -- pedir de novo nao lave a recusa (12.11).
+  withdrawn_at        timestamptz,
+
+  -- Quem decidiu, para a trilha. Nunca projetado.
+  decided_by_user_id  uuid        REFERENCES users (id) ON DELETE SET NULL,
+
+  CONSTRAINT network_event_join_requests_um_por_conta UNIQUE (event_id, user_id),
+  CONSTRAINT network_event_join_requests_decidido_tem_instante
+    CHECK ((status IN ('approved', 'declined')) = (decided_at IS NOT NULL)),
+  CONSTRAINT network_event_join_requests_desistencia_so_do_recusado
+    CHECK (withdrawn_at IS NULL OR status = 'declined')
+);
+
+CREATE UNIQUE INDEX network_event_join_requests_ref_unico ON network_event_join_requests (ref);
+
+-- A fila do painel.
+CREATE INDEX network_event_join_requests_fila
+  ON network_event_join_requests (requested_at)
+  WHERE status = 'pending' AND withdrawn_at IS NULL;
+
+-- "Meus pedidos" do app, e o expurgo de D54 junta por `event_id` (ja coberto
+-- pelo indice da restricao unica).
+CREATE INDEX network_event_join_requests_da_conta
+  ON network_event_join_requests (user_id);
+
+COMMENT ON TABLE network_event_join_requests IS
+  'Pedido para participar de encontro privado. Da conta, nunca do pet. Retencao D54: pendente desistido e apagado na hora; aprovado e recusado saem 30 dias depois do fim do encontro (ou do cancelamento), pelo worker de expurgo.';
+COMMENT ON COLUMN network_event_join_requests.status IS
+  'A DECISAO guardada. O app nunca ve `declined`: o recusado aparece como `requested` ate o encontro passar e como `expired` depois (ADR-0027 12.11).';
+
 -- Down Migration
+
+DROP INDEX network_event_join_requests_da_conta;
+DROP INDEX network_event_join_requests_fila;
+DROP INDEX network_event_join_requests_ref_unico;
+DROP TABLE network_event_join_requests;
+DROP TABLE network_event_amenities;
+DROP INDEX network_event_sizes_por_porte;
+DROP TABLE network_event_sizes;
+DROP TABLE network_event_bring_items;
 
 DROP INDEX network_events_por_ponto;
 DROP INDEX network_events_por_cidade;

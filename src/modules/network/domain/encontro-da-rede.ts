@@ -71,10 +71,44 @@ export interface EncontroDaRede {
   /** O nome IANA da zona. Sem ele o instante esta certo e a hora de parede, errada. */
   readonly timeZone: string;
   readonly publicacao: PublicacaoVisivel;
+  /**
+   * A data local (`AAAA-MM-DD`) no fuso do encontro, calculada pelo banco com
+   * `AT TIME ZONE`. E o que o teaser do privado leva no lugar de `starts_at`,
+   * `ends_at` e `time_zone` (ADR-0027 12.10): o nome do fuso entregaria o
+   * estado.
+   */
+  readonly dataLocal: string;
+  readonly visibilidade: 'public' | 'private';
+  readonly entrada: EntradaDoEncontro;
+  readonly portesAceitos: readonly string[];
+  readonly idadeDosCaes: string;
+  readonly vacinacaoExigida: boolean;
+  readonly areaCercada: boolean;
+  readonly estrutura: readonly string[];
+  readonly paraLevar: readonly string[];
+  readonly observacoes: string | null;
+  /** Na ordem do painel; a primeira e a capa. */
+  readonly imagens: readonly ImagemDoEncontro[];
 }
 
-/** O cartao do encontro, como a resposta publica o declara. */
-export interface EncontroProjetado {
+/** Gratuito, ou pago com valor informativo em centavos. */
+export type EntradaDoEncontro =
+  | { readonly tipo: 'free' }
+  | {
+      readonly tipo: 'paid';
+      readonly centavos: number;
+      readonly moeda: 'BRL';
+      readonly unidade: 'per_dog' | 'per_person' | 'per_pair';
+    };
+
+/** Uma imagem, com a URL ja composta a partir da chave publica. */
+export interface ImagemDoEncontro {
+  readonly url: string;
+  readonly textoAlternativo: string;
+}
+
+/** Os campos do item 17, na forma do fio. Comuns ao publico e ao privado aprovado. */
+interface CamposDoEncontroProjetados {
   readonly slug: string;
   readonly title: string;
   readonly summary: string;
@@ -88,8 +122,48 @@ export interface EncontroProjetado {
   readonly ends_at: string | null;
   readonly time_zone: string;
   readonly status: StatusDoEncontro;
-  readonly cover_image_url: null;
+  readonly cover_image_url: string | null;
+  readonly images: readonly { readonly url: string; readonly alt_text: string }[];
+  readonly admission: {
+    readonly kind: 'free' | 'paid';
+    readonly price: {
+      readonly amount: number;
+      readonly currency: 'BRL';
+      readonly unit: 'per_dog' | 'per_person' | 'per_pair';
+    } | null;
+  };
+  readonly accepted_sizes: readonly string[];
+  readonly dog_age: string;
+  readonly vaccination_required: boolean;
+  readonly fenced_off_leash_area: boolean;
+  readonly amenities: readonly string[];
+  readonly bring_items: readonly string[];
+  readonly notes: string | null;
 }
+
+/** O encontro publico, como a leitura publica o declara (`NetworkEventPublic`). */
+export interface EncontroPublicoProjetado extends CamposDoEncontroProjetados {
+  readonly visibility: 'public';
+}
+
+/**
+ * O teaser do privado (`NetworkEventPrivateTeaser`): **exatamente** cinco
+ * propriedades. Lista permitida, e o portao P19 cobra o contrato; esta
+ * interface cobra o codigo.
+ */
+export interface TeaserDoPrivado {
+  readonly slug: string;
+  readonly title: string;
+  readonly local_date: string;
+  readonly visibility: 'private';
+  readonly status: StatusDoEncontro;
+}
+
+/** O que a agenda e o detalhe devolvem: publico inteiro ou teaser. */
+export type EncontroProjetado = EncontroPublicoProjetado | TeaserDoPrivado;
+
+/** O conteudo oculto do privado, so para aprovado (`NetworkEventPrivateDetails`). */
+export type DetalhesPrivadosProjetados = CamposDoEncontroProjetados;
 
 /**
  * O ponto do encontro, marcado no mapa pelo administrador (`map_pin`).
@@ -143,13 +217,12 @@ export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): Stat
   return temporal;
 }
 
-/**
- * Projeta o encontro para a resposta publica, a mesma na agenda e no detalhe.
- *
- * Campo a campo, e nunca `{ ...encontro }`: o espalhamento publicaria sozinho
- * qualquer campo que o tipo ganhasse depois.
- */
-export function projetarEncontro(encontro: EncontroDaRede, agora: Instant): EncontroProjetado {
+/** Os campos comuns, campo a campo. Nunca `{ ...encontro }`. */
+function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEncontroProjetados {
+  const imagens = encontro.imagens.map((imagem) => ({
+    url: imagem.url,
+    alt_text: imagem.textoAlternativo,
+  }));
   return {
     slug: encontro.slug,
     title: encontro.title,
@@ -165,12 +238,90 @@ export function projetarEncontro(encontro: EncontroDaRede, agora: Instant): Enco
     ends_at: encontro.endsAt === null ? null : comoIso(encontro.endsAt),
     time_zone: encontro.timeZone,
     status: statusDoEncontro(encontro, agora),
-    // Sempre nulo nesta fatia. A coluna saiu (o banco nao guarda URL,
-    // `docs/07-devops.md` 3.6), e a capa volta como a posicao 0 das imagens do
-    // encontro na fatia seguinte, preenchendo este mesmo campo. Ele fica no
-    // contrato para o app, que ja o le como opcional, nao mudar duas vezes.
-    cover_image_url: null,
+    // Derivada da imagem de posicao 0, nunca gravada no banco.
+    cover_image_url: imagens[0]?.url ?? null,
+    images: imagens,
+    admission:
+      encontro.entrada.tipo === 'free'
+        ? { kind: 'free', price: null }
+        : {
+            kind: 'paid',
+            price: {
+              amount: encontro.entrada.centavos,
+              currency: encontro.entrada.moeda,
+              unit: encontro.entrada.unidade,
+            },
+          },
+    accepted_sizes: [...encontro.portesAceitos],
+    dog_age: encontro.idadeDosCaes,
+    vaccination_required: encontro.vacinacaoExigida,
+    fenced_off_leash_area: encontro.areaCercada,
+    amenities: [...encontro.estrutura],
+    bring_items: [...encontro.paraLevar],
+    notes: encontro.observacoes,
   };
+}
+
+/**
+ * O teaser do privado, **construido** com as cinco propriedades e nenhuma
+ * outra. Nao deriva de `camposProjetados` de proposito: montar o publico e
+ * depois apagar campos e lista proibida, e campo novo passaria.
+ */
+export function projetarTeaser(encontro: EncontroDaRede, agora: Instant): TeaserDoPrivado {
+  return {
+    slug: encontro.slug,
+    title: encontro.title,
+    local_date: encontro.dataLocal,
+    visibility: 'private',
+    status: statusDoEncontro(encontro, agora),
+  };
+}
+
+/**
+ * Projeta o encontro para a agenda e o detalhe. A forma vem da propriedade do
+ * EVENTO, igual para qualquer chamador (ADR-0021): o privado sai como teaser
+ * inclusive para quem foi aprovado.
+ */
+export function projetarEncontro(encontro: EncontroDaRede, agora: Instant): EncontroProjetado {
+  if (encontro.visibilidade === 'private') return projetarTeaser(encontro, agora);
+  return { ...camposProjetados(encontro, agora), visibility: 'public' };
+}
+
+/** O conteudo oculto, para `getNetworkEventPrivateDetails`. So quem chama sabe se pode. */
+export function projetarDetalhesPrivados(
+  encontro: EncontroDaRede,
+  agora: Instant,
+): DetalhesPrivadosProjetados {
+  return camposProjetados(encontro, agora);
+}
+
+/** Arredonda a distancia a 100 m, como `Perto`: precisao maior e localizacao. */
+export function distanciaArredondada(metros: number | null): number | null {
+  return metros === null ? null : Math.round(metros / 100) * 100;
+}
+
+/**
+ * O estado que o tutor ve (`JoinRequestAppState`). **Nunca `declined`**
+ * (ADR-0027 12.11): o recusado e o pendente nao se distinguem, e os dois viram
+ * `expired` quando o encontro termina.
+ */
+export type EstadoDoPedidoNoApp = 'requested' | 'approved' | 'withdrawn' | 'expired';
+
+export function estadoDoPedidoNoApp(
+  decisao: 'pending' | 'approved' | 'declined',
+  encontro: EncontroDaRede,
+  agora: Instant,
+): EstadoDoPedidoNoApp {
+  if (decisao === 'approved') return 'approved';
+  // `pending` e `declined` caem no MESMO ramo, e e isso que torna a recusa
+  // invisivel. Separa-los aqui seria o defeito que o P19 item 3 existe para
+  // pegar.
+  return statusTemporal(encontro, agora) === 'ended' ? 'expired' : 'requested';
+}
+
+/** Se o encontro ja terminou, pela mesma regra do rotulo. */
+export function encontroEncerrado(encontro: EncontroDaRede, agora: Instant): boolean {
+  return statusTemporal(encontro, agora) === 'ended';
 }
 
 /**

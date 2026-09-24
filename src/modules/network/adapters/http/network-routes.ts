@@ -1,64 +1,51 @@
 /**
- * As tres rotas da secao `Rede`.
+ * As rotas da secao `Rede` no app (ADR-0025, ADR-0027 secao 12).
  *
- * **LEIA O ADR-0025 E A SECAO 12 DO ADR-0027 ANTES DE MEXER AQUI.**
+ * ## Duas leituras alcancaveis sem conta, e o resto so com conta
  *
- * ## Duas leituras alcancaveis sem conta, e uma so com conta
+ * `listNetworkEvents` e publica e `getNetworkEvent` tem autenticacao opcional:
+ * a `Rede` e navegavel deslogado. Nenhuma das duas carrega coordenada, e o
+ * encontro privado sai nelas como teaser (so titulo, data local e estado) para
+ * qualquer chamador, inclusive o aprovado. A forma vem do EVENTO, e nao de quem
+ * pergunta (ADR-0021).
  *
- * `listNetworkEvents` e publica (`security: []`) e `getNetworkEvent` aceita as
- * duas coisas (`bearerAuth` ou nada), porque a `Rede` e **navegavel
- * deslogado**. Nenhuma das duas carrega coordenada: o portao de contrato
- * publico trata autenticacao opcional como publica, e o ADR-0021 proibe a
- * resposta que muda conforme o chamador.
+ * As outras sete exigem conta (`bearerAuth` sem alternativa vazia): o ponto, a
+ * agenda por distancia, o conteudo do privado, o pedido para participar (criar,
+ * ler, desistir) e "meus pedidos". **O 401 vem antes de qualquer consulta**:
+ * sem conta nao se descobre nem se o `slug` existe.
  *
- * `getNetworkEventLocation` devolve o ponto do encontro e exige conta
- * (`bearerAuth` sem alternativa vazia). E a emenda 1 do ADR-0010, de escopo
- * fechado: ponto de EVENTO publicado, em resposta autenticada. O 401 vem
- * **antes** de qualquer consulta: sem conta nao se descobre nem se o `slug`
- * existe.
+ * ## O que este arquivo nao decide
  *
- * Check-in e galeria sairam desta versao por decisao do cliente (ADR-0027
- * 12.4); o desenho anterior esta na branch `guarda/rede-checkin-galeria`.
- *
- * ## O corpo de `getNetworkEvent` e UM SO, e e o publico
- *
- * ADR-0021. O detalhe nao le o token: nao ha campo derivado de quem chama, e
- * um token vencido nao vira 401 numa rota que atende sem token nenhum.
- *
- * ## A validacao de query e de caminho nao esta aqui
- *
- * `vigiarParametrosDasRotas` instala `schema.querystring` e `schema.params` a
- * partir do contrato, pelo `operationId`. Declarar um schema aqui criaria a
- * segunda definicao, que e a que diverge.
- *
- * ## O `status` nao e calculado aqui
- *
- * Ele e calculado em `statusDoEncontro`, no dominio, junto da regra que decide
- * o que cada rotulo quer dizer, inclusive o do cancelado.
+ * Quem pode ver o conteudo do privado e decidido na clausula `WHERE` do
+ * repositorio (um `EXISTS` sobre o pedido aprovado), e nao aqui. O estado que o
+ * app ve e derivado no dominio, e o recusado e o pendente caem no mesmo ramo
+ * la. A validacao de query e de caminho vem do contrato, pelo `operationId`.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
-import { projetarEncontro, projetarLocalizacao } from '../../domain/encontro-da-rede.js';
+import { comoIso } from '../../../../shared/time/clock.js';
+import {
+  distanciaArredondada,
+  estadoDoPedidoNoApp,
+  projetarDetalhesPrivados,
+  projetarEncontro,
+  projetarLocalizacao,
+  projetarTeaser,
+  type EncontroPublicoProjetado,
+} from '../../domain/encontro-da-rede.js';
 import type {
   NetworkRepository,
   OrdemDaAgenda,
+  PedidoDaConta,
   RecorteNoTempo,
 } from '../../ports/network-repository.js';
 import type { Clock } from '../../../../shared/ports/index.js';
-import type { UserId } from '../../../../shared/types/brands.js';
+import type { Instant, UserId } from '../../../../shared/types/brands.js';
 
-/**
- * Os tetos sao os do contrato, COPIADOS de la e nao escolhidos aqui.
- *
- * `expensive_query` e o efeito da listagem: a busca por texto varre titulo e
- * resumo do recorte inteiro e ainda conta o recorte. Sem efeito declarado o
- * teto seria opcional, e agenda publica sem teto e a porta da raspagem.
- *
- * **Um teto so, e uma dimensao so, em cada rota.**
- */
+/** Os tetos sao os do contrato, COPIADOS de la. Um teto e uma dimensao por rota. */
 export const rotaDaAgenda = defineRoute({
   operationId: 'listNetworkEvents',
   method: 'get',
@@ -67,11 +54,6 @@ export const rotaDaAgenda = defineRoute({
   rateLimit: [{ dimension: ['ip'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
-/**
- * Sem efeito: a leitura de um encontro e uma linha. O teto e o DOBRO da
- * listagem, porque abrir varios encontros seguidos e uso normal de quem esta
- * escolhendo para onde ir no domingo.
- */
 export const rotaDoEncontro = defineRoute({
   operationId: 'getNetworkEvent',
   method: 'get',
@@ -80,15 +62,17 @@ export const rotaDoEncontro = defineRoute({
   rateLimit: [{ dimension: ['ip'], limit: 600, window: '1h', onExceed: 'deny_429' }],
 });
 
+export const rotaDaAgendaPorDistancia = defineRoute({
+  operationId: 'listNearbyNetworkEvents',
+  method: 'get',
+  path: '/network/events/nearby',
+  effects: ['expensive_query'],
+  rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
 /**
- * `account`, e nao `ip` (ADR-0027 12.5): a operacao EXIGE conta, entao ha conta
- * para contar, e no Brasil o CGNAT das operadoras poe muita gente atras de
- * poucos enderecos -- um teto por `ip` pegaria vizinho inocente.
- *
- * O teto e o mesmo do detalhe: a tela do encontro chama as duas operacoes a
- * cada abertura, e um limite menor aqui faria o mapa sumir antes do resto da
- * tela. O que ele segura e a raspagem dos pontos de todos os encontros por uma
- * conta so.
+ * `account`, e nao `ip` (ADR-0027 12.5). O mesmo teto do detalhe: a tela do
+ * encontro chama as operacoes a cada abertura.
  */
 export const rotaDoLocal = defineRoute({
   operationId: 'getNetworkEventLocation',
@@ -98,17 +82,54 @@ export const rotaDoLocal = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
 });
 
-/** Os mesmos defaults que o contrato declara. Copiados de la. */
+export const rotaDosDetalhesPrivados = defineRoute({
+  operationId: 'getNetworkEventPrivateDetails',
+  method: 'get',
+  path: '/network/events/:eventSlug/private-details',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDoPedido = defineRoute({
+  operationId: 'requestToJoinNetworkEvent',
+  method: 'post',
+  path: '/network/events/:eventSlug/join-request',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDoMeuPedido = defineRoute({
+  operationId: 'getMyNetworkEventJoinRequest',
+  method: 'get',
+  path: '/network/events/:eventSlug/join-request',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDaDesistencia = defineRoute({
+  operationId: 'withdrawNetworkEventJoinRequest',
+  method: 'delete',
+  path: '/network/events/:eventSlug/join-request',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDosMeusPedidos = defineRoute({
+  operationId: 'listMyNetworkEventJoinRequests',
+  method: 'get',
+  path: '/network/join-requests',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 const RECORTE_PADRAO: RecorteNoTempo = 'upcoming';
+const SEM_CACHE = 'private, no-store';
 
 /**
- * O default de `sort` **DEPENDE de `when`**, e e esta funcao inteira.
- *
- * Com `upcoming` e com `all` a ordem e `proximos`; com `past` a ordem inverte
- * para `recentes`, porque a pergunta "o que houve" se responde do mais recente
- * para tras. E por isso que `effective_sort` existe na resposta.
+ * O default de `sort` **depende de `when`**: com `past` e `recentes`, com os
+ * outros e `proximos`. E por isso que `effective_sort` existe na resposta.
  */
 export function ordemPadraoDe(quando: RecorteNoTempo): OrdemDaAgenda {
   return quando === 'past' ? 'recentes' : 'proximos';
@@ -128,7 +149,18 @@ interface QueryDaAgenda {
   readonly q?: string;
   readonly city?: string;
   readonly when?: RecorteNoTempo;
-  readonly sort?: OrdemDaAgenda;
+  readonly sort?: string;
+  readonly admission?: 'free' | 'paid';
+  readonly visibility?: 'public' | 'private';
+  readonly size?: string;
+  readonly max_km?: 2 | 5 | 10;
+  readonly page?: number;
+  readonly limit?: number;
+}
+
+interface QueryDosMeusPedidos {
+  readonly q?: string;
+  readonly state?: 'requested' | 'approved' | 'withdrawn' | 'expired';
   readonly page?: number;
   readonly limit?: number;
 }
@@ -137,19 +169,31 @@ interface CaminhoDoEncontro {
   readonly eventSlug: string;
 }
 
+function aparado(valor: string | undefined): string | undefined {
+  const t = valor?.trim();
+  return t === undefined || t === '' ? undefined : t;
+}
+
 /**
- * O recorte que de fato valeu, para a tela poder escreve-lo. `scope: all`
- * quando nada foi recortado. `when` **nao entra aqui**: ele tem campo proprio
- * (`effective_when`) porque sempre vale algum, inclusive o default.
+ * O recorte que de fato valeu, para a tela escrever. `scope: all` quando nada
+ * foi recortado. `when` e `sort` tem campo proprio.
  */
-function recortesAplicados(query: QueryDaAgenda): Record<string, string> {
+function recortesAplicados(entradas: Record<string, string | undefined>): Record<string, string> {
   const aplicados: Record<string, string> = {};
-  const termo = query.q?.trim();
-  if (termo !== undefined && termo !== '') aplicados['q'] = termo;
-  const cidade = query.city?.trim();
-  if (cidade !== undefined && cidade !== '') aplicados['city'] = cidade;
+  for (const [nome, valor] of Object.entries(entradas)) {
+    if (valor !== undefined) aplicados[nome] = valor;
+  }
   if (Object.keys(aplicados).length === 0) aplicados['scope'] = 'all';
   return aplicados;
+}
+
+function filtrosDaAgenda(query: QueryDaAgenda) {
+  return {
+    q: aparado(query.q),
+    city: aparado(query.city),
+    admission: query.admission,
+    size: query.size,
+  };
 }
 
 /** O token do cabecalho, sem decidir nada sobre ele. */
@@ -168,10 +212,8 @@ function chamadorAutenticado(
   return memoDaRequisicao(request, 'rede:chamador', async () => {
     const token = tokenDaRequisicao(request);
     if (token === undefined) throw problemas.naoAutenticado();
-    // O 401 de token vencido, revogado ou forjado e do servico de identidade,
-    // como no diretorio. Nao ha `catch` aqui: engolir o erro transformaria uma
-    // falha de banco em 401, e a pessoa seria mandada fazer login de novo por
-    // um defeito nosso.
+    // O 401 de token vencido ou forjado e do servico de identidade. Nao ha
+    // `catch`: engolir o erro transformaria falha de banco em 401.
     return (await deps.autenticador.autenticar(token)).userId;
   });
 }
@@ -188,24 +230,43 @@ async function contaDoTeto(
   }
 }
 
+/** O pedido no vocabulario do app. Os mesmos campos para pendente e recusado. */
+function projetarPedido(pedido: PedidoDaConta, agora: Instant) {
+  return {
+    state: estadoDoPedidoNoApp(pedido.decisao, pedido.encontro, agora),
+    requested_at: comoIso(pedido.pedidoEm),
+  };
+}
+
+/**
+ * O 400 das regras de estado do pedido. `code` e fixo por regra e nao depende
+ * da decisao guardada: o pendente e o recusado recebem o mesmo corpo.
+ */
+function recusaDoPedido(code: 'event_ended' | 'join_request_final') {
+  return problemas.validacao(
+    [{ field: 'eventSlug', code, message: code === 'event_ended' ? 'O encontro ja terminou.' : 'O pedido nao pode mais mudar.' }],
+    code === 'event_ended' ? 'O encontro ja terminou.' : 'O pedido nao pode mais mudar.',
+  );
+}
+
 export function registrarRotasDaRede(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotasDaRede,
 ): void {
-  // Sem resolvedor: `ip` e dimensao generica e o registro a resolve sozinho.
+  const porConta = { resolvedores: { account: (request: FastifyRequest) => contaDoTeto(request, deps) } };
+
   registrarRota(app, rotaDaAgenda, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as QueryDaAgenda;
     const page = query.page ?? PAGINA_INICIAL;
     const limit = query.limit ?? TAMANHO_PADRAO;
     const when = query.when ?? RECORTE_PADRAO;
-    const sort = query.sort ?? ordemPadraoDe(when);
-    const termo = query.q?.trim();
-    const cidade = query.city?.trim();
+    const sort = (query.sort as OrdemDaAgenda | undefined) ?? ordemPadraoDe(when);
+    const filtros = filtrosDaAgenda(query);
     const agora = deps.clock.now();
 
     const pagina = await deps.rede.listarAgenda({
-      ...(termo === undefined || termo === '' ? {} : { q: termo }),
-      ...(cidade === undefined || cidade === '' ? {} : { city: cidade }),
+      ...filtros,
+      visibility: query.visibility,
       when,
       sort,
       agora,
@@ -220,41 +281,153 @@ export function registrarRotasDaRede(
       total: pagina.total,
       effective_sort: sort,
       effective_when: when,
-      applied_filters: recortesAplicados(query),
+      applied_filters: recortesAplicados({ ...filtros, visibility: query.visibility }),
     });
   });
 
   registrarRota(app, rotaDoEncontro, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
     const encontro = await deps.rede.buscarEncontro(eventSlug);
-
-    // Invisivel e inexistente respondem 404 com o MESMO corpo: distinguir
-    // contaria a um estranho que aquele `slug` existiu.
     if (encontro === undefined) throw problemas.naoEncontrado();
-
     return reply.send(projetarEncontro(encontro, deps.clock.now()));
   });
 
   registrarRota(
     app,
-    rotaDoLocal,
-    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    rotaDaAgendaPorDistancia,
+    porConta,
     async (request: FastifyRequest, reply: FastifyReply) => {
-      // O 401 vem ANTES da consulta: sem conta nao se descobre nem se o `slug`
-      // existe. A ordem inversa responderia 404 a quem nao tem conta para um
-      // `slug` inexistente e 401 para um existente, e a diferenca entre os dois
-      // e exatamente o que o 404 unico existe para esconder.
-      await chamadorAutenticado(request, deps);
+      const chamador = await chamadorAutenticado(request, deps);
+      const query = (request.query ?? {}) as QueryDaAgenda;
+      const page = query.page ?? PAGINA_INICIAL;
+      const limit = query.limit ?? TAMANHO_PADRAO;
+      const when = query.when ?? RECORTE_PADRAO;
+      const pedida = query.sort === 'proximos' ? 'proximos' : 'distancia';
+      const filtros = filtrosDaAgenda(query);
+      const agora = deps.clock.now();
+
+      const pagina = await deps.rede.listarPorDistancia({
+        ...filtros,
+        chamador,
+        when,
+        sort: pedida,
+        maxKm: query.max_km,
+        agora,
+        page,
+        limit,
+      });
+
+      // Sem regiao nao ha distancia: a ordem efetiva e a de data, e a resposta
+      // diz isso em vez de fingir que ordenou.
+      const efetiva = pagina.temRegiao ? pedida : 'proximos';
+      return reply.send({
+        items: pagina.itens.map(({ encontro, distanciaM }) => ({
+          // A consulta so devolve publico; o `as` registra isso para o tipo.
+          ...(projetarEncontro(encontro, agora) as EncontroPublicoProjetado),
+          distance_m: distanciaArredondada(distanciaM),
+        })),
+        page,
+        limit,
+        total: pagina.total,
+        effective_sort: efetiva,
+        effective_when: when,
+        applied_filters: recortesAplicados({
+          ...filtros,
+          max_km: pagina.temRegiao && query.max_km !== undefined ? String(query.max_km) : undefined,
+        }),
+      });
+    },
+  );
+
+  registrarRota(app, rotaDoLocal, porConta, async (request: FastifyRequest, reply: FastifyReply) => {
+    const chamador = await chamadorAutenticado(request, deps);
+    const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
+    const local = await deps.rede.buscarLocalDoEncontro(eventSlug, chamador);
+    // Invisivel, inexistente e privado sem aprovacao: o mesmo 404.
+    if (local === undefined) throw problemas.naoEncontrado();
+    return reply.header('Cache-Control', SEM_CACHE).send(projetarLocalizacao(local.ponto));
+  });
+
+  registrarRota(
+    app,
+    rotaDosDetalhesPrivados,
+    porConta,
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
       const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
+      const encontro = await deps.rede.buscarDetalhesPrivados(eventSlug, chamador);
+      // Nao e privado, nao existe, ou a conta nao foi aprovada: um 404 so.
+      if (encontro === undefined) throw problemas.naoEncontrado();
+      return reply
+        .header('Cache-Control', SEM_CACHE)
+        .send(projetarDetalhesPrivados(encontro, deps.clock.now()));
+    },
+  );
 
-      const local = await deps.rede.buscarLocalDoEncontro(eventSlug);
+  registrarRota(app, rotaDoPedido, porConta, async (request: FastifyRequest, reply: FastifyReply) => {
+    const chamador = await chamadorAutenticado(request, deps);
+    const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
+    const agora = deps.clock.now();
+    const desfecho = await deps.rede.pedirParaParticipar(eventSlug, chamador, agora);
+    if (desfecho.tipo === 'nao_encontrado') throw problemas.naoEncontrado();
+    if (desfecho.tipo === 'encerrado') throw recusaDoPedido('event_ended');
+    return reply.header('Cache-Control', SEM_CACHE).send(projetarPedido(desfecho.pedido, agora));
+  });
 
-      // Mesma regra de visibilidade de `getNetworkEvent`, e o mesmo corpo de
-      // 404 (ADR-0027 12.5). Nao ha 403: o ponto de um encontro visivel e o
-      // mesmo para qualquer tutor autenticado.
-      if (local === undefined) throw problemas.naoEncontrado();
+  registrarRota(app, rotaDoMeuPedido, porConta, async (request: FastifyRequest, reply: FastifyReply) => {
+    const chamador = await chamadorAutenticado(request, deps);
+    const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
+    const pedido = await deps.rede.lerMeuPedido(eventSlug, chamador);
+    if (pedido === undefined) throw problemas.naoEncontrado();
+    return reply.header('Cache-Control', SEM_CACHE).send(projetarPedido(pedido, deps.clock.now()));
+  });
 
-      return reply.send(projetarLocalizacao(local.ponto));
+  registrarRota(
+    app,
+    rotaDaDesistencia,
+    porConta,
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
+      const desfecho = await deps.rede.desistirDoPedido(eventSlug, chamador, deps.clock.now());
+      if (desfecho.tipo === 'nao_encontrado') throw problemas.naoEncontrado();
+      if (desfecho.tipo === 'final') throw recusaDoPedido('join_request_final');
+      return reply
+        .header('Cache-Control', SEM_CACHE)
+        .send({ state: 'withdrawn', requested_at: comoIso(desfecho.pedidoEm) });
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDosMeusPedidos,
+    porConta,
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const query = (request.query ?? {}) as QueryDosMeusPedidos;
+      const page = query.page ?? PAGINA_INICIAL;
+      const limit = query.limit ?? TAMANHO_PADRAO;
+      const q = aparado(query.q);
+      const agora = deps.clock.now();
+      const pagina = await deps.rede.listarMeusPedidos({
+        chamador,
+        q,
+        estado: query.state,
+        agora,
+        page,
+        limit,
+      });
+      return reply.header('Cache-Control', SEM_CACHE).send({
+        items: pagina.itens.map((pedido) => ({
+          event: projetarTeaser(pedido.encontro, agora),
+          ...projetarPedido(pedido, agora),
+        })),
+        page,
+        limit,
+        total: pagina.total,
+        effective_sort: 'proximos',
+        applied_filters: recortesAplicados({ q, state: query.state }),
+      });
     },
   );
 }

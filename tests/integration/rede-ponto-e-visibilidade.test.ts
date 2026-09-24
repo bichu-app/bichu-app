@@ -66,6 +66,9 @@ const PONTO_PUBLICADO = { lat: -23.5634, lon: -46.6821 };
 const PONTO_CANCELADO = { lat: -23.5466, lon: -46.7236 };
 const PONTO_ESCONDIDO = { lat: -23.5445, lon: -46.6579 };
 
+/** Conta sem pedido nenhum: o ponto do encontro PUBLICO nao depende de aprovacao. */
+const QUALQUER_CONTA = randomUUID();
+
 const QUALQUER_UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 let banco: DbHandle;
@@ -133,7 +136,7 @@ before(async () => {
   banco = createDb(CONEXAO);
   cliente = new pg.Client({ connectionString: CONEXAO });
   await cliente.connect();
-  repo = criarNetworkRepository(banco.db);
+  repo = criarNetworkRepository(banco.db, { uuidv7: () => randomUUID() });
 
   await cliente.query('DELETE FROM network_events WHERE slug LIKE $1', [`${PREFIXO}%`]);
   for (const linha of LINHAS) await inserir(linha);
@@ -202,15 +205,15 @@ void describe('a visibilidade e a mesma nas tres leituras', () => {
     // A regra do ADR-0027 13.5 como estado do banco: o ponto do encontro da
     // comunidade so sai depois de revisao humana. E o do retirado nao sai
     // nunca.
-    assert.equal(await repo.buscarLocalDoEncontro(ESPERANDO_REVISAO), undefined);
-    assert.equal(await repo.buscarLocalDoEncontro(RETIRADO), undefined);
-    assert.equal(await repo.buscarLocalDoEncontro(`${PREFIXO}nunca-existiu`), undefined);
+    assert.equal(await repo.buscarLocalDoEncontro(ESPERANDO_REVISAO, QUALQUER_CONTA), undefined);
+    assert.equal(await repo.buscarLocalDoEncontro(RETIRADO, QUALQUER_CONTA), undefined);
+    assert.equal(await repo.buscarLocalDoEncontro(`${PREFIXO}nunca-existiu`, QUALQUER_CONTA), undefined);
   });
 });
 
 void describe('o ponto, so pelo `location`', () => {
   void it('o publicado com ponto devolve o ponto gravado, em graus, na ordem lat/lon', async () => {
-    const local = await repo.buscarLocalDoEncontro(PUBLICADO_COM_PONTO);
+    const local = await repo.buscarLocalDoEncontro(PUBLICADO_COM_PONTO, QUALQUER_CONTA);
     assert.ok(local !== undefined);
     const corpo = projetarLocalizacao(local.ponto);
     assert.ok(corpo.point !== null);
@@ -220,13 +223,13 @@ void describe('o ponto, so pelo `location`', () => {
   });
 
   void it('o publicado sem ponto devolve `{ point: null }`, e nao 404', async () => {
-    const local = await repo.buscarLocalDoEncontro(PUBLICADO_SEM_PONTO);
+    const local = await repo.buscarLocalDoEncontro(PUBLICADO_SEM_PONTO, QUALQUER_CONTA);
     assert.ok(local !== undefined, 'encontro visivel sem ponto nao e 404');
     assert.deepEqual(projetarLocalizacao(local.ponto), { point: null });
   });
 
   void it('o cancelado ainda visivel devolve o ponto: ele continua na agenda', async () => {
-    const local = await repo.buscarLocalDoEncontro(CANCELADO_POR_VIR);
+    const local = await repo.buscarLocalDoEncontro(CANCELADO_POR_VIR, QUALQUER_CONTA);
     assert.ok(local?.ponto !== null && local?.ponto !== undefined);
   });
 

@@ -59,9 +59,11 @@ import {
 } from './massa-da-vitrine.js';
 import {
   ENCONTROS_COM_PONTO,
+  ENCONTROS_PRIVADOS,
   ENCONTROS_VISIVEIS,
   MASSA_DA_REDE,
   MOMENTO_DA_REDE,
+  camposDe,
   momentoDoEncontro,
 } from './massa-da-rede.js';
 
@@ -279,26 +281,44 @@ export async function semearRede(db: Db, hoje: Date): Promise<void> {
 
   for (const encontro of MASSA_DA_REDE) {
     const momento = momentoDoEncontro(encontro, hoje);
+    const campos = camposDe(encontro);
+    const id = ids.uuidv7();
     const ponto =
       encontro.ponto === null
         ? sql`null`
         : sql`ST_SetSRID(ST_MakePoint(${encontro.ponto.lon}, ${encontro.ponto.lat}), 4326)::geography`;
     const origemDoPonto = encontro.ponto === null ? null : 'map_pin';
+    const pago = campos.admission;
     await sql`
       insert into network_events (
         id, slug, title, summary, place_name, neighborhood, city, state,
         geo, geo_source, starts_at, ends_at, time_zone,
-        origin, publication_status, published_at
+        origin, publication_status, published_at,
+        visibility, admission_kind, admission_amount, admission_currency, admission_unit,
+        dog_age, vaccination_required, fenced_off_leash_area, notes
       ) values (
-        ${ids.uuidv7()}::uuid, ${encontro.slug}, ${encontro.title}, ${encontro.summary},
+        ${id}::uuid, ${encontro.slug}, ${encontro.title}, ${encontro.summary},
         ${encontro.placeName}, ${encontro.neighborhood}, ${encontro.city}, ${encontro.state},
         ${ponto}, ${origemDoPonto},
         ${momento.inicioLocal}::timestamp at time zone ${momento.zonaDeLeitura},
         ${momento.fimLocal}::timestamp at time zone ${momento.zonaDeLeitura},
         ${encontro.timeZone},
-        'admin', ${encontro.publicationStatus}, ${MOMENTO_DA_REDE}::timestamptz
+        'admin', ${encontro.publicationStatus}, ${MOMENTO_DA_REDE}::timestamptz,
+        ${campos.visibility}, ${pago === null ? 'free' : 'paid'},
+        ${pago === null ? null : pago.centavos}, ${pago === null ? null : 'BRL'},
+        ${pago === null ? null : pago.unidade},
+        ${campos.idade}, ${campos.vacinacao}, ${campos.areaCercada}, ${campos.observacoes}
       )
     `.execute(db);
+    for (const porte of campos.portes) {
+      await sql`insert into network_event_sizes (event_id, size) values (${id}::uuid, ${porte})`.execute(db);
+    }
+    for (const item of campos.estrutura) {
+      await sql`insert into network_event_amenities (event_id, amenity) values (${id}::uuid, ${item})`.execute(db);
+    }
+    for (const item of campos.paraLevar) {
+      await sql`insert into network_event_bring_items (event_id, item) values (${id}::uuid, ${item})`.execute(db);
+    }
   }
 }
 
@@ -411,7 +431,8 @@ export async function main(): Promise<void> {
         `${String(PARCEIROS_DA_VITRINE.length)} parceiros.`,
       `massa da Rede semeada: ${String(MASSA_DA_REDE.length)} encontros, ` +
         `${String(ENCONTROS_VISIVEIS.length)} visiveis, ` +
-        `${String(ENCONTROS_COM_PONTO.length)} com ponto no mapa.`,
+        `${String(ENCONTROS_COM_PONTO.length)} com ponto no mapa, ` +
+        `${String(ENCONTROS_PRIVADOS.length)} privados.`,
       '',
       'As duas nao publicadas (um rascunho e um oculto) existem de proposito: sao o',
       'que da o que medir a isca do filtro de `status`. Na Rede o equivalente e o',

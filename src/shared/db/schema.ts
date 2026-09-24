@@ -931,6 +931,16 @@ export interface NetworkEventsTable {
    * `timestamptz` sozinho diz o instante e nao diz a hora de parede.
    */
   time_zone: Generated<string>;
+  visibility: Generated<VisibilidadeDoEncontro>;
+  admission_kind: Generated<EntradaDoEncontro>;
+  /** Centavos. Nulo quando gratuito; anda junto de moeda e unidade por `CHECK`. */
+  admission_amount: number | null;
+  admission_currency: 'BRL' | null;
+  admission_unit: UnidadeDoValor | null;
+  dog_age: Generated<IdadeDosCaes>;
+  vaccination_required: Generated<boolean>;
+  fenced_off_leash_area: Generated<boolean>;
+  notes: string | null;
   origin: Generated<OrigemDoEncontro>;
   publication_status: PublicacaoDoEncontro;
   published_at: Date | null;
@@ -943,6 +953,61 @@ export interface NetworkEventsTable {
 
 /** O `CHECK` `network_events_origem_do_ponto`. ADR-0006: so `map_pin`. */
 export type OrigemDoPontoDoEncontro = 'map_pin';
+
+export type VisibilidadeDoEncontro = 'public' | 'private';
+export type EntradaDoEncontro = 'free' | 'paid';
+export type UnidadeDoValor = 'per_dog' | 'per_person' | 'per_pair';
+export type IdadeDosCaes = 'any' | 'from_4_months' | 'from_1_year' | 'up_to_1_year';
+export type ItemParaLevar =
+  | 'water'
+  | 'water_bowl'
+  | 'leash'
+  | 'poop_bags'
+  | 'treats'
+  | 'towel'
+  | 'vaccination_card'
+  | 'toy';
+export type EstruturaDoLocal =
+  | 'level_ground_or_ramp'
+  | 'accessible_restroom'
+  | 'public_restroom_nearby'
+  | 'shade'
+  | 'benches'
+  | 'dog_water_fountain'
+  | 'parking_nearby';
+/** A DECISAO guardada. O app nunca ve `declined` (ADR-0027 12.11). */
+export type DecisaoDoPedido = 'pending' | 'approved' | 'declined';
+
+export interface NetworkEventBringItemsTable {
+  event_id: string;
+  item: ItemParaLevar;
+}
+
+export interface NetworkEventSizesTable {
+  event_id: string;
+  size: string;
+}
+
+export interface NetworkEventAmenitiesTable {
+  event_id: string;
+  amenity: EstruturaDoLocal;
+}
+
+/**
+ * O pedido para participar de encontro privado. Da conta, nunca do pet.
+ * `decided_by_user_id` fica fora do tipo: a trilha o escreve por SQL cru, e
+ * nenhuma leitura do app o projeta.
+ */
+export interface NetworkEventJoinRequestsTable {
+  id: string;
+  ref: string;
+  event_id: string;
+  user_id: string;
+  status: Generated<DecisaoDoPedido>;
+  requested_at: Generated<Date>;
+  decided_at: Date | null;
+  withdrawn_at: Date | null;
+}
 
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
@@ -992,6 +1057,10 @@ export interface Database {
   store_partners: StorePartnersTable;
   store_items: StoreItemsTable;
   network_events: NetworkEventsTable;
+  network_event_bring_items: NetworkEventBringItemsTable;
+  network_event_sizes: NetworkEventSizesTable;
+  network_event_amenities: NetworkEventAmenitiesTable;
+  network_event_join_requests: NetworkEventJoinRequestsTable;
   'audit.events': AuditEventsTable;
 }
 

@@ -605,7 +605,7 @@ export async function main(): Promise<void> {
     // diretorio e o da transferencia -- o modulo recebe a funcao e continua sem
     // conhecer o servico de identidade.
     registrarRotasDaRede(escopo, {
-      rede: criarNetworkRepository(db),
+      rede: criarNetworkRepository(db, ids),
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },

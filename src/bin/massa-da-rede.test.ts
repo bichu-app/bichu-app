@@ -34,11 +34,14 @@
  * que someria em silencio se alguem "arrumasse" a massa.
  */
 import assert from 'node:assert/strict';
+import { redigirCanalMediado } from '../shared/redaction/redigir.js';
 import { describe, it } from 'node:test';
 
 import {
   ENCONTROS_COM_PONTO,
+  ENCONTROS_PRIVADOS,
   ENCONTROS_VISIVEIS,
+  camposDe,
   FUSOS_DA_REDE,
   MASSA_DA_REDE,
   dataCivilDoEncontro,
@@ -343,9 +346,51 @@ void describe('a massa presta para ser OLHADA, que e para o que ela existe', () 
     }
   });
 
+  void it('ISCA -- ha encontro PRIVADO na massa (P19: zero privados reprova)', () => {
+    assert.ok(ENCONTROS_PRIVADOS.length >= 1, 'nenhum encontro privado: o teaser nunca seria visto');
+  });
+
+  void it('ISCA -- o slug do privado nao carrega o lugar, o bairro nem a cidade', () => {
+    // ADR-0027 12.10: o `slug` do privado sai no teaser para todo mundo.
+    const normal = (t: string) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    for (const privado of ENCONTROS_PRIVADOS) {
+      for (const pedaco of [privado.placeName, privado.neighborhood, privado.city]) {
+        for (const palavra of normal(pedaco).split(/[^a-z0-9]+/).filter((p) => p.length >= 4)) {
+          assert.equal(normal(privado.slug).includes(palavra), false, `"${palavra}" no slug ${privado.slug}`);
+        }
+      }
+    }
+  });
+
+  void it('pago sempre com valor e unidade, e o valor e positivo', () => {
+    for (const encontro of MASSA_DA_REDE) {
+      const pago = camposDe(encontro).admission;
+      if (pago === null) continue;
+      assert.ok(pago.centavos >= 1 && pago.centavos <= 100_000_000, `valor fora da faixa em ${encontro.slug}`);
+    }
+    assert.ok(MASSA_DA_REDE.some((um) => camposDe(um).admission !== null), 'nenhum encontro pago');
+  });
+
+  void it('ISCA -- as observacoes cabem em 500 e nao tem contato nem link (D59)', () => {
+    for (const encontro of MASSA_DA_REDE) {
+      const nota = camposDe(encontro).observacoes;
+      if (nota === null) continue;
+      assert.ok(nota.trim().length >= 2 && nota.trim().length <= 500, `nota fora do teto em ${encontro.slug}`);
+      assert.deepEqual(redigirCanalMediado(nota).retirados, [], `contato na nota de ${encontro.slug}`);
+    }
+  });
+
+  void it('todo encontro aceita pelo menos um porte, e a lista fechada e respeitada', () => {
+    for (const encontro of MASSA_DA_REDE) {
+      const c = camposDe(encontro);
+      assert.ok(c.portes.length >= 1, `sem porte em ${encontro.slug}`);
+      assert.ok(c.paraLevar.length <= 8);
+    }
+  });
+
   void it('a massa tem cerca de dez encontros visiveis', () => {
     assert.ok(
-      ENCONTROS_VISIVEIS.length >= 9 && ENCONTROS_VISIVEIS.length <= 12,
+      ENCONTROS_VISIVEIS.length >= 9 && ENCONTROS_VISIVEIS.length <= 13,
       `${String(ENCONTROS_VISIVEIS.length)} encontros visiveis: a massa deixou de ter o tamanho ` +
         'que o cliente pediu para olhar',
     );

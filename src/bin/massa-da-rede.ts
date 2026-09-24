@@ -1,5 +1,5 @@
 /**
- * A massa fixa da secao `Rede`: onze encontros.
+ * A massa fixa da secao `Rede`: treze encontros, dois deles privados.
  *
  * ## Por que ela mora num arquivo proprio
  *
@@ -111,6 +111,52 @@ export interface EncontroSemeado {
    * cancelado na massa -- ver o cabecalho.
    */
   readonly publicationStatus: 'published' | 'removed';
+  /** Os campos do item 17. Ausente vale o padrao da migracao. */
+  readonly campos?: CamposSemeados;
+}
+
+/**
+ * Os campos do encontro (ADR-0027 item 17). Todos opcionais na massa: o que
+ * falta vale o padrao da migracao, e `camposDe` o resolve num lugar so.
+ */
+export interface CamposSemeados {
+  readonly visibility?: 'public' | 'private';
+  readonly admission?: { readonly centavos: number; readonly unidade: 'per_dog' | 'per_person' | 'per_pair' } | null;
+  readonly portes?: readonly ('P' | 'M' | 'G' | 'GG')[];
+  readonly idade?: 'any' | 'from_4_months' | 'from_1_year' | 'up_to_1_year';
+  readonly vacinacao?: boolean;
+  readonly areaCercada?: boolean;
+  readonly estrutura?: readonly string[];
+  readonly paraLevar?: readonly string[];
+  readonly observacoes?: string | null;
+}
+
+export interface CamposResolvidos {
+  readonly visibility: 'public' | 'private';
+  readonly admission: { readonly centavos: number; readonly unidade: 'per_dog' | 'per_person' | 'per_pair' } | null;
+  readonly portes: readonly string[];
+  readonly idade: string;
+  readonly vacinacao: boolean;
+  readonly areaCercada: boolean;
+  readonly estrutura: readonly string[];
+  readonly paraLevar: readonly string[];
+  readonly observacoes: string | null;
+}
+
+/** Os padroes da migracao (A.4.1), num lugar so. */
+export function camposDe(encontro: EncontroSemeado): CamposResolvidos {
+  const c = encontro.campos ?? {};
+  return {
+    visibility: c.visibility ?? 'public',
+    admission: c.admission ?? null,
+    portes: c.portes ?? ['P', 'M', 'G', 'GG'],
+    idade: c.idade ?? 'any',
+    vacinacao: c.vacinacao ?? true,
+    areaCercada: c.areaCercada ?? false,
+    estrutura: c.estrutura ?? [],
+    paraLevar: c.paraLevar ?? [],
+    observacoes: c.observacoes ?? null,
+  };
 }
 
 /** Latitude e longitude em graus, na ordem em que as pessoas as escrevem. */
@@ -148,6 +194,11 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     timeZone: 'America/Sao_Paulo',
     ponto: { lat: -23.5634, lon: -46.6821 },
     publicationStatus: 'published',
+    campos: {
+      admission: { centavos: 1500, unidade: 'per_dog' },
+      estrutura: ['shade', 'benches', 'public_restroom_nearby'],
+      paraLevar: ['water', 'water_bowl', 'leash', 'poop_bags'],
+    },
   },
   // 2. TITULO QUE QUEBRA EM DUAS LINHAS, e ponto.
   {
@@ -162,6 +213,11 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     timeZone: 'America/Sao_Paulo',
     ponto: { lat: -23.5874, lon: -46.6576 },
     publicationStatus: 'published',
+    campos: {
+      portes: ['G', 'GG'],
+      idade: 'from_1_year',
+      paraLevar: ['water', 'leash', 'vaccination_card'],
+    },
   },
   // 3. SEM CAPA, SEM PONTO e SEM FIM DECLARADO. Tres ausencias no mesmo
   //    cartao, e nenhuma delas e defeito. A tela do encontro, com conta,
@@ -288,6 +344,7 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     timeZone: 'America/Sao_Paulo',
     ponto: null,
     publicationStatus: 'published',
+    campos: { vacinacao: false },
   },
   // 9. SEM CAPA, SEM PONTO e SEM FIM DECLARADO, um mes a frente. O encontro distante e o que testa a ordenacao: com `when=upcoming`
   //    ele e o ultimo da lista, e com `sort=recentes` ele e o primeiro.
@@ -319,6 +376,54 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     timeZone: 'America/Sao_Paulo',
     ponto: { lat: -23.5466, lon: -46.7236 },
     publicationStatus: 'published',
+    campos: {
+      areaCercada: true,
+      estrutura: ['level_ground_or_ramp', 'accessible_restroom', 'shade', 'dog_water_fountain', 'parking_nearby'],
+      paraLevar: ['treats', 'towel', 'toy'],
+      observacoes: 'Chegue pelo portao principal; a area cercada fica logo depois do bicicletario.',
+    },
+  },
+
+  // ------------------------------------------------------------------
+  // ENCONTROS PRIVADOS (ADR-0027 item 17). Para quem nao foi aprovado, a
+  // agenda mostra so titulo e data. O `slug` e aleatorio, como o servidor o
+  // gera: um `slug` digitado poderia dizer o lugar. O titulo e publico, entao
+  // ele tambem nao diz o lugar.
+  // ------------------------------------------------------------------
+  {
+    slug: 'p-7k2m9x4qd3',
+    title: 'Encontro fechado de cães reativos',
+    summary: 'Grupo pequeno com adestradora, distância entre os cães e entrada escalonada.',
+    placeName: 'Praça Buenos Aires',
+    neighborhood: 'Higienópolis',
+    city: 'São Paulo',
+    state: 'SP',
+    quando: { ancora: 'parede', diasAPartirDeHoje: 5, horaLocal: '08:00', duracaoEmMinutos: 90 },
+    timeZone: 'America/Sao_Paulo',
+    ponto: { lat: -23.5462, lon: -46.6581 },
+    publicationStatus: 'published',
+    campos: {
+      visibility: 'private',
+      admission: { centavos: 3000, unidade: 'per_pair' },
+      portes: ['M', 'G'],
+      estrutura: ['shade'],
+      paraLevar: ['leash', 'treats'],
+      observacoes: 'Chegue no horario marcado para a sua dupla; a adestradora organiza a entrada.',
+    },
+  },
+  {
+    slug: 'p-q8w3n5z1ty',
+    title: 'Aniversário do Pipoca',
+    summary: 'Festa de aniversário de um vira-lata do bairro, com bolo para cães.',
+    placeName: 'Parque da Aclimação',
+    neighborhood: 'Aclimação',
+    city: 'São Paulo',
+    state: 'SP',
+    quando: { ancora: 'parede', diasAPartirDeHoje: 12, horaLocal: '16:00', duracaoEmMinutos: 120 },
+    timeZone: 'America/Sao_Paulo',
+    ponto: null,
+    publicationStatus: 'published',
+    campos: { visibility: 'private', paraLevar: ['toy'] },
   },
 
   // ------------------------------------------------------------------
@@ -351,6 +456,11 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
 /** Os encontros que a agenda de fato mostra: os publicados. */
 export const ENCONTROS_VISIVEIS: readonly EncontroSemeado[] = MASSA_DA_REDE.filter(
   (encontro) => encontro.publicationStatus === 'published',
+);
+
+/** Os encontros privados visiveis. */
+export const ENCONTROS_PRIVADOS: readonly EncontroSemeado[] = ENCONTROS_VISIVEIS.filter(
+  (encontro) => camposDe(encontro).visibility === 'private',
 );
 
 /** Os encontros visiveis que tem ponto no mapa. */

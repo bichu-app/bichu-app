@@ -22,7 +22,7 @@ import type { Instant } from '../../../shared/types/brands.js';
  * `upcoming` e o default no contrato e **isso importa**: a lista abre com o que
  * ainda vai acontecer. `all` existe e nao e o default.
  */
-export type RecorteNoTempo = 'upcoming' | 'past' | 'all';
+export type RecorteNoTempo = 'upcoming' | 'past' | 'all' | 'today' | 'weekend' | 'next_30_days';
 
 /**
  * As ordens que a rota aceita. `proximos` e crescente, `recentes` e decrescente.
@@ -39,6 +39,11 @@ export interface RecorteDaAgenda {
   readonly q?: string | undefined;
   /** A cidade DIGITADA, nunca uma coordenada (ADR-0006). */
   readonly city?: string | undefined;
+  /** Exclui o privado: a condicao de acesso dele e oculta (ADR-0027 12.14). */
+  readonly admission?: 'free' | 'paid' | undefined;
+  readonly visibility?: 'public' | 'private' | undefined;
+  /** Porte aceito. Exclui o privado, pelo mesmo motivo de `admission`. */
+  readonly size?: string | undefined;
   readonly when: RecorteNoTempo;
   readonly sort: OrdemDaAgenda;
   /**
@@ -63,22 +68,76 @@ export interface LocalDoEncontro {
   readonly ponto: PontoDoEncontro | null;
 }
 
+/** A agenda por distancia (`listNearbyNetworkEvents`). So encontros publicos. */
+export interface RecorteDaAgendaPorDistancia extends Omit<RecorteDaAgenda, 'sort' | 'visibility'> {
+  readonly chamador: string;
+  readonly sort: 'distancia' | 'proximos';
+  readonly maxKm?: 2 | 5 | 10 | undefined;
+}
+
+export interface EncontroComDistancia {
+  readonly encontro: EncontroDaRede;
+  /** Metros, SEM arredondar: quem arredonda e o dominio. Nulo sem ponto ou sem regiao. */
+  readonly distanciaM: number | null;
+}
+
+export interface PaginaPorDistancia {
+  readonly itens: readonly EncontroComDistancia[];
+  readonly total: number;
+  /** `false` quando a conta nao tem regiao de referencia valida. */
+  readonly temRegiao: boolean;
+}
+
+/** O pedido da propria conta, como o banco o guarda, com o encontro dele. */
+export interface PedidoDaConta {
+  readonly decisao: 'pending' | 'approved' | 'declined';
+  readonly pedidoEm: Instant;
+  readonly encontro: EncontroDaRede;
+}
+
+export type DesfechoDoPedido =
+  | { readonly tipo: 'nao_encontrado' }
+  | { readonly tipo: 'encerrado' }
+  | { readonly tipo: 'ok'; readonly pedido: PedidoDaConta };
+
+export type DesfechoDaDesistencia =
+  | { readonly tipo: 'nao_encontrado' }
+  | { readonly tipo: 'final' }
+  | { readonly tipo: 'ok'; readonly pedidoEm: Instant };
+
+export interface RecorteDosMeusPedidos {
+  readonly chamador: string;
+  readonly q?: string | undefined;
+  readonly estado?: 'requested' | 'approved' | 'withdrawn' | 'expired' | undefined;
+  readonly agora: Instant;
+  readonly page: number;
+  readonly limit: number;
+}
+
+export interface PaginaDosMeusPedidos {
+  readonly itens: readonly PedidoDaConta[];
+  readonly total: number;
+}
+
 export interface NetworkRepository {
   listarAgenda(recorte: RecorteDaAgenda): Promise<PaginaDaAgenda>;
+  listarPorDistancia(recorte: RecorteDaAgendaPorDistancia): Promise<PaginaPorDistancia>;
   /**
    * O encontro. `undefined` quando ele nao existe **ou nao e visivel**
-   * (`pending_review`, `removed`), e os casos sao o mesmo caso de proposito:
-   * distinguir contaria a um estranho que aquele `slug` existiu.
+   * (`pending_review`, `removed`), e os casos sao o mesmo caso de proposito.
    */
   buscarEncontro(slug: string): Promise<EncontroDaRede | undefined>;
   /**
-   * O ponto do encontro, sob a MESMA regra de visibilidade de `buscarEncontro`
-   * (ADR-0027 12.5). `undefined` e o 404, com o mesmo corpo; `{ ponto: null }`
-   * e o encontro visivel sem ponto marcado.
-   *
-   * Quem chama ja precisa estar autenticado, e isso e da borda: a porta nao
-   * recebe o chamador porque a resposta nao depende de quem ele e -- qualquer
-   * tutor autenticado ve o mesmo ponto.
+   * O ponto, sob a mesma visibilidade de `buscarEncontro`, e, **no privado, so
+   * para quem tem pedido aprovado** (ADR-0027 12.11). A aprovacao e um `EXISTS`
+   * na clausula `WHERE`: sem ela, `undefined`, que e o mesmo 404.
    */
-  buscarLocalDoEncontro(slug: string): Promise<LocalDoEncontro | undefined>;
+  buscarLocalDoEncontro(slug: string, chamador: string): Promise<LocalDoEncontro | undefined>;
+  /** O conteudo oculto do privado, so com pedido aprovado. Senao, `undefined`. */
+  buscarDetalhesPrivados(slug: string, chamador: string): Promise<EncontroDaRede | undefined>;
+  pedirParaParticipar(slug: string, chamador: string, agora: Instant): Promise<DesfechoDoPedido>;
+  /** O pedido NAO desistido da conta num privado visivel. */
+  lerMeuPedido(slug: string, chamador: string): Promise<PedidoDaConta | undefined>;
+  desistirDoPedido(slug: string, chamador: string, agora: Instant): Promise<DesfechoDaDesistencia>;
+  listarMeusPedidos(recorte: RecorteDosMeusPedidos): Promise<PaginaDosMeusPedidos>;
 }

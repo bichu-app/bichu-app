@@ -25,10 +25,14 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  distanciaArredondada,
+  estadoDoPedidoNoApp,
+  projetarDetalhesPrivados,
   projetarEncontro,
   projetarLocalizacao,
   statusDoEncontro,
   type EncontroDaRede,
+  type EncontroPublicoProjetado,
 } from './encontro-da-rede.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
@@ -54,6 +58,17 @@ function encontro(ajustes: Partial<EncontroDaRede> = {}): EncontroDaRede {
     endsAt: (AGORA + 3 * UMA_HORA) as Instant,
     timeZone: 'America/Sao_Paulo',
     publicacao: 'published',
+    dataLocal: '2026-09-23',
+    visibilidade: 'public',
+    entrada: { tipo: 'free' },
+    portesAceitos: ['P', 'M', 'G', 'GG'],
+    idadeDosCaes: 'any',
+    vacinacaoExigida: true,
+    areaCercada: false,
+    estrutura: [],
+    paraLevar: [],
+    observacoes: null,
+    imagens: [],
     ...ajustes,
   };
 }
@@ -193,7 +208,7 @@ void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)
 
 void describe('a projecao do encontro', () => {
   void it('devolve o lugar em tres rotulos, e nenhuma coordenada', () => {
-    const projetado = projetarEncontro(encontro(), AGORA);
+    const projetado = (projetarEncontro(encontro(), AGORA) as EncontroPublicoProjetado);
     assert.deepEqual(projetado.place, {
       place_name: 'Praça Benedito Calixto',
       neighborhood: 'Pinheiros',
@@ -210,14 +225,19 @@ void describe('a projecao do encontro', () => {
     }
   });
 
-  void it('as chaves do corpo sao EXATAMENTE as do contrato, escritas por extenso', () => {
-    // Por campo A MAIS e que uma resposta se afasta do documento sem alarme: o
-    // comparador de contrato so reprova o que some. Esta lista e a de
-    // `NetworkEventSummary` depois da emenda, sem contagem, galeria nem sinal
-    // de quem chama.
+  void it('as chaves do corpo publico sao EXATAMENTE as de `NetworkEventPublic`', () => {
+    // Por campo A MAIS e que uma resposta se afasta do documento sem alarme.
     assert.deepEqual(Object.keys(projetarEncontro(encontro(), AGORA)).sort(), [
+      'accepted_sizes',
+      'admission',
+      'amenities',
+      'bring_items',
       'cover_image_url',
+      'dog_age',
       'ends_at',
+      'fenced_off_leash_area',
+      'images',
+      'notes',
       'place',
       'slug',
       'starts_at',
@@ -225,14 +245,45 @@ void describe('a projecao do encontro', () => {
       'summary',
       'time_zone',
       'title',
+      'vaccination_required',
+      'visibility',
     ]);
+  });
+
+  void it('pago sai com valor, moeda e unidade; gratuito sai com `price` nulo', () => {
+    const pago = projetarEncontro(
+      encontro({ entrada: { tipo: 'paid', centavos: 1500, moeda: 'BRL', unidade: 'per_dog' } }),
+      AGORA,
+    ) as EncontroPublicoProjetado;
+    assert.deepEqual(pago.admission, {
+      kind: 'paid',
+      price: { amount: 1500, currency: 'BRL', unit: 'per_dog' },
+    });
+    const gratis = projetarEncontro(encontro(), AGORA) as EncontroPublicoProjetado;
+    assert.deepEqual(gratis.admission, { kind: 'free', price: null });
+  });
+
+  void it('`cover_image_url` e a URL da imagem de posicao 0, derivada', () => {
+    const comImagem = projetarEncontro(
+      encontro({
+        imagens: [
+          { url: 'https://midia.exemplo.invalid/a.jpg', textoAlternativo: 'A roda na sombra' },
+          { url: 'https://midia.exemplo.invalid/b.jpg', textoAlternativo: 'O bebedouro' },
+        ],
+      }),
+      AGORA,
+    ) as EncontroPublicoProjetado;
+    assert.equal(comImagem.cover_image_url, 'https://midia.exemplo.invalid/a.jpg');
+    assert.equal(comImagem.images.length, 2);
+    const semImagem = projetarEncontro(encontro(), AGORA) as EncontroPublicoProjetado;
+    assert.equal(semImagem.cover_image_url, null);
   });
 
   void it('leva o fuso junto da data, e os dois sao campos distintos', () => {
     const projetado = projetarEncontro(
       encontro({ startsAt: Date.UTC(2026, 8, 27, 12, 0, 0) as Instant, endsAt: null }),
       AGORA,
-    );
+    ) as EncontroPublicoProjetado;
     assert.equal(projetado.starts_at, '2026-09-27T12:00:00.000Z');
     assert.equal(projetado.ends_at, null);
     assert.equal(projetado.time_zone, 'America/Sao_Paulo');
@@ -264,5 +315,102 @@ void describe('a projecao do ponto (getNetworkEventLocation)', () => {
   void it('campo a campo: o que vier a mais no ponto nao atravessa', () => {
     const comSobra = { lat: -23.5, lon: -46.6, origem: 'map_pin', autor: 'x' };
     assert.deepEqual(Object.keys(projetarLocalizacao(comSobra).point ?? {}).sort(), ['lat', 'lon']);
+  });
+});
+
+/** Um privado com TODO campo oculto preenchido por sentinela. */
+function privadoComSentinelas(): EncontroDaRede {
+  return encontro({
+    slug: 'p-q8w3n5z1ty',
+    title: 'Encontro fechado',
+    visibilidade: 'private',
+    placeName: 'ISCA-LUGAR',
+    neighborhood: 'ISCA-BAIRRO',
+    city: 'ISCA-CIDADE',
+    state: 'ZZ',
+    summary: 'ISCA-RESUMO',
+    timeZone: 'America/Porto_Velho',
+    entrada: { tipo: 'paid', centavos: 987654, moeda: 'BRL', unidade: 'per_pair' },
+    portesAceitos: ['P', 'M', 'G', 'GG'],
+    estrutura: ['shade'],
+    paraLevar: ['towel'],
+    observacoes: 'ISCA-NOTA',
+    imagens: [{ url: 'https://midia.exemplo.invalid/ISCA-CHAVE.jpg', textoAlternativo: 'ISCA-ALT' }],
+  });
+}
+
+const SENTINELAS = [
+  'ISCA-LUGAR',
+  'ISCA-BAIRRO',
+  'ISCA-CIDADE',
+  'ISCA-RESUMO',
+  'ISCA-NOTA',
+  'ISCA-ALT',
+  'ISCA-CHAVE',
+  '987654',
+  'Porto_Velho',
+  'towel',
+  'shade',
+];
+
+void describe('o encontro PRIVADO na leitura publica (ADR-0027 12.10)', () => {
+  void it('sai como teaser, com EXATAMENTE cinco propriedades', () => {
+    assert.deepEqual(Object.keys(projetarEncontro(privadoComSentinelas(), AGORA)).sort(), [
+      'local_date',
+      'slug',
+      'status',
+      'title',
+      'visibility',
+    ]);
+  });
+
+  void it('ISCA -- nenhuma sentinela do lado oculto aparece no teaser', () => {
+    const bruto = JSON.stringify(projetarEncontro(privadoComSentinelas(), AGORA));
+    for (const sentinela of SENTINELAS) {
+      assert.equal(bruto.includes(sentinela), false, `${sentinela} no teaser do privado`);
+    }
+  });
+
+  void it('controle positivo: os detalhes privados trazem TODAS as sentinelas', () => {
+    // Sem este caso, uma varredura que nao enxerga a sentinela aprovaria qualquer coisa.
+    const bruto = JSON.stringify(projetarDetalhesPrivados(privadoComSentinelas(), AGORA));
+    for (const sentinela of SENTINELAS) {
+      assert.equal(bruto.includes(sentinela), true, `${sentinela} faltou nos detalhes do aprovado`);
+    }
+  });
+
+  void it('o teaser leva a data local, e nao o instante nem o fuso', () => {
+    const teaser = projetarEncontro(privadoComSentinelas(), AGORA) as unknown as Record<string, unknown>;
+    assert.equal(teaser['local_date'], '2026-09-23');
+    assert.equal(teaser['starts_at'], undefined);
+    assert.equal(teaser['time_zone'], undefined);
+  });
+});
+
+void describe('o estado do pedido que o app ve (ADR-0027 12.11)', () => {
+  const porVir = encontro();
+  const passado = encontro({
+    startsAt: (AGORA - 3 * UMA_HORA) as Instant,
+    endsAt: (AGORA - UMA_HORA) as Instant,
+  });
+
+  void it('ISCA -- recusado e pendente dao o MESMO estado, antes e depois do fim', () => {
+    assert.equal(estadoDoPedidoNoApp('declined', porVir, AGORA), 'requested');
+    assert.equal(estadoDoPedidoNoApp('pending', porVir, AGORA), 'requested');
+    assert.equal(estadoDoPedidoNoApp('declined', passado, AGORA), 'expired');
+    assert.equal(estadoDoPedidoNoApp('pending', passado, AGORA), 'expired');
+  });
+
+  void it('aprovado e aprovado, inclusive depois do fim', () => {
+    assert.equal(estadoDoPedidoNoApp('approved', porVir, AGORA), 'approved');
+    assert.equal(estadoDoPedidoNoApp('approved', passado, AGORA), 'approved');
+  });
+});
+
+void describe('a distancia da agenda por distancia', () => {
+  void it('arredonda a 100 m, e nula continua nula', () => {
+    assert.equal(distanciaArredondada(1249), 1200);
+    assert.equal(distanciaArredondada(1250), 1300);
+    assert.equal(distanciaArredondada(null), null);
   });
 });

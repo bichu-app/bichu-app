@@ -42,9 +42,14 @@ import type { Clock } from '../../../../shared/ports/index.js';
 import type { AbsoluteUrl, Instant, UserId } from '../../../../shared/types/brands.js';
 import type { EncontroDaRede } from '../../domain/encontro-da-rede.js';
 import type {
+  DesfechoDaDesistencia,
+  DesfechoDoPedido,
   LocalDoEncontro,
   NetworkRepository,
   PaginaDaAgenda,
+  PaginaDosMeusPedidos,
+  PaginaPorDistancia,
+  PedidoDaConta,
   RecorteDaAgenda,
 } from '../../ports/network-repository.js';
 import { ordemPadraoDe, registrarRotasDaRede, rotaDaAgenda, rotaDoLocal } from './network-routes.js';
@@ -68,6 +73,26 @@ const ENCONTRO: EncontroDaRede = {
   endsAt: (AGORA + 3 * UMA_HORA) as Instant,
   timeZone: 'America/Sao_Paulo',
   publicacao: 'published',
+  dataLocal: '2026-09-23',
+  visibilidade: 'public',
+  entrada: { tipo: 'free' },
+  portesAceitos: ['P', 'M', 'G', 'GG'],
+  idadeDosCaes: 'any',
+  vacinacaoExigida: true,
+  areaCercada: false,
+  estrutura: [],
+  paraLevar: [],
+  observacoes: null,
+  imagens: [],
+};
+
+const PRIVADO: EncontroDaRede = {
+  ...ENCONTRO,
+  slug: 'p-q8w3n5z1ty',
+  visibilidade: 'private',
+  placeName: 'ISCA-LUGAR',
+  neighborhood: 'ISCA-BAIRRO',
+  summary: 'ISCA-RESUMO',
 };
 
 interface Cenario {
@@ -75,6 +100,10 @@ interface Cenario {
   /** `undefined` e o encontro que nao existe OU nao e visivel -- o mesmo caso. */
   readonly encontro?: EncontroDaRede | undefined;
   readonly local?: LocalDoEncontro | undefined;
+  readonly pedido?: DesfechoDoPedido;
+  readonly desistencia?: DesfechoDaDesistencia;
+  readonly detalhes?: EncontroDaRede | undefined;
+  readonly temRegiao?: boolean;
 }
 
 const recortesVistos: RecorteDaAgenda[] = [];
@@ -92,6 +121,30 @@ function repositorio(cenario: Cenario): NetworkRepository {
       locaisPedidos.push(slug);
       return Promise.resolve('local' in cenario ? cenario.local : { ponto: PONTO });
     },
+    listarPorDistancia: (): Promise<PaginaPorDistancia> =>
+      Promise.resolve({
+        itens: [{ encontro: ENCONTRO, distanciaM: 1249 }],
+        total: 1,
+        temRegiao: cenario.temRegiao ?? true,
+      }),
+    buscarDetalhesPrivados: (): Promise<EncontroDaRede | undefined> =>
+      Promise.resolve('detalhes' in cenario ? cenario.detalhes : PRIVADO),
+    pedirParaParticipar: (): Promise<DesfechoDoPedido> =>
+      Promise.resolve(
+        cenario.pedido ?? {
+          tipo: 'ok',
+          pedido: { decisao: 'pending', pedidoEm: AGORA as Instant, encontro: PRIVADO },
+        },
+      ),
+    lerMeuPedido: (): Promise<PedidoDaConta | undefined> =>
+      Promise.resolve({ decisao: 'declined', pedidoEm: AGORA as Instant, encontro: PRIVADO }),
+    desistirDoPedido: (): Promise<DesfechoDaDesistencia> =>
+      Promise.resolve(cenario.desistencia ?? { tipo: 'ok', pedidoEm: AGORA as Instant }),
+    listarMeusPedidos: (): Promise<PaginaDosMeusPedidos> =>
+      Promise.resolve({
+        itens: [{ decisao: 'declined', pedidoEm: AGORA as Instant, encontro: PRIVADO }],
+        total: 1,
+      }),
   };
 }
 
@@ -113,22 +166,24 @@ function servidor(
 
 interface Resposta {
   readonly status: number;
+  readonly cache: string | string[] | number | undefined;
   readonly corpo: Record<string, unknown>;
   readonly bruto: string;
 }
 
 async function pedir(
   app: RegistradorDeRotas,
-  opcoes: { url?: string; como?: UserId | null } = {},
+  opcoes: { url?: string; como?: UserId | null; metodo?: 'GET' | 'POST' | 'DELETE' } = {},
 ): Promise<Resposta> {
   const como = opcoes.como === undefined ? null : opcoes.como;
   const resposta = await app.inject({
-    method: 'GET',
+    method: opcoes.metodo ?? 'GET',
     url: opcoes.url ?? '/network/events',
     ...(como === null ? {} : { headers: { authorization: `Bearer ${como}` } }),
   });
   return {
     status: resposta.statusCode,
+    cache: resposta.headers['cache-control'],
     corpo: resposta.body === '' ? {} : (JSON.parse(resposta.body) as Record<string, unknown>),
     bruto: resposta.body,
   };
@@ -386,6 +441,112 @@ void describe('os tetos das tres rotas', () => {
       assert.equal(ok.status, 200, `a chamada ${String(i + 1)} deveria passar`);
     }
     assert.equal((await pedir(app, { url: URL_DO_LOCAL, como: QUEM_CHAMA })).status, 429);
+  });
+});
+
+const ROTAS_COM_CONTA: readonly { metodo: 'GET' | 'POST' | 'DELETE'; url: string }[] = [
+  { metodo: 'GET', url: '/network/events/nearby' },
+  { metodo: 'GET', url: `/network/events/${SLUG}/location` },
+  { metodo: 'GET', url: `/network/events/${SLUG}/private-details` },
+  { metodo: 'POST', url: `/network/events/${SLUG}/join-request` },
+  { metodo: 'GET', url: `/network/events/${SLUG}/join-request` },
+  { metodo: 'DELETE', url: `/network/events/${SLUG}/join-request` },
+  { metodo: 'GET', url: '/network/join-requests' },
+];
+
+void describe('as sete operacoes com conta: 401 sem token, e nada do encontro no corpo', () => {
+  for (const rota of ROTAS_COM_CONTA) {
+    void it(`ISCA -- ${rota.metodo} ${rota.url} sem token responde 401`, async () => {
+      const resposta = await pedir(servidor(), { metodo: rota.metodo, url: rota.url, como: null });
+      assert.equal(resposta.status, 401);
+      for (const proibido of ['ISCA-', '"lat"', '"state"', 'Benedito']) {
+        assert.equal(resposta.bruto.includes(proibido), false, `${proibido} no 401 de ${rota.url}`);
+      }
+    });
+  }
+});
+
+void describe('o privado na leitura publica e o teaser', () => {
+  void it('o detalhe do privado tem exatamente cinco campos, com e sem conta', async () => {
+    const app = servidor({ encontro: PRIVADO });
+    const semConta = await pedir(app, { url: `/network/events/${PRIVADO.slug}` });
+    const comConta = await pedir(app, { url: `/network/events/${PRIVADO.slug}`, como: QUEM_CHAMA });
+    assert.deepEqual(Object.keys(semConta.corpo).sort(), ['local_date', 'slug', 'status', 'title', 'visibility']);
+    assert.equal(semConta.bruto, comConta.bruto, 'ADR-0021: a forma vem do evento, nao do chamador');
+    assert.equal(semConta.bruto.includes('ISCA-'), false);
+  });
+
+  void it('private-details e location respondem com `private, no-store`', async () => {
+    const detalhes = await pedir(servidor(), { url: `/network/events/${SLUG}/private-details`, como: QUEM_CHAMA });
+    const local = await pedir(servidor(), { url: `/network/events/${SLUG}/location`, como: QUEM_CHAMA });
+    assert.equal(detalhes.status, 200);
+    assert.equal(detalhes.cache, 'private, no-store');
+    assert.equal(local.cache, 'private, no-store');
+  });
+
+  void it('private-details sem aprovacao e 404, com o mesmo corpo do detalhe inexistente', async () => {
+    const detalhes = await pedir(servidor({ detalhes: undefined }), {
+      url: `/network/events/${SLUG}/private-details`,
+      como: QUEM_CHAMA,
+    });
+    const inexistente = await pedir(servidor({ encontro: undefined }), { url: '/network/events/nao-existe' });
+    assert.equal(detalhes.status, 404);
+    assert.deepEqual(
+      { ...detalhes.corpo, instance: undefined, correlation_id: undefined },
+      { ...inexistente.corpo, instance: undefined, correlation_id: undefined },
+    );
+  });
+});
+
+void describe('o pedido para participar, no vocabulario do app', () => {
+  void it('ISCA -- o recusado sai como `requested`, nunca como `declined`', async () => {
+    const resposta = await pedir(servidor(), { url: `/network/events/${SLUG}/join-request`, como: QUEM_CHAMA });
+    assert.deepEqual(Object.keys(resposta.corpo).sort(), ['requested_at', 'state']);
+    assert.equal(resposta.corpo['state'], 'requested');
+    assert.equal(resposta.bruto.includes('declined'), false);
+  });
+
+  void it('pedir em encontro encerrado e 400 `event_ended`', async () => {
+    const resposta = await pedir(servidor({ pedido: { tipo: 'encerrado' } }), {
+      metodo: 'POST',
+      url: `/network/events/${SLUG}/join-request`,
+      como: QUEM_CHAMA,
+    });
+    assert.equal(resposta.status, 400);
+    assert.equal(resposta.bruto.includes('event_ended'), true);
+  });
+
+  void it('desistir de aprovado e 400 `join_request_final`, e desistir de pedido e 200 `withdrawn`', async () => {
+    const final = await pedir(servidor({ desistencia: { tipo: 'final' } }), {
+      metodo: 'DELETE',
+      url: `/network/events/${SLUG}/join-request`,
+      como: QUEM_CHAMA,
+    });
+    assert.equal(final.status, 400);
+    const ok = await pedir(servidor(), { metodo: 'DELETE', url: `/network/events/${SLUG}/join-request`, como: QUEM_CHAMA });
+    assert.equal(ok.corpo['state'], 'withdrawn');
+  });
+
+  void it('meus pedidos traz o teaser e o estado, e nada oculto', async () => {
+    const resposta = await pedir(servidor(), { url: '/network/join-requests', como: QUEM_CHAMA });
+    const itens = resposta.corpo['items'] as Record<string, unknown>[];
+    assert.deepEqual(Object.keys(itens[0] ?? {}).sort(), ['event', 'requested_at', 'state']);
+    assert.equal(resposta.bruto.includes('ISCA-'), false);
+    assert.equal(resposta.bruto.includes('declined'), false);
+  });
+});
+
+void describe('a agenda por distancia', () => {
+  void it('com regiao, a distancia sai arredondada a 100 m e a ordem e `distancia`', async () => {
+    const resposta = await pedir(servidor(), { url: '/network/events/nearby', como: QUEM_CHAMA });
+    const itens = resposta.corpo['items'] as Record<string, unknown>[];
+    assert.equal(itens[0]?.['distance_m'], 1200);
+    assert.equal(resposta.corpo['effective_sort'], 'distancia');
+  });
+
+  void it('sem regiao, a ordem efetiva e `proximos`, e a resposta diz isso', async () => {
+    const resposta = await pedir(servidor({ temRegiao: false }), { url: '/network/events/nearby', como: QUEM_CHAMA });
+    assert.equal(resposta.corpo['effective_sort'], 'proximos');
   });
 });
 
