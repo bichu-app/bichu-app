@@ -268,7 +268,17 @@ export function construtorDaListagemDoPainel(db: DbExecutor, recorte: RecorteDeI
 
 function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativo): TransacaoDoCatalogo {
   return {
-    parceiroPorSlug: (slug) => parceiroPorSlug(trx, slug),
+    // Dentro da escrita, o parceiro e lido com `FOR UPDATE`. Sem a trava, criar
+    // um item e trocar o host do mesmo parceiro podiam correr juntos: a troca
+    // conferia os destinos antes de o item novo existir, e o item nascia
+    // apontando para o host antigo. Com ela, uma das duas espera a outra.
+    async parceiroPorSlug(slug) {
+      const linha = await consultaDeParceiros(trx)
+        .where('p.slug', '=', slug)
+        .forUpdate('p')
+        .executeTakeFirst();
+      return linha === undefined ? null : comoParceiro(linha as LinhaDoParceiro);
+    },
 
     async inserirParceiro(novo: NovoParceiro) {
       const agora = new Date(novo.agora);
