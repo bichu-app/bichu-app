@@ -464,7 +464,7 @@ consentimento para "buscável por qualquer um".
   vaza por exclusão: se "reencontrado" tivesse texto próprio, a página genérica
   passaria a significar "não voltou", e o link continua circulando no WhatsApp
   depois do encerramento. A página fixa diz só que o caso não está mais aberto e
-  oferece o caminho de achado avulso (ADR-0030). O 410 é o sinal mais forte de
+  oferece o caminho de achado avulso (ADR-0031). O 410 é o sinal mais forte de
   remoção que existe, mas a remoção só
   acontece **quando o robô volta**, e isso leva de dias a semanas num site
   pequeno. Até lá, o resultado antigo continua na busca, com o texto de quando o
@@ -504,7 +504,7 @@ escopo e só ele:
 
 **Fica fora da v1**, e cada rota responde 404 do site até entrar: `/c/`,
 `/cartaz/`, `/p/`, `/@`, `/transferencia/`, e as páginas de formulário do
-achado sem conta (ADR-0030). As operações de leitura de `/c/`, `/cartaz/`, `/p/`
+achado sem conta (ADR-0031). As operações de leitura de `/c/`, `/cartaz/`, `/p/`
 e `/@` ainda não estão em `src/` (emenda 3 do ADR-0017), então nenhuma delas
 teria o que mostrar. Com isso, o item 11 (indexação de `/p/` e `/@`) e o mapa do
 site com casos não se aplicam à v1: o mapa da v1 lista só o institucional.
