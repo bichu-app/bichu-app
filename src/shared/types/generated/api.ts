@@ -1700,6 +1700,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/store/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * As tags que o filtro da Loja oferece
+         * @description As opcoes do grupo de filtro de tags do app: so tags **ativas** com
+         *     pelo menos um item publicado, em ordem alfabetica, ate 40. O filtro e
+         *     de lista fechada, sem campo digitavel (ADR-0027 item 16).
+         */
+        get: operations["listStoreTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/store/items/{itemSlug}": {
         parameters: {
             query?: never;
@@ -2544,7 +2566,14 @@ export interface paths {
          *
          *     Recusas de regra, todas `400 validation-failed` com o campo: fim antes
          *     do inicio; encontro que ja terminou (`code: event_in_past`); fuso que
-         *     nao existe; ponto fora dos limites do Brasil.
+         *     nao existe; ponto fora dos limites do Brasil; encontro pago sem preco
+         *     ou sem nenhuma forma de pagar (`code: admission_incomplete`).
+         *
+         *     `visibility: private` faz o encontro aparecer no app **so com titulo
+         *     e data** ate a conta ter o pedido aprovado na fila
+         *     (`listAdminNetworkJoinRequests`). **O Bichu nao cobra**: preco e forma
+         *     de pagar sao o que o organizador informa, e o link abre fora do app
+         *     (ADR-0027 item 17).
          */
         post: operations["createAdminNetworkEvent"];
         delete?: never;
@@ -2586,8 +2615,10 @@ export interface paths {
          * @description **Data, horario, fuso e lugar nao mudam aqui**, porque todo encontro
          *     esta publicado desde a criacao: mudar onde e quando as pessoas levam
          *     os caes e `relocateAdminNetworkEvent`, com reautenticacao e aviso a
-         *     todos os administradores. O corpo nao tem esses campos. Encontro
-         *     `removed` responde `400` (`code: event_removed`).
+         *     todos os administradores. **Visibilidade e condicao de acesso
+         *     tambem nao**: sao `changeAdminNetworkEventAccess`, pelo mesmo motivo.
+         *     O corpo nao tem esses campos. Encontro `removed` responde `400`
+         *     (`code: event_removed`).
          */
         patch: operations["updateAdminNetworkEvent"];
         trace?: never;
@@ -2646,6 +2677,109 @@ export interface paths {
          *     novo.
          */
         post: operations["cancelAdminNetworkEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/events/{eventSlug}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Muda visibilidade, gratuidade, preco ou forma de pagar de um encontro
+         * @description Trocar o link de pagamento de um encontro publicado e o golpe mais
+         *     barato com uma conta tomada, e tornar publico um encontro privado
+         *     entrega o lugar a quem nao foi aprovado. Por isso as mesmas travas de
+         *     `relocateAdminNetworkEvent`: `X-Admin-Reauth-Token` do escopo
+         *     `network_event_access_change`, aviso a todos os administradores com o
+         *     antes e o depois, e trilha. Privado que vira publico deixa os pedidos
+         *     como estao, sem efeito; publico que vira privado passa a exigir pedido
+         *     de todos.
+         */
+        post: operations["changeAdminNetworkEventAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/join-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de pedidos para participar de encontros privados
+         * @description So existe no painel: nenhuma operacao do app lista pedidos ou aprovados
+         *     de ninguem, nem como contagem (ADR-0010 item 7). Sem filtro, vem a fila
+         *     de pendentes, do pedido mais antigo para o mais novo.
+         */
+        get: operations["listAdminNetworkJoinRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/join-requests/{requestRef}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["JoinRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprova o pedido, e o tutor passa a ver o encontro inteiro
+         * @description So a partir de `pending` (`400`, `code: request_not_pending`, nos
+         *     outros estados). O tutor recebe push. A partir daqui
+         *     `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
+         *     para a conta dele.
+         */
+        post: operations["approveAdminNetworkJoinRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/join-requests/{requestRef}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["JoinRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recusa o pedido
+         * @description So a partir de `pending`. O tutor recebe push. A recusa e final para
+         *     aquele encontro (pergunta 2 do ADR-0027, padrao enquanto nao
+         *     respondida). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
+         */
+        post: operations["declineAdminNetworkJoinRequest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4017,7 +4151,7 @@ export interface components {
          *     abre operacao de outro.
          * @enum {string}
          */
-        AdminReauthScope: "store_item_retirement" | "network_event_relocation" | "network_event_cancellation" | "network_event_removal";
+        AdminReauthScope: "store_item_retirement" | "network_event_relocation" | "network_event_cancellation" | "network_event_removal" | "network_event_access_change";
         AdminReauthRequest: {
             password: string;
             scope: components["schemas"]["AdminReauthScope"];
@@ -4273,10 +4407,17 @@ export interface components {
              * @description Envio de `createAdminCatalogImageIntent` com `purpose` `network_event`.
              */
             cover_upload_id?: string;
+            visibility?: components["schemas"]["NetworkEventVisibility"];
+            admission?: components["schemas"]["AdminNetworkEventAdmissionInput"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            bring_other?: components["schemas"]["NetworkEventBringOther"];
+            notes?: components["schemas"]["NetworkEventNotes"];
         };
         /**
          * @description **Sem data, horario, fuso nem lugar**: mudar onde e quando e
-         *     `relocateAdminNetworkEvent`. `cover_upload_id: null` tira a capa.
+         *     `relocateAdminNetworkEvent`; sem visibilidade nem condicao de acesso:
+         *     `changeAdminNetworkEventAccess`. `cover_upload_id: null` tira a capa;
+         *     `notes: null` tira as observacoes; as listas substituem o conjunto.
          */
         AdminNetworkEventPatch: {
             slug?: components["schemas"]["Slug"];
@@ -4284,6 +4425,9 @@ export interface components {
             summary?: string;
             /** Format: uuid */
             cover_upload_id?: string | null;
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            bring_other?: components["schemas"]["NetworkEventBringOther"];
+            notes?: components["schemas"]["NetworkEventNotes"] | null;
         };
         /** @description `reason` e pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`. */
         AdminNetworkEventRelocation: {
@@ -4332,6 +4476,13 @@ export interface components {
             cover?: components["schemas"]["AdminCatalogImage"] | null;
             /** @enum {string} */
             origin: "admin";
+            visibility: components["schemas"]["NetworkEventVisibility"];
+            admission: components["schemas"]["AdminNetworkEventAdmission"];
+            bring_items: components["schemas"]["NetworkEventBringItem"][];
+            bring_other: string[];
+            notes: string | null;
+            /** @description Pedidos pendentes na fila. Sempre 0 em encontro publico. So existe no painel. */
+            pending_request_count: number;
             publication_status: components["schemas"]["AdminNetworkEventPublicationStatus"];
             timing: components["schemas"]["AdminNetworkEventTiming"];
             /** Format: date-time */
@@ -4441,6 +4592,104 @@ export interface components {
              *     mesma de `image_url`. Vazia e estado normal.
              */
             images: components["schemas"]["StoreItemImage"][];
+        };
+        /**
+         * @description `private`: para quem nao tem pedido aprovado, o app recebe so titulo e
+         *     data; o resto sai em operacao separada, so para conta aprovada
+         *     (ADR-0027 item 17 e 12.10 a 12.12).
+         * @default public
+         * @enum {string}
+         */
+        NetworkEventVisibility: "public" | "private";
+        /**
+         * @description O que levar, na parte fechada: o que se repete em todo encontro, com
+         *     icone e texto do app. Lista fechada por `CHECK` em
+         *     `network_event_bring_items`; acrescentar valor e tres arquivos no mesmo
+         *     commit (ADR-0023 secao 3).
+         * @enum {string}
+         */
+        NetworkEventBringItem: "water" | "water_bowl" | "leash" | "poop_bags" | "treats" | "towel" | "vaccination_card" | "toy";
+        NetworkEventBringItems: components["schemas"]["NetworkEventBringItem"][];
+        /** @description A excecao, ate tres itens livres. Texto puro. */
+        NetworkEventBringOther: string[];
+        /** @description Observacoes, so como complemento. O que tem forma propria (acesso, o que levar) nao vai aqui. */
+        NetworkEventNotes: string;
+        /**
+         * @description Gratuito ou pago. Pago exige `price` e pelo menos um de
+         *     `payment_instructions` e `payment_url` (`400`, `code:
+         *     admission_incomplete`); gratuito recusa os tres. **O Bichu nao cobra e
+         *     nao tem provedor de pagamento**: o link abre no navegador do sistema.
+         */
+        AdminNetworkEventAdmissionInput: {
+            /**
+             * @default free
+             * @enum {string}
+             */
+            kind: "free" | "paid";
+            price?: components["schemas"]["AdminEventPrice"] | null;
+            payment_instructions?: string | null;
+            payment_url?: components["schemas"]["HttpsUrl"] | null;
+        };
+        /** @description O valor que o organizador informa. Sem vencimento, porque nao e preco de referencia de terceiro. */
+        AdminEventPrice: {
+            /** @description Centavos. */
+            amount: number;
+            /** @enum {string} */
+            currency: "BRL";
+        };
+        AdminNetworkEventAdmission: {
+            /** @enum {string} */
+            kind: "free" | "paid";
+            price: components["schemas"]["AdminEventPrice"] | null;
+            payment_instructions: string | null;
+            /** Format: uri */
+            payment_url: string | null;
+        };
+        /** @description `reason` e pelo menos um de `visibility` e `admission`. `admission` substitui a condicao inteira. */
+        AdminNetworkEventAccessChange: {
+            visibility?: components["schemas"]["NetworkEventVisibility"];
+            admission?: components["schemas"]["AdminNetworkEventAdmissionInput"];
+            /** @description Vai no aviso a todos os administradores. */
+            reason: string;
+        };
+        /** @enum {string} */
+        AdminJoinRequestStatus: "pending" | "approved" | "declined" | "withdrawn";
+        /**
+         * @description Um pedido para participar de encontro privado. **O pedido e da conta,
+         *     nunca do pet** (ADR-0010 item 7). Do solicitante sai **so** o nome de
+         *     exibicao que a pessoa escolheu e o mes em que a conta foi criada: sem
+         *     e-mail, telefone, pets, UUID nem historico. **Esta e a unica leitura de
+         *     pessoa no backoffice v1, e ela reabre o RA-01** (ADR-0027 item 17).
+         */
+        AdminJoinRequest: {
+            /** @description Identificador opaco do pedido, 128 bits aleatorios. Nao e o UUID. */
+            ref: string;
+            event: {
+                slug: string;
+                title: string;
+                /** Format: date-time */
+                starts_at: string;
+                time_zone: string;
+            };
+            requester: {
+                display_name: string;
+                /** @description Ano e mes de criacao da conta, e nada mais fino. */
+                member_since: string;
+            };
+            status: components["schemas"]["AdminJoinRequestStatus"];
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            decided_at?: string | null;
+        };
+        AdminJoinRequestPage: {
+            items: components["schemas"]["AdminJoinRequest"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
+        StoreTagPage: {
+            items: components["schemas"]["StoreTagRef"][];
         };
     };
     responses: {
@@ -4772,6 +5021,8 @@ export interface components {
         ItemSlug: components["schemas"]["Slug"];
         /** @description O endereco publico do encontro. */
         EventSlug: components["schemas"]["Slug"];
+        /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+        JoinRequestRef: string;
         /**
          * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
          *     existente do backoffice: dois administradores editando o mesmo recurso
@@ -7262,6 +7513,27 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    listStoreTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O vocabulario visivel. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreTagPage"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     getStoreItem: {
         parameters: {
             query?: never;
@@ -8452,6 +8724,7 @@ export interface operations {
                 q?: string;
                 publication_status?: components["schemas"]["AdminNetworkEventPublicationStatus"];
                 timing?: components["schemas"]["AdminNetworkEventTiming"];
+                visibility?: components["schemas"]["NetworkEventVisibility"];
                 city?: string;
                 /** @description `agenda` e por inicio, do mais proximo; `atualizado` poe o que mudou por ultimo primeiro. */
                 sort?: "agenda" | "atualizado";
@@ -8698,6 +8971,134 @@ export interface operations {
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
             428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    changeAdminNetworkEventAccess: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminNetworkEventAccessChange"];
+            };
+        };
+        responses: {
+            /** @description Condicao de acesso alterada. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminReauthRequired"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminNetworkJoinRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["AdminJoinRequestStatus"];
+                /** @description `slug` do encontro. */
+                event?: components["schemas"]["Slug"];
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJoinRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    approveAdminNetworkJoinRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["JoinRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pedido aprovado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJoinRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    declineAdminNetworkJoinRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["JoinRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pedido recusado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJoinRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
