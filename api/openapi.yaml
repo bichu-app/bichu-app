@@ -296,6 +296,7 @@ x-problem-types:
   - { slug: transfer-not-for-this-account, status: 409 }
   - { slug: transfer-already-in-progress,  status: 409, note: "BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite" }
   - { slug: transfer-already-effective,    status: 409, note: "BICHUS-66: a transferencia ja se consumou, e depois disso o caminho e transferir de volta, nao cancelar. E 409 e nao 410 de proposito: a rota EXIGE conta e o tutor tem direito de saber em que pe esta a propria transferencia -- o 410 sem distincao e da superficie PUBLICA do token, onde dizer qual dos tres casos ocorreu entregaria a um estranho o estado de uma transferencia alheia" }
+  - { slug: found-report-already-claimed,  status: 409, note: "ADR-0030: o aviso sem conta ja foi vinculado a OUTRA conta. O mesmo token apresentado pela mesma conta responde 200 de novo (idempotente); por outra conta, 409. Sem este tipo, o segundo reclamante receberia `forbidden` e acharia que o token e dele e o servidor esta errado" }
   - { slug: conversation-closed,           status: 410 }
   - { slug: tag-revoked,                   status: 410, note: "tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)" }
   - { slug: tag-code-not-found,            status: 404 }
@@ -1231,6 +1232,82 @@ paths:
         '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
+
+  /me/found-report-claims:
+    post:
+      operationId: claimFoundReport
+      tags: [me, found]
+      x-effects: [irreversible_write]
+      summary: Vincula a esta conta um aviso feito sem conta (ADR-0030)
+      description: |
+        Quem avisou sem conta e depois criou conta ou entrou apresenta o
+        `finder_token` do aviso. O aviso passa a ter `reporter_user_id`, e os
+        pontos que ele ja gerou, e os que ainda gerar, passam a esta conta.
+
+        - **uma conta por aviso, para sempre.** A mesma conta apresentando o
+          mesmo token de novo recebe 200 (idempotente); outra conta, 409
+          `found-report-already-claimed`;
+        - **o token continua valendo** para a conversa em `/c/`: vincular nao
+          troca a credencial de quem ainda esta com a pagina aberta;
+        - **token inexistente, expirado ou de outro aviso** respondem o mesmo
+          404, para a rota nao servir de oraculo;
+        - **o dono do pet nao pontua pelo proprio pet.** O vinculo acontece, e
+          `credit_status` diz `not_creditable` com o motivo. Recusar o vinculo
+          esconderia do tutor a propria acao; pontuar pagaria o autoaviso.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+        - dimension: [ip]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FoundReportClaimInput' }
+      responses:
+        '200':
+          description: Aviso vinculado a esta conta.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FoundReportClaimResult' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: O aviso ja pertence a outra conta.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+
+  /me/points:
+    get:
+      operationId: getMyPoints
+      tags: [me]
+      x-effects: []
+      summary: Saldo de pontos e os ultimos lancamentos (ADR-0030)
+      description: |
+        **Privado**, por decisao do cliente de 17/09 (pontuacao privada). Nao
+        existe operacao que devolva os pontos de outra pessoa. Niveis e selos
+        sao fase 2 e nao estao aqui.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Saldo e lancamentos, do mais novo para o mais antigo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PointsSummary' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
 
   /me/location:
     get:
@@ -2260,9 +2337,15 @@ paths:
           on_exceed: hold_for_review
       summary: Registra um achado avulso, sem QR
       description: |
-        **Exige conta** (regra fechada no briefing). O cruzamento com casos
-        abertos e por atributos e por distancia, e toda correspondencia passa
-        por confirmacao humana do tutor.
+        **O caminho COM conta.** O cruzamento com casos abertos e por atributos
+        e por distancia, e toda correspondencia passa por confirmacao humana do
+        tutor.
+
+        Quem nao tem conta registra pelo `POST /public/found-reports`
+        (`createPublicFoundReport`, ADR-0030), que devolve `finder_token` em vez
+        de exigir `bearerAuth`. As duas operacoes gravam na mesma tabela e
+        alimentam o mesmo cruzamento; o que muda e a credencial, e a regra desta
+        casa e que a credencial exigida seja legivel operacao a operacao.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -2868,7 +2951,14 @@ paths:
           window: 1h
           on_exceed: deny_429
       summary: Confirma ou descarta uma correspondencia
-      description: Confirmar abre a conversa mediada com quem registrou o achado.
+      description: |
+        Confirmar abre a conversa mediada com quem registrou o achado. Se o
+        achado veio sem conta (`createPublicFoundReport`), a conversa do
+        achador deixa de estar em `awaiting_owner`.
+
+        Confirmar tambem e o evento que credita `help_acknowledged` a quem
+        registrou o achado, se ele tiver conta ou vincular depois (ADR-0030).
+        Descartar nao credita nem estorna nada.
       requestBody:
         required: true
         content:
@@ -3261,6 +3351,124 @@ paths:
   # ----------------------------------------------------------------------
   # Superficie publica
   # ----------------------------------------------------------------------
+
+  /public/found-reports:
+    post:
+      operationId: createPublicFoundReport
+      tags: [found, public]
+      x-effects: [notifies, irreversible_write, human_work, expensive_query]
+      summary: Registra um achado SEM conta, avulso ou "vi este pet" (ADR-0030)
+      description: |
+        **Sem conta, por decisao do cliente de 23/09.** E o destino de dois
+        botoes do site: "Registrar que achei um pet" (saida da pagina da tag
+        quando ela responde 404, 410 ou 429) e "Vi este pet" (pagina publica do
+        caso). O aviso pela tag continua sendo `createFoundReportFromTag`.
+
+        Duas formas de corpo, e so duas (`PublicFoundReportInput`):
+
+        - **com `share_token`** ("vi este pet"): o achado nasce vinculado ao
+          caso, o tutor e **notificado** e a conversa mediada **abre na hora**,
+          como no aviso pela tag. Nada alem do `share_token` e obrigatorio;
+        - **sem `share_token`** (achado avulso): especie, porte e onde. O
+          achado entra no cruzamento por atributos; o tutor so e avisado quando
+          houver candidato, e a conversa so abre quando ele **confirmar** o
+          candidato (`decideLostCaseCandidate`). Ate la, a conversa do achador
+          responde `awaiting_owner: true`.
+
+        **Tag revogada nao vincula.** O botao da saida de 410 cria achado
+        avulso, sem ligacao com o pet da tag: vincular devolveria a quem tem a
+        plaquinha revogada o caminho que a revogacao existe para fechar.
+
+        **O invariante nº 1 vale aqui inteiro: nenhum aviso ao tutor e
+        descartado por limite.** Nao ha `deny_429` nesta operacao, e nao ha
+        `challenge`, porque `challenge` degenera em `deny_429` quando o token
+        do desafio nao chega. O excesso e tratado pelo que os tetos abaixo
+        fazem com o DISPARO: agrupar, resumir ou reter para revisao. O aviso
+        sempre e gravado, e a tela sempre diz a verdade sobre o que aconteceu.
+
+        **reCAPTCHA Enterprise decide o disparo, nunca a entrada.** Score abaixo
+        de 0,3 retem o disparo e abre revisao (mesma semantica de
+        `accept_and_defer_dispatch`); de 0,3 a 0,5 dispara e entra na fila de
+        revisao; ausencia do token e gravada como sinal e nao bloqueia. O
+        formulario que carrega o script do provedor vive numa pagina propria
+        do site, e nao em `/t/` nem em `/c/`, cuja politica de conteudo
+        proibe script de terceiro (ADR-0028 item 7).
+
+        **Foto:** depois do 201, pelo `finder_token`, pelos mesmos caminhos do
+        aviso pela tag: `createFinderPhotoUploadIntent` e
+        `enrichFinderFoundReport`. Teto de 3 fotos por aviso (SEC-009).
+
+        **Pontos:** quem registra sem conta nao pontua. Se criar conta ou
+        entrar depois, `claimFoundReport` vincula este aviso a conta, e os
+        pontos que o aviso gerou passam a ser dela (ADR-0030).
+      security: []
+      x-rate-limit:
+        - dimension: [pet, finder_identity]
+          limit: 1
+          window: 6h
+          on_exceed: group_notification
+          note: "so com share_token. Anexa a conversa existente; o aviso nunca e descartado"
+        - dimension: [pet]
+          counts: distinct_identities
+          limit: 30
+          window: 24h
+          on_exceed: notify_once_and_review
+          note: "so com share_token, e o caso esta aberto por definicao: mesmo numero de pet_lost em createFoundReportFromTag"
+        - dimension: [finder_identity]
+          limit: 5
+          window: 24h
+          on_exceed: accept_and_defer_dispatch
+          note: "a mesma pessoa registrando o sexto achado do dia: grava, retem o disparo e revisa"
+        - dimension: [ip]
+          limit: 20
+          window: 1h
+          on_exceed: accept_and_defer_dispatch
+          note: "CGNAT: teto alto, e mesmo acima dele nada e recusado"
+        - dimension: [ip_24]
+          limit: 200
+          window: 1h
+          on_exceed: log_and_alert
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKeyRequired'
+        - $ref: '#/components/parameters/CaptchaToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PublicFoundReportInput' }
+            examples:
+              viEstePet:
+                summary: Vi este pet, um toque na pagina do caso
+                value: { share_token: 'k3Jx9Qm2vT8wLp4Z' }
+              achadoAvulso:
+                summary: Achei um pet sem plaquinha que abrisse
+                value:
+                  species: dog
+                  size: M
+                  found_at: '2026-09-23T18:40:00-03:00'
+                  area: { city: 'Sao Paulo', state: SP, neighborhood: 'Pinheiros' }
+      responses:
+        '201':
+          description: |
+            Achado registrado. `finder_token` e `conversation_url` permitem voltar
+            sem conta; o site guarda no armazenamento local.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PublicFoundReportCreated' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '410':
+          description: |
+            O `share_token` nao leva a caso aberto: caso encerrado, pet excluido,
+            falecido ou arquivado, **e token desconhecido**. Os cinco sao a MESMA
+            resposta, sem desfecho, pela regra de `lost-case-closed` (contrato de
+            23/09, PR #6): distinguir contaria a um estranho o que aconteceu com
+            o animal de outra pessoa, ou se aquele link existiu. Por isso esta
+            operacao nao declara 404. O site oferece registrar como achado
+            avulso, porque o animal na frente da pessoa pode ser outro parecido.
+            O handler depende de `lost-case-closed` estar em `x-problem-types`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
 
   /public/lost-pets:
     get:
@@ -4922,6 +5130,123 @@ components:
             continua dizendo a verdade.
         pet_display_name: { type: string }
 
+    PublicFoundReportInput:
+      description: |
+        As duas formas de `createPublicFoundReport`, e so elas. Com
+        `share_token` e "vi este pet"; sem, e achado avulso. A forma avulsa
+        proibe `share_token` para que um corpo nunca case com as duas.
+      oneOf:
+        - $ref: '#/components/schemas/PublicSightingInput'
+        - $ref: '#/components/schemas/PublicStrayReportInput'
+
+    PublicSightingInput:
+      type: object
+      required: [share_token]
+      properties:
+        share_token:
+          type: string
+          minLength: 16
+          maxLength: 64
+          description: O token opaco do link do caso (o mesmo de `/p/{shareToken}`).
+        found_at: { type: string, format: date-time }
+        location: { $ref: '#/components/schemas/GeoPoint' }
+        area: { $ref: '#/components/schemas/Area' }
+        notes: { type: string, maxLength: 500 }
+
+    PublicStrayReportInput:
+      type: object
+      required: [species, size, found_at]
+      anyOf:
+        - required: [location]
+        - required: [area]
+      not:
+        required: [share_token]
+      properties:
+        species: { $ref: '#/components/schemas/Species' }
+        breed_code: { type: string, maxLength: 40 }
+        size: { $ref: '#/components/schemas/PetSize' }
+        primary_color_code: { type: string, maxLength: 30 }
+        sex: { $ref: '#/components/schemas/Sex' }
+        found_at: { type: string, format: date-time }
+        location: { $ref: '#/components/schemas/GeoPoint' }
+        area: { $ref: '#/components/schemas/Area' }
+        notes: { type: string, maxLength: 500 }
+
+    PublicFoundReportCreated:
+      type: object
+      required: [finder_token, conversation_url, link]
+      description: |
+        Sem identificador interno (SEC-001), pela mesma razao de
+        `FoundReportCreated`.
+      properties:
+        finder_token: { type: string }
+        conversation_url: { type: string, format: uri }
+        link:
+          type: string
+          enum: [linked_to_case, awaiting_match]
+          description: |
+            `linked_to_case`: veio com `share_token`, o tutor foi avisado (ou o
+            aviso foi agrupado, ver `owner_notified`) e a conversa esta aberta.
+            `awaiting_match`: achado avulso; a conversa abre quando um tutor
+            confirmar o candidato.
+        owner_notified:
+          type: boolean
+          description: |
+            So com `linked_to_case`. Falso quando a notificacao foi agrupada a
+            um aviso recente ou retida para revisao. O aviso em si nunca e
+            descartado.
+        pet_display_name: { type: string }
+
+    FoundReportClaimInput:
+      type: object
+      required: [finder_token]
+      properties:
+        finder_token: { type: string, minLength: 20, maxLength: 256 }
+
+    FoundReportClaimResult:
+      type: object
+      required: [claimed, credit_status, points_credited]
+      properties:
+        claimed: { type: boolean }
+        credit_status:
+          type: string
+          enum: [creditable, not_creditable]
+        not_creditable_reason:
+          type: string
+          nullable: true
+          enum: [own_pet, email_unverified]
+          description: |
+            `email_unverified`: o vinculo vale, e os pontos ficam pendentes ate
+            o e-mail ser confirmado (pontuar e D2, visao de produto 8.6).
+        points_credited:
+          type: integer
+          minimum: 0
+          description: Pontos ja gerados pelo aviso e creditados agora.
+
+    PointsSummary:
+      type: object
+      required: [balance, entries]
+      properties:
+        balance: { type: integer }
+        entries:
+          type: array
+          items: { $ref: '#/components/schemas/PointEntry' }
+        next_cursor: { type: string, nullable: true }
+
+    PointEntry:
+      type: object
+      required: [kind, points, created_at]
+      description: |
+        Um lancamento. O livro e so de acrescimo: estorno e um lancamento
+        negativo com `kind: reversal`, nunca a remocao do original.
+      properties:
+        kind:
+          type: string
+          enum: [help_acknowledged, reunion_credited, reversal]
+        points: { type: integer }
+        pet_display_name: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
     FoundReportEnrichment:
       type: object
       properties:
@@ -5056,6 +5381,16 @@ components:
       properties:
         pet_display_name: { type: string }
         status: { type: string, enum: [open, blocked, closed] }
+        awaiting_owner:
+          type: boolean
+          default: false
+          description: |
+            ADR-0030. Verdadeiro no achado avulso registrado sem conta que ainda
+            nao tem tutor: a conversa existe (`status: open`), so o outro lado
+            nao chegou. Vira falso quando um tutor confirma o candidato. A
+            pagina mostra o estado de espera e nao mostra caixa de mensagem.
+            Campo e nao valor novo de `status` de proposito: valor novo num
+            enum de resposta quebra quem ja trata os tres de hoje.
         participants:
           type: array
           items:
@@ -5238,6 +5573,18 @@ components:
             reencontro atribuivel a um canal.
           enum: [tag_scan, bichu_alert, poster_or_link, on_my_own, other]
         note: { type: string, maxLength: 500, nullable: true }
+        helped_by:
+          type: array
+          maxItems: 5
+          uniqueItems: true
+          description: |
+            ADR-0030. So com `outcome: reunited`. As conversas de quem ajudou,
+            escolhidas pelo tutor. Cada uma credita pontos a quem avisou, se o
+            aviso tiver conta (ou for vinculado depois por `claimFoundReport`).
+            O ponto de reencontro cai na confirmacao do tutor, nunca na
+            declaracao de quem achou (visao de produto 8.5). Conversa que nao e
+            deste caso responde 400.
+          items: { type: string, format: uuid }
 
     AlertDispatch:
       type: object
