@@ -590,17 +590,25 @@ carimbar-fechamento: ## carimba o recibo do fechamento no commit atual (chamado 
 
 backup: ## pg_dump para ./backup. Sem servico gerenciado, o unico backup e este
 	@mkdir -p backup
-	$(COMPOSE) exec -T db pg_dump -U $${POSTGRES_USER:-bichu} $${POSTGRES_DB:-bichu} | gzip > backup/bichu-$$(date +%Y%m%d-%H%M%S).sql.gz
+	@# `set -o pipefail` na PROPRIA linha, e nao em `.SHELLFLAGS`: o GNU Make
+	@# 3.81 (o que vem no macOS) le `.SHELLFLAGS` e NAO o usa -- a correcao
+	@# pareceria aplicada e nao valeria nada justo na maquina de quem roda
+	@# `make backup` a mao. Sem isto, `pg_dump` que reprova vira um .gz
+	@# valido e VAZIO, o `gzip` sai 0, e o alvo anuncia "backup gravado".
+	set -o pipefail; $(COMPOSE) exec -T db pg_dump -U $${POSTGRES_USER:-bichu} $${POSTGRES_DB:-bichu} | gzip > backup/bichu-$$(date +%Y%m%d-%H%M%S).sql.gz
 	@echo "backup gravado. Backup nunca restaurado nao e backup: exercite `make restore` uma vez"
 
 restore: ## restaura o dump mais recente de ./backup
 	@ultimo=$$(ls -t backup/*.sql.gz 2>/dev/null | head -1); \
 	 test -n "$$ultimo" || { echo "nenhum backup em ./backup"; exit 1; }; \
 	 echo "restaurando $$ultimo"; \
-	 gunzip -c "$$ultimo" | $(COMPOSE) exec -T db psql -U $${POSTGRES_USER:-bichu} -d $${POSTGRES_DB:-bichu}
+	 set -o pipefail; gunzip -c "$$ultimo" | $(COMPOSE) exec -T db psql -U $${POSTGRES_USER:-bichu} -d $${POSTGRES_DB:-bichu}
 
 pin-digests: ## reresolve os digests das imagens do compose e da base do Dockerfile
-	@grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' compose.yaml Dockerfile | sort -u | while read -r ref; do \
+	@# Sem `pipefail`, `grep` que nao acha nada sai 1, o `sort` sai 0 e o
+	@# `while` nao executa: o alvo termina VERDE tendo conferido ZERO
+	@# referencias, que e o estado em que ele mais precisava falar.
+	@set -o pipefail; grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' compose.yaml Dockerfile | sort -u | while read -r ref; do \
 	  tag=$${ref%@*}; \
 	  novo=$$(docker buildx imagetools inspect "$$tag" --format '{{.Manifest.Digest}}' 2>/dev/null); \
 	  if [ -n "$$novo" ]; then echo "$$tag -> $$novo"; else echo "$$tag -> NAO RESOLVEU"; fi; \
