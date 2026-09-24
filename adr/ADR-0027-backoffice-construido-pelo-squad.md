@@ -416,8 +416,8 @@ direto ao bucket privado. JPEG, PNG e WebP; **SVG recusado sempre**. O envio
 declara `purpose` (`store_item` | `network_event`) e fica gravado em
 `upload_intents` com `kind = 'catalog_image'`.
 
-A confirmação é a própria escrita do item ou do evento, com `image_upload_id` /
-`cover_upload_id`. Ela **só aceita** envio de `kind = 'catalog_image'`, com o
+A confirmação é a própria escrita do item ou do evento, na lista `images`
+(itens 16 e 17). Ela **só aceita** envio de `kind = 'catalog_image'`, com o
 mesmo `purpose`, criado por conta `admin`: foto de pet, de achador ou de outro
 propósito é recusada com `400` (T9). Ela enfileira o processamento (bytes
 reais, EXIF/XMP/IPTC removidos, reescrita, teto de pixels, derivadas) e a
@@ -500,8 +500,8 @@ estão no apêndice A.4. `active boolean` é substituída por `publication_statu
 e os índices `network_events_agenda` e `network_events_por_cidade` passam a
 `WHERE publication_status IN ('published', 'cancelled')`. `created_by_user_id`
 leva no `COMMENT ON COLUMN` a marca que `portao-colunas-que-nao-saem.ts` lê.
-`cover_image_id` **não** entra nesta migração: ele aponta para `catalog_images`,
-que nasce na migração do backoffice, e é acrescentado lá.
+`network_event_images` **não** entra nesta migração: ela aponta para
+`catalog_images`, que nasce na migração do backoffice, e é criada lá (A.4.2).
 
 **12.4 Check-in e galeria saem desta migração e do contrato.** O cliente os
 tirou da tela. `network_event_checkins`, `network_event_photos`,
@@ -545,8 +545,8 @@ mostra os rótulos e não mostra mapa. O P5 de `04-seguranca.md` não precisa de
 emenda: nenhuma operação com alternativa `{}` carrega `lat`/`lon`.
 
 **12.6 Cancelado.** `NetworkEventStatus` ganha `cancelled`, que prevalece sobre
-o estado temporal. Por quanto tempo o evento cancelado continua na lista é a
-pergunta 1 no fim; até a resposta, o padrão é continuar até o fim previsto.
+o estado temporal. **O cancelado continua visível até o fim previsto**
+(decisão do cliente, 23/09), com o selo por extenso.
 
 **12.7 O texto do ADR-0025.** O item 5 ("o evento não tem coordenada", "não há
 mapa, em zoom nenhum") fica **superado** por este ADR e pela emenda 1 do
@@ -572,17 +572,49 @@ fica no formulário do painel, não no banco.
 `ends_at`, `time_zone`, `visibility: private` e `status`, e
 `additionalProperties: false`. A diferença vem da propriedade do **evento**,
 igual para qualquer chamador, então não é ramo privilegiado (ADR-0021).
-Encontro privado **não entra em filtro por lugar** (`city`): aparecer no
-recorte de uma cidade entregaria a cidade.
+Encontro privado **não entra em filtro por nada que é oculto nele** (`city`,
+`admission`, `size`): aparecer no recorte entregaria o valor.
+
+**Divergência com a designer, resolvida pela decisão do cliente:** a §24.13.5
+de `06-design-system.md` mostra a **capa** no privado não aprovado. O cliente
+decidiu **só título e data**, então a capa fica do lado oculto e o app usa o
+banner da marca (§24.12.2) nesse estado.
 
 **12.11 As operações novas do app**, todas `bearerAuth` sem alternativa vazia:
 
 | Operação | Caminho | O que faz |
 |---|---|---|
-| `requestToJoinNetworkEvent` | `POST /network/events/{eventSlug}/join-request` | cria o pedido da conta; idempotente (o segundo devolve o estado); encontro público ou inexistente responde 404; sem corpo |
-| `getMyNetworkEventJoinRequest` | `GET /network/events/{eventSlug}/join-request` | o estado do pedido **da própria conta**: `pending`, `approved`, `declined`, `withdrawn`; sem pedido, 404 |
-| `withdrawNetworkEventJoinRequest` | `DELETE /network/events/{eventSlug}/join-request` | desiste enquanto `pending`; depois disso, 400 |
+| `requestToJoinNetworkEvent` | `POST /network/events/{eventSlug}/join-request` | cria o pedido da conta, sempre 200 com o estado que o app vê; encontro público ou inexistente responde 404; sem corpo. Idempotência abaixo |
+| `getMyNetworkEventJoinRequest` | `GET /network/events/{eventSlug}/join-request` | o estado do pedido **da própria conta**, no vocabulário do app; sem pedido, 404 |
+| `withdrawNetworkEventJoinRequest` | `DELETE /network/events/{eventSlug}/join-request` | desiste enquanto o app vê `requested`; aprovado ou encontro encerrado, 400 |
 | `getNetworkEventPrivateDetails` | `GET /network/events/{eventSlug}/private-details` | o conteúdo oculto do privado. 404 se o encontro não é privado, não existe, ou a conta não tem pedido `approved`, com o mesmo corpo nos três casos |
+
+**O app nunca vê `declined`** (decisão do cliente, 23/09). O estado que as
+três operações e "meus pedidos" devolvem é `JoinRequestAppState`, com os
+valores `requested`, `approved`, `withdrawn` e `expired`. O nome do estado de
+espera é **`requested`**, e não `pending`, de propósito: `pending` é a decisão
+guardada no banco e no painel, e `requested` é o que o tutor sabe, que é só
+que pediu. Dois nomes para duas coisas diferentes impedem que alguém
+"corrija" o app para mostrar a decisão. **A regra deve ser mantida como
+está:** o recusado aparece para o tutor como `requested` até o encontro
+passar, e depois como `expired`, igual a um pendente que ninguém decidiu.
+
+| O banco tem | O app vê |
+|---|---|
+| `pending` ou `declined`, sem desistência, encontro a vir ou acontecendo | **`requested`** ("aguardando a equipe") |
+| `approved` | `approved` |
+| desistência (`withdrawn_at`) | `withdrawn` |
+| `pending` ou `declined`, sem desistência, encontro encerrado | `expired` ("o encontro passou") |
+
+A recusa não gera push; a aprovação gera. **Idempotência, com a recusa
+invisível:** pedir de novo nunca cria linha nova (`UNIQUE (event_id, user_id)`)
+e sempre devolve 200 com o estado do app. Sobre pedido recusado, devolve
+`requested` e **não** o recoloca na fila. Sobre pedido desistido, limpa
+`withdrawn_at`: se a decisão guardada era `pending`, ele volta à fila; se era
+`declined`, continua recusado e invisível. Desistir de um recusado responde 200
+e grava `withdrawn_at`, sem mudar a decisão. Assim, nenhuma sequência de
+pedir, desistir e pedir de novo lava uma recusa, e nenhuma resposta difere
+entre recusado e pendente.
 
 `getNetworkEventLocation` (12.5) passa a ter a mesma regra: encontro privado só
 devolve o ponto para conta aprovada; os outros recebem 404. Tetos por conta. O
@@ -601,34 +633,51 @@ espírito de P5, e com as duas metades que P5 tem:
    encontrar o schema, ou se não encontrar nenhuma operação que o use.
 2. **Na execução**, teste de integração com isca: a massa cria um encontro
    privado com **todo** campo oculto preenchido por sentinela (`ISCA-LUGAR`,
-   `ISCA-BAIRRO`, `ISCA-RESUMO`, `ISCA-NOTA`, `ISCA-PAGAMENTO`, um ponto em
-   coordenada que não existe em outra linha, uma capa com chave própria) e
-   chama lista, detalhe, `location` e `private-details` como anônimo, como
-   tutor sem pedido, com pedido `pending`, `declined` e `withdrawn`. O teste
+   `ISCA-BAIRRO`, `ISCA-RESUMO`, `ISCA-NOTA`, `ISCA-TRAZER`, `ISCA-ALT`, um
+   valor em centavos que não existe em outra linha, um ponto em coordenada
+   que não existe em outra linha, imagens com chave própria, e todos os portes
+   e itens de estrutura marcados) e chama lista, detalhe, `location`,
+   `private-details`, o estado do pedido e "meus pedidos" como anônimo, como
+   tutor sem pedido, com pedido pendente, **recusado**, desistido e recusado
+   depois de desistido. O teste
    varre **o corpo bruto da resposta como texto**, não os campos, e reprova se
    qualquer sentinela aparecer. **Controle positivo obrigatório:** a mesma
    varredura sobre `private-details` do tutor aprovado precisa achar todas as
    sentinelas; se não achar, o teste reprova, porque um teste que não enxerga a
    sentinela aprovaria qualquer coisa. Zero encontros privados na massa também
    reprova.
+3. **A recusa não se distingue do pendente.** Para o mesmo encontro, as
+   respostas do estado do pedido e de "meus pedidos" para a conta pendente e
+   para a conta recusada têm que ser **idênticas byte a byte** depois de
+   normalizar os carimbos de data do próprio pedido; o mesmo para a resposta
+   de pedir de novo. Qualquer campo, cabeçalho de cache ou tamanho de corpo que
+   difira reprova.
 
-**12.13 Tabelas.** A emenda da migração ganha as colunas do apêndice A.4.1 e a
-tabela `network_event_join_requests` (A.6). `bring_items` vai em tabela
-própria (`network_event_bring_items`), com a lista fechada em `CHECK`, pelo
-mesmo caminho de três arquivos das outras listas.
+**12.13 Tabelas.** A emenda da migração ganha as colunas do apêndice A.4.1, as
+listas `network_event_bring_items`, `network_event_sizes` e
+`network_event_amenities`, e a tabela `network_event_join_requests` (A.6). A
+galeria (`network_event_images`, A.4.2) vai na migração do backoffice. **Não
+há limite de vagas** (decisão do cliente): nenhuma coluna de capacidade.
 
 **12.14 Busca, filtros e sub-menus na agenda.** `listNetworkEvents` (pública)
 passa a aceitar, e devolve em `applied_filters` e `effective_sort` o recorte e
-a ordem que **de fato** valeram, no desenho de `listStoreItems`:
+a ordem que **de fato** valeram, no desenho de `listStoreItems`. **Um
+vocabulário só, alinhado com o que `feat/secao-rede` já tem e com a §24.14.3
+da designer:** o parâmetro de período é o **`when` que já existe** (não há
+`period`), que ganha valores; a ordem é o `sort` que já existe (`proximos`,
+`recentes`); o valor é `admission`, o mesmo nome do campo na resposta (a
+designer escreveu `price`, e o app usa `admission`); o porte é `size`, com os
+valores de `PetSize`.
 
 | Parâmetro | Valores | Regra |
 |---|---|---|
 | `q` | 2 a 80 caracteres | título, nome do lugar e bairro, no servidor. **Encontro privado casa só pelo título**: casar pelo bairro entregaria onde ele é |
-| `period` | `today`, `weekend`, `next_30_days` | calculado no servidor, **no fuso de cada encontro** (`time_zone`): `today` é a data local de hoje naquele fuso; `weekend` é o sábado e o domingo correntes ou os próximos; `next_30_days` é início entre agora e agora + 30 dias |
+| `when` | os de hoje (`upcoming`, `past`, `all`) e os novos `today`, `weekend`, `next_30_days` | calculado no servidor, **no fuso de cada encontro** (`time_zone`): `today` é a data local de hoje naquele fuso; `weekend` é o sábado e o domingo correntes ou os próximos; `next_30_days` é início entre agora e agora + 30 dias. A designer escreveu `next30`; o valor é `next_30_days` |
 | `admission` | `free`, `paid` | **exclui encontro privado**: a condição de acesso dele é oculta, e aparecer no recorte "pago" a entregaria |
+| `size` | `P`, `M`, `G`, `GG` | encontros que aceitam aquele porte. **Exclui encontro privado**, pelo mesmo motivo |
 | `visibility` | `public`, `private` | a visibilidade é visível, então filtra os dois |
 | `city` | como hoje | exclui encontro privado (12.10) |
-| `sort` | `date` | a pública só ordena por data |
+| `sort` | `proximos`, `recentes` | os que já existem. A pública não ordena por distância |
 
 **`q` não vira dimensão de teto, e a política não muda.** A dimensão
 `[ip, q]` contaria repetição do mesmo termo, e o custo real de busca vem de
@@ -648,13 +697,23 @@ sem região, responde a mesma lista em ordem de data e diz isso em
 100 m só para encontro **público com ponto**; encontro sem ponto vem no fim
 com distância nula (P.3); **encontro privado não entra**, porque a posição
 dele numa lista por distância já é localização. Aceita os mesmos filtros da
-pública.
+pública e **`max_km`** (`2`, `5`, `10`), que exclui encontro sem ponto (a nota
+da §24.14.3). **A posição do tutor não vai na requisição**: a operação usa a
+região de referência já gravada (`user_reference_locations`, quantizada em
+100 m), e não latitude e longitude em parâmetro de consulta. Isso responde a
+preocupação da §24.14.6: nenhuma coordenada sai do aparelho a cada busca, e
+nada de localização entra em URL, log de borda ou histórico.
 
 **"Meus pedidos" é leitura separada**, `GET /network/join-requests`
 (`listMyNetworkEventJoinRequests`), `bearerAuth`, paginada: os encontros
 privados em que **a própria conta** pediu para participar, cada um com o
-teaser de 12.10 e o estado do pedido. Não é filtro da pública, e não devolve
-conteúdo oculto nem para aprovado: o conteúdo continua em `private-details`.
+teaser de 12.10 e o `JoinRequestAppState`. Não é filtro da pública, e não
+devolve conteúdo oculto nem para aprovado: o conteúdo continua em
+`private-details`. Aceita `q` (só título), `state` (`requested`, `approved`,
+`withdrawn`, `expired`; **não há `declined`**, e o grupo "Recusado" da
+§24.14.3 sai do app) e `sort=proximos`. **Não aceita `admission` nem `size`**:
+filtrar por valor oculto entregaria o valor. Distância também não, porque
+todos ali são privados.
 
 ### 13. Como a regra "lugar público, nunca residência" é garantida
 
@@ -775,8 +834,15 @@ vazia, e não 400, para o link antigo continuar abrindo.
 `store_item_images` liga o item a até **8** imagens de `catalog_images`, com
 `position` de 0 a 7. **A principal é a de `position` 0**, e não há
 sinalizador de principal: dois lugares para dizer qual é a principal divergem
-na primeira troca. O painel manda `image_upload_ids` na ordem em que o app
-mostra, e **a lista substitui a anterior inteira**: reordenar é mandar a ordem
+na primeira troca. **Cada imagem tem texto alternativo obrigatório**, de 2 a
+150 caracteres (`store_item_images.alt_text`), porque o app as mostra e o
+leitor de tela precisa dizer o que são. **Obrigatório em toda posição, e não
+só na 0**: assim a obrigação acompanha a imagem que vira principal numa
+reordenação sem regra à parte, e nenhuma troca de ordem deixa a principal sem
+texto. A leitura pública devolve `alt_text` em cada imagem do detalhe e
+`image_alt_text` junto da principal na lista; o mesmo modelo serve ao encontro
+(item 17). O painel manda `images`, uma lista de `{upload_id, alt_text}` na
+ordem em que o app mostra, e **a lista substitui a anterior inteira**: reordenar é mandar a ordem
 nova, remover é omitir, `[]` tira todas. Uma escrita, uma transação, uma linha
 de trilha; operações separadas de acrescentar, remover e mover seriam três
 caminhos para o mesmo estado, cada um com a sua corrida.
@@ -795,7 +861,7 @@ retirado, inexistente e parceiro inativo respondem o mesmo 404 (ADR-0021). O
 preço vencido sai sem valor, como na lista.
 
 **Operações que mudam no painel:** `createAdminStoreItem` e
-`updateAdminStoreItem` (`species`, `tag_slugs`, `image_upload_ids` no lugar de
+`updateAdminStoreItem` (`species`, `tag_slugs`, `images` no lugar de
 `image_upload_id`); `AdminStoreItem` (`species`, `tags`, `images` no lugar de
 `image`); `listAdminStoreItems` (filtros `species` e `tag`). Novas:
 `listAdminStoreTags`, `createAdminStoreTag`, `updateAdminStoreTag`; e, na
@@ -820,22 +886,39 @@ obrigatoriedade estão no apêndice A.4.1; o resumo:
 |---|---|---|
 | `visibility` | `public` \| `private` | sim, padrão `public` |
 | `admission.kind` | `free` \| `paid` | sim, padrão `free` |
-| `admission.price` | centavos + `BRL` | só quando `paid`, e então sim |
-| `admission.payment_instructions` | texto, 2 a 500 | quando `paid`, este **ou** o link |
-| `admission.payment_url` | `https`, regras de D47 | quando `paid`, este **ou** as instruções |
+| `admission.price` | centavos + `BRL`, informativo | só quando `paid`, e então sim |
+| `images` | até 8, `{upload_id, alt_text}`, posição 0 é a capa, texto alternativo de 2 a 150 **obrigatório em cada uma** | não (sem imagem, o app usa o banner da marca) |
+| `accepted_sizes` | conjunto de `PetSize` (`P`, `M`, `G`, `GG`) | sim, padrão os quatro |
+| `dog_age` | `any`, `from_4_months`, `from_1_year`, `up_to_1_year` | sim, padrão `any` |
+| `vaccination_required` | booleano | sim, padrão `true` |
+| `off_leash_allowed` | booleano | sim, padrão `false` |
+| `amenities` | conjunto de `level_ground_or_ramp`, `accessible_restroom`, `public_restroom_nearby`, `shade`, `benches`, `dog_water_fountain`, `parking_nearby` | não |
 | `bring_items` | lista fechada, até 8 valores | não |
 | `bring_other` | até 3 itens livres, 2 a 40 cada | não |
 | `notes` | texto, 2 a 1000 | não, e só complemento |
 
-**O Bichu não cobra e não tem provedor de pagamento.** O preço é o que o
-organizador informa, sem vencimento (não é preço de referência de terceiro,
-como o da `Loja`), e o link de pagamento abre no navegador do sistema, fora do
-app. **Trocar o link de pagamento de um encontro publicado é a forma mais
-barata de golpe com uma conta tomada** (T11 com dinheiro no meio), então
-condição de acesso (visibilidade, gratuito/pago, preço, como pagar) só muda
-por operação própria, `changeAdminNetworkEventAccess`, com reautenticação no
-escopo `network_event_access_change` e aviso a todos os administradores, como
-mover o encontro. Na criação ela entra livre, porque criar já avisa todos.
+**Pago é só o valor, informativo** (decisão do cliente, 23/09). O Bichu não
+cobra, não tem provedor de pagamento e **não guarda forma de pagar**: nem
+instrução, nem link. O valor é o que o organizador informa, sem vencimento
+(não é preço de referência de terceiro, como o da `Loja`), e sem unidade: a
+alternativa "por cão, por pessoa" da §24.13.6 não foi adotada, porque o
+cliente pediu só o valor. **Não há limite de vagas.** Condição de acesso
+(visibilidade, gratuito ou pago, valor) só muda por operação própria,
+`changeAdminNetworkEventAccess`, com reautenticação no escopo
+`network_event_access_change` e aviso a todos os administradores: trocar o
+valor muda o que as pessoas esperam pagar na porta, e tornar público um
+privado entrega o lugar. Na criação ela entra livre, porque criar já avisa
+todos.
+
+**Os campos da designer** (§24.12.4 de `06-design-system.md`) entram um por
+coluna ou lista, com os valores dela: portes com os valores de `PetSize` e
+`ref_sizes` (os do cadastro de pet, mesma razão da espécie no item 16), idade
+em lista fechada de escolha única, vacinação e cães soltos em booleano com os
+padrões dela, estrutura do local em lista fechada múltipla. **A galeria da
+equipe usa o modelo do produto** (item 16): até 8 imagens, posição 0 é a capa,
+texto alternativo obrigatório em cada uma, o que cumpre "texto alternativo da
+capa obrigatório quando há capa" sem uma regra à parte. A designer propôs até
+4 fotos além da capa; o painel já desenhou 8 com capa, e 8 é o teto.
 
 **"O que levar" é misto:** uma lista fechada para o que se repete (`water`,
 `water_bowl`, `leash`, `poop_bags`, `treats`, `towel`, `vaccination_card`,
@@ -844,8 +927,7 @@ revisão, mais **até três itens livres** para a exceção. Lista só fechada
 empurraria a exceção para as observações; lista só livre seria texto sem
 forma, com três grafias para "água".
 
-**Os campos que a designer ainda vai propor** (para quais cães é, regras de
-convivência, acessibilidade do local) entram do mesmo jeito: **cada um é
+**Campo novo que vier depois** entra do mesmo jeito: **cada um é
 coluna ou lista própria, por migração aditiva**, e campo opcional novo em
 corpo de requisição é mudança compatível dentro de `/v1`. **Não há saco
 `jsonb` de "detalhes"**: ele seria o texto em observações com outro nome, sem
@@ -853,22 +935,23 @@ validação, sem lista fechada e sem portão. O que precisa ficar oculto no
 encontro privado entra, por padrão, no lado oculto: fora do teaser de 12.10, e o portão de 12.12 o cobra sem ninguém lembrar.
 
 **Encontro privado.** Para quem não foi aprovado, a agenda e o detalhe trazem
-**só título e data**. Lugar (inclusive bairro e cidade), ponto, resumo, capa,
-condições de acesso, "o que levar" e observações **não saem no corpo**. Não
+**só título e data**. Lugar (inclusive bairro e cidade), ponto, resumo,
+imagens (a capa inclusive), valor, portes, idade, regras, estrutura, "o que
+levar" e observações **não saem no corpo**. Não
 é o app que esconde: o servidor não manda (12.10 a 12.12).
 
 - **O pedido é da conta, nunca do pet** (ADR-0010 item 7): a tabela
   `network_event_join_requests` não tem `pet_id`, não tem texto livre e não tem
   lista em lugar nenhum do app. O tutor vê só o estado do **próprio** pedido;
   ninguém vê quem mais pediu ou foi aprovado, nem como contagem.
-- **A fila existe só no painel**, com aprovar e recusar, cada decisão na trilha
-  e com push ao tutor.
+- **A fila existe só no painel**, com aprovar e recusar, cada decisão na
+  trilha. **Aprovar gera push; recusar não avisa ninguém**, e para o tutor o
+  pedido continua "aguardando" até o encontro passar (12.11).
 - **O conteúdo aprovado sai em operação separada** (ADR-0021, como
   `/location`), com a autorização na cláusula `WHERE`. A mesma operação,
   chamada por quem não foi aprovado, responde 404, e não um corpo menor.
-- Recusa é final para aquele encontro, e desistir é permitido enquanto
-  pendente. Pedir de novo depois de recusado seria insistência sem custo
-  contra quem decidiu.
+- A recusa é final e invisível. Pedir de novo é idempotente e não lava a
+  recusa (12.11).
 
 **O que a fila leva ao painel, e o que isso reabre.** Para decidir, o
 administrador precisa saber quem pede. A fila mostra **só** o nome de exibição
@@ -1010,7 +1093,8 @@ O teto de 5 por item é do caso de uso, na mesma transação da escrita.
 `store_item_images`: `item_id uuid NOT NULL REFERENCES store_items (id) ON
 DELETE CASCADE`, `image_id uuid NOT NULL UNIQUE REFERENCES catalog_images
 (id)`, `position smallint NOT NULL CHECK (position BETWEEN 0 AND 7)`,
-`PRIMARY KEY (item_id, image_id)`, e `CONSTRAINT store_item_images_ordem_unica
+`alt_text text NOT NULL CHECK (char_length(btrim(alt_text)) BETWEEN 2 AND
+150)`, `PRIMARY KEY (item_id, image_id)`, e `CONSTRAINT store_item_images_ordem_unica
 UNIQUE (item_id, position) DEFERRABLE INITIALLY DEFERRED`, para que reordenar
 seja um conjunto de `UPDATE` na mesma transação sem colidir no meio. A imagem
 principal é `position = 0`. `catalog_images.purpose` precisa ser `store_item`
@@ -1072,25 +1156,40 @@ Na mesma emenda da migração da `Rede`:
 | `admission_kind` | `text` | `NOT NULL DEFAULT 'free' CHECK (admission_kind IN ('free', 'paid'))` |
 | `admission_amount` | `integer` | nulo, `CHECK (admission_amount IS NULL OR admission_amount BETWEEN 1 AND 100000000)`, centavos |
 | `admission_currency` | `text` | nulo, `CHECK (admission_currency IS NULL OR admission_currency = 'BRL')` |
-| `payment_instructions` | `text` | nulo, `CHECK (payment_instructions IS NULL OR char_length(btrim(payment_instructions)) BETWEEN 2 AND 500)` |
-| `payment_url` | `text` | nulo, `CHECK (payment_url IS NULL OR (payment_url ~ '^https://' AND char_length(payment_url) <= 2048))` |
+| `dog_age` | `text` | `NOT NULL DEFAULT 'any' CHECK (dog_age IN ('any', 'from_4_months', 'from_1_year', 'up_to_1_year'))` |
+| `vaccination_required` | `boolean` | `NOT NULL DEFAULT true` |
+| `off_leash_allowed` | `boolean` | `NOT NULL DEFAULT false` |
 | `bring_other` | `text[]` | `NOT NULL DEFAULT '{}' CHECK (cardinality(bring_other) <= 3)`; tamanho de cada item (2 a 40) no caso de uso |
 | `notes` | `text` | nulo, `CHECK (notes IS NULL OR char_length(btrim(notes)) BETWEEN 2 AND 1000)` |
 
 - `CHECK ((admission_kind = 'free') = (admission_amount IS NULL))`,
-  `CHECK ((admission_amount IS NULL) = (admission_currency IS NULL))`,
-  `CHECK (admission_kind = 'paid' OR (payment_instructions IS NULL AND payment_url IS NULL))`,
-  `CHECK (admission_kind = 'free' OR num_nonnulls(payment_instructions, payment_url) >= 1)`.
+  `CHECK ((admission_amount IS NULL) = (admission_currency IS NULL))`. Não há
+  coluna de forma de pagar nem de capacidade.
 - `network_event_bring_items`: `event_id uuid NOT NULL REFERENCES
   network_events (id) ON DELETE CASCADE`, `item text NOT NULL CHECK (item IN
   ('water', 'water_bowl', 'leash', 'poop_bags', 'treats', 'towel',
   'vaccination_card', 'toy'))`, `PRIMARY KEY (event_id, item)`.
-- O resto da URL de pagamento (sem `userinfo`, sem IP literal) é regra do caso
-  de uso, como em D47.
+- `network_event_sizes`: `event_id uuid NOT NULL REFERENCES network_events (id)
+  ON DELETE CASCADE`, `size text NOT NULL REFERENCES ref_sizes (code)`,
+  `PRIMARY KEY (event_id, size)`. Pelo menos um é regra do caso de uso; a
+  criação sem o campo grava os quatro.
+- `network_event_amenities`: `event_id` como acima, `amenity text NOT NULL
+  CHECK (amenity IN ('level_ground_or_ramp', 'accessible_restroom',
+  'public_restroom_nearby', 'shade', 'benches', 'dog_water_fountain',
+  'parking_nearby'))`, `PRIMARY KEY (event_id, amenity)`.
 
-Na migração do backoffice:
-`ADD COLUMN cover_image_id uuid REFERENCES catalog_images (id)` com
-`CHECK (num_nonnulls(cover_image_url, cover_image_id) <= 1)`.
+### A.4.2 `network_event_images` (na migração do backoffice)
+
+A mesma forma de `store_item_images` (A.2.1): `event_id uuid NOT NULL
+REFERENCES network_events (id) ON DELETE CASCADE`, `image_id uuid NOT NULL
+UNIQUE REFERENCES catalog_images (id)`, `position smallint NOT NULL CHECK
+(position BETWEEN 0 AND 7)`, `alt_text text NOT NULL CHECK
+(char_length(btrim(alt_text)) BETWEEN 2 AND 150)`, `PRIMARY KEY (event_id,
+image_id)`, `UNIQUE (event_id, position) DEFERRABLE INITIALLY DEFERRED`. A capa
+é `position = 0`. `catalog_images.purpose` precisa ser `network_event`.
+`network_events.cover_image_url` (URL da massa) continua, e o evento com ela
+não tem linha aqui (caso de uso). O `cover_image_id` que este apêndice previa
+antes sai: a galeria o substitui.
 
 Regras que o `CHECK` não expressa, no caso de uso, com `400 validation-failed`:
 criar exige que o fim (ou o início, sem fim) não tenha passado
@@ -1106,14 +1205,18 @@ fuso nem lugar (`code: use_relocation`); cancelar só a partir de `published`;
 | `ref` | `text` | `NOT NULL UNIQUE`, 128 bits aleatórios em base64url: o identificador que o painel usa no caminho, porque UUIDv7 carrega o instante |
 | `event_id` | `uuid` | `NOT NULL REFERENCES network_events (id) ON DELETE CASCADE` |
 | `user_id` | `uuid` | `NOT NULL REFERENCES users (id) ON DELETE CASCADE` |
-| `status` | `text` | `NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined', 'withdrawn'))` |
+| `status` | `text` | `NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined'))`: a decisão, e só ela |
 | `requested_at` | `timestamptz` | `NOT NULL DEFAULT now()` |
 | `decided_at` | `timestamptz` | nulo |
+| `withdrawn_at` | `timestamptz` | nulo; a desistência, separada da decisão para que desistir e pedir de novo não lave uma recusa (12.11) |
 | `decided_by_user_id` | `uuid` | nulo, `REFERENCES users (id) ON DELETE SET NULL`; nunca projetado |
 
 - `UNIQUE (event_id, user_id)`: um pedido por conta por encontro.
 - `CHECK ((status IN ('approved', 'declined')) = (decided_at IS NOT NULL))`.
-- Índice `network_event_join_requests_fila ON (requested_at) WHERE status = 'pending'`.
+- `CHECK (status <> 'approved' OR withdrawn_at IS NULL)`: aprovado não desiste.
+- Índice `network_event_join_requests_fila ON (requested_at) WHERE status = 'pending' AND withdrawn_at IS NULL`.
+- O estado que o app vê (`JoinRequestAppState`) é derivado na leitura, e
+  `declined` nunca é projetado para o app.
 - **Sem `pet_id` e sem texto livre**, de propósito (ADR-0010 item 7; a
   conversa é v2). Nenhuma operação do app lê esta tabela além da linha da
   própria conta, e a leitura que libera conteúdo é um `EXISTS` sobre ela na
@@ -1145,38 +1248,13 @@ Sem mudança de esquema. As ações novas entram na união `AuditAction`:
   requisição, o aviso a cada sessão e os tiles do OSM.
 - A migração `20260923000001` não foi aplicada em nenhum banco compartilhado.
 
-## Pergunta ao cliente
+## Perguntas ao cliente
 
-**1. Evento cancelado: continua visível no app até a data prevista, ou some?**
-
-- **(a) Continua visível até o fim previsto, marcado como cancelado.** Quem se
-  programou para ir abre o app e descobre antes de sair de casa.
-- **(b) Some da lista no ato do cancelamento.**
-
-**Recomendação: (a).** Em (b), quem viu o encontro ontem e não o acha hoje não
-sabe se foi cancelado ou se procurou errado, e vai à praça.
-**Custo de não decidir:** fica (a), que é o padrão da seção 12.6; mudar depois
-é trocar um filtro.
-
-**2. Encontro privado: o tutor recusado pode pedir de novo?**
-
-- **(a) Não.** A recusa vale para aquele encontro.
-- **(b) Sim, depois de 7 dias.**
-
-**Recomendação: (a).** Pedir de novo sem custo transforma a recusa em
-insistência contra quem decidiu, e o painel passa a rever a mesma pessoa.
-**Custo de não decidir:** fica (a); passar a (b) depois é regra de caso de
-uso, sem migração.
-
-**3. O administrador é avisado de pedido novo?**
-
-- **(a) Não: a fila aparece no painel**, com a contagem de pendentes em cada
-  encontro privado.
-- **(b) Sim, por e-mail a todos os administradores, a cada pedido.**
-
-**Recomendação: (a)** na v1. Um e-mail por pedido vira ruído no primeiro
-encontro popular, e o tutor recebe push quando a decisão sai.
-**Custo de não decidir:** fica (a), e o pedido espera alguém abrir o painel.
+As três perguntas desta seção foram respondidas pelo cliente em 23/09 e estão
+fechadas: o encontro cancelado continua visível até o fim previsto (12.6); a
+recusa é invisível ao tutor, e pedir de novo é idempotente sem lavar a recusa
+(12.11); os administradores não recebem e-mail a cada pedido, e a fila fica no
+painel com a contagem de pendentes. Nenhuma pergunta aberta.
 
 ---
 DÉDALO, Arquiteto de Software

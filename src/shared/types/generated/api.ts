@@ -2498,9 +2498,9 @@ export interface paths {
          * Altera um item, em qualquer estado
          * @description Editar nao publica nem retira: o estado so muda pelas operacoes de
          *     `publication`. Renovar o preco e mandar `price` com `checked_at` novo;
-         *     `price: null` tira o preco. `species`, `tag_slugs` e `image_upload_ids`
+         *     `price: null` tira o preco. `species`, `tag_slugs` e `images`
          *     **substituem o conjunto inteiro**: reordenar imagens e mandar a lista na
-         *     ordem nova, remover e omitir, e `image_upload_ids: []` tira todas.
+         *     ordem nova, remover e omitir, e `images: []` tira todas.
          */
         patch: operations["updateAdminStoreItem"];
         trace?: never;
@@ -2566,14 +2566,14 @@ export interface paths {
          *
          *     Recusas de regra, todas `400 validation-failed` com o campo: fim antes
          *     do inicio; encontro que ja terminou (`code: event_in_past`); fuso que
-         *     nao existe; ponto fora dos limites do Brasil; encontro pago sem preco
-         *     ou sem nenhuma forma de pagar (`code: admission_incomplete`).
+         *     nao existe; ponto fora dos limites do Brasil; encontro pago sem valor
+         *     (`code: admission_incomplete`); imagem sem texto alternativo.
+         *     **Nao ha limite de vagas** (decisao do cliente).
          *
          *     `visibility: private` faz o encontro aparecer no app **so com titulo
          *     e data** ate a conta ter o pedido aprovado na fila
-         *     (`listAdminNetworkJoinRequests`). **O Bichu nao cobra**: preco e forma
-         *     de pagar sao o que o organizador informa, e o link abre fora do app
-         *     (ADR-0027 item 17).
+         *     (`listAdminNetworkJoinRequests`). **O Bichu nao cobra**: o valor e so
+         *     informativo (ADR-0027 item 17).
          */
         post: operations["createAdminNetworkEvent"];
         delete?: never;
@@ -2670,8 +2670,7 @@ export interface paths {
         /**
          * Cancela um encontro publicado
          * @description O encontro passa a `cancelled` e **continua visivel no app como
-         *     cancelado** ate o fim previsto (padrao enquanto o cliente nao responder
-         *     a pergunta 1 do ADR-0027). Exige `X-Admin-Reauth-Token` do escopo
+         *     cancelado** ate o fim previsto (decisao do cliente, 23/09). Exige `X-Admin-Reauth-Token` do escopo
          *     `network_event_cancellation` e avisa todos os administradores. Sem
          *     volta: um encontro cancelado que vai acontecer de novo e um encontro
          *     novo.
@@ -2696,10 +2695,10 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Muda visibilidade, gratuidade, preco ou forma de pagar de um encontro
-         * @description Trocar o link de pagamento de um encontro publicado e o golpe mais
-         *     barato com uma conta tomada, e tornar publico um encontro privado
-         *     entrega o lugar a quem nao foi aprovado. Por isso as mesmas travas de
+         * Muda visibilidade, gratuidade ou valor de um encontro
+         * @description Trocar o valor de um encontro publicado muda o que as pessoas esperam
+         *     pagar na porta, e tornar publico um encontro privado entrega o lugar a
+         *     quem nao foi aprovado. Por isso as mesmas travas de
          *     `relocateAdminNetworkEvent`: `X-Admin-Reauth-Token` do escopo
          *     `network_event_access_change`, aviso a todos os administradores com o
          *     antes e o depois, e trilha. Privado que vira publico deixa os pedidos
@@ -2749,8 +2748,8 @@ export interface paths {
         put?: never;
         /**
          * Aprova o pedido, e o tutor passa a ver o encontro inteiro
-         * @description So a partir de `pending` (`400`, `code: request_not_pending`, nos
-         *     outros estados). O tutor recebe push. A partir daqui
+         * @description So a partir de `pending` sem desistencia (`400`, `code:
+         *     request_not_pending`, nos outros casos). O tutor recebe push. A partir daqui
          *     `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
          *     para a conta dele.
          */
@@ -2774,10 +2773,12 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Recusa o pedido
-         * @description So a partir de `pending`. O tutor recebe push. A recusa e final para
-         *     aquele encontro (pergunta 2 do ADR-0027, padrao enquanto nao
-         *     respondida). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
+         * Recusa o pedido, sem avisar o tutor
+         * @description So a partir de `pending` sem desistencia. **O tutor nao e avisado**, e
+         *     para ele o pedido continua "aguardando" ate o encontro passar (decisao
+         *     do cliente, 23/09): o app recebe `requested`, nunca `declined`. A
+         *     recusa e final e invisivel: pedir de novo devolve o mesmo `requested`
+         *     e nao recoloca o pedido na fila (ADR-0027 item 17 e 12.11). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
          */
         post: operations["declineAdminNetworkJoinRequest"];
         delete?: never;
@@ -2800,7 +2801,7 @@ export interface paths {
          * @description ADR-0007 a letra, com `kind = catalog_image` e `purpose` gravados no
          *     envio. O backend nunca recebe os bytes. JPEG, PNG e WebP; **SVG
          *     recusado sempre** (`415`). A confirmacao e a escrita do item
-         *     (`image_upload_ids`) ou do encontro (`cover_upload_id`) com o mesmo
+         *     (`images`) ou do encontro (`images`) com o mesmo
          *     `purpose`; e ela que enfileira o processamento. A derivada publica so e
          *     servida pronta.
          */
@@ -3978,6 +3979,8 @@ export interface components {
              *     desenhar sem imagem.
              */
             image_url?: string | null;
+            /** @description O texto alternativo da imagem principal. Opcional ate a implementacao (ADR-0027 item 16). */
+            image_alt_text?: string | null;
             /**
              * Format: uri
              * @description O destino no site do parceiro. **Nenhum identificador de pessoa
@@ -4297,7 +4300,7 @@ export interface components {
             price?: components["schemas"]["AdminPriceInput"];
             species: components["schemas"]["StoreItemSpeciesSet"];
             tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
-            image_upload_ids?: components["schemas"]["StoreItemImageUploadIds"];
+            images?: components["schemas"]["CatalogImagesInput"];
             /** @default 0 */
             sort_order: number;
         };
@@ -4315,7 +4318,7 @@ export interface components {
             price?: components["schemas"]["AdminPriceInput"] | null;
             species?: components["schemas"]["StoreItemSpeciesSet"];
             tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
-            image_upload_ids?: components["schemas"]["StoreItemImageUploadIds"];
+            images?: components["schemas"]["CatalogImagesInput"];
             sort_order?: number;
         };
         AdminStoreItem: {
@@ -4329,7 +4332,7 @@ export interface components {
             species: components["schemas"]["Species"][];
             tags: components["schemas"]["AdminStoreTagRef"][];
             /** @description Na ordem do app. `position` 0 e a principal. Vazia e estado normal. */
-            images: components["schemas"]["AdminStoreItemImage"][];
+            images: components["schemas"]["AdminCatalogGalleryImage"][];
             /** @description Nulo quando o item nao tem preco. **Presente mesmo vencido.** */
             price?: components["schemas"]["AdminPrice"] | null;
             price_status: components["schemas"]["StorePriceStatus"];
@@ -4402,11 +4405,14 @@ export interface components {
             /** Format: date-time */
             ends_at?: string;
             time_zone: components["schemas"]["TimeZoneName"];
-            /**
-             * Format: uuid
-             * @description Envio de `createAdminCatalogImageIntent` com `purpose` `network_event`.
-             */
-            cover_upload_id?: string;
+            images?: components["schemas"]["CatalogImagesInput"];
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            /** @default true */
+            vaccination_required: boolean;
+            /** @default false */
+            off_leash_allowed: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
             visibility?: components["schemas"]["NetworkEventVisibility"];
             admission?: components["schemas"]["AdminNetworkEventAdmissionInput"];
             bring_items?: components["schemas"]["NetworkEventBringItems"];
@@ -4416,15 +4422,20 @@ export interface components {
         /**
          * @description **Sem data, horario, fuso nem lugar**: mudar onde e quando e
          *     `relocateAdminNetworkEvent`; sem visibilidade nem condicao de acesso:
-         *     `changeAdminNetworkEventAccess`. `cover_upload_id: null` tira a capa;
-         *     `notes: null` tira as observacoes; as listas substituem o conjunto.
+         *     `changeAdminNetworkEventAccess`. `images` substitui a galeria inteira
+         *     (a posicao 0 e a capa); `notes: null` tira as observacoes; as listas
+         *     substituem o conjunto.
          */
         AdminNetworkEventPatch: {
             slug?: components["schemas"]["Slug"];
             title?: string;
             summary?: string;
-            /** Format: uuid */
-            cover_upload_id?: string | null;
+            images?: components["schemas"]["CatalogImagesInput"];
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required?: boolean;
+            off_leash_allowed?: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
             bring_items?: components["schemas"]["NetworkEventBringItems"];
             bring_other?: components["schemas"]["NetworkEventBringOther"];
             notes?: components["schemas"]["NetworkEventNotes"] | null;
@@ -4473,7 +4484,13 @@ export interface components {
             /** Format: date-time */
             ends_at?: string | null;
             time_zone: string;
-            cover?: components["schemas"]["AdminCatalogImage"] | null;
+            /** @description A galeria da equipe, em ordem. A posicao 0 e a capa. Vazia e estado normal (banner da marca no app). */
+            images: components["schemas"]["AdminCatalogGalleryImage"][];
+            accepted_sizes: components["schemas"]["PetSize"][];
+            dog_age: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required: boolean;
+            off_leash_allowed: boolean;
+            amenities: components["schemas"]["NetworkEventAmenity"][];
             /** @enum {string} */
             origin: "admin";
             visibility: components["schemas"]["NetworkEventVisibility"];
@@ -4522,18 +4539,32 @@ export interface components {
          */
         StoreItemTagSlugs: components["schemas"]["Slug"][];
         /**
-         * @description Ate 8 envios de `createAdminCatalogImageIntent` com `purpose`
-         *     `store_item`, **na ordem em que o app os mostra**. O primeiro e a
-         *     imagem principal, a da lista. A lista substitui a anterior inteira.
+         * @description Ate 8 imagens, **na ordem em que o app as mostra**. A primeira e a
+         *     principal (a da lista da `Loja`; a capa do encontro). Cada uma e um
+         *     envio de `createAdminCatalogImageIntent` com o `purpose` do recurso, e
+         *     **cada uma tem texto alternativo obrigatorio, ate 150 caracteres**, em
+         *     toda posicao: a obrigacao da principal acompanha a imagem que vira
+         *     principal numa reordenacao, sem regra a parte. A lista substitui a
+         *     anterior inteira: reordenar e mandar a ordem nova, remover e omitir,
+         *     `[]` tira todas. `upload_id` repetido e recusado com `400`
+         *     (ADR-0027 itens 16 e 17).
          */
-        StoreItemImageUploadIds: string[];
-        AdminStoreItemImage: components["schemas"]["AdminCatalogImage"] & {
+        CatalogImagesInput: components["schemas"]["CatalogImageInput"][];
+        CatalogImageInput: {
+            /** Format: uuid */
+            upload_id: string;
+            alt_text: components["schemas"]["ImageAltText"];
+        };
+        /** @description O que a foto mostra, para quem usa leitor de tela. Texto puro. */
+        ImageAltText: string;
+        AdminCatalogGalleryImage: components["schemas"]["AdminCatalogImage"] & {
             /**
              * Format: uuid
-             * @description O identificador que o painel devolve em `image_upload_ids` para manter, reordenar ou remover esta imagem.
+             * @description O identificador que o painel devolve em `images` para manter, reordenar ou remover esta imagem.
              */
             upload_id: string;
             position: number;
+            alt_text: string;
         };
         AdminStoreTagRef: {
             slug: string;
@@ -4580,6 +4611,8 @@ export interface components {
             label: string;
         };
         StoreItemImage: {
+            /** @description Texto alternativo. Item da massa com imagem externa traz o titulo do item. */
+            alt_text: string;
             /**
              * Format: uri
              * @description A derivada publica, sempre pronta. Imagem em processamento ou recusada nunca aparece aqui.
@@ -4615,10 +4648,11 @@ export interface components {
         /** @description Observacoes, so como complemento. O que tem forma propria (acesso, o que levar) nao vai aqui. */
         NetworkEventNotes: string;
         /**
-         * @description Gratuito ou pago. Pago exige `price` e pelo menos um de
-         *     `payment_instructions` e `payment_url` (`400`, `code:
-         *     admission_incomplete`); gratuito recusa os tres. **O Bichu nao cobra e
-         *     nao tem provedor de pagamento**: o link abre no navegador do sistema.
+         * @description Gratuito ou pago, e **pago e so o valor, informativo** (decisao do
+         *     cliente, 23/09). Pago exige `price` (`400`, `code:
+         *     admission_incomplete`); gratuito o recusa. **O Bichu nao cobra, nao tem
+         *     provedor de pagamento e nao guarda forma de pagar**: nem instrucao, nem
+         *     link.
          */
         AdminNetworkEventAdmissionInput: {
             /**
@@ -4627,8 +4661,6 @@ export interface components {
              */
             kind: "free" | "paid";
             price?: components["schemas"]["AdminEventPrice"] | null;
-            payment_instructions?: string | null;
-            payment_url?: components["schemas"]["HttpsUrl"] | null;
         };
         /** @description O valor que o organizador informa. Sem vencimento, porque nao e preco de referencia de terceiro. */
         AdminEventPrice: {
@@ -4641,9 +4673,6 @@ export interface components {
             /** @enum {string} */
             kind: "free" | "paid";
             price: components["schemas"]["AdminEventPrice"] | null;
-            payment_instructions: string | null;
-            /** Format: uri */
-            payment_url: string | null;
         };
         /** @description `reason` e pelo menos um de `visibility` e `admission`. `admission` substitui a condicao inteira. */
         AdminNetworkEventAccessChange: {
@@ -4652,8 +4681,18 @@ export interface components {
             /** @description Vai no aviso a todos os administradores. */
             reason: string;
         };
-        /** @enum {string} */
-        AdminJoinRequestStatus: "pending" | "approved" | "declined" | "withdrawn";
+        /**
+         * @description A decisao, como o painel a ve. **O app nunca ve `declined`, e esta
+         *     regra nao e para ser "corrigida"**: para o tutor, o pedido recusado
+         *     aparece como **`requested`** (aguardando) ate o encontro passar, e
+         *     depois como `expired`, exatamente como um pedido que ninguem decidiu
+         *     (decisao do cliente, 23/09). O estado do app (`JoinRequestAppState`:
+         *     `requested`, `approved`, `withdrawn`, `expired`) e derivado na leitura e
+         *     nao tem `declined`. Desistencia nao e estado aqui, e `withdrawn_at`
+         *     (ADR-0027 item 17 e 12.11).
+         * @enum {string}
+         */
+        AdminJoinRequestStatus: "pending" | "approved" | "declined";
         /**
          * @description Um pedido para participar de encontro privado. **O pedido e da conta,
          *     nunca do pet** (ADR-0010 item 7). Do solicitante sai **so** o nome de
@@ -4681,6 +4720,11 @@ export interface components {
             requested_at: string;
             /** Format: date-time */
             decided_at?: string | null;
+            /**
+             * Format: date-time
+             * @description O tutor desistiu. Pedido desistido nao aparece na fila de pendentes e nao pode ser decidido.
+             */
+            withdrawn_at?: string | null;
         };
         AdminJoinRequestPage: {
             items: components["schemas"]["AdminJoinRequest"][];
@@ -4691,6 +4735,32 @@ export interface components {
         StoreTagPage: {
             items: components["schemas"]["StoreTagRef"][];
         };
+        /**
+         * @description Portes aceitos, um ou mais, com os valores de `PetSize` (`ref_sizes`),
+         *     os do cadastro de pet. O padrao e todos; o app escreve "Todos os
+         *     portes" quando os quatro estao marcados.
+         * @default [
+         *       "P",
+         *       "M",
+         *       "G",
+         *       "GG"
+         *     ]
+         */
+        NetworkEventAcceptedSizes: components["schemas"]["PetSize"][];
+        /**
+         * @description Idade dos caes, uma escolha. Lista fechada por `CHECK`.
+         * @default any
+         * @enum {string}
+         */
+        NetworkEventDogAge: "any" | "from_4_months" | "from_1_year" | "up_to_1_year";
+        /**
+         * @description Acessibilidade e estrutura do local. Lista fechada por `CHECK` em
+         *     `network_event_amenities`; acrescentar valor e tres arquivos no mesmo
+         *     commit (ADR-0023 secao 3).
+         * @enum {string}
+         */
+        NetworkEventAmenity: "level_ground_or_ramp" | "accessible_restroom" | "public_restroom_nearby" | "shade" | "benches" | "dog_water_fountain" | "parking_nearby";
+        NetworkEventAmenities: components["schemas"]["NetworkEventAmenity"][];
     };
     responses: {
         /** @description Pedido aceito para processamento. */
