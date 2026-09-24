@@ -1388,14 +1388,18 @@ jobs:
   #      para nao deixar passar.
   #   2. O VEREDITO DO PORTAO DE QUALIDADE. Informativo enquanto houver a
   #      dispensa datada `sonarcloud-veredito` no quality-gates.yml; bloqueante
-  #      no instante em que ela for apagada. O motivo esta na secao 8.4: na
-  #      PRIMEIRA analise o SonarCloud trata o repositorio inteiro como "codigo
-  #      novo", entao os 74% de linha medidos hoje vao de encontro ao piso de
-  #      80% do perfil `Sonar way` e o portao reprova -- um veredito sobre
-  #      treze dias de codigo acumulado, cobrado de quem abriu o PR. Portao que
-  #      reprova tudo no primeiro dia e desligado na primeira semana, e o
-  #      desligamento e definitivo. Uma semana de linha de base, e ele passa a
-  #      julgar o diff, que e o que ele sabe julgar.
+  #      no instante em que ela for apagada. O motivo, MEDIDO EM 23/09/2026 e
+  #      nao suposto: o projeto nao tem LINHA DE BASE DE CODIGO NOVO no
+  #      SonarQube Cloud (`periodo_de_codigo_novo` vem vazio), entao as
+  #      metricas `new_*` sao calculadas sobre o repositorio inteiro em vez do
+  #      diff. O mesmo commit analisado como PR passou com 0 New issues e
+  #      analisado como branch deu D/D. Enquanto o periodo estiver vazio,
+  #      nenhum conserto de codigo move `new_reliability_rating` nem
+  #      `new_security_rating`. A linha de base e configuracao do projeto no
+  #      SonarCloud e exige permissao de administrador -- ela NAO sai de
+  #      `sonar-project.properties`, e nao ha parametro de scanner que a defina
+  #      na nuvem. Os passos estao no comentario da dispensa, em
+  #      `.github/quality-gates.yml`.
   sonar:
     name: SonarCloud (analise estatica e cobertura)
     runs-on: ubuntu-latest

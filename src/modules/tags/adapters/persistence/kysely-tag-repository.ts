@@ -310,7 +310,17 @@ export function criarTagRepository(db: Db): TagRepository {
           // a janela inteira, o corpo do 429 dizia "24 horas" para quem tinha
           // dez minutos de espera, e o texto novo transforma esse arredondamento
           // em um número que a pessoa lê e obedece.
-          .select(({ fn }) => fn.min<Date>('created_at').as('mais_antiga'))
+          //
+          // `Date | null` e não `Date`: quem mentia era a anotação, não a
+          // guarda abaixo. `MIN()` sobre zero linhas devolve `NULL` em SQL, e
+          // o Kysely aceita como tipo da coluna exatamente o que se escreve
+          // aqui -- então `fn.min<Date>` prometia não-nulo o que o banco pode
+          // devolver nulo, e era isso que fazia a comparação parecer "sempre
+          // falsa" para a análise estática. Apagar a comparação, que é o que a
+          // ferramenta sugere, deixaria `new Date(null).getTime()` valer época
+          // zero e o `Retry-After` do 429 sair como 1 segundo no dia em que
+          // esta consulta mudar de forma.
+          .select(({ fn }) => fn.min<Date | null>('created_at').as('mais_antiga'))
           .where('pet_id', '=', nova.petId)
           .where('created_at', '>=', inicioDaJanela)
           .executeTakeFirstOrThrow();
