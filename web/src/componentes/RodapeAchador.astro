@@ -1,0 +1,16 @@
+---
+// Assinatura discreta das paginas publicas (`.rodape-achador` do kit): simbolo,
+// "Bichu · a rede dos pets", links legais e uma patinha. Nada decorativo acima.
+import simbolo from '../assets/marca/simbolo-reduzido.svg';
+import { RODAPE_ACHADOR } from '../conteudo/comum.ts';
+---
+<footer class="rodape-achador">
+  <img class="rodape-achador__simbolo" src={simbolo.src} alt="" width={simbolo.width} height={simbolo.height} />
+  <p>{RODAPE_ACHADOR.assinatura}</p>
+  <p class="rodape-achador__links">
+    <a class="rodape-achador__link" href="/termos">{RODAPE_ACHADOR.termos}</a>
+    <span aria-hidden="true">·</span>
+    <a class="rodape-achador__link" href="/privacidade">{RODAPE_ACHADOR.privacidade}</a>
+  </p>
+  <span class="patinha" aria-hidden="true"></span>
+</footer>

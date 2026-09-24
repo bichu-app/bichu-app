@@ -1,0 +1,29 @@
+---
+// Paginas publicas de uso direto (/t/, /verificar-email, /redefinir-senha, 404, erro).
+// Regra do desenho: nenhuma decoracao acima da dobra. A marca entra so no
+// logotipo pequeno do topo e na assinatura do rodape, com a patinha.
+import Base from './Base.astro';
+import RodapeAchador from '../componentes/RodapeAchador.astro';
+import logotipo from '../assets/marca/logo-horizontal.svg';
+import { MARCA, NAVEGACAO } from '../conteudo/comum.ts';
+import '../styles/publica.css';
+
+interface Props {
+  titulo: string;
+  descricao: string;
+}
+const { titulo, descricao } = Astro.props;
+---
+<Base titulo={titulo} descricao={descricao} indexar={false} temaAutomatico>
+  <a class="pular-para-conteudo" href="#conteudo">{NAVEGACAO.pular}</a>
+  <header class="publica__topo">
+    <a class="publica__marca" href="/" aria-label={MARCA.rotuloInicio}>
+      <img src={logotipo.src} alt={MARCA.altLogotipo} width={logotipo.width} height={logotipo.height} class="publica__logo" />
+    </a>
+  </header>
+  <main id="conteudo" class="publica">
+    <slot />
+  </main>
+  <slot name="acao" />
+  <RodapeAchador />
+</Base>

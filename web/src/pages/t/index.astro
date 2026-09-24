@@ -1,0 +1,15 @@
+---
+// /t?codigo=...: o formulario "Procurar este codigo" (tela 400) funciona sem
+// JavaScript por GET, e aqui ele vira o endereco da tag. Nenhuma decisao sobre
+// o codigo: quem diz se ele vale e a API, na pagina de destino.
+export const prerender = false;
+
+const codigo = (Astro.url.searchParams.get('codigo') ?? '').trim();
+if (codigo) {
+  return new Response(null, {
+    status: 303,
+    headers: { Location: `/t/${encodeURIComponent(codigo)}`, 'Cache-Control': 'no-store', 'X-Robots-Tag': 'noindex, nofollow' },
+  });
+}
+return Astro.rewrite('/404');
+---

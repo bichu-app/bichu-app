@@ -1,0 +1,127 @@
+---
+// /redefinir-senha?token=...: C.5, a pagina que cria a senha nova (UX 7.6.1).
+//   GET  -> checkPasswordResetToken  (o 410 aparece ANTES de a pessoa digitar)
+//   POST -> confirmPasswordReset     (nunca enfileirado; falha diz que nada mudou)
+// A senha digitada nunca volta no HTML da resposta: depois de um erro, o campo
+// vem vazio. Refletir senha em pagina e deixa-la em cache e historico.
+export const prerender = false;
+
+import Publica from '../layouts/Publica.astro';
+import Estado from '../componentes/Estado.astro';
+import Icone from '../componentes/Icone.astro';
+import BotaoEnviar from '../componentes/BotaoEnviar.astro';
+import ScriptDeEnvio from '../componentes/ScriptDeEnvio.astro';
+import { clienteDaApi, executar } from '../api/chamar.ts';
+import { telaAoConferirLink, telaAoSalvarSenha, type TelaDaSenha } from '../dominio/telas-de-conta.ts';
+import { espera } from '../dominio/texto-do-pet.ts';
+import { REDEFINIR_SENHA as T, COMUM_PUBLICO } from '../conteudo/conta.ts';
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+
+let cliente: string | undefined;
+try { cliente = Astro.clientAddress; } catch { cliente = undefined; }
+const api = clienteDaApi(Astro.request, cliente);
+
+let token = Astro.url.searchParams.get('token') ?? '';
+let tela: TelaDaSenha;
+
+if (Astro.request.method === 'POST') {
+  const formulario = await Astro.request.formData().catch(() => null);
+  const t = formulario?.get('token');
+  const senha = formulario?.get('new_password');
+  token = typeof t === 'string' ? t : '';
+  const r = await executar(() =>
+    api.POST('/auth/password-reset/confirm', { body: { token, new_password: typeof senha === 'string' ? senha : '' } }),
+  );
+  tela = telaAoSalvarSenha(r);
+} else if (!token) {
+  // Sem token nao ha link para conferir: e o mesmo "link invalido" do 410.
+  tela = { tela: 'expirado', http: 400 };
+} else {
+  const r = await executar(() => api.GET('/public/password-reset/{token}', { params: { path: { token } } }));
+  tela = telaAoConferirLink(r);
+}
+Astro.response.status = tela.http;
+if (tela.http >= 500) Astro.response.headers.set('Retry-After', '10');
+
+const mostraFormulario = tela.tela === 'formulario' || tela.tela === 'formulario-com-erro' || tela.tela === 'nao-salvou';
+const erro = tela.tela === 'formulario-com-erro' ? T.erros[tela.codigo] : null;
+---
+<Publica titulo={T.tituloDaPagina} descricao={T.descricaoDaPagina}>
+  {mostraFormulario && (
+    <>
+      <h1 class="estado__titulo">{T.titulo}</h1>
+      {tela.tela === 'nao-salvou' && (
+        <div class="alerta" role="alert">
+          <Icone nome="error" />
+          <p class="alerta__titulo">{T.naoSalvouTitulo}</p>
+          <p class="alerta__texto">{T.naoSalvouTexto}</p>
+        </div>
+      )}
+      <form class="formulario" id="form-senha" method="post" action="/redefinir-senha" data-envio>
+        <input type="hidden" name="token" value={token} />
+        <div class:list={['campo', erro && 'campo--erro']}>
+          <label class="campo__rotulo" for="senha">{T.campo}</label>
+          <div class="campo__caixa campo__caixa--com-botao">
+            <input class="campo__entrada" id="senha" name="new_password" type="password" required minlength="10" maxlength="256"
+              autocomplete="new-password" aria-describedby={erro ? 'senha-erro senha-regra' : 'senha-regra'}
+              aria-invalid={erro ? 'true' : undefined} autofocus={erro ? true : undefined} />
+            <button class="campo__revelar" type="button" data-revelar="senha" aria-pressed="false" aria-label={T.mostrar} hidden>
+              <Icone nome="visibility" />
+            </button>
+          </div>
+          {erro && (
+            <p class="campo__erro" id="senha-erro"><Icone nome="warning" /><span>{erro}</span></p>
+          )}
+          <p class="campo__ajuda" id="senha-regra">{T.regra}</p>
+        </div>
+      </form>
+    </>
+  )}
+  {tela.tela === 'nao-conferiu' && (
+    <Estado icone="wifi_off" titulo={T.naoConferiuTitulo}>
+      <p class="estado__texto">{T.naoConferiuTexto}</p>
+    </Estado>
+  )}
+  {tela.tela === 'expirado' && (
+    <Estado icone="schedule" titulo={T.expiradoTitulo}>
+      <p class="estado__texto">{T.expiradoTexto}</p>
+    </Estado>
+  )}
+  {tela.tela === 'alterada' && (
+    <Estado icone="check_circle" tom="sucesso" titulo={T.alteradaTitulo}>
+      <p class="estado__texto">{T.alteradaTexto}</p>
+    </Estado>
+  )}
+  {tela.tela === 'espere' && (
+    <Estado icone="hourglass" titulo={COMUM_PUBLICO.espereTitulo}>
+      <p class="estado__texto">{COMUM_PUBLICO.espereTexto(espera(tela.esperaSegundos))}</p>
+    </Estado>
+  )}
+  {tela.tela === 'fora-do-ar' && (
+    <Estado icone="schedule" titulo={COMUM_PUBLICO.foraDoArTitulo}>
+      <p class="estado__texto">{COMUM_PUBLICO.foraDoArTexto}</p>
+    </Estado>
+  )}
+  {tela.tela === 'erro' && (
+    <Estado icone="error" titulo={COMUM_PUBLICO.erroTitulo}>
+      <p class="estado__texto">{COMUM_PUBLICO.erroTexto}</p>
+      {tela.correlationId && <p class="estado__codigo"><code>{tela.correlationId}</code></p>}
+    </Estado>
+  )}
+  <Fragment slot="acao">
+    {mostraFormulario && (
+      <div class="acao">
+        <BotaoEnviar form="form-senha" rotulo={tela.tela === 'nao-salvou' ? T.tentarDeNovo : T.botao} enviando={T.enviando} />
+        <p class="acao__nota">{T.abaixoDoBotao}</p>
+      </div>
+    )}
+    {tela.tela === 'nao-conferiu' && (
+      <div class="acao">
+        <a class="botao botao--primario botao--largo" href={`/redefinir-senha?token=${encodeURIComponent(token)}`}>{T.tentarDeNovo}</a>
+      </div>
+    )}
+  </Fragment>
+  {mostraFormulario && <ScriptDeEnvio />}
+</Publica>

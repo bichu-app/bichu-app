@@ -8,10 +8,30 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build",
-    "start": "node servidor.mjs"
+    "start": "node servidor.mjs",
+    "check": "astro check",
+    "generate:api": "node scripts/gerar-tipos-da-api.mjs",
+    "verify:api": "node scripts/gerar-tipos-da-api.mjs --verificar && node scripts/isca-api.mjs",
+    "generate:tokens": "node scripts/gerar-tokens-css.mjs",
+    "verify:tokens": "node scripts/gerar-tokens-css.mjs --verificar && node scripts/isca-tokens.mjs",
+    "verify:valores-soltos": "node scripts/verificar-valores-soltos.mjs",
+    "test:unidade": "node --experimental-strip-types --test tests/unidade/",
+    "test:e2e": "playwright test",
+    "verify:orcamento": "node scripts/orcamento.mjs",
+    "mock": "node tests/mock/servidor-mock.mjs"
   },
   "dependencies": {
     "@astrojs/node": "11.1.6",
-    "astro": "7.3.4"
+    "astro": "7.3.4",
+    "openapi-fetch": "0.17.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.10",
+    "@axe-core/playwright": "4.13.0",
+    "@playwright/test": "1.63.0",
+    "@types/node": "22.20.4",
+    "openapi-typescript": "7.13.0",
+    "typescript": "5.9.3",
+    "yaml": "2.9.1"
   }
 }

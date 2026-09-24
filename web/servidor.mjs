@@ -51,10 +51,56 @@ const TIPOS = {
   '.woff2': 'font/woff2',
 };
 
+// Producao e so o host canonico. Em qualquer outro (homologacao, local, CI),
+// toda resposta sai com `X-Robots-Tag: noindex` (ADR-0028, item 11, e ADR-0029):
+// e o que impede a copia de homologacao de entrar no indice sem depender de
+// cada pagina lembrar.
+const PRODUCAO = (() => {
+  try {
+    return new URL(process.env.SITE_BASE_URL ?? '').hostname === 'bichu.app';
+  } catch {
+    return false;
+  }
+})();
+
+const FRAME = "frame-ancestors 'none'";
+
+// `frame-ancestors` nao vale em <meta>, entao ele sai daqui em toda resposta.
+// Nas rotas do servidor o Astro escreve a propria CSP no mesmo cabecalho, e ela
+// sobrescreveria esta: por isso a diretiva e costurada em qualquer CSP que o
+// Astro mandar, em vez de so definida antes.
+function comFrameAncestors(valor) {
+  const texto = Array.isArray(valor) ? valor.join('; ') : String(valor ?? '');
+  if (/frame-ancestors/i.test(texto)) return texto;
+  const base = texto.trim().replace(/;\s*$/, '');
+  return base ? `${base}; ${FRAME}` : FRAME;
+}
+
 function cabecalhosDeSeguranca(res) {
-  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+  res.setHeader('Content-Security-Policy', FRAME);
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  if (!PRODUCAO) res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+
+  const setHeader = res.setHeader.bind(res);
+  res.setHeader = (nome, valor) => {
+    const n = String(nome).toLowerCase();
+    if (n === 'content-security-policy') return setHeader(nome, comFrameAncestors(valor));
+    if (n === 'x-robots-tag' && !PRODUCAO) return setHeader(nome, 'noindex, nofollow');
+    return setHeader(nome, valor);
+  };
+  const writeHead = res.writeHead.bind(res);
+  res.writeHead = (status, ...resto) => {
+    const cabecalhos = resto.find((r) => r && typeof r === 'object');
+    if (cabecalhos && !Array.isArray(cabecalhos)) {
+      for (const nome of Object.keys(cabecalhos)) {
+        if (nome.toLowerCase() === 'content-security-policy') cabecalhos[nome] = comFrameAncestors(cabecalhos[nome]);
+        // Fora de producao o noindex do servidor prevalece sobre o da pagina.
+        if (!PRODUCAO && nome.toLowerCase() === 'x-robots-tag') cabecalhos[nome] = 'noindex, nofollow';
+      }
+    }
+    return writeHead(status, ...resto);
+  };
 }
 
 // Resolve o caminho pedido DENTRO de `dist/client`, ou devolve null. Caminho
