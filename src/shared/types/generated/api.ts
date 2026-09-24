@@ -2572,6 +2572,45 @@ export interface components {
              *     vem de quem nao tem conta (SEC-001).
              */
             photo_upload_ref?: string;
+            /**
+             * @description Sem faixa e sem obrigatoriedade, como estava antes de 23/09/2026.
+             *     A versao do achador sem conta (`FinderFoundReportEnrichment`) usa
+             *     `GeoPoint`; se o app tambem deve passar a `GeoPoint` e decisao
+             *     pendente do app, porque mudar aqui quebra quem ja envia.
+             */
+            location?: {
+                /** Format: double */
+                lat?: number;
+                /** Format: double */
+                lon?: number;
+                accuracy_m?: number;
+            };
+            /**
+             * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
+             *     para avisar a resposta do tutor e o desfecho do caso.
+             */
+            finder_contact?: {
+                display_name?: string;
+                /** Format: email */
+                email?: string;
+            };
+        };
+        /**
+         * @description O corpo de `enrichFinderFoundReport`, do achador sem conta. Mesmos
+         *     campos de `FoundReportEnrichment`, com uma diferenca: `location` e
+         *     `GeoPoint`, com a faixa do territorio e `lat`/`lon` obrigatorios
+         *     juntos. Existe separado porque `FoundReportEnrichment` e tambem o corpo
+         *     de `enrichFoundReport`, que o app ja usa, e apertar la quebraria esse
+         *     consumidor (13 quebras no `oasdiff` do commit 19ee222).
+         */
+        FinderFoundReportEnrichment: {
+            message?: string;
+            /**
+             * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+             *     (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+             *     vem de quem nao tem conta (SEC-001).
+             */
+            photo_upload_ref?: string;
             location?: components["schemas"]["GeoPoint"];
             /**
              * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
@@ -5315,7 +5354,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FoundReportEnrichment"];
+                "application/json": components["schemas"]["FinderFoundReportEnrichment"];
             };
         };
         responses: {

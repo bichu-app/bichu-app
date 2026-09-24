@@ -2451,7 +2451,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: { $ref: '#/components/schemas/FoundReportEnrichment' }
+            schema: { $ref: '#/components/schemas/FinderFoundReportEnrichment' }
       responses:
         '200':
           description: Aviso complementado.
@@ -5025,8 +5025,45 @@ components:
             (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
             vem de quem nao tem conta (SEC-001).
         location:
+          type: object
+          description: |
+            Sem faixa e sem obrigatoriedade, como estava antes de 23/09/2026.
+            A versao do achador sem conta (`FinderFoundReportEnrichment`) usa
+            `GeoPoint`; se o app tambem deve passar a `GeoPoint` e decisao
+            pendente do app, porque mudar aqui quebra quem ja envia.
+          properties:
+            lat: { type: number, format: double }
+            lon: { type: number, format: double }
+            accuracy_m: { type: integer }
+        finder_contact:
+          type: object
+          description: |
+            Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
+            para avisar a resposta do tutor e o desfecho do caso.
+          properties:
+            display_name: { type: string, maxLength: 60 }
+            email: { type: string, format: email }
+
+    FinderFoundReportEnrichment:
+      type: object
+      description: |
+        O corpo de `enrichFinderFoundReport`, do achador sem conta. Mesmos
+        campos de `FoundReportEnrichment`, com uma diferenca: `location` e
+        `GeoPoint`, com a faixa do territorio e `lat`/`lon` obrigatorios
+        juntos. Existe separado porque `FoundReportEnrichment` e tambem o corpo
+        de `enrichFoundReport`, que o app ja usa, e apertar la quebraria esse
+        consumidor (13 quebras no `oasdiff` do commit 19ee222).
+      properties:
+        message: { type: string, maxLength: 1000 }
+        photo_upload_ref:
+          type: string
+          pattern: '^[A-Za-z0-9_-]{22}$'
+          description: |
+            O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+            (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+            vem de quem nao tem conta (SEC-001).
+        location:
           $ref: '#/components/schemas/GeoPoint'
-          # A mesma faixa de todo ponto do produto (territorio brasileiro).
           # Latitude sem longitude nao e ponto, e por isso as duas sao
           # obrigatorias quando `location` vem.
         finder_contact:
