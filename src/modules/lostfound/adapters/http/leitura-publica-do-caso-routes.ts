@@ -14,8 +14,8 @@
  *   uma coisa: saber se quem chama é o tutor, e esconder dele o botão "vi este
  *   pet". Token presente e inválido RECUSA, pela mesma razão da rota da tag
  *   (`tag-routes.ts`, `chamadorOpcional`): rebaixar para anônimo esconderia do
- *   app que a sessão acabou. O cartaz ignora o cabeçalho, porque o papel é igual
- *   para todo mundo.
+ *   app que a sessão acabou. O cartaz declara `security: []` e não lê o
+ *   cabeçalho: o papel é igual para todo mundo.
  * - **`Cache-Control: no-store` nas duas.** A página varia com quem chama, e um
  *   cache compartilhado que guardasse a versão do tutor serviria
  *   `can_report_sighting: false` ao vizinho. O cache de 60 s do ADR-0028 é do

@@ -5,8 +5,8 @@
  * tutor (ver a porta). O que esta camada acrescenta são três regras:
  *
  * 1. **Texto livre passa pela redação do canal mediado NA SAÍDA.** O contrato
- *    diz que `description` "passa pela mesma redação de contato das mensagens",
- *    e `reward_note` idem. A redação deveria acontecer antes de gravar
+ *    diz que `description` "passa pela mesma redação de contato das mensagens".
+ *    A redação deveria acontecer antes de gravar
  *    (`shared/redaction/redigir.ts`), e para `care_notes` acontece; para
  *    `lost_cases.description` e `pets.distinctive_marks`, hoje, não acontece.
  *    Enquanto a gravação não redigir, a superfície pública redige, e redige
@@ -16,10 +16,11 @@
  *    privilegiado").
  * 2. **Os links são as páginas do site** (ADR-0017, quadro das oito rotas):
  *    `/p/{shareToken}` é a página do caso e `/cartaz/{shareToken}` o cartaz.
- * 3. **`area_label` nunca sai vazio.** O banco admite caso aberto só com
- *    coordenada (BICHUS-21 critério 5), e o contrato declara o campo
- *    obrigatório. A coordenada não vira rótulo (não há geocodificação no MVP) e
- *    nunca sai; o que sai é um rótulo fixo, honesto sobre a ausência.
+ * 3. **`area_label` é nulo quando o caso só tem coordenada** (BICHUS-21
+ *    critério 5). A coordenada não vira rótulo (não há geocodificação no MVP)
+ *    e nunca sai. O texto que a tela mostra nesse caso é do cliente: um rótulo
+ *    fixo dentro de um campo de dado seria indistinguível de um bairro com esse
+ *    nome (contrato, `PublicLostPet.area_label`).
  */
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import { rotuloDaArea } from './abertura-do-caso.js';
@@ -29,8 +30,6 @@ import type { CasoPublico } from '../ports/leitura-publica-do-caso.js';
 
 type PublicLostCase = components['schemas']['PublicLostCase'];
 type LostCasePoster = components['schemas']['LostCasePoster'];
-
-export const ROTULO_DE_AREA_NAO_INFORMADA = 'Região não informada';
 
 export interface BasesPublicas {
   /** Onde o site mora: de onde saem o link do caso e o do cartaz. */
@@ -71,13 +70,11 @@ function urlDaFoto(caso: CasoPublico, baseDeMidia: AbsoluteUrl): string | null {
   return caso.chaveDaFoto === null ? null : `${semBarraNoFim(baseDeMidia)}/${caso.chaveDaFoto}`;
 }
 
-function rotuloPublicoDaArea(caso: CasoPublico): string {
-  return (
-    rotuloDaArea({
-      city: caso.cidade ?? undefined,
-      neighborhood: caso.bairro ?? undefined,
-    }) ?? ROTULO_DE_AREA_NAO_INFORMADA
-  );
+function rotuloPublicoDaArea(caso: CasoPublico): string | null {
+  return rotuloDaArea({
+    city: caso.cidade ?? undefined,
+    neighborhood: caso.bairro ?? undefined,
+  });
 }
 
 /**
@@ -111,13 +108,13 @@ export function projecaoPublicaDoCaso(caso: CasoPublico, bases: BasesPublicas): 
 /**
  * `LostCasePoster`, campo a campo como o contrato declara.
  *
- * - `reward_note` sai nulo: não existe coluna nem operação que o grave. Nulo é
- *   o valor verdadeiro, e o contrato o declara anulável.
+ * - Não há campo de recompensa. O ADR-0010 proíbe recompensa em qualquer forma,
+ *   e `reward_note` saiu do contrato em 23/09/2026.
  * - `short_url` é o endereço da página do caso. Não há encurtador no produto, e
  *   o `/p/{shareToken}` é o endereço mais curto que leva ao canal mediado.
  * - `photo_url` é a derivada `card`, a única que a superfície pública mostra
- *   (migração de `pet_photos`). O contrato pede resolução de impressão, e essa
- *   derivada não existe; a divergência está registrada na entrega.
+ *   (migração de `pet_photos`). O contrato fixa essa derivada, de 1024 px, para
+ *   o cartaz desde 23/09/2026.
  */
 export function cartazDoCaso(caso: CasoPublico, bases: BasesPublicas): LostCasePoster {
   return {
@@ -130,7 +127,6 @@ export function cartazDoCaso(caso: CasoPublico, bases: BasesPublicas): LostCaseP
     lost_since: caso.vistoPorUltimoEm.toISOString(),
     area_label: rotuloPublicoDaArea(caso),
     photo_url: urlDaFoto(caso, bases.baseDeMidia),
-    reward_note: null,
     short_url: linksDoCaso(bases.baseDaWeb, caso.shareToken).shareUrl,
   };
 }

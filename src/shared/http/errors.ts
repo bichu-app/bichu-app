@@ -469,13 +469,15 @@ export const problemas = {
    * aconteceu com o animal de outra pessoa, e o reencontro é o desfecho que
    * menos precisa virar notícia para quem só viu um cartaz.
    *
-   * O tipo é `conversation-closed` pelo mesmo motivo de `avisoEncerrado`: é o
-   * único 410 do vocabulário fechado do contrato que significa "isto terminou".
-   * O `next_action` é o do ADR-0004 para a tag desativada: quem chegou aqui pode
-   * estar com um animal parecido no colo, e não pode dar num beco sem saída.
+   * O tipo é `lost-case-closed` (`components/responses/LostCaseClosed`), e não
+   * `conversation-closed`, que é da conversa do achador: o site e o app decidem
+   * a tela pelo `type`, e quem abre um cartaz não está numa conversa. O
+   * `next_action` é o que o contrato declara, o mesmo do ADR-0004 para a tag
+   * desativada: quem chegou aqui pode estar com um animal parecido no colo, e
+   * não pode dar num beco sem saída.
    */
   casoPublicoEncerrado: (): AppError =>
-    new AppError('conversation-closed', 'Este caso não está mais aberto', {
+    new AppError('lost-case-closed', 'Este caso não está mais aberto', {
       detail: 'Se você encontrou um animal, registre o achado para a vizinhança ver.',
       nextAction: 'register_stray_found_report',
     }),

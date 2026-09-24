@@ -19,7 +19,6 @@ import {
   cartazDoCaso,
   linksDoCaso,
   projecaoPublicaDoCaso,
-  ROTULO_DE_AREA_NAO_INFORMADA,
 } from './projecao-publica-do-caso.js';
 
 const BASES = {
@@ -91,9 +90,12 @@ void describe('projeção pública do caso (PublicLostCase)', () => {
     assert.equal(projecaoPublicaDoCaso(caso({ chaveDaFoto: null }), BASES).photo_url, null);
   });
 
-  void it('caso aberto só com coordenada ainda tem area_label, que o contrato exige', () => {
-    const corpo = projecaoPublicaDoCaso(caso({ cidade: null, bairro: null }), BASES);
-    assert.equal(corpo.area_label, ROTULO_DE_AREA_NAO_INFORMADA);
+  void it('caso aberto só com coordenada sai com area_label nulo, e não com um rótulo inventado', () => {
+    // O contrato tornou o campo anulável em 23/09: rótulo fixo dentro de um
+    // campo de dado é indistinguível de um bairro com esse nome. O texto da
+    // tela é do cliente.
+    assert.equal(projecaoPublicaDoCaso(caso({ cidade: null, bairro: null }), BASES).area_label, null);
+    assert.equal(cartazDoCaso(caso({ cidade: null, bairro: null }), BASES).area_label, null);
   });
 
   void it('telefone, e-mail e endereço escritos em texto livre saem redigidos', () => {
@@ -124,7 +126,6 @@ void describe('cartaz do caso (LostCasePoster)', () => {
       lost_since: '2026-09-20T18:30:00.000Z',
       area_label: 'Pinheiros, São Paulo',
       photo_url: 'https://midia.exemplo.invalid/pets/abc/card/f00d.webp',
-      reward_note: null,
       short_url: `https://web.exemplo.invalid/p/${TOKEN}`,
     });
   });
@@ -134,6 +135,8 @@ void describe('cartaz do caso (LostCasePoster)', () => {
     assert.equal('share_token' in corpo, false);
     assert.equal('description' in corpo, false);
     assert.equal('care_notes' in corpo, false);
+    // ADR-0010: nenhuma recompensa, em nenhuma forma.
+    assert.equal('reward_note' in corpo, false);
   });
 
   void it('marcas com telefone saem redigidas: o cartaz é colado em poste', () => {

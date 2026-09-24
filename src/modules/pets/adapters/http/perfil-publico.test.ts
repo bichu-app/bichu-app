@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { carregarContrato } from '../../../../shared/http/contract.js';
+import { vigiarParametrosDasRotas } from '../../../../shared/http/validacao-de-parametros.js';
 import { criarServidor } from '../../../../shared/http/server.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import {
@@ -73,6 +74,7 @@ function perfilHostil(parcial: Partial<PerfilPublicoDoPet> = {}): PerfilPublicoD
 function montar(resposta: PerfilPublicoDoPet | undefined): {
   app: RegistradorDeRotas;
   slugs: string[];
+  conferirParametros: () => void;
 } {
   const slugs: string[] = [];
   const app = criarServidor({
@@ -80,6 +82,8 @@ function montar(resposta: PerfilPublicoDoPet | undefined): {
     isProduction: false,
     teto: tetoDeTeste(),
   });
+  // O mesmo par de `src/bin/api.ts`: sem ele não há o 400 do `pattern` do slug.
+  const conferirParametros = vigiarParametrosDasRotas(app, carregarContrato('api/openapi.yaml'), '/v1');
   void app.register(
     (escopo, _opcoes, pronto) => {
       registrarRotaDoPerfilPublico(escopo, {
@@ -95,7 +99,7 @@ function montar(resposta: PerfilPublicoDoPet | undefined): {
     },
     { prefix: '/v1' },
   );
-  return { app, slugs };
+  return { app, slugs, conferirParametros };
 }
 
 async function pedir(
@@ -156,5 +160,42 @@ void describe('getPublicPetBySlug: o que o contrato declara', () => {
     const resposta = await pedir(montar(perfilHostil()).app, SLUG);
     assert.equal(resposta.cabecalhos['cache-control'], 'no-store');
     assert.equal(resposta.cabecalhos['x-robots-tag'], 'noindex, nofollow');
+  });
+});
+
+void describe('getPublicPetBySlug: os status emitidos são os que o contrato declara', () => {
+  function declara(status: number): boolean {
+    const respostas = carregarContrato('api/openapi.yaml').operacoes.get('getPublicPetBySlug')?.raw['responses'];
+    return typeof respostas === 'object' && respostas !== null && String(status) in respostas;
+  }
+
+  void it('a bancada instala a validação de parâmetro sem queixa de subida', async () => {
+    const bancada = montar(perfilHostil());
+    await bancada.app.ready();
+    assert.doesNotThrow(() => {
+      bancada.conferirParametros();
+    });
+  });
+
+  void it('200, 400 (slug fora do pattern) e 404 emitidos e declarados', async () => {
+    const emitidos = new Set<number>();
+    emitidos.add((await pedir(montar(perfilHostil()).app, SLUG)).status);
+    const foraDoFormato = montar(perfilHostil());
+    emitidos.add((await pedir(foraDoFormato.app, 'Com_Maiuscula')).status);
+    assert.deepEqual(foraDoFormato.slugs, [], 'slug fora do formato chegou ao manipulador');
+    emitidos.add((await pedir(montar(undefined).app, SLUG)).status);
+
+    assert.deepEqual([...emitidos].sort(), [200, 400, 404]);
+    for (const status of emitidos) assert.ok(declara(status), `emite ${String(status)} e não o declara`);
+  });
+
+  void it('acima do teto de 60/h, a resposta sai com status declarado', async () => {
+    // O contrato declara 429 (`challenge` sem `X-Captcha-Token`, ADR-0020), e
+    // `aplicacao-de-teto.ts` hoje deixa `challenge` passar. Cobra-se só que o
+    // status seja um dos declarados; a divergência está fora deste PR.
+    const { app } = montar(perfilHostil());
+    let ultima = 0;
+    for (let i = 0; i < 61; i += 1) ultima = (await pedir(app, SLUG)).status;
+    assert.ok(declara(ultima), `a 61ª saiu com ${String(ultima)}, que o contrato não declara`);
   });
 });

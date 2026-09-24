@@ -36,6 +36,7 @@ import {
 } from '../../../../shared/http/vazamento-publico.js';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { problemas } from '../../../../shared/http/errors.js';
+import { vigiarParametrosDasRotas } from '../../../../shared/http/validacao-de-parametros.js';
 import type { AbsoluteUrl, UserId } from '../../../../shared/types/brands.js';
 import { LeituraPublicaDoCasoService } from '../../application/leitura-publica-do-caso.js';
 import type { CasoPublico, LeituraPublicaDoCaso } from '../../ports/leitura-publica-do-caso.js';
@@ -105,6 +106,7 @@ interface Bancada {
   readonly app: RegistradorDeRotas;
   readonly contrato: Contrato;
   readonly chamadas: { token: string; chamador: UserId | undefined }[];
+  readonly conferirParametros: () => void;
 }
 
 function montar(resposta: (chamador: UserId | undefined) => CasoPublico | undefined): Bancada {
@@ -121,6 +123,9 @@ function montar(resposta: (chamador: UserId | undefined) => CasoPublico | undefi
     isProduction: false,
     teto: tetoDeTeste(),
   });
+  // O mesmo par de `src/bin/api.ts`: sem ele a bancada não exercita o 400 de
+  // parâmetro, que é um dos status que o contrato declara.
+  const conferirParametros = vigiarParametrosDasRotas(app, contrato, '/v1');
   void app.register(
     (escopo, _opcoes, pronto) => {
       registrarRotasDaLeituraPublicaDoCaso(escopo, {
@@ -140,7 +145,7 @@ function montar(resposta: (chamador: UserId | undefined) => CasoPublico | undefi
     },
     { prefix: '/v1' },
   );
-  return { app, contrato, chamadas };
+  return { app, contrato, chamadas, conferirParametros };
 }
 
 interface Resposta {
@@ -248,7 +253,7 @@ void describe('getPublicLostCase: o que o contrato declara', () => {
     const resposta = await pedir(montar(() => casoHostil({ aberto: false })), URL_DO_CASO);
     assert.equal(resposta.status, 410);
     assert.match(resposta.tipo ?? '', /^application\/problem\+json/);
-    assert.equal(resposta.corpo['type'], 'https://api.exemplo.invalid/problems/conversation-closed');
+    assert.equal(resposta.corpo['type'], `https://api.exemplo.invalid/problems/${slugDoCasoEncerrado()}`);
     assert.equal(resposta.corpo['status'], 410);
     assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
   });
@@ -282,7 +287,9 @@ void describe('getLostCasePoster: o que o contrato declara', () => {
     assert.equal(resposta.status, 200);
     assert.equal(resposta.corpo['pet_display_name'], 'Thor');
     assert.equal(resposta.corpo['short_url'], `https://web.exemplo.invalid/p/${TOKEN}`);
-    assert.equal(resposta.corpo['reward_note'], null);
+    // ADR-0010: nenhuma recompensa, em nenhuma forma. O campo saiu do contrato
+    // em 23/09 e não pode voltar pela porta dos fundos.
+    assert.equal('reward_note' in resposta.corpo, false);
   });
 
   void it('o cartaz ignora quem chama: a porta recebe chamador indefinido mesmo com token', async () => {
@@ -291,12 +298,120 @@ void describe('getLostCasePoster: o que o contrato declara', () => {
     assert.deepEqual(bancada.chamadas, [{ token: TOKEN, chamador: undefined }]);
   });
 
+  void it('o cartaz nem lê o token: um token inválido continua respondendo 200, e não 401', async () => {
+    // `security: []` desde 23/09, e o contrato não declara 401 aqui. Se a rota
+    // passar a autenticar, este caso reprova antes de a resposta sair com um
+    // status que a especificação não promete.
+    const resposta = await pedir(montar(() => casoHostil()), URL_DO_CARTAZ, 'token-vencido');
+    assert.equal(resposta.status, 200);
+  });
+
   void it('caso encerrado e token desconhecido: 410 com next_action', async () => {
     for (const resposta of [
       await pedir(montar(() => casoHostil({ aberto: false })), URL_DO_CARTAZ),
       await pedir(montar(() => undefined), URL_DO_CARTAZ),
     ]) {
       assert.equal(resposta.status, 410);
+      assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
+    }
+  });
+});
+
+/**
+ * O `type` que o contrato promete no 410 das duas operações, lido do exemplo de
+ * `components/responses/LostCaseClosed`. É daqui, e não de uma string escrita
+ * neste arquivo, que o esperado vem: foi uma string escrita à mão
+ * (`conversation-closed`) que deixou o código e o contrato divergirem sem que
+ * nenhum teste acusasse.
+ */
+function slugDoCasoEncerrado(): string {
+  const spec = carregarContrato('api/openapi.yaml').spec as {
+    components?: { responses?: Record<string, { content?: Record<string, { examples?: Record<string, { value?: { type?: unknown } }> }> }> };
+  };
+  const exemplos = spec.components?.responses?.['LostCaseClosed']?.content?.['application/problem+json']?.examples;
+  const tipo = Object.values(exemplos ?? {})[0]?.value?.type;
+  if (typeof tipo !== 'string') {
+    throw new Error('O contrato não declara exemplo com `type` em LostCaseClosed: não há contra o que comparar.');
+  }
+  return tipo.slice(tipo.lastIndexOf('/') + 1);
+}
+
+function declara(contrato: Contrato, operationId: string, status: number): boolean {
+  const respostas = contrato.operacoes.get(operationId)?.raw['responses'];
+  return typeof respostas === 'object' && respostas !== null && String(status) in respostas;
+}
+
+/**
+ * Todo status que as duas rotas emitem está declarado, e o 410 aponta para
+ * `LostCaseClosed`. O caminho é o da bancada inteira (validação de parâmetro e
+ * teto de chamada ligados), e não uma lista de status copiada do contrato.
+ */
+void describe('os status que as rotas do caso emitem são os que o contrato declara', () => {
+  const TOKEN_CURTO = 'curto';
+
+  void it('a bancada instala a validação de parâmetro sem queixa de subida', async () => {
+    const bancada = montar(() => casoHostil());
+    await bancada.app.ready();
+    assert.doesNotThrow(() => {
+      bancada.conferirParametros();
+    });
+  });
+
+  void it('getPublicLostCase: 200, 400, 401 e 410 emitidos e declarados; acima do teto, só status declarado', async () => {
+    const emitidos = new Set<number>();
+    emitidos.add((await pedir(montar(() => casoHostil()), URL_DO_CASO)).status);
+    emitidos.add((await pedir(montar(() => casoHostil()), `/v1/public/lost-cases/${TOKEN_CURTO}`)).status);
+    emitidos.add((await pedir(montar(() => casoHostil()), URL_DO_CASO, 'token-vencido')).status);
+    emitidos.add((await pedir(montar(() => undefined), URL_DO_CASO)).status);
+
+    assert.deepEqual([...emitidos].sort(), [200, 400, 401, 410]);
+
+    // Acima do teto de 120/h. O contrato declara 429 porque `challenge` sem
+    // `X-Captcha-Token` degenera em `deny_429` (ADR-0020), mas
+    // `aplicacao-de-teto.ts` hoje só recusa em `deny_429` e deixa `challenge`
+    // passar. O que se cobra aqui é que a 121ª saia com status DECLARADO, seja
+    // qual for dos dois; a divergência entre a política e a borda está no
+    // relatório da entrega, fora deste PR.
+    const bancada = montar(() => casoHostil());
+    let ultima = 0;
+    for (let i = 0; i < 121; i += 1) ultima = (await pedir(bancada, URL_DO_CASO)).status;
+    emitidos.add(ultima);
+    const contrato = carregarContrato('api/openapi.yaml');
+    for (const status of emitidos) {
+      assert.ok(declara(contrato, 'getPublicLostCase', status), `getPublicLostCase emite ${String(status)} e não o declara`);
+    }
+  });
+
+  void it('getLostCasePoster: 200, 400 e 410 emitidos e declarados; o teto não recusa', async () => {
+    const emitidos = new Set<number>();
+    emitidos.add((await pedir(montar(() => casoHostil()), URL_DO_CARTAZ)).status);
+    emitidos.add((await pedir(montar(() => casoHostil()), `/v1/public/lost-cases/${TOKEN_CURTO}/poster`)).status);
+    emitidos.add((await pedir(montar(() => undefined), URL_DO_CARTAZ)).status);
+
+    // `serve_cache` não recusa: acima do teto de 60/h continua 200, e por isso
+    // o contrato não declara 429 aqui.
+    const bancada = montar(() => casoHostil());
+    let ultima = 0;
+    for (let i = 0; i < 61; i += 1) ultima = (await pedir(bancada, URL_DO_CARTAZ)).status;
+    emitidos.add(ultima);
+
+    assert.deepEqual([...emitidos].sort(), [200, 400, 410]);
+    const contrato = carregarContrato('api/openapi.yaml');
+    for (const status of emitidos) {
+      assert.ok(declara(contrato, 'getLostCasePoster', status), `getLostCasePoster emite ${String(status)} e não o declara`);
+    }
+  });
+
+  void it('o 410 das duas é LostCaseClosed no contrato, e o type emitido é o dele', async () => {
+    const contrato = carregarContrato('api/openapi.yaml');
+    for (const [operationId, url] of [
+      ['getPublicLostCase', URL_DO_CASO],
+      ['getLostCasePoster', URL_DO_CARTAZ],
+    ] as const) {
+      const respostas = contrato.operacoes.get(operationId)?.raw['responses'] as Record<string, { $ref?: string }>;
+      assert.equal(respostas['410']?.$ref, '#/components/responses/LostCaseClosed');
+      const resposta = await pedir(montar(() => undefined), url);
+      assert.equal(resposta.corpo['type'], `https://api.exemplo.invalid/problems/${slugDoCasoEncerrado()}`);
       assert.equal(resposta.corpo['next_action'], 'register_stray_found_report');
     }
   });

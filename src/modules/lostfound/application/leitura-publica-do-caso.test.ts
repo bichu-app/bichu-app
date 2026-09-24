@@ -75,7 +75,7 @@ void describe('leitura pública do caso: 200 ou 410', () => {
   void it('caso encerrado responde 410 com next_action', async () => {
     const problema = await problemaDe(servico(caso({ aberto: false })).caso(TOKEN, undefined));
     assert.equal(problema.status, 410);
-    assert.equal(problema.problemType, 'conversation-closed');
+    assert.equal(problema.problemType, 'lost-case-closed');
     assert.equal(problema.nextAction, 'register_stray_found_report');
   });
 
