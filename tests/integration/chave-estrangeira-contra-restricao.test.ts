@@ -578,6 +578,45 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // catalogo e RECUSADO por `catalog_images_upload_intent_id_fkey`. Para conta
   // dedicada, que nao entra no app e nao pede exclusao por ele, isso e trava e
   // nao perda; a decisao de desligar o envio da conta e do dono do ADR-0027.
+  // ADR-0027 A.2.1 (BICHUS-267). Especie, tags e imagens do item. As tres
+  // ligacoes a partir do ITEM sao CASCADE, e o que some junto e so a ligacao:
+  // o item nunca e apagado pelo painel (retirar nao apaga), entao a cascata so
+  // anda num expurgo operacional. As ligacoes para o OUTRO lado (especie, tag,
+  // imagem) sao NO ACTION: apagar uma especie, uma tag ou uma imagem que um
+  // item usa precisa falhar, como apagar uma raca com pet apontando.
+  'public.store_item_species.store_item_species_item_id_fkey': {
+    colunas: ['item_id'],
+    referencia: 'public.store_items',
+    aoApagar: 'CASCADE',
+    levaJunto: 'as especies do item apagado. Catalogo, sem dado de pessoa.',
+  },
+  'public.store_item_species.store_item_species_species_fkey': {
+    colunas: ['species'],
+    referencia: 'public.ref_species',
+    aoApagar: 'NO ACTION',
+  },
+  'public.store_item_tags.store_item_tags_item_id_fkey': {
+    colunas: ['item_id'],
+    referencia: 'public.store_items',
+    aoApagar: 'CASCADE',
+    levaJunto: 'as ligacoes do item apagado com o vocabulario. A tag fica.',
+  },
+  'public.store_item_tags.store_item_tags_tag_id_fkey': {
+    colunas: ['tag_id'],
+    referencia: 'public.store_tags',
+    aoApagar: 'NO ACTION',
+  },
+  'public.store_item_images.store_item_images_item_id_fkey': {
+    colunas: ['item_id'],
+    referencia: 'public.store_items',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a ordem e o texto alternativo das imagens do item apagado. A imagem em catalog_images fica.',
+  },
+  'public.store_item_images.store_item_images_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
   'public.catalog_images.catalog_images_upload_intent_id_fkey': {
     colunas: ['upload_intent_id'],
     referencia: 'public.upload_intents',

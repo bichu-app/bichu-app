@@ -14,14 +14,21 @@
 -- - A.3: `catalog_images`, na forma de `pet_photos`.
 -- - A.3: `upload_intents` aceita `catalog_image`, com `purpose` obrigatorio
 --   nele e proibido nos demais.
+-- - A.2.1 (item 16, pedido do cliente de 23/09): especie em
+--   `store_item_species`, vocabulario curado em `store_tags` ligado por
+--   `store_item_tags`, e ate 8 imagens por item em `store_item_images`, com
+--   texto alternativo obrigatorio e a principal em `position = 0`.
 --
 -- O QUE ELA NAO FAZ, E A AUSENCIA E DELIBERADA:
 --
--- - **Nao cria `store_items.image_id`** (A.2). Em 23/09 o cliente pediu varias
---   imagens por produto, e a arquitetura vai trocar a coluna unica por uma
---   tabela de imagens do produto. Criar a coluna agora seria criar o que a
---   emenda vai apagar. `catalog_images` e o envio ficam, porque os dois servem
---   aos dois desenhos e a capa do encontro da `Rede` tambem depende deles.
+-- - **Nao cria `store_items.image_id`.** A versao anterior do apendice A.2 a
+--   previa, e o item 16 a substituiu por `store_item_images` antes de ela ser
+--   migrada. `store_items.image_url` (URL externa da massa) continua, e item
+--   com ela nao tem linha em `store_item_images` (regra do caso de uso: um
+--   `CHECK` nao conta linhas de outra tabela).
+-- - **Os tetos de 5 tags por item e de 40 tags ativas sao do caso de uso**, na
+--   mesma transacao da escrita. O de 8 imagens e do banco: `position` de 0 a 7
+--   com unicidade por item.
 -- - **Nenhuma coluna de autor.** Quem criou e quem mudou esta em
 --   `audit.events`, o unico lugar onde isso e imutavel (A.2).
 -- - **Nao toca `network_events`.** A tabela nasce na migracao da `Rede`
@@ -138,7 +145,89 @@ COMMENT ON COLUMN store_items.published_at IS
 COMMENT ON COLUMN store_items.active IS
   'Esta na vitrine agora. O padrao `true` e da massa; o item escrito pelo painel nasce `false` (rascunho).';
 
+-- ---------------------------------------------------------------------------
+-- Especie, tags e imagens do item (A.2.1, item 16)
+-- ---------------------------------------------------------------------------
+
+-- Os valores de `ref_species`, os mesmos do cadastro de pet: o app filtra a
+-- vitrine pela especie dos pets do tutor sem traduzir uma lista na outra. A
+-- chave estrangeira para `code` de dado de referencia e a forma que o portao
+-- da BICHUS-19 admite.
+CREATE TABLE store_item_species (
+  item_id  uuid NOT NULL REFERENCES store_items (id) ON DELETE CASCADE,
+  species  text NOT NULL REFERENCES ref_species (code),
+  PRIMARY KEY (item_id, species)
+);
+
+CREATE INDEX store_item_species_por_especie ON store_item_species (species, item_id);
+
+COMMENT ON TABLE store_item_species IS
+  'A que especies o item serve (1 a 3, regra do caso de uso na criacao e na publicacao). Valores de ref_species.';
+
+-- O vocabulario curado. O `slug` e a chave de normalizacao (sem acento,
+-- minusculo): e o indice unico dele que recusa a segunda grafia do mesmo
+-- rotulo. Formato COPIADO de `store_items.slug`.
+CREATE TABLE store_tags (
+  id          uuid        PRIMARY KEY,
+  slug        text        NOT NULL
+              CONSTRAINT store_tags_slug_formato
+              CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'),
+  label       text        NOT NULL
+              CONSTRAINT store_tags_rotulo_tem_tamanho
+              CHECK (char_length(btrim(label)) BETWEEN 2 AND 24),
+  active      boolean     NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  version     integer     NOT NULL DEFAULT 1
+              CONSTRAINT store_tags_versao_positiva CHECK (version > 0)
+);
+
+CREATE UNIQUE INDEX store_tags_slug_unico ON store_tags (slug);
+
+COMMENT ON COLUMN store_tags.id IS
+  'Identidade interna. NUNCA sai em resposta: a tag sai pelo `slug`.';
+COMMENT ON COLUMN store_tags.slug IS
+  'Derivado do rotulo: NFKD, sem marca diacritica, minusculo, espaco vira hifen. Unico, entao duas grafias do mesmo rotulo sao a mesma tag.';
+
+-- Chave estrangeira para `id`, nunca para `slug` (ADR-0024): renomear a tag
+-- troca o `slug`, e a ligacao nao pode depender dele.
+CREATE TABLE store_item_tags (
+  item_id  uuid NOT NULL REFERENCES store_items (id) ON DELETE CASCADE,
+  tag_id   uuid NOT NULL REFERENCES store_tags (id),
+  PRIMARY KEY (item_id, tag_id)
+);
+
+CREATE INDEX store_item_tags_por_tag ON store_item_tags (tag_id, item_id);
+
+-- Ate 8 imagens por item, ordenadas. A principal e `position = 0`, e nao ha
+-- sinalizador de principal: dois lugares para dizer qual e a principal divergem
+-- na primeira troca. A unicidade de `(item_id, position)` e DIFERIDA para que
+-- reordenar seja um conjunto de UPDATE na mesma transacao sem colidir no meio.
+CREATE TABLE store_item_images (
+  item_id   uuid     NOT NULL REFERENCES store_items (id) ON DELETE CASCADE,
+  image_id  uuid     NOT NULL UNIQUE REFERENCES catalog_images (id),
+  position  smallint NOT NULL
+            CONSTRAINT store_item_images_posicao
+            CHECK (position BETWEEN 0 AND 7),
+  alt_text  text     NOT NULL
+            CONSTRAINT store_item_images_texto_alternativo_tem_tamanho
+            CHECK (char_length(btrim(alt_text)) BETWEEN 2 AND 150),
+  PRIMARY KEY (item_id, image_id),
+  CONSTRAINT store_item_images_ordem_unica
+    UNIQUE (item_id, position) DEFERRABLE INITIALLY DEFERRED
+);
+
+COMMENT ON COLUMN store_item_images.alt_text IS
+  'Texto alternativo, obrigatorio em TODA posicao: a obrigacao acompanha a imagem que vira principal numa reordenacao.';
+COMMENT ON COLUMN store_item_images.position IS
+  '0 e a principal (a da lista da Loja). Ate 7: o teto de 8 imagens e este CHECK somado a unicidade por item.';
+
 -- Down Migration
+
+DROP TABLE IF EXISTS store_item_images;
+DROP TABLE IF EXISTS store_item_tags;
+DROP TABLE IF EXISTS store_tags;
+DROP TABLE IF EXISTS store_item_species;
 
 ALTER TABLE store_items
   DROP CONSTRAINT IF EXISTS store_items_publicado_tem_data,

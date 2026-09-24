@@ -944,6 +944,37 @@ export interface StoreItemsTable {
   published_at: Date | null;
 }
 
+/** A que especies o item serve (ADR-0027 A.2.1). Valores de `ref_species`. */
+export interface StoreItemSpeciesTable {
+  item_id: string;
+  species: 'dog' | 'cat' | 'other';
+}
+
+/** O vocabulario curado de tags da Loja (ADR-0027 A.2.1). */
+export interface StoreTagsTable {
+  /** Identidade interna. Nunca projetada em resposta. */
+  id: string;
+  slug: string;
+  label: string;
+  active: Generated<boolean>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  version: Generated<number>;
+}
+
+export interface StoreItemTagsTable {
+  item_id: string;
+  tag_id: string;
+}
+
+/** Ate 8 imagens por item; `position = 0` e a principal (ADR-0027 A.2.1). */
+export interface StoreItemImagesTable {
+  item_id: string;
+  image_id: string;
+  position: number;
+  alt_text: string;
+}
+
 /** A imagem de catalogo (ADR-0027 A.3). Mesma forma de `pet_photos`. */
 export interface CatalogImagesTable {
   /** Identidade interna. Nunca projetada em resposta. */
@@ -997,6 +1028,10 @@ export interface Database {
   store_partners: StorePartnersTable;
   store_items: StoreItemsTable;
   catalog_images: CatalogImagesTable;
+  store_item_species: StoreItemSpeciesTable;
+  store_tags: StoreTagsTable;
+  store_item_tags: StoreItemTagsTable;
+  store_item_images: StoreItemImagesTable;
   'audit.events': AuditEventsTable;
 }
 

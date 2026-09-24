@@ -449,6 +449,11 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
   'public.store_partners.store_partners_slug_formato':
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  // ADR-0027 A.2.1 (BICHUS-267). O vocabulario de tags usa o MESMO formato de
+  // endereco publico do item e do parceiro: o `slug` da tag e o parametro de
+  // filtro do app e o de caminho do painel.
+  'public.store_tags.store_tags_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
   // https e nao http: o destino e uma pagina de comercio, e um link em claro
   // numa vitrine nossa e uma recomendacao nossa de digitar dado em canal
   // aberto.
