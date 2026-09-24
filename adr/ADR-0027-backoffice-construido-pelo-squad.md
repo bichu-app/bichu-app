@@ -630,7 +630,86 @@ motivo no item citado:
 | Aviso de login | dispositivo ou rede nova | toda sessão | 5 |
 | Mídia anexada | só já processada | anexada em processamento, servida só pronta | 10 |
 
-### 16. Fronteira da v1
+### 16. O produto da `Loja` ganha espécie, tags e várias imagens (pedido do cliente, 23/09)
+
+**Espécie: os três valores que o produto já usa, e múltipla escolha.** O item
+declara `species`, um conjunto de um a três valores de `Species` (`dog`,
+`cat`, `other`), guardado em `store_item_species` com chave estrangeira para
+`ref_species (code)`. São os mesmos valores do cadastro de pet, e é isso que
+decide: o app filtra a vitrine pela espécie dos pets do tutor sem traduzir uma
+lista na outra, e uma espécie nova entra nos dois lugares ao mesmo tempo, pelo
+caminho de lista fechada. Uma lista mais granular só na `Loja` (ave, peixe,
+roedor) teria valores que nenhum pet cadastrado tem, e seria uma segunda
+taxonomia da mesma coisa, que é o que diverge. `other` é "outros pets",
+genérico de propósito, porque é o que `pets.species` guarda. **Não vai
+pergunta ao cliente:** se ele quiser espécies mais finas, a pergunta é para o
+cadastro de pet primeiro, e a `Loja` acompanha. Espécie é obrigatória na
+criação; produto que serve a todas declara as três.
+
+**Tags: vocabulário curado, e o item só referencia.** Texto livre no item
+foi recusado por dois motivos. Primeiro, é conteúdo publicado sem revisão
+nenhuma, digitado no meio de outro formulário. Segundo, texto livre não
+filtra: `Ração`, `racao` e `ração ` viram três filtros. O desenho:
+
+- a tag nasce **uma vez**, por operação própria (`createAdminStoreTag`), com
+  trilha própria (`admin.store_tag.created`);
+- o rótulo tem **2 a 24 caracteres**, só letras, dígitos, espaço e hífen
+  (conferido no servidor: nada de URL, e-mail ou símbolo); o servidor apara as
+  pontas e junta espaços;
+- o `slug` é derivado do rótulo: NFKD, sem marca diacrítica, minúsculo, espaço
+  vira hífen. **Unicidade é pelo `slug`**, então duas grafias do mesmo rótulo
+  são a mesma tag, e a segunda é recusada com `409 slug-taken`;
+- **até 5 tags por item**; **até 40 tags ativas** no vocabulário, porque um
+  filtro com duzentas opções não filtra;
+- não há exclusão: desativar tira a tag do app (do item e do filtro) e a
+  mantém ligada, para voltar sem refazer.
+
+O que contém o risco de conteúdo é a soma: o vocabulário é pequeno, cada
+entrada passa por uma operação auditada que só um `admin` alcança, o conjunto
+de caracteres não comporta link, e todo administrador vê a lista inteira na
+tela do vocabulário. **O app filtra por uma tag de cada vez** (`tag=<slug>`),
+combinada com categoria e espécie; tag inativa ou inexistente devolve a lista
+vazia, e não 400, para o link antigo continuar abrindo.
+
+**Várias imagens: tabela ordenada, a primeira é a principal.**
+`store_item_images` liga o item a até **8** imagens de `catalog_images`, com
+`position` de 0 a 7. **A principal é a de `position` 0**, e não há
+sinalizador de principal: dois lugares para dizer qual é a principal divergem
+na primeira troca. O painel manda `image_upload_ids` na ordem em que o app
+mostra, e **a lista substitui a anterior inteira**: reordenar é mandar a ordem
+nova, remover é omitir, `[]` tira todas. Uma escrita, uma transação, uma linha
+de trilha; operações separadas de acrescentar, remover e mover seriam três
+caminhos para o mesmo estado, cada um com a sua corrida.
+
+Isso **substitui** o `store_items.image_id` do apêndice A.2, que não chegou a
+ser migrado. `store_items.image_url` (URL externa, só da massa) continua;
+item com imagem externa não tem linha em `store_item_images`, e a regra é do
+caso de uso, porque um `CHECK` não conta linhas de outra tabela.
+
+**O que a leitura pública devolve.** A lista (`listStoreItems`) continua
+trazendo **só a principal**, no `image_url` que já existe, para não pesar a
+vitrine. O detalhe é **operação nova**, `GET /v1/store/items/{itemSlug}`
+(`getStoreItem`), pública pelas mesmas razões da lista, com **todas as imagens
+prontas** em ordem. Imagem em processamento ou recusada nunca sai. Rascunho,
+retirado, inexistente e parceiro inativo respondem o mesmo 404 (ADR-0021). O
+preço vencido sai sem valor, como na lista.
+
+**Operações que mudam no painel:** `createAdminStoreItem` e
+`updateAdminStoreItem` (`species`, `tag_slugs`, `image_upload_ids` no lugar de
+`image_upload_id`); `AdminStoreItem` (`species`, `tags`, `images` no lugar de
+`image`); `listAdminStoreItems` (filtros `species` e `tag`). Novas:
+`listAdminStoreTags`, `createAdminStoreTag`, `updateAdminStoreTag`.
+
+**Nota de impacto para o app** (outra sessão): (1) `StoreItemSummary` ganha
+`species` e `tags`, **opcionais até a implementação**, e o app trata ausência
+como "não informado", nunca como "serve a todas"; (2) `listStoreItems` ganha
+os filtros `species` e `tag`, declarados antes do código, e **o app só
+oferece esses filtros depois de o backend os implementar**; (3) o cartão da
+lista não muda (`image_url` continua sendo a principal); (4) a tela de detalhe
+passa a chamar `getStoreItem` para a galeria. Nada do que a demonstração de
+30/09 usa muda de forma: tudo é acréscimo.
+
+### 17. Fronteira da v1
 
 Fora, sem desenho aqui: `Perto` no painel (o contrato de escrita do ADR-0023 e
 o do ADR-0026 continuam referência; levá-lo ao painel reabre o RA-01);
@@ -725,12 +804,41 @@ Nas duas:
 | `updated_at` | `timestamptz` | `NOT NULL DEFAULT now()` |
 | `version` | `integer` | `NOT NULL DEFAULT 1 CHECK (version > 0)`, incrementada a cada escrita; é o `ETag` |
 
-Só em `store_items`: `image_id uuid REFERENCES catalog_images (id)`, nulo, com
-`CHECK (num_nonnulls(image_url, image_id) <= 1)`; e `published_at timestamptz`,
+Só em `store_items`: `published_at timestamptz`,
 nulo, a primeira publicação, com `CHECK (NOT active OR published_at IS NOT NULL)`.
 A massa grava `published_at` junto com `active = true`. Nenhuma coluna de autor:
 quem criou e quem mudou está em `audit.events`, o único lugar onde isso é
 imutável.
+
+### A.2.1 Espécie, tags e imagens do item (item 16)
+
+`store_item_species`: `item_id uuid NOT NULL REFERENCES store_items (id) ON
+DELETE CASCADE`, `species text NOT NULL REFERENCES ref_species (code)`,
+`PRIMARY KEY (item_id, species)`. Chave estrangeira para `code` de dado de
+referência é a forma que o portão da BICHUS-19 admite. Pelo menos uma espécie
+é regra do caso de uso (criação e publicação).
+
+`store_tags`: `id uuid` PK; `slug text NOT NULL` com o formato de `Slug` e
+`CREATE UNIQUE INDEX store_tags_slug_unico ON store_tags (slug)`; `label text
+NOT NULL CHECK (char_length(btrim(label)) BETWEEN 2 AND 24)`; `active boolean
+NOT NULL DEFAULT true`; `created_at`, `updated_at`, `version` como em A.2. O
+`slug` é a chave de normalização (sem acento, minúsculo): é o índice único
+dele que recusa a segunda grafia. O teto de 40 ativas é do caso de uso.
+
+`store_item_tags`: `item_id uuid NOT NULL REFERENCES store_items (id) ON DELETE
+CASCADE`, `tag_id uuid NOT NULL REFERENCES store_tags (id)`, `PRIMARY KEY
+(item_id, tag_id)`. Chave estrangeira para `id`, nunca para `slug` (ADR-0024).
+O teto de 5 por item é do caso de uso, na mesma transação da escrita.
+
+`store_item_images`: `item_id uuid NOT NULL REFERENCES store_items (id) ON
+DELETE CASCADE`, `image_id uuid NOT NULL UNIQUE REFERENCES catalog_images
+(id)`, `position smallint NOT NULL CHECK (position BETWEEN 0 AND 7)`,
+`PRIMARY KEY (item_id, image_id)`, e `CONSTRAINT store_item_images_ordem_unica
+UNIQUE (item_id, position) DEFERRABLE INITIALLY DEFERRED`, para que reordenar
+seja um conjunto de `UPDATE` na mesma transação sem colidir no meio. A imagem
+principal é `position = 0`. `catalog_images.purpose` precisa ser `store_item`
+(caso de uso). O teto de 8 é o próprio `CHECK` de `position` somado à
+unicidade.
 
 ### A.3 `catalog_images` (nova) e `upload_intents` (alteração)
 
@@ -795,7 +903,8 @@ Sem mudança de esquema. As ações novas entram na união `AuditAction`:
 `admin.guard.denied`, `admin.store_partner.created`,
 `admin.store_partner.updated`, `admin.store_item.created`,
 `admin.store_item.updated`, `admin.store_item.published`,
-`admin.store_item.retired`, `admin.network_event.created`,
+`admin.store_item.retired`, `admin.store_tag.created`,
+`admin.store_tag.updated`, `admin.network_event.created`,
 `admin.network_event.updated`, `admin.network_event.relocated`, `admin.network_event.cancelled`,
 `admin.network_event.removed`, `admin.catalog_image.intent_created`.
 

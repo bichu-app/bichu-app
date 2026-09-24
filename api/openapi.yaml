@@ -3367,6 +3367,17 @@ paths:
           in: query
           description: Filtra por categoria do produto.
           schema: { $ref: '#/components/schemas/StoreCategory' }
+        - name: species
+          in: query
+          description: |
+            Itens que servem a esta especie, entre outras (ADR-0027 item 16).
+            Declarado antes do codigo; o app so oferece o filtro depois de a
+            implementacao existir.
+          schema: { $ref: '#/components/schemas/Species' }
+        - name: tag
+          in: query
+          description: '`slug` de uma tag ativa. Tag inexistente ou inativa devolve a lista vazia, nao 400: a tag some do vocabulario e o link antigo continua abrindo.'
+          schema: { $ref: '#/components/schemas/Slug' }
         - name: sort
           in: query
           description: |
@@ -3392,6 +3403,46 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/StoreItemPage' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /store/items/{itemSlug}:
+    parameters:
+      - name: itemSlug
+        in: path
+        required: true
+        description: O endereco publico do item.
+        schema: { $ref: '#/components/schemas/Slug' }
+    get:
+      operationId: getStoreItem
+      tags: [store]
+      x-effects: []
+      summary: Um item da vitrine, com todas as imagens
+      description: |
+        O detalhe do item: o mesmo `StoreItemSummary` da lista, mais **todas as
+        imagens prontas**, na ordem do painel (ADR-0027 item 16). A lista
+        continua trazendo so a principal, em `image_url`, para nao pesar a
+        vitrine.
+
+        Publica, pela mesma razao de `listStoreItems`, e com as mesmas regras:
+        nenhum UUID sai, e o preco vencido **sai sem valor**, com
+        `price_status: vencido`. Item em rascunho, retirado, inexistente ou de
+        parceiro inativo responde **404 nos quatro casos**, com o mesmo corpo
+        (ADR-0021).
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "mesmo teto da lista: quem abre o detalhe veio dela"
+      responses:
+        '200':
+          description: O item.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreItemDetail' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   # ----------------------------------------------------------------------
@@ -4569,6 +4620,128 @@ paths:
         '428': { $ref: '#/components/responses/PreconditionRequired' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  /admin/store/tags:
+    get:
+      operationId: listAdminStoreTags
+      tags: [admin]
+      x-effects: []
+      summary: O vocabulario de tags da Loja
+      description: Todas as tags, ativas e inativas, com quantos itens cada uma tem.
+      security:
+        - adminSession: []
+      x-admin-roles: [admin]
+      parameters:
+        - name: q
+          in: query
+          schema: { type: string, minLength: 1, maxLength: 24 }
+        - name: active
+          in: query
+          schema: { type: boolean }
+        - $ref: '#/components/parameters/AdminPage'
+        - $ref: '#/components/parameters/AdminLimit'
+      responses:
+        '200':
+          description: Pagina do vocabulario, em ordem alfabetica.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreTagPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+    post:
+      operationId: createAdminStoreTag
+      tags: [admin]
+      x-effects: []
+      summary: Acrescenta uma tag ao vocabulario
+      description: |
+        **Tag e vocabulario curado, nao texto livre do item** (ADR-0027 item
+        17). Ela nasce aqui, uma vez, com rotulo conferido, e o item so a
+        referencia pelo `slug`. Teto de **40 tags ativas**: acima disso, `400`
+        (`code: tag_vocabulary_full`), porque um filtro com duzentas opcoes nao
+        filtra.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.store_tag.created, resource_kind: store_tag }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStoreTagInput' }
+            examples:
+              porte:
+                value: { label: Porte medio }
+      responses:
+        '201':
+          description: Tag criada, ativa.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreTag' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '409': { $ref: '#/components/responses/SlugTaken' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /admin/store/tags/{tagSlug}:
+    parameters:
+      - name: tagSlug
+        in: path
+        required: true
+        schema: { $ref: '#/components/schemas/Slug' }
+    patch:
+      operationId: updateAdminStoreTag
+      tags: [admin]
+      x-effects: []
+      summary: Renomeia ou desativa uma tag
+      description: |
+        Nao ha exclusao: desativar tira a tag do app (dos itens e do filtro) e a
+        mantem ligada aos itens, para voltar sem refazer nada. Renomear troca o
+        `slug` junto.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.store_tag.updated, resource_kind: store_tag }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      parameters:
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AdminStoreTagPatch' }
+      responses:
+        '200':
+          description: Tag alterada.
+          headers:
+            ETag: { $ref: '#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminStoreTag' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/SlugTaken' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '428': { $ref: '#/components/responses/PreconditionRequired' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /admin/store/items:
     get:
       operationId: listAdminStoreItems
@@ -4597,6 +4770,14 @@ paths:
         - name: publication_state
           in: query
           schema: { $ref: '#/components/schemas/AdminStoreItemPublicationState' }
+        - name: species
+          in: query
+          description: Itens que servem a esta especie (entre outras).
+          schema: { $ref: '#/components/schemas/Species' }
+        - name: tag
+          in: query
+          description: '`slug` de uma tag do vocabulario, ativa ou nao.'
+          schema: { $ref: '#/components/schemas/Slug' }
         - name: price_status
           in: query
           description: '`vencido` e o filtro de quem reconfere precos.'
@@ -4626,10 +4807,13 @@ paths:
         `publishAdminStoreItem`. `target_url` precisa terminar no host do
         parceiro (`400`, `code: host_mismatch`). O preco e objeto unico ou
         ausente: "preco sem data" nao cabe no corpo. `checked_at` no futuro e
-        recusado. A imagem, se houver, e um envio de
-        `createAdminCatalogImageIntent` com `purpose: store_item`; qualquer
-        outro envio e recusado com `400` (T9). **URL de imagem externa nao e
-        aceita** (ADR-0027 item 6).
+        recusado. As imagens, ate 8, sao envios de
+        `createAdminCatalogImageIntent` com `purpose: store_item`, na ordem em
+        que o app as mostra; a primeira e a principal. Qualquer outro envio e
+        recusado com `400` (T9). **URL de imagem externa nao e aceita**
+        (ADR-0027 item 6). `species` e obrigatoria (pelo menos uma); `tag_slugs`
+        so aceita tag que ja existe no vocabulario (`createAdminStoreTag`),
+        ate 5 (ADR-0027 item 16).
       security:
         - adminSession: []
           adminCsrf: []
@@ -4654,6 +4838,8 @@ paths:
                   title: Racao para cao adulto, 10 kg
                   summary: Racao seca para caes adultos de porte medio.
                   category: food
+                  species: [dog]
+                  tag_slugs: [porte-medio]
                   target_url: https://lojadobairro.com.br/racao-adulto-10kg
                   price: { amount: 18990, currency: BRL, checked_at: '2026-09-22' }
       responses:
@@ -4708,7 +4894,9 @@ paths:
       description: |
         Editar nao publica nem retira: o estado so muda pelas operacoes de
         `publication`. Renovar o preco e mandar `price` com `checked_at` novo;
-        `price: null` tira o preco. `image_upload_id: null` tira a imagem.
+        `price: null` tira o preco. `species`, `tag_slugs` e `image_upload_ids`
+        **substituem o conjunto inteiro**: reordenar imagens e mandar a lista na
+        ordem nova, remover e omitir, e `image_upload_ids: []` tira todas.
       security:
         - adminSession: []
           adminCsrf: []
@@ -5164,7 +5352,7 @@ paths:
         ADR-0007 a letra, com `kind = catalog_image` e `purpose` gravados no
         envio. O backend nunca recebe os bytes. JPEG, PNG e WebP; **SVG
         recusado sempre** (`415`). A confirmacao e a escrita do item
-        (`image_upload_id`) ou do encontro (`cover_upload_id`) com o mesmo
+        (`image_upload_ids`) ou do encontro (`cover_upload_id`) com o mesmo
         `purpose`; e ela que enfileira o processamento. A derivada publica so e
         servida pronta.
       security:
@@ -5745,7 +5933,12 @@ components:
         summary: Racao seca para caes adultos de porte medio.
         category: food
         target_url: https://lojadobairro.com.br/racao-adulto-10kg
-        image: { source: uploaded, status: ready, url: 'https://img.bichu.app/c/8f3a1c0e9b2d4f6a8c1e3b5d7f9a0c2e.webp' }
+        species: [dog]
+        tags:
+          - { slug: porte-medio, label: Porte medio, active: true }
+        images:
+          - { upload_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e70, position: 0, source: uploaded, status: ready, url: 'https://img.bichu.app/c/8f3a1c0e9b2d4f6a8c1e3b5d7f9a0c2e.webp' }
+          - { upload_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e71, position: 1, source: uploaded, status: processing, url: null }
         price: { amount: 18990, currency: BRL, checked_at: '2026-08-10', valid_until: '2026-09-09' }
         price_status: vencido
         publication_state: published
@@ -7097,7 +7290,10 @@ components:
           type: string
           format: uri
           nullable: true
-          description: Sempre https. Nulo e estado normal, e o cartao sabe se desenhar sem imagem.
+          description: |
+            Sempre https. **A imagem principal** (a primeira de
+            `StoreItemDetail.images`). Nulo e estado normal, e o cartao sabe se
+            desenhar sem imagem.
         target_url:
           type: string
           format: uri
@@ -7108,6 +7304,18 @@ components:
             embutida: webview com a nossa moldura em volta faz o Bichu parecer
             o vendedor.
         partner: { $ref: '#/components/schemas/StorePartnerRef' }
+        species:
+          type: array
+          items: { $ref: '#/components/schemas/Species' }
+          description: |
+            A que especies o produto serve (ADR-0027 item 16). Declarado em
+            23/09 antes do codigo: **opcional ate a implementacao**, e o app
+            trata ausencia como "nao informado", nunca como "serve a todas".
+        tags:
+          type: array
+          maxItems: 5
+          items: { $ref: '#/components/schemas/StoreTagRef' }
+          description: So tags ativas. Opcional ate a implementacao, como `species`.
         price_amount:
           type: integer
           nullable: true
@@ -7478,7 +7686,7 @@ components:
 
     AdminStoreItemInput:
       type: object
-      required: [slug, partner_slug, title, summary, category, target_url]
+      required: [slug, partner_slug, title, summary, category, species, target_url]
       additionalProperties: false
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
@@ -7499,10 +7707,9 @@ components:
         price:
           allOf:
             - $ref: '#/components/schemas/AdminPriceInput'
-        image_upload_id:
-          type: string
-          format: uuid
-          description: Envio de `createAdminCatalogImageIntent` com `purpose` `store_item`.
+        species: { $ref: '#/components/schemas/StoreItemSpeciesSet' }
+        tag_slugs: { $ref: '#/components/schemas/StoreItemTagSlugs' }
+        image_upload_ids: { $ref: '#/components/schemas/StoreItemImageUploadIds' }
         sort_order: { type: integer, minimum: -32768, maximum: 32767, default: 0 }
 
     AdminStoreItemPatch:
@@ -7523,14 +7730,14 @@ components:
           oneOf:
             - $ref: '#/components/schemas/AdminPriceInput'
             - type: 'null'
-        image_upload_id:
-          type: [string, 'null']
-          format: uuid
+        species: { $ref: '#/components/schemas/StoreItemSpeciesSet' }
+        tag_slugs: { $ref: '#/components/schemas/StoreItemTagSlugs' }
+        image_upload_ids: { $ref: '#/components/schemas/StoreItemImageUploadIds' }
         sort_order: { type: integer, minimum: -32768, maximum: 32767 }
 
     AdminStoreItem:
       type: object
-      required: [slug, partner, title, summary, category, target_url, price_status, publication_state, sort_order, created_at, updated_at, version]
+      required: [slug, partner, title, summary, category, species, tags, images, target_url, price_status, publication_state, sort_order, created_at, updated_at, version]
       properties:
         slug: { type: string }
         partner: { $ref: '#/components/schemas/StorePartnerRef' }
@@ -7538,10 +7745,17 @@ components:
         summary: { type: string }
         category: { $ref: '#/components/schemas/StoreCategory' }
         target_url: { type: string, format: uri }
-        image:
-          oneOf:
-            - $ref: '#/components/schemas/AdminCatalogImage'
-            - type: 'null'
+        species:
+          type: array
+          items: { $ref: '#/components/schemas/Species' }
+        tags:
+          type: array
+          items: { $ref: '#/components/schemas/AdminStoreTagRef' }
+        images:
+          type: array
+          maxItems: 8
+          description: Na ordem do app. `position` 0 e a principal. Vazia e estado normal.
+          items: { $ref: '#/components/schemas/AdminStoreItemImage' }
         price:
           description: Nulo quando o item nao tem preco. **Presente mesmo vencido.**
           oneOf:
@@ -7745,3 +7959,140 @@ components:
         applied_filters:
           type: object
           additionalProperties: { type: string }
+
+    StoreItemSpeciesSet:
+      type: array
+      minItems: 1
+      maxItems: 3
+      uniqueItems: true
+      description: |
+        A que especies o produto serve, uma ou mais. Os valores sao os de
+        `Species` (`ref_species`), os mesmos do cadastro de pet: e o que deixa o
+        app filtrar a vitrine pela especie dos pets do tutor sem traduzir uma
+        lista na outra. `other` e "outros pets", generico de proposito
+        (ADR-0027 item 16).
+      items: { $ref: '#/components/schemas/Species' }
+
+    StoreItemTagSlugs:
+      type: array
+      maxItems: 5
+      uniqueItems: true
+      description: |
+        Ate 5 tags do vocabulario curado (`createAdminStoreTag`). Tag que nao
+        existe e recusada com `400` (`code: unknown_tag`): tag nao nasce por
+        digitacao no formulario do item.
+      items: { $ref: '#/components/schemas/Slug' }
+
+    StoreItemImageUploadIds:
+      type: array
+      maxItems: 8
+      uniqueItems: true
+      description: |
+        Ate 8 envios de `createAdminCatalogImageIntent` com `purpose`
+        `store_item`, **na ordem em que o app os mostra**. O primeiro e a
+        imagem principal, a da lista. A lista substitui a anterior inteira.
+      items: { type: string, format: uuid }
+
+    AdminStoreItemImage:
+      allOf:
+        - $ref: '#/components/schemas/AdminCatalogImage'
+        - type: object
+          required: [upload_id, position]
+          properties:
+            upload_id:
+              type: string
+              format: uuid
+              description: O identificador que o painel devolve em `image_upload_ids` para manter, reordenar ou remover esta imagem.
+            position: { type: integer, minimum: 0, maximum: 7 }
+
+    AdminStoreTagRef:
+      type: object
+      required: [slug, label, active]
+      properties:
+        slug: { type: string }
+        label: { type: string }
+        active:
+          type: boolean
+          description: Tag inativa continua ligada ao item, e some do app.
+
+    AdminStoreTagInput:
+      type: object
+      required: [label]
+      additionalProperties: false
+      properties:
+        label:
+          type: string
+          minLength: 2
+          maxLength: 24
+          description: |
+            Como o app mostra. Letras, digitos, espaco e hifen, e nada mais
+            (conferido no servidor, `code: tag_charset`). O servidor apara as
+            pontas e junta espacos repetidos. O `slug` e derivado: sem acento,
+            minusculo, espaco vira hifen. **Dois rotulos que dao o mesmo `slug`
+            sao a mesma tag** (`Racao` e `racao` e `Ração`): o segundo e recusado
+            com `409 slug-taken`.
+
+    AdminStoreTagPatch:
+      type: object
+      additionalProperties: false
+      minProperties: 1
+      properties:
+        label:
+          type: string
+          minLength: 2
+          maxLength: 24
+          description: Trocar o rotulo troca o `slug` junto, e o novo nao pode colidir.
+        active: { type: boolean }
+
+    AdminStoreTag:
+      type: object
+      required: [slug, label, active, item_count, created_at, updated_at, version]
+      properties:
+        slug: { type: string }
+        label: { type: string }
+        active: { type: boolean }
+        item_count: { type: integer, description: Itens ligados a tag, em qualquer estado. }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        version: { type: integer, minimum: 1 }
+
+    AdminStoreTagPage:
+      type: object
+      required: [items, page, limit, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AdminStoreTag' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+
+    StoreTagRef:
+      type: object
+      required: [slug, label]
+      properties:
+        slug: { type: string }
+        label: { type: string }
+
+    StoreItemImage:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: A derivada publica, sempre pronta. Imagem em processamento ou recusada nunca aparece aqui.
+
+    StoreItemDetail:
+      allOf:
+        - $ref: '#/components/schemas/StoreItemSummary'
+        - type: object
+          required: [images]
+          properties:
+            images:
+              type: array
+              maxItems: 8
+              description: |
+                Todas as imagens prontas, na ordem do painel; a primeira e a
+                mesma de `image_url`. Vazia e estado normal.
+              items: { $ref: '#/components/schemas/StoreItemImage' }
