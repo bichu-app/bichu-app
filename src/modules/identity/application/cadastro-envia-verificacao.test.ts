@@ -117,6 +117,11 @@ function contaRecemCriada(): Conta {
 }
 
 class RepositorioDeCadastro implements IdentityRepository {
+  /** D42 (BICHUS-259): as contas deste dublê sao todas de tutor. */
+  papeisDaConta(): Promise<readonly string[]> {
+    return Promise.resolve(['tutor']);
+  }
+
   public readonly contasCriadas: NovaConta[] = [];
   public readonly tokensGravados: NovoTokenDeVerificacao[] = [];
   public readonly familiasAbertas: NovoRefresh[] = [];

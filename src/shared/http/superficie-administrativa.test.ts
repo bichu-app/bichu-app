@@ -25,7 +25,7 @@ import {
 } from './superficie-administrativa.js';
 import { tetoDeTeste } from './teto-de-teste.js';
 
-const ORIGEM = 'https://admin.bichu.app';
+const ORIGEM = 'https://painel.exemplo.test';
 const BASE = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
 const rotaDeEntrar = defineRoute({
@@ -76,6 +76,7 @@ function sessao(token: string, csrf: string, papeis: readonly string[]): SessaoA
     papeis,
     csrfTokenHash: hashDeToken(csrf),
     etiqueta: '0011223344556677',
+    instanteDaSenha: new Date(),
     idleExpiresAt: new Date(),
     absoluteExpiresAt: new Date(),
   };
@@ -195,8 +196,8 @@ void describe('guarda do prefixo /v1/admin', () => {
     const { app, recusas } = bancada();
     const casos: Cabecalhos[] = [
       { ...ESCRITA_CERTA, origin: '' },
-      { ...ESCRITA_CERTA, origin: 'https://bichu.app' },
-      { ...ESCRITA_CERTA, origin: 'https://hml.bichu.app' },
+      { ...ESCRITA_CERTA, origin: 'https://exemplo.test' },
+      { ...ESCRITA_CERTA, origin: 'https://hml.exemplo.test' },
       { ...ESCRITA_CERTA, 'x-csrf-token': '' },
       { ...ESCRITA_CERTA, 'x-csrf-token': 'csrf-outra-0123456789abcdef0123456789' },
     ];
@@ -261,7 +262,7 @@ void describe('guarda do prefixo /v1/admin', () => {
     const irmao = await app.inject({
       method: 'POST',
       url: '/v1/admin/teste/entrar',
-      headers: cabecalhos({ origin: 'https://bichu.app' }),
+      headers: cabecalhos({ origin: 'https://exemplo.test' }),
     });
     assert.equal(irmao.statusCode, 403);
     const certo = await app.inject({ method: 'POST', url: '/v1/admin/teste/entrar', headers: cabecalhos({ origin: ORIGEM }) });
@@ -283,7 +284,7 @@ void describe('guarda do prefixo /v1/admin', () => {
 
   void it('nenhuma resposta do prefixo traz Access-Control-Allow-* (D34)', async () => {
     const { app } = bancada();
-    for (const origin of ['https://evil.example', 'https://bichu.app']) {
+    for (const origin of ['https://evil.example', 'https://exemplo.test']) {
       for (const method of ['GET', 'POST', 'OPTIONS'] as const) {
         const resposta = await app.inject({
           method,
@@ -390,7 +391,7 @@ void describe('fronteira de registro do prefixo administrativo', () => {
       () =>
         escoparRotasAdministrativas(
           {} as RegistradorDeRotas,
-          { origem: 'https://admin.bichu.app/', sessoes: {} as PortaDaSessaoAdministrativa },
+          { origem: 'https://painel.exemplo.test/', sessoes: {} as PortaDaSessaoAdministrativa },
           () => {},
         ),
       /ADMIN_ORIGIN/,

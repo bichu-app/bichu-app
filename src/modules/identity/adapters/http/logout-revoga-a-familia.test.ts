@@ -145,6 +145,11 @@ function contaAtiva(): Conta {
  *    não é erro.
  */
 class RepositorioFalso implements IdentityRepository {
+  /** D42 (BICHUS-259): as contas deste dublê sao todas de tutor. */
+  papeisDaConta(): Promise<readonly string[]> {
+    return Promise.resolve(['tutor']);
+  }
+
   public readonly revogacoes: { familyId: string; motivo: MotivoDeRevogacao; agora: Instant }[] = [];
   /**
    * A isca do "sair de todos os aparelhos disfarçado". Fica como lista, e não
