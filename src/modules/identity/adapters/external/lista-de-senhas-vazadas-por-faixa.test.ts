@@ -22,7 +22,7 @@ const OUTRO = 'F'.repeat(35);
 function buscaQueResponde(corpo: string, status = 200) {
   const pedidos: { url: string; init: RequestInit | undefined }[] = [];
   const buscar: Buscar = (url, init) => {
-    pedidos.push({ url: String(url), init });
+    pedidos.push({ url: url instanceof Request ? url.url : url.toString(), init });
     return Promise.resolve(new Response(corpo, { status }));
   };
   return { buscar, pedidos };
