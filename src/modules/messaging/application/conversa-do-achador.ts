@@ -16,13 +16,11 @@
  *   4. validade: caso aberto, ou 30 dias do aviso, ou 30 dias depois do
  *      encerramento (`acesso-do-achador.ts`).
  *
- * Os passos 1 a 3 respondem **403** do mesmo jeito, que é o único status de
- * recusa de credencial que o contrato declara nestas operações; distinguir
- * "malformado" de "não existe" diria a quem tenta que chegou perto. O passo 4
- * responde **410** na leitura e no envio, porque ali o token existiu e quem o
- * tem é quem ajudou: ele merece saber que a conversa terminou, e como. No
- * bloqueio e na denúncia ele responde 403, que é o único status de recusa que
- * aquelas duas operações declaram.
+ * Os passos 1 a 3 respondem `finder-link-invalid` (401) com o mesmo corpo:
+ * distinguir "malformado" de "não existe" diria a quem tenta que chegou perto.
+ * O passo 4 responde `conversation-closed` (410) com corpo FIXO, nas quatro
+ * operações: o token existiu, e responder 401 diria que ele nunca valeu. O
+ * corpo não conta o desfecho do caso (ver `problemas.acessoDoAchadorVencido`).
  *
  * ## O que nunca sai daqui
  *
@@ -51,7 +49,6 @@ import {
 } from '../domain/conversa-mediada.js';
 import {
   codificarCursorDoAchador,
-  desfechoParaQuemAchou,
   tokenBemFormado,
   tokenDoAchadorVale,
 } from '../domain/acesso-do-achador.js';
@@ -174,7 +171,7 @@ export class ConversaDoAchadorService {
    * quem bloqueia o que o outro lado fez.
    */
   async bloquear(token: string, origem: OrigemDoPedido): Promise<void> {
-    const { conversa, resumo } = await this.resolverValida(token, 'recusar');
+    const { conversa, resumo } = await this.resolverValida(token);
     await this.deps.repositorio.bloquearPeloAchador(resumo, this.deps.clock.now());
     await this.deps.trilha.record({
       actorKind: 'anonymous',
@@ -198,7 +195,7 @@ export class ConversaDoAchadorService {
     detalhe: string | undefined,
     origem: OrigemDoPedido,
   ): Promise<void> {
-    const { conversa } = await this.resolverValida(token, 'recusar');
+    const { conversa } = await this.resolverValida(token);
     await this.deps.repositorio.registrarDenuncia({
       id: this.deps.ids.uuidv7(),
       conversationId: conversa.id,
@@ -253,7 +250,7 @@ export class ConversaDoAchadorService {
     return mensagem.body;
   }
 
-  /** Passos 1 a 3 do cabeçalho. `undefined` é sempre 403 para quem chama. */
+  /** Passos 1 a 3 do cabeçalho. `undefined` é sempre `finder-link-invalid` para quem chama. */
   private async resolver(token: string): Promise<Resolvida | undefined> {
     if (!tokenBemFormado(token)) return undefined;
     const resumo = hashDeToken(token);
@@ -270,26 +267,11 @@ export class ConversaDoAchadorService {
     );
   }
 
-  /**
-   * Os quatro passos, lançando o problema que cada um responde.
-   *
-   * `vencido` escolhe o que o token vencido vira, porque o contrato decide por
-   * operação: a leitura e o envio declaram 410 (e a leitura promete o
-   * desfecho); o bloqueio e a denúncia declaram só 403, e responder um 410 ali
-   * seria um status que o documento não promete.
-   */
-  private async resolverValida(
-    token: string,
-    vencido: 'contar-o-desfecho' | 'recusar' = 'contar-o-desfecho',
-  ): Promise<Resolvida> {
+  /** Os quatro passos, lançando o problema que cada um responde. */
+  private async resolverValida(token: string): Promise<Resolvida> {
     const resolvida = await this.resolver(token);
-    if (resolvida === undefined) throw problemas.semPermissao();
-    if (!this.vale(resolvida.conversa)) {
-      if (vencido === 'recusar') throw problemas.semPermissao();
-      throw problemas.acessoDoAchadorVencido(
-        desfechoParaQuemAchou(resolvida.conversa.caso?.desfecho ?? null, resolvida.conversa.petDisplayName),
-      );
-    }
+    if (resolvida === undefined) throw problemas.linkDoAchadorInvalido();
+    if (!this.vale(resolvida.conversa)) throw problemas.acessoDoAchadorVencido();
     return resolvida;
   }
 

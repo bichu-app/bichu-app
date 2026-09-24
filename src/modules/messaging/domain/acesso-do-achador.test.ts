@@ -10,7 +10,6 @@ import type { Instant } from '../../../shared/types/brands.js';
 import {
   codificarCursorDoAchador,
   decodificarCursorDoAchador,
-  desfechoParaQuemAchou,
   tokenBemFormado,
   tokenDoAchadorVale,
 } from './acesso-do-achador.js';
@@ -32,32 +31,19 @@ void describe('"valido enquanto o caso estiver aberto mais 30 dias"', () => {
   void it('com o caso ABERTO, continua valendo depois do 30º dia', () => {
     // É o caso que a coluna sozinha erraria: o animal ainda está na rua, e a
     // conversa pararia de funcionar exatamente quando mais importa.
-    const caso = { aberto: true, encerradoEm: null, desfecho: null };
+    const caso = { aberto: true, encerradoEm: null };
     assert.equal(tokenDoAchadorVale({ expiraEm: EXPIRA, caso }, em(90)), true);
   });
 
   void it('com o caso encerrado, vale mais 30 dias a partir do encerramento', () => {
-    const caso = { aberto: false, encerradoEm: comoData(em(60)), desfecho: 'reunited' as const };
+    const caso = { aberto: false, encerradoEm: comoData(em(60)) };
     assert.equal(tokenDoAchadorVale({ expiraEm: EXPIRA, caso }, em(89)), true);
     assert.equal(tokenDoAchadorVale({ expiraEm: EXPIRA, caso }, em(91)), false);
   });
 
   void it('caso encerrado cedo não encurta os 30 dias do aviso', () => {
-    const caso = { aberto: false, encerradoEm: comoData(em(1)), desfecho: 'reunited' as const };
+    const caso = { aberto: false, encerradoEm: comoData(em(1)) };
     assert.equal(tokenDoAchadorVale({ expiraEm: EXPIRA, caso }, em(29)), true);
-  });
-});
-
-void describe('o desfecho para quem ajudou', () => {
-  void it('o reencontro é contado com o nome do pet', () => {
-    assert.match(desfechoParaQuemAchou('reunited', 'Aurora'), /Aurora voltou para casa/);
-  });
-
-  void it('os outros desfechos não contam o estado do caso de outra pessoa', () => {
-    const naoEncontrado = desfechoParaQuemAchou('not_found', 'Aurora');
-    const alarmeFalso = desfechoParaQuemAchou('false_alarm', 'Aurora');
-    assert.equal(naoEncontrado, alarmeFalso);
-    assert.doesNotMatch(naoEncontrado, /Aurora/);
   });
 });
 

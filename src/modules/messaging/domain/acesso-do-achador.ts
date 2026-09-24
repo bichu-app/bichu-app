@@ -28,6 +28,13 @@
  * edita nem se apaga, só cai inteira junto com a conversa), então a posição é
  * estável entre duas páginas.
  *
+ * ## O desfecho do caso não mora aqui
+ *
+ * Nada neste arquivo sabe como o caso terminou, e a ausência é a regra: o
+ * link é um bearer e pode ter sido repassado, e o 410 do link vencido tem
+ * corpo fixo (`problemas.acessoDoAchadorVencido`). Um texto por desfecho
+ * contaria, por exclusão, o que aconteceu com o animal de outra pessoa.
+ *
  * ## O token tem forma
  *
  * 32 bytes em base64url, 43 caracteres (`IdGenerator.opaqueToken`). O que não
@@ -48,13 +55,9 @@ export function tokenBemFormado(token: string): boolean {
   return FORMATO_DO_TOKEN.test(token);
 }
 
-/** Os três desfechos de `lost_cases.closure_outcome`. */
-export type DesfechoDoCaso = 'reunited' | 'not_found' | 'false_alarm';
-
 export interface CasoDaConversa {
   readonly aberto: boolean;
   readonly encerradoEm: Date | null;
-  readonly desfecho: DesfechoDoCaso | null;
 }
 
 export interface ValidadeDoToken {
@@ -72,23 +75,6 @@ export function tokenDoAchadorVale(validade: ValidadeDoToken, agora: Instant): b
   if (caso.aberto) return true;
   if (caso.encerradoEm === null) return false;
   return agora < caso.encerradoEm.getTime() + DIAS_DE_LEITURA_DEPOIS_DO_ENCERRAMENTO * DIA_EM_MS;
-}
-
-/**
- * O desfecho para quem ajudou, quando o token já não abre a conversa.
- *
- * Só o reencontro é contado com o nome do pet. "Não encontrado" e "alarme
- * falso" são estado do caso de outra pessoa, e quem achou não precisa saber
- * qual dos dois foi para entender que a conversa acabou.
- */
-export function desfechoParaQuemAchou(desfecho: DesfechoDoCaso | null, nomeDoPet: string | null): string {
-  if (desfecho === 'reunited') {
-    const nome = (nomeDoPet ?? '').trim();
-    return nome === ''
-      ? 'O tutor marcou que o pet voltou para casa. Obrigado por ajudar.'
-      : `O tutor marcou que ${nome} voltou para casa. Obrigado por ajudar.`;
-  }
-  return 'Este caso foi encerrado e a conversa não está mais aberta.';
 }
 
 const PREFIXO_DO_CURSOR = 'p:';

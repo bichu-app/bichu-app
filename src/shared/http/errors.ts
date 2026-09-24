@@ -25,6 +25,12 @@ interface AppErrorOptions {
   /** Contexto interno para o log. **Nunca** vai para a resposta. */
   readonly cause?: unknown;
   /**
+   * Cabeçalhos que o contrato declara na resposta deste problema, como o
+   * `WWW-Authenticate: Bearer` de `FinderLinkInvalid`. Vão para a resposta;
+   * nada aqui é contexto interno.
+   */
+  readonly cabecalhos?: Readonly<Record<string, string>>;
+  /**
    * Divergência conhecida, e a única: `GET /v1/health` declara resposta **503**
    * no contrato, e `x-problem-types` não tem nenhum tipo com status 503 — o mais
    * próximo, `internal`, é 500. Enquanto o contrato não ganhar o tipo, a sonda
@@ -46,6 +52,7 @@ export class AppError extends Error {
   readonly nextAction: NextAction | undefined;
   readonly errors: readonly ProblemFieldError[] | undefined;
   readonly retryAfterSeconds: number | undefined;
+  readonly cabecalhos: Readonly<Record<string, string>> | undefined;
 
   constructor(problemType: ProblemType, title: string, options: AppErrorOptions = {}) {
     super(`${problemType}: ${title}`, options.cause === undefined ? undefined : { cause: options.cause });
@@ -57,6 +64,7 @@ export class AppError extends Error {
     this.nextAction = options.nextAction;
     this.errors = options.errors;
     this.retryAfterSeconds = options.retryAfterSeconds;
+    this.cabecalhos = options.cabecalhos;
   }
 }
 
@@ -442,15 +450,36 @@ export const problemas = {
     }),
 
   /**
-   * 410. O token do achador sem conta passou da validade (BICHUS-41).
+   * 401. O token do achador sem conta está ausente, malformado ou não
+   * corresponde a aviso nenhum (`FinderLinkInvalid`, BICHUS-41).
    *
-   * O contrato de `getFinderConversation` diz que este 410 "traz o desfecho,
-   * porque quem ajudou merece saber que deu certo". `Problem` não tem campo de
-   * desfecho e `next_action` não tem valor para ele, então o desfecho vai no
-   * `detail`, que é texto para a pessoa ler. A tela decide pelo `type`.
+   * **Um corpo só para os três casos**, e sem argumento: distinguir
+   * "malformado" de "não existe" diria a quem tenta que chegou perto. Não é
+   * `unauthenticated`, que manda entrar, porque quem abriu o link não tem
+   * conta; e não é `forbidden`, porque não há ninguém autenticado para ser
+   * recusado. A saída oferecida é a de quem está com um animal na mão e um
+   * link que não abre: registrar o achado.
    */
-  acessoDoAchadorVencido: (desfecho: string): AppError =>
-    new AppError('conversation-closed', 'Esta conversa terminou', { detail: desfecho }),
+  linkDoAchadorInvalido: (): AppError =>
+    new AppError('finder-link-invalid', 'Este link não vale', {
+      detail: 'Confira se o endereço foi copiado inteiro.',
+      nextAction: 'register_stray_found_report',
+      cabecalhos: { 'WWW-Authenticate': 'Bearer' },
+    }),
+
+  /**
+   * 410. O token do achador existiu e venceu (`FinderAccessEnded`, BICHUS-41).
+   *
+   * **Corpo fixo, sem argumento, e sem o desfecho do caso.** O link é um
+   * bearer e pode ter sido repassado: um texto que dissesse "voltou para casa"
+   * num desfecho e outra coisa nos demais contaria, por exclusão, o que
+   * aconteceu com o animal de outra pessoa. Quem decide contar é o tutor, na
+   * conversa, antes de encerrar. É a mesma resposta nas seis operações.
+   */
+  acessoDoAchadorVencido: (): AppError =>
+    new AppError('conversation-closed', 'Esta conversa terminou', {
+      detail: 'Este link não dá mais acesso à conversa.',
+    }),
 
   /**
    * 410. O aviso já foi encerrado, e não há mais o que acrescentar a ele.

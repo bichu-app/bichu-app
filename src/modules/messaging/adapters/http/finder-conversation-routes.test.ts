@@ -52,6 +52,7 @@ import type {
   NovaMensagem,
 } from '../../ports/conversation-repository.js';
 import { registrarRotasDoAchador } from './finder-conversation-routes.js';
+import { problemaDaResposta, respostaDeclarada } from '../../../../shared/http/problema-do-contrato.js';
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const DIA = 24 * 60 * 60 * 1000;
@@ -261,6 +262,7 @@ interface Resposta {
   readonly status: number;
   readonly corpo: Record<string, unknown>;
   readonly bruto: string;
+  readonly cabecalhos: Record<string, unknown>;
 }
 
 async function pedir(
@@ -280,12 +282,38 @@ async function pedir(
     status: resposta.statusCode,
     corpo: resposta.body === '' ? {} : (JSON.parse(resposta.body) as Record<string, unknown>),
     bruto: resposta.body,
+    cabecalhos: resposta.headers,
   };
 }
 
 function tipoDe(corpo: Record<string, unknown>): string | undefined {
   const { type } = corpo;
   return typeof type === 'string' ? type.slice(type.lastIndexOf('/') + 1) : undefined;
+}
+
+/** As quatro operações, com um pedido válido de cada uma. */
+const OPERACOES: readonly {
+  readonly operationId: string;
+  readonly pedido: { metodo?: 'GET' | 'POST'; url: string; corpo?: unknown };
+}[] = [
+  { operationId: 'getFinderConversation', pedido: { url: '/finder/conversation' } },
+  {
+    operationId: 'postFinderMessage',
+    pedido: { metodo: 'POST', url: '/finder/conversation/messages', corpo: { body: 'Oi' } },
+  },
+  { operationId: 'blockFinderConversation', pedido: { metodo: 'POST', url: '/finder/conversation/block' } },
+  {
+    operationId: 'reportFinderConversation',
+    pedido: { metodo: 'POST', url: '/finder/conversation/report', corpo: { reason: 'spam' } },
+  },
+];
+
+/** O corpo do problema sem `correlation_id`, que muda a cada requisição. */
+function corpoSemCorrelacao(resposta: Resposta): string {
+  const resto = { ...resposta.corpo };
+  delete resto['correlation_id'];
+  delete resto['instance'];
+  return JSON.stringify(resto);
 }
 
 /** As propriedades que o contrato declara para um schema, lidas do YAML. */
@@ -383,7 +411,7 @@ void describe('getFinderConversation: a conversa pelo token, e só o que o contr
 
   void it('com o caso encerrado e o token ainda válido: 200 em modo leitura, `closed`', async () => {
     const { app } = bancada({
-      caso: { aberto: false, encerradoEm: new Date(AGORA - DIA), desfecho: 'reunited' },
+      caso: { aberto: false, encerradoEm: new Date(AGORA - DIA) },
     });
     const resposta = await pedir(app, { url: '/finder/conversation' });
     await app.close();
@@ -394,29 +422,30 @@ void describe('getFinderConversation: a conversa pelo token, e só o que o contr
   void it('com o caso ABERTO, o token vale depois dos 30 dias do aviso', async () => {
     const { app } = bancada({
       tokenVencidoPeloAviso: true,
-      caso: { aberto: true, encerradoEm: null, desfecho: null },
+      caso: { aberto: true, encerradoEm: null },
     });
     const resposta = await pedir(app, { url: '/finder/conversation' });
     await app.close();
     assert.equal(resposta.status, 200);
   });
 
-  void it('token vencido: 410 `conversation-closed`, com o desfecho no texto', async () => {
-    const { app } = bancada({
-      tokenVencidoPeloAviso: true,
-      caso: { aberto: false, encerradoEm: new Date(AGORA - 40 * DIA), desfecho: 'reunited' },
-    });
-    const resposta = await pedir(app, { url: '/finder/conversation' });
-    await app.close();
-    assert.equal(resposta.status, 410);
-    assert.equal(tipoDe(resposta.corpo), 'conversation-closed');
-    assert.match(String(resposta.corpo['detail']), /Aurora voltou para casa/);
-    exigirQueNaoVaza(resposta, '410 do token vencido');
-  });
 });
 
-void describe('o token: 403 idêntico para ausente, malformado, desconhecido e que não confere', () => {
-  void it('os quatro casos respondem o mesmo 403 `forbidden`', async () => {
+void describe('o token, pelo que o CONTRATO declara (status e `type` lidos de api/openapi.yaml)', () => {
+  const invalido = problemaDaResposta('FinderLinkInvalid');
+  const vencido = problemaDaResposta('FinderAccessEnded');
+
+  void it('as quatro operações declaram FinderLinkInvalid e FinderAccessEnded nos status do contrato', () => {
+    for (const operacao of OPERACOES) {
+      assert.equal(respostaDeclarada(operacao.operationId, invalido.status), 'FinderLinkInvalid');
+      // `postFinderMessage` escreve o 410 na própria operação, porque ele cobre
+      // também a conversa bloqueada; as outras três apontam para a resposta.
+      const doVencido = respostaDeclarada(operacao.operationId, vencido.status);
+      if (operacao.operationId !== 'postFinderMessage') assert.equal(doVencido, 'FinderAccessEnded');
+    }
+  });
+
+  void it('ausente, malformado, desconhecido e que não confere: o MESMO corpo de FinderLinkInvalid, nas quatro', async () => {
     const casos: { rotulo: string; token: string | null; cenario?: Cenario }[] = [
       { rotulo: 'ausente', token: null },
       { rotulo: 'malformado', token: 'curto' },
@@ -425,17 +454,53 @@ void describe('o token: 403 idêntico para ausente, malformado, desconhecido e q
       // pessoa. A segunda chave, em tempo constante, é quem recusa.
       { rotulo: 'que não confere', token: OUTRO_TOKEN, cenario: { bancoSemFiltro: true } },
     ];
-    const titulos = new Set<string>();
-    for (const caso of casos) {
-      const { app } = bancada(caso.cenario);
-      const resposta = await pedir(app, { url: '/finder/conversation', token: caso.token });
-      await app.close();
-      assert.equal(resposta.status, 403, `token ${caso.rotulo}: ${resposta.bruto}`);
-      assert.equal(tipoDe(resposta.corpo), 'forbidden', `token ${caso.rotulo}`);
-      titulos.add(`${String(resposta.corpo['title'])}|${String(resposta.corpo['detail'])}`);
-      exigirQueNaoVaza(resposta, `403 do token ${caso.rotulo}`);
+    const corpos = new Set<string>();
+    for (const operacao of OPERACOES) {
+      for (const caso of casos) {
+        const { app, gravadas, bloqueios, denuncias } = bancada(caso.cenario);
+        const resposta = await pedir(app, { ...operacao.pedido, token: caso.token });
+        await app.close();
+        const onde = `${operacao.operationId}, token ${caso.rotulo}`;
+        assert.equal(resposta.status, invalido.status, `${onde}: ${resposta.bruto}`);
+        assert.equal(tipoDe(resposta.corpo), invalido.slug, onde);
+        if (invalido.cabecalhos.includes('www-authenticate')) {
+          assert.equal(resposta.cabecalhos['www-authenticate'], 'Bearer', `${onde}: sem WWW-Authenticate`);
+        }
+        assert.equal(gravadas.length + bloqueios.length + denuncias.length, 0, `${onde}: algo foi gravado`);
+        corpos.add(corpoSemCorrelacao(resposta));
+        exigirQueNaoVaza(resposta, onde);
+      }
     }
-    assert.equal(titulos.size, 1, 'os quatro 403 são distinguíveis pelo texto');
+    assert.equal(corpos.size, 1, `os corpos de ${invalido.slug} diferem entre os casos: ${[...corpos].join(' | ')}`);
+  });
+
+  void it('token vencido: FinderAccessEnded nas quatro, com corpo FIXO, sem o desfecho do caso', async () => {
+    // O link é um bearer e pode ter sido repassado. Um texto que diz "voltou
+    // para casa" num desfecho e outra coisa nos demais conta, por exclusão, o
+    // que aconteceu com o animal de outra pessoa.
+    const desfechos = ['reunited', 'not_found', 'false_alarm'] as const;
+    const corpos = new Set<string>();
+    for (const operacao of OPERACOES) {
+      for (const desfecho of desfechos) {
+        const { app, gravadas, bloqueios, denuncias } = bancada({
+          tokenVencidoPeloAviso: true,
+          // O desfecho pendurado como um adaptador desatento o traria: a porta
+          // não o declara, e a resposta não pode depender dele.
+          caso: { aberto: false, encerradoEm: new Date(AGORA - 40 * DIA), ...{ desfecho } },
+        });
+        const resposta = await pedir(app, operacao.pedido);
+        await app.close();
+        const onde = `${operacao.operationId}, desfecho ${desfecho}`;
+        assert.equal(resposta.status, vencido.status, `${onde}: ${resposta.bruto}`);
+        assert.equal(tipoDe(resposta.corpo), vencido.slug, onde);
+        assert.ok(!resposta.bruto.includes('Aurora'), `${onde}: o nome do pet saiu no 410`);
+        assert.doesNotMatch(resposta.bruto, /voltou|encontrad|alarme/i, `${onde}: o 410 conta o desfecho`);
+        assert.equal(gravadas.length + bloqueios.length + denuncias.length, 0, `${onde}: algo foi gravado`);
+        corpos.add(corpoSemCorrelacao(resposta));
+        exigirQueNaoVaza(resposta, onde);
+      }
+    }
+    assert.equal(corpos.size, 1, `o corpo do 410 varia: ${[...corpos].join(' | ')}`);
   });
 
   void it('o token em claro nunca chega à persistência: só o resumo', async () => {
@@ -572,7 +637,8 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
     }
     await app.close();
     // Mesmo contador, outro token: o balde é outro. O token é desconhecido
-    // desta bancada, então a resposta é o 403 do handler, e não um 429.
+    // desta bancada, então a resposta é a recusa de credencial do handler, e
+    // não um 429.
     const { app: outra } = bancada({ contador });
     const resposta = await pedir(outra, {
       metodo: 'POST',
@@ -581,7 +647,7 @@ void describe('postFinderMessage: canal mediado, redigido nos dois sentidos', ()
       corpo: { body: 'x' },
     });
     await outra.close();
-    assert.equal(resposta.status, 403);
+    assert.equal(resposta.status, problemaDaResposta('FinderLinkInvalid').status);
   });
 });
 
@@ -629,34 +695,5 @@ void describe('blockFinderConversation e reportFinderConversation', () => {
     await app.close();
     assert.equal(resposta.status, 400);
     assert.equal(denuncias.length, 0);
-  });
-
-  void it('token vencido: bloquear e denunciar respondem 403, que é o que o contrato declara', async () => {
-    const { app, bloqueios, denuncias } = bancada({ tokenVencidoPeloAviso: true });
-    const bloqueio = await pedir(app, { metodo: 'POST', url: '/finder/conversation/block' });
-    const denuncia = await pedir(app, {
-      metodo: 'POST',
-      url: '/finder/conversation/report',
-      corpo: { reason: 'spam' },
-    });
-    await app.close();
-    assert.equal(bloqueio.status, 403);
-    assert.equal(denuncia.status, 403);
-    assert.equal(bloqueios.length + denuncias.length, 0);
-  });
-
-  void it('sem token, bloquear e denunciar respondem 403 e não tocam nada', async () => {
-    const { app, bloqueios, denuncias } = bancada();
-    const bloqueio = await pedir(app, { metodo: 'POST', url: '/finder/conversation/block', token: null });
-    const denuncia = await pedir(app, {
-      metodo: 'POST',
-      url: '/finder/conversation/report',
-      token: null,
-      corpo: { reason: 'spam' },
-    });
-    await app.close();
-    assert.equal(bloqueio.status, 403);
-    assert.equal(denuncia.status, 403);
-    assert.equal(bloqueios.length + denuncias.length, 0);
   });
 });

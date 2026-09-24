@@ -38,6 +38,7 @@ import type {
 } from '../../ports/found-report-repository.js';
 import type { AcessoDoAchador } from '../../ports/conversa-do-achador.js';
 import { registrarRotasDoAvisoDoAchador } from './finder-found-report-routes.js';
+import { problemaDaResposta, respostaDeclarada } from '../../../../shared/http/problema-do-contrato.js';
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const BASE_DA_WEB = 'https://bichu.test' as AbsoluteUrl;
@@ -197,6 +198,7 @@ interface Resposta {
   readonly status: number;
   readonly corpo: Record<string, unknown>;
   readonly bruto: string;
+  readonly cabecalhos: Record<string, unknown>;
 }
 
 async function pedir(
@@ -214,8 +216,33 @@ async function pedir(
     status: resposta.statusCode,
     corpo: resposta.body === '' ? {} : (JSON.parse(resposta.body) as Record<string, unknown>),
     bruto: resposta.body,
+    cabecalhos: resposta.headers,
   };
 }
+
+/** O corpo do problema sem o que muda a cada requisição ou rota. */
+function corpoSemCorrelacao(resposta: Resposta): string {
+  const resto = { ...resposta.corpo };
+  delete resto['correlation_id'];
+  delete resto['instance'];
+  return JSON.stringify(resto);
+}
+
+/** As duas operações, com um pedido válido de cada uma. */
+const OPERACOES = [
+  {
+    operationId: 'enrichFinderFoundReport',
+    pedido: { metodo: 'PATCH' as const, url: '/finder/found-report', corpo: { message: 'oi' } },
+  },
+  {
+    operationId: 'createFinderPhotoUploadIntent',
+    pedido: {
+      metodo: 'POST' as const,
+      url: '/media/finder-photo-intents',
+      corpo: { content_type: 'image/jpeg', byte_size: 1000 },
+    },
+  },
+];
 
 function tipoDe(corpo: Record<string, unknown>): string | undefined {
   const { type } = corpo;
@@ -229,6 +256,29 @@ function propriedadesDoContrato(nome: string): Set<string> {
   const schema = spec.components.schemas[nome];
   assert.ok(schema?.properties !== undefined, `o contrato não declara ${nome}`);
   return new Set(Object.keys(schema.properties));
+}
+
+/** A faixa de `GeoPoint`, lida do contrato. */
+function geoPointDoContrato(): {
+  lat: { minimo: number; maximo: number };
+  lon: { minimo: number; maximo: number };
+} {
+  const spec = parseYaml(readFileSync('api/openapi.yaml', 'utf8')) as {
+    components: {
+      schemas: Record<string, { properties?: Record<string, { minimum?: number; maximum?: number }> }>;
+    };
+  };
+  const props = spec.components.schemas['GeoPoint']?.properties;
+  const lat = props?.['lat'];
+  const lon = props?.['lon'];
+  assert.ok(
+    lat?.minimum !== undefined && lat.maximum !== undefined && lon?.minimum !== undefined && lon.maximum !== undefined,
+    'o contrato não declara a faixa de GeoPoint: não há contra o que comparar',
+  );
+  return {
+    lat: { minimo: lat.minimum, maximo: lat.maximum },
+    lon: { minimo: lon.minimum, maximo: lon.maximum },
+  };
 }
 
 /** A checagem de não-vazamento. Ver o cabeçalho. */
@@ -302,8 +352,15 @@ void describe('enrichFinderFoundReport: "Contar mais", sem id e sem coordenada d
     assert.equal(mudancas.length + recados.length, 0, 'algo foi gravado apesar da recusa');
   });
 
-  void it('coordenada fora da faixa, ou pela metade, é recusada antes de chegar ao PostGIS', async () => {
-    for (const location of [{ lat: 500, lon: 0 }, { lat: -23.5 }]) {
+  void it('`location` é GeoPoint: fora da faixa do contrato, ou pela metade, é 400', async () => {
+    const ponto = geoPointDoContrato();
+    const foraDaFaixa = [
+      { lat: ponto.lat.minimo - 1, lon: -46.6 },
+      { lat: ponto.lat.maximo + 1, lon: -46.6 },
+      { lat: -23.5, lon: ponto.lon.minimo - 1 },
+      { lat: -23.5, lon: ponto.lon.maximo + 1 },
+    ];
+    for (const location of [...foraDaFaixa, { lat: -23.5 }, { lon: -46.6 }]) {
       const { app, mudancas } = bancada();
       const resposta = await pedir(app, { metodo: 'PATCH', url: '/finder/found-report', corpo: { location } });
       await app.close();
@@ -324,31 +381,73 @@ void describe('enrichFinderFoundReport: "Contar mais", sem id e sem coordenada d
     assert.equal(mudancas.length, 0);
   });
 
-  void it('token recusado 403; vencido, conversa fechada ou aviso encerrado 410', async () => {
-    const casos: { rotulo: string; cenario: Cenario; token?: string | null; status: number }[] = [
-      { rotulo: 'sem token', cenario: {}, token: null, status: 403 },
-      { rotulo: 'token de ninguém', cenario: {}, token: 'X'.repeat(43), status: 403 },
-      { rotulo: 'vencido', cenario: { acesso: { situacao: 'vencido' } }, status: 410 },
-      {
-        rotulo: 'conversa fechada',
-        cenario: { acesso: { situacao: 'valido', aceitaMensagem: false } },
-        status: 410,
-      },
-      { rotulo: 'aviso encerrado', cenario: { statusDoAviso: 'closed' }, status: 410 },
-    ];
-    for (const caso of casos) {
-      const { app, mudancas, recados } = bancada(caso.cenario);
-      const resposta = await pedir(app, {
-        metodo: 'PATCH',
-        url: '/finder/found-report',
-        token: caso.token,
-        corpo: { message: 'oi' },
-      });
+  void it('conversa fechada ou aviso encerrado: 410 `conversation-closed`, nada gravado', async () => {
+    const encerrado = problemaDaResposta('FinderAccessEnded');
+    for (const cenario of [
+      { acesso: { situacao: 'valido', aceitaMensagem: false } } as Cenario,
+      { statusDoAviso: 'closed' } as Cenario,
+    ]) {
+      const { app, mudancas, recados } = bancada(cenario);
+      const resposta = await pedir(app, { metodo: 'PATCH', url: '/finder/found-report', corpo: { message: 'oi' } });
       await app.close();
-      assert.equal(resposta.status, caso.status, `${caso.rotulo}: ${resposta.bruto}`);
-      assert.equal(mudancas.length + recados.length, 0, `${caso.rotulo}: algo foi gravado`);
-      exigirQueNaoVaza(resposta, caso.rotulo);
+      assert.equal(resposta.status, encerrado.status, JSON.stringify(cenario));
+      assert.equal(tipoDe(resposta.corpo), encerrado.slug);
+      assert.equal(mudancas.length + recados.length, 0);
     }
+  });
+});
+
+void describe('o token nas duas operações, pelo que o CONTRATO declara', () => {
+  const invalido = problemaDaResposta('FinderLinkInvalid');
+  const vencido = problemaDaResposta('FinderAccessEnded');
+
+  void it('as duas declaram FinderLinkInvalid e FinderAccessEnded nos status do contrato', () => {
+    for (const { operationId } of OPERACOES) {
+      assert.equal(respostaDeclarada(operationId, invalido.status), 'FinderLinkInvalid');
+      assert.equal(respostaDeclarada(operationId, vencido.status), 'FinderAccessEnded');
+    }
+  });
+
+  void it('ausente, malformado ou desconhecido: o MESMO corpo de FinderLinkInvalid, com WWW-Authenticate', async () => {
+    const casos: { rotulo: string; token?: string | null; cenario?: Cenario }[] = [
+      { rotulo: 'ausente', token: null },
+      { rotulo: 'malformado', token: 'curto' },
+      { rotulo: 'desconhecido', token: 'X'.repeat(43) },
+      { rotulo: 'recusado pela conversa', cenario: { acesso: { situacao: 'recusado' } } },
+    ];
+    const corpos = new Set<string>();
+    for (const operacao of OPERACOES) {
+      for (const caso of casos) {
+        const { app, mudancas, recados, intencoes } = bancada(caso.cenario);
+        const resposta = await pedir(app, { ...operacao.pedido, token: caso.token });
+        await app.close();
+        const onde = `${operacao.operationId}, token ${caso.rotulo}`;
+        assert.equal(resposta.status, invalido.status, `${onde}: ${resposta.bruto}`);
+        assert.equal(tipoDe(resposta.corpo), invalido.slug, onde);
+        if (invalido.cabecalhos.includes('www-authenticate')) {
+          assert.equal(resposta.cabecalhos['www-authenticate'], 'Bearer', `${onde}: sem WWW-Authenticate`);
+        }
+        assert.equal(mudancas.length + recados.length + intencoes.length, 0, `${onde}: algo foi gravado`);
+        corpos.add(corpoSemCorrelacao(resposta));
+        exigirQueNaoVaza(resposta, onde);
+      }
+    }
+    assert.equal(corpos.size, 1, `os corpos de ${invalido.slug} diferem: ${[...corpos].join(' | ')}`);
+  });
+
+  void it('token vencido: FinderAccessEnded nas duas, com corpo fixo e nada gravado', async () => {
+    const corpos = new Set<string>();
+    for (const operacao of OPERACOES) {
+      const { app, mudancas, recados, intencoes } = bancada({ acesso: { situacao: 'vencido' } });
+      const resposta = await pedir(app, operacao.pedido);
+      await app.close();
+      assert.equal(resposta.status, vencido.status, `${operacao.operationId}: ${resposta.bruto}`);
+      assert.equal(tipoDe(resposta.corpo), vencido.slug, operacao.operationId);
+      assert.ok(!resposta.bruto.includes('Aurora'), `${operacao.operationId}: o nome do pet saiu no 410`);
+      assert.equal(mudancas.length + recados.length + intencoes.length, 0);
+      corpos.add(corpoSemCorrelacao(resposta));
+    }
+    assert.equal(corpos.size, 1, `o 410 do link vencido varia entre as operações: ${[...corpos].join(' | ')}`);
   });
 });
 
@@ -399,11 +498,11 @@ void describe('createFinderPhotoUploadIntent: referência opaca, nunca o id', ()
     assert.equal(cheio.intencoes.length, 0);
   });
 
-  void it('token recusado ou conversa fechada: 403, e nenhuma autorização de escrita sai', async () => {
+  void it('conversa fechada ou aviso encerrado: 410, e nenhuma autorização de escrita sai', async () => {
+    const encerrado = problemaDaResposta('FinderAccessEnded');
     for (const cenario of [
-      { acesso: { situacao: 'recusado' } as const },
-      { acesso: { situacao: 'vencido' } as const },
-      { acesso: { situacao: 'valido', aceitaMensagem: false } as const },
+      { acesso: { situacao: 'valido', aceitaMensagem: false } } as Cenario,
+      { statusDoAviso: 'closed' } as Cenario,
     ]) {
       const { app, intencoes } = bancada(cenario);
       const resposta = await pedir(app, {
@@ -412,7 +511,8 @@ void describe('createFinderPhotoUploadIntent: referência opaca, nunca o id', ()
         corpo: { content_type: 'image/jpeg', byte_size: 1000 },
       });
       await app.close();
-      assert.equal(resposta.status, 403, JSON.stringify(cenario));
+      assert.equal(resposta.status, encerrado.status, JSON.stringify(cenario));
+      assert.equal(tipoDe(resposta.corpo), encerrado.slug);
       assert.equal(intencoes.length, 0);
     }
   });

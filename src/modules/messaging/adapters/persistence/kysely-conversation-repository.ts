@@ -24,7 +24,6 @@ import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
 import { JANELA_DE_AGRUPAMENTO_EM_MS } from '../../../tags/ports/tag-repository.js';
-import type { DesfechoDoCaso } from '../../domain/acesso-do-achador.js';
 import type { Papel } from '../../domain/conversa-mediada.js';
 import type { MotivoDeRetencao } from '../../domain/retencao-para-revisao.js';
 import type {
@@ -363,7 +362,6 @@ interface LinhaDaConversaDoAchador {
   finder_token_expires_at: Date | null;
   case_status: string | null;
   case_closed_at: Date | null;
-  case_outcome: DesfechoDoCaso | null;
 }
 
 /**
@@ -396,7 +394,6 @@ export function construtorDaLeituraDoAchador(db: Db, resumo: Uint8Array) {
       'proprio.finder_token_expires_at',
       'lost_cases.status as case_status',
       'lost_cases.closed_at as case_closed_at',
-      'lost_cases.closure_outcome as case_outcome',
     ])
     .where('conversations.id', '=', idDaConversaDoToken(resumo));
 }
@@ -449,7 +446,6 @@ function comoConversaDoAchador(linha: LinhaDaConversaDoAchador): ConversaDoAchad
         : {
             aberto: linha.case_status === 'open',
             encerradoEm: linha.case_closed_at,
-            desfecho: linha.case_outcome,
           },
   };
 }

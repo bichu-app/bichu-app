@@ -16,17 +16,16 @@ import type { ResolvedorDeDimensao } from './aplicacao-de-teto.js';
  * `Authorization: Bearer`, que é o que o esquema `finderToken` (`http`,
  * `bearer`) declara. A página `/c/{finderToken}` do site o repassa aqui.
  *
- * Ausente responde **403**, e não 401: é o único status de recusa de credencial
- * que estas operações declaram, e `unauthenticated` mandaria a tela ao login de
- * quem não tem conta.
+ * Ausente responde `finder-link-invalid` (401, `FinderLinkInvalid`), o mesmo
+ * corpo do token malformado e do desconhecido.
  */
 export function tokenDoAchador(request: FastifyRequest): string {
   const cabecalho = request.headers.authorization;
   if (typeof cabecalho !== 'string' || !cabecalho.startsWith('Bearer ')) {
-    throw problemas.semPermissao();
+    throw problemas.linkDoAchadorInvalido();
   }
   const token = cabecalho.slice('Bearer '.length).trim();
-  if (token === '') throw problemas.semPermissao();
+  if (token === '') throw problemas.linkDoAchadorInvalido();
   return token;
 }
 

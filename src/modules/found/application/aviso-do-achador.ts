@@ -94,7 +94,7 @@ export class AvisoDoAchadorService {
    *
    * A validação vem antes de tudo, e a lista inteira de uma vez: a pessoa está
    * com o animal na mão e não pode descobrir um problema por requisição. Depois,
-   * o token (403 recusado, 410 vencido ou conversa fechada), e só então as
+   * o token (401 recusado, 410 vencido ou conversa fechada), e só então as
    * escritas. O recado entra primeiro porque é o que o tutor lê; se a conversa
    * fechar entre as duas, o 410 sai antes de o aviso mudar.
    */
@@ -105,12 +105,7 @@ export class AvisoDoAchadorService {
   ): Promise<VistaDoAvisoParaOAchador> {
     const mudanca = validarEnriquecimento(entrada);
 
-    const acesso = await this.deps.conversa.acesso(token);
-    if (acesso.situacao === 'recusado') throw problemas.semPermissao();
-    if (acesso.situacao === 'vencido' || !acesso.aceitaMensagem) throw problemas.avisoEncerrado();
-
-    const { aviso, resumo } = await this.avisoDoToken(token);
-    if (aviso.status === 'closed') throw problemas.avisoEncerrado();
+    const { resumo } = await this.avisoAberto(token);
 
     let fotoUploadId: string | undefined;
     if (entrada.photo_upload_ref !== undefined) {
@@ -146,26 +141,15 @@ export class AvisoDoAchadorService {
   }
 
   /**
-   * `POST /v1/media/finder-photo-intents`.
-   *
-   * O contrato declara 403 e 415, e nenhum 410: token vencido e conversa
-   * fechada respondem 403 aqui, com o texto dizendo por quê.
+   * `POST /v1/media/finder-photo-intents`. Mesmas recusas de token que
+   * "Contar mais": 401 recusado, 410 vencido, 410 conversa ou aviso encerrado.
    */
   async autorizarFoto(
     token: string,
     contentType: string,
     byteSize: number,
   ): Promise<FotoDoAchadorAutorizada> {
-    const acesso = await this.deps.conversa.acesso(token);
-    if (acesso.situacao === 'recusado') throw problemas.semPermissao();
-    if (acesso.situacao === 'vencido' || !acesso.aceitaMensagem) {
-      throw problemas.semPermissao('Esta conversa terminou, e o aviso não recebe mais fotos.');
-    }
-
-    const { aviso, resumo } = await this.avisoDoToken(token);
-    if (aviso.status === 'closed') {
-      throw problemas.semPermissao('Esta conversa terminou, e o aviso não recebe mais fotos.');
-    }
+    const { aviso, resumo } = await this.avisoAberto(token);
 
     // 415, como na foto do achador com conta: é o status que o contrato
     // declara para arquivo que não abrimos. O teto de 2 MB é do SEC-009.
@@ -207,13 +191,29 @@ export class AvisoDoAchadorService {
     return { uploadRef, autorizacao };
   }
 
-  /** O aviso do token, com a segunda chave em tempo constante. 403 no resto. */
-  private async avisoDoToken(token: string): Promise<{ aviso: AvisoDoAchador; resumo: Buffer }> {
+  /**
+   * O token e o aviso, nas recusas que o contrato declara para as duas
+   * operações:
+   *
+   * - `finder-link-invalid` (401), um corpo só, para o token que a conversa
+   *   recusa e para o que não resolve aviso ou não confere em tempo constante;
+   * - `FinderAccessEnded` (410, corpo fixo) para o token vencido, o MESMO
+   *   corpo das quatro rotas da conversa;
+   * - `conversation-closed` (410) para a conversa que não aceita mensagem e
+   *   para o aviso encerrado.
+   */
+  private async avisoAberto(token: string): Promise<{ aviso: AvisoDoAchador; resumo: Buffer }> {
+    const acesso = await this.deps.conversa.acesso(token);
+    if (acesso.situacao === 'recusado') throw problemas.linkDoAchadorInvalido();
+    if (acesso.situacao === 'vencido') throw problemas.acessoDoAchadorVencido();
+    if (!acesso.aceitaMensagem) throw problemas.avisoEncerrado();
+
     const resumo = hashDeToken(token);
     const aviso = await this.deps.repositorio.avisoPeloTokenDoAchador(resumo);
     if (aviso === undefined || !iguaisEmTempoConstante(Buffer.from(aviso.resumoDoToken), resumo)) {
-      throw problemas.semPermissao();
+      throw problemas.linkDoAchadorInvalido();
     }
+    if (aviso.status === 'closed') throw problemas.avisoEncerrado();
     return { aviso, resumo };
   }
 
@@ -241,9 +241,12 @@ export class AvisoDoAchadorService {
 /**
  * As regras de entrada que o schema do contrato não carrega.
  *
- * `FoundReportEnrichment.location` declara `lat` e `lon` sem faixa: um `lat`
- * de 500 passaria pelo schema e chegaria ao PostGIS, que responderia 500. E
- * coordenada pela metade não é coordenada.
+ * A faixa da coordenada NÃO está aqui: `location` é `GeoPoint` no contrato,
+ * com a faixa do território e `lat`/`lon` obrigatórias juntas, e é o schema
+ * dele que a rota instala. Uma segunda faixa escrita aqui divergiria da do
+ * contrato no primeiro ajuste. O que fica é a recusa da coordenada pela metade
+ * para quem chamar o serviço sem passar pela rota: ponto sem as duas metades
+ * não é gravado.
  */
 export function validarEnriquecimento(entrada: EntradaDeEnriquecimento): EnriquecimentoDoAchador {
   const erros: ProblemFieldError[] = [];
@@ -252,12 +255,8 @@ export function validarEnriquecimento(entrada: EntradaDeEnriquecimento): Enrique
   const local = entrada.location;
   if (local !== undefined) {
     const { lat, lon } = local;
-    if (lat === undefined || lon === undefined) {
+    if (lat === undefined || lon === undefined || !Number.isFinite(lat) || !Number.isFinite(lon)) {
       erros.push({ field: 'location', code: 'required', message: 'Envie latitude e longitude juntas.' });
-    } else if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-      erros.push({ field: 'location.lat', code: 'range', message: 'Latitude entre -90 e 90.' });
-    } else if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
-      erros.push({ field: 'location.lon', code: 'range', message: 'Longitude entre -180 e 180.' });
     } else {
       mudanca.lat = lat;
       mudanca.lon = lon;
