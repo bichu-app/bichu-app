@@ -1679,6 +1679,17 @@ export interface paths {
          *
          *     Devolve a mesma projecao publica da listagem: foto, sinais, **bairro** e
          *     data. Nunca contato, endereco, ponto exato nem UUID interno.
+         *
+         *     **A autenticacao e opcional e decide um campo so**, `can_report_sighting`,
+         *     que e falso para o tutor do caso. Sem `Authorization`, a leitura e a
+         *     anonima. **Com `Authorization` presente e invalido, a resposta e 401**,
+         *     e nao a leitura anonima: rebaixar em silencio esconderia do app que a
+         *     sessao acabou, e o toque seguinte em "vi este pet" falharia sem
+         *     explicacao. E a mesma regra de `GET /tags/{code}`.
+         *
+         *     A resposta varia com quem chama, e por isso sai com
+         *     `Cache-Control: no-store`: um cache compartilhado que guardasse a versao
+         *     do tutor serviria `can_report_sighting: false` ao vizinho.
          */
         get: operations["getPublicLostCase"];
         put?: never;
@@ -1709,8 +1720,16 @@ export interface paths {
          *     ganhar campo sem que o cartaz caiba em uma folha, e o dia em que os dois
          *     forem o mesmo recurso, um dos dois vai piorar.
          *
-         *     Nunca traz contato, endereco, ponto exato nem UUID interno — a mesma
+         *     Nunca traz contato, endereco, ponto exato nem UUID interno, a mesma
          *     regra da projecao publica.
+         *
+         *     **Sem autenticacao.** O papel colado no poste e igual para todo mundo, e
+         *     a resposta nao pode variar com quem pede. Ate 23/09/2026 esta operacao
+         *     declarava autenticacao opcional sem que o token decidisse coisa alguma;
+         *     o servidor ignora `Authorization` aqui, e por isso nao ha 401.
+         *
+         *     **Nao ha 429.** O unico teto e `serve_cache`, que responde do cache e
+         *     nao recusa, como em `getFinderConversation`.
          */
         get: operations["getLostCasePoster"];
         put?: never;
@@ -2976,10 +2995,26 @@ export interface components {
             breed_label?: string | null;
             size: components["schemas"]["PetSize"];
             primary_color?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description **Quando o animal foi visto pela ultima vez**, como o tutor informou
+             *     (`lost_cases.last_seen_at`), e nao quando o caso foi aberto. Quem
+             *     abre o caso no dia seguinte ao sumico precisa que a pagina diga "desde
+             *     ontem", e e esse o numero que orienta quem esta procurando. O nome do
+             *     campo fica, porque e o que a tela mostra ("perdido desde").
+             */
             lost_since: string;
-            /** @description Bairro e cidade. Este e o nivel maximo de precisao publica. */
-            area_label: string;
+            /**
+             * @description Bairro e cidade. Este e o nivel maximo de precisao publica.
+             *
+             *     **Nulo quando o caso foi aberto so com coordenada** (BICHUS-21
+             *     criterio 5). A coordenada nunca sai e nao ha geocodificacao no MVP,
+             *     entao nao ha rotulo verdadeiro para dar. O texto que a tela mostra
+             *     nesse caso ("Regiao nao informada") e do cliente: rotulo fixo dentro
+             *     de um campo de dado e indistinguivel de um bairro com esse nome. E a
+             *     mesma regra de `LostCaseReachPreview.area_label`.
+             */
+            area_label: string | null;
             /** Format: uri */
             photo_url?: string | null;
             /** Format: uri */
@@ -2998,30 +3033,40 @@ export interface components {
             size: components["schemas"]["PetSize"];
             primary_color?: string | null;
             distinctive_marks?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Quando o animal foi visto pela ultima vez (`lost_cases.last_seen_at`),
+             *     e nao quando o caso foi aberto. Mesmo significado de
+             *     `PublicLostPet.lost_since`.
+             */
             lost_since: string;
-            /** @description Bairro e cidade. Nivel maximo de precisao publica. */
-            area_label: string;
+            /**
+             * @description Bairro e cidade. Nivel maximo de precisao publica. Nulo quando o caso
+             *     so tem coordenada, pela mesma regra de `PublicLostPet.area_label`.
+             */
+            area_label: string | null;
             /**
              * Format: uri
-             * @description Derivada em resolucao de **impressao**, maior que a da listagem. Um
-             *     cartaz e visto a dois metros de distancia; a miniatura da lista
+             * @description A derivada `card` da foto principal, **1024 px de largura**. Em meia
+             *     folha A4 (cerca de 17 cm) isso da uns 150 dpi, o bastante para um
+             *     cartaz lido a dois metros. Nunca a `thumb` (160 px): a miniatura
              *     impressa vira uma mancha, e o cartaz deixa de servir para a unica
-             *     coisa que ele faz.
+             *     coisa que ele faz. Nao ha derivada so para impressao, e ela so se
+             *     paga se a medida de 150 dpi se mostrar insuficiente no papel.
              */
             photo_url?: string | null;
             /**
-             * @description Texto livre curto do tutor, se houver. Passa pela mesma redacao de
-             *     contato das mensagens: telefone ou e-mail escritos aqui sao
-             *     retirados, porque o cartaz e publico e um numero em poste e a porta
-             *     do golpe do falso achador.
-             */
-            reward_note?: string | null;
-            /**
              * Format: uri
-             * @description O endereco curto que vira o QR do papel. E por ele que quem viu o
-             *     animal chega ao canal mediado, sem telefone e sem endereco no
-             *     cartaz.
+             * @description O endereco que o QR do papel codifica: a pagina do caso,
+             *     `{WEB_BASE_URL}/p/{shareToken}`, o mesmo valor de
+             *     `PublicLostCase.share_url`. E por ele que quem viu o animal chega ao
+             *     canal mediado, sem telefone e sem endereco no cartaz.
+             *
+             *     **Nao ha encurtador**, e o contrato nao promete um. "Curto" quer
+             *     dizer apenas que e o endereco mais curto que leva ao caso; o nome
+             *     fica porque renomear agora nao muda o que o QR carrega. Um encurtador proprio seria
+             *     mais um servico e mais um dominio para manter, e um de terceiro
+             *     colocaria outra empresa entre o cartaz e o caso.
              */
             short_url: string;
         };
@@ -3048,9 +3093,16 @@ export interface components {
             /** @description O mesmo cartao de manejo da pagina do achador. */
             care_notes?: string | null;
             /**
-             * @description Falso para o proprio tutor. Verdadeiro para qualquer outra conta:
-             *     e o botao "vi este pet", que cria o achado ja vinculado pelo
-             *     `share_token`.
+             * @description Falso **so** para o proprio tutor. Verdadeiro para qualquer outra
+             *     conta **e para quem chama sem conta**: e o botao "vi este pet", e
+             *     ele existe para quem viu o animal, tenha conta ou nao.
+             *
+             *     O toque leva a `POST /found-reports` (`createStrayFoundReport`)
+             *     com o `share_token` do caso, que vincula o achado direto a ele.
+             *     Aquela operacao exige conta, entao para o anonimo o toque passa
+             *     antes pela entrada: **a conta e pedida no toque, nao na leitura**.
+             *     Esconder o botao de quem nao entrou esconderia justamente de
+             *     quem chegou pelo cartaz.
              */
             can_report_sighting?: boolean;
             /** Format: uri */
@@ -3293,6 +3345,27 @@ export interface components {
         };
         /** @description Nao existe, ou nao e visivel para quem perguntou. */
         NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O link publico do caso nao leva mais a caso aberto. `type` e sempre
+         *     `lost-case-closed`, e cobre, **com o mesmo corpo**: caso encerrado; pet
+         *     excluido, falecido ou arquivado; e token desconhecido. A superficie
+         *     publica nao distingue o motivo, porque distinguir contaria a um estranho
+         *     o que aconteceu com o animal de outra pessoa, ou se aquele token um dia
+         *     existiu. Nao e 404 pela mesma razao da tag revogada (ADR-0004): link
+         *     impresso num cartaz nao pode terminar numa pagina sem saida.
+         *
+         *     `next_action: register_stray_found_report` e a saida: quem chegou por um
+         *     cartaz antigo e esta vendo um animal parecido ainda consegue registrar o
+         *     achado avulso, e o cruzamento por atributos faz o resto.
+         */
+        LostCaseClosed: {
             headers: {
                 [name: string]: unknown;
             };
@@ -5968,7 +6041,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getPublicLostCase: {
@@ -5983,7 +6058,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Caso. */
+            /** @description Caso aberto. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5992,15 +6067,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicLostCase"];
                 };
             };
-            /** @description Caso encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            410: components["responses"]["LostCaseClosed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getLostCasePoster: {
@@ -6024,15 +6094,8 @@ export interface operations {
                     "application/json": components["schemas"]["LostCasePoster"];
                 };
             };
-            /** @description Caso encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            410: components["responses"]["LostCaseClosed"];
         };
     };
     checkPasswordResetToken: {

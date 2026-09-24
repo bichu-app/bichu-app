@@ -1,7 +1,7 @@
 /**
  * Rotas públicas do caso, pelo `share_token` (BICHUS-76): a página do caso
  * (`getPublicLostCase`) e o cartaz (`getLostCasePoster`). São as operações que o
- * site consome em `/p/{shareToken}` e `/cartaz/{shareToken}` (ADR-0024), e a
+ * site consome em `/p/{shareToken}` e `/cartaz/{shareToken}` (ADR-0028), e a
  * primeira é também o destino do toque no push do alerta.
  *
  * Três pontos desta fiação que não são detalhe:
@@ -18,7 +18,7 @@
  *   para todo mundo.
  * - **`Cache-Control: no-store` nas duas.** A página varia com quem chama, e um
  *   cache compartilhado que guardasse a versão do tutor serviria
- *   `can_report_sighting: false` ao vizinho. O cache de 60 s do ADR-0024 é do
+ *   `can_report_sighting: false` ao vizinho. O cache de 60 s do ADR-0028 é do
  *   site, sobre o HTML que ele monta, e não desta resposta.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';

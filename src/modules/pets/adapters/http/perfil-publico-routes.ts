@@ -1,6 +1,6 @@
 /**
  * `GET /v1/public/pets/{slug}` (`getPublicPetBySlug`, BICHUS-45): o perfil
- * público do pet, que o site consome em `/@{slug}` (ADR-0024).
+ * público do pet, que o site consome em `/@{slug}` (ADR-0028).
  *
  * - **404 para os quatro casos, com o mesmo corpo:** slug inexistente, perfil
  *   desligado (o contrato manda), pet excluído e pet falecido ou arquivado. Quem

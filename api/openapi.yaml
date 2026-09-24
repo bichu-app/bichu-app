@@ -297,6 +297,7 @@ x-problem-types:
   - { slug: transfer-already-in-progress,  status: 409, note: "BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite" }
   - { slug: transfer-already-effective,    status: 409, note: "BICHUS-66: a transferencia ja se consumou, e depois disso o caminho e transferir de volta, nao cancelar. E 409 e nao 410 de proposito: a rota EXIGE conta e o tutor tem direito de saber em que pe esta a propria transferencia -- o 410 sem distincao e da superficie PUBLICA do token, onde dizer qual dos tres casos ocorreu entregaria a um estranho o estado de uma transferencia alheia" }
   - { slug: conversation-closed,           status: 410 }
+  - { slug: lost-case-closed,              status: 410, note: "o link publico do caso (`/p/`, `/cartaz/`, destino do push) nao leva mais a caso aberto: encerrado, pet excluido, falecido ou arquivado, e token desconhecido. Os cinco sao a MESMA resposta de proposito -- distinguir contaria a um estranho o que aconteceu com o animal de outra pessoa, ou se aquele token existiu. Separado de `conversation-closed` porque a tela e outra: quem abre o cartaz nao esta numa conversa, e o site e o app decidem pelo `type`" }
   - { slug: tag-revoked,                   status: 410, note: "tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)" }
   - { slug: tag-code-not-found,            status: 404 }
   - { slug: tag-code-malformed,            status: 400 }
@@ -3363,7 +3364,17 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PublicPetProfile' }
         '301': { description: Slug trocado. `Location` aponta para o atual. }
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          # `Slug` declara `pattern`: um endereco fora do formato e recusado
+          # antes do manipulador, e nao vira 404. A diferenca nao vaza nada:
+          # o formato do slug e publico, esta neste documento.
         '404': { $ref: '#/components/responses/NotFound' }
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+          # `challenge` degenera em `deny_429` com `Retry-After` quando o pedido
+          # nao traz `X-Captcha-Token` (secao de `x-rate-limit`, ADR-0020), o
+          # mesmo motivo por que `listPublicLostPets` declara 429.
 
   /public/lost-cases/{shareToken}:
     parameters:
@@ -3380,6 +3391,17 @@ paths:
 
         Devolve a mesma projecao publica da listagem: foto, sinais, **bairro** e
         data. Nunca contato, endereco, ponto exato nem UUID interno.
+
+        **A autenticacao e opcional e decide um campo so**, `can_report_sighting`,
+        que e falso para o tutor do caso. Sem `Authorization`, a leitura e a
+        anonima. **Com `Authorization` presente e invalido, a resposta e 401**,
+        e nao a leitura anonima: rebaixar em silencio esconderia do app que a
+        sessao acabou, e o toque seguinte em "vi este pet" falharia sem
+        explicacao. E a mesma regra de `GET /tags/{code}`.
+
+        A resposta varia com quem chama, e por isso sai com
+        `Cache-Control: no-store`: um cache compartilhado que guardasse a versao
+        do tutor serviria `can_report_sighting: false` ao vizinho.
       security:
         - bearerAuth: []
         - {}
@@ -3390,15 +3412,24 @@ paths:
           on_exceed: challenge
       responses:
         '200':
-          description: Caso.
+          description: Caso aberto.
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PublicLostCase' }
-        '410':
-          description: Caso encerrado.
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/Problem' }
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          # `ShareToken` declara `minLength` e `maxLength`: fora da faixa nao e
+          # token de caso nenhum, e a recusa vem antes do manipulador. Nao vaza
+          # nada, porque a faixa e publica; token dentro da faixa e
+          # desconhecido continua sendo 410, como o encerrado.
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+          # So com `Authorization` presente e invalido (ver a descricao).
+        '410': { $ref: '#/components/responses/LostCaseClosed' }
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+          # `challenge` degenera em `deny_429` com `Retry-After` quando o pedido
+          # nao traz `X-Captcha-Token` (secao de `x-rate-limit`, ADR-0020).
 
   # ----------------------------------------------------------------------
   # As quatro que o front web de outro time passou a precisar (ADR-0017)
@@ -3430,11 +3461,17 @@ paths:
         ganhar campo sem que o cartaz caiba em uma folha, e o dia em que os dois
         forem o mesmo recurso, um dos dois vai piorar.
 
-        Nunca traz contato, endereco, ponto exato nem UUID interno — a mesma
+        Nunca traz contato, endereco, ponto exato nem UUID interno, a mesma
         regra da projecao publica.
-      security:
-        - bearerAuth: []
-        - {}
+
+        **Sem autenticacao.** O papel colado no poste e igual para todo mundo, e
+        a resposta nao pode variar com quem pede. Ate 23/09/2026 esta operacao
+        declarava autenticacao opcional sem que o token decidisse coisa alguma;
+        o servidor ignora `Authorization` aqui, e por isso nao ha 401.
+
+        **Nao ha 429.** O unico teto e `serve_cache`, que responde do cache e
+        nao recusa, como em `getFinderConversation`.
+      security: []
       x-rate-limit:
         - dimension: [ip]
           limit: 60
@@ -3446,11 +3483,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCasePoster' }
-        '410':
-          description: Caso encerrado.
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/Problem' }
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          # `ShareToken` fora da faixa de tamanho. Ver `getPublicLostCase`.
+        '410': { $ref: '#/components/responses/LostCaseClosed' }
 
   /public/password-reset/{token}:
     parameters:
@@ -4273,6 +4309,31 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    LostCaseClosed:
+      description: |
+        O link publico do caso nao leva mais a caso aberto. `type` e sempre
+        `lost-case-closed`, e cobre, **com o mesmo corpo**: caso encerrado; pet
+        excluido, falecido ou arquivado; e token desconhecido. A superficie
+        publica nao distingue o motivo, porque distinguir contaria a um estranho
+        o que aconteceu com o animal de outra pessoa, ou se aquele token um dia
+        existiu. Nao e 404 pela mesma razao da tag revogada (ADR-0004): link
+        impresso num cartaz nao pode terminar numa pagina sem saida.
+
+        `next_action: register_stray_found_report` e a saida: quem chegou por um
+        cartaz antigo e esta vendo um animal parecido ainda consegue registrar o
+        achado avulso, e o cruzamento por atributos faz o resto.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            encerrado:
+              value:
+                type: https://dominio-a-definir.com.br/problems/lost-case-closed
+                title: Este caso foi encerrado
+                status: 410
+                detail: Este pet nao esta mais sendo procurado por este link.
+                next_action: register_stray_found_report
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
     ValidationFailed:
       description: Corpo ou parametro invalido.
       content:
@@ -5417,10 +5478,27 @@ components:
         breed_label: { type: string, nullable: true }
         size: { $ref: '#/components/schemas/PetSize' }
         primary_color: { type: string, nullable: true }
-        lost_since: { type: string, format: date-time }
+        lost_since:
+          type: string
+          format: date-time
+          description: |
+            **Quando o animal foi visto pela ultima vez**, como o tutor informou
+            (`lost_cases.last_seen_at`), e nao quando o caso foi aberto. Quem
+            abre o caso no dia seguinte ao sumico precisa que a pagina diga "desde
+            ontem", e e esse o numero que orienta quem esta procurando. O nome do
+            campo fica, porque e o que a tela mostra ("perdido desde").
         area_label:
           type: string
-          description: Bairro e cidade. Este e o nivel maximo de precisao publica.
+          nullable: true
+          description: |
+            Bairro e cidade. Este e o nivel maximo de precisao publica.
+
+            **Nulo quando o caso foi aberto so com coordenada** (BICHUS-21
+            criterio 5). A coordenada nunca sai e nao ha geocodificacao no MVP,
+            entao nao ha rotulo verdadeiro para dar. O texto que a tela mostra
+            nesse caso ("Regiao nao informada") e do cliente: rotulo fixo dentro
+            de um campo de dado e indistinguivel de um bairro com esse nome. E a
+            mesma regra de `LostCaseReachPreview.area_label`.
         photo_url: { type: string, format: uri, nullable: true }
         share_url: { type: string, format: uri }
 
@@ -5439,35 +5517,50 @@ components:
         size: { $ref: '#/components/schemas/PetSize' }
         primary_color: { type: string, nullable: true }
         distinctive_marks: { type: string, nullable: true }
-        lost_since: { type: string, format: date-time }
+        lost_since:
+          type: string
+          format: date-time
+          description: |
+            Quando o animal foi visto pela ultima vez (`lost_cases.last_seen_at`),
+            e nao quando o caso foi aberto. Mesmo significado de
+            `PublicLostPet.lost_since`.
         area_label:
           type: string
-          description: Bairro e cidade. Nivel maximo de precisao publica.
+          nullable: true
+          description: |
+            Bairro e cidade. Nivel maximo de precisao publica. Nulo quando o caso
+            so tem coordenada, pela mesma regra de `PublicLostPet.area_label`.
         photo_url:
           type: string
           format: uri
           nullable: true
           description: |
-            Derivada em resolucao de **impressao**, maior que a da listagem. Um
-            cartaz e visto a dois metros de distancia; a miniatura da lista
+            A derivada `card` da foto principal, **1024 px de largura**. Em meia
+            folha A4 (cerca de 17 cm) isso da uns 150 dpi, o bastante para um
+            cartaz lido a dois metros. Nunca a `thumb` (160 px): a miniatura
             impressa vira uma mancha, e o cartaz deixa de servir para a unica
-            coisa que ele faz.
-        reward_note:
-          type: string
-          nullable: true
-          maxLength: 120
-          description: |
-            Texto livre curto do tutor, se houver. Passa pela mesma redacao de
-            contato das mensagens: telefone ou e-mail escritos aqui sao
-            retirados, porque o cartaz e publico e um numero em poste e a porta
-            do golpe do falso achador.
+            coisa que ele faz. Nao ha derivada so para impressao, e ela so se
+            paga se a medida de 150 dpi se mostrar insuficiente no papel.
         short_url:
           type: string
           format: uri
           description: |
-            O endereco curto que vira o QR do papel. E por ele que quem viu o
-            animal chega ao canal mediado, sem telefone e sem endereco no
-            cartaz.
+            O endereco que o QR do papel codifica: a pagina do caso,
+            `{WEB_BASE_URL}/p/{shareToken}`, o mesmo valor de
+            `PublicLostCase.share_url`. E por ele que quem viu o animal chega ao
+            canal mediado, sem telefone e sem endereco no cartaz.
+
+            **Nao ha encurtador**, e o contrato nao promete um. "Curto" quer
+            dizer apenas que e o endereco mais curto que leva ao caso; o nome
+            fica porque renomear agora nao muda o que o QR carrega. Um encurtador proprio seria
+            mais um servico e mais um dominio para manter, e um de terceiro
+            colocaria outra empresa entre o cartaz e o caso.
+
+        # `reward_note` saiu em 23/09/2026, antes de a operacao ter qualquer
+        # consumidor. O ADR-0010 proibe recompensa intermediada "em nenhuma
+        # forma", e o A.1 da UX proibe recompensa no cartaz: um valor em papel
+        # colado no poste e a isca do golpe do falso achador. O campo nao tinha
+        # coluna nem operacao que o gravasse. Nao volta sem revogar o ADR-0010.
 
     TransferCancelView:
       type: object
@@ -5503,9 +5596,16 @@ components:
             can_report_sighting:
               type: boolean
               description: |
-                Falso para o proprio tutor. Verdadeiro para qualquer outra conta:
-                e o botao "vi este pet", que cria o achado ja vinculado pelo
-                `share_token`.
+                Falso **so** para o proprio tutor. Verdadeiro para qualquer outra
+                conta **e para quem chama sem conta**: e o botao "vi este pet", e
+                ele existe para quem viu o animal, tenha conta ou nao.
+
+                O toque leva a `POST /found-reports` (`createStrayFoundReport`)
+                com o `share_token` do caso, que vincula o achado direto a ele.
+                Aquela operacao exige conta, entao para o anonimo o toque passa
+                antes pela entrada: **a conta e pedida no toque, nao na leitura**.
+                Esconder o botao de quem nao entrou esconderia justamente de
+                quem chegou pelo cartaz.
             poster_url: { type: string, format: uri }
 
     ProfessionalKind:
