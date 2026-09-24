@@ -13,25 +13,62 @@ dispensas:
   # provisionou SONAR_TOKEN. O job `sonar` da esteira passou a existir de
   # verdade, e sem o token ele REPROVA nomeando a credencial.
   #
-  # O que continua dispensado e so o VEREDITO do portao de qualidade, e por um
-  # motivo estreito: na primeira analise o SonarCloud trata o repositorio
-  # inteiro como codigo novo, entao os 74% de linha medidos hoje batem no piso
-  # de 80% do perfil `Sonar way` e o portao reprova de saida. Isso e um
-  # veredito sobre treze dias de codigo acumulado, cobrado de quem abrir o
-  # proximo PR. Portao que reprova tudo no primeiro dia e desligado na
-  # primeira semana, e o desligamento nao volta atras.
+  # O que continua dispensado e so o VEREDITO do portao de qualidade.
   #
-  # Uma semana depois existe linha de base em `development`, "codigo novo"
-  # passa a significar o diff do PR, e o piso de 80% vira uma exigencia sobre
-  # o que a pessoa acabou de escrever -- que e o que ele sabe cobrar.
+  # REESCRITA EM 23/09/2026, E NAO SO REDATADA. O motivo anterior dizia
+  # cobertura -- "os 74% contra o piso de 80%" -- e era FALSO desde que a
+  # cobertura subiu: hoje `new_coverage` mede 85,3 contra piso de 80 e passa
+  # com folga, junto de `new_maintainability_rating` 1,
+  # `new_duplicated_lines_density` 0,3 e `new_security_hotspots_reviewed` 100.
+  # Quem reprova sao `new_reliability_rating` e `new_security_rating`, os dois
+  # em 4. Dispensa cujo motivo nao descreve o que ela segura e pior que
+  # dispensa nenhuma, porque quem le acredita que ja olhou.
   #
-  # Enquanto esta entrada existir, o job `sonar` publica o veredito vermelho
-  # no resumo da execucao com `::warning::` e nao derruba o PR. Apagar esta
-  # entrada torna o veredito bloqueante, sem tocar no workflow.
+  # A CAUSA, MEDIDA E NAO SUPOSTA: o projeto NAO TEM LINHA DE BASE DE CODIGO
+  # NOVO no SonarQube Cloud. O envelope de `buscar_veredito_do_sonar.py` traz
+  # `periodo_de_codigo_novo` VAZIO, e sem linha de base as metricas `new_*` sao
+  # calculadas sobre o REPOSITORIO INTEIRO em vez do diff. A prova e o mesmo
+  # commit analisado duas vezes: como PR numero 2 (`development` para `main`)
+  # deu `Quality Gate passed, 0 New issues`; como analise de branch, deu D/D.
+  #
+  # POR QUE A CONDICAO DE SAIDA NAO E "os dois ratings voltarem a 1". Foi o que
+  # se propos primeiro, e ela nao funciona: sem linha de base, voltar a 1 exige
+  # zerar a divida historica do repositorio, nao o que se acabou de escrever.
+  # Nenhum conserto de codigo move aqueles dois numeros enquanto o periodo
+  # estiver vazio, e a dispensa cairia por esgotamento de prazo em vez de por
+  # correcao -- que e o desfecho que este arquivo existe para impedir.
+  #
+  # O QUE FAZ ELA CAIR, E QUEM PRECISA FAZER. A definicao de `New Code` e
+  # configuracao do PROJETO no SonarQube Cloud: ela nao sai de
+  # `sonar-project.properties`, nao ha parametro de scanner que a defina na
+  # nuvem, e ela exige permissao de administrar o projeto. O squad nao tem essa
+  # permissao e nao manipula `SONAR_TOKEN` (ADR-0022). Passos, na ordem, para
+  # quem administra a organizacao `bichu-app`:
+  #   1. sonarcloud.io, projeto `bichu-app_bichu-app`, Administration e depois
+  #      New Code;
+  #   2. escolher `Number of days` com valor 7, ou `Previous version`. As duas
+  #      aparecem na interface. `Reference branch` NAO existe no SonarQube
+  #      Cloud, so no Server, entao nao adianta procura-la;
+  #   3. salvar e reexecutar o job `sonar` em `development`.
+  # Feito isso, `periodo_de_codigo_novo` deixa de vir vazio, a regra
+  # `sem-linha-de-base` de `verificar_veredito_do_sonar.py` para de disparar, e
+  # os dois ratings passam a julgar o diff -- que ja mediu 0 issues no PR 2.
+  #
+  # ENQUANTO ISSO, o estado e ruidoso e nao silencioso: o job `sonar` publica o
+  # veredito vermelho no resumo da execucao com `::warning::` E, desde 23/09,
+  # nomeia a ausencia de linha de base como regra propria, em vez de deixar o
+  # numero 4 sem explicacao. Apagar esta entrada torna o veredito bloqueante,
+  # sem tocar no workflow.
+  #
+  # OS ACHADOS QUE A TRIAGEM ENCONTROU NAO SEGURAM ESTA DISPENSA, e isso e
+  # deliberado: nenhum deles e exploravel hoje, e os dois reais (SEC-025, o
+  # retrocesso quadratico da redacao do canal mediado, e SEC-026, o mesmo
+  # padrao no portao de suite limpa) foram consertados em 23/09 com caso de
+  # tempo versionado. O que sobra e a linha de base.
   - portao: sonarcloud-veredito
-    motivo: "primeira analise trata o repositorio inteiro como codigo novo e reprova os 74% contra o piso de 80% do Sonar way; a janela existe para criar linha de base em development"
-    responsavel: squad
-    vence_em: 2026-09-24
+    motivo: "o projeto nao tem linha de base de codigo novo no SonarQube Cloud (periodo_de_codigo_novo vazio), entao new_reliability_rating e new_security_rating sao calculados sobre o repositorio inteiro e nenhum conserto de codigo os move. CAI QUANDO o projeto tiver linha de base de codigo novo definida E, a partir dela, os dois ratings voltarem a 1 -- condicao que a analise do PR 2 ja satisfez com 0 New issues. Depende de permissao de administrar o projeto no SonarCloud, que o squad nao tem"
+    responsavel: cliente
+    vence_em: 2026-09-26
 
   # AS DUAS DE BAIXO MUDARAM DE NATUREZA EM 22/09/2026, E NAO SO DE DATA.
   #
@@ -118,10 +155,67 @@ dispensas:
     responsavel: cliente
     vence_em: 2026-09-29
 
+  # REESCRITA EM 23/09/2026. O texto anterior descrevia um mundo que deixou de
+  # existir: ele dizia "o app nao vai para loja por ora" e punha como condicao
+  # de saida "houver decisao de submeter o app a uma loja". Essa decisao
+  # ACONTECEU, e foi para o outro lado. Verbatim do cliente em 23/09: "como nao
+  # estamos conseguindo seguir com o cadastro do desenvolvedor, iremos focar
+  # apenas na versao android para publicacao". Cartao BICHUS-253.
+  #
+  # Uma dispensa cuja condicao de saida ja foi satisfeita pela metade e pior que
+  # uma vencida: quem le conclui que ela esta prestes a cair, e ela nao esta.
+  #
+  # O QUE ELA GOVERNA, MEDIDO E NAO SUPOSTO: UMA linha, a segunda entrada de
+  # `casos` em `infra/verificacao/verificar_borda_local.py:258` -- o
+  # `/.well-known/apple-app-site-association` servido com 200 e
+  # `applinks.details` VAZIO. Nada mais no repositorio consulta o portao `ios`.
+  #
+  # E ELA NAO E SOBRE LOJA, apesar do nome e do texto antigo. Ela e sobre DEEP
+  # LINK: Universal Links exigem o `appID` da Apple, que exige o Team ID, que
+  # exige a conta de desenvolvedor. Publicar ou nao publicar na App Store e uma
+  # pergunta diferente da de o link abrir o app.
+  #
+  # NAO HA BUILD DE iOS PARA DESLIGAR. Medido em 23/09 nos cinco workflows: 15
+  # ocorrencias de `runs-on`, TODAS `ubuntu-latest`, e ZERO ocorrencias de
+  # `ios`, `xcode` ou `macos` em `.github/workflows/`. Nenhum alvo de iOS no
+  # `Makefile`. O alvo iOS nunca existiu na esteira.
+  #
+  # E O `app/ios/` NAO SAI, mesmo com a decisao de publicar so Android. Sao 54
+  # arquivos rastreados, e TRES arquivos de teste obrigatorios os leem:
+  # `app/test/dispositivo/permissoes_de_loja_test.dart` (le o `Info.plist`),
+  # `app/test/marca/arte_do_app_test.dart` (le `Assets.xcassets` e o
+  # `project.pbxproj`) e `app/test/marca/splash_ios_test.dart` (le o
+  # `LaunchScreen.storyboard`). Apagar a arvore deixa a esteira vermelha na
+  # hora. O iOS fica DORMENTE E DECLARADO, nunca removido: a conta pode sair em
+  # outubro, e codigo apagado nao volta.
+  #
+  # POR QUE A DISPENSA E A LINHA CONTINUAM, em vez de as duas sairem. A linha
+  # nao mede a loja: ela mede se o arquivo que o sistema operacional busca esta
+  # vazio. Apagar o portao nao apaga o arquivo -- ele continua sendo servido com
+  # 200 e lista vazia -- e no dia em que o Team ID chegar ninguem seria avisado
+  # de que falta preencher. O proprio docstring daquela funcao ja diz por que
+  # isso e o pior desfecho: "200 com JSON valido deixa qualquer conferencia
+  # superficial verde, e a falha so aparece no aparelho do usuario, depois de a
+  # plaquinha impressa". Verificacao que some e pior que verificacao dispensada,
+  # porque a dispensada esta escrita aqui e expira sozinha.
+  #
+  # A CONDICAO DE SAIDA AGORA E UM FATO, e e o mesmo fato que a linha mede: a
+  # lista `applinks.details` deixar de ser vazia. Nao ha como satisfaze-la sem
+  # o Team ID, e nao ha como te-lo sem a conta. Quando isso acontecer o portao
+  # fica verde sozinho, e esta entrada sai por ter virado redundante -- que e o
+  # unico jeito honesto de uma dispensa cair.
+  #
+  # A DATA E A UNICA PARTE ARBITRARIA, E EU A DECLARO ASSIM. A anterior, 29/09,
+  # reprovava a partir de 30/09 e derrubaria `rapidos`, `integracao` e o
+  # `portao` -- travando inclusive entrega alheia que nao tem nada a ver com
+  # iOS. Nao existe previsao para a conta Apple, entao nenhuma data descreve o
+  # fato; ela so diz de quanto em quanto tempo alguem reabre a pergunta. 31/10
+  # afasta a trava do fim do desenvolvimento (30/09) e mantem a revisao mensal.
+  # Encurtar isso e decisao de quem coordena, nao minha.
   - portao: ios
-    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao o alvo iOS sai do caminho critico. CAI QUANDO houver decisao de submeter o app a uma loja; ate la a conta Apple (BICHUS-94) segue pendente e sem Team ID nao ha Universal Links"
+    motivo: "esta dispensa NAO e sobre loja: ela cobre uma linha so, o apple-app-site-association servido com applinks.details vazio (verificar_borda_local.py:258), que e o deep link do iOS e depende do Team ID. Em 23/09/2026 o cliente decidiu publicar SO Android porque o cadastro de desenvolvedor Apple nao anda (BICHUS-253), entao o Team ID nao tem previsao. CAI QUANDO a conta de desenvolvedor Apple existir e o appID entrar no apple-app-site-association, momento em que o portao fica verde sozinho. O alvo iOS fica dormente e declarado: app/ios tem 54 arquivos e tres testes obrigatorios os leem, entao apagar a arvore deixa a esteira vermelha na hora"
     responsavel: cliente
-    vence_em: 2026-09-29
+    vence_em: 2026-10-31
 
   # A correcao do `logout` (BICHUS-81, commit aca2d33) acrescentou `requestBody`
   # OBRIGATORIO a `POST /v1/auth/logout`, e para o `oasdiff` isso e quebra de

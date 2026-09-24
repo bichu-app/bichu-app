@@ -34,9 +34,9 @@ AS TRES COISAS QUE PRECISAM SER VERDADE
    e para risco conhecido e aceito; ignorancia nao e risco conhecido.
 2. O MOTIVO aparece na saida, com o codigo HTTP ou o erro de transporte: quem
    le precisa distinguir "o Sonar disse nao" de "o Sonar nao disse nada".
-3. A dispensa `sonarcloud-veredito` continua valendo, e SO, para o primeiro
-   caso -- o veredito negativo de verdade, que e o que ela foi escrita para
-   cobrir (74% de linha contra o piso de 80% na primeira analise).
+3. A dispensa `sonarcloud-veredito` continua valendo, e SO, para o veredito
+   negativo de verdade -- hoje, os dois `4` que o SonarCloud calcula sobre o
+   repositorio inteiro por falta de linha de base de codigo novo.
 
 =========================================================================
 COMO ELE DISTINGUE
@@ -78,10 +78,23 @@ VOCABULARIO = {"OK", "ERROR", "WARN", "NONE"}
 # ausencia de veredito e nao veredito negativo.
 NEGATIVOS = {"ERROR", "WARN"}
 
-# A UNICA regra dispensavel. A lista e explicita e curta de proposito: quem
+# As regras dispensaveis. A lista e explicita e curta de proposito: quem
 # acrescentar um nome aqui esta dizendo, por escrito, que aquele desfecho e
 # risco conhecido e aceito.
-DISPENSAVEIS = {"veredito-negativo"}
+#
+# `sem-linha-de-base` entrou em 23/09/2026 e e dispensavel PELA MESMA ENTRADA,
+# porque e o que a dispensa reescrita nomeia. Ela nao e um desfecho novo: e a
+# EXPLICACAO do desfecho negativo que ja existia, dita em voz alta no log em vez
+# de ficar so num documento. Ver `sem-linha-de-base` em REGRAS.
+DISPENSAVEIS = {"veredito-negativo", "sem-linha-de-base"}
+
+
+def _periodo(e) -> dict:
+    """O periodo de codigo novo do envelope, ou vazio quando nao ha."""
+    if not _envelope(e):
+        return {}
+    p = e.get("periodo_de_codigo_novo")
+    return p if isinstance(p, dict) else {}
 
 
 def _envelope(e) -> bool:
@@ -135,8 +148,22 @@ REGRAS: list[tuple[str, object, str]] = [
     (
         "veredito-negativo",
         lambda e: _obteve(e) and _palavra(e) in NEGATIVOS,
-        "o portao de qualidade do SonarCloud REPROVOU. Este e o unico desfecho que a "
-        "dispensa datada `sonarcloud-veredito` cobre",
+        "o portao de qualidade do SonarCloud REPROVOU. A dispensa datada "
+        "`sonarcloud-veredito` cobre este desfecho",
+    ),
+    (
+        "sem-linha-de-base",
+        lambda e: _obteve(e) and _palavra(e) in NEGATIVOS and not _periodo(e),
+        "o projeto NAO TEM LINHA DE BASE DE CODIGO NOVO no SonarCloud: "
+        "`periodo_de_codigo_novo` veio vazio. Entao as metricas `new_*` deste veredito NAO "
+        "medem codigo novo -- elas medem O REPOSITORIO INTEIRO, cobrado como se fosse "
+        "trabalho recente. Medido em 23/09/2026: o MESMO commit analisado como PR #2 deu "
+        "`Quality Gate passed, 0 New issues`, e analisado como branch deu D/D. Enquanto esta "
+        "regra disparar, NENHUMA correcao de codigo muda `new_reliability_rating` nem "
+        "`new_security_rating`, e a dispensa caira por esgotamento de prazo em vez de por "
+        "correcao. O que destrava NAO esta neste repositorio: e a definicao de `New Code` "
+        "nas configuracoes do projeto no SonarQube Cloud, que so quem tem permissao de "
+        "administrar o projeto consegue fazer",
     ),
 ]
 
@@ -195,9 +222,8 @@ def relatar(envelope, regras: list[str], tem_dispensa: bool) -> int:
                 marca = "ok " if c.get("estado") == "OK" else "ERRO"
                 print(f"    [{marca}] {c.get('metrica')}: {c.get('valor')} "
                       f"{c.get('comparador')} {c.get('piso')}")
-        periodo = envelope.get("periodo_de_codigo_novo") or {}
-        if periodo:
-            print(f"  codigo novo: {periodo}")
+        periodo = _periodo(envelope)
+        print(f"  codigo novo: {periodo if periodo else '(SEM LINHA DE BASE)'}")
         if envelope.get("painel"):
             print(f"  painel:      {envelope['painel']}")
     print(f"  dispensa `{DISPENSA}`: {'presente' if tem_dispensa else 'ausente'}")
@@ -222,8 +248,9 @@ def relatar(envelope, regras: list[str], tem_dispensa: bool) -> int:
         print(
             f"\n::error::a dispensa `{DISPENSA}` existe e NAO cobre este desfecho "
             f"({', '.join(nao_cobertas)}). Ela foi escrita para o veredito negativo de verdade "
-            "-- os 74% de linha contra o piso de 80% na primeira analise -- e nao para a "
-            "ausencia de veredito. Dispensa e para risco conhecido e aceito, nao para ignorancia"
+            "-- os dois `4` calculados sobre o repositorio inteiro por falta de linha de base "
+            "de codigo novo -- e nao para a ausencia de veredito. Dispensa e para risco "
+            "conhecido e aceito, nao para ignorancia"
         )
         return 1
 
@@ -270,7 +297,14 @@ CASOS: list[tuple[str, set[str], bool, str]] = [
         "veredito-sonar-negativo.json",
         {"veredito-negativo"},
         True,
-        "o veredito negativo DE VERDADE: reprova, e a dispensa salva, como hoje",
+        "o veredito negativo DE VERDADE, COM linha de base: so a regra do veredito dispara",
+    ),
+    (
+        "veredito-sonar-sem-linha-de-base.json",
+        {"veredito-negativo", "sem-linha-de-base"},
+        True,
+        "A SITUACAO REAL DE 23/09: veredito negativo E `periodo_de_codigo_novo` vazio -- "
+        "duas regras, as duas dispensaveis, e o log passa a dizer o motivo verdadeiro",
     ),
     (
         "veredito-sonar-aviso.json",

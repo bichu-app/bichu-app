@@ -59,7 +59,12 @@ function ehEtapaDeLimpeza(etapa: string): boolean {
   const texto = etapa.trim();
   const alvo = DIRETORIO_DE_TESTES_COMPILADOS;
   const removeComRm =
-    /(^|\s)rm\s+(-[a-zA-Z]*r[a-zA-Z]*\s+)+/.test(texto) &&
+    // O grupo externo repetido continha duas repetições sobre a mesma classe de
+    // letras, que é a forma que S5852 acusa. Aqui não há atacante -- a entrada
+    // são os `scripts` do package.json deste repositório, em tempo de
+    // construção -- e o retrocesso não se materializa (32.000 caracteres de
+    // pior caso, 0,02 ms). A troca sai porque é barata, não porque protege.
+    /(^|\s)rm\s+-[a-zA-Z]*r[a-zA-Z]*(\s+-[a-zA-Z]+)*\s+/.test(texto) &&
     new RegExp(`(^|\\s)${alvo.replace(/\//g, '\\/')}(\\s|$|\\/)`).test(texto);
   const limpaComTsc = /(^|\s)tsc\s/.test(texto) && /--build/.test(texto) && /--clean/.test(texto);
   return removeComRm || limpaComTsc;
