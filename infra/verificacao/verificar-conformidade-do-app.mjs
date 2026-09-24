@@ -55,6 +55,47 @@
  *    existir, e o portao diz qual.
  *
  * ====================================================================
+ * POR QUE "NAO QUEBRA O CONTRATO" NAO QUER DIZER "NAO QUEBRA O APP"
+ * ====================================================================
+ *
+ * As tres mudancas que este portao pega sao ADITIVAS: `oasdiff breaking` nao
+ * acusa nenhuma delas, e um portao de quebra de contrato passaria nas tres.
+ *
+ *   renomear um campo deixando o antigo de pe  -> o app continua lendo o antigo
+ *   acrescentar um valor a um enum             -> a tela recebe o que nao desenha
+ *   tornar um campo opcional                   -> o app assume presenca
+ *
+ * A terceira foi exercitada sobre a spec de verdade: tirar `id` de `required`
+ * em `#/components/schemas/Pet` reprova nomeando o campo, e nenhuma ferramenta
+ * de diff de contrato teria dito nada.
+ *
+ * ====================================================================
+ * A MATRIZ DE RASTREABILIDADE, E POR QUE AS DUAS COISAS CONVIVEM
+ * ====================================================================
+ *
+ * `api/rastreabilidade-backoffice-rede.yaml` (branch `docs/backoffice-arquitetura`)
+ * faz a mesma pergunta pelo outro lado: ela parte da TELA, lista cada operacao
+ * e cada campo que o prototipo mostra, e reprova quando uma referencia dessas
+ * deixa de resolver na spec.
+ *
+ * As duas nao se substituem, e a diferenca e a fonte da verdade. A matriz e
+ * escrita a mao: ela pega o que o DESENHO promete e o contrato nao entrega, e
+ * envelhece calada se o codigo mudar sem alguem edita-la. Este portao le o
+ * CODIGO: ele pega o que o app de fato assume e o contrato nao sustenta, e nao
+ * tem como envelhecer, porque a fonte dele e o proprio arquivo que o
+ * desenvolvedor acabou de mexer. Campo que o app le e que ninguem listou na
+ * matriz e invisivel la e visivel aqui; tela que promete um campo que o app
+ * ainda nao le e o contrario.
+ *
+ * O que veio de la e a semantica de resolucao -- seguir `$ref`, `allOf`,
+ * `oneOf` e item de lista antes de dizer que algo nao existe -- e a regra de
+ * que arquivo sem o que conferir REPROVA. O que nao veio e a sintaxe de
+ * referencia (`req:`, `resp:`, `enum:Schema.valor`), que e ancorada em
+ * operationId: um modelo Dart e compartilhado por varias operacoes e nao tem
+ * operationId para citar, entao aqui a ancora e JSON Pointer (RFC 6901), que
+ * endereca schema, parametro e extensao com uma forma so.
+ *
+ * ====================================================================
  * O VALOR QUE O APP NAO PODE VER, E POR QUE ELE NAO E EXCECAO NO CODIGO
  * ====================================================================
  *
@@ -211,6 +252,51 @@ function valoresDoEnum(corpo) {
 /** As chaves de resposta que o corpo de uma classe le. */
 function chavesLidas(corpo) {
   return [...new Set([...corpo.matchAll(/\bjson\['([^']+)'\]/g)].map((m) => m[1]))];
+}
+
+/**
+ * As chaves que a classe le SEM admitir nulo, isto e, assumindo presenca.
+ *
+ * A nulidade nao sai de regex simples porque o tipo Dart carrega generico:
+ * `as Map<String, dynamic>?` e anulavel e `as String` nao e, e um `[A-Za-z<>,]`
+ * preguicoso erra os dois. Aqui o tipo e lido contando `<` e `>`, e so entao se
+ * pergunta se ele termina em `?`. Essa diferenca ja produziu um falso positivo
+ * na medicao que precedeu este portao, e falso positivo aqui e o defeito caro:
+ * portao que reprova o codigo certo e portao que alguem desliga.
+ */
+function chavesSemNulo(corpo) {
+  const saida = new Set();
+  const re = /\bjson\['([^']+)'\]\s+as\s+/g;
+  let m;
+  while ((m = re.exec(corpo)) !== null) {
+    let i = re.lastIndex;
+    let profundidade = 0;
+    while (i < corpo.length) {
+      const c = corpo[i];
+      if (c === "<") profundidade += 1;
+      else if (c === ">") profundidade -= 1;
+      else if (profundidade === 0 && !/[A-Za-z0-9_$. ]/.test(c)) break;
+      i += 1;
+    }
+    if (corpo[i] !== "?") saida.add(m[1]);
+  }
+  return [...saida];
+}
+
+/** Os campos que o contrato declara obrigatorios, descendo `$ref` e `allOf`. */
+function obrigatoriosDe(doc, no, vistos = new Set()) {
+  const nomes = new Set();
+  if (no == null || typeof no !== "object") return nomes;
+  if (typeof no.$ref === "string") {
+    if (vistos.has(no.$ref)) return nomes;
+    vistos.add(no.$ref);
+    return obrigatoriosDe(doc, resolverPonteiro(doc, no.$ref), vistos);
+  }
+  if (Array.isArray(no.required)) for (const r of no.required) nomes.add(String(r));
+  if (Array.isArray(no.allOf)) {
+    for (const sub of no.allOf) for (const r of obrigatoriosDe(doc, sub, vistos)) nomes.add(r);
+  }
+  return nomes;
 }
 
 // --------------------------------------------------------------------------
@@ -403,6 +489,19 @@ export function divergencias(declaracoes, spec) {
       });
       continue;
     }
+    const obrigatorios = obrigatoriosDe(spec, no);
+    for (const chave of chavesSemNulo(d.corpo)) {
+      if (doContrato.has(chave) && !obrigatorios.has(chave)) {
+        casos.push({
+          caso: "campo-opcional-lido-como-obrigatorio",
+          alvo: onde,
+          motivo:
+            `o app le o campo \`${chave}\` sem admitir nulo e \`${ponteiro}\` nao o declara em \`required\`. ` +
+            "Campo que deixa de ser obrigatorio nao quebra o contrato -- `oasdiff breaking` nao acusa -- " +
+            "e quebra o app na primeira resposta que vier sem ele.",
+        });
+      }
+    }
     for (const chave of chavesLidas(d.corpo)) {
       if (!doContrato.has(chave)) {
         casos.push({
@@ -564,6 +663,48 @@ function autoteste() {
     spec: SPEC_DE_MENTIRA,
     esperado: "piso-de-enums",
     semPiso: false,
+  });
+
+  iscas.push({
+    nome: "campo-que-virou-opcional-reprova-pelo-nome",
+    declaracoes: lerDeclaracoes(
+      dart(
+        "/// `#/components/schemas/Pet` do contrato.",
+        "class Pet {\n  factory Pet.doJson(Map<String, Object?> json) {\n    return Pet(nome: json['name'] as String);\n  }\n}",
+      ),
+      "isca.dart",
+    ),
+    spec: SPEC_DE_MENTIRA,
+    esperado: "campo-opcional-lido-como-obrigatorio",
+    nomeia: "name",
+  });
+
+  iscas.push({
+    nome: "campo-obrigatorio-lido-sem-nulo-nao-reprova",
+    declaracoes: lerDeclaracoes(
+      dart(
+        "/// `#/components/schemas/PetInput` do contrato.",
+        "class PetInput {\n  factory PetInput.doJson(Map<String, Object?> json) {\n    return PetInput(nome: json['name'] as String);\n  }\n}",
+      ),
+      "isca.dart",
+    ),
+    spec: {
+      components: { schemas: { PetInput: { required: ["name"], properties: { name: {} } } } },
+    },
+    esperado: null,
+  });
+
+  iscas.push({
+    nome: "generico-anulavel-nao-e-lido-como-obrigatorio",
+    declaracoes: lerDeclaracoes(
+      dart(
+        "/// `#/components/schemas/Pet` do contrato.",
+        "class Pet {\n  factory Pet.doJson(Map<String, Object?> json) {\n    return Pet(area: json['name'] as Map<String, dynamic>?);\n  }\n}",
+      ),
+      "isca.dart",
+    ),
+    spec: SPEC_DE_MENTIRA,
+    esperado: null,
   });
 
   iscas.push({
