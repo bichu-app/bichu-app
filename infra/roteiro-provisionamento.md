@@ -633,6 +633,74 @@ curl -sI https://bichu.app/.well-known/apple-app-site-association \
 
 ---
 
+### Passo 11.1 — `admin.bichu.app`, o backoffice (ADR-0027)
+
+O backoffice é o container `admin-web`, atrás da mesma borda, na mesma origem
+que `/v1/admin/*`. A borda passou a ser imagem própria (plugin de taxa, emenda 2
+do ADR-0016), então este passo **constrói** a borda no host, e não só a recria.
+
+**Ordem que não se inverte: configuração, depois DNS.** O certificado sai por
+HTTP-01, e o Caddy só tenta emitir para nome que esteja num bloco. Nome no DNS
+sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
+`http://` para diagnosticar.
+
+1. Com o repositório atualizado no host, no `.env`:
+
+   ```bash
+   ADMIN_HOSTS=https://admin.bichu.app
+   # ADMIN_CSP_UPLOAD=<host público de UploadIntent.url>  -- quando decidido;
+   # vazio, o envio de imagem pelo painel fica bloqueado pela CSP
+   ```
+
+2. Construir e recriar **só** os dois serviços. Recriar a borda derruba as
+   conexões abertas por alguns segundos, em todos os hosts: faça fora de uso.
+
+   ```bash
+   BUILD_COMMIT=$(git rev-parse HEAD) docker compose build edge admin-web
+   docker compose up -d --no-deps admin-web edge
+   docker compose run --rm --no-deps --entrypoint caddy edge list-modules --skip-standard
+   # esperado: um único módulo não-padrão, http.handlers.rate_limit
+   ```
+
+   A partir daqui, e **antes do DNS**, `/v1/admin*` já responde 404 da borda
+   nos hosts do app (D33):
+
+   ```bash
+   curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://hml.bichu.app/v1/admin/ping
+   # 404 text/plain -- com application/problem+json quem respondeu foi a API
+   ```
+
+3. O registro, **em nuvem cinza** (sem proxy): o teto de taxa é por IP de quem
+   conecta na borda, e com proxy todo mundo teria o IP da Cloudflare. A zona
+   `bichu.app` está na Cloudflare (`aurora`/`wesley.ns.cloudflare.com`).
+
+   ```bash
+   ZONA=$(curl -sS "https://api.cloudflare.com/client/v4/zones?name=bichu.app" \
+     -H "Authorization: Bearer $CF_API_TOKEN" | jq -r '.result[0].id')
+   curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONA/dns_records" \
+     -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
+     --data '{"type":"A","name":"admin","content":"35.247.247.16","ttl":300,"proxied":false,"comment":"backoffice admin-web (ADR-0027)"}' \
+     | jq '{success, errors, id: .result.id, proxied: .result.proxied}'
+   ```
+
+   Só o `A`. Sem `AAAA` (a VM não tem IPv6, e `AAAA` órfão leva o cliente IPv6
+   para lugar nenhum) e sem mexer em nenhum outro registro.
+
+**Verificação:**
+
+```bash
+dig +short admin.bichu.app @1.1.1.1          # = 35.247.247.16, e só ele
+dig +short AAAA admin.bichu.app @1.1.1.1     # vazio
+docker compose logs edge | grep -i 'admin.bichu.app' | grep -i 'certificate obtained'
+curl -sSI https://admin.bichu.app/ | grep -iE '^(HTTP|strict-transport|content-security|x-robots|cache-control)'
+# 200, HSTS, CSP sem unsafe-* e sem google, X-Robots-Tag noindex, no-store
+curl -sSI https://admin.bichu.app/v1/health | head -1        # 404: o host admin não é a API inteira
+for i in $(seq 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST https://admin.bichu.app/v1/admin/auth/login; done; echo
+# os dez primeiros NÃO são 429; o 11º é 429 (espere 1 min antes de repetir)
+```
+
+---
+
 ## Parte C — O que precisa existir antes de a máquina receber o primeiro dado
 
 ### Passo 12 — `pg_dump` diário guardado FORA do host (critério 10 de BICHUS-13)
