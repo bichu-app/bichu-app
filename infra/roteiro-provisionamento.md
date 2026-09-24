@@ -391,6 +391,16 @@ gcloud compute ssh bichu-hml --project=bichu-app-508914 \
 
 ### Passo 7 — O artefato e o ambiente de homologação
 
+> **OBSOLETO PARA LEVAR CÓDIGO À VM, desde 24/09/2026.** O `scp` deste passo e o
+> `docker compose up` que constrói na VM (passo 8) foram substituídos pelo CD
+> (`.github/workflows/cd.yml`): a imagem é construída uma vez no CI, publicada no
+> Artifact Registry e implantada **por digest** por `infra/cd/implantar.sh`, que
+> também entrega o `compose.yaml` e a configuração da borda. Construir na VM foi o
+> que deixou o `src/` da homologação quatro dias atrás, e o `scp` abaixo nem
+> copiava o código (correção nunca mesclada em
+> `correcao/receita-de-provisionamento-copia-o-codigo`). Continua valendo deste
+> passo: a tabela do `.env` do host, que o CD não cria nem altera.
+
 O `compose.yaml` é o artefato, e é o **mesmo** dos dois destinos. O que muda é
 o arquivo de ambiente — é isso que torna a portabilidade do critério 12 um fato
 verificável em vez de uma frase.
