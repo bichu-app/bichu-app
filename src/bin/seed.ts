@@ -222,11 +222,11 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
     }
     await sql`
       insert into store_items (
-        id, slug, partner_id, title, summary, category, image_url, target_url,
+        id, slug, partner_id, title, summary, category, image_path, target_path,
         price_amount, price_currency, price_checked_at, active, sort_order
       ) values (
         ${ids.uuidv7()}::uuid, ${item.slug}, ${partnerId}::uuid, ${item.title}, ${item.summary},
-        ${item.category}, ${item.imageUrl}, ${item.targetUrl},
+        ${item.category}, ${item.imagePath}, ${item.targetPath},
         ${item.priceAmount}, ${item.priceAmount === null ? null : 'BRL'},
         ${data}::date, ${item.active}, ${item.sortOrder}
       )

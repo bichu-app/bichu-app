@@ -74,6 +74,25 @@ export const CATEGORIAS_DA_VITRINE: readonly CategoriaDaVitrine[] = [
  */
 export const DIAS_DE_VALIDADE_DO_PRECO = 30;
 
+/**
+ * O endereco absoluto de um caminho no site do parceiro.
+ *
+ * O banco guarda o CAMINHO do item e o HOST do parceiro em colunas separadas
+ * (migracao `20260922000009`; a secao 3.6 de `docs/07-devops.md` e normativa
+ * no porque), e e aqui que os dois viram a URL unica que a resposta publica
+ * devolve. Nao ha esquema guardado em lugar nenhum: ele e sempre `https`,
+ * porque link de saida em claro numa vitrine nossa e uma recomendacao nossa
+ * de digitar dado em canal aberto.
+ *
+ * Compor aqui torna ESTRUTURAL o que antes era conferido: o destino de um item
+ * nao tem como apontar para fora do host do parceiro que ele declara, porque o
+ * host nao vem do item. E trocar o dominio de um parceiro volta a ser o UPDATE
+ * de uma coluna que a chave estrangeira da migracao promete.
+ */
+export function enderecoNoParceiro(host: string, caminho: string): string {
+  return `https://${host}${caminho}`;
+}
+
 /** O item como o repositorio o entrega. Sem `active`, sem UUID -- nao ha um. */
 export interface ItemDaVitrine {
   readonly slug: string;
