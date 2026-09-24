@@ -68,6 +68,22 @@ void describe('lerSenhaSemEco', () => {
     assert.ok(pedaco.every((b) => b === 0), 'o pedaco entregue pelo terminal nao foi zerado');
   });
 
+  void it('isca: o modo cru liga ANTES do rotulo, senao o que se digita logo depois dele ecoa', async () => {
+    // Medido num pty de verdade em 23/09: com o rotulo escrito antes do modo
+    // cru, a resposta que chegou junto com o rotulo (colar, digitar adiantado)
+    // passou pelo eco do terminal, e a segunda senha apareceu na saida.
+    const entrada = new TerminalFalso();
+    const ordem: string[] = [];
+    entrada.setRawMode = (modo: boolean): void => {
+      ordem.push(`cru:${String(modo)}`);
+    };
+    const saida = { write: (texto: string) => ordem.push(`escreve:${texto}`) };
+    const lida = lerSenhaSemEco(entrada, saida, 'Senha: ');
+    entrada.digitar(Buffer.from('x\r'));
+    await lida;
+    assert.deepEqual(ordem.slice(0, 2), ['cru:true', 'escreve:Senha: ']);
+  });
+
   void it('apagar recua um caractere UTF-8 inteiro', async () => {
     const entrada = new TerminalFalso();
     const lida = lerSenhaSemEco(entrada, saidaCapturada().saida, '');

@@ -160,8 +160,11 @@ export function lerSenhaSemEco(
       }
     };
 
-    saida.write(rotulo);
+    // O modo cru liga ANTES do rotulo. Na ordem inversa, o que chega entre o
+    // rotulo e o modo cru (colar, digitar adiantado) passa pelo eco do
+    // terminal: medido num pty em 23/09, a segunda senha apareceu na saida.
     setRawMode.call(entrada, true);
+    saida.write(rotulo);
     entrada.on('data', aoReceber);
     entrada.resume();
   });
