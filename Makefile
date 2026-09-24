@@ -365,6 +365,10 @@ verificar-contrato-publico: ## BICHUS-55: portao de contrato publico, iscas prim
 	npm run build
 	sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
 
+verificar-rastreabilidade: ## ADR-0027 item 18: a matriz tela -> contrato concorda com api/openapi.yaml, isca primeiro
+	npm run build
+	node dist/tools/portao-rastreabilidade.js
+
 verificar-borda: ## ADR-0016: x-edge-limits, prefixo e rota de /.well-known, por leitura
 	python3 infra/verificacao/verificar_borda.py
 
@@ -409,7 +413,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-rastreabilidade verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
