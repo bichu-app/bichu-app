@@ -3456,17 +3456,16 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/PublicFoundReportCreated' }
         '400': { $ref: '#/components/responses/ValidationFailed' }
-        '404':
-          description: |
-            `share_token` que nao corresponde a caso nenhum. Mesma resposta para
-            token inexistente e para caso apagado.
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/Problem' }
         '410':
           description: |
-            Caso ja encerrado. Vem com `next_action`, e o site oferece registrar
-            como achado avulso: o animal pode ser outro parecido.
+            O `share_token` nao leva a caso aberto: caso encerrado, pet excluido,
+            falecido ou arquivado, **e token desconhecido**. Os cinco sao a MESMA
+            resposta, sem desfecho, pela regra de `lost-case-closed` (contrato de
+            23/09, PR #6): distinguir contaria a um estranho o que aconteceu com
+            o animal de outra pessoa, ou se aquele link existiu. Por isso esta
+            operacao nao declara 404. O site oferece registrar como achado
+            avulso, porque o animal na frente da pessoa pode ser outro parecido.
+            O handler depende de `lost-case-closed` estar em `x-problem-types`.
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }

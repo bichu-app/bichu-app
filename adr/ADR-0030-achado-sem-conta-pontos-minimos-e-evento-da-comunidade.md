@@ -73,6 +73,14 @@ tabela já separa as duas autorizações por CHECK.
 A forma avulsa proíbe `share_token` (`not: required`), para que um corpo nunca
 case com as duas.
 
+**`share_token` que não leva a caso aberto responde 410, e só 410**, com o
+mesmo corpo para encerrado, pet excluído, falecido, arquivado e token
+desconhecido, e **sem desfecho**. É a regra de `lost-case-closed` do contrato de
+23/09 (PR #6): o desfecho vaza por exclusão, e o link do caso continua
+circulando depois do encerramento. A operação não declara 404 pelo mesmo
+motivo. O site oferece registrar como achado avulso, porque o animal na frente
+da pessoa pode ser outro parecido.
+
 **Tag revogada não vincula.** O botão da saída do 410 de `/t/` cria achado
 **avulso**, sem ligação com o pet daquela tag. Vincular devolveria a quem tem a
 plaquinha revogada o caminho que a revogação existe para fechar (ADR-0004). A

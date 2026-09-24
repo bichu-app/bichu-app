@@ -6250,20 +6250,14 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             /**
-             * @description `share_token` que nao corresponde a caso nenhum. Mesma resposta para
-             *     token inexistente e para caso apagado.
-             */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
-            /**
-             * @description Caso ja encerrado. Vem com `next_action`, e o site oferece registrar
-             *     como achado avulso: o animal pode ser outro parecido.
+             * @description O `share_token` nao leva a caso aberto: caso encerrado, pet excluido,
+             *     falecido ou arquivado, **e token desconhecido**. Os cinco sao a MESMA
+             *     resposta, sem desfecho, pela regra de `lost-case-closed` (contrato de
+             *     23/09, PR #6): distinguir contaria a um estranho o que aconteceu com
+             *     o animal de outra pessoa, ou se aquele link existiu. Por isso esta
+             *     operacao nao declara 404. O site oferece registrar como achado
+             *     avulso, porque o animal na frente da pessoa pode ser outro parecido.
+             *     O handler depende de `lost-case-closed` estar em `x-problem-types`.
              */
             410: {
                 headers: {
