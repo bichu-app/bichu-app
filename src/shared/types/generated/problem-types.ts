@@ -26,7 +26,8 @@ export const STATUS_DO_PROBLEMA = {
   'transfer-not-for-this-account':  409,
   'transfer-already-in-progress':   409, // BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite
   'transfer-already-effective':     409, // BICHUS-66: a transferencia ja se consumou, e depois disso o caminho e transferir de volta, nao cancelar. E 409 e nao 410 de proposito: a rota EXIGE conta e o tutor tem direito de saber em que pe esta a propria transferencia -- o 410 sem distincao e da superficie PUBLICA do token, onde dizer qual dos tres casos ocorreu entregaria a um estranho o estado de uma transferencia alheia
-  'conversation-closed':            410,
+  'conversation-closed':            410, // BICHUS-41: nas rotas do achador sem conta, o token existiu e venceu. O corpo e FIXO: nao conta o desfecho do caso, pela mesma regra de `lost-case-closed`
+  'finder-link-invalid':            401, // BICHUS-41: token do achador ausente, malformado ou desconhecido, com o MESMO corpo. E 401 porque falta credencial que autentique, e nao `unauthenticated` porque este tipo manda entrar, e quem tem este link nao tem conta. Nunca `forbidden`: nao ha ninguem autenticado para ser recusado
   'tag-revoked':                    410, // tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)
   'tag-code-not-found':             404,
   'tag-code-malformed':             400,
@@ -38,7 +39,7 @@ export const STATUS_DO_PROBLEMA = {
   'internal':                       500,
 } as const;
 
-/** União fechada dos 28 tipos declarados no contrato. */
+/** União fechada dos 29 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

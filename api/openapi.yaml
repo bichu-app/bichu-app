@@ -266,6 +266,25 @@ x-rate-limit-vocabulary:
     raise_queue_priority: aceita, eleva a prioridade na fila de revisao, e NUNCA age sobre o alvo
     deny_429: recusa com `Retry-After`. Unico valor que nao aceita
 
+# DIVIDA REGISTRADA EM 23/09/2026 (BICHUS-41). O limitador do servico
+# (`src/shared/http/aplicacao-de-teto.ts`) conta e recusa so `deny_429`. Tres
+# valores acima estao DECLARADOS e NAO sao aplicados por ele:
+#
+#   serve_cache            resolveTagCode, getFinderConversation,
+#                          previewLostCaseReach, getLostCasePoster,
+#                          getReferenceData
+#   accept_and_deduplicate blockFinderConversation, reportFinderConversation,
+#                          blockConversation, reportConversation
+#   raise_queue_priority   reportFinderConversation, reportConversation
+#
+# O que existe hoje: a denuncia do achador deduplica pelo indice parcial de
+# `conversation_reports` (um item aberto por lado), que cobre parte de
+# `accept_and_deduplicate` sem passar pelo limitador. Nada eleva prioridade e
+# nada responde do cache. Estouro nessas entradas hoje e atendido como se o
+# teto nao existisse. Gatilho para pagar: antes de a primeira dessas operacoes
+# ir para producao, ou no primeiro incidente de abuso numa delas. Esta lista
+# e mantida a mao; ao pagar um item, tire a operacao daqui.
+
 x-problem-types:
   # `type` e sempre `https://{dominio}/problems/<slug>` e o cliente decide por
   # ele, nunca pelo texto. Esta lista e fechada: tipo novo entra aqui antes de
@@ -296,7 +315,8 @@ x-problem-types:
   - { slug: transfer-not-for-this-account, status: 409 }
   - { slug: transfer-already-in-progress,  status: 409, note: "BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite" }
   - { slug: transfer-already-effective,    status: 409, note: "BICHUS-66: a transferencia ja se consumou, e depois disso o caminho e transferir de volta, nao cancelar. E 409 e nao 410 de proposito: a rota EXIGE conta e o tutor tem direito de saber em que pe esta a propria transferencia -- o 410 sem distincao e da superficie PUBLICA do token, onde dizer qual dos tres casos ocorreu entregaria a um estranho o estado de uma transferencia alheia" }
-  - { slug: conversation-closed,           status: 410 }
+  - { slug: conversation-closed,           status: 410, note: "BICHUS-41: nas rotas do achador sem conta, o token existiu e venceu. O corpo e FIXO: nao conta o desfecho do caso, pela mesma regra de `lost-case-closed`" }
+  - { slug: finder-link-invalid,           status: 401, note: "BICHUS-41: token do achador ausente, malformado ou desconhecido, com o MESMO corpo. E 401 porque falta credencial que autentique, e nao `unauthenticated` porque este tipo manda entrar, e quem tem este link nao tem conta. Nunca `forbidden`: nao ha ninguem autenticado para ser recusado" }
   - { slug: tag-revoked,                   status: 410, note: "tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)" }
   - { slug: tag-code-not-found,            status: 404 }
   - { slug: tag-code-malformed,            status: 400 }
@@ -2150,7 +2170,9 @@ paths:
         campos. Data e hora sao do servidor; o codigo ja veio no caminho.
 
         Detalhes (onde, foto, recado, contato) chegam depois, por
-        `PATCH /found-reports/{foundReportId}` com o `finder_token`.
+        `PATCH /v1/finder/found-report` (`enrichFinderFoundReport`), com o
+        `finder_token` em `Authorization: Bearer` e sem id no caminho. A foto
+        vem antes, por `POST /v1/media/finder-photo-intents`.
 
         `Idempotency-Key` e **obrigatorio**: a pagina publica reenvia o pedido
         por fila do service worker quando a rede cai, e o tutor nao pode
@@ -2436,12 +2458,10 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FinderFoundReportView' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '410':
-          description: Caso ja encerrado.
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/Problem' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/FinderLinkInvalid' }
+        '410': { $ref: '#/components/responses/FinderAccessEnded' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /media/finder-photo-intents:
     post:
@@ -2481,8 +2501,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FinderUploadIntent' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/FinderLinkInvalid' }
+        '410': { $ref: '#/components/responses/FinderAccessEnded' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+          # `deny_429` em `finder_token`, 3 por aviso para sempre (SEC-009).
+          # Janela `lifetime`: o corpo nao promete reabertura.
 
   /finder/conversation:
     get:
@@ -2495,6 +2521,20 @@ paths:
           window: 1h
           on_exceed: serve_cache
       summary: A conversa do achador, resolvida pelo token
+      description: |
+        Enquanto o link vale (caso aberto, ou ate 30 dias do aviso, ou ate 30
+        dias depois do encerramento), a leitura e **200**, inclusive com o caso
+        encerrado: `status: closed` diz que a conversa nao aceita mais
+        mensagem, e o que o tutor escreveu antes continua legivel. Depois disso,
+        **410** com corpo fixo.
+
+        **Nenhuma das duas respostas conta o desfecho do caso.** Ate 23/09/2026
+        este documento prometia "o desfecho, porque quem ajudou merece saber que
+        deu certo". A promessa saiu pela regra de `lost-case-closed`: o link e
+        um bearer, pode ter sido repassado, e um texto que diz "voltou para
+        casa" em um caso e outra coisa nos demais conta, por exclusao, o que
+        aconteceu com o animal de outra pessoa. Quem decide contar e o tutor,
+        na conversa, antes de encerrar.
       security:
         - finderToken: []
       parameters:
@@ -2506,14 +2546,11 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FinderConversation' }
-        '403': { $ref: '#/components/responses/Forbidden' }
-        '410':
-          description: |
-            Caso encerrado. A resposta traz o desfecho, porque quem ajudou
-            merece saber que deu certo.
-          content:
-            application/problem+json:
-              schema: { $ref: '#/components/schemas/Problem' }
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+          # `cursor` e `limit` tem faixa declarada.
+        '401': { $ref: '#/components/responses/FinderLinkInvalid' }
+        '410': { $ref: '#/components/responses/FinderAccessEnded' }
 
   /finder/conversation/messages:
     post:
@@ -2550,9 +2587,12 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FinderMessage' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/FinderLinkInvalid' }
         '410':
-          description: Conversa encerrada ou bloqueada.
+          description: |
+            Conversa encerrada ou bloqueada, ou acesso do link vencido. Corpo
+            fixo, sem desfecho do caso (ver `FinderAccessEnded`).
           content:
             application/problem+json:
               schema: { $ref: '#/components/schemas/Problem' }
@@ -2573,7 +2613,8 @@ paths:
         - finderToken: []
       responses:
         '204': { description: Bloqueada. }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '401': { $ref: '#/components/responses/FinderLinkInvalid' }
+        '410': { $ref: '#/components/responses/FinderAccessEnded' }
 
   /finder/conversation/report:
     post:
@@ -2609,7 +2650,9 @@ paths:
                 detail: { type: string, maxLength: 1000 }
       responses:
         '202': { $ref: '#/components/responses/Accepted' }
-        '403': { $ref: '#/components/responses/Forbidden' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/FinderLinkInvalid' }
+        '410': { $ref: '#/components/responses/FinderAccessEnded' }
 
   # ----------------------------------------------------------------------
   # Casos de perdido
@@ -4273,6 +4316,54 @@ components:
       content:
         application/problem+json:
           schema: { $ref: '#/components/schemas/Problem' }
+    FinderLinkInvalid:
+      description: |
+        O token do achador esta ausente, malformado ou nao corresponde a aviso
+        nenhum. Os tres casos tem **o mesmo corpo**: distinguir "malformado" de
+        "nao existe" diria a quem tenta que chegou perto. `type` e sempre
+        `finder-link-invalid`.
+
+        E 401, e nao 403, pelo mesmo criterio de `getPublicLostCase`: credencial
+        que nao autentica e 401, e 403 fica para quem se autenticou e nao tem
+        permissao, que aqui nao existe (o token tem escopo de uma conversa so).
+        Nao e `unauthenticated` porque aquele tipo manda entrar, e quem abriu
+        este link nao tem conta. Sai com `WWW-Authenticate: Bearer`.
+      headers:
+        WWW-Authenticate: { schema: { type: string }, description: 'Sempre `Bearer`.' }
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            linkInvalido:
+              value:
+                type: https://dominio-a-definir.com.br/problems/finder-link-invalid
+                title: Este link nao vale
+                status: 401
+                detail: Confira se o endereco foi copiado inteiro.
+                next_action: register_stray_found_report
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+    FinderAccessEnded:
+      description: |
+        O token do achador existiu e **venceu**: passou dos 30 dias do aviso com
+        o caso ja encerrado, ou dos 30 dias depois do encerramento. `type` e
+        `conversation-closed`, e o corpo e **fixo**: nao traz o desfecho do caso
+        em campo nenhum, nem no `detail`. Ver a descricao de
+        `getFinderConversation`.
+
+        Vale igual para as seis operacoes do achador. Bloquear, denunciar,
+        enviar foto ou recado por um link vencido recebe a mesma resposta que
+        ler a conversa: responder 401 ali diria que o link nunca valeu.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            vencido:
+              value:
+                type: https://dominio-a-definir.com.br/problems/conversation-closed
+                title: Esta conversa terminou
+                status: 410
+                detail: Este link nao da mais acesso a conversa.
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
     ValidationFailed:
       description: Corpo ou parametro invalido.
       content:
@@ -4930,15 +5021,14 @@ components:
           type: string
           pattern: '^[A-Za-z0-9_-]{22}$'
           description: |
-            O `upload_ref` devolvido por
-            `POST /v1/finder/found-report/photo-upload-intent`. Opaco de
-            proposito: este corpo vem de quem nao tem conta (SEC-001).
+            O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+            (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+            vem de quem nao tem conta (SEC-001).
         location:
-          type: object
-          properties:
-            lat: { type: number, format: double }
-            lon: { type: number, format: double }
-            accuracy_m: { type: integer }
+          $ref: '#/components/schemas/GeoPoint'
+          # A mesma faixa de todo ponto do produto (territorio brasileiro).
+          # Latitude sem longitude nao e ponto, e por isso as duas sao
+          # obrigatorias quando `location` vem.
         finder_contact:
           type: object
           description: |
@@ -4992,7 +5082,13 @@ components:
             Opcional. Vincula o achado a um caso conhecido em vez de deixar o
             cruzamento descobrir. O candidato nasce com `status: suggested` e
             **continua exigindo confirmacao humana do tutor**.
-        notes: { type: string, maxLength: 1000 }
+        notes:
+          type: string
+          maxLength: 500
+          description: |
+            500, o mesmo teto de `found_reports.notes` no banco
+            (`found_reports_notes_tamanho`). O contrato dizia 1000, e o texto
+            entre 501 e 1000 passava pela validacao e morria no banco como 500.
         photo_upload_id: { type: string, format: uuid }
 
     FoundReport:
