@@ -27,7 +27,11 @@
  */
 import { sql } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
-import type { CategoriaDaVitrine, ItemDaVitrine } from '../../domain/item-da-vitrine.js';
+import {
+  enderecoNoParceiro,
+  type CategoriaDaVitrine,
+  type ItemDaVitrine,
+} from '../../domain/item-da-vitrine.js';
 import type {
   PaginaDaVitrine,
   RecorteDaVitrine,
@@ -39,8 +43,8 @@ interface LinhaDoItem {
   title: string;
   summary: string;
   category: CategoriaDaVitrine;
-  image_url: string | null;
-  target_url: string;
+  image_path: string | null;
+  target_path: string;
   partner_slug: string;
   partner_name: string;
   partner_host: string;
@@ -141,8 +145,8 @@ export class KyselyStoreRepository implements StoreRepository {
         'i.title as title',
         'i.summary as summary',
         'i.category as category',
-        'i.image_url as image_url',
-        'i.target_url as target_url',
+        'i.image_path as image_path',
+        'i.target_path as target_path',
         'p.slug as partner_slug',
         'p.name as partner_name',
         'p.host as partner_host',
@@ -159,8 +163,11 @@ export class KyselyStoreRepository implements StoreRepository {
       title: linha.title,
       summary: linha.summary,
       category: linha.category,
-      imageUrl: linha.image_url,
-      targetUrl: linha.target_url,
+      // O banco guarda caminho; o endereco e composto aqui, com o host do
+      // parceiro que a juncao trouxe. Ver `enderecoNoParceiro`.
+      imageUrl:
+        linha.image_path === null ? null : enderecoNoParceiro(linha.partner_host, linha.image_path),
+      targetUrl: enderecoNoParceiro(linha.partner_host, linha.target_path),
       partnerSlug: linha.partner_slug,
       partnerName: linha.partner_name,
       partnerHost: linha.partner_host,

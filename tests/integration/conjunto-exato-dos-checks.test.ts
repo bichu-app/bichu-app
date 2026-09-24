@@ -487,13 +487,15 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
   'public.store_partners.store_partners_slug_formato':
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
-  // https e nao http: o destino e uma pagina de comercio, e um link em claro
-  // numa vitrine nossa e uma recomendacao nossa de digitar dado em canal
-  // aberto.
-  'public.store_items.store_items_destino_e_https':
-    "CHECK ((target_url ~ '^https://'::text))",
-  'public.store_items.store_items_imagem_e_https':
-    "CHECK (((image_url IS NULL) OR (image_url ~ '^https://'::text)))",
+  // Caminho, e nao URL: o banco nao guarda endereco (docs/07-devops.md secao
+  // 3.6), e o absoluto e composto na leitura com o host do parceiro. O
+  // esquema `https` deixou de ser assunto do banco porque deixou de ser
+  // dado -- ele e constante da composicao. Sem `?` e sem `#`: parametro em
+  // link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185).
+  'public.store_items.store_items_destino_e_caminho':
+    "CHECK ((target_path ~ '^/[^[:space:]?#]*$'::text))",
+  'public.store_items.store_items_imagem_e_caminho':
+    "CHECK (((image_path IS NULL) OR (image_path ~ '^/[^[:space:]?#]*$'::text)))",
   // So o HOST, sem esquema, caminho nem consulta. Guardar a URL inteira
   // convidaria um parametro a viajar junto, e parametro em link de saida e
   // onde dado pessoal vaza (consequencia 3 da BICHUS-185).

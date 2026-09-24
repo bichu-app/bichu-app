@@ -95,12 +95,16 @@ void main() {
           'terminado. E o defeito que o cliente relatou em aparelho: ele toca '
           'no botao e o circulo nao para nunca.',
     );
-    // A rolagem continua aqui pela tela de ENTRAR, cujo botao ainda vive
-    // dentro do conteudo. Em `Criar conta` o botao esta na barra fixa do
-    // rodape desde 23/09/2026 e o `if` abaixo nao chega a disparar -- e e de
-    // proposito que ele continue existindo: se o botao voltar para dentro do
-    // conteudo, o caso precisa medir o carregamento, e nao reprovar por nao
-    // ACHAR o botao, que e outro motivo que nao o do caso.
+    // **Nenhuma das tres telas de conta rola mais para chegar ao botao**: as
+    // tres o tem na barra fixa do rodape desde 23/09/2026 (`Criar conta` pela
+    // manha, `Entrar` e `Esqueci minha senha` no mesmo dia). O `if` abaixo
+    // deixou de disparar, e e de proposito que ele continue existindo: se o
+    // botao voltar para dentro do conteudo, o caso precisa medir o
+    // carregamento, e nao reprovar por nao ACHAR o botao, que e outro motivo
+    // que nao o do caso.
+    //
+    // Quem cobra que ele fique fora da rolagem e
+    // `telas/acao_primaria_fora_da_rolagem_test.dart`, e nao este arquivo.
     final alvo = find.widgetWithText(FilledButton, rotulo);
     if (alvo.evaluate().isEmpty) {
       await tester.dragUntilVisible(

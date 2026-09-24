@@ -272,6 +272,28 @@ jobs:
       - name: nenhuma assercao de tolerancia zero sobre sorteio, iscas primeiro
         run: node infra/verificacao/verificar-sorteio-sem-semente.mjs
 
+      # PORTAO DE NUMERO DE ADR (23/09/2026). Em 23/09 duas ADRs nasceram com o
+      # numero 0024 em branches diferentes -- uma sobre a Loja, outra sobre
+      # privacidade da Rede -- e nenhum dos dois autores sabia do outro. O git
+      # NAO acusa isso: nomes de arquivo diferentes nao conflitam, entao o merge
+      # junta as duas em silencio e o codigo passa a citar "ADR-0024" com duas
+      # decisoes possiveis atras do mesmo rotulo.
+      #
+      # AQUI, no `rapidos`, e por dois motivos. Custo: 0,06 s, so leitura de
+      # nomes de arquivo, sem npm e sem docker. E lugar: a colisao nasce em
+      # branches separadas e so vira defeito no MERGE, que e exatamente o que
+      # este job guarda. O gemeo local e `make verificar-numero-de-adr`, que
+      # entrou em `make verificar` no mesmo dia.
+      #
+      # As iscas rodam ANTES da varredura, e o autoteste nao le `adr/`: ele
+      # exercita a decisao com listas de nomes montadas a mao, inclusive a
+      # colisao real de 23/09.
+      - name: as iscas do portao de numero de ADR reprovam
+        run: node infra/verificacao/verificar-numero-de-adr.mjs --autoteste
+
+      - name: nenhum numero de ADR repetido em adr/
+        run: node infra/verificacao/verificar-numero-de-adr.mjs
+
       - name: a borda concorda com o contrato
         run: python3 infra/verificacao/verificar_borda.py
 

@@ -873,8 +873,10 @@ export interface StoreItemsTable {
   title: string;
   summary: string;
   category: CategoriaDaVitrine;
-  image_url: string | null;
-  target_url: string;
+  /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
+  image_path: string | null;
+  /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
+  target_path: string;
   /** Centavos, inteiro. Nunca ponto flutuante. */
   price_amount: number | null;
   price_currency: string | null;

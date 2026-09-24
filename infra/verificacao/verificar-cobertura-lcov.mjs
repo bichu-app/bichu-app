@@ -170,6 +170,10 @@ const AUSENCIAS_ACEITAS = new Map([
   // outras: nao declara `const`, `function`, `class` nem `enum`, e o compilado
   // em `dist/_tests` e `export {};` -- 59 bytes, nenhuma instrucao.
   ['src/modules/professionals/ports/directory-repository.ts', SO_TIPO],
+  // Chegou com a `Loja` (23/09). Conferida pelo MESMO criterio das outras:
+  // nao declara `const`, `function`, `class` nem `enum`, e o compilado em
+  // `dist/_tests` e `export {};` -- 55 bytes, nenhuma instrucao.
+  ['src/modules/store/ports/store-repository.ts', SO_TIPO],
   ['src/modules/tags/ports/autenticador.ts', SO_TIPO],
   ['src/modules/tags/ports/rasterizador-de-qr.ts', SO_TIPO],
   ['src/modules/tags/ports/tag-repository.ts', SO_TIPO],
