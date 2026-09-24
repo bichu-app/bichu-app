@@ -23,11 +23,12 @@ import { problemas } from '../../../shared/http/errors.js';
 import { hashDeToken, hashDoCodigoDaTag } from '../../../shared/crypto/digest.js';
 import { gerarCodigoDaTag, normalizarCodigoDaTag, sufixoDoCodigo } from '../domain/tag-code.js';
 import { desenharQr, urlDaTag } from '../domain/qr-da-tag.js';
-import type {
-  ContextoDoDono,
-  TagDoTutor,
-  TagRepository,
-  TagResolvida,
+import {
+  JANELA_DE_AGRUPAMENTO_EM_MS,
+  type ContextoDoDono,
+  type TagDoTutor,
+  type TagRepository,
+  type TagResolvida,
 } from '../ports/tag-repository.js';
 import type { RasterizadorDeQr } from '../ports/rasterizador-de-qr.js';
 import type {
@@ -43,8 +44,6 @@ import type {
 
 const HORA = 3600 * 1000;
 
-/** Janela do agrupamento: dois avisos do mesmo achador em 6 h são uma conversa só. */
-const JANELA_DE_AGRUPAMENTO_EM_MS = 6 * HORA;
 
 /** "Você já avisou" muda o texto do botão; não impede avisar de novo. */
 const JANELA_DE_JA_AVISOU_EM_MS = 24 * HORA;

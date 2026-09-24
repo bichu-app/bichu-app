@@ -61,6 +61,46 @@ export interface NovaIntencaoDeFotoDoAchado {
   readonly expiresAt: Date;
 }
 
+/**
+ * O aviso como o achador SEM CONTA o alcança: pelo resumo do token (BICHUS-41).
+ *
+ * `id` fica do lado de dentro, para a chave de objeto da foto; a vista que sai
+ * (`FinderFoundReportView`) não tem id nenhum (SEC-001).
+ */
+export interface AvisoDoAchador {
+  readonly id: FoundReportId;
+  readonly status: 'open' | 'matched' | 'closed';
+  readonly achadoEm: Date;
+  readonly temFoto: boolean;
+  readonly temPonto: boolean;
+  /** `found_reports.notes`, como a pessoa digitou no aviso. Redigido na borda de saída. */
+  readonly recado: string | null;
+  readonly nomeDoPet: string | null;
+  /** O resumo gravado, para a comparação em tempo constante no serviço. */
+  readonly resumoDoToken: Uint8Array;
+}
+
+/** O que "Contar mais" grava no aviso. O recado não: ele vai para a conversa. */
+export interface EnriquecimentoDoAchador {
+  readonly lat?: number;
+  readonly lon?: number;
+  readonly nome?: string;
+  readonly email?: string;
+  /** O id interno do upload, já resolvido a partir da referência opaca. */
+  readonly fotoUploadId?: string;
+}
+
+export interface NovaIntencaoDeFotoDoAchadorSemConta {
+  readonly id: string;
+  /** A referência opaca que o achador recebe e devolve. Nunca o `id`. */
+  readonly uploadRef: string;
+  readonly foundReportId: FoundReportId;
+  readonly objectKey: ObjectKey;
+  readonly declaredType: string;
+  readonly maxBytes: number;
+  readonly expiresAt: Date;
+}
+
 export interface FoundReportRepository {
   /** `null` quando o caso do `share_token` não existe ou não está aberto. */
   casoAbertoPorShareToken(token: string): Promise<CaseId | null>;
@@ -123,4 +163,33 @@ export interface FoundReportRepository {
    * instante (`match_candidates_decisao_tem_autor`).
    */
   sugerirCorrespondencias(sugestoes: readonly Sugestao[]): Promise<number>;
+
+  // -------------------------------------------------------------------------
+  // O achador sem conta (BICHUS-41). O "dono" é o RESUMO do token, e ele entra
+  // no `WHERE` de cada consulta, como `reporter_user_id` entra nas de cima.
+  // -------------------------------------------------------------------------
+
+  /** `undefined` quando o resumo não é de aviso nenhum. */
+  avisoPeloTokenDoAchador(resumo: Uint8Array): Promise<AvisoDoAchador | undefined>;
+
+  /**
+   * `undefined` quando o resumo não é de aviso nenhum **ou o aviso já encerrou**.
+   * Quem distingue os dois é o serviço, que já leu o aviso antes.
+   */
+  enriquecerPeloTokenDoAchador(
+    resumo: Uint8Array,
+    mudanca: EnriquecimentoDoAchador,
+    agora: Instant,
+  ): Promise<AvisoDoAchador | undefined>;
+
+  /** O upload da referência opaca, e só se ele for DESTE aviso. */
+  intencaoDeFotoDoAchadorPelaReferencia(
+    resumo: Uint8Array,
+    uploadRef: string,
+  ): Promise<string | undefined>;
+
+  /** Quantas intenções de foto o aviso deste token já teve, na vida inteira (SEC-009). */
+  contarIntencoesDeFotoPeloTokenDoAchador(resumo: Uint8Array): Promise<number>;
+
+  registrarIntencaoDeFotoDoAchadorSemConta(nova: NovaIntencaoDeFotoDoAchadorSemConta): Promise<void>;
 }

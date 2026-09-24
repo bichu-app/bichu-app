@@ -42,9 +42,12 @@ import {
   TOLERANCIA_DE_ACHADO_ANTES_EM_HORAS,
 } from '../../domain/cruzamento.js';
 import type {
+  AvisoDoAchador,
   Enriquecimento,
+  EnriquecimentoDoAchador,
   FoundReportRepository,
   NovaIntencaoDeFotoDoAchado,
+  NovaIntencaoDeFotoDoAchadorSemConta,
   NovoAchado,
   Pagina,
 } from '../../ports/found-report-repository.js';
@@ -236,6 +239,114 @@ export function construtorDaContagemDeFotos(db: DbExecutor, achado: FoundReportI
     .where('found_reports.reporter_user_id', '=', dono);
 }
 
+// ===========================================================================
+// O achador sem conta (BICHUS-41)
+// ===========================================================================
+//
+// O "dono" aqui é o resumo do token, e ele entra no `WHERE` de toda consulta,
+// pelo mesmo motivo que `reporter_user_id` entra nas de cima: a consulta que
+// alcançaria o aviso de outra pessoa não existe neste arquivo. `origin =
+// 'tag_scan'` vai junto porque só o aviso da plaquinha tem token.
+
+interface LinhaDoAvisoDoAchador {
+  id: string;
+  status: 'open' | 'matched' | 'closed';
+  found_at: Date;
+  tem_foto: boolean;
+  tem_ponto: boolean;
+  notes: string | null;
+  pet_name: string | null;
+  finder_token_hash: Buffer | null;
+}
+
+/** A leitura do aviso pelo token. Exportado para a bancada que lê o SQL. */
+export function construtorDoAvisoDoAchador(db: DbExecutor, resumo: Uint8Array) {
+  return db
+    .selectFrom('found_reports')
+    .leftJoin('pets', 'pets.id', 'found_reports.pet_id')
+    .select([
+      'found_reports.id',
+      'found_reports.status',
+      'found_reports.found_at',
+      sql<boolean>`(found_reports.photo_upload_id IS NOT NULL)`.as('tem_foto'),
+      // O booleano, e nunca o ponto: a coordenada não atravessa a aplicação.
+      sql<boolean>`(found_reports.found_point IS NOT NULL)`.as('tem_ponto'),
+      'found_reports.notes',
+      'pets.name as pet_name',
+      'found_reports.finder_token_hash',
+    ])
+    .where('found_reports.finder_token_hash', '=', Buffer.from(resumo))
+    .where('found_reports.origin', '=', 'tag_scan');
+}
+
+/**
+ * O "Contar mais" do achador. `status <> 'closed'` no `WHERE`: aviso encerrado
+ * não recebe detalhe, e a escrita que não pegou é o sinal que o serviço lê.
+ *
+ * `found_point` por SQL, na ordem (lon, lat) de `ST_MakePoint`, como no resto
+ * do arquivo.
+ */
+export function construtorDoEnriquecimentoDoAchador(
+  db: DbExecutor,
+  resumo: Uint8Array,
+  mudanca: EnriquecimentoDoAchador,
+) {
+  const temCoordenada = typeof mudanca.lat === 'number' && typeof mudanca.lon === 'number';
+  return db
+    .updateTable('found_reports')
+    .set({
+      ...(temCoordenada
+        ? {
+            found_point: sql`ST_SetSRID(ST_MakePoint(${mudanca.lon}, ${mudanca.lat}), 4326)::geography`,
+          }
+        : {}),
+      ...(mudanca.nome === undefined ? {} : { finder_display_name: mudanca.nome }),
+      ...(mudanca.email === undefined ? {} : { finder_email: mudanca.email }),
+      ...(mudanca.fotoUploadId === undefined ? {} : { photo_upload_id: mudanca.fotoUploadId }),
+    } as never)
+    .where('finder_token_hash', '=', Buffer.from(resumo))
+    .where('origin', '=', 'tag_scan')
+    .where('status', '<>', 'closed');
+}
+
+/** O upload da referência, e só se ele pertence ao aviso DESTE token. */
+export function construtorDaIntencaoPelaReferencia(
+  db: DbExecutor,
+  resumo: Uint8Array,
+  uploadRef: string,
+) {
+  return db
+    .selectFrom('upload_intents')
+    .innerJoin('found_reports', 'found_reports.id', 'upload_intents.found_report_id')
+    .select('upload_intents.id')
+    .where('upload_intents.upload_ref', '=', uploadRef)
+    .where('upload_intents.kind', '=', 'finder_photo')
+    .where('found_reports.finder_token_hash', '=', Buffer.from(resumo));
+}
+
+/** O teto vitalício de três fotos por aviso (SEC-009), contado pelo aviso do token. */
+export function construtorDaContagemDeFotosDoAchador(db: DbExecutor, resumo: Uint8Array) {
+  return db
+    .selectFrom('upload_intents')
+    .innerJoin('found_reports', 'found_reports.id', 'upload_intents.found_report_id')
+    .select(({ fn }) => fn.countAll<number>().as('total'))
+    .where('found_reports.finder_token_hash', '=', Buffer.from(resumo));
+}
+
+function comoAvisoDoAchador(linha: LinhaDoAvisoDoAchador): AvisoDoAchador | undefined {
+  if (linha.finder_token_hash === null) return undefined;
+  return {
+    id: linha.id as FoundReportId,
+    status: linha.status,
+    achadoEm: linha.found_at,
+    temFoto: linha.tem_foto,
+    temPonto: linha.tem_ponto,
+    recado: linha.notes,
+    nomeDoPet: linha.pet_name,
+    resumoDoToken: new Uint8Array(linha.finder_token_hash),
+  };
+}
+
 export function criarFoundReportRepository(db: Db): FoundReportRepository {
   return {
     async casoAbertoPorShareToken(token: string): Promise<CaseId | null> {
@@ -365,6 +476,51 @@ export function criarFoundReportRepository(db: Db): FoundReportRepository {
           max_bytes: nova.maxBytes,
           expires_at: nova.expiresAt,
           confirmed_at: null,
+        })
+        .execute();
+    },
+
+    async avisoPeloTokenDoAchador(resumo): Promise<AvisoDoAchador | undefined> {
+      const linha = await construtorDoAvisoDoAchador(db, resumo).executeTakeFirst();
+      return linha === undefined ? undefined : comoAvisoDoAchador(linha);
+    },
+
+    async enriquecerPeloTokenDoAchador(resumo, mudanca): Promise<AvisoDoAchador | undefined> {
+      const resultado = await construtorDoEnriquecimentoDoAchador(db, resumo, mudanca).executeTakeFirst();
+      if (Number(resultado.numUpdatedRows) === 0) return undefined;
+      const linha = await construtorDoAvisoDoAchador(db, resumo).executeTakeFirst();
+      return linha === undefined ? undefined : comoAvisoDoAchador(linha);
+    },
+
+    async intencaoDeFotoDoAchadorPelaReferencia(resumo, uploadRef): Promise<string | undefined> {
+      const linha = await construtorDaIntencaoPelaReferencia(db, resumo, uploadRef).executeTakeFirst();
+      return linha?.id;
+    },
+
+    async contarIntencoesDeFotoPeloTokenDoAchador(resumo): Promise<number> {
+      const linha = await construtorDaContagemDeFotosDoAchador(db, resumo).executeTakeFirst();
+      return Number(linha?.total ?? 0);
+    },
+
+    async registrarIntencaoDeFotoDoAchadorSemConta(
+      nova: NovaIntencaoDeFotoDoAchadorSemConta,
+    ): Promise<void> {
+      await db
+        .insertInto('upload_intents')
+        .values({
+          id: nova.id,
+          // Sem conta, sem dono: o CHECK `upload_intents_dono_salvo_achador_sem_conta`
+          // só admite isto em `finder_photo`.
+          user_id: null,
+          pet_id: null,
+          found_report_id: nova.foundReportId,
+          kind: 'finder_photo',
+          object_key: nova.objectKey,
+          declared_type: nova.declaredType,
+          max_bytes: nova.maxBytes,
+          expires_at: nova.expiresAt,
+          confirmed_at: null,
+          upload_ref: nova.uploadRef,
         })
         .execute();
     },

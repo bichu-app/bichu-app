@@ -165,6 +165,12 @@ function repositorio(cenario: Cenario): FoundReportRepository {
       gravadas.push(...sugestoes);
       return Promise.resolve(sugestoes.length);
     },
+    // O achador sem conta tem bancada própria (`finder-found-report-routes.test.ts`).
+    avisoPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+    enriquecerPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+    intencaoDeFotoDoAchadorPelaReferencia: () => Promise.reject(new Error('fora desta bancada')),
+    contarIntencoesDeFotoPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+    registrarIntencaoDeFotoDoAchadorSemConta: () => Promise.reject(new Error('fora desta bancada')),
   };
 }
 

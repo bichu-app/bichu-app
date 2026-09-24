@@ -442,6 +442,17 @@ export const problemas = {
     }),
 
   /**
+   * 410. O token do achador sem conta passou da validade (BICHUS-41).
+   *
+   * O contrato de `getFinderConversation` diz que este 410 "traz o desfecho,
+   * porque quem ajudou merece saber que deu certo". `Problem` não tem campo de
+   * desfecho e `next_action` não tem valor para ele, então o desfecho vai no
+   * `detail`, que é texto para a pessoa ler. A tela decide pelo `type`.
+   */
+  acessoDoAchadorVencido: (desfecho: string): AppError =>
+    new AppError('conversation-closed', 'Esta conversa terminou', { detail: desfecho }),
+
+  /**
    * 410. O aviso já foi encerrado, e não há mais o que acrescentar a ele.
    *
    * O tipo é `conversation-closed` porque é o único 410 do vocabulário fechado do
@@ -468,10 +479,11 @@ export const problemas = {
    * motivo diferente.
    *
    * **"Deste aparelho" nomeia uma dimensão que este construtor não conhece.**
-   * O mesmo 429 sai de onze dimensões declaradas em `x-rate-limit`
+   * O mesmo 429 sai das dimensões declaradas em `x-rate-limit`
    * (`DIMENSOES_CONHECIDAS`, em `aplicacao-de-teto.ts`): `ip`, `ip_24`,
    * `origin`, `account`, `email`, `code`, `pet`, `token_family`,
-   * `finder_identity`, `conversation_participant` e `found_report`. Duas são de
+   * `finder_identity`, `conversation_participant`, `found_report`,
+   * `finder_token` e `report_target`. Duas são de
    * rede e nenhuma é de aparelho. No balde de IP o texto era pior do que
    * impreciso: sob CGNAT de operadora, ou atrás do NAT de um escritório, o
    * balde é compartilhado por gente que não tem relação nenhuma entre si, e a
