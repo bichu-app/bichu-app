@@ -40,6 +40,13 @@
  * alguem (ADR-0027 secao 13). Vale tambem para massa: um ponto de massa copiado
  * para um ambiente de demonstracao continua sendo um ponto no mapa.
  *
+ * ## As capas apontam para `.example`, e de proposito
+ *
+ * `.example` e reservado pela RFC 2606 e nao resolve em lugar nenhum, como os
+ * parceiros da massa da `Loja`. Um host real em `src/` e achado do portao de
+ * portabilidade (`docs/07-devops.md` 3.6), e a capa desta fatia e so para o
+ * cartao se desenhar com e sem imagem.
+ *
  * ## AS DATAS SAO CALCULADAS, E NUNCA LITERAIS
  *
  * Com datas literais a massa INTEIRA vira passado sozinha em poucas semanas.
@@ -142,7 +149,7 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 4, horaLocal: '09:00', duracaoEmMinutos: 180 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://cdn.bichu.app/rede/benedito-calixto.jpg',
+    coverImageUrl: 'https://midia.bichu.example/rede/benedito-calixto.jpg',
     ponto: { lat: -23.5634, lon: -46.6821 },
     publicationStatus: 'published',
   },
@@ -157,7 +164,7 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 10, horaLocal: '15:30', duracaoEmMinutos: 120 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://cdn.bichu.app/rede/ibirapuera-portao-7.jpg',
+    coverImageUrl: 'https://midia.bichu.example/rede/ibirapuera-portao-7.jpg',
     ponto: { lat: -23.5874, lon: -46.6576 },
     publicationStatus: 'published',
   },
@@ -198,7 +205,7 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'MG',
     quando: { ancora: 'instante', comecaEmMinutos: -45, duracaoEmMinutos: 180 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://cdn.bichu.app/rede/praca-da-liberdade.jpg',
+    coverImageUrl: 'https://midia.bichu.example/rede/praca-da-liberdade.jpg',
     ponto: { lat: -19.932, lon: -43.938 },
     publicationStatus: 'published',
   },
@@ -217,7 +224,7 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: -9, horaLocal: '10:00', duracaoEmMinutos: 300 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://cdn.bichu.app/rede/roosevelt-adocao.jpg',
+    coverImageUrl: 'https://midia.bichu.example/rede/roosevelt-adocao.jpg',
     ponto: { lat: -23.5486, lon: -46.6461 },
     publicationStatus: 'published',
   },
@@ -289,7 +296,7 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 18, horaLocal: '17:00', duracaoEmMinutos: 90 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://cdn.bichu.app/rede/orla-de-santos.jpg',
+    coverImageUrl: 'https://midia.bichu.example/rede/orla-de-santos.jpg',
     ponto: null,
     publicationStatus: 'published',
   },
@@ -322,7 +329,7 @@ export const MASSA_DA_REDE: readonly EncontroSemeado[] = [
     state: 'SP',
     quando: { ancora: 'parede', diasAPartirDeHoje: 6, horaLocal: '11:00', duracaoEmMinutos: 210 },
     timeZone: 'America/Sao_Paulo',
-    coverImageUrl: 'https://cdn.bichu.app/rede/villa-lobos.jpg',
+    coverImageUrl: 'https://midia.bichu.example/rede/villa-lobos.jpg',
     ponto: { lat: -23.5466, lon: -46.7236 },
     publicationStatus: 'published',
   },
