@@ -2767,8 +2767,12 @@ export interface paths {
         put?: never;
         /**
          * Aprova o pedido, e o tutor passa a ver o encontro inteiro
-         * @description So a partir de `pending` sem desistencia (`400`, `code:
-         *     request_not_pending`, nos outros casos). O tutor recebe push **so com
+         * @description A partir de `pending` sem desistencia, **ou de `declined`** (o painel
+         *     pode reverter uma recusa; o tutor nunca soube dela, e a aprovacao
+         *     chega como a primeira noticia). Aprovado nao volta a recusado: o tutor
+         *     ja viu o lugar, e recusar depois seria uma segunda decisao que ele
+         *     sabe que existiu (`400`, `code: request_not_pending`, nos outros
+         *     casos). O tutor recebe push **so com
          *     o titulo do encontro**, nunca lugar nem horario: o conteudo passa pelo
          *     provedor de push e aparece na tela bloqueada (22.10.1). A partir daqui
          *     `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
@@ -2795,7 +2799,8 @@ export interface paths {
         put?: never;
         /**
          * Recusa o pedido, sem avisar o tutor
-         * @description So a partir de `pending` sem desistencia. **O tutor nao e avisado**, e
+         * @description So a partir de `pending` sem desistencia; aprovado nao volta a
+         *     recusado. **O tutor nao e avisado**, e
          *     para ele o pedido continua "aguardando" ate o encontro passar (decisao
          *     do cliente, 23/09): o app recebe `requested`, nunca `declined`. A
          *     recusa e final e invisivel: pedir de novo devolve o mesmo `requested`
@@ -4228,6 +4233,13 @@ export interface components {
              * @enum {string}
              */
             content_type: "image/jpeg" | "image/png" | "image/webp";
+            /**
+             * @description Ate 5 MiB, o numero que o painel mostra. Dimensao minima: 800 x 800
+             *     pixels para `store_item`, 1600 x 900 para `network_event`. A
+             *     dimensao so e conhecida depois do envio: o worker a confere nos
+             *     bytes e marca a imagem `rejected` com o motivo, e o painel mostra o
+             *     erro na miniatura.
+             */
             byte_size: number;
         };
         AdminStorePartnerInput: {
@@ -4307,7 +4319,12 @@ export interface components {
          */
         AdminStoreItemPublicationState: "draft" | "published" | "retired";
         AdminStoreItemInput: {
-            slug: components["schemas"]["Slug"];
+            /**
+             * @description Opcional. Sem ele, o servidor deriva do titulo (sem acento,
+             *     minusculo, espaco vira hifen, com sufixo curto se ja existir). O
+             *     formulario do painel nao pede `slug` (matriz de rastreabilidade).
+             */
+            slug?: components["schemas"]["Slug"];
             partner_slug: components["schemas"]["Slug"];
             title: string;
             /** @description Uma linha. Texto puro, renderizado como texto no app (D47). */
@@ -4382,11 +4399,13 @@ export interface components {
             };
         };
         /**
-         * @description O ponto tocado no mapa do painel. A origem e sempre `map_pin`
-         *     (ADR-0006), e por isso nao ha campo de origem nem de precisao. Os
-         *     limites sao os de `GeoPoint`.
+         * @description O ponto do encontro, marcado no mapa (`map_pin`, ADR-0006). Sem campo de
+         *     origem nem de precisao: a origem e sempre `map_pin`. Os limites sao os
+         *     de `GeoPoint`. **Um schema so para o painel e para o app**: e o mesmo
+         *     `NetworkEventPoint` da emenda da `Rede` (`feat/secao-rede-emenda-servidor`),
+         *     com a mesma forma e os mesmos limites; `AdminMapPin` deixou de existir.
          */
-        AdminMapPin: {
+        NetworkEventPoint: {
             /** Format: double */
             lat: number;
             /** Format: double */
@@ -4402,14 +4421,14 @@ export interface components {
             neighborhood: string;
             city: string;
             state: string;
-            point?: components["schemas"]["AdminMapPin"] | null;
+            point?: components["schemas"]["NetworkEventPoint"] | null;
         };
         AdminNetworkEventPlace: {
             place_name: string;
             neighborhood: string;
             city: string;
             state: string;
-            point: components["schemas"]["AdminMapPin"] | null;
+            point: components["schemas"]["NetworkEventPoint"] | null;
         };
         /**
          * @description Nome IANA da zona. Que a zona exista de verdade e conferido no servidor.
@@ -4418,7 +4437,8 @@ export interface components {
         TimeZoneName: string;
         AdminNetworkEventInput: {
             /**
-             * @description Obrigatorio no encontro **publico**. No **privado** ele e gerado
+             * @description Opcional no encontro **publico**: sem ele, o servidor deriva do
+             *     titulo, como no item da `Loja`. No **privado** ele e sempre gerado
              *     pelo servidor, aleatorio, e mandar um e recusado com `400`
              *     (`code: private_slug_is_generated`): o `slug` sai no teaser para
              *     todo mundo, e um `slug` digitado como `caminhada-rua-das-flores`
@@ -4432,6 +4452,10 @@ export interface components {
             starts_at: string;
             /** Format: date-time */
             ends_at?: string;
+            /**
+             * @description Opcional, padrao `America/Sao_Paulo` (o painel diz "Horario de Brasilia").
+             * @default America/Sao_Paulo
+             */
             time_zone: components["schemas"]["TimeZoneName"];
             images?: components["schemas"]["CatalogImagesInput"];
             accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
@@ -4482,7 +4506,11 @@ export interface components {
             reason: string;
         };
         AdminNetworkEventCancellation: {
-            /** @description O motivo, que o app mostra junto do "cancelado". */
+            /**
+             * @description O motivo, **so para o painel e para a trilha**. Nao sai no app: e
+             *     texto livre do administrador, e o cliente nao decidiu mostrar
+             *     motivo (se um dia existir, a UX recomenda lista fechada).
+             */
             note: string;
         };
         /**
@@ -4764,11 +4792,12 @@ export interface components {
             /** @description D53. Projecao minima fechada, e nada alem destes tres campos. */
             requester: {
                 /**
-                 * @description O nome de exibicao que a pessoa escolheu. Quando ele e nulo na
-                 *     conta, sai o texto fixo `Sem nome de exibicao`, **nunca** o
-                 *     e-mail nem parte dele.
+                 * @description O nome de exibicao que a pessoa escolheu, ou `null` quando a
+                 *     conta nao tem um. O rotulo do nulo e do painel ("Conta sem nome
+                 *     de exibicao"), e o servidor **nunca** preenche o nulo com o
+                 *     e-mail nem parte dele (D53).
                  */
-                display_name: string;
+                display_name: string | null;
                 /** @description Se a conta confirmou o e-mail. So o booleano, nunca o endereco nem a data. */
                 email_verified: boolean;
                 /** @description Ano e mes de criacao da conta, e nada mais fino. */

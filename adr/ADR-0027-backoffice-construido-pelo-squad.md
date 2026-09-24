@@ -814,6 +814,11 @@ de forma, só com acréscimos (apêndice A.2):
   itens que deixariam de casar é recusado com `code: host_mismatch_items`.
 - `store_catalog_versions` perde a finalidade; nenhuma escrita administrativa a
   toca. **Dívida:** sai quando a massa deixar de usá-la.
+- `store_items.image_url` guarda URL, o que a regra 3.6 de `07-devops.md`
+  proíbe (o banco guarda chave, nunca URL). O painel não a escreve (item 6).
+  **Dívida:** sai quando a massa passar a gravar imagem em
+  `store_item_images`, pelo mesmo caminho que tirou `cover_image_url` do
+  encontro (A.4.2).
 - A pergunta 14.3 (quem reconfere o preço) muda de meio, não de dono: continua
   na mesa do cliente.
 
@@ -1045,7 +1050,55 @@ já previu), a redação de telefone, e-mail e endereço de `messaging` vale igu
 a caixa do painel lê as conversas dessa âncora, e o push ao tutor é o que já
 existe. Nada do modelo desta v1 impede isso, e nada dele precisa ser desfeito.
 
-### 18. Fronteira da v1
+### 18. Matriz de rastreabilidade: uma fonte só para as quatro pontas
+
+**Regra do cliente, 23/09: tudo segue `api/openapi.yaml`.** Backend, app,
+backoffice e site usam os mesmos campos, os mesmos valores e as mesmas
+funcionalidades. Para isso ser verificável, e não só declarado, a ligação entre
+cada tela e o contrato vive em **`api/rastreabilidade-backoffice-rede.yaml`**,
+rastreado no git, ao lado do contrato: cada tela e estado dos protótipos
+(`docs/prototipos/backoffice.html` e `rede-encontro.html`), a operação que ela
+chama (`operationId`), e cada campo, filtro, valor de lista fechada e tipo de
+problema que ela mostra ou envia, numa notação que uma máquina resolve.
+
+A matriz tem três listas além das telas: as **correspondências código →
+rótulo** (os rótulos ficam no cliente, e a correspondência tem que ser 1 para
+1; a de `category` foi conferida contra `app/lib/api/modelos_loja.dart` e é),
+o que a **tela usa e o contrato não tem** (`tela_sem_contrato`, cada item com
+quem muda), e o que o **contrato tem e nenhuma tela usa** (`contrato_sem_tela`).
+
+**O que a primeira leitura achou, e o que já foi resolvido no contrato:**
+`slug` passou a opcional (derivado do título) no item e no encontro público,
+porque nenhum formulário o pede; `time_zone` passou a opcional com padrão
+`America/Sao_Paulo`; o envio de imagem de catálogo passou a 5 MiB, com a
+dimensão mínima conferida pelo worker; o nome de exibição nulo na fila passou
+a `null`, com o rótulo no painel; e o painel pode **reverter uma recusa**
+(recusado → aprovado), mas não uma aprovação. **O que a tela muda:** tirar o
+e-mail do administrador da navegação (o login é alcançável sem conta, e o
+portão reprova `email` ali), tirar "Excluir produto" (retirar é o gesto),
+pedir senha ao despublicar, pedir UF no encontro, não obrigar fim nem ponto
+no mapa, não obrigar imagem no produto, e tirar os itens livres de "o que
+levar" do app. **O que o contrato tem sem tela**, e é lacuna de produto:
+cancelar encontro (o cliente decidiu que o cancelado aparece até o fim
+previsto, e nenhuma tela cancela), cadastro de parceiro, vocabulário de tags,
+sair de todas as sessões e desistir do pedido no app. **Uma questão aberta**
+(APP-2): a distância no cartão da agenda em ordem por data; a proposta é
+`listNearbyNetworkEvents` aceitar `sort=proximos`.
+
+**O portão proposto** (a implementar por quem monta a esteira, com a isca que
+precisa reprovar): lê a matriz e o contrato e reprova quando um `operationId`
+de situação `contrato` não existe; quando uma referência de campo, parâmetro,
+cabeçalho, problema ou valor de lista fechada não resolve, seguindo `$ref`,
+`allOf`, `oneOf` e itens de lista; quando uma lacuna marcada `resolucao:
+contrato` já resolve e continua listada; quando uma operação de `/admin/` ou
+da `Rede` não aparece nem em `telas` nem em `contrato_sem_tela`; e quando a
+matriz tem zero telas. Operação `pendente` (ainda em outra branch) exige
+`onde`, e passa a ser resolvida quando a branch mesclar. A isca: uma cópia da
+matriz com um `operationId` renomeado e um `req:` que não existe, que precisa
+reprovar pelos dois motivos. Medido nesta rodada com um resolvedor
+descartável: todas as referências de situação `contrato` resolvem.
+
+### 19. Fronteira da v1
 
 Fora, sem desenho aqui: `Perto` no painel (o contrato de escrita do ADR-0023 e
 o do ADR-0026 continuam referência; levá-lo ao painel reabre o RA-01);
@@ -1264,9 +1317,14 @@ UNIQUE REFERENCES catalog_images (id)`, `position smallint NOT NULL CHECK
 (char_length(btrim(alt_text)) BETWEEN 2 AND 150)`, `PRIMARY KEY (event_id,
 image_id)`, `UNIQUE (event_id, position) DEFERRABLE INITIALLY DEFERRED`. A capa
 é `position = 0`. `catalog_images.purpose` precisa ser `network_event`.
-`network_events.cover_image_url` (URL da massa) continua, e o evento com ela
-não tem linha aqui (caso de uso). O `cover_image_id` que este apêndice previa
-antes sai: a galeria o substitui.
+**`network_events.cover_image_url` sai** (decisão da coordenação, 23/09): o
+banco guarda chave de objeto, nunca URL (regra 3.6 de `07-devops.md`, cobrada
+pelo portão de portabilidade), e a capa já é a posição 0 desta tabela. A massa
+passa a gravar a capa como linha aqui. O `cover_image_id` que este apêndice
+previa antes também sai: a galeria substitui os dois. **A mesma regra alcança
+`store_items.image_url`**, que já está na `development` (`20260922000009`) e
+guarda URL de parceiro; ele continua só como dado da massa, e a remoção fica
+registrada como dívida do item 14.
 
 Regras que o `CHECK` não expressa, no caso de uso, com `400 validation-failed`:
 criar exige que o fim (ou o início, sem fim) não tenha passado
