@@ -1700,6 +1700,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/store/items/{itemSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["schemas"]["Slug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um item da vitrine, com todas as imagens
+         * @description O detalhe do item: o mesmo `StoreItemSummary` da lista, mais **todas as
+         *     imagens prontas**, na ordem do painel (ADR-0027 item 16). A lista
+         *     continua trazendo so a principal, em `image_url`, para nao pesar a
+         *     vitrine.
+         *
+         *     Publica, pela mesma razao de `listStoreItems`, e com as mesmas regras:
+         *     nenhum UUID sai, e o preco vencido **sai sem valor**, com
+         *     `price_status: vencido`. Item em rascunho, retirado, inexistente ou de
+         *     parceiro inativo responde **404 nos quatro casos**, com o mesmo corpo
+         *     (ADR-0021).
+         */
+        get: operations["getStoreItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/lost-pets": {
         parameters: {
             query?: never;
@@ -2330,6 +2362,58 @@ export interface paths {
         patch: operations["updateAdminStorePartner"];
         trace?: never;
     };
+    "/admin/store/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O vocabulario de tags da Loja
+         * @description Todas as tags, ativas e inativas, com quantos itens cada uma tem.
+         */
+        get: operations["listAdminStoreTags"];
+        put?: never;
+        /**
+         * Acrescenta uma tag ao vocabulario
+         * @description **Tag e vocabulario curado, nao texto livre do item** (ADR-0027 item
+         *     17). Ela nasce aqui, uma vez, com rotulo conferido, e o item so a
+         *     referencia pelo `slug`. Teto de **40 tags ativas**: acima disso, `400`
+         *     (`code: tag_vocabulary_full`), porque um filtro com duzentas opcoes nao
+         *     filtra.
+         */
+        post: operations["createAdminStoreTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/store/tags/{tagSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagSlug: components["schemas"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Renomeia ou desativa uma tag
+         * @description Nao ha exclusao: desativar tira a tag do app (dos itens e do filtro) e a
+         *     mantem ligada aos itens, para voltar sem refazer nada. Renomear troca o
+         *     `slug` junto.
+         */
+        patch: operations["updateAdminStoreTag"];
+        trace?: never;
+    };
     "/admin/store/items": {
         parameters: {
             query?: never;
@@ -2351,10 +2435,13 @@ export interface paths {
          *     `publishAdminStoreItem`. `target_url` precisa terminar no host do
          *     parceiro (`400`, `code: host_mismatch`). O preco e objeto unico ou
          *     ausente: "preco sem data" nao cabe no corpo. `checked_at` no futuro e
-         *     recusado. A imagem, se houver, e um envio de
-         *     `createAdminCatalogImageIntent` com `purpose: store_item`; qualquer
-         *     outro envio e recusado com `400` (T9). **URL de imagem externa nao e
-         *     aceita** (ADR-0027 item 6).
+         *     recusado. As imagens, ate 8, sao envios de
+         *     `createAdminCatalogImageIntent` com `purpose: store_item`, na ordem em
+         *     que o app as mostra; a primeira e a principal. Qualquer outro envio e
+         *     recusado com `400` (T9). **URL de imagem externa nao e aceita**
+         *     (ADR-0027 item 6). `species` e obrigatoria (pelo menos uma); `tag_slugs`
+         *     so aceita tag que ja existe no vocabulario (`createAdminStoreTag`),
+         *     ate 5 (ADR-0027 item 16).
          */
         post: operations["createAdminStoreItem"];
         delete?: never;
@@ -2389,7 +2476,9 @@ export interface paths {
          * Altera um item, em qualquer estado
          * @description Editar nao publica nem retira: o estado so muda pelas operacoes de
          *     `publication`. Renovar o preco e mandar `price` com `checked_at` novo;
-         *     `price: null` tira o preco. `image_upload_id: null` tira a imagem.
+         *     `price: null` tira o preco. `species`, `tag_slugs` e `image_upload_ids`
+         *     **substituem o conjunto inteiro**: reordenar imagens e mandar a lista na
+         *     ordem nova, remover e omitir, e `image_upload_ids: []` tira todas.
          */
         patch: operations["updateAdminStoreItem"];
         trace?: never;
@@ -2577,7 +2666,7 @@ export interface paths {
          * @description ADR-0007 a letra, com `kind = catalog_image` e `purpose` gravados no
          *     envio. O backend nunca recebe os bytes. JPEG, PNG e WebP; **SVG
          *     recusado sempre** (`415`). A confirmacao e a escrita do item
-         *     (`image_upload_id`) ou do encontro (`cover_upload_id`) com o mesmo
+         *     (`image_upload_ids`) ou do encontro (`cover_upload_id`) com o mesmo
          *     `purpose`; e ela que enfileira o processamento. A derivada publica so e
          *     servida pronta.
          */
@@ -3750,7 +3839,9 @@ export interface components {
             category: components["schemas"]["StoreCategory"];
             /**
              * Format: uri
-             * @description Sempre https. Nulo e estado normal, e o cartao sabe se desenhar sem imagem.
+             * @description Sempre https. **A imagem principal** (a primeira de
+             *     `StoreItemDetail.images`). Nulo e estado normal, e o cartao sabe se
+             *     desenhar sem imagem.
              */
             image_url?: string | null;
             /**
@@ -3763,6 +3854,14 @@ export interface components {
              */
             target_url: string;
             partner: components["schemas"]["StorePartnerRef"];
+            /**
+             * @description A que especies o produto serve (ADR-0027 item 16). Declarado em
+             *     23/09 antes do codigo: **opcional ate a implementacao**, e o app
+             *     trata ausencia como "nao informado", nunca como "serve a todas".
+             */
+            species?: components["schemas"]["Species"][];
+            /** @description So tags ativas. Opcional ate a implementacao, como `species`. */
+            tags?: components["schemas"]["StoreTagRef"][];
             /**
              * @description **Centavos, inteiro.** Ponto flutuante para dinheiro erra na soma e
              *     o erro aparece meses depois. Nulo quando nao ha preco **e tambem
@@ -4062,11 +4161,9 @@ export interface components {
              */
             target_url: components["schemas"]["HttpsUrl"];
             price?: components["schemas"]["AdminPriceInput"];
-            /**
-             * Format: uuid
-             * @description Envio de `createAdminCatalogImageIntent` com `purpose` `store_item`.
-             */
-            image_upload_id?: string;
+            species: components["schemas"]["StoreItemSpeciesSet"];
+            tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
+            image_upload_ids?: components["schemas"]["StoreItemImageUploadIds"];
             /** @default 0 */
             sort_order: number;
         };
@@ -4082,8 +4179,9 @@ export interface components {
             category?: components["schemas"]["StoreCategory"];
             target_url?: components["schemas"]["HttpsUrl"];
             price?: components["schemas"]["AdminPriceInput"] | null;
-            /** Format: uuid */
-            image_upload_id?: string | null;
+            species?: components["schemas"]["StoreItemSpeciesSet"];
+            tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
+            image_upload_ids?: components["schemas"]["StoreItemImageUploadIds"];
             sort_order?: number;
         };
         AdminStoreItem: {
@@ -4094,7 +4192,10 @@ export interface components {
             category: components["schemas"]["StoreCategory"];
             /** Format: uri */
             target_url: string;
-            image?: components["schemas"]["AdminCatalogImage"] | null;
+            species: components["schemas"]["Species"][];
+            tags: components["schemas"]["AdminStoreTagRef"][];
+            /** @description Na ordem do app. `position` 0 e a principal. Vazia e estado normal. */
+            images: components["schemas"]["AdminStoreItemImage"][];
             /** @description Nulo quando o item nao tem preco. **Presente mesmo vencido.** */
             price?: components["schemas"]["AdminPrice"] | null;
             price_status: components["schemas"]["StorePriceStatus"];
@@ -4254,6 +4355,92 @@ export interface components {
             applied_filters?: {
                 [key: string]: string;
             };
+        };
+        /**
+         * @description A que especies o produto serve, uma ou mais. Os valores sao os de
+         *     `Species` (`ref_species`), os mesmos do cadastro de pet: e o que deixa o
+         *     app filtrar a vitrine pela especie dos pets do tutor sem traduzir uma
+         *     lista na outra. `other` e "outros pets", generico de proposito
+         *     (ADR-0027 item 16).
+         */
+        StoreItemSpeciesSet: components["schemas"]["Species"][];
+        /**
+         * @description Ate 5 tags do vocabulario curado (`createAdminStoreTag`). Tag que nao
+         *     existe e recusada com `400` (`code: unknown_tag`): tag nao nasce por
+         *     digitacao no formulario do item.
+         */
+        StoreItemTagSlugs: components["schemas"]["Slug"][];
+        /**
+         * @description Ate 8 envios de `createAdminCatalogImageIntent` com `purpose`
+         *     `store_item`, **na ordem em que o app os mostra**. O primeiro e a
+         *     imagem principal, a da lista. A lista substitui a anterior inteira.
+         */
+        StoreItemImageUploadIds: string[];
+        AdminStoreItemImage: components["schemas"]["AdminCatalogImage"] & {
+            /**
+             * Format: uuid
+             * @description O identificador que o painel devolve em `image_upload_ids` para manter, reordenar ou remover esta imagem.
+             */
+            upload_id: string;
+            position: number;
+        };
+        AdminStoreTagRef: {
+            slug: string;
+            label: string;
+            /** @description Tag inativa continua ligada ao item, e some do app. */
+            active: boolean;
+        };
+        AdminStoreTagInput: {
+            /**
+             * @description Como o app mostra. Letras, digitos, espaco e hifen, e nada mais
+             *     (conferido no servidor, `code: tag_charset`). O servidor apara as
+             *     pontas e junta espacos repetidos. O `slug` e derivado: sem acento,
+             *     minusculo, espaco vira hifen. **Dois rotulos que dao o mesmo `slug`
+             *     sao a mesma tag** (`Racao` e `racao` e `Ração`): o segundo e recusado
+             *     com `409 slug-taken`.
+             */
+            label: string;
+        };
+        AdminStoreTagPatch: {
+            /** @description Trocar o rotulo troca o `slug` junto, e o novo nao pode colidir. */
+            label?: string;
+            active?: boolean;
+        };
+        AdminStoreTag: {
+            slug: string;
+            label: string;
+            active: boolean;
+            /** @description Itens ligados a tag */
+            item_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        AdminStoreTagPage: {
+            items: components["schemas"]["AdminStoreTag"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
+        StoreTagRef: {
+            slug: string;
+            label: string;
+        };
+        StoreItemImage: {
+            /**
+             * Format: uri
+             * @description A derivada publica, sempre pronta. Imagem em processamento ou recusada nunca aparece aqui.
+             */
+            url: string;
+        };
+        StoreItemDetail: components["schemas"]["StoreItemSummary"] & {
+            /**
+             * @description Todas as imagens prontas, na ordem do painel; a primeira e a
+             *     mesma de `image_url`. Vazia e estado normal.
+             */
+            images: components["schemas"]["StoreItemImage"][];
         };
     };
     responses: {
@@ -7034,6 +7221,14 @@ export interface operations {
                 /** @description Filtra por categoria do produto. */
                 category?: components["schemas"]["StoreCategory"];
                 /**
+                 * @description Itens que servem a esta especie, entre outras (ADR-0027 item 16).
+                 *     Declarado antes do codigo; o app so oferece o filtro depois de a
+                 *     implementacao existir.
+                 */
+                species?: components["schemas"]["Species"];
+                /** @description `slug` de uma tag ativa. Tag inexistente ou inativa devolve a lista vazia, nao 400: a tag some do vocabulario e o link antigo continua abrindo. */
+                tag?: components["schemas"]["Slug"];
+                /**
                  * @description `curadoria` e a ordem da vitrine, escolhida a mao, e e o default: a
                  *     Loja e uma lista curada e a primeira coisa que ela comunica e a
                  *     escolha. **Nao ha ordem por preco**, porque o preco e opcional e
@@ -7064,6 +7259,32 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getStoreItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["schemas"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreItemDetail"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -7903,6 +8124,107 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    listAdminStoreTags: {
+        parameters: {
+            query?: {
+                q?: string;
+                active?: boolean;
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina do vocabulario, em ordem alfabetica. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreTagPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    createAdminStoreTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStoreTagInput"];
+            };
+        };
+        responses: {
+            /** @description Tag criada, ativa. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreTag"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["SlugTaken"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateAdminStoreTag: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                tagSlug: components["schemas"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStoreTagPatch"];
+            };
+        };
+        responses: {
+            /** @description Tag alterada. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreTag"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SlugTaken"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listAdminStoreItems: {
         parameters: {
             query?: {
@@ -7912,6 +8234,10 @@ export interface operations {
                 /** @description `slug` do parceiro. */
                 partner?: components["schemas"]["Slug"];
                 publication_state?: components["schemas"]["AdminStoreItemPublicationState"];
+                /** @description Itens que servem a esta especie (entre outras). */
+                species?: components["schemas"]["Species"];
+                /** @description `slug` de uma tag do vocabulario, ativa ou nao. */
+                tag?: components["schemas"]["Slug"];
                 /** @description `vencido` e o filtro de quem reconfere precos. */
                 price_status?: components["schemas"]["StorePriceStatus"];
                 /** @description `curadoria` e a ordem da vitrine; `atualizado` poe o que mudou por ultimo primeiro; `validade` poe primeiro o preco que vence antes. */
