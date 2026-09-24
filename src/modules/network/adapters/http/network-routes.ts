@@ -1,54 +1,47 @@
 /**
  * As tres rotas da secao `Rede`.
  *
- * **LEIA O ADR-0025 ANTES DE MEXER AQUI.** As ausencias deste arquivo sao o
- * conteudo dele, e cada uma fecha uma inferencia que o produto nao consegue
- * reabrir depois sem pedir consentimento a quem ja confirmou presenca.
+ * **LEIA O ADR-0025 E A SECAO 12 DO ADR-0027 ANTES DE MEXER AQUI.**
  *
- * ## Duas publicas e uma autenticada, e a divisao tem razao
+ * ## Duas leituras alcancaveis sem conta, e uma so com conta
  *
  * `listNetworkEvents` e publica (`security: []`) e `getNetworkEvent` aceita as
  * duas coisas (`bearerAuth` ou nada), porque a `Rede` e **navegavel
- * deslogado**: uma agenda de encontros de bairro atras de login e uma agenda
- * que a pessoa so ve depois de criar conta. Nao ha nisso o problema de `Perto`,
- * onde `phone_e164` e `distance_m` sao o conteudo -- aqui nao ha telefone, nao
- * ha coordenada, nao ha distancia, nao ha UUID e, acima de tudo, **nao ha
- * ninguem**: a presenca e um inteiro.
+ * deslogado**. Nenhuma das duas carrega coordenada: o portao de contrato
+ * publico trata autenticacao opcional como publica, e o ADR-0021 proibe a
+ * resposta que muda conforme o chamador.
  *
- * `checkInNetworkEvent` exige conta porque ela ESCREVE em nome de alguem. Sem
- * conta nao ha quem confirmar presenca.
+ * `getNetworkEventLocation` devolve o ponto do encontro e exige conta
+ * (`bearerAuth` sem alternativa vazia). E a emenda 1 do ADR-0010, de escopo
+ * fechado: ponto de EVENTO publicado, em resposta autenticada. O 401 vem
+ * **antes** de qualquer consulta: sem conta nao se descobre nem se o `slug`
+ * existe.
+ *
+ * Check-in e galeria sairam desta versao por decisao do cliente (ADR-0027
+ * 12.4); o desenho anterior esta na branch `guarda/rede-checkin-galeria`.
  *
  * ## O corpo de `getNetworkEvent` e UM SO, e e o publico
  *
- * ADR-0021. `viewer_checked_in` e a unica coisa derivada de quem chama, e ela
- * segue o precedente do campo `viewer`: e sinal de navegacao, **nao destranca
- * campo nenhum** e nao fala de terceiro. Ela responde "voce ja confirmou
- * presenca?" a partir do token de quem ja esta chamando, e e `false` para quem
- * chega sem conta. Nao ha ramo por chamador neste arquivo, e e por isso que o
- * portao de contrato o confere sem precisar entender prosa.
+ * ADR-0021. O detalhe nao le o token: nao ha campo derivado de quem chama, e
+ * um token vencido nao vira 401 numa rota que atende sem token nenhum.
  *
- * ## A validacao de query nao esta aqui
+ * ## A validacao de query e de caminho nao esta aqui
  *
- * `vigiarParametrosDasRotas` instala `schema.querystring` a partir do contrato,
- * pelo `operationId`. Declarar um schema aqui criaria a segunda definicao, que
- * e a que diverge -- e o `400` que ela produz ja esta declarado na operacao.
+ * `vigiarParametrosDasRotas` instala `schema.querystring` e `schema.params` a
+ * partir do contrato, pelo `operationId`. Declarar um schema aqui criaria a
+ * segunda definicao, que e a que diverge.
  *
  * ## O `status` nao e calculado aqui
  *
  * Ele e calculado em `statusDoEncontro`, no dominio, junto da regra que decide
- * o que cada rotulo quer dizer. Um `if` de data nesta funcao separaria a regra
- * do lugar onde ela e testavel sem subir borda -- e as bordas dela (exatamente
- * no comeco, exatamente no fim, sem fim declarado) sao o coracao da secao.
+ * o que cada rotulo quer dizer, inclusive o do cancelado.
  */
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
-import {
-  projetarEncontro,
-  projetarEncontroComGaleria,
-} from '../../domain/encontro-da-rede.js';
+import { projetarEncontro, projetarLocalizacao } from '../../domain/encontro-da-rede.js';
 import type {
   NetworkRepository,
   OrdemDaAgenda,
@@ -61,14 +54,10 @@ import type { UserId } from '../../../../shared/types/brands.js';
  * Os tetos sao os do contrato, COPIADOS de la e nao escolhidos aqui.
  *
  * `expensive_query` e o efeito da listagem: a busca por texto varre titulo e
- * resumo do recorte inteiro, conta o recorte e ainda conta presenca e foto por
- * cartao. Sem efeito declarado o teto seria opcional, e agenda publica sem teto
- * e a porta da raspagem.
+ * resumo do recorte inteiro e ainda conta o recorte. Sem efeito declarado o
+ * teto seria opcional, e agenda publica sem teto e a porta da raspagem.
  *
- * **Um teto so, e uma dimensao so, em cada rota.** A armadilha medida em 22/09
- * -- dois tetos na mesma dimensao com janelas diferentes caindo no mesmo balde
- * -- esta consertada em `montarChave`, que poe a janela na chave. Nenhuma
- * destas tres rotas depende do conserto, porque nenhuma declara o segundo.
+ * **Um teto so, e uma dimensao so, em cada rota.**
  */
 export const rotaDaAgenda = defineRoute({
   operationId: 'listNetworkEvents',
@@ -79,10 +68,9 @@ export const rotaDaAgenda = defineRoute({
 });
 
 /**
- * Sem efeito: a leitura de um encontro e uma linha, a galeria dele e a
- * contagem. O teto existe mesmo assim, e e o DOBRO da listagem, porque abrir a
- * galeria de varios encontros seguidos e uso normal de quem esta escolhendo
- * para onde ir no domingo.
+ * Sem efeito: a leitura de um encontro e uma linha. O teto e o DOBRO da
+ * listagem, porque abrir varios encontros seguidos e uso normal de quem esta
+ * escolhendo para onde ir no domingo.
  */
 export const rotaDoEncontro = defineRoute({
   operationId: 'getNetworkEvent',
@@ -93,19 +81,21 @@ export const rotaDoEncontro = defineRoute({
 });
 
 /**
- * `account`, e nao `ip`: a operacao EXIGE conta, entao ha conta para contar.
+ * `account`, e nao `ip` (ADR-0027 12.5): a operacao EXIGE conta, entao ha conta
+ * para contar, e no Brasil o CGNAT das operadoras poe muita gente atras de
+ * poucos enderecos -- um teto por `ip` pegaria vizinho inocente.
  *
- * Teto por `ip` aqui seria armadilha no Brasil, onde o CGNAT das operadoras poe
- * muita gente atras de poucos enderecos -- ele pegaria vizinho inocente e
- * erraria quem enche a contagem de um encontro. 30 por hora e muito para quem
- * usa e pouco para quem enche.
+ * O teto e o mesmo do detalhe: a tela do encontro chama as duas operacoes a
+ * cada abertura, e um limite menor aqui faria o mapa sumir antes do resto da
+ * tela. O que ele segura e a raspagem dos pontos de todos os encontros por uma
+ * conta so.
  */
-export const rotaDeCheckIn = defineRoute({
-  operationId: 'checkInNetworkEvent',
-  method: 'post',
-  path: '/network/events/:eventSlug/check-in',
+export const rotaDoLocal = defineRoute({
+  operationId: 'getNetworkEventLocation',
+  method: 'get',
+  path: '/network/events/:eventSlug/location',
   effects: [],
-  rateLimit: [{ dimension: ['account'], limit: 30, window: '1h', onExceed: 'deny_429' }],
+  rateLimit: [{ dimension: ['account'], limit: 600, window: '1h', onExceed: 'deny_429' }],
 });
 
 /** Os mesmos defaults que o contrato declara. Copiados de la. */
@@ -116,15 +106,9 @@ const RECORTE_PADRAO: RecorteNoTempo = 'upcoming';
 /**
  * O default de `sort` **DEPENDE de `when`**, e e esta funcao inteira.
  *
- * Com `upcoming` e com `all` a ordem e `proximos`: a pergunta e "o que vem", e
- * ela se responde de frente para tras. Com `past` a ordem inverte para
- * `recentes`, porque a pergunta "o que houve" se responde do mais recente para
- * tras -- abrir o passado na ordem crescente mostraria primeiro o encontro mais
- * antigo que a `Rede` ja teve, que e o cartao menos util da lista.
- *
- * **E por isso que `effective_sort` existe na resposta.** Um cliente que nao
- * mandou `sort` nao tem como saber qual ordem valeu sem perguntar, e a barra de
- * listagem mostra a ordem REAL.
+ * Com `upcoming` e com `all` a ordem e `proximos`; com `past` a ordem inverte
+ * para `recentes`, porque a pergunta "o que houve" se responde do mais recente
+ * para tras. E por isso que `effective_sort` existe na resposta.
  */
 export function ordemPadraoDe(quando: RecorteNoTempo): OrdemDaAgenda {
   return quando === 'past' ? 'recentes' : 'proximos';
@@ -154,17 +138,9 @@ interface CaminhoDoEncontro {
 }
 
 /**
- * O recorte que de fato valeu, para a tela poder escreve-lo.
- *
- * `scope: all` quando nada foi recortado, pela mesma razao da `Loja` e de
- * `Perto`: "nada filtrado" e uma informacao, e um objeto vazio faria a tela
- * adivinhar a diferenca entre "sem filtro" e "filtro que nao coube na resposta".
- *
- * `when` **nao entra aqui**, e a ausencia e deliberada: ele tem campo proprio
- * (`effective_when`) porque sempre vale algum, inclusive o default. Poe-lo
- * tambem em `applied_filters` faria a tela mostrar "Proximos" como se fosse um
- * filtro que a pessoa escolheu, e o botao de limpar filtros passaria a prometer
- * que apaga o que e o estado normal da agenda.
+ * O recorte que de fato valeu, para a tela poder escreve-lo. `scope: all`
+ * quando nada foi recortado. `when` **nao entra aqui**: ele tem campo proprio
+ * (`effective_when`) porque sempre vale algum, inclusive o default.
  */
 function recortesAplicados(query: QueryDaAgenda): Record<string, string> {
   const aplicados: Record<string, string> = {};
@@ -192,29 +168,12 @@ function chamadorAutenticado(
   return memoDaRequisicao(request, 'rede:chamador', async () => {
     const token = tokenDaRequisicao(request);
     if (token === undefined) throw problemas.naoAutenticado();
+    // O 401 de token vencido, revogado ou forjado e do servico de identidade,
+    // como no diretorio. Nao ha `catch` aqui: engolir o erro transformaria uma
+    // falha de banco em 401, e a pessoa seria mandada fazer login de novo por
+    // um defeito nosso.
     return (await deps.autenticador.autenticar(token)).userId;
   });
-}
-
-/**
- * Quem chama, quando ha alguem. **Nao levanta.**
- *
- * `getNetworkEvent` e navegavel deslogado, e um token vencido nao pode virar
- * 401 numa rota que atende sem token nenhum: a pessoa que abriu o aplicativo
- * depois de um mes fora veria a agenda publica recusar, e nao ha nada nesta
- * resposta que uma credencial destranque. Sem chamador, `viewer_checked_in` e
- * `false`, que e a mesma resposta de quem nunca teve conta.
- */
-async function chamadorOpcional(
-  request: FastifyRequest,
-  deps: DependenciasDasRotasDaRede,
-): Promise<UserId | undefined> {
-  if (tokenDaRequisicao(request) === undefined) return undefined;
-  try {
-    return await chamadorAutenticado(request, deps);
-  } catch {
-    return undefined;
-  }
 }
 
 /** `account` para o teto. Sem credencial valida nao ha balde de conta. */
@@ -233,10 +192,7 @@ export function registrarRotasDaRede(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotasDaRede,
 ): void {
-  // Sem resolvedor: `ip` e dimensao generica e o registro a resolve sozinho. O
-  // tipo `ResolvedoresExigidos` so aceita o objeto vazio como AUSENTE aqui, e
-  // essa e a prova em tempo de compilacao de que nenhuma dimensao nova entrou
-  // em `DIMENSOES_CONHECIDAS` por causa desta rota.
+  // Sem resolvedor: `ip` e dimensao generica e o registro a resolve sozinho.
   registrarRota(app, rotaDaAgenda, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as QueryDaAgenda;
     const page = query.page ?? PAGINA_INICIAL;
@@ -262,10 +218,6 @@ export function registrarRotasDaRede(
       page,
       limit,
       total: pagina.total,
-      // Os dois campos que dizem o que DE FATO valeu. `effective_sort` nao e
-      // decoracao aqui: como o default de `sort` depende de `when`, um cliente
-      // que nao mandou nenhum dos dois nao tem como saber a ordem sem este
-      // campo -- e a barra de listagem mostra a ordem REAL, nao a pedida.
       effective_sort: sort,
       effective_when: when,
       applied_filters: recortesAplicados(query),
@@ -274,43 +226,35 @@ export function registrarRotasDaRede(
 
   registrarRota(app, rotaDoEncontro, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
-    const chamador = await chamadorOpcional(request, deps);
+    const encontro = await deps.rede.buscarEncontro(eventSlug);
 
-    const encontro = await deps.rede.buscarEncontro({
-      slug: eventSlug,
-      ...(chamador === undefined ? {} : { chamador }),
-    });
-
-    // Inativo e inexistente respondem 404 com o MESMO corpo: distinguir
+    // Invisivel e inexistente respondem 404 com o MESMO corpo: distinguir
     // contaria a um estranho que aquele `slug` existiu.
     if (encontro === undefined) throw problemas.naoEncontrado();
 
-    return reply.send(projetarEncontroComGaleria(encontro, deps.clock.now()));
+    return reply.send(projetarEncontro(encontro, deps.clock.now()));
   });
 
   registrarRota(
     app,
-    rotaDeCheckIn,
+    rotaDoLocal,
     { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const chamador = await chamadorAutenticado(request, deps);
+      // O 401 vem ANTES da consulta: sem conta nao se descobre nem se o `slug`
+      // existe. A ordem inversa responderia 404 a quem nao tem conta para um
+      // `slug` inexistente e 401 para um existente, e a diferenca entre os dois
+      // e exatamente o que o 404 unico existe para esconder.
+      await chamadorAutenticado(request, deps);
       const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
 
-      const desfecho = await deps.rede.confirmarPresenca({ slug: eventSlug, chamador });
+      const local = await deps.rede.buscarLocalDoEncontro(eventSlug);
 
-      // O 404 vem da AUSENCIA DE LINHA, e a ausencia vem do `WHERE` da propria
-      // escrita (ADR-0021). Nao houve consulta previa, nao houve comparacao
-      // aqui e nao ha 403 -- nem para evento inativo, nem para `slug` que nunca
-      // existiu.
-      if (desfecho === undefined) throw problemas.naoEncontrado();
+      // Mesma regra de visibilidade de `getNetworkEvent`, e o mesmo corpo de
+      // 404 (ADR-0027 12.5). Nao ha 403: o ponto de um encontro visivel e o
+      // mesmo para qualquer tutor autenticado.
+      if (local === undefined) throw problemas.naoEncontrado();
 
-      return reply.send({
-        checkin_count: desfecho.checkinCount,
-        // Sempre `true` numa resposta 200 desta operacao, inclusive na segunda
-        // chamada: a presenca esta confirmada nos dois casos, e e por isso que
-        // a idempotencia nao precisa aparecer na resposta.
-        viewer_checked_in: true,
-      });
+      return reply.send(projetarLocalizacao(local.ponto));
     },
   );
 }

@@ -1,12 +1,13 @@
 /**
- * O rotulo `status` e a projecao do encontro, sem banco e sem servidor.
+ * O rotulo `status`, a projecao do encontro e a do ponto, sem banco e sem
+ * servidor.
  *
  * ## As iscas deste arquivo, e como cada uma foi provada
  *
- * Cada linha foi desligada no codigo de producao, a mudanca foi conferida no
- * disco (`git diff --stat` nao vazio), a suite rodou e reprovou com o nome do
- * caso na saida, e o arquivo foi restaurado.
- * 23/09/2026, Node 22 (`/opt/homebrew/opt/node@22`).
+ * Cada linha foi desligada no codigo de producao, a suite rodou e reprovou com
+ * o nome do caso na saida, e o arquivo foi restaurado. As linhas marcadas
+ * "23/09, emenda" foram medidas na emenda da BICHUS-251 (ADR-0027 12), Node 22
+ * (`/opt/homebrew/opt/node@22`); as outras vem da primeira versao.
  *
  * | o que foi desligado | `fail` |
  * |---|---|
@@ -14,7 +15,8 @@
  * | `agora <= endsAt` virando `<` (a borda de fechamento) | 1 |
  * | sem `endsAt`, devolver `happening` em vez de `ended` | 2 |
  * | `statusDoEncontro` devolvendo `ended` SEMPRE (a isca negativa) | 3 |
- * | `projetarFoto` trocado por `{ ...foto }` | 1 |
+ * | 23/09, emenda: o cancelado ignorado (sempre temporal) | 3 |
+ * | 23/09, emenda: o cancelado sempre `cancelled`, mesmo depois do fim | 2 |
  *
  * **A isca negativa da quarta linha e obrigatoria.** Provar que um encontro de
  * tres semanas atras sai `ended` nao prova nada se o de amanha tambem sair.
@@ -24,8 +26,7 @@ import { describe, it } from 'node:test';
 
 import {
   projetarEncontro,
-  projetarEncontroComGaleria,
-  projetarFoto,
+  projetarLocalizacao,
   statusDoEncontro,
   type EncontroDaRede,
 } from './encontro-da-rede.js';
@@ -35,8 +36,7 @@ import type { Instant } from '../../../shared/types/brands.js';
  * Um instante fixo. Nada aqui depende do relogio de quem roda.
  *
  * E um `Instant` -- milissegundos --, e nao um `Date`, porque e isso que o
- * dominio recebe. `Date.UTC` e aritmetica de calendario e nao leitura de
- * relogio, e o `Clock` continua sendo o unico caminho do tempo real.
+ * dominio recebe.
  */
 const AGORA = Date.UTC(2026, 8, 23, 12, 0, 0) as Instant;
 const UMA_HORA = 3_600_000;
@@ -54,8 +54,7 @@ function encontro(ajustes: Partial<EncontroDaRede> = {}): EncontroDaRede {
     endsAt: (AGORA + 3 * UMA_HORA) as Instant,
     timeZone: 'America/Sao_Paulo',
     coverImageUrl: null,
-    checkinCount: 12,
-    photoCount: 3,
+    publicacao: 'published',
     ...ajustes,
   };
 }
@@ -139,6 +138,60 @@ void describe('o encontro SEM fim declarado', () => {
   });
 });
 
+void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)', () => {
+  void it('antes do comeco e `cancelled`, e nao `upcoming`', () => {
+    // O cancelado nao conta como agendado: quem se programou para ir precisa
+    // ler "cancelado" antes de sair de casa.
+    assert.equal(statusDoEncontro(encontro({ publicacao: 'cancelled' }), AGORA), 'cancelled');
+  });
+
+  void it('durante a janela prevista e `cancelled`, e nao `happening`', () => {
+    const naJanela = encontro({
+      publicacao: 'cancelled',
+      startsAt: (AGORA - UMA_HORA) as Instant,
+      endsAt: (AGORA + UMA_HORA) as Instant,
+    });
+    assert.equal(statusDoEncontro(naJanela, AGORA), 'cancelled');
+  });
+
+  void it('EXATAMENTE no fim previsto ainda e `cancelled`', () => {
+    // A borda e a mesma do `happening`: o fim e fechado. Um cancelado nao pode
+    // virar `ended` um instante antes do publicado equivalente.
+    const noFim = encontro({
+      publicacao: 'cancelled',
+      startsAt: (AGORA - UMA_HORA) as Instant,
+      endsAt: AGORA,
+    });
+    assert.equal(statusDoEncontro(noFim, AGORA), 'cancelled');
+  });
+
+  void it('DEPOIS do fim segue a regra do encerrado: `ended`', () => {
+    // ISCA: com o cancelado sempre `cancelled`, este caso le `cancelled`. Um
+    // encontro de ontem, cancelado ou nao, e passado.
+    const passado = encontro({
+      publicacao: 'cancelled',
+      startsAt: (AGORA - 3 * UMA_HORA) as Instant,
+      endsAt: (AGORA - 1) as Instant,
+    });
+    assert.equal(statusDoEncontro(passado, AGORA), 'ended');
+  });
+
+  void it('sem fim declarado, e `cancelled` ate o comeco e `ended` a partir dele', () => {
+    // Sem `ends_at` o "fim previsto" e o comeco, pela mesma regra que decide
+    // `ended` no publicado (ADR-0025 secao 6).
+    const antes = encontro({ publicacao: 'cancelled', endsAt: null });
+    assert.equal(statusDoEncontro(antes, AGORA), 'cancelled');
+    const noComeco = encontro({ publicacao: 'cancelled', startsAt: AGORA, endsAt: null });
+    assert.equal(statusDoEncontro(noComeco, AGORA), 'ended');
+  });
+
+  void it('A ISCA NEGATIVA: o PUBLICADO de amanha continua `upcoming`', () => {
+    // Sem este caso, um dominio que rotulasse tudo `cancelled` passaria nos
+    // casos acima.
+    assert.equal(statusDoEncontro(encontro({ publicacao: 'published' }), AGORA), 'upcoming');
+  });
+});
+
 void describe('a projecao do encontro', () => {
   void it('devolve o lugar em tres rotulos, e nenhuma coordenada', () => {
     const projetado = projetarEncontro(encontro(), AGORA);
@@ -148,15 +201,35 @@ void describe('a projecao do encontro', () => {
       city: 'São Paulo',
       state: 'SP',
     });
-    const chaves = Object.keys(projetado.place);
-    assert.equal(chaves.includes('lat'), false);
-    assert.equal(chaves.includes('lon'), false);
-    assert.equal(chaves.includes('distance_m'), false);
+    const bruto = JSON.stringify(projetado);
+    for (const proibido of ['"lat"', '"lon"', '"point"', '"geo"', 'distance_m']) {
+      assert.equal(
+        bruto.includes(proibido),
+        false,
+        `ISCA: ${proibido} no corpo publico. O ponto so sai em getNetworkEventLocation, com conta.`,
+      );
+    }
+  });
+
+  void it('as chaves do corpo sao EXATAMENTE as do contrato, escritas por extenso', () => {
+    // Por campo A MAIS e que uma resposta se afasta do documento sem alarme: o
+    // comparador de contrato so reprova o que some. Esta lista e a de
+    // `NetworkEventSummary` depois da emenda, sem contagem, galeria nem sinal
+    // de quem chama.
+    assert.deepEqual(Object.keys(projetarEncontro(encontro(), AGORA)).sort(), [
+      'cover_image_url',
+      'ends_at',
+      'place',
+      'slug',
+      'starts_at',
+      'status',
+      'summary',
+      'time_zone',
+      'title',
+    ]);
   });
 
   void it('leva o fuso junto da data, e os dois sao campos distintos', () => {
-    // `starts_at` sozinho diz o instante e nao diz que horas o cartaz da praca
-    // dizia. Um aparelho em UTC renderizaria um encontro das 9h como 12h.
     const projetado = projetarEncontro(
       encontro({ startsAt: Date.UTC(2026, 8, 27, 12, 0, 0) as Instant, endsAt: null }),
       AGORA,
@@ -166,118 +239,31 @@ void describe('a projecao do encontro', () => {
     assert.equal(projetado.time_zone, 'America/Sao_Paulo');
   });
 
-  void it('a presenca e um INTEIRO, e o corpo nao tem campo com pessoas', () => {
-    // ADR-0025 secao 2. A varredura e sobre o JSON inteiro e nao campo a campo,
-    // de proposito: uma conferencia que olha os campos que ela conhece nao
-    // enxerga o campo que alguem acrescentar amanha.
-    const projetado = projetarEncontro(encontro({ checkinCount: 12 }), AGORA);
-    assert.equal(projetado.checkin_count, 12);
-    const bruto = JSON.stringify(projetado);
-    // Os nomes sao escritos por extenso, e nao derivados de constante nenhuma.
-    // `place_name` existe e e legitimo, entao a lista nao tem o pedaco `name`
-    // solto: ela tem as formas com que uma pessoa apareceria numa resposta.
-    for (const proibido of [
-      'user_id',
-      'user_slug',
-      'attendee',
-      'attendees',
-      'checkins',
-      'checked_in_by',
-      'display_name',
-      'first_name',
-      'avatar',
-      'people',
-    ]) {
-      assert.equal(
-        bruto.toLowerCase().includes(proibido),
-        false,
-        `ISCA: "${proibido}" no corpo reconstroi a lista de presenca que o ADR-0025 recusa.`,
-      );
+  void it('NAO devolve UUID nem campo com pessoas', () => {
+    const bruto = JSON.stringify(projetarEncontro(encontro(), AGORA)).toLowerCase();
+    assert.equal(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(bruto), false);
+    for (const proibido of ['user_id', 'checkin', 'attendee', 'display_name', 'avatar', 'pet_']) {
+      assert.equal(bruto.includes(proibido), false, `"${proibido}" no corpo da Rede.`);
     }
   });
 
-  void it('NAO devolve UUID em lugar nenhum do corpo', () => {
-    const bruto = JSON.stringify(projetarEncontro(encontro(), AGORA));
-    assert.equal(
-      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(bruto),
-      false,
-      'O ADR-0010 item 6 nao admite identificador interno em saida, e o endereco ' +
-        'de um encontro e o `slug`.',
-    );
+  void it('o cancelado sai com `status` `cancelled` na projecao', () => {
+    assert.equal(projetarEncontro(encontro({ publicacao: 'cancelled' }), AGORA).status, 'cancelled');
   });
 });
 
-void describe('a galeria', () => {
-  void it('projeta TRES campos, e a lista deles e escrita por extenso', () => {
-    const projetada = projetarFoto({
-      slug: 'roda-de-cachorros-na-sombra',
-      imageUrl: 'https://cdn.bichu.test/rede/roda-de-cachorros.jpg',
-      caption: 'A roda das dez da manhã.',
-    });
-    assert.deepEqual(Object.keys(projetada).sort(), ['caption', 'image_url', 'slug']);
+void describe('a projecao do ponto (getNetworkEventLocation)', () => {
+  void it('com ponto, devolve `{ point: { lat, lon } }` e mais nada', () => {
+    const projetado = projetarLocalizacao({ lat: -23.5617, lon: -46.6823 });
+    assert.deepEqual(projetado, { point: { lat: -23.5617, lon: -46.6823 } });
   });
 
-  void it('a legenda nula sai nula, e isso e estado normal e nao lacuna', () => {
-    const projetada = projetarFoto({
-      slug: 'chegada-do-pessoal',
-      imageUrl: 'https://cdn.bichu.test/rede/chegada.jpg',
-      caption: null,
-    });
-    assert.equal(projetada.caption, null);
+  void it('sem ponto marcado, `point` e nulo -- estado normal, e nao erro', () => {
+    assert.deepEqual(projetarLocalizacao(null), { point: null });
   });
 
-  void it('quem enviou a foto NAO atravessa a projecao, nem por campo extra', () => {
-    // ISCA: com `{ ...foto }` no lugar da escrita campo a campo, qualquer campo
-    // que a linha ganhe depois sai junto -- e o campo que a linha tem hoje e
-    // que nao pode sair e justamente o de quem enviou. O objeto abaixo carrega
-    // um campo a mais de proposito, com nome que nao e o da coluna.
-    const comSobra = {
-      slug: 'fim-de-tarde',
-      imageUrl: 'https://cdn.bichu.test/rede/fim-de-tarde.jpg',
-      caption: null,
-      quemEnviou: '018f3a2b-0000-7000-8000-0000000000aa',
-    };
-    const projetada = projetarFoto(comSobra);
-    assert.deepEqual(Object.keys(projetada).sort(), ['caption', 'image_url', 'slug']);
-    assert.equal(JSON.stringify(projetada).includes('018f3a2b'), false);
-  });
-
-  void it('o encontro com galeria leva `viewer_checked_in`, e nada sobre terceiro', () => {
-    const projetado = projetarEncontroComGaleria(
-      {
-        ...encontro(),
-        galeria: [
-          {
-            slug: 'roda-de-cachorros-na-sombra',
-            imageUrl: 'https://cdn.bichu.test/rede/roda-de-cachorros.jpg',
-            caption: 'A roda das dez da manhã.',
-          },
-        ],
-        viewerCheckedIn: true,
-      },
-      AGORA,
-    );
-    assert.equal(projetado.viewer_checked_in, true);
-    assert.equal(projetado.gallery.length, 1);
-    assert.deepEqual(Object.keys(projetado.gallery[0] ?? {}).sort(), [
-      'caption',
-      'image_url',
-      'slug',
-    ]);
-  });
-
-  void it('quem chega sem conta recebe `viewer_checked_in` falso, com o mesmo corpo', () => {
-    const comConta = projetarEncontroComGaleria(
-      { ...encontro(), galeria: [], viewerCheckedIn: true },
-      AGORA,
-    );
-    const semConta = projetarEncontroComGaleria(
-      { ...encontro(), galeria: [], viewerCheckedIn: false },
-      AGORA,
-    );
-    // ADR-0021: um corpo so, e esse corpo e o publico. `viewer_checked_in` e a
-    // UNICA coisa que muda entre os dois -- ela nao destranca campo nenhum.
-    assert.deepEqual(Object.keys(comConta).sort(), Object.keys(semConta).sort());
-    assert.equal(semConta.viewer_checked_in, false);
+  void it('campo a campo: o que vier a mais no ponto nao atravessa', () => {
+    const comSobra = { lat: -23.5, lon: -46.6, origem: 'map_pin', autor: 'x' };
+    assert.deepEqual(Object.keys(projetarLocalizacao(comSobra).point ?? {}).sort(), ['lat', 'lon']);
   });
 });

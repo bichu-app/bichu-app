@@ -1694,60 +1694,46 @@ export interface paths {
          * A agenda de encontros da Rede
          * @description A secao `Rede`: os encontros que a comunidade marca em praca e parque.
          *
-         *     **LEIA O ADR-0025 ANTES DE MEXER NESTA OPERACAO.** As ausencias abaixo
-         *     sao o conteudo dele, e cada uma fecha uma inferencia.
+         *     **LEIA O ADR-0025 E A SECAO 12 DO ADR-0027 ANTES DE MEXER NESTA
+         *     OPERACAO.**
          *
-         *     ## Nao ha lista de presenca. Ha um NUMERO
+         *     ## Nao ha pessoa nenhuma nesta resposta
          *
-         *     `checkin_count` e um inteiro. **Nao existe campo com pessoas**, em forma
-         *     nenhuma: nem nome, nem primeiro nome, nem apelido, nem `slug`, nem
-         *     avatar, nem contagem por bairro.
+         *     Check-in e galeria sairam desta versao por decisao do cliente (ADR-0027
+         *     12.4). Quando voltarem, voltam pelas decisoes 1 a 3 do ADR-0025: a
+         *     presenca e da PESSOA e nunca do pet, sai como numero e nunca como lista,
+         *     e a foto nao tem autor na saida. O motivo e o item 7 do ADR-0010: uma
+         *     lista de presenca num encontro de bairro publica, de graca, que dois
+         *     animais sao do mesmo tutor.
          *
-         *     O motivo e o item 7 do ADR-0010, que proibe a superficie publica de
-         *     deixar inferir que dois pets sao do mesmo tutor. Uma lista de presenca
-         *     num encontro de bairro faz essa inferencia de graca: quem confirma
-         *     presenca com dois animais publica que os dois moram na mesma casa, e o
-         *     lugar do encontro e uma praca do bairro dela. Num produto cujo fluxo
-         *     mais critico e pet perdido, essa e exatamente a informacao que interessa
-         *     a quem quer levar um animal.
+         *     ## Nao ha coordenada nesta resposta, nem ordem por distancia
          *
-         *     Por isso **o check-in e da PESSOA e nunca do pet**, e a tabela
-         *     `network_event_checkins` nao tem `pet_id`: nao ha caminho no banco pelo
-         *     qual um check-in saiba qual animal foi junto.
+         *     O encontro pode ter ponto marcado no mapa (ADR-0027 12.2), e **o ponto
+         *     nao sai aqui**: esta operacao e alcancavel sem conta. Ele sai so em
+         *     `getNetworkEventLocation`, com `bearerAuth` obrigatorio (emenda 1 do
+         *     ADR-0010). O lugar nesta resposta sao tres rotulos de texto --
+         *     `place_name`, `neighborhood`, `city`/`state` --, que e o teto de
+         *     precisao que o ADR-0010 permite em superficie publica.
          *
-         *     ## Nao ha coordenada, nao ha mapa e nao ha ordem por distancia
-         *
-         *     O ADR-0006 proibe geocodificacao no MVP e so aceita coordenada vinda de
-         *     `device_gps` ou de `map_pin`; quem cadastra uma praca nao tem nenhuma
-         *     das duas. O lugar sao tres rotulos de texto -- `place_name`,
-         *     `neighborhood`, `city`/`state` --, que e o teto de precisao que o
-         *     ADR-0010 permite em superficie publica.
-         *
-         *     **A ordem por distancia nao existe e nao aparece desabilitada.** Sem
-         *     coordenada nao ha distancia, e oferecer uma ordem que nunca podera ser
-         *     cumprida e pior que nao oferece-la. O filtro de lugar e por `city`
-         *     digitada, como a listagem publica de perdidos.
+         *     **A ordem por distancia nao existe e nao aparece desabilitada.** Ela
+         *     revelaria, pela ordem, onde o encontro esta. O filtro de lugar e por
+         *     `city` digitada, como a listagem publica de perdidos.
          *
          *     ## A agenda nao mistura passado e futuro sem dizer qual e qual
          *
          *     `when` tem default `upcoming`: a lista abre com o que ainda vai
          *     acontecer. `past` traz o que passou, `all` traz os dois e **nao e o
-         *     default**, porque agenda que mistura os dois em ordem unica e o defeito
-         *     mais comum de agenda.
+         *     default**.
          *
-         *     **`status` e calculado no SERVIDOR**, nunca no aplicativo. Se a regra
-         *     morasse la, um aparelho com relogio errado ou com build antiga chamaria
-         *     de "proximo" um encontro de tres semanas atras, e nao haveria como
-         *     corrigir isso sem passar pela loja de aplicativos. E a mesma razao pela
-         *     qual o vencimento do preco da `Loja` e aplicado aqui.
+         *     **`status` e calculado no SERVIDOR**, nunca no aplicativo. O encontro
+         *     CANCELADO continua na agenda ate o fim previsto, com `status`
+         *     `cancelled`; depois do fim, segue a regra do encerrado e sai `ended`
+         *     (ADR-0027 12.6, decisao do cliente de 23/09/2026).
          *
-         *     ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTE CONTRATO
+         *     ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTA SECAO
          *
-         *     A ausencia e a decisao 4 do ADR-0025: nao ha moderacao, denuncia nem
-         *     remocao em lugar nenhum deste repositorio, e o cliente ja negou o
-         *     equivalente para o diretorio na emenda 1 do ADR-0011. A criacao pela
-         *     comunidade e fase seguinte, com o pacote de moderacao junto. Quando a
-         *     escrita existir, ela nasce em `/v1/admin/...` como manda o ADR-0023.
+         *     A escrita e do backoffice, em `/admin/network/events` (ADR-0027), e nao
+         *     daqui.
          */
         get: operations["listNetworkEvents"];
         put?: never;
@@ -1766,35 +1752,20 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Um encontro, com a galeria dele
+         * Um encontro
          * @description **Um corpo so, e esse corpo e o publico** (ADR-0021). A autenticacao e
          *     opcional porque a `Rede` e navegavel deslogado, e o corpo e identico nos
-         *     dois casos.
+         *     dois casos: nada nesta resposta e derivado de quem chama.
          *
-         *     `viewer_checked_in` e a UNICA coisa derivada de quem chama, e ela segue
-         *     exatamente o precedente do campo `viewer` do ADR-0021: e sinal de
-         *     navegacao, nao destranca campo nenhum, e nao fala de terceiro -- ela
-         *     responde "**voce** ja confirmou presenca?" a partir do token de quem ja
-         *     esta chamando. Para quem chega sem conta ela e `false`.
+         *     **Sem coordenada.** Autenticacao opcional e, para o portao de contrato
+         *     publico, operacao publica (P5 de `04-seguranca.md`). O ponto do encontro
+         *     sai em `getNetworkEventLocation`, que exige conta (ADR-0027 12.5).
          *
-         *     ## A galeria nao tem autor
-         *
-         *     `network_event_photos` guarda `submitted_by_user_id` para remocao,
-         *     auditoria e resposta a abuso, e **esse campo nunca e projetado**. A foto
-         *     pertence ao EVENTO: a resposta tem imagem e legenda, e mais nada.
-         *
-         *     Atribuir foto a pessoa reconstruiria a lista de presenca por outro
-         *     caminho -- dez fotos assinadas sao dez nomes presentes, com a vantagem,
-         *     para quem procura, de virem com imagem do lugar.
-         *
-         *     **Nesta fatia a galeria e EXIBIDA e nao ENVIADA.** Nao ha operacao de
-         *     upload aqui, e a ausencia e a decisao 4 do ADR-0025: o envio pela
-         *     comunidade depende de moderacao, que nao existe no repositorio, e do
-         *     armazenamento de objeto na pilha de integracao, que esta numa branch
-         *     ainda nao mesclada.
-         *
-         *     Evento inativo ou inexistente responde **404 nos dois casos**, com o
-         *     mesmo corpo: distinguir contaria a um estranho que aquele `slug` existiu.
+         *     Encontro que nao existe, que espera revisao (`pending_review`) ou que
+         *     foi retirado (`removed`) responde **404 nos tres casos**, com o mesmo
+         *     corpo: distinguir contaria a um estranho que aquele `slug` existiu. O
+         *     encontro cancelado e visivel, com `status` `cancelled` ate o fim
+         *     previsto.
          */
         get: operations["getNetworkEvent"];
         put?: never;
@@ -1805,38 +1776,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/network/events/{eventSlug}/check-in": {
+    "/network/events/{eventSlug}/location": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
         /**
-         * Confirmar presenca num encontro
-         * @description Confirma que **voce** vai (ou foi) ao encontro. **O pet nao entra
-         *     nisto**, e nao ha corpo de requisicao: nao ha o que escolher, porque o
-         *     unico dado da operacao e quem chama e qual evento.
+         * O ponto do encontro no mapa, so para quem tem conta
+         * @description O ponto marcado no mapa pelo administrador (`geo_source = map_pin`,
+         *     ADR-0006), para o aplicativo desenhar o encontro no mapa. E a emenda 1
+         *     do ADR-0010, com escopo fechado: **ponto de evento publicado, em
+         *     resposta autenticada**. Coordenada de pessoa, de pet, de caso e de
+         *     achado continua proibida em qualquer superficie.
          *
-         *     E a UNICA participacao da comunidade nesta fatia, e a escolha tem razao
-         *     escrita no ADR-0025 secao 4: **check-in nao produz conteudo**. Nao tem
-         *     texto, nao tem imagem, nao tem nada para moderar. Um inteiro que sobe de
-         *     um nao precisa de fila de revisao -- e fila de revisao e o que nao
-         *     existe neste repositorio.
+         *     **So com conta, e sem alternativa vazia.** `listNetworkEvents` e
+         *     publica e `getNetworkEvent` tem autenticacao opcional; nenhuma das duas
+         *     pode carregar o ponto, porque o portao de contrato publico trata
+         *     autenticacao opcional como publica e o ADR-0021 proibe a resposta que
+         *     muda conforme o chamador (ADR-0027 12.5). Sem conta, a tela mostra os
+         *     rotulos do lugar e nao mostra mapa.
          *
-         *     **Idempotente pelo BANCO, e nao pela aplicacao.** A chave primaria de
-         *     `network_event_checkins` e `(event_id, user_id)`: o segundo check-in da
-         *     mesma pessoa no mesmo evento deixa de ser algo que alguem precisa
-         *     conferir e passa a ser um estado que o banco recusa. A resposta e 200 nas
-         *     duas vezes, com a mesma contagem.
+         *     `point` e **nulo** quando o encontro nao tem ponto marcado: o ponto e
+         *     opcional (ADR-0027 12.2), e a ausencia e estado normal.
          *
-         *     Evento inativo, inexistente, ou `slug` de evento que nunca existiu:
-         *     **404 nos tres casos** (ADR-0021), com a autorizacao na clausula `WHERE`
-         *     e nunca 403.
+         *     **Lugar publico, nunca residencia** (ADR-0027 secao 13): quem cria o
+         *     encontro e o administrador, o formulario do painel diz que o local e
+         *     logradouro publico, e criar, mover e cancelar avisam todos os
+         *     administradores. Nenhuma restricao de banco distingue uma praca de uma
+         *     casa, e este contrato nao afirma que distingue.
+         *
+         *     O encontro e visivel para esta operacao sob a mesma regra de
+         *     `getNetworkEvent` (publicado ou cancelado), com a autorizacao na
+         *     clausula `WHERE`: encontro que nao existe, que espera revisao ou que
+         *     foi retirado responde 404, com o mesmo corpo. O 401 vem antes de
+         *     qualquer consulta: sem conta nao se descobre nem se o `slug` existe.
          */
-        post: operations["checkInNetworkEvent"];
+        get: operations["getNetworkEventLocation"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3495,13 +3474,9 @@ export interface components {
         NetworkEventWhen: "upcoming" | "past" | "all";
         /**
          * @description `proximos` e a data em ordem crescente; `recentes` e decrescente.
-         *     **Nao ha ordem por distancia**, e a ausencia e o ADR-0025 secao 5: o
-         *     evento nao tem coordenada, entao a distancia nao existe -- e uma ordem
-         *     que nunca podera ser cumprida e pior que uma que nao e oferecida.
-         *
-         *     **Nao ha ordem por numero de presencas.** Ordenar por presenca
-         *     transformaria `checkin_count` numa disputa e daria a quem enche a
-         *     contagem o topo da agenda.
+         *     **Nao ha ordem por distancia**: a agenda e publica e o ponto do encontro
+         *     so sai com conta (ADR-0027 12.5), e uma ordem por distancia revelaria,
+         *     pela ordem, onde o encontro esta.
          * @enum {string}
          */
         NetworkEventSort: "proximos" | "recentes";
@@ -3511,18 +3486,27 @@ export interface components {
          *     no aplicativo, um aparelho com relogio errado ou com build antiga
          *     chamaria de `upcoming` um encontro de tres semanas atras, e a correcao
          *     passaria pela loja de aplicativos.
+         *
+         *     `cancelled` prevalece sobre o estado temporal **enquanto o fim previsto
+         *     nao passou**: o cancelado nao conta como agendado nem como acontecendo
+         *     agora. **Depois do fim, segue a regra do encerrado** e sai `ended`
+         *     (ADR-0027 12.6, decisao do cliente de 23/09/2026). Cliente que nao
+         *     conhece `cancelled` precisa tratar valor desconhecido sem quebrar.
          * @enum {string}
          */
-        NetworkEventStatus: "upcoming" | "happening" | "ended";
+        NetworkEventStatus: "upcoming" | "happening" | "ended" | "cancelled";
         /**
-         * @description O lugar, em rotulo e **nunca em coordenada**. ADR-0006: nao ha
-         *     geocodificacao no MVP. `place_name` e o nome do lugar publico como as
-         *     pessoas o chamam, e nao logradouro, numero nem CEP -- os tres sao
-         *     endereco, e o ADR-0010 item 2 os proibe aqui.
+         * @description O lugar, em rotulo e **nunca em coordenada**. `place_name` e o nome do
+         *     lugar publico como as pessoas o chamam, e nao logradouro, numero nem
+         *     CEP -- os tres sao endereco, e o ADR-0010 item 2 os proibe aqui.
          *
-         *     A precisao para no bairro, que e o teto que o ADR-0010 declara para
-         *     superficie publica. **Nao ha campo de latitude, de longitude nem de
-         *     distancia, em nenhuma precisao e em nenhum arredondamento.**
+         *     **Nao ha campo de latitude, de longitude nem de distancia neste objeto,
+         *     em nenhuma precisao.** Ele sai em operacoes alcancaveis sem conta, e o
+         *     ponto do encontro so sai em `getNetworkEventLocation`, com conta
+         *     (ADR-0027 12.5). Acrescentar `lat` aqui faz o portao de contrato
+         *     publico reprovar, e a isca
+         *     `infra/verificacao/iscas/deve-reprovar-ponto-do-encontro-no-detalhe-publico.yaml`
+         *     existe para provar isso.
          */
         NetworkEventPlace: {
             /** @example Praça Benedito Calixto */
@@ -3535,19 +3519,9 @@ export interface components {
             state: string;
         };
         /**
-         * @description **Sem autor, e a ausencia e a decisao 3 do ADR-0025.** A foto pertence ao
-         *     evento. O banco guarda quem a enviou, para remocao e auditoria, e esse
-         *     campo nunca e projetado: dez fotos assinadas sao dez nomes presentes.
-         */
-        NetworkEventPhoto: {
-            slug: string;
-            /** Format: uri */
-            image_url: string;
-            caption?: string | null;
-        };
-        /**
-         * @description O cartao de um encontro na agenda. **Nao ha nenhum campo com pessoas**, e
-         *     nao ha UUID: `slug` e a chave primaria de `network_events`.
+         * @description O cartao de um encontro na agenda. **Nao ha nenhum campo com pessoas**,
+         *     nao ha coordenada e nao ha UUID: `slug` e a unica chave do encontro que
+         *     sai em resposta.
          */
         NetworkEventSummary: {
             slug: string;
@@ -3575,34 +3549,23 @@ export interface components {
              * @description Ausencia e estado normal, nao lacuna. O cartao sabe se desenhar sem ela.
              */
             cover_image_url?: string | null;
-            /**
-             * @description **Quantas pessoas, e nunca quais.** Ver a descricao de
-             *     `listNetworkEvents` e o ADR-0025 secao 2 para o motivo, e para o que
-             *     o produto paga por isto.
-             */
-            checkin_count: number;
-            photo_count: number;
         };
-        NetworkEvent: components["schemas"]["NetworkEventSummary"] & {
-            gallery: components["schemas"]["NetworkEventPhoto"][];
-            /**
-             * @description Se **quem esta chamando** ja confirmou presenca. Derivado do
-             *     proprio token de quem chama, pelo precedente do campo `viewer` do
-             *     ADR-0021: e sinal de navegacao, nao destranca campo nenhum e nao
-             *     fala de terceiro. `false` para quem chega sem conta.
-             */
-            viewer_checked_in: boolean;
-        };
+        /**
+         * @description O encontro, na leitura do detalhe. Hoje e o mesmo corpo do cartao da
+         *     agenda: a galeria e o `viewer_checked_in` sairam com o check-in
+         *     (ADR-0027 12.4). Continua como esquema proprio para que o detalhe possa
+         *     ganhar campo sem mudar o cartao.
+         */
+        NetworkEvent: components["schemas"]["NetworkEventSummary"];
         NetworkEventPage: {
             items: components["schemas"]["NetworkEventSummary"][];
             page: number;
             limit: number;
             total: number;
             /**
-             * @description **A ordem em que a lista de fato saiu.** Aqui ela nao e decoracao: o
-             *     default de `sort` DEPENDE de `when`, entao um cliente que nao mandou
-             *     `sort` nao tem como saber qual ordem valeu sem este campo. A barra de
-             *     listagem mostra a ordem REAL.
+             * @description **A ordem em que a lista de fato saiu.** O default de `sort` DEPENDE
+             *     de `when`, entao um cliente que nao mandou `sort` nao tem como saber
+             *     qual ordem valeu sem este campo.
              */
             effective_sort: components["schemas"]["NetworkEventSort"];
             /** @description O recorte de tempo que valeu, pelo mesmo motivo de `effective_sort`. */
@@ -3617,14 +3580,23 @@ export interface components {
             };
         };
         /**
-         * @description O desfecho de um check-in. **Nao ha lista de quem confirmou**, aqui nem em
-         *     lugar nenhum desta secao.
+         * @description O ponto do encontro, marcado no mapa (`map_pin`, ADR-0006). Sem campo de
+         *     origem nem de precisao: a origem e sempre `map_pin`. Os limites sao os
+         *     de `GeoPoint` e os de `AdminMapPin`.
          */
-        NetworkCheckIn: {
-            /** @description A contagem JA ATUALIZADA, para a tela nao somar um por conta propria. */
-            checkin_count: number;
-            /** @description Sempre `true` numa resposta 200 desta operacao, inclusive na segunda chamada. */
-            viewer_checked_in: boolean;
+        NetworkEventPoint: {
+            /** Format: double */
+            lat: number;
+            /** Format: double */
+            lon: number;
+        };
+        /**
+         * @description A resposta de `getNetworkEventLocation`. **So sai com conta** (emenda 1
+         *     do ADR-0010). `point` nulo e o encontro sem ponto marcado: a tela mostra
+         *     os rotulos e nao mostra mapa.
+         */
+        NetworkEventLocation: {
+            point: components["schemas"]["NetworkEventPoint"] | null;
         };
         PublicLostPetPage: {
             items: components["schemas"]["PublicLostPet"][];
@@ -6478,14 +6450,14 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                /** @description O endereco publico do encontro. Nao ha UUID nesta secao. */
+                /** @description O endereco publico do encontro. UUID nao sai nesta secao. */
                 eventSlug: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description O encontro e a galeria dele. */
+            /** @description O encontro. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6499,28 +6471,25 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
-    checkInNetworkEvent: {
+    getNetworkEventLocation: {
         parameters: {
             query?: never;
             header?: never;
             path: {
+                /** @description O endereco publico do encontro. */
                 eventSlug: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /**
-             * @description A presenca esta confirmada. Devolve a contagem JA ATUALIZADA, para a
-             *     tela nao precisar somar um por conta propria -- soma local diverge da
-             *     do servidor no primeiro check-in simultaneo.
-             */
+            /** @description O ponto do encontro, ou `point` nulo quando nao ha ponto marcado. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["NetworkCheckIn"];
+                    "application/json": components["schemas"]["NetworkEventLocation"];
                 };
             };
             400: components["responses"]["ValidationFailed"];

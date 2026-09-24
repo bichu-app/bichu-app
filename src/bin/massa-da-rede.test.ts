@@ -28,7 +28,7 @@
  * fossem iguais entre si atenderiam o banco e nao mostrariam nada.
  *
  * Entao o segundo bloco afirma a VARIEDADE: que existe encontro sem capa, que
- * existe galeria vazia, que existe contagem zero, que existe um acontecendo
+ * existe encontro com e sem ponto no mapa, que existe um acontecendo
  * agora e um que ja passou, que ha mais de uma cidade para o filtro filtrar, e
  * que o caso feio continua feio. Cada uma dessas linhas e um caso de desenho
  * que someria em silencio se alguem "arrumasse" a massa.
@@ -37,12 +37,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  ENCONTROS_COM_PONTO,
   ENCONTROS_VISIVEIS,
-  FOTOS_DA_REDE,
   FUSOS_DA_REDE,
   MASSA_DA_REDE,
-  PRESENCAS_DA_REDE,
-  TUTORES_DA_REDE,
   dataCivilDoEncontro,
   momentoDoEncontro,
 } from './massa-da-rede.js';
@@ -59,7 +57,6 @@ const TETO_DO_RESUMO = 180;
 const TETO_DO_LUGAR = 80;
 const TETO_DO_BAIRRO = 60;
 const TETO_DA_CIDADE = 60;
-const TETO_DA_LEGENDA = 140;
 
 /** Um `hoje` fixo, para as contas deste arquivo nao dependerem do relogio. */
 const HOJE = new Date('2026-09-23T15:30:00.000Z');
@@ -68,31 +65,29 @@ function comprimido(texto: string): number {
   return texto.trim().length;
 }
 
-function fotosDe(eventSlug: string): readonly { readonly slug: string }[] {
-  return FOTOS_DA_REDE.filter((foto) => foto.eventSlug === eventSlug);
-}
-
-function presencasDe(eventSlug: string): number {
-  return PRESENCAS_DA_REDE.filter((presenca) => presenca.eventSlug === eventSlug).length;
-}
-
 void describe('a massa da Rede cabe nos CHECK da migracao', () => {
-  void it('todo slug de encontro e de foto tem o formato que o banco aceita', () => {
+  void it('todo slug de encontro tem o formato que o banco aceita', () => {
     for (const encontro of MASSA_DA_REDE) {
       assert.match(encontro.slug, FORMATO_DO_SLUG, `slug fora do formato: ${encontro.slug}`);
     }
-    for (const foto of FOTOS_DA_REDE) {
-      assert.match(foto.slug, FORMATO_DO_SLUG, `slug de foto fora do formato: ${foto.slug}`);
-    }
   });
 
-  void it('nenhum slug se repete, nem entre encontros nem entre fotos', () => {
-    // `slug` e a chave primaria das duas tabelas: repetido, o `INSERT` estoura
-    // no meio da massa, com parte dela gravada.
+  void it('nenhum slug se repete', () => {
+    // `network_events_slug_unico`: repetido, o `INSERT` estoura no meio da
+    // massa, com parte dela gravada.
     const encontros = MASSA_DA_REDE.map((um) => um.slug);
     assert.equal(new Set(encontros).size, encontros.length, 'slug de encontro repetido');
-    const fotos = FOTOS_DA_REDE.map((uma) => uma.slug);
-    assert.equal(new Set(fotos).size, fotos.length, 'slug de foto repetido');
+  });
+
+  void it('ISCA -- todo ponto cabe nos limites do Brasil do contrato (`NetworkEventPoint`)', () => {
+    // Os limites de `GeoPoint` e de `AdminMapPin`: lat de -34 a 6, lon de -74 a
+    // -32. Trocar lat por lon, o erro mais comum com ponto, cai fora dos dois.
+    for (const encontro of MASSA_DA_REDE) {
+      if (encontro.ponto === null) continue;
+      const { lat, lon } = encontro.ponto;
+      assert.ok(lat >= -34 && lat <= 6, `lat de "${encontro.slug}" fora do Brasil: ${String(lat)}`);
+      assert.ok(lon >= -74 && lon <= -32, `lon de "${encontro.slug}" fora do Brasil: ${String(lon)}`);
+    }
   });
 
   void it('ISCA -- o titulo cabe em 120 e o resumo em 180', () => {
@@ -133,18 +128,7 @@ void describe('a massa da Rede cabe nos CHECK da migracao', () => {
     }
   });
 
-  void it('ISCA -- a legenda cabe em 140, quando existe', () => {
-    for (const foto of FOTOS_DA_REDE) {
-      if (foto.caption === null) continue;
-      const legenda = comprimido(foto.caption);
-      assert.ok(
-        legenda >= 2 && legenda <= TETO_DA_LEGENDA,
-        `legenda de "${foto.slug}" tem ${String(legenda)} caracteres, e o teto e ${String(TETO_DA_LEGENDA)}`,
-      );
-    }
-  });
-
-  void it('toda imagem e toda capa sao https', () => {
+  void it('toda capa e https', () => {
     for (const encontro of MASSA_DA_REDE) {
       if (encontro.coverImageUrl === null) continue;
       assert.equal(
@@ -152,9 +136,6 @@ void describe('a massa da Rede cabe nos CHECK da migracao', () => {
         'https:',
         `capa de "${encontro.slug}" nao e https`,
       );
-    }
-    for (const foto of FOTOS_DA_REDE) {
-      assert.equal(new URL(foto.imageUrl).protocol, 'https:', `foto "${foto.slug}" nao e https`);
     }
   });
 
@@ -206,75 +187,6 @@ void describe('a massa da Rede cabe nos CHECK da migracao', () => {
         `"${encontro.slug}" nao declara duracao e ainda assim produziu um fim`,
       );
     }
-  });
-});
-
-void describe('a massa e integra: nada aponta para o que nao existe', () => {
-  void it('toda foto pertence a um encontro da massa', () => {
-    const encontros = new Set(MASSA_DA_REDE.map((um) => um.slug));
-    for (const foto of FOTOS_DA_REDE) {
-      assert.ok(
-        encontros.has(foto.eventSlug),
-        `foto "${foto.slug}" aponta para o encontro "${foto.eventSlug}", que a massa nao tem`,
-      );
-    }
-  });
-
-  void it('toda presenca e de um tutor e de um encontro da massa', () => {
-    const encontros = new Set(MASSA_DA_REDE.map((um) => um.slug));
-    const tutores = new Set(TUTORES_DA_REDE.map((um) => um.id));
-    for (const presenca of PRESENCAS_DA_REDE) {
-      assert.ok(
-        encontros.has(presenca.eventSlug),
-        `presenca num encontro que a massa nao tem: ${presenca.eventSlug}`,
-      );
-      assert.ok(
-        tutores.has(presenca.tutorId),
-        `presenca de um tutor que a massa nao tem: ${presenca.tutorId}`,
-      );
-    }
-  });
-
-  void it('ISCA -- ninguem confirma presenca duas vezes no mesmo encontro', () => {
-    // A chave primaria de `network_event_checkins` e `(event_id, user_id)`. O
-    // par repetido estoura o `INSERT` no meio da massa.
-    const pares = PRESENCAS_DA_REDE.map((uma) => `${uma.eventSlug}|${uma.tutorId}`);
-    const repetidos = pares.filter((par, indice) => pares.indexOf(par) !== indice);
-    assert.deepEqual(repetidos, [], 'o mesmo tutor confirma presenca duas vezes no mesmo encontro');
-  });
-
-  void it('o e-mail de todo tutor e de dominio reservado, e nenhum se repete', () => {
-    // `.invalid` e reservado por RFC 2606: a massa nao consegue mandar e-mail
-    // para ninguem de verdade nem por engano.
-    for (const tutor of TUTORES_DA_REDE) {
-      assert.ok(
-        tutor.email.endsWith('.invalid'),
-        `o e-mail de "${tutor.displayName}" nao e de dominio reservado`,
-      );
-    }
-    const emails = TUTORES_DA_REDE.map((um) => um.email);
-    assert.equal(new Set(emails).size, emails.length, 'e-mail de tutor repetido');
-    const ids = TUTORES_DA_REDE.map((um) => um.id);
-    assert.equal(new Set(ids).size, ids.length, 'id de tutor repetido');
-  });
-
-  void it('NENHUMA foto da massa carrega quem a enviou, e isso e a decisao', () => {
-    // A galeria desta fatia e CURADA (ADR-0025 decisao 4): exibida e nao
-    // enviada. Foto curada nao tem remetente, e inventar um seria inventar um
-    // envio que nao aconteceu.
-    //
-    // Quem prova que o campo nao SAI na resposta estando preenchido e a isca
-    // `tests/integration/rede-nao-liga-dois-pets.test.ts`, que monta a propria
-    // foto com remetente. Este caso guarda a outra metade: que a massa nao
-    // adquira o campo de volta por conveniencia.
-    const chaves = new Set(FOTOS_DA_REDE.flatMap((uma) => Object.keys(uma)));
-    assert.deepEqual(
-      [...chaves].sort(),
-      ['caption', 'eventSlug', 'imageUrl', 'slug', 'sortOrder'],
-      'o conjunto de campos de uma foto da massa mudou. Se apareceu quem enviou, '
-        + 'a galeria curada passou a fingir um envio -- e o portao de colunas '
-        + 'reprova o nome dessa coluna em qualquer lugar de `src/`.',
-    );
   });
 });
 
@@ -341,8 +253,8 @@ void describe('as datas sao calculadas, e a RELACAO entre elas e o que a massa p
       'nenhum encontro da massa cai entre `starts_at` e `ends_at` no instante da semeadura',
     );
     assert.ok(
-      acontecendo.every((um) => um.active),
-      'o encontro que acontece agora esta inativo, entao ele nao aparece na agenda',
+      acontecendo.every((um) => um.publicationStatus === 'published'),
+      'o encontro que acontece agora nao esta publicado, entao ele nao aparece na agenda',
     );
   });
 
@@ -381,25 +293,14 @@ void describe('a massa presta para ser OLHADA, que e para o que ela existe', () 
     );
   });
 
-  void it('ha galeria cheia, galeria de uma foto so, e galeria VAZIA', () => {
-    const tamanhos = ENCONTROS_VISIVEIS.map((um) => fotosDe(um.slug).length);
-    assert.ok(tamanhos.some((n) => n >= 3), 'nenhuma galeria cheia');
+  void it('ha encontro COM ponto no mapa e encontro SEM ponto (ADR-0027 12.8)', () => {
+    // A tela do encontro, com conta, desenha o mapa quando ha ponto e so os
+    // rotulos quando nao ha. Os dois casos precisam estar na massa para o
+    // cliente ver os dois.
+    assert.ok(ENCONTROS_COM_PONTO.length >= 1, 'nenhum encontro visivel com ponto');
     assert.ok(
-      tamanhos.some((n) => n === 1),
-      'nenhuma galeria de uma foto so, que e o caso em que a grade de tres colunas fica com ' +
-        'dois buracos',
-    );
-    assert.ok(tamanhos.some((n) => n === 0), 'nenhuma galeria vazia');
-  });
-
-  void it('ha muitas presencas, ha UMA, e ha NENHUMA', () => {
-    const contagens = ENCONTROS_VISIVEIS.map((um) => presencasDe(um.slug));
-    assert.ok(Math.max(...contagens) >= 5, 'a maior contagem da massa e pequena demais para medir nada');
-    assert.ok(contagens.some((n) => n === 1), 'nenhum encontro com exatamente uma presenca');
-    assert.ok(
-      contagens.some((n) => n === 0),
-      'todo encontro tem presenca: o zero e o caso que ninguem desenha, e e o estado em que ' +
-        'todo encontro novo nasce',
+      ENCONTROS_VISIVEIS.some((um) => um.ponto === null),
+      'todo encontro visivel tem ponto: a tela sem mapa nunca seria vista',
     );
   });
 
@@ -432,39 +333,37 @@ void describe('a massa presta para ser OLHADA, que e para o que ela existe', () 
 
   void it('ISCA -- o caso feio continua feio', () => {
     // Ele e o pior cartao que a secao consegue produzir: titulo e resumo
-    // encostados no teto, nome de lugar encostado no teto, nenhuma capa,
-    // galeria vazia e nenhuma presenca. Se alguem "arrumar" a massa, e aqui que
-    // isso aparece -- e um cartao feio que ninguem ve e um cartao feio que vai
-    // para producao.
+    // encostados no teto, nome de lugar encostado no teto, nenhuma capa e
+    // nenhum ponto. Se alguem "arrumar" a massa, e aqui que isso aparece.
     const feios = ENCONTROS_VISIVEIS.filter(
       (um) =>
         comprimido(um.title) >= TETO_DO_TITULO - 15 &&
         comprimido(um.summary) >= TETO_DO_RESUMO - 15 &&
         comprimido(um.placeName) >= TETO_DO_LUGAR - 15 &&
         um.coverImageUrl === null &&
-        fotosDe(um.slug).length === 0 &&
-        presencasDe(um.slug) === 0,
+        um.ponto === null,
     );
     assert.equal(
       feios.length,
       1,
       'a massa precisa de exatamente um caso feio: titulo, resumo e lugar encostados nos ' +
-        'tetos, sem capa, sem galeria e sem presenca',
+        'tetos, sem capa e sem ponto',
     );
   });
 
-  void it('ISCA -- existe encontro INATIVO, e ele e futuro', () => {
+  void it('ISCA -- existe encontro RETIRADO, e ele e futuro e tem ponto', () => {
     // Uma massa so com encontros visiveis faria o caso "encontro retirado nao
     // aparece" passar contra uma consulta que nunca filtrou nada. Futuro de
-    // proposito: no passado, `when=upcoming` sozinho o esconderia e o `active`
-    // continuaria sem ser exercido.
-    const inativos = MASSA_DA_REDE.filter((um) => !um.active);
-    assert.ok(inativos.length >= 1, 'nenhum encontro inativo: o filtro de `active` nao tem alvo');
-    for (const inativo of inativos) {
+    // proposito: no passado, `when=upcoming` sozinho o esconderia. Com ponto de
+    // proposito: e o caso em que `location` precisa responder 404.
+    const retirados = MASSA_DA_REDE.filter((um) => um.publicationStatus === 'removed');
+    assert.ok(retirados.length >= 1, 'nenhum encontro retirado: o filtro de visibilidade nao tem alvo');
+    for (const retirado of retirados) {
       assert.ok(
-        inativo.quando.ancora !== 'parede' || inativo.quando.diasAPartirDeHoje > 0,
-        `"${inativo.slug}" esta inativo E no passado: o filtro when=upcoming o esconderia sozinho`,
+        retirado.quando.ancora !== 'parede' || retirado.quando.diasAPartirDeHoje > 0,
+        `"${retirado.slug}" esta retirado E no passado: o filtro when=upcoming o esconderia sozinho`,
       );
+      assert.notEqual(retirado.ponto, null, `"${retirado.slug}" nao tem ponto: o 404 do location fica sem alvo`);
     }
   });
 

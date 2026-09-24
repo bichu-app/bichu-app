@@ -1,4 +1,4 @@
--- A secao `Rede`: os encontros da comunidade, a presenca e a galeria.
+-- A secao `Rede`: os encontros da comunidade.
 --
 -- POR QUE ESTA MIGRACAO EXISTE, EM UMA FRASE: a `Rede` e uma das cinco abas do
 -- aplicativo e nao tinha NADA -- nem tabela, nem rota, nem tela, nem uma linha
@@ -6,60 +6,70 @@
 -- construcao", e continuaria dizendo isso enquanto nao houvesse onde guardar um
 -- encontro.
 --
--- A decisao que deu forma a este arquivo e o **ADR-0025**. Leia-o antes de
--- mexer aqui: as tres ausencias abaixo sao o conteudo dele, e desfazer qualquer
--- uma reabre a inferencia que ele existe para fechar.
+-- As decisoes que deram forma a este arquivo sao o **ADR-0025** (a Rede nao tem
+-- lista de presenca) e a **secao 12 do ADR-0027**, que emendou esta migracao
+-- antes do merge. Leia os dois antes de mexer aqui.
 --
 -- ====================================================================
--- AS TRES AUSENCIAS, E CADA UMA E UMA DECISAO E NAO UM ESQUECIMENTO
+-- ESTA MIGRACAO FOI EDITADA NO LUGAR, E NAO CORRIGIDA POR OUTRA
 -- ====================================================================
 --
--- 1. **`network_event_checkins` NAO TEM `pet_id`.**
+-- A primeira versao (BICHUS-251) criava tambem a presenca e a galeria, fazia
+-- `slug` ser a chave primaria e guardava o encontro sem ponto nenhum. Em
+-- 23/09/2026 o cliente decidiu, antes do merge:
 --
---    O ADR-0010 item 7 proibe a superficie publica de deixar inferir que dois
---    pets sao do mesmo tutor. Uma lista de presenca por PET faz essa inferencia
---    de graca: quem confirma presenca com o Thor e com a Nina publica, para
---    quem abrir a lista, que os dois moram na mesma casa -- e o endereco do
---    evento e uma praca do bairro dela.
+-- 1. **sem check-in e sem galeria nesta versao.** As duas tabelas sairam daqui.
+--    Cria-las depois e `CREATE TABLE`, aditivo e sem risco; deixa-las agora
+--    seria esquema sem fluxo e campo de contrato sempre zero. As decisoes 1 a 3
+--    do ADR-0025 continuam normativas para quando voltarem: presenca sem
+--    `pet_id`, presenca como numero e nunca como lista, foto sem autor na
+--    saida. O desenho anterior esta na branch `guarda/rede-checkin-galeria`;
+-- 2. **o encontro ganha ponto no mapa**, que o aplicativo mostra so a quem
+--    esta logado (ADR-0027 12.5 e a emenda 1 do ADR-0010).
 --
---    Num produto cujo fluxo mais critico e pet perdido, essa e exatamente a
---    informacao que interessa a quem quer levar um animal.
+-- A edicao no lugar vale porque a migracao **nao foi mesclada em `development`
+-- nem aplicada em banco compartilhado** (conferido em 23/09 com
+-- `git branch -a --contains`: so as branches da propria secao a tem). Quem a
+-- aplicou num banco local de desenvolvimento precisa de `make reset`.
 --
---    Nao ha coluna de pet e nao ha tabela de ligacao. A regra deixa de ser algo
---    que quem projeta precisa lembrar e passa a ser um dado que NAO EXISTE:
---    nenhum `join`, nenhum `select *` e nenhum engano de implementacao pode
---    publicar o que nao foi gravado.
+-- ====================================================================
+-- A IDENTIDADE INTERNA E SEPARADA DA PUBLICA (ADR-0024, ADR-0027 12.1)
+-- ====================================================================
 --
---    O preco esta escrito no ADR-0025 e e real: o produto perde "levei o Thor".
+-- `id uuid` e a chave primaria e `slug` e unico ao lado, como em `pets`,
+-- `professionals` e na vitrine da `Loja` desde 69c6a27. O ADR-0010 item 6
+-- proibe UUID na SAIDA publica, nao no esquema, e o engano que a primeira
+-- versao temia (projetar o `id` por descuido) ja tem portao proprio:
+-- `src/tools/portao-contrato-publico.ts` reprova `format: uuid` em operacao
+-- alcancavel sem conta. Toda chave estrangeira futura aponta para `id`, porque
+-- chave estrangeira sobre `slug` e o que o criterio 2 da BICHUS-19 proibe.
 --
--- 2. **`network_events` NAO TEM COORDENADA.**
+-- ====================================================================
+-- O PONTO, E QUEM PODE VE-LO
+-- ====================================================================
 --
---    Sem `geo`, sem latitude, sem longitude, sem CEP. O ADR-0006 proibe
---    geocodificacao no MVP e e explicito sobre a origem de coordenada: so
---    `device_gps` e `map_pin`. Quem cadastra uma praca nao tem nenhuma das duas
---    -- nao esta la, e nao ha toque no mapa fora do cadastro de tutor.
+-- `geo` e opcional: os tres rotulos (`place_name`, `neighborhood`,
+-- `city`/`state`) continuam obrigatorios e o ponto e tolerancia, nao caminho.
+-- A unica origem admitida e `map_pin` -- a que o ADR-0006 admite e que um
+-- operador consegue produzir tocando o mapa do painel. Nao ha geocodificacao.
 --
---    O lugar e TRES ROTULOS DE TEXTO: `place_name`, `neighborhood` e
---    `city`/`state`. Isso fica NO TETO que o ADR-0010 declara para superficie
---    publica ("bairro e cidade") e nao o ultrapassa. E o nome de uma praca nao
---    e endereco de residencia de ninguem.
+-- **O ponto nunca sai em resposta alcancavel sem conta.** A agenda e o detalhe
+-- continuam sem coordenada; o ponto sai so em
+-- `GET /v1/network/events/{eventSlug}/location`, com `bearerAuth` obrigatorio.
+-- A emenda 1 do ADR-0010 tem escopo fechado: ponto de EVENTO publicado, em
+-- resposta AUTENTICADA. Coordenada de pessoa, de pet, de caso e de achado
+-- continua proibida em qualquer superficie.
 --
---    Consequencia que precisa estar dita: **nao ha ordenacao por distancia**, e
---    ela nao aparece desabilitada. Sem coordenada nao ha distancia, e oferecer
---    uma ordem que nunca podera ser cumprida e pior que nao oferece-la.
---
--- 3. **NAO HA `id uuid` EM `network_events` NEM EM `network_event_photos`.**
---
---    `slug` e a chave primaria nas duas, copiando a forma de `store_items` e
---    `store_partners` (20260922000009), que por sua vez copiaram `pets.slug`.
---    Um `id uuid` aqui seria uma coluna que nunca pode ser projetada esperando
---    alguem projeta-la por engano -- foi o que obrigou a 20260922000008 a
---    acrescentar `slug` a `professionals` depois.
---
---    `network_event_checkins` tem `user_id uuid`, e a excecao tem razao: ela
---    NUNCA e projetada. A chave e `(event_slug, user_id)` e a tabela existe
---    para contar e para impedir o segundo check-in da mesma pessoa. A unica
---    leitura do contrato sobre ela e `count(*)`.
+-- "Lugar publico, nunca residencia" (ADR-0027 secao 13) NAO E UM CHECK, e dizer
+-- o contrario seria mentir: nenhuma restricao sabe a diferenca entre uma praca
+-- e uma casa. O que o banco garante e o que cabe a ele:
+--   - so `origin = 'community'` pode estar em `pending_review`, e
+--     `pending_review` nunca e visivel -- o encontro criado pela comunidade,
+--     quando existir, so projeta ponto depois de revisao humana;
+--   - quem criou fica guardado para a trilha, e nunca sai.
+-- O resto e processo: so o administrador cria evento na v1, o formulario diz
+-- que o local e logradouro publico, e criar, mover e cancelar avisam todos os
+-- administradores.
 --
 -- ====================================================================
 -- A DATA, QUE E A ARMADILHA DESTA SECAO
@@ -74,43 +84,30 @@
 -- A hora de um evento e hora de parede, e parede tem lugar.
 --
 -- O PASSADO E ROTULADO PELO SERVIDOR, e nao por esta tabela: `status`
--- (`upcoming` / `happening` / `ended`) e calculado na projecao, pela mesma razao
--- pela qual o vencimento do preco da `Loja` e calculado la. Se a regra morasse
--- no aplicativo, um aparelho com relogio errado ou com build antiga chamaria de
--- "proximo" um evento de tres semanas atras, e nao haveria como corrigir isso
--- sem passar pela loja de aplicativos.
+-- (`upcoming` / `happening` / `ended`, e `cancelled`, que prevalece) e
+-- calculado na projecao, pela mesma razao pela qual o vencimento do preco da
+-- `Loja` e calculado la.
 --
 -- ====================================================================
--- QUEM ESCREVE, HOJE E DEPOIS
+-- QUEM ESCREVE
 -- ====================================================================
 --
--- Esta migracao **nao cria rota de escrita de evento**, pela mesma razao da
--- 20260922000009: a decisao 9.6 de `api/contrato-de-escrita-do-diretorio.md`
--- (catalogo versionado no repositorio ou backoffice de outra esteira) esta
--- pendente do cliente, e o esquema e o MESMO nos dois caminhos. Quando a
--- escrita existir, ela nasce em `/v1/admin/...` como manda o ADR-0023, e nada
--- daqui e jogado fora.
---
--- O que a comunidade faz nesta fatia e **check-in**, e so ele. O ADR-0025
--- secao 4 explica a escolha em uma linha: check-in NAO PRODUZ CONTEUDO. Nao tem
--- texto, nao tem imagem, nao tem nada para moderar -- e moderacao, denuncia e
--- remocao nao existem em lugar nenhum deste repositorio.
---
--- `network_event_photos` nasce **exibida e nao enviada**: a massa a preenche
--- para o cartao poder ser visto com e sem foto. O envio pela comunidade e fase
--- seguinte, junto da moderacao que ele exige.
+-- Esta migracao nao cria rota de escrita. A escrita nasce no backoffice
+-- (`/v1/admin/network/*`, ADR-0027), numa migracao posterior a esta, que
+-- acrescenta `cover_image_id` -- ele aponta para `catalog_images`, que ainda
+-- nao existe aqui.
 
 -- Up Migration
 
--- ---------------------------------------------------------------------------
--- O encontro
--- ---------------------------------------------------------------------------
-
 CREATE TABLE network_events (
-  -- Mesma decisao de `store_items.slug`, pelo mesmo motivo, e com o MESMO
-  -- formato. Tres formatos de endereco publico no mesmo produto seriam tres
-  -- regras para alguem decorar.
-  slug            text        PRIMARY KEY
+  -- A IDENTIDADE INTERNA. Alvo de toda chave estrangeira desta secao, e nunca
+  -- projetada.
+  id              uuid        PRIMARY KEY,
+
+  -- O ENDERECO PUBLICO. Mesmo formato de `pets.slug`, `professionals.slug` e
+  -- `store_items.slug`: quatro formatos de endereco publico no mesmo produto
+  -- seriam quatro regras para alguem decorar.
+  slug            text        NOT NULL
                   CONSTRAINT network_events_slug_formato
                   CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'),
 
@@ -119,20 +116,17 @@ CREATE TABLE network_events (
                   CHECK (char_length(btrim(title)) BETWEEN 2 AND 120),
 
   -- Uma linha, e o teto e o que faz dela uma linha. Mesmo numero da
-  -- `store_items.summary`, e a igualdade e deliberada: os dois cartoes vivem na
-  -- mesma listagem, com a mesma largura.
+  -- `store_items.summary`: os dois cartoes vivem na mesma listagem.
   summary         text        NOT NULL
                   CONSTRAINT network_events_resumo_tem_tamanho
                   CHECK (char_length(btrim(summary)) BETWEEN 2 AND 180),
 
   -- ---------------------------------------------------------------------
-  -- O LUGAR, EM TRES ROTULOS. Nenhuma coordenada -- ver a ausencia 2 acima.
+  -- O LUGAR: TRES ROTULOS OBRIGATORIOS E UM PONTO OPCIONAL
   -- ---------------------------------------------------------------------
   --
   -- O nome do lugar publico, COMO AS PESSOAS O CHAMAM: `Praca Benedito
-  -- Calixto`, `Parque da Aclimacao`. Nao e logradouro, nao e numero e nao e
-  -- CEP -- os tres sao endereco, e o ADR-0010 item 2 os proibe em superficie
-  -- publica.
+  -- Calixto`, `Parque da Aclimacao`. Nao e logradouro, numero nem CEP.
   place_name      text        NOT NULL
                   CONSTRAINT network_events_lugar_tem_tamanho
                   CHECK (char_length(btrim(place_name)) BETWEEN 2 AND 80),
@@ -149,56 +143,119 @@ CREATE TABLE network_events (
                   CONSTRAINT network_events_uf_tem_duas_letras
                   CHECK (state ~ '^[A-Z]{2}$'),
 
+  -- `geography` e nao `geometry`, pelo motivo de `lost_cases` e
+  -- `professionals`: a distancia sobre a esfera e em metros e nao se deforma
+  -- com a latitude. Opcional (ADR-0027 12.2).
+  geo             geography(Point, 4326),
+
+  -- A origem do ponto. `map_pin` e a unica: e a que o ADR-0006 admite e a unica
+  -- que um operador consegue produzir. Geocodificacao continua proibida.
+  geo_source      text
+                  CONSTRAINT network_events_origem_do_ponto
+                  CHECK (geo_source IS NULL OR geo_source = 'map_pin'),
+
   -- ---------------------------------------------------------------------
   -- A DATA, E O FUSO QUE ANDA COM ELA
   -- ---------------------------------------------------------------------
   starts_at       timestamptz NOT NULL,
 
-  -- Opcional: nem todo encontro declara fim. Quando existe, e depois do
-  -- comeco, e o CHECK dispensa a discussao -- os dois sao colunas da mesma
-  -- linha, entao a comparacao e imutavel e cabe numa restricao.
   ends_at         timestamptz
                   CONSTRAINT network_events_fim_depois_do_comeco
                   CHECK (ends_at IS NULL OR ends_at > starts_at),
 
-  -- O nome IANA da zona. Ver "A DATA" no cabecalho: sem ele o instante esta
-  -- certo e a hora de parede esta errada, em silencio.
-  --
   -- O formato e conferido aqui; que a zona EXISTA de verdade e conferido pelo
-  -- gatilho la embaixo, porque isso exige consultar o catalogo e um CHECK nao
-  -- enxerga outra relacao.
+  -- gatilho la embaixo, porque isso exige consultar o catalogo.
   time_zone       text        NOT NULL DEFAULT 'America/Sao_Paulo'
                   CONSTRAINT network_events_fuso_tem_forma_iana
                   CHECK (time_zone ~ '^[A-Za-z]+/[A-Za-z_]+$'),
 
-  -- A imagem de capa. Opcional, e a ausencia e estado normal e nao lacuna: o
-  -- cartao sabe se desenhar sem ela, e a massa tem os dois casos de proposito.
   cover_image_url text
                   CONSTRAINT network_events_capa_e_https
                   CHECK (cover_image_url IS NULL OR cover_image_url ~ '^https://'),
 
-  -- Evento retirado fica na tabela e nunca entra na leitura, como em
-  -- `store_items`. Apagar perderia os check-ins junto.
-  active          boolean     NOT NULL DEFAULT true,
+  -- ---------------------------------------------------------------------
+  -- PUBLICACAO, ORIGEM E AUTOR (ADR-0027 12.3 e apendice A.4)
+  -- ---------------------------------------------------------------------
+  --
+  -- `active boolean` saiu: duas colunas para "isto aparece?" divergem na
+  -- primeira escrita que atualizar so uma. `publication_status` responde
+  -- sozinha, e sem padrao: quem cria diz. Nao ha `draft` (ADR-0027 12.9):
+  -- criar e publicar.
+  origin              text        NOT NULL DEFAULT 'admin'
+                      CONSTRAINT network_events_origem_conhecida
+                      CHECK (origin IN ('admin', 'community')),
 
-  created_at      timestamptz NOT NULL DEFAULT now()
+  created_by_user_id  uuid        REFERENCES users (id) ON DELETE SET NULL,
+
+  publication_status  text        NOT NULL
+                      CONSTRAINT network_events_publicacao_conhecida
+                      CHECK (publication_status IN ('pending_review', 'published', 'cancelled', 'removed')),
+
+  published_at        timestamptz,
+  cancelled_at        timestamptz,
+
+  cancellation_note   text
+                      CONSTRAINT network_events_nota_de_cancelamento_tem_tamanho
+                      CHECK (cancellation_note IS NULL OR char_length(btrim(cancellation_note)) BETWEEN 2 AND 280),
+
+  created_at          timestamptz NOT NULL DEFAULT now(),
+  updated_at          timestamptz NOT NULL DEFAULT now(),
+
+  version             integer     NOT NULL DEFAULT 1
+                      CONSTRAINT network_events_versao_positiva
+                      CHECK (version > 0),
+
+  -- Ponto e origem andam juntos: ponto sem origem e coordenada que ninguem sabe
+  -- de onde veio, e origem sem ponto e rotulo mentindo.
+  CONSTRAINT network_events_ponto_anda_com_origem
+    CHECK ((geo IS NULL) = (geo_source IS NULL)),
+
+  CONSTRAINT network_events_cancelado_tem_instante
+    CHECK (publication_status <> 'cancelled' OR cancelled_at IS NOT NULL),
+
+  CONSTRAINT network_events_visivel_foi_publicado
+    CHECK (publication_status NOT IN ('published', 'cancelled') OR published_at IS NOT NULL),
+
+  -- So o encontro da COMUNIDADE espera revisao. E esta linha que faz da regra
+  -- "o ponto de evento da comunidade so aparece depois de revisao humana"
+  -- (ADR-0027 13.5) um estado do banco: `pending_review` nunca e visivel, e so
+  -- `community` pode estar nele.
+  CONSTRAINT network_events_revisao_so_da_comunidade
+    CHECK (origin = 'community' OR publication_status <> 'pending_review')
 );
 
+-- Unicidade global, com o nome que `pets_slug_unico`,
+-- `professionals_slug_unico` e `store_partners_slug_unico` ja usam.
+CREATE UNIQUE INDEX network_events_slug_unico ON network_events (slug);
+
 COMMENT ON TABLE network_events IS
-  'Os encontros da secao `Rede`. Sem coordenada, por decisao: ADR-0006 proibe geocodificacao e o lugar e rotulo (place_name + neighborhood + city/state), no teto de precisao que o ADR-0010 permite em superficie publica.';
+  'Os encontros da secao `Rede`. O lugar sao tres rotulos obrigatorios e um ponto opcional (`geo`, origem `map_pin`). O ponto so sai em resposta autenticada (`getNetworkEventLocation`, emenda 1 do ADR-0010); agenda e detalhe publicos nao carregam coordenada.';
+COMMENT ON COLUMN network_events.id IS
+  'A identidade interna do encontro. Nao sai em resposta: o ADR-0010 item 6 proibe UUID em saida publica, e o portao de contrato publico reprova quem tentar. Alvo de toda chave estrangeira da secao.';
 COMMENT ON COLUMN network_events.slug IS
-  'O endereco publico do evento, e a chave primaria. Nao ha UUID nesta tabela: ela so existe para sair em resposta publica, e o ADR-0010 item 6 proibe UUID interno la.';
+  'O endereco publico do encontro. Unico, e e a unica chave do encontro que sai em resposta.';
 COMMENT ON COLUMN network_events.place_name IS
-  'O nome do lugar publico, como as pessoas o chamam. NAO e logradouro, numero nem CEP: os tres sao endereco, e o ADR-0010 item 2 os proibe em superficie publica.';
+  'O nome do lugar publico, como as pessoas o chamam. NAO e logradouro, numero nem CEP. Logradouro publico, nunca residencia (ADR-0027 secao 13): regra de processo, garantida por quem cria, e nao por restricao.';
+COMMENT ON COLUMN network_events.geo IS
+  'O ponto do encontro, marcado no mapa pelo administrador. Opcional. So sai em `getNetworkEventLocation`, com `bearerAuth` obrigatorio; nunca em operacao alcancavel sem conta.';
 COMMENT ON COLUMN network_events.time_zone IS
   'O nome IANA da zona do evento. Anda junto de `starts_at` porque `timestamptz` sozinho diz o instante e nao diz a hora de parede: um aparelho em UTC renderizaria um encontro das 9h como 12h, sem nada acusar.';
+COMMENT ON COLUMN network_events.publication_status IS
+  'Se o encontro aparece. Visivel e `published` ou `cancelled` (o cancelado sai com `status` `cancelled` ate o fim previsto e, depois dele, segue a regra do encerrado; decisao do cliente de 23/09). `pending_review` e so da comunidade e nunca e visivel; `removed` e terminal.';
+-- A MARCA `NUNCA sai do servidor` NAO E PROSA: ela e lida por
+-- `src/tools/portao-colunas-que-nao-saem.ts`, que varre o contrato e `src/`
+-- atras do NOME desta coluna e reprova quem a projetar. E o mesmo mecanismo que
+-- ja guarda a coluna homonima de `professionals`, pela mesma razao: quem criou
+-- e dado de trilha, nao de vitrine.
+COMMENT ON COLUMN network_events.created_by_user_id IS
+  'QUEM CRIOU O ENCONTRO. NUNCA sai do servidor, em nenhuma resposta, nem a administrativa (ADR-0027 apendice A.4). Existe para a trilha e para resposta a abuso.';
 
 -- A zona precisa EXISTIR, e nao apenas ter a forma de uma. `America/Sao_Pualo`
 -- passa no CHECK de formato e renderiza errado para sempre.
 --
 -- Gatilho e nao CHECK pela mesma razao da `store_items_recusa_data_futura`:
 -- consultar `pg_timezone_names` nao e imutavel, e o Postgres recusa funcao
--- volatil em restricao -- um CHECK com ela nem chega a ser criado.
+-- volatil em restricao.
 CREATE FUNCTION network_events_recusa_fuso_inexistente() RETURNS trigger AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = NEW.time_zone) THEN
@@ -215,128 +272,27 @@ CREATE TRIGGER network_events_fuso_existe
   BEFORE INSERT OR UPDATE ON network_events
   FOR EACH ROW EXECUTE FUNCTION network_events_recusa_fuso_inexistente();
 
--- Os indices das duas consultas que a rota faz: a agenda ativa por data, e a
--- agenda ativa de uma cidade. Parciais em `active` pela mesma razao dos indices
--- da vitrine: evento retirado nunca entra na leitura.
---
--- `starts_at` na frente porque a ordenacao da secao e SEMPRE por data: `when`
--- decide o sentido (crescente para o que vem, decrescente para o que passou) e
--- o Postgres percorre o mesmo indice nos dois sentidos.
+-- Os indices das consultas que as rotas fazem: a agenda visivel por data, a
+-- agenda visivel de uma cidade e o ponto do encontro visivel. Parciais no
+-- conjunto VISIVEL, que e o mesmo predicado da clausula `WHERE` das leituras.
 CREATE INDEX network_events_agenda
-  ON network_events (starts_at, slug)
-  WHERE active;
+  ON network_events (starts_at, id)
+  WHERE publication_status IN ('published', 'cancelled');
 
 CREATE INDEX network_events_por_cidade
-  ON network_events (city, starts_at, slug)
-  WHERE active;
+  ON network_events (city, starts_at, id)
+  WHERE publication_status IN ('published', 'cancelled');
 
--- ---------------------------------------------------------------------------
--- A presenca. DA PESSOA, e nunca do pet -- ver a ausencia 1 no cabecalho.
--- ---------------------------------------------------------------------------
-
-CREATE TABLE network_event_checkins (
-  event_slug    text        NOT NULL REFERENCES network_events (slug) ON DELETE CASCADE,
-
-  -- A unica coluna que identifica alguem nesta secao inteira, e ela NUNCA e
-  -- projetada. O contrato le esta tabela por `count(*)` e por mais nada.
-  user_id       uuid        NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-
-  checked_in_at timestamptz NOT NULL DEFAULT now(),
-
-  -- A chave composta e a idempotencia: o segundo check-in da mesma pessoa no
-  -- mesmo evento deixa de ser algo que a aplicacao precisa conferir e passa a
-  -- ser um estado que o banco recusa. Mesma forma de
-  -- `store_catalog_versions_uma_corrente`: a regra mora onde ela nao pode ser
-  -- contornada por caminho que ninguem previu.
-  PRIMARY KEY (event_slug, user_id)
-);
-
-COMMENT ON TABLE network_event_checkins IS
-  'Quem confirmou presenca. NAO HA `pet_id`, e a ausencia e a decisao do ADR-0025: check-in por pet publicaria que dois animais sao do mesmo tutor, que e o item 7 do ADR-0010. Nenhuma operacao do contrato le esta tabela linha a linha -- a unica leitura e count(*).';
--- ESTA COLUNA NAO LEVA A MARCA `NUNCA sai do servidor`, E A AUSENCIA E
--- DELIBERADA -- nao e esquecimento e nao e descuido.
---
--- O portao de `src/tools/portao-colunas-que-nao-saem.ts` busca pelo NOME da
--- coluna marcada, no contrato inteiro e em `src/` inteiro. `user_id` e um dos
--- nomes mais comuns do produto: marca-lo aqui faria o portao acusar dezenas de
--- usos legitimos em outros modulos e, pior, faria alguem desligar o portao para
--- voltar a trabalhar. Portao que acusa demais morre igual a portao que nao
--- acusa -- e o que morre junto e a protecao de `submitted_by_user_id`, que
--- depende do mesmo mecanismo.
---
--- O que guarda esta coluna, entao, esta escrito e e verificavel:
---   1. o contrato nao tem campo para ela (`NetworkEventSummary` e `NetworkEvent`
---      trazem `checkin_count`, um inteiro, e nenhum campo com pessoas);
---   2. `tests/integration/rede-nao-liga-dois-pets.test.ts` varre o CORPO INTEIRO
---      serializado das respostas publicas da secao atras de qualquer UUID, e nao
---      campo a campo -- e por campo A MAIS que uma resposta se afasta do
---      documento sem alarme;
---   3. a unica leitura desta tabela na camada de persistencia e `count(*)`.
-COMMENT ON COLUMN network_event_checkins.user_id IS
-  'NUNCA PROJETADO. A resposta publica de um evento traz `checkin_count`, um inteiro, e nenhum campo com pessoas -- nem nome, nem primeiro nome, nem apelido, nem slug, nem avatar. Nao leva a marca do portao de colunas porque `user_id` e nome comum demais para ser buscado por nome; quem guarda esta coluna e a isca `rede-nao-liga-dois-pets`, que varre o corpo inteiro das respostas.';
-
--- ---------------------------------------------------------------------------
--- A galeria. A foto e do EVENTO, e nao de quem a enviou.
--- ---------------------------------------------------------------------------
-
-CREATE TABLE network_event_photos (
-  slug                 text        PRIMARY KEY
-                       CONSTRAINT network_event_photos_slug_formato
-                       CHECK (slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'),
-
-  event_slug           text        NOT NULL REFERENCES network_events (slug) ON DELETE CASCADE,
-
-  image_url            text        NOT NULL
-                       CONSTRAINT network_event_photos_imagem_e_https
-                       CHECK (image_url ~ '^https://'),
-
-  -- Opcional, e curta. Legenda sem teto vira post, e post e conteudo com
-  -- moderacao -- que e a fase seguinte, nao esta.
-  caption              text
-                       CONSTRAINT network_event_photos_legenda_tem_tamanho
-                       CHECK (caption IS NULL OR char_length(btrim(caption)) BETWEEN 2 AND 140),
-
-  -- Guardado para remocao, auditoria e resposta a abuso. **NUNCA PROJETADO.**
-  --
-  -- Atribuir foto a pessoa reconstruiria a lista de presenca por outro caminho:
-  -- dez fotos assinadas sao dez nomes presentes, com a vantagem, para quem
-  -- procura, de virem com imagem do lugar.
-  --
-  -- `NULL` porque a foto desta fatia e curada e nao tem remetente, e
-  -- `ON DELETE SET NULL` porque a conta de quem enviou pode ser excluida sem
-  -- que a foto do evento tenha de sumir junto.
-  submitted_by_user_id uuid        REFERENCES users (id) ON DELETE SET NULL,
-
-  published_at         timestamptz NOT NULL DEFAULT now(),
-  sort_order           smallint    NOT NULL DEFAULT 0
-);
-
-COMMENT ON TABLE network_event_photos IS
-  'A galeria de um encontro. A foto pertence ao EVENTO: a resposta publica tem imagem e legenda, e mais nada. Nesta fatia ela e EXIBIDA e nao ENVIADA -- o envio pela comunidade depende de moderacao, que nao existe no repositorio, e do armazenamento de objeto na pilha de integracao.';
--- A MARCA `NUNCA sai do servidor` NAO E PROSA: ela e lida por
--- `src/tools/portao-colunas-que-nao-saem.ts`, que varre o contrato e `src/`
--- atras do NOME desta coluna e reprova quem a projetar. E o mesmo mecanismo que
--- guarda `professionals.created_by_user_id` desde a emenda 1 do ADR-0011, e
--- pela mesma razao: quem enviou a foto e um VINCULO ENTRE DUAS PESSOAS (esta
--- pessoa esteve neste lugar), e vinculo entre pessoas nao atravessa a borda --
--- nem como campo, nem como contagem, nem como existencia.
---
--- Com a marca, a decisao 3 do ADR-0025 deixa de valer pela disciplina de quem
--- escreve a projecao e passa a ter portao. Sem ela, valeria ate o dia em que
--- alguem acrescentasse o campo "enviada por" achando que estava sendo gentil.
-COMMENT ON COLUMN network_event_photos.submitted_by_user_id IS
-  'QUEM ENVIOU. Vinculo entre duas pessoas -- esta pessoa esteve neste lugar: NUNCA sai do servidor, em nenhuma resposta, nem como contagem nem como existencia (ADR-0025 secao 3). Guardado por `src/tools/portao-colunas-que-nao-saem.ts`. Existe para remocao, auditoria e resposta a abuso.';
-
-CREATE INDEX network_event_photos_da_galeria
-  ON network_event_photos (event_slug, sort_order, slug);
+CREATE INDEX network_events_por_ponto
+  ON network_events USING GIST (geo)
+  WHERE publication_status IN ('published', 'cancelled') AND geo IS NOT NULL;
 
 -- Down Migration
 
-DROP INDEX network_event_photos_da_galeria;
-DROP TABLE network_event_photos;
-DROP TABLE network_event_checkins;
+DROP INDEX network_events_por_ponto;
 DROP INDEX network_events_por_cidade;
 DROP INDEX network_events_agenda;
 DROP TRIGGER network_events_fuso_existe ON network_events;
 DROP FUNCTION network_events_recusa_fuso_inexistente();
+DROP INDEX network_events_slug_unico;
 DROP TABLE network_events;

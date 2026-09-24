@@ -1,36 +1,37 @@
 /**
  * As tres rotas da `Rede`, sobre um Fastify de verdade.
  *
- * Sobe o servidor em vez de chamar o manipulador porque quatro coisas que estas
- * rotas prometem so existem com o framework no caminho: o **401** de quem tenta
- * confirmar presenca sem conta, o **404** do evento inativo, o **429** do teto
- * (que e um gancho `onRequest`/`preValidation`, e nao um `if`) e a
- * **serializacao real** da resposta -- que e onde uma pessoa vazaria.
+ * Sobe o servidor em vez de chamar o manipulador porque o que estas rotas
+ * prometem so existe com o framework no caminho: o **401** de quem pede o
+ * ponto sem conta, o **404** do encontro invisivel, o **429** do teto (que e
+ * um gancho, e nao um `if`) e a **serializacao real** da resposta -- que e onde
+ * uma coordenada vazaria.
  *
  * ## As iscas deste arquivo, e como cada uma foi provada
  *
- * Cada linha foi desligada no codigo de producao, a mudanca foi conferida no
- * disco (`git diff --stat` nao vazio), a suite rodou e reprovou com o nome do
- * caso na saida, e o arquivo foi restaurado.
- * 23/09/2026, Node 22 (`/opt/homebrew/opt/node@22`).
+ * Cada linha foi desligada no codigo de producao, a suite rodou e reprovou com
+ * o nome do caso na saida, e o arquivo foi restaurado. As linhas "23/09,
+ * emenda" foram medidas na emenda da BICHUS-251 (ADR-0027 12), Node 22
+ * (`/opt/homebrew/opt/node@22`).
  *
  * | o que foi desligado | `fail` |
  * |---|---|
  * | `ordemPadraoDe` devolvendo `proximos` tambem para `past` | 2 |
  * | `effective_when` saindo fixo em `upcoming` | 1 |
- * | o 404 do check-in virando 403 | 1 |
- * | `chamadorAutenticado` deixando de exigir o cabecalho no check-in | 1 |
- * | `chamadorOpcional` levantando em vez de devolver `undefined` | 1 |
  * | `deny_429` virando `log_and_alert` no teto da agenda | 1 |
+ * | 23/09, emenda: `location` sem `chamadorAutenticado` (responde sem conta) | 3 |
+ * | 23/09, emenda: `location` consultando ANTES de autenticar | 1 |
+ * | 23/09, emenda: o 404 do `location` virando 403 | 1 |
+ * | 23/09, emenda: o detalhe levando o ponto junto (`point` no corpo publico) | 1 |
  * | `rateLimit` removido da agenda (tem efeito) | **nao compila** |
- * | dimensao `account` do check-in declarada sem resolvedor | **nao compila** |
- * | `app.get` direto, fora de `registrarRota` | o portao de registro reprova |
+ * | dimensao `account` do `location` declarada sem resolvedor | **nao compila** |
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { criarServidor } from '../../../../shared/http/server.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
+import { problemas } from '../../../../shared/http/errors.js';
 import {
   criarContadorDesligado,
   criarContadorEmMemoria,
@@ -39,24 +40,24 @@ import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.j
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 import type { AbsoluteUrl, Instant, UserId } from '../../../../shared/types/brands.js';
-import type { EncontroComGaleria, EncontroDaRede } from '../../domain/encontro-da-rede.js';
+import type { EncontroDaRede } from '../../domain/encontro-da-rede.js';
 import type {
-  DesfechoDoCheckIn,
+  LocalDoEncontro,
   NetworkRepository,
   PaginaDaAgenda,
-  PedidoDeCheckIn,
-  PedidoDeEncontro,
   RecorteDaAgenda,
 } from '../../ports/network-repository.js';
-import { ordemPadraoDe, registrarRotasDaRede, rotaDaAgenda, rotaDeCheckIn } from './network-routes.js';
+import { ordemPadraoDe, registrarRotasDaRede, rotaDaAgenda, rotaDoLocal } from './network-routes.js';
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const QUEM_CHAMA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
 const AGORA = Date.UTC(2026, 8, 23, 12, 0, 0);
 const UMA_HORA = 3_600_000;
+const SLUG = 'encontro-de-domingo-na-benedito';
+const PONTO = { lat: -23.5617, lon: -46.6823 };
 
 const ENCONTRO: EncontroDaRede = {
-  slug: 'encontro-de-domingo-na-benedito',
+  slug: SLUG,
   title: 'Encontro de domingo na Benedito Calixto',
   summary: 'Cachorros de todos os portes, sombra e agua fresca.',
   placeName: 'Praça Benedito Calixto',
@@ -67,32 +68,18 @@ const ENCONTRO: EncontroDaRede = {
   endsAt: (AGORA + 3 * UMA_HORA) as Instant,
   timeZone: 'America/Sao_Paulo',
   coverImageUrl: null,
-  checkinCount: 12,
-  photoCount: 1,
-};
-
-const COM_GALERIA: EncontroComGaleria = {
-  ...ENCONTRO,
-  galeria: [
-    {
-      slug: 'roda-de-cachorros-na-sombra',
-      imageUrl: 'https://cdn.bichu.test/rede/roda-de-cachorros.jpg',
-      caption: 'A roda das dez da manhã.',
-    },
-  ],
-  viewerCheckedIn: false,
+  publicacao: 'published',
 };
 
 interface Cenario {
   readonly contador?: RateLimitStore;
-  /** `undefined` e o evento que nao existe OU esta inativo -- o mesmo caso. */
-  readonly encontro?: EncontroComGaleria | undefined;
-  readonly desfecho?: DesfechoDoCheckIn | undefined;
+  /** `undefined` e o encontro que nao existe OU nao e visivel -- o mesmo caso. */
+  readonly encontro?: EncontroDaRede | undefined;
+  readonly local?: LocalDoEncontro | undefined;
 }
 
 const recortesVistos: RecorteDaAgenda[] = [];
-const pedidosDeEncontro: PedidoDeEncontro[] = [];
-const pedidosDeCheckIn: PedidoDeCheckIn[] = [];
+const locaisPedidos: string[] = [];
 
 function repositorio(cenario: Cenario): NetworkRepository {
   return {
@@ -100,18 +87,20 @@ function repositorio(cenario: Cenario): NetworkRepository {
       recortesVistos.push(recorte);
       return Promise.resolve({ itens: [ENCONTRO], total: 1 });
     },
-    buscarEncontro: (pedido): Promise<EncontroComGaleria | undefined> => {
-      pedidosDeEncontro.push(pedido);
-      return Promise.resolve('encontro' in cenario ? cenario.encontro : COM_GALERIA);
-    },
-    confirmarPresenca: (pedido): Promise<DesfechoDoCheckIn | undefined> => {
-      pedidosDeCheckIn.push(pedido);
-      return Promise.resolve('desfecho' in cenario ? cenario.desfecho : { checkinCount: 13 });
+    buscarEncontro: (): Promise<EncontroDaRede | undefined> =>
+      Promise.resolve('encontro' in cenario ? cenario.encontro : ENCONTRO),
+    buscarLocalDoEncontro: (slug): Promise<LocalDoEncontro | undefined> => {
+      locaisPedidos.push(slug);
+      return Promise.resolve('local' in cenario ? cenario.local : { ponto: PONTO });
     },
   };
 }
 
-function servidor(cenario: Cenario = {}): RegistradorDeRotas {
+function servidor(
+  cenario: Cenario = {},
+  autenticar: (token: string) => Promise<{ userId: UserId }> = (token) =>
+    Promise.resolve({ userId: token as UserId }),
+): RegistradorDeRotas {
   const app = criarServidor({
     problemBaseUrl: BASE_DE_PROBLEMA,
     isProduction: false,
@@ -119,11 +108,7 @@ function servidor(cenario: Cenario = {}): RegistradorDeRotas {
     bodyLimitBytes: 1_048_576,
   });
   const clock: Clock = { now: () => AGORA as ReturnType<Clock['now']> };
-  registrarRotasDaRede(app, {
-    rede: repositorio(cenario),
-    autenticador: { autenticar: (token: string) => Promise.resolve({ userId: token as UserId }) },
-    clock,
-  });
+  registrarRotasDaRede(app, { rede: repositorio(cenario), autenticador: { autenticar }, clock });
   return app;
 }
 
@@ -135,11 +120,11 @@ interface Resposta {
 
 async function pedir(
   app: RegistradorDeRotas,
-  opcoes: { metodo?: 'GET' | 'POST'; url?: string; como?: UserId | null } = {},
+  opcoes: { url?: string; como?: UserId | null } = {},
 ): Promise<Resposta> {
   const como = opcoes.como === undefined ? null : opcoes.como;
   const resposta = await app.inject({
-    method: opcoes.metodo ?? 'GET',
+    method: 'GET',
     url: opcoes.url ?? '/network/events',
     ...(como === null ? {} : { headers: { authorization: `Bearer ${como}` } }),
   });
@@ -149,6 +134,8 @@ async function pedir(
     bruto: resposta.body,
   };
 }
+
+const URL_DO_LOCAL = `/network/events/${SLUG}/location`;
 
 void describe('a agenda e publica, e a ordem depende do recorte de tempo', () => {
   void it('sem conta nenhuma, responde 200 -- a Rede e navegavel deslogado', async () => {
@@ -222,190 +209,137 @@ void describe('a agenda e publica, e a ordem depende do recorte de tempo', () =>
     assert.deepEqual(resposta.corpo['applied_filters'], { scope: 'all' });
   });
 
-  void it('o cartao traz a contagem, o fuso e o rotulo calculado no servidor', async () => {
+  void it('o cartao traz o fuso e o rotulo calculado no servidor', async () => {
     const resposta = await pedir(servidor());
     const itens = resposta.corpo['items'] as Record<string, unknown>[];
-    assert.equal(itens[0]?.['checkin_count'], 12);
-    assert.equal(itens[0]?.['photo_count'], 1);
     assert.equal(itens[0]?.['time_zone'], 'America/Sao_Paulo');
     assert.equal(itens[0]?.['status'], 'upcoming');
   });
 });
 
-void describe('nenhuma pessoa sai da Rede', () => {
-  void it('a listagem NAO devolve UUID em lugar nenhum do corpo', async () => {
+void describe('nenhuma coordenada e nenhuma pessoa nas leituras publicas', () => {
+  void it('a listagem NAO devolve UUID nem ponto em lugar nenhum do corpo', async () => {
     const resposta = await pedir(servidor());
     assert.equal(
       /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(resposta.bruto),
       false,
       'ISCA: qualquer UUID no corpo reprova. O endereco de um encontro e o `slug`.',
     );
-  });
-
-  void it('o encontro com galeria NAO traz autor de foto nem campo com pessoas', async () => {
-    const resposta = await pedir(servidor(), {
-      url: '/network/events/encontro-de-domingo-na-benedito',
-      como: QUEM_CHAMA,
-    });
-    assert.equal(resposta.status, 200);
-    const bruto = resposta.bruto.toLowerCase();
-    // Os nomes sao escritos por extenso. A varredura e sobre o corpo inteiro e
-    // nao campo a campo: uma conferencia que olha os campos que ela conhece nao
-    // enxerga o campo que alguem acrescentar amanha.
-    for (const proibido of [
-      'user_id',
-      'attendee',
-      'checkins',
-      'checked_in_by',
-      'display_name',
-      'avatar',
-      'pet_slug',
-      'pet_id',
-    ]) {
-      assert.equal(bruto.includes(proibido), false, `ISCA: "${proibido}" no corpo da Rede.`);
+    for (const proibido of ['"lat"', '"lon"', '"point"']) {
+      assert.equal(resposta.bruto.includes(proibido), false, `${proibido} na agenda publica.`);
     }
-    assert.equal(
-      /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i.test(resposta.bruto),
-      false,
-    );
   });
 
-  void it('a foto da galeria sai com tres campos, e a lista e escrita por extenso', async () => {
-    const resposta = await pedir(servidor(), {
-      url: '/network/events/encontro-de-domingo-na-benedito',
-    });
-    const galeria = resposta.corpo['gallery'] as Record<string, unknown>[];
-    assert.deepEqual(Object.keys(galeria[0] ?? {}).sort(), ['caption', 'image_url', 'slug']);
+  void it('o detalhe, COM conta, continua sem ponto: o corpo e um so', async () => {
+    // ISCA: se o detalhe levar o ponto junto quando ha token, este caso acusa.
+    // `getNetworkEvent` tem autenticacao opcional, e para o portao de contrato
+    // publico isso e operacao publica (ADR-0027 12.5).
+    const comConta = await pedir(servidor(), { url: `/network/events/${SLUG}`, como: QUEM_CHAMA });
+    const semConta = await pedir(servidor(), { url: `/network/events/${SLUG}` });
+    assert.equal(comConta.status, 200);
+    assert.equal(comConta.bruto, semConta.bruto, 'ADR-0021: o corpo nao muda conforme o chamador.');
+    for (const proibido of ['"lat"', '"lon"', '"point"', 'checkin', 'gallery', 'viewer_']) {
+      assert.equal(comConta.bruto.includes(proibido), false, `${proibido} no detalhe publico.`);
+    }
   });
-});
 
-void describe('o encontro, e o 404 que nao distingue inativo de inexistente', () => {
-  void it('quem chega sem conta recebe o corpo, com `viewer_checked_in` falso', async () => {
-    const resposta = await pedir(servidor(), {
-      url: '/network/events/encontro-de-domingo-na-benedito',
-    });
+  void it('o detalhe com token INVALIDO atende como quem nao tem conta', async () => {
+    // O detalhe nao le o token. Um token vencido nao pode virar 401 numa rota
+    // que atende sem token nenhum.
+    const app = servidor({}, () => Promise.reject(new Error('token vencido')));
+    const resposta = await pedir(app, { url: `/network/events/${SLUG}`, como: QUEM_CHAMA });
     assert.equal(resposta.status, 200);
-    assert.equal(resposta.corpo['viewer_checked_in'], false);
   });
 
-  void it('com token invalido a rota NAO recusa: ela atende como quem nao tem conta', async () => {
-    // ISCA: com `chamadorOpcional` levantando, esta chamada responde 401 numa
-    // rota que atende sem token nenhum -- a pessoa que reabriu o aplicativo
-    // depois de um mes fora veria a agenda publica recusar.
-    const app = criarServidor({
-      problemBaseUrl: BASE_DE_PROBLEMA,
-      isProduction: false,
-      teto: tetoDeTeste(criarContadorEmMemoria(() => AGORA)),
-      bodyLimitBytes: 1_048_576,
-    });
-    registrarRotasDaRede(app, {
-      rede: repositorio({}),
-      autenticador: { autenticar: () => Promise.reject(new Error('token vencido')) },
-      clock: { now: () => AGORA as ReturnType<Clock['now']> },
-    });
-    const resposta = await pedir(app, {
-      url: '/network/events/encontro-de-domingo-na-benedito',
-      como: QUEM_CHAMA,
-    });
-    assert.equal(resposta.status, 200);
-    assert.equal(resposta.corpo['viewer_checked_in'], false);
-  });
-
-  void it('quem chama chega ao repositorio, para o EXISTS de `viewer_checked_in`', async () => {
-    pedidosDeEncontro.length = 0;
-    await pedir(servidor(), {
-      url: '/network/events/encontro-de-domingo-na-benedito',
-      como: QUEM_CHAMA,
-    });
-    assert.equal(pedidosDeEncontro.at(-1)?.chamador, QUEM_CHAMA);
-  });
-
-  void it('sem conta, o repositorio NAO recebe chamador nenhum', async () => {
-    // `false` por decisao, e nao o resultado de um `EXISTS` sem filtro de
-    // pessoa -- que responderia "alguem confirmou" no lugar de "voce confirmou".
-    pedidosDeEncontro.length = 0;
-    await pedir(servidor(), { url: '/network/events/encontro-de-domingo-na-benedito' });
-    assert.equal(pedidosDeEncontro.at(-1)?.chamador, undefined);
-  });
-
-  void it('evento inativo ou inexistente: 404, e nunca 403', async () => {
+  void it('encontro invisivel ou inexistente: 404, e nunca 403', async () => {
     const resposta = await pedir(servidor({ encontro: undefined }), {
       url: '/network/events/encontro-que-foi-retirado',
     });
     assert.equal(resposta.status, 404);
-    assert.notEqual(
-      resposta.status,
-      403,
-      'ADR-0021: um 403 afirmaria que aquele `slug` existe e nao e seu, e um ' +
-        'evento retirado nao e de ninguem.',
-    );
+  });
+
+  void it('o cancelado sai na leitura publica com `status` `cancelled`', async () => {
+    const resposta = await pedir(servidor({ encontro: { ...ENCONTRO, publicacao: 'cancelled' } }), {
+      url: `/network/events/${SLUG}`,
+    });
+    assert.equal(resposta.status, 200);
+    assert.equal(resposta.corpo['status'], 'cancelled');
   });
 });
 
-void describe('o check-in', () => {
-  void it('sem cabecalho de credencial, 401 -- a operacao escreve em nome de alguem', async () => {
-    const resposta = await pedir(servidor(), {
-      metodo: 'POST',
-      url: '/network/events/encontro-de-domingo-na-benedito/check-in',
-      como: null,
-    });
+void describe('getNetworkEventLocation: o ponto, so com conta', () => {
+  void it('ISCA -- SEM cabecalho de credencial, 401, e o repositorio nem e consultado', async () => {
+    // A prova negativa da emenda 1 do ADR-0010: sem conta, nao ha ponto. E o
+    // 401 vem ANTES da consulta -- sem conta nao se descobre nem se o `slug`
+    // existe.
+    locaisPedidos.length = 0;
+    const resposta = await pedir(servidor(), { url: URL_DO_LOCAL, como: null });
     assert.equal(resposta.status, 401);
+    assert.equal(resposta.bruto.includes('"lat"'), false);
+    assert.deepEqual(locaisPedidos, [], 'o repositorio foi consultado antes da autenticacao');
   });
 
-  void it('com "Bearer " vazio, 401 tambem', async () => {
+  void it('ISCA -- com "Bearer " vazio, 401 tambem', async () => {
     const resposta = await servidor().inject({
-      method: 'POST',
-      url: '/network/events/encontro-de-domingo-na-benedito/check-in',
+      method: 'GET',
+      url: URL_DO_LOCAL,
       headers: { authorization: 'Bearer    ' },
     });
     assert.equal(resposta.statusCode, 401);
   });
 
-  void it('devolve a contagem JA ATUALIZADA e `viewer_checked_in` verdadeiro', async () => {
-    const resposta = await pedir(servidor(), {
-      metodo: 'POST',
-      url: '/network/events/encontro-de-domingo-na-benedito/check-in',
+  void it('ISCA -- com token recusado pelo servico de identidade, 401', async () => {
+    // O servico de identidade recusa com o mesmo problema que ele devolve em
+    // producao; a rota nao traduz nem engole.
+    const app = servidor({}, () => Promise.reject(problemas.naoAutenticado()));
+    const resposta = await pedir(app, { url: URL_DO_LOCAL, como: QUEM_CHAMA });
+    assert.equal(resposta.status, 401);
+    assert.equal(resposta.bruto.includes('"lat"'), false);
+  });
+
+  void it('sem conta, 401 MESMO para `slug` que nao existe -- o 401 nao conta que ele existe', async () => {
+    const resposta = await pedir(servidor({ local: undefined }), {
+      url: '/network/events/nao-existe-isto/location',
+      como: null,
+    });
+    assert.equal(resposta.status, 401);
+  });
+
+  void it('com conta, devolve `{ point: { lat, lon } }`, e o corpo tem so isso', async () => {
+    const resposta = await pedir(servidor(), { url: URL_DO_LOCAL, como: QUEM_CHAMA });
+    assert.equal(resposta.status, 200);
+    assert.deepEqual(resposta.corpo, { point: PONTO });
+  });
+
+  void it('com conta e sem ponto marcado, `point` e nulo', async () => {
+    const resposta = await pedir(servidor({ local: { ponto: null } }), {
+      url: URL_DO_LOCAL,
       como: QUEM_CHAMA,
     });
     assert.equal(resposta.status, 200);
-    assert.equal(resposta.corpo['checkin_count'], 13);
-    assert.equal(resposta.corpo['viewer_checked_in'], true);
+    assert.deepEqual(resposta.corpo, { point: null });
   });
 
-  void it('o corpo do check-in tem DOIS campos, e nenhum deles e uma lista', async () => {
-    const resposta = await pedir(servidor(), {
-      metodo: 'POST',
-      url: '/network/events/encontro-de-domingo-na-benedito/check-in',
+  void it('encontro invisivel ou inexistente: 404 com o mesmo corpo do detalhe, e nunca 403', async () => {
+    const local = await pedir(servidor({ local: undefined }), {
+      url: '/network/events/encontro-que-foi-retirado/location',
       como: QUEM_CHAMA,
     });
-    assert.deepEqual(Object.keys(resposta.corpo).sort(), ['checkin_count', 'viewer_checked_in']);
+    const detalhe = await pedir(servidor({ encontro: undefined }), {
+      url: '/network/events/encontro-que-foi-retirado',
+    });
+    assert.equal(local.status, 404);
+    assert.deepEqual(
+      { ...local.corpo, instance: undefined, correlation_id: undefined },
+      { ...detalhe.corpo, instance: undefined, correlation_id: undefined },
+      'ADR-0027 12.5: o 404 do ponto e o mesmo corpo do 404 do detalhe',
+    );
   });
 
-  void it('o pet NAO entra: o pedido que chega ao repositorio tem `slug` e chamador', async () => {
-    // ADR-0025 secao 1. Nao ha caminho no banco pelo qual um check-in saiba
-    // qual animal foi junto, e nao ha campo no pedido por onde ele entraria.
-    pedidosDeCheckIn.length = 0;
-    await pedir(servidor(), {
-      metodo: 'POST',
-      url: '/network/events/encontro-de-domingo-na-benedito/check-in',
-      como: QUEM_CHAMA,
-    });
-    const pedido = pedidosDeCheckIn.at(-1);
-    assert.ok(pedido !== undefined);
-    assert.deepEqual(Object.keys(pedido).sort(), ['chamador', 'slug']);
-    assert.equal(pedido.slug, 'encontro-de-domingo-na-benedito');
-  });
-
-  void it('evento inativo ou inexistente: 404 pelo proprio WHERE, e nunca 403', async () => {
-    // ISCA: o repositorio devolve "nao achei" porque o `WHERE` da escrita nao
-    // encontrou linha de origem. Trocar este 404 por 403 contaria a um estranho
-    // que aquele `slug` existiu.
-    const resposta = await pedir(servidor({ desfecho: undefined }), {
-      metodo: 'POST',
-      url: '/network/events/encontro-que-foi-retirado/check-in',
-      como: QUEM_CHAMA,
-    });
-    assert.equal(resposta.status, 404);
+  void it('o `slug` do caminho chega ao repositorio, e so ele', async () => {
+    locaisPedidos.length = 0;
+    await pedir(servidor(), { url: URL_DO_LOCAL, como: QUEM_CHAMA });
+    assert.deepEqual(locaisPedidos, [SLUG]);
   });
 });
 
@@ -428,12 +362,7 @@ void describe('os tetos das tres rotas', () => {
   void it('com o contador desligado, a 301 passa -- e e isso que prova que o caso mede LIMITE', async () => {
     const app = servidor({ contador: criarContadorDesligado() });
     for (let i = 0; i < 300; i += 1) await pedir(app);
-    assert.equal(
-      (await pedir(app)).status,
-      200,
-      'o mesmo caminho com o mecanismo desligado precisa deixar passar. Sem este ' +
-        'controle, o caso acima mediria a capacidade de contar ate 301.',
-    );
+    assert.equal((await pedir(app)).status, 200);
   });
 
   void it('a agenda conta por IP, porque nao ha conta para contar', () => {
@@ -444,14 +373,20 @@ void describe('os tetos das tres rotas', () => {
     assert.equal(rotaDaAgenda.rateLimit.length, 1, 'um teto so, e uma dimensao so');
   });
 
-  void it('o check-in conta por CONTA, porque ele exige uma', () => {
-    // No Brasil o CGNAT das operadoras poe muita gente atras de poucos
-    // enderecos: teto por `ip` aqui pegaria vizinho inocente e erraria quem
-    // enche a contagem de um encontro.
+  void it('o ponto conta por CONTA, porque ele exige uma (ADR-0027 12.5)', () => {
     assert.deepEqual(
-      rotaDeCheckIn.rateLimit?.map((entrada) => entrada.dimension),
+      rotaDoLocal.rateLimit?.map((entrada) => entrada.dimension),
       [['account']],
     );
+  });
+
+  void it('a chamada 601 do ponto pela mesma conta na mesma hora e recusada com 429', async () => {
+    const app = servidor({ contador: criarContadorEmMemoria(() => AGORA) });
+    for (let i = 0; i < 600; i += 1) {
+      const ok = await pedir(app, { url: URL_DO_LOCAL, como: QUEM_CHAMA });
+      assert.equal(ok.status, 200, `a chamada ${String(i + 1)} deveria passar`);
+    }
+    assert.equal((await pedir(app, { url: URL_DO_LOCAL, como: QUEM_CHAMA })).status, 429);
   });
 });
 

@@ -1,56 +1,57 @@
 /**
- * A projecao de um encontro da secao `Rede`, e a regra de `status`.
+ * A projecao de um encontro da secao `Rede`, a regra de `status` e o ponto.
  *
- * ## O que NAO sai daqui, e cada ausencia e a decisao do ADR-0025
+ * ## O que NAO sai daqui, e cada ausencia e uma decisao
  *
- * - **Ninguem.** A presenca e um INTEIRO (`checkin_count`), e nao existe campo
- *   com pessoas em forma nenhuma: nem nome, nem primeiro nome, nem apelido,
- *   nem `slug`, nem avatar, nem contagem por bairro. O motivo e o item 7 do
- *   ADR-0010: uma lista de presenca num encontro de bairro publica, de graca,
- *   que dois animais sao do mesmo tutor -- e o lugar do encontro e uma praca do
- *   bairro dela. Num produto cujo fluxo mais critico e pet perdido, essa e
- *   exatamente a informacao que interessa a quem quer levar um animal.
- * - **O autor da foto.** A galeria projeta `slug`, `image_url` e `caption`, e
- *   mais nada. O banco guarda quem enviou, para remocao, auditoria e resposta a
- *   abuso, e esse campo nunca atravessa esta funcao: dez fotos assinadas sao
- *   dez nomes presentes, com a vantagem, para quem procura, de virem com imagem
- *   do lugar.
- * - **Nenhum UUID, e nao por filtragem: nao ha um.** `network_events` e
- *   `network_event_photos` tem `slug` como chave primaria (ADR-0010 item 6).
- * - **Coordenada, distancia, mapa.** ADR-0006. O lugar sao tres rotulos de
- *   texto, e nao ha latitude, longitude nem CEP em precisao nenhuma.
- * - **`active`.** So evento ativo chega ate aqui. O filtro mora na clausula
- *   `WHERE` (ADR-0021), e nao num `if` desta funcao: projecao que filtra e
- *   projecao que um dia esquece.
+ * - **Ninguem.** Nao existe campo com pessoas em forma nenhuma. Check-in e
+ *   galeria sairam desta versao por decisao do cliente (23/09/2026, ADR-0027
+ *   12.4); quando voltarem, voltam pelas decisoes 1 a 3 do ADR-0025: presenca
+ *   como numero e nunca como lista, foto sem autor.
+ * - **Nenhum UUID.** `network_events` tem `id uuid` (ADR-0024) e ele nao chega
+ *   ate aqui: o repositorio nao o seleciona para leitura.
+ * - **Coordenada, na agenda e no detalhe.** As duas leituras sao alcancaveis
+ *   sem conta, e o ponto do encontro so sai em resposta autenticada, numa
+ *   operacao propria (ADR-0027 12.5, emenda 1 do ADR-0010). Por isso o ponto
+ *   nao e campo de `EncontroDaRede`: ele tem tipo e projecao separados,
+ *   `PontoDoEncontro` e `projetarLocalizacao`, e nao ha como uma projecao
+ *   publica o levar junto por espalhamento.
+ * - **`publication_status`.** Chega ate aqui so o que e visivel. O filtro mora
+ *   na clausula `WHERE` (ADR-0021), e nao num `if` desta funcao. O que a
+ *   projecao sabe da publicacao e so se o encontro foi CANCELADO, porque isso
+ *   muda o rotulo.
  *
  * ## `status` e calculado no SERVIDOR, e e por isso que ele mora aqui
  *
- * Mesma razao do vencimento do preco da `Loja`, e o ADR-0025 secao 6 a escreve:
- * se a regra morasse no aplicativo, um aparelho com relogio errado ou com build
- * antiga chamaria de `upcoming` um encontro de tres semanas atras, e nao
- * haveria como corrigir isso sem passar pela loja de aplicativos -- que leva
- * dias e depende de aprovacao de terceiro. Com a regra aqui, o rotulo **chega
- * pronto** ao aparelho, e todo build, novo ou velho, passa a dizer a mesma
- * coisa no mesmo dia.
+ * Mesma razao do vencimento do preco da `Loja` (ADR-0025 secao 6): se a regra
+ * morasse no aplicativo, um aparelho com relogio errado ou com build antiga
+ * chamaria de `upcoming` um encontro de tres semanas atras, e nao haveria como
+ * corrigir isso sem passar pela loja de aplicativos.
  *
  * O instante vem do `Clock`, injetado. `Date.now()` e `new Date()` sao
- * proibidos nesta camada (`src/architecture.rules.mjs`), e a proibicao e o que
- * torna as bordas testaveis sem esperar tres semanas.
+ * proibidos nesta camada (`src/architecture.rules.mjs`).
  */
 
 import { comoIso } from '../../../shared/time/clock.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
 /**
- * Os tres rotulos que a tela escreve, **calculados no servidor**.
+ * Os rotulos que a tela escreve, **calculados no servidor**.
  *
- * Espelham o `enum` de `NetworkEventStatus` no contrato. Nao ha um quarto, e
- * nao ha `unknown`: um evento tem comeco, entao ele esta em exatamente um dos
- * tres a cada instante.
+ * Espelham o `enum` de `NetworkEventStatus` no contrato. `cancelled` entrou com
+ * a emenda (ADR-0027 12.6) e prevalece sobre o estado temporal enquanto o
+ * encontro nao terminou; depois do fim, o cancelado segue a regra do
+ * encerrado (decisao do cliente de 23/09/2026).
  */
-export type StatusDoEncontro = 'upcoming' | 'happening' | 'ended';
+export type StatusDoEncontro = 'upcoming' | 'happening' | 'ended' | 'cancelled';
 
-/** O encontro como o repositorio o entrega. Sem `active`, sem UUID. */
+/**
+ * Os estados de publicacao que a LEITURA enxerga. `pending_review` e `removed`
+ * nao estao aqui porque nunca saem da consulta: o tipo diz o que a clausula
+ * `WHERE` ja garantiu.
+ */
+export type PublicacaoVisivel = 'published' | 'cancelled';
+
+/** O encontro como o repositorio o entrega. Sem UUID e sem ponto. */
 export interface EncontroDaRede {
   readonly slug: string;
   readonly title: string;
@@ -60,45 +61,17 @@ export interface EncontroDaRede {
   readonly city: string;
   readonly state: string;
   /**
-   * O instante absoluto. A hora de PAREDE sai de `timeZone`, e nao daqui.
-   *
-   * E um `Instant` -- a mesma marca que o `Clock` produz -- porque ele so
-   * existe para ser comparado com `agora`. Um `number` cru dos dois lados
-   * deixaria compilar a comparacao entre um instante e qualquer outro numero
-   * que passasse por perto, e a marca e o que a recusa.
+   * O instante absoluto. A hora de PAREDE sai de `timeZone`, e nao daqui. E um
+   * `Instant` -- a mesma marca que o `Clock` produz -- porque ele so existe
+   * para ser comparado com `agora`.
    */
   readonly startsAt: Instant;
   /** Nulo quando o encontro nao declara fim, e a ausencia e estado normal. */
   readonly endsAt: Instant | null;
-  /**
-   * O nome IANA da zona, e ele nao e enfeite: `startsAt` sozinho diz o instante
-   * e nao diz que horas o cartaz da praca dizia. Um aparelho em UTC
-   * renderizaria um encontro das 9h como 12h, sem nada acusar, e o Brasil tem
-   * mais de uma zona.
-   */
+  /** O nome IANA da zona. Sem ele o instante esta certo e a hora de parede, errada. */
   readonly timeZone: string;
   readonly coverImageUrl: string | null;
-  /** **Quantas pessoas, e nunca quais.** ADR-0025 secao 2. */
-  readonly checkinCount: number;
-  readonly photoCount: number;
-}
-
-/** Uma foto da galeria, como o repositorio a entrega. Ja sem autor. */
-export interface FotoDoEncontro {
-  readonly slug: string;
-  readonly imageUrl: string;
-  readonly caption: string | null;
-}
-
-/** O encontro com a galeria e o sinal de navegacao de quem chama. */
-export interface EncontroComGaleria extends EncontroDaRede {
-  readonly galeria: readonly FotoDoEncontro[];
-  /**
-   * Se **quem esta chamando** ja confirmou presenca. `false` para quem chega
-   * sem conta. Precedente do campo `viewer` do ADR-0021: e sinal de navegacao,
-   * nao destranca campo nenhum e nao fala de terceiro.
-   */
-  readonly viewerCheckedIn: boolean;
+  readonly publicacao: PublicacaoVisivel;
 }
 
 /** O cartao do encontro, como a resposta publica o declara. */
@@ -117,53 +90,65 @@ export interface EncontroProjetado {
   readonly time_zone: string;
   readonly status: StatusDoEncontro;
   readonly cover_image_url: string | null;
-  readonly checkin_count: number;
-  readonly photo_count: number;
-}
-
-/** A foto, como a resposta publica a declara. Tres campos, e mais nada. */
-export interface FotoProjetada {
-  readonly slug: string;
-  readonly image_url: string;
-  readonly caption: string | null;
-}
-
-/** O encontro com a galeria, como a resposta publica o declara. */
-export interface EncontroComGaleriaProjetado extends EncontroProjetado {
-  readonly gallery: readonly FotoProjetada[];
-  readonly viewer_checked_in: boolean;
 }
 
 /**
- * O rotulo do encontro, agora.
+ * O ponto do encontro, marcado no mapa pelo administrador (`map_pin`).
  *
- * As tres bordas, e cada uma e uma decisao e nao um arredondamento:
- *
- * - **Exatamente em `startsAt` ja e `happening`.** Quem abre a agenda na hora
- *   marcada precisa ler `Acontecendo agora`, e nao a data de um encontro que
- *   comeca neste segundo. A comparacao e `agora >= startsAt`.
- * - **Exatamente em `endsAt` ainda e `happening`.** Mesma razao, do outro lado:
- *   o encontro que termina neste segundo ainda esta acontecendo. A comparacao e
- *   `agora <= endsAt`, e trocar por `<` faria o intervalo ser aberto num dos
- *   extremos e fechado no outro sem que nada explicasse a assimetria.
- * - **Sem `endsAt` nao existe `happening`.** Passou de `startsAt`, e `ended`.
- *   O ADR-0025 secao 6 escreve assim ("passou de `ends_at`, ou de `starts_at`,
- *   quando nao ha fim"), e a alternativa -- inventar uma duracao padrao --
- *   seria o servidor afirmando `Acontecendo agora` sobre um encontro que ele
- *   nao sabe se acabou.
+ * Tipo proprio, e nao campo de `EncontroDaRede`, de proposito: as duas leituras
+ * publicas projetam `EncontroDaRede`, e um campo de ponto la dentro ficaria a
+ * um espalhamento distraido de sair sem conta.
  */
-export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): StatusDoEncontro {
+export interface PontoDoEncontro {
+  readonly lat: number;
+  readonly lon: number;
+}
+
+/** A resposta de `getNetworkEventLocation`: o ponto, ou nulo quando nao ha. */
+export interface LocalizacaoProjetada {
+  readonly point: { readonly lat: number; readonly lon: number } | null;
+}
+
+/**
+ * O rotulo temporal, sem olhar a publicacao.
+ *
+ * - **Exatamente em `startsAt` ja e `happening`.** A comparacao e
+ *   `agora >= startsAt`.
+ * - **Exatamente em `endsAt` ainda e `happening`.** A comparacao e
+ *   `agora <= endsAt`.
+ * - **Sem `endsAt` nao existe `happening`.** Passou de `startsAt`, e `ended`
+ *   (ADR-0025 secao 6): inventar uma duracao padrao seria o servidor afirmando
+ *   `Acontecendo agora` sobre um encontro que ele nao sabe se acabou.
+ */
+function statusTemporal(
+  encontro: EncontroDaRede,
+  agora: Instant,
+): Exclude<StatusDoEncontro, 'cancelled'> {
   if (agora < encontro.startsAt) return 'upcoming';
   if (encontro.endsAt === null) return 'ended';
   return agora <= encontro.endsAt ? 'happening' : 'ended';
 }
 
 /**
- * Projeta o encontro para a resposta publica.
+ * O rotulo do encontro, agora.
  *
- * `status` entra aqui e nao no repositorio porque ele e REGRA, e regra testavel
- * sem banco e regra que alguem consegue conferir. A consulta decide quais linhas
- * saem; esta funcao decide o que cada linha diz.
+ * **O cancelado nao conta como agendado nem como acontecendo agora**: enquanto
+ * o fim previsto nao passou, ele e `cancelled`, e quem se programou para ir
+ * descobre antes de sair de casa. **Depois do fim, segue a regra do
+ * encerrado**, como qualquer encontro: um cancelado de tres semanas atras e
+ * passado. Decisao do cliente de 23/09/2026 sobre a pergunta 1 do ADR-0027.
+ */
+export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): StatusDoEncontro {
+  const temporal = statusTemporal(encontro, agora);
+  if (encontro.publicacao === 'cancelled' && temporal !== 'ended') return 'cancelled';
+  return temporal;
+}
+
+/**
+ * Projeta o encontro para a resposta publica, a mesma na agenda e no detalhe.
+ *
+ * Campo a campo, e nunca `{ ...encontro }`: o espalhamento publicaria sozinho
+ * qualquer campo que o tipo ganhasse depois.
  */
 export function projetarEncontro(encontro: EncontroDaRede, agora: Instant): EncontroProjetado {
   return {
@@ -176,39 +161,20 @@ export function projetarEncontro(encontro: EncontroDaRede, agora: Instant): Enco
       city: encontro.city,
       state: encontro.state,
     },
-    // `comoIso` e o unico caminho declarado de `Instant` para o texto do fio
-    // neste repositorio. Montar a data aqui seria a supressao de lint que o
-    // cabecalho de `shared/time/clock.ts` existe para evitar.
+    // `comoIso` e o unico caminho declarado de `Instant` para o texto do fio.
     starts_at: comoIso(encontro.startsAt),
     ends_at: encontro.endsAt === null ? null : comoIso(encontro.endsAt),
     time_zone: encontro.timeZone,
     status: statusDoEncontro(encontro, agora),
     cover_image_url: encontro.coverImageUrl,
-    checkin_count: encontro.checkinCount,
-    photo_count: encontro.photoCount,
   };
 }
 
 /**
- * Projeta uma foto da galeria: `slug`, `image_url` e `caption`, e mais nada.
- *
- * A escrita e campo a campo e nao `{ ...foto }` de proposito. O espalhamento
- * publicaria, sozinho e em silencio, qualquer campo que a linha ganhasse
- * depois -- e o campo que a linha tem hoje e que nao pode sair e justamente o
- * de quem enviou a foto.
+ * Projeta o ponto para `getNetworkEventLocation`. Nulo e estado normal: o ponto
+ * e opcional (ADR-0027 12.2), e sem ele a tela mostra os rotulos e nao mostra
+ * mapa.
  */
-export function projetarFoto(foto: FotoDoEncontro): FotoProjetada {
-  return { slug: foto.slug, image_url: foto.imageUrl, caption: foto.caption };
-}
-
-/** O encontro com a galeria, para `getNetworkEvent`. */
-export function projetarEncontroComGaleria(
-  encontro: EncontroComGaleria,
-  agora: Instant,
-): EncontroComGaleriaProjetado {
-  return {
-    ...projetarEncontro(encontro, agora),
-    gallery: encontro.galeria.map(projetarFoto),
-    viewer_checked_in: encontro.viewerCheckedIn,
-  };
+export function projetarLocalizacao(ponto: PontoDoEncontro | null): LocalizacaoProjetada {
+  return { point: ponto === null ? null : { lat: ponto.lat, lon: ponto.lon } };
 }

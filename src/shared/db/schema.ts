@@ -885,26 +885,20 @@ export interface StoreItemsTable {
 }
 
 /**
- * O encontro da secao `Rede`.
+ * O encontro da secao `Rede` (ADR-0025, emendado pela secao 12 do ADR-0027).
  *
- * **Identidade interna separada da publica** (ADR-0024, e o desenho de `pets`,
- * de `professionals` e da `Loja`): `id` e a chave primaria, alvo das chaves
- * estrangeiras da secao, e **nunca sai em resposta**; `slug` e o endereco
- * publico e e a unica chave do encontro que sai. O ADR-0010 item 6 proibe UUID
- * na SAIDA publica, nao no esquema, e quem impede o engano e o portao de
- * `src/tools/portao-contrato-publico.ts`.
+ * **Identidade interna separada da publica** (ADR-0024): `id` e a chave
+ * primaria e **nunca sai em resposta**; `slug` e o endereco publico e e a unica
+ * chave do encontro que sai.
  *
- * O que a chave primaria em `slug` custava era concreto: as chaves
- * estrangeiras precisavam apontar para ela, e chave estrangeira sobre `slug` e
- * o que o criterio 2 da BICHUS-19 proibe -- `slug` e valor que o usuario troca
- * **e** valor que sai impresso, e uma coluna que e as duas coisas entrega a
- * juncao junto com o endereco.
+ * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a regra: a
+ * coluna de quem criou o encontro leva a marca de saida no `COMMENT ON COLUMN`
+ * da migracao `20260923000001`, e `src/tools/portao-colunas-que-nao-saem.ts`
+ * varre `src/` atras do nome dela. E o mesmo tratamento da coluna homonima de
+ * `ProfessionalsTable`. Quem precisa dela (a trilha do backoffice) a escreve
+ * por SQL cru.
  *
- * **Sem coordenada, e a ausencia e a decisao.** O ADR-0006 proibe
- * geocodificacao no MVP e so aceita coordenada de `device_gps` ou `map_pin`;
- * quem cadastra uma praca nao tem nenhuma das duas. O lugar sao tres rotulos de
- * texto, no teto de bairro que o ADR-0010 permite em superficie publica. Nao ha
- * campo de latitude, de longitude nem de distancia, em precisao nenhuma.
+ * Check-in e galeria sairam desta versao (ADR-0027 12.4), com as tabelas.
  */
 export interface NetworkEventsTable {
   /** Identidade interna. Alvo das chaves estrangeiras, e nunca projetada. */
@@ -918,76 +912,46 @@ export interface NetworkEventsTable {
   neighborhood: string;
   city: string;
   state: string;
+  /**
+   * `geography(Point,4326)`. `never` nos tres sentidos, como `professionals.geo`
+   * e `user_reference_locations.reference_point`: o tipo impede a coluna de ser
+   * selecionada crua ou inserida pelo construtor tipado, e o unico caminho ate
+   * ela e SQL onde `ST_MakePoint`/`ST_Y`/`ST_X` ficam a vista. O ponto so sai
+   * em `getNetworkEventLocation`, com conta (ADR-0027 12.5).
+   */
+  geo: ColumnType<never, never, never>;
+  /** `map_pin` ou nulo, e anda junto de `geo` por `CHECK`. */
+  geo_source: OrigemDoPontoDoEncontro | null;
   starts_at: Date;
   ends_at: Date | null;
   /**
    * O nome IANA da zona, e ele anda junto de `starts_at` por necessidade:
-   * `timestamptz` sozinho diz o instante e nao diz a hora de parede. Um
-   * aparelho em UTC renderizaria um encontro das 9h como 12h, sem nada acusar.
+   * `timestamptz` sozinho diz o instante e nao diz a hora de parede.
    */
   time_zone: Generated<string>;
   cover_image_url: string | null;
-  active: Generated<boolean>;
+  origin: Generated<OrigemDoEncontro>;
+  publication_status: PublicacaoDoEncontro;
+  published_at: Date | null;
+  cancelled_at: Date | null;
+  cancellation_note: string | null;
   created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  version: Generated<number>;
 }
 
-/**
- * Quem confirmou presenca.
- *
- * **NAO HA `pet_id`, e a ausencia e o ADR-0025.** Check-in por pet publicaria
- * que dois animais sao do mesmo tutor, que e o item 7 do ADR-0010 -- e num
- * produto de pet perdido essa e a informacao que interessa a quem quer levar um
- * animal. Nao ha coluna, nao ha tabela de ligacao, entao nao ha `join` que
- * possa publicar o que nao foi gravado.
- *
- * A chave e `(event_id, user_id)`, e a composta e a idempotencia do check-in.
- *
- * `user_id` NUNCA e projetado: a unica leitura do contrato sobre esta tabela e
- * `count(*)`.
- */
-export interface NetworkEventCheckinsTable {
-  /** Aponta para `network_events.id`, nunca para o `slug` dele. */
-  event_id: string;
-  user_id: string;
-  checked_in_at: Generated<Date>;
-}
+/** O `CHECK` `network_events_origem_do_ponto`. ADR-0006: so `map_pin`. */
+export type OrigemDoPontoDoEncontro = 'map_pin';
+
+/** O `CHECK` `network_events_origem_conhecida`. */
+export type OrigemDoEncontro = 'admin' | 'community';
 
 /**
- * A galeria de um encontro. A foto pertence ao EVENTO.
- *
- * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a decisao 3
- * do ADR-0025. A coluna que guarda quem enviou a foto esta no banco e **nao
- * aparece aqui**: ela leva a marca de saida no `COMMENT ON COLUMN` da migracao
- * `20260923000001`, e `src/tools/portao-colunas-que-nao-saem.ts` varre o
- * contrato e `src/` inteiro atras do nome dela. Declara-la neste arquivo seria a
- * primeira ocorrencia, e o portao reprovaria -- com razao, porque um campo no
- * tipo e um `select` a uma tecla de distancia.
- *
- * E o mesmo tratamento que a coluna de quem convidou, em `ProfessionalsTable`,
- * ja recebe desde a emenda 1 do ADR-0011, e pela mesma razao: e um vinculo entre
- * duas pessoas, e vinculo entre pessoas nao atravessa a borda.
- *
- * Quem precisa dela -- remocao, auditoria, resposta a abuso -- a le por SQL cru,
- * que e como a massa a escreve. Nenhuma consulta da aplicacao a projeta, e a
- * partir deste arquivo isso e erro de compilacao, e nao disciplina de quem
- * escreve a projecao.
- *
- * (Os nomes das duas colunas nao aparecem escritos aqui de proposito: o portao
- * busca por nome e nao distingue mencao de uso, entao cita-las neste arquivo o
- * faria reprovar o comentario que explica por que elas nao estao nele.)
+ * O `CHECK` `network_events_publicacao_conhecida`. Visivel e `published` ou
+ * `cancelled`; `pending_review` e so da comunidade e nunca e visivel;
+ * `removed` e terminal.
  */
-export interface NetworkEventPhotosTable {
-  /** Identidade interna. Nunca projetada. */
-  id: string;
-  /** O endereco publico da foto. Unico. */
-  slug: string;
-  /** Aponta para `network_events.id`, nunca para o `slug` dele. */
-  event_id: string;
-  image_url: string;
-  caption: string | null;
-  published_at: Generated<Date>;
-  sort_order: Generated<number>;
-}
+export type PublicacaoDoEncontro = 'pending_review' | 'published' | 'cancelled' | 'removed';
 
 export interface Database {
   users: UsersTable;
@@ -1027,8 +991,6 @@ export interface Database {
   store_partners: StorePartnersTable;
   store_items: StoreItemsTable;
   network_events: NetworkEventsTable;
-  network_event_checkins: NetworkEventCheckinsTable;
-  network_event_photos: NetworkEventPhotosTable;
   'audit.events': AuditEventsTable;
 }
 
