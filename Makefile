@@ -365,8 +365,21 @@ verificar-contrato-publico: ## BICHUS-55: portao de contrato publico, iscas prim
 	npm run build
 	sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
 
-verificar-borda: ## ADR-0016: x-edge-limits, prefixo e rota de /.well-known, por leitura
+verificar-borda: ## ADR-0016: x-edge-limits, prefixo, rota de /.well-known e `/v1/admin*` so no host admin, por leitura
 	python3 infra/verificacao/verificar_borda.py
+
+# O BACKOFFICE (`admin/`, ADR-0027). Duas metades, pelo mesmo motivo das outras
+# do repositorio: o autoteste da sonda roda em `make verificar` porque nao usa
+# docker nem rede e leva menos de um segundo; a verificacao inteira (imagem,
+# iscas de build, pilha ISOLADA e a sonda pela borda) sobe containers e fica
+# fora de `verificar`, como `verificar-subida-da-api`. E o MESMO script do job
+# `admin` da esteira. Nao toca a pilha `bichu` de quem esta desenvolvendo: o
+# projeto e outro, e nenhuma porta e publicada.
+verificar-backoffice-autoteste: ## as iscas da sonda do backoffice na borda reprovam (nao usa docker)
+	node infra/verificacao/verificar-backoffice-na-borda.mjs --autoteste
+
+verificar-backoffice: commit-de-build ## ADR-0027: imagem do admin-web, iscas de build, pilha isolada e sonda D33/D34/D41/D48 (~35 s)
+	bash infra/verificacao/verificar-backoffice.sh
 
 verificar-borda-local: ## a borda de pe responde o que o contrato promete, pela porta publicada
 	python3 infra/verificacao/verificar_borda_local.py $${PUBLIC_BASE_URL:-http://localhost:$(PORTA)} .
@@ -409,7 +422,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs

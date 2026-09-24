@@ -1,0 +1,76 @@
+# Servidor ESTATICO do backoffice. Roda dentro do container `admin-web`, atras da
+# borda (`infra/caddy/Caddyfile`), e nao fala com o mundo direto: nao publica
+# porta, nao emite certificado, nao conhece dominio.
+#
+# Quem decide QUAL host chega aqui, e com quais cabecalhos de seguranca, e a
+# borda: la esta o bloco `(cabecalhos_do_backoffice)`, o unico lugar onde CSP,
+# HSTS e afins estao escritos. Este arquivo so decide COMO os bytes saem --
+# cache e o fallback da SPA. Separar as duas coisas e o que deixa a imagem ser a
+# MESMA em todo ambiente: a CSP carrega o dominio da API, e dominio e
+# configuracao, nao artefato.
+{
+	# Sem API de administracao e sem TLS: a configuracao nasce com a imagem, e o
+	# TLS termina na borda.
+	admin off
+	auto_https off
+	persist_config off
+}
+
+:8080 {
+	root * /srv/admin
+
+	# Cache em duas classes, pelo NOME do arquivo:
+	#
+	#   - `/assets/*` e onde o Vite poe o que ele nomeia com hash; nunca muda de
+	#     conteudo sem mudar de nome, entao fica um ano no navegador;
+	#   - o resto, HTML em primeiro lugar, e `no-store` (docs/04-seguranca.md,
+	#     D48). A borda tambem poe `no-store` nesse resto; repetido aqui para a
+	#     imagem continuar certa sozinha, e porque um `index.html` em cache pede
+	#     `/assets/` que o deploy novo ja apagou.
+	#
+	# Se o gerador deixar de ser Vite, o caminho do matcher muda junto.
+	@comhash path /assets/*
+	header @comhash Cache-Control "public, max-age=31536000, immutable"
+	@semhash not path /assets/*
+	header @semhash Cache-Control "no-store"
+
+	header {
+		-Server
+		X-Content-Type-Options nosniff
+	}
+
+	# FALLBACK DA SPA, e com fronteira. Rota de cliente (`/eventos/123`) nao
+	# existe em disco e precisa receber `index.html` com 200, senao recarregar a
+	# pagina da 404. Tres coisas ficam FORA do fallback:
+	#
+	#   - `/assets/*`: um arquivo de deploy anterior que sumiu responde 404, e
+	#     nao `index.html` com 200 -- o navegador tentaria executar HTML como
+	#     JavaScript, e a classe de cache acima guardaria esse HTML como imutavel
+	#     por um ano;
+	#   - arquivo que existe (`{path}`);
+	#   - diretorio que existe (`{path}/`): e o que deixa a pagina de login ser
+	#     um documento proprio, `dist/entrar/index.html` em `/entrar/`, com a CSP
+	#     propria que a borda da a esse caminho (D41), em vez de cair no
+	#     `index.html` da SPA.
+	#
+	# `rewrite` com matcher, e nao `try_files`: `try_files` nao aceita matcher,
+	# e um `@nome` na lista dele vira nome de arquivo -- medido em 23/09, o
+	# fallback engolia `/assets/*` com 200.
+	@rotadecliente {
+		not path /assets/*
+		not file {path} {path}/
+	}
+	rewrite @rotadecliente /index.html
+
+	file_server {
+		precompressed br gzip
+	}
+	encode zstd gzip
+
+	# O erro sai com `no-store`, sobrescrevendo a classe de cache: um 404 em
+	# `/assets/*` nao pode ficar guardado como imutavel.
+	handle_errors {
+		header Cache-Control "no-store"
+		respond "{err.status_code}" {err.status_code}
+	}
+}

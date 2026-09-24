@@ -1,0 +1,30 @@
+# ISCA de verificar_borda.py (D34). PRECISA REPROVAR.
+# Tudo certo quanto a D33, e com CORS para o backoffice no bloco da aplicacao:
+# o desenho que a seguranca recusou em 23/09 em favor da mesma origem.
+{
+	admin off
+}
+
+{$PUBLIC_BASE_URL}{$HOSTS_EXTRA_APP} {
+	header Access-Control-Allow-Origin "https://admin.bichu.app"
+
+	handle /v1/admin* {
+		respond "nao encontrado" 404
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+}
+
+{$ADMIN_HOSTS:http://admin.localhost} {
+	handle /v1/admin/* {
+		request_header -X-Internal-*
+		request_header X-Internal-Surface admin
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy admin-web:8080
+	}
+}

@@ -1,0 +1,42 @@
+# Sobreposicao de TESTE, usada por `infra/verificacao/verificar-backoffice.sh`
+# (`make verificar-backoffice` e o job `admin` da esteira). Nunca entra em
+# `make up` nem no host.
+#
+# Duas trocas, e so duas:
+#
+# 1. A `edge` NAO PUBLICA PORTA NENHUMA. A sonda roda dentro da rede do compose,
+#    entao a pilha de teste nao disputa a 3000 com a pilha de quem esta
+#    desenvolvendo -- e nao derruba nem encosta nela.
+#
+# 2. A `api` vira um eco.
+#
+# Troca a `api` por um eco que devolve, no corpo, os cabecalhos internos que
+# chegaram a ela. E o unico jeito de provar de fora que a borda poe
+# `X-Internal-Surface: admin` no host administrativo e apaga o que o cliente
+# forjou (docs/04-seguranca.md, D33): a API de verdade nao conta o que recebeu.
+#
+# O MESMO `caddy:2.8-alpine`, pelo mesmo digest, da borda: nenhuma imagem a
+# mais para baixar. O `content-type` e o da API de verdade, para a sonda nao
+# poder confundir o eco com o 404 em texto puro da borda.
+services:
+  edge:
+    ports: !reset []
+
+  api:
+    image: caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
+    build: !reset null
+    env_file: !reset []
+    environment: !reset {}
+    depends_on: !reset {}
+    healthcheck: !reset {}
+    command:
+      - caddy
+      - respond
+      - --listen
+      - ":3000"
+      - --header
+      - "Content-Type: application/problem+json"
+      - --header
+      - "Cache-Control: max-age=60"
+      - --body
+      - "eco surface=[{http.request.header.X-Internal-Surface}] forjado=[{http.request.header.X-Internal-Forjado}] caminho={http.request.uri.path}"

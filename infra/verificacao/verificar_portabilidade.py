@@ -30,7 +30,14 @@ from pathlib import Path
 # workflows) e contrato (api/openapi.yaml) tem URL por natureza e ficam de fora:
 # e justamente para la que o hostname deve ser empurrado. Varrer configuracao
 # faria o portao acusar o proprio remedio.
-RAIZES_VARRIDAS = ("src/", "migrations/", "app/lib/", "web/")
+# `admin/src/` desde 23/09: a SPA do backoffice chama `/v1/admin/*` por caminho
+# RELATIVO (mesma origem, D34 da seguranca), entao host literal no codigo que
+# vai ao navegador e defeito duas vezes -- amarra o build a um ambiente e abre
+# caminho para CORS. So `src/` da SPA, e nao `admin/` inteiro: o
+# `vite.config.ts` pode legitimamente apontar o proxy de desenvolvimento para
+# `http://localhost:3000`, e `package-lock.json` e `node_modules/` sao URL de
+# registro, nao amarracao.
+RAIZES_VARRIDAS = ("src/", "migrations/", "app/lib/", "web/", "admin/src/")
 
 # Dentro do codigo, o adaptador externo e onde falar com provedor e legitimo.
 ISENTOS = (

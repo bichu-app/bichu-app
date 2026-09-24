@@ -1,0 +1,30 @@
+# ISCA de verificar_borda.py (D33). PRECISA REPROVAR.
+# O bloco administrativo poe `X-Internal-Surface: admin` e so DEPOIS apaga
+# `X-Internal-*`: invertidas, a linha de limpeza apaga a marca da borda, e o que
+# o cliente mandar em `X-Internal-Surface` vira o unico valor que poderia
+# sobreviver. O bloco da aplicacao esta certo, de proposito.
+{
+	admin off
+}
+
+{$PUBLIC_BASE_URL}{$HOSTS_EXTRA_APP} {
+	handle /v1/admin* {
+		respond "nao encontrado" 404
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+}
+
+{$ADMIN_HOSTS:http://admin.localhost} {
+	handle /v1/admin/* {
+		request_header X-Internal-Surface admin
+		request_header -X-Internal-*
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy admin-web:8080
+	}
+}

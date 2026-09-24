@@ -26,7 +26,8 @@
 # nucleo mata dentro daquele grupo, e o Postgres nem fica sabendo. O worker
 # morre, reinicia, e o trabalho volta para a tabela `jobs`.
 #
-# Soma dos limites: 1792 MB, deixando ~256 MB para o sistema operacional.
+# Soma dos limites: 1824 MB, deixando ~224 MB para o sistema operacional.
+# (1792 ate 23/09; o `admin-web`, com 32 MB medidos, entrou nessa data.)
 # Se apertar, e2-medium e REINICIO e nao migracao: parar, trocar o tipo,
 # religar. Dura minutos.
 #
@@ -371,9 +372,9 @@ services:
   #     estiver aqui. Subir 320m para caber um compilador faz o portao passar a
   #     abencoar, em producao, uma api com o dobro do teto que ela precisa -- e
   #     ele existe justamente para o teto ser real.
-  #  2. A soma no topo deste arquivo (1792 MB, ~256 MB para o sistema) e o
-  #     orcamento da e2-small de 2 GB. `api` em 700m levaria a soma a 2172 MB, e
-  #     o limite deixaria de caber na maquina que ele protege.
+  #  2. A soma no topo deste arquivo (1792 MB quando isto foi escrito, 1824 MB
+  #     desde 23/09) e o orcamento da e2-small de 2 GB. `api` em 700m levaria a
+  #     soma a 2204 MB, e o limite deixaria de caber na maquina que ele protege.
   #
   # Entao a compilacao sai do servico com teto de runtime e ganha o seu.
   # Nao e desenho novo: `infra/integracao/compose.integracao.yaml` ja separa
@@ -514,6 +515,31 @@ services:
       - caddy_dados:/data
       - caddy_config:/config
     environment:
+      # O BACKOFFICE (container `admin-web`, decisao do cliente de 23/09/2026).
+      #
+      #   ADMIN_HOSTS       o endereco do bloco do backoffice: a SPA e o
+      #                     `/v1/admin/*` na MESMA origem (sem CORS, D34 da
+      #                     seguranca). Pode listar mais de um, com virgula;
+      #   ADMIN_CSP_UPLOAD  o host de `UploadIntent.url` do ambiente, no
+      #                     `connect-src` da CSP (ADR-0027 item 6). Nome exato.
+      #
+      # ADMIN_CSP_UPLOAD e VAZIO por padrao: o endpoint do armazenamento hoje e
+      # `http://objeto:9000`, interno, e o host publico do envio nao esta
+      # decidido. Vazio, o envio de imagem pelo painel fica BLOQUEADO pela CSP,
+      # que e o lado certo de errar. O host dos tiles do mapa e fixo e esta no
+      # proprio Caddyfile.
+      #
+      # ADMIN_HOSTS tem PADRAO AQUI, e nao vazio, pelo mesmo motivo do site:
+      # vazio chega ao Caddy como variavel DEFINIDA, o padrao do Caddyfile nao
+      # se aplica, e a borda recusa subir com um bloco sem endereco.
+      # `admin.localhost` nao e dominio de ninguem e nao pede certificado.
+      #
+      # Em homologacao/producao, no `.env` do host, e o edge RECRIADO:
+      #   ADMIN_HOSTS=https://admin.bichu.app
+      # O corte, e a ordem config-antes-do-DNS, estao no bloco do backoffice em
+      # infra/caddy/Caddyfile.
+      ADMIN_HOSTS: ${ADMIN_HOSTS:-http://admin.localhost}
+      ADMIN_CSP_UPLOAD: ${ADMIN_CSP_UPLOAD:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       OBJECT_BUCKET_PUBLIC: ${OBJECT_BUCKET_PUBLIC:-bichu-media-public}
@@ -530,6 +556,73 @@ services:
       HOSTS_EXTRA_APP: ${HOSTS_EXTRA_APP:-}
       HOSTS_EXTRA_MIDIA: ${HOSTS_EXTRA_MIDIA:-}
     depends_on: [api, objeto]
+    restart: unless-stopped
+
+  admin-web:
+    # O BACKOFFICE: SPA React + TypeScript de `admin/`, servida como arquivo
+    # estatico. Decisao do cliente de 23/09/2026: mesma VM, IMAGEM SEPARADA, em
+    # `admin.bichu.app`, consumindo `/v1/admin` da API. Mesmo desenho do
+    # container `web` do site, de proposito: mudar o backoffice de lugar e mover
+    # este servico e trocar um upstream na borda.
+    #
+    # O que ele NAO tem, e cada ausencia e a regra:
+    #   - sem `env_file`: a SPA nao le `.env`, entao nao ha como um segredo da
+    #     API vazar para um arquivo que qualquer navegador baixa. Ela chama
+    #     `/v1/admin/*` por caminho RELATIVO, na mesma origem, entao nem o
+    #     endereco da API ela precisa saber. O unico `environment` e o teto do
+    #     coletor de lixo do Caddy, logo abaixo;
+    #   - sem `depends_on` de `db`/`api`: ele sobe e serve sozinho. Cair a API
+    #     deixa o backoffice sem dados, nao sem tela;
+    #   - sem `ports`: so a borda o alcanca, pela rede interna do compose;
+    #   - sem `profiles`: sobe nos dois destinos, entao NAO entra em
+    #     `SERVICOS_AUSENTES_NO_HOSPEDADO` (src/tools/comparar-destinos.ts).
+    #
+    # Contexto de build `./admin`, e so ele. Ver `admin/Dockerfile`.
+    image: bichu-admin-web:${IMAGE_TAG:-local}
+    build:
+      context: ./admin
+      args:
+        # Mesma regra da api (BICHUS-210): `verificar_commit_de_build.py` exige
+        # o argumento em todo servico que constroi, e `admin/Dockerfile` reprova
+        # o build sem ele.
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+    # MEDIDO em 23/09/2026, imagem com o pacote pre-comprimido no build:
+    #
+    #   repouso                                   14 a 17 MiB
+    #   teto aberto (256m), 200 conexoes          pico 55 MiB -- o Go nao sabe
+    #                                             do teto do cgroup e so coleta
+    #                                             lixo quando o heap dobra
+    #   32m sem GOMEMLIMIT, 200 conexoes          0 OOM, mas 5567 batidas no
+    #                                             teto e 48,7 s para 60 mil
+    #                                             requisicoes: o nucleo segura o
+    #                                             processo em reclamacao
+    #   32m com GOMEMLIMIT=24MiB, 200 conexoes    0 OOM, 237 batidas, 9,5 s
+    #   48m com GOMEMLIMIT=32MiB, 200 conexoes    0 OOM, 1 batida, 8,7 s
+    #
+    # Fica 32m com 24MiB. Duzentas conexoes simultaneas e carga sintetica: o
+    # backoffice tem um punhado de pessoas, e 16 MB a menos na soma do topo
+    # valem mais na e2-small do que o segundo caso contra o terceiro.
+    #
+    # GOMEMLIMIT e o limite MACIO do coletor do Go (o Caddy e Go): com ele o
+    # heap para abaixo do teto do cgroup em vez de encostar nele. O par anda
+    # junto: mexer em um sem o outro devolve o primeiro caso da tabela.
+    mem_limit: 32m
+    environment:
+      GOMEMLIMIT: 24MiB
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # A mesma sonda declarada na imagem, repetida aqui para ficar visivel de
+      # fora dela: pede a pagina inicial, entao so passa com conteudo servido.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
 
 volumes:

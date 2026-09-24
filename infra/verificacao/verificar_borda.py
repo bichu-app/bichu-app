@@ -15,6 +15,11 @@ fino" valeu pela confianca do dia em que foi escrita.
      `/.well-known/openid-configuration` estavam no contrato, o servico os
      servia, a borda nao os roteava, e o catch-all respondia 404. Nada acusou,
      porque nada estava olhando.
+  4. A superficie administrativa so existe no host administrativo
+     (docs/04-seguranca.md, D33 e D34; prova P15, metade estatica). Todo bloco
+     que repassa `/v1/*` a API responde 404 DA BORDA para `/v1/admin*`; o bloco
+     do backoffice apaga `X-Internal-*` de entrada ANTES de por
+     `X-Internal-Surface: admin`; e nenhuma linha do arquivo emite CORS.
 
 Regra que governa o arquivo inteiro: **quando nao consegue verificar, reprova**.
 Bloco ausente, numero ilegivel, zero caminho encontrado -- tudo reprovacao com o
@@ -259,6 +264,157 @@ def comparar_roteamento(rotas: list[str], caddyfile: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# 4. A superficie administrativa so existe no host administrativo (D33, D34)
+# ---------------------------------------------------------------------------
+#
+# Por que por LEITURA do arquivo, e nao so pela sonda da pilha de pe: a sonda
+# (`verificar-backoffice-na-borda.mjs`) prova o comportamento de UMA
+# configuracao renderizada, com os hosts daquele ambiente. Um bloco de site
+# novo -- o apex saindo para o bloco do site, um `api.` que alguem acrescente --
+# so e coberto por ela se alguem lembrar de sondar o host novo. Aqui a regra vale
+# para TODO bloco que repassa `/v1/*` a API, inclusive os que ainda nao existem.
+#
+# O parser e estreito de proposito, e se apoia na forma deste arquivo: chave de
+# abertura no FIM da linha, chave de fechamento SOZINHA na linha. `{$VAR}` e
+# `{placeholder}` no meio da linha nao contam. Arquivo que fuja disso reprova
+# por nao fechar as chaves, em vez de ser lido errado.
+
+MARCA_DO_BLOCO_ADMIN = "ADMIN_HOSTS"
+
+
+def _linhas_sem_comentario(texto: str) -> list[str]:
+    saida = []
+    for linha in texto.splitlines():
+        # `#` inicia comentario no inicio da linha ou depois de espaco. Nenhum
+        # valor deste arquivo tem `#` entre aspas; se passar a ter, o bloco
+        # deixa de fechar e a conferencia reprova, que e o lado certo.
+        saida.append(re.split(r"(?:^|\s)#", linha, maxsplit=1)[0].rstrip())
+    return saida
+
+
+def blocos(linhas: list[str]) -> list[tuple[str, list[str]]]:
+    """Blocos no primeiro nivel de `linhas`: (cabecalho, corpo sem as chaves)."""
+    achados: list[tuple[str, list[str]]] = []
+    profundidade = 0
+    cabecalho = ""
+    corpo: list[str] = []
+    for linha in linhas:
+        limpa = linha.strip()
+        if not limpa:
+            continue
+        abre = limpa.endswith("{")
+        fecha = limpa == "}"
+        if profundidade == 0:
+            if abre:
+                cabecalho = limpa[:-1].strip()
+                corpo = []
+                profundidade = 1
+            continue
+        if fecha:
+            profundidade -= 1
+            if profundidade == 0:
+                achados.append((cabecalho, corpo))
+                continue
+        elif abre:
+            profundidade += 1
+        corpo.append(linha)
+    if profundidade != 0:
+        raise Reprovacao(
+            "as chaves do Caddyfile nao fecham na leitura deste portao (chave de abertura no fim "
+            "da linha, fechamento sozinho na linha). Sem blocos confiaveis nao ha como conferir a "
+            "separacao por host, e a conferencia reprova em vez de adivinhar"
+        )
+    return achados
+
+
+def conferir_superficie_admin(caddyfile: str) -> list[str]:
+    linhas = _linhas_sem_comentario(caddyfile)
+    falhas: list[str] = []
+
+    # D34: CORS em lugar nenhum. A SPA e `/v1/admin/*` estao na mesma origem;
+    # um `Access-Control-Allow-*` em qualquer bloco e uma porta cruzada que
+    # ninguem decidiu abrir.
+    for n, linha in enumerate(linhas, 1):
+        if re.search(r"Access-Control-Allow-", linha):
+            falhas.append(
+                f"Caddyfile:{n} emite `Access-Control-Allow-*`. O backoffice e a API "
+                "administrativa estao na MESMA origem (D34): CORS aqui abre a API a outra origem "
+                "sem decisao"
+            )
+
+    todos = blocos(linhas)
+    sites = [(c, corpo) for c, corpo in todos if c and not c.startswith(("(", "&("))]
+    admin = [(c, corpo) for c, corpo in sites if MARCA_DO_BLOCO_ADMIN in c]
+    if len(admin) != 1:
+        raise Reprovacao(
+            f"esperado exatamente 1 bloco de site com `{MARCA_DO_BLOCO_ADMIN}` no endereco, "
+            f"achei {len(admin)}. Sem o bloco administrativo nao ha o que conferir, e com dois a "
+            "conferencia nao sabe qual vale"
+        )
+
+    def handles(corpo: list[str]) -> dict[str, list[str]]:
+        return {c.split(None, 1)[1] if " " in c else "": b
+                for c, b in blocos(corpo) if c == "handle" or c.startswith("handle ")}
+
+    aplicacoes = []
+    for cabecalho, corpo in sites:
+        if MARCA_DO_BLOCO_ADMIN in cabecalho:
+            continue
+        hs = handles(corpo)
+        if any("reverse_proxy api:" in l for l in hs.get("/v1/*", [])):
+            aplicacoes.append((cabecalho, hs))
+    if not aplicacoes:
+        raise Reprovacao(
+            "nenhum bloco de site repassa `handle /v1/*` a `api:`. Ou a forma do arquivo mudou e "
+            "o parser parou de enxergar, ou a API saiu da borda; nos dois casos a regra D33 nao "
+            "tem onde ser conferida, e passar verde aqui seria nao olhar"
+        )
+    for cabecalho, hs in aplicacoes:
+        bloqueio = hs.get("/v1/admin*")
+        if bloqueio is None:
+            falhas.append(
+                f"o bloco `{cabecalho}` repassa `/v1/*` a API e NAO tem `handle /v1/admin*` com "
+                "404 da borda. A superficie administrativa fica publicada neste host (D33) -- o "
+                "estado medido em `hml.bichu.app` em 23/09"
+            )
+        elif any("reverse_proxy" in l for l in bloqueio) or not any(
+            re.search(r"\brespond\b.*\b404\b", l) for l in bloqueio
+        ):
+            falhas.append(
+                f"no bloco `{cabecalho}`, `handle /v1/admin*` existe mas nao responde 404 da borda "
+                "sem repassar. Ele precisa ser `respond ... 404`, e so isso"
+            )
+
+    _, corpo_admin = admin[0]
+    rota = handles(corpo_admin).get("/v1/admin/*")
+    if rota is None:
+        falhas.append(
+            "o bloco administrativo nao tem `handle /v1/admin/*`: a SPA ficaria sem API na mesma "
+            "origem, e a tentacao seguinte e CORS (D34)"
+        )
+    else:
+        texto = [l.strip() for l in rota]
+        limpa = next((i for i, l in enumerate(texto) if l == "request_header -X-Internal-*"), None)
+        marca = next((i for i, l in enumerate(texto)
+                      if re.fullmatch(r"request_header\s+X-Internal-Surface\s+admin", l)), None)
+        if marca is None:
+            falhas.append(
+                "o `handle /v1/admin/*` do bloco administrativo nao poe "
+                "`request_header X-Internal-Surface admin`. A guarda da aplicacao recusa sem ele, "
+                "entao o backoffice inteiro responderia 404"
+            )
+        if limpa is None or (marca is not None and limpa > marca):
+            falhas.append(
+                "o `handle /v1/admin/*` do bloco administrativo nao apaga `X-Internal-*` ANTES de "
+                "por `X-Internal-Surface`. Sem a limpeza primeiro, o valor mandado pelo cliente "
+                "sobrevive e a marca da borda deixa de provar de onde a requisicao veio (D33)"
+            )
+        if not any(l.startswith("reverse_proxy api:") for l in texto):
+            falhas.append("o `handle /v1/admin/*` do bloco administrativo nao repassa a `api:`")
+    return falhas
+
+
+# ---------------------------------------------------------------------------
 # Autoteste
 # ---------------------------------------------------------------------------
 
@@ -351,6 +507,51 @@ def autoteste(raiz: Path) -> list[str]:
         except Reprovacao as e:
             falhas.append(f"api-com-prefixo-divergente.ts.isca: reprovou pelo motivo errado: {e}")
 
+    # (e) D33: bloco da aplicacao SEM o 404 de `/v1/admin*`. E o estado de
+    # `hml.bichu.app` medido em 23/09, e o que esta isca existe para pegar.
+    if texto := caddy("caddyfile-app-sem-bloqueio-admin"):
+        try:
+            if not any("/v1/admin*" in f for f in conferir_superficie_admin(texto)):
+                falhas.append(
+                    "caddyfile-app-sem-bloqueio-admin: A ISCA PASSOU. O portao parou de enxergar "
+                    "bloco que repassa `/v1/*` sem responder 404 para `/v1/admin*` (D33)"
+                )
+        except Reprovacao as e:
+            falhas.append(f"caddyfile-app-sem-bloqueio-admin: reprovou pelo motivo errado: {e}")
+
+    # (f) D33: bloco administrativo que poe a marca SEM apagar o forjado antes.
+    if texto := caddy("caddyfile-admin-sem-limpar-interno"):
+        try:
+            if not any("ANTES" in f for f in conferir_superficie_admin(texto)):
+                falhas.append(
+                    "caddyfile-admin-sem-limpar-interno: A ISCA PASSOU. O portao aceitou um "
+                    "`X-Internal-Surface` posto sem apagar `X-Internal-*` antes (D33)"
+                )
+        except Reprovacao as e:
+            falhas.append(f"caddyfile-admin-sem-limpar-interno: reprovou pelo motivo errado: {e}")
+
+    # (g) D34: CORS em qualquer lugar do arquivo.
+    if texto := caddy("caddyfile-com-cors"):
+        try:
+            if not any("Access-Control-Allow-" in f for f in conferir_superficie_admin(texto)):
+                falhas.append(
+                    "caddyfile-com-cors: A ISCA PASSOU. O portao parou de enxergar CORS na borda "
+                    "(D34)"
+                )
+        except Reprovacao as e:
+            falhas.append(f"caddyfile-com-cors: reprovou pelo motivo errado: {e}")
+
+    # (h) sem bloco administrativo: nao ha o que conferir, e isso reprova.
+    if texto := caddy("caddyfile-sem-bloco-admin"):
+        try:
+            conferir_superficie_admin(texto)
+            falhas.append(
+                "caddyfile-sem-bloco-admin: A ISCA PASSOU. O portao aprovou um Caddyfile sem bloco "
+                "administrativo, o que e passar verde por nao ter o que checar"
+            )
+        except Reprovacao:
+            pass
+
     return falhas
 
 
@@ -413,6 +614,15 @@ def main(argv: list[str]) -> int:
         falhas.extend(achados)
     except Reprovacao as e:
         print("  [REPROVA] rota na borda para caminho fora de `/v1`")
+        falhas.append(str(e))
+
+    try:
+        achados = conferir_superficie_admin(caddyfile)
+        print(f"  [{'ok' if not achados else 'REPROVA'}] `/v1/admin*` so no host administrativo, "
+              "com `X-Internal-*` limpo antes da marca, e sem CORS (D33, D34)")
+        falhas.extend(achados)
+    except Reprovacao as e:
+        print("  [REPROVA] `/v1/admin*` so no host administrativo (D33, D34)")
         falhas.append(str(e))
 
     print()

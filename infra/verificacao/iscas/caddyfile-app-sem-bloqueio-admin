@@ -1,0 +1,38 @@
+# ISCA de verificar_borda.py (D33). PRECISA REPROVAR.
+# O bloco da aplicacao repassa `/v1/*` a API e NAO responde 404 para
+# `/v1/admin*`: e o estado de `hml.bichu.app` medido em 23/09, em que
+# `/v1/admin/ping` chegava a aplicacao. O resto esta certo, de proposito, para a
+# reprovacao so poder vir desta ausencia.
+{
+	admin off
+}
+
+{$PUBLIC_BASE_URL}{$HOSTS_EXTRA_APP} {
+	request_header -X-Internal-*
+
+	handle /v1/media/* {
+		reverse_proxy api:3000
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+
+	handle {
+		respond "nao encontrado" 404
+	}
+}
+
+{$ADMIN_HOSTS:http://admin.localhost} {
+	request_header -X-Internal-*
+
+	handle /v1/admin/* {
+		request_header -X-Internal-*
+		request_header X-Internal-Surface admin
+		reverse_proxy api:3000
+	}
+
+	handle {
+		reverse_proxy admin-web:8080
+	}
+}
