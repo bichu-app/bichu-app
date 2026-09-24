@@ -150,6 +150,15 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'deixou de existir para ambos, e é por aqui que a exclusão de uma conta leva embora o ' +
       'que a outra pessoa escreveu. Ver o caso "a cascata atravessa pessoas".',
   },
+  'public.conversation_reports.conversation_reports_conversation_id_fkey': {
+    colunas: ['conversation_id'],
+    referencia: 'public.conversations',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as denúncias da conversa apagada (BICHUS-41). CASCADE e não SET NULL: a denúncia sem a ' +
+      'conversa não aponta para nada que a moderação possa abrir, e um SET NULL seria o UPDATE ' +
+      'que revalida as outras chaves da linha no meio da cascata, a forma de 22/09.',
+  },
   'public.conversation_messages.conversation_messages_sender_user_id_fkey': {
     colunas: ['sender_user_id'],
     referencia: 'public.users',
