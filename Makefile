@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-numero-de-adr verificar-numero-de-adr-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -394,6 +394,37 @@ verificar-numero-de-adr-autoteste: ## as iscas do portao de numero de ADR reprov
 verificar-numero-de-adr: ## dois arquivos de adr/ com o mesmo numero reprovam, nomeando os dois (0,06 s)
 	node infra/verificacao/verificar-numero-de-adr.mjs
 
+# CARIMBO DE MIGRACAO REPETIDO (23/09/2026). O irmao do de cima, e o caso GRAVE
+# da familia: ADR repetida confunde quem le, migracao repetida QUEBRA O BANCO.
+#
+# Em 23/09 cinco migracoes nasceram com `20260923000001` em cinco branches de
+# tres sessoes que nao se enxergam. E a `development` ja carregava ONZE
+# migracoes em quatro carimbos repetidos antes de alguem olhar.
+#
+# POR QUE E PIOR QUE A ADR, medido contra um Postgres 16 com o node-pg-migrate
+# 9.0.0 que o `package.json` pina: num banco que ja aplicou UMA das irmas, o
+# `migrate up` seguinte morre em `checkOrder` --
+#   Error: Not run migration <a nova> is preceding already run migration <a antiga>
+# saida 1, nada aplicado, e o banco travado para toda migracao futura.
+# `checkOrder` e ligado por padrao, e o `compose.yaml` chama `migracao up` sem
+# desliga-lo.
+#
+# A CONFERENCIA DE COLISAO nao pergunta nada ao git, pelo mesmo motivo do portao
+# de ADR: a colisao nasce num arquivo recem-criado e ainda nao rastreado, que e
+# o unico instante em que renumerar e barato.
+#
+# A CONFERENCIA DE ORDEM precisa do git, e nao tem como nao precisar: "carimbo
+# anterior ao que ja existe" so tem sentido contra a ponta da linha de base. Ela
+# usa a PONTA e nao o `merge-base`, porque o que trava um banco e o que a base ja
+# carrega, e nao o ponto em que a branch saiu dela.
+#
+# O QUE ELE NAO FAZ: buraco na sequencia nao reprova, vira nota.
+verificar-carimbo-de-migracao-autoteste: ## as iscas do portao de carimbo de migracao reprovam (nao le migrations/)
+	node infra/verificacao/verificar-carimbo-de-migracao.mjs --autoteste
+
+verificar-carimbo-de-migracao: ## dois arquivos de migrations/ com o mesmo carimbo reprovam, nomeando todos (0,21 s)
+	node infra/verificacao/verificar-carimbo-de-migracao.mjs
+
 verificar-tipos-gerados: ## o gerado de src/shared/types/generated/ bate com api/openapi.yaml (1,06 s)
 	node infra/verificacao/verificar-tipos-gerados.mjs
 
@@ -448,7 +479,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
