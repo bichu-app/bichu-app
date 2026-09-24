@@ -459,7 +459,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Vincula a esta conta um aviso feito sem conta (ADR-0030)
+         * Vincula a esta conta um aviso feito sem conta (ADR-0031)
          * @description Quem avisou sem conta e depois criou conta ou entrou apresenta o
          *     `finder_token` do aviso. O aviso passa a ter `reporter_user_id`, e os
          *     pontos que ele ja gerou, e os que ainda gerar, passam a esta conta.
@@ -490,7 +490,7 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Saldo de pontos e os ultimos lancamentos (ADR-0030)
+         * Saldo de pontos e os ultimos lancamentos (ADR-0031)
          * @description **Privado**, por decisao do cliente de 17/09 (pontuacao privada). Nao
          *     existe operacao que devolva os pontos de outra pessoa. Niveis e selos
          *     sao fase 2 e nao estao aqui.
@@ -1115,7 +1115,7 @@ export interface paths {
          *     tutor.
          *
          *     Quem nao tem conta registra pelo `POST /public/found-reports`
-         *     (`createPublicFoundReport`, ADR-0030), que devolve `finder_token` em vez
+         *     (`createPublicFoundReport`, ADR-0031), que devolve `finder_token` em vez
          *     de exigir `bearerAuth`. As duas operacoes gravam na mesma tabela e
          *     alimentam o mesmo cruzamento; o que muda e a credencial, e a regra desta
          *     casa e que a credencial exigida seja legivel operacao a operacao.
@@ -1444,7 +1444,7 @@ export interface paths {
          *     achador deixa de estar em `awaiting_owner`.
          *
          *     Confirmar tambem e o evento que credita `help_acknowledged` a quem
-         *     registrou o achado, se ele tiver conta ou vincular depois (ADR-0030).
+         *     registrou o achado, se ele tiver conta ou vincular depois (ADR-0031).
          *     Descartar nao credita nem estorna nada.
          */
         post: operations["decideLostCaseCandidate"];
@@ -1688,7 +1688,7 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Registra um achado SEM conta, avulso ou "vi este pet" (ADR-0030)
+         * Registra um achado SEM conta, avulso ou "vi este pet" (ADR-0031)
          * @description **Sem conta, por decisao do cliente de 23/09.** E o destino de dois
          *     botoes do site: "Registrar que achei um pet" (saida da pagina da tag
          *     quando ela responde 404, 410 ou 429) e "Vi este pet" (pagina publica do
@@ -1730,7 +1730,7 @@ export interface paths {
          *
          *     **Pontos:** quem registra sem conta nao pontua. Se criar conta ou
          *     entrar depois, `claimFoundReport` vincula este aviso a conta, e os
-         *     pontos que o aviso gerou passam a ser dela (ADR-0030).
+         *     pontos que o aviso gerou passam a ser dela (ADR-0031).
          */
         post: operations["createPublicFoundReport"];
         delete?: never;
@@ -2871,7 +2871,7 @@ export interface components {
             /** @enum {string} */
             status: "open" | "blocked" | "closed";
             /**
-             * @description ADR-0030. Verdadeiro no achado avulso registrado sem conta que ainda
+             * @description ADR-0031. Verdadeiro no achado avulso registrado sem conta que ainda
              *     nao tem tutor: a conversa existe (`status: open`), so o outro lado
              *     nao chegou. Vira falso quando um tutor confirma o candidato. A
              *     pagina mostra o estado de espera e nao mostra caixa de mensagem.
@@ -3050,7 +3050,7 @@ export interface components {
             reunion_channel?: "tag_scan" | "bichu_alert" | "poster_or_link" | "on_my_own" | "other" | null;
             note?: string | null;
             /**
-             * @description ADR-0030. So com `outcome: reunited`. As conversas de quem ajudou,
+             * @description ADR-0031. So com `outcome: reunited`. As conversas de quem ajudou,
              *     escolhidas pelo tutor. Cada uma credita pontos a quem avisou, se o
              *     aviso tiver conta (ou for vinculado depois por `claimFoundReport`).
              *     O ponto de reencontro cai na confirmacao do tutor, nunca na

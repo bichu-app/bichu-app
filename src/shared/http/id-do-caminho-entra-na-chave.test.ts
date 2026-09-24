@@ -268,9 +268,9 @@ const VEREDITOS: readonly Veredito[] = [
   // `Idempotency-Key` e não há handler. Quando ele existir, troque esta linha
   // pela rota — e o caso abaixo passa a exigir o id do caminho dela também.
   { operationId: 'postFinderMessage', semHandler: 'BICHUS-41, sem handler registrado' },
-  // O achado sem conta do ADR-0030: contrato escrito antes do codigo, sem id no
+  // O achado sem conta do ADR-0031: contrato escrito antes do codigo, sem id no
   // caminho. Quando a rota existir, troque esta linha por ela.
-  { operationId: 'createPublicFoundReport', semHandler: 'ADR-0030, sem handler registrado' },
+  { operationId: 'createPublicFoundReport', semHandler: 'ADR-0031, sem handler registrado' },
 ];
 
 void describe('varredura: toda rota idempotente do produto', () => {

@@ -1,4 +1,4 @@
-# ADR-0030: Achado sem conta pela web, o mínimo de pontos, e o que o evento criado pela comunidade exige
+# ADR-0031: Achado sem conta pela web, o mínimo de pontos, e o que o evento criado pela comunidade exige
 
 **Status:** aceito. Três perguntas ao cliente no fim; nenhuma bloqueia o
 contrato
@@ -12,8 +12,12 @@ produto 8.6 (registrar achado avulso era D2). **Pede emenda:** a ADR da Rede,
 `feat/secao-rede`, não publicada e de outra frente (seção 6). Esta ADR não a
 edita.
 
-**Numeração:** conferida em 23/09 contra todas as branches locais e remotas,
-os worktrees e os PRs abertos. 0024 a 0029 estão em uso; 0030 é o próximo livre.
+**Numeração:** nasceu como ADR-0030 em 23/09, às 21:28. O 0030 já tinha sido
+criado às 21:27, na branch local `chore/entregas-um-arquivo-por-entrada`
+(registro concorrente), que não existia quando fiz a primeira varredura. Por
+ordem de chegada, esta ficou com 0031. Conferido com
+`infra/verificacao/verificar-numero-de-adr.mjs` sobre a união de todas as
+branches locais e remotas e de todos os worktrees.
 
 ## Contexto
 

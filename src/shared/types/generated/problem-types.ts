@@ -26,7 +26,7 @@ export const STATUS_DO_PROBLEMA = {
   'transfer-not-for-this-account':  409,
   'transfer-already-in-progress':   409, // BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite
   'transfer-already-effective':     409, // BICHUS-66: a transferencia ja se consumou, e depois disso o caminho e transferir de volta, nao cancelar. E 409 e nao 410 de proposito: a rota EXIGE conta e o tutor tem direito de saber em que pe esta a propria transferencia -- o 410 sem distincao e da superficie PUBLICA do token, onde dizer qual dos tres casos ocorreu entregaria a um estranho o estado de uma transferencia alheia
-  'found-report-already-claimed':   409, // ADR-0030: o aviso sem conta ja foi vinculado a OUTRA conta. O mesmo token apresentado pela mesma conta responde 200 de novo (idempotente); por outra conta, 409. Sem este tipo, o segundo reclamante receberia `forbidden` e acharia que o token e dele e o servidor esta errado
+  'found-report-already-claimed':   409, // ADR-0031: o aviso sem conta ja foi vinculado a OUTRA conta. O mesmo token apresentado pela mesma conta responde 200 de novo (idempotente); por outra conta, 409. Sem este tipo, o segundo reclamante receberia `forbidden` e acharia que o token e dele e o servidor esta errado
   'conversation-closed':            410,
   'tag-revoked':                    410, // tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)
   'tag-code-not-found':             404,
