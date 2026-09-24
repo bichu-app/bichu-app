@@ -66,6 +66,36 @@ export type ReauthScope =
   | 'tag_revocation'
   | 'session_revocation';
 
+/**
+ * Os papeis que abrem sessao administrativa, como o contrato os enumera em
+ * `AdminRole`. Na v1 so `admin` (decisao do cliente de 23/09); `moderator`
+ * entra como valor novo quando a moderacao entrar, pelo caminho de lista
+ * fechada do ADR-0023 secao 3.
+ */
+export type PapelAdministrativo = 'admin';
+
+/**
+ * As finalidades de `X-Admin-Reauth-Token` (D40), como o contrato as enumera em
+ * `AdminReauthScope`. Nao se misturam com `ReauthScope`: o token do app e preso
+ * ao `jti` do JWT movel, e este a sessao administrativa (ADR-0027 item 5).
+ */
+export type EscopoDeReautenticacaoAdministrativa =
+  | 'store_item_retirement'
+  | 'network_event_relocation'
+  | 'network_event_cancellation'
+  | 'network_event_removal';
+
+/**
+ * O `x-audit` da operacao administrativa: a acao gravada em `audit.events` na
+ * mesma transacao da escrita, e o tipo de recurso. A acao e so uma cadeia aqui
+ * porque `shared/` nao conhece o modulo `audit`; quem a transforma em
+ * `AuditAction` e `eventoAdministrativo`, que recusa acao fora da lista.
+ */
+export interface DeclaracaoDeTrilha {
+  readonly action: `admin.${string}`;
+  readonly resourceKind: string;
+}
+
 export interface RateLimitEntry {
   readonly dimension: readonly string[];
   readonly counts?: 'requests' | 'distinct_identities' | 'distinct_cases' | 'distinct_emails';
@@ -89,6 +119,24 @@ interface RouteBase {
    */
   readonly noChallenge?: true;
   readonly reauthScope?: ReauthScope;
+  /**
+   * `x-admin-roles` do contrato: o papel minimo da operacao administrativa.
+   * Quem confere e a guarda do prefixo `/v1/admin` (`superficie-administrativa.ts`),
+   * uma vez so, lendo esta declaracao; nao ha verificacao de papel dentro de
+   * caso de uso (ADR-0027 item 7). Rota com esta declaracao fora do prefixo
+   * administrativo nao sobe, e rota do prefixo sem ela tambem nao.
+   */
+  readonly adminRoles?: NonEmpty<PapelAdministrativo>;
+  /**
+   * A unica rota do prefixo administrativo que dispensa sessao: o login
+   * (`security: []` no contrato). Ela continua passando pela guarda de
+   * superficie, pela recusa do Bearer e pela conferencia de `Origin`.
+   */
+  readonly adminPublic?: true;
+  /** `x-audit` do contrato. Obrigatorio em toda escrita administrativa. */
+  readonly audit?: DeclaracaoDeTrilha;
+  /** `x-admin-reauth-scope` do contrato. */
+  readonly adminReauthScope?: EscopoDeReautenticacaoAdministrativa;
 }
 
 /** Tem efeito fora do processo: teto é OBRIGATÓRIO. */

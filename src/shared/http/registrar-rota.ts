@@ -69,6 +69,14 @@ import {
   DIMENSOES_GENERICAS,
 } from './aplicacao-de-teto.js';
 import { AppError } from './errors.js';
+import { recusarCampoDesconhecido } from './corpo-fechado.js';
+import {
+  CABECALHO_DE_REAUTENTICACAO_ADMINISTRATIVA,
+  PREFIXO_ADMINISTRATIVO,
+  contextoDaGuarda,
+  sessaoAdministrativaDe,
+  type OpcoesDaSuperficieAdministrativa,
+} from './superficie-administrativa.js';
 import type { ProblemType } from './problem.js';
 import type { RateLimitEntry, ReauthScope, RouteDefinition } from './route-definition.js';
 
@@ -265,7 +273,15 @@ export async function escoparRotas(
   montar: (registrador: RegistradorDeRotas) => void,
 ): Promise<void> {
   const plugin: FastifyPluginCallback = (escopo, _opcoes, pronto) => {
-    montar(escopo);
+    // O erro de registro (a fronteira administrativa, o verificador que falta)
+    // vai para `pronto`: lancado aqui dentro, ele nao chegaria a `ready()` e o
+    // carregador esperaria o `pronto` que nunca vem, ate estourar o tempo.
+    try {
+      montar(escopo);
+    } catch (erro) {
+      pronto(erro as Error);
+      return;
+    }
     pronto();
   };
   await app.register(plugin, { prefix: prefixo });
@@ -324,6 +340,71 @@ function portaoDeReautenticacao(
 }
 
 /**
+ * A rota administrativa so sobe dentro do escopo da guarda, e o escopo so
+ * aceita rota administrativa (ADR-0027 item 7). Sao as quatro formas de uma
+ * rota escapar da guarda, e cada uma derruba a subida com o motivo:
+ *
+ * 1. rota com `/admin/` no caminho, ou com declaracao administrativa, fora do
+ *    escopo: ela seria servida sem guarda nenhuma;
+ * 2. rota do escopo sem `/admin/` no caminho: o contrato nao a conhece ali;
+ * 3. rota do escopo sem `adminRoles` nem `adminPublic`: a guarda nao teria
+ *    papel contra o que conferir, e conferir contra lista vazia recusa tudo ou,
+ *    escrito do jeito errado, aprova tudo;
+ * 4. escrita do escopo sem `audit`, ou leitura com `audit`: GET nao muda estado
+ *    (ADR-0027 item 3), e escrita administrativa sem trilha e o estado que D49
+ *    proibe.
+ */
+function exigirFronteiraAdministrativa(
+  rota: RouteDefinition,
+  superficie: OpcoesDaSuperficieAdministrativa | undefined,
+): void {
+  const caminhoAdministrativo = rota.path.startsWith(PREFIXO_ADMINISTRATIVO);
+  const declaraAdministrativa =
+    rota.adminRoles !== undefined ||
+    rota.adminPublic === true ||
+    rota.audit !== undefined ||
+    rota.adminReauthScope !== undefined;
+  const falha = (motivo: string): never => {
+    throw new Error(`Rota ${rota.operationId} (${rota.method.toUpperCase()} ${rota.path}): ${motivo} (ADR-0027 item 7).`);
+  };
+
+  if (superficie === undefined) {
+    if (caminhoAdministrativo || declaraAdministrativa) {
+      falha('rota administrativa registrada fora de escoparRotasAdministrativas; ela seria servida sem a guarda do prefixo');
+    }
+    return;
+  }
+  if (!caminhoAdministrativo) falha('rota sem /admin/ no caminho dentro do escopo administrativo');
+  if ((rota.adminRoles === undefined) === (rota.adminPublic !== true)) {
+    falha('rota do escopo administrativo precisa declarar adminRoles OU adminPublic, e so um dos dois');
+  }
+  if (rota.method === 'get' && rota.audit !== undefined) falha('GET administrativo nao muda estado e nao declara audit');
+  if (rota.method !== 'get' && rota.audit === undefined) falha('escrita administrativa sem audit (D49)');
+}
+
+/**
+ * O portao de `X-Admin-Reauth-Token`, nascido da declaracao da rota, no mesmo
+ * lugar e pelo mesmo motivo de `portaoDeReautenticacao`: esquecer de exigir a
+ * senha deixa de ser exprimivel.
+ */
+function portaoDeReautenticacaoAdministrativa(
+  rota: RouteDefinition,
+  superficie: OpcoesDaSuperficieAdministrativa | undefined,
+): onRequestAsyncHookHandler | undefined {
+  const escopo = rota.adminReauthScope;
+  if (escopo === undefined || superficie === undefined) return undefined;
+  return async (request) => {
+    const apresentado = request.headers[CABECALHO_DE_REAUTENTICACAO_ADMINISTRATIVA];
+    await superficie.sessoes.consumirReautenticacao(
+      sessaoAdministrativaDe(request),
+      escopo,
+      typeof apresentado === 'string' ? apresentado : undefined,
+      contextoDaGuarda(request),
+    );
+  };
+}
+
+/**
  * Registra a rota e liga os tetos dela.
  *
  * `rota.method` finalmente é consumido: era o único campo do objeto, junto com
@@ -337,7 +418,18 @@ export function registrarRota<const T extends RouteDefinition>(
   handler: Handler,
 ): void {
   const deps = tetoDe(app);
+  const superficie = app.superficieAdministrativa;
+  exigirFronteiraAdministrativa(rota, superficie);
   const portaoDeReauth = portaoDeReautenticacao(app, rota);
+  const portaoDeReauthAdministrativa = portaoDeReautenticacaoAdministrativa(rota, superficie);
+  // O corpo administrativo e FECHADO de verdade: o Ajv do Fastify apaga o campo
+  // desconhecido em silencio (`removeAdditional`), e numa escrita do painel isso
+  // e responder 200 a um campo que nao foi gravado. O guarda roda antes do Ajv.
+  const corpoDaRota = opcoes.schema?.body;
+  const corpoFechado =
+    superficie !== undefined && typeof corpoDaRota === 'object' && corpoDaRota !== null
+      ? [recusarCampoDesconhecido(corpoDaRota as Record<string, unknown>, rota.operationId)]
+      : [];
   naoAplicadas.push(...inventariarNaoAplicaveis(rota));
 
   const resolvedores: Resolvedores = {
@@ -362,7 +454,9 @@ export function registrarRota<const T extends RouteDefinition>(
     method: METODOS[rota.method],
     url: rota.path,
     ...(opcoes.schema === undefined ? {} : { schema: opcoes.schema }),
-    ...(opcoes.config === undefined ? {} : { config: opcoes.config }),
+    // A declaracao inteira vai para `config`: e dali que a guarda do escopo
+    // administrativo le o papel minimo da operacao.
+    config: { ...(opcoes.config ?? {}), rotaDeclarada: rota },
     // A ordem é a do cabeçalho deste arquivo, com o portão da segunda
     // credencial entre o teto e os ganchos da rota: a chamada recusada por teto
     // não chega a custar a leitura do banco que a conferência da janela faz, e
@@ -370,9 +464,10 @@ export function registrarRota<const T extends RouteDefinition>(
     onRequest: [
       tetoDeEntrada,
       ...(portaoDeReauth === undefined ? [] : [portaoDeReauth]),
+      ...(portaoDeReauthAdministrativa === undefined ? [] : [portaoDeReauthAdministrativa]),
       ...(opcoes.onRequest ?? []),
     ],
-    preValidation: [tetoDoCorpo, ...(opcoes.preValidation ?? [])],
+    preValidation: [tetoDoCorpo, ...corpoFechado, ...(opcoes.preValidation ?? [])],
     onError: (request, _reply, erro, pronto) => {
       if (erro instanceof AppError && TIPOS_DE_TENTATIVA_INVALIDA.has(erro.problemType)) {
         request.tentativaInvalida = true;
