@@ -155,10 +155,67 @@ dispensas:
     responsavel: cliente
     vence_em: 2026-09-29
 
+  # REESCRITA EM 23/09/2026. O texto anterior descrevia um mundo que deixou de
+  # existir: ele dizia "o app nao vai para loja por ora" e punha como condicao
+  # de saida "houver decisao de submeter o app a uma loja". Essa decisao
+  # ACONTECEU, e foi para o outro lado. Verbatim do cliente em 23/09: "como nao
+  # estamos conseguindo seguir com o cadastro do desenvolvedor, iremos focar
+  # apenas na versao android para publicacao". Cartao BICHUS-253.
+  #
+  # Uma dispensa cuja condicao de saida ja foi satisfeita pela metade e pior que
+  # uma vencida: quem le conclui que ela esta prestes a cair, e ela nao esta.
+  #
+  # O QUE ELA GOVERNA, MEDIDO E NAO SUPOSTO: UMA linha, a segunda entrada de
+  # `casos` em `infra/verificacao/verificar_borda_local.py:258` -- o
+  # `/.well-known/apple-app-site-association` servido com 200 e
+  # `applinks.details` VAZIO. Nada mais no repositorio consulta o portao `ios`.
+  #
+  # E ELA NAO E SOBRE LOJA, apesar do nome e do texto antigo. Ela e sobre DEEP
+  # LINK: Universal Links exigem o `appID` da Apple, que exige o Team ID, que
+  # exige a conta de desenvolvedor. Publicar ou nao publicar na App Store e uma
+  # pergunta diferente da de o link abrir o app.
+  #
+  # NAO HA BUILD DE iOS PARA DESLIGAR. Medido em 23/09 nos cinco workflows: 15
+  # ocorrencias de `runs-on`, TODAS `ubuntu-latest`, e ZERO ocorrencias de
+  # `ios`, `xcode` ou `macos` em `.github/workflows/`. Nenhum alvo de iOS no
+  # `Makefile`. O alvo iOS nunca existiu na esteira.
+  #
+  # E O `app/ios/` NAO SAI, mesmo com a decisao de publicar so Android. Sao 54
+  # arquivos rastreados, e TRES arquivos de teste obrigatorios os leem:
+  # `app/test/dispositivo/permissoes_de_loja_test.dart` (le o `Info.plist`),
+  # `app/test/marca/arte_do_app_test.dart` (le `Assets.xcassets` e o
+  # `project.pbxproj`) e `app/test/marca/splash_ios_test.dart` (le o
+  # `LaunchScreen.storyboard`). Apagar a arvore deixa a esteira vermelha na
+  # hora. O iOS fica DORMENTE E DECLARADO, nunca removido: a conta pode sair em
+  # outubro, e codigo apagado nao volta.
+  #
+  # POR QUE A DISPENSA E A LINHA CONTINUAM, em vez de as duas sairem. A linha
+  # nao mede a loja: ela mede se o arquivo que o sistema operacional busca esta
+  # vazio. Apagar o portao nao apaga o arquivo -- ele continua sendo servido com
+  # 200 e lista vazia -- e no dia em que o Team ID chegar ninguem seria avisado
+  # de que falta preencher. O proprio docstring daquela funcao ja diz por que
+  # isso e o pior desfecho: "200 com JSON valido deixa qualquer conferencia
+  # superficial verde, e a falha so aparece no aparelho do usuario, depois de a
+  # plaquinha impressa". Verificacao que some e pior que verificacao dispensada,
+  # porque a dispensada esta escrita aqui e expira sozinha.
+  #
+  # A CONDICAO DE SAIDA AGORA E UM FATO, e e o mesmo fato que a linha mede: a
+  # lista `applinks.details` deixar de ser vazia. Nao ha como satisfaze-la sem
+  # o Team ID, e nao ha como te-lo sem a conta. Quando isso acontecer o portao
+  # fica verde sozinho, e esta entrada sai por ter virado redundante -- que e o
+  # unico jeito honesto de uma dispensa cair.
+  #
+  # A DATA E A UNICA PARTE ARBITRARIA, E EU A DECLARO ASSIM. A anterior, 29/09,
+  # reprovava a partir de 30/09 e derrubaria `rapidos`, `integracao` e o
+  # `portao` -- travando inclusive entrega alheia que nao tem nada a ver com
+  # iOS. Nao existe previsao para a conta Apple, entao nenhuma data descreve o
+  # fato; ela so diz de quanto em quanto tempo alguem reabre a pergunta. 31/10
+  # afasta a trava do fim do desenvolvimento (30/09) e mantem a revisao mensal.
+  # Encurtar isso e decisao de quem coordena, nao minha.
   - portao: ios
-    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao o alvo iOS sai do caminho critico. CAI QUANDO houver decisao de submeter o app a uma loja; ate la a conta Apple (BICHUS-94) segue pendente e sem Team ID nao ha Universal Links"
+    motivo: "esta dispensa NAO e sobre loja: ela cobre uma linha so, o apple-app-site-association servido com applinks.details vazio (verificar_borda_local.py:258), que e o deep link do iOS e depende do Team ID. Em 23/09/2026 o cliente decidiu publicar SO Android porque o cadastro de desenvolvedor Apple nao anda (BICHUS-253), entao o Team ID nao tem previsao. CAI QUANDO a conta de desenvolvedor Apple existir e o appID entrar no apple-app-site-association, momento em que o portao fica verde sozinho. O alvo iOS fica dormente e declarado: app/ios tem 54 arquivos e tres testes obrigatorios os leem, entao apagar a arvore deixa a esteira vermelha na hora"
     responsavel: cliente
-    vence_em: 2026-09-29
+    vence_em: 2026-10-31
 
   # A correcao do `logout` (BICHUS-81, commit aca2d33) acrescentou `requestBody`
   # OBRIGATORIO a `POST /v1/auth/logout`, e para o `oasdiff` isso e quebra de

@@ -255,7 +255,7 @@ const TELEFONE = /(?:\+?55[\s.-]*)?(?:\(?\d{2}\)?[\s.-]*)?\d(?:[\s.()-]*\d){7,12
  * interna nunca foi a parte cara. Os rótulos ficam mesmo assim, porque são eles
  * que tiram do código a forma que a regra acusa.
  *
- * Quem prova isto é `tempo-da-redacao.test.ts`, com teto de 50 ms.
+ * Quem prova isto é `tempo-da-redacao.test.ts`, que mede a função inteira.
  */
 const EMAIL = /(?<![a-z0-9._%+-])[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/g;
 /**
