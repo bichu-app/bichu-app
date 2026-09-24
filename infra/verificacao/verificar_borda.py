@@ -333,8 +333,41 @@ def blocos(linhas: list[str]) -> list[tuple[str, list[str]]]:
     return achados
 
 
+def _expandir_imports(linhas: list[str]) -> list[str]:
+    """Troca `import <trecho>` pelo corpo do trecho, no nivel em que aparece.
+
+    Sem isto, uma regra escrita num trecho importado -- o `handle /v1/*` que
+    passe a morar num `(gateway_v1)` compartilhado entre blocos, por exemplo --
+    sumiria desta leitura, e a conferencia reprovaria por nao achar o que existe
+    ou, pior, aprovaria por nao achar o que falta. Argumentos do `import` nao sao
+    substituidos: as regras aqui nao dependem deles.
+    """
+    trechos = {c[1:-1].strip(): corpo for c, corpo in blocos(linhas)
+               if c.startswith("(") and c.endswith(")")}
+
+    def expandir(corpo: list[str], pilha: tuple[str, ...]) -> list[str]:
+        saida: list[str] = []
+        for linha in corpo:
+            m = re.match(r"\s*import\s+(\S+)", linha)
+            if m and m.group(1) in trechos:
+                nome = m.group(1)
+                if nome in pilha:
+                    raise Reprovacao(f"o trecho `({nome})` importa a si mesmo")
+                saida.extend(expandir(trechos[nome], pilha + (nome,)))
+            else:
+                saida.append(linha)
+        return saida
+
+    saida: list[str] = []
+    for c, corpo in blocos(linhas):
+        saida.append(f"{c} {{")
+        saida.extend(expandir(corpo, ()) if not c.startswith(("(", "&(")) else corpo)
+        saida.append("}")
+    return saida
+
+
 def conferir_superficie_admin(caddyfile: str) -> list[str]:
-    linhas = _linhas_sem_comentario(caddyfile)
+    linhas = _expandir_imports(_linhas_sem_comentario(caddyfile))
     falhas: list[str] = []
 
     # D34: CORS em lugar nenhum. A SPA e `/v1/admin/*` estao na mesma origem;
@@ -455,7 +488,7 @@ def conferir_taxa_na_borda(contrato: dict[str, int], caddyfile: str) -> list[str
                 "existe no Caddyfile e teto sem dono"
             )
 
-    linhas = _linhas_sem_comentario(caddyfile)
+    linhas = _expandir_imports(_linhas_sem_comentario(caddyfile))
     sites = [(c, corpo) for c, corpo in blocos(linhas) if c and not c.startswith(("(", "&("))]
     for cabecalho, corpo in sites:
         if MARCA_DO_BLOCO_ADMIN not in cabecalho and any(
