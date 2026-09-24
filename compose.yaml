@@ -461,7 +461,18 @@ services:
     # Sao duas PORTAS e nao dois subdominios de localhost: `app.bichu.localhost`
     # resolveria no laptop e NAO resolve no telefone de ninguem, e o teste com
     # segundo aparelho depende disso (secao 3.10).
-    image: caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
+    #
+    # IMAGEM PROPRIA desde 23/09: o `caddy:2.8-alpine` de prateleira, pelo
+    # mesmo digest, com o binario trocado por um que tem o plugin de taxa -- o
+    # teto do host administrativo (ADR-0016 emenda 2). Ver `infra/caddy/Dockerfile`.
+    # O Caddyfile continua montado abaixo, e nao copiado na imagem: mudar regra
+    # de borda segue sendo recriar o container, sem reconstruir.
+    image: bichu-edge:${IMAGE_TAG:-local}
+    build:
+      context: ./infra/caddy
+      args:
+        # Mesma regra dos outros servicos que constroem (BICHUS-210).
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 64m
     # Porta do hospedeiro IGUAL a porta de dentro, e nao um mapeamento cruzado:
     # o Caddy escuta na porta que esta em PUBLIC_BASE_URL, entao 3100:3000

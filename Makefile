@@ -375,8 +375,9 @@ verificar-borda: ## ADR-0016: x-edge-limits, prefixo, rota de /.well-known e `/v
 # fora de `verificar`, como `verificar-subida-da-api`. E o MESMO script do job
 # `admin` da esteira. Nao toca a pilha `bichu` de quem esta desenvolvendo: o
 # projeto e outro, e nenhuma porta e publicada.
-verificar-backoffice-autoteste: ## as iscas da sonda do backoffice na borda reprovam (nao usa docker)
+verificar-backoffice-autoteste: ## as iscas da sonda do backoffice e do orcamento do painel reprovam (nao usa docker)
 	node infra/verificacao/verificar-backoffice-na-borda.mjs --autoteste
+	node infra/verificacao/verificar-orcamento-do-admin.mjs --autoteste
 
 verificar-backoffice: commit-de-build ## ADR-0027: imagem do admin-web, iscas de build, pilha isolada e sonda D33/D34/D41/D48 (~35 s)
 	bash infra/verificacao/verificar-backoffice.sh
@@ -573,8 +574,8 @@ restore: ## restaura o dump mais recente de ./backup
 	 echo "restaurando $$ultimo"; \
 	 gunzip -c "$$ultimo" | $(COMPOSE) exec -T db psql -U $${POSTGRES_USER:-bichu} -d $${POSTGRES_DB:-bichu}
 
-pin-digests: ## reresolve os digests das imagens do compose e da base do Dockerfile
-	@grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' compose.yaml Dockerfile | sort -u | while read -r ref; do \
+pin-digests: ## reresolve os digests das imagens do compose e de todo Dockerfile (API, admin/, borda)
+	@grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' $(wildcard compose.yaml Dockerfile */Dockerfile infra/*/Dockerfile) | sort -u | while read -r ref; do \
 	  tag=$${ref%@*}; \
 	  novo=$$(docker buildx imagetools inspect "$$tag" --format '{{.Manifest.Digest}}' 2>/dev/null); \
 	  if [ -n "$$novo" ]; then echo "$$tag -> $$novo"; else echo "$$tag -> NAO RESOLVEU"; fi; \

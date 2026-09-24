@@ -1334,10 +1334,12 @@ jobs:
         run: |
           [ -f admin/package.json ] || { echo "::error::admin/package.json nao existe. Sem o app nao ha o que construir, e o job reprova em vez de passar vazio"; exit 1; }
           [ -f admin/package-lock.json ] || { echo "::error::admin/ sem package-lock.json. Build sem lockfile nao e reproduzivel, e \`npm ci\` recusa"; exit 1; }
-          # `lint` carrega a regra `react/no-danger` da D47; `test` e `build`
-          # sao o combinado com quem escreve o app. Script ausente e
-          # verificacao que nao roda, e verificacao que nao roda reprova.
-          faltando=$(node -e 'const s=require("./admin/package.json").scripts||{};console.log(["lint","test","build"].filter(k=>!s[k]).join(" "))')
+          # `lint` carrega a regra `react/no-danger` da D47; `verify:types`
+          # confere os tipos gerados de `api/openapi.yaml` (ADR-0027 item 1);
+          # `test` e `build` sao o combinado com quem escreve o app. Script
+          # ausente e verificacao que nao roda, e verificacao que nao roda
+          # reprova.
+          faltando=$(node -e 'const s=require("./admin/package.json").scripts||{};console.log(["lint","verify:types","test","build"].filter(k=>!s[k]).join(" "))')
           [ -z "$faltando" ] || { echo "::error::admin/package.json sem os scripts: $faltando"; exit 1; }
 
       - uses: actions/setup-node@v4
@@ -1354,6 +1356,10 @@ jobs:
         working-directory: admin
         run: npm run lint
 
+      - name: tipos gerados do contrato em dia
+        working-directory: admin
+        run: npm run verify:types
+
       - name: teste
         working-directory: admin
         run: npm test
@@ -1361,6 +1367,14 @@ jobs:
       - name: build
         working-directory: admin
         run: npm run build
+
+      # O orcamento do painel (ADR-0027 item 1) quebra a esteira: JavaScript
+      # inicial <= 200 KB comprimidos por documento, e cada pedaco sob demanda
+      # (o do mapa e o caso nomeado) <= 150 KB. LCP, INP e CLS, que o mesmo
+      # item pede, exigem navegador e ainda nao sao medidos aqui.
+      - name: orcamento do painel (JS inicial e sob demanda)
+        run: node infra/verificacao/verificar-orcamento-do-admin.mjs admin/dist | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash
 
       # D48: build de producao sem mapa de codigo-fonte e sem segredo no
       # pacote. O Dockerfile reconfere o mapa no build da imagem (e o unico

@@ -20,6 +20,12 @@ fino" valeu pela confianca do dia em que foi escrita.
      que repassa `/v1/*` a API responde 404 DA BORDA para `/v1/admin*`; o bloco
      do backoffice apaga `X-Internal-*` de entrada ANTES de por
      `X-Internal-Surface: admin`; e nenhuma linha do arquivo emite CORS.
+  5. O teto de taxa da borda (ADR-0016 emenda 2): as duas zonas do bloco
+     administrativo contra `x-edge-limits`, numero a numero; zona sem numero no
+     contrato e numero sem zona reprovam; `rate_limit` em qualquer outro bloco
+     reprova; e CHAVE DESCONHECIDA em `x-edge-limits` reprova -- ate 23/09 este
+     portao ignorava chave que nao conhecia, e numero declarado sem imposicao e
+     o que a secao 4 do ADR-0016 chama de pior que nenhum.
 
 Regra que governa o arquivo inteiro: **quando nao consegue verificar, reprova**.
 Bloco ausente, numero ilegivel, zero caminho encontrado -- tudo reprovacao com o
@@ -415,6 +421,105 @@ def conferir_superficie_admin(caddyfile: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# 5. Teto de taxa na borda, so no host administrativo (ADR-0016 emenda 2)
+# ---------------------------------------------------------------------------
+
+# Chave de `x-edge-limits` -> (zona do `rate_limit`, metodo exigido, caminho).
+LIMITES_DE_TAXA = {
+    "admin_login_requests_per_minute_per_ip": ("admin_login", "POST", "/v1/admin/auth/login"),
+    "admin_requests_per_minute_per_ip": ("admin_api", None, "/v1/admin/*"),
+}
+
+
+def _janela_em_segundos(bruto: str, onde: str) -> int:
+    m = re.fullmatch(r"(\d+)(s|m|h)", bruto.strip())
+    if not m:
+        raise Reprovacao(f"{onde}: nao entendi a janela {bruto!r}")
+    return int(m.group(1)) * {"s": 1, "m": 60, "h": 3600}[m.group(2)]
+
+
+def conferir_taxa_na_borda(contrato: dict[str, int], caddyfile: str) -> list[str]:
+    falhas: list[str] = []
+
+    conhecidas = set(CAMPOS_DE_LIMITE) | set(LIMITES_DE_TAXA)
+    for chave in sorted(set(contrato) - conhecidas):
+        falhas.append(
+            f"`x-edge-limits.{chave}` nao e conferido por este portao. Numero no contrato que "
+            "ninguem compara com a borda e numero declarado sem imposicao (ADR-0016 emenda 2): "
+            "ensine a conferencia ou tire a chave"
+        )
+    for chave in LIMITES_DE_TAXA:
+        if chave not in contrato:
+            falhas.append(
+                f"`x-edge-limits` nao declara `{chave}`, e a borda aplica essa zona. Teto que so "
+                "existe no Caddyfile e teto sem dono"
+            )
+
+    linhas = _linhas_sem_comentario(caddyfile)
+    sites = [(c, corpo) for c, corpo in blocos(linhas) if c and not c.startswith(("(", "&("))]
+    for cabecalho, corpo in sites:
+        if MARCA_DO_BLOCO_ADMIN not in cabecalho and any(
+            re.match(r"\s*rate_limit\b", l) for l in corpo
+        ):
+            falhas.append(
+                f"o bloco `{cabecalho}` tem `rate_limit`. Teto de taxa na borda e SO do host "
+                "administrativo (ADR-0016 emenda 2); nos hosts do app ele mora no servico, com "
+                "a dimensao certa (item 4)"
+            )
+    admin = [corpo for c, corpo in sites if MARCA_DO_BLOCO_ADMIN in c]
+    if len(admin) != 1:
+        raise Reprovacao(
+            f"esperado 1 bloco com `{MARCA_DO_BLOCO_ADMIN}` para conferir o teto de taxa, achei "
+            f"{len(admin)}"
+        )
+    taxa = [b for c, b in blocos(admin[0]) if c == "rate_limit"]
+    if len(taxa) != 1:
+        raise Reprovacao(
+            "o bloco administrativo nao tem exatamente um `rate_limit`. Sem ele a emenda 2 do "
+            "ADR-0016 esta escrita e nao aplicada, que e o estado que este portao existe para "
+            "impedir"
+        )
+    zonas = {c.split(None, 1)[1]: b for c, b in blocos(taxa[0]) if c.startswith("zone ")}
+    esperadas = {z for z, _m, _p in LIMITES_DE_TAXA.values()}
+    for sobrando in sorted(set(zonas) - esperadas):
+        falhas.append(
+            f"a zona `{sobrando}` do `rate_limit` nao tem numero em `x-edge-limits`. Teto na borda "
+            "sem numero no contrato e divergencia silenciosa"
+        )
+    for chave, (zona, metodo, caminho) in LIMITES_DE_TAXA.items():
+        corpo = zonas.get(zona)
+        if corpo is None:
+            falhas.append(f"`x-edge-limits.{chave}` existe e o `rate_limit` nao tem a zona `{zona}`")
+            continue
+        texto = [l.strip() for l in corpo]
+        eventos = next((l.split()[1] for l in texto if l.startswith("events ")), None)
+        janela = next((l.split()[1] for l in texto if l.startswith("window ")), None)
+        if eventos is None or janela is None or not eventos.isdigit():
+            falhas.append(f"a zona `{zona}` nao declara `events` e `window` legiveis")
+            continue
+        segundos = _janela_em_segundos(janela, f"Caddyfile:zona {zona}")
+        if (int(eventos) * 60) % segundos != 0:
+            falhas.append(f"a zona `{zona}` ({eventos} em {janela}) nao vira um numero inteiro por minuto")
+            continue
+        por_minuto = int(eventos) * 60 // segundos
+        if chave in contrato and contrato[chave] != por_minuto:
+            falhas.append(
+                f"`x-edge-limits.{chave}` = {contrato[chave]} por minuto e a zona `{zona}` do "
+                f"Caddyfile aplica {por_minuto} por minuto ({eventos} em {janela})"
+            )
+        if "key {remote_host}" not in texto:
+            falhas.append(
+                f"a zona `{zona}` nao chaveia por `{{remote_host}}`. O contrato diz POR IP; outra "
+                "chave e outro teto"
+            )
+        if f"path {caminho}" not in texto:
+            falhas.append(f"a zona `{zona}` nao casa `path {caminho}`, que e o caminho do contrato")
+        if metodo and f"method {metodo}" not in texto:
+            falhas.append(f"a zona `{zona}` nao casa `method {metodo}`")
+    return falhas
+
+
+# ---------------------------------------------------------------------------
 # Autoteste
 # ---------------------------------------------------------------------------
 
@@ -541,6 +646,44 @@ def autoteste(raiz: Path) -> list[str]:
         except Reprovacao as e:
             falhas.append(f"caddyfile-com-cors: reprovou pelo motivo errado: {e}")
 
+    # (i) teto de taxa divergente entre `x-edge-limits` e a zona do Caddyfile.
+    if texto := caddy("caddyfile-taxa-divergente"):
+        try:
+            if not any("admin_login" in f and "por minuto" in f
+                       for f in conferir_taxa_na_borda(limites_certos, texto)):
+                falhas.append(
+                    "caddyfile-taxa-divergente: A ISCA PASSOU. O portao parou de enxergar teto de "
+                    "taxa da borda diferente do contrato"
+                )
+        except Reprovacao as e:
+            falhas.append(f"caddyfile-taxa-divergente: reprovou pelo motivo errado: {e}")
+
+    # (j) teto de taxa num host do app: a emenda 2 vale so para o administrativo.
+    if texto := caddy("caddyfile-taxa-no-host-do-app"):
+        try:
+            if not any("SO do host administrativo" in f
+                       for f in conferir_taxa_na_borda(limites_certos, texto)):
+                falhas.append(
+                    "caddyfile-taxa-no-host-do-app: A ISCA PASSOU. O portao aceitou `rate_limit` "
+                    "num host do app"
+                )
+        except Reprovacao as e:
+            falhas.append(f"caddyfile-taxa-no-host-do-app: reprovou pelo motivo errado: {e}")
+
+    # (k) chave desconhecida em `x-edge-limits`: o buraco que a emenda 2 nomeou.
+    if texto := caddy("contrato-com-limite-desconhecido.yaml"):
+        try:
+            desconhecido = limites_do_contrato(texto)
+            real = (raiz / "infra" / "caddy" / "Caddyfile").read_text(encoding="utf-8")
+            if not any("nao e conferido por este portao" in f
+                       for f in conferir_taxa_na_borda(desconhecido, real)):
+                falhas.append(
+                    "contrato-com-limite-desconhecido.yaml: A ISCA PASSOU. Uma chave de "
+                    "`x-edge-limits` sem conferencia voltou a passar calada"
+                )
+        except Reprovacao as e:
+            falhas.append(f"contrato-com-limite-desconhecido.yaml: reprovou pelo motivo errado: {e}")
+
     # (h) sem bloco administrativo: nao ha o que conferir, e isso reprova.
     if texto := caddy("caddyfile-sem-bloco-admin"):
         try:
@@ -614,6 +757,15 @@ def main(argv: list[str]) -> int:
         falhas.extend(achados)
     except Reprovacao as e:
         print("  [REPROVA] rota na borda para caminho fora de `/v1`")
+        falhas.append(str(e))
+
+    try:
+        achados = conferir_taxa_na_borda(limites_do_contrato(contrato), caddyfile)
+        print(f"  [{'ok' if not achados else 'REPROVA'}] teto de taxa da borda so no host "
+              "administrativo, igual a `x-edge-limits`, sem chave desconhecida (ADR-0016 emenda 2)")
+        falhas.extend(achados)
+    except Reprovacao as e:
+        print("  [REPROVA] teto de taxa da borda (ADR-0016 emenda 2)")
         falhas.append(str(e))
 
     try:

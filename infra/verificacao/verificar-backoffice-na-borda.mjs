@@ -3,8 +3,14 @@
 //
 // docs/04-seguranca.md secao 22: D33 (superficie administrativa so no host
 // administrativo), D34 (mesma origem, sem CORS), D41 (CSP propria so no login)
-// e D48 (cabecalhos do host administrativo). E a metade de COMPORTAMENTO da
+// e D48 (cabecalhos do host administrativo), mais o teto de taxa da borda no
+// login administrativo (D45, ADR-0016 emenda 2). E a metade de COMPORTAMENTO da
 // prova P15/P18; a metade de LEITURA do arquivo esta em `verificar_borda.py`.
+//
+// O TETO DO LOGIN E CONTADO PELA BORDA, POR IP, EM JANELA DE UM MINUTO: a
+// rajada de 11 logins so prova o que promete contra uma borda que nao recebeu
+// login deste IP no ultimo minuto. O script da pilha isolada sobe uma borda
+// nova a cada execucao; contra um ambiente de pe, espere um minuto entre duas.
 //
 // Por que as duas: a leitura vale para todo bloco, inclusive os que ainda nao
 // existem, e nao ve o que o Caddy faz de fato (ordem de `handle`, `header` que
@@ -47,7 +53,7 @@ const CABECALHOS_DO_HOST_ADMIN = [
 
 const PROIBIDO_NA_CSP_DA_SPA = [/'unsafe-inline'/, /'unsafe-eval'/, /(^|\s)\*(\s|;|$)/, /google/i, /gstatic/i];
 
-function pedir(base, host, caminho, { metodo = 'GET', cabecalhos = {} } = {}) {
+function pedir(base, host, caminho, { metodo = 'GET', cabecalhos = {}, corpo } = {}) {
   const url = new URL(caminho, base);
   return new Promise((resolver, rejeitar) => {
     const req = http.request(
@@ -69,7 +75,7 @@ function pedir(base, host, caminho, { metodo = 'GET', cabecalhos = {} } = {}) {
     );
     req.on('timeout', () => req.destroy(new Error(`tempo esgotado em ${metodo} ${host}${caminho}`)));
     req.on('error', rejeitar);
-    req.end();
+    req.end(corpo);
   });
 }
 
@@ -140,10 +146,31 @@ export function julgar(r, { eco }) {
       `${chave}: esperado 404 text/plain DA BORDA, veio ${resp.status} ${tipo(resp)}. Com application/problem+json quem respondeu foi a APLICACAO, que e o estado medido em hml.bichu.app em 23/09`);
   }
 
+  // --- teto de taxa da borda no login administrativo (D45) ---
+  // 10 por minuto por IP: as 10 primeiras passam pela borda (o que a API
+  // responder a elas nao importa aqui), a 11a e 429 com Retry-After e com os
+  // cabecalhos do host.
+  const rajada = r.adminLoginRajada ?? [];
+  exigir(rajada.length === 11, `admin POST /v1/admin/auth/login: esperada rajada de 11, vieram ${rajada.length}`);
+  if (rajada.length === 11) {
+    const cedo = rajada.slice(0, 10).findIndex((x) => x.status === 429);
+    exigir(cedo === -1, `admin POST /v1/admin/auth/login: a borda recusou o ${cedo + 1}o login com 429; o teto e 10 por minuto (x-edge-limits)`);
+    const decimoPrimeiro = rajada[10];
+    exigir(decimoPrimeiro.status === 429,
+      `admin POST /v1/admin/auth/login: o 11o login em um minuto respondeu ${decimoPrimeiro.status}, e nao 429. O teto de taxa da borda (D45) nao esta valendo`);
+    exigir(/^\d+$/.test(String(cabecalho(decimoPrimeiro, 'retry-after') ?? '')),
+      `admin POST /v1/admin/auth/login: o 429 veio sem Retry-After numerico: '${cabecalho(decimoPrimeiro, 'retry-after') ?? ''}'`);
+    exigir(cabecalho(decimoPrimeiro, 'x-robots-tag') !== undefined && cabecalho(decimoPrimeiro, 'content-security-policy') !== undefined,
+      'admin POST /v1/admin/auth/login: o 429 saiu sem os cabecalhos do host administrativo (a rota de erro perdeu o trecho)');
+  }
+
   // --- CORS em lugar nenhum (D34) ---
-  for (const [chave, resp] of Object.entries(r)) {
+  for (const [chave, resp] of Object.entries(r).filter(([k]) => k !== 'adminLoginRajada')) {
     exigir(cabecalho(resp, 'access-control-allow-origin') === undefined,
       `${chave}: resposta com Access-Control-Allow-Origin '${cabecalho(resp, 'access-control-allow-origin')}'. Mesma origem, sem CORS (D34)`);
+  }
+  for (const resp of rajada) {
+    exigir(cabecalho(resp, 'access-control-allow-origin') === undefined, 'admin login: resposta com Access-Control-Allow-Origin (D34)');
   }
   return falhas;
 }
@@ -179,6 +206,10 @@ function respostaCerta() {
     appAdminSemBarra: r(404, 'text/plain; charset=utf-8'),
     appAdminOptions: r(404, 'text/plain; charset=utf-8'),
     appSaudeComOrigem: r(200, 'application/json'),
+    adminLoginRajada: [
+      ...Array.from({ length: 10 }, () => r(401, 'application/problem+json', { ...seguranca, 'cache-control': 'no-store' })),
+      r(429, 'text/plain', { ...seguranca, 'cache-control': 'no-store', 'retry-after': '42' }),
+    ],
   };
 }
 
@@ -201,6 +232,10 @@ export function autoteste() {
     ['cabecalho interno forjado sobrevivendo', (r) => { r.adminApi.corpo = 'API surface=[admin] forjado=[x]'; }],
     ['host administrativo servindo a API inteira', (r) => { r.adminOutraApi = { ...r.adminOutraApi, status: 200, cabecalhos: { ...r.adminOutraApi.cabecalhos, 'content-type': 'application/json' } }; }],
     ['login sem a CSP propria', (r) => { r.adminLogin.cabecalhos['content-security-policy'] = r.adminRaiz.cabecalhos['content-security-policy']; }],
+    ['sem teto de taxa no login (o 11o passa)', (r) => { r.adminLoginRajada[10] = r.adminLoginRajada[0]; }],
+    ['429 sem Retry-After', (r) => { delete r.adminLoginRajada[10].cabecalhos['retry-after']; }],
+    ['teto mais baixo que o contrato (6o recusado)', (r) => { r.adminLoginRajada[5] = r.adminLoginRajada[10]; }],
+    ['429 sem os cabecalhos do host', (r) => { r.adminLoginRajada[10] = { status: 429, cabecalhos: { 'retry-after': '42' }, corpo: '' }; }],
   ];
   for (const [nome, estragar] of iscas) {
     const r = respostaCerta();
@@ -263,13 +298,25 @@ async function main() {
       cabecalhos: { Origin: 'https://bichu.app', 'Access-Control-Request-Method': 'POST' },
     });
     r.appSaudeComOrigem = await P('/v1/health', { cabecalhos: { Origin: `https://${a['admin-host']}` } });
+    // Por ULTIMO, e em serie: a rajada gasta o teto do login deste IP por um
+    // minuto, e nada depois dela pode depender de login.
+    r.adminLoginRajada = [];
+    for (let i = 0; i < 11; i++) {
+      r.adminLoginRajada.push(await A('/v1/admin/auth/login', {
+        metodo: 'POST',
+        cabecalhos: { 'Content-Type': 'application/json', 'Content-Length': '2' },
+        corpo: '{}',
+      }));
+    }
   } catch (erro) {
     console.log(`REPROVADO: a borda nao respondeu: ${erro instanceof Error ? erro.message : erro}`);
     return 1;
   }
   for (const [k, v] of Object.entries(r)) {
+    if (k === 'adminLoginRajada') continue;
     console.log(`  ${k.padEnd(20)} ${v.status} ${tipo(v)}  cache=${cabecalho(v, 'cache-control') ?? '-'}`);
   }
+  console.log(`  ${'adminLoginRajada'.padEnd(20)} ${r.adminLoginRajada.map((x) => x.status).join(' ')}  retry-after do 11o=${cabecalho(r.adminLoginRajada[10], 'retry-after') ?? '-'}`);
   if (!a.eco) console.log('  [aviso] sem --eco: a chegada de `X-Internal-Surface` e a remocao do forjado NAO foram conferidas');
   const falhas = julgar(r, { eco: a.eco });
   if (falhas.length > 0) {

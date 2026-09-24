@@ -328,13 +328,23 @@ x-edge-limits:
   # diferirem**. Se o teste nao achar o bloco em um dos dois arquivos, ele falha
   # com o motivo — verificacao que nao consegue verificar precisa reprovar.
   #
-  # O que NAO esta aqui, e a ausencia e deliberada: **teto de requisicoes por
-  # IP na borda**. O Caddy, sem plugin, nao tem limitador de taxa, e plugin
-  # significa imagem propria na borda — que e onde a substituibilidade
-  # conquistada pelo ADR-0001 comeca a ser gasta. Os tetos por IP existem, e
-  # estao em `x-rate-limit`, aplicados no servico, que e onde eles podem ser
-  # aplicados com a dimensao certa. Declarar aqui um teto que a borda nao impoe
-  # seria pior que nao ter: alguem leria a declaracao e pararia de procurar.
+  # TETO DE REQUISICOES POR IP NA BORDA: SO NO HOST ADMINISTRATIVO.
+  #
+  # Para os hosts do app a ausencia continua deliberada (ADR-0016 item 4): os
+  # tetos por IP existem em `x-rate-limit`, aplicados no servico, que e onde eles
+  # tem a dimensao certa. Declarar aqui um teto que a borda nao impoe seria pior
+  # que nao ter: alguem leria a declaracao e pararia de procurar.
+  #
+  # A excecao e `admin.bichu.app` (ADR-0016 emenda 2, ADR-0027 item 11, D45 de
+  # `docs/04-seguranca.md`): o login administrativo e a unica parede depois da
+  # recusa de MFA e de restricao de rede, e uma camada que nao depende do codigo
+  # da aplicacao cobre o modo de falhar que o repositorio ja teve (teto
+  # declarado e nao aplicado ate 21/09). Imposto por imagem propria do Caddy
+  # com o plugin de taxa (`infra/caddy/Dockerfile`), estouro com `429` e
+  # `Retry-After`. `verificar_borda.py` confere cada numero contra a zona do
+  # Caddyfile, reprova zona sem numero aqui e numero sem zona la, reprova
+  # teto de taxa em qualquer outro host, e reprova chave desconhecida neste
+  # bloco.
   max_request_body_bytes: 12582912   # 12 MiB. O maior upload aceito e de 10 MiB
                                      # (`UploadIntentInput.byte_size`); a folga
                                      # cobre envelope e cabecalho. O upload de
@@ -343,6 +353,10 @@ x-edge-limits:
   max_request_header_bytes: 16384    # 16 KiB
   read_timeout_seconds: 30
   write_timeout_seconds: 30
+  admin_login_requests_per_minute_per_ip: 10   # `POST /v1/admin/auth/login`,
+                                               # so em `admin.bichu.app`
+  admin_requests_per_minute_per_ip: 600        # `/v1/admin/*` inteiro, so em
+                                               # `admin.bichu.app`
 
 paths:
 

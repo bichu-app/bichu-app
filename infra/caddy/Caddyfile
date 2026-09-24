@@ -316,13 +316,6 @@
 #     `max_size` do arquivo como espelho de `x-edge-limits`, e um numero so do
 #     backoffice seria numero sem dono no contrato. O teto de corpo que vale
 #     aqui e o padrao do Caddy, e o do servico;
-#   - NAO TEM LIMITE DE TAXA NO LOGIN, e a ausencia e PENDENCIA, nao decisao.
-#     A D45 da seguranca pede 10/min por IP em `POST /v1/admin/auth/login` e
-#     600/min em `/v1/admin/*`, o que exige plugin de taxa (imagem propria da
-#     borda) -- e o ADR-0016 item 4 recusou plugin. Emendar o ADR e decisao da
-#     arquitetura. Enquanto nao houver, o controle e o da aplicacao (D44), e a
-#     lacuna esta no registro de risco da seguranca (22.7). NAO instale plugin
-#     aqui sem essa emenda;
 #   - nao serve os arquivos de associacao de deep link: nenhum link que abre o
 #     app aponta para este host.
 #
@@ -409,6 +402,49 @@
 	encode zstd gzip
 
 	import cabecalhos_do_backoffice site
+
+	# TETO DE TAXA NA BORDA, E SO NESTE HOST (ADR-0016 emenda 2, ADR-0027 item
+	# 11, D45). Os hosts do app continuam sem teto na borda: la os tetos moram
+	# no servico, com a dimensao certa (ADR-0016 item 4). Aqui o login e a unica
+	# parede depois da recusa de MFA e de restricao de rede, e uma camada que nao
+	# depende do codigo da aplicacao cobre o dia em que o servico declarar teto e
+	# nao aplicar -- que ja aconteceu neste repositorio, ate 21/09.
+	#
+	# Exige o plugin `caddy-ratelimit`, que e o motivo de a borda ter imagem
+	# propria (`infra/caddy/Dockerfile`). Os numeros ESPELHAM `x-edge-limits` do
+	# contrato (`admin_login_requests_per_minute_per_ip`,
+	# `admin_requests_per_minute_per_ip`), e `verificar_borda.py` reprova quando
+	# divergirem, quando uma zona nao tiver numero la, e quando `rate_limit`
+	# aparecer em qualquer outro bloco.
+	#
+	# Chave `{remote_host}`: o IP de quem conectou na borda. Vale porque a borda
+	# recebe a conexao direto (registro DNS sem proxy, "nuvem cinza", docs/07
+	# 16.4). Com um proxy na frente, todo mundo teria o IP do proxy e o teto
+	# viraria global -- trocar para cabecalho de IP encaminhado exige saber de
+	# quem confiar nele, e e decisao propria.
+	#
+	# Um login conta nas DUAS zonas, e esta certo: 10 < 600, o teto do login e o
+	# que vale para ele. Estouro: `429` com `Retry-After`, pela rota de erro
+	# abaixo, que carrega os cabecalhos do host.
+	rate_limit {
+		zone admin_login {
+			match {
+				method POST
+				path /v1/admin/auth/login
+			}
+			key {remote_host}
+			events 10
+			window 1m
+		}
+		zone admin_api {
+			match {
+				path /v1/admin/*
+			}
+			key {remote_host}
+			events 600
+			window 1m
+		}
+	}
 
 	# Cabecalho interno forjado pelo cliente sai ANTES de tudo, no host inteiro.
 	request_header -X-Internal-*

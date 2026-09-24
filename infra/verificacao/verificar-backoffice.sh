@@ -54,7 +54,13 @@ if [ ! -f admin/package.json ]; then
   reprova "admin/package.json nao existe. O backoffice nao tem placeholder: sem o app nao ha imagem nem o que verificar"
   exit 1
 fi
-dc build --quiet admin-web
+# A borda tambem: desde a emenda 2 do ADR-0016 ela e imagem propria, com o
+# plugin de taxa, e a sonda do passo 6 prova o teto do login nela.
+dc build --quiet admin-web edge
+docker run --rm "bichu-edge:${IMAGE_TAG:-local}" caddy list-modules --skip-standard > "$trabalho/modulos.txt" 2>&1
+nao_padrao=$(grep -E '^[a-z]+\.' "$trabalho/modulos.txt" | sort | tr '\n' ' ')
+[ "$nao_padrao" = "http.handlers.rate_limit " ] || reprova "a borda tem modulos nao-padrao diferentes de exatamente \`http.handlers.rate_limit\`: '$nao_padrao'. Modulo novo na borda e superficie nova, e entra por decisao"
+echo "modulos nao-padrao da borda: $nao_padrao"
 tamanho=$(docker image inspect "bichu-admin-web:${IMAGE_TAG:-local}" --format '{{.Size}}')
 echo "imagem bichu-admin-web:${IMAGE_TAG:-local}: $((tamanho / 1024 / 1024)) MiB ($tamanho bytes)"
 
