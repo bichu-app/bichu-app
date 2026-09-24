@@ -123,6 +123,134 @@ services:
       start_period: 3s
     restart: "no"
 
+  objeto:
+    # ARMAZENAMENTO DE OBJETO NA PILHA EFEMERA (BICHUS-245).
+    #
+    # Ate aqui a pilha subia `db`, `mail`, `migracao` e `testes`, e o
+    # `.env.integracao` apontava `OBJECT_STORAGE_ENDPOINT` para um host que nao
+    # resolve. A consequencia nao era um caso pulado: era a AUSENCIA de
+    # qualquer caso. Nenhum byte de foto subiu em teste automatizado nenhum, e
+    # foi por isso que "a funcao de envio foi escrita e nunca chamada" passou
+    # despercebida -- nao havia onde a foto chegar, entao nao havia isca capaz
+    # de pegar.
+    #
+    # QUANTO ELE CUSTA, MEDIDO E NAO ESTIMADO. Um servico a mais pesa em TODA
+    # execucao, entao o numero vem com o metodo -- numero sem metodo vira lenda
+    # na terceira vez que alguem o repete.
+    #
+    #   3 pares alternados nesta maquina, pilha derrubada com `down -v` antes
+    #   de cada medicao, imagens quentes:
+    #     `up -d --wait db mail`                        5,75 / 5,78 / 5,83 s
+    #     `up -d --wait db mail objeto` + os baldes     6,83 / 6,82 / 7,00 s
+    #
+    # +1,05 s na fase de subida (mediana), que e ~5% do `npm run
+    # test:integration` inteiro (19,3-21,0 s antes, 19,6-21,0 s depois: a
+    # diferenca no total fica DENTRO da dispersao entre execucoes, e a fase
+    # isolada e o unico lugar onde ela aparece limpa).
+    #
+    # O MESMO digest do compose.yaml da raiz, pelo mesmo motivo do `db`: provar
+    # o comportamento de um armazenamento que ninguem roda nao prova nada. E o
+    # MinIO NAO esta no Docker Hub (`minio/minio` responde "pull access
+    # denied"); a imagem oficial vive no quay.io. Quem for atualizar vai
+    # esbarrar nisso e achar que e credencial.
+    image: quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    mem_limit: 320m
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY_ID:?a chave vem do .env.integracao gerado por infra/integracao/gerar-env-de-integracao.mjs}
+      MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?o segredo vem do .env.integracao gerado por infra/integracao/gerar-env-de-integracao.mjs}
+      # CRIPTOGRAFIA NO SERVIDOR. A politica de envio assinada manda
+      # `x-amz-server-side-encryption: AES256` (criterio 22 de BICHUS-87), e sem
+      # esta variavel o MinIO responde 501 Not Implemented -- ele entende o
+      # pedido e nao sabe atende-lo, porque SSE-S3 exige um KMS. O KMS embutido
+      # atende, e e o caminho que o proprio MinIO documenta.
+      MINIO_KMS_SECRET_KEY: ${OBJECT_STORAGE_KMS_KEY:?a chave de KMS vem do .env.integracao gerado por infra/integracao/gerar-env-de-integracao.mjs}
+    # SEM `MINIO_SERVER_URL`, e a ausencia e deliberada.
+    #
+    # O compose.yaml da raiz define a variavel porque la existe um dominio de
+    # midia publico, e o MinIO assina a URL com o host pelo qual ele se conhece
+    # -- divergir quebra toda URL assinada. Aqui nao ha host publico: quem fala
+    # com o armazenamento e o servico `testes`, de dentro da rede, por
+    # `objeto:9000`. Fixar um `MINIO_SERVER_URL` faria a assinatura ser
+    # conferida contra um host que ninguem usa, e a leitura assinada reprovaria
+    # com erro de assinatura que nao diz que e de host.
+    #
+    # Dado em memoria, pelo mesmo motivo do `db`: a pilha e descartavel por
+    # desenho e nao deve deixar volume para tras nem quando a execucao morre no
+    # meio. `down -v` limpa o resto; isto garante que nem exista resto de byte
+    # de foto em disco de hospedeiro.
+    tmpfs:
+      - /data:size=256m
+    healthcheck:
+      # `mc ready local` e a sonda que o proprio MinIO documenta, e ela esta na
+      # imagem do servidor. NAO e `sleep`: o passo seguinte cria balde, e balde
+      # criado contra servidor que ainda nao aceitou a primeira conexao falha
+      # com "Server not initialized", que e uma falha com outra cor.
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: "no"
+
+  objeto_init:
+    # Cria os DOIS baldes do ADR-0007 e aplica a politica -- a MESMA do
+    # compose.yaml da raiz, palavra por palavra.
+    #
+    # Isso e o ponto do servico, e nao economia de digitacao: um balde de teste
+    # com politica propria provaria a seguranca de uma configuracao que nao
+    # sobe em lugar nenhum. O que `tests/integration/foto-de-ponta-a-ponta.test.ts`
+    # afirma sobre leitura anonima so vale porque a politica conferida aqui e a
+    # que dev e homologacao aplicam.
+    image: quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    mem_limit: 128m
+    depends_on:
+      objeto:
+        condition: service_healthy
+    environment:
+      OBJECT_BUCKET_PRIVATE: ${OBJECT_BUCKET_PRIVATE:?o nome do balde privado vem do .env.integracao}
+      OBJECT_BUCKET_PUBLIC: ${OBJECT_BUCKET_PUBLIC:?o nome do balde publico vem do .env.integracao}
+      CHAVE: ${OBJECT_STORAGE_ACCESS_KEY_ID:?}
+      SEGREDO: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        mc alias set local http://objeto:9000 "$$CHAVE" "$$SEGREDO"
+        mc mb --ignore-existing "local/$$OBJECT_BUCKET_PRIVATE"
+        mc mb --ignore-existing "local/$$OBJECT_BUCKET_PUBLIC"
+        mc anonymous set none "local/$$OBJECT_BUCKET_PRIVATE"
+        # NAO use `mc anonymous set download`: o preset concede `s3:GetObject`
+        # E `s3:ListBucket`, e a listagem anula a unica protecao que a chave
+        # publica tem.
+        #
+        # A derivada e servida sem assinatura, e o que a protege e nao ser
+        # adivinhavel -- e por isso que `chaveDaDerivada` exige 128 bits de
+        # CSPRNG (BICHUS-134). Com `ListBucket` anonimo, qualquer um pede a
+        # lista e recebe TODAS as chaves: os 128 bits deixam de valer.
+        #
+        # Descoberto em 19/09 no minimo hospedado, com
+        # `GET https://img-hml.bichu.app/bichu-media-public/` devolvendo
+        # `ListBucketResult`. O balde estava vazio; se houvesse foto, estaria
+        # tudo listado. O caso 5 de `foto-de-ponta-a-ponta.test.ts` e o que
+        # impede isso de voltar em silencio.
+        cat >/tmp/publico.json <<POLITICA
+        {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": { "AWS": ["*"] },
+              "Action": ["s3:GetObject"],
+              "Resource": ["arn:aws:s3:::$$OBJECT_BUCKET_PUBLIC/*"]
+            }
+          ]
+        }
+        POLITICA
+        mc anonymous set-json /tmp/publico.json "local/$$OBJECT_BUCKET_PUBLIC"
+    restart: "no"
+
   migracao:
     # Mesmo alvo do compose.yaml da raiz, pelo mesmo motivo: `node-pg-migrate` e
     # devDependency e a migracao nao muda de forma entre ambientes.
@@ -195,6 +323,15 @@ services:
       mail:
         condition: service_healthy
       migracao:
+        condition: service_completed_successfully
+      objeto:
+        condition: service_healthy
+      # `service_completed_successfully` e nao `service_started`: o `mc` SAI
+      # depois de criar os baldes e aplicar a politica. Esperar que ele fique
+      # de pe devolveria erro ("exited"), e esperar so que ele COMECE deixaria
+      # o caso de ponta a ponta correr contra balde que ainda nao existe --
+      # `NoSuchBucket` no meio do envio, que e uma falha com a cor errada.
+      objeto_init:
         condition: service_completed_successfully
     # Nada por padrao: este servico existe para `docker compose run --rm testes`.
     command: ["node", "-e", "console.error('use `npm run test:integration`'); process.exit(1)"]
