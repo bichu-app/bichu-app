@@ -33,15 +33,17 @@ import type { Contrato } from '../../../../shared/http/contract.js';
 import { defineRoute, type RateLimitEntry } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { atorAdministrativoDe } from '../../../../shared/http/superficie-administrativa.js';
-import type { CategoriaDaVitrine, EstadoDoPreco } from '../../domain/item-da-vitrine.js';
+import type { CategoriaDaVitrine, EspecieDoItem, EstadoDoPreco } from '../../domain/item-da-vitrine.js';
 import type { EstadoDePublicacao } from '../../domain/escrita-da-vitrine.js';
 import type {
   CatalogoAdministrativo,
   CorpoDeIntencao,
   CorpoDeItem,
   CorpoDeParceiro,
+  CorpoDeTag,
   PatchDeItem,
   PatchDeParceiro,
+  PatchDeTag,
 } from '../../application/catalogo-administrativo.js';
 import type { OrdemDoPainel } from '../../ports/catalogo-administrativo.js';
 
@@ -98,6 +100,34 @@ export const rotaDeAlterarParceiro = defineRoute({
   effects: [],
   adminRoles: ADMIN,
   audit: { action: 'admin.store_partner.updated', resourceKind: 'store_partner' },
+  rateLimit: [BALDE_DE_ESCRITA],
+});
+
+export const rotaDeListarTags = defineRoute({
+  operationId: 'listAdminStoreTags',
+  method: 'get',
+  path: '/admin/store/tags',
+  effects: [],
+  adminRoles: ADMIN,
+});
+
+export const rotaDeCriarTag = defineRoute({
+  operationId: 'createAdminStoreTag',
+  method: 'post',
+  path: '/admin/store/tags',
+  effects: [],
+  adminRoles: ADMIN,
+  audit: { action: 'admin.store_tag.created', resourceKind: 'store_tag' },
+  rateLimit: [BALDE_DE_ESCRITA],
+});
+
+export const rotaDeAlterarTag = defineRoute({
+  operationId: 'updateAdminStoreTag',
+  method: 'patch',
+  path: '/admin/store/tags/:tagSlug',
+  effects: [],
+  adminRoles: ADMIN,
+  audit: { action: 'admin.store_tag.updated', resourceKind: 'store_tag' },
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
@@ -227,6 +257,8 @@ interface QueryDeItens {
   readonly category?: CategoriaDaVitrine;
   readonly partner?: string;
   readonly publication_state?: EstadoDePublicacao;
+  readonly species?: EspecieDoItem;
+  readonly tag?: string;
   readonly price_status?: EstadoDoPreco;
   readonly sort?: OrdemDoPainel;
   readonly page?: number;
@@ -239,6 +271,8 @@ function filtrosAplicados(query: QueryDeItens): Record<string, string> {
   if (query.category !== undefined) aplicados['category'] = query.category;
   if (query.partner !== undefined) aplicados['partner'] = query.partner;
   if (query.publication_state !== undefined) aplicados['publication_state'] = query.publication_state;
+  if (query.species !== undefined) aplicados['species'] = query.species;
+  if (query.tag !== undefined) aplicados['tag'] = query.tag;
   if (query.price_status !== undefined) aplicados['price_status'] = query.price_status;
   if (Object.keys(aplicados).length === 0) aplicados['scope'] = 'all';
   return aplicados;
@@ -296,6 +330,46 @@ export function registrarRotasDaLojaAdministrativa(
     },
   );
 
+  // -------------------------------------------------------------------- tags
+
+  registrarRota(app, rotaDeListarTags, {}, async (request: FastifyRequest, reply: FastifyReply) => {
+    const query = (request.query ?? {}) as QueryDeParceiros;
+    const termo = query.q?.trim();
+    return reply.send(
+      await catalogo.listarTags({
+        ...(termo === undefined || termo === '' ? {} : { q: termo }),
+        ...(query.active === undefined ? {} : { active: query.active }),
+        page: query.page ?? PAGINA_INICIAL,
+        limit: query.limit ?? TAMANHO_PADRAO,
+      }),
+    );
+  });
+
+  registrarRota(
+    app,
+    rotaDeCriarTag,
+    { schema: { body: corpoDe(contrato, rotaDeCriarTag.operationId) }, resolvedores },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const criada = await catalogo.criarTag(atorAdministrativoDe(request), request.body as CorpoDeTag);
+      return reply.status(201).header('ETag', criada.etag).send(criada.recurso);
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeAlterarTag,
+    { schema: { body: corpoDe(contrato, rotaDeAlterarTag.operationId) }, resolvedores },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const alterada = await catalogo.alterarTag(
+        atorAdministrativoDe(request),
+        parametro(request, 'tagSlug'),
+        ifMatch(request),
+        request.body as PatchDeTag,
+      );
+      return reply.header('ETag', alterada.etag).send(alterada.recurso);
+    },
+  );
+
   // ------------------------------------------------------------------- itens
 
   registrarRota(app, rotaDeListarItens, {}, async (request: FastifyRequest, reply: FastifyReply) => {
@@ -306,6 +380,8 @@ export function registrarRotasDaLojaAdministrativa(
       ...(query.category === undefined ? {} : { category: query.category }),
       ...(query.partner === undefined ? {} : { partnerSlug: query.partner }),
       ...(query.publication_state === undefined ? {} : { publicationState: query.publication_state }),
+      ...(query.species === undefined ? {} : { species: query.species }),
+      ...(query.tag === undefined ? {} : { tagSlug: query.tag }),
       ...(query.price_status === undefined ? {} : { priceStatus: query.price_status }),
       sort: query.sort ?? ORDEM_PADRAO,
       page: query.page ?? PAGINA_INICIAL,

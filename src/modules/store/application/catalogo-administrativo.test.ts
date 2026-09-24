@@ -26,7 +26,9 @@ import {
   novoId,
   preparadorFalso,
   repositorioEmMemoria,
+  type EnvioSemeado,
 } from '../adapters/persistence/catalogo-em-memoria-de-teste.js';
+import { comoData } from '../../../shared/time/clock.js';
 import { CatalogoAdministrativo, type Autor } from './catalogo-administrativo.js';
 
 const AGORA = Date.UTC(2026, 8, 23, 15, 0, 0) as Instant;
@@ -37,7 +39,7 @@ const AUTOR: Autor = {
   correlationId: 'corr-1',
 };
 
-function montar(opcoes: { trilhaFalha?: () => boolean } = {}) {
+function montar(opcoes: { trilhaFalha?: () => boolean; envios?: readonly EnvioSemeado[] } = {}) {
   const { repo, estado } = repositorioEmMemoria(opcoes);
   const catalogo = new CatalogoAdministrativo({
     repositorio: repo,
@@ -51,6 +53,7 @@ function montar(opcoes: { trilhaFalha?: () => boolean } = {}) {
       },
     },
     clock: { now: () => AGORA },
+    urlDeMidia: (chave) => `https://midia.bichu.test/${chave}`,
   });
   return { catalogo, estado };
 }
@@ -72,6 +75,7 @@ const ITEM = {
   title: 'Racao para cao adulto, 10 kg',
   summary: 'Racao seca para caes adultos de porte medio.',
   category: 'food' as const,
+  species: ['dog' as const],
   target_url: 'https://lojadobairro.test/racao-adulto-10kg',
   price: { amount: 18990, currency: 'BRL' as const, checked_at: '2026-09-22' },
 };
@@ -272,15 +276,6 @@ void describe('escrita administrativa da Loja', () => {
     assert.equal(tipo(erro), 'not-found');
   });
 
-  void it('image_upload_id e recusado ate a emenda de imagens (nao aceita e ignora)', async () => {
-    await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
-    const erro = await m.catalogo
-      .criarItem(AUTOR, { ...ITEM, image_upload_id: '0192a3b4-0000-7000-8000-000000000999' })
-      .catch((e: unknown) => e);
-    assert.deepEqual(codigos(erro), ['not_available']);
-    assert.equal(m.estado().itens.size, 0);
-  });
-
   void it('intencao de envio: grava purpose e trilha; SVG e recusado pelo preparador', async () => {
     const r = await m.catalogo.autorizarEnvioDeCatalogo(AUTOR, {
       purpose: 'network_event',
@@ -290,5 +285,177 @@ void describe('escrita administrativa da Loja', () => {
     assert.equal(m.estado().intencoes[0]?.purpose, 'network_event');
     assert.equal(m.estado().intencoes[0]?.id, r.uploadId);
     assert.equal(m.estado().trilha[0]?.resourceKind, 'upload_intent');
+  });
+
+  void describe('especie, tags e galeria (ADR-0027 item 16)', () => {
+    const FOTO_DE_PET = '0192a3b4-0000-7000-8000-00000000f0f0';
+    const CAPA_DE_ENCONTRO = '0192a3b4-0000-7000-8000-00000000c0c0';
+    const VENCIDO = '0192a3b4-0000-7000-8000-00000000d0d0';
+
+    function comEnvios() {
+      return montar({
+        envios: [
+          { id: FOTO_DE_PET, kind: 'pet_photo', purpose: null, expiresAt: comoData((AGORA + 60_000) as Instant) },
+          { id: CAPA_DE_ENCONTRO, kind: 'catalog_image', purpose: 'network_event', expiresAt: comoData((AGORA + 60_000) as Instant) },
+          { id: VENCIDO, kind: 'catalog_image', purpose: 'store_item', expiresAt: comoData((AGORA - 1) as Instant) },
+        ],
+      });
+    }
+
+    async function envio(c: ReturnType<typeof montar>): Promise<string> {
+      const r = await c.catalogo.autorizarEnvioDeCatalogo(AUTOR, {
+        purpose: 'store_item',
+        content_type: 'image/webp',
+        byte_size: 1000,
+      });
+      return r.uploadId;
+    }
+
+    void it('especie vazia, repetida ou desconhecida: 400 species_invalid', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      for (const species of [[], ['dog', 'dog'], ['peixe']]) {
+        const erro = await m.catalogo
+          .criarItem(AUTOR, { ...ITEM, species: species as never })
+          .catch((e: unknown) => e);
+        assert.deepEqual(codigos(erro), ['species_invalid'], JSON.stringify(species));
+      }
+    });
+
+    void it('ISCA: publicar item sem especie (o da massa) e 400 species_required', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const i = await m.catalogo.criarItem(AUTOR, ITEM);
+      const [id] = [...m.estado().especies.keys()];
+      m.estado().especies.set(id ?? '', []);
+      const erro = await m.catalogo.publicarItem(AUTOR, ITEM.slug, i.etag).catch((e: unknown) => e);
+      assert.deepEqual(codigos(erro), ['species_required']);
+    });
+
+    void it('tag: nasce uma vez, pelo slug; a segunda grafia e 409', async () => {
+      const t = await m.catalogo.criarTag(AUTOR, { label: 'Ração' });
+      assert.equal(t.recurso.slug, 'racao');
+      const erro = await m.catalogo.criarTag(AUTOR, { label: 'racao' }).catch((e: unknown) => e);
+      assert.equal(tipo(erro), 'slug-taken');
+      assert.deepEqual(
+        m.estado().trilha.map((e) => e.action),
+        ['admin.store_tag.created'],
+      );
+    });
+
+    void it('ISCA: a 41a tag ativa e recusada (tag_vocabulary_full); reativar acima do teto tambem', async () => {
+      for (let n = 0; n < 40; n += 1) await m.catalogo.criarTag(AUTOR, { label: `Tag numero ${String(n)}` });
+      const erro = await m.catalogo.criarTag(AUTOR, { label: 'Mais uma' }).catch((e: unknown) => e);
+      assert.deepEqual(codigos(erro), ['tag_vocabulary_full']);
+
+      const desativada = await m.catalogo.alterarTag(AUTOR, 'tag-numero-0', '"1"', { active: false });
+      await m.catalogo.criarTag(AUTOR, { label: 'Mais uma' });
+      const reativar = await m.catalogo
+        .alterarTag(AUTOR, 'tag-numero-0', desativada.etag, { active: true })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(reativar), ['tag_vocabulary_full']);
+    });
+
+    void it('item referencia tag existente (ativa ou nao); tag desconhecida e 400; mais de 5 e 400', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      await m.catalogo.criarTag(AUTOR, { label: 'Porte medio' });
+      const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, tag_slugs: ['porte-medio'] });
+      assert.deepEqual(i.recurso.tags, [{ slug: 'porte-medio', label: 'Porte medio', active: true }]);
+
+      const desconhecida = await m.catalogo
+        .alterarItem(AUTOR, ITEM.slug, i.etag, { tag_slugs: ['nao-existe'] })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(desconhecida), ['unknown_tag']);
+      const demais = await m.catalogo
+        .alterarItem(AUTOR, ITEM.slug, i.etag, { tag_slugs: ['a1a', 'b2b', 'c3c', 'd4d', 'e5e', 'f6f'] })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(demais), ['too_many_tags']);
+    });
+
+    void it('galeria: o envio vira imagem em processamento, com trabalho enfileirado, e a ordem e a do corpo', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const a = await envio(m);
+      const b = await envio(m);
+      const i = await m.catalogo.criarItem(AUTOR, {
+        ...ITEM,
+        images: [
+          { upload_id: a, alt_text: 'Saco de racao em pe' },
+          { upload_id: b, alt_text: 'Tabela nutricional' },
+        ],
+      });
+      assert.deepEqual(
+        i.recurso.images.map((x) => [x.upload_id, x.position, x.alt_text, x.status, x.url]),
+        [
+          [a, 0, 'Saco de racao em pe', 'processing', null],
+          [b, 1, 'Tabela nutricional', 'processing', null],
+        ],
+      );
+      assert.equal(m.estado().trabalhos.length, 2);
+
+      // Reordenar e mandar a ordem nova; o envio ja confirmado e reaproveitado,
+      // sem imagem nova e sem trabalho novo.
+      const reordenado = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, {
+        images: [
+          { upload_id: b, alt_text: 'Tabela nutricional' },
+          { upload_id: a, alt_text: 'Saco de racao em pe' },
+        ],
+      });
+      assert.deepEqual(reordenado.recurso.images.map((x) => x.upload_id), [b, a]);
+      assert.equal(m.estado().trabalhos.length, 2);
+
+      const vazia = await m.catalogo.alterarItem(AUTOR, ITEM.slug, reordenado.etag, { images: [] });
+      assert.deepEqual(vazia.recurso.images, []);
+      const ultima = m.estado().trilha.at(-1);
+      assert.deepEqual(ultima?.after, { images: [] });
+    });
+
+    void it('ISCA T9: foto de pet, capa de encontro e envio vencido sao recusados (upload_not_usable), e nada e gravado', async () => {
+      const c = comEnvios();
+      await c.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      for (const upload of [FOTO_DE_PET, CAPA_DE_ENCONTRO, VENCIDO, '0192a3b4-0000-7000-8000-0000000000ff']) {
+        const erro = await c.catalogo
+          .criarItem(AUTOR, { ...ITEM, images: [{ upload_id: upload, alt_text: 'Qualquer coisa' }] })
+          .catch((e: unknown) => e);
+        assert.deepEqual(codigos(erro), ['upload_not_usable'], upload);
+      }
+      assert.equal(c.estado().itens.size, 0);
+      assert.equal(c.estado().trabalhos.length, 0);
+    });
+
+    void it('ISCA: a imagem de um item nao pode ser anexada a outro', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const a = await envio(m);
+      await m.catalogo.criarItem(AUTOR, { ...ITEM, images: [{ upload_id: a, alt_text: 'Saco de racao' }] });
+      const erro = await m.catalogo
+        .criarItem(AUTOR, { ...ITEM, slug: 'outro-item', images: [{ upload_id: a, alt_text: 'Saco de racao' }] })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(erro), ['upload_not_usable']);
+    });
+
+    void it('upload repetido, texto alternativo curto e mais de 8 imagens: 400 antes de abrir transacao', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const a = await envio(m);
+      const repetido = await m.catalogo
+        .criarItem(AUTOR, { ...ITEM, images: [{ upload_id: a, alt_text: 'U' }, { upload_id: a, alt_text: 'Dois ok' }] })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(repetido).sort(), ['duplicate_upload', 'length']);
+      const nove = Array.from({ length: 9 }, (_, n) => ({ upload_id: `0192a3b4-0000-7000-8000-00000000090${String(n)}`, alt_text: 'Imagem' }));
+      const demais = await m.catalogo.criarItem(AUTOR, { ...ITEM, images: nove }).catch((e: unknown) => e);
+      assert.deepEqual(codigos(demais), ['too_many_images']);
+    });
+
+    void it('a trilha do item grava especie, tags e galeria na forma que o painel mandou', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      await m.catalogo.criarTag(AUTOR, { label: 'Porte medio' });
+      const a = await envio(m);
+      await m.catalogo.criarItem(AUTOR, {
+        ...ITEM,
+        species: ['cat', 'dog'],
+        tag_slugs: ['porte-medio'],
+        images: [{ upload_id: a, alt_text: 'Saco de racao' }],
+      });
+      const criado = m.estado().trilha.find((e) => e.action === 'admin.store_item.created');
+      assert.deepEqual(criado?.after?.['species'], ['dog', 'cat']);
+      assert.deepEqual(criado?.after?.['tag_slugs'], ['porte-medio']);
+      assert.deepEqual(criado?.after?.['images'], [{ upload_id: a, alt_text: 'Saco de racao' }]);
+    });
   });
 });

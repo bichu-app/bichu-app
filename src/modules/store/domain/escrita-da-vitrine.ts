@@ -35,11 +35,46 @@ import {
   diasDeCalendario,
   estadoDoPreco,
   type CategoriaDaVitrine,
+  type EspecieDoItem,
   type EstadoDoPreco,
 } from './item-da-vitrine.js';
 
 /** Derivado no servidor, nunca gravado (`AdminStoreItemPublicationState`). */
 export type EstadoDePublicacao = 'draft' | 'published' | 'retired';
+
+export type EstadoDaImagem = 'processing' | 'ready' | 'rejected';
+
+/** Uma imagem da galeria do item, como a escrita a enxerga. */
+export interface ImagemDoItem {
+  /** O envio (`upload_intents.id`) de que ela nasceu: e o que o painel devolve em `images`. */
+  readonly uploadId: string;
+  /** `catalog_images.id`, interno. So a trilha e a escrita o veem. */
+  readonly imageId: string;
+  readonly position: number;
+  readonly altText: string;
+  readonly status: EstadoDaImagem;
+  readonly publicKey: string | null;
+  readonly rejectionReason: string | null;
+}
+
+/** A tag ligada a um item, como o painel a ve: inclusive a inativa. */
+export interface TagDoItem {
+  readonly slug: string;
+  readonly label: string;
+  readonly active: boolean;
+}
+
+/** A tag do vocabulario. `id` e interno e nunca sai. */
+export interface TagAdministrativa {
+  readonly id: string;
+  readonly slug: string;
+  readonly label: string;
+  readonly active: boolean;
+  readonly itemCount: number;
+  readonly createdAt: Date;
+  readonly updatedAt: Date;
+  readonly version: number;
+}
 
 /** O parceiro como a escrita o enxerga. `id` e interno e nunca sai. */
 export interface ParceiroAdministrativo {
@@ -66,10 +101,13 @@ export interface ItemAdministrativo {
   readonly targetUrl: string;
   /**
    * URL do parceiro, so em dado da massa. O painel nunca a escreve (ADR-0027
-   * item 6). A imagem enviada pelo painel espera a emenda de varias imagens por
-   * produto (pedido do cliente de 23/09).
+   * item 6); o que ele escreve e `imagens`.
    */
   readonly imageUrl: string | null;
+  readonly species: readonly EspecieDoItem[];
+  readonly tags: readonly TagDoItem[];
+  /** Em ordem de `position`. */
+  readonly imagens: readonly ImagemDoItem[];
   readonly priceAmount: number | null;
   readonly priceCurrency: string | null;
   /** `AAAA-MM-DD`. */
@@ -299,9 +337,13 @@ export function projetarParceiro(p: ParceiroAdministrativo): ParceiroProjetado {
   };
 }
 
+/** `AdminCatalogGalleryImage`: a imagem da galeria como o painel a ve. */
 export interface ImagemProjetada {
-  readonly source: 'external';
-  readonly status: 'ready';
+  readonly upload_id: string;
+  readonly position: number;
+  readonly alt_text: string;
+  readonly source: 'uploaded';
+  readonly status: EstadoDaImagem;
   readonly url: string | null;
   readonly rejection_reason: string | null;
 }
@@ -320,7 +362,9 @@ export interface ItemAdministrativoProjetado {
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
   readonly target_url: string;
-  readonly image: ImagemProjetada | null;
+  readonly species: readonly EspecieDoItem[];
+  readonly tags: readonly TagDoItem[];
+  readonly images: readonly ImagemProjetada[];
   readonly price: PrecoProjetado | null;
   readonly price_status: EstadoDoPreco;
   readonly publication_state: EstadoDePublicacao;
@@ -332,13 +376,28 @@ export interface ItemAdministrativoProjetado {
 }
 
 /**
- * A imagem como o painel a ve. Hoje so existe a `external`, que vem da massa e
- * e sempre `ready` (`AdminCatalogImage`). A `uploaded` entra com a emenda de
- * varias imagens por produto; ate la, nenhum item tem imagem enviada.
+ * A galeria como o painel a ve (`AdminCatalogGalleryImage`). So a imagem
+ * pronta ganha `url`: a derivada nao e servida antes (ADR-0027 item 10). O
+ * `upload_id` e o identificador que o painel devolve em `images` para manter,
+ * reordenar ou remover a imagem, e e o unico UUID que esta resposta carrega,
+ * porque o contrato o declara.
+ *
+ * A URL externa da massa (`image_url`) NAO entra aqui: a galeria exige
+ * `upload_id`, e a imagem externa nao tem envio. Ver a entrega da BICHUS-267.
  */
-function projetarImagem(item: ItemAdministrativo): ImagemProjetada | null {
-  if (item.imageUrl === null) return null;
-  return { source: 'external', status: 'ready', url: item.imageUrl, rejection_reason: null };
+function projetarImagens(
+  item: ItemAdministrativo,
+  urlDeMidia: (chave: string) => string,
+): ImagemProjetada[] {
+  return item.imagens.map((i) => ({
+    upload_id: i.uploadId,
+    position: i.position,
+    alt_text: i.altText,
+    source: 'uploaded',
+    status: i.status,
+    url: i.status === 'ready' && i.publicKey !== null ? urlDeMidia(i.publicKey) : null,
+    rejection_reason: i.status === 'rejected' ? i.rejectionReason : null,
+  }));
 }
 
 /**
@@ -351,6 +410,7 @@ function projetarImagem(item: ItemAdministrativo): ImagemProjetada | null {
 export function projetarItemAdministrativo(
   item: ItemAdministrativo,
   agora: Instant,
+  urlDeMidia: (chave: string) => string,
 ): ItemAdministrativoProjetado {
   return {
     slug: item.slug,
@@ -359,7 +419,9 @@ export function projetarItemAdministrativo(
     summary: item.summary,
     category: item.category,
     target_url: item.targetUrl,
-    image: projetarImagem(item),
+    species: [...item.species],
+    tags: item.tags.map((t) => ({ slug: t.slug, label: t.label, active: t.active })),
+    images: projetarImagens(item, urlDeMidia),
     price:
       item.priceAmount !== null && item.priceCheckedAt !== null && item.priceCurrency === 'BRL'
         ? {
@@ -376,5 +438,107 @@ export function projetarItemAdministrativo(
     created_at: item.createdAt.toISOString(),
     updated_at: item.updatedAt.toISOString(),
     version: item.version,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// O vocabulario de tags (ADR-0027 item 16)
+// ---------------------------------------------------------------------------
+
+/** Ate 5 tags por item, e ate 40 ativas no vocabulario: um filtro com duzentas opcoes nao filtra. */
+export const TETO_DE_TAGS_POR_ITEM = 5;
+export const TETO_DE_TAGS_ATIVAS = 40;
+/** Ate 8 imagens por item; `position` de 0 a 7. */
+export const TETO_DE_IMAGENS_POR_ITEM = 8;
+
+/** Mesmo formato de `Slug` no contrato e de `store_tags_slug_formato` no banco. */
+const FORMATO_DE_SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
+
+/**
+ * O rotulo como vai ser gravado: pontas aparadas e espacos repetidos juntados.
+ * E sobre ESTE valor que o tamanho e o conjunto de caracteres sao conferidos.
+ */
+export function normalizarRotulo(rotulo: string): string {
+  return rotulo.trim().replace(/\s+/g, ' ');
+}
+
+/**
+ * O `slug` da tag, derivado do rotulo: NFKD, sem marca diacritica, minusculo,
+ * espaco vira hifen, hifens repetidos viram um, e nenhum hifen nas pontas.
+ * `Ração`, `racao` e `RACAO` dao `racao`, e e isso que faz o indice unico do
+ * `slug` recusar a segunda grafia.
+ */
+export function slugDaTag(rotulo: string): string {
+  return normalizarRotulo(rotulo)
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/ /g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '');
+}
+
+/**
+ * Confere o rotulo e devolve o que gravar. Letras (com acento), digitos, espaco
+ * e hifen, e nada mais (`code: tag_charset`): o conjunto nao comporta URL,
+ * e-mail nem simbolo, e e parte do que contem o risco de conteudo publicado sem
+ * revisao.
+ *
+ * O `slug` derivado precisa caber no formato de `Slug` (3 a 30 caracteres).
+ * Rotulo de dois caracteres cabe no contrato (`minLength: 2`) e da `slug` de
+ * dois, que o formato recusa: `code: tag_slug_invalid`, e a divergencia vai
+ * na entrega.
+ */
+export function conferirRotulo(
+  campo: string,
+  rotulo: string,
+): { readonly erros: ProblemFieldError[]; readonly rotulo: string; readonly slug: string } {
+  const normalizado = normalizarRotulo(rotulo);
+  const slug = slugDaTag(normalizado);
+  if (normalizado.length < 2 || normalizado.length > 24) {
+    return { erros: [{ field: campo, code: 'length', message: 'Entre 2 e 24 caracteres.' }], rotulo: normalizado, slug };
+  }
+  if (!/^[\p{L}\p{N} -]+$/u.test(normalizado)) {
+    return {
+      erros: [{ field: campo, code: 'tag_charset', message: 'Só letras, números, espaço e hífen.' }],
+      rotulo: normalizado,
+      slug,
+    };
+  }
+  if (!FORMATO_DE_SLUG.test(slug)) {
+    return {
+      erros: [
+        {
+          field: campo,
+          code: 'tag_slug_invalid',
+          message: 'Este rótulo não forma um endereço válido. Use pelo menos três letras ou números.',
+        },
+      ],
+      rotulo: normalizado,
+      slug,
+    };
+  }
+  return { erros: [], rotulo: normalizado, slug };
+}
+
+export interface TagProjetada {
+  readonly slug: string;
+  readonly label: string;
+  readonly active: boolean;
+  readonly item_count: number;
+  readonly created_at: string;
+  readonly updated_at: string;
+  readonly version: number;
+}
+
+export function projetarTag(t: TagAdministrativa): TagProjetada {
+  return {
+    slug: t.slug,
+    label: t.label,
+    active: t.active,
+    item_count: t.itemCount,
+    created_at: t.createdAt.toISOString(),
+    updated_at: t.updatedAt.toISOString(),
+    version: t.version,
   };
 }

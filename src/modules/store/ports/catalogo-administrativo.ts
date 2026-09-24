@@ -24,25 +24,28 @@
  *
  * ## O que esta porta NAO faz
  *
- * Nao le `users`, `user_roles`, `pets` nem conversa (D51).
- *
- * Nao anexa imagem a item. Em 23/09 o cliente pediu varias imagens por
- * produto, e a arquitetura vai trocar o `image_id` unico do apendice A.2 por
- * uma tabela propria; a confirmacao do envio entra com essa emenda.
+ * Nao le `users`, `user_roles`, `pets` nem conversa (D51). O "criado por conta
+ * admin" do item 10 do ADR-0027 e garantido pelo unico caminho que cria
+ * `kind = 'catalog_image'`, que passa pela guarda administrativa.
  */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
-import type { NovaIntencaoDeCatalogo } from '../../media/ports/imagem-de-catalogo.js';
+import type {
+  ConfirmacaoDeCatalogo,
+  EnvioDeCatalogo,
+  NovaIntencaoDeCatalogo,
+} from '../../media/ports/imagem-de-catalogo.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import type {
   EstadoDePublicacao,
   ItemAdministrativo,
   ParceiroAdministrativo,
+  TagAdministrativa,
 } from '../domain/escrita-da-vitrine.js';
-import type { CategoriaDaVitrine, EstadoDoPreco } from '../domain/item-da-vitrine.js';
+import type { CategoriaDaVitrine, EspecieDoItem, EstadoDoPreco } from '../domain/item-da-vitrine.js';
 
 /** Lancado pelo adaptador quando o `slug` ja e de outro recurso do mesmo tipo. */
 export class SlugOcupado extends Error {
-  constructor(readonly recurso: 'store_partner' | 'store_item') {
+  constructor(readonly recurso: 'store_partner' | 'store_item' | 'store_tag') {
     super(`slug ocupado em ${recurso}`);
     this.name = 'SlugOcupado';
   }
@@ -62,6 +65,9 @@ export interface RecorteDeItens {
   readonly category?: CategoriaDaVitrine | undefined;
   readonly partnerSlug?: string | undefined;
   readonly publicationState?: EstadoDePublicacao | undefined;
+  readonly species?: EspecieDoItem | undefined;
+  /** `slug` de uma tag do vocabulario, ativa ou nao. */
+  readonly tagSlug?: string | undefined;
   readonly priceStatus?: EstadoDoPreco | undefined;
   readonly sort: OrdemDoPainel;
   /**
@@ -72,6 +78,39 @@ export interface RecorteDeItens {
   readonly hoje: string;
   readonly page: number;
   readonly limit: number;
+}
+
+export interface RecorteDeTags {
+  readonly q?: string | undefined;
+  readonly active?: boolean | undefined;
+  readonly page: number;
+  readonly limit: number;
+}
+
+export interface NovaTag {
+  readonly id: string;
+  readonly slug: string;
+  readonly label: string;
+  readonly agora: Instant;
+}
+
+export interface MudancaDeTag {
+  readonly slug?: string;
+  readonly label?: string;
+  readonly active?: boolean;
+}
+
+/** Uma posicao da galeria, como a escrita a grava. */
+export interface ImagemNaPosicao {
+  readonly imageId: string;
+  readonly position: number;
+  readonly altText: string;
+}
+
+/** A tag referenciada por um item, pelo `slug`, resolvida para a identidade interna. */
+export interface TagResolvida {
+  readonly id: string;
+  readonly slug: string;
 }
 
 export interface Pagina<T> {
@@ -159,6 +198,43 @@ export interface TransacaoDoCatalogo {
 
   registrarIntencaoDeCatalogo(nova: NovaIntencaoDeCatalogo): Promise<void>;
 
+  /** O item de novo, pelo `id` interno, depois das escritas da transacao. */
+  recarregarItem(id: string): Promise<ItemAdministrativo>;
+  /** Substitui o conjunto inteiro de especies do item. */
+  substituirEspecies(itemId: string, especies: readonly EspecieDoItem[]): Promise<void>;
+  /** As tags do vocabulario com estes `slug`s, ativas ou nao. As que nao existem ficam de fora. */
+  tagsPorSlugs(slugs: readonly string[]): Promise<readonly TagResolvida[]>;
+  /** Substitui o conjunto inteiro de tags do item. */
+  substituirTags(itemId: string, tagIds: readonly string[]): Promise<void>;
+  /**
+   * Substitui a galeria inteira do item (`[]` tira todas). A unicidade de
+   * posicao e diferida, entao a nova ordem so e conferida no COMMIT.
+   */
+  substituirImagens(itemId: string, imagens: readonly ImagemNaPosicao[]): Promise<void>;
+  /** O envio de imagem, com trava de linha. */
+  envioDeCatalogo(uploadId: string): Promise<EnvioDeCatalogo | null>;
+  /** A que item uma imagem ja confirmada esta ligada. `null` se a nenhum. */
+  itemDaImagem(imageId: string): Promise<string | null>;
+  /** Imagem em `processing`, envio confirmado e trabalho enfileirado, juntos. */
+  confirmarEnvioDeCatalogo(entrada: ConfirmacaoDeCatalogo): Promise<void>;
+
+  /** A tag, com trava de linha. */
+  tagPorSlug(slug: string): Promise<TagAdministrativa | null>;
+  /**
+   * Quantas tags estao ativas agora, sob uma trava da transacao: duas criacoes
+   * simultaneas nao passam as duas pelo teto de 40.
+   */
+  contarTagsAtivasComTrava(): Promise<number>;
+  /** Lanca `SlugOcupado`. */
+  inserirTag(nova: NovaTag): Promise<TagAdministrativa>;
+  /** `null` quando `versaoLida` nao e mais a atual. Lanca `SlugOcupado`. */
+  atualizarTag(
+    id: string,
+    versaoLida: number,
+    mudanca: MudancaDeTag,
+    agora: Instant,
+  ): Promise<TagAdministrativa | null>;
+
   /** O ULTIMO passo de toda escrita. Ver o cabecalho. */
   registrarNaTrilha(evento: AuditEvent): Promise<void>;
 }
@@ -170,4 +246,5 @@ export interface CatalogoAdministrativoRepository {
   parceiroPorSlug(slug: string): Promise<ParceiroAdministrativo | null>;
   listarItens(recorte: RecorteDeItens): Promise<Pagina<ItemAdministrativo>>;
   itemPorSlug(slug: string): Promise<ItemAdministrativo | null>;
+  listarTags(recorte: RecorteDeTags): Promise<Pagina<TagAdministrativa>>;
 }

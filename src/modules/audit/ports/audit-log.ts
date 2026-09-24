@@ -174,11 +174,21 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.store_item.updated',
   'admin.store_item.published',
   'admin.store_item.retired',
+  // Emenda do item 16 do ADR-0027 (23/09): o vocabulario de tags da Loja.
+  'admin.store_tag.created',
+  'admin.store_tag.updated',
   'admin.network_event.created',
   'admin.network_event.updated',
   'admin.network_event.relocated',
   'admin.network_event.cancelled',
   'admin.network_event.removed',
+  // Emenda do item 17 do ADR-0027 (23/09): encontro privado e fila de pedidos.
+  // Entram aqui porque o contrato ja as declara em `x-audit`, e a conferencia
+  // de `acoes-administrativas.test.ts` e nos dois sentidos.
+  'admin.network_event.access_changed',
+  'admin.network_join_request.listed',
+  'admin.network_join_request.approved',
+  'admin.network_join_request.declined',
   'admin.catalog_image.intent_created',
 ] as const;
 

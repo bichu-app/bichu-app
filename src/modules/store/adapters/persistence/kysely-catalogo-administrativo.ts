@@ -26,9 +26,15 @@ import type { Db, DbTransaction, DbExecutor } from '../../../../shared/db/pool.j
 import type { TrilhaTransacional } from '../../../audit/ports/audit-log.js';
 import type { RegistroDeImagemDeCatalogo } from '../../../media/ports/imagem-de-catalogo.js';
 import type { Instant } from '../../../../shared/types/brands.js';
-import type { ItemAdministrativo, ParceiroAdministrativo } from '../../domain/escrita-da-vitrine.js';
-import type { CategoriaDaVitrine } from '../../domain/item-da-vitrine.js';
-import { DIAS_DE_VALIDADE_DO_PRECO } from '../../domain/item-da-vitrine.js';
+import type {
+  ImagemDoItem,
+  ItemAdministrativo,
+  ParceiroAdministrativo,
+  TagAdministrativa,
+  TagDoItem,
+} from '../../domain/escrita-da-vitrine.js';
+import type { CategoriaDaVitrine, EspecieDoItem } from '../../domain/item-da-vitrine.js';
+import { DIAS_DE_VALIDADE_DO_PRECO, ordenarEspecies } from '../../domain/item-da-vitrine.js';
 import { somarDias } from '../../domain/escrita-da-vitrine.js';
 import {
   SlugOcupado,
@@ -40,6 +46,9 @@ import {
   type Pagina,
   type RecorteDeItens,
   type RecorteDeParceiros,
+  type RecorteDeTags,
+  type MudancaDeTag,
+  type NovaTag,
   type TransacaoDoCatalogo,
 } from '../../ports/catalogo-administrativo.js';
 import { comoDataSimples, escaparCuringas } from './kysely-store-repository.js';
@@ -62,8 +71,16 @@ export interface DependenciasDoCatalogoAdministrativo {
 const VIOLACAO_DE_UNICIDADE = '23505';
 const INDICE_DO_PARCEIRO = 'store_partners_slug_unico';
 const INDICE_DO_ITEM = 'store_items_slug_unico';
+const INDICE_DA_TAG = 'store_tags_slug_unico';
 
-function comSlugTraduzido<T>(recurso: 'store_partner' | 'store_item', indice: string) {
+/**
+ * A chave da trava de transacao do teto de 40 tags ativas. Um numero fixo, e
+ * nao `hashtext`: a trava e deste arquivo, e um numero escrito e o que se acha
+ * procurando.
+ */
+const TRAVA_DO_VOCABULARIO = 2_700_016;
+
+function comSlugTraduzido<T>(recurso: 'store_partner' | 'store_item' | 'store_tag', indice: string) {
   return async (escrever: () => Promise<T>): Promise<T> => {
     try {
       return await escrever();
@@ -154,8 +171,74 @@ interface LinhaDoItem {
   version: number;
 }
 
-function comoItem(l: LinhaDoItem): ItemAdministrativo {
+interface ComplementosDoItem {
+  readonly especies: ReadonlyMap<string, string[]>;
+  readonly tags: ReadonlyMap<string, TagDoItem[]>;
+  readonly imagens: ReadonlyMap<string, ImagemDoItem[]>;
+}
+
+/**
+ * Especie, tags e galeria dos itens, em TRES consultas para qualquer numero de
+ * itens: a listagem do painel tem ate cem linhas, e uma consulta por linha
+ * seria o N+1 que o padrao de qualidade proibe.
+ */
+async function complementosDosItens(db: DbExecutor, ids: readonly string[]): Promise<ComplementosDoItem> {
+  if (ids.length === 0) return { especies: new Map(), tags: new Map(), imagens: new Map() };
+  const [especies, tags, imagens] = await Promise.all([
+    db.selectFrom('store_item_species').select(['item_id', 'species']).where('item_id', 'in', ids).execute(),
+    db
+      .selectFrom('store_item_tags as it')
+      .innerJoin('store_tags as t', 't.id', 'it.tag_id')
+      .select(['it.item_id as item_id', 't.slug as slug', 't.label as label', 't.active as active'])
+      .where('it.item_id', 'in', ids)
+      .orderBy('t.label', 'asc')
+      .execute(),
+    db
+      .selectFrom('store_item_images as ii')
+      .innerJoin('catalog_images as c', 'c.id', 'ii.image_id')
+      .select([
+        'ii.item_id as item_id',
+        'ii.image_id as image_id',
+        'ii.position as position',
+        'ii.alt_text as alt_text',
+        'c.upload_intent_id as upload_id',
+        'c.status as status',
+        'c.public_key as public_key',
+        'c.rejection_reason as rejection_reason',
+      ])
+      .where('ii.item_id', 'in', ids)
+      .orderBy('ii.position', 'asc')
+      .execute(),
+  ]);
+  const agrupar = <L extends { item_id: string }, T>(linhas: readonly L[], mapear: (l: L) => T): Map<string, T[]> => {
+    const mapa = new Map<string, T[]>();
+    for (const linha of linhas) {
+      const lista = mapa.get(linha.item_id) ?? [];
+      lista.push(mapear(linha));
+      mapa.set(linha.item_id, lista);
+    }
+    return mapa;
+  };
   return {
+    especies: agrupar(especies, (l) => l.species),
+    tags: agrupar(tags, (l) => ({ slug: l.slug, label: l.label, active: l.active })),
+    imagens: agrupar(imagens, (l) => ({
+      uploadId: l.upload_id,
+      imageId: l.image_id,
+      position: Number(l.position),
+      altText: l.alt_text,
+      status: l.status,
+      publicKey: l.public_key,
+      rejectionReason: l.rejection_reason,
+    })),
+  };
+}
+
+function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo {
+  return {
+    species: ordenarEspecies(extra.especies.get(l.id) ?? []),
+    tags: extra.tags.get(l.id) ?? [],
+    imagens: extra.imagens.get(l.id) ?? [],
     id: l.id,
     slug: l.slug,
     partner: { slug: l.partner_slug, name: l.partner_name, host: l.partner_host },
@@ -215,12 +298,61 @@ async function parceiroPorId(db: DbExecutor, id: string): Promise<ParceiroAdmini
 
 async function itemPorSlug(db: DbExecutor, slug: string): Promise<ItemAdministrativo | null> {
   const linha = await consultaDeItens(db).where('i.slug', '=', slug).executeTakeFirst();
-  return linha === undefined ? null : comoItem(linha);
+  return linha === undefined ? null : comoItem(linha, await complementosDosItens(db, [linha.id]));
 }
 
 async function itemPorId(db: DbExecutor, id: string): Promise<ItemAdministrativo> {
   const linha = await consultaDeItens(db).where('i.id', '=', id).executeTakeFirstOrThrow();
-  return comoItem(linha);
+  return comoItem(linha, await complementosDosItens(db, [linha.id]));
+}
+
+interface LinhaDaTag {
+  id: string;
+  slug: string;
+  label: string;
+  active: boolean;
+  item_count: string | number;
+  created_at: Date;
+  updated_at: Date;
+  version: number;
+}
+
+function comoTag(l: LinhaDaTag): TagAdministrativa {
+  return {
+    id: l.id,
+    slug: l.slug,
+    label: l.label,
+    active: l.active,
+    itemCount: Number(l.item_count),
+    createdAt: l.created_at,
+    updatedAt: l.updated_at,
+    version: Number(l.version),
+  };
+}
+
+function consultaDeTags(db: DbExecutor) {
+  return db
+    .selectFrom('store_tags as t')
+    .select([
+      't.id as id',
+      't.slug as slug',
+      't.label as label',
+      't.active as active',
+      't.created_at as created_at',
+      't.updated_at as updated_at',
+      't.version as version',
+      (eb) =>
+        eb
+          .selectFrom('store_item_tags as it')
+          .select((e) => e.fn.countAll<string>().as('n'))
+          .whereRef('it.tag_id', '=', 't.id')
+          .as('item_count'),
+    ]);
+}
+
+async function tagPorId(db: DbExecutor, id: string): Promise<TagAdministrativa> {
+  const linha = await consultaDeTags(db).where('t.id', '=', id).executeTakeFirstOrThrow();
+  return comoTag(linha as LinhaDaTag);
 }
 
 /**
@@ -242,6 +374,32 @@ export function construtorDaListagemDoPainel(db: DbExecutor, recorte: RecorteDeI
   }
   if (recorte.category !== undefined) consulta = consulta.where('i.category', '=', recorte.category);
   if (recorte.partnerSlug !== undefined) consulta = consulta.where('p.slug', '=', recorte.partnerSlug);
+
+  if (recorte.species !== undefined) {
+    const especie = recorte.species;
+    consulta = consulta.where((eb) =>
+      eb.exists(
+        eb
+          .selectFrom('store_item_species as s')
+          .select(sql`1`.as('um'))
+          .whereRef('s.item_id', '=', 'i.id')
+          .where('s.species', '=', especie),
+      ),
+    );
+  }
+  if (recorte.tagSlug !== undefined) {
+    const slug = recorte.tagSlug;
+    consulta = consulta.where((eb) =>
+      eb.exists(
+        eb
+          .selectFrom('store_item_tags as it')
+          .innerJoin('store_tags as t', 't.id', 'it.tag_id')
+          .select(sql`1`.as('um'))
+          .whereRef('it.item_id', '=', 'i.id')
+          .where('t.slug', '=', slug),
+      ),
+    );
+  }
 
   if (recorte.publicationState === 'draft') {
     consulta = consulta.where('i.published_at', 'is', null);
@@ -411,6 +569,114 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
     },
 
     registrarIntencaoDeCatalogo: (nova) => deps.imagens.registrarIntencao(trx, nova),
+    envioDeCatalogo: (uploadId) => deps.imagens.envio(trx, uploadId),
+    confirmarEnvioDeCatalogo: (entrada) => deps.imagens.confirmar(trx, entrada),
+
+    recarregarItem: (id) => itemPorId(trx, id),
+
+    async substituirEspecies(itemId, especies: readonly EspecieDoItem[]) {
+      await trx.deleteFrom('store_item_species').where('item_id', '=', itemId).execute();
+      if (especies.length === 0) return;
+      await trx
+        .insertInto('store_item_species')
+        .values(especies.map((species) => ({ item_id: itemId, species })))
+        .execute();
+    },
+
+    async tagsPorSlugs(slugs) {
+      if (slugs.length === 0) return [];
+      return trx.selectFrom('store_tags').select(['id', 'slug']).where('slug', 'in', slugs).execute();
+    },
+
+    async substituirTags(itemId, tagIds) {
+      await trx.deleteFrom('store_item_tags').where('item_id', '=', itemId).execute();
+      if (tagIds.length === 0) return;
+      await trx
+        .insertInto('store_item_tags')
+        .values(tagIds.map((tag_id) => ({ item_id: itemId, tag_id })))
+        .execute();
+    },
+
+    async substituirImagens(itemId, imagens) {
+      // Apagar e inserir, e nao atualizar posicao por posicao: a galeria e
+      // substituida inteira pelo contrato, e a unicidade de posicao e diferida,
+      // entao a ordem nova so e conferida no COMMIT.
+      await trx.deleteFrom('store_item_images').where('item_id', '=', itemId).execute();
+      if (imagens.length === 0) return;
+      await trx
+        .insertInto('store_item_images')
+        .values(
+          imagens.map((i) => ({
+            item_id: itemId,
+            image_id: i.imageId,
+            position: i.position,
+            alt_text: i.altText,
+          })),
+        )
+        .execute();
+    },
+
+    async itemDaImagem(imageId) {
+      const linha = await trx
+        .selectFrom('store_item_images')
+        .select('item_id')
+        .where('image_id', '=', imageId)
+        .executeTakeFirst();
+      return linha?.item_id ?? null;
+    },
+
+    async tagPorSlug(slug) {
+      const linha = await consultaDeTags(trx).where('t.slug', '=', slug).forUpdate('t').executeTakeFirst();
+      return linha === undefined ? null : comoTag(linha as LinhaDaTag);
+    },
+
+    async contarTagsAtivasComTrava() {
+      await sql`select pg_advisory_xact_lock(${TRAVA_DO_VOCABULARIO})`.execute(trx);
+      const linha = await trx
+        .selectFrom('store_tags')
+        .select((eb) => eb.fn.countAll<string>().as('n'))
+        .where('active', '=', true)
+        .executeTakeFirst();
+      return Number(linha?.n ?? 0);
+    },
+
+    async inserirTag(nova: NovaTag) {
+      const agora = new Date(nova.agora);
+      await comSlugTraduzido<void>('store_tag', INDICE_DA_TAG)(async () => {
+        await trx
+          .insertInto('store_tags')
+          .values({
+            id: nova.id,
+            slug: nova.slug,
+            label: nova.label,
+            active: true,
+            created_at: agora,
+            updated_at: agora,
+            version: 1,
+          })
+          .execute();
+      });
+      return tagPorId(trx, nova.id);
+    },
+
+    async atualizarTag(id, versaoLida, mudanca: MudancaDeTag, agora: Instant) {
+      const atualizada = await comSlugTraduzido<{ id: string } | undefined>('store_tag', INDICE_DA_TAG)(() =>
+        trx
+          .updateTable('store_tags')
+          .set((eb) => ({
+            ...(mudanca.slug === undefined ? {} : { slug: mudanca.slug }),
+            ...(mudanca.label === undefined ? {} : { label: mudanca.label }),
+            ...(mudanca.active === undefined ? {} : { active: mudanca.active }),
+            updated_at: new Date(agora),
+            version: eb('version', '+', 1),
+          }))
+          .where('id', '=', id)
+          .where('version', '=', versaoLida)
+          .returning('id')
+          .executeTakeFirst(),
+      );
+      return atualizada === undefined ? null : tagPorId(trx, id);
+    },
 
     registrarNaTrilha: (evento) => deps.trilha.recordIn(trx, evento),
   };
@@ -477,16 +743,39 @@ export function criarCatalogoAdministrativoRepository(
               ? base.orderBy(sql`i.price_checked_at asc nulls last`).orderBy('i.slug', 'asc')
               : base.orderBy('i.sort_order', 'asc').orderBy('i.slug', 'asc');
 
-      const linhas = await ordenada
+      const linhas = (await ordenada
         .limit(recorte.limit)
         .offset((recorte.page - 1) * recorte.limit)
-        .execute();
+        .execute()) as LinhaDoItem[];
+      const extra = await complementosDosItens(db, linhas.map((l) => l.id));
       return {
-        itens: (linhas as LinhaDoItem[]).map(comoItem),
+        itens: linhas.map((l) => comoItem(l, extra)),
         total: Number(contagem?.total ?? 0),
       };
     },
 
     itemPorSlug: (slug) => itemPorSlug(db, slug),
+
+    async listarTags(recorte: RecorteDeTags): Promise<Pagina<TagAdministrativa>> {
+      let base = db.selectFrom('store_tags as t');
+      let pagina = consultaDeTags(db);
+      if (recorte.q !== undefined && recorte.q !== '') {
+        const padrao = `%${escaparCuringas(recorte.q)}%`;
+        base = base.where(sql<boolean>`t.label ilike ${padrao}`);
+        pagina = pagina.where(sql<boolean>`t.label ilike ${padrao}`);
+      }
+      if (recorte.active !== undefined) {
+        base = base.where('t.active', '=', recorte.active);
+        pagina = pagina.where('t.active', '=', recorte.active);
+      }
+      const contagem = await base.select((eb) => eb.fn.countAll<string>().as('total')).executeTakeFirst();
+      const linhas = await pagina
+        .orderBy('t.label', 'asc')
+        .orderBy('t.slug', 'asc')
+        .limit(recorte.limit)
+        .offset((recorte.page - 1) * recorte.limit)
+        .execute();
+      return { itens: (linhas as LinhaDaTag[]).map(comoTag), total: Number(contagem?.total ?? 0) };
+    },
   };
 }

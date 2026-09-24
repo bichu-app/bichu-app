@@ -597,7 +597,10 @@ export async function main(): Promise<void> {
       },
       clock: systemClock,
     });
-    registrarRotasDaVitrine(escopo, { vitrine: criarStoreRepository(db), clock: systemClock });
+    registrarRotasDaVitrine(escopo, {
+      vitrine: criarStoreRepository(db, urlDeMidia),
+      clock: systemClock,
+    });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);

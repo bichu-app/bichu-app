@@ -109,6 +109,7 @@ function bancada(): Bancada {
       },
     },
     clock: { now: () => AGORA },
+    urlDeMidia: (chave) => `https://midia.bichu.test/${chave}`,
   });
   const contrato = carregarContrato(resolve(process.cwd(), 'api/openapi.yaml'));
 
@@ -160,6 +161,7 @@ const ITEM = {
   title: 'Racao para cao adulto, 10 kg',
   summary: 'Racao seca para caes adultos de porte medio.',
   category: 'food',
+  species: ['dog'],
   target_url: 'https://lojadobairro.test/racao-adulto-10kg',
   price: { amount: 18990, currency: 'BRL', checked_at: '2026-09-22' },
 };
@@ -198,6 +200,30 @@ void describe('rotas da escrita administrativa da Loja, dentro da guarda', () =>
       assert.doesNotMatch(JSON.stringify(resposta.corpo), UUID, 'UUID interno na resposta do painel');
     }
     assert.equal(b.estado().trilha.length, 3);
+  });
+
+  void it('tag pela rota: 201 com ETag; a segunda grafia e 409; o item a referencia e a lista filtra', async () => {
+    const t = await chamar(b, 'POST', '/admin/store/tags', { corpo: { label: 'Porte médio' } });
+    assert.equal(t.status, 201, JSON.stringify(t.corpo));
+    assert.equal(t.corpo['slug'], 'porte-medio');
+    assert.equal(t.etag, '"1"');
+    const dup = await chamar(b, 'POST', '/admin/store/tags', { corpo: { label: 'porte medio' } });
+    assert.equal(dup.status, 409);
+    const campoExtra = await chamar(b, 'POST', '/admin/store/tags', { corpo: { label: 'Outra', slug: 'x' } });
+    assert.equal(campoExtra.status, 400);
+
+    await chamar(b, 'POST', '/admin/store/partners', { corpo: PARCEIRO });
+    const i = await chamar(b, 'POST', '/admin/store/items', { corpo: { ...ITEM, tag_slugs: ['porte-medio'] } });
+    assert.equal(i.status, 201, JSON.stringify(i.corpo));
+    assert.deepEqual(i.corpo['tags'], [{ slug: 'porte-medio', label: 'Porte médio', active: true }]);
+    assert.deepEqual(i.corpo['species'], ['dog']);
+
+    const desativada = await chamar(b, 'PATCH', '/admin/store/tags/porte-medio', {
+      corpo: { active: false },
+      ifMatch: t.etag ?? '',
+    });
+    assert.equal(desativada.status, 200, JSON.stringify(desativada.corpo));
+    assert.equal(desativada.corpo['active'], false);
   });
 
   void it('ISCA: tutor recebe 403 e NADA e gravado, nem trilha', async () => {
@@ -299,8 +325,8 @@ void describe('a declaracao de cada rota bate com o contrato', () => {
     return op;
   }
 
-  void it('onze rotas, todas com operacao no contrato', () => {
-    assert.equal(declaradas.length, 11, 'rota nova ou sumida; confira contra o contrato');
+  void it('catorze rotas, todas com operacao no contrato', () => {
+    assert.equal(declaradas.length, 14, 'rota nova ou sumida; confira contra o contrato');
     for (const rota of declaradas) assert.equal(operacao(rota)['operationId'], rota.operationId);
   });
 

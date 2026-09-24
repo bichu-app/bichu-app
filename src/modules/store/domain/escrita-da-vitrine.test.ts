@@ -22,6 +22,8 @@ import {
   lerIfMatch,
   projetarItemAdministrativo,
   projetarParceiro,
+  conferirRotulo,
+  slugDaTag,
   somarDias,
   validoAte,
   type ItemAdministrativo,
@@ -33,6 +35,7 @@ import type { Instant } from '../../../shared/types/brands.js';
 
 const AGORA = Date.UTC(2026, 8, 23, 15, 0, 0) as Instant;
 const data = (iso: string): Date => comoData(Date.parse(iso) as Instant);
+const URL_DE_MIDIA = (chave: string): string => `https://midia.bichu.test/${chave}`;
 
 function item(ajustes: Partial<ItemAdministrativo> = {}): ItemAdministrativo {
   return {
@@ -44,6 +47,9 @@ function item(ajustes: Partial<ItemAdministrativo> = {}): ItemAdministrativo {
     category: 'food',
     targetUrl: 'https://lojadobairro.test/racao-adulto-10kg',
     imageUrl: null,
+    species: ['dog'],
+    tags: [{ slug: 'porte-medio', label: 'Porte medio', active: true }],
+    imagens: [],
     priceAmount: 18990,
     priceCurrency: 'BRL',
     priceCheckedAt: '2026-09-22',
@@ -73,7 +79,7 @@ void describe('o preco no painel', () => {
 
   void it('ISCA: preco consultado ha 31 dias sai COM o valor no painel, marcado vencido', () => {
     const vencido = item({ priceCheckedAt: '2026-08-23' });
-    const painel = projetarItemAdministrativo(vencido, AGORA);
+    const painel = projetarItemAdministrativo(vencido, AGORA, URL_DE_MIDIA);
     assert.equal(painel.price_status, 'vencido');
     assert.deepEqual(painel.price, {
       amount: 18990,
@@ -92,6 +98,9 @@ void describe('o preco no painel', () => {
         summary: vencido.summary,
         category: vencido.category,
         imageUrl: null,
+        imageAltText: null,
+        species: ['dog'],
+        tags: [],
         targetUrl: vencido.targetUrl,
         partnerSlug: vencido.partner.slug,
         partnerName: vencido.partner.name,
@@ -108,7 +117,7 @@ void describe('o preco no painel', () => {
   });
 
   void it('preco consultado ha 30 dias ainda e vigente no painel', () => {
-    const painel = projetarItemAdministrativo(item({ priceCheckedAt: '2026-08-24' }), AGORA);
+    const painel = projetarItemAdministrativo(item({ priceCheckedAt: '2026-08-24' }), AGORA, URL_DE_MIDIA);
     assert.equal(painel.price_status, 'vigente');
   });
 
@@ -116,6 +125,7 @@ void describe('o preco no painel', () => {
     const painel = projetarItemAdministrativo(
       item({ priceAmount: null, priceCurrency: null, priceCheckedAt: null }),
       AGORA,
+      URL_DE_MIDIA,
     );
     assert.equal(painel.price, null);
     assert.equal(painel.price_status, 'sem_preco');
@@ -195,9 +205,10 @@ void describe('nenhum UUID interno na saida do painel', () => {
   const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
   void it('ISCA: o item projetado nao carrega `id` nem valor com forma de UUID', () => {
-    const projetado = projetarItemAdministrativo(item(), AGORA);
+    const projetado = projetarItemAdministrativo(item(), AGORA, URL_DE_MIDIA);
     assert.equal('id' in projetado, false);
     assert.doesNotMatch(JSON.stringify(projetado), UUID);
+    assert.doesNotMatch(JSON.stringify(projetado), /000000000001/, 'o id interno do item saiu');
   });
 
   void it('ISCA: o parceiro projetado nao carrega `id`', () => {
@@ -219,18 +230,82 @@ void describe('nenhum UUID interno na saida do painel', () => {
   });
 });
 
-void describe('a imagem no painel', () => {
-  void it('sem imagem: null', () => {
-    assert.equal(projetarItemAdministrativo(item(), AGORA).image, null);
+void describe('a galeria no painel', () => {
+  const imagem = (ajuste: Partial<ItemAdministrativo['imagens'][number]>): ItemAdministrativo['imagens'][number] => ({
+    uploadId: '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e70',
+    imageId: '018f7c1e-7a2b-7c3d-9e4f-00000000beef',
+    position: 0,
+    altText: 'Saco de racao de 10 kg',
+    status: 'ready',
+    publicKey: 'card/abc.webp',
+    rejectionReason: null,
+    ...ajuste,
   });
 
-  void it('URL do parceiro (massa): external, sempre ready', () => {
-    const p = projetarItemAdministrativo(item({ imageUrl: 'https://cdn.parceiro.test/x.jpg' }), AGORA);
-    assert.deepEqual(p.image, {
-      source: 'external',
-      status: 'ready',
-      url: 'https://cdn.parceiro.test/x.jpg',
-      rejection_reason: null,
-    });
+  void it('pronta ganha url; processando e recusada nao', () => {
+    const p = projetarItemAdministrativo(
+      item({
+        imagens: [
+          imagem({}),
+          imagem({ uploadId: 'u2', imageId: 'i2', position: 1, status: 'processing', publicKey: null }),
+          imagem({ uploadId: 'u3', imageId: 'i3', position: 2, status: 'rejected', publicKey: null, rejectionReason: 'ilegivel' }),
+        ],
+      }),
+      AGORA,
+      URL_DE_MIDIA,
+    );
+    assert.deepEqual(
+      p.images.map((i) => [i.position, i.status, i.url, i.rejection_reason]),
+      [
+        [0, 'ready', 'https://midia.bichu.test/card/abc.webp', null],
+        [1, 'processing', null, null],
+        [2, 'rejected', null, 'ilegivel'],
+      ],
+    );
+    assert.equal(p.images[0]?.upload_id, '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e70');
+    assert.equal(p.images[0]?.alt_text, 'Saco de racao de 10 kg');
+  });
+
+  void it('ISCA: o id interno da imagem (catalog_images.id) nao sai', () => {
+    const p = projetarItemAdministrativo(item({ imagens: [imagem({})] }), AGORA, URL_DE_MIDIA);
+    assert.doesNotMatch(JSON.stringify(p), /00000000beef/);
+  });
+
+  void it('especie e tags saem como o painel as ve, inclusive a tag inativa', () => {
+    const p = projetarItemAdministrativo(
+      item({ species: ['dog', 'cat'], tags: [{ slug: 'antiga', label: 'Antiga', active: false }] }),
+      AGORA,
+      URL_DE_MIDIA,
+    );
+    assert.deepEqual(p.species, ['dog', 'cat']);
+    assert.deepEqual(p.tags, [{ slug: 'antiga', label: 'Antiga', active: false }]);
+  });
+});
+
+void describe('o vocabulario de tags', () => {
+  void it('o slug e derivado: sem acento, minusculo, espaco vira hifen', () => {
+    assert.equal(slugDaTag('Ração'), 'racao');
+    assert.equal(slugDaTag('  Porte   Médio '), 'porte-medio');
+    assert.equal(slugDaTag('Anti - pulgas'), 'anti-pulgas');
+  });
+
+  void it('ISCA: duas grafias do mesmo rotulo dao o mesmo slug', () => {
+    assert.equal(slugDaTag('Ração'), slugDaTag('racao'));
+    assert.equal(slugDaTag('RACAO'), slugDaTag('ração'));
+  });
+
+  void it('rotulo aparado e com espacos juntados', () => {
+    assert.deepEqual(conferirRotulo('label', '  Porte   medio ').rotulo, 'Porte medio');
+  });
+
+  void it('ISCA: URL, e-mail e simbolo sao recusados (tag_charset)', () => {
+    for (const rotulo of ['http://x.io', 'a@b.io', 'promo!', 'x/y', 'oi<b>']) {
+      assert.deepEqual(conferirRotulo('label', rotulo).erros.map((e) => e.code), ['tag_charset'], rotulo);
+    }
+  });
+
+  void it('rotulo que nao forma slug de 3 caracteres: tag_slug_invalid', () => {
+    assert.deepEqual(conferirRotulo('label', 'Pé').erros.map((e) => e.code), ['tag_slug_invalid']);
+    assert.deepEqual(conferirRotulo('label', 'Gatos').erros, []);
   });
 });

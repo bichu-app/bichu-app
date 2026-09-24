@@ -41,20 +41,35 @@ import {
   lerIfMatch,
   projetarItemAdministrativo,
   projetarParceiro,
+  projetarTag,
+  conferirRotulo,
+  TETO_DE_IMAGENS_POR_ITEM,
+  TETO_DE_TAGS_ATIVAS,
+  TETO_DE_TAGS_POR_ITEM,
   type EstadoDePublicacao,
+  type TagAdministrativa,
+  type TagProjetada,
   type ItemAdministrativo,
   type ItemAdministrativoProjetado,
   type ParceiroAdministrativo,
   type ParceiroProjetado,
 } from '../domain/escrita-da-vitrine.js';
-import type { CategoriaDaVitrine, EstadoDoPreco } from '../domain/item-da-vitrine.js';
+import {
+  ESPECIES_DO_ITEM,
+  type CategoriaDaVitrine,
+  type EspecieDoItem,
+  type EstadoDoPreco,
+} from '../domain/item-da-vitrine.js';
 import {
   SlugOcupado,
   type CatalogoAdministrativoRepository,
   type MudancaDeItem,
   type MudancaDeParceiro,
   type OrdemDoPainel,
+  type ImagemNaPosicao,
+  type MudancaDeTag,
   type Preco,
+  type TransacaoDoCatalogo,
 } from '../ports/catalogo-administrativo.js';
 
 /** Quem escreve, para a trilha. Nunca o e-mail (BICHUS-56 criterio 3). */
@@ -95,8 +110,25 @@ export interface CorpoDeItem {
   readonly category: CategoriaDaVitrine;
   readonly target_url: string;
   readonly price?: PrecoDoCorpo;
-  readonly image_upload_id?: string;
+  readonly species: readonly EspecieDoItem[];
+  readonly tag_slugs?: readonly string[];
+  readonly images?: readonly ImagemDoCorpo[];
   readonly sort_order?: number;
+}
+
+/** `CatalogImageInput`: um envio e o texto alternativo dele. */
+export interface ImagemDoCorpo {
+  readonly upload_id: string;
+  readonly alt_text: string;
+}
+
+export interface CorpoDeTag {
+  readonly label: string;
+}
+
+export interface PatchDeTag {
+  readonly label?: string;
+  readonly active?: boolean;
 }
 
 export interface PatchDeItem {
@@ -107,7 +139,9 @@ export interface PatchDeItem {
   readonly category?: CategoriaDaVitrine;
   readonly target_url?: string;
   readonly price?: PrecoDoCorpo | null;
-  readonly image_upload_id?: string | null;
+  readonly species?: readonly EspecieDoItem[];
+  readonly tag_slugs?: readonly string[];
+  readonly images?: readonly ImagemDoCorpo[];
   readonly sort_order?: number;
 }
 
@@ -139,6 +173,8 @@ export interface DependenciasDoCatalogo {
   readonly envios: PreparadorDeEnvioDeCatalogo;
   readonly ids: IdGenerator;
   readonly clock: Clock;
+  /** A URL publica da derivada, montada na leitura. O banco guarda so a chave. */
+  readonly urlDeMidia: (chave: string) => string;
 }
 
 function slugOcupado(): AppError {
@@ -185,34 +221,15 @@ function errosDoPreco(preco: PrecoDoCorpo | null | undefined, agora: Instant): P
   return [];
 }
 
-/**
- * `image_upload_id` e recusado com 400 enquanto a emenda de imagens nao sai.
- *
- * O contrato declara o campo, e o cliente pediu em 23/09 varias imagens por
- * produto: a arquitetura vai trocar o `image_id` unico do apendice A.2 por uma
- * tabela propria. Aceitar e ignorar mentiria ("salvei a imagem", e nao salvou);
- * gravar no desenho unico criaria o que a emenda vai apagar. A recusa diz o que
- * aconteceu, e some quando a emenda entrar.
- */
-function errosDaImagemAdiada(uploadId: string | null | undefined): ProblemFieldError[] {
-  if (uploadId === undefined) return [];
-  return [
-    {
-      field: 'image_upload_id',
-      code: 'not_available',
-      message: 'A imagem do produto ainda não pode ser salva por aqui.',
-    },
-  ];
-}
-
 /** Os campos do parceiro como a trilha os grava. */
 function retratoDoParceiro(p: ParceiroAdministrativo): Record<string, unknown> {
   return { slug: p.slug, name: p.name, host: p.host, active: p.active, sort_order: p.sortOrder };
 }
 
 /**
- * Os campos do item como a trilha os grava. Sem imagem: o painel nao a escreve
- * nesta versao (ver `errosDaImagemAdiada`).
+ * Os campos do item como a trilha os grava. A galeria vai como a lista que o
+ * painel mandou (`upload_id` e texto alternativo, na ordem): e isso que
+ * responde "que imagens estavam aqui antes" numa investigacao.
  */
 function retratoDoItem(i: ItemAdministrativo): Record<string, unknown> {
   return {
@@ -227,7 +244,65 @@ function retratoDoItem(i: ItemAdministrativo): Record<string, unknown> {
         ? null
         : { amount: i.priceAmount, currency: i.priceCurrency, checked_at: i.priceCheckedAt },
     sort_order: i.sortOrder,
+    species: [...i.species],
+    tag_slugs: i.tags.map((t) => t.slug),
+    images: i.imagens.map((m) => ({ upload_id: m.uploadId, alt_text: m.altText })),
   };
+}
+
+function retratoDaTag(t: TagAdministrativa): Record<string, unknown> {
+  return { slug: t.slug, label: t.label, active: t.active };
+}
+
+function tagDesconhecida(): AppError {
+  return problemas.validacao([
+    { field: 'tag_slugs', code: 'unknown_tag', message: 'Tag que não está no vocabulário.' },
+  ]);
+}
+
+/**
+ * O que o corpo diz de especie, tags e imagens, conferido antes de abrir a
+ * transacao. O que depende do banco (tag existe, envio serve) e conferido la
+ * dentro, por `aplicarEspecieTagsEImagens`.
+ */
+function errosDaGaleriaEDaEspecie(corpo: {
+  readonly species?: readonly string[] | undefined;
+  readonly tag_slugs?: readonly string[] | undefined;
+  readonly images?: readonly ImagemDoCorpo[] | undefined;
+}): ProblemFieldError[] {
+  const erros: ProblemFieldError[] = [];
+  if (corpo.species !== undefined) {
+    const unicas = new Set(corpo.species);
+    const conhecidas = corpo.species.every((e) => (ESPECIES_DO_ITEM as readonly string[]).includes(e));
+    if (unicas.size === 0 || unicas.size !== corpo.species.length || !conhecidas) {
+      erros.push({ field: 'species', code: 'species_invalid', message: 'De uma a três espécies, sem repetir.' });
+    }
+  }
+  if (corpo.tag_slugs !== undefined) {
+    if (corpo.tag_slugs.length > TETO_DE_TAGS_POR_ITEM || new Set(corpo.tag_slugs).size !== corpo.tag_slugs.length) {
+      erros.push({
+        field: 'tag_slugs',
+        code: 'too_many_tags',
+        message: `Até ${String(TETO_DE_TAGS_POR_ITEM)} tags, sem repetir.`,
+      });
+    }
+  }
+  if (corpo.images !== undefined) {
+    if (corpo.images.length > TETO_DE_IMAGENS_POR_ITEM) {
+      erros.push({
+        field: 'images',
+        code: 'too_many_images',
+        message: `Até ${String(TETO_DE_IMAGENS_POR_ITEM)} imagens.`,
+      });
+    }
+    if (new Set(corpo.images.map((i) => i.upload_id.toLowerCase())).size !== corpo.images.length) {
+      erros.push({ field: 'images', code: 'duplicate_upload', message: 'A mesma imagem apareceu duas vezes.' });
+    }
+    corpo.images.forEach((imagem, n) => {
+      erros.push(...errosDeTexto(`images[${String(n)}].alt_text`, imagem.alt_text, 2, 150));
+    });
+  }
+  return erros;
 }
 
 /** So os campos que mudaram, nos dois lados. */
@@ -275,7 +350,7 @@ export class CatalogoAdministrativo {
   }
 
   private projetarItem(item: ItemAdministrativo): ItemAdministrativoProjetado {
-    return projetarItemAdministrativo(item, this.agora());
+    return projetarItemAdministrativo(item, this.agora(), this.deps.urlDeMidia);
   }
 
   private escritoDoItem(item: ItemAdministrativo): Escrito<ItemAdministrativoProjetado> {
@@ -427,10 +502,10 @@ export class CatalogoAdministrativo {
   async criarItem(autor: Autor, corpo: CorpoDeItem): Promise<Escrito<ItemAdministrativoProjetado>> {
     const agora = this.agora();
     const erros = [
-      ...errosDaImagemAdiada(corpo.image_upload_id),
       ...errosDeTexto('title', corpo.title, 2, 120),
       ...errosDeTexto('summary', corpo.summary, 2, 180),
       ...errosDoPreco(corpo.price, agora),
+      ...errosDaGaleriaEDaEspecie(corpo),
     ];
     if (erros.length > 0) throw problemas.validacao(erros);
 
@@ -459,12 +534,15 @@ export class CatalogoAdministrativo {
         }),
       );
 
+      await this.aplicarEspecieTagsEImagens(tx, criado.id, corpo, agora);
+      const completo = await tx.recarregarItem(criado.id);
+
       await tx.registrarNaTrilha(
         this.evento(autor, 'admin.store_item.created', 'store_item', criado.id, {
-          after: { ...retratoDoItem(criado), publication_state: 'draft' },
+          after: { ...retratoDoItem(completo), publication_state: 'draft' },
         }),
       );
-      return this.escritoDoItem(criado);
+      return this.escritoDoItem(completo);
     });
   }
 
@@ -478,10 +556,10 @@ export class CatalogoAdministrativo {
     const versao = versaoExigida(ifMatch);
     const agora = this.agora();
     const erros = [
-      ...errosDaImagemAdiada(patch.image_upload_id),
       ...(patch.title === undefined ? [] : errosDeTexto('title', patch.title, 2, 120)),
       ...(patch.summary === undefined ? [] : errosDeTexto('summary', patch.summary, 2, 180)),
       ...errosDoPreco(patch.price, agora),
+      ...errosDaGaleriaEDaEspecie(patch),
     ];
     if (erros.length > 0) throw problemas.validacao(erros);
 
@@ -524,8 +602,13 @@ export class CatalogoAdministrativo {
         ...(patch.sort_order === undefined ? {} : { sortOrder: patch.sort_order }),
       };
 
+      // O UPDATE vem primeiro, mesmo quando so a galeria muda: e ele que
+      // confere a versao lida e a incrementa, e sem ele duas edicoes da galeria
+      // com o mesmo If-Match passariam as duas.
       const alterado = await comSlugLivre(() => tx.atualizarItem(atual.id, versao, mudanca, agora));
       if (alterado === null) throw versaoMudou();
+      await this.aplicarEspecieTagsEImagens(tx, atual.id, patch, agora);
+      const completo = await tx.recarregarItem(atual.id);
 
       await tx.registrarNaTrilha(
         this.evento(
@@ -533,10 +616,10 @@ export class CatalogoAdministrativo {
           'admin.store_item.updated',
           'store_item',
           atual.id,
-          diferenca(retratoDoItem(atual), retratoDoItem(alterado)),
+          diferenca(retratoDoItem(atual), retratoDoItem(completo)),
         ),
       );
-      return this.escritoDoItem(alterado);
+      return this.escritoDoItem(completo);
     });
   }
 
@@ -556,6 +639,17 @@ export class CatalogoAdministrativo {
       if (atual === null) throw problemas.naoEncontrado();
       const antes = estadoDePublicacao(atual);
       if (antes === 'published') return this.escritoDoItem(atual);
+      // Pelo menos uma especie e regra da criacao E da publicacao (A.2.1): o
+      // item da massa nasceu sem especie, e ele nao volta ao app sem uma.
+      if (atual.species.length === 0) {
+        throw problemas.validacao([
+          {
+            field: 'species',
+            code: 'species_required',
+            message: 'Diga a que espécie o produto serve antes de publicar.',
+          },
+        ]);
+      }
 
       const agora = this.agora();
       const alterado = await tx.atualizarItem(
@@ -625,6 +719,171 @@ export class CatalogoAdministrativo {
     });
   }
 
+  /**
+   * Especie, tags e galeria, cada uma so quando o corpo a traz, e cada uma
+   * SUBSTITUINDO a anterior inteira (o contrato: "a lista substitui a anterior
+   * inteira"). Uma escrita, uma transacao, uma linha de trilha.
+   */
+  private async aplicarEspecieTagsEImagens(
+    tx: TransacaoDoCatalogo,
+    itemId: string,
+    corpo: {
+      readonly species?: readonly EspecieDoItem[] | undefined;
+      readonly tag_slugs?: readonly string[] | undefined;
+      readonly images?: readonly ImagemDoCorpo[] | undefined;
+    },
+    agora: Instant,
+  ): Promise<void> {
+    if (corpo.species !== undefined) await tx.substituirEspecies(itemId, corpo.species);
+
+    if (corpo.tag_slugs !== undefined) {
+      const achadas = await tx.tagsPorSlugs(corpo.tag_slugs);
+      if (achadas.length !== corpo.tag_slugs.length) throw tagDesconhecida();
+      await tx.substituirTags(
+        itemId,
+        achadas.map((t) => t.id),
+      );
+    }
+
+    if (corpo.images !== undefined) {
+      const galeria: ImagemNaPosicao[] = [];
+      for (const [position, imagem] of corpo.images.entries()) {
+        const imageId = await this.imagemDoEnvio(tx, itemId, imagem.upload_id, agora);
+        galeria.push({ imageId, position, altText: imagem.alt_text.trim() });
+      }
+      await tx.substituirImagens(itemId, galeria);
+    }
+  }
+
+  /**
+   * A confirmacao do envio e a propria escrita do item (ADR-0027 item 10).
+   *
+   * **So aceita** envio de `kind = 'catalog_image'` com `purpose = 'store_item'`.
+   * Foto de pet, de achador, capa de encontro, envio vencido, ou imagem que ja
+   * e de OUTRO item: todos recusados com `400` (T9), e com a MESMA resposta,
+   * para nao contar a quem testa ids qual deles aconteceu.
+   *
+   * Envio aberto vira `catalog_images` em `processing`, com o trabalho
+   * enfileirado na mesma transacao. Envio ja confirmado e ligado a ESTE item e
+   * reaproveitado: o painel manda a galeria inteira a cada salvamento.
+   */
+  private async imagemDoEnvio(
+    tx: TransacaoDoCatalogo,
+    itemId: string,
+    uploadId: string,
+    agora: Instant,
+  ): Promise<string> {
+    const recusa = (): AppError =>
+      problemas.validacao([
+        {
+          field: 'images',
+          code: 'upload_not_usable',
+          message: 'Uma das imagens não serve para este produto. Envie-a de novo.',
+        },
+      ]);
+
+    const envio = await tx.envioDeCatalogo(uploadId);
+    if (envio === null || envio.kind !== 'catalog_image' || envio.purpose !== 'store_item') throw recusa();
+    if (envio.confirmedAt !== null) {
+      if (envio.catalogImageId === null) throw recusa();
+      const dono = await tx.itemDaImagem(envio.catalogImageId);
+      if (dono !== null && dono !== itemId) throw recusa();
+      return envio.catalogImageId;
+    }
+    if (envio.expiresAt.getTime() <= agora) throw recusa();
+
+    const imagemId = this.deps.ids.uuidv7();
+    await tx.confirmarEnvioDeCatalogo({
+      imagemId,
+      trabalhoId: this.deps.ids.uuidv7(),
+      envioId: envio.id,
+      purpose: 'store_item',
+      agora,
+    });
+    return imagemId;
+  }
+
+  // -------------------------------------------------------------------------
+  // Vocabulario de tags (BICHUS-267, ADR-0027 item 16)
+  // -------------------------------------------------------------------------
+
+  async listarTags(recorte: {
+    q?: string | undefined;
+    active?: boolean | undefined;
+    page: number;
+    limit: number;
+  }): Promise<PaginaProjetada<TagProjetada>> {
+    const pagina = await this.deps.repositorio.listarTags(recorte);
+    return {
+      items: pagina.itens.map(projetarTag),
+      page: recorte.page,
+      limit: recorte.limit,
+      total: pagina.total,
+    };
+  }
+
+  /**
+   * A tag nasce uma vez, aqui, com rotulo conferido. Teto de 40 ativas: acima,
+   * `400 tag_vocabulary_full`. A contagem e feita sob trava da transacao, entao
+   * duas criacoes simultaneas nao passam as duas pela 40a vaga.
+   */
+  async criarTag(autor: Autor, corpo: CorpoDeTag): Promise<Escrito<TagProjetada>> {
+    const conferido = conferirRotulo('label', corpo.label);
+    if (conferido.erros.length > 0) throw problemas.validacao(conferido.erros);
+
+    return this.deps.repositorio.emTransacao(async (tx) => {
+      if ((await tx.contarTagsAtivasComTrava()) >= TETO_DE_TAGS_ATIVAS) throw vocabularioCheio();
+      const criada = await comSlugLivre(() =>
+        tx.inserirTag({
+          id: this.deps.ids.uuidv7(),
+          slug: conferido.slug,
+          label: conferido.rotulo,
+          agora: this.agora(),
+        }),
+      );
+      await tx.registrarNaTrilha(
+        this.evento(autor, 'admin.store_tag.created', 'store_tag', criada.id, { after: retratoDaTag(criada) }),
+      );
+      return { recurso: projetarTag(criada), etag: comoEtag(criada.version) };
+    });
+  }
+
+  /** Renomear troca o `slug` junto. Nao ha exclusao: desativar tira do app e mantem a ligacao. */
+  async alterarTag(
+    autor: Autor,
+    slug: string,
+    ifMatch: string | string[] | undefined,
+    patch: PatchDeTag,
+  ): Promise<Escrito<TagProjetada>> {
+    const versao = versaoExigida(ifMatch);
+    const conferido = patch.label === undefined ? undefined : conferirRotulo('label', patch.label);
+    if (conferido !== undefined && conferido.erros.length > 0) throw problemas.validacao(conferido.erros);
+
+    return this.deps.repositorio.emTransacao(async (tx) => {
+      const atual = await tx.tagPorSlug(slug);
+      if (atual === null) throw problemas.naoEncontrado();
+      if (patch.active === true && !atual.active) {
+        if ((await tx.contarTagsAtivasComTrava()) >= TETO_DE_TAGS_ATIVAS) throw vocabularioCheio();
+      }
+      const mudanca: MudancaDeTag = {
+        ...(conferido === undefined ? {} : { label: conferido.rotulo, slug: conferido.slug }),
+        ...(patch.active === undefined ? {} : { active: patch.active }),
+      };
+      const alterada = await comSlugLivre(() => tx.atualizarTag(atual.id, versao, mudanca, this.agora()));
+      if (alterada === null) throw versaoMudou();
+      await tx.registrarNaTrilha(
+        this.evento(
+          autor,
+          'admin.store_tag.updated',
+          'store_tag',
+          atual.id,
+          diferenca(retratoDaTag(atual), retratoDaTag(alterada)),
+        ),
+      );
+      return { recurso: projetarTag(alterada), etag: comoEtag(alterada.version) };
+    });
+  }
+
   // -------------------------------------------------------------------------
   // Imagem de catalogo (BICHUS-267; ADR-0007 e ADR-0027 item 10)
   // -------------------------------------------------------------------------
@@ -664,6 +923,16 @@ export class CatalogoAdministrativo {
 
     return { uploadId: envio.uploadId, autorizacao: envio.autorizacao };
   }
+}
+
+function vocabularioCheio(): AppError {
+  return problemas.validacao([
+    {
+      field: 'label',
+      code: 'tag_vocabulary_full',
+      message: `O vocabulário já tem ${String(TETO_DE_TAGS_ATIVAS)} tags ativas. Desative uma antes.`,
+    },
+  ]);
 }
 
 /** Traduz a violacao de unicidade do adaptador para o 409 do contrato. */
