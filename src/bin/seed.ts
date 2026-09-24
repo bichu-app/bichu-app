@@ -220,15 +220,19 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
         `o item '${item.slug}' aponta para o parceiro '${item.partnerSlug}', que nao esta em PARCEIROS_DA_VITRINE`,
       );
     }
+    // `published_at` em TODO item da massa, inclusive no inativo (ADR-0027
+    // A.2): a massa descreve itens que estiveram na vitrine, e o inativo e o
+    // retirado, nao o rascunho. `store_items_publicado_tem_data` recusaria o
+    // ativo sem data, e o inativo sem data viraria `draft` no painel.
     await sql`
       insert into store_items (
         id, slug, partner_id, title, summary, category, image_url, target_url,
-        price_amount, price_currency, price_checked_at, active, sort_order
+        price_amount, price_currency, price_checked_at, active, sort_order, published_at
       ) values (
         ${ids.uuidv7()}::uuid, ${item.slug}, ${partnerId}::uuid, ${item.title}, ${item.summary},
         ${item.category}, ${item.imageUrl}, ${item.targetUrl},
         ${item.priceAmount}, ${item.priceAmount === null ? null : 'BRL'},
-        ${data}::date, ${item.active}, ${item.sortOrder}
+        ${data}::date, ${item.active}, ${item.sortOrder}, ${hoje}::timestamptz
       )
     `.execute(db);
   }

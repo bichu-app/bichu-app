@@ -149,12 +149,19 @@ export function diasDeCalendario(desde: string, ate: Instant): number {
 /**
  * O estado do preco de um item, agora.
  *
+ * Recebe so os dois campos que decidem, porque a projecao do painel
+ * (`projetarItemAdministrativo`) usa esta MESMA funcao: "vencido" precisa querer
+ * dizer a mesma coisa no app e no painel.
+ *
  * **A fronteira e `> DIAS_DE_VALIDADE_DO_PRECO`, e nao `>=`.** Trinta dias de
  * validade significa que o trigesimo dia ainda vale; recusar no trigesimo faria
  * a validade ser de vinte e nove, e a divergencia entre o numero escrito e o
  * numero aplicado e a classe de defeito que ninguem procura.
  */
-export function estadoDoPreco(item: ItemDaVitrine, agora: Instant): EstadoDoPreco {
+export function estadoDoPreco(
+  item: Pick<ItemDaVitrine, 'priceAmount' | 'priceCheckedAt'>,
+  agora: Instant,
+): EstadoDoPreco {
   if (item.priceAmount === null || item.priceCheckedAt === null) return 'sem_preco';
   return diasDeCalendario(item.priceCheckedAt, agora) > DIAS_DE_VALIDADE_DO_PRECO
     ? 'vencido'

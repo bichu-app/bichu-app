@@ -570,6 +570,19 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.store_partners',
     aoApagar: 'NO ACTION',
   },
+  // ADR-0027 A.3 (BICHUS-267). Como o apendice a escreve, sem `ON DELETE`: o
+  // envio de uma imagem de catalogo existente nao se apaga.
+  //
+  // CONSEQUENCIA MEDIDA, e ela esta nos Riscos da entrega: `upload_intents.user_id`
+  // e CASCADE, entao apagar a conta do administrador que enviou uma imagem de
+  // catalogo e RECUSADO por `catalog_images_upload_intent_id_fkey`. Para conta
+  // dedicada, que nao entra no app e nao pede exclusao por ele, isso e trava e
+  // nao perda; a decisao de desligar o envio da conta e do dono do ADR-0027.
+  'public.catalog_images.catalog_images_upload_intent_id_fkey': {
+    colunas: ['upload_intent_id'],
+    referencia: 'public.upload_intents',
+    aoApagar: 'NO ACTION',
+  },
 
   // -------------------------------------------------------------------------
   // upload_intents

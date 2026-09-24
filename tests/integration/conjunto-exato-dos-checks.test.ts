@@ -205,6 +205,18 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'status',
     valores: ['processing', 'ready', 'rejected'],
   },
+  // ADR-0027 A.3 (BICHUS-267). A imagem de catalogo, na forma de `pet_photos`:
+  // os mesmos tres estados, e o proposito gravado no envio. Os dois conjuntos
+  // sao os `enum` de `AdminCatalogImage.status` e de
+  // `AdminCatalogImageIntentInput.purpose` no contrato.
+  'public.catalog_images.catalog_images_estado': {
+    coluna: 'status',
+    valores: ['processing', 'ready', 'rejected'],
+  },
+  'public.catalog_images.catalog_images_proposito': {
+    coluna: 'purpose',
+    valores: ['store_item', 'network_event'],
+  },
   'public.pet_tags.pet_tags_revocation_reason_check': {
     coluna: 'revocation_reason',
     valores: [
@@ -325,7 +337,9 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   },
   'public.upload_intents.upload_intents_kind_check': {
     coluna: 'kind',
-    valores: ['pet_photo', 'found_report_photo', 'finder_photo'],
+    // `catalog_image` entrou com o backoffice (ADR-0027 item 10, BICHUS-267):
+    // a imagem de item da Loja ou de encontro da Rede enviada pelo painel.
+    valores: ['pet_photo', 'found_report_photo', 'finder_photo', 'catalog_image'],
   },
   'public.user_devices.user_devices_permissao': {
     coluna: 'push_permission',
@@ -537,6 +551,13 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((status <> 'ready'::text) OR ((thumb_key IS NOT NULL) AND (card_key IS NOT NULL))))",
   'public.pet_photos.pet_photos_recusada_tem_motivo':
     "CHECK (((status <> 'rejected'::text) OR (rejection_reason IS NOT NULL)))",
+  // ADR-0027 A.3 (BICHUS-267). A mesma forma de `pet_photos`: pronta tem a
+  // chave da derivada publica, recusada tem motivo. E a primeira que impede
+  // servir a imagem antes de pronta pelo caminho do banco.
+  'public.catalog_images.catalog_images_pronta_tem_chave':
+    "CHECK (((status <> 'ready'::text) OR (public_key IS NOT NULL)))",
+  'public.catalog_images.catalog_images_recusada_tem_motivo':
+    "CHECK (((status <> 'rejected'::text) OR (rejection_reason IS NOT NULL)))",
   'public.pet_tags.pet_tags_code_suffix_alfabeto':
     "CHECK ((code_suffix ~ '^[0-9A-HJKMNP-TV-Z]{4}$'::text))",
   'public.pet_tags.pet_tags_revogacao_e_completa':
@@ -593,6 +614,18 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ser ligada. O CHECK é o que impede a intenção de foto de achado sem achado.
   'public.upload_intents.upload_intents_foto_de_achado_tem_aviso':
     "CHECK (((kind <> 'found_report_photo'::text) OR (found_report_id IS NOT NULL)))",
+  // ADR-0027 A.3 (BICHUS-267). O proposito da imagem de catalogo: lista
+  // fechada que admite nulo, e por isso nao tem a forma simples. Os dois
+  // valores sao o `enum` de `AdminCatalogImageIntentInput.purpose`.
+  'public.upload_intents.upload_intents_proposito_de_catalogo':
+    "CHECK (((purpose IS NULL) OR (purpose = ANY (ARRAY['store_item'::text, 'network_event'::text]))))",
+  // Nas DUAS direcoes: catalogo tem proposito, e o que nao e catalogo NAO tem.
+  // Uma foto de pet com `purpose = 'store_item'` seria exatamente a linha que
+  // a confirmacao de T9 existe para recusar.
+  'public.upload_intents.upload_intents_proposito_so_no_catalogo':
+    "CHECK (((kind = 'catalog_image'::text) = (purpose IS NOT NULL)))",
+  'public.upload_intents.upload_intents_catalogo_sem_pet':
+    "CHECK (((kind <> 'catalog_image'::text) OR (pet_id IS NULL)))",
   'public.users.users_phone_e164_formato':
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+55[0-9]{10,11}$'::text)))",
 };

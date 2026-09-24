@@ -76,8 +76,9 @@ async function criarItem(partnerId: string, slug: string): Promise<string> {
   const id = randomUUID();
   await cliente.query(
     `INSERT INTO store_items (
-       id, slug, partner_id, title, summary, category, target_url, active, sort_order
-     ) VALUES ($1, $2, $3, $4, $5, 'toy', 'https://exemplo.invalid/item', true, 0)`,
+       id, slug, partner_id, title, summary, category, target_url, active, sort_order,
+       published_at
+     ) VALUES ($1, $2, $3, $4, $5, 'toy', 'https://exemplo.invalid/item', true, 0, now())`,
     [id, slug, partnerId, `Item ${slug}`, `Resumo de ${slug}`],
   );
   itensCriados.push(id);
@@ -141,7 +142,7 @@ void describe('a vitrine da `Loja`, contra Postgres', () => {
     // que ninguém previu precisa aparecer aqui, e não ser diluída numa
     // contagem.
     assert.deepEqual(
-      rows.map((r) => `${r.coluna} -> ${r.alvo}.${r.coluna_alvo}`),
+      rows.map((r) => `${r.coluna} -> ${r.alvo}.${r.coluna_alvo}`).sort(),
       ['partner_id -> store_partners.id'],
       'a chave estrangeira da vitrine mudou de forma. Apontar de volta para `slug` é o que o ' +
         'ADR-0024 decidiu não fazer, e o critério 2 da BICHUS-19 proíbe.',

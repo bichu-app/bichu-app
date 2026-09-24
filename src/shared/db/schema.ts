@@ -429,7 +429,13 @@ export interface AuditEventsTable {
 }
 
 /** O que o cliente vai enviar direto ao armazenamento (ADR-0007, BICHUS-87). */
-export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
+export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo' | 'catalog_image';
+
+/**
+ * O proposito da imagem de catalogo (ADR-0027 item 10). So em
+ * `kind = 'catalog_image'`, e a escrita que confirma o envio exige o mesmo.
+ */
+export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event';
 
 export interface UploadIntentsTable {
   id: string;
@@ -443,6 +449,8 @@ export interface UploadIntentsTable {
    */
   found_report_id: string | null;
   kind: TipoDeEnvio;
+  /** Obrigatorio em `catalog_image`, nulo nos demais (`upload_intents_proposito_so_no_catalogo`). */
+  purpose: Generated<PropositoDaImagemDeCatalogo | null>;
   /** Chave no armazenamento privado. **Nunca** uma URL. */
   object_key: string;
   /** O que o cliente DECLAROU. Diagnóstico, nunca verdade. */
@@ -902,6 +910,10 @@ export interface StorePartnersTable {
   host: string;
   active: Generated<boolean>;
   sort_order: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  /** O `ETag` do painel. Incrementada a cada escrita. */
+  version: Generated<number>;
 }
 
 /** O item da vitrine. Mesmo desenho de `StorePartnersTable`. */
@@ -924,6 +936,25 @@ export interface StoreItemsTable {
   price_checked_at: Date | null;
   active: Generated<boolean>;
   sort_order: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  /** O `ETag` do painel. Incrementada a cada escrita. */
+  version: Generated<number>;
+  /** A PRIMEIRA publicacao. Nunca reescrita. */
+  published_at: Date | null;
+}
+
+/** A imagem de catalogo (ADR-0027 A.3). Mesma forma de `pet_photos`. */
+export interface CatalogImagesTable {
+  /** Identidade interna. Nunca projetada em resposta. */
+  id: string;
+  upload_intent_id: string;
+  purpose: PropositoDaImagemDeCatalogo;
+  status: Generated<StatusDaFoto>;
+  /** Chave da derivada publica. Nula ate `ready`. */
+  public_key: string | null;
+  rejection_reason: string | null;
+  created_at: Generated<Date>;
 }
 
 export interface Database {
@@ -965,6 +996,7 @@ export interface Database {
   store_catalog_versions: StoreCatalogVersionsTable;
   store_partners: StorePartnersTable;
   store_items: StoreItemsTable;
+  catalog_images: CatalogImagesTable;
   'audit.events': AuditEventsTable;
 }
 
