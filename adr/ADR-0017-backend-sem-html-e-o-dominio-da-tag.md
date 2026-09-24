@@ -26,12 +26,12 @@ páginas moram. Está no fim deste documento.
 
 **Emenda 3, ACEITA em 23/09/2026 (decisão do cliente):** o "outro time web"
 passa a ser **este squad**. O site (institucional e as oito rotas públicas) é
-construído aqui, roda na mesma VM da API do seu ambiente (ADR-0025), em **imagem separada**, e vai ao ar em
+construído aqui, roda na mesma VM da API do seu ambiente (ADR-0029), em **imagem separada**, e vai ao ar em
 `bichu.app`. O serviço Node da API **continua sem servir HTML**: o item 1 fica
 de pé sem exceção, e a exceção de back-end prevista no item 4 e estendida pela
 emenda 2 **deixa de existir**. A emenda 2 fica como registro do diagnóstico, e a
 decisão dela é substituída. Stack, forma do site e roteamento de hosts estão no
-ADR-0024. A emenda está no fim deste documento.
+ADR-0028. A emenda está no fim deste documento.
 
 ## Contexto
 
@@ -553,11 +553,11 @@ deixou para o cliente.
 
 | Item | Antes | Depois |
 |---|---|---|
-| 1. Zero `text/html` | vale | **vale, sem exceção**. O site é outro serviço, com imagem própria (ADR-0024). Nenhuma linha de HTML volta para `src/` |
+| 1. Zero `text/html` | vale | **vale, sem exceção**. O site é outro serviço, com imagem própria (ADR-0028). Nenhuma linha de HTML volta para `src/` |
 | 2. As três variáveis | `TAG_BASE_URL=https://tag.bichu.app`, `WEB_BASE_URL=https://bichu.app` (emenda 1) | **inalterado**. Os links que a API emite já apontam para onde o site vai responder |
-| 3. Arquivos de associação | "a hospedagem é deles" | a hospedagem é **nossa**, pela borda, a partir de `infra/caddy/well-known/`, o mesmo arquivo em `tag.bichu.app`, `bichu.app` e `hml.bichu.app` (ADR-0024 item 6). Os três requisitos continuam inegociáveis |
+| 3. Arquivos de associação | "a hospedagem é deles" | a hospedagem é **nossa**, pela borda, a partir de `infra/caddy/well-known/`, o mesmo arquivo em `tag.bichu.app`, `bichu.app` e `hml.bichu.app` (ADR-0028 item 6). Os três requisitos continuam inegociáveis |
 | 4. Gatilho de 07/10 e exceção de back-end | se o outro time não entregar `/t/{code}`, a API volta a servir uma página mínima | **a exceção de back-end deixa de existir.** O gatilho vira **prazo com dono**: seção 3 abaixo |
-| 5. Borda fechada | tudo que não é `/v1` responde 404 | continua assim nos hosts da API (`hml.bichu.app`, `api.bichu.app`). Nos hosts do site, o que não é `/v1` nem arquivo de associação vai para o container do site (ADR-0024 item 5) |
+| 5. Borda fechada | tudo que não é `/v1` responde 404 | continua assim nos hosts da API (`hml.bichu.app`, `api.bichu.app`). Nos hosts do site, o que não é `/v1` nem arquivo de associação vai para o container do site (ADR-0028 item 5) |
 | *Consequências*, "o que fica em aberto e não é meu" | contrato de entrega com o time web; subdomínio | **fechado.** Não há fronteira de time; a entrega passa pela nossa esteira e pela nossa revisão |
 
 A exceção do item 4 existia porque a página estava fora do nosso alcance, e ela
@@ -602,7 +602,7 @@ o QR leva `bichu.app/t/<código>`; o que o QR codifica é `{TAG_BASE_URL}/t/{có
 `https://tag.bichu.app`. O valor efetivo na VM só se confere dentro dela
 (`docker compose exec -T api printenv TAG_BASE_URL`), e precisa ser conferido
 antes de qualquer resposta a essa pergunta. O site serve `/t/` também no apex
-(ADR-0024 item 5), então as duas formas abrem; a que vai para o plástico é a
+(ADR-0028 item 5), então as duas formas abrem; a que vai para o plástico é a
 de `TAG_BASE_URL`.
 
 **Os itens 4 e 5 da emenda 2 viram trabalho do site:** as três regras de
@@ -625,7 +625,7 @@ dependem de operação que o contrato declara e o código não tem (seção 5).
 | BICHUS-71 | avisar o tutor sem login, em um toque | Figma. Back-end pronto. Anda junto com a 59 |
 | BICHUS-70 | aviso enviado, com as três ofertas opcionais | Figma. Back-end pronto |
 | BICHUS-47 | código não encontrado ou tag desativada | Figma. Back-end pronto (404 e 410 com `next_action`) |
-| BICHUS-119 | cabeçalhos de segurança e `og:` em `/t/`, `/c/`, `/cartaz/` | nada além do próprio site: é o item 7 do ADR-0024 e a asserção de cabeçalho da esteira |
+| BICHUS-119 | cabeçalhos de segurança e `og:` em `/t/`, `/c/`, `/cartaz/` | nada além do próprio site: é o item 7 do ADR-0028 e a asserção de cabeçalho da esteira |
 | BICHUS-72 | contar mais: foto do lugar, recado, contato | Figma **e back-end**: `createFinderPhotoUploadIntent` e `enrichFinderFoundReport` não estão implementadas |
 | BICHUS-41 | conversa por token na web, `/c/{token}` | Figma **e back-end**: as quatro operações de `/v1/finder/conversation*` não estão implementadas |
 | BICHUS-76 | cartaz automático e link compartilhável | Figma **e back-end**: `getPublicLostCase` e `getLostCasePoster` não estão implementadas |
@@ -686,4 +686,4 @@ site** até essas operações existirem, mesmo com o site no ar.
 
 Nada sobre impressão de plaquinha (ADR-0004 e emenda 1 item 5 continuam valendo
 sem alteração). Nada sobre o conteúdo das páginas, que é do Figma aprovado. A
-stack, a forma da imagem, o roteamento de hosts e a CSP estão no ADR-0024.
+stack, a forma da imagem, o roteamento de hosts e a CSP estão no ADR-0028.

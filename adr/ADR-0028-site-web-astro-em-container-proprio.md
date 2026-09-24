@@ -1,10 +1,13 @@
-# ADR-0024: O site web é um container Astro próprio, renderizado no servidor onde o link é compartilhado, e a borda separa os hosts
+# ADR-0028: O site web é um container Astro próprio, renderizado no servidor onde o link é compartilhado, e a borda separa os hosts
 
 **Status:** aceito. As três perguntas foram respondidas pelo cliente em 23/09 (fim do documento)
 **Data:** 2026-09-23
+**Numeração:** nasceu como ADR-0024 nesta branch. O 0024 já estava em
+`development` (identidade interna separada da pública) e 0025 a 0027 estão
+reservados em outras branches; este ficou com 0028 em 23/09.
 **Depende de:** ADR-0016 (o gateway `/v1`), ADR-0017 com a emenda 3 (o site é nosso)
 **Revisa:** ADR-0017 emenda 1, item 4 (um arquivo de associação por host, ver item 6 abaixo)
-**Revisado por:** ADR-0025 (produção e homologação em VMs separadas: a tabela do item 5 é a da VM de produção, e `hml.bichu.app`, na VM de homologação, ganha o site de homologação)
+**Revisado por:** ADR-0029 (produção e homologação em VMs separadas: a tabela do item 5 é a da VM de produção, e `hml.bichu.app`, na VM de homologação, ganha o site de homologação)
 
 ## Contexto
 
@@ -16,7 +19,7 @@ ADR-0017:
 2. o site roda na mesma VM (`bichu-hml`, `bichu-app-508914`,
    `southamerica-east1-a`), em **imagem Docker separada** da API, para que
    migrar depois seja trocar onde a imagem roda e não reescrever nada. Com o
-   ADR-0025, "a mesma VM" passou a valer **por ambiente**: o site de produção
+   ADR-0029, "a mesma VM" passou a valer **por ambiente**: o site de produção
    roda na `bichu-prod` junto da API de produção, e o de homologação na
    `bichu-hml`;
 3. o site vai ao ar direto em `bichu.app`;
@@ -213,7 +216,7 @@ e cabeçalhos exatos das operações usadas pelas ilhas e `Access-Control-Max-Ag
 
 **`hml.bichu.app` não muda para o app.** Mesmos caminhos de API, mesma máquina. O
 cliente testa no aparelho por ele, e o `API_BASE_URL` do app que está no
-aparelho dele aponta para lá. Com o ADR-0025, ele é a API **de homologação**, na
+aparelho dele aponta para lá. Com o ADR-0029, ele é a API **de homologação**, na
 VM `bichu-hml`, e ganha o site de homologação no que hoje é 404. A tabela abaixo
 é a da **VM de produção**, `bichu-prod`.
 
@@ -414,7 +417,7 @@ Requisitos para quem monta o pipeline; o desenho do job não é meu.
 | `/p/{shareToken}` de caso aberto | `index, follow, max-image-preview:standard` | sim, com `lastmod` | `<link rel="canonical">` para `https://bichu.app/p/{shareToken}` |
 | `/@{slug}` com perfil público ligado | `index, follow, max-image-preview:standard` | **não** | slug trocado: a API responde 301, e o site repassa 301 para o slug atual |
 | `/t/`, `/c/`, `/cartaz/`, `/verificar-email`, `/redefinir-senha`, `/transferencia/` | `noindex, nofollow` | não | token na URL ou página de uso único |
-| tudo em `hml.bichu.app` | `noindex` | não existe mapa | ADR-0025 |
+| tudo em `hml.bichu.app` | `noindex` | não existe mapa | ADR-0029 |
 
 - **`noindex` por cabeçalho (`X-Robots-Tag`) e pela meta, nunca por `Disallow`
   no `robots.txt`.** Com `Disallow` o buscador não busca a página e, por isso,
@@ -501,10 +504,10 @@ defeito em "abri o link e não apareceu nada" agora pode estar na borda, no site
 ou na API; o `x-correlation-id` atravessando os três é o que torna isso
 investigável.
 
-**Orçamento da máquina:** em cada VM (ADR-0025), a soma dos tetos em regime vai
+**Orçamento da máquina:** em cada VM (ADR-0029), a soma dos tetos em regime vai
 de 1792 para **1888 MB** e cabe na e2-small, com 160 MB para o sistema. No
 redeploy, o `worker` para antes da migração, senão o pico passa de 2 GB. A conta
-completa e o alerta de 70% estão no ADR-0025, seções 2 e 11.
+completa e o alerta de 70% estão no ADR-0029, seções 2 e 11.
 
 **Irreversível:** nada neste ADR. O host impresso continua sendo o único item
 irreversível do produto, e ele não muda aqui.
@@ -518,7 +521,7 @@ irreversível do produto, e ele não muda aqui.
    ignorado.
 2. Artefato de build servido pelo container, sem CDN (item 9).
 3. ~~Homologação e produção são a mesma API e o mesmo banco.~~ Resolvida pela
-   resposta do cliente: separação antes de o site subir (ADR-0025).
+   resposta do cliente: separação antes de o site subir (ADR-0029).
 
 **O que muda em outros documentos, e não é deste PR:**
 
@@ -538,6 +541,6 @@ irreversível do produto, e ele não muda aqui.
    comportamento do 410.
 2. **A máquina fica na e2-small**, com alerta de memória em 70% sustentado.
    Depois, com a separação de ambientes, o cliente escolheu **uma e2-small por
-   ambiente**. Conta de memória e alerta no ADR-0025, seções 2 e 11.
+   ambiente**. Conta de memória e alerta no ADR-0029, seções 2 e 11.
 3. **Produção e homologação separadas antes de o site subir**, em VMs separadas.
-   Desenho e plano de execução no ADR-0025.
+   Desenho e plano de execução no ADR-0029.

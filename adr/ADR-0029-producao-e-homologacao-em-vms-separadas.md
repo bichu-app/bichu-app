@@ -1,11 +1,14 @@
-# ADR-0025: Produção e homologação em VMs separadas, antes de o site subir
+# ADR-0029: Produção e homologação em VMs separadas, antes de o site subir
 
-**Status:** aceito. Duas perguntas ao cliente no fim; a primeira é pré-condição
-do passo 3 do plano
+**Status:** aceito. As duas perguntas ao cliente foram respondidas em 23/09 e
+estão fechadas (fim do documento)
 **Data:** 2026-09-23
 **Depende de:** ADR-0013 (a VM e os tetos de memória), ADR-0022 (segredos),
-ADR-0017 emenda 1 e ADR-0004 (o host impresso), ADR-0024 (o site e os hosts)
-**Revisa:** ADR-0024, item 5 (a tabela de hosts passa a ter duas máquinas)
+ADR-0017 emenda 1 e ADR-0004 (o host impresso), ADR-0028 (o site e os hosts)
+**Revisa:** ADR-0028, item 5 (a tabela de hosts passa a ter duas máquinas)
+**Numeração:** nasceu como ADR-0025 nesta branch. O número 0025 é da ADR da Rede
+(`feat/secao-rede`), e 0024, 0026 e 0027 já estão em uso em `development` ou em
+branch aberta; este ficou com 0029 em 23/09.
 
 > A primeira versão deste ADR, publicada na mesma branch em 23/09, punha os dois
 > ambientes na mesma VM. O cliente trocou a premissa no mesmo dia, e esta versão
@@ -18,7 +21,7 @@ O cliente decidiu em 23/09, em três rodadas:
 1. **produção e homologação separadas antes de o site subir**;
 2. **uma e2-small para cada ambiente, em VMs separadas.** Dentro de cada
    ambiente continua valendo a decisão anterior: site e API na mesma máquina,
-   em imagens Docker separadas (ADR-0024);
+   em imagens Docker separadas (ADR-0028);
 3. **nenhuma plaquinha foi impressa.** Todo o dado de hoje vira homologação, e
    produção começa vazia;
 4. alerta de memória em 70% sustentado.
@@ -131,14 +134,14 @@ próprias `MINIO_ROOT_USER` e `MINIO_ROOT_PASSWORD`).
 
 `img-hml.bichu.app` continua na VM de homologação, e `img.bichu.app` passa para
 a de produção. Cada bloco de mídia roteia só o bucket público da sua máquina e
-responde `X-Robots-Tag: noindex` (ADR-0024 item 11).
+responde `X-Robots-Tag: noindex` (ADR-0028 item 11).
 
 ### 5. Segredos e conta de serviço por VM
 
 | | Homologação (`bichu-hml`) | Produção (`bichu-prod`) |
 |---|---|---|
 | Conta de serviço da VM | `bichu-vm` (a de hoje) | **`bichu-prod-vm`, nova** |
-| `SECRET_STORE_PROJECT` | **projeto GCP de homologação** (pergunta 1) | `bichu-app-508914` |
+| `SECRET_STORE_PROJECT` | **projeto GCP de homologação** (criado por decisão do cliente de 23/09) | `bichu-app-508914` |
 | Valores | os de hoje, **copiados** (a sessão do cliente sobrevive) | **todos gerados de novo** |
 | Acesso | `secretAccessor` para `bichu-vm`, **por segredo**, só no projeto de homologação | `secretAccessor` para `bichu-prod-vm`, por segredo. **`bichu-vm` perde toda permissão** nos segredos de `bichu-app-508914` |
 
@@ -155,7 +158,7 @@ um motivo que não tem a ver com isolamento: o nome do segredo é o nome da
 variável, então **`DATABASE_URL` de homologação e `DATABASE_URL` de produção não
 cabem no mesmo projeto.** A alternativa é mudar o código para prefixar o nome
 por ambiente, o que reabre o ADR-0022 e a guarda que ele protege. Um projeto
-só com o cofre custa perto de zero. Pergunta 1.
+só com o cofre custa perto de zero. **O cliente decidiu criá-lo em 23/09.**
 
 **Isto resolve o "limite honesto" da versão anterior?** **Resolve o que eu tinha
 nomeado**, e sobra um resíduo menor, que fica escrito:
@@ -222,7 +225,7 @@ mesmo `SECRET_STORE_PROJECT`.
 | `www.bichu.app` | IP de `bichu-prod` | **novo** |
 | `MX`, `TXT` (SPF, DMARC), DKIM | Google Workspace e Postmark | **não podem mudar** |
 
-A borda de produção é a tabela do ADR-0024 item 5, com `api` e `web` da VM de
+A borda de produção é a tabela do ADR-0028 item 5, com `api` e `web` da VM de
 produção. A de homologação: `hml.bichu.app` com a API de homologação, os
 arquivos de associação e o site de homologação no que hoje é 404 (os links que
 homologação emite passam a apontar para lá), com `noindex` em tudo;
@@ -301,7 +304,10 @@ uso: US$ 0,005 por hora). Premissa de câmbio: **R$ 5,50 por dólar**.
 
 **O alerta de orçamento de R$ 200 fica abaixo do custo só das máquinas.**
 Hoje ele já está em ~78% com uma VM; com duas, estoura todo mês. Alerta que
-dispara todo mês é ignorado, e é o jeito de ele deixar de proteger. Pergunta 2.
+dispara todo mês é ignorado, e é o jeito de ele deixar de proteger. **O cliente
+subiu o alerta para R$ 400 em 23/09, com avisos em 50%, 90% e 100%** (R$ 200,
+R$ 360 e R$ 400). Com as duas máquinas em ~R$ 314, o aviso de 50% vai disparar
+todo mês por volta do dia 20, e isso é esperado: é o de 90% que pede ação.
 Os valores não incluem Maps nem o que mais estiver na mesma conta de
 faturamento, e o alerta atual cobre a conta inteira.
 
@@ -313,7 +319,7 @@ gravar direto no cofre, comparar por SHA-256.
 
 ```bash
 PROJ=bichu-app-508914
-PROJ_HML=<ID informado pelo cliente>        # pergunta 1
+PROJ_HML=<ID do projeto criado pelo cliente>  # decisão de 23/09; o ID não existe ainda
 ZONA=southamerica-east1-a
 SA_HML=bichu-vm@bichu-app-508914.iam.gserviceaccount.com
 SA_PROD=bichu-prod-vm@bichu-app-508914.iam.gserviceaccount.com
@@ -325,8 +331,10 @@ Se `MAIL_API_TOKEN` e `MAIL_WEBHOOK_SECRET` existirem em `$PROJ`
 
 ### Pré-condições
 
-- **P1.** Pergunta 1 respondida e o ID do projeto de homologação informado.
-- **P2.** Pergunta 2 respondida, com o alerta de orçamento ajustado **antes** do
+- **P1.** Projeto de homologação **criado** (decisão do cliente de 23/09), com a
+  API do Secret Manager ligada e o faturamento vinculado, e o ID informado.
+- **P2.** Alerta de orçamento em **R$ 400, com avisos em 50%, 90% e 100%**
+  (decisão do cliente de 23/09), ajustado **antes** do
   passo 5, que cria a segunda máquina.
 - **P3.** Dia e hora da janela do passo 4 combinados com o cliente.
 - **P4.** Mesclado em `development` o que o plano usa do repositório: no
@@ -543,7 +551,7 @@ ponto de retorno. **Apagar exige o ok do cliente.**
 |---|---|---|---|
 | Promover `bichu-hml` a produção e criar homologação nova | produção fica com o IP de hoje | mover o dado de teste, trocar o DNS do host do cliente, interromper o teste dele e depois apagar o dado de teste na máquina promovida; produção herda disco e snapshots com histórico de teste | todo o custo cai no ambiente que tem gente usando, e nenhum no que está vazio |
 | Mesma VM, dois ambientes (primeira versão deste ADR) | uma máquina | não cabe na e2-small; conta de serviço compartilhada | decisão do cliente |
-| Sem projeto de homologação, prefixo de ambiente no nome do segredo | um projeto só | reabre o ADR-0022 e cega a guarda da esteira | pergunta 1 |
+| Sem projeto de homologação, prefixo de ambiente no nome do segredo | um projeto só | reabre o ADR-0022 e cega a guarda da esteira | o cliente decidiu pelo projeto separado |
 | Nomes diferentes de banco e bucket por ambiente | nome diz o ambiente | configuração diferente entre ambientes é o que faz um defeito aparecer só em produção | máquinas separadas já separam; o nome igual é paridade |
 | Manter a aplicação como superusuário em homologação | janela menor | a role sem superusuário seria testada pela primeira vez em produção | homologação existe para isso |
 
@@ -569,20 +577,10 @@ plaquinha de produção continua o de antes.
 3. fotos de produção só no disco. Gatilho: o primeiro tutor real com foto;
 4. 160 MB de folga para o sistema em cada VM. Gatilho: o da seção 11.
 
-## Perguntas ao cliente
+## Perguntas ao cliente: fechadas em 23/09/2026
 
-**1. Criar um projeto GCP só para os segredos de homologação?**
-(a) Sim: custo perto de zero; é o que o passo 3 usa, e depois serve de projeto
-Firebase para o app de homologação. (b) Não: aí `DATABASE_URL` de homologação e a
-de produção não cabem no mesmo cofre, e a saída é mudar o código para prefixar
-o nome por ambiente, o que reabre o ADR-0022.
-**Recomendo (a).** Máquinas separadas não dispensam isso: o motivo é o nome do
-segredo, não o isolamento.
-
-**2. As duas máquinas custam ~R$ 314 por mês, e o alerta de orçamento está em
-R$ 200. Para quanto vai o alerta?**
-(a) R$ 400: cobre as máquinas, o cofre, os backups e alguma folga. (b) R$ 350:
-mais apertado, e dispara com qualquer serviço novo. (c) Fica em R$ 200: dispara
-todo mês e deixa de ser lido.
-**Recomendo (a).** O valor em reais depende do câmbio (premissa: R$ 5,50), e
-Maps e outros serviços da mesma conta de faturamento entram na mesma soma.
+1. **Criar um projeto GCP só para os segredos de homologação?** **Fechada:
+   sim (a).** É o `$PROJ_HML` do plano. O ID ainda não existe e não é
+   inventado aqui; a pré-condição P1 é recebê-lo.
+2. **Para quanto vai o alerta de orçamento?** **Fechada: R$ 400, com avisos em
+   50%, 90% e 100%.** Ajuste feito antes do passo 5 (pré-condição P2).
