@@ -65,14 +65,14 @@ function codigos(erro: unknown): string[] {
   return (erro.errors ?? []).map((e) => e.code);
 }
 
-const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', host: 'lojadobairro.com.br' };
+const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', host: 'lojadobairro.test' };
 const ITEM = {
   slug: 'racao-adulto-10kg',
   partner_slug: 'loja-do-bairro',
   title: 'Racao para cao adulto, 10 kg',
   summary: 'Racao seca para caes adultos de porte medio.',
   category: 'food' as const,
-  target_url: 'https://lojadobairro.com.br/racao-adulto-10kg',
+  target_url: 'https://lojadobairro.test/racao-adulto-10kg',
   price: { amount: 18990, currency: 'BRL' as const, checked_at: '2026-09-22' },
 };
 
@@ -210,7 +210,7 @@ void describe('escrita administrativa da Loja', () => {
     void it('destino fora do host do parceiro: host_mismatch, e nada e gravado', async () => {
       await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
       const erro = await m.catalogo
-        .criarItem(AUTOR, { ...ITEM, target_url: 'https://outraloja.com.br/x' })
+        .criarItem(AUTOR, { ...ITEM, target_url: 'https://outraloja.test/x' })
         .catch((e: unknown) => e);
       assert.deepEqual(codigos(erro), ['host_mismatch']);
       assert.equal(m.estado().itens.size, 0);
@@ -218,7 +218,7 @@ void describe('escrita administrativa da Loja', () => {
 
     void it('trocar o parceiro sem trocar o link reconfere o link contra o parceiro novo', async () => {
       await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
-      await m.catalogo.criarParceiro(AUTOR, { slug: 'outra-loja', name: 'Outra', host: 'outraloja.com.br' });
+      await m.catalogo.criarParceiro(AUTOR, { slug: 'outra-loja', name: 'Outra', host: 'outraloja.test' });
       const i = await m.catalogo.criarItem(AUTOR, ITEM);
       const erro = await m.catalogo
         .alterarItem(AUTOR, ITEM.slug, i.etag, { partner_slug: 'outra-loja' })
@@ -230,7 +230,7 @@ void describe('escrita administrativa da Loja', () => {
       const p = await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
       await m.catalogo.criarItem(AUTOR, ITEM);
       const erro = await m.catalogo
-        .alterarParceiro(AUTOR, PARCEIRO.slug, p.etag, { host: 'outraloja.com.br' })
+        .alterarParceiro(AUTOR, PARCEIRO.slug, p.etag, { host: 'outraloja.test' })
         .catch((e: unknown) => e);
       assert.deepEqual(codigos(erro), ['host_mismatch_items']);
     });

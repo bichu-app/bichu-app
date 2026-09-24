@@ -50,7 +50,7 @@ import {
 } from '../persistence/catalogo-em-memoria-de-teste.js';
 import * as rotas from './admin-store-routes.js';
 
-const ORIGEM = 'https://admin.bichu.app';
+const ORIGEM = 'https://admin.bichu.test';
 const BASE = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const AGORA = Date.UTC(2026, 8, 23, 15, 0, 0) as Instant;
 const CSRF_ADMIN = 'csrf-admin-0123456789abcdef0123456789';
@@ -153,14 +153,14 @@ async function chamar(
   };
 }
 
-const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', host: 'lojadobairro.com.br' };
+const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', host: 'lojadobairro.test' };
 const ITEM = {
   slug: 'racao-adulto-10kg',
   partner_slug: 'loja-do-bairro',
   title: 'Racao para cao adulto, 10 kg',
   summary: 'Racao seca para caes adultos de porte medio.',
   category: 'food',
-  target_url: 'https://lojadobairro.com.br/racao-adulto-10kg',
+  target_url: 'https://lojadobairro.test/racao-adulto-10kg',
   price: { amount: 18990, currency: 'BRL', checked_at: '2026-09-22' },
 };
 
@@ -264,7 +264,7 @@ void describe('rotas da escrita administrativa da Loja, dentro da guarda', () =>
     assert.equal(nao.status, 404);
     await chamar(b, 'POST', '/admin/store/partners', { corpo: PARCEIRO });
     const fora = await chamar(b, 'POST', '/admin/store/items', {
-      corpo: { ...ITEM, target_url: 'https://outraloja.com.br/x' },
+      corpo: { ...ITEM, target_url: 'https://outraloja.test/x' },
     });
     assert.equal(fora.status, 400);
     assert.deepEqual((fora.corpo['errors'] as { code: string }[]).map((e) => e.code), ['host_mismatch']);
