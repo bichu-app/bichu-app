@@ -1,6 +1,6 @@
 # ADR-0028: O site web é um container Astro próprio, renderizado no servidor onde o link é compartilhado, e a borda separa os hosts
 
-**Status:** aceito. As três perguntas foram respondidas pelo cliente em 23/09 (fim do documento)
+**Status:** aceito. As três perguntas foram respondidas pelo cliente em 23/09 (fim do documento). **v1 autorizada para produção em 23/09**, com o escopo do item 12
 **Data:** 2026-09-23
 **Numeração:** nasceu como ADR-0024 nesta branch. O 0024 já estava em
 `development` (identidade interna separada da pública) e 0025 a 0027 estão
@@ -136,7 +136,9 @@ com a página e um botão; a ação acontece no `POST` do formulário (SEC-005).
 **antes** de a pessoa digitar a senha nova.
 
 **Tradução de resposta em tela é por `type`, nunca por texto nem só por
-status.** O 410 com `next_action` do contrato vira a página do desfecho; o
+status.** Na tag, `tag-revoked` (410 com `next_action`) vira a página que o
+`next_action` indica. No caso, `lost-case-closed` (410, contrato do PR #6) vira
+**uma página fixa, igual para todos os motivos e sem desfecho** (item 11). O
 `problem+json` desconhecido vira a página de erro genérica com o
 `correlation_id` visível. Mesma regra do app.
 
@@ -453,15 +455,24 @@ consentimento para "buscável por qualquer um".
 
 **O caso encerrado e a despublicação:**
 
-- **Caso encerrado:** a API responde 410 com `next_action`, e o site responde
-  **HTTP 410** com a página do desfecho, `X-Robots-Tag: noindex` e `og:`
-  genérica. O 410 é o sinal mais forte de remoção que existe, mas a remoção só
+- **Caso encerrado:** a API responde 410 `lost-case-closed`, e o site responde
+  **HTTP 410** com uma **página fixa**, `X-Robots-Tag: noindex` e `og:`
+  genérica. **A página não diz o desfecho.** O contrato de 23/09 (PR #6) dá o
+  mesmo corpo a cinco situações: caso encerrado, pet excluído, pet falecido,
+  caso arquivado e token desconhecido. Distinguir contaria a um estranho o que
+  aconteceu com o animal de outra pessoa, ou se aquele link existiu. O desfecho
+  vaza por exclusão: se "reencontrado" tivesse texto próprio, a página genérica
+  passaria a significar "não voltou", e o link continua circulando no WhatsApp
+  depois do encerramento. A página fixa diz só que o caso não está mais aberto e
+  oferece o caminho de achado avulso (ADR-0030). O 410 é o sinal mais forte de
+  remoção que existe, mas a remoção só
   acontece **quando o robô volta**, e isso leva de dias a semanas num site
   pequeno. Até lá, o resultado antigo continua na busca, com o texto de quando o
   caso estava aberto. Para o robô voltar mais cedo, o caso encerrado **fica no
   mapa do site por 30 dias** com `lastmod` na data do encerramento, e depois
   sai.
-- **Caso reaberto** ganha `shareToken` novo (BICHUS-76); a URL antiga continua 410.
+- **Caso reaberto** ganha `shareToken` novo (BICHUS-76); a URL antiga continua 410,
+  com a mesma página fixa.
 - **Perfil desligado ou conta apagada:** a API responde 404, e o site repassa
   404 com `noindex`. Mesmo efeito do 410, um pouco mais lento.
 - **Remoção urgente** (tutor pedindo que suma já): só a ferramenta de remoção do
@@ -474,9 +485,32 @@ consentimento para "buscável por qualquer um".
   410 aparecer.
 
 **Na esteira** (item 10, asserção de cabeçalho): `/p/` de caso aberto sem
-`noindex`, `/p/` encerrado com 410 e `noindex`, `/@` desligado com 404 e
+`noindex`, `/p/` encerrado com 410, `noindex` e **o mesmo corpo byte a byte**
+que `/p/` de token desconhecido (a isca que prova que o desfecho não vaza), `/@` desligado com 404 e
 `noindex`, todo objeto de `img.bichu.app` com `noindex`, e todo host de
 homologação com `noindex`.
+
+### 12. A v1 que vai para produção (ok do cliente, 23/09/2026)
+
+**O cliente autorizou em 23/09 a ida da v1 do site para produção**, com este
+escopo e só ele:
+
+| Entra na v1 | Por quê |
+|---|---|
+| institucional (páginas pré-renderizadas do item 2) | é o que `bichu.app` mostra no lugar do 404 de hoje |
+| `/t/{code}` | a plaquinha; prazo de 07/10 (ADR-0017, emenda 3) |
+| `/redefinir-senha` | o link do e-mail já sai; a BICHUS-147 não vai a produção sem ela |
+| `/verificar-email` | idem |
+
+**Fica fora da v1**, e cada rota responde 404 do site até entrar: `/c/`,
+`/cartaz/`, `/p/`, `/@`, `/transferencia/`, e as páginas de formulário do
+achado sem conta (ADR-0030). As operações de leitura de `/c/`, `/cartaz/`, `/p/`
+e `/@` ainda não estão em `src/` (emenda 3 do ADR-0017), então nenhuma delas
+teria o que mostrar. Com isso, o item 11 (indexação de `/p/` e `/@`) e o mapa do
+site com casos não se aplicam à v1: o mapa da v1 lista só o institucional.
+
+O ok vale para o escopo acima. Rota nova entra em produção com ok novo, e o
+merge em produção continua sendo do cliente.
 
 ## Alternativas consideradas
 
