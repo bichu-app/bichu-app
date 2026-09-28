@@ -158,7 +158,6 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/lostfound/ports/registro-de-disparos.ts', SO_TIPO],
   ['src/modules/media/ports/image-processor.ts', SO_TIPO],
   ['src/modules/media/ports/media-repository.ts', SO_TIPO],
-  ['src/modules/media/ports/object-storage.ts', SO_TIPO],
   ['src/modules/messaging/ports/conversation-repository.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-aparelhos.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-entregas.ts', SO_TIPO],
@@ -215,6 +214,15 @@ const AUSENCIAS_ACEITAS = new Map([
   //   `tests/integration/worker-sobrevive-a-serie-e-nao-deixa-foto-presa.test.ts`,
   //   que exercita `enqueue` e a recuperacao de orfao contra Postgres de
   //   verdade.
+  //
+  // E SAIU UMA QUARTA, no mesmo fechamento de 28/09, esta pelo motivo e nao pelo
+  // relatorio: `src/modules/media/ports/object-storage.ts` estava como `SO_TIPO`,
+  // e deixou de ser so tipo. O conserto de prazo do armazenamento de objeto poe
+  // `PrazoDoArmazenamentoEsgotadoError` -- uma CLASSE, com codigo que sobrevive a
+  // compilacao -- dentro da porta, entao o arquivo passou a ter linha
+  // instrumentada e a aparecer nos dois relatorios. Nenhuma das quatro foi
+  // deduzida: a invariante 2 acusou cada uma pelo nome, e este verificador roda
+  // em `verificar-cobertura`, dentro de `make verificar`.
   ['src/modules/notifications/adapters/persistence/kysely-registro-de-entregas.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/pets/adapters/persistence/kysely-reference-data-repository.ts', SEM_SUITE_QUE_CARREGUE],
   [
