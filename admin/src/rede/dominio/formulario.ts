@@ -35,18 +35,25 @@ export const LIMITE_DAS_OBSERVACOES = 500;
 export const LIMITE_DO_RESUMO = 180;
 export const LIMITE_DO_MOTIVO = 280;
 
-export type EstadoDaFoto = 'enviando' | 'falhou' | 'processing' | 'ready' | 'rejected';
+/**
+ * Mesma forma da imagem da galeria compartilhada do painel: `enviando` e
+ * `erro` so existem no navegador; `enviada` e o envio que a escrita do
+ * encontro ainda vai confirmar; `processing`, `ready` e `rejected` sao o
+ * `AdminCatalogGalleryImage.status` que o servidor devolve.
+ */
+export type EstadoDaFoto = 'enviando' | 'erro' | 'enviada' | 'processing' | 'ready' | 'rejected';
 
 export interface FotoDoFormulario {
   /** Chave local e estavel da miniatura, para o React e para o foco. */
   chave: string;
   estado: EstadoDaFoto;
-  upload_id?: string;
-  url?: string | null;
+  uploadId?: string;
+  previa?: string | null;
   motivo?: string | null;
-  porcentagem?: number;
   alt: string;
 }
+
+const FOTO_QUE_VAI = new Set<EstadoDaFoto>(['enviada', 'processing', 'ready']);
 
 export interface EstadoDoFormulario {
   titulo: string;
@@ -116,9 +123,9 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
       .sort((a, b) => a.position - b.position)
       .map((img) => ({
         chave: img.upload_id,
-        estado: img.status === 'rejected' ? 'rejected' : img.status === 'processing' ? 'processing' : 'ready',
-        upload_id: img.upload_id,
-        url: img.url ?? null,
+        estado: img.status,
+        uploadId: img.upload_id,
+        previa: img.url ?? null,
         motivo: img.rejection_reason ?? null,
         alt: img.alt_text,
       })),
@@ -175,11 +182,11 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
 
   if (f.fotos.some((x) => x.estado === 'enviando')) {
     e('fotos', 'Fotos', 'Espere o envio das fotos terminar.');
-  } else if (f.fotos.some((x) => x.estado === 'falhou' || x.estado === 'rejected')) {
+  } else if (f.fotos.some((x) => x.estado === 'erro' || x.estado === 'rejected')) {
     e('fotos', 'Fotos', 'Remova ou envie de novo a foto que não foi aceita.');
   }
   f.fotos.forEach((foto, i) => {
-    if ((foto.estado === 'ready' || foto.estado === 'processing') && !entre(foto.alt, 2, 150)) {
+    if (FOTO_QUE_VAI.has(foto.estado) && !entre(foto.alt, 2, 150)) {
       e(`alt-${i}`, 'Descrição da imagem', 'Descreva a imagem.');
     }
   });
@@ -214,8 +221,8 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
 
 function imagens(f: EstadoDoFormulario): ImagemInput[] {
   return f.fotos
-    .filter((x): x is FotoDoFormulario & { upload_id: string } => !!x.upload_id && (x.estado === 'ready' || x.estado === 'processing'))
-    .map((x) => ({ upload_id: x.upload_id, alt_text: x.alt.trim() }));
+    .filter((x): x is FotoDoFormulario & { uploadId: string } => !!x.uploadId && FOTO_QUE_VAI.has(x.estado))
+    .map((x) => ({ upload_id: x.uploadId, alt_text: x.alt.trim() }));
 }
 
 function lugar(f: EstadoDoFormulario): LugarInput {

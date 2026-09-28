@@ -135,7 +135,7 @@ describe('validação do formulário', () => {
   it('foto pronta sem descrição reprova; foto enviando segura o envio', () => {
     const f = preenchido();
     f.fotos = [
-      { chave: 'a', estado: 'ready', upload_id: '11111111-1111-4111-8111-111111111111', alt: '' },
+      { chave: 'a', estado: 'ready', uploadId: '11111111-1111-4111-8111-111111111111', alt: '' },
       { chave: 'b', estado: 'enviando', alt: '' },
     ];
     expect(validar(f, 'novo', AGORA).map((e) => e.campo)).toEqual(['fotos', 'alt-0']);
