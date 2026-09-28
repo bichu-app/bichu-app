@@ -31,7 +31,6 @@ import 'dart:async';
 
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 

@@ -30,7 +30,6 @@
 import 'dart:convert';
 
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
-import 'package:bichu/telas/escanear/tela_do_pet_da_tag.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
