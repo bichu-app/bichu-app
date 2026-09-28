@@ -306,4 +306,72 @@ class TagsApi {
     final json = await _api.get('/tags/${Uri.encodeComponent(codigo)}');
     return TagResolvida.doJson(json);
   }
+
+  /// O caminho de `POST /tags/{code}/found-reports`, num lugar so.
+  ///
+  /// Existe como funcao porque a fila offline grava o **caminho** da acao, e
+  /// nao a chamada: quem enfileira um aviso monta o caminho por aqui, e uma
+  /// segunda interpolacao a mao seria a segunda definicao da mesma rota.
+  static String caminhoDoAviso(String codigo) =>
+      '/tags/${Uri.encodeComponent(codigo)}/found-reports';
+
+  /// `POST /tags/{code}/found-reports` -- **avisar o tutor**.
+  ///
+  /// A operacao mais critica do produto, e a **excecao permanente** do
+  /// contrato: `security: [bearerAuth, {}]`, ou seja, ela **nao exige conta**.
+  /// Quem acha um animal na rua nao vai criar cadastro com o bicho no colo, e
+  /// e por isso que o corpo tambem e opcional -- um toque, zero campos. Data e
+  /// hora sao do servidor; o codigo ja veio no caminho.
+  ///
+  /// `exigeToken: true` **nao** contradiz isso: no [ApiClient] essa marca quer
+  /// dizer "leve o `Authorization` se houver um", e nao "recuse sem ele". Com
+  /// sessao o aviso sai identificado, que e o que faz o tutor ver quem falou;
+  /// sem sessao sai anonimo, e o servidor responde 201 igual.
+  ///
+  /// **`Idempotency-Key` e obrigatoria, e quem reenvia usa a MESMA.** O
+  /// contrato a declara obrigatoria porque este pedido e reenviado por fila
+  /// quando a rede cai, e o tutor nao pode receber o mesmo aviso tres vezes.
+  /// Por isso ela e **parametro**, e nao gerada aqui dentro: gerar aqui faria
+  /// o reenvio nascer com chave nova e derrubaria a garantia inteira, em
+  /// silencio.
+  ///
+  /// **A foto do achador nao entra aqui, e a ausencia e do contrato.**
+  /// `FoundReportFromTagInput` tem dois campos (`found_at`, `client_note`) e
+  /// nenhum de imagem: a foto chega depois, por
+  /// `PATCH /found-reports/{foundReportId}` com o `finder_token` e um
+  /// `photo_upload_ref` de
+  /// `POST /finder/found-report/photo-upload-intent`. Nenhuma das duas tem
+  /// cliente neste app, e nenhuma e pre-requisito do aviso.
+  Future<AvisoDoAchadorCriado> avisarOTutor(
+    String codigo, {
+    required String idempotencyKey,
+    String? recadoDoAchador,
+    DateTime? achadoEm,
+  }) async {
+    final json = await _api.post(
+      caminhoDoAviso(codigo),
+      corpo: corpoDoAviso(
+        recadoDoAchador: recadoDoAchador,
+        achadoEm: achadoEm,
+      ),
+      idempotencyKey: idempotencyKey,
+    );
+    return AvisoDoAchadorCriado.doJson(json);
+  }
+
+  /// O corpo do aviso, **separado para a fila offline gravar o mesmo**.
+  ///
+  /// Devolve mapa vazio quando nada foi digitado, e nao nulo: o corpo vazio e
+  /// o caminho principal desta operacao, e um mapa vazio atravessa a fila (que
+  /// grava `Map<String, dynamic>`) sem virar caso especial.
+  static Map<String, dynamic> corpoDoAviso({
+    String? recadoDoAchador,
+    DateTime? achadoEm,
+  }) {
+    final recado = recadoDoAchador?.trim();
+    return <String, dynamic>{
+      if (achadoEm != null) 'found_at': achadoEm.toUtc().toIso8601String(),
+      if (recado != null && recado.isNotEmpty) 'client_note': recado,
+    };
+  }
 }

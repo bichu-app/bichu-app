@@ -328,7 +328,15 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
         builder: (context, estado) {
           final tag = estado.extra;
           if (tag is! TagResolvida) return const TelaLeitorDeQr();
-          return TelaDoPetDaTag(tag: tag);
+          // **O codigo sai do CAMINHO, e nao da resolucao.** A resposta
+          // publica de `GET /tags/{code}` nao devolve o codigo de proposito:
+          // ele E a credencial. Sem ele o botao `Avisar o tutor` nao tem para
+          // qual plaquinha avisar, e e por isso que esta rota existe como
+          // endereco desde o comeco.
+          final codigo =
+              estado.pathParameters[Rotas.parametroDoCodigoDaTag] ?? '';
+          if (codigo.isEmpty) return const TelaLeitorDeQr();
+          return TelaDoPetDaTag(tag: tag, codigo: codigo);
         },
       ),
       // `Pets` > `Adoções`. Sub-destino com pagina propria, alcancado tambem
