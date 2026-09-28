@@ -568,7 +568,40 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// mesclada, e nao copiado de relato nenhum. As justificativas acima ficaram
 /// TODAS, dos dois lados: cada uma diz o que mudou de um lado, e e isso que
 /// mantem a troca sendo um ato deliberado.
-const String _arvoreDasTelas = '883961325403f0e22fe845c4442014e93ff1e479';
+/// **Destravado pelas duas telas de conta que faltavam, 23/09/2026 (sem chave
+/// de issue no acionamento).** DOIS arquivos de `app/lib/telas` mudam:
+/// `conta/tela_entrar.dart` e `conta/tela_esqueci_minha_senha.dart`. Eram as
+/// duas ultimas das tres telas de conta fora do padrao 11.8 do design system;
+/// a terceira, `conta/tela_criar_conta.dart`, entrou pela manha.
+///
+/// O que mudou nas duas, e nada disso encosta na porta `CameraEGaleria`, que
+/// e o que o criterio 10 da BICHUS-161 protege:
+///
+///  - a acao primaria saiu do corpo rolavel e foi para `BarraDeAcaoFixa`, no
+///    `bottomNavigationBar`. Medido com o teclado de 270 dp aberto: `Entrar`
+///    ficava 100 dp abaixo da dobra em 320 x 568 e 28 dp em 360 x 640, e
+///    `Enviar o link` ficava 78 dp e 6 dp nos mesmos dois gabaritos. Depois do
+///    401 -- o estado de quem ja tem conta e errou a senha -- faltavam 360 dp
+///    em 320 x 568 e 231 dp em 375 x 667, um gabarito em que a tela estava
+///    certa antes do erro;
+///  - o corpo virou `SingleChildScrollView` com `Column`, pelo motivo ja
+///    registrado em `pet/tela_editar_pet.dart` e em F1.1: em 320 x 568 o
+///    `ListView` nao chegava a CONSTRUIR o botao das duas telas, e controle
+///    que nao esta na arvore nao pode ser focado nem lido por leitor de tela;
+///  - cada recusa passou a trazer a faixa para dentro da janela, porque um
+///    botao alcancavel de qualquer ponto pode ser tocado de um ponto em que a
+///    recusa esta fora da tela.
+///
+/// A `C.4` ganhou uma barra que troca de acao com a fase, porque a tela tem
+/// duas acoes e nunca as duas ao mesmo tempo: `Enviar o link` antes do pedido,
+/// `Reenviar o link` depois dele.
+///
+/// Quem cobra o comportamento nao e esta constante, e sim
+/// `test/telas/acao_primaria_fora_da_rolagem_test.dart`, que toca no botao SEM
+/// rolar no menor gabarito e mede a requisicao do outro lado. Medido pelo
+/// indice temporario que este portao usa, sobre a arvore de trabalho.
+/// Anterior: `883961325403f0e22fe845c4442014e93ff1e479`.
+const String _arvoreDasTelas = 'cad6c7b5c278308c0c7dca45029eb98e7b1c4f9e';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

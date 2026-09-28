@@ -76,15 +76,31 @@ function valoresDeIntegracao() {
     // ninguem associa a este arquivo.
     DATABASE_URL: `postgres://bichu:${senha}@db:5432/bichu`,
 
-    // Armazenamento de objeto NAO sobe nesta pilha: nenhum caso de
-    // `tests/integration/` fala com ele. Os valores existem porque
-    // `loadAppConfig()` os exige na subida, e apontam para um host que nao
-    // resolve -- se algum caso passar a usar armazenamento, ele falha dizendo
-    // que nao resolveu o nome, em vez de escrever no MinIO da pilha principal.
-    OBJECT_STORAGE_ENDPOINT: `http://objeto-que-nao-existe-na-pilha-de-${MARCA}:9000`,
+    // Armazenamento de objeto AGORA SOBE nesta pilha (BICHUS-245). Ate aqui
+    // este valor apontava para um host que nao resolve, e o comentario dizia
+    // que nenhum caso falava com armazenamento -- o que era verdade, e era o
+    // buraco: os 358 casos de integracao nunca subiram um byte de foto, entao
+    // "a funcao de envio nunca foi chamada" nao tinha como ser pega por
+    // ninguem.
+    //
+    // `objeto` e o nome do servico em `compose.integracao.yaml`, que e a mesma
+    // grafia do `.env.example`. Como em `db` e `mail`, isso nao e coincidencia
+    // conveniente: e o que permite a pilha efemera usar o ambiente da
+    // aplicacao sem traducao, e e por isso que nenhuma porta precisa ser
+    // publicada no hospedeiro.
+    OBJECT_STORAGE_ENDPOINT: 'http://objeto:9000',
     OBJECT_STORAGE_REGION: 'us-east-1',
     OBJECT_STORAGE_ACCESS_KEY_ID: `${MARCA}-chave`,
     OBJECT_STORAGE_SECRET_ACCESS_KEY: `${MARCA}-segredo`,
+    OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
+    // Os MESMOS nomes de `.env.example`, e nao nomes de teste. O caso de
+    // seguranca afirma coisas sobre a politica dos baldes; afirma-las sobre
+    // baldes com outro nome seria provar a configuracao de um ambiente que
+    // nao existe.
+    OBJECT_BUCKET_PRIVATE: 'bichu-media-private',
+    OBJECT_BUCKET_PUBLIC: 'bichu-media-public',
+    // `<nome>:<32 bytes em base64>` e a forma que o KMS embutido do MinIO
+    // exige. Sorteada a cada execucao e jogada fora com a pilha.
     OBJECT_STORAGE_KMS_KEY: `${MARCA}:${randomBytes(32).toString('base64')}`,
 
     MAIL_TRANSPORT: 'smtp',

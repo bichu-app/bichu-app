@@ -1,0 +1,16 @@
+{
+  "_isca": "ISCA. Reproduz o envelope REAL de 23/09/2026 em development: veredito negativo com `periodo_de_codigo_novo` VAZIO. Os valores das condicoes sao os medidos; o que esta isca prova e que a ausencia de linha de base vira regra propria no log, e nao que estes numeros sejam os de hoje.",
+  "obtido": true,
+  "status_http": 200,
+  "veredito": "ERROR",
+  "condicoes": [
+    { "metrica": "new_coverage", "valor": "85.3", "comparador": "LT", "piso": "80", "estado": "OK" },
+    { "metrica": "new_maintainability_rating", "valor": "1", "comparador": "GT", "piso": "1", "estado": "OK" },
+    { "metrica": "new_duplicated_lines_density", "valor": "0.3", "comparador": "GT", "piso": "3", "estado": "OK" },
+    { "metrica": "new_security_hotspots_reviewed", "valor": "100.0", "comparador": "LT", "piso": "100", "estado": "OK" },
+    { "metrica": "new_reliability_rating", "valor": "4", "comparador": "GT", "piso": "1", "estado": "ERROR" },
+    { "metrica": "new_security_rating", "valor": "4", "comparador": "GT", "piso": "1", "estado": "ERROR" }
+  ],
+  "periodo_de_codigo_novo": {},
+  "painel": "https://sonarcloud.io/dashboard?id=bichu-app_bichu-app&branch=development"
+}

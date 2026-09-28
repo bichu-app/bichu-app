@@ -40,6 +40,23 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# POR QUE ISTO EXISTE, E POR QUE NAO E `set -o pipefail` PASSO A PASSO.
+#
+# Sem `shell:`, o runner executa cada `run:` como `bash -e {0}` -- com `-e`,
+# SEM `pipefail`. Num cano o shell devolve o codigo do ULTIMO comando, entao
+# `verifica | tee` devolve o do `tee`, que sai 0 quase sempre: o passo fica
+# VERDE com a reprovacao impressa no resumo. Declarar `shell: bash` troca a
+# invocacao por `bash --noprofile --norc -e -o pipefail {0}`
+# (actions/runner, ScriptHandlerHelpers.cs).
+#
+# Aqui, e nao em cada passo, porque `set -o pipefail` espalhado depende de
+# alguem lembrar no proximo passo que nascer com um cano -- e foram 10 canos
+# que ninguem lembrou. Este arquivo ja tinha o problema diagnosticado em 4
+# lugares, corrigidos um a um com `PIPESTATUS`; os outros 10 ficaram.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   rapidos:
     name: portoes rapidos (portabilidade, dispensas, segredo)
@@ -271,6 +288,56 @@ jobs:
       # 8 sigma, que ja estavam no mesmo arquivo no mesmo dia.
       - name: nenhuma assercao de tolerancia zero sobre sorteio, iscas primeiro
         run: node infra/verificacao/verificar-sorteio-sem-semente.mjs
+
+      # PORTAO DE NUMERO DE ADR (23/09/2026). Em 23/09 duas ADRs nasceram com o
+      # numero 0024 em branches diferentes -- uma sobre a Loja, outra sobre
+      # privacidade da Rede -- e nenhum dos dois autores sabia do outro. O git
+      # NAO acusa isso: nomes de arquivo diferentes nao conflitam, entao o merge
+      # junta as duas em silencio e o codigo passa a citar "ADR-0024" com duas
+      # decisoes possiveis atras do mesmo rotulo.
+      #
+      # AQUI, no `rapidos`, e por dois motivos. Custo: 0,06 s, so leitura de
+      # nomes de arquivo, sem npm e sem docker. E lugar: a colisao nasce em
+      # branches separadas e so vira defeito no MERGE, que e exatamente o que
+      # este job guarda. O gemeo local e `make verificar-numero-de-adr`, que
+      # entrou em `make verificar` no mesmo dia.
+      #
+      # As iscas rodam ANTES da varredura, e o autoteste nao le `adr/`: ele
+      # exercita a decisao com listas de nomes montadas a mao, inclusive a
+      # colisao real de 23/09.
+      - name: as iscas do portao de numero de ADR reprovam
+        run: node infra/verificacao/verificar-numero-de-adr.mjs --autoteste
+
+      - name: nenhum numero de ADR repetido em adr/
+        run: node infra/verificacao/verificar-numero-de-adr.mjs
+
+      # CARIMBO DE MIGRACAO REPETIDO (23/09/2026). O irmao do de cima, e o caso
+      # grave da familia. Em 23/09 CINCO migracoes nasceram com
+      # `20260923000001` em cinco branches de tres sessoes que nao se enxergam,
+      # e a `development` ja carregava onze migracoes em quatro carimbos
+      # repetidos antes de alguem olhar.
+      #
+      # ADR repetida confunde quem le; migracao repetida TRAVA O BANCO. Medido
+      # contra um Postgres 16 com o node-pg-migrate 9.0.0 do `package.json`:
+      # num banco que ja aplicou uma das irmas, o `migrate up` seguinte morre em
+      # `checkOrder`, com saida 1, nada aplicado, e nenhuma migracao futura
+      # entrando ate alguem intervir a mao.
+      #
+      # AQUI, no `rapidos`, pelos dois motivos do portao de ADR. Custo: 0,21 s,
+      # leitura de nomes de arquivo mais um `git ls-tree`, sem docker e sem
+      # banco. E lugar: a colisao nasce em branches separadas e so vira defeito
+      # no MERGE, que e o que este job guarda.
+      #
+      # A CONFERENCIA DE ORDEM DEPENDE DO `fetch-depth: 0` deste job: ela
+      # compara com a ponta de `origin/development`, e sem historico ela nao
+      # consegue comparar. Nesse caso o portao REPROVA dizendo isso, em vez de
+      # aprovar por ausencia -- se este job perder o `fetch-depth: 0`, o sintoma
+      # vai ser esta mensagem, e nao um verde silencioso.
+      - name: as iscas do portao de carimbo de migracao reprovam
+        run: node infra/verificacao/verificar-carimbo-de-migracao.mjs --autoteste
+
+      - name: nenhum carimbo repetido em migrations/
+        run: node infra/verificacao/verificar-carimbo-de-migracao.mjs
 
       - name: a borda concorda com o contrato
         run: python3 infra/verificacao/verificar_borda.py
@@ -598,13 +665,21 @@ jobs:
           # O VENCIMENTO da dispensa nao e conferido aqui: quem o confere e
           # `verificar_dispensas.py`, no job `rapidos`, de que este job depende.
           # Dispensa vencida derruba `rapidos` e este passo nem executa.
-          python3 infra/verificacao/verificar_quebras_de_contrato.py /tmp/quebras.json \
-            | tee -a "$GITHUB_STEP_SUMMARY"
           # `tee` mascara o codigo de saida do python. Guardado aqui e usado na
           # ULTIMA linha: sair agora pularia o changelog abaixo, e sair nunca
           # deixaria o passo verde com a reprovacao impressa no resumo -- que e
           # a pior forma de portao, a que parece ter funcionado.
+          #
+          # Com o `pipefail` do topo, `-e` abortaria NESTE cano e o changelog
+          # abaixo nunca seria impresso. Desligado so em volta do cano: quem
+          # responde pelo veredito continua sendo o `PIPESTATUS` e o `exit` da
+          # ultima linha, entao o passo reprova igual -- o que se preserva aqui
+          # e o diagnostico, nao a aprovacao.
+          set +o pipefail
+          python3 infra/verificacao/verificar_quebras_de_contrato.py /tmp/quebras.json \
+            | tee -a "$GITHUB_STEP_SUMMARY"
           veredito="${PIPESTATUS[0]}"
+          set -o pipefail
 
           # Campo ACRESCENTADO nao quebra ninguem e por isso passa nas
           # ferramentas -- e e exatamente por ali que a implementacao se afasta
@@ -974,10 +1049,15 @@ jobs:
           projeto=$(sed -n 's/^SECRET_STORE_PROJECT=//p' .env | head -1)
           test -n "$projeto" || { echo "::error::SECRET_STORE_PROJECT vazia no .env deste job"; exit 1; }
 
+          # Mesmo motivo do job `contrato`: com o `pipefail` do topo, `-e`
+          # abortaria neste cano e o `::error::` abaixo, que nomeia o defeito,
+          # nunca sairia. O veredito continua vindo do `PIPESTATUS`.
+          set +o pipefail
           python3 infra/verificacao/verificar_boot_do_alvo_prod.py \
             --log /tmp/prova-prod.log --saida "$saida" --projeto "$projeto" \
             | tee -a "$GITHUB_STEP_SUMMARY"
           veredito="${PIPESTATUS[0]}"
+          set -o pipefail
 
           echo "Este passo NAO prova que o alvo \`prod\` atende requisicao: sem gerenciador de segredos no runner, essa prova e de implantacao (BICHUS-213)." \
             | tee -a "$GITHUB_STEP_SUMMARY"
@@ -1388,14 +1468,18 @@ jobs:
   #      para nao deixar passar.
   #   2. O VEREDITO DO PORTAO DE QUALIDADE. Informativo enquanto houver a
   #      dispensa datada `sonarcloud-veredito` no quality-gates.yml; bloqueante
-  #      no instante em que ela for apagada. O motivo esta na secao 8.4: na
-  #      PRIMEIRA analise o SonarCloud trata o repositorio inteiro como "codigo
-  #      novo", entao os 74% de linha medidos hoje vao de encontro ao piso de
-  #      80% do perfil `Sonar way` e o portao reprova -- um veredito sobre
-  #      treze dias de codigo acumulado, cobrado de quem abriu o PR. Portao que
-  #      reprova tudo no primeiro dia e desligado na primeira semana, e o
-  #      desligamento e definitivo. Uma semana de linha de base, e ele passa a
-  #      julgar o diff, que e o que ele sabe julgar.
+  #      no instante em que ela for apagada. O motivo, MEDIDO EM 23/09/2026 e
+  #      nao suposto: o projeto nao tem LINHA DE BASE DE CODIGO NOVO no
+  #      SonarQube Cloud (`periodo_de_codigo_novo` vem vazio), entao as
+  #      metricas `new_*` sao calculadas sobre o repositorio inteiro em vez do
+  #      diff. O mesmo commit analisado como PR passou com 0 New issues e
+  #      analisado como branch deu D/D. Enquanto o periodo estiver vazio,
+  #      nenhum conserto de codigo move `new_reliability_rating` nem
+  #      `new_security_rating`. A linha de base e configuracao do projeto no
+  #      SonarCloud e exige permissao de administrador -- ela NAO sai de
+  #      `sonar-project.properties`, e nao ha parametro de scanner que a defina
+  #      na nuvem. Os passos estao no comentario da dispensa, em
+  #      `.github/quality-gates.yml`.
   sonar:
     name: SonarCloud (analise estatica e cobertura)
     runs-on: ubuntu-latest
