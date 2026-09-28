@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../roteamento/rotas.dart';
+import '../widgets/aviso_que_chegou.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
 import '../widgets/marca.dart';
@@ -363,7 +364,23 @@ class _CascaComAbasState extends State<CascaComAbas> {
       drawerEnableOpenDragGesture: false,
       body: ControleDaGaveta(
         abrir: () => _casca.currentState?.openDrawer(),
-        child: navegacao,
+        // O AVISO QUE CHEGOU, ACIMA DO CONTEUDO.
+        //
+        // **Ele mora aqui e nao numa tela**, e a razao e a mesma da gaveta: o
+        // push chega em qualquer momento, e a pessoa pode estar em qualquer
+        // uma das cinco secoes. Um aviso preso a uma tela cobre a tela, e o
+        // problema nao e da tela.
+        //
+        // **Com o app ABERTO o sistema operacional nao desenha nada**, mesmo
+        // com bloco `notification` na mensagem. Sem esta faixa, quem esta com
+        // o app na mao e a unica pessoa que nao ve o alerta -- o oposto do
+        // esperado, e o motivo de testar so com o app aberto enganar.
+        child: Column(
+          children: <Widget>[
+            const AvisoQueChegou(),
+            Expanded(child: navegacao),
+          ],
+        ),
       ),
       bottomNavigationBar: DecoratedBox(
         // O filete de 1px em `outline` e obrigatorio, nao decorativo (design
