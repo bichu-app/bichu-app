@@ -14,6 +14,8 @@
 library;
 
 import '../api/api_client.dart';
+import '../api/falhas.dart';
+import '../api/mensagens_de_erro.dart';
 import '../api/rede_api.dart';
 import '../roteamento/rotas.dart';
 import 'guarda_de_acao.dart';
@@ -22,9 +24,10 @@ import 'intencao_pendente.dart';
 /// O ID de tela de retorno do encontro da `Rede`.
 ///
 /// A tabela de telas da UX (27.5.2) nao numera o detalhe do evento; o ID
-/// segue o prefixo da secao. [Rotas.rotaDaTelaDeUx] o traduz para a agenda,
-/// que e para onde a pessoa volta se o pedido falhar depois do login: la ela
-/// reabre o encontro e toca de novo, com a conta ja aberta.
+/// segue o prefixo da secao. [Rotas.rotaDaTelaDeUx] o traduz para a agenda
+/// so para a guarda saber que a tela existe neste build; a volta de verdade e
+/// o proprio encontro, pela `rotaDeRetorno` do executavel, porque o `slug`
+/// esta no `alvo`.
 const String telaDeRetornoDoEncontro = 'REDE.ENCONTRO';
 
 IntencaoPendente intencaoDePedirParaParticipar(
@@ -39,6 +42,20 @@ IntencaoPendente intencaoDePedirParaParticipar(
   );
 }
 
+/// O que o encontro recebe no `extra` quando o pedido feito depois do login
+/// nao saiu: a mensagem, para a caixa do privado dize-la.
+class RetomadaDoPedido {
+  const RetomadaDoPedido(this.erro);
+  final MensagemDeErro erro;
+}
+
+/// Recusa que pedir de novo nao conserta: o encontro terminou (`400`,
+/// `event_ended`), deixou de existir ou deixou de ser privado (`404`). O
+/// envelope morre, para o pedido nao ser refeito no proximo login.
+bool _falhaDefinitiva(FalhaDeChamada falha) =>
+    falha is FalhaDaApi &&
+    (falha.problem.status == 400 || falha.problem.status == 404);
+
 AcaoExecutavel pedidoDeParticipacaoExecutavel(ApiClient api) {
   return AcaoExecutavel(
     executar: (intencao) async {
@@ -46,11 +63,26 @@ AcaoExecutavel pedidoDeParticipacaoExecutavel(ApiClient api) {
       if (slug == null || slug.isEmpty) {
         throw const FormatException('intencao de pedido sem o encontro');
       }
-      // Idempotente no servidor: pedir de novo nunca cria linha nova e nunca
-      // revela recusa (ADR-0027 12.11).
-      await RedeApi(api).pedir(slug);
+      try {
+        // Idempotente no servidor: pedir de novo nunca cria linha nova e
+        // nunca revela recusa (ADR-0027 12.11).
+        await RedeApi(api).pedir(slug);
+      } on FalhaDeChamada catch (falha) {
+        // Falha definitiva: volta ao encontro como RESULTADO, e a guarda
+        // descarta o envelope. A transitoria (rede, 5xx) sobe: o envelope
+        // fica e a pessoa volta ao encontro pela [rotaDeRetorno].
+        if (!_falhaDefinitiva(falha)) rethrow;
+        return ResultadoDaExecucao(
+          rota: Rotas.encontroDaRedeDe(slug),
+          extra: RetomadaDoPedido(MensagensDeErro.de(falha)),
+        );
+      }
       return ResultadoDaExecucao(rota: Rotas.encontroDaRedeDe(slug));
     },
-    retomar: (intencao, erro) => null,
+    retomar: (intencao, erro) => erro == null ? null : RetomadaDoPedido(erro),
+    rotaDeRetorno: (intencao) {
+      final slug = intencao.alvo;
+      return slug == null || slug.isEmpty ? null : Rotas.encontroDaRedeDe(slug);
+    },
   );
 }

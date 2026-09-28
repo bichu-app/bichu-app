@@ -55,10 +55,23 @@ import 'pecas_da_rede.dart';
 /// cadastrada; o GPS nao participa). **Nunca em privado**, nem aprovado;
 /// nunca em encerrado nem em cancelado.
 class TelaDoEncontro extends StatefulWidget {
-  const TelaDoEncontro({required this.slug, super.key, this.distanciaEmMetros});
+  const TelaDoEncontro({
+    required this.slug,
+    super.key,
+    this.distanciaEmMetros,
+    this.erroDoPedido,
+  });
 
   final String slug;
   final int? distanciaEmMetros;
+
+  /// O pedido feito pela guarda de acao, depois do login, nao saiu: a caixa
+  /// do privado abre dizendo por que.
+  final String? erroDoPedido;
+
+  static const String falhaDoPedido =
+      'Não conseguimos consultar o seu pedido agora.';
+  static const String rotuloDeTentar = 'Tentar de novo';
 
   static const String tituloDaTela = 'Encontro';
   static const String rotuloDeAtualizar = 'Atualizar';
@@ -77,7 +90,7 @@ class TelaDoEncontro extends StatefulWidget {
       'pedido.';
   static const String avisoDeTransparencia =
       'Ao pedir, a equipe do Bichu vê o seu nome de exibição, o mês em que você '
-      'criou a conta e se a sua conta está validada.';
+      'criou a conta e se o seu e-mail está confirmado.';
   static const String rotuloDePedir = 'Pedir para participar';
   static const String tituloDoEnviado = 'Pedido enviado';
   static const String textoDoEnviado =
@@ -136,6 +149,12 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
 
   /// Privado: o pedido da conta. `null` com [_temPedido] falso e "sem pedido".
   bool _temPedido = false;
+
+  /// `getMyNetworkEventJoinRequest` falhou: o teaser fica, e so a caixa diz.
+  bool _pedidoIndisponivel = false;
+
+  /// A ultima falha de pedir ou desistir, dita dentro da caixa.
+  String? _erroDoPedido;
   EstadoDoPedido? _estadoDoPedido;
   DetalhesDoPrivado? _detalhes;
   bool _detalhesFalharam = false;
@@ -152,6 +171,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
   @override
   void initState() {
     super.initState();
+    _erroDoPedido = widget.erroDoPedido;
     _rolagem.addListener(_aoRolar);
     _agendarCarga();
   }
@@ -196,32 +216,13 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       final logado = _logado;
       final encontro = await rede.detalhar(widget.slug);
 
-      var temPedido = false;
-      EstadoDoPedido? estado;
-      DetalhesDoPrivado? detalhes;
-      var detalhesFalharam = false;
-      if (encontro is TeaserDoPrivado && logado) {
-        final pedido = await rede.meuPedido(widget.slug);
-        temPedido = pedido != null;
-        estado = pedido?.estado;
-        if (estado == EstadoDoPedido.aprovado) {
-          try {
-            detalhes = await rede.detalhesDoPrivado(widget.slug);
-          } on FalhaDeChamada {
-            detalhesFalharam = true;
-          } on FormatException {
-            detalhesFalharam = true;
-          }
-          detalhesFalharam = detalhesFalharam || detalhes == null;
-        }
-      }
+      final lido = encontro is TeaserDoPrivado && logado
+          ? await _lerPedido(rede)
+          : null;
       if (!mounted) return;
       setState(() {
         _encontro = encontro;
-        _temPedido = temPedido;
-        _estadoDoPedido = estado;
-        _detalhes = detalhes;
-        _detalhesFalharam = detalhesFalharam;
+        _aplicarPedido(lido);
         _fase = _Fase.pronto;
       });
       _carregarPonto();
@@ -240,6 +241,59 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         _fase = _Fase.falha;
       });
     }
+  }
+
+  /// O pedido da conta e, se aprovado, o conteudo oculto.
+  ///
+  /// **Falha aqui nao derruba a pagina**: o teaser ja chegou, e so a caixa do
+  /// pedido diz que nao conseguiu consultar (com `Tentar de novo`, que refaz
+  /// so esta consulta, UX 28.2).
+  Future<_PedidoLido> _lerPedido(RedeApi rede) async {
+    try {
+      final pedido = await rede.meuPedido(widget.slug);
+      final estado = pedido?.estado;
+      DetalhesDoPrivado? detalhes;
+      var detalhesFalharam = false;
+      if (estado == EstadoDoPedido.aprovado) {
+        try {
+          detalhes = await rede.detalhesDoPrivado(widget.slug);
+        } on FalhaDeChamada {
+          detalhesFalharam = true;
+        } on FormatException {
+          detalhesFalharam = true;
+        }
+        detalhesFalharam = detalhesFalharam || detalhes == null;
+      }
+      return _PedidoLido(
+        temPedido: pedido != null,
+        estado: estado,
+        detalhes: detalhes,
+        detalhesFalharam: detalhesFalharam,
+      );
+    } on FalhaDeChamada {
+      return const _PedidoLido.indisponivel();
+    } on FormatException {
+      return const _PedidoLido.indisponivel();
+    }
+  }
+
+  void _aplicarPedido(_PedidoLido? lido) {
+    _temPedido = lido?.temPedido ?? false;
+    _estadoDoPedido = lido?.estado;
+    _detalhes = lido?.detalhes;
+    _detalhesFalharam = lido?.detalhesFalharam ?? false;
+    _pedidoIndisponivel = lido?.indisponivel ?? false;
+  }
+
+  Future<void> _consultarPedidoDeNovo() async {
+    final lido = await _lerPedido(_rede);
+    if (!mounted) return;
+    setState(() {
+      _aplicarPedido(lido);
+      _erroDoPedido = null;
+    });
+    _focarCaixa();
+    _carregarPonto();
   }
 
   /// O ponto so e perguntado com conta, com lugar na tela e sem cancelamento.
@@ -299,17 +353,24 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         _enviandoPedido = false;
         _temPedido = true;
         _estadoDoPedido = pedido.estado;
+        _erroDoPedido = null;
       });
       _focarCaixa();
       if (pedido.estado == EstadoDoPedido.aprovado) _carregar();
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
-      setState(() => _enviandoPedido = false);
-      _avisar(MensagensDeErro.de(falha).texto);
+      setState(() {
+        _enviandoPedido = false;
+        _erroDoPedido = MensagensDeErro.de(falha).texto;
+      });
+      _focarCaixa();
     } on FormatException {
       if (!mounted) return;
-      setState(() => _enviandoPedido = false);
-      _avisar(MensagensDeErro.servidorFora);
+      setState(() {
+        _enviandoPedido = false;
+        _erroDoPedido = MensagensDeErro.servidorFora;
+      });
+      _focarCaixa();
     }
   }
 
@@ -366,14 +427,17 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       setState(() {
         _temPedido = false;
         _estadoDoPedido = null;
+        _erroDoPedido = null;
       });
       _focarCaixa();
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
-      _avisar(MensagensDeErro.de(falha).texto);
+      setState(() => _erroDoPedido = MensagensDeErro.de(falha).texto);
+      _focarCaixa();
     } on FormatException {
       if (!mounted) return;
-      _avisar(MensagensDeErro.servidorFora);
+      setState(() => _erroDoPedido = MensagensDeErro.servidorFora);
+      _focarCaixa();
     }
   }
 
@@ -737,6 +801,24 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
   /// tem caixa: pedir responderia `event_ended`.
   Widget? _caixaDoPrivado({required bool encerrado}) {
     final estado = _estadoDoPedido;
+    if (_pedidoIndisponivel && !encerrado) {
+      return _CaixaDoPrivado(
+        foco: _focoDaCaixa,
+        icone: Icons.lock_outline,
+        titulo: TelaDoEncontro.tituloDoPrivado,
+        texto: TelaDoEncontro.falhaDoPedido,
+        acao: Align(
+          alignment: Alignment.centerLeft,
+          child: TextButton(
+            onPressed: _consultarPedidoDeNovo,
+            style: TextButton.styleFrom(
+              minimumSize: const Size(BichuAlvoDeToque.min, BichuAlvoDeToque.min),
+            ),
+            child: const Text(TelaDoEncontro.rotuloDeTentar),
+          ),
+        ),
+      );
+    }
     if (estado == EstadoDoPedido.aprovado) {
       return _CaixaDoPrivado(
         foco: _focoDaCaixa,
@@ -752,6 +834,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         icone: Icons.schedule_send_outlined,
         titulo: TelaDoEncontro.tituloDoEnviado,
         texto: TelaDoEncontro.textoDoEnviado,
+        erro: _erroDoPedido,
         // So a partir de `requested`. Um estado que este build nao conhece
         // fica sem acao, e nunca vira recusa.
         acao: estado == EstadoDoPedido.enviado
@@ -777,6 +860,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       titulo: TelaDoEncontro.tituloDoPrivado,
       texto: TelaDoEncontro.textoDoPrivado,
       aviso: TelaDoEncontro.avisoDeTransparencia,
+      erro: _erroDoPedido,
       acao: Semantics(
         // O aviso D57 e a descricao acessivel do botao: quem usa leitor de
         // tela ouve o que sera compartilhado antes de tocar (24.16, item 3).
@@ -875,9 +959,14 @@ class _CaixaDoPrivado extends StatelessWidget {
     required this.texto,
     this.aviso,
     this.acao,
+    this.erro,
   });
 
   final FocusNode foco;
+
+  /// A falha da ultima acao do pedido, dita aqui dentro e nao num aviso
+  /// passageiro: a caixa e a regiao de status (24.13.5).
+  final String? erro;
   final IconData icone;
   final String titulo;
   final String texto;
@@ -936,6 +1025,13 @@ class _CaixaDoPrivado extends StatelessWidget {
                   ),
                 ),
               ],
+              if (erro != null) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e3),
+                Text(
+                  erro!,
+                  style: textos.bodySmall?.copyWith(color: cores.error),
+                ),
+              ],
               if (acao != null) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e3),
                 acao!,
@@ -946,6 +1042,29 @@ class _CaixaDoPrivado extends StatelessWidget {
       ),
     );
   }
+}
+
+/// O que a consulta do pedido devolveu.
+class _PedidoLido {
+  const _PedidoLido({
+    required this.temPedido,
+    required this.estado,
+    required this.detalhes,
+    required this.detalhesFalharam,
+  }) : indisponivel = false;
+
+  const _PedidoLido.indisponivel()
+      : temPedido = false,
+        estado = null,
+        detalhes = null,
+        detalhesFalharam = false,
+        indisponivel = true;
+
+  final bool temPedido;
+  final EstadoDoPedido? estado;
+  final DetalhesDoPrivado? detalhes;
+  final bool detalhesFalharam;
+  final bool indisponivel;
 }
 
 class _CaixaQuando extends StatelessWidget {

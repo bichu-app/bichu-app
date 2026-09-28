@@ -242,7 +242,7 @@ enum ItemParaLevar {
   agua('water', 'Água'),
   poteDeAgua('water_bowl', 'Pote de água'),
   guia('leash', 'Guia'),
-  saquinho('poop_bags', 'Saquinho'),
+  saquinho('poop_bags', 'Saquinhos para cocô'),
   petisco('treats', 'Petisco'),
   toalha('towel', 'Toalha'),
   carteiraDeVacinacao('vaccination_card', 'Carteira de vacinação'),
@@ -271,13 +271,21 @@ enum ItemParaLevar {
 enum EstadoDoPedido {
   enviado('requested', 'Pedido enviado'),
   aprovado('approved', 'Pedido aprovado'),
-  desistido('withdrawn', 'Pedido cancelado'),
-  expirado('expired', 'O encontro passou');
+  desistido('withdrawn', null),
+  expirado('expired', null);
 
   const EstadoDoPedido(this.codigo, this.rotulo);
 
   final String codigo;
-  final String rotulo;
+
+  /// O rotulo na tela, ou nulo quando a especificacao nao desenha nenhum.
+  ///
+  /// `expired` nao tem rotulo (design system 24.17.5): o encontro que passa
+  /// sai de `Meus pedidos` e vai para `Encerrados`. `withdrawn` tambem nao
+  /// (24.17.6): ele nao aparece na lista, e o "Pedido cancelado" da matriz de
+  /// rastreabilidade nao entra na tela. Divergencia da matriz registrada na
+  /// entrega.
+  final String? rotulo;
 
   /// O filtro `Situação do pedido` so oferece os dois que aparecem na lista
   /// (design system 24.17.3): desistido nao volta em `Meus pedidos`, e o
@@ -788,7 +796,8 @@ Set<Porte> _portes(Object? bruto) {
   if (bruto is! List) return <Porte>{...Porte.values};
   final lidos = <Porte>{
     for (final item in bruto)
-      if (Porte.de(item as String?) case final Porte p) p,
+      if (item is String)
+        if (Porte.de(item) case final Porte p) p,
   };
   return lidos.isEmpty ? <Porte>{...Porte.values} : lidos;
 }
@@ -967,7 +976,8 @@ class TeaserDoPrivado extends EncontroDaRede {
   static TeaserDoPrivado doJson(Map<String, dynamic> json) {
     final slug = json['slug'];
     final titulo = json['title'];
-    final dia = DiaDoEncontro.daDataLocal(json['local_date'] as String?);
+    final data = json['local_date'];
+    final dia = DiaDoEncontro.daDataLocal(data is String ? data : null);
     if (slug is! String || titulo is! String || dia == null) {
       throw const FormatException('teaser sem slug, title ou local_date');
     }
@@ -1101,7 +1111,8 @@ class EncontroPorPerto {
   final int? distanciaEmMetros;
 
   static EncontroPorPerto doJson(Map<String, dynamic> json) {
-    final distancia = json['distance_m'] as int?;
+    final bruta = json['distance_m'];
+    final distancia = bruta is int ? bruta : null;
     return EncontroPorPerto(
       encontro: EncontroPublico.doJson(json),
       distanciaEmMetros: distancia,
@@ -1407,6 +1418,33 @@ class RecorteDaRede {
   final EstadoDoPedido? estadoDoPedido;
   final int pagina;
   final int limite;
+
+  /// A mesma consulta em outra pagina, ou sem o termo de busca.
+  ///
+  /// `semTermo` serve as distancias: elas dependem de quais encontros
+  /// publicos existem no recorte, e nao do que a pessoa digitou, entao nao
+  /// ha motivo para pergunta-las de novo a cada tecla.
+  RecorteDaRede copiar({int? pagina, bool semTermo = false}) => RecorteDaRede(
+        termo: semTermo ? null : termo,
+        quando: quando,
+        entrada: entrada,
+        visibilidade: visibilidade,
+        cidade: cidade,
+        porte: porte,
+        distanciaMaxima: distanciaMaxima,
+        ordem: ordem,
+        estadoDoPedido: estadoDoPedido,
+        pagina: pagina ?? this.pagina,
+        limite: limite,
+      );
+
+  /// O que decide QUAIS encontros publicos entram nas distancias.
+  String get assinaturaDasDistancias => <Object?>[
+        cidade,
+        quando?.codigo,
+        entrada?.codigo,
+        porte?.valor,
+      ].join('|');
 
   String? get termoLimpo {
     final t = termo?.trim();

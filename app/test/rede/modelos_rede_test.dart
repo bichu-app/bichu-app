@@ -13,6 +13,9 @@ import 'package:bichu/api/api_client.dart';
 import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/api/modelos_rede.dart';
 import 'package:bichu/config/app_config.dart';
+import 'package:bichu/api/rede_api.dart';
+import 'package:bichu/intencao/deposito_de_intencao.dart';
+import 'package:bichu/intencao/guarda_de_acao.dart';
 import 'package:bichu/intencao/intencao_pendente.dart';
 import 'package:bichu/intencao/pedido_de_participacao_como_intencao.dart';
 import 'package:bichu/roteamento/rotas.dart';
@@ -93,7 +96,7 @@ void main() {
         isNull,
       );
       for (final e in EstadoDoPedido.values) {
-        expect(e.rotulo.toLowerCase(), isNot(contains('recusad')));
+        expect((e.rotulo ?? '').toLowerCase(), isNot(contains('recusad')));
       }
     });
   });
@@ -174,7 +177,7 @@ void main() {
         'water': 'Água',
         'water_bowl': 'Pote de água',
         'leash': 'Guia',
-        'poop_bags': 'Saquinho',
+        'poop_bags': 'Saquinhos para cocô',
         'treats': 'Petisco',
         'towel': 'Toalha',
         'vaccination_card': 'Carteira de vacinação',
@@ -196,14 +199,19 @@ void main() {
       });
     });
 
-    test('JoinRequestAppState', () {
-      expect(<String, String>{
+    test('JoinRequestAppState: so os dois estados que a tela desenha', () {
+      // A matriz da `withdrawn: Pedido cancelado` e `expired: O encontro
+      // passou`, e a especificacao nao desenha nenhum dos dois: `expired`
+      // vai para `Encerrados` (design system 24.17.5) e o rotulo de
+      // `withdrawn` "nao entra na tela" (24.17.6). Vale a especificacao; a
+      // divergencia da matriz esta registrada na entrega.
+      expect(<String, String?>{
         for (final e in EstadoDoPedido.values) e.codigo: e.rotulo,
-      }, <String, String>{
+      }, <String, String?>{
         'requested': 'Pedido enviado',
         'approved': 'Pedido aprovado',
-        'withdrawn': 'Pedido cancelado',
-        'expired': 'O encontro passou',
+        'withdrawn': null,
+        'expired': null,
       });
     });
 
@@ -278,6 +286,117 @@ void main() {
       expect(chamadas.single.url.path, '/v1/network/events/$slugPrivado/join-request');
       expect(chamadas.single.body, isEmpty);
       expect(resultado.rota, '/rede/encontros/$slugPrivado');
+    });
+  });
+
+  group('a intencao de pedir: falhas depois do login', () {
+    ApiClient apiQueResponde(http.Response Function(http.Request) r) => ApiClient(
+          config: AppConfig.carregar(apiBaseUrlDeTeste: 'http://localhost:3000'),
+          cliente: MockClient((req) async => r(req)),
+          tokenDeAcesso: () async => 'token-de-teste',
+        );
+
+    http.Response problemaDe(String slug, int status) => http.Response(
+          jsonEncode(<String, dynamic>{
+            'type': 'https://api.bichu.app/problems/$slug',
+            'title': 'x',
+            'status': status,
+            'code': 'event_ended',
+          }),
+          status,
+          headers: <String, String>{'content-type': 'application/problem+json'},
+        );
+
+    Future<(DestinoPosLogin, String?)> depoisDoLogin(http.Response resposta) async {
+      final deposito = DepositoDeIntencaoEmMemoria();
+      final guarda = GuardaDeAcao(
+        deposito: deposito,
+        rotaDaTela: Rotas.rotaDaTelaDeUx,
+        acoes: <AcaoDeIntencao, AcaoExecutavel>{
+          AcaoDeIntencao.pedirParaParticipar:
+              pedidoDeParticipacaoExecutavel(apiQueResponde((_) => resposta)),
+        },
+      );
+      await guarda.guardar(
+        intencaoDePedirParaParticipar(slugPrivado, criadaEm: DateTime.now()),
+      );
+      final destino = await guarda.executarDepoisDoLogin();
+      return (destino, await deposito.ler());
+    }
+
+    test(
+        'ISCA -- falha definitiva (event_ended): volta ao encontro com o erro e '
+        'o envelope morre', () async {
+      // ISCA: em `pedidoDeParticipacaoExecutavel`, apague o `try/catch` em
+      // volta de `pedir`. O 400 sobe, a guarda guarda o envelope e este caso
+      // reprova no envelope.
+      final (destino, envelope) = await depoisDoLogin(problemaDe('validation-failed', 400));
+      expect(destino, isA<DestinoDeResultado>());
+      final d = destino as DestinoDeResultado;
+      expect(d.rota, '/rede/encontros/$slugPrivado');
+      expect(d.extra, isA<RetomadaDoPedido>());
+      expect(envelope, isNull);
+    });
+
+    test('falha transitoria (500): volta ao encontro, e o envelope fica', () async {
+      final (destino, envelope) = await depoisDoLogin(problemaDe('internal-error', 500));
+      expect(destino, isA<DestinoDeRetorno>());
+      final d = destino as DestinoDeRetorno;
+      expect(d.rota, '/rede/encontros/$slugPrivado');
+      expect(d.extra, isA<RetomadaDoPedido>());
+      expect(envelope, isNotNull);
+    });
+  });
+
+  group('resposta fora do contrato vira FormatException, nunca TypeError', () {
+    ApiClient apiQueDevolve(Map<String, dynamic> corpo) => ApiClient(
+          config: AppConfig.carregar(apiBaseUrlDeTeste: 'http://localhost:3000'),
+          cliente: MockClient(
+            (req) async => http.Response(
+              jsonEncode(corpo),
+              200,
+              headers: <String, String>{'content-type': 'application/json'},
+            ),
+          ),
+        );
+
+    test('teaser com local_date numerico', () {
+      expect(
+        () => RedeApi(apiQueDevolve(<String, dynamic>{
+          ...teaserPrivado(),
+          'local_date': 20261004,
+        })).detalhar(slugPrivado),
+        throwsFormatException,
+      );
+    });
+
+    test('accepted_sizes com valor de outro tipo nao quebra a leitura', () {
+      final e = EncontroPublico.doJson(<String, dynamic>{
+        ...encontroPublico(),
+        'accepted_sizes': <Object>[1, 'M'],
+      });
+      expect(e.portesAceitos, <Porte>{Porte.medio});
+    });
+
+    test('distance_m de outro tipo vira nula', () {
+      final p = EncontroPorPerto.doJson(<String, dynamic>{
+        ...encontroPublico(),
+        'distance_m': '1200',
+      });
+      expect(p.distanciaEmMetros, isNull);
+    });
+
+    test('um TypeError de leitura sai da RedeApi como FormatException', () {
+      // `place.state` como lista: o modelo confere `is String` e recusa;
+      // `images` com mapa de tipos errados e descartado. O caminho que sobra
+      // para `TypeError` e o que ninguem previu, e `_ler` o converte.
+      expect(
+        () => RedeApi(apiQueDevolve(<String, dynamic>{
+          ...encontroPublico(),
+          'place': <String, dynamic>{'place_name': 1},
+        })).detalhar(slugPublico),
+        throwsFormatException,
+      );
     });
   });
 }

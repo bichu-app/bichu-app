@@ -86,7 +86,8 @@ class CartaoDoEncontro extends StatelessWidget {
         partes.add('Privado');
     }
     final pedido = estadoDoPedido;
-    if (pedido != null) partes.add(pedido.rotulo);
+    final rotuloDoPedido = pedido?.rotulo;
+    if (rotuloDoPedido != null) partes.add(rotuloDoPedido);
     return partes.join('. ');
   }
 
@@ -137,8 +138,8 @@ class CartaoDoEncontro extends StatelessWidget {
         children: <Widget>[
           if (e is EncontroPublico) seloDeValor(e.entrada),
           if (e is TeaserDoPrivado) seloPrivado,
-          if (estadoDoPedido case final EstadoDoPedido pedido)
-            _PilulaDoPedido(estado: pedido),
+          if (estadoDoPedido?.rotulo case final String rotulo)
+            _PilulaDoPedido(rotulo: rotulo),
         ],
       ),
     ];
@@ -238,9 +239,9 @@ class _LinhaComIcone extends StatelessWidget {
 /// **Nao existe pilula de recusa**: o servidor manda `requested` para o
 /// recusado, e esta pilula diz `Pedido enviado` nos dois casos (UX 28.7.3).
 class _PilulaDoPedido extends StatelessWidget {
-  const _PilulaDoPedido({required this.estado});
+  const _PilulaDoPedido({required this.rotulo});
 
-  final EstadoDoPedido estado;
+  final String rotulo;
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +257,7 @@ class _PilulaDoPedido extends StatelessWidget {
         borderRadius: BorderRadius.circular(BichuRaio.full),
       ),
       child: Text(
-        estado.rotulo,
+        rotulo,
         style: textos.labelMedium?.copyWith(color: cores.onPrimaryContainer),
       ),
     );

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/material.dart';
@@ -53,10 +54,10 @@ import 'cartao_do_encontro.dart';
 class AgendaDaRede extends StatefulWidget {
   const AgendaDaRede({super.key});
 
-  static const String tituloDoVazio = 'A Rede ainda não tem encontro';
+  static const String tituloDoVazio = 'A Rede ainda não tem encontros';
   static const String explicacaoDoVazio =
-      'Os encontros da comunidade em praças e parques vão aparecer nesta '
-      'agenda. Quando o primeiro for marcado, ele fica aqui.';
+      'Os encontros da comunidade em praças e parques aparecem aqui assim que '
+      'forem marcados.';
   static const String tituloDoVazioDePedidos = 'Nenhum pedido ainda';
   static const String explicacaoDoVazioDePedidos =
       'Quando você pedir para participar de um encontro privado, ele aparece '
@@ -80,10 +81,17 @@ class AgendaDaRede extends StatefulWidget {
       'públicos que têm mapa.';
   static const String notaDeMaisPerto =
       'Mais perto usa a região do seu perfil. Os encontros sem mapa ficam no '
-      'fim, e os privados não aparecem nesta ordem.';
+      'fim, e os privados saem da lista.';
   static const String ordemTrocadaPeloServidor =
-      'O servidor devolveu a agenda em outra ordem. A lista está na ordem '
-      'mostrada acima.';
+      'A ordem escolhida não está disponível agora. A lista usa a ordem '
+      'marcada acima.';
+
+  /// "Carregar mais" (ATENCAO: a especificacao nao desenhou a paginacao da
+  /// agenda; texto no padrao de 28.2, `Tentar de novo` refaz uma coisa so).
+  static const String rotuloDeCarregarMais = 'Carregar mais encontros';
+  static const String falhaAoCarregarMais =
+      'Não conseguimos carregar mais encontros.';
+  static const String rotuloDeTentar = 'Tentar de novo';
 
   static String tituloDoVazioComBusca(String termo) =>
       'Nenhum encontro com “$termo”';
@@ -120,13 +128,28 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
   List<_ItemDaAgenda> _itens = const <_ItemDaAgenda>[];
   int _total = 0;
   int _pagina = 1;
-  int _limite = 20;
   String _ordemEfetiva = OrdemDaRede.proximos.codigo;
 
-  /// Visto numa resposta desta tela: ha regiao cadastrada. Fica ligado ate a
-  /// sessao mudar, para o filtro de distancia nao sumir justamente depois de
-  /// esvaziar a lista.
-  bool _temRegiao = false;
+  /// As distancias ja medidas, por `slug`, DESACOPLADAS da pagina da agenda.
+  ///
+  /// Elas vem de `listNearbyNetworkEvents` com `sort=proximos` e dependem so
+  /// de quais encontros publicos o recorte tem ([RecorteDaRede.
+  /// assinaturaDasDistancias]): nao da pagina carregada e nao do termo de
+  /// busca. Assim digitar nao repete a pergunta, e "Carregar mais" so pede a
+  /// proxima pagina de distancias quando falta medida para um cartao novo.
+  final Map<String, int?> _medidas = <String, int?>{};
+  String? _assinaturaDasMedidas;
+  int _paginaDasMedidas = 0;
+  bool _medidasEsgotadas = false;
+
+  bool _carregandoMais = false;
+  bool _falhaAoCarregarMais = false;
+
+  /// A espera da busca: a pergunta sai 300 ms depois da ultima tecla. A
+  /// agenda tem teto de 300 perguntas por hora (contrato, `x-rate-limit`).
+  Timer? _esperaDaBusca;
+  static const Duration esperaDaBusca = Duration(milliseconds: 300);
+
   bool? _logadoDaUltimaCarga;
 
   final SplayTreeSet<String> _cidadesConhecidas = SplayTreeSet<String>();
@@ -141,6 +164,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   @override
   void dispose() {
+    _esperaDaBusca?.cancel();
     _buscaControlador.dispose();
     _abas?.dispose();
     super.dispose();
@@ -188,30 +212,52 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return novo;
   }
 
-  Future<void> _carregar() async {
+  /// Ha regiao cadastrada no perfil (`Me.reference_area`). Sem ela nao ha
+  /// distancia, e a pergunta de distancias nao sai (UX 28.3, decisao 3).
+  bool get _temRegiao =>
+      Escopo.of(context).sessao.usuario?.regiaoDeReferencia != null;
+
+  /// Carrega a primeira pagina do recorte, ou a seguinte com [maisUma].
+  Future<void> _carregar({bool maisUma = false}) async {
     if (!mounted) return;
-    final geracao = ++_geracao;
     final escopo = Escopo.of(context);
     final logado = escopo.sessao.logado;
     if (_logadoDaUltimaCarga != null && _logadoDaUltimaCarga != logado) {
-      _temRegiao = false;
+      // Outra conta, outra regiao: as medidas antigas nao valem.
+      _limparMedidas();
     }
     _logadoDaUltimaCarga = logado;
     if (!logado && _aba == AbaDaRede.pedidos) _aba = AbaDaRede.proximos;
 
-    setState(() => _fase = _Fase.carregando);
+    final int geracao;
+    if (maisUma) {
+      if (_carregandoMais) return;
+      geracao = _geracao;
+      setState(() {
+        _carregandoMais = true;
+        _falhaAoCarregarMais = false;
+      });
+    } else {
+      geracao = ++_geracao;
+      setState(() => _fase = _Fase.carregando);
+    }
+    final recorte = _recorte.copiar(pagina: maisUma ? _pagina + 1 : 1);
     final rede = RedeApi(escopo.api);
+    final medir = logado &&
+        _temRegiao &&
+        _aba == AbaDaRede.proximos &&
+        !recorte.pedeDistancia &&
+        recorte.visibilidade != VisibilidadeDoEncontro.privado;
 
     try {
       late final List<_ItemDaAgenda> itens;
       late final int total;
       late final int pagina;
-      late final int limite;
       late final String efetiva;
 
       switch (_aba) {
         case AbaDaRede.pedidos:
-          final p = await rede.meusPedidos(_recorte.queryDePedidos);
+          final p = await rede.meusPedidos(recorte.queryDePedidos);
           itens = <_ItemDaAgenda>[
             for (final m in p.itens)
               _ItemDaAgenda(
@@ -220,26 +266,25 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
                 pedido: m.estado ?? EstadoDoPedido.enviado,
               ),
           ];
-          (total, pagina, limite) = (p.total, p.pagina, p.limite);
+          (total, pagina) = (p.total, p.pagina);
           efetiva = OrdemDaRede.proximos.codigo;
         case AbaDaRede.encerrados:
           final p = await rede.listar(
-            _recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.passados),
+            recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.passados),
           );
           _cidadesConhecidas.addAll(p.cidades);
           itens = <_ItemDaAgenda>[for (final e in p.itens) _ItemDaAgenda(e)];
-          (total, pagina, limite) = (p.total, p.pagina, p.limite);
+          (total, pagina) = (p.total, p.pagina);
           efetiva = p.ordemEfetiva.codigo;
         case AbaDaRede.proximos:
-          if (logado && _recorte.pedeDistancia) {
+          if (logado && _temRegiao && recorte.pedeDistancia) {
             final p = await rede.listarPorPerto(
-              _recorte.queryPorPerto(
-                ordemPorPerto: _recorte.ordem == OrdemPorPerto.distancia.codigo
+              recorte.queryPorPerto(
+                ordemPorPerto: recorte.ordem == OrdemPorPerto.distancia.codigo
                     ? OrdemPorPerto.distancia
                     : OrdemPorPerto.proximos,
               ),
             );
-            _temRegiao = _temRegiao || p.temRegiao;
             for (final i in p.itens) {
               _cidadesConhecidas.add(i.encontro.lugar.cidade);
             }
@@ -247,71 +292,105 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
               for (final i in p.itens)
                 _ItemDaAgenda(i.encontro, distancia: i.distanciaEmMetros),
             ];
-            (total, pagina, limite) = (p.total, p.pagina, p.limite);
+            (total, pagina) = (p.total, p.pagina);
             efetiva = p.ordemEfetiva.codigo;
           } else {
-            final lista = rede.listar(
-              _recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.aVir),
+            final p = await rede.listar(
+              recorte.queryDaAgenda(quandoDaAba: QuandoDaRede.aVir),
             );
-            final distancias = logado &&
-                    _recorte.visibilidade != VisibilidadeDoEncontro.privado
-                ? _distancias(rede)
-                : Future<PaginaPorPerto?>.value();
-            final p = await lista;
-            final porPerto = await distancias;
-            if (porPerto != null) _temRegiao = _temRegiao || porPerto.temRegiao;
-            final medidas = porPerto?.distanciasPorSlug ?? const <String, int>{};
             _cidadesConhecidas.addAll(p.cidades);
+            if (medir) {
+              await _garantirMedidas(rede, recorte, <String>[
+                for (final e in p.itens)
+                  if (e is EncontroPublico) e.slug,
+              ]);
+            }
             itens = <_ItemDaAgenda>[
               for (final e in p.itens)
                 _ItemDaAgenda(
                   e,
                   // So publico recebe medida; o teaser nao tem onde por.
-                  distancia: e is EncontroPublico ? medidas[e.slug] : null,
+                  distancia: medir && e is EncontroPublico ? _medidas[e.slug] : null,
                 ),
             ];
-            (total, pagina, limite) = (p.total, p.pagina, p.limite);
+            (total, pagina) = (p.total, p.pagina);
             efetiva = p.ordemEfetiva.codigo;
           }
       }
 
       if (!mounted || geracao != _geracao) return;
       setState(() {
-        _itens = itens;
+        _itens = maisUma ? <_ItemDaAgenda>[..._itens, ...itens] : itens;
         _total = total;
         _pagina = pagina;
-        _limite = limite;
         _ordemEfetiva = efetiva;
         _fase = _Fase.lista;
+        _carregandoMais = false;
       });
     } on FalhaDeChamada {
-      if (!mounted || geracao != _geracao) return;
-      setState(() {
-        // Os cartoes antigos saem: sob uma faixa de erro eles afirmariam um
-        // recorte que a tela nao conseguiu aplicar.
-        _itens = const <_ItemDaAgenda>[];
-        _fase = _Fase.falha;
-      });
+      _falhou(geracao, maisUma: maisUma);
     } on FormatException {
-      if (!mounted || geracao != _geracao) return;
-      setState(() {
-        _itens = const <_ItemDaAgenda>[];
-        _fase = _Fase.falha;
-      });
+      _falhou(geracao, maisUma: maisUma);
     }
   }
 
-  /// A segunda pergunta de `Próximos`: so as distancias. Falha vira nulo, e
-  /// a agenda sai sem a linha.
-  Future<PaginaPorPerto?> _distancias(RedeApi rede) async {
-    try {
-      return await rede.listarPorPerto(
-        _recorte.queryPorPerto(ordemPorPerto: OrdemPorPerto.proximos),
-      );
-    } on FalhaDeChamada {
-      return null;
-    } on FormatException {
-      return null;
+  void _falhou(int geracao, {required bool maisUma}) {
+    if (!mounted || geracao != _geracao) return;
+    setState(() {
+      if (maisUma) {
+        // A pagina seguinte falhou: os cartoes que ja estao na tela ficam,
+        // porque o recorte deles e o mesmo, e so o fim da lista diz.
+        _carregandoMais = false;
+        _falhaAoCarregarMais = true;
+        return;
+      }
+      // Os cartoes antigos saem: sob uma faixa de erro eles afirmariam um
+      // recorte que a tela nao conseguiu aplicar.
+      _itens = const <_ItemDaAgenda>[];
+      _fase = _Fase.falha;
+    });
+  }
+
+  void _limparMedidas() {
+    _medidas.clear();
+    _assinaturaDasMedidas = null;
+    _paginaDasMedidas = 0;
+    _medidasEsgotadas = false;
+  }
+
+  /// Pede paginas de distancias ate cobrir os [slugs] da tela, no maximo
+  /// tres por vez. Falha nao derruba a agenda: o cartao sai sem a linha.
+  Future<void> _garantirMedidas(
+    RedeApi rede,
+    RecorteDaRede recorte,
+    List<String> slugs,
+  ) async {
+    final assinatura = recorte.assinaturaDasDistancias;
+    if (assinatura != _assinaturaDasMedidas) {
+      _limparMedidas();
+      _assinaturaDasMedidas = assinatura;
+    }
+    for (var rodada = 0; rodada < 3; rodada++) {
+      if (_medidasEsgotadas) return;
+      if (slugs.every(_medidas.containsKey)) return;
+      try {
+        final p = await rede.listarPorPerto(
+          recorte
+              .copiar(pagina: _paginaDasMedidas + 1, semTermo: true)
+              .queryPorPerto(ordemPorPerto: OrdemPorPerto.proximos),
+        );
+        _paginaDasMedidas = p.pagina;
+        for (final i in p.itens) {
+          _medidas[i.encontro.slug] = i.distanciaEmMetros;
+        }
+        if (p.itens.isEmpty || p.pagina * p.limite >= p.total) {
+          _medidasEsgotadas = true;
+        }
+      } on FalhaDeChamada {
+        return;
+      } on FormatException {
+        return;
+      }
     }
   }
 
@@ -332,6 +411,8 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   bool get _podeMedir =>
       Escopo.of(context).sessao.logado && _temRegiao && _aba == AbaDaRede.proximos;
+
+  bool get _temMais => _itens.length < _total;
 
   @override
   Widget build(BuildContext context) {
@@ -390,13 +471,19 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
       exemplo: AgendaDaRede.exemploDaBusca,
       rotulo: 'Buscar encontro',
       aoMudar: (texto) {
+        _esperaDaBusca?.cancel();
         final limpo = texto.trim();
         // `minLength: 2` no contrato: um caractere so produziria 400.
         if (limpo.isNotEmpty && limpo.length < 2) {
           setState(() {});
           return;
         }
-        _trocarRecorte(_recorteCom(termo: limpo.isEmpty ? null : limpo));
+        final termo = limpo.isEmpty ? null : limpo;
+        if (termo == _recorte.termoLimpo) return;
+        // A pergunta sai 300 ms depois da ultima tecla, e nao a cada tecla.
+        _esperaDaBusca = Timer(esperaDaBusca, () {
+          if (mounted) _trocarRecorte(_recorteCom(termo: termo));
+        });
       },
     );
   }
@@ -657,12 +744,28 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
         ),
       ],
       const SizedBox(height: BichuEspaco.e4),
-      _LinhaDaPagina(
-        pagina: _pagina,
-        limite: _limite,
-        naPagina: _itens.length,
-        total: _total,
-      ),
+      _LinhaDaPagina(naTela: _itens.length, total: _total),
+      if (_temMais) ...<Widget>[
+        const SizedBox(height: BichuEspaco.e3),
+        if (_falhaAoCarregarMais) ...<Widget>[
+          Text(
+            AgendaDaRede.falhaAoCarregarMais,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: BichuEspaco.e2),
+        ],
+        OutlinedButton(
+          onPressed: _carregandoMais ? null : () => _carregar(maisUma: true),
+          style: OutlinedButton.styleFrom(
+            minimumSize: const Size.fromHeight(BichuAlvoDeToque.min),
+          ),
+          child: Text(
+            _falhaAoCarregarMais
+                ? AgendaDaRede.rotuloDeTentar
+                : AgendaDaRede.rotuloDeCarregarMais,
+          ),
+        ),
+      ],
     ];
   }
 
@@ -715,26 +818,17 @@ class _Nada {
 }
 
 class _LinhaDaPagina extends StatelessWidget {
-  const _LinhaDaPagina({
-    required this.pagina,
-    required this.limite,
-    required this.naPagina,
-    required this.total,
-  });
+  const _LinhaDaPagina({required this.naTela, required this.total});
 
-  final int pagina;
-  final int limite;
-  final int naPagina;
+  final int naTela;
   final int total;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
-    final primeiro = (pagina - 1) * limite + 1;
-    final ultimo = primeiro + naPagina - 1;
     return Text(
-      'Mostrando $primeiro a $ultimo de $total',
+      'Mostrando 1 a $naTela de $total',
       style: textos.bodySmall?.copyWith(color: cores.textSecondary),
     );
   }

@@ -10,6 +10,7 @@
 // sao a outra metade, e o caso que as le quebra junto.
 
 
+import 'package:bichu/api/modelos.dart';
 import 'package:bichu/telas/rede/cartao_do_encontro.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
@@ -212,15 +213,25 @@ http.Response Function(http.Request) naoEncontrado() =>
     (_) => problema('not-found', 404);
 
 /// Abre o app e vai para a secao `Rede`.
+/// A regiao cadastrada do tutor de teste (`Me.reference_area`).
+const RegiaoDeReferencia regiaoDeTeste = RegiaoDeReferencia(
+  bairro: 'Pinheiros',
+  cidade: 'São Paulo',
+  uf: 'SP',
+);
+
 Future<void> abrirRede(
   WidgetTester tester, {
   required RedeDeTeste rede,
   bool logado = true,
+  bool comRegiao = true,
 }) async {
   await abrirOApp(
     tester,
     rede: rede.call,
-    deposito: logado ? depositoLogado() : null,
+    deposito: logado
+        ? depositoLogado(regiaoDeReferencia: comRegiao ? regiaoDeTeste : null)
+        : null,
   );
   await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
   await tester.pumpAndSettle();

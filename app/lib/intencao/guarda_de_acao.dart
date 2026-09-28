@@ -43,7 +43,11 @@ class ResultadoDaExecucao {
 /// O que a guarda sabe fazer com uma ação: executá-la e, quando ela falha,
 /// montar o que a tela de retorno precisa receber.
 class AcaoExecutavel {
-  const AcaoExecutavel({required this.executar, required this.retomar});
+  const AcaoExecutavel({
+    required this.executar,
+    required this.retomar,
+    this.rotaDeRetorno,
+  });
 
   /// Executa de verdade. Lança `FalhaDeChamada` como qualquer camada de API.
   final Future<ResultadoDaExecucao> Function(IntencaoPendente) executar;
@@ -53,6 +57,12 @@ class AcaoExecutavel {
   /// formulário em branco, que é perder o rascunho pelo outro caminho.
   final Object? Function(IntencaoPendente intencao, MensagemDeErro? erro)
       retomar;
+
+  /// A rota da tela de retorno quando ela depende do ALVO, e nao so do ID de
+  /// tela. Nulo usa `rotaDaTela(telaDeRetorno)`, como ate aqui. O encontro da
+  /// `Rede` precisa disto: a volta de um pedido que falhou e o proprio
+  /// encontro (`/rede/encontros/<slug>`), e o `slug` esta no `alvo`.
+  final String? Function(IntencaoPendente intencao)? rotaDeRetorno;
 }
 
 /// Para onde a pessoa vai depois de entrar na conta.
@@ -246,8 +256,9 @@ class GuardaDeAcao {
     }
 
     // Já validado por `pendente`.
-    final rotaDeRetorno = _rotaDaTela(intencao.telaDeRetorno)!;
     final executavel = _acoes[intencao.acao];
+    final rotaDeRetorno = executavel?.rotaDeRetorno?.call(intencao) ??
+        _rotaDaTela(intencao.telaDeRetorno)!;
 
     if (executavel == null) {
       // Defeito de programação: alguma tela guardou uma intenção cuja ação

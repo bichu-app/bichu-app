@@ -36,7 +36,7 @@ class RedeApi {
       query: query,
       exigeToken: false,
     );
-    return PaginaDaRede.doJson(json);
+    return _ler(() => PaginaDaRede.doJson(json));
   }
 
   /// `GET /v1/network/events/nearby` (`listNearbyNetworkEvents`).
@@ -46,20 +46,20 @@ class RedeApi {
   /// nao participa de nada na `Rede`.
   Future<PaginaPorPerto> listarPorPerto(Map<String, String> query) async {
     final json = await _api.get('/network/events/nearby', query: query);
-    return PaginaPorPerto.doJson(json);
+    return _ler(() => PaginaPorPerto.doJson(json));
   }
 
   /// `GET /v1/network/events/{eventSlug}` (`getNetworkEvent`).
   Future<EncontroDaRede> detalhar(String slug) async {
     final json = await _api.get(_caminho(slug), exigeToken: false);
-    return EncontroDaRede.doJson(json);
+    return _ler(() => EncontroDaRede.doJson(json));
   }
 
   /// `GET /v1/network/events/{eventSlug}/location`
   /// (`getNetworkEventLocation`), com conta.
   Future<LocalizacaoDoEncontro> localizacao(String slug) async {
     final json = await _api.get('${_caminho(slug)}/location');
-    return LocalizacaoDoEncontro.doJson(json);
+    return _ler(() => LocalizacaoDoEncontro.doJson(json));
   }
 
   /// `GET /v1/network/events/{eventSlug}/private-details`
@@ -71,7 +71,7 @@ class RedeApi {
   Future<DetalhesDoPrivado?> detalhesDoPrivado(String slug) async {
     try {
       final json = await _api.get('${_caminho(slug)}/private-details');
-      return DetalhesDoPrivado.doJson(json);
+      return _ler<DetalhesDoPrivado>(() => DetalhesDoPrivado.doJson(json));
     } on FalhaDaApi catch (falha) {
       if (falha.problem.status == 404) return null;
       rethrow;
@@ -82,7 +82,7 @@ class RedeApi {
   /// (`requestToJoinNetworkEvent`). Sem corpo. Idempotente no servidor.
   Future<PedidoDeParticipacao> pedir(String slug) async {
     final json = await _api.post('${_caminho(slug)}/join-request');
-    return PedidoDeParticipacao.doJson(json);
+    return _ler(() => PedidoDeParticipacao.doJson(json));
   }
 
   /// `GET /v1/network/events/{eventSlug}/join-request`
@@ -91,7 +91,9 @@ class RedeApi {
   Future<PedidoDeParticipacao?> meuPedido(String slug) async {
     try {
       final json = await _api.get('${_caminho(slug)}/join-request');
-      return PedidoDeParticipacao.doJson(json);
+      return _ler<PedidoDeParticipacao>(
+        () => PedidoDeParticipacao.doJson(json),
+      );
     } on FalhaDaApi catch (falha) {
       if (falha.problem.status == 404) return null;
       rethrow;
@@ -102,13 +104,28 @@ class RedeApi {
   /// (`withdrawNetworkEventJoinRequest`).
   Future<PedidoDeParticipacao> desistir(String slug) async {
     final json = await _api.delete('${_caminho(slug)}/join-request');
-    return PedidoDeParticipacao.doJson(json);
+    return _ler(() => PedidoDeParticipacao.doJson(json));
   }
 
   /// `GET /v1/network/join-requests` (`listMyNetworkEventJoinRequests`).
   Future<PaginaDeMeusPedidos> meusPedidos(Map<String, String> query) async {
     final json = await _api.get('/network/join-requests', query: query);
-    return PaginaDeMeusPedidos.doJson(json);
+    return _ler(() => PaginaDeMeusPedidos.doJson(json));
+  }
+
+  /// Le uma resposta, e resposta fora do contrato sai como `FormatException`.
+  ///
+  /// Os modelos conferem tipo antes de ler, mas um campo de tipo inesperado
+  /// ainda pode estourar `TypeError` num lugar que ninguem previu. As telas
+  /// tratam `FormatException` como "resposta fora do contrato" (estado de
+  /// falha com `Atualizar`); um `TypeError` escaparia desse tratamento e
+  /// deixaria a tela girando.
+  static T _ler<T>(T Function() ler) {
+    try {
+      return ler();
+    } on TypeError catch (erro) {
+      throw FormatException('resposta da Rede fora do contrato: $erro');
+    }
   }
 
   /// O `slug` vem da resposta do servidor: vai codificado, como os ids das

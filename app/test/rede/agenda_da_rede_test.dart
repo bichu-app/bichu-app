@@ -8,8 +8,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 
+import 'package:bichu/escopo.dart';
+
 import '../telas/ajuda_de_tela.dart';
 import 'fixtures_da_rede.dart';
+
+/// Uma `NetworkEventPage` com `total` maior que a pagina.
+Map<String, dynamic> paginaFixa(List<Map<String, dynamic>> itens, int total) =>
+    pagina(itens, total: total);
 
 RedeDeTeste redeComAgenda({
   List<Map<String, dynamic>>? proximos,
@@ -227,17 +233,15 @@ void main() {
     });
 
     testWidgets(
-        'sem região, Mais perto e Distância não existem; com região, existem',
-        (tester) async {
-      await abrirRede(
-        tester,
-        rede: redeComAgenda(
-          porPertoCorpo: paginaPorPerto(<Map<String, dynamic>>[
-            porPerto(encontroPublico(), null),
-          ]),
-        ),
-      );
-      // Uma ordem so: o botao nao nasce.
+        'sem região cadastrada: nenhuma pergunta de distância, e Mais perto '
+        'e Distância não existem', (tester) async {
+      // ISCA: em `agenda_da_rede.dart`, troque `_temRegiao` por `true`. A
+      // pergunta de distancias sai para a conta sem regiao e este caso
+      // reprova no registro da rede.
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede, comRegiao: false);
+
+      expect(rede.chamadasA('GET /v1/network/events/nearby'), isEmpty);
       expect(find.byTooltip('Ordenar, Data mais próxima'), findsNothing);
       await tester.tap(find.byTooltip('Filtrar'));
       await tester.pumpAndSettle();
@@ -254,7 +258,7 @@ void main() {
       expect(
         find.text(
           'Mais perto usa a região do seu perfil. Os encontros sem mapa ficam '
-          'no fim, e os privados não aparecem nesta ordem.',
+          'no fim, e os privados saem da lista.',
         ),
         findsOneWidget,
       );
@@ -418,7 +422,14 @@ void main() {
         rede: redeComAgenda(proximos: <Map<String, dynamic>>[]),
         logado: false,
       );
-      expect(find.text('A Rede ainda não tem encontro'), findsOneWidget);
+      expect(find.text('A Rede ainda não tem encontros'), findsOneWidget);
+      expect(
+        find.text(
+          'Os encontros da comunidade em praças e parques aparecem aqui assim '
+          'que forem marcados.',
+        ),
+        findsOneWidget,
+      );
       expect(find.byTooltip('Filtrar'), findsNothing);
     });
 
@@ -458,6 +469,207 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Atualizar'), findsOneWidget);
+    });
+  });
+
+  group('paginação', () {
+    List<Map<String, dynamic>> encontros(int de, int ate) => <Map<String, dynamic>>[
+          for (var i = de; i <= ate; i++)
+            encontroPublico(slug: 'encontro-$i', title: 'Encontro $i'),
+        ];
+
+    RedeDeTeste redePaginada({bool segundaFalha = false}) {
+      return RedeDeTeste(<String, http.Response Function(http.Request)>{
+        'GET /v1/network/events': (req) {
+          final pagina = req.url.queryParameters['page'];
+          if (pagina == '2') {
+            if (segundaFalha) return problema('internal-error', 500);
+            return json200(<String, dynamic>{
+              ...paginaFixa(encontros(21, 25), 25),
+              'page': 2,
+            });
+          }
+          return json200(paginaFixa(encontros(1, 20), 25));
+        },
+        'GET /v1/network/events/nearby': (req) {
+          final pagina = req.url.queryParameters['page'];
+          final itens = pagina == '2' ? encontros(21, 25) : encontros(1, 20);
+          return json200(<String, dynamic>{
+            ...paginaPorPerto(<Map<String, dynamic>>[
+              for (final e in itens) porPerto(e, 1500),
+            ]),
+            'page': int.parse(pagina ?? '1'),
+            'total': 25,
+          });
+        },
+      });
+    }
+
+    testWidgets(
+        'ISCA -- Carregar mais pede a página 2 e soma os cartões, e as '
+        'distâncias seguem a lista, não a página', (tester) async {
+      // ISCA: em `RecorteDaRede.copiar`, ignore o parametro `pagina`. O
+      // pedido da pagina 2 sai como pagina 1 e este caso reprova.
+      final rede = redePaginada();
+      await abrirRede(tester, rede: rede);
+      expect(find.text('Mostrando 1 a 20 de 25'), findsOneWidget);
+      expect(rede.chamadasA('GET /v1/network/events/nearby'), hasLength(1));
+
+      await tester.ensureVisible(find.text('Carregar mais encontros'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Carregar mais encontros'));
+      await tester.pumpAndSettle();
+
+      final lista = rede.chamadasA('GET /v1/network/events');
+      expect(lista.last.url.queryParameters['page'], '2');
+      expect(find.text('Mostrando 1 a 25 de 25'), findsOneWidget);
+      expect(find.text('Carregar mais encontros'), findsNothing);
+      // Os cinco novos nao tinham medida: a proxima pagina de distancias sai.
+      final perto = rede.chamadasA('GET /v1/network/events/nearby');
+      expect(perto, hasLength(2));
+      expect(perto.last.url.queryParameters['page'], '2');
+    });
+
+    testWidgets('falha na página seguinte: os cartões ficam e Tentar de novo',
+        (tester) async {
+      await abrirRede(tester, rede: redePaginada(segundaFalha: true), logado: false);
+      await tester.ensureVisible(find.text('Carregar mais encontros'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Carregar mais encontros'));
+      await tester.pumpAndSettle();
+      expect(find.text('Não conseguimos carregar mais encontros.'), findsOneWidget);
+      expect(find.text('Tentar de novo'), findsOneWidget);
+      expect(find.text('Mostrando 1 a 20 de 25'), findsOneWidget);
+    });
+  });
+
+  group('busca', () {
+    testWidgets(
+        'ISCA -- espera 300 ms, não pergunta com 1 caractere e não repete as '
+        'distâncias', (tester) async {
+      // ISCA: em `_controleDeBusca`, troque o `Timer(esperaDaBusca, ...)`
+      // pela chamada direta de `_trocarRecorte`. Cada tecla vira pergunta e
+      // este caso reprova na contagem.
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede);
+      final antes = rede.chamadasA('GET /v1/network/events').length;
+      final pertoAntes = rede.chamadasA('GET /v1/network/events/nearby').length;
+
+      final campo = find.byType(TextField).first;
+      await tester.enterText(campo, 'a');
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(rede.chamadasA('GET /v1/network/events'), hasLength(antes));
+
+      for (final t in <String>['ag', 'agi', 'agil', 'agility']) {
+        await tester.enterText(campo, t);
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(rede.chamadasA('GET /v1/network/events'), hasLength(antes));
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      final depois = rede.chamadasA('GET /v1/network/events');
+      expect(depois, hasLength(antes + 1));
+      expect(depois.last.url.queryParameters['q'], 'agility');
+      // As distancias nao dependem do termo: nenhuma pergunta nova.
+      expect(rede.chamadasA('GET /v1/network/events/nearby'), hasLength(pertoAntes));
+    });
+  });
+
+  group('os outros filtros do contrato', () {
+    Future<Map<String, String>> escolher(
+      WidgetTester tester,
+      RedeDeTeste rede,
+      String opcao, {
+      String caminho = 'GET /v1/network/events',
+    }) async {
+      await tester.tap(find.byTooltip(RegExp('^Filtrar')));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text(opcao).last);
+      await tester.tap(find.text(opcao).last);
+      await tester.pumpAndSettle();
+      return rede.chamadasA(caminho).last.url.queryParameters;
+    }
+
+    testWidgets('Este fim de semana e Próximos 30 dias', (tester) async {
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede, logado: false);
+      expect((await escolher(tester, rede, 'Este fim de semana'))['when'], 'weekend');
+      expect((await escolher(tester, rede, 'Próximos 30 dias'))['when'], 'next_30_days');
+    });
+
+    testWidgets('Cidade manda city com o rótulo de uma cidade já vista',
+        (tester) async {
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede, logado: false);
+      expect((await escolher(tester, rede, 'São Paulo'))['city'], 'São Paulo');
+    });
+
+    testWidgets('Privado manda visibility=private e não pergunta distâncias',
+        (tester) async {
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede);
+      final perto = rede.chamadasA('GET /v1/network/events/nearby').length;
+      final q = await escolher(tester, rede, 'Privado');
+      expect(q['visibility'], 'private');
+      expect(rede.chamadasA('GET /v1/network/events/nearby'), hasLength(perto));
+    });
+
+    testWidgets('Até 5 km vai a listNearbyNetworkEvents, sem visibility',
+        (tester) async {
+      final rede = redeComAgenda();
+      await abrirRede(tester, rede: rede);
+      final q = await escolher(
+        tester,
+        rede,
+        'Até 5 km',
+        caminho: 'GET /v1/network/events/nearby',
+      );
+      expect(q['max_km'], '5');
+      expect(q.containsKey('visibility'), isFalse);
+    });
+  });
+
+  group('sessão', () {
+    testWidgets(
+        'sair da conta com a agenda aberta: Meus pedidos some e a agenda '
+        'volta sem token e sem distâncias', (tester) async {
+      final rede = redeComAgenda();
+      rede.respostas['POST /v1/auth/logout'] = (_) => http.Response('', 204);
+      await abrirRede(tester, rede: rede);
+      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsOneWidget);
+      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
+      await tester.pumpAndSettle();
+
+      final contexto = tester.element(find.byType(TabBar));
+      await Escopo.of(contexto).sessao.sair();
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithText(Tab, 'Meus pedidos'), findsNothing);
+      final ultima = rede.chamadasA('GET /v1/network/events').last;
+      expect(ultima.url.queryParameters['when'], 'upcoming');
+      expect(ultima.headers['Authorization'], isNull);
+      final perto = rede.chamadasA('GET /v1/network/events/nearby').length;
+      await tester.enterText(find.byType(TextField).first, 'passeio');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      expect(rede.chamadasA('GET /v1/network/events/nearby'), hasLength(perto));
+    });
+  });
+
+  group('resposta fora do contrato', () {
+    testWidgets('um teaser com local_date de outro tipo vira a faixa de falha',
+        (tester) async {
+      await abrirRede(
+        tester,
+        logado: false,
+        rede: redeComAgenda(
+          proximos: <Map<String, dynamic>>[
+            <String, dynamic>{...teaserPrivado(), 'local_date': 20261004},
+          ],
+        ),
+      );
+      expect(find.text('Não conseguimos carregar os encontros agora.'), findsOneWidget);
     });
   });
 }

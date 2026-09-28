@@ -33,6 +33,7 @@ import '../telas/achado/tela_achado_registrado.dart';
 import '../telas/achado/tela_do_achado.dart';
 import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
+import '../intencao/pedido_de_participacao_como_intencao.dart';
 import '../telas/rede/encontro_da_rede.dart';
 import '../telas/tela_de_abertura.dart';
 
@@ -570,6 +571,11 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
                       // e a linha some sem aviso.
                       distanciaEmMetros: estado.extra is int
                           ? estado.extra! as int
+                          : null,
+                      // O pedido feito depois do login nao saiu: a caixa do
+                      // privado diz por que.
+                      erroDoPedido: estado.extra is RetomadaDoPedido
+                          ? (estado.extra! as RetomadaDoPedido).erro.texto
                           : null,
                     ),
                   ),

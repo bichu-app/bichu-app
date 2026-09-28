@@ -8,9 +8,12 @@
 
 import 'dart:convert';
 
+import 'package:bichu/api/mensagens_de_erro.dart';
 import 'package:bichu/dispositivo/saida_do_app.dart';
+import 'package:bichu/intencao/pedido_de_participacao_como_intencao.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/roteamento/rotas.dart';
+import 'package:bichu/telas/conta/tela_entrar.dart';
 import 'package:bichu/telas/rede/agenda_da_rede.dart';
 import 'package:bichu/telas/rede/local_do_encontro.dart';
 import 'package:flutter/material.dart';
@@ -132,7 +135,7 @@ void main() {
         'Vacinação em dia',
         'O que levar',
         'Água',
-        'Saquinho',
+        'Saquinhos para cocô',
         'Cuidados no encontro',
         'Recolha o cocô e leve o saquinho embora.',
         'Na área cercada, o cão pode ficar solto. Fora dela, na guia.',
@@ -202,6 +205,29 @@ void main() {
       expect(saida.mapas, hasLength(1));
       expect(saida.mapas.single.lat, -23.5617);
       expect(saida.mapas.single.nome, 'Praça Benedito Calixto');
+    });
+
+    testWidgets('/location com falha: o erro do mapa e Tentar de novo refaz só ela',
+        (tester) async {
+      var falhar = true;
+      final rede = redeDoEncontro(
+        encontro: encontroPublico(),
+        mais: <String, http.Response Function(http.Request)>{
+          'GET /v1/network/events/$slugPublico/location': (_) => falhar
+              ? problema('internal-error', 500)
+              : json200(localizacao(lat: null)),
+        },
+      );
+      await abrirEncontro(tester, rede: rede, titulo: tituloPublico);
+      expect(find.text('Não conseguimos carregar o mapa agora.'), findsOneWidget);
+      // O endereco continua: o mapa nunca e a unica forma de saber onde e.
+      expect(find.text('Praça Benedito Calixto'), findsOneWidget);
+      falhar = false;
+      await tester.tap(find.text('Tentar de novo'));
+      await tester.pumpAndSettle();
+      expect(rede.chamadasA('GET /v1/network/events/$slugPublico/location'), hasLength(2));
+      expect(rede.chamadasA('GET /v1/network/events/$slugPublico'), hasLength(1));
+      expect(find.text('Não conseguimos carregar o mapa agora.'), findsNothing);
     });
 
     testWidgets('com conta e sem ponto: só o endereço, sem mapa nem botão',
@@ -307,11 +333,11 @@ void main() {
   group('encontro privado', () {
     RedeDeTeste redePrivada({
       String? estado,
-      List<String>? estadosDepois,
+      String status = 'upcoming',
     }) {
       var estadoAtual = estado;
       return redeDoEncontro(
-        encontro: teaserPrivado(),
+        encontro: teaserPrivado(status: status),
         mais: <String, http.Response Function(http.Request)>{
           'GET /v1/network/events/$slugPrivado/join-request': (_) =>
               estadoAtual == null
@@ -364,7 +390,7 @@ void main() {
       expect(
         find.text(
           'Ao pedir, a equipe do Bichu vê o seu nome de exibição, o mês em que '
-          'você criou a conta e se a sua conta está validada.',
+          'você criou a conta e se o seu e-mail está confirmado.',
         ),
         findsOneWidget,
       );
@@ -403,6 +429,8 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Entrar').last);
       await tester.pumpAndSettle();
 
+      // A guarda leva a pessoa a tela de entrar, e ela esta na frente.
+      expect(find.byType(TelaEntrar), findsOneWidget);
       final guardado = jsonDecode((await envelope.ler())!) as Map<String, dynamic>;
       expect(guardado['acao'], 'pedir_para_participar');
       expect(guardado['alvo'], slugPrivado);
@@ -495,5 +523,122 @@ void main() {
       expect(textoDaTela(tester), isNot(contains('da sua região')));
       expect(find.text('Compartilhar'), findsNothing);
     });
-  });
+  
+    testWidgets('falha ao consultar o pedido: o teaser fica e só a caixa diz',
+        (tester) async {
+      // ISCA: em `_lerPedido`, apague os dois `on ... return
+      // const _PedidoLido.indisponivel()`. A falha sobe para `_carregar` e a
+      // tela inteira vira a faixa de erro; este caso reprova no titulo.
+      final rede = redePrivada(estado: 'requested');
+      var falhar = true;
+      rede.respostas['GET /v1/network/events/$slugPrivado/join-request'] = (_) =>
+          falhar ? problema('internal-error', 500) : json200(pedido('requested'));
+      await abrirEncontro(tester, rede: rede, titulo: tituloPrivado);
+
+      expect(find.text(tituloPrivado), findsOneWidget);
+      expect(find.text('Domingo, 4 de outubro'), findsOneWidget);
+      expect(find.text('Não conseguimos consultar o seu pedido agora.'), findsOneWidget);
+      expect(find.text('Pedir para participar'), findsNothing);
+      falhar = false;
+      await tester.tap(find.text('Tentar de novo'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pedido enviado'), findsOneWidget);
+      // So a consulta do pedido foi refeita: o encontro nao foi relido.
+      expect(rede.chamadasA('GET /v1/network/events/$slugPrivado'), hasLength(1));
+    });
+
+    testWidgets('falha ao pedir: o erro fica na caixa', (tester) async {
+      final rede = redePrivada();
+      // Sem conexao: a camada de API traduz para uma frase conhecida.
+      rede.respostas['POST /v1/network/events/$slugPrivado/join-request'] =
+          (_) => throw http.ClientException('sem rede');
+      await abrirEncontro(tester, rede: rede, titulo: tituloPrivado);
+      await tester.tap(find.text('Pedir para participar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Encontro privado'), findsOneWidget);
+      expect(find.text('Pedido enviado'), findsNothing);
+      expect(
+        find.text('Isso precisa de conexão. Tente de novo quando tiver sinal.'),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    testWidgets('falha ao desistir: continua Pedido enviado, com o erro',
+        (tester) async {
+      final rede = redePrivada(estado: 'requested');
+      rede.respostas['DELETE /v1/network/events/$slugPrivado/join-request'] =
+          (_) => throw http.ClientException('sem rede');
+      await abrirEncontro(tester, rede: rede, titulo: tituloPrivado);
+      await tester.tap(find.text('Desistir do pedido'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(OutlinedButton, 'Desistir do pedido'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pedido enviado'), findsOneWidget);
+      expect(find.text('Desistir do pedido'), findsOneWidget);
+      expect(
+        find.text('Isso precisa de conexão. Tente de novo quando tiver sinal.'),
+        findsOneWidget,
+      );
+      expect(find.byType(SnackBar), findsNothing);
+    });
+
+    for (final status in <int>[404, 500]) {
+      testWidgets('aprovado com private-details $status: a faixa dos detalhes',
+          (tester) async {
+        final rede = redePrivada(estado: 'approved');
+        rede.respostas['GET /v1/network/events/$slugPrivado/private-details'] =
+            (_) => problema(status == 404 ? 'not-found' : 'internal-error', status);
+        await abrirEncontro(tester, rede: rede, titulo: tituloPrivado);
+        expect(find.text('Pedido aprovado'), findsOneWidget);
+        expect(find.text('Não conseguimos carregar os detalhes agora.'), findsOneWidget);
+        expect(textoDaTela(tester), isNot(contains('ISCA-')));
+        expect(rede.chamadasA('GET /v1/network/events/$slugPrivado/location'), isEmpty);
+      });
+    }
+
+    testWidgets('privado cancelado: o aviso, e nenhuma caixa de pedido',
+        (tester) async {
+      await abrirEncontro(
+        tester,
+        rede: redePrivada(status: 'cancelled'),
+        titulo: tituloPrivado,
+      );
+      expect(
+        find.text('A equipe do Bichu cancelou este encontro. Ele não vai acontecer.'),
+        findsOneWidget,
+      );
+      expect(find.text('Pedir para participar'), findsNothing);
+      expect(find.text('Encontro privado'), findsNothing);
+    });
+
+    testWidgets('privado encerrado sem aprovação: sem caixa e sem pedir',
+        (tester) async {
+      await abrirEncontro(
+        tester,
+        rede: redePrivada(status: 'ended', estado: 'requested'),
+        titulo: tituloPrivado,
+      );
+      expect(find.text('Encerrado'), findsOneWidget);
+      expect(find.text('Pedir para participar'), findsNothing);
+      expect(find.text('Pedido enviado'), findsNothing);
+    });
+
+    testWidgets('a volta da guarda com erro: a caixa abre dizendo por que',
+        (tester) async {
+      final rede = redePrivada();
+      telaAlta(tester);
+      await abrirRede(tester, rede: rede);
+      final contexto = tester.element(find.byType(AgendaDaRede));
+      GoRouter.of(contexto).go(
+        Rotas.encontroDaRedeDe(slugPrivado),
+        extra: const RetomadaDoPedido(
+          MensagemDeErro(texto: 'Este encontro já aconteceu.'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Encontro privado'), findsOneWidget);
+      expect(find.text('Este encontro já aconteceu.'), findsOneWidget);
+    });
+});
 }
