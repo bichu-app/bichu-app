@@ -107,7 +107,7 @@ function corpo(ajuste: Record<string, unknown> = {}) {
 }
 
 async function criar(ajuste: Record<string, unknown> = {}) {
-  const criado = await r.criarEncontro(autor, corpo(ajuste) as never);
+  const criado = await r.criarEncontro(autor, corpo(ajuste));
   slugs.push(criado.recurso.slug);
   return criado;
 }
@@ -124,7 +124,7 @@ async function trilhaDe(resourceId: string): Promise<{ action: string; before: u
     .where('resource_id', '=', resourceId)
     .orderBy('occurred_at', 'asc')
     .execute();
-  return linhas as never;
+  return linhas;
 }
 
 async function novaConta(ajuste: { displayName?: string | null; verificada?: boolean } = {}): Promise<string> {
@@ -164,8 +164,7 @@ async function envio(purpose: 'network_event' | 'store_item', dono: string): Pro
 
 function codigo(erro: unknown): string | undefined {
   if (!(erro instanceof AppError)) return undefined;
-  const erros = (erro as unknown as { errors?: { code: string }[] }).errors;
-  return erros?.[0]?.code ?? erro.type;
+  return erro.errors?.[0]?.code ?? erro.problemType;
 }
 
 before(async () => {
@@ -203,7 +202,7 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
   void it('ISCA: com a trilha falhando, o encontro NAO e gravado', async () => {
     const quebrada: TrilhaTransacional = { recordIn: () => Promise.reject(new Error('trilha fora do ar')) };
     const titulo = `Sem trilha ${sufixo()}`;
-    await assert.rejects(() => rede(quebrada).criarEncontro(autor, corpo({ title: titulo }) as never), /trilha fora do ar/);
+    await assert.rejects(() => rede(quebrada).criarEncontro(autor, corpo({ title: titulo })), /trilha fora do ar/);
     const linha = await banco.db.selectFrom('network_events').select('id').where('title', '=', titulo).executeTakeFirst();
     assert.equal(linha, undefined, 'o encontro ficou gravado sem linha de trilha');
   });
