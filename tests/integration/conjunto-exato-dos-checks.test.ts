@@ -84,7 +84,8 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'revoked_reason',
     valores: ['logout', 'rotated', 'role_removed', 'account_invalidated', 'disavowed'],
   },
-  // BICHUS-259 (D40). Os quatro escopos de `X-Admin-Reauth-Token`. Espelha
+  // BICHUS-259 (D40). Os cinco escopos de `X-Admin-Reauth-Token` (o quinto,
+  // `network_event_access_change`, pela 20260923000010, provisoria). Espelha
   // `AdminReauthScope` do contrato, `EscopoDeReautenticacaoAdministrativa` em
   // `src/shared/http/route-definition.ts` e o tipo da coluna em
   // `src/shared/db/schema.ts`.
@@ -95,6 +96,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       'network_event_relocation',
       'network_event_cancellation',
       'network_event_removal',
+      'network_event_access_change',
     ],
   },
   'public.alert_dispatches.alert_dispatches_estado': {

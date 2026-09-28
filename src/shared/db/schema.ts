@@ -101,7 +101,8 @@ export interface AdminReauthTokensTable {
     | 'store_item_retirement'
     | 'network_event_relocation'
     | 'network_event_cancellation'
-    | 'network_event_removal';
+    | 'network_event_removal'
+    | 'network_event_access_change';
   token_hash: Buffer;
   issued_at: Date;
   expires_at: Date;

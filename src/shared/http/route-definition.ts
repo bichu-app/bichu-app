@@ -83,7 +83,8 @@ export type EscopoDeReautenticacaoAdministrativa =
   | 'store_item_retirement'
   | 'network_event_relocation'
   | 'network_event_cancellation'
-  | 'network_event_removal';
+  | 'network_event_removal'
+  | 'network_event_access_change';
 
 /**
  * O `x-audit` da operacao administrativa: a acao gravada em `audit.events` na
