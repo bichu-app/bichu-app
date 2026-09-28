@@ -150,11 +150,23 @@ async function gerarPiorCasoAceito(destino: string): Promise<void> {
   await writeFile(destino, bytes);
 }
 
-/** O programa que o filho roda: a série, pelo adaptador do produto. */
+/**
+ * O programa que o filho roda: a série, pelo MESMO adaptador do produto.
+ *
+ * O endereço do adaptador sai de `import.meta.resolve`, e não de um caminho
+ * relativo escrito à mão. Este arquivo é lido de dois lugares diferentes — da
+ * árvore, com os tipos removidos em tempo de execução, e de `dist/_tests/`
+ * depois de compilado — e um relativo que acerta em um erra no outro. Errado, o
+ * filho morre por módulo não encontrado: saída diferente de zero, mesma cor da
+ * isca pega, e o caso passaria a "reprovar" por um motivo que não é o dele.
+ */
 function programaDaSerie(): string {
+  const adaptador = import.meta.resolve(
+    '../../src/modules/media/adapters/external/sharp-image-processor.js',
+  );
   return [
     "import { readFileSync } from 'node:fs';",
-    "import { criarImageProcessor } from '../../dist/modules/media/adapters/external/sharp-image-processor.js';",
+    `import { criarImageProcessor } from ${JSON.stringify(adaptador)};`,
     'const bytes = readFileSync(process.argv[2]);',
     'const quantas = Number(process.argv[3]);',
     'const imagens = criarImageProcessor();',
@@ -192,7 +204,7 @@ async function rodarSerieEmProcessoFilho(programa: string): Promise<DesfechoDoFi
   const filho = spawn(
     process.execPath,
     [caminhoDoPrograma, caminhoDaFoto, String(FOTOS_NA_SERIE)],
-    { cwd: join(import.meta.dirname, '..', '..', 'tests', 'integration'), stdio: ['ignore', 'pipe', 'pipe'] },
+    { stdio: ['ignore', 'pipe', 'pipe'] },
   );
 
   let texto = '';
@@ -226,10 +238,21 @@ async function rodarSerieEmProcessoFilho(programa: string): Promise<DesfechoDoFi
   return { saida, sinal, picoMiB, fotos, prazoEstourado, saidaCrua: texto };
 }
 
+/**
+ * Uma foto em `processing`, com a intenção de envio que o banco exige.
+ *
+ * `pet_photos.upload_intent_id` é NOT NULL com `REFERENCES upload_intents`, e a
+ * primeira versão deste arquivo não a criava: o caso reprovou com violação de
+ * restrição em vez de reprovar pelo que ele mede. Fixture que não monta o estado
+ * faz o caso falhar pelo motivo errado, que tem a mesma cor do motivo certo.
+ */
 async function criarFotoEmProcessamento(): Promise<{ foto: string; pet: PetId }> {
   const tutor = randomUUID() as UserId;
   const pet = randomUUID() as PetId;
+  const intencao = randomUUID();
   const foto = randomUUID();
+  const chave = `pets/${pet.replace(/-/g, '')}/original/foto.jpg`;
+
   await cliente.query('INSERT INTO users (id, email) VALUES ($1, $2)', [
     tutor,
     `orfao-${tutor}@${DOMINIO_DE_TESTE}`,
@@ -240,12 +263,95 @@ async function criarFotoEmProcessamento(): Promise<{ foto: string; pet: PetId }>
     [pet, tutor],
   );
   await cliente.query(
-    `INSERT INTO pet_photos (id, pet_id, original_key, status)
-     VALUES ($1, $2, $3, 'processing')`,
-    [foto, pet, `pets/${pet.replace(/-/g, '')}/original/foto.jpg`],
+    `INSERT INTO upload_intents
+       (id, user_id, pet_id, kind, object_key, declared_type, max_bytes, expires_at, confirmed_at)
+     VALUES ($1, $2, $3, 'pet_photo', $4, 'image/jpeg', 10485760, now() + interval '5 minutes', now())`,
+    [intencao, tutor, pet, chave],
+  );
+  await cliente.query(
+    `INSERT INTO pet_photos (id, pet_id, upload_intent_id, original_key, status)
+     VALUES ($1, $2, $3, $4, 'processing')`,
+    [foto, pet, intencao, chave],
   );
   contasCriadas.push(tutor);
   return { foto, pet };
+}
+
+/**
+ * Um processo que reserva ESTE trabalho e morre com ele na mão, de verdade.
+ *
+ * ## Por que a reserva é por id, e não `fila.claim(1)`
+ *
+ * `node --test` roda os arquivos em paralelo, e `claim` pega o trabalho mais
+ * antigo que estiver `pending` na tabela inteira — que pode ser de outro arquivo
+ * de teste correndo agora. Chamar `claim` aqui rouba trabalho alheio e deixa o
+ * caso dependendo de quem mais está rodando: verde sozinho, vermelho na suíte,
+ * e por um motivo que não é o dele.
+ *
+ * O `UPDATE` abaixo é o MESMO de `claim` (status, `locked_at` e `attempts` na
+ * mesma instrução), restrito a um id. O que este caso mede é a saída de
+ * `running`, não a escolha de `claim`.
+ *
+ * ## Por que um processo de verdade, e por que SIGKILL
+ *
+ * Porque é o estado que interessa: reserva feita, processo morto, ninguém para
+ * chamar `complete` nem `fail`. SIGKILL e não SIGTERM porque o worker trata
+ * SIGTERM e encerra com ordem — o que este caso reproduz é o cgroup matando por
+ * memória, que não dá chance de nada.
+ */
+async function reservarEMorrer(trabalho: string): Promise<{ saida: number | null; sinal: string | null }> {
+  // `pg` pelo endereço absoluto, pelo mesmo motivo do adaptador no caso 1: o
+  // programa é escrito num diretório temporário fora da árvore, e um
+  // especificador de pacote não resolve de lá. Errado, o filho morre por módulo
+  // não encontrado em vez de por SIGKILL — e a asserção de sinal abaixo é quem
+  // pegou isso, em vez de o caso passar medindo uma linha que nunca esteve
+  // `running`.
+  const programa = [
+    `import pg from ${JSON.stringify(import.meta.resolve('pg'))};`,
+    'const cliente = new pg.Client({ connectionString: process.argv[2] });',
+    'await cliente.connect();',
+    'await cliente.query(',
+    '  "UPDATE jobs SET status = \'running\', locked_at = now(), attempts = attempts + 1 WHERE id = $1",',
+    '  [process.argv[3]],',
+    ');',
+    'await cliente.end();',
+    "// Morte sem despedida: e o cgroup matando por memoria, nao um encerramento.",
+    "process.kill(process.pid, 'SIGKILL');",
+  ].join('\n');
+
+  const caminho = join(diretorio, `morte-${randomUUID().slice(0, 8)}.mjs`);
+  await writeFile(caminho, programa);
+
+  const filho = spawn(process.execPath, [caminho, CONEXAO ?? '', trabalho], {
+    cwd: process.cwd(),
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let texto = '';
+  filho.stdout.on('data', (p: Buffer) => { texto += p.toString(); });
+  filho.stderr.on('data', (p: Buffer) => { texto += p.toString(); });
+
+  let prazoEstourado = false;
+  const relogio = setTimeout(() => {
+    prazoEstourado = true;
+    filho.kill('SIGKILL');
+  }, 30_000);
+
+  const desfecho = await new Promise<{ saida: number | null; sinal: string | null }>((resolve) => {
+    filho.once('close', (codigo, sinal) => {
+      clearTimeout(relogio);
+      resolve({ saida: codigo, sinal });
+    });
+  });
+
+  assert.equal(prazoEstourado, false, `o processo que deveria morrer pendurou. Saida:\n${texto}`);
+  assert.equal(
+    desfecho.sinal,
+    'SIGKILL',
+    `o processo tinha de morrer por SIGKILL e terminou com sinal ${String(desfecho.sinal)} e ` +
+      `saida ${String(desfecho.saida)}. Se ele saiu limpo, a reserva pode nao ter acontecido, ` +
+      `e o caso mediria uma linha que nunca esteve \`running\`. Saida:\n${texto}`,
+  );
+  return desfecho;
 }
 
 async function estadoDoTrabalho(
@@ -344,13 +450,11 @@ void describe('o worker sobrevive à série, e não deixa foto presa', () => {
       const { foto } = await criarFotoEmProcessamento();
       const trabalho = await fila.enqueue('media.process_upload', { photo_id: foto });
 
-      // A reserva de verdade: é ela que põe a linha em `running` com `locked_at`.
-      const reservados = await fila.claim(1);
-      assert.ok(
-        reservados.some((t) => t.id === trabalho),
-        'a reserva não pegou o trabalho que este caso acabou de enfileirar',
-      );
-      assert.equal((await estadoDoTrabalho(trabalho)).status, 'running');
+      // A reserva acontece e o processo MORRE com ela na mão.
+      await reservarEMorrer(trabalho);
+      const reservado = await estadoDoTrabalho(trabalho);
+      assert.equal(reservado.status, 'running');
+      assert.equal(reservado.orphan_recoveries, 0);
 
       // ISTO é "o processo morreu no meio": ninguém vai chamar `complete` nem
       // `fail`, porque quem faria isso não existe mais. Sem varredura de órfão,
@@ -425,7 +529,7 @@ void describe('o worker sobrevive à série, e não deixa foto presa', () => {
     async () => {
       const { foto } = await criarFotoEmProcessamento();
       const trabalho = await fila.enqueue('media.process_upload', { photo_id: foto });
-      await fila.claim(1);
+      await reservarEMorrer(trabalho);
       assert.equal((await estadoDoTrabalho(trabalho)).status, 'running');
 
       // Prazo de produção. A reserva tem segundos de idade, não minutos.
