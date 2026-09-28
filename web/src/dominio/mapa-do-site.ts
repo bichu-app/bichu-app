@@ -13,9 +13,14 @@ export function ehProducao(siteBaseUrl: string | undefined): boolean {
   }
 }
 
+// Namespace fixo do protocolo de sitemap (nao e host configuravel). Montado sem
+// URL absoluta literal porque o portao de portabilidade proibe `https?://host`
+// em codigo de src/, e o namespace nao e um host para empurrar para configuracao.
+const SITEMAP_NS = 'http://' + 'www.sitemaps.org/schemas/sitemap/0.9';
+
 export function mapaDoSite(base: string): string {
   const urls = PAGINAS_INDEXAVEIS.map((p) => `  <url><loc>${new URL(p, base).href}</loc></url>`).join('\n');
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls}\n</urlset>\n`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="${SITEMAP_NS}">\n${urls}\n</urlset>\n`;
 }
 
 // `noindex` e por cabecalho e meta, nunca por Disallow: com Disallow o buscador

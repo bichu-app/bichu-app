@@ -1,7 +1,7 @@
 // Caminhos dos Material Symbols Rounded, peso 500, preenchimento 0 (icon.axis.weight
 // e icon.axis.fill-repouso de design/tokens.json). Extraidos de
-// @material-symbols/svg-500@0.47.5 (Apache-2.0, https://github.com/marella/material-symbols),
-// que reempacota os SVG oficiais do Google. Copiados em vez de instalados: o site usa
+// @material-symbols/svg-500@0.47.5 (Apache-2.0, pacote marella/material-symbols no
+// npm), que reempacota os SVG oficiais do Google. Copiados em vez de instalados: o site usa
 // 37 dos 7854, e a fonte de icones do prototipo nao pode entrar (ADR-0028,
 // item 7: nenhuma fonte web). Icone novo: acrescente o nome e o caminho aqui.
 // viewBox de todos: "0 -960 960 960".

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { descricaoDoPet, desde, espera, frase } from '../../src/dominio/texto-do-pet.ts';
 import { fotoPermitida, origemDaMidia } from '../../src/dominio/midia.ts';
 import { ehProducao, mapaDoSite, robots } from '../../src/dominio/mapa-do-site.ts';
+import { HOSTS, url } from './hosts.ts';
 
 test('descricao so com o que a API devolveu', () => {
   assert.equal(descricaoDoPet({ display_name: 'Thor', species: 'dog', size: 'M', primary_color: 'preto e branco' }), 'Cão, porte médio, preto e branco.');
@@ -35,20 +36,22 @@ test('espera legivel a partir do Retry-After', () => {
 });
 
 test('foto so da origem da midia, que e a unica na CSP', () => {
-  const origem = origemDaMidia('https://img.bichu.app/qualquer/caminho');
-  assert.equal(origem, 'https://img.bichu.app');
-  assert.equal(fotoPermitida('https://img.bichu.app/p/1/card.webp', origem), 'https://img.bichu.app/p/1/card.webp');
-  assert.equal(fotoPermitida('https://outro.exemplo/p.webp', origem), null);
-  assert.equal(fotoPermitida('https://img.bichu.app/p.webp', null), null);
+  const origem = origemDaMidia(url(HOSTS.midia, '/qualquer/caminho'));
+  assert.equal(origem, url(HOSTS.midia));
+  assert.equal(fotoPermitida(url(HOSTS.midia, '/p/1/card.webp'), origem), url(HOSTS.midia, '/p/1/card.webp'));
+  assert.equal(fotoPermitida(url(HOSTS.outro, '/p.webp'), origem), null);
+  assert.equal(fotoPermitida(url(HOSTS.midia, '/p.webp'), null), null);
   assert.equal(origemDaMidia('javascript:alert(1)'), null);
 });
 
 test('mapa do site e robots so em producao', () => {
-  assert.equal(ehProducao('https://bichu.app'), true);
-  assert.equal(ehProducao('https://hml.bichu.app'), false);
+  const prod = url(HOSTS.producao);
+  const hml = url(HOSTS.homologacao);
+  assert.equal(ehProducao(prod), true);
+  assert.equal(ehProducao(hml), false);
   assert.equal(ehProducao(undefined), false);
-  assert.match(mapaDoSite('https://bichu.app'), /<loc>https:\/\/bichu\.app\/comunidade<\/loc>/);
-  assert.doesNotMatch(mapaDoSite('https://bichu.app'), /termos|privacidade|\/t\//);
-  assert.match(robots('https://bichu.app', true), /Sitemap: https:\/\/bichu\.app\/sitemap\.xml/);
-  assert.doesNotMatch(robots('https://hml.bichu.app', false), /Disallow|Sitemap/);
+  assert.ok(mapaDoSite(prod).includes(`<loc>${url(HOSTS.producao, '/comunidade')}</loc>`));
+  assert.doesNotMatch(mapaDoSite(prod), /termos|privacidade|\/t\//);
+  assert.ok(robots(prod, true).includes(`Sitemap: ${url(HOSTS.producao, '/sitemap.xml')}`));
+  assert.doesNotMatch(robots(hml, false), /Disallow|Sitemap/);
 });

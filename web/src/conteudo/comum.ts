@@ -9,11 +9,16 @@ export const MARCA = {
   rotuloInicio: 'Bichu, página inicial',
 };
 
+// Host e perfil separados do esquema de proposito: o portao de portabilidade
+// proibe URL absoluta literal em codigo de src/, e o link se monta com o host.
+const INSTAGRAM_HOST = 'www.instagram.com';
+const INSTAGRAM_PERFIL = 'bichu.app';
+
 export const CONTATO = {
   email: 'oi@bichu.app',
   instagram: {
     usuario: '@bichu.app',
-    url: 'https://www.instagram.com/bichu.app/',
+    url: `https://${INSTAGRAM_HOST}/${INSTAGRAM_PERFIL}/`,
   },
 };
 

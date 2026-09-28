@@ -4,15 +4,14 @@ import assert from 'node:assert/strict';
 import { lerEspera, resultadoDeProblema, slugDoTipo, type Resultado } from '../../src/dominio/resultado.ts';
 import { telaAoAbrir, telaAoAvisar, type ResolucaoDaTag, type AvisoCriado } from '../../src/dominio/telas-da-tag.ts';
 import { telaAoConferirLink, telaAoConfirmarEmail, telaAoSalvarSenha } from '../../src/dominio/telas-de-conta.ts';
-
-const tipo = (slug: string) => `https://dominio-a-definir.com.br/problems/${slug}`;
+import { HOSTS, tipoDeProblema as tipo, url } from './hosts.ts';
 const problema = (status: number, slug: string, extra: Record<string, unknown> = {}, retry: string | null = null) =>
   resultadoDeProblema(status, { type: tipo(slug), title: 'qualquer texto', status, ...extra }, retry);
 const falha: Resultado<never> = { tipo: 'falha', motivo: 'tempo' };
 
 test('slug sai do type em qualquer dominio, e so se estiver na lista fechada', () => {
-  assert.equal(slugDoTipo('https://hml.bichu.app/problems/tag-revoked'), 'tag-revoked');
-  assert.equal(slugDoTipo('https://x/problems/nao-existe-na-lista'), null);
+  assert.equal(slugDoTipo(url(HOSTS.homologacao, '/problems/tag-revoked')), 'tag-revoked');
+  assert.equal(slugDoTipo(url('x', '/problems/nao-existe-na-lista')), null);
   assert.equal(slugDoTipo('tag-revoked'), null);
   assert.equal(slugDoTipo(undefined), null);
 });
