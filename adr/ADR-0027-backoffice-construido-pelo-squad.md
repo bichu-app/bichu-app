@@ -1,9 +1,13 @@
-# ADR-0027: O backoffice é do squad: SPA em `admin.bichu.app`, sessão opaca em cookie na mesma origem da API administrativa, conta dedicada e trilha em toda escrita
+# ADR-0027: O backoffice é do squad: SPA em `admin.bichu.app`, sessão opaca em cookie na mesma origem da API administrativa, contas próprias e trilha em toda escrita
 
 **Status:** aceito. As decisões do cliente de 23/09 estão fechadas; as
 decisões técnicas foram reconciliadas com a seção 22 de `docs/04-seguranca.md`
 (ARGOS, mesma data), e as divergências que restaram estão no item 15.
-**Data:** 2026-09-23
+**Emenda de 28/09 (item 20):** o painel passa a ter **contas próprias**, em
+`admin_accounts`, sem ligação com `users`. Isso supera a conta dedicada em
+`users` + `user_roles` e a D42 na forma de 23/09; os itens 2, 5, 7, 8, 9, 10 e o
+apêndice A foram reescritos no lugar para ficarem coerentes com ele.
+**Data:** 2026-09-23 (emenda de 2026-09-28)
 **Supera:** a credencial de serviço (`adminAuth`, `X-Service-Credential`) do
 ADR-0026, seções 2.2 e 2.3; a BICHUS-189 (catálogo em arquivo versionado)
 **Emenda:** ADR-0023 (emenda 1), ADR-0016 (emenda 2), ADR-0010 (emenda 1),
@@ -37,6 +41,7 @@ cliente decidiu que o squad constrói o backoffice**, e respondeu, por escrito:
 | Ponto do encontro da `Rede` | **o app mostra ao tutor o ponto no mapa**, em resposta autenticada |
 | BICHUS-251 (`feat/secao-rede`) | **emendada antes do merge**: sem check-in e galeria na tela, com coordenada |
 | Prioridade | em paralelo à cunha, sem tocar no que a demonstração de 30/09 usa |
+| Contas do painel (**28/09**) | **separadas das contas do app**, "para que usuários não tenham como entrar no backoffice" (item 20) |
 
 O estado medido em 23/09, na `development` local (`4ae9671`):
 
@@ -122,10 +127,11 @@ navegador, e os prazos reais são do servidor.
 - **Identificador novo no login e na reautenticação**; o anterior deixa de
   valer (fixação de sessão, D38).
 - **Cada requisição confere, no servidor:** o hash existe; não foi revogado;
-  está dentro dos dois prazos; `created_at >= users.sessions_invalid_before`; a
-  conta está `active` e não excluída; **`user_roles` ainda tem `admin`**. O
-  papel nunca vai em claim (D37). Retirar o papel vale na próxima requisição,
-  e não daqui a 15 minutos.
+  está dentro dos dois prazos; `created_at >= admin_accounts.sessions_invalid_before`;
+  a conta administrativa está `active`; **`admin_accounts.role` ainda abre o
+  painel** (item 20). Uma consulta só, sessão junto da conta. O papel nunca vai
+  em claim (D37). Desativar a conta vale na próxima requisição, e não daqui a
+  15 minutos.
 
 **`Authorization: Bearer` em `/v1/admin/*` responde 401, inclusive com JWT
 válido de conta `admin`; o cookie é ignorado fora de `/v1/admin/*`** (D36).
@@ -203,18 +209,22 @@ envio de imagem vai direto do navegador ao bucket (ADR-0007, item 10): o bucket
 de envio aceita `POST`/`PUT` com origem `https://admin.bichu.app`, só no
 prefixo do catálogo, sem credenciais.
 
-### 5. Login, conta dedicada e o que responde ao "um token, dois poderes"
+### 5. Login, conta própria e o que responde ao "um token, dois poderes"
 
-**A conta administrativa é dedicada** (D42). Conta com papel `admin` ou
-`moderator` é recusada em `POST /v1/auth/login` e `POST /v1/auth/refresh` com
-**o mesmo 401** de credencial inválida, e conceder o papel revoga as sessões
-móveis da conta. Quem é administrador e tutor usa duas contas.
+**A conta administrativa é própria** (D42, forma de 28/09; item 20). Ela mora
+em `admin_accounts`, que não tem chave estrangeira para `users` nem é
+referenciada por nada do app. O login do app nunca lê `admin_accounts`, e o
+login do painel nunca lê `users`, `user_identities` nem `local_credentials`.
+Uma conta do app, com qualquer papel, não tem como abrir sessão no painel,
+porque o painel não a encontra; e uma conta do painel não tem como entrar no
+app, pelo mesmo motivo. Quem é administrador e tutor tem duas contas, em duas
+tabelas.
 
 É a resposta ao motivo 1 do ADR-0026 contra "conta de pessoa com papel": o
 problema era **um token, dois poderes**. Aqui são duas credenciais (cookie só
-em `/v1/admin`, Bearer só fora dele) **e** duas contas, e a conta
-administrativa não abre o app. A porta do tutor, mais frouxa por decisão
-(ADR-0020), deixa de servir de oráculo da senha do administrador (T2).
+em `/v1/admin`, Bearer só fora dele) **e** dois cadastros, e a porta do tutor,
+mais frouxa por decisão (ADR-0020), deixa de servir de oráculo da senha do
+administrador (T2) sem precisar de nenhuma recusa no código do app.
 
 **Login administrativo** (`POST /v1/admin/auth/login`), na ordem:
 
@@ -227,22 +237,26 @@ administrativa não abre o app. A porta do tutor, mais frouxa por decisão
    Como o cookie é `HttpOnly`, o script de terceiro nunca o alcança.
 2. **Teto antes de derivar o hash** (D44), e o contrato o declara em
    `x-rate-limit`: 5 falhas por e-mail em 15 minutos e 10 em 24 horas (a
-   segunda bloqueia até redefinição por e-mail ou desbloqueio operacional), 20
+   segunda grava `admin_accounts.blocked_reason = 'failed_logins'`, e o
+   bloqueio só cai com `conta-admin redefinir-senha`, item 20.3), 20
    falhas por IP em 1 hora, sempre `429` com `Retry-After`. Acima de 50 falhas
    no total em 10 minutos, alerta de plantão (métrica, não balde).
-3. **Mesmo corpo e mesmo tempo** para conta inexistente, senha errada, e senha
-   certa sem papel `admin` (hash de descarte da 7.1 de `04-seguranca.md`). O
-   login não conta a ninguém quem é administrador (T3).
+3. **Mesmo corpo e mesmo tempo** para e-mail sem conta administrativa (inclusive
+   o e-mail de uma conta do app), senha errada, e senha certa de conta
+   desativada (hash de descarte da 7.1 de `04-seguranca.md`). O login não conta
+   a ninguém quem é administrador (T3).
 4. **Senha de conta administrativa** (D43): mínimo de **15 caracteres**,
    conferida contra base de senhas vazadas na definição e em todo login. Senha
-   correta que está na base: `403 password-reset-required`, com o caminho de
-   redefinição. A definição acontece pela redefinição por e-mail (a conta
-   dedicada não entra no app), e é `POST /v1/auth/password-reset/confirm` que
-   recusa com `422 weak-password` abaixo de 15 para conta com papel.
+   correta que está na base, ou conta com `blocked_reason = 'disavowed'`: `403
+   password-reset-required`, e o texto manda pedir a redefinição ao responsável
+   pelo painel. A senha só é definida pelo comando `conta-admin` (item 20.3),
+   digitada no terminal; não existe endpoint que defina ou redefina senha de
+   conta administrativa.
 5. **Aviso por e-mail a cada sessão administrativa aberta** (D46), com o link
-   "não fui eu" que já existe (`POST /v1/public/session-alerts/{alertToken}/disavow`).
-   Ele empurra `sessions_invalid_before`, que o item 2 lê a cada requisição:
-   o invasor cai do painel em menos de um segundo. ARGOS pede o aviso para
+   "não fui eu" do próprio painel (`POST /v1/admin/auth/disavow`, item 20.5),
+   que revoga as sessões, empurra `admin_accounts.sessions_invalid_before` e
+   bloqueia a conta até a redefinição: o invasor cai do painel em menos de um
+   segundo. ARGOS pede o aviso para
    dispositivo ou rede nova; aqui é **toda** sessão, porque reconhecer
    dispositivo exigiria um cookie persistente de dispositivo, que é mais um
    artefato com cara de credencial, e com até cinco contas e sessões de 12
@@ -262,33 +276,30 @@ existe. Escopos da v1, e o motivo de cada um:
 | `network_event_cancellation` | cancelar evento publicado | desfaz um encontro que pessoas planejaram |
 | `network_event_removal` | remover evento (estado terminal) | não tem volta |
 | `store_item_retirement` | retirar da vitrine item publicado | é o "excluir publicado" de D40 para a `Loja`: nada é apagado, mas um roteiro com a senha roubada esvaziaria a vitrine |
+| `network_event_access_change` | trocar a visibilidade (público/privado) de encontro publicado | muda quem vê o ponto e a hora (item 17) |
 
 Não há operação em lote na v1; a que vier exige reautenticação. O item em
 rascunho (nunca publicado) não tem o que retirar.
 
 **Por que não reaproveitar `X-Reauth-Token`.** O token do app é preso ao `jti`
 do JWT móvel (`reauth` em `components/securitySchemes`), e a conta
-administrativa não tem JWT móvel (D42). Um cabeçalho com o mesmo nome e duas
+administrativa não tem JWT móvel (item 20). Um cabeçalho com o mesmo nome e duas
 amarrações diferentes seria um token que vale num lugar e não no outro sem que
 o nome diga. Por isso `adminReauth` / `X-Admin-Reauth-Token` e a extensão
 `x-admin-reauth-scope`, com a mesma semântica (5 minutos, uso único, escopo),
 presos à sessão administrativa.
 
-**Redefinição de senha da conta administrativa: o fluxo que já existe.**
-`POST /v1/auth/password-reset` e `POST /v1/auth/password-reset/confirm`, com a
-página `/redefinir-senha` do site. D42 recusa a conta administrativa no
-**login** e na **renovação** do app, e não na redefinição: redefinir não abre
-sessão, só troca o segredo. Um segundo fluxo seria uma segunda porta para o
-mesmo segredo, com os mesmos riscos e metade do teste. Para conta com papel
-`admin`, a confirmação (1) recusa senha abaixo de 15 caracteres ou presente na
-base de vazadas com `422 weak-password`; (2) empurra `sessions_invalid_before`,
-o que derruba toda sessão administrativa da conta; e (3) avisa **todos** os
-administradores (D46). O e-mail de redefinição é o ponto sem mitigação do item
-9.
+**Redefinição de senha da conta administrativa: só pelo comando, no servidor**
+(item 20.4). O fluxo `POST /v1/auth/password-reset` do app não alcança
+`admin_accounts`, e não há fluxo por e-mail para o painel na v1. Quem esqueceu
+a senha pede ao responsável, que roda `conta-admin redefinir-senha` e digita a
+senha nova no terminal junto da pessoa; o comando recusa abaixo de 15 ou
+vazada, empurra `sessions_invalid_before`, limpa o bloqueio e avisa **todos**
+os administradores (D46).
 
 **Sair**: `POST /v1/admin/auth/logout` revoga a sessão;
-`POST /v1/admin/auth/logout-all` empurra `sessions_invalid_before` e derruba
-todas as sessões da conta, que por ser dedicada não tem sessão móvel a perder.
+`POST /v1/admin/auth/logout-all` empurra `admin_accounts.sessions_invalid_before`
+e derruba todas as sessões da conta.
 
 ### 6. XSS: o que o painel impõe, porque é dele que o item 2 depende
 
@@ -349,11 +360,10 @@ com a isca que precisa reprovar (P16 de `04-seguranca.md`):
    `adminReauth`;
 4. a matriz de P16 é gerada do contrato e reprova com zero operações.
 
-**Conceder e retirar papel não é operação do SPA** (D51): é o comando
-`src/bin/conceder-papel.ts`, que grava na trilha com `actor_kind = 'system'` e
-o operador em `metadata`, e que revoga as sessões móveis da conta ao conceder.
-Um papel que se concede por tela é a primeira coisa que um invasor com a senha
-de um administrador usaria.
+**Criar, desativar e redefinir conta administrativa não é operação do SPA**
+(D51): é o comando `src/bin/conta-admin.ts` (item 20.3), que grava na trilha com
+`actor_kind = 'system'` e o operador em `metadata`. Uma conta que se cria por
+tela é a primeira coisa que um invasor com a senha de um administrador usaria.
 
 ### 8. Trilha: toda escrita administrativa grava na mesma transação, ou não acontece
 
@@ -371,7 +381,7 @@ continua para o app.
 
 | Campo | O que vai |
 |---|---|
-| `actor_kind` / `actor_user_id` | `user` e o UUID interno do administrador; no login recusado de e-mail desconhecido, `anonymous` |
+| `actor_kind` / `actor_admin_id` | `admin` e o `admin_accounts.id` (item 20.2); `actor_user_id` fica nulo. No login recusado de e-mail sem conta administrativa, `anonymous`; no comando `conta-admin`, `system` com o operador em `metadata` |
 | `action` | o valor de `x-audit.action`, no padrão `admin.<recurso>.<verbo>` (D49), entrando na união fechada `AuditAction` |
 | `resource_kind` / `resource_id` | o tipo e o **`id` interno**, nunca o `slug`. O `slug` muda (ADR-0005), e a trilha precisa achar o mesmo objeto depois da troca; é divergência declarada com o ADR-0026 seção 4, que gravava o `slug` |
 | `before` / `after` | os campos que mudaram. Catálogo e evento não são dado pessoal, então o valor vai inteiro, **exceto a coordenada do evento**: a porta proíbe coordenada bruta na trilha, e ali vai só `{"point_changed": true}` |
@@ -396,16 +406,17 @@ mostra), e envia imagem que aparece para toda a base, com a marca Bichu, até
 alguém perceber. `admin.bichu.app` aparece no log de Certificate Transparency
 no dia em que o certificado for emitido.
 
-**A recuperação de senha fica sem mitigação.** O cliente recusou restringir o
-papel a e-mail de domínio corporativo (a Q1 de `04-seguranca.md` 22.8). A
-senha se redefine pela caixa de e-mail do administrador, que pode ser qualquer
-provedor e não tem segundo fator garantido: **quem tomar a caixa de e-mail
-toma o painel**, sem passar pelo reCAPTCHA nem pelo teto do login (T14). O
-aviso a todos os administradores a cada redefinição (item 5) é detecção, não
-prevenção.
+**A recuperação de senha deixa de passar pelo e-mail** (item 20.4, forma de
+28/09). Até 23/09 a senha se redefinia pela caixa de e-mail do administrador,
+e quem tomasse a caixa tomava o painel (T14). Com a redefinição só pelo comando
+no servidor, a caixa de e-mail passa a servir para **avisar** (D46) e para o
+"não fui eu", que só derruba e bloqueia: quem a tomar consegue, no máximo,
+trancar o administrador para fora até o responsável redefinir a senha. Se o
+cliente preferir a redefinição por e-mail (pergunta do item 20.9), T14 volta
+como estava.
 
 Este ADR **não** trata MFA como bloqueante. O que cabe dentro da escolha, e
-está decidido: conta dedicada; reCAPTCHA e teto no login; senha de 15 com
+está decidido: conta própria, fora de `users`; reCAPTCHA e teto no login; senha de 15 com
 recusa de vazada; aviso a cada sessão com "não fui eu"; sessão de 30 minutos e
 12 horas; revogação na próxima requisição; reautenticação para mover e cancelar
 encontro; teto de dano por conta (item 11); aviso a todos os administradores a
@@ -419,12 +430,14 @@ dele.
 recebe os bytes, devolve a política assinada de 10 minutos, e o navegador envia
 direto ao bucket privado. JPEG, PNG e WebP; **SVG recusado sempre**. O envio
 declara `purpose` (`store_item` | `network_event`) e fica gravado em
-`upload_intents` com `kind = 'catalog_image'`.
+`catalog_upload_intents` (A.3), tabela própria com `admin_account_id`, e não em
+`upload_intents`, que é do app e aponta para `users` (item 20.2).
 
 A confirmação é a própria escrita do item ou do evento, na lista `images`
-(itens 16 e 17). Ela **só aceita** envio de `kind = 'catalog_image'`, com o
-mesmo `purpose`, criado por conta `admin`: foto de pet, de achador ou de outro
-propósito é recusada com `400` (T9). Ela enfileira o processamento (bytes
+(itens 16 e 17). Ela **só aceita** envio de `catalog_upload_intents`, com o
+mesmo `purpose`: foto de pet, de achador ou de outro propósito nem existe
+nessa tabela, e a chave estrangeira de `catalog_images` a recusa antes do caso
+de uso (T9 fechado por esquema). Ela enfileira o processamento (bytes
 reais, EXIF/XMP/IPTC removidos, reescrita, teto de pixels, derivadas) e a
 derivada vai ao bucket **público**, com chave de 128 bits aleatórios. **A
 derivada nunca é servida antes de pronta**: enquanto processa, a leitura
@@ -504,7 +517,8 @@ produzir.
 estão no apêndice A.4. `active boolean` é substituída por `publication_status`,
 e os índices `network_events_agenda` e `network_events_por_cidade` passam a
 `WHERE publication_status IN ('published', 'cancelled')`. `created_by_user_id`
-leva no `COMMENT ON COLUMN` a marca que `portao-colunas-que-nao-saem.ts` lê.
+(evento da comunidade) e `created_by_admin_id` (evento do painel, item 20.2)
+levam no `COMMENT ON COLUMN` a marca que `portao-colunas-que-nao-saem.ts` lê.
 `network_event_images` **não** entra nesta migração: ela aponta para
 `catalog_images`, que nasce na migração do backoffice, e é criada lá (A.4.2).
 
@@ -829,7 +843,9 @@ de forma, só com acréscimos (apêndice A.2):
 
 Adotado sem mudança: D33 a D39, D41 a D44, D46 a D49, D51, D52, o nome do
 cookie, os 12 horas, os caminhos `/v1/admin/auth/*` e `/v1/admin/session`, o
-nome `x-admin-roles`. **D45 aceito** (item 11). Divergências, cada uma com o
+nome `x-admin-roles`. **D45 aceito** (item 11). Em 28/09 a D42 mudou de forma
+(conta própria em `admin_accounts`, item 20), e a seção 22.11 de
+`04-seguranca.md` a reescreveu junto com D61 a D63. Divergências, cada uma com o
 motivo no item citado:
 
 | Ponto | ARGOS | Aqui | Item |
@@ -1130,11 +1146,347 @@ moderação; o papel `moderator` no painel; operação (usuários, tags, casos);
 conceder papel por tela; tela de trilha; criação de evento pela comunidade;
 check-in; galeria.
 
+### 20. Contas administrativas próprias (decisão do cliente, 28/09)
+
+O cliente decidiu que o painel tem **contas próprias, separadas das contas do
+app**, "para que usuários não tenham como entrar no backoffice". O desenho de
+23/09 punha o administrador em `users` com o papel `admin` em `user_roles` e
+fechava a porta do app por código (a D42 antiga, duas recusas em
+`auth-service.ts`). Funcionava, mas a separação dependia de uma linha de código
+em cada porta e de ninguém esquecer a próxima. Com cadastros separados a
+separação é do esquema: uma porta não acha a conta da outra.
+
+Nenhum controle da seção 22 de `04-seguranca.md` afrouxa: cookie `__Host-`,
+CSRF em duas camadas, reautenticação, papel lido a cada requisição, trilha na
+mesma transação, tetos, reCAPTCHA e aviso por e-mail continuam como estão.
+
+#### 20.1 A tabela `admin_accounts`
+
+Na migração `20260923000006` (editada no lugar; ela ainda não está na
+`development`).
+
+| Coluna | Tipo | Restrição |
+|---|---|---|
+| `id` | `uuid` | PK, UUIDv7. Tipo próprio no código (`AdminAccountId`), que o compilador não deixa trocar por `UserId` |
+| `email` | `citext` | `NOT NULL`, `CHECK (char_length(email) <= 254)`; `CREATE UNIQUE INDEX admin_accounts_email_unico ON admin_accounts (email)`, sobre **todas** as linhas, inclusive desativadas |
+| `display_name` | `text` | `NOT NULL CHECK (char_length(btrim(display_name)) BETWEEN 2 AND 60)`; é o `AdminSession.display_name`, agora nunca vazio |
+| `role` | `text` | `NOT NULL DEFAULT 'admin' CHECK (role IN ('admin'))`; `moderator` entra como valor novo quando a moderação existir |
+| `password_phc` | `text` | `NOT NULL CONSTRAINT admin_accounts_phc_pbkdf2_sha512 CHECK (password_phc LIKE '$pbkdf2-sha512$%')` |
+| `password_updated_at` | `timestamptz` | `NOT NULL` |
+| `status` | `text` | `NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'disabled'))` |
+| `disabled_at` | `timestamptz` | nulo |
+| `blocked_reason` | `text` | nulo, `CHECK (blocked_reason IN ('failed_logins', 'disavowed'))` |
+| `blocked_at` | `timestamptz` | nulo |
+| `sessions_invalid_before` | `timestamptz` | `NOT NULL DEFAULT now()`, a mesma barreira de `users` |
+| `last_login_at` | `timestamptz` | nulo |
+| `created_at` | `timestamptz` | `NOT NULL DEFAULT now()` |
+
+- `CHECK ((status = 'disabled') = (disabled_at IS NOT NULL))`;
+  `CHECK ((blocked_reason IS NULL) = (blocked_at IS NULL))`.
+- **Sem chave estrangeira para `users`, em nenhuma tabela `admin_*`**, e o
+  e-mail é único só aqui dentro: a mesma pessoa pode ter conta no app e no
+  painel com o mesmo e-mail, e cada porta só enxerga a sua.
+- **Hash igual ao do app:** PBKDF2-SHA512 em PHC, gerado pelas mesmas funções
+  (`gerarHashDeSenha`, `verificarSenha`, `precisaDeRehash`), com o mesmo
+  rehash transparente no login (D19) e o mesmo hash de descarte (7.1).
+- **Conta não se apaga, desativa.** `status = 'disabled'` revoga as sessões na
+  mesma transação e vale na próxima requisição; a linha fica para a trilha e
+  para as colunas `created_by_admin_id` e `decided_by_admin_id` continuarem
+  apontando para alguém.
+- Duas tabelas acompanham: `admin_sessions` e `admin_reauth_tokens` trocam
+  `user_id` por `admin_account_id` (A.1), e `admin_session_alerts` guarda o
+  "não fui eu" do painel (20.5): `id uuid` PK; `admin_account_id uuid NOT NULL
+  REFERENCES admin_accounts (id) ON DELETE CASCADE`; `session_id uuid
+  REFERENCES admin_sessions (id) ON DELETE SET NULL`; `token_hash bytea NOT
+  NULL UNIQUE` (SHA-256 de 256 bits); `expires_at timestamptz NOT NULL`;
+  `consumed_at timestamptz`; `created_at timestamptz NOT NULL DEFAULT now()`.
+
+**O código mora num módulo novo, `src/modules/admin-access/`**, que entra em
+`MODULES` de `src/architecture.rules.mjs`. Tudo o que hoje é sessão
+administrativa dentro de `identity` muda para lá. A regra que já existe (um
+módulo só enxerga `ports/` de outro) passa a vigiar a fronteira: `admin-access`
+importa de `identity` só `ports/senha.ts` (novo, que publica as funções puras
+de hash, política de senha e normalização de e-mail) e
+`ports/lista-de-senhas-vazadas.ts`; `identity` não importa nada de
+`admin-access`.
+
+#### 20.2 O que referenciava `users`, e para onde vai
+
+| Onde | 23/09 | 28/09 |
+|---|---|---|
+| Papel do painel | `user_roles.role = 'admin'` | `admin_accounts.role`. `user_roles` passa a `CHECK (role IN ('tutor'))` na 000006, com um bloco que **aborta a migração** se existir linha diferente de `tutor` (falha ruidosa em vez de apagar em silêncio; nenhum banco compartilhado tem essa linha, porque o `conceder-papel` não foi mesclado) |
+| D42 | recusa de conta com papel em `POST /v1/auth/login` e `/refresh` | **as recusas saem** de `auth-service.ts` junto com `papeisDaConta`; a D42 passa a ser a separação de cadastros, provada pelo P21 de `04-seguranca.md` |
+| Trilha | `actor_kind = 'user'`, `actor_user_id` = UUID do admin | `actor_kind = 'admin'`, `actor_admin_id` (A.5). Sem isso a trilha teria UUIDs de duas tabelas na mesma coluna, e a investigação que junta `actor_user_id` com `users` acharia nada ou, pior, outra pessoa |
+| `admin_sessions`, `admin_reauth_tokens` | `user_id → users` | `admin_account_id → admin_accounts` |
+| Barreira de sessão | `users.sessions_invalid_before` | `admin_accounts.sessions_invalid_before` |
+| Intenção de envio de imagem | `upload_intents` (`user_id NOT NULL → users`) alterada | `catalog_upload_intents` (A.3). A 000007 deixa de alterar `upload_intents`, que é do app |
+| Autor do encontro | `network_events.created_by_user_id` | `created_by_admin_id` para `origin = 'admin'`; `created_by_user_id` fica para `community` (A.4) |
+| Quem decidiu o pedido | `network_event_join_requests.decided_by_user_id` | `decided_by_admin_id` (A.6) |
+| Chave dos tetos por conta | `account:<uuid>` | `admin:<uuid>` para a superfície administrativa, para que um balde do app e um do painel nunca dividam chave |
+
+O que **continua** lendo `users` no painel é só a fila de pedidos (D53:
+`display_name` e `member_since` de quem pediu). É leitura de tutor, e não de
+conta do painel.
+
+#### 20.3 O comando `conta-admin`
+
+`src/bin/conta-admin.ts` substitui `src/bin/conceder-papel.ts`. Mesmo
+invólucro que o `conceder-papel` já provou: `docker compose run --rm -it api
+node dist/bin/conta-admin.js <subcomando> --email <e-mail>`, recusa sem
+terminal antes de abrir o banco, recusa opção com cara de senha pelo nome,
+nunca repete o valor recusado, e só lê senha por `lerSenhaSemEco`, duas vezes.
+
+| Subcomando | O que faz | Trilha |
+|---|---|---|
+| `criar --email <e> --nome <n>` | cria a conta `admin` com a senha digitada; recusa e-mail já existente em `admin_accounts` | `admin.account.created` |
+| `redefinir-senha --email <e>` | troca a senha, empurra a barreira, revoga as sessões (`password_reset`), limpa `blocked_*` | `admin.account.password_reset` |
+| `desativar --email <e>` | `status = 'disabled'`, revoga as sessões (`account_disabled`) | `admin.account.disabled` |
+| `reativar --email <e>` | volta a `active` **e exige senha nova** no mesmo passo | `admin.account.enabled` |
+| `encerrar-sessoes --email <e>` | empurra a barreira e revoga as sessões, sem mexer na senha | `admin.account.sessions_closed` |
+| `listar` | e-mail, nome, estado, bloqueio e último login; nunca hash | nenhuma |
+
+Regras:
+
+1. **A senha é digitada pelo cliente no terminal, nunca gerada nem gravada por
+   agente**, e nunca entra por argumento, variável de ambiente ou arquivo. O
+   roteiro em `infra/roteiro-provisionamento.md` diz isso com todas as letras,
+   e nenhum briefing de agente inclui rodar `criar`, `redefinir-senha` ou
+   `reativar`.
+2. Senha com menos de 15 caracteres, acima de 256, ou presente na base de
+   vazadas (consulta por faixa, que o `conceder-papel` já tem): recusada, com
+   saída `4`. Base fora do ar também recusa: sem conferência não se define.
+3. **Reuso com o app (D63):** se existir conta do app com o mesmo e-mail e a
+   senha digitada conferir com a credencial local dela, o comando recusa. É a
+   única leitura do mundo do app que existe no caminho do painel, e ela mora no
+   ponto de composição (`src/bin/`), pela porta pública de `identity`, não no
+   módulo `admin-access`.
+4. Toda escrita e a linha da trilha vão na mesma transação (`actor_kind =
+   'system'`, `metadata.operator` perguntado no terminal, `resource_kind =
+   'admin_account'`, `resource_id` = o `id`).
+5. `criar`, `redefinir-senha`, `desativar` e `reativar` **avisam todos os
+   administradores ativos** por e-mail, e `criar` avisa também o dono do
+   endereço novo. Falha do envio não desfaz a escrita; o comando diz no
+   terminal quem não recebeu. É o que faz uma conta criada por quem tomou a
+   máquina aparecer na caixa de alguém.
+6. Códigos de saída do `conceder-papel` mantidos (`0`, `1`, `2`, `3`, `4`, `5`,
+   `6`), com `3` passando a significar "não há conta administrativa com esse
+   e-mail".
+
+#### 20.4 Recuperação de senha: pelo comando, e só por ele, na v1
+
+**Recomendação:** a v1 não tem recuperação por e-mail. Quem esqueceu a senha, ou
+foi bloqueado por dez falhas, ou clicou "não fui eu", pede ao responsável, que
+roda `conta-admin redefinir-senha`; a pessoa digita a senha nova no terminal.
+Com até cinco contas e o cliente operando a VM, o custo é uma conversa.
+
+O ganho é de segurança, e grande: o T14 (quem toma a caixa de e-mail toma o
+painel) era o único ponto do RA-01 sem mitigação nenhuma, e deixa de existir.
+Um fluxo por e-mail próprio do painel custaria dois endpoints, uma tela, uma
+tabela de token e o T14 de volta. Fica como dívida com gatilho: mais de cinco
+contas administrativas, ou administrador sem acesso a quem opera a VM.
+
+O documento `/entrar` troca o "Esqueci minha senha" por um texto: "Fale com o
+responsável pelo painel para redefinir a senha."
+
+#### 20.5 Contrato: `/v1/admin/session*` não muda
+
+Nenhum campo, esquema, código de status ou cabeçalho de `openAdminSession`,
+`getAdminSession`, `closeAdminSession`, `closeAllAdminSessions` e
+`reauthenticateAdmin` muda. As telas do painel continuam valendo. Mudam só
+textos de descrição, que não geram tipo:
+
+- `openAdminSession`: o parágrafo da D42 passa a dizer "contas do painel e do
+  app são cadastros separados"; o passo 3 troca "sem papel `admin`" por "conta
+  desativada"; o passo 4 e o exemplo `senhaVazada` trocam "redefina pelo
+  e-mail" por "peça a redefinição ao responsável pelo painel"; a nota do balde
+  de 24 horas troca "redefinição por e-mail ou desbloqueio operacional" por
+  "`conta-admin redefinir-senha`"; o aviso aponta para
+  `disavowAdminSessionAlert`.
+- `closeAllAdminSessions`: `admin_accounts.sessions_invalid_before`.
+- `AdminLoginRequest.password`: o mínimo de 15 é cobrado no comando, e não em
+  `confirmPasswordReset`.
+- `password-reset-required` na lista de problemas: "o caminho é pedir a
+  redefinição ao responsável".
+- `login`, `refresh` e `confirmPasswordReset` do app: saem as menções a conta
+  com papel `admin`.
+
+**Uma operação nova, aditiva, fora de `/admin/session*`:**
+
+```yaml
+/admin/auth/disavow:
+  post:
+    operationId: disavowAdminSessionAlert
+    tags: [admin]
+    x-effects: [verifies_secret, notifies, irreversible_write]
+    x-no-challenge: true
+    security: []
+    x-audit: { action: admin.session.disavowed, resource_kind: admin_account }
+    x-rate-limit:
+      - { dimension: [ip], limit: 10, window: 1h, on_exceed: log_and_alert }
+    requestBody:   # AdminDisavowRequest, additionalProperties: false
+      token: { type: string, minLength: 43, maxLength: 43, pattern: '^[A-Za-z0-9_-]{43}$' }
+    responses: { '204', '400', '403' (Origin), '410' (TokenExpired, igual para vencido, usado e inexistente) }
+```
+
+O e-mail de sessão aberta leva `https://admin.bichu.app/nao-fui-eu#t=<token>`:
+o token vai no **fragmento**, que não chega a log de servidor nem a `Referer`,
+e a página do painel o envia por `POST` (nunca `GET`, pelo motivo de
+`disavowSessionAlert`). O efeito, numa transação: revoga todas as sessões
+(`disavowed`), empurra a barreira, grava `blocked_reason = 'disavowed'`,
+grava a trilha, e então consome o token. Avisa todos os administradores.
+`Origin` exato continua exigido (D39, primeira camada); o token de 256 bits
+substitui a segunda, porque não há sessão a que o `X-CSRF-Token` se ligue.
+
+Os portões do contrato administrativo ganham a segunda exceção: a regra 1 do
+item 7 (toda operação sob `/admin/` declara `adminSession`) e a regra 2
+(`adminCsrf` em método não seguro) passam a isentar `openAdminSession` **e**
+`disavowAdminSessionAlert`, por lista fechada no portão, com isca que reprova
+uma terceira operação sem sessão. Na matriz de rastreabilidade a operação
+entra em `contrato_sem_tela` até a página `/nao-fui-eu` existir.
+
+#### 20.6 Impacto nas branches
+
+**`feat/backoffice-acesso`** (a base das outras três):
+
+- `migrations/20260923000006_sessao-administrativa.sql`: reescrita no lugar.
+  Cria `admin_accounts` e `admin_session_alerts`; `admin_sessions` e
+  `admin_reauth_tokens` com `admin_account_id`; `revoked_reason` com os seis
+  motivos de A.1; `admin_reauth_tokens.scope` com os **cinco** escopos
+  (entra `network_event_access_change`, e a 000010 provisória da
+  `feat/backoffice-rede-admin` deixa de existir); `audit.events` com `admin`
+  em `actor_kind`, `actor_admin_id`, o `CHECK` e o índice (A.5); `user_roles`
+  estreitado a `tutor` com o bloco que aborta. `down` desfaz na ordem inversa.
+- Movem de `src/modules/identity/` para `src/modules/admin-access/`, com a
+  troca de `UserId` por `AdminAccountId`: `domain/sessao-administrativa.ts`
+  (+ teste; saem `PAPEIS_DE_CONTA_DEDICADA` e `ehContaDedicada`),
+  `application/sessao-administrativa-service.ts` (a dependência `identidade`
+  vira `contas: RepositorioDeContasAdministrativas`),
+  `ports/sessao-administrativa-repository.ts` (`papeisDaConta` vira
+  `contaParaAGuarda`, uma leitura de sessão junto com a conta),
+  `adapters/persistence/kysely-sessao-administrativa-repository.ts`,
+  `adapters/http/admin-session-routes.ts` (+ a rota de `disavow`).
+  `ports/verificador-de-captcha.ts` e `adapters/external/recaptcha-enterprise.ts`
+  (+ teste) vão junto: só o painel os usa.
+- Novos em `admin-access`: `ports/repositorio-de-contas-administrativas.ts`,
+  `adapters/persistence/kysely-contas-administrativas.ts`. Novo em `identity`:
+  `ports/senha.ts`.
+- `src/modules/identity/application/auth-service.ts` e `auth-service.test.ts`:
+  saem os dois blocos da D42 e os testes deles.
+  `ports/identity-repository.ts` e `adapters/persistence/kysely-identity-repository.ts`:
+  sai `papeisDaConta`. Voltam ao estado da `development` os sete testes do app
+  que só ganharam o *stub* de `papeisDaConta` (`logout-revoga-a-familia`,
+  `pedido-de-verificacao-sem-corpo`, `cadastro-envia-verificacao`,
+  `cadastro-recusa-endereco-injetavel`, `exclusao-e-nao-fui-eu`,
+  `sair-de-todos-os-aparelhos`, `troca-de-email`).
+- `src/modules/audit/ports/audit-log.ts`, `trilha-administrativa.ts`,
+  `adapters/persistence/kysely-audit-log.ts`, `ports/acoes-administrativas.test.ts`:
+  variante `{ actorKind: 'admin', actorAdminId: AdminAccountId }` e as ações
+  novas de A.5.
+- `src/shared/http/superficie-administrativa.ts` (+ teste):
+  `SessaoAdministrativaConferida.userId` vira `adminAccountId`; a lista de
+  isenções da guarda ganha `disavowAdminSessionAlert`; a chave dos tetos,
+  `admin:`.
+- `src/shared/types/brands.ts` (`AdminAccountId`), `src/shared/db/schema.ts`,
+  `src/architecture.rules.mjs` (`admin-access` em `MODULES`), `src/bin/api.ts`
+  (composição).
+- `src/tools/portao-contrato-administrativo.ts` (+ teste): a segunda isenção.
+- `api/openapi.yaml`, `src/shared/types/generated/api.ts`: os textos de 20.5 e
+  a operação nova.
+- `tests/integration/sessao-administrativa-pelo-http.test.ts`: a massa cria a
+  conta em `admin_accounts`; entram os casos do P21. `trilha-na-mesma-transacao.test.ts`,
+  `conjunto-exato-dos-checks.test.ts` (os `CHECK` novos e alterados),
+  `chave-estrangeira-contra-restricao.test.ts` (as FKs novas).
+
+**`feat/backoffice-comando-admin`:**
+
+- `src/bin/conceder-papel.ts` (+ teste) viram `src/bin/conta-admin.ts` (+ teste).
+- `src/modules/identity/domain/concessao-de-papel.ts`, `application/conceder-papel.ts`,
+  `ports/repositorio-de-papeis.ts`, `adapters/persistence/kysely-repositorio-de-papeis.ts`
+  (+ testes) viram, em `admin-access`, `domain/comando-conta-admin.ts`,
+  `application/comando-conta-admin.ts` e o repositório de 20.1.
+- `tests/integration/conceder-papel.test.ts` vira `conta-admin.test.ts`.
+- `infra/roteiro-provisionamento.md`, seção "Conta administrativa": reescrita.
+- Ficam como estão: `src/shared/tty/ler-senha-sem-eco.ts` e
+  `lista-de-senhas-vazadas-por-faixa.ts` (+ testes).
+
+**`feat/backoffice-loja`:**
+
+- `migrations/20260923000007_backoffice-da-loja-e-imagem-de-catalogo.sql`:
+  sai o bloco que altera `upload_intents` (`kind`, `purpose` e os três
+  `CHECK`); entra `catalog_upload_intents`; `catalog_images.upload_intent_id`
+  aponta para ela.
+- `src/modules/media/adapters/persistence/kysely-imagem-de-catalogo.ts`,
+  `ports/imagem-de-catalogo.ts`, `application/preparar-envio-de-catalogo.ts`,
+  `application/processar-imagem-de-catalogo.ts` (+ teste),
+  `application/varrer-envios-vencidos.ts`: a tabela nova e `adminAccountId`.
+- `src/modules/store/application/catalogo-administrativo.ts` (+ teste),
+  `ports/catalogo-administrativo.ts`, `adapters/http/admin-store-routes.ts`
+  (+ teste): o autor é `AdminAccountId`, e a trilha, `actorKind: 'admin'`.
+- `src/modules/store/domain/escrita-da-vitrine.ts`: o comentário de
+  `upload_intents.id`.
+- `tests/integration/escrita-administrativa-da-loja.test.ts`, `schema.ts`,
+  `conjunto-exato-dos-checks.test.ts`, `chave-estrangeira-contra-restricao.test.ts`.
+
+**`feat/backoffice-rede-admin`:**
+
+- `migrations/20260923000001_secao-rede-eventos-e-presenca.sql` (fora da
+  `development`, editada no lugar): `created_by_admin_id` e os dois `CHECK` de
+  A.4; `decided_by_admin_id` no lugar de `decided_by_user_id`. A migração é
+  editada também por `feat/secao-rede-emenda-servidor` (BICHUS-251); a mudança
+  entra numa das duas e a outra a recebe por merge, nunca nas duas à mão.
+- A 000010 provisória do quinto escopo: apagada (não estava commitada quando
+  li; o escopo vai na 000006).
+- `src/modules/network/adapters/persistence/kysely-network-repository.ts`,
+  `ports/network-repository.ts`, `adapters/http/network-routes.ts` (+ teste):
+  autor e decisor com `AdminAccountId`, trilha com `actorKind: 'admin'`.
+- `src/tools/portao-colunas-que-nao-saem.ts` e a marca nas duas colunas novas.
+- `tests/integration/rede-p19-privado.test.ts`,
+  `rede-ponto-e-visibilidade.test.ts`, `src/bin/massa-da-rede.ts` (+ teste) se
+  a massa gravar autor: a conta de teste passa a ser de `admin_accounts`.
+- Herdados da loja: os mesmos arquivos de mídia e da vitrine acima.
+
+**Fora do backend**, para quem faz o painel: `/entrar` perde o link de
+redefinição (20.4), e nasce a página `/nao-fui-eu` (20.5).
+
+#### 20.7 Plano em fatias, com o teste de cada uma
+
+Cada fatia fecha com a suíte do que tocou verde; a varredura completa só na
+última. Ordem obrigatória: 1 a 4 em `feat/backoffice-acesso`, depois as outras
+branches mesclam a acesso e fazem a sua.
+
+| # | Branch | Entrega | Teste que prova, e o caso que precisa reprovar |
+|---|---|---|---|
+| 1 | acesso | 000006 reescrita, `schema.ts`, `AdminAccountId` | migração sobe e desce em banco limpo; `conjunto-exato-dos-checks` com os `CHECK` novos; `chave-estrangeira-contra-restricao` com as FKs; teste de catálogo que **reprova** se qualquer tabela `admin_*` ou `catalog_upload_intents` tiver FK para `users`; a migração **aborta** num banco com uma linha `admin` em `user_roles` |
+| 2 | acesso | módulo `admin-access` com o que muda de `identity`; guarda lendo `admin_accounts`; trilha com `actor_admin_id` | os testes que já existem (domínio, serviço, `superficie-administrativa`, `sessao-administrativa-pelo-http`, `trilha-na-mesma-transacao`) verdes sobre a tabela nova, com o mesmo nome e a mesma quantidade de casos; conta desativada → próxima chamada `403` e zero sessões vivas; ESLint reprova `admin-access` importando `identity/domain` |
+| 3 | acesso | saem as recusas da D42 e `papeisDaConta`; P21 | P21 (seção 22.11 de `04-seguranca.md`): credencial de conta do app em `POST /v1/admin/auth/login` → `401` com corpo idêntico ao de senha errada; credencial do painel em `POST /v1/auth/login` → `401` idêntico; mesma pessoa, mesmo e-mail nas duas tabelas, senhas diferentes: cada porta só aceita a sua; varredura por tabela com isca que reprova (`admin-access` citando `users`, `identity` citando `admin_accounts`) |
+| 4 | acesso | `disavowAdminSessionAlert`, textos do contrato, tipos gerados, segunda isenção no portão | token válido → `204`, zero sessões vivas, `blocked_reason = 'disavowed'`, login seguinte com a senha certa → `403 password-reset-required`; token reusado, vencido ou inexistente → `410` idêntico; sem `Origin` ou com `Origin: https://bichu.app` → `403`; `GET` → `405`; isca do portão com terceira operação sem sessão reprova; `verify:types` e `oasdiff` sem quebra em `/admin/session*` |
+| 5 | comando | `conta-admin` com os seis subcomandos | unidade: argumentos, senha por opção recusada pelo nome, sem terminal; integração: `criar` grava conta e trilha na mesma transação e avisa os administradores; 14 caracteres e senha da lista de teste recusados; **mesma senha da conta do app de mesmo e-mail recusada** (D63); `redefinir-senha` derruba sessão viva e limpa bloqueio; `desativar` derruba sessão e a guarda responde `403`; falha forçada da trilha não deixa conta |
+| 6 | loja | `catalog_upload_intents`, autor `AdminAccountId` | `escrita-administrativa-da-loja` verde; `media_id` de `upload_intents` (foto de pet) na escrita do item → `400`; envio vencido é varrido nas duas tabelas; a trilha do item tem `actor_kind = 'admin'` |
+| 7 | rede-admin | FKs de autor e decisor, quinto escopo pela 000006, sem 000010 | `rede-p19-privado` e `rede-ponto-e-visibilidade` verdes; `network_event_access_change` exigido na troca de visibilidade de encontro publicado; `portao-colunas-que-nao-saem` reprova com `created_by_admin_id` projetado; evento `community` com `created_by_admin_id` → violação de `CHECK` |
+
+#### 20.8 Coordenação
+
+A 000006 altera duas tabelas que nasceram na `development` (`user_roles` e
+`audit.events`). Ela não mexe em dado do app, mas a sessão da App precisa
+saber antes do merge. Registro também que a `development` renumerou as
+migrações de 22/09 (`20260922000023_vitrine-da-loja.sql`), enquanto as quatro
+branches ainda usam os números antigos: a conciliação vem antes desta emenda
+entrar, e não é parte dela.
+
+#### 20.9 Pergunta ao cliente
+
+**Como o administrador recupera a senha na v1?**
+(a) Só pelo responsável, com o comando no servidor. Nada por e-mail.
+(b) Por e-mail, com um fluxo próprio do painel.
+**Recomendo (a).** Tira do ar o único risco sem mitigação do painel (quem toma
+a caixa de e-mail toma o painel) e não custa construção. **Custo de não
+decidir:** fica (a), que é o que este item desenha.
+
 ## Alternativas consideradas
 
 | Opção | Prós | Contras | Por que não |
 |---|---|---|---|
-| **Cookie `HttpOnly` opaco, mesma origem, conta dedicada** | XSS não exporta a credencial; revogação imediata; nenhum CORS; sobrevive ao Keycloak como BFF | exige CSRF; uma leitura de banco por requisição | **é a escolha** |
+| **Cookie `HttpOnly` opaco, mesma origem, conta própria** | XSS não exporta a credencial; revogação imediata; nenhum CORS; sobrevive ao Keycloak como BFF | exige CSRF; uma leitura de banco por requisição | **é a escolha** |
 | Credencial de serviço (`adminAuth`) + Bearer do operador (ADR-0026) | separa sistema e pessoa quando o painel é de terceiros e tem servidor | num SPA sem servidor, o segredo iria no bundle, e segredo no bundle não é segredo; o Bearer volta ao navegador | a premissa do ADR-0026 (painel de outro time, servidor a servidor) caiu |
 | JWT RS256 com `aud: bichu-admin` dentro do cookie | reaproveita o emissor | 15 minutos e renovação; revogação imediata lê o banco de qualquer jeito | mais peças para o mesmo resultado |
 | Bearer em memória + refresh em cookie | imune a CSRF no token | XSS leva o token; o CSRF volta no refresh; F5 depende do refresh | resolve o CSRF num endpoint e o recria no outro |
@@ -1142,6 +1494,9 @@ check-in; galeria.
 | O mesmo JWT do app em `/v1/admin`, com papel | zero trabalho de sessão | um token, dois poderes; `04-seguranca.md` o declara inaceitável | ADR-0026 motivo 1 e D36 |
 | Painel em `admin.` chamando a API por CORS com credenciais | separa hosts | lista de origens; cookie viajando para o host do app | troca uma rota na borda por uma política de CORS |
 | SSR (Astro/Next) para o painel | um padrão com o site | Node em execução sem nenhum dos motivos do site | memória gasta à toa |
+| Conta do painel em `users` com papel em `user_roles` (desenho de 23/09) | um cadastro, um fluxo de senha | a separação depende de uma recusa em cada porta do app; a trilha mistura UUIDs; o e-mail vira caminho de recuperação | superada pelo cliente em 28/09 (item 20) |
+| Contas separadas, mas `admin_accounts` com FK para `users` | reaproveita perfil e e-mail | recria a ligação que a decisão existe para cortar; excluir a conta do app mexeria no painel | é o mesmo desenho com outro nome |
+| Recuperação de senha do painel por e-mail | autoatendimento | dois endpoints, uma tela, uma tabela de token, e o T14 de volta | a v1 tem até cinco contas e o cliente opera a VM (item 20.4) |
 | Especificação administrativa separada | cumpre a letra da seção 1 (a) de `04-seguranca.md` | dois geradores, dois lints, dois `oasdiff` | a intenção já é cumprida pelo ADR-0018 (Swagger fechada em produção) |
 
 ## Consequências
@@ -1153,7 +1508,9 @@ não a sessão.
 
 **Fica mais difícil:** a borda passa a ter um bloco, uma regra de 404 por host,
 um cabeçalho interno e uma imagem própria do Caddy; o serviço ganha um segundo
-tipo de sessão; administrador que também é tutor mantém duas contas; e cada
+tipo de sessão e um segundo cadastro de contas, com comando próprio;
+administrador que também é tutor mantém duas contas em duas tabelas; senha
+esquecida depende de quem opera a VM; e cada
 operação administrativa nova declara papel, trilha e, se mover gente, a
 reautenticação.
 
@@ -1161,7 +1518,9 @@ reautenticação.
 `admin.bichu.app`; e, a partir da primeira escrita administrativa, a trilha
 passa a ser a única memória do catálogo.
 
-**Dívida aceita, com gatilho:** MFA (RA-01 e seus gatilhos);
+**Dívida aceita, com gatilho:** MFA (RA-01 e seus gatilhos); recuperação de
+senha do painel por e-mail (mais de cinco contas, ou administrador sem acesso a
+quem opera a VM, item 20.4);
 `store_catalog_versions` (quando a massa deixar de usá-la); tiles do OSM direto
 do navegador do operador (mais de uma dezena de operadores, ou mapa público no
 app); leitura administrativa sem trilha (entrada de `Perto` ou moderação).
@@ -1183,7 +1542,7 @@ o resto numa migração nova do backoffice, posterior a ela.
 | Coluna | Tipo | Restrição |
 |---|---|---|
 | `id` | `uuid` | PK, UUIDv7 |
-| `user_id` | `uuid` | `NOT NULL REFERENCES users (id) ON DELETE CASCADE` |
+| `admin_account_id` | `uuid` | `NOT NULL REFERENCES admin_accounts (id) ON DELETE CASCADE` (item 20.2; nunca `users`) |
 | `token_hash` | `bytea` | `NOT NULL UNIQUE`, SHA-256 do valor do cookie |
 | `csrf_token_hash` | `bytea` | `NOT NULL`, SHA-256 do `csrf_token` |
 | `created_at` | `timestamptz` | `NOT NULL DEFAULT now()`; o instante da senha, herdado na rotação |
@@ -1191,14 +1550,17 @@ o resto numa migração nova do backoffice, posterior a ela.
 | `idle_expires_at` | `timestamptz` | `NOT NULL` |
 | `absolute_expires_at` | `timestamptz` | `NOT NULL` |
 | `revoked_at` | `timestamptz` | nulo |
-| `revoked_reason` | `text` | `CHECK (revoked_reason IN ('logout', 'rotated', 'role_removed', 'account_invalidated', 'disavowed'))` |
+| `revoked_reason` | `text` | `CHECK (revoked_reason IN ('logout', 'rotated', 'account_disabled', 'account_invalidated', 'disavowed', 'password_reset'))` |
 | `user_agent` | `text` | nulo, `CHECK (char_length(user_agent) <= 512)` |
 | `ip_hmac` | `bytea` | nulo |
 
 - `CHECK (idle_expires_at <= absolute_expires_at)`;
   `CHECK (absolute_expires_at <= created_at + interval '12 hours')`;
   `CHECK ((revoked_at IS NULL) = (revoked_reason IS NULL))`.
-- Índice `admin_sessions_vivas ON admin_sessions (user_id) WHERE revoked_at IS NULL`.
+- Índice `admin_sessions_vivas ON admin_sessions (admin_account_id) WHERE revoked_at IS NULL`.
+- `admin_reauth_tokens` (D40) segue a mesma troca: `admin_account_id` no lugar
+  de `user_id`, e o `CHECK` de `scope` com os **cinco** escopos do item 5,
+  incluindo `network_event_access_change`.
 - **Tabela própria, e não `refresh_tokens` com sinalizador**: vida útil, CSRF e
   escopo são outros, e dividir a tabela deixaria um refresh do app a um valor
   de coluna de virar sessão administrativa.
@@ -1254,12 +1616,12 @@ principal é `position = 0`. `catalog_images.purpose` precisa ser `store_item`
 (caso de uso). O teto de 8 é o próprio `CHECK` de `position` somado à
 unicidade.
 
-### A.3 `catalog_images` (nova) e `upload_intents` (alteração)
+### A.3 `catalog_images` e `catalog_upload_intents` (novas)
 
 | Coluna | Tipo | Restrição |
 |---|---|---|
 | `id` | `uuid` | PK |
-| `upload_intent_id` | `uuid` | `NOT NULL UNIQUE REFERENCES upload_intents (id)` |
+| `upload_intent_id` | `uuid` | `NOT NULL UNIQUE REFERENCES catalog_upload_intents (id)` |
 | `purpose` | `text` | `NOT NULL CHECK (purpose IN ('store_item', 'network_event'))` |
 | `status` | `text` | `NOT NULL DEFAULT 'processing' CHECK (status IN ('processing', 'ready', 'rejected'))` |
 | `public_key` | `text` | nulo; chave da derivada pública, 128 bits aleatórios |
@@ -1270,10 +1632,24 @@ unicidade.
 `CHECK (status <> 'rejected' OR rejection_reason IS NOT NULL)`, a forma de
 `pet_photos`.
 
-`upload_intents`: `kind` ganha `catalog_image`; coluna nova `purpose text` com
-`CHECK (purpose IS NULL OR purpose IN ('store_item', 'network_event'))`;
-`CHECK ((kind = 'catalog_image') = (purpose IS NOT NULL))`;
-`CHECK (kind <> 'catalog_image' OR pet_id IS NULL)`.
+`catalog_upload_intents` (item 20.2), no lugar da alteração de `upload_intents`
+que a versão de 23/09 previa. `upload_intents` fica como está na
+`development`, do app, com `user_id NOT NULL REFERENCES users`:
+
+| Coluna | Tipo | Restrição |
+|---|---|---|
+| `id` | `uuid` | PK |
+| `admin_account_id` | `uuid` | `NOT NULL REFERENCES admin_accounts (id)` |
+| `purpose` | `text` | `NOT NULL CHECK (purpose IN ('store_item', 'network_event'))` |
+| `object_key` | `text` | `NOT NULL`, chave no armazenamento privado, nunca URL |
+| `declared_type` | `text` | `NOT NULL` |
+| `max_bytes` | `integer` | `NOT NULL CHECK (max_bytes > 0)` |
+| `expires_at` | `timestamptz` | `NOT NULL` |
+| `confirmed_at` | `timestamptz` | nulo |
+| `created_at` | `timestamptz` | `NOT NULL DEFAULT now()` |
+
+O varredor de envios vencidos (`varrer-envios-vencidos.ts`) passa a varrer as
+duas tabelas.
 
 ### A.4 `network_events` (emenda da seção 12, mais o que o backoffice acrescenta)
 
@@ -1282,7 +1658,8 @@ Na migração da `Rede`, além de 12.1 e 12.2:
 | Coluna | Tipo | Restrição |
 |---|---|---|
 | `origin` | `text` | `NOT NULL DEFAULT 'admin' CHECK (origin IN ('admin', 'community'))` |
-| `created_by_user_id` | `uuid` | nulo, `REFERENCES users (id) ON DELETE SET NULL`; **nunca projetado**, com a marca do portão |
+| `created_by_user_id` | `uuid` | nulo, `REFERENCES users (id) ON DELETE SET NULL`; só evento da comunidade; **nunca projetado**, com a marca do portão |
+| `created_by_admin_id` | `uuid` | nulo, `REFERENCES admin_accounts (id)`; só evento do painel (item 20.2); **nunca projetado**, com a marca do portão |
 | `publication_status` | `text` | `NOT NULL CHECK (publication_status IN ('pending_review', 'published', 'cancelled', 'removed'))`, sem padrão: quem cria diz |
 | `published_at` | `timestamptz` | nulo |
 | `cancelled_at` | `timestamptz` | nulo |
@@ -1298,6 +1675,9 @@ Na migração da `Rede`, além de 12.1 e 12.2:
   comunidade nascerá `pending_review`. Um rascunho no futuro é valor novo na
   lista, aditivo.
 - `CHECK (origin = 'community' OR publication_status <> 'pending_review')`.
+- `CHECK (created_by_user_id IS NULL OR origin = 'community')` e
+  `CHECK (created_by_admin_id IS NULL OR origin = 'admin')`. A massa grava
+  evento `admin` com os dois nulos.
 
 ### A.4.1 Campos do encontro (item 17)
 
@@ -1368,7 +1748,7 @@ fuso nem lugar (`code: use_relocation`); cancelar só a partir de `published`;
 | `requested_at` | `timestamptz` | `NOT NULL DEFAULT now()` |
 | `decided_at` | `timestamptz` | nulo |
 | `withdrawn_at` | `timestamptz` | nulo; só existe em pedido **recusado** do qual o tutor desistiu (pedido pendente desistido é apagado na hora, D54), para que desistir e pedir de novo não lave a recusa (12.11) |
-| `decided_by_user_id` | `uuid` | nulo, `REFERENCES users (id) ON DELETE SET NULL`; nunca projetado |
+| `decided_by_admin_id` | `uuid` | nulo, `REFERENCES admin_accounts (id)`; nunca projetado (item 20.2; quem decide é conta do painel, nunca de `users`) |
 
 - `UNIQUE (event_id, user_id)`: um pedido por conta por encontro.
 - `CHECK ((status IN ('approved', 'declined')) = (decided_at IS NOT NULL))`.
@@ -1387,7 +1767,15 @@ fuso nem lugar (`code: use_relocation`); cancelar só a partir de `published`;
 
 ### A.5 `audit.events`
 
-Sem mudança de esquema. As ações novas entram na união `AuditAction`:
+Uma mudança de esquema (item 20.2), feita na migração `20260923000006`:
+`actor_kind` ganha `admin`, e entra a coluna `actor_admin_id uuid`, **sem chave
+estrangeira** (pelo mesmo motivo de `actor_user_id`: a trilha sobrevive à
+conta), com `CHECK ((actor_kind = 'admin') = (actor_admin_id IS NOT NULL))` e
+índice `audit_events_ator_admin ON audit.events (actor_admin_id, occurred_at DESC)
+WHERE actor_admin_id IS NOT NULL`. O `GRANT INSERT, SELECT` de
+`bichu_audit_writer` é da tabela e cobre a coluna nova.
+
+As ações novas entram na união `AuditAction`:
 `admin.session.opened`, `admin.session.denied`, `admin.session.closed`,
 `admin.session.all_closed`, `admin.session.reauthenticated`,
 `admin.guard.denied`, `admin.store_partner.created`,
@@ -1399,7 +1787,10 @@ Sem mudança de esquema. As ações novas entram na união `AuditAction`:
 `admin.network_join_request.approved`,
 `admin.network_join_request.declined`,
 `admin.network_event.updated`, `admin.network_event.relocated`, `admin.network_event.cancelled`,
-`admin.network_event.removed`, `admin.catalog_image.intent_created`.
+`admin.network_event.removed`, `admin.catalog_image.intent_created`,
+`admin.session.disavowed`, `admin.account.created`,
+`admin.account.password_reset`, `admin.account.disabled`,
+`admin.account.enabled`, `admin.account.sessions_closed`.
 
 ---
 
