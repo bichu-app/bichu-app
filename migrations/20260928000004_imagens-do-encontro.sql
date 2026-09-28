@@ -4,8 +4,8 @@
 -- 8 imagens, a capa e `position = 0`, texto alternativo obrigatorio em TODA
 -- posicao (a obrigacao acompanha a imagem que vira capa numa reordenacao).
 --
--- Nao nasceu na `20260923000001` porque aponta para `catalog_images`, que nasce
--- na `20260923000007`. `network_events.cover_image_url` saiu (decisao da
+-- Nao nasceu na `20260928000001` porque aponta para `catalog_images`, que nasce
+-- na `20260928000003`. `network_events.cover_image_url` saiu (decisao da
 -- coordenacao, 23/09): o banco guarda a chave do objeto, e a URL da capa e
 -- composta na leitura a partir da imagem de posicao 0.
 --

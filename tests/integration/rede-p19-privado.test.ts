@@ -25,7 +25,7 @@
  * 4. **O `slug` do privado nao carrega o lugar.**
  *
  * **O que fica de fora, e por que:** as imagens (a tabela depende de
- * `catalog_images`, que nasce na migracao `20260923000007`, da fatia da Loja)
+ * `catalog_images`, que nasce na migracao `20260928000003`, da fatia da Loja)
  * e "a criacao recusa `slug` enviado para privado" (a criacao e
  * `/admin/network/*`, fatia seguinte). Os dois voltam com as fatias deles.
  *

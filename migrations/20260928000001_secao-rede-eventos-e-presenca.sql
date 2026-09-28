@@ -41,7 +41,7 @@
 -- viraram tabelas de lista; e o pedido para participar de encontro privado
 -- ganhou tabela propria (A.6), da conta e nunca do pet. A galeria do encontro
 -- NAO esta aqui: ela aponta para `catalog_images`, que nasce numa migracao
--- posterior (`20260923000007`), e entra com ela.
+-- posterior (`20260928000003`), e entra com ela.
 
 -- ====================================================================
 -- A IDENTIDADE INTERNA E SEPARADA DA PUBLICA (ADR-0024, ADR-0027 12.1)

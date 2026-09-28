@@ -147,7 +147,7 @@ COMMENT ON COLUMN store_partners.version IS
 COMMENT ON COLUMN store_items.version IS
   'Incrementada a cada escrita. E o `ETag` do painel; o UPDATE confere a versao lida na propria clausula WHERE.';
 COMMENT ON COLUMN store_items.published_at IS
-  'A PRIMEIRA publicacao, nunca reescrita (ADR-0026 secao 3). `draft` = nulo; `published` = active; `retired` = nao active e nao nulo. Nas linhas publicadas antes da 20260923000007 e o instante dessa migracao, e nao a publicacao real, que ninguem registrou.';
+  'A PRIMEIRA publicacao, nunca reescrita (ADR-0026 secao 3). `draft` = nulo; `published` = active; `retired` = nao active e nao nulo. Nas linhas publicadas antes da 20260928000003 e o instante dessa migracao, e nao a publicacao real, que ninguem registrou.';
 COMMENT ON COLUMN store_items.active IS
   'Esta na vitrine agora. O padrao `true` e da massa; o item escrito pelo painel nasce `false` (rascunho).';
 

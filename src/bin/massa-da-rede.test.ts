@@ -9,7 +9,7 @@
  * 180. Isso ia chegar ao `make seed` de quem fosse rodar depois, com a massa
  * parcialmente gravada.
  *
- * As afirmacoes abaixo sao as mesmas dos `CHECK` da migracao `20260923000001`,
+ * As afirmacoes abaixo sao as mesmas dos `CHECK` da migracao `20260928000001`,
  * escritas aqui para reprovarem em SEGUNDOS e sem Postgres. Elas **nao
  * substituem o banco** -- o banco continua sendo a autoridade, e o gatilho
  * `network_events_fuso_existe` conhece um catalogo de fusos que o Node nao tem

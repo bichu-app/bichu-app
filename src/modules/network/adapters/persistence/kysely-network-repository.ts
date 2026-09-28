@@ -37,7 +37,7 @@
  *
  * ## Imagens
  *
- * A galeria (`network_event_images`, migracao `20260923000009`) vem na mesma
+ * A galeria (`network_event_images`, migracao `20260928000004`) vem na mesma
  * consulta, por subconsulta escalar em JSON, so com imagem PRONTA
  * (`catalog_images.status = 'ready'`): a derivada nunca e servida antes
  * (ADR-0027 item 10). O banco guarda a chave; a URL e composta aqui, e a capa

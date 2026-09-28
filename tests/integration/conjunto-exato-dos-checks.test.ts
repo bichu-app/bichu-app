@@ -499,7 +499,7 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
  */
 const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ------------------------------------------------------------------
-  // A secao `Rede` (ADR-0025, migracao 20260923000001, emendada pela secao
+  // A secao `Rede` (ADR-0025, migracao 20260928000001, emendada pela secao
   // 12 do ADR-0027).
   //
   // Os abaixo sao os CHECKs da `Rede` que MENCIONAM literal de texto e nao

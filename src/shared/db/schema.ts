@@ -1046,7 +1046,7 @@ export interface CatalogImagesTable {
  *
  * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a regra: a
  * coluna de quem criou o encontro leva a marca de saida no `COMMENT ON COLUMN`
- * da migracao `20260923000001`, e `src/tools/portao-colunas-que-nao-saem.ts`
+ * da migracao `20260928000001`, e `src/tools/portao-colunas-que-nao-saem.ts`
  * varre `src/` atras do nome dela. E o mesmo tratamento da coluna homonima de
  * `ProfessionalsTable`. Quem precisa dela (a trilha do backoffice) a escreve
  * por SQL cru.

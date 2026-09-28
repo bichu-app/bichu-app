@@ -27,7 +27,7 @@ import { after, before, describe, it } from 'node:test';
 import { Client } from 'pg';
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
-const MIGRACAO = 'migrations/20260923000006_sessao-administrativa.sql';
+const MIGRACAO = 'migrations/20260928000002_sessao-administrativa.sql';
 
 let cliente: Client;
 

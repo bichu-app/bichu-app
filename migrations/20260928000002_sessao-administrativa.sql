@@ -56,7 +56,7 @@ BEGIN
     RAISE EXCEPTION USING
       ERRCODE = '23514',
       MESSAGE = format(
-        'migracao 20260923000006 abortada: user_roles tem %s linha(s) com papel diferente de tutor: %s',
+        'migracao 20260928000002 abortada: user_roles tem %s linha(s) com papel diferente de tutor: %s',
         total, amostra),
       DETAIL  = 'Desde o ADR-0027 item 20 o painel tem cadastro proprio (admin_accounts) e user_roles aceita so tutor. '
              || 'Nada foi alterado: a migracao inteira foi desfeita.',
@@ -265,7 +265,7 @@ CREATE INDEX audit_events_ator_admin ON audit.events (actor_admin_id, occurred_a
   WHERE actor_admin_id IS NOT NULL;
 
 COMMENT ON COLUMN audit.events.actor_admin_id IS
-  'admin_accounts.id de quem agiu no painel. Sem FK: a trilha sobrevive a conta. Nulo em toda linha que nao seja actor_kind = admin, inclusive as anteriores a 20260923000006.';
+  'admin_accounts.id de quem agiu no painel. Sem FK: a trilha sobrevive a conta. Nulo em toda linha que nao seja actor_kind = admin, inclusive as anteriores a 20260928000002.';
 
 -- Down Migration
 
@@ -280,7 +280,7 @@ BEGIN
   IF total > 0 THEN
     RAISE EXCEPTION USING
       ERRCODE = '23514',
-      MESSAGE = format('descida de 20260923000006 recusada: audit.events tem %s evento(s) com actor_kind = admin', total),
+      MESSAGE = format('descida de 20260928000002 recusada: audit.events tem %s evento(s) com actor_kind = admin', total),
       HINT    = 'A trilha e imutavel e nao se apaga para desfazer esquema. Mantenha a migracao aplicada.';
   END IF;
 END
