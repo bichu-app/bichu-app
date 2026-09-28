@@ -2676,9 +2676,9 @@ export interface paths {
         /**
          * Altera um parceiro
          * @description `If-Match` obrigatorio: dois administradores editando o mesmo parceiro
-         *     nao se sobrescrevem em silencio. Trocar `host` e recusado com `400`
-         *     (`code: host_mismatch_items`) se algum item do parceiro deixaria de
-         *     apontar para o host dele. Trocar `slug` e permitido; o caminho muda, e a
+         *     nao se sobrescrevem em silencio. Trocar `host` leva os itens junto: o
+         *     item guarda so o caminho do destino, e o endereco e composto com o
+         *     host do parceiro na leitura. Trocar `slug` e permitido; o caminho muda, e a
          *     resposta traz o novo.
          */
         patch: operations["updateAdminStorePartner"];
@@ -4397,14 +4397,14 @@ export interface components {
         NetworkEventNearbySort: "distancia" | "proximos";
         /**
          * @description **Calculado no servidor, sempre.** `cancelled` prevalece sobre o estado
-         *     temporal **enquanto o fim previsto nao passou**; depois do fim, segue a
-         *     regra do encerrado e sai `ended` (ADR-0027 12.6, decisao do cliente de
-         *     23/09/2026). **Sem `ends_at`, o fim previsto e o proprio `starts_at`**
-         *     (regra que o servidor ja aplica desde a BICHUS-251): o encontro sem fim
-         *     e `upcoming` ate comecar e `ended` a partir dai, e o cancelado sem fim
-         *     sai `cancelled` ate o inicio e depois some do recorte `upcoming` como
-         *     encerrado. Nao ha estender ate o fim do dia no fuso do encontro. Cliente
-         *     que nao conhece um valor precisa trata-lo sem quebrar.
+         *     temporal ate o fim previsto, para as pessoas confirmarem o
+         *     cancelamento: **com `ends_at`, ate o `ends_at`; sem `ends_at`, ate
+         *     23:59:59 do dia do encontro no `time_zone` dele** (decisoes do cliente
+         *     de 23/09 e 28/09/2026). Depois disso sai `ended`. No encontro
+         *     publicado sem `ends_at` nada muda: ele e `upcoming` ate comecar e
+         *     `ended` a partir dai (ADR-0025 item 6). O recorte `when=upcoming` segue a
+         *     mesma regra. Cliente que nao conhece um valor precisa trata-lo sem
+         *     quebrar.
          * @enum {string}
          */
         NetworkEventStatus: "upcoming" | "happening" | "ended" | "cancelled";
@@ -4975,7 +4975,8 @@ export interface components {
             summary: string;
             category: components["schemas"]["StoreCategory"];
             /**
-             * @description Precisa terminar no host do parceiro (`400`, `code: host_mismatch`).
+             * @description Precisa estar no host EXATO do parceiro (`400`, `code: host_mismatch`),
+             *     sem `?` nem `#` (`400`, `code: invalid_url`): o banco guarda so o caminho.
              *     Nenhum identificador de pessoa, em codificacao nenhuma.
              */
             target_url: components["schemas"]["HttpsUrl"];
@@ -5257,9 +5258,14 @@ export interface components {
         AdminCatalogGalleryImage: components["schemas"]["AdminCatalogImage"] & {
             /**
              * Format: uuid
-             * @description O identificador que o painel devolve em `images` para manter, reordenar ou remover esta imagem.
+             * @description O identificador que o painel devolve em `images` para manter,
+             *     reordenar ou remover esta imagem. **Nulo** quando a conta que
+             *     enviou a imagem foi apagada: a imagem continua no produto ou no
+             *     encontro (`catalog_images.upload_intent_id` e `ON DELETE SET
+             *     NULL`), e o painel so a mantem reenviando a galeria sem ela ou
+             *     com uma imagem nova.
              */
-            upload_id: string;
+            upload_id: string | null;
             position: number;
             alt_text: string;
         };

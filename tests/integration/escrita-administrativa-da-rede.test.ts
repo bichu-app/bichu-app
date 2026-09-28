@@ -400,3 +400,23 @@ void describe('o aviso a todos os administradores (D52, D60), contra Postgres', 
     assert.ok(ocorrencias.length > 0);
   });
 });
+
+void describe('o cancelado sem ends_at na agenda publica (decisao de 28/09)', () => {
+  void it('ISCA (regra antiga): segue no recorte upcoming ate 23:59:59 do dia no fuso dele, e so depois vai para past', async () => {
+    const criado = await criar({ ends_at: undefined });
+    const id = await idDoEncontro(criado.recurso.slug);
+    await sql`update network_events set starts_at = '2026-10-10T15:00:00Z', ends_at = null,
+              publication_status = 'cancelled', cancelled_at = now(), time_zone = 'America/Sao_Paulo'
+              where id = ${id}::uuid`.execute(banco.db);
+    const publica = criarNetworkRepository(banco.db, ids, (c) => c);
+    const recorte = (when: 'upcoming' | 'past', agora: string) =>
+      publica.listarAgenda({ q: criado.recurso.title, when, sort: 'proximos', agora: Date.parse(agora) as Instant, page: 1, limit: 20 });
+    // 17h em Sao Paulo, horas depois do inicio: a regra antiga ja dava `ended`.
+    assert.equal((await recorte('upcoming', '2026-10-10T20:00:00Z')).total, 1);
+    assert.equal((await recorte('past', '2026-10-10T20:00:00Z')).total, 0);
+    // 23:59:59 local ainda e o dia; 00:00:01 local do dia seguinte ja nao e.
+    assert.equal((await recorte('upcoming', '2026-10-11T02:59:59Z')).total, 1);
+    assert.equal((await recorte('upcoming', '2026-10-11T03:00:01Z')).total, 0);
+    assert.equal((await recorte('past', '2026-10-11T03:00:01Z')).total, 1);
+  });
+});

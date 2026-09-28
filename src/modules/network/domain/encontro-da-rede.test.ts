@@ -32,6 +32,7 @@ import {
   projetarDetalhesPrivados,
   projetarEncontro,
   projetarLocalizacao,
+  fimDoDiaLocal,
   statusDoEncontro,
   type EncontroDaRede,
   type EncontroPublicoProjetado,
@@ -192,13 +193,29 @@ void describe('o encontro CANCELADO (ADR-0027 12.6, decisao do cliente de 23/09)
     assert.equal(statusDoEncontro(passado, AGORA), 'ended');
   });
 
-  void it('sem fim declarado, e `cancelled` ate o comeco e `ended` a partir dele', () => {
-    // Sem `ends_at` o "fim previsto" e o comeco, pela mesma regra que decide
-    // `ended` no publicado (ADR-0025 secao 6).
-    const antes = encontro({ publicacao: 'cancelled', endsAt: null });
-    assert.equal(statusDoEncontro(antes, AGORA), 'cancelled');
+  void it('ISCA (regra antiga): sem fim declarado, o cancelado NAO vira `ended` no comeco', () => {
+    // A regra ate 28/09 dava `ended` a partir do `startsAt`, e apagava o
+    // "cancelado" no proprio dia do encontro. Este caso reprova essa regra.
     const noComeco = encontro({ publicacao: 'cancelled', startsAt: AGORA, endsAt: null });
-    assert.equal(statusDoEncontro(noComeco, AGORA), 'ended');
+    assert.equal(statusDoEncontro(noComeco, AGORA), 'cancelled');
+    const horasDepois = encontro({ publicacao: 'cancelled', startsAt: (AGORA - 5 * UMA_HORA) as Instant, endsAt: null });
+    assert.equal(statusDoEncontro(horasDepois, AGORA), 'cancelled');
+  });
+
+  void it('sem fim declarado, e `cancelled` ate 23:59:59 do dia no fuso do encontro, e `ended` depois', () => {
+    // 23/09 em Sao Paulo (UTC-3): o dia acaba em 24/09 02:59:59Z.
+    const fim = Date.UTC(2026, 8, 24, 2, 59, 59) as Instant;
+    assert.equal(fimDoDiaLocal('2026-09-23', 'America/Sao_Paulo'), fim);
+    const semFim = encontro({ publicacao: 'cancelled', startsAt: (AGORA - UMA_HORA) as Instant, endsAt: null });
+    assert.equal(statusDoEncontro(semFim, fim), 'cancelled');
+    assert.equal(statusDoEncontro(semFim, (fim + 1000) as Instant), 'ended');
+    // O fuso e o do encontro: em Manaus (UTC-4) o mesmo dia acaba uma hora depois.
+    assert.equal(fimDoDiaLocal('2026-09-23', 'America/Manaus'), (fim + UMA_HORA) as Instant);
+  });
+
+  void it('o publicado sem fim continua `ended` a partir do comeco (a regra nova e so do cancelado)', () => {
+    const publicado = encontro({ startsAt: (AGORA - UMA_HORA) as Instant, endsAt: null });
+    assert.equal(statusDoEncontro(publicado, AGORA), 'ended');
   });
 
   void it('A ISCA NEGATIVA: o PUBLICADO de amanha continua `upcoming`', () => {

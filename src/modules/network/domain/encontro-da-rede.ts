@@ -202,19 +202,59 @@ function statusTemporal(
   return agora <= encontro.endsAt ? 'happening' : 'ended';
 }
 
+/** Quanto o relogio de parede de `timeZone` esta a frente do UTC, em `instante`. */
+function deslocamentoDoFuso(instante: number, timeZone: string): number {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  }).formatToParts(instante);
+  const n = (tipo: string): number => Number(partes.find((p) => p.type === tipo)?.value ?? 0);
+  return Date.UTC(n('year'), n('month') - 1, n('day'), n('hour'), n('minute'), n('second')) - Math.floor(instante / 1000) * 1000;
+}
+
+/**
+ * 23:59:59 do dia `dataLocal` (`AAAA-MM-DD`) no fuso `timeZone`, como instante.
+ * Duas passadas corrigem o deslocamento quando o dia atravessa mudanca de
+ * horario.
+ */
+export function fimDoDiaLocal(dataLocal: string, timeZone: string): Instant {
+  const [ano, mes, dia] = dataLocal.split('-').map(Number);
+  const parede = Date.UTC(ano ?? 1970, (mes ?? 1) - 1, dia ?? 1, 23, 59, 59);
+  let instante = parede - deslocamentoDoFuso(parede, timeZone);
+  instante = parede - deslocamentoDoFuso(instante, timeZone);
+  return instante as Instant;
+}
+
+/**
+ * Ate quando o cancelado aparece COMO cancelado: o fim previsto, ou, sem
+ * `endsAt`, 23:59:59 do dia do encontro no fuso dele (decisao de 28/09). O
+ * cancelado existe para as pessoas confirmarem que nao vai acontecer, e virar
+ * `ended` no `startsAt` apagaria essa informacao no proprio dia.
+ */
+export function fimDoCancelado(encontro: Pick<EncontroDaRede, 'endsAt' | 'dataLocal' | 'timeZone'>): Instant {
+  return encontro.endsAt ?? fimDoDiaLocal(encontro.dataLocal, encontro.timeZone);
+}
+
 /**
  * O rotulo do encontro, agora.
  *
- * **O cancelado nao conta como agendado nem como acontecendo agora**: enquanto
- * o fim previsto nao passou, ele e `cancelled`, e quem se programou para ir
- * descobre antes de sair de casa. **Depois do fim, segue a regra do
- * encerrado**, como qualquer encontro: um cancelado de tres semanas atras e
- * passado. Decisao do cliente de 23/09/2026 sobre a pergunta 1 do ADR-0027.
+ * **O cancelado nao conta como agendado nem como acontecendo agora**: ate o
+ * fim previsto (`fimDoCancelado`) ele e `cancelled`, e quem se programou para
+ * ir descobre antes de sair de casa. **Depois disso, segue a regra do
+ * encerrado**: um cancelado de tres semanas atras e passado. Decisoes do
+ * cliente de 23/09 e de 28/09/2026.
  */
 export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): StatusDoEncontro {
-  const temporal = statusTemporal(encontro, agora);
-  if (encontro.publicacao === 'cancelled' && temporal !== 'ended') return 'cancelled';
-  return temporal;
+  if (encontro.publicacao === 'cancelled') {
+    return agora <= fimDoCancelado(encontro) ? 'cancelled' : 'ended';
+  }
+  return statusTemporal(encontro, agora);
 }
 
 /** Os campos comuns, campo a campo. Nunca `{ ...encontro }`. */

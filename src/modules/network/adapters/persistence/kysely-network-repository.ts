@@ -183,6 +183,9 @@ function consultaBase(db: DbExecutor) {
   return db.selectFrom('network_events as e').where('e.publication_status', 'in', VISIVEL);
 }
 
+/** 23:59:59 do dia local do encontro, no fuso dele, como instante. */
+const FIM_DO_DIA_DO_CANCELADO = sql`(((e.starts_at AT TIME ZONE e.time_zone)::date + time '23:59:59') AT TIME ZONE e.time_zone)`;
+
 /** O sabado do fim de semana corrente ou proximo, no fuso do encontro. */
 function sabadoDoFimDeSemana(agora: Date) {
   const hoje = sql`(${agora}::timestamptz AT TIME ZONE e.time_zone)::date`;
@@ -202,12 +205,21 @@ function recorteNoTempo(consulta: Consulta, when: RecorteDaAgenda['when'], agora
         eb.or([
           eb.and([eb('e.ends_at', 'is', null), eb('e.starts_at', '>', agora)]),
           eb.and([eb('e.ends_at', 'is not', null), eb('e.ends_at', '>=', agora)]),
+          // O cancelado sem fim segue visivel COMO cancelado ate 23:59:59 do
+          // dia dele, no fuso dele (`fimDoCancelado`, decisao de 28/09).
+          sql<SqlBool>`(e.publication_status = 'cancelled' AND e.ends_at IS NULL
+            AND ${agora}::timestamptz <= ${FIM_DO_DIA_DO_CANCELADO})`,
         ]),
       );
     case 'past':
       return consulta.where((eb) =>
         eb.or([
-          eb.and([eb('e.ends_at', 'is', null), eb('e.starts_at', '<=', agora)]),
+          eb.and([
+            eb('e.ends_at', 'is', null),
+            eb('e.starts_at', '<=', agora),
+            sql<SqlBool>`NOT (e.publication_status = 'cancelled'
+              AND ${agora}::timestamptz <= ${FIM_DO_DIA_DO_CANCELADO})`,
+          ]),
           eb.and([eb('e.ends_at', 'is not', null), eb('e.ends_at', '<', agora)]),
         ]),
       );
