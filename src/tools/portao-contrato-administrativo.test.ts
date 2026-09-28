@@ -35,6 +35,15 @@ void describe('portao do contrato administrativo', () => {
     assert.ok(operacoesAdministrativas >= 5, `so ${String(operacoesAdministrativas)} operacoes sob /admin/`);
   });
 
+  void it('a fila de pedidos e a leitura auditada que a regra 5 aceita: GET com x-audit de leitura', () => {
+    const spec = parseYaml(TEXTO) as Spec;
+    const fila = operacao(spec, '/admin/network/join-requests', 'get');
+    assert.deepEqual(fila['x-audit'], {
+      action: 'admin.network_join_request.listed',
+      resource_kind: 'network_join_request',
+    });
+  });
+
   const iscas: readonly { nome: string; regra: RegExp; alterar: (spec: Spec) => void }[] = [
     {
       nome: 'leitura administrativa sem x-admin-roles',
@@ -82,10 +91,26 @@ void describe('portao do contrato administrativo', () => {
       },
     },
     {
-      nome: 'GET administrativo com x-audit',
-      regra: /getAdminSession: GET com x-audit/,
+      nome: 'GET administrativo com x-audit de verbo de escrita',
+      regra: /getAdminSession: GET com x-audit de verbo que nao e de leitura/,
       alterar: (s) =>
         void (operacao(s, '/admin/session', 'get')['x-audit'] = { action: 'admin.session.opened', resource_kind: 'x' }),
+    },
+    {
+      nome: 'GET administrativo com x-audit de leitura, mas sem teto por linhas (nao e leitura de pessoa)',
+      regra: /getAdminSession: GET com x-audit sem teto por rows_returned/,
+      alterar: (s) =>
+        void (operacao(s, '/admin/session', 'get')['x-audit'] = { action: 'admin.session.listed', resource_kind: 'x' }),
+    },
+    {
+      nome: 'a fila de pedidos perde o teto por linhas e fica com x-audit',
+      regra: /listAdminNetworkJoinRequests: GET com x-audit sem teto por rows_returned/,
+      alterar: (s) => void delete operacao(s, '/admin/network/join-requests', 'get')['x-rate-limit'],
+    },
+    {
+      nome: 'a fila de pedidos perde o x-audit (leitura de pessoa sem trilha)',
+      regra: /listAdminNetworkJoinRequests: GET com teto por rows_returned e sem x-audit/,
+      alterar: (s) => void delete operacao(s, '/admin/network/join-requests', 'get')['x-audit'],
     },
     {
       nome: 'contrato sem nenhuma operacao administrativa',

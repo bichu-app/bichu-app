@@ -13,8 +13,16 @@
  *    `adminReauth`, `x-admin-roles` ou `x-audit`;
  * 4. `adminReauth` no `security` e `x-admin-reauth-scope` andam juntos, e o
  *    escopo e um valor de `AdminReauthScope`;
- * 5. nenhuma operacao `GET` administrativa declara `x-audit` (GET nao muda
- *    estado, item 3).
+ * 5. `GET` administrativo so declara `x-audit` quando e LEITURA DE DADO PESSOAL
+ *    AUDITADA (D55): o verbo da acao e de leitura (`.listed`, `.read`) e a
+ *    operacao declara o teto por linhas devolvidas (`x-rate-limit` com
+ *    `counts: rows_returned`, D56). Os dois andam juntos porque sao a mesma
+ *    decisao do RA-01: o que se audita na leitura e o que sai de dado de
+ *    pessoa, e isso se mede em linhas. Fora disso, GET com `x-audit` continua
+ *    reprovado (GET nao muda estado, item 3), e um verbo de escrita num GET
+ *    reprova sempre;
+ * 6. o inverso: `GET` administrativo com teto por `rows_returned` e leitura de
+ *    pessoa, e sem `x-audit` ele sairia sem trilha (D55).
  *
  * **Nao achar alvo reprova**: com zero operacoes sob `/admin/` o portao nao
  * verificou nada, e diz isso. As iscas que ele precisa reprovar estao no teste
@@ -27,6 +35,19 @@ const SEGUROS: ReadonlySet<string> = new Set(['get']);
 const PREFIXO = '/admin/';
 const LOGIN = 'openAdminSession';
 const ESQUEMAS_ADMINISTRATIVOS = ['adminSession', 'adminCsrf', 'adminReauth'];
+/** Verbos de acao que descrevem leitura, e nao mudanca de estado. */
+const VERBOS_DE_LEITURA: ReadonlySet<string> = new Set(['listed', 'read']);
+
+/** A operacao declara o teto por linhas devolvidas (D56)? */
+function contaLinhasDevolvidas(tetos: unknown): boolean {
+  return Array.isArray(tetos) && tetos.some((t) => ehObjeto(t) && t['counts'] === 'rows_returned');
+}
+
+function verboDaAcao(trilha: unknown): string | null {
+  if (!ehObjeto(trilha) || typeof trilha['action'] !== 'string') return null;
+  const partes = trilha['action'].split('.');
+  return partes[partes.length - 1] ?? null;
+}
 
 function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
@@ -108,8 +129,22 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
       if (inseguro) {
         if (!trilhaCompleta) violacoes.push(`${id}: escrita sem x-audit com action e resource_kind (regra 2)`);
         if (!ehLogin && !esquemas.has('adminCsrf')) violacoes.push(`${id}: escrita sem adminCsrf (regra 2)`);
-      } else if (trilha !== undefined) {
-        violacoes.push(`${id}: GET com x-audit; GET nao muda estado (regra 5)`);
+      } else {
+        const leituraDePessoa = contaLinhasDevolvidas(operacao['x-rate-limit']);
+        if (trilha !== undefined) {
+          const verbo = verboDaAcao(trilha);
+          if (!trilhaCompleta || verbo === null || !VERBOS_DE_LEITURA.has(verbo)) {
+            violacoes.push(
+              `${id}: GET com x-audit de verbo que nao e de leitura; GET nao muda estado (regra 5)`,
+            );
+          } else if (!leituraDePessoa) {
+            violacoes.push(
+              `${id}: GET com x-audit sem teto por rows_returned; so a leitura de dado pessoal auditada (D55, D56) declara trilha (regra 5)`,
+            );
+          }
+        } else if (leituraDePessoa) {
+          violacoes.push(`${id}: GET com teto por rows_returned e sem x-audit; leitura de pessoa sem trilha (regra 6, D55)`);
+        }
       }
 
       const pedeReauth = esquemas.has('adminReauth');
