@@ -240,8 +240,39 @@ interface Achado {
  * que é exatamente a informação pela qual o campo existe.
  */
 const TELEFONE = /(?:\+?55[\s.-]*)?(?:\(?\d{2}\)?[\s.-]*)?\d(?:[\s.()-]*\d){7,12}/g;
-const EMAIL = /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/g;
-const LINK = /(?:https?:\/\/|www\.)[^\s]+|[a-z0-9-]+\.(?:com|net|org|br|me|io|app|link|gg)(?:\.br)?(?:\/[^\s]*)?/g;
+/**
+ * E-mail. O olhar-para-trás na frente não é refinamento de casamento: é o que
+ * torna o custo linear, e sem ele o resto desta expressão não adianta.
+ *
+ * Medido em Node 22 sobre o pior caso construído `a…a@a.a.a.…!`, que casa quase
+ * tudo e falha no último caractere. Sem o olhar-para-trás o motor recomeça a
+ * varredura a partir de **cada** posição do mesmo bloco de caracteres e o custo
+ * cresce com o quadrado do tamanho: 240 ms em 16 KB, 118.870 ms em 256 KB. Com
+ * ele sobram duas posições de partida em vez de n, e 256 KB custam 1,9 ms.
+ *
+ * Trocar só o domínio por rótulos separados, que é o que a regra S5852 sugere,
+ * não resolve e piora: 122.850 ms nos mesmos 256 KB, medido. A ambiguidade
+ * interna nunca foi a parte cara. Os rótulos ficam mesmo assim, porque são eles
+ * que tiram do código a forma que a regra acusa.
+ *
+ * Quem prova isto é `tempo-da-redacao.test.ts`, que mede a função inteira.
+ */
+const EMAIL = /(?<![a-z0-9._%+-])[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/g;
+/**
+ * Link. O olhar-para-trás está **só** no segundo ramo, e de propósito.
+ *
+ * Este achado não estava na triagem: ela mediu os dois regex de e-mail e este
+ * aqui é pior que os dois. `[a-z0-9-]+` seguido de `\.` sobre um bloco longo de
+ * letras faz o motor desenrolar o bloco inteiro a cada posição de partida.
+ * Medido em Node 22, 200 KB: `rua aaa…` custava 73.332 ms, `1-1-1…` 66.855 ms.
+ * Com o olhar-para-trás, 1,5 ms nos dois.
+ *
+ * Pô-lo antes da alternância inteira mudaria o casamento: `xwww.foo.com` casa
+ * hoje como `www.foo.com` pelo primeiro ramo, e um olhar-para-trás global
+ * bloquearia esse ramo e devolveria `foo.com`. O primeiro ramo fica intacto.
+ */
+const LINK =
+  /(?:https?:\/\/|www\.)[^\s]+|(?<![a-z0-9-])[a-z0-9-]+\.(?:com|net|org|br|me|io|app|link|gg)(?:\.br)?(?:\/[^\s]*)?/g;
 const CEP = /\d{5}-?\d{3}/g;
 /**
  * Endereço: a palavra de logradouro seguida do resto, com o número opcional.

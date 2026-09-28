@@ -206,8 +206,12 @@ const AUSENCIAS_ACEITAS = new Map([
   // o comeco de uma lista que so cresce. No fechamento do dia saiu tambem
   // `kysely-lost-case-repository.ts`, pelo mesmo motivo: o proprio verificador
   // acusou a excecao como obsoleta.
-  ['src/modules/media/application/media-service.ts', SEM_SUITE_QUE_CARREGUE],
-  ['src/modules/media/application/processar-foto.ts', SEM_SUITE_QUE_CARREGUE],
+  // SAIRAM EM 28/09, pela invariante 2 desta lista, e foi o proprio verificador
+  // que acusou: `media-service.ts` e `processar-foto.ts` passaram a APARECER no
+  // relatorio de integracao, porque `tests/integration/foto-de-ponta-a-ponta.
+  // test.ts` (BICHUS-245) carrega a foto de ponta a ponta contra o
+  // armazenamento de objeto da pilha efemera. A dispensa que sobra depois de o
+  // teste chegar e o comeco de uma lista que so cresce.
   ['src/modules/notifications/adapters/persistence/kysely-registro-de-entregas.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/pets/adapters/persistence/kysely-reference-data-repository.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/shared/queue/kysely-job-queue.ts', SEM_SUITE_QUE_CARREGUE],
