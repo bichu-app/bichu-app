@@ -40,6 +40,38 @@ const TETO_DE_MEGAPIXELS = 50;
 
 const TETO_DE_PIXELS = TETO_DE_MEGAPIXELS * 1_000_000;
 
+/**
+ * O CACHE DO LIBVIPS FICA DESLIGADO, e isto não é afinação: é o que mantém o
+ * processo vivo depois da segunda foto.
+ *
+ * O `sharp` nasce com um cache de operação de 50 MiB, 20 arquivos e 100 itens
+ * (`sharp.cache()` devolve isso). Ele existe para o caso em que o mesmo processo
+ * reencontra a mesma imagem, que é o caso de um servidor de miniaturas. **Aqui
+ * nunca acontece**: cada trabalho da fila traz uma foto que este processo nunca
+ * viu e nunca vai ver de novo. Então o cache não acerta uma vez, e o que ele faz
+ * é retomar memória entre fotos sem nada em troca.
+ *
+ * Medido no container com o `mem_limit: 448m` da `compose.yaml`, sobre o pior
+ * caso que `inspecionar` aceita (50 megapixels exatos, JPEG progressivo, 2,1 MiB
+ * — cabe nos 10 MiB de `UploadIntentInput.byte_size`), dez fotos em série:
+ *
+ *   cache ligado (o padrão) .... 331 → 632 → 925 → 1072 MiB, e continua subindo
+ *                                até 1219 MiB com teto de 2 GiB. Com os 448m de
+ *                                verdade, morto pelo cgroup na SEGUNDA foto,
+ *                                saída 137.
+ *   cache desligado ............ pico 304 MiB, estável da terceira foto em
+ *                                diante, dez fotos com saída 0.
+ *
+ * `MALLOC_TRIM_THRESHOLD_=131072` foi medido nos dois sentidos e **não muda
+ * nada**: 304 MiB contra 310 MiB sem ela, que é ruído, e com o cache ligado o
+ * processo morre com ela igual. A retenção é do cache do libvips, não do
+ * alocador da glibc.
+ *
+ * Chamada no corpo do módulo, e não dentro de `criarImageProcessor()`, porque o
+ * ajuste é do processo e não da instância: duas instâncias não são dois caches.
+ */
+sharp.cache(false);
+
 export function criarImageProcessor(): ImageProcessor {
   return {
     async inspecionar(bytes: Buffer): Promise<DimensoesDaImagem | MotivoDeRecusa> {
