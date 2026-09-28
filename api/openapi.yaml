@@ -8210,8 +8210,12 @@ components:
         **Calculado no servidor, sempre.** `cancelled` prevalece sobre o estado
         temporal **enquanto o fim previsto nao passou**; depois do fim, segue a
         regra do encerrado e sai `ended` (ADR-0027 12.6, decisao do cliente de
-        23/09/2026). Cliente que nao conhece um valor precisa trata-lo sem
-        quebrar.
+        23/09/2026). **Sem `ends_at`, o fim previsto e o proprio `starts_at`**
+        (regra que o servidor ja aplica desde a BICHUS-251): o encontro sem fim
+        e `upcoming` ate comecar e `ended` a partir dai, e o cancelado sem fim
+        sai `cancelled` ate o inicio e depois some do recorte `upcoming` como
+        encerrado. Nao ha estender ate o fim do dia no fuso do encontro. Cliente
+        que nao conhece um valor precisa trata-lo sem quebrar.
 
     NetworkEventVisibility:
       type: string

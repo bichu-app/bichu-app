@@ -214,9 +214,9 @@ after(async () => {
       await banco.db.deleteFrom('store_items').where('partner_id', '=', id.id).execute();
       await banco.db.deleteFrom('store_partners').where('id', '=', id.id).execute();
     }
-    // Nesta ordem, e a ordem e o risco declarado na entrega: `upload_intents.user_id`
-    // e CASCADE e `catalog_images.upload_intent_id` e NO ACTION (apendice A.3),
-    // entao a conta que enviou imagem de catalogo so sai depois das imagens.
+    // `catalog_images.upload_intent_id` e SET NULL desde 28/09, entao a conta
+    // ja sairia antes das imagens; as imagens de teste sao apagadas mesmo assim,
+    // para nao sobrarem linhas orfas na pilha.
     await sql`
       delete from catalog_images
        where upload_intent_id in (select id from upload_intents where user_id = ${autor.userId}::uuid)
