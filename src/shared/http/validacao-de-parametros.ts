@@ -228,6 +228,10 @@ export function vigiarParametrosDasRotas(
   let corposConferidos = 0;
 
   app.addHook('onRoute', (rota) => {
+    // A rota de `405` do escopo administrativo (`fecharMetodosDaSuperficie`)
+    // nao e operacao: ela responde `405` sem ler parametro, corpo nem banco, e
+    // existe justamente para o metodo que o contrato NAO declara.
+    if ((rota.config as { metodoNaoPermitido?: boolean } | undefined)?.metodoNaoPermitido === true) return;
     const metodos = Array.isArray(rota.method) ? rota.method : [rota.method];
     const caminho = caminhoDoContrato(rota.url, prefixoDaApi);
 

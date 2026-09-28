@@ -430,6 +430,14 @@ export function registrarRota<const T extends RouteDefinition>(
   const superficie = app.superficieAdministrativa;
   exigirFronteiraAdministrativa(rota, superficie);
   if (superficie !== undefined) anotarMetodoDaSuperficie(superficie, rota);
+  // A marca da rota de 405 e so de `fecharMetodosDaSuperficie`: numa rota
+  // comum ela a tiraria da conferencia de subida contra o contrato.
+  if (opcoes.config !== undefined && 'metodoNaoPermitido' in opcoes.config) {
+    throw new Error(
+      `Rota ${rota.operationId}: \`config.metodoNaoPermitido\` e reservada a rota de 405 do painel, ` +
+        'e numa rota comum ela a esconderia da conferencia de subida contra o contrato.',
+    );
+  }
   const portaoDeReauth = portaoDeReautenticacao(app, rota);
   const portaoDeReauthAdministrativa = portaoDeReautenticacaoAdministrativa(rota, superficie);
   // O corpo administrativo e FECHADO de verdade: o Ajv do Fastify apaga o campo
@@ -543,6 +551,9 @@ export function fecharMetodosDaSuperficie(
     (app as FastifyInstance).route({
       method: faltando,
       url: caminho,
+      // A marca que `vigiarParametrosDasRotas` le para nao cobrar operacao do
+      // contrato de uma rota que so existe para recusar o metodo.
+      config: { metodoNaoPermitido: true },
       handler: async (_request, reply) => {
         void reply.header('Allow', permitidos);
         throw problemas.metodoNaoPermitido();
