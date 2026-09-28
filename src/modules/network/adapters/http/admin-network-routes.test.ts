@@ -174,7 +174,7 @@ async function chamar(
     corpo: r.body === '' ? {} : (JSON.parse(r.body) as Record<string, unknown>),
     etag: typeof etag === 'string' ? etag : undefined,
     bruto: r.body,
-    cabecalhos: r.headers as Record<string, unknown>,
+    cabecalhos: r.headers,
   };
 }
 
