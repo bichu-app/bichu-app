@@ -101,19 +101,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
  * Quem implementa uma delas tira a linha no mesmo commit.
  */
 const OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA: readonly string[] = [
-  // A `Rede` (ADR-0027 itens 12 e 17), de outra fatia. A `Loja` e a intencao de
-  // envio de imagem sairam desta lista com BICHUS-266/267.
-  'listAdminNetworkEvents',
-  'createAdminNetworkEvent',
-  'getAdminNetworkEvent',
-  'updateAdminNetworkEvent',
-  'removeAdminNetworkEvent',
-  'relocateAdminNetworkEvent',
-  'cancelAdminNetworkEvent',
-  'changeAdminNetworkEventAccess',
-  'listAdminNetworkJoinRequests',
-  'approveAdminNetworkJoinRequest',
-  'declineAdminNetworkJoinRequest',
+  // Vazia desde BICHUS-273/292: a `Loja` e a intencao de envio de imagem sairam
+  // com BICHUS-266/267, e a `Rede` e a fila de pedidos com esta fatia. Operacao
+  // administrativa nova no contrato sem rota entra aqui, no mesmo commit.
 ];
 
 function ehRota(valor: unknown): valor is RouteDefinition {

@@ -1,7 +1,7 @@
 # Matriz de rastreabilidade: telas do backoffice e da Rede contra api/openapi.yaml
 #
 # Status: rascunho
-# Atualizado: 2026-09-23
+# Atualizado: 2026-09-28
 # Dono: arquitetura (ADR-0027 item 18)
 #
 # POR QUE ESTE ARQUIVO EXISTE, EM UMA FRASE: regra do cliente de 23/09, "tudo
@@ -165,6 +165,7 @@ telas:
           - enum:AdminReauthScope.store_item_retirement
           - resp:reauth_token
           - resp:csrf_token
+          - problem:invalid-credentials
 
   - tela: "3 · Loja: formulario"
     prototipo: backoffice.html
@@ -292,6 +293,17 @@ telas:
         usa:
           - header:If-Match
           - enum:AdminReauthScope.network_event_removal
+          - problem:reauthentication-required
+      - operationId: cancelAdminNetworkEvent
+        situacao: contrato
+        nota: "item de menu Cancelar, com motivo e senha (feat/backoffice-telas-rede, 73b78a4); o cancelado segue no app ate o fim previsto"
+        usa:
+          - req:note
+          - header:If-Match
+          - resp:publication_status
+          - resp:cancellation_note
+          - enum:AdminNetworkEventPublicationStatus.cancelled
+          - enum:AdminReauthScope.network_event_cancellation
           - problem:reauthentication-required
 
   - tela: "4 · Rede: formulario"
@@ -667,9 +679,6 @@ contrato_sem_tela:
   - operationId: updateAdminStoreTag
     resolucao: "tela: resolvido quando a tela existir"
     nota: "nao ha tela de vocabulario: renomear e desativar tag nao tem onde acontecer"
-  - operationId: cancelAdminNetworkEvent
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "nenhuma tela cancela encontro, e o cliente decidiu que o cancelado aparece no app ate o fim previsto. Falta o item de menu Cancelar, com senha"
   - operationId: closeAllAdminSessions
     resolucao: "tela: resolvido quando a tela existir"
     nota: "sair de todas as sessoes administrativas nao tem botao"

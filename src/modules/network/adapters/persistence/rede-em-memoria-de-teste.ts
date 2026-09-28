@@ -290,7 +290,9 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
       return Promise.resolve(g === null ? null : montar(estado, g));
     },
     listarEncontros: (recorte) => {
-      const itens = [...estado.encontros.values()].map((g) => montar(estado, g));
+      const itens = [...estado.encontros.values()]
+        .filter((g) => (recorte.publicacao === undefined ? g.publicacao !== 'removed' : g.publicacao === recorte.publicacao))
+        .map((g) => montar(estado, g));
       const inicio = (recorte.page - 1) * recorte.limit;
       return Promise.resolve({ itens: itens.slice(inicio, inicio + recorte.limit), total: itens.length });
     },

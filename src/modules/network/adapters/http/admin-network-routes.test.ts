@@ -314,6 +314,18 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     ]);
   });
 
+  void it('removido some da lista por padrao e so volta com publication_status=removed', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(criado.corpo['slug']);
+    await chamar(b, 'DELETE', `/admin/network/events/${slug}`, { ifMatch: criado.etag ?? '', reauth: 'janela-network_event_removal' });
+    const padrao = await chamar(b, 'GET', '/admin/network/events');
+    assert.equal(padrao.status, 200, padrao.bruto);
+    assert.equal(padrao.corpo['total'], 0);
+    const removidos = await chamar(b, 'GET', '/admin/network/events?publication_status=removed');
+    assert.equal(removidos.corpo['total'], 1);
+    assert.deepEqual(removidos.corpo['applied_filters'], { publication_status: 'removed' });
+  });
+
   void it('mover grava point_changed e NUNCA a coordenada na trilha; o aviso diz o antes e o depois', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRIVADO });
     const slug = String(criado.corpo['slug']);

@@ -2851,7 +2851,11 @@ export interface paths {
         };
         /**
          * Encontros da Rede, em todos os estados
-         * @description A lista do painel, com publicados, cancelados e removidos, e o estado temporal calculado no servidor.
+         * @description A lista do painel, com o estado temporal calculado no servidor.
+         *     **Removido nao aparece por padrao**: removido some da lista (a UX o
+         *     trata como apagado para quem opera), e so volta quando pedido pelo
+         *     filtro fechado `publication_status=removed`, que devolve so os
+         *     removidos. Sem filtro vem publicado e cancelado.
          */
         get: operations["listAdminNetworkEvents"];
         put?: never;
@@ -9345,7 +9349,22 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
-            401: components["responses"]["AdminUnauthorized"];
+            /**
+             * @description Tres tipos, e o painel trata dois deles de jeito diferente:
+             *     `invalid-credentials` e a senha errada (a pessoa continua na tela e
+             *     tenta de novo; o corpo e o mesmo do login recusado, e a tentativa vai
+             *     para a trilha como `admin.session.denied`); `unauthenticated` e
+             *     `token-expired` sao a sessao que nao existe ou venceu, e levam ao
+             *     login, como em `AdminUnauthorized`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
             403: components["responses"]["AdminForbidden"];
             429: components["responses"]["TooManyRequests"];
         };
@@ -9808,6 +9827,7 @@ export interface operations {
             query?: {
                 /** @description Busca em titulo, resumo e nome do lugar, no servidor. */
                 q?: string;
+                /** @description Sem ele, `published` e `cancelled`. `removed` so aparece quando pedido aqui. */
                 publication_status?: components["schemas"]["AdminNetworkEventPublicationStatus"];
                 timing?: components["schemas"]["AdminNetworkEventTiming"];
                 visibility?: components["schemas"]["NetworkEventVisibility"];
@@ -9922,6 +9942,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["AdminReauthRequired"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];

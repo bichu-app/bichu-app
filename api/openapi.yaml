@@ -4970,7 +4970,31 @@ paths:
                     scope: network_event_relocation
                     csrf_token: Qm9uZGlhLCBpc3RvIGUgc28gdW0gZXhlbXBsbw
         '400': { $ref: '#/components/responses/ValidationFailed' }
-        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '401':
+          description: |
+            Tres tipos, e o painel trata dois deles de jeito diferente:
+            `invalid-credentials` e a senha errada (a pessoa continua na tela e
+            tenta de novo; o corpo e o mesmo do login recusado, e a tentativa vai
+            para a trilha como `admin.session.denied`); `unauthenticated` e
+            `token-expired` sao a sessao que nao existe ou venceu, e levam ao
+            login, como em `AdminUnauthorized`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                senhaErrada:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/invalid-credentials
+                    title: E-mail ou senha nao conferem
+                    status: 401
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+                semSessao:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/unauthenticated
+                    title: Entre para continuar
+                    status: 401
+                    next_action: sign_in
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
         '403': { $ref: '#/components/responses/AdminForbidden' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
@@ -5529,7 +5553,12 @@ paths:
       tags: [admin]
       x-effects: []
       summary: Encontros da Rede, em todos os estados
-      description: A lista do painel, com publicados, cancelados e removidos, e o estado temporal calculado no servidor.
+      description: |
+        A lista do painel, com o estado temporal calculado no servidor.
+        **Removido nao aparece por padrao**: removido some da lista (a UX o
+        trata como apagado para quem opera), e so volta quando pedido pelo
+        filtro fechado `publication_status=removed`, que devolve so os
+        removidos. Sem filtro vem publicado e cancelado.
       security:
         - adminSession: []
       x-admin-roles: [admin]
@@ -5540,6 +5569,7 @@ paths:
           schema: { type: string, minLength: 2, maxLength: 80 }
         - name: publication_status
           in: query
+          description: 'Sem ele, `published` e `cancelled`. `removed` so aparece quando pedido aqui.'
           schema: { $ref: '#/components/schemas/AdminNetworkEventPublicationStatus' }
         - name: timing
           in: query
@@ -5734,6 +5764,7 @@ paths:
         - $ref: '#/components/parameters/IfMatch'
       responses:
         '204': { description: Encontro removido. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/AdminReauthRequired' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }

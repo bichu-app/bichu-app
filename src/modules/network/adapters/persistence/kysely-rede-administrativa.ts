@@ -514,7 +514,13 @@ export function criarRedeAdministrativaRepository(
           sql<SqlBool>`(e.title ILIKE ${padrao} OR e.summary ILIKE ${padrao} OR e.place_name ILIKE ${padrao})`,
         );
       }
-      if (recorte.publicacao !== undefined) condicoes.push(sql<SqlBool>`e.publication_status = ${recorte.publicacao}`);
+      // Removido some da lista e so volta pelo filtro fechado (contrato de
+      // listAdminNetworkEvents).
+      condicoes.push(
+        recorte.publicacao === undefined
+          ? sql<SqlBool>`e.publication_status IN ('published', 'cancelled')`
+          : sql<SqlBool>`e.publication_status = ${recorte.publicacao}`,
+      );
       if (recorte.visibilidade !== undefined) condicoes.push(sql<SqlBool>`e.visibility = ${recorte.visibilidade}`);
       const cidade = recorte.city?.trim();
       if (cidade !== undefined && cidade !== '') condicoes.push(sql<SqlBool>`lower(e.city) = lower(${cidade})`);
