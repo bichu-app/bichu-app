@@ -1,0 +1,29 @@
+# ISCA PERMANENTE do portao da matriz de rastreabilidade (ADR-0027 item 18).
+#
+# Esta matriz esta errada DE PROPOSITO, em quatro lugares, e o portao precisa
+# reprova-la pelos quatro (ACHADOS_DA_ISCA em src/tools/portao-rastreabilidade.ts).
+# Se um dia ela passar, o portao ficou cego para aquele caso e a esteira para.
+# Nao "conserte" este arquivo.
+versao: 1
+contrato: api/openapi.yaml
+telas:
+  - tela: "isca"
+    prototipo: nenhum
+    estados: [isca]
+    operacoes:
+      - operationId: operacaoQueNaoExiste         # 1. operationId sumiu
+        situacao: contrato
+        usa: []
+      - operationId: createAdminStoreItem
+        situacao: contrato
+        usa:
+          - req:title                              # resolve: controle positivo
+          - req:campo_que_nao_existe               # 2. campo sumiu
+      - operationId: operacaoDeOutraBranch         # 3. pendente sem onde
+        situacao: pendente
+correspondencias:
+  StoreCategory:
+    um_para_um: false
+    valores:
+      food: Alimentacao
+      nao_existe: Rotulo sem codigo               # 4. codigo fora da lista fechada

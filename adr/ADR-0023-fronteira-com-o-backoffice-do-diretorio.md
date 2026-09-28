@@ -1,7 +1,11 @@
 # ADR-0023: A fronteira entre o Bichu e o backoffice de outra esteira
 
-**Status:** proposto — três itens dependem de decisão do cliente
+**Status:** proposto, com emenda 1 (23/09/2026)
 **Data:** 2026-09-22
+
+**Emenda 1, 23/09/2026 (ADR-0027):** o backoffice deixou de ser de outra
+esteira: o squad o constrói. As três decisões de fronteira continuam; mudam o
+público, a credencial e o escopo. Ver o fim do documento.
 
 ## Contexto
 
@@ -195,3 +199,40 @@ essa reabertura é do cliente, não minha.
 
 ---
 DÉDALO — Arquiteto de Software
+
+
+---
+
+# Emenda 1 — 23/09/2026: o backoffice é do squad
+
+**Decisão do cliente, 23/09:** o squad constrói o backoffice, uma SPA React em
+`admin.bichu.app`, com escopo v1 de autenticação, `Loja` e `Rede`. O desenho
+está no ADR-0027.
+
+**O que continua valendo deste documento, sem mudança:**
+
+- item 1: **escrita por API, nunca direto no banco**. O cliente confirmou (D.1);
+- item 2: recusa de regra de campo na escrita, rascunho permitido e publicação
+  recusada sem o conjunto completo, leitura filtrando só o estado publicado;
+- item 3: `api/openapi.yaml` é o contrato, `oasdiff breaking` na esteira, só
+  acréscimo dentro de `/v1`, lista fechada é três arquivos no mesmo commit, 30
+  dias de descontinuação.
+
+**O que muda:**
+
+1. **Credencial.** "Autenticadas com `bearerAuth` e um papel em `user_roles`"
+   (item 1) está superado. `/v1/admin/*` aceita só a sessão administrativa em
+   cookie `__Host-bichu_adm`, e recusa `bearerAuth` com 401 (ADR-0027 item 2).
+   A credencial de serviço do ADR-0026 também está superada: num SPA sem
+   servidor, o segredo iria no bundle.
+2. **Público.** O documento falava com um time externo. O item 3 ("um contato
+   nomeado de cada lado") deixa de ser pendência: o contrato é consumido pelo
+   próprio squad.
+3. **Escopo.** A v1 cobre `Loja` e `Rede`. `Perto` fica fora do painel; este
+   documento e o ADR-0026 continuam como referência para quando ele entrar, e
+   essa entrada reabre o risco aceito RA-01 de `docs/04-seguranca.md` 22.7.
+4. **`Loja`.** A decisão 9.6 fechou em (a): tabela alimentada pelo painel. A
+   BICHUS-189 (catálogo em arquivo versionado) está superada. O "risco alto" do
+   fim deste documento (Loja e Rede sem tabela) está resolvido: `store_*` existe
+   na `development` e `network_events` na BICHUS-251, emendada pelo ADR-0027
+   seção 12.

@@ -3,6 +3,12 @@
 **Status:** aceito
 **Data:** 2026-09-17
 
+**Nota, 23/09/2026:** "a administração é por endpoint interno" (Consequências)
+foi superado pelo ADR-0027: existe backoffice, em `admin.bichu.app`, com sessão
+própria, conta dedicada e o risco sem MFA aceito pelo cliente. O gatilho de
+MFA deste documento continua valendo, e é um dos gatilhos de revisão do risco
+aceito (RA-01).
+
 ## Contexto
 
 O padrão da plataforma manda federar identidade com Keycloak e **não**

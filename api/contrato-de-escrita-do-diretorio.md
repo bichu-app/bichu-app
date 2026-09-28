@@ -1,5 +1,15 @@
-> **Status:** rascunho
-> **Atualizado:** 2026-09-22
+> **Status:** rascunho, superado em parte (ver o aviso abaixo)
+> **Atualizado:** 2026-09-23
+
+> **Aviso, 23/09/2026.** Este documento foi escrito para um backoffice de
+> **outro time**. Em 23/09 o cliente decidiu que o squad constrói o painel
+> (ADR-0027). O que segue continua valendo como descrição de `Perto`, que
+> ficou **fora** da v1 do painel. Para `Loja` e `Rede` ele está superado: as
+> seções 7 e 9.6 foram resolvidas (a `Loja` é tabela do painel; a `Rede` tem
+> tabela na BICHUS-251), e o contrato das duas é o de `/v1/admin/...` em
+> `api/openapi.yaml`. A autenticação descrita na seção 8 (`bearerAuth` e papel)
+> também está superada: `/v1/admin/*` aceita só a sessão administrativa em
+> cookie (ADR-0027 item 2).
 
 # Contrato de escrita do diretório — Bichu
 
