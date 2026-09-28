@@ -27,7 +27,17 @@ export type PropositoDaImagem = 'store_item' | 'network_event';
 export const TIPOS_DE_IMAGEM_DE_CATALOGO = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
 /** O teto do contrato (`byte_size.maximum`), que vai para a politica assinada. */
-export const TETO_DE_BYTES_DO_CATALOGO = 10 * 1024 * 1024;
+export const TETO_DE_BYTES_DO_CATALOGO = 5 * 1024 * 1024;
+
+/**
+ * A dimensao minima por proposito (`AdminCatalogImageIntentInput.byte_size`).
+ * So e conhecida depois do envio: o worker a confere nos bytes e recusa com o
+ * motivo, e o painel mostra o erro na miniatura.
+ */
+export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: number; altura: number }>> = {
+  store_item: { largura: 800, altura: 800 },
+  network_event: { largura: 1600, altura: 900 },
+};
 
 /**
  * Dez minutos, o numero do ADR-0027 item 10. A foto do pet tem cinco porque sai
@@ -95,6 +105,7 @@ export interface RegistroDeImagemDeCatalogo {
 /** A imagem como o worker precisa dela: a chave do original, e nada que sirva de resposta. */
 export interface ImagemParaProcessar {
   readonly id: string;
+  readonly purpose: PropositoDaImagem;
   readonly status: 'processing' | 'ready' | 'rejected';
   readonly originalKey: ObjectKey;
 }

@@ -43,6 +43,8 @@ import {
   projetarParceiro,
   projetarTag,
   conferirRotulo,
+  slugDoItem,
+  sufixoCurto,
   TETO_DE_IMAGENS_POR_ITEM,
   TETO_DE_TAGS_ATIVAS,
   TETO_DE_TAGS_POR_ITEM,
@@ -103,7 +105,8 @@ export interface PatchDeParceiro {
 }
 
 export interface CorpoDeItem {
-  readonly slug: string;
+  /** Opcional: sem ele, o servidor deriva do titulo (`slugDoItem`). */
+  readonly slug?: string;
   readonly partner_slug: string;
   readonly title: string;
   readonly summary: string;
@@ -519,10 +522,10 @@ export class CatalogoAdministrativo {
       const destino = errosDoDestino('target_url', corpo.target_url, parceiro.host);
       if (destino.length > 0) throw problemas.validacao(destino);
 
-      const criado = await comSlugLivre(() =>
+      const inserir = (slug: string) =>
         tx.inserirItem({
           id: this.deps.ids.uuidv7(),
-          slug: corpo.slug,
+          slug,
           partnerId: parceiro.id,
           title: corpo.title.trim(),
           summary: corpo.summary.trim(),
@@ -531,8 +534,11 @@ export class CatalogoAdministrativo {
           preco: corpo.price === undefined ? null : precoDoCorpo(corpo.price),
           sortOrder: corpo.sort_order ?? 0,
           agora,
-        }),
-      );
+        });
+      const criado =
+        corpo.slug === undefined
+          ? await this.inserirComSlugDerivado(tx, corpo.title, inserir)
+          : await comSlugLivre(() => inserir(corpo.slug as string));
 
       await this.aplicarEspecieTagsEImagens(tx, criado.id, corpo, agora);
       const completo = await tx.recarregarItem(criado.id);
@@ -607,7 +613,13 @@ export class CatalogoAdministrativo {
       // com o mesmo If-Match passariam as duas.
       const alterado = await comSlugLivre(() => tx.atualizarItem(atual.id, versao, mudanca, agora));
       if (alterado === null) throw versaoMudou();
-      await this.aplicarEspecieTagsEImagens(tx, atual.id, patch, agora);
+      await this.aplicarEspecieTagsEImagens(
+        tx,
+        atual.id,
+        patch,
+        agora,
+        atual.tags.map((t) => t.slug),
+      );
       const completo = await tx.recarregarItem(atual.id);
 
       await tx.registrarNaTrilha(
@@ -733,12 +745,26 @@ export class CatalogoAdministrativo {
       readonly images?: readonly ImagemDoCorpo[] | undefined;
     },
     agora: Instant,
+    tagsJaLigadas: readonly string[] = [],
   ): Promise<void> {
     if (corpo.species !== undefined) await tx.substituirEspecies(itemId, corpo.species);
 
     if (corpo.tag_slugs !== undefined) {
       const achadas = await tx.tagsPorSlugs(corpo.tag_slugs);
       if (achadas.length !== corpo.tag_slugs.length) throw tagDesconhecida();
+      // O teto de 5 conta ativas E desativadas (a lista inteira ja foi contada
+      // antes da transacao). O que se recusa aqui e LIGAR DE NOVO uma
+      // desativada; manter a que ja estava ligada preserva o vinculo (ADR-0027
+      // item 16, emenda de 23/09).
+      if (achadas.some((t) => !t.active && !tagsJaLigadas.includes(t.slug))) {
+        throw problemas.validacao([
+          {
+            field: 'tag_slugs',
+            code: 'inactive_tag',
+            message: 'Esta tag está desativada no vocabulário e não pode ser ligada de novo.',
+          },
+        ]);
+      }
       await tx.substituirTags(
         itemId,
         achadas.map((t) => t.id),
@@ -753,6 +779,34 @@ export class CatalogoAdministrativo {
       }
       await tx.substituirImagens(itemId, galeria);
     }
+  }
+
+  /**
+   * O `slug` derivado do titulo, com sufixo curto se ja existir (contrato:
+   * `AdminStoreItemInput.slug`). A procura e feita dentro da transacao, e a
+   * corrida que sobra (dois itens com o mesmo titulo ao mesmo tempo) e pega
+   * pelo indice unico, que devolve `SlugOcupado`: ai a proxima tentativa leva
+   * sufixo. Cinco tentativas com 20 bits de sufixo cada; se todas colidirem, o
+   * 409 do contrato sai, e nao um 500.
+   */
+  private async inserirComSlugDerivado(
+    tx: TransacaoDoCatalogo,
+    titulo: string,
+    inserir: (slug: string) => Promise<ItemAdministrativo>,
+  ): Promise<ItemAdministrativo> {
+    for (let tentativa = 0; tentativa < 5; tentativa += 1) {
+      const semSufixo = tentativa === 0 ? slugDoItem(titulo) : undefined;
+      const candidato =
+        semSufixo !== undefined && (await tx.itemPorSlug(semSufixo)) === null
+          ? semSufixo
+          : slugDoItem(titulo, sufixoCurto(this.deps.ids.random128()));
+      try {
+        return await inserir(candidato);
+      } catch (erro) {
+        if (!(erro instanceof SlugOcupado)) throw erro;
+      }
+    }
+    throw slugOcupado();
   }
 
   /**

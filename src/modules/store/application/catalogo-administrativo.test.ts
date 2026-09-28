@@ -29,6 +29,7 @@ import {
   type EnvioSemeado,
 } from '../adapters/persistence/catalogo-em-memoria-de-teste.js';
 import { comoData } from '../../../shared/time/clock.js';
+
 import { CatalogoAdministrativo, type Autor } from './catalogo-administrativo.js';
 
 const AGORA = Date.UTC(2026, 8, 23, 15, 0, 0) as Instant;
@@ -456,6 +457,57 @@ void describe('escrita administrativa da Loja', () => {
       assert.deepEqual(criado?.after?.['species'], ['dog', 'cat']);
       assert.deepEqual(criado?.after?.['tag_slugs'], ['porte-medio']);
       assert.deepEqual(criado?.after?.['images'], [{ upload_id: a, alt_text: 'Saco de racao' }]);
+    });
+  });
+
+  void describe('emenda de 23/09: tag desativada e slug derivado', () => {
+    void it('ISCA: ligar DE NOVO uma tag desativada e 400 inactive_tag; manter a ja ligada e permitido', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const t = await m.catalogo.criarTag(AUTOR, { label: 'Porte medio' });
+      const outra = await m.catalogo.criarTag(AUTOR, { label: 'Filhote' });
+      const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, tag_slugs: ['porte-medio'] });
+      await m.catalogo.alterarTag(AUTOR, 'porte-medio', t.etag, { active: false });
+      await m.catalogo.alterarTag(AUTOR, 'filhote', outra.etag, { active: false });
+
+      const mantida = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, {
+        tag_slugs: ['porte-medio'],
+        title: 'Racao 10 kg',
+      });
+      assert.deepEqual(mantida.recurso.tags, [{ slug: 'porte-medio', label: 'Porte medio', active: false }]);
+
+      const religada = await m.catalogo
+        .alterarItem(AUTOR, ITEM.slug, mantida.etag, { tag_slugs: ['porte-medio', 'filhote'] })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(religada), ['inactive_tag']);
+      const nova = await m.catalogo
+        .criarItem(AUTOR, { ...ITEM, slug: 'outro-item', tag_slugs: ['porte-medio'] })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(nova), ['inactive_tag']);
+    });
+
+    void it('o teto de 5 conta as desativadas: seis slugs, mesmo com uma desativada, e 400', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const erro = await m.catalogo
+        .criarItem(AUTOR, { ...ITEM, tag_slugs: ['aaa', 'bbb', 'ccc', 'ddd', 'eee', 'fff'] })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(erro), ['too_many_tags']);
+    });
+
+    void it('sem slug, ele vem do titulo; o segundo item com o mesmo titulo ganha sufixo', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const semSlug = {
+        partner_slug: ITEM.partner_slug,
+        summary: ITEM.summary,
+        category: ITEM.category,
+        species: ITEM.species,
+        target_url: ITEM.target_url,
+      };
+      const a = await m.catalogo.criarItem(AUTOR, { ...semSlug, title: 'Ração úmida sachê' });
+      const b = await m.catalogo.criarItem(AUTOR, { ...semSlug, title: 'Ração úmida sachê' });
+      assert.equal(a.recurso.slug, 'racao-umida-sache');
+      assert.match(b.recurso.slug, /^racao-umida-sache-[0-9a-z]{4}$/);
+      const curto = await m.catalogo.criarItem(AUTOR, { ...semSlug, title: 'Pé' });
+      assert.match(curto.recurso.slug, /^pe-[0-9a-z]{4}$/);
     });
   });
 });

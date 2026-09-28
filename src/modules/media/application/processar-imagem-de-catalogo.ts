@@ -20,7 +20,7 @@
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import { chaveDaDerivada } from '../domain/chave-de-objeto.js';
 import type { ImageProcessor, MotivoDeRecusa } from '../ports/image-processor.js';
-import type { ImagensDeCatalogoDoWorker } from '../ports/imagem-de-catalogo.js';
+import { DIMENSAO_MINIMA, type ImagensDeCatalogoDoWorker } from '../ports/imagem-de-catalogo.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 
 const LARGURA_DA_DERIVADA = 1024;
@@ -45,7 +45,11 @@ export interface CargaDaImagemDeCatalogo {
 
 export type ResultadoDaImagemDeCatalogo =
   | { readonly tipo: 'pronta'; readonly imagemId: string }
-  | { readonly tipo: 'recusada'; readonly imagemId: string; readonly motivo: MotivoDeRecusa }
+  | {
+      readonly tipo: 'recusada';
+      readonly imagemId: string;
+      readonly motivo: MotivoDeRecusa | 'imagem_pequena_demais';
+    }
   | { readonly tipo: 'ignorada'; readonly imagemId: string };
 
 export async function processarImagemDeCatalogo(
@@ -73,6 +77,18 @@ export async function processarImagemDeCatalogo(
     const motivo: MotivoDeRecusa = typeof inspecao === 'string' ? inspecao : 'formato_nao_aceito';
     await deps.imagens.marcarRecusada(imagem.id, TEXTO_DA_RECUSA[motivo]);
     return { tipo: 'recusada', imagemId: imagem.id, motivo };
+  }
+
+  // A dimensao minima por proposito, que so os bytes dizem (contrato,
+  // `AdminCatalogImageIntentInput.byte_size`): 800 x 800 no produto, 1600 x 900
+  // no encontro. Recusa final, com o numero no motivo, para a miniatura dizer.
+  const minima = DIMENSAO_MINIMA[imagem.purpose];
+  if (inspecao.largura < minima.largura || inspecao.altura < minima.altura) {
+    await deps.imagens.marcarRecusada(
+      imagem.id,
+      `A imagem precisa ter pelo menos ${String(minima.largura)} x ${String(minima.altura)} pixels.`,
+    );
+    return { tipo: 'recusada', imagemId: imagem.id, motivo: 'imagem_pequena_demais' };
   }
 
   const derivada = await deps.processador.derivar(original, LARGURA_DA_DERIVADA);

@@ -542,3 +542,25 @@ export function projetarTag(t: TagAdministrativa): TagProjetada {
     version: t.version,
   };
 }
+
+/**
+ * O `slug` do item derivado do titulo (`AdminStoreItemInput.slug`, opcional
+ * desde 23/09): a mesma normalizacao da tag, cortada para caber no formato de
+ * `Slug` (3 a 30) junto com o sufixo. Sem sufixo, devolve `undefined` quando o
+ * titulo nao da um endereco valido (`Pé`): quem chama passa a usar sufixo.
+ */
+export function slugDoItem(titulo: string): string | undefined;
+export function slugDoItem(titulo: string, sufixo: string): string;
+export function slugDoItem(titulo: string, sufixo?: string): string | undefined {
+  const base = slugDaTag(titulo);
+  const espacoDoSufixo = sufixo === undefined ? 0 : sufixo.length + 1;
+  const cortado = base.slice(0, 30 - espacoDoSufixo).replace(/-+$/, '');
+  if (sufixo === undefined) return FORMATO_DE_SLUG.test(cortado) ? cortado : undefined;
+  return cortado === '' ? `item-${sufixo}` : `${cortado}-${sufixo}`;
+}
+
+/** Quatro caracteres base36 (cerca de 20 bits) tirados do CSPRNG. */
+export function sufixoCurto(aleatorio: Uint8Array): string {
+  const n = ((aleatorio[0] ?? 0) << 16) | ((aleatorio[1] ?? 0) << 8) | (aleatorio[2] ?? 0);
+  return (n % 1_679_616).toString(36).padStart(4, '0');
+}

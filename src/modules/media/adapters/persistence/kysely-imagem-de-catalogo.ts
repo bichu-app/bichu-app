@@ -140,11 +140,16 @@ export async function imagemDeCatalogoParaProcessar(
   const linha = await db
     .selectFrom('catalog_images as c')
     .innerJoin('upload_intents as u', 'u.id', 'c.upload_intent_id')
-    .select(['c.id as id', 'c.status as status', 'u.object_key as object_key'])
+    .select(['c.id as id', 'c.status as status', 'c.purpose as purpose', 'u.object_key as object_key'])
     .where('c.id', '=', imagemId)
     .executeTakeFirst();
   if (linha === undefined) return null;
-  return { id: linha.id, status: linha.status, originalKey: comoObjectKey(linha.object_key) };
+  return {
+    id: linha.id,
+    status: linha.status,
+    purpose: linha.purpose,
+    originalKey: comoObjectKey(linha.object_key),
+  };
 }
 
 /** `ready` so com a chave publica, e so a partir de `processing`: estado final nao volta. */

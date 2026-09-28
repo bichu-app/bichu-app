@@ -585,7 +585,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
 
     async tagsPorSlugs(slugs) {
       if (slugs.length === 0) return [];
-      return trx.selectFrom('store_tags').select(['id', 'slug']).where('slug', 'in', slugs).execute();
+      return trx.selectFrom('store_tags').select(['id', 'slug', 'active']).where('slug', 'in', slugs).execute();
     },
 
     async substituirTags(itemId, tagIds) {

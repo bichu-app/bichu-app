@@ -286,7 +286,7 @@ export function repositorioEmMemoria(
         },
         tagsPorSlugs: (slugs) =>
           Promise.resolve(
-            [...r.tags.values()].filter((t) => slugs.includes(t.slug)).map((t) => ({ id: t.id, slug: t.slug })),
+            [...r.tags.values()].filter((t) => slugs.includes(t.slug)).map((t) => ({ id: t.id, slug: t.slug, active: t.active })),
           ),
         async substituirTags(itemId, tagIds) {
           await Promise.resolve();

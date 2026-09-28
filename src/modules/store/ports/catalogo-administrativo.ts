@@ -111,6 +111,7 @@ export interface ImagemNaPosicao {
 export interface TagResolvida {
   readonly id: string;
   readonly slug: string;
+  readonly active: boolean;
 }
 
 export interface Pagina<T> {
