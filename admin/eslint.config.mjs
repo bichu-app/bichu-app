@@ -40,4 +40,19 @@ export default tseslint.config(
       'no-console': 'error',
     },
   },
+
+  // ADR-0027 item 6: HTML cru na tela e porta de XSS. Sem plugin novo: a regra
+  // nativa recusa o atributo em qualquer JSX.
+  {
+    files: ['src/**/*.tsx'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: 'dangerouslySetInnerHTML e proibido no backoffice (ADR-0027 item 6).',
+        },
+      ],
+    },
+  },
 );
