@@ -3,11 +3,10 @@
  * devolve um `Resultado`: a tela decide pelo `tipo` da falha (RFC 9457,
  * `Problem.type`), nunca pelo texto do servidor.
  *
- * Reautenticacao (D40): o cliente pede a senha, chama `reauthenticateAdmin`
- * com o escopo da operacao e manda o token em `X-Admin-Reauth-Token`. O
- * token e de uso unico, entao cada operacao sensivel reautentica de novo. A
- * resposta traz um `csrf_token` novo (a sessao foi rotacionada, D38), que vai
- * para `aoRotacionarCsrf`: guardar o token e trabalho da sessao, nao daqui.
+ * As operacoes sensiveis (D40) recebem o `X-Admin-Reauth-Token` pronto. Quem
+ * o obtem e a sessao (`reautenticar`, que tambem troca o token anti-CSRF
+ * rotacionado, D38): a Rede nao guarda credencial nenhuma. O token e de uso
+ * unico, entao cada operacao sensivel pede uma reautenticacao propria.
  */
 import type { ClienteDaApi } from '../../api/cliente.ts';
 import type {
@@ -92,27 +91,21 @@ export interface OpcoesDaApiDaRede {
   cliente: ClienteDaApi;
   /** Para o envio direto da foto ao armazenamento (ADR-0007). */
   fetch?: typeof globalThis.fetch;
-  aoRotacionarCsrf?: (token: string) => void;
 }
+
+/** A mesma forma de `reautenticar` da sessao do painel. */
+export type ResultadoDaReautenticacao =
+  | { ok: true; token: string }
+  | { ok: false; motivo: 'incorreta' }
+  | { ok: false; motivo: 'tentativas'; espera: string; segundos: number }
+  | { ok: false; motivo: 'falha' };
+
+export type Reautenticar = (senha: string, escopo: EscopoDeReautenticacao) => Promise<ResultadoDaReautenticacao>;
 
 const reauth = (token: string) => ({ 'X-Admin-Reauth-Token': token });
 
-export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalThis), aoRotacionarCsrf }: OpcoesDaApiDaRede) {
+export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalThis) }: OpcoesDaApiDaRede) {
   const evento = (slug: string) => ({ path: { eventSlug: slug } });
-
-  async function reautenticar(senha: string, escopo: EscopoDeReautenticacao): Promise<Resultado<string>> {
-    const r = await executar(() => cliente.POST('/admin/auth/reauth', { body: { password: senha, scope: escopo } }));
-    if (!r.ok) return r;
-    aoRotacionarCsrf?.(r.dados.csrf_token);
-    return { ok: true, dados: r.dados.reauth_token, etag: null };
-  }
-
-  /** Reautentica no escopo e executa a operacao com o token recem-emitido. */
-  async function comSenha<T>(senha: string, escopo: EscopoDeReautenticacao, operacao: (token: string) => Promise<Resultado<T>>) {
-    const token = await reautenticar(senha, escopo);
-    if (!token.ok) return token;
-    return operacao(token.dados);
-  }
 
   return {
     listar: (query: FiltrosDaLista): Promise<Resultado<PaginaDeEncontros>> =>
@@ -132,47 +125,39 @@ export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalTh
         }),
       ),
 
-    mover: (senha: string, slug: string, etag: string, corpo: Mudanca) =>
-      comSenha(senha, 'network_event_relocation', (token) =>
-        executar(() =>
-          cliente.POST('/admin/network/events/{eventSlug}/relocation', {
-            params: { ...evento(slug), header: { 'If-Match': etag } },
-            headers: reauth(token),
-            body: corpo,
-          }),
-        ),
+    mover: (token: string, slug: string, etag: string, corpo: Mudanca) =>
+      executar(() =>
+        cliente.POST('/admin/network/events/{eventSlug}/relocation', {
+          params: { ...evento(slug), header: { 'If-Match': etag } },
+          headers: reauth(token),
+          body: corpo,
+        }),
       ),
 
-    mudarAcesso: (senha: string, slug: string, etag: string, corpo: MudancaDeAcesso) =>
-      comSenha(senha, 'network_event_access_change', (token) =>
-        executar(() =>
-          cliente.POST('/admin/network/events/{eventSlug}/access', {
-            params: { ...evento(slug), header: { 'If-Match': etag } },
-            headers: reauth(token),
-            body: corpo,
-          }),
-        ),
+    mudarAcesso: (token: string, slug: string, etag: string, corpo: MudancaDeAcesso) =>
+      executar(() =>
+        cliente.POST('/admin/network/events/{eventSlug}/access', {
+          params: { ...evento(slug), header: { 'If-Match': etag } },
+          headers: reauth(token),
+          body: corpo,
+        }),
       ),
 
-    cancelar: (senha: string, slug: string, etag: string, motivo: string) =>
-      comSenha(senha, 'network_event_cancellation', (token) =>
-        executar(() =>
-          cliente.POST('/admin/network/events/{eventSlug}/cancellation', {
-            params: { ...evento(slug), header: { 'If-Match': etag } },
-            headers: reauth(token),
-            body: { note: motivo },
-          }),
-        ),
+    cancelar: (token: string, slug: string, etag: string, motivo: string) =>
+      executar(() =>
+        cliente.POST('/admin/network/events/{eventSlug}/cancellation', {
+          params: { ...evento(slug), header: { 'If-Match': etag } },
+          headers: reauth(token),
+          body: { note: motivo },
+        }),
       ),
 
-    remover: (senha: string, slug: string, etag: string) =>
-      comSenha(senha, 'network_event_removal', (token) =>
-        executar(() =>
-          cliente.DELETE('/admin/network/events/{eventSlug}', {
-            params: { ...evento(slug), header: { 'If-Match': etag } },
-            headers: reauth(token),
-          }),
-        ),
+    remover: (token: string, slug: string, etag: string) =>
+      executar(() =>
+        cliente.DELETE('/admin/network/events/{eventSlug}', {
+          params: { ...evento(slug), header: { 'If-Match': etag } },
+          headers: reauth(token),
+        }),
       ),
 
     pedidos: (slug: string, status: EstadoDoPedido, page = 1): Promise<Resultado<PaginaDePedidos>> =>
@@ -224,4 +209,26 @@ export function esperaPorExtenso(segundos: number | null): string {
   }
   const m = Math.max(1, Math.round(segundos / 60));
   return m === 1 ? '1 minuto' : `${m} minutos`;
+}
+
+/**
+ * Reautenticacao direta pelo cliente, para o duble e para os testes. No
+ * painel montado, a Rede usa a `reautenticar` da sessao, que tambem guarda o
+ * token anti-CSRF novo.
+ */
+export function reautenticarPeloCliente(cliente: ClienteDaApi): Reautenticar {
+  return async (senha, escopo) => {
+    try {
+      const { data, error, response } = await cliente.POST('/admin/auth/reauth', { body: { password: senha, scope: escopo } });
+      if (data) return { ok: true, token: data.reauth_token };
+      if (response.status === 429) {
+        const s = Number(response.headers.get('Retry-After')) || null;
+        return { ok: false, motivo: 'tentativas', espera: esperaPorExtenso(s), segundos: s ?? 0 };
+      }
+      if (slugDoProblema(error) === 'invalid-credentials') return { ok: false, motivo: 'incorreta' };
+      return { ok: false, motivo: 'falha' };
+    } catch {
+      return { ok: false, motivo: 'falha' };
+    }
+  };
 }

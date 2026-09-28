@@ -341,6 +341,12 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   }
 
   const fetchDoDuble = async (entrada: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    const endereco = entrada instanceof Request ? entrada.url : entrada.toString();
+    if (new URL(endereco, globalThis.location.href).pathname.startsWith('/duble-upload/')) {
+      // O envio direto ao armazenamento: o corpo e o arquivo, e nao interessa ao duble.
+      registro.push({ metodo: init?.method ?? 'GET', caminho: new URL(endereco).pathname, consulta: new URLSearchParams(), cabecalhos: {}, corpo: undefined });
+      return new Response(null, { status: 200 });
+    }
     const request = entrada instanceof Request ? entrada : new Request(entrada, init);
     const url = new URL(request.url);
     const cabecalhos: Record<string, string> = {};
@@ -357,7 +363,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     const req: Requisicao = { metodo: request.method, caminho: url.pathname, consulta: url.searchParams, cabecalhos, corpo };
     registro.push(req);
     if (opcoes.atrasoMs) await new Promise((r) => setTimeout(r, opcoes.atrasoMs));
-    if (url.pathname.startsWith('/duble-upload/')) return new Response(null, { status: 200 });
     return responder(req);
   };
 
