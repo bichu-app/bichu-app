@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'app.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
+import 'dispositivo/avisos_recebidos.dart';
 import 'firebase_options.dart';
 import 'theme/bichu_theme.dart';
 
@@ -26,7 +27,22 @@ Future<void> main() async {
     return;
   }
 
-  runApp(BichuApp(config: config, avisos: await _avisos()));
+  // **Uma inicializacao do Firebase, dois consumidores.** `_avisos()` e quem
+  // tenta subir o Firebase; ela devolve a porta de PERMISSAO e diz, pelo tipo,
+  // se conseguiu. A porta de MENSAGENS segue a mesma resposta: ligar o ouvinte
+  // de push sobre um Firebase que nao subiu daria uma stream que nunca emite e
+  // um `getInitialMessage()` que nunca resolve.
+  final avisos = await _avisos();
+  final embarcado = avisos is AvisosPorFirebase;
+  runApp(
+    BichuApp(
+      config: config,
+      avisos: avisos,
+      mensagensDePush: embarcado
+          ? const MensagensDePushPorFirebase()
+          : const MensagensDePushNaoEmbarcadas(),
+    ),
+  );
 }
 
 /// Liga o transporte de push, ou diz por que nao ligou.

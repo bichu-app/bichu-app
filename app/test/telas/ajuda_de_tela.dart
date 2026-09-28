@@ -26,6 +26,7 @@ import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/escopo.dart';
 import 'package:bichu/dispositivo/avisos.dart';
+import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/dispositivo/leitor_de_qr.dart';
@@ -532,6 +533,15 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
   CameraEGaleria? camera,
   LeitorDeQr? leitorDeQr,
   Avisos? avisos,
+  /// A porta das mensagens de push. **O unico jeito de um caso exercitar os
+  /// tres estados**: nao ha como pedir ao Flutter que mate o processo e o
+  /// reabra por um toque em notificacao.
+  ///
+  /// O padrao e a porta nao embarcada, pelo motivo do proprio tipo: sem canal
+  /// de plataforma, `onMessage` devolve stream que nunca emite nem fecha, e
+  /// `getInitialMessage()` um `Future` que nunca resolve -- o `await` do
+  /// arranque penduraria a suite inteira, sem mensagem.
+  MensagensDePush? mensagensDePush,
   Localizacao? localizacao,
   DepositoDeIntencaoEmMemoria? envelope,
   DepositoDeSessao? deposito,
@@ -614,6 +624,8 @@ Future<DepositoDeIntencaoEmMemoria> abrirOApp(
         // O padrao e o mesmo do app quando o Firebase nao subiu: nenhum canal de
         // plataforma esta ligado em teste de widget, e um `FirebaseMessaging`
         // de verdade travaria a suite num `Future` que nunca resolve.
+        mensagensDePush:
+            mensagensDePush ?? const MensagensDePushNaoEmbarcadas(),
         avisos: avisos ?? const AvisosNaoEmbarcados(),
         // O padrao e a porta ausente, e nao uma concedida: `Geolocator` de
         // verdade estouraria `MissingPluginException` em teste de widget, e
