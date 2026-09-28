@@ -21,7 +21,7 @@ importa porque so uma delas esta esperando insumo de fora:
 
 - **`applinks.details` (iOS):** o `appID` depende do Team ID, que depende da
   conta Apple Developer, que nao existe (dispensa `ios` em
-  `.github/quality-gates.yml`, vence em 2026-09-29). Esta esperando insumo.
+  `.github/quality-gates.yml`, vence em 2026-10-31). Esta esperando insumo.
 
 - **`sha256_cert_fingerprints` (Android):** NAO esta esperando a chave de
   release. A BICHUS-106 ja autorizou, em 17/09, registrar aqui a digital do

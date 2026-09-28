@@ -13,6 +13,7 @@ import 'api/fila_offline.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
+import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
@@ -46,6 +47,7 @@ class Escopo extends InheritedWidget {
     required this.camera,
     required this.leitorDeQr,
     required this.avisos,
+    required this.avisosRecebidos,
     required this.oportunidades,
     required this.vigiaDeAviso,
     required this.localizacao,
@@ -133,6 +135,15 @@ class Escopo extends InheritedWidget {
   /// exercitar e a reacao da tela aos quatro estados.
   final Avisos avisos;
 
+  /// O ouvinte dos avisos que CHEGAM (os tres estados do push).
+  ///
+  /// Fica no escopo, e nao na tela, pela mesma razao da fila offline: e UM
+  /// objeto no app inteiro. Um ouvinte por tela registraria N assinaturas na
+  /// mesma stream e a pessoa veria o mesmo aviso N vezes; e, pior, o estado
+  /// `fechado` (`getInitialMessage`) entrega a mensagem UMA vez -- a segunda
+  /// instancia a perderia.
+  final OuvinteDeAvisos avisosRecebidos;
+
   /// Quais das DUAS oportunidades de UX 10.1 ja foram gastas neste aparelho
   /// (BICHUS-24).
   ///
@@ -219,6 +230,7 @@ class Escopo extends InheritedWidget {
       camera != anterior.camera ||
       leitorDeQr != anterior.leitorDeQr ||
       avisos != anterior.avisos ||
+      avisosRecebidos != anterior.avisosRecebidos ||
       oportunidades != anterior.oportunidades ||
       vigiaDeAviso != anterior.vigiaDeAviso ||
       localizacao != anterior.localizacao ||

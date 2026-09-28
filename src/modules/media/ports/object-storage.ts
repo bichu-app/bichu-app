@@ -83,6 +83,32 @@ export interface Cabecalho {
   readonly etag: string | undefined;
 }
 
+/** As operações que falam com a rede. As outras duas só assinam, localmente. */
+export type OperacaoDeRede = 'HEAD' | 'GET' | 'PUT' | 'DELETE';
+
+/**
+ * O armazenamento não respondeu dentro do prazo.
+ *
+ * Todo adaptador precisa produzir esta falha, e não o `AbortError` ou o
+ * `TimeoutError` do cliente HTTP que ele usa: quem chama decide se tenta de
+ * novo olhando para o TIPO, e não para o nome de uma exceção de biblioteca.
+ *
+ * **A mensagem não carrega endereço, bucket nem chave.** Ela vai para log e,
+ * no caminho da confirmação, pode virar resposta; a chave do objeto contém o
+ * identificador do pet.
+ */
+export class PrazoDoArmazenamentoEsgotadoError extends Error {
+  readonly operacao: OperacaoDeRede;
+  readonly prazoMs: number;
+
+  constructor(operacao: OperacaoDeRede, prazoMs: number) {
+    super(`O armazenamento de objeto não respondeu ao ${operacao} em ${String(prazoMs)} ms.`);
+    this.name = 'PrazoDoArmazenamentoEsgotadoError';
+    this.operacao = operacao;
+    this.prazoMs = prazoMs;
+  }
+}
+
 export interface ObjectStorage {
   /** A autorização assinada que o CLIENTE usa para enviar direto. */
   createUploadIntent(pedido: PedidoDeEnvio): Promise<AutorizacaoDeEnvio>;
