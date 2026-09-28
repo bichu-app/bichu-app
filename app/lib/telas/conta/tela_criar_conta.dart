@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/problem.dart';
@@ -11,9 +12,12 @@ import '../../escopo.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../validacao/politica_de_senha.dart';
+import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/requisitos_da_senha.dart';
 import '../../widgets/saida_da_tela.dart';
 
 /// A recusa de criar conta sem ter o que registrar como aceite.
@@ -65,6 +69,28 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   final TextEditingController _senha = TextEditingController();
   final FocusNode _focoDoEmail = FocusNode();
 
+  /// Existe por uma razao so: **levar a pessoa ate a recusa**.
+  ///
+  /// A faixa de "este build nao registra aceite" mora no topo do formulario, e
+  /// o botao agora mora na barra fixa do rodape, fora da rolagem. Quem toca
+  /// nele pode estar em qualquer ponto do formulario: sem esta rolagem a tela
+  /// recusa num lugar que a pessoa nao esta olhando, e o resultado, do lado de
+  /// ca, e um botao que nao faz nada.
+  final ScrollController _rolagem = ScrollController();
+
+  /// Os tres alvos de recusa, para a tela conseguir levar a pessoa ate eles.
+  ///
+  /// **Sem isto a barra fixa piora o defeito que ela resolve.** Com o botao
+  /// rolando junto do conteudo, quem tocava nele estava no fim do formulario e
+  /// via o erro aparecer a poucos dp dali. Ancorado no rodape, o botao fica
+  /// alcancavel de qualquer ponto -- inclusive de um ponto em que o campo
+  /// recusado esta a 400 dp de distancia, fora da tela. Marcar o campo com
+  /// `erro` e nao mostra-lo e escrever a resposta num lugar que ninguem olha,
+  /// que e exatamente "toquei no botao e nao aconteceu nada".
+  final GlobalKey _alvoDoEmail = GlobalKey();
+  final GlobalKey _alvoDaSenha = GlobalKey();
+  final GlobalKey _alvoDoAceite = GlobalKey();
+
   bool _senhaVisivel = false;
   bool _aceitouOsTermos = false;
   bool _enviando = false;
@@ -73,12 +99,36 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
   String? _erroDoAceite;
   MensagemDeErro? _faixa;
 
+  /// Traz o alvo da recusa para dentro da dobra.
+  ///
+  /// `alignment: 0.5` centraliza em vez de encostar na borda: campo colado no
+  /// limite do viewport fica meio escondido atras da barra fixa ou do teclado,
+  /// e meio escondido e o mesmo que nao mostrado para quem esta procurando o
+  /// que deu errado.
+  ///
+  /// Roda **depois do quadro** porque quem chama acabou de fazer `setState`: a
+  /// mensagem de erro muda a altura do campo, e medir antes do relayout leva a
+  /// pessoa para o lugar onde o campo estava.
+  void _levarAte(GlobalKey alvo) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final contexto = alvo.currentContext;
+      if (contexto == null) return;
+      Scrollable.ensureVisible(
+        contexto,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
+  }
+
   @override
   void dispose() {
     _nome.dispose();
     _email.dispose();
     _senha.dispose();
     _focoDoEmail.dispose();
+    _rolagem.dispose();
     super.dispose();
   }
 
@@ -95,10 +145,26 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     if (!_emailPlausivel(_email.text)) {
       setState(() => _erroDoEmail = 'Digite o e-mail da sua conta.');
       _focoDoEmail.requestFocus();
+      _levarAte(_alvoDoEmail);
       return;
     }
-    if (_senha.text.length < 10) {
-      setState(() => _erroDaSenha = MensagensDeErro.senhaCurta);
+    // A politica INTEIRA, e nao so o tamanho. Enquanto isto era
+    // `_senha.text.length < 10`, a tela deixava passar a senha igual ao
+    // e-mail e a senha de 300 caracteres, e a recusa vinha do servidor depois
+    // da ida a rede -- com o texto errado, porque o `_tratar` abaixo
+    // respondia "pelo menos 10 caracteres" a qualquer recusa.
+    //
+    // A lista de `RequisitosDaSenha` ja mostrou isto enquanto a pessoa
+    // digitava; aqui a mesma fonte decide, e e por isso que as duas nao tem
+    // como divergir.
+    final violacoes = PoliticaDeSenha.violacoes(
+      senha: _senha.text,
+      email: _email.text.trim(),
+      nome: _nome.text.trim(),
+    );
+    if (violacoes.isNotEmpty) {
+      setState(() => _erroDaSenha = violacoes.first.mensagemDeErro);
+      _levarAte(_alvoDaSenha);
       return;
     }
 
@@ -119,11 +185,26 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     // pedir um gesto que nao vale nada.
     final String? versaoDosTermos = AppConfig.instancia.versaoDosTermos;
     if (versaoDosTermos == null) {
-      setState(() => _faixa = const MensagemDeErro(texto: _semVersaoDosTermos));
+      // A faixa JA ESTA na tela desde que ela abriu (ver `build`), entao aqui
+      // nao ha nada a acrescentar -- so a anunciar. Escrever `_faixa` neste
+      // ponto imprimiria a mesma frase duas vezes.
+      //
+      // O anuncio e urgente porque o gesto acabou de falhar: quem usa leitor
+      // de tela tocou no botao e precisa saber agora, e nao ao percorrer a
+      // tela de novo procurando o que houve.
+      anunciar(context, _semVersaoDosTermos, urgente: true);
+      if (_rolagem.hasClients) {
+        await _rolagem.animateTo(
+          0,
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeOut,
+        );
+      }
       return;
     }
     if (!_aceitouOsTermos) {
       setState(() => _erroDoAceite = _aceiteObrigatorio);
+      _levarAte(_alvoDoAceite);
       return;
     }
 
@@ -179,11 +260,33 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     if (falha is FalhaDaApi) {
       if (falha.tipo == ProblemTipo.emailJaCadastrado) {
         setState(() => _erroDoEmail = MensagensDeErro.emailJaCadastrado);
+        _levarAte(_alvoDoEmail);
         return;
       }
+      // A RECUSA DE SENHA E DITA PELO `code`, E NAO POR UM TEXTO FIXO.
+      //
+      // Aqui estava `_erroDaSenha = MensagensDeErro.senhaCurta` para QUALQUER
+      // recusa de senha. A politica emite quatro codigos hoje
+      // (`too_short`, `too_long`, `blank`, `similar_to_identity`) e vai emitir
+      // mais quando a lista de vazamento sair da porta: dizer "pelo menos 10
+      // caracteres" a quem foi recusado por vazamento manda a pessoa
+      // acrescentar caracteres e ser recusada de novo.
+      //
+      // `code` desconhecido cai no texto generico, que e sempre melhor que uma
+      // frase errada dita com confianca -- e e o caso que a versao antiga
+      // deste app vai viver por semanas depois de o servidor ganhar uma regra.
       final campoDaSenha = falha.problem.campo('password');
-      if (campoDaSenha != null || falha.problem.status == 422) {
-        setState(() => _erroDaSenha = MensagensDeErro.senhaCurta);
+      if (campoDaSenha != null) {
+        final regra = PoliticaDeSenha.porCodigoDoServidor(campoDaSenha.codigo);
+        setState(
+          () => _erroDaSenha = regra?.mensagemDeErro ?? senhaRecusadaPeloServidor,
+        );
+        _levarAte(_alvoDaSenha);
+        return;
+      }
+      if (falha.problem.status == 422) {
+        setState(() => _erroDaSenha = senhaRecusadaPeloServidor);
+        _levarAte(_alvoDaSenha);
         return;
       }
     }
@@ -211,101 +314,187 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
 
   @override
   Widget build(BuildContext context) {
+    // O BUILD SEM `TERMS_VERSION` NAO PODE CRIAR CONTA, E DIZ ISSO NA ABERTURA.
+    //
+    // Achado do teste em aparelho de 22/09/2026: o cliente relatou que nao
+    // consegue criar conta, e a API de homologacao estava no ar. O comando de
+    // build de homologacao publicado no `README.md` da raiz passa **so**
+    // `--dart-define=API_BASE_URL`, e sem `TERMS_VERSION` a guarda de
+    // `_criarConta` recusa -- corretamente, porque o aceite nao teria o que
+    // registrar (ver o bloco de comentario la).
+    //
+    // O defeito nao e a recusa, e a HORA dela: a pessoa preenchia tres campos,
+    // marcava a caixa, tocava no botao e so entao a frase aparecia, numa
+    // faixa que a lista de requisitos empurrou para longe da dobra. Recusa que
+    // chega depois do esforco inteiro e indistinguivel de botao quebrado, que
+    // e literalmente como ela foi relatada.
+    //
+    // O requisito e dito ANTES do erro (UX secao 13), e este e o unico caso
+    // desta tela em que o requisito nao e da pessoa: nao ha nada que ela possa
+    // digitar para resolver, entao a frase precisa estar no topo, desde o
+    // primeiro segundo.
+    final bool semVersaoDosTermos =
+        AppConfig.instancia.versaoDosTermos == null;
+
     return Scaffold(
       appBar: const BarraDeConta(
         titulo: 'Criar conta',
         saida: TipoDeSaida.voltar,
       ),
+      // O BOTAO NAO ROLA COM O FORMULARIO, E ISSO FOI MEDIDO E NAO ESCOLHIDO
+      // POR GOSTO.
+      //
+      // Medida em 360 x 640 dp (o gabarito de aparelho pequeno do design
+      // system, secao 13) com o teclado aberto: a area rolavel fica com 282 dp
+      // e o formulario inteiro tem 862 dp. O botao ficava em 734..782 dp desse
+      // conteudo, ou seja **500 dp abaixo da dobra** -- e o `ListView` nao
+      // chega a CONSTRUIR o que nao cabe, entao ele nem existia na arvore.
+      // Nos outros gabaritos medidos: 534 dp no iPhone SE de 320 x 568, 441 dp
+      // no SE de 375 x 667 e 157 dp num Android de 412 x 915. **Em nenhum
+      // aparelho, em nenhum estado, o botao estava visivel.**
+      //
+      // A lista de requisitos ao vivo nao criou o problema: ela o dobrou. Ela
+      // ocupa 306 dp onde o texto de ajuda antigo ocupava 72, entao antes
+      // desta historia a rolagem necessaria ja era de 266 dp no mesmo
+      // gabarito. Encolher a lista tambem nao resolveria: sem ela por inteiro
+      // o conteudo ainda tem 628 dp contra 282 dp de dobra.
+      //
+      // A decisao ja estava tomada no design system (11.8, barra de acao fixa)
+      // e ja valia em treze telas do app. Esta era uma das tres telas de conta
+      // que ficaram fora do padrao.
+      bottomNavigationBar: BarraDeAcaoFixa(
+        acoes: <Widget>[
+          BotaoPrimario(
+            rotulo: 'Criar conta',
+            critico: true,
+            carregando: _enviando,
+            // O botao continua habilitado sem conexao: o detector de offline
+            // erra, e deixar a pessoa sem caminho e pior que deixa-la tentar.
+            aoTocar: _criarConta,
+          ),
+        ],
+      ),
+      // **`SingleChildScrollView` + `Column`, e nao `ListView`**, pelo mesmo
+      // motivo medido em `pet/tela_editar_pet.dart`: o `ListView` so constroi
+      // o que cabe na tela.
+      //
+      // Aqui isso vale para um controle OBRIGATORIO. Com a barra fixa, a area
+      // rolavel encolheu 97 dp com o teclado fechado, e a caixa de aceite
+      // passou a nascer fora do que o `ListView` constroi. Enquanto ela nao
+      // existe, ela nao pode ser marcada, e a tela recusa a criacao da conta
+      // apontando para um controle que nao esta na arvore -- que e a versao
+      // mais silenciosa possivel de "toquei no botao e nao aconteceu nada".
+      //
+      // O formulario tem uma dezena de filhos e nenhuma lista de tamanho
+      // aberto: construir todos custa nada e e o que faz `_levarAte` ter para
+      // onde rolar. Preguica de construcao serve a lista de registros, e nao
+      // a formulario.
       body: SafeArea(
-        child: ListView(
+        child: SingleChildScrollView(
+          controller: _rolagem,
           padding: const EdgeInsets.all(BichuEspaco.e4),
-          children: <Widget>[
-            BichuField(
-              rotulo: 'Nome',
-              controlador: _nome,
-              autofill: const <String>[AutofillHints.name],
-              capitalizacao: TextCapitalization.words,
-              acaoDeTeclado: TextInputAction.next,
-            ),
-            const SizedBox(height: BichuEspaco.e6),
-            BichuField(
-              rotulo: 'E-mail',
-              controlador: _email,
-              foco: _focoDoEmail,
-              erro: _erroDoEmail,
-              tipoDeTeclado: TextInputType.emailAddress,
-              autofill: const <String>[AutofillHints.email],
-              correcaoAutomatica: false,
-              acaoDeTeclado: TextInputAction.next,
-            ),
-            if (_erroDoEmail == MensagensDeErro.emailJaCadastrado)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  // Troca lateral: mesmo passo, outra tela. `pushReplacement`
-                  // para que a volta leve a aba de origem, e nao a este
-                  // formulario que a pessoa acabou de abandonar.
-                  onPressed: () => context.pushReplacement(
-                    Rotas.entrar,
-                    extra: _email.text.trim(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              if (semVersaoDosTermos) ...<Widget>[
+                const FaixaDeAviso(texto: _semVersaoDosTermos),
+                const SizedBox(height: BichuEspaco.e6),
+              ],
+              BichuField(
+                rotulo: 'Nome',
+                controlador: _nome,
+                autofill: const <String>[AutofillHints.name],
+                capitalizacao: TextCapitalization.words,
+                acaoDeTeclado: TextInputAction.next,
+              ),
+              const SizedBox(height: BichuEspaco.e6),
+              BichuField(
+                key: _alvoDoEmail,
+                rotulo: 'E-mail',
+                controlador: _email,
+                foco: _focoDoEmail,
+                erro: _erroDoEmail,
+                tipoDeTeclado: TextInputType.emailAddress,
+                autofill: const <String>[AutofillHints.email],
+                correcaoAutomatica: false,
+                acaoDeTeclado: TextInputAction.next,
+              ),
+              if (_erroDoEmail == MensagensDeErro.emailJaCadastrado)
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                    // Troca lateral: mesmo passo, outra tela. `pushReplacement`
+                    // para que a volta leve a aba de origem, e nao a este
+                    // formulario que a pessoa acabou de abandonar.
+                    onPressed: () => context.pushReplacement(
+                      Rotas.entrar,
+                      extra: _email.text.trim(),
+                    ),
+                    child: const Text('Entrar com este e-mail'),
                   ),
-                  child: const Text('Entrar com este e-mail'),
+                ),
+              const SizedBox(height: BichuEspaco.e6),
+              BichuField(
+                key: _alvoDaSenha,
+                rotulo: 'Senha',
+                controlador: _senha,
+                erro: _erroDaSenha,
+                // Sem `ajuda`: o requisito nao cabe mais numa frase estatica.
+                // Ele saiu daqui para `RequisitosDaSenha`, logo abaixo, que diz
+                // os QUATRO e responde a cada tecla. O texto que estava aqui
+                // dizia um so ("Pelo menos 10 caracteres. Uma frase curta
+                // funciona melhor que uma senha complicada.") e os outros tres
+                // so apareciam como erro do servidor, depois do envio.
+                obscurecer: !_senhaVisivel,
+                autofill: const <String>[AutofillHints.newPassword],
+                correcaoAutomatica: false,
+                acaoDeTeclado: TextInputAction.done,
+                aoEnviar: (_) => _criarConta(),
+                sufixo: BotaoRevelarSenha(
+                  visivel: _senhaVisivel,
+                  aoAlternar: () =>
+                      setState(() => _senhaVisivel = !_senhaVisivel),
                 ),
               ),
-            const SizedBox(height: BichuEspaco.e6),
-            BichuField(
-              rotulo: 'Senha',
-              controlador: _senha,
-              erro: _erroDaSenha,
-              ajuda: 'Pelo menos 10 caracteres. Uma frase curta funciona '
-                  'melhor que uma senha complicada.',
-              obscurecer: !_senhaVisivel,
-              autofill: const <String>[AutofillHints.newPassword],
-              correcaoAutomatica: false,
-              acaoDeTeclado: TextInputAction.done,
-              aoEnviar: (_) => _criarConta(),
-              sufixo: BotaoRevelarSenha(
-                visivel: _senhaVisivel,
-                aoAlternar: () =>
-                    setState(() => _senhaVisivel = !_senhaVisivel),
-              ),
-            ),
-            if (_faixa != null) ...<Widget>[
+              const SizedBox(height: BichuEspaco.e2),
+              // A LISTA AO VIVO, logo abaixo do campo que ela descreve.
+              //
+              // Ela escuta os tres controladores por conta propria, entao nao ha
+              // `onChanged` a encadear aqui e nao ha como esquecer de ligar um
+              // campo novo: a regra `similar_to_identity` compara a senha com o
+              // e-mail e com o nome, e corrigir o e-mail depois da senha muda o
+              // que a lista mostra.
+              RequisitosDaSenha(senha: _senha, email: _email, nome: _nome),
+              if (_faixa != null) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e6),
+                FaixaDeAviso(texto: _faixa!.texto),
+              ],
               const SizedBox(height: BichuEspaco.e6),
-              FaixaDeAviso(texto: _faixa!.texto),
-            ],
-            const SizedBox(height: BichuEspaco.e6),
-            // O ACEITE, **acima** do botao: uma regra que se aceita ao apertar
-            // um botao precisa estar legivel antes do aperto, e nao abaixo da
-            // dobra (UX F1.1).
-            //
-            // Nao ha mais caixa de "continuar conectado" nesta tela: ela virou
-            // comportamento padrao em 22/09/2026, por decisao do cliente. A
-            // unica caixa da F1.1 e esta, e o que ela marca e o aceite.
-            _CaixaDeAceiteDosTermos(
-              marcada: _aceitouOsTermos,
-              erro: _erroDoAceite,
-              aoMudar: (v) => setState(() {
-                _aceitouOsTermos = v;
-                if (v) _erroDoAceite = null;
-              }),
-            ),
-            const SizedBox(height: BichuEspaco.e6),
-            BotaoPrimario(
-              rotulo: 'Criar conta',
-              carregando: _enviando,
-              // O botao continua habilitado sem conexao: o detector de offline
-              // erra, e deixar a pessoa sem caminho e pior que deixa-la tentar.
-              aoTocar: _criarConta,
-            ),
-            const SizedBox(height: BichuEspaco.e4),
-            Center(
-              child: TextButton(
-                onPressed: () => context.pushReplacement(Rotas.entrar),
-                child: const Text('Já tenho conta'),
+              // O ACEITE, **acima** do botao: uma regra que se aceita ao apertar
+              // um botao precisa estar legivel antes do aperto, e nao abaixo da
+              // dobra (UX F1.1).
+              //
+              // Nao ha mais caixa de "continuar conectado" nesta tela: ela virou
+              // comportamento padrao em 22/09/2026, por decisao do cliente. A
+              // unica caixa da F1.1 e esta, e o que ela marca e o aceite.
+              _CaixaDeAceiteDosTermos(
+                key: _alvoDoAceite,
+                marcada: _aceitouOsTermos,
+                erro: _erroDoAceite,
+                aoMudar: (v) => setState(() {
+                  _aceitouOsTermos = v;
+                  if (v) _erroDoAceite = null;
+                }),
               ),
-            ),
-          ],
+              const SizedBox(height: BichuEspaco.e6),
+              Center(
+                child: TextButton(
+                  onPressed: () => context.pushReplacement(Rotas.entrar),
+                  child: const Text('Já tenho conta'),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -421,6 +610,7 @@ class _CaixaDeAceiteDosTermos extends StatelessWidget {
     required this.marcada,
     required this.erro,
     required this.aoMudar,
+    super.key,
   });
 
   final bool marcada;

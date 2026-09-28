@@ -114,6 +114,24 @@ void main() {
   }
 
   final Finder caixaDeAceite = find.byType(Checkbox);
+  final Finder botaoCriarConta = find.widgetWithText(FilledButton, 'Criar conta');
+
+  /// Traz o alvo para a janela do teste, como uma pessoa faria.
+  ///
+  /// Passou a ser necessario em 22/09/2026, quando a lista de requisitos da
+  /// senha (`RequisitosDaSenha`) entrou sob o campo: o formulario ficou mais
+  /// alto que a janela do teste. Em 23/09 o alvo da rolagem deixou de ser
+  /// `ListView` -- o formulario virou `SingleChildScrollView` para que nenhum
+  /// controle obrigatorio deixe de existir por estar fora da janela -- e
+  /// `ensureVisible` nao depende do tipo do container.
+  ///
+  /// **So a caixa precisa disto.** O botao mora na barra fixa do rodape desde
+  /// 23/09 e nao rola: pedir rolagem para ele esconderia a regressao de ele
+  /// voltar para dentro do conteudo.
+  Future<void> rolarAte(WidgetTester tester, Finder alvo) async {
+    await tester.ensureVisible(alvo);
+    await tester.pumpAndSettle();
+  }
 
   Future<void> preencherETocar(
     WidgetTester tester, {
@@ -125,10 +143,11 @@ void main() {
     );
     await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
     if (aceitar) {
+      await rolarAte(tester, caixaDeAceite);
       await tester.tap(caixaDeAceite);
       await tester.pumpAndSettle();
     }
-    await tester.tap(find.widgetWithText(FilledButton, 'Criar conta'));
+    await tester.tap(botaoCriarConta);
     await tester.pumpAndSettle();
   }
 
@@ -195,6 +214,69 @@ void main() {
         findsOneWidget,
         reason: 'A recusa precisa ser visivel. Recusa muda e indistinguivel '
             'de um botao quebrado.',
+      );
+    });
+
+    testWidgets(
+        'SEM versao declarada: a recusa esta na tela ANTES de qualquer toque',
+        (tester) async {
+      // ACHADO DO APARELHO, 22/09/2026: o cliente relatou que nao consegue
+      // criar conta, com a API de homologacao no ar. O comando de build de
+      // homologacao do `README.md` da raiz passa so `API_BASE_URL`, e sem
+      // `TERMS_VERSION` a tela recusa -- corretamente.
+      //
+      // O que estava errado era a HORA: a frase so aparecia depois de
+      // preencher tudo e tocar no botao, e a faixa nascia abaixo da dobra.
+      // Recusa que chega depois do esforco inteiro e indistinguivel de botao
+      // quebrado, que foi exatamente como ela chegou ate nos.
+      await abrirCriarConta(tester);
+
+      expect(
+        find.textContaining('Não conseguimos registrar o aceite'),
+        findsOneWidget,
+        reason: 'REPROVA: a tela abre sem dizer que este build nao consegue '
+            'criar conta. A pessoa preenche nome, e-mail e senha, aceita os '
+            'termos, toca no botao e so entao descobre que nao havia caminho '
+            'nenhum.',
+      );
+
+      // Depois do toque a frase continua UMA. A guarda de `_criarConta` nao
+      // reimprime: ela leva a pessoa ate a faixa que ja estava la.
+      await preencherETocar(tester, aceitar: true);
+      expect(
+        find.textContaining('Não conseguimos registrar o aceite'),
+        findsOneWidget,
+        reason: 'REPROVA: ou a frase sumiu, ou ela aparece duas vezes.',
+      );
+      expect(cadastros, isEmpty);
+
+      // E ela esta DENTRO da janela. Quem toca no botao esta no fim da lista;
+      // uma recusa que acontece no topo, fora da area visivel, e a definicao
+      // de "o botao nao faz nada" -- que foi como o cliente relatou.
+      final faixa =
+          tester.getRect(find.textContaining('Não conseguimos registrar'));
+      final altura =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      expect(
+        faixa.top,
+        greaterThanOrEqualTo(0),
+        reason: 'REPROVA: a recusa ficou acima da area visivel depois do '
+            'toque. A tela recusou num lugar que a pessoa nao esta olhando.',
+      );
+      expect(faixa.bottom, lessThanOrEqualTo(altura));
+    });
+
+    testWidgets(
+        'COM versao declarada, a faixa de recusa nao aparece', (tester) async {
+      // O outro lado: um build configurado nao pode abrir a tela com um aviso
+      // que nao vale para ele.
+      await abrirCriarConta(tester, versaoDosTermos: versao);
+      expect(
+        find.textContaining('Não conseguimos registrar o aceite'),
+        findsNothing,
+        reason: 'REPROVA: o build tem a versao dos termos e a tela avisa que '
+            'nao consegue registrar o aceite. Aviso que nao vale e ruido que '
+            'se aprende a ignorar, inclusive quando passar a valer.',
       );
     });
 
@@ -289,23 +371,71 @@ void main() {
 
     testWidgets('o alvo de toque tem pelo menos 48 dp', (tester) async {
       await abrirCriarConta(tester, versaoDosTermos: versao);
+      await rolarAte(tester, caixaDeAceite);
       final tamanho = tester.getSize(caixaDeAceite);
       expect(tamanho.width, greaterThanOrEqualTo(48));
       expect(tamanho.height, greaterThanOrEqualTo(48));
     });
 
-    testWidgets('a caixa fica ACIMA do botao, e nao abaixo da dobra',
+    testWidgets(
+        'sem o aceite o botao nao cria conta, diz o que falta e MOSTRA a caixa',
         (tester) async {
-      // Uma regra que se aceita ao apertar um botao precisa estar legivel
-      // antes do aperto.
+      // A regra continua a mesma: uma declaracao que se aceita ao apertar um
+      // botao precisa estar legivel antes de o aceite valer.
+      //
+      // **O que mudou em 23/09/2026 foi o mecanismo, e o caso mudou junto.**
+      // Enquanto o botao ficava no fim do formulario, quem chegasse nele tinha
+      // passado pela caixa, e comparar `dy` bastava. Medido em 360 x 640 dp
+      // com o teclado aberto, "chegar nele" custava 500 dp de rolagem e o
+      // `ListView` nem o construia; o botao foi ancorado na barra fixa do
+      // rodape (design system 11.8) e passou a estar ao alcance de qualquer
+      // ponto do formulario, inclusive de um ponto acima da caixa.
+      //
+      // Com isso o `dy` deixou de dizer alguma coisa, e o caso cobra o
+      // COMPORTAMENTO, que e mais forte: comparar alturas continuaria verde
+      // numa tela que criasse a conta sem o aceite, desde que a caixa
+      // estivesse desenhada acima do botao.
       await abrirCriarConta(tester, versaoDosTermos: versao);
+      await tester.enterText(
+        find.byType(TextField).at(1),
+        'marina@exemplo.com.br',
+      );
+      await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+      await tester.pumpAndSettle();
+
+      // A caixa comeca FORA da janela: sem isto o caso nao estaria medindo a
+      // rolagem que ele diz medir.
       expect(
         tester.getTopLeft(caixaDeAceite).dy,
-        lessThan(
-          tester
-              .getTopLeft(find.widgetWithText(FilledButton, 'Criar conta'))
-              .dy,
+        greaterThan(tester.getBottomLeft(find.byType(SingleChildScrollView)).dy),
+        reason: 'O caso nao chegou a por a caixa fora da janela: ele esta '
+            'medindo outra coisa.',
+      );
+
+      await tester.tap(botaoCriarConta);
+      await tester.pumpAndSettle();
+
+      expect(
+        cadastros,
+        isEmpty,
+        reason: 'REPROVA: a conta foi criada sem o aceite dos termos.',
+      );
+      expect(
+        find.text(
+          'Para criar a conta, aceite os termos de uso e a política de '
+          'privacidade.',
         ),
+        findsOneWidget,
+        reason: 'REPROVA: o botao recusou EM SILENCIO. Com ele ancorado no '
+            'rodape, a pessoa pode toca-lo sem nunca ter visto a caixa: se a '
+            'tela nao diz o que falta, o botao e indistinguivel de quebrado.',
+      );
+      expect(
+        tester.getTopLeft(caixaDeAceite).dy,
+        lessThan(tester.getBottomLeft(find.byType(SingleChildScrollView)).dy),
+        reason: 'REPROVA: a tela recusou apontando para uma caixa que continua '
+            'fora da janela. Marcar o erro num controle que a pessoa nao ve e '
+            'escrever a resposta onde ninguem olha.',
       );
     });
 
@@ -333,12 +463,8 @@ void main() {
       await abrirCriarConta(tester, versaoDosTermos: versao);
 
       final altura = tester.view.physicalSize.height / dpr;
-      for (final alvo in <Finder>[
-        caixaDeAceite,
-        find.widgetWithText(FilledButton, 'Criar conta'),
-      ]) {
-        await tester.ensureVisible(alvo);
-        await tester.pumpAndSettle();
+      for (final alvo in <Finder>[caixaDeAceite, botaoCriarConta]) {
+        await rolarAte(tester, alvo);
         final caixa = tester.getRect(alvo);
         expect(
           caixa.top,

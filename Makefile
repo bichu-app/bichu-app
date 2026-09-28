@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste verificar-tokens-web verificar-site fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: verificar-numero-de-adr verificar-numero-de-adr-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -355,6 +355,45 @@ verificar-associacao: ## roda o monitor dos arquivos de deep link (secao 16.12)
 verificar-tipos-gerados-autoteste: ## as iscas do portao dos tipos gerados reprovam (nao gera nada)
 	node infra/verificacao/verificar-tipos-gerados.mjs --autoteste
 
+# --------------------------------------------------------------------------
+# O PORTAO DE NUMERO DE ADR (23/09/2026)
+#
+# Em 23/09 duas ADRs nasceram com o numero 0024 em branches diferentes, uma
+# sobre a Loja e outra sobre privacidade da Rede, e NENHUM dos dois autores
+# sabia do outro. O git nao acusa: nomes de arquivo diferentes nao conflitam,
+# entao o merge junta os dois em silencio. So apareceu porque alguem foi olhar,
+# e o conserto custou cerca de 55 referencias trocadas linha a linha.
+#
+# POR QUE EM `verificar` E NAO EM `fechar-integracao`
+#
+# Pelo criterio de custo da casa, medido neste worktree: 0,06 s, cinco medicoes,
+# `real` entre 0,06 e 0,07. Ele le 24 nomes de arquivo e nao abre nenhum deles;
+# nao usa docker, nao usa rede e nao depende de `npm ci`. `verificar-subida-da-api`
+# ficou em `fechar-integracao` porque sobe docker e custa 15-27 s;
+# `verificar-tipos-gerados` entrou em `verificar` com 1,06 s. Este e DEZESSETE
+# VEZES mais barato que o dos tipos, entao entra no mesmo lugar, e primeiro na
+# lista: o check mais rapido roda antes.
+#
+# POR QUE ELE NAO PERGUNTA NADA AO GIT
+#
+# Porque a pergunta e sobre o CONTEUDO de `adr/`, e nao sobre o estado do git.
+# O portao dos tipos custou uma iteracao para aprender isso: a primeira versao
+# terminava em `git diff --exit-code` e reprovava quem tinha feito tudo certo e
+# ainda nao commitado. Aqui seria pior, porque a colisao NASCE num arquivo
+# recem-criado e ainda nao rastreado -- o unico instante em que renumerar e
+# barato e justamente aquele em que o git nao tem o que mostrar. Este alvo vale
+# com a arvore limpa ou suja.
+#
+# O QUE ELE NAO FAZ: buraco na numeracao nao reprova. Numero reservado numa
+# branch que ainda nao mesclou deixa buraco legitimo em toda branch vizinha, e
+# reprovar nisso seria reprovar o fluxo normal do repositorio. Ele imprime o
+# buraco como nota.
+verificar-numero-de-adr-autoteste: ## as iscas do portao de numero de ADR reprovam (nao le adr/)
+	node infra/verificacao/verificar-numero-de-adr.mjs --autoteste
+
+verificar-numero-de-adr: ## dois arquivos de adr/ com o mesmo numero reprovam, nomeando os dois (0,06 s)
+	node infra/verificacao/verificar-numero-de-adr.mjs
+
 verificar-tipos-gerados: ## o gerado de src/shared/types/generated/ bate com api/openapi.yaml (1,06 s)
 	node infra/verificacao/verificar-tipos-gerados.mjs
 
@@ -409,7 +448,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs

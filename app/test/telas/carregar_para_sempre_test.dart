@@ -95,10 +95,16 @@ void main() {
           'terminado. E o defeito que o cliente relatou em aparelho: ele toca '
           'no botao e o circulo nao para nunca.',
     );
-    // A faixa de aviso cresce a lista e pode empurrar o botao para fora da
-    // dobra, e `ListView` nao constroi o que nao cabe. Rolar primeiro e o que
-    // a pessoa faz; sem isto o caso reprovaria por nao ACHAR o botao, que e
-    // outro motivo que nao o do caso.
+    // **Nenhuma das tres telas de conta rola mais para chegar ao botao**: as
+    // tres o tem na barra fixa do rodape desde 23/09/2026 (`Criar conta` pela
+    // manha, `Entrar` e `Esqueci minha senha` no mesmo dia). O `if` abaixo
+    // deixou de disparar, e e de proposito que ele continue existindo: se o
+    // botao voltar para dentro do conteudo, o caso precisa medir o
+    // carregamento, e nao reprovar por nao ACHAR o botao, que e outro motivo
+    // que nao o do caso.
+    //
+    // Quem cobra que ele fique fora da rolagem e
+    // `telas/acao_primaria_fora_da_rolagem_test.dart`, e nao este arquivo.
     final alvo = find.widgetWithText(FilledButton, rotulo);
     if (alvo.evaluate().isEmpty) {
       await tester.dragUntilVisible(
@@ -138,6 +144,17 @@ void main() {
       'marina@exemplo.com.br',
     );
     await tester.enterText(find.byType(TextField).at(2), 'uma frase longa');
+    // A caixa do aceite mora DENTRO da rolagem, num formulario mais alto que
+    // a janela do teste: e preciso traze-la antes de marca-la, que e o que
+    // uma pessoa faz. Sem isto o toque cai no vazio, a caixa fica desmarcada,
+    // `_criarConta` recusa antes de chamar a rede, e os casos abaixo
+    // reprovariam por nao encontrar o indicador -- que e sobre o tamanho da
+    // janela, e nao sobre o carregamento eterno que eles existem para pegar.
+    //
+    // O BOTAO nao precisa disto desde 23/09/2026: ele mora na barra fixa do
+    // rodape, fora da rolagem.
+    await tester.ensureVisible(find.byType(Checkbox));
+    await tester.pumpAndSettle();
     await tester.tap(find.byType(Checkbox));
     await tester.pumpAndSettle();
   }

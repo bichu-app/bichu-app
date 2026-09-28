@@ -504,6 +504,49 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
+  // vitrine da Loja (BICHUS-185 / BICHUS-189, migração 20260922000009)
+  //
+  // A PERGUNTA QUE ESTA ENTRADA OBRIGA A RESPONDER: quando o parceiro sai, o
+  // que acontece com os itens dele?
+  //
+  // As três ações eram defensáveis e nenhuma é óbvia:
+  //
+  // - `CASCADE` apagaria a vitrine inteira do parceiro. É a mais destrutiva, e
+  //   é silenciosa: ninguém fica sabendo que doze itens sumiram junto.
+  // - `SET NULL` está fora antes de qualquer opinião, e é decidível pelo
+  //   catálogo: `partner_id` é `NOT NULL`. É o caso 1 da taxonomia do topo
+  //   deste arquivo, e seria contradição entre duas declarações do mesmo banco.
+  // - `NO ACTION` recusa apagar o parceiro enquanto houver item apontando para
+  //   ele. Não destrói nada e obriga quem apaga a olhar para a vitrine antes.
+  //
+  // `NO ACTION` é a escolha, e ela é a MESMA classe do dado de referência logo
+  // acima: `store_partners` é catálogo curado (a forma da migração é copiada de
+  // `dados-de-referencia.sql`), não identidade de pessoa. Apagar um parceiro
+  // com item apontando para ele precisa FALHAR, exatamente como apagar uma raça
+  // com pet apontando para ela.
+  //
+  // E o produto já diz que a exclusão não é o caminho: as duas tabelas têm
+  // `active boolean`, e o item retirado é marcado inativo em vez de apagado.
+  // Parceiro que sai do programa vira `active = false`, a vitrine dele some da
+  // leitura pelo índice parcial, e nenhuma linha é destruída. `NO ACTION` é a
+  // rede embaixo de uma operação que o desenho já diz que não deve acontecer.
+  //
+  // POR QUE ELA APONTA PARA `partner_id` E NÃO PARA `partner_slug` (ADR-0024):
+  // a primeira versão desta migração apontava para `store_partners.slug`, e era
+  // a ÚNICA chave estrangeira sobre `slug` do esquema inteiro. O critério 2 da
+  // BICHUS-19 proíbe isso, e por dois motivos, não um: slug é valor que o
+  // usuário troca, e é valor que sai público. `store_partners` ganhou
+  // identidade interna — o desenho que `pets` e `professionals` já tinham —, e
+  // a chave estrangeira passou a apontar para ela. O `slug` continua sendo o
+  // que sai na resposta, e nenhum campo do contrato mudou.
+  // -------------------------------------------------------------------------
+  'public.store_items.store_items_partner_id_fkey': {
+    colunas: ['partner_id'],
+    referencia: 'public.store_partners',
+    aoApagar: 'NO ACTION',
+  },
+
+  // -------------------------------------------------------------------------
   // upload_intents
   // -------------------------------------------------------------------------
   'public.upload_intents.upload_intents_found_report_id_fkey': {
