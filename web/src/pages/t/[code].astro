@@ -76,7 +76,7 @@ if (tela.http >= 500) Astro.response.headers.set('Retry-After', '10');
 
 // A foto do pet vem da midia publica (img.bichu.app), e so essa origem entra na CSP.
 const midia = origemDaMidia(process.env.MEDIA_PUBLIC_BASE_URL);
-if (midia) Astro.csp.insertDirective(`img-src 'self' ${midia}`);
+if (midia) Astro.csp?.insertDirective(`img-src 'self' ${midia}`);
 
 const resolucao = tela.tela === 'pet' ? tela.resolucao : null;
 const pet = resolucao?.pet ?? null;

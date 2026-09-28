@@ -1,0 +1,10 @@
+{
+  "$descricao": "Lista FECHADA de valores escritos a mao em web/src, cada um com o motivo. Excecao que deixa de casar com alguma linha reprova o varredor.",
+  "excecoes": [
+    {
+      "arquivo": "src/styles/base.css",
+      "trecho": "position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;",
+      "motivo": "Tecnica padrao de texto so para leitor de tela: 1px e o menor tamanho que nao some da arvore de acessibilidade. Nao e distancia de desenho."
+    }
+  ]
+}

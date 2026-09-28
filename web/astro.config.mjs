@@ -23,6 +23,11 @@ export default defineConfig({
   },
   markdown: { syntaxHighlight: false },
   security: {
+    // Desligado de proposito: com `Referrer-Policy: no-referrer` (item 7) o
+    // navegador manda `Origin: null` em todo POST de formulario, e esta
+    // conferencia recusaria o aviso legitimo. A protecao equivalente, por
+    // Sec-Fetch-Site, esta em src/middleware.ts.
+    checkOrigin: false,
     // A borda (Caddy) repassa X-Forwarded-Proto e X-Forwarded-Host. So estes
     // hosts sao aceitos: e o que faz o POST do formulario passar na conferencia
     // de origem do Astro atras do proxy, e o que torna confiavel o endereco do

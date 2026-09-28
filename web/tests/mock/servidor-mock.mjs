@@ -248,7 +248,7 @@ const servidor = createServer(async (req, res) => {
 });
 
 const porta = Number(process.argv[2] ?? process.env.PORTA_MOCK ?? 4399);
-servidor.listen(porta, '127.0.0.1', () => {
+servidor.listen(porta, process.env.HOST_MOCK ?? '127.0.0.1', () => {
   process.stdout.write(`mock do contrato em http://127.0.0.1:${porta}/v1 (${ROTAS.length} operacoes, cenarios conferidos)\n`);
 });
 for (const sinal of ['SIGTERM', 'SIGINT']) process.on(sinal, () => servidor.close(() => process.exit(0)));

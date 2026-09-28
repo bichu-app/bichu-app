@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste verificar-tokens-web verificar-site fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -449,6 +449,18 @@ verificar-tokens-gerados-autoteste: ## as iscas do portao dos tokens gerados rep
 
 verificar-tokens-gerados: ## o Dart de app/lib/theme/ bate com design/tokens.json (1,26 s)
 	node infra/verificacao/verificar-tokens-gerados.mjs
+
+# O SITE (web/, ADR-0028, item 8). Gemeo local do passo de tokens do job `web`:
+# a pergunta e "gerar de novo muda o arquivo?", e a isca (raspberry.700
+# alterado numa copia) PRECISA reprovar nomeando web/src/styles/tokens.g.css.
+verificar-tokens-web: ## o CSS de web/src/styles/ bate com design/tokens.json, com a isca
+	cd web && node scripts/gerar-tokens-css.mjs --verificar && node scripts/isca-tokens.mjs
+
+# Os portoes do site que nao precisam de navegador nem de build (segundos).
+# A suite de ponta a ponta e o orcamento rodam no job `web` da esteira; local:
+#   cd web && npm run build && npm run verify:orcamento && npm run test:e2e
+verificar-site: verificar-tokens-web ## site: contrato, tokens, valores soltos, astro check e unidade
+	cd web && npm run verify:api && npm run verify:valores-soltos && npm run check && npm run test:unidade
 
 # `flutter pub get` PRIMEIRO, e nao por habito: `dart run tool/gen_tokens.dart`
 # precisa do pacote resolvido, e sem isso o portao reprovaria por falta de

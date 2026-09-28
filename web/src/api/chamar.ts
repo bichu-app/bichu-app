@@ -28,11 +28,35 @@ function cabecalhosRepassados(requisicao: Request, enderecoDoCliente: string | u
   return saida;
 }
 
+/**
+ * fetch com tempo limite garantido: aborta a requisicao E corre contra um
+ * relogio proprio. So o sinal de abort nao bastou: com a suite inteira rodando,
+ * de forma intermitente, a chamada lenta esperou os 3 s do mock e a pagina
+ * mostrou sucesso onde devia mostrar 503. A corrida garante que, passados 2 s,
+ * a renderizacao segue com `falha`, com ou sem cooperacao do fetch.
+ */
+async function comTempoLimite(pedido: Request): Promise<Response> {
+  const controle = new AbortController();
+  let relogio: ReturnType<typeof setTimeout> | undefined;
+  const estouro = new Promise<never>((_, rejeitar) => {
+    relogio = setTimeout(() => {
+      const erro = new DOMException('tempo limite', 'TimeoutError');
+      controle.abort(erro);
+      rejeitar(erro);
+    }, TEMPO_LIMITE_MS);
+  });
+  try {
+    return await Promise.race([fetch(new Request(pedido, { signal: controle.signal })), estouro]);
+  } finally {
+    clearTimeout(relogio);
+  }
+}
+
 export function clienteDaApi(requisicao: Request, enderecoDoCliente?: string) {
   return createClient<paths>({
     baseUrl: baseDaApi(),
     headers: cabecalhosRepassados(requisicao, enderecoDoCliente),
-    fetch: (pedido: Request) => fetch(new Request(pedido, { signal: AbortSignal.timeout(TEMPO_LIMITE_MS) })),
+    fetch: comTempoLimite,
   });
 }
 

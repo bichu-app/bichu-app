@@ -213,8 +213,9 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
   display: grid; place-items: center;
   width: var(--space-16); height: var(--space-16); margin-bottom: var(--space-2);
   border-radius: var(--radius-full);
-  background: var(--cor-surface); color: var(--cor-primary);
+  background: var(--cor-surface-sunken); color: var(--cor-primary);
 }
+.secao--comunidade .passo__icone { background: var(--cor-surface); }
 .passo__icone .icone { width: 58%; height: 58%; }
 .passo__texto { color: var(--cor-text-secondary); }
 /* passos numerados: a ordem e informacao, por isso o numero aparece */
@@ -230,7 +231,7 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 }
 
 /* ---------- Rede (faixa Verde suave) ---------- */
-.rede { padding-block: calc(var(--space-16) * 1.25) calc(var(--space-16) * 1.5); overflow: clip; }
+.rede { padding-block: calc(var(--space-16) * 1.25) calc(var(--space-16) * 1.5); overflow-x: clip; }
 .rede .blob--3 { width: 70vw; height: 60vw; max-width: calc(var(--layout-coluna-max) * 1.4); max-height: calc(var(--layout-coluna-max) * 1.2); right: -20vw; top: 6%; opacity: .7; display: none; }
 @media (min-width: 905px) {
   .rede .blob--3 { display: block; }
@@ -421,7 +422,7 @@ main > .secao--comunidade:last-child { padding-bottom: calc(var(--space-16) * 1.
 .legal__texto ul { list-style: disc; padding-inline-start: var(--space-6); display: grid; gap: var(--space-2); }
 .legal__texto ol { list-style: decimal; padding-inline-start: var(--space-6); display: grid; gap: var(--space-2); }
 .legal__texto a { color: var(--cor-primary); }
-.legal__texto table { width: 100%; border-collapse: collapse; font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); display: block; overflow-x: auto; }
+.legal__texto table { width: 100%; border-collapse: collapse; font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); overflow-wrap: anywhere; hyphens: auto; }
 .legal__texto :is(th, td) { text-align: start; vertical-align: top; padding: var(--space-2) var(--space-3); border-bottom: var(--border-hairline) solid var(--cor-outline); }
 
 /* ---------- rodape em Carmim ---------- */
