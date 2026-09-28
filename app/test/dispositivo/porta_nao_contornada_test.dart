@@ -692,7 +692,16 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// branch `feat/secao-rede-app-desenho-novo`, e conferido contra o
 /// "encontrado" que este portao imprimiu antes da troca. Anterior:
 /// `61c6945773d63c8f502e26039f0b69435f03659c`.
-const String _arvoreDasTelas = 'd555005fb7c327572091b26863473674fcd6e965';
+///
+/// **Destravado pelas correcoes do QA na Rede (BICHUS-251), 28/09/2026.**
+/// Mudam `rede/agenda_da_rede.dart` (paginacao, espera da busca, distancias
+/// desacopladas e presas a regiao cadastrada, microcopy A4/A13/A14),
+/// `rede/encontro_da_rede.dart` (falha do pedido dentro da caixa, retomada
+/// da guarda, microcopy A5) e `rede/cartao_do_encontro.dart` (pilula so com
+/// rotulo). Nenhuma encosta na porta `CameraEGaleria`. Medido com `git
+/// rev-parse HEAD:app/lib/telas` sobre `11d36d9`, conferido contra o
+/// "encontrado" do portao. Anterior: `d555005fb7c327572091b26863473674fcd6e965`.
+const String _arvoreDasTelas = '123dc34cc1100ee38bc0571a36bab5b5e25238ca';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
