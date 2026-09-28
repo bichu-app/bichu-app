@@ -1,5 +1,5 @@
 > **Status:** pronto para aplicar
-> **Atualizado:** 2026-09-19
+> **Atualizado:** 2026-09-23
 > **Issue:** BICHUS-135 (destrava BICHUS-13, critérios 3, 6, 7, 8, 9, 10 e 12)
 > **Decisão que este roteiro executa:** `docs/07-devops.md` 16.1, 16.2 e 16.3 — ADR-0013.
 
@@ -821,6 +821,89 @@ A segunda linha é a verificação que importa: a recusa do `make reset` é a ú
 proteção automática entre um comando de hábito e a massa de teste do QA. Se ela
 não recusar, o `ENVIRONMENT` do host ficou em `dev` e o passo 7 falhou em
 silêncio.
+
+---
+
+### Passo 14 — Conta administrativa do backoffice (BICHUS-260, ADR-0027 D42, D43, D51)
+
+Papel administrativo **não se concede por tela** (D51): um papel que se concede
+pelo painel é a primeira coisa que um invasor com a senha de um administrador
+usaria. Ele se concede por um comando no servidor, que só quem entra na máquina
+roda, e que grava cada concessão e revogação em `audit.events` com
+`actor_kind = 'system'` e o nome de quem rodou em `metadata.operator`.
+
+**A senha é do cliente.** Quem digita a senha de uma conta administrativa é a
+pessoa que vai usá-la, no terminal, na hora. Ela é pedida **duas vezes, sem
+eco**, e nunca entra por argumento, variável de ambiente ou arquivo: o comando
+recusa `--senha`, `--password`, `-p` e afins pelo **nome**, sem repetir o valor,
+e recusa rodar sem terminal. Se alguém digitou a senha como argumento, ela
+ficou no histórico do shell: escolha outra.
+
+O `-it` é obrigatório. Sem ele não há terminal, e o comando sai com código 2
+antes de perguntar qualquer coisa.
+
+```bash
+# 1. conta NOVA e dedicada (o caso normal): cria a conta so com o papel admin.
+#    Pede uma confirmacao ("sim") e a senha duas vezes.
+docker compose run --rm -it api node dist/bin/conceder-papel.js \
+  --email operacao@exemplo.com.br --criar-conta --operador "Nome de quem roda"
+
+# 2. conceder admin a uma conta que JA existe (nao troca a senha dela).
+#    Sem --operador, o comando pergunta o nome.
+docker compose run --rm -it api node dist/bin/conceder-papel.js --email <e-mail>
+
+# 3. revogar admin (revoga tambem as sessoes abertas do painel)
+docker compose run --rm -it api node dist/bin/conceder-papel.js --email <e-mail> --revogar
+
+# ajuda
+docker compose run --rm api node dist/bin/conceder-papel.js --ajuda
+```
+
+**Leia o aviso de D42 que o comando mostra antes de confirmar.** Conta com
+papel `admin` é **dedicada**: ela deixa de entrar pelo app (login e renovação
+recusados com o mesmo 401 de senha errada), e conceder o papel derruba as
+sessões móveis dela na hora. Quem é administrador e tutor usa **duas contas**.
+Conceder `admin` à conta pessoal de um tutor tira dele o acesso aos próprios
+pets pelo app, e o comando avisa quando a conta tem papel `tutor`. Por isso o
+caminho normal é o 1, com um e-mail que só serve ao painel.
+
+A senha de conta administrativa segue D43: **mínimo de 15 caracteres**, sem
+regra de composição, recusada se parecer com o e-mail, e **conferida contra a
+base pública de senhas vazadas**. A consulta manda para fora só os 5 primeiros
+caracteres hexadecimais do SHA-1 da senha (k-anonimato), e exige saída HTTPS do
+container da `api` para `api.pwnedpasswords.com`. **Sem essa saída, a senha é
+recusada e nada é criado**: aprovar senha que ninguém conseguiu conferir seria
+um portão verde que não verificou nada. Só o hash vai para o banco, no mesmo
+esquema do login (PBKDF2-SHA512 em PHC).
+
+A conta criada nasce **sem e-mail verificado**: quem roda o comando declara o
+endereço, e declarar não prova a caixa de entrada.
+
+Códigos de saída, para quem roda por roteiro:
+
+| Código | Significado |
+|---|---|
+| 0 | feito, ou nada a fazer (a conta já tinha, ou já não tinha, o papel) |
+| 1 | erro inesperado (a mensagem traz nome e código do erro, nunca a linha do banco) |
+| 2 | uso: argumento inválido, senha por argumento, papel fora da lista, revogar `tutor`, sem terminal |
+| 3 | o e-mail não tem conta ativa; **nenhuma conta é criada** (use `--criar-conta`) |
+| 4 | senha recusada: curta, vazada, as duas digitações diferentes, ou base de vazadas inalcançável |
+| 5 | cancelado: a confirmação não foi `sim`, ou Ctrl-C |
+| 6 | conflito: conta suspensa, ou `--criar-conta` para e-mail que já tem conta |
+
+Só `admin` é aceito em `--papel` na v1; `tutor` não se revoga por aqui.
+
+**Verificação:** a trilha registra quem, quando e o quê, e **nunca** a senha.
+
+```bash
+docker compose exec -T db psql -U bichu -d bichu -c "
+  select occurred_at, action, actor_kind, metadata->>'operator' as operador,
+         before, after
+    from audit.events
+   where action in ('authz.role_granted', 'authz.role_revoked', 'auth.account_created')
+   order by occurred_at desc limit 10"
+# esperado: actor_kind = system, operador preenchido, e after com o papel
+```
 
 ---
 

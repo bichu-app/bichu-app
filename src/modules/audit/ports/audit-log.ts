@@ -62,6 +62,15 @@ export type AuditAction =
   | 'auth.email_changed'
   // Autorização
   | 'authz.denied'
+  /**
+   * BICHUS-260 (ADR-0027 D51). Papel concedido ou revogado pelo comando
+   * `src/bin/conceder-papel.ts`, e so por ele. Ator `system`: quem executa e o
+   * comando no servidor, e quem digitou vai em `metadata.operator`. Fora de
+   * `ACOES_ADMINISTRATIVAS` de proposito: aquela lista espelha o `x-audit` do
+   * contrato HTTP, e conceder papel nao e operacao HTTP.
+   */
+  | 'authz.role_granted'
+  | 'authz.role_revoked'
   | 'profile.updated'
   // Cadastro do pet
   | 'pet.created'
