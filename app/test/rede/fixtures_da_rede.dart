@@ -228,11 +228,17 @@ Future<void> abrirRede(
 
 /// Abre o primeiro cartao cujo titulo e [titulo].
 Future<void> abrirCartao(WidgetTester tester, String titulo) async {
-  final cartao = find.byWidgetPredicate(
-    (w) => w is CartaoDoEncontro && w.encontro.titulo == titulo,
+  // O cartao e mais alto que a tela de teste: toca-se no TITULO dele, que
+  // esta dentro do mesmo `InkWell`.
+  final alvo = find.descendant(
+    of: find.byWidgetPredicate(
+      (w) => w is CartaoDoEncontro && w.encontro.titulo == titulo,
+    ),
+    matching: find.text(titulo),
   );
-  await tester.ensureVisible(cartao);
-  await tester.tap(cartao);
+  await tester.ensureVisible(alvo);
+  await tester.pumpAndSettle();
+  await tester.tap(alvo);
   await tester.pumpAndSettle();
 }
 

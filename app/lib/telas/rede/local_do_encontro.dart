@@ -200,7 +200,6 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
     var faltam = tiles.length;
     _prazo = Timer(widget.prazoDaImagem, () {
       if (!mounted || _imagem != _Imagem.carregando) return;
-      _pararCarga();
       setState(() => _imagem = _Imagem.falhou);
     });
     for (final tile in tiles) {
@@ -222,9 +221,12 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
             }
           }
         },
+        // As escutas FICAM depois do primeiro erro: os outros tiles ainda vao
+        // responder, e erro de imagem sem escuta vira excecao nao tratada.
+        // Elas saem na proxima carga ou no `dispose`.
         onError: (_, _) {
           if (!mounted || _imagem != _Imagem.carregando) return;
-          _pararCarga();
+          _prazo?.cancel();
           setState(() => _imagem = _Imagem.falhou);
         },
       );
