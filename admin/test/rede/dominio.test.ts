@@ -49,6 +49,8 @@ describe('observações (D59, conveniência de tela)', () => {
       'Até 10 filhotes por turma.',
       'Traga água; a praça tem pouca sombra depois das 10h.',
       'Encontro na Praça Benedito Calixto, perto do coreto.',
+      'Remarcado de 03.10.2026 para 10.10.2026.',
+      'Encontro em 10/10/2026.',
     ]) {
       expect(achadosNasObservacoes(texto), texto).toEqual([]);
     }

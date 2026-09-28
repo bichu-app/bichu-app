@@ -42,6 +42,41 @@ const CASOS = [
   // o caso do QA: data com pontos
   'Encontro em 10.10.2026, até 12h.',
   'Remarcado de 03.10.2026 para 10.10.2026.',
+  // d54fb59: datas passam, telefone parecido com data continua recusado
+  'Proximo encontro em 10.10.2026.',
+  'Remarcado de 03/11/2026 para 17/11/2026',
+  'Dia 1.2.2027, se chover.',
+  'Liga 10.10.2026.99',
+  'Chame 11 98765-4321 ate 10/10/2026',
+  '32.13.2026 1198765432',
+  'de 10.10.2026 a 31/12/2026',
+  '13.13.2026 e 10.10.26',
+  // af9594b: encurtador, dominio, @perfil, PIX quebrado e dados bancarios
+  'Inscricao em bit.ly/encontro',
+  'Tudo em linktr.ee/organizacao',
+  'veja meusite.com.br',
+  'fale no wa.me/5511987654321',
+  'site . com',
+  'siga @organizacao',
+  'Pague no p i x',
+  'Pague no p-i-x',
+  'Pague no P1X',
+  'Pague no Pïx',
+  'Aceitamos PicPay',
+  'Aceitamos pic pay',
+  'Mercado Pago na entrada',
+  'Nubank ou PayPal',
+  'PagSeguro no local',
+  'ag 1234 cc 56789-0',
+  'Agência: 0001 Conta: 12345-6',
+  'deposite em qualquer.dominio/caminho',
+  // af9594b: complemento que continua passando
+  'Traga agua e saquinho.',
+  'Encontro na praca central, perto do coreto.',
+  'Caes de todos os portes.',
+  'Traga água.Leve petisco e um mix de brinquedos.',
+  'Picnic liberado na sombra; evite pisar no canteiro.',
+  'A agenda do mês tem 3 encontros e 2 caminhadas.',
 ];
 
 describe('observações: painel e servidor dão a mesma resposta', () => {
