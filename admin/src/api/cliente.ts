@@ -2,9 +2,10 @@ import createClient, { type Client, type Middleware } from 'openapi-fetch';
 
 import { configuracao } from '../config.ts';
 import { semSessao, type EstrategiaDeSessao } from '../sessao/sessao.ts';
-import type { paths } from './generated/api.ts';
+import type { components, paths } from './generated/api.ts';
 
 export type ClienteDaApi = Client<paths>;
+export type Esquemas = components['schemas'];
 
 export interface OpcoesDoCliente {
   /** URL base com o prefixo de versao, por exemplo `https://api.bichu.app/v1`. */
@@ -38,6 +39,7 @@ export function criarClienteDaApi(opcoes: OpcoesDoCliente = {}): ClienteDaApi {
     onRequest: ({ request }) => sessao.prepararRequisicao(request),
     onResponse: ({ response }) => {
       if (response.status === 401) sessao.aoPerderAutorizacao?.(response);
+      else sessao.aoUsar?.();
       return undefined;
     },
   };

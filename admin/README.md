@@ -54,7 +54,23 @@ Mudou um token ou o contrato? Rode o `generate:*` e versione o resultado junto.
 Cor só vem de `tokens.g.css`: `test/sem-cor-a-mao.test.ts` reprova qualquer
 cor literal em `src/`.
 
-## Sessão
+## Sessão e login
 
-Ainda não há login. O modelo de sessão no navegador está em decisão por ADR; o
-ponto de extensão é `src/sessao/sessao.ts`, recebido por `criarClienteDaApi`.
+- **Login** é outro documento, `/entrar/` (`entrar/index.html`), o único que carrega
+  o reCAPTCHA Enterprise (ADR-0027 item 5). A chave de site vem de
+  `VITE_CAPTCHA_SITE_KEY`; sem ela, no build de produção o login mostra "A
+  verificação de segurança do login não carregou", e no `npm run dev` manda um
+  token que o servidor sempre recusa (o servidor não tem modo que aprove sem
+  avaliar). Depois de entrar, recarga completa para o painel.
+- **Sessão** é o cookie `__Host-bichu_adm`, `HttpOnly`: o código nunca o vê. O
+  token anti-CSRF vem no corpo de `GET /v1/admin/session` e fica só em memória;
+  todo método não seguro leva `X-CSRF-Token` (`src/sessao/sessao.ts`).
+  `test/iscas.test.tsx` reprova se ele faltar ou se aparecer em `localStorage`
+  ou `sessionStorage`.
+- **Desenvolvimento local:** o proxy do Vite faz o papel da borda de
+  `admin.bichu.app` e acrescenta `X-Internal-Surface: admin`. A API precisa de
+  `ADMIN_ORIGIN=http://localhost:5173`.
+
+```sh
+API_PROXY_TARGET=http://localhost:3200 npm run dev
+```
