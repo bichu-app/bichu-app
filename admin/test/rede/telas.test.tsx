@@ -374,6 +374,30 @@ describe('Rede: fila de pedidos', () => {
     expect(limites).toEqual(expect.arrayContaining([['pending', '50'], ['approved', '1'], ['declined', '1']]));
   });
 
+  it('encontro cancelado: a fila avisa que fechou e não oferece aprovar nem recusar', async () => {
+    const duble = criarDuble();
+    const privado = duble.encontros.get('k3Jx9QpL2mZt7VwR4cYb');
+    if (!privado) throw new Error('massa sem o privado');
+    privado.publication_status = 'cancelled';
+    montar(PRIVADO, duble);
+    expect(await screen.findByText(/Este encontro foi cancelado, removido ou já aconteceu\./)).toBeInTheDocument();
+    await screen.findByText('Carla M.');
+    expect(screen.queryByRole('button', { name: /Aprovar o pedido/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Recusar o pedido/ })).toBeNull();
+  });
+
+  it('409 event-not-open na decisão (encontro fechou depois da leitura) tira os botões e diz o motivo', async () => {
+    const { duble, usuario } = montar(PRIVADO);
+    await usuario.click(await screen.findByRole('button', { name: 'Aprovar o pedido de Carla M.' }).then((b) => {
+      const privado = duble.encontros.get('k3Jx9QpL2mZt7VwR4cYb');
+      if (privado) privado.timing = 'ended';
+      return b;
+    }));
+    expect(await screen.findByText(/Os pedidos dele não podem mais ser aprovados nem recusados\./)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Aprovar o pedido/ })).toBeNull();
+    expect(duble.pedidos.find((p) => p.ref.startsWith('rq_Carla'))?.status).toBe('pending');
+  });
+
   it('encontro público não tem fila', async () => {
     montar('/rede/encontro-de-caes-no-parque/pedidos');
     expect(await screen.findByText('Este encontro é público.')).toBeInTheDocument();

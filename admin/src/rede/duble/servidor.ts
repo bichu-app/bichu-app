@@ -355,6 +355,10 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     if (recurso === 'join-requests' && id && req.metodo === 'POST') {
       const p = pedidos.find((x) => x.ref === decodeURIComponent(id));
       if (!p) return problema(404, 'not-found', 'Nao encontrado');
+      const ev = encontros.get(p.event.slug);
+      if (ev && (ev.publication_status !== 'published' || ev.timing === 'ended')) {
+        return problema(409, 'event-not-open', 'Encontro fechado');
+      }
       const podeAprovar = !p.withdrawn_at && (p.status === 'pending' || p.status === 'declined');
       const podeRecusar = !p.withdrawn_at && p.status === 'pending';
       if ((sub === 'approval' && !podeAprovar) || (sub === 'decline' && !podeRecusar)) {

@@ -15,7 +15,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import { Banner, LinhasCarregando } from '../../componentes/basicos.tsx';
 import { Icone } from '../../componentes/Icone.tsx';
-import { mensagemDaFalha } from '../api/mensagens.ts';
+import { ENCONTRO_FECHADO, mensagemDaFalha } from '../api/mensagens.ts';
 import { esperaPorExtenso, type Falha, type Resultado } from '../api/redeApi.ts';
 import { SeloDoEncontro } from '../componentes/SeloDoEncontro.tsx';
 import { dataCurta, dataEHora, faixaDeHorario, mesPorExtenso } from '../dominio/horario.ts';
@@ -54,6 +54,7 @@ export default function PedidosDoEncontro() {
   const [aviso, setAviso] = useState<{ tipo: 'ok' | 'erro'; texto: string; desfazer?: Pedido }>();
   const [decidindo, setDecidindo] = useState<string>();
   const [versao, setVersao] = useState(0);
+  const [fechadoPeloServidor, setFechadoPeloServidor] = useState(false);
   const idDoPainel = useId();
   const abasRef = useRef<HTMLDivElement>(null);
 
@@ -71,6 +72,9 @@ export default function PedidosDoEncontro() {
 
   const privado = typeof encontro === 'object' && encontro.visibility === 'private';
   const chaveDaFila = `${aba}:${versao}`;
+  // Cancelado, removido ou encerrado nao recebe decisao (409 event-not-open): a tela ja nao oferece.
+  const fechado =
+    fechadoPeloServidor || (typeof encontro === 'object' && (encontro.publication_status !== 'published' || encontro.timing === 'ended'));
   const fila: Fila = filaGuardada.chave === chaveDaFila ? filaGuardada : { fase: 'carregando' };
 
   const aplicar = useCallback(
@@ -157,6 +161,12 @@ export default function PedidosDoEncontro() {
     const r = decisao === 'aprovar' ? await rede.aprovar(p.ref) : await rede.recusar(p.ref);
     setDecidindo(undefined);
     const nome = nomeDe(p);
+    if (!r.ok && r.falha.tipo === 'encontro-fechado') {
+      // O encontro fechou (409 event-not-open): nenhuma decisao vai valer; o aviso fixo da fila diz isso.
+      setAviso(undefined);
+      setFechadoPeloServidor(true);
+      return;
+    }
     if (!r.ok) {
       setAviso({ tipo: 'erro', texto: mensagemDaFalha(r.falha, decisao === 'aprovar' ? 'aprovar o pedido' : 'recusar o pedido') });
       // Pedido ja decidido por outra pessoa: a fila em tela esta velha, e so entao se rele.
@@ -240,6 +250,7 @@ export default function PedidosDoEncontro() {
           Aqui aparecem só o nome de exibição, se a conta está validada (e-mail confirmado), o mês em que a conta foi criada e a data do pedido. Pets e contato não
           aparecem. Quem for aprovado passa a ver no app o local e os detalhes. Não há como mandar mensagem pelo Bichu.
         </p>
+        {fechado && <Banner tipo="alerta">{ENCONTRO_FECHADO}</Banner>}
         <Banner tipo="info">Recusar não avisa a pessoa. No app, o pedido dela continua como “Pedido enviado” até a data do encontro.</Banner>
         {aviso && (
           <Banner
@@ -306,7 +317,7 @@ export default function PedidosDoEncontro() {
           {fila.fase === 'pronto' && fila.itens.length > 0 && (
             <ul className={estilos.pedidos}>
               {fila.itens.map((p) => (
-                <LinhaDoPedido key={p.ref} pedido={p} aba={aba} ocupado={decidindo === p.ref} aoDecidir={(d) => void decidir(p, d)} />
+                <LinhaDoPedido key={p.ref} pedido={p} aba={aba} fechado={fechado} ocupado={decidindo === p.ref} aoDecidir={(d) => void decidir(p, d)} />
               ))}
             </ul>
           )}
@@ -335,7 +346,19 @@ function Voltar() {
   );
 }
 
-function LinhaDoPedido({ pedido: p, aba, ocupado, aoDecidir }: { pedido: Pedido; aba: EstadoDoPedido; ocupado: boolean; aoDecidir: (d: 'aprovar' | 'recusar') => void }) {
+function LinhaDoPedido({
+  pedido: p,
+  aba,
+  fechado,
+  ocupado,
+  aoDecidir,
+}: {
+  pedido: Pedido;
+  aba: EstadoDoPedido;
+  fechado: boolean;
+  ocupado: boolean;
+  aoDecidir: (d: 'aprovar' | 'recusar') => void;
+}) {
   const nome = nomeDe(p);
   const semNome = !p.requester.display_name?.trim();
   const desistiu = !!p.withdrawn_at;
@@ -355,6 +378,8 @@ function LinhaDoPedido({ pedido: p, aba, ocupado, aoDecidir }: { pedido: Pedido;
       </div>
       {desistiu ? (
         <span className="t-body-sm c-sec">A pessoa desistiu do pedido.</span>
+      ) : fechado ? (
+        aba !== 'pending' && <span className="t-body-sm c-sec">{aba === 'approved' ? 'Aprovado' : 'Recusado'}</span>
       ) : aba === 'pending' ? (
         <div className={estilos.pedidoAcoes}>
           <button type="button" className="btn sec" disabled={ocupado} aria-label={`Recusar o pedido de ${nome}`} onClick={() => aoDecidir('recusar')}>

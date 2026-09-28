@@ -34,6 +34,7 @@ export type Falha =
   | { tipo: 'versao' }
   | { tipo: 'limite'; esperaSegundos: number | null }
   | { tipo: 'endereco-ocupado' }
+  | { tipo: 'encontro-fechado' }
   | { tipo: 'sem-conexao' }
   | { tipo: 'servidor'; status: number };
 
@@ -58,7 +59,8 @@ export function falhaDaResposta(resposta: Response, corpo: unknown): Falha {
     case 404:
       return { tipo: 'nao-encontrado' };
     case 409:
-      return { tipo: 'endereco-ocupado' };
+      // `event-not-open`: o encontro foi cancelado, removido ou terminou, e a fila dele fechou.
+      return slug === 'event-not-open' ? { tipo: 'encontro-fechado' } : { tipo: 'endereco-ocupado' };
     case 412:
     case 428:
       return { tipo: 'versao' };

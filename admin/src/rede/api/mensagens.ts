@@ -16,6 +16,9 @@ const CODIGOS: Record<string, string> = {
   request_not_pending: 'Este pedido já foi decidido ou a pessoa desistiu. A lista foi atualizada.',
 };
 
+/** 409 `event-not-open` na fila. */
+export const ENCONTRO_FECHADO = 'Este encontro foi cancelado, removido ou já aconteceu. Os pedidos dele não podem mais ser aprovados nem recusados.';
+
 export function mensagemDaFalha(falha: Falha, acao: string): string {
   switch (falha.tipo) {
     case 'validacao': {
@@ -35,6 +38,8 @@ export function mensagemDaFalha(falha: Falha, acao: string): string {
       return 'Confirme sua senha de novo.';
     case 'sem-conexao':
       return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
+    case 'encontro-fechado':
+      return ENCONTRO_FECHADO;
     case 'endereco-ocupado':
       return 'Já existe um encontro com um título parecido. Mude o título e tente de novo.';
     case 'sessao':

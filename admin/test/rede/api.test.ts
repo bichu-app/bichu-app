@@ -96,6 +96,7 @@ describe('mensagens de falha (UX 30, B16 e B19)', async () => {
     expect(mensagemDaFalha({ tipo: 'validacao', erros: [{ field: 'slug', code: 'event_removed' }] }, 'salvar')).toBe(
       'Este encontro foi removido. Ele não aparece no app e não pode mais ser alterado.',
     );
+    expect(mensagemDaFalha({ tipo: 'encontro-fechado' }, 'aprovar')).toMatch(/^Este encontro foi cancelado, removido ou já aconteceu\./);
     expect(mensagemDaFalha({ tipo: 'endereco-ocupado' }, 'salvar')).toBe('Já existe um encontro com um título parecido. Mude o título e tente de novo.');
   });
 });
