@@ -676,7 +676,23 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// primaria fora da rolagem (`cad6c7b5...`). A arvore mesclada nao e nenhuma
 /// das duas. Nenhuma das pecas encosta na porta `CameraEGaleria`. Medido com
 /// o indice temporario deste portao sobre a arvore ja mesclada.
-const String _arvoreDasTelas = '61c6945773d63c8f502e26039f0b69435f03659c';
+///
+/// **Destravado pela Rede no desenho novo (BICHUS-251, emendada, e
+/// BICHUS-279), 28/09/2026.** Mudam `rede/agenda_da_rede.dart` (abas
+/// `Próximos`, `Meus pedidos` e `Encerrados` na `BarraDeListagem`),
+/// `rede/encontro_da_rede.dart` (capa, secoes, pedido do privado, cancelado e
+/// encerrado) e entram `rede/cartao_do_encontro.dart`,
+/// `rede/local_do_encontro.dart` (mapa estatico pela `/location`, so com
+/// conta) e `rede/pecas_da_rede.dart`. Nenhuma delas encosta na porta
+/// `CameraEGaleria`: nao leem camera nem galeria e nao pedem permissao
+/// nenhuma (o calendario e o app de mapas saem por
+/// `dispositivo/saida_do_app.dart`, sem permissao), e o portao de diretivas
+/// abaixo continua cobrando isso sem depender desta constante. Medido com
+/// `git rev-parse HEAD:app/lib/telas` sobre o commit `d897eef` da
+/// branch `feat/secao-rede-app-desenho-novo`, e conferido contra o
+/// "encontrado" que este portao imprimiu antes da troca. Anterior:
+/// `61c6945773d63c8f502e26039f0b69435f03659c`.
+const String _arvoreDasTelas = 'd555005fb7c327572091b26863473674fcd6e965';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
