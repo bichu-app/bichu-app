@@ -33,6 +33,17 @@
 -- aplicou num banco local de desenvolvimento precisa de `make reset`.
 --
 -- ====================================================================
+-- FATIA 2: OS CAMPOS DO ENCONTRO, O PRIVADO E O PEDIDO (ADR-0027 item 17)
+-- ====================================================================
+--
+-- Visibilidade, entrada paga (so o valor, informativo), idade, vacinacao,
+-- area cercada e observacoes viraram colunas; portes, estrutura e o que levar
+-- viraram tabelas de lista; e o pedido para participar de encontro privado
+-- ganhou tabela propria (A.6), da conta e nunca do pet. A galeria do encontro
+-- NAO esta aqui: ela aponta para `catalog_images`, que nasce numa migracao
+-- posterior (`20260923000007`), e entra com ela.
+
+-- ====================================================================
 -- A IDENTIDADE INTERNA E SEPARADA DA PUBLICA (ADR-0024, ADR-0027 12.1)
 -- ====================================================================
 --

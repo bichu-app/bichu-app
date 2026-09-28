@@ -17,6 +17,8 @@
  * | `statusDoEncontro` devolvendo `ended` SEMPRE (a isca negativa) | 3 |
  * | 23/09, emenda: o cancelado ignorado (sempre temporal) | 5 |
  * | 23/09, emenda: o cancelado sempre `cancelled`, mesmo depois do fim | 2 |
+ * | 28/09, fatia 2: o recusado separado do pendente (`declined` vira `expired`) | 2, com o de rota |
+ * | 28/09, fatia 2: o privado sai inteiro em vez de teaser | 4, com o de rota |
  *
  * **A isca negativa da quarta linha e obrigatoria.** Provar que um encontro de
  * tres semanas atras sai `ended` nao prova nada se o de amanha tambem sair.

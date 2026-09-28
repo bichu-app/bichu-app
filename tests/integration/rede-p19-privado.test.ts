@@ -29,6 +29,18 @@
  * e "a criacao recusa `slug` enviado para privado" (a criacao e
  * `/admin/network/*`, fatia seguinte). Os dois voltam com as fatias deles.
  *
+ * **As iscas, medidas e nao afirmadas** (28/09, Node 22, pilha efemera de
+ * `npm run test:integration`, codigo de producao alterado e restaurado a cada
+ * rodada, `git status` limpo depois):
+ *
+ * | o que foi desligado | integracao |
+ * |---|---|
+ * | `city` sem a guarda `visibility = 'public'` | 425 de 426; reprova "ISCA -- city" |
+ * | `private-details` sem o `EXISTS` do pedido aprovado | 421 de 426; reprova as cinco contas nao aprovadas |
+ *
+ * E o teste achou um defeito de verdade na primeira rodada: o parametro
+ * `visibility` herdava `default: public`, e a agenda saia sem nenhum privado.
+ *
  * **Verificacao que nao consegue verificar reprova:** sem `DATABASE_URL` o
  * `before` levanta, e o controle positivo reprova se a varredura nao enxergar.
  */
