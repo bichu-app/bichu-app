@@ -226,6 +226,20 @@ const PAGAMENTO_POR_NUMERO: readonly RegExp[] = [
 ];
 
 /**
+ * Data de calendario nos dois formatos que a equipe escreve: `dd.mm.aaaa` e
+ * `dd/mm/aaaa`, dia 1 a 31 (com ou sem zero), mes 1 a 12, ano 19xx ou 20xx,
+ * sem digito colado antes nem depois (nem separador seguido de digito). O detector de telefone do canal mediado le "10.10.2026"
+ * como numero de oito digitos; nas observacoes do encontro a data e trocada
+ * por um marcador antes de conferir. `redigir.ts` (a conversa mediada) nao
+ * muda.
+ */
+const DATA_DE_CALENDARIO = /(?<!\d)(?<!\d[./])(?:0?[1-9]|[12]\d|3[01])([./])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}(?!\d)(?![./]\d)/g;
+
+export function semDatas(texto: string): string {
+  return texto.replace(DATA_DE_CALENDARIO, ' data ');
+}
+
+/**
  * As observacoes (D59): telefone, e-mail, link (inclusive encurtador e
  * qualquer token com cara de dominio), perfil `@usuario`, endereco, CEP,
  * chave PIX, meio de pagamento e dados bancarios sao recusados com `400`.
@@ -239,9 +253,9 @@ const PAGAMENTO_POR_NUMERO: readonly RegExp[] = [
 export function errosDasObservacoes(campo: string, valor: string): ProblemFieldError[] {
   const tamanho = errosDeTexto(campo, valor, 2, 500);
   if (tamanho.length > 0) return tamanho;
-  const { base, letras } = normalizarParaConferencia(valor);
+  const { base, letras } = normalizarParaConferencia(semDatas(valor.normalize('NFKC')));
   const contato =
-    redigirCanalMediado(valor.normalize('NFKC')).retirados.length > 0 ||
+    redigirCanalMediado(semDatas(valor.normalize('NFKC'))).retirados.length > 0 ||
     DOMINIO.test(base) ||
     DOMINIO.test(letras) ||
     DOMINIO_COM_CAMINHO.test(base) ||

@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { comoData } from '../../../shared/time/clock.js';
+import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import {
   entradaDoCorpo,
@@ -17,6 +18,7 @@ import {
   errosDasObservacoes,
   mesEmSaoPaulo,
   normalizarParaConferencia,
+  semDatas,
   errosDeTexto,
   errosDoHorario,
   lerIfMatch,
@@ -79,6 +81,21 @@ void describe('D59: observacoes sem contato nem pagamento', () => {
     assert.equal(normalizarParaConferencia('P-1-X e Pïx').letras, 'pix e pix');
     assert.equal(normalizarParaConferencia('p i x').letras, 'pix');
     assert.equal(normalizarParaConferencia('ag 1234').base, 'ag 1234');
+  });
+
+  void it('datas dd.mm.aaaa e dd/mm/aaaa passam; telefone parecido com data continua recusado', () => {
+    for (const texto of ['Proximo encontro em 10.10.2026.', 'Remarcado de 03/11/2026 para 17/11/2026', 'Dia 1.2.2027, se chover.']) {
+      assert.deepEqual(codigos(texto), [], texto);
+    }
+    for (const texto of ['Liga 10.10.2026.99', 'Chame 11 98765-4321 ate 10/10/2026', '32.13.2026 1198765432']) {
+      assert.deepEqual(codigos(texto), ['contact_or_payment_detected'], texto);
+    }
+    assert.equal(semDatas('de 10.10.2026 a 31/12/2026'), 'de  data  a  data ');
+    assert.equal(semDatas('13.13.2026 e 10.10.26'), '13.13.2026 e 10.10.26');
+  });
+
+  void it('a conversa mediada NAO mudou: redigir.ts continua lendo 10.10.2026 como telefone', () => {
+    assert.equal(redigirCanalMediado('Encontro em 10.10.2026').retirados[0]?.kind, 'phone');
   });
 
   void it('texto de complemento passa', () => {
