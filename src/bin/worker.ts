@@ -22,6 +22,7 @@ import { resolverSegredos } from '../shared/config/segredos.js';
 import { criarSecretProvider } from '../shared/adapters/external/env-var-secret-provider.js';
 import { createDb } from '../shared/db/pool.js';
 import { manterProcessoVivo } from '../shared/process/vida-do-processo.js';
+import { criarPassadaSemReentrada } from '../shared/process/passada-sem-reentrada.js';
 import { systemClock } from '../shared/time/clock.js';
 import {
   criarTrilhaDeAuditoria,
@@ -34,6 +35,10 @@ import { criarObjectStorage } from '../modules/media/adapters/external/s3-object
 import { criarImageProcessor } from '../modules/media/adapters/external/sharp-image-processor.js';
 import { criarPushSender } from '../modules/notifications/adapters/external/log-push-sender.js';
 import { processarFoto, type CargaDoTrabalho } from '../modules/media/application/processar-foto.js';
+import {
+  desistirDaFoto,
+  type CargaDoTrabalhoDeFoto,
+} from '../modules/media/application/desistir-da-foto.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
 import { expurgarContasExcluidas } from '../modules/identity/application/expurgar-contas-excluidas.js';
 import { criarIdentityRepository } from '../modules/identity/adapters/persistence/kysely-identity-repository.js';
@@ -105,6 +110,106 @@ const INTERVALO_DO_EXPURGO_DE_LOCALIZACAO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
  * estavam saudáveis.
  */
 const TRABALHOS_POR_PASSADA = 1;
+
+/**
+ * QUANTO TEMPO DE `running` SEM SINAL DE VIDA É ÓRFÃO: cinco minutos.
+ *
+ * O número não é redondo por gosto. Ele sai de três medições e de um limite que
+ * já existe neste sistema.
+ *
+ * **O teto do trabalho legítimo, medido.** O pior caso que `inspecionar` aceita
+ * é 50 megapixels exatos (o teto é `> 50`, não `>=`) em JPEG progressivo, e ele
+ * cabe nos 10 MiB de `UploadIntentInput.byte_size`: 2,1 MiB. No container com
+ * `mem_limit: 448m`, a inspeção mais as duas derivadas levaram, por foto:
+ *
+ *   sem limite de CPU ......... 0,68 s a 2,4 s
+ *   `--cpus 1` ................ 0,83 s a 0,92 s
+ *   `--cpus 0,5` .............. 1,6 s a 2,2 s
+ *   `--cpus 2`, primeira foto . 4,2 s (a mais lenta de todas as medições)
+ *
+ * Quatro segundos e dois décimos é o pior tempo de imagem medido. Somando as
+ * três chamadas de armazenamento que o trabalho faz (um `get` do original e dois
+ * `put` de derivada) e a concorrência que ainda cabe no processo, o teto
+ * legítimo fica na casa dos quinze segundos.
+ *
+ * **Por que não algo próximo disso.** Porque `s3-object-storage.ts` não impõe
+ * prazo nenhum nas chamadas de rede, e o `fetch` do Node também não: uma conexão
+ * pendurada deixa o trabalho legítimo esperando por um tempo que nada neste
+ * repositório limita. Derivar o prazo de órfão de um tempo medido de CPU seria
+ * derivá-lo da parte do trabalho que tem fim, ignorando a que não tem.
+ *
+ * **Por que não menos de um minuto.** `proximaTentativaEmMs(1)` é 60 s: é o que
+ * um trabalho que falhou por exceção espera antes da próxima tentativa. Um prazo
+ * de órfão menor que isso faria a recuperação do caminho ANORMAL ser mais ágil
+ * que a retentativa do caminho normal, e a fila passaria a favorecer o trabalho
+ * cujo processo morreu.
+ *
+ * **Por que exatamente 300 s.** É a validade da autorização de envio
+ * (`VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS`, em `media-service.ts`): o intervalo que
+ * este sistema já escolheu como o limite externo de uma etapa do ciclo de vida de
+ * uma foto. Usar o mesmo número mantém uma decisão só onde havia uma, e dá 20
+ * vezes de folga sobre o teto legítimo medido — folga suficiente para a chamada
+ * de rede sem prazo esticar bastante antes de um trabalho vivo ser tomado de
+ * quem o está fazendo.
+ *
+ * **O preço, dito com clareza.** A foto de quem caiu no azar fica até cinco
+ * minutos e meio em `processing` antes de alguém tentar de novo. Isso é aceitável
+ * aqui e em pouco lugar mais: a foto do pet não é interativa, o cadastro já
+ * avançou sem ela (é o ponto inteiro da BICHUS-87) e ninguém está olhando um
+ * botão girar.
+ */
+const PRAZO_DE_ORFANDADE_EM_MILISSEGUNDOS = 5 * 60 * 1000;
+
+/**
+ * QUANTAS ORFANDADES ANTES DE DESISTIR: duas.
+ *
+ * A pergunta por trás do número é como se distingue "falhou pela foto" de
+ * "falhou por azar", e a resposta não está na contagem: está em **qual coluna
+ * conta**.
+ *
+ * Trabalho que lança exceção passa por `fail`, que grava `last_error` e conta em
+ * `attempts`. Armazenamento fora do ar, banco indisponível, rede: tudo isso
+ * acusa o AMBIENTE, e cinco tentativas com espera crescente é a resposta certa
+ * porque o ambiente volta.
+ *
+ * Trabalho recuperado de `running` por trava vencida não passou por `fail`
+ * nenhum: ele **matou o processo**. Essa é a assinatura da carga, não do
+ * ambiente, e é exatamente por isso que ela merece coluna própria
+ * (`orphan_recoveries`) e teto próprio. O que mata o processo decodificando uma
+ * imagem mata de novo na retentativa, com a mesma imagem.
+ *
+ * **Por que não uma.** Porque a primeira morte é ambígua de verdade, e por
+ * motivos que não têm nada a ver com a foto: implantação mandando SIGKILL, o
+ * matador de memória do cgroup escolhendo este processo por causa de um trabalho
+ * VIZINHO, a máquina reiniciando. Desistir na primeira jogaria fora uma foto boa
+ * a cada implantação que pegasse o worker ocupado.
+ *
+ * **Por que não cinco, que é o padrão de `max_attempts`.** Porque cada morte
+ * leva consigo todo trabalho que estava em voo no mesmo processo, e não só o
+ * culpado. Repetir cinco vezes é pagar quatro quedas por uma informação que a
+ * segunda já deu.
+ *
+ * **Por que duas separa.** Porque a segunda reserva acontece pelo menos um
+ * minuto depois da primeira (a recuperação devolve com a espera de `fail`, não
+ * com `run_after = now()`), e a janela de uma implantação já passou. Morrer duas
+ * vezes segurando a MESMA carga, em reservas separadas por minutos, não é
+ * coincidência: é a carga.
+ */
+const TETO_DE_ORFANDADE = 2;
+
+/**
+ * De quanto em quanto tempo os órfãos são varridos: um minuto.
+ *
+ * Menor que o prazo de órfandade de propósito. Varrer a cada quinze minutos,
+ * como as outras varreduras, faria a latência de detecção ser o prazo mais o
+ * intervalo — vinte minutos para descobrir algo que se decidiu chamar de órfão em
+ * cinco. A varredura é uma consulta sobre um índice parcial de linhas em voo, que
+ * são poucas por construção; um minuto não pesa.
+ */
+const INTERVALO_DA_VARREDURA_DE_ORFAOS_EM_MILISSEGUNDOS = 60 * 1000;
+
+/** Teto de linhas por varredura: uma passada não pode virar transação longa. */
+const ORFAOS_POR_VARREDURA = 20;
 
 export async function main(): Promise<void> {
   assertSafeBoot();
@@ -245,6 +350,64 @@ export async function main(): Promise<void> {
     fila,
     baseDaWeb: config.webBaseUrl,
   });
+
+  /**
+   * A VARREDURA DE ÓRFÃOS, e ela é o que dá saída a `running`.
+   *
+   * Dois desfechos, e os dois precisam de log: devolvido à fila (alguém vai
+   * tentar de novo, nada a fazer) e desistido (final, e alguém prometeu algo a
+   * uma pessoa). No segundo caso, um trabalho de foto deixa uma foto presa em
+   * `processing`, e é aqui que ela sai — em `rejected`, com motivo.
+   *
+   * Trabalho de outro tipo que desiste por orfandade sai só no log, e isso é
+   * honesto em vez de completo: `alert.dispatch` e `case.transfer_consummate`
+   * têm rede de segurança própria (a varredura de transferências reenfileira;
+   * o alerta é reavaliado por caso), e inventar desfecho para eles aqui seria
+   * um segundo caminho de consumação que ninguém escolheu.
+   */
+  const rodarVarreduraDeOrfaos = async (): Promise<void> => {
+    const recuperados = await fila.recuperarOrfaos({
+      prazoEmMs: PRAZO_DE_ORFANDADE_EM_MILISSEGUNDOS,
+      tetoDeOrfandade: TETO_DE_ORFANDADE,
+      limite: ORFAOS_POR_VARREDURA,
+    });
+
+    for (const trabalho of recuperados) {
+      if (!trabalho.desistiu) {
+        console.warn(
+          JSON.stringify({
+            evento: 'fila.orfao_devolvido',
+            trabalho: trabalho.id,
+            tipo: trabalho.kind,
+            orfandades: trabalho.orfandades,
+          }),
+        );
+        continue;
+      }
+
+      console.error(
+        JSON.stringify({
+          evento: 'fila.orfao_final',
+          trabalho: trabalho.id,
+          tipo: trabalho.kind,
+          orfandades: trabalho.orfandades,
+        }),
+      );
+
+      if (trabalho.kind !== 'media.process_upload') continue;
+
+      const recusada = await desistirDaFoto(
+        { repositorio: dependenciasDaFoto.repositorio, clock: systemClock },
+        trabalho.payload as CargaDoTrabalhoDeFoto,
+      );
+      console.error(
+        JSON.stringify({
+          evento: recusada ? 'media.desistencia' : 'media.desistencia_sem_efeito',
+          trabalho: trabalho.id,
+        }),
+      );
+    }
+  };
 
   const rodarFila = async (): Promise<void> => {
     const trabalhos = await fila.claim(TRABALHOS_POR_PASSADA);
@@ -450,13 +613,43 @@ export async function main(): Promise<void> {
   }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
   temporizadorDeTransferencias.unref();
 
+  /**
+   * A PASSADA DA FILA NÃO CORRE SOBRE SI MESMA, e sem esta linha ela corria.
+   *
+   * `setInterval` não espera promessa. Com o intervalo em 2 s e uma foto grande
+   * levando mais que isso, a passada seguinte começava em cima da anterior e
+   * reservava OUTRO trabalho — então `TRABALHOS_POR_PASSADA = 1` deixava de
+   * significar "uma decodificação por vez neste processo". Medido: três
+   * decodificações simultâneas do pior caso aceito matam o processo nos 448 MiB
+   * do `compose.yaml`, e matam **mesmo com o cache do libvips desligado**. As
+   * três morrem, inclusive as duas saudáveis.
+   *
+   * É também por isso que `WORKER_IMAGE_CONCURRENCY: "1"` no `compose.yaml` não
+   * protegia nada: nenhuma linha deste repositório lê essa variável.
+   */
+  const passadaDaFila = criarPassadaSemReentrada(rodarFila);
+
   const temporizadorDaFila = setInterval(() => {
     if (vida.estaEncerrando) return;
-    rodarFila().catch((erro: unknown) => {
+    passadaDaFila().catch((erro: unknown) => {
       console.error(JSON.stringify({ evento: 'fila.passada_falhou', erro: String(erro) }));
     });
   }, INTERVALO_DA_FILA_EM_MILISSEGUNDOS);
   temporizadorDaFila.unref();
+
+  // A varredura de órfãos também não se sobrepõe: ela escreve nas mesmas linhas
+  // que está lendo, e duas passadas concorrentes no mesmo processo contariam a
+  // mesma orfandade duas vezes. Entre processos isso é o `SKIP LOCKED`; dentro
+  // de um, é esta guarda.
+  const passadaDeOrfaos = criarPassadaSemReentrada(rodarVarreduraDeOrfaos);
+
+  const temporizadorDeOrfaos = setInterval(() => {
+    if (vida.estaEncerrando) return;
+    passadaDeOrfaos().catch((erro: unknown) => {
+      console.error(JSON.stringify({ evento: 'fila.varredura_de_orfaos_falhou', erro: String(erro) }));
+    });
+  }, INTERVALO_DA_VARREDURA_DE_ORFAOS_EM_MILISSEGUNDOS);
+  temporizadorDeOrfaos.unref();
 
   const temporizador = setInterval(() => {
     if (vida.estaEncerrando) return;
@@ -478,6 +671,7 @@ export async function main(): Promise<void> {
 
   clearInterval(temporizador);
   clearInterval(temporizadorDaFila);
+  clearInterval(temporizadorDeOrfaos);
   clearInterval(temporizadorDaVarredura);
   clearInterval(temporizadorDaLocalizacao);
   await banco.close();

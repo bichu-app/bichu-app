@@ -530,6 +530,11 @@ export interface JobsTable {
   status: Generated<StatusDoTrabalho>;
   attempts: Generated<number>;
   max_attempts: Generated<number>;
+  /**
+   * Quantas vezes o processo morreu segurando este trabalho (migração
+   * 20260923000008). Não é `attempts`: esta acusa a carga, aquela o ambiente.
+   */
+  orphan_recoveries: Generated<number>;
   last_error: string | null;
   run_after: Generated<Date>;
   locked_at: Date | null;

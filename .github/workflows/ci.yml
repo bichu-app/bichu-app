@@ -979,14 +979,34 @@ jobs:
           # `deploy.resources.limits` fora do Swarm e ignorado EM SILENCIO e o
           # arquivo parece correto. Conferir no runtime, nao no YAML.
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' | tee -a "$GITHUB_STEP_SUMMARY"
-          for c in bichu-db-1 bichu-api-1 bichu-worker-1; do
-            limite=$(docker inspect "$c" --format '{{.HostConfig.Memory}}')
-            if [ "$limite" = "0" ]; then
-              echo "::error::o limite de memoria de $c nao esta valendo. Ver o bloco no topo do compose.yaml"
+          #
+          # "Diferente de zero" nao bastava, e deixou de bastar em 23/09 quando
+          # os tetos passaram a ser MEDIDOS: um teto trocado no YAML e nao
+          # aplicado (container antigo, override esquecido) passava igual. Agora
+          # cada container que esta de pe e comparado, em bytes, com o
+          # `mem_limit` que a configuracao RENDERIZADA declara para ele, e a
+          # lista de servicos vem da propria configuracao: servico novo com
+          # teto entra na conferencia sem ninguem lembrar deste passo.
+          # Servico que roda sem teto declarado tambem reprova.
+          docker compose --profile dev config --format json > "$RUNNER_TEMP/config.json"
+          conferidos=0
+          for s in $(docker compose --profile dev ps --services --status running); do
+            c=$(docker compose --profile dev ps -q "$s")
+            aplicado=$(docker inspect "$c" --format '{{.HostConfig.Memory}}')
+            declarado=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["services"][sys.argv[2]].get("mem_limit") or 0)' "$RUNNER_TEMP/config.json" "$s")
+            if [ "$declarado" = "0" ] || [ "$aplicado" = "0" ]; then
+              echo "::error::$s roda sem teto de memoria (declarado=$declarado aplicado=$aplicado). Ver o bloco no topo do compose.yaml"
               exit 1
             fi
-            echo "limite de $c aplicado: $limite bytes"
+            if [ "$aplicado" != "$declarado" ]; then
+              echo "::error::$s: o compose declara $declarado bytes e o container roda com $aplicado. O teto medido nao e o que esta valendo"
+              exit 1
+            fi
+            echo "teto de $s aplicado e igual ao declarado: $aplicado bytes"
+            conferidos=$((conferidos + 1))
           done
+          # Sem nada de pe, a conferencia nao conferiu nada, e isso reprova.
+          [ "$conferidos" -ge 5 ] || { echo "::error::so $conferidos servico(s) de pe conferidos; esperado ao menos db, objeto, api, worker e edge"; exit 1; }
 
       # BICHUS-213. ESTE PASSO MUDOU DE PROMESSA EM 22/09, E VALE LER O PORQUE.
       #

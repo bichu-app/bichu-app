@@ -577,3 +577,51 @@ class TagResolvida {
     );
   }
 }
+
+/// A resposta de `POST /tags/{code}/found-reports` (`FoundReportCreated`).
+///
+/// **Nao ha identificador interno aqui, e a ausencia e do contrato** (SEC-001):
+/// devolver UUIDv7 a quem nao tem conta entregaria de graca o instante de
+/// criacao e a posicao do registro na base. Quem endereca e a URL; quem
+/// autoriza e o token.
+class AvisoDoAchadorCriado {
+  const AvisoDoAchadorCriado({
+    required this.tokenDoAchador,
+    required this.urlDaConversa,
+    required this.tutorAvisado,
+    this.nomeDoPet,
+  });
+
+  /// `finder_token`: o que deixa o achador **sem conta** voltar a conversa.
+  ///
+  /// **Este build nao o persiste, e isso esta declarado no relatorio da
+  /// entrega em vez de escondido aqui.** Guardar um token que nada le seria
+  /// codigo morto carregando credencial em disco; a tela de conversa do
+  /// achador nao existe neste app. Quem construir essa tela persiste o token
+  /// junto, e nao depois.
+  final String tokenDoAchador;
+
+  /// `conversation_url`: o endereco da conversa mediada, montado pelo servidor.
+  final String urlDaConversa;
+
+  /// `owner_notified`.
+  ///
+  /// **Falso NAO significa que o aviso se perdeu**: o contrato diz que ele e
+  /// falso apenas quando a notificacao foi **agrupada** a um aviso recente, e
+  /// que o aviso em si nunca e descartado. A tela do achador continua dizendo
+  /// que o tutor foi avisado, porque foi -- mudar o texto para "talvez" faria
+  /// quem esta com o animal na mao duvidar e ir embora.
+  final bool tutorAvisado;
+
+  /// `pet_display_name`. Opcional no contrato.
+  final String? nomeDoPet;
+
+  factory AvisoDoAchadorCriado.doJson(Map<String, dynamic> json) {
+    return AvisoDoAchadorCriado(
+      tokenDoAchador: json['finder_token'] as String? ?? '',
+      urlDaConversa: json['conversation_url'] as String? ?? '',
+      tutorAvisado: json['owner_notified'] as bool? ?? true,
+      nomeDoPet: json['pet_display_name'] as String?,
+    );
+  }
+}

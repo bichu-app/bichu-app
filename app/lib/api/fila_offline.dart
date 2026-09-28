@@ -54,6 +54,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'api_client.dart';
+import 'falhas.dart';
+
 /// Uma ação esperando sinal.
 class AcaoEnfileirada {
   const AcaoEnfileirada({
@@ -361,5 +364,167 @@ class FilaOffline {
   Future<void> _persistir(List<AcaoEnfileirada> lista) async {
     _memoria = lista;
     await _deposito.gravar(jsonEncode(lista.map((a) => a.paraJson()).toList()));
+  }
+}
+
+/// A varredura que DRENA a fila. O chamador que `reenviarTudo` nao tinha.
+///
+/// ## O defeito que esta classe existe para fechar
+///
+/// `FilaOffline.reenviarTudo` estava escrito, testado, e **sem nenhum call
+/// site**. Duas telas enfileiravam de verdade -- `tela_alcance_do_alerta.dart`
+/// (o caso de perdido) e `tela_registrar_achado.dart` (o achado avulso) -- e
+/// nada nunca tirava nada de lá. O efeito: **caso registrado sem sinal ficava no
+/// disco para sempre**, enquanto a tela dizia "vamos enviar assim que o sinal
+/// voltar".
+///
+/// Era o pior formato de defeito que este produto consegue produzir. Nada
+/// falhava: a tela prometia o certo, o arquivo era gravado corretamente, a
+/// chave de idempotencia estava lá, e o método que resolveria tudo existia e
+/// passava nos testes. A única evidência era um tutor cujo pet sumiu e cujo
+/// alerta nunca saiu.
+///
+/// **Um teste que só verifique que `reenviarTudo` existe aprova esse defeito.**
+/// A prova é o call site.
+///
+/// ## QUANDO a fila drena, e por que nos DOIS momentos
+///
+/// 1. **No arranque do app**, depois de a sessão ser lida do chaveiro.
+/// 2. **Ao o app voltar para o primeiro plano** (`AppLifecycleState.resumed`).
+///
+/// Os dois, e não um: eles cobrem casos diferentes.
+///
+/// O arranque cobre o app que o sistema **matou** para liberar memória — que é
+/// o que acontece com app em segundo plano num aparelho barato, e é o caso que
+/// a fila em disco existe para atender. A retomada cobre o app que ficou vivo
+/// no bolso enquanto a pessoa saía do elevador ou do metrô: sem ela, a fila só
+/// drenaria quando o sistema resolvesse matar o processo, o que pode não
+/// acontecer por dias.
+///
+/// **O que NÃO existe aqui é reagir ao sinal voltar.** Detectar mudança de
+/// conectividade exige um pacote que este app não declara (`connectivity_plus`),
+/// e a decisão de acrescentar dependência não é minha. A retomada é a
+/// aproximação honesta: quem estava sem sinal e voltou a ter, na prática,
+/// olha o telefone. E o caminho imediato continua existindo, e é o botão da
+/// tela.
+///
+/// ## COMO ELA PARA, que é a pergunta que custa caro
+///
+/// Fila que reenvia em laço sem limite é o desfecho pior que o defeito: gasta
+/// bateria, nunca avisa ninguém, e foi exatamente o buraco que deixou foto
+/// presa em "processando" para sempre em outro lugar deste produto.
+///
+/// Ela para por **três mecanismos diferentes**, e nenhum deles é um contador de
+/// tentativas:
+///
+/// - **Recusa permanente DESCARTA a ação.** `400`, `404`, `409`, `410`, `422`:
+///   o servidor recusou, e tentar de novo não muda a resposta. A ação sai da
+///   fila. É este ramo que garante que a fila esvazia em vez de circular.
+/// - **Falha temporária PARA a varredura e MANTÉM a ação.** Sem rede, `5xx`,
+///   `429`: as seguintes vão falhar igual, e insistir só gasta bateria. Nada é
+///   descartado, e a próxima retomada tenta de novo.
+/// - **`401` e `403` PARAM e MANTÊM.** Ver [_desfecho]: este é o ramo que, mal
+///   escrito, apaga exatamente o que a fila existe para salvar.
+///
+/// O teto de 50 de [FilaOffline.teto] é a terceira defesa, e ela já existia: a
+/// fila não cresce sem limite nem no aparelho que passa uma semana sem sinal.
+class RetomadaDaFila {
+  const RetomadaDaFila({required this.fila, required this.api});
+
+  final FilaOffline fila;
+  final ApiClient api;
+
+  /// Drena a fila. Devolve quantas ações saíram de fato.
+  ///
+  /// **Nunca estoura**: ela é chamada do arranque do app e de um observador de
+  /// ciclo de vida, dois lugares onde uma exceção não tem quem a pegue. Uma
+  /// falha no meio vira o fim da varredura, e a próxima retomada recomeça.
+  Future<int> drenar() async {
+    try {
+      return await fila.reenviarTudo(_enviar);
+    } on Object {
+      return 0;
+    }
+  }
+
+  /// Reenvia UMA ação, com a chave da primeira tentativa.
+  ///
+  /// **`idempotencyKey: acao.idempotencyKey`, e nunca uma nova.** É a garantia
+  /// inteira da fila: a mesma chave faz o servidor devolver a resposta original
+  /// em vez de executar de novo. Gerar uma chave aqui faria o tutor receber o
+  /// mesmo aviso a cada retomada do app, e o defeito só apareceria na caixa de
+  /// entrada de quem está procurando o pet.
+  Future<ResultadoDoEnvio> _enviar(AcaoEnfileirada acao) async {
+    try {
+      // Só `POST` entra na fila hoje (as duas telas que enfileiram registram
+      // criações), e é por isso que o método é conferido em vez de assumido:
+      // uma ação com outro verbo enviada como `POST` chegaria na rota errada, e
+      // o servidor responderia 404 -- que este arquivo classificaria como
+      // recusa permanente e DESCARTARIA. Ação que não sabemos enviar fica
+      // guardada, e quem acrescentar o verbo acrescenta o ramo aqui.
+      if (acao.metodo != 'POST') return ResultadoDoEnvio.semSinal;
+      await api.post(
+        acao.caminho,
+        corpo: acao.corpo,
+        idempotencyKey: acao.idempotencyKey,
+      );
+      return ResultadoDoEnvio.entregue;
+    } on FalhaDeChamada catch (falha) {
+      return _desfecho(falha);
+    }
+  }
+
+  /// Traduz a falha em um dos três desfechos que a fila entende.
+  ///
+  /// ## O ramo que apaga o que a fila existe para salvar
+  ///
+  /// `401` e `403` **não** são recusa permanente aqui, e tratá-los como tal é o
+  /// erro mais caro deste arquivo. As duas rotas que a fila carrega
+  /// (`POST /pets/{petId}/lost-cases` e `POST /found-reports`) são
+  /// `bearerAuth`: sem token elas respondem `401`. Se `401` descartasse, a
+  /// primeira varredura de quem está deslogado — ou de quem teve o token
+  /// expirado — apagaria em silêncio o caso do pet sumido que a pessoa abriu no
+  /// elevador.
+  ///
+  /// É o mesmo buraco que `RetomadaDeFotos` documenta, e lá a defesa é a
+  /// guarda de sessão antes da varredura. Aqui há **as duas**: a guarda no
+  /// chamador, e este ramo. A guarda cobre o arranque; este ramo cobre o token
+  /// que expira no meio da varredura, que a guarda não vê.
+  static ResultadoDoEnvio _desfecho(FalhaDeChamada falha) {
+    return switch (falha) {
+      // Sem rede. Não conta tentativa, não descarta.
+      FalhaDeConexao() => ResultadoDoEnvio.semSinal,
+      // **A ação PODE ter acontecido no servidor.** É justamente para isto que
+      // ela viaja com `Idempotency-Key`: o reenvio com a mesma chave devolve a
+      // resposta original em vez de criar um segundo caso. Descartar aqui
+      // perderia a ação que talvez não tenha saído; reenviar é seguro.
+      FalhaDeTempo() => ResultadoDoEnvio.semSinal,
+      // Nada saiu do aparelho: a requisição foi recusada antes de sair, porque
+      // o endereço não era desta API. Não é caso de fila (a fila monta o
+      // endereço a partir da configuração, não de um corpo de resposta), e não
+      // é recusa do servidor -- mantém.
+      FalhaDeEnderecoRecusado() => ResultadoDoEnvio.semSinal,
+      FalhaDaApi(:final problem) => _desfechoDoStatus(problem.status),
+    };
+  }
+
+  static ResultadoDoEnvio _desfechoDoStatus(int status) {
+    // Sessão. Ver o cabeçalho de [_desfecho]: é o ramo que, invertido, apaga o
+    // caso do pet sumido.
+    if (status == 401 || status == 403) return ResultadoDoEnvio.semSinal;
+    // Teto de chamada. Tem hora para voltar, e ela não é agora.
+    if (status == 429) return ResultadoDoEnvio.semSinal;
+    // Servidor fora, gateway ruim, indisponível. Temporário por definição.
+    if (status >= 500) return ResultadoDoEnvio.semSinal;
+    // **A RECUSA PERMANENTE, e é ela que faz a fila esvaziar.** `400` de corpo
+    // inválido, `404` de pet que foi excluído, `409` de conflito, `410` de tag
+    // revogada, `422` de regra de negócio: nenhum melhora com repetição.
+    // Repetir para sempre uma recusa definitiva é um laço que gasta bateria e
+    // nunca avisa ninguém.
+    if (status >= 400) return ResultadoDoEnvio.recusada;
+    // Não deveria chegar aqui: `FalhaDaApi` nasce de status fora de 2xx. Se
+    // chegar, MANTÉM -- descartar por um status que não soubemos classificar é
+    // perder trabalho da pessoa por uma falha nossa de leitura.
+    return ResultadoDoEnvio.semSinal;
   }
 }

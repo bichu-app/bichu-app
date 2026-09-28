@@ -515,7 +515,7 @@ void main() {
   // ISCA 5 — nenhuma acao sem destino
   // -----------------------------------------------------------------------
   group('ISCA — nenhuma acao desta tela aponta para o vazio', () {
-    testWidgets('nao ha `Avisar o tutor` enquanto o aviso nao tiver destino', (
+    testWidgets('`Avisar o tutor` esta na tela, e ele TEM destino', (
       tester,
     ) async {
       await escanear(
@@ -523,20 +523,23 @@ void main() {
         rede: redeComTag(viewer: 'anonymous', perdido: true),
       );
 
-      // `POST /v1/tags/{code}/found-reports` nao tem cliente neste app. Um
-      // botao que nao avisa ninguem e PIOR que nenhum botao: o achador vai
-      // embora acreditando que avisou. Criterio 2 da BICHUS-62.
+      // Este caso era o inverso: ele cobrava a AUSENCIA do botao, porque
+      // `POST /v1/tags/{code}/found-reports` nao tinha cliente no app e um
+      // botao que nao avisa ninguem e pior que nenhum botao. O cliente entrou
+      // (`TagsApi.avisarOTutor`), e o caso virou junto -- o proprio texto que
+      // ele carregava pedia isso.
+      //
+      // **A prova de que o botao AVISA de verdade nao esta aqui**: ela exige
+      // medir a requisicao que sai, e mora em
+      // `test/telas/aviso_ao_tutor_pela_tag_test.dart`. Aqui a pergunta e a
+      // desta isca: nenhuma acao desta tela aponta para o vazio.
       expect(
-        find.textContaining('Avisar'),
-        findsNothing,
+        find.widgetWithText(FilledButton, 'Avisar o tutor'),
+        findsOneWidget,
         reason:
-            'REPROVA: a tela renderiza `Avisar o tutor` e o app nao tem '
-            'como avisar ninguem -- nao ha metodo em `TagsApi`, nao ha fila e '
-            'nao ha confirmacao. E o defeito dos dois `Ver meus pets` que o '
-            'criterio 2 da BICHUS-62 existe para fechar, e ele nao pode '
-            'entrar pela porta que veio fecha-lo. Quando '
-            '`POST /tags/{code}/found-reports` tiver cliente, este caso muda '
-            'junto com o botao.',
+            'REPROVA: a tela do achador nao tem `Avisar o tutor`. E a '
+            'terceira etapa do laco do produto, e sem ela quem esta com o '
+            'animal no colo chega aqui e vai embora sem caminho.',
       );
     });
 

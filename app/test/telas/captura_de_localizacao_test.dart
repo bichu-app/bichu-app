@@ -62,6 +62,7 @@ import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/dispositivo/vigia_de_aviso.dart';
+import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:bichu/escopo.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/intencao/guarda_de_acao.dart';
@@ -148,6 +149,13 @@ Future<_Caixa> _montar(
       // 54) e sao as variantes que nao encostam em canal de plataforma, que e
       // o que um teste de widget suporta.
       leitorDeQr: const LeitorDeQrNaoEmbarcado(),
+      // O ouvinte de push entra com a porta NAO EMBARCADA, pela mesma razao das
+      // outras cinco: `FirebaseMessaging.onMessage` num ambiente sem canal de
+      // plataforma devolve stream que nunca emite e nunca fecha, e
+      // `getInitialMessage()` um `Future` que nunca resolve -- o `pumpAndSettle`
+      // deste caso esperaria para sempre.
+      avisosRecebidos:
+          OuvinteDeAvisos(mensagens: const MensagensDePushNaoEmbarcadas()),
       avisos: const AvisosNaoEmbarcados(),
       oportunidades:
           OportunidadesDeAviso(deposito: DepositoDeOportunidadesEmMemoria()),

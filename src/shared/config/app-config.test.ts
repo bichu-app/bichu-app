@@ -17,7 +17,13 @@ import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
 import { afterEach, describe, it } from 'node:test';
 
-import { loadAppConfig } from './app-config.js';
+import {
+  loadAppConfig,
+  PRAZO_CURTO_DO_ARMAZENAMENTO_MS,
+  PRAZO_DE_TRANSFERENCIA_DO_ARMAZENAMENTO_MS,
+  VAZAO_MINIMA_DO_ARMAZENAMENTO_BYTES_POR_SEGUNDO,
+} from './app-config.js';
+import { TETO_DE_BYTES } from '../../modules/media/domain/chave-de-objeto.js';
 
 function gerarPem(): string {
   const { privateKey } = generateKeyPairSync('rsa', {
@@ -88,7 +94,14 @@ function ambienteCompleto(): Record<string, string> {
   };
 }
 
-const CHAVES_DO_AMBIENTE = [...Object.keys(ambienteCompleto()), 'NODE_ENV'];
+const CHAVES_DO_AMBIENTE = [
+  ...Object.keys(ambienteCompleto()),
+  'NODE_ENV',
+  // Opcionais, e fora da bancada de propósito: o caso do padrão precisa vê-las
+  // AUSENTES, e um valor herdado do processo mediria o ambiente de quem roda.
+  'OBJECT_STORAGE_TIMEOUT_MS',
+  'OBJECT_STORAGE_TRANSFER_TIMEOUT_MS',
+];
 const ORIGINAL = new Map(CHAVES_DO_AMBIENTE.map((nome) => [nome, process.env[nome]]));
 
 /**
@@ -420,4 +433,42 @@ void describe('TAG_CODE_INDEX_KEY: índice cego ausente não degrada, derruba a 
     assert.equal(config.tagCodeIndexKey.length, 32);
     assert.equal(config.tagCodeIndexKey.toString('hex'), 'd2'.repeat(32));
   });
+});
+
+void describe('Prazos do armazenamento de objeto: toda chamada de rede termina', () => {
+  void it('ausentes, valem os padrões: 5 s para metadado, 45 s para transferência', () => {
+    aplicar(ambienteCompleto());
+    const { objectStorage } = loadAppConfig();
+    assert.equal(objectStorage.prazoCurtoMs, 5_000);
+    assert.equal(objectStorage.prazoDeTransferenciaMs, 45_000);
+  });
+
+  void it('o prazo de transferência cobre o maior objeto aceito na vazão mínima', () => {
+    // Se o teto da foto subir e o prazo não acompanhar, o original grande passa
+    // a ser abortado no meio do download do worker — e a falha parece rede.
+    const necessario =
+      (TETO_DE_BYTES / VAZAO_MINIMA_DO_ARMAZENAMENTO_BYTES_POR_SEGUNDO) * 1000 + PRAZO_CURTO_DO_ARMAZENAMENTO_MS;
+    assert.ok(
+      PRAZO_DE_TRANSFERENCIA_DO_ARMAZENAMENTO_MS >= necessario,
+      `prazo de ${String(PRAZO_DE_TRANSFERENCIA_DO_ARMAZENAMENTO_MS)} ms < ${String(necessario)} ms exigidos por TETO_DE_BYTES`,
+    );
+  });
+
+  void it('o ambiente sobrepõe os dois', () => {
+    aplicar({
+      ...ambienteCompleto(),
+      OBJECT_STORAGE_TIMEOUT_MS: '1500',
+      OBJECT_STORAGE_TRANSFER_TIMEOUT_MS: '120000',
+    });
+    const { objectStorage } = loadAppConfig();
+    assert.equal(objectStorage.prazoCurtoMs, 1500);
+    assert.equal(objectStorage.prazoDeTransferenciaMs, 120_000);
+  });
+
+  for (const invalido of ['0', '-1', '30s', '1.5', 'abc']) {
+    void it(`${JSON.stringify(invalido)} derruba a subida citando a variável, em vez de cair no padrão`, () => {
+      aplicar({ ...ambienteCompleto(), OBJECT_STORAGE_TRANSFER_TIMEOUT_MS: invalido });
+      assert.throws(loadAppConfig, /OBJECT_STORAGE_TRANSFER_TIMEOUT_MS/);
+    });
+  }
 });

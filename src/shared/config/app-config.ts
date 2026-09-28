@@ -213,6 +213,16 @@ export interface ObjectStorageConfig {
   readonly bucketPrivate: string;
   /** SÓ as derivadas que a rota pública mostra, servidas pelo domínio de mídia. */
   readonly bucketPublic: string;
+  /**
+   * Prazo de HEAD e DELETE: sem corpo, é ida e volta de metadado.
+   *
+   * O `fetch` do Node não tem prazo padrão. Sem este número, um armazenamento
+   * que aceita a conexão e não responde prende o trabalho do worker até a
+   * varredura de órfãos o soltar.
+   */
+  readonly prazoCurtoMs: number;
+  /** Prazo de GET e PUT, que carregam os bytes da foto. Cobre a leitura do corpo. */
+  readonly prazoDeTransferenciaMs: number;
 }
 
 const SEGUNDO = 1;
@@ -225,6 +235,53 @@ const TTL_INATIVIDADE_PADRAO = 30 * DIA;
 const TTL_INATIVIDADE_CONTINUAR_CONECTADO = 180 * DIA;
 const TTL_ABSOLUTO = 180 * DIA;
 const TOLERANCIA_DE_RELOGIO = 60 * SEGUNDO;
+
+const MILISSEGUNDO_POR_SEGUNDO = 1000;
+
+/**
+ * HEAD e DELETE. Cinco segundos é duas ordens de grandeza acima do que o MinIO
+ * na mesma rede leva, e ainda folgado para um gerenciado do outro lado da
+ * internet. Mais que isso não é lentidão, é armazenamento fora do ar.
+ */
+export const PRAZO_CURTO_DO_ARMAZENAMENTO_MS = 5 * MILISSEGUNDO_POR_SEGUNDO;
+
+/**
+ * Vazão mínima que o prazo de transferência tolera: 256 KiB/s, ou 2 Mbit/s.
+ *
+ * O prazo sai do TAMANHO, e não de um número redondo: o maior objeto que
+ * trafega é o original da foto, cujo teto é 10 MiB (`TETO_DE_BYTES`, em
+ * `modules/media/domain/chave-de-objeto.ts`). 10 MiB a 256 KiB/s são 40 s; com
+ * o prazo curto somado para a ida e volta do cabeçalho, 45 s.
+ *
+ * O teto não é importado daqui porque `shared/` não depende de módulo. O teste
+ * de `app-config.test.ts` importa os dois e reprova se o teto subir sem que
+ * este prazo acompanhe.
+ */
+export const VAZAO_MINIMA_DO_ARMAZENAMENTO_BYTES_POR_SEGUNDO = 256 * 1024;
+const MAIOR_OBJETO_TRAFEGADO_BYTES = 10 * 1024 * 1024;
+export const PRAZO_DE_TRANSFERENCIA_DO_ARMAZENAMENTO_MS =
+  (MAIOR_OBJETO_TRAFEGADO_BYTES / VAZAO_MINIMA_DO_ARMAZENAMENTO_BYTES_POR_SEGUNDO) * MILISSEGUNDO_POR_SEGUNDO +
+  PRAZO_CURTO_DO_ARMAZENAMENTO_MS;
+
+/**
+ * Prazo em milissegundos, inteiro e positivo, ou o padrão quando ausente.
+ *
+ * Valor inválido DERRUBA a subida em vez de cair no padrão: `30s` lido por
+ * `parseInt` vira 30 ms e aborta toda transferência, e `0` ou `NaN` no
+ * `AbortSignal.timeout` desligariam o prazo ou abortariam na hora — nenhum dos
+ * dois aparece como erro de configuração, aparece como foto que não processa.
+ */
+function milissegundosEnv(nome: string, padrao: number): number {
+  const bruto = optionalEnv(nome);
+  if (bruto === undefined) return padrao;
+  if (!/^[1-9]\d*$/.test(bruto.trim())) {
+    throw new Error(
+      `${nome}=${JSON.stringify(bruto)} não é um prazo válido. Use um inteiro positivo em ` +
+        `milissegundos, ou apague a variável para usar o padrão de ${String(padrao)} ms.`,
+    );
+  }
+  return Number(bruto.trim());
+}
 
 /**
  * Aceita PEM cru ou PEM em base64. As duas formas existem porque quebra de
@@ -627,6 +684,11 @@ export function loadAppConfig(): AppConfig {
     forcePathStyle: boolEnv('OBJECT_STORAGE_FORCE_PATH_STYLE', true),
     bucketPrivate: requireEnv('OBJECT_BUCKET_PRIVATE'),
     bucketPublic: requireEnv('OBJECT_BUCKET_PUBLIC'),
+    prazoCurtoMs: milissegundosEnv('OBJECT_STORAGE_TIMEOUT_MS', PRAZO_CURTO_DO_ARMAZENAMENTO_MS),
+    prazoDeTransferenciaMs: milissegundosEnv(
+      'OBJECT_STORAGE_TRANSFER_TIMEOUT_MS',
+      PRAZO_DE_TRANSFERENCIA_DO_ARMAZENAMENTO_MS,
+    ),
   };
 
   // `MAIL_TRANSPORT` recusa valor desconhecido, e isso nao e preciosismo: a

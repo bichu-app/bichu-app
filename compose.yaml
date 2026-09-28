@@ -26,7 +26,21 @@
 # nucleo mata dentro daquele grupo, e o Postgres nem fica sabendo. O worker
 # morre, reinicia, e o trabalho volta para a tabela `jobs`.
 #
-# Soma dos limites: 1792 MB, deixando ~256 MB para o sistema operacional.
+# Soma dos limites DO QUE RODA DE FATO: 1664 MB, deixando ~384 MB para o
+# sistema operacional. Entram `db` 640, `objeto` 320, `api` 192, `worker` 448 e
+# `edge` 64. Ficam fora `migracao` (256, termina antes de `api` e `worker`
+# subirem), `mail` (perfis dev/qa, nao sobe no hospedado) e `ferramentas`
+# (1 GB, perfil proprio, so sob `docker compose run`: e o teto do `tsc`, e nao
+# de runtime). Era 1792 ate 23/09; a `api` desceu de 320 para 192, medida.
+#
+# 384 MB e a folga que considero segura, e o piso e 300: nucleo, systemd e
+# sshd (~80), dockerd e containerd (~100), Ops Agent (~80 a 100, exigido pelo
+# alerta de memoria do ADR-0029) e o resto para cache de pagina.
+#
+# NO MERGE, ESTA LINHA NAO SE RESOLVE ESCOLHENDO UM LADO. Duas branches que
+# mexem em teto produzem dois numeros certos para a arvore de cada uma e um
+# errado para a juncao. Quem integra SOMA os `mem_limit` do que roda de fato e
+# MEDE de novo com `docker stats` na pilha juntada.
 # Se apertar, e2-medium e REINICIO e nao migracao: parar, trocar o tipo,
 # religar. Dura minutos.
 #
@@ -226,7 +240,16 @@ services:
         #
         #   BUILD_COMMIT=$(git rev-parse HEAD) docker compose build
         BUILD_COMMIT: ${BUILD_COMMIT:-}
-    mem_limit: 320m
+    # 192m, MEDIDO em 23/09 (pilha isolada, carga pela borda: 150 conexoes por
+    # 90 s, mistura de /v1/health, login com PBKDF2, JWKS e 404):
+    #
+    #   repouso 54 MiB   pico 93 MiB   -- contra 320m ate aqui
+    #
+    # 192 e o dobro do pico. `--max-old-space-size` NAO e necessario: o Node 22
+    # le o teto do cgroup e dimensiona o heap por ele (com 320m o limite de
+    # heap medido era 259 MiB). O `tsc` nao roda aqui: e o servico
+    # `ferramentas`, com teto proprio.
+    mem_limit: 192m
     command: ["node", "dist/bin/api.js"]
     env_file: [.env]
     environment:
@@ -312,14 +335,41 @@ services:
         # compara `docker inspect` de api e worker, reprovaria por uma
         # divergencia que nao e de codigo.
         BUILD_COMMIT: ${BUILD_COMMIT:-}
+    # 448m FICA, e nao desce para 320 como a `api`: FOLGA ANTES DE ECONOMIA.
+    #
+    # Medido pela sessao App no container (sharp 0.35.4, libvips 8.18.6), com
+    # este mesmo teto, sobre o pior caso aceito (50 MP exatos, JPEG
+    # progressivo), dez fotos em serie:
+    #
+    #   cache do libvips ligado (padrao) .. morto pelo cgroup na SEGUNDA foto,
+    #                                        saida 137
+    #   cache desligado .................. pico 304 a 313 MiB, estavel, saida 0
+    #
+    # O conserto e `sharp.cache(false)`, codigo do worker, na branch da App
+    # `correcao/worker-que-morre-na-sequencia` (5eb4e2b). Com ele, 320m
+    # deixaria 7 a 16 MiB de folga sobre o pico: isso nao e teto, e aposta. Por
+    # isso 448m, cerca de 135 MiB acima do pico medido.
+    #
+    # `MALLOC_TRIM_THRESHOLD_` NAO entra aqui, embora a versao anterior deste
+    # comentario a citasse: a mesma medicao a testou nos dois sentidos e a
+    # diferenca foi de 4 a 6 MiB (ruido), e com o cache ligado o processo morre
+    # igual, com ela ou sem ela. A retencao e do cache do libvips, nao do
+    # alocador da glibc.
+    #
+    # E a morte nao e ruidosa: o trabalho em curso fica `running` para sempre
+    # (`claim` so pega `pending`), a foto fica `processing` para sempre, e o
+    # tutor nao ve erro.
+    #
+    # Nao ha `WORKER_IMAGE_CONCURRENCY` aqui, e isso e de proposito: ate
+    # 28/09 havia, com o comentario "uma imagem por vez", mas NENHUMA linha do
+    # repositorio lia a variavel. Um limite declarado que nao existe e pior que
+    # nenhum, porque convence quem le. A guarda real contra duas decodificacoes
+    # ao mesmo tempo e a passada sem reentrada do worker, na mesma branch da
+    # App: tres decodificacoes simultaneas matam o processo nestes 448m mesmo
+    # com o cache desligado.
     mem_limit: 448m
     command: ["node", "dist/bin/worker.js"]
     env_file: [.env]
-    environment:
-      # UMA imagem por vez. Duas fotos grandes em paralelo estouram 448 MB com
-      # folga, e ai o limite protege o Postgres mas o worker morre em toda
-      # foto. Processar em serie e mais lento e e o que cabe em 2 GB.
-      WORKER_IMAGE_CONCURRENCY: "1"
     depends_on:
       db: {condition: service_healthy}
       objeto: {condition: service_healthy}
@@ -371,9 +421,9 @@ services:
   #     estiver aqui. Subir 320m para caber um compilador faz o portao passar a
   #     abencoar, em producao, uma api com o dobro do teto que ela precisa -- e
   #     ele existe justamente para o teto ser real.
-  #  2. A soma no topo deste arquivo (1792 MB, ~256 MB para o sistema) e o
-  #     orcamento da e2-small de 2 GB. `api` em 700m levaria a soma a 2172 MB, e
-  #     o limite deixaria de caber na maquina que ele protege.
+  #  2. A soma no topo deste arquivo (1792 MB quando isto foi escrito, 1664
+  #     desde 23/09) e o orcamento da e2-small de 2 GB. `api` em 700m a levaria
+  #     a 2172 MB, e o limite deixaria de caber na maquina que ele protege.
   #
   # Entao a compilacao sai do servico com teto de runtime e ganha o seu.
   # Nao e desenho novo: `infra/integracao/compose.integracao.yaml` ja separa
