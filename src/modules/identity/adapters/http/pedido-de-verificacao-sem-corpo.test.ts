@@ -63,7 +63,6 @@ function repositorioQueNaoDeveriaSerTocado(): IdentityRepository {
     atualizarPerfil: recusar('atualizarPerfil'),
     buscarContaPorEmail: recusar('buscarContaPorEmail'),
     buscarCredencialLocalPorEmail: recusar('buscarCredencialLocalPorEmail'),
-    papeisDaConta: recusar('papeisDaConta'),
     regravarCredencial: recusar('regravarCredencial'),
     registrarLogin: recusar('registrarLogin'),
     gravarRefresh: recusar('gravarRefresh'),

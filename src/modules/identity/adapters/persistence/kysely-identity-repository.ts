@@ -309,11 +309,6 @@ export function criarIdentityRepository(db: Db, ids: IdGenerator): IdentityRepos
       }
     },
 
-    async papeisDaConta(userId: UserId): Promise<readonly string[]> {
-      const linhas = await db.selectFrom('user_roles').select('role').where('user_id', '=', userId).execute();
-      return linhas.map((linha) => linha.role);
-    },
-
     async buscarContaPorId(id: UserId): Promise<Conta | undefined> {
       const linha = await db
         .selectFrom('users')

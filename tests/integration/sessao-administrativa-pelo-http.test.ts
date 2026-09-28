@@ -625,6 +625,46 @@ function contextoVazio(): { correlationId: string; ip: undefined; userAgent: und
 }
 
 
+void describe('P21 (a): as duas portas nao se cruzam (D42, forma de 28/09)', () => {
+  const corpoDoProblema = (r: Resposta) => ({
+    status: r.status, type: tipo(r), title: r.corpo?.['title'], detail: r.corpo?.['detail'],
+  });
+  const loginDoPainel = (email: string, password: string): Promise<Resposta> =>
+    chamar(principal, 'POST', '/admin/auth/login', {
+      cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email, password },
+    });
+  const loginDoApp = (email: string, password: string): Promise<Resposta> =>
+    chamar(principal, 'POST', '/auth/login', { corpo: { email, password }, semSuperficie: true });
+
+  void it('credencial valida do app no login do painel: 401 identico ao da senha errada', async () => {
+    const tutora = await contaDoApp();
+    const certaDoApp = await loginDoPainel(tutora.email, SENHA);
+    const errada = await loginDoPainel(tutora.email, 'outra frase longa errada aqui');
+    assert.equal(certaDoApp.status, 401, JSON.stringify(certaDoApp.corpo));
+    assert.deepEqual(corpoDoProblema(certaDoApp), corpoDoProblema(errada));
+  });
+
+  void it('credencial valida do painel no login do app: 401 identico ao da senha errada', async () => {
+    const admin = await contaDoPainel();
+    const certaDoPainel = await loginDoApp(admin.email, SENHA);
+    const errada = await loginDoApp(admin.email, 'outra frase longa errada aqui');
+    assert.equal(certaDoPainel.status, 401, JSON.stringify(certaDoPainel.corpo));
+    assert.deepEqual(corpoDoProblema(certaDoPainel), corpoDoProblema(errada));
+  });
+
+  void it('mesma pessoa, mesmo e-mail nas duas tabelas, senhas diferentes: cada porta aceita so a sua', async () => {
+    const email = `mesma-${randomUUID().slice(0, 8)}@exemplo.invalid`;
+    await contaDoApp({ email, phc: phcVazada });
+    await contaDoPainel({ email });
+    // A senha do app aqui e a que a dubla chama de vazada so para ter um
+    // segundo hash pronto; na porta do app a base de vazadas nao recusa login.
+    assert.equal((await loginDoPainel(email, SENHA)).status, 200, 'a senha do painel nao abriu o painel');
+    assert.equal((await loginDoPainel(email, SENHA_VAZADA)).status, 401, 'a senha do app abriu o painel');
+    assert.equal((await loginDoApp(email, SENHA_VAZADA)).status, 200, 'a senha do app nao abriu o app');
+    assert.equal((await loginDoApp(email, SENHA)).status, 401, 'a senha do painel abriu o app');
+  });
+});
+
 void describe('P17: a trilha na mesma transacao, por operacao da sessao', () => {
   void it('toda escrita administrativa deste servidor grava a sua acao na trilha', async () => {
     const escritas = principal.rotasAdministrativas.filter((rota) => rota.method !== 'get');

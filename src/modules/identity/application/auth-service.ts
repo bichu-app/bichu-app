@@ -16,7 +16,6 @@ import {
   verificarSenha,
 } from '../domain/password.js';
 import { validarSenha } from '../domain/password-policy.js';
-import { ehContaDedicada } from '../domain/sessao-administrativa.js';
 import {
   instanteDeEmissaoDoAcesso,
   instanteDeRevogacao,
@@ -680,25 +679,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       const conta = await deps.repositorio.buscarContaPorId(credencial.userId);
       if (conta === undefined) throw problemas.credencialRecusada();
 
-      // D42 (ADR-0027 item 5). Conta com papel `admin` ou `moderator` e
-      // DEDICADA e nao entra pela porta do tutor, nem com a senha certa: o MESMO
-      // 401 da senha errada, depois da MESMA derivacao. Sem isto, esta porta
-      // (frouxa por decisao, ADR-0020) testaria a senha de quem publica no app
-      // sem nenhum dos limites do login do painel (T2).
-      if (ehContaDedicada(await deps.repositorio.papeisDaConta(conta.id))) {
-        await deps.trilha.record({
-          actorKind: 'user',
-          actorUserId: conta.id,
-          actorIp: contexto.ip,
-          correlationId: contexto.correlationId,
-          action: 'auth.login_failed',
-          resourceKind: 'user',
-          resourceId: conta.id,
-          metadata: { reason: 'dedicated_admin_account' },
-        });
-        throw problemas.credencialRecusada();
-      }
-
       // Rehash transparente. Guardar os parâmetros junto do hash só vale alguma
       // coisa se alguém os usar; sem isto o formato PHC é documentação.
       if (precisaDeRehash(credencial.passwordPhc)) {
@@ -806,24 +786,6 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
 
       const conta = await deps.repositorio.buscarContaPorId(armazenado.userId);
       if (conta === undefined) throw problemas.sessaoExpirada();
-
-      // D42 do lado da renovacao: conceder o papel revoga as sessoes moveis, e
-      // esta recusa cobre a familia que tenha escapado da revogacao. A mesma
-      // resposta de refresh vencido, para nao contar a ninguem que a conta
-      // ganhou papel.
-      if (ehContaDedicada(await deps.repositorio.papeisDaConta(conta.id))) {
-        await deps.trilha.record({
-          actorKind: 'user',
-          actorUserId: conta.id,
-          actorIp: contexto.ip,
-          correlationId: contexto.correlationId,
-          action: 'auth.refresh_rejected_revoked_session',
-          resourceKind: 'refresh_family',
-          resourceId: armazenado.familyId,
-          metadata: { reason: 'dedicated_admin_account' },
-        });
-        throw problemas.sessaoExpirada();
-      }
 
       // SEC-006 do lado do refresh. Sem esta comparação a troca de senha não
       // expulsava ninguém: ela empurrava `sessions_invalid_before`, `autenticar()`

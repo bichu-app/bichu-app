@@ -66,7 +66,6 @@ function repositorioQueRecusaTudo(): IdentityRepository {
     gravarRefresh: () => naoDeveriaTerChegado('gravarRefresh'),
     buscarContaPorEmail: () => naoDeveriaTerChegado('buscarContaPorEmail'),
     buscarContaPorId: () => naoDeveriaTerChegado('buscarContaPorId'),
-    papeisDaConta: () => naoDeveriaTerChegado('papeisDaConta'),
     buscarRefreshPorHash: () => naoDeveriaTerChegado('buscarRefreshPorHash'),
     revogarFamilia: () => naoDeveriaTerChegado('revogarFamilia'),
     revogarTodasAsFamilias: () => naoDeveriaTerChegado('revogarTodasAsFamilias'),

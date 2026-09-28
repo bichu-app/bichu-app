@@ -93,12 +93,6 @@ interface RedefinicaoPendente {
 }
 
 class RepositorioFalso implements IdentityRepository {
-  /** D42 (BICHUS-259): papeis por conta. Sem entrada, a conta e de tutor. */
-  readonly papeis = new Map<string, string[]>();
-  papeisDaConta(userId: UserId): Promise<readonly string[]> {
-    return Promise.resolve(this.papeis.get(userId) ?? ['tutor']);
-  }
-
   public readonly revogacoes: { familyId: string; motivo: MotivoDeRevogacao; agora: Instant }[] = [];
   public readonly rotacoes: NovoRefresh[] = [];
 
@@ -1369,68 +1363,5 @@ void describe('o refresh emitido logo depois de uma revogação dupla renova (BI
     const erro = await capturar(bancada.servico.renovar('refresh-copiado', CONTEXTO));
     assert.equal(erro.status, 401);
     assert.deepEqual(bancada.repo.rotacoes, [], 'a recusa vem ANTES da rotação');
-  });
-});
-
-/**
- * D42 (ADR-0027 item 5, BICHUS-259): a conta com papel `admin` ou `moderator` e
- * dedicada, e a porta do tutor a recusa com o MESMO 401 da senha errada, no
- * login e na renovacao.
- */
-void describe('conta dedicada nao entra pela porta do tutor (D42)', () => {
-  const EMAIL = 'operacao@exemplo.test';
-  const SENHA = 'uma frase longa que so a operacao sabe';
-
-  async function bancadaDeLogin(papeis: string[]): Promise<Bancada> {
-    const bancada = montar({
-      conta: contaAtiva(0 as Instant),
-      login: {
-        identityId: 'identidade-1',
-        userId: VITIMA,
-        passwordPhc: await gerarHashDeSenha(SENHA),
-        mustChange: false,
-      },
-    });
-    bancada.repo.papeis.set(VITIMA, papeis);
-    return bancada;
-  }
-
-  void it('admin com a senha CERTA: o mesmo 401 de senha errada, e nenhuma sessao aberta', async () => {
-    const admin = await bancadaDeLogin(['tutor', 'admin']);
-    const certa = await capturar(admin.servico.entrar({ email: EMAIL, password: SENHA, staySignedIn: false }, CONTEXTO));
-
-    const tutor = await bancadaDeLogin(['tutor']);
-    const errada = await capturar(
-      tutor.servico.entrar({ email: EMAIL, password: 'outra frase qualquer aqui', staySignedIn: false }, CONTEXTO),
-    );
-
-    assert.equal(certa.status, 401);
-    assert.equal(certa.problemType, errada.problemType);
-    assert.equal(certa.title, errada.title);
-    assert.equal(certa.detail, errada.detail);
-    assert.deepEqual(admin.repo.rotacoes, []);
-    assert.ok(
-      admin.eventos.some((e) => e.action === 'auth.login_failed' && e.metadata?.['reason'] === 'dedicated_admin_account'),
-      'a recusa nao foi para a trilha',
-    );
-  });
-
-  void it('moderator tambem e dedicado; tutor continua entrando', async () => {
-    const moderador = await bancadaDeLogin(['tutor', 'moderator']);
-    const erro = await capturar(moderador.servico.entrar({ email: EMAIL, password: SENHA, staySignedIn: false }, CONTEXTO));
-    assert.equal(erro.status, 401);
-
-    const tutor = await bancadaDeLogin(['tutor']);
-    const sessao = await tutor.servico.entrar({ email: EMAIL, password: SENHA, staySignedIn: false }, CONTEXTO);
-    assert.ok(sessao.access_token.length > 0);
-  });
-
-  void it('refresh de conta que ganhou papel: o mesmo 401 de refresh vencido, sem rotacionar', async () => {
-    const bancada = montar({ refresh: refreshArmazenado({}), conta: contaAtiva(0 as Instant) });
-    bancada.repo.papeis.set(VITIMA, ['tutor', 'admin']);
-    const erro = await capturar(bancada.servico.renovar('refresh-apresentado', CONTEXTO));
-    assert.equal(erro.status, 401);
-    assert.equal(erro.problemType, 'token-expired');
-    assert.deepEqual(bancada.repo.rotacoes, []);
   });
 });
