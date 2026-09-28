@@ -107,7 +107,7 @@ export default function Tags() {
           <h1 className="t-headline">Tags</h1>
           <p className="t-body-sm c-sec">O vocabulário que os produtos usam. Cada produto escolhe até {MAXIMO_DE_TAGS} destas.</p>
         </div>
-        <button type="button" className="btn pri" disabled={cheio} aria-describedby={cheio ? 'tags-limite' : undefined} onClick={() => setCriar(true)}>
+        <button type="button" className="btn pri" data-cy="tag-criar" disabled={cheio} aria-describedby={cheio ? 'tags-limite' : undefined} onClick={() => setCriar(true)}>
           <Icone nome="add" tamanho="s20" />
           Criar tag
         </button>
@@ -183,7 +183,7 @@ export default function Tags() {
                   <LinhasCarregando linhas={6} colunas={['w-upd', 'w-status', 'w-preco']} />
                 ) : (
                   estado.itens.map((tag) => (
-                    <tr key={tag.slug}>
+                    <tr key={tag.slug} data-cy="tag-linha" data-slug={tag.slug}>
                       <td className="t-label">{tag.label}</td>
                       <td className="w-upd t-body-sm">{tag.item_count}</td>
                       <td className="w-status">
@@ -191,12 +191,13 @@ export default function Tags() {
                       </td>
                       <td className="w-preco">
                         <div className="acts">
-                          <button type="button" className="btn ghost sm" aria-label={`Renomear a tag ${tag.label}`} onClick={() => setRenomear(tag)}>
+                          <button type="button" className="btn ghost sm" data-cy="tag-renomear" aria-label={`Renomear a tag ${tag.label}`} onClick={() => setRenomear(tag)}>
                             Renomear
                           </button>
                           <button
                             type="button"
                             className="btn ghost sm"
+                            data-cy="tag-alternar"
                             disabled={!tag.active && cheio}
                             aria-label={`${tag.active ? 'Desativar' : 'Reativar'} a tag ${tag.label}`}
                             onClick={() => void alternar(tag)}

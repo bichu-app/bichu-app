@@ -101,6 +101,7 @@ export function DialogoComSenha({
         <p className="t-body-sm c-sec">Digite sua senha para confirmar.</p>
         <CampoDeSenha
           id="senha-de-confirmacao"
+          dataCy="senha-de-confirmacao"
           rotulo="Sua senha"
           valor={senha}
           aoMudar={setSenha}
@@ -114,7 +115,7 @@ export function DialogoComSenha({
           <button type="button" className="btn sec" onClick={aoFechar}>
             Cancelar
           </button>
-          <button type="submit" className={perigo ? 'btn danger' : 'btn pri'} disabled={!!bloqueio} aria-busy={carregando || undefined}>
+          <button type="submit" data-cy="senha-confirmar" className={perigo ? 'btn danger' : 'btn pri'} disabled={!!bloqueio} aria-busy={carregando || undefined}>
             {carregando && <span className="spin" aria-hidden="true" />}
             {rotuloDaAcao}
           </button>

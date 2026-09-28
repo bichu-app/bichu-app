@@ -19,6 +19,7 @@ export function Banner({
   aoFechar,
   id,
   className,
+  dataCy,
 }: {
   tipo: TipoDeBanner;
   titulo?: ReactNode;
@@ -27,9 +28,12 @@ export function Banner({
   aoFechar?: () => void;
   id?: string;
   className?: string;
+  /** Gancho do teste de ponta a ponta de hml (Cypress). */
+  dataCy?: string;
 }) {
   return (
     <div
+      data-cy={dataCy ?? `banner-${tipo}`}
       className={`banner ${tipo}${className ? ` ${className}` : ''}`}
       role={tipo === 'erro' ? 'alert' : 'status'}
       {...(id ? { id } : {})}
@@ -131,6 +135,7 @@ export function CampoDeSenha({
   somenteLeitura,
   autoFoco,
   referencia,
+  dataCy,
 }: {
   id: string;
   rotulo: string;
@@ -138,6 +143,7 @@ export function CampoDeSenha({
   aoMudar: (v: string) => void;
   erro?: string | undefined;
   ajuda?: string | undefined;
+  dataCy?: string;
   desabilitado?: boolean;
   somenteLeitura?: boolean;
   autoFoco?: boolean;
@@ -153,6 +159,7 @@ export function CampoDeSenha({
           ref={referencia}
           className="input"
           id={id}
+          data-cy={dataCy ?? id}
           type={visivel ? 'text' : 'password'}
           autoComplete="current-password"
           value={valor}
@@ -206,6 +213,7 @@ export function CampoDeTexto({
   somenteLeitura,
   autoFoco,
   referencia,
+  dataCy,
 }: {
   id: string;
   rotulo: string;
@@ -213,6 +221,7 @@ export function CampoDeTexto({
   aoMudar: (v: string) => void;
   erro?: string | undefined;
   ajuda?: string | undefined;
+  dataCy?: string;
   contador?: boolean;
   maximo?: number;
   tipo?: 'text' | 'email' | 'url' | 'date' | 'number';
@@ -232,6 +241,7 @@ export function CampoDeTexto({
         ref={referencia}
         className="input"
         id={id}
+        data-cy={dataCy ?? id}
         type={tipo}
         value={valor}
         onChange={(e) => aoMudar(e.target.value)}

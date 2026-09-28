@@ -147,6 +147,8 @@ export default function ListaDeProdutos() {
       recarregar();
       return { ok: false, mensagem: 'Alguém alterou este produto antes de você. A lista foi atualizada; confira e tente de novo.' };
     }
+    if (tipoDoProblema(error) === 'reauthentication-required')
+      return { ok: false, mensagem: 'A confirmação com senha não vale mais. Digite a senha de novo e confirme.' };
     return { ok: false, mensagem: 'Não conseguimos retirar o produto. Tente de novo.' };
   }
 
@@ -171,7 +173,7 @@ export default function ListaDeProdutos() {
         <h1 className="t-headline">Loja</h1>
         <p className="t-body-sm c-sec">Produtos que aparecem na Loja do app, com link para o parceiro.</p>
       </div>
-      <Link className="btn pri" to="/loja/novo">
+      <Link className="btn pri" to="/loja/novo" data-cy="loja-novo-produto">
         <Icone nome="add" tamanho="s20" />
         Novo produto
       </Link>
@@ -351,7 +353,7 @@ function LinhaDoProduto({ item, menu, aoRenovar }: { item: Item; menu: ItemDoMen
   const especies = item.species.map((e) => ESPECIES[e]).join(', ');
   const n = item.images.length;
   return (
-    <tr>
+    <tr data-cy="produto-linha" data-slug={item.slug}>
       <td>
         <div className="prod">
           <span className="thumb">{miniatura ? <img src={miniatura} alt="" loading="lazy" width={48} height={48} /> : <Icone nome="image" tamanho="s20" />}</span>

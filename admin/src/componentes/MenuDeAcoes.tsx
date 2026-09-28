@@ -7,6 +7,17 @@ export interface ItemDoMenu {
   icone: NomeDoIcone;
   aoEscolher: () => void;
   perigo?: boolean;
+  /** Gancho do teste de ponta a ponta; sem ele, sai do rotulo. */
+  dataCy?: string;
+}
+
+function ganchoDoRotulo(rotulo: string): string {
+  return `acao-${rotulo
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')}`;
 }
 
 /**
@@ -81,6 +92,7 @@ export function MenuDeAcoes({
         type="button"
         className={classeDoBotao}
         aria-haspopup="menu"
+        data-cy="menu-de-acoes"
         aria-expanded={aberto}
         aria-controls={aberto ? idDoMenu : undefined}
         aria-label={rotuloDoBotao}
@@ -102,6 +114,7 @@ export function MenuDeAcoes({
               <button
                 type="button"
                 role="menuitem"
+                data-cy={item.dataCy ?? ganchoDoRotulo(item.rotulo)}
                 className={item.perigo ? 'del' : undefined}
                 onClick={() => {
                   fechar(true);

@@ -92,6 +92,7 @@ export function BarraDeListagem({
           <span className="sr">{rotuloDaBusca}</span>
           <input
             type="search"
+            data-cy="busca"
             value={texto}
             placeholder={placeholder}
             onChange={(e) => setTexto(e.target.value)}
@@ -116,7 +117,7 @@ export function BarraDeListagem({
         {seletores?.map((s) => (
           <label key={s.id} className={s.prefixoVisivel ? 'ordem' : 'ordem sel'}>
             {s.prefixoVisivel ? <span className="t-body-sm c-sec">{s.prefixoVisivel}</span> : <span className="sr">{s.rotuloAcessivel}</span>}
-            <select id={s.id} value={s.valor} onChange={(e) => s.aoMudar(e.target.value)}>
+            <select id={s.id} data-cy={s.id} value={s.valor} onChange={(e) => s.aoMudar(e.target.value)}>
               {s.opcoes.map((o) => (
                 <option key={o.valor} value={o.valor}>
                   {o.rotulo}
@@ -136,6 +137,7 @@ export function BarraDeListagem({
               key={c.valor}
               type="button"
               className="chip"
+              data-cy={`filtro-${c.valor}`}
               role="radio"
               aria-checked={chipAtivo === c.valor}
               onClick={() => aoEscolherChip?.(c.valor)}

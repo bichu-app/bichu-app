@@ -224,6 +224,7 @@ export default function FormularioDeParceiro() {
         <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
         <CampoDeTexto
           id="p-nome"
+          dataCy="parceiro-nome"
           rotulo="Nome *"
           valor={valores.nome}
           aoMudar={(v) => mudar({ nome: v })}
@@ -233,6 +234,7 @@ export default function FormularioDeParceiro() {
         />
         <CampoDeTexto
           id="p-slug"
+          dataCy="parceiro-identificador"
           rotulo="Identificador *"
           valor={valores.slug}
           aoMudar={(v) => mudar({ slug: v.toLowerCase(), slugEditado: true })}
@@ -246,6 +248,7 @@ export default function FormularioDeParceiro() {
         />
         <CampoDeTexto
           id="p-host"
+          dataCy="parceiro-site"
           rotulo="Site do parceiro *"
           valor={valores.host}
           aoMudar={(v) => mudar({ host: v.toLowerCase() })}
@@ -256,6 +259,7 @@ export default function FormularioDeParceiro() {
         />
         <CampoDeTexto
           id="p-ordem"
+          dataCy="parceiro-ordem"
           rotulo="Ordem na Loja"
           valor={valores.ordem}
           aoMudar={(v) => mudar({ ordem: v })}
@@ -285,7 +289,7 @@ export default function FormularioDeParceiro() {
           <Link className="btn sec" to="/loja/parceiros">
             Cancelar
           </Link>
-          <button type="submit" className="btn pri" aria-busy={salvando || undefined} disabled={salvando}>
+          <button type="submit" className="btn pri" data-cy="parceiro-salvar" aria-busy={salvando || undefined} disabled={salvando}>
             {salvando && <span className="spin" aria-hidden="true" />}
             {editando ? 'Salvar alterações' : 'Cadastrar parceiro'}
           </button>

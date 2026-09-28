@@ -116,7 +116,7 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
   let banner: ReactNode = null;
   if (aviso) {
     banner = (
-      <Banner tipo={aviso.tipo} {...(bloqueado ? { id: 'motivo-do-bloqueio' } : {})}>
+      <Banner tipo={aviso.tipo} dataCy="entrar-aviso" {...(bloqueado ? { id: 'motivo-do-bloqueio' } : {})}>
         {aviso.texto}
       </Banner>
     );
@@ -144,6 +144,7 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
         {banner}
         <CampoDeTexto
           id="l-email"
+          dataCy="entrar-email"
           rotulo="E-mail"
           tipo="email"
           autoComplete="username"
@@ -155,6 +156,7 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
         />
         <CampoDeSenha
           id="l-senha"
+          dataCy="entrar-senha"
           rotulo="Senha"
           valor={senha}
           aoMudar={setSenha}
@@ -164,6 +166,7 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
         />
         <button
           className="btn pri"
+          data-cy="entrar-botao"
           type="submit"
           disabled={bloqueado}
           aria-describedby={bloqueado ? 'motivo-do-bloqueio' : undefined}

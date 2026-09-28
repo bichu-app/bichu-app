@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
-import type { Esquemas } from '../api/cliente.ts';
+import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema } from '../api/problema.ts';
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
+import { Dialogo } from '../componentes/Dialogo.tsx';
 import { DialogoComSenha, type ResultadoDaAcaoComSenha } from '../componentes/DialogoComSenha.tsx';
 import { enviarImagem } from '../componentes/envio-de-imagem.ts';
 import { Galeria, type ImagemDaGaleria } from '../componentes/Galeria.tsx';
@@ -43,6 +44,24 @@ const AVISO = {
 const FALHA_DE_REDE = 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
 const CONFLITO = 'Alguém alterou este produto enquanto você editava, e nada foi gravado. Recarregar traz a versão atual e descarta o que você mudou aqui.';
 
+interface RascunhoDoProduto {
+  valores: ValoresDoProduto;
+  /** O ETag da leitura em que a pessoa estava editando. */
+  etag?: string;
+}
+
+/** Todos os parceiros ativos, pagina por pagina (o `limit` do contrato vai ate 100). */
+async function carregarParceirosAtivos(api: ClienteDaApi, sinal: AbortSignal): Promise<Parceiro[] | undefined> {
+  const todos: Parceiro[] = [];
+  for (let page = 1; page <= 50; page += 1) {
+    const { data } = await api.GET('/admin/store/partners', { params: { query: { active: true, limit: 100, page } }, signal: sinal });
+    if (!data) return undefined;
+    todos.push(...data.items);
+    if (todos.length >= data.total || data.items.length === 0) break;
+  }
+  return todos;
+}
+
 /** O que vai para o rascunho da sessao: sem arquivo e sem previa local, que nao sobrevivem a recarga. */
 function paraRascunho(v: ValoresDoProduto): ValoresDoProduto {
   return {
@@ -79,6 +98,7 @@ export default function FormularioDeProduto() {
   const [falha, setFalha] = useState<{ texto: string; recarregar?: boolean }>();
   const [criarTag, setCriarTag] = useState(false);
   const [retirar, setRetirar] = useState(false);
+  const [confirmarRetirada, setConfirmarRetirada] = useState(false);
   const [renovar, setRenovar] = useState(false);
   const [versao, setVersao] = useState(0);
   const resumo = useRef<HTMLDivElement>(null);
@@ -103,7 +123,7 @@ export default function FormularioDeProduto() {
     async function carregar() {
       const [respostaDoItem, respostaDosParceiros, respostaDasTags] = await Promise.all([
         itemSlug ? api.GET('/admin/store/items/{itemSlug}', { params: { path: { itemSlug } }, signal: sinal }) : Promise.resolve(undefined),
-        api.GET('/admin/store/partners', { params: { query: { active: true, limit: 100 } }, signal: sinal }),
+        carregarParceirosAtivos(api, sinal),
         api.GET('/admin/store/tags', { params: { query: { active: true, limit: 100 } }, signal: sinal }),
       ]);
       if (sinal.aborted) return;
@@ -111,21 +131,23 @@ export default function FormularioDeProduto() {
         setCarga({ chave, fase: respostaDoItem.response.status === 404 ? 'nao-encontrado' : 'erro' });
         return;
       }
-      if (!respostaDosParceiros.data || !respostaDasTags.data) {
+      if (!respostaDosParceiros || !respostaDasTags.data) {
         setCarga({ chave, fase: 'erro' });
         return;
       }
-      setParceiros(respostaDosParceiros.data.items);
+      setParceiros(respostaDosParceiros);
       setTags(respostaDasTags.data.items);
       let doServidor = VALORES_VAZIOS;
+      const rascunho = retomarRascunho<RascunhoDoProduto>(rotaDoRascunho);
       if (respostaDoItem?.data) {
         setItem(respostaDoItem.data);
-        setEtag(respostaDoItem.response.headers.get('ETag') ?? `"${respostaDoItem.data.version}"`);
+        // Rascunho de antes do login volta com o ETag que a pessoa tinha lido: se
+        // alguem salvou no meio, o If-Match antigo da 412 e nada se sobrescreve.
+        setEtag(rascunho?.etag ?? respostaDoItem.response.headers.get('ETag') ?? `"${respostaDoItem.data.version}"`);
         doServidor = valoresDoItem(respostaDoItem.data);
       }
       setBase(doServidor);
-      const rascunho = retomarRascunho<ValoresDoProduto>(rotaDoRascunho);
-      setValores(rascunho ?? doServidor);
+      setValores(rascunho?.valores ?? doServidor);
       setErrosDoServidorNaTela({});
       setTentouSalvar(undefined);
       setCarga({ chave, fase: 'pronto' });
@@ -138,10 +160,21 @@ export default function FormularioDeProduto() {
 
   // UX 29.2: se a sessao cair, o formulario fica guardado para depois do login.
   const valoresRef = useRef(valores);
+  const etagRef = useRef(etag);
   useLayoutEffect(() => {
     valoresRef.current = valores;
+    etagRef.current = etag;
   });
-  useEffect(() => registrarRascunho(() => guardarRascunho(rotaDoRascunho, paraRascunho(valoresRef.current))), [registrarRascunho, rotaDoRascunho]);
+  useEffect(
+    () =>
+      registrarRascunho(() =>
+        guardarRascunho(rotaDoRascunho, {
+          valores: paraRascunho(valoresRef.current),
+          ...(etagRef.current ? { etag: etagRef.current } : {}),
+        } satisfies RascunhoDoProduto),
+      ),
+    [registrarRascunho, rotaDoRascunho],
+  );
 
   // Imagem em conferencia (`processing`): o worker muda o estado depois da escrita.
   const temConferencia = valores.imagens.some((im) => im.estado === 'processing');
@@ -223,21 +256,36 @@ export default function FormularioDeProduto() {
         if (acao !== 'publicar') return sair(AVISO.salvo);
       }
       if (!atual || !versaoAtual) return;
-      const { data } = await api.PUT('/admin/store/items/{itemSlug}/publication', {
-        params: { path: { itemSlug: atual.slug }, header: { 'If-Match': versaoAtual } },
-      });
-      if (data) return sair(AVISO.publicado);
-      // O rascunho ficou gravado; a publicacao nao. A pessoa continua no item.
-      liberado.current = true;
-      void navigate(`/loja/${atual.slug}`, {
-        replace: true,
-        state: { falha: 'O produto foi salvo, mas não conseguimos publicar. Tente publicar de novo.' },
-      });
+      await publicarDepoisDeGravar(atual.slug, versaoAtual);
     } catch {
       setFalha({ texto: FALHA_DE_REDE });
     } finally {
       setSalvando(undefined);
     }
+  }
+
+  /**
+   * O item ja esta gravado. Se a publicacao falhar, por resposta ou por excecao,
+   * a pessoa vai para a edicao do item: ficar em /loja/novo faria o proximo
+   * clique criar outro item igual.
+   */
+  async function publicarDepoisDeGravar(slug: string, versaoAtual: string) {
+    try {
+      const { data } = await api.PUT('/admin/store/items/{itemSlug}/publication', {
+        params: { path: { itemSlug: slug }, header: { 'If-Match': versaoAtual } },
+      });
+      if (data) return sair(AVISO.publicado);
+    } catch {
+      // cai no caminho abaixo
+    }
+    const texto = 'O produto foi salvo, mas não conseguimos publicar. Tente publicar de novo.';
+    if (editando) {
+      setFalha({ texto });
+      setVersao((n) => n + 1);
+      return;
+    }
+    liberado.current = true;
+    void navigate(`/loja/${slug}`, { replace: true, state: { falha: texto } });
   }
 
   function tratarRecusa(error: unknown, status: number) {
@@ -270,6 +318,8 @@ export default function FormularioDeProduto() {
       return { ok: true };
     }
     if (tipoDoProblema(error) === 'precondition-failed') return { ok: false, mensagem: CONFLITO };
+    if (tipoDoProblema(error) === 'reauthentication-required')
+      return { ok: false, mensagem: 'A confirmação com senha não vale mais. Digite a senha de novo e confirme.' };
     return { ok: false, mensagem: 'Não conseguimos retirar o produto. Tente de novo.' };
   }
 
@@ -347,14 +397,15 @@ export default function FormularioDeProduto() {
       )}
       <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
 
-      <CampoDeTexto id="f-nome" rotulo="Nome *" valor={valores.titulo} aoMudar={(v) => mudar('titulo', v)} maximo={120} erro={erro('f-nome')} />
-      <CampoDeTexto id="f-desc" rotulo="Descrição *" valor={valores.resumo} aoMudar={(v) => mudar('resumo', v)} maximo={180} contador erro={erro('f-desc')} />
+      <CampoDeTexto dataCy="produto-nome" id="f-nome" rotulo="Nome *" valor={valores.titulo} aoMudar={(v) => mudar('titulo', v)} maximo={120} erro={erro('f-nome')} />
+      <CampoDeTexto dataCy="produto-descricao" id="f-desc" rotulo="Descrição *" valor={valores.resumo} aoMudar={(v) => mudar('resumo', v)} maximo={180} contador erro={erro('f-desc')} />
 
       <div className="row2">
         <div className={erro('f-categoria') ? 'field err' : 'field'}>
           <label htmlFor="f-categoria">Categoria *</label>
           <div className="ordem sel campo-sel">
             <select
+              data-cy="produto-categoria"
               id="f-categoria"
               value={valores.categoria}
               onChange={(e) => mudar('categoria', eCategoria(e.target.value) ? e.target.value : '')}
@@ -382,6 +433,7 @@ export default function FormularioDeProduto() {
               <label key={codigo} className="check">
                 <input
                   type="checkbox"
+                  data-cy={`produto-especie-${codigo}`}
                   {...(i === 0 ? { id: 'f-especies' } : {})}
                   checked={valores.especies.includes(codigo)}
                   onChange={(e) =>
@@ -478,6 +530,7 @@ export default function FormularioDeProduto() {
         <label htmlFor="f-parceiro">Parceiro *</label>
         <div className="ordem sel campo-sel">
           <select
+            data-cy="produto-parceiro"
             id="f-parceiro"
             value={valores.parceiro}
             onChange={(e) => mudar('parceiro', e.target.value)}
@@ -503,6 +556,7 @@ export default function FormularioDeProduto() {
       </div>
 
       <CampoDeTexto
+        dataCy="produto-link"
         id="f-link"
         rotulo="Link do produto no parceiro *"
         valor={valores.link}
@@ -528,10 +582,10 @@ export default function FormularioDeProduto() {
           </Banner>
         )}
         <div className="row2">
-          <CampoDeTexto id="f-preco" rotulo="Preço (R$)" valor={valores.preco} aoMudar={(v) => mudar('preco', v)} modoDeEntrada="decimal" erro={erro('f-preco')} />
-          <CampoDeTexto id="f-data" rotulo="Consultado em" valor={valores.consultadoEm} aoMudar={(v) => mudar('consultadoEm', v)} tipo="date" erro={erro('f-data')} />
+          <CampoDeTexto dataCy="produto-preco" id="f-preco" rotulo="Preço (R$)" valor={valores.preco} aoMudar={(v) => mudar('preco', v)} modoDeEntrada="decimal" erro={erro('f-preco')} />
+          <CampoDeTexto dataCy="produto-consultado-em" id="f-data" rotulo="Consultado em" valor={valores.consultadoEm} aoMudar={(v) => mudar('consultadoEm', v)} tipo="date" erro={erro('f-data')} />
         </div>
-        <button type="button" className="btn ghost sm voltar" onClick={() => mudar('consultadoEm', hojeCivil())}>
+        <button type="button" className="btn ghost sm voltar" data-cy="produto-consultei-hoje" onClick={() => mudar('consultadoEm', hojeCivil())}>
           Consultei hoje
         </button>
         <span className="help">
@@ -542,7 +596,7 @@ export default function FormularioDeProduto() {
       <div className="rodape-form">
         {publicado ? (
           <>
-            <button type="button" className="btn sec" disabled={!!salvando} onClick={() => setRetirar(true)}>
+            <button type="button" className="btn sec" data-cy="produto-retirar" disabled={!!salvando} onClick={() => (sujo ? setConfirmarRetirada(true) : setRetirar(true))}>
               Retirar
             </button>
             <BotaoDeSalvar acao="salvar" salvando={salvando} rotulo="Salvar alterações" primario />
@@ -577,6 +631,26 @@ export default function FormularioDeProduto() {
           }}
         />
       )}
+      {confirmarRetirada && (
+        <Dialogo titulo="Retirar sem salvar as alterações?" aoFechar={() => setConfirmarRetirada(false)}>
+          <p className="t-body c-sec">O que você mudou neste formulário vai se perder. Para manter, salve antes de retirar.</p>
+          <div className="acoes">
+            <button type="button" className="btn sec" data-foco-inicial onClick={() => setConfirmarRetirada(false)}>
+              Continuar editando
+            </button>
+            <button
+              type="button"
+              className="btn danger"
+              onClick={() => {
+                setConfirmarRetirada(false);
+                setRetirar(true);
+              }}
+            >
+              Retirar sem salvar
+            </button>
+          </div>
+        </Dialogo>
+      )}
       {retirar && item && (
         <DialogoComSenha
           titulo={`Retirar “${item.title}”?`}
@@ -589,12 +663,13 @@ export default function FormularioDeProduto() {
       )}
       {renovar && item && (
         <DialogoRenovarPreco
-          item={{ ...item, version: Number.parseInt((etag ?? '').replace(/\D/g, ''), 10) || item.version }}
+          item={item}
+          {...(etag ? { etag } : {})}
           aoFechar={() => setRenovar(false)}
-          aoRenovar={(novo) => {
+          aoRenovar={(novo, etagNovo) => {
             setRenovar(false);
             setItem(novo);
-            setEtag(`"${novo.version}"`);
+            setEtag(etagNovo ?? `"${novo.version}"`);
             const preco = valoresDoItem(novo);
             setValores((v) => ({ ...v, preco: preco.preco, consultadoEm: preco.consultadoEm }));
             setBase((b) => ({ ...b, preco: preco.preco, consultadoEm: preco.consultadoEm }));
@@ -627,6 +702,7 @@ function ChipDeTag({
     <button
       type="button"
       className={recusada ? 'chip err' : 'chip'}
+      data-cy="produto-tag"
       aria-pressed={marcada}
       disabled={desabilitada}
       aria-describedby={recusada ? 'f-tags-erro' : undefined}
@@ -656,6 +732,7 @@ function BotaoDeSalvar({
   return (
     <button
       type={primario ? 'submit' : 'button'}
+      data-cy={`produto-${acao}`}
       className={primario ? 'btn pri' : 'btn sec'}
       disabled={!!salvando && !carregando}
       aria-busy={carregando || undefined}

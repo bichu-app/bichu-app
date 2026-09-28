@@ -63,6 +63,7 @@ export function Casca() {
                   to={item.para}
                   className={item.sub ? 'navitem sub t-label' : 'navitem t-label-lg'}
                   aria-current={ativo ? 'page' : undefined}
+                  data-cy={`nav-${item.rotulo.toLowerCase()}`}
                   title={item.rotulo}
                 >
                   <Icone nome={item.icone} />
@@ -94,7 +95,7 @@ export function Casca() {
               ]}
             />
           </div>
-          <button type="button" className="btn ghost" title="Sair" onClick={() => void sair()}>
+          <button type="button" className="btn ghost" data-cy="sair" title="Sair" onClick={() => void sair()}>
             <Icone nome="logout" />
             <span className="rot">Sair</span>
           </button>

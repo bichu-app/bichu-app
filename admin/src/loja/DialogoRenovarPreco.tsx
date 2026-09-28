@@ -17,13 +17,16 @@ type Item = Esquemas['AdminStoreItem'];
  */
 export function DialogoRenovarPreco({
   item,
+  etag,
   aoFechar,
   aoRenovar,
   aoConflito,
 }: {
   item: Item;
+  /** O ETag da ultima leitura, inteiro; sem ele, o da `version` da lista. */
+  etag?: string;
   aoFechar: () => void;
-  aoRenovar: (novo: Item) => void;
+  aoRenovar: (novo: Item, etag: string | undefined) => void;
   aoConflito: () => void;
 }) {
   const { api } = useSessao();
@@ -43,11 +46,11 @@ export function DialogoRenovarPreco({
     setFalha(undefined);
     setSalvando(true);
     try {
-      const { data, error } = await api.PATCH('/admin/store/items/{itemSlug}', {
-        params: { path: { itemSlug: item.slug }, header: { 'If-Match': versaoComoEtag(item.version) } },
+      const { data, error, response } = await api.PATCH('/admin/store/items/{itemSlug}', {
+        params: { path: { itemSlug: item.slug }, header: { 'If-Match': etag ?? versaoComoEtag(item.version) } },
         body: { price: { amount, currency: 'BRL', checked_at: hojeCivil() } },
       });
-      if (data) aoRenovar(data);
+      if (data) aoRenovar(data, response.headers.get('ETag') ?? undefined);
       else if (tipoDoProblema(error) === 'precondition-failed') aoConflito();
       else setFalha('Não conseguimos renovar a consulta. Tente de novo.');
     } catch {

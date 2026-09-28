@@ -369,6 +369,7 @@ export function Galeria({
         multiple
         hidden
         data-testid={`${id}-arquivo`}
+        data-cy={`${id}-arquivo`}
         onChange={(e) => {
           escolher(e.target.files);
           e.target.value = '';

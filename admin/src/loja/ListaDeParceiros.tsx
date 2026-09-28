@@ -63,7 +63,7 @@ export default function ListaDeParceiros() {
         <h1 className="t-headline">Parceiros</h1>
         <p className="t-body-sm c-sec">As lojas para onde os produtos da Loja levam. Cada produto é de um parceiro.</p>
       </div>
-      <Link className="btn pri" to="/loja/parceiros/novo">
+      <Link className="btn pri" to="/loja/parceiros/novo" data-cy="parceiro-novo">
         <Icone nome="add" tamanho="s20" />
         Novo parceiro
       </Link>
@@ -170,7 +170,7 @@ export default function ListaDeParceiros() {
                   <LinhasCarregando linhas={4} colunas={['w-preco', 'w-upd', 'w-status', 'w-acts']} />
                 ) : (
                   estado.itens.map((parceiro) => (
-                    <tr key={parceiro.slug}>
+                    <tr key={parceiro.slug} data-cy="parceiro-linha" data-slug={parceiro.slug}>
                       <td>
                         <Link className="t-label" to={`/loja/parceiros/${parceiro.slug}`}>
                           {parceiro.name}

@@ -78,6 +78,7 @@ export function DialogoCriarTag({ aoFechar, aoCriar }: { aoFechar: () => void; a
       >
         <CampoDeTexto
           id="nova-tag"
+          dataCy="tag-nome"
           rotulo="Nome da tag"
           valor={rotulo}
           aoMudar={setRotulo}
@@ -90,7 +91,7 @@ export function DialogoCriarTag({ aoFechar, aoCriar }: { aoFechar: () => void; a
           <button type="button" className="btn sec" onClick={aoFechar}>
             Cancelar
           </button>
-          <button type="submit" className="btn pri" aria-busy={salvando || undefined}>
+          <button type="submit" className="btn pri" data-cy="tag-criar-confirmar" aria-busy={salvando || undefined}>
             {salvando && <span className="spin" aria-hidden="true" />}
             Criar tag
           </button>
