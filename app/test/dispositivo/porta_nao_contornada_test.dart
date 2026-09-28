@@ -619,7 +619,14 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 /// A foto continua entrando pela porta: nenhuma tela do assistente de cadastro
 /// (`app/lib/telas/pet/`) mudou nesta rodada.
-const String _arvoreDasTelas = 'e8ff3313ee47f5ddc82cd69f9325c147a6fbfe07';
+///
+/// Troca de 28/09, correcao da paginacao das listagens (sem chave de issue no
+/// acionamento): `telas/perto/lista_do_diretorio.dart` e
+/// `telas/loja/vitrine_da_loja.dart` passaram a acumular as paginas e a pedir a
+/// seguinte pelo `RodapeDaPaginacao`. Nada a ver com camera: nenhuma das duas
+/// toca em foto, e as telas do assistente de cadastro (`app/lib/telas/pet/`)
+/// seguem intocadas.
+const String _arvoreDasTelas = 'cfba3eb42ecc9c32b91a500e7748fb50463a7b92';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

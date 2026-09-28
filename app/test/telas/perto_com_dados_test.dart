@@ -16,6 +16,7 @@ import 'dart:io';
 import 'package:bichu/telas/perto/lista_do_diretorio.dart';
 import 'package:bichu/theme/bichu_theme.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
+import 'package:bichu/widgets/rodape_da_paginacao.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -77,6 +78,87 @@ Map<String, dynamic> paginaDoContrato(
     'distance_available': distanciaDisponivel,
     'applied_filters': filtros,
   };
+}
+
+/// Vinte e cinco entradas distintas, com nome e `slug` numerados.
+///
+/// **Vinte e cinco, e nao cinco.** Um caso com cinco itens cabe inteiro na
+/// primeira pagina e fica verde com a paginacao quebrada -- foi o que
+/// aconteceu: a tela foi entregue com massa de dez e doze itens e o defeito
+/// passou. O teto do contrato e `limit: 20`, entao so acima de vinte existe um
+/// item que a pagina 1 nao alcanca.
+List<Map<String, dynamic>> vinteECincoEntradas() {
+  return <Map<String, dynamic>>[
+    for (var i = 1; i <= 25; i++)
+      entradaDoContrato(
+        slug: 'entrada-$i',
+        displayName: 'Entrada $i',
+        distanceM: i * 100,
+      ),
+  ];
+}
+
+/// A rede que **pagina de verdade**: recorta a massa por `page` e `limit`, do
+/// jeito que o contrato manda, e registra cada URL pedida.
+///
+/// Ela nao devolve um corpo fixo. Um duble que responde a mesma pagina para
+/// qualquer `page` deixaria passar exatamente o defeito que estes casos
+/// existem para pegar: a tela pode nunca pedir a pagina 2 e o teste nao
+/// perceberia.
+Future<http.Response> Function(http.Request) redeQuePaginaODiretorio(
+  List<Map<String, dynamic>> massa, {
+  required List<Uri> urls,
+  bool distanciaDisponivel = true,
+  Map<String, String> Function(Map<String, String> pedido)? filtrosAplicados,
+  List<Map<String, dynamic>> Function(Map<String, String> pedido)? recorte,
+}) {
+  return (req) async {
+    if (req.url.path != '/v1/directory/entries' || req.method != 'GET') {
+      return problema('not-found', 404);
+    }
+    urls.add(req.url);
+    final pedido = req.url.queryParameters;
+    final pagina = int.parse(pedido['page'] ?? '1');
+    final limite = int.parse(pedido['limit'] ?? '20');
+    final visivel = recorte == null ? massa : recorte(pedido);
+    final inicio = (pagina - 1) * limite;
+    final fatia = inicio >= visivel.length
+        ? const <Map<String, dynamic>>[]
+        : visivel.sublist(
+            inicio,
+            inicio + limite > visivel.length ? visivel.length : inicio + limite,
+          );
+    return json200(
+      paginaDoContrato(
+        fatia,
+        distanciaDisponivel: distanciaDisponivel,
+        total: visivel.length,
+        pagina: pagina,
+        limite: limite,
+        filtros: filtrosAplicados?.call(pedido) ??
+            const <String, String>{'scope': 'all'},
+      ),
+    );
+  };
+}
+
+/// Rola ate o rodape e toca em `Carregar mais`.
+///
+/// O `ensureVisible` nao e cerimonia de teste: com vinte cartoes o botao nasce
+/// muito abaixo da dobra, e chegar ate ele rolando e o desenho do paragrafo
+/// 11.20 -- e o que a rolagem infinita impediria.
+Future<void> tocarEmCarregarMais(WidgetTester tester) async {
+  final botao = find.text(RodapeDaPaginacao.rotuloDeCarregarMais);
+  expect(
+    botao,
+    findsOneWidget,
+    reason: 'REPROVA: nao ha `Carregar mais` na tela, e os itens depois do '
+        '20o sao inalcancaveis.',
+  );
+  await tester.ensureVisible(botao);
+  await tester.pumpAndSettle();
+  await tester.tap(botao);
+  await tester.pumpAndSettle();
 }
 
 /// A rede que atende o diretorio e **404 em qualquer outra rota**.
@@ -892,7 +974,13 @@ void main() {
       );
 
       expect(find.text('1 resultado · Mais perto'), findsOneWidget);
-      expect(find.text('Mostrando 1 a 1 de 1'), findsOneWidget);
+      // O fim da lista tambem vai para o singular: `todos os 1 profissionais`
+      // e o defeito que uma frase montada com o total sozinho produziria.
+      expect(
+        find.text('Você viu o único profissional desta região.'),
+        findsOneWidget,
+      );
+      expect(find.text(RodapeDaPaginacao.rotuloDeCarregarMais), findsNothing);
     });
 
     testWidgets('429: o texto diz que o teto e por CONTA, e ha como tentar',
@@ -951,7 +1039,191 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // 9. A barra de topo nao foi ocupada
+  // 9. ISCA — o 21o item e alcancavel, e trocar o filtro volta para a pagina 1
+  // -------------------------------------------------------------------------
+  group('ISCA — a paginacao avanca de verdade', () {
+    // DESLIGAR PARA VER REPROVAR, caso do 21o item: em
+    // `lib/telas/perto/lista_do_diretorio.dart`, em `_corpo`, troque o rodape
+    // por `const SizedBox.shrink()` -- e o estado em que esta tela foi
+    // entregue, sem botao de pagina seguinte. Ou, mais perto do defeito
+    // original, troque `_itens.addAll(pagina.itens)` em `_carregarMais` por
+    // `_itens..clear()..addAll(pagina.itens)`: a pagina 2 volta a SUBSTITUIR a
+    // 1, e `Entrada 1` desaparece.
+    //
+    // DESLIGAR PARA VER REPROVAR, caso do filtro: no mesmo arquivo, em
+    // `_carregar`, troque
+    // `_recorte.pagina == 1 ? _recorte : _recorte.com(pagina: 1)` por
+    // `_recorte`, e apague o `pagina: 1` da chamada de `_trocarRecorte` em
+    // `aoEscolher`. O filtro passa a ser aplicado sobre a pagina 3 e a lista
+    // fica vazia sem motivo aparente.
+    testWidgets(
+        'o 21o item e alcancavel: `Carregar mais` pede a pagina 2 e ACRESCENTA',
+        (tester) async {
+      final urls = <Uri>[];
+      await abrirPerto(
+        tester,
+        rede: redeQuePaginaODiretorio(vinteECincoEntradas(), urls: urls),
+      );
+
+      // A pagina 1 traz as vinte primeiras, e `Entrada 21` nao esta na tela.
+      expect(nomesNaTela(tester), hasLength(20));
+      expect(find.text('Entrada 21'), findsNothing);
+      expect(urls.single.queryParameters['page'], '1');
+
+      // O rodape oferece o caminho, porque ha mais no servidor (25 > 20). E
+      // NAO mostra a frase de fim de lista, que seria mentira aqui.
+      expect(
+        find.text(RodapeDaPaginacao.rotuloDeCarregarMais),
+        findsOneWidget,
+        reason: 'REPROVA: 25 entradas no servidor, 20 na tela, e nenhum '
+            'caminho para as outras 5. Os itens depois do 20o ficam '
+            'inalcancaveis, que e o defeito inteiro.',
+      );
+      expect(find.textContaining('Você viu todos'), findsNothing);
+
+      await tocarEmCarregarMais(tester);
+
+      // A tela PEDIU a pagina 2. Sem isto o resto e coincidencia.
+      expect(
+        urls.last.queryParameters['page'],
+        '2',
+        reason: 'REPROVA: a tela nao pediu a pagina seguinte. O parametro '
+            '`page` existe no contrato e o cliente de API ja o manda: quem '
+            'nao avancava era a tela.',
+      );
+      expect(urls.last.queryParameters['limit'], '20');
+
+      // E ACRESCENTOU: as 25 estao na tela, a primeira continua lá, e a 21a
+      // finalmente existe. Substituir em vez de acrescentar seria a outra
+      // forma de o 21o item nao ser alcancavel.
+      expect(nomesNaTela(tester), hasLength(25));
+      expect(
+        find.text('Entrada 21'),
+        findsOneWidget,
+        reason: 'REPROVA: a pagina 2 chegou e o 21o item continua fora da '
+            'tela.',
+      );
+      expect(
+        find.text('Entrada 1'),
+        findsOneWidget,
+        reason: 'REPROVA: a pagina 2 SUBSTITUIU a pagina 1 em vez de '
+            'continua-la. A pessoa perdeu as vinte primeiras entradas ao '
+            'pedir mais.',
+      );
+
+      // Fim da lista: o botao sai e entra a frase (paragrafo 11.20).
+      expect(find.text(RodapeDaPaginacao.rotuloDeCarregarMais), findsNothing);
+      expect(
+        find.text('Você viu todos os 25 profissionais desta região.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('trocar o filtro VOLTA para a pagina 1', (tester) async {
+      final urls = <Uri>[];
+      await abrirPerto(
+        tester,
+        rede: redeQuePaginaODiretorio(
+          vinteECincoEntradas(),
+          urls: urls,
+          // O recorte por `kind` deixa TRES entradas. Se o filtro for pedido
+          // na pagina 2, o servidor responde uma fatia vazia e a tela mostra
+          // "Nada com esses filtros" com tres entradas existindo -- que e
+          // exatamente o "a lista ficou vazia sem motivo" deste defeito.
+          recorte: (pedido) => pedido['kind'] == null
+              ? vinteECincoEntradas()
+              : vinteECincoEntradas().take(3).toList(),
+          filtrosAplicados: (pedido) => pedido['kind'] == null
+              ? const <String, String>{'scope': 'all'}
+              : <String, String>{'kind': pedido['kind']!},
+        ),
+      );
+
+      // Primeiro sai da pagina 1, para que manter a pagina seja um defeito
+      // possivel. Sem este passo o caso fica verde com o defeito de pe.
+      await tocarEmCarregarMais(tester);
+      expect(urls.last.queryParameters['page'], '2');
+
+      // A barra ficou 25 cartoes acima da dobra depois do `Carregar mais`.
+      await tester.ensureVisible(find.byTooltip('Filtrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Veterinário'));
+      await tester.pumpAndSettle();
+
+      expect(urls.last.queryParameters['kind'], 'vet');
+      expect(
+        urls.last.queryParameters['page'],
+        '1',
+        reason: 'REPROVA: o filtro foi aplicado mantendo a pagina 2. A fatia '
+            'volta vazia e a tela diz que nada casa com o filtro, com tres '
+            'entradas existindo. Este e o defeito que aparece como "a lista '
+            'ficou vazia sem motivo".',
+      );
+
+      // E a tela mostra as tres, e nao o vazio filtrado.
+      expect(nomesNaTela(tester), hasLength(3));
+      expect(find.text(ListaDoDiretorio.tituloDoVazioFiltrado), findsNothing);
+      // A lista acumulada da pagina 2 foi DESCARTADA: sobraram tres, e nao
+      // vinte e tres.
+      expect(
+        find.text('Você viu todos os 3 profissionais desta região.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'voltar para a aba depois de `Carregar mais` recomeca da pagina 1',
+        (tester) async {
+      final urls = <Uri>[];
+      await abrirPerto(
+        tester,
+        rede: redeQuePaginaODiretorio(vinteECincoEntradas(), urls: urls),
+      );
+
+      await tocarEmCarregarMais(tester);
+      expect(urls.last.queryParameters['page'], '2');
+
+      // Sai da secao e volta. O estado da tela SOBREVIVE (o ramo do
+      // `StatefulShellRoute` fica vivo), e e `TickerMode` que dispara a
+      // recarga -- e por isso que `_recorte` pode voltar aqui com `page` em 2.
+      final antesDeSair = urls.length;
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Loja'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
+      await tester.pumpAndSettle();
+
+      final depoisDeVoltar = urls.sublist(antesDeSair);
+      expect(
+        depoisDeVoltar,
+        isNotEmpty,
+        reason: 'REPROVA: voltar para a aba nao recarregou nada, e o caso '
+            'perdeu o que ele existe para medir.',
+      );
+      // **Todas** as chamadas depois do retorno, e nao so a ultima.
+      //
+      // Enquanto este caso olhava apenas `urls.last` ele ficava VERDE com o
+      // defeito de pe: o retorno pedia a pagina 2 e uma segunda carga, logo
+      // atras, pedia a 1. Medido: `[page=1, page=2, page=2, page=1]`.
+      expect(
+        depoisDeVoltar
+            .map((u) => u.queryParameters['page'])
+            .toSet(),
+        <String>{'1'},
+        reason: 'REPROVA: voltar para a aba pediu a pagina que o `Carregar '
+            'mais` tinha deixado no recorte. Pedidas: '
+            '${depoisDeVoltar.map((u) => u.query).toList()}. Com um recorte '
+            'menor essa pagina volta VAZIA, e a lista fica vazia sem ninguem '
+            'ter mexido em filtro nenhum.',
+      );
+      expect(nomesNaTela(tester), hasLength(20));
+      expect(find.text('Entrada 1'), findsOneWidget);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // 10. A barra de topo nao foi ocupada
   // -------------------------------------------------------------------------
   testWidgets('o slot unico de acao da `AppBar` continua LIVRE em Perto',
       (tester) async {
