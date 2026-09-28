@@ -4660,8 +4660,11 @@ components:
     NetworkEventVisibilityParam:
       name: visibility
       in: query
-      description: A visibilidade e visivel, entao filtra os dois.
-      schema: { $ref: '#/components/schemas/NetworkEventVisibility' }
+      description: |
+        A visibilidade e visivel, entao filtra os dois. **Sem padrao**, de
+        proposito: o `default: public` de `NetworkEventVisibility` aplicado aqui
+        tiraria todo encontro privado da agenda sem ninguem ter pedido.
+      schema: { type: string, enum: [public, private] }
     NetworkEventSizeParam:
       name: size
       in: query

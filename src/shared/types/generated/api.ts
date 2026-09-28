@@ -4209,8 +4209,12 @@ export interface components {
          *     e oculta, e aparecer no recorte "pago" a entregaria (ADR-0027 12.14).
          */
         NetworkEventAdmissionParam: "free" | "paid";
-        /** @description A visibilidade e visivel, entao filtra os dois. */
-        NetworkEventVisibilityParam: components["schemas"]["NetworkEventVisibility"];
+        /**
+         * @description A visibilidade e visivel, entao filtra os dois. **Sem padrao**, de
+         *     proposito: o `default: public` de `NetworkEventVisibility` aplicado aqui
+         *     tiraria todo encontro privado da agenda sem ninguem ter pedido.
+         */
+        NetworkEventVisibilityParam: "public" | "private";
         /**
          * @description Encontros que aceitam aquele porte. **Exclui encontro privado**, pelo
          *     mesmo motivo de `admission`.
@@ -6807,7 +6811,11 @@ export interface operations {
                  *     e oculta, e aparecer no recorte "pago" a entregaria (ADR-0027 12.14).
                  */
                 admission?: components["parameters"]["NetworkEventAdmissionParam"];
-                /** @description A visibilidade e visivel, entao filtra os dois. */
+                /**
+                 * @description A visibilidade e visivel, entao filtra os dois. **Sem padrao**, de
+                 *     proposito: o `default: public` de `NetworkEventVisibility` aplicado aqui
+                 *     tiraria todo encontro privado da agenda sem ninguem ter pedido.
+                 */
                 visibility?: components["parameters"]["NetworkEventVisibilityParam"];
                 /**
                  * @description Encontros que aceitam aquele porte. **Exclui encontro privado**, pelo

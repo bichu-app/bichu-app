@@ -65,12 +65,10 @@ const SENTINELAS = [
   'ISCA-NOTA',
   '987654',
   'Porto_Velho',
-  String(LAT),
-  String(LON),
-  'dog_water_fountain',
-  'vaccination_card',
-  'from_1_year',
 ];
+
+/** O ponto sentinela, varrido em todo corpo e conferido positivo no `location`. */
+const SENTINELAS_DO_PONTO = [String(LAT), String(LON)];
 
 /** O `slug` do privado, aleatorio, como o servidor o gera. */
 const SLUG_PRIVADO = `p-${randomUUID().slice(0, 10)}`;
@@ -343,7 +341,7 @@ function varrer(rotulo: string, bruto: string): void {
   // Os identificadores aleatorios da requisicao sao tirados antes: um UUID
   // pode conter `987654` por acaso, e o teste ficaria intermitente.
   const texto = normalizado(bruto);
-  for (const sentinela of SENTINELAS) {
+  for (const sentinela of [...SENTINELAS, ...SENTINELAS_DO_PONTO]) {
     assert.equal(texto.includes(sentinela), false, `${rotulo}: a sentinela ${sentinela} saiu no corpo`);
   }
 }
@@ -353,7 +351,10 @@ void describe('P19.1 -- nenhuma sentinela sai para quem nao foi aprovado, em nen
     const r = await cliente.query<{ n: number }>('SELECT count(*)::int AS n FROM network_events WHERE slug = $1 AND visibility = $2', [SLUG_PRIVADO, 'private']);
     assert.equal(r.rows[0]?.n, 1);
     const lista = await chamar('GET', `/network/events?when=all&q=${encodeURIComponent(PREFIXO_DO_TITULO)}`);
-    assert.ok(lista.bruto.includes(SLUG_PRIVADO), 'o privado nem aparece na agenda: a varredura nao teria alvo');
+    assert.ok(
+      lista.bruto.includes(SLUG_PRIVADO),
+      `o privado nem aparece na agenda: a varredura nao teria alvo (${String(lista.status)}) ${lista.bruto.slice(0, 600)}`,
+    );
   });
 
   for (const conta of [undefined, 'sem_pedido', 'pendente', 'recusado', 'desistido', 'recusado_desistido'] as const) {
@@ -362,8 +363,10 @@ void describe('P19.1 -- nenhuma sentinela sai para quem nao foi aprovado, em nen
         const r = await chamar(chamada.metodo, chamada.url, conta);
         varrer(`${chamada.rotulo} como ${conta ?? 'anonimo'} (${String(r.status)})`, r.bruto);
       }
-      if (conta !== undefined) {
-        // Pedir de novo: o POST de sucesso tambem entra na varredura.
+      // Pedir de novo: o POST de sucesso tambem entra na varredura. As contas
+      // desistidas ficam de fora AQUI de proposito: pedir de novo as tiraria
+      // do estado desistido, que o P19.3 confere depois.
+      if (conta !== undefined && conta !== 'desistido' && conta !== 'recusado_desistido') {
         const pedido = await chamar('POST', `/network/events/${SLUG_PRIVADO}/join-request`, conta);
         varrer(`requestToJoinNetworkEvent como ${conta}`, pedido.bruto);
       }
@@ -389,7 +392,10 @@ void describe('P19.1 -- nenhuma sentinela sai para quem nao foi aprovado, em nen
   void it('o ponto do privado sai so para o aprovado', async () => {
     const aprovado = await chamar('GET', `/network/events/${SLUG_PRIVADO}/location`, 'aprovado');
     assert.equal(aprovado.status, 200);
-    assert.equal(aprovado.bruto.includes(String(LAT)), true);
+    // CONTROLE POSITIVO do ponto: a varredura enxerga as duas coordenadas.
+    for (const sentinela of SENTINELAS_DO_PONTO) {
+      assert.equal(aprovado.bruto.includes(sentinela), true, `o location do aprovado nao traz ${sentinela}`);
+    }
     for (const conta of ['sem_pedido', 'pendente', 'recusado'] as const) {
       assert.equal((await chamar('GET', `/network/events/${SLUG_PRIVADO}/location`, conta)).status, 404);
     }
