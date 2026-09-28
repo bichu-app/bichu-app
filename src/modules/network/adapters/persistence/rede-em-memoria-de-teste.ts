@@ -95,7 +95,7 @@ function pedidoNaFila(e: EstadoDaRede, p: PedidoGuardado): PedidoNaFila | null {
   const ev = e.encontros.get(p.eventoId);
   const conta = e.contas.get(p.userId);
   if (ev === undefined || conta === undefined) return null;
-  if (ev.visibilidade !== 'private' || ev.publicacao === 'removed') return null;
+  if (ev.visibilidade !== 'private') return null;
   return {
     id: p.id,
     ref: p.ref,
@@ -103,7 +103,14 @@ function pedidoNaFila(e: EstadoDaRede, p: PedidoGuardado): PedidoNaFila | null {
     requestedAt: p.requestedAt,
     decidedAt: p.decidedAt,
     withdrawnAt: p.withdrawnAt,
-    encontro: { slug: ev.slug, title: ev.title, startsAt: ev.startsAt, timeZone: ev.timeZone },
+    encontro: {
+      slug: ev.slug,
+      title: ev.title,
+      startsAt: ev.startsAt,
+      endsAt: ev.endsAt,
+      timeZone: ev.timeZone,
+      publicacao: ev.publicacao,
+    },
     solicitante: { displayName: conta.displayName, contaCriadaEm: conta.createdAt, emailConfirmado: conta.emailConfirmado },
   };
 }
@@ -269,7 +276,7 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
           const todos = [...r.pedidos.values()]
             .filter((p) => p.decisao === decisao && (decisao !== 'pending' || p.withdrawnAt === null))
             .map((p) => pedidoNaFila(r, p))
-            .filter((p): p is PedidoNaFila => p !== null)
+            .filter((p): p is PedidoNaFila => p !== null && p.encontro.publicacao !== 'removed')
             .filter((p) => recorte.eventoSlug === undefined || p.encontro.slug === recorte.eventoSlug)
             .sort((a, b) => a.requestedAt.getTime() - b.requestedAt.getTime());
           const inicio = (recorte.page - 1) * recorte.limit;

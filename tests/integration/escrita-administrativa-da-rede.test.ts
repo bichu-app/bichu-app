@@ -350,6 +350,31 @@ void describe('a fila de pedidos, contra Postgres (D53 a D56)', () => {
     assert.equal((await r.aprovarPedido(autor, ref)).status, 'approved');
   });
 
+  void it('ISCA (QA 28/09): pedido de encontro cancelado ou removido responde 409, e nao 404 nem aprovacao', async () => {
+    for (const estado of ['cancelled', 'removed'] as const) {
+      const privado = await criar({ visibility: 'private' });
+      const evento = await idDoEncontro(privado.recurso.slug);
+      const ref = await pedir(evento, await novaConta());
+      await sql`update network_events set publication_status = ${estado}, cancelled_at = now() where id = ${evento}::uuid`.execute(banco.db);
+      const erro = await r.aprovarPedido(autor, ref).catch((e: unknown) => e);
+      assert.ok(erro instanceof AppError, String(erro));
+      assert.equal(erro.problemType, 'event-not-open', estado);
+      assert.equal(erro.status, 409);
+      const linha = await sql<{ status: string }>`select status from network_event_join_requests where ref = ${ref}`.execute(banco.db);
+      assert.equal(linha.rows[0]?.status, 'pending');
+    }
+  });
+
+  void it('member_since sai no mes de Sao Paulo: conta criada 01/04 02h UTC e de marco', async () => {
+    const privado = await criar({ visibility: 'private' });
+    const evento = await idDoEncontro(privado.recurso.slug);
+    const conta = await novaConta();
+    await sql`update users set created_at = '2026-04-01T02:00:00Z' where id = ${conta}::uuid`.execute(banco.db);
+    await pedir(evento, conta);
+    const pagina = await r.listarFila(autor, { eventoSlug: privado.recurso.slug, page: 1, limit: 50 });
+    assert.equal(pagina.items[0]?.requester.member_since, '2026-03');
+  });
+
   void it('D54: pedido de encontro que terminou ha mais de 30 dias sai; o recente fica', async () => {
     const velho = await criar();
     const recente = await criar({ visibility: 'private' });

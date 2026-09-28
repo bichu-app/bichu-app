@@ -109,7 +109,9 @@ export interface PedidoNaFila {
     readonly slug: string;
     readonly title: string;
     readonly startsAt: Date;
+    readonly endsAt: Date | null;
     readonly timeZone: string;
+    readonly publicacao: PublicacaoAdministrativa;
   };
   readonly solicitante: {
     readonly displayName: string | null;
@@ -164,38 +166,107 @@ export function errosDeTexto(campo: string, valor: string, minimo: number, maxim
 }
 
 /**
- * Chave PIX que o detector do canal mediado nao cobre: CPF, CNPJ e a chave
- * aleatoria (UUID). Telefone e e-mail, que tambem sao chave PIX, o detector ja
- * pega. A palavra "pix" sozinha tambem recusa: sem campo de "como pagar", as
- * observacoes seriam o lugar natural da chave trocada por uma conta tomada
- * (ADR-0027 item 17), e a recusa tira o valor desse golpe.
+ * O texto na forma em que a conferencia de D59 o le.
+ *
+ * - `base`: NFKC, sem acento, minusculo, sem caractere de largura zero. E a
+ *   forma em que numero continua numero (CPF, conta, agencia).
+ * - `letras`: a `base` com o digito que imita letra trocado por ela dentro de
+ *   palavra (`P1X` vira `pix`) e com os separadores entre letras soltas
+ *   tirados (`p i x`, `p-i-x`, `p.i.x` viram `pix`). E a forma em que palavra
+ *   continua palavra, por mais que alguem a quebre.
  */
-const PAGAMENTO: readonly RegExp[] = [
-  /\bpix\b/i,
+export function normalizarParaConferencia(texto: string): { base: string; letras: string } {
+  const base = texto
+    .normalize('NFKC')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .replace(/[\u200b-\u200f\u2060-\u2064\ufeff\u00ad]/gu, '')
+    .toLowerCase();
+  const IMITA_LETRA: Readonly<Record<string, string>> = { '1': 'i', '0': 'o', '3': 'e', '4': 'a', '5': 's', '7': 't', '$': 's' };
+  // Tres ou mais caracteres soltos com o MESMO separador entre eles (espaco,
+  // ponto, hifen, sublinhado, barra, asterisco) viram uma palavra so. O mesmo
+  // separador em toda a sequencia evita colar a palavra seguinte.
+  const juntado = base.replace(
+    /(?<![a-z0-9$])([a-z0-9$])([\s.\-_*/|]+)(?:[a-z0-9$]\2){1,}[a-z0-9$](?![a-z0-9$])/g,
+    (m) => m.replace(/[^a-z0-9$]/g, ''),
+  );
+  const letras = juntado.replace(/[a-z0-9$]+/g, (palavra) =>
+    /[a-z]/.test(palavra) ? palavra.replace(/[103457$]/g, (c) => IMITA_LETRA[c] ?? c) : palavra,
+  );
+  return { base, letras };
+}
+
+/**
+ * Nome de dominio de primeiro nivel que um link encurtado ou uma pagina de
+ * perfil usa. Lista aberta de proposito, com os genericos e os de pais que
+ * encurtador usa (`bit.ly`, `linktr.ee`, `wa.me`, `t.co`, `is.gd`).
+ */
+const TLD = 'com|net|org|br|me|io|ly|ee|app|link|gg|co|info|site|online|store|shop|xyz|tv|to|bio|page|sh|cc|gd|in|us|so|ai|dev|click|live|social|pay|money|bank|digital|vip|top|club|ws|biz|tk|ml|ga|cf|gq';
+
+/** Token com cara de dominio, com ou sem caminho: `algo.tld`, `algo.tld/abc`, `algo . tld`. */
+const DOMINIO = new RegExp(`(?:^|[^a-z0-9@])[a-z0-9][a-z0-9-]*\\s?\\.\\s?(?:${TLD})(?![a-z0-9])`);
+/** Qualquer `algo.algo/caminho`, mesmo com TLD fora da lista. */
+const DOMINIO_COM_CAMINHO = /[a-z0-9-]+\.[a-z]{2,}\/\S+/;
+/** Perfil em rede social: `@usuario`. */
+const ARROBA = /(?:^|[^a-z0-9])@[a-z0-9_.]{2,}/;
+
+/** Pagamento pela palavra, na forma `letras`. */
+const PAGAMENTO_POR_PALAVRA = /\b(?:pix(?!el|ot|ar)|picpay|pic\s?pay|mercado\s?pago|nubank|paypal|pagseguro|chave\s+aleatoria)\b/;
+
+/** Pagamento pelo numero, na forma `base`: CPF, CNPJ, chave aleatoria e dados bancarios. */
+const PAGAMENTO_POR_NUMERO: readonly RegExp[] = [
   /\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b/,
   /\b\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}\b/,
-  /\b[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\b/i,
+  /\b[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}\b/,
+  // "ag 1234", "agencia: 1234-5", "ag. 0001"
+  /\b(?:ag|agencia|agenc)\s*[.:]?\s*\d{3,5}(?:-?\d)?\b/,
+  // "cc 56789-0", "c/c 1234", "conta 12345-6", "conta corrente: 123456"
+  /\b(?:cc|c\/c|conta(?:\s+corrente)?|conta\s+poupanca|cp)\s*[.:]?\s*\d{4,}(?:-?[\dx])?\b/,
+  /\bbanco\s*[.:]?\s*\d{3}\b/,
 ];
 
 /**
- * As observacoes (D59): telefone, e-mail, URL, endereco, CEP e chave PIX sao
- * recusados com `400`. O detector e o do canal mediado (`redigirCanalMediado`),
- * que ja normaliza largura zero, homoglifo e numero por extenso; aqui ele e
- * usado para RECUSAR, e nao para redigir: texto publicado pela equipe nao
- * chega ao app com buraco no meio.
+ * Data de calendario nos dois formatos que a equipe escreve: `dd.mm.aaaa` e
+ * `dd/mm/aaaa`, dia 1 a 31 (com ou sem zero), mes 1 a 12, ano 19xx ou 20xx,
+ * sem digito colado antes nem depois (nem separador seguido de digito). O detector de telefone do canal mediado le "10.10.2026"
+ * como numero de oito digitos; nas observacoes do encontro a data e trocada
+ * por um marcador antes de conferir. `redigir.ts` (a conversa mediada) nao
+ * muda.
+ */
+const DATA_DE_CALENDARIO = /(?<!\d)(?<!\d[./])(?:0?[1-9]|[12]\d|3[01])([./])(?:0?[1-9]|1[0-2])\1(?:19|20)\d{2}(?!\d)(?![./]\d)/g;
+
+export function semDatas(texto: string): string {
+  return texto.replace(DATA_DE_CALENDARIO, ' data ');
+}
+
+/**
+ * As observacoes (D59): telefone, e-mail, link (inclusive encurtador e
+ * qualquer token com cara de dominio), perfil `@usuario`, endereco, CEP,
+ * chave PIX, meio de pagamento e dados bancarios sao recusados com `400`.
+ *
+ * Duas camadas. O detector do canal mediado (`redigirCanalMediado`) ja
+ * normaliza largura zero, homoglifo e numero por extenso, e aqui e usado para
+ * RECUSAR, e nao para redigir: texto publicado pela equipe nao chega ao app com
+ * buraco no meio. Por cima, `normalizarParaConferencia` desfaz as quebras que
+ * ele nao cobre (`p i x`, `P1X`, `Pïx`, `bit . ly`).
  */
 export function errosDasObservacoes(campo: string, valor: string): ProblemFieldError[] {
   const tamanho = errosDeTexto(campo, valor, 2, 500);
   if (tamanho.length > 0) return tamanho;
-  const normalizado = valor.normalize('NFKC');
-  const contato = redigirCanalMediado(normalizado).retirados.length > 0;
-  const pagamento = PAGAMENTO.some((padrao) => padrao.test(normalizado.replace(/[\u200b-\u200f\u2060-\u2064\ufeff]/gu, '')));
+  const { base, letras } = normalizarParaConferencia(semDatas(valor.normalize('NFKC')));
+  const contato =
+    redigirCanalMediado(semDatas(valor.normalize('NFKC'))).retirados.length > 0 ||
+    DOMINIO.test(base) ||
+    DOMINIO.test(letras) ||
+    DOMINIO_COM_CAMINHO.test(base) ||
+    ARROBA.test(base);
+  const pagamento = PAGAMENTO_POR_PALAVRA.test(letras) || PAGAMENTO_POR_NUMERO.some((padrao) => padrao.test(base));
   if (contato || pagamento) {
     return [
       {
         field: campo,
         code: 'contact_or_payment_detected',
-        message: 'As observações não podem ter telefone, e-mail, link, endereço, CEP nem chave PIX.',
+        message: 'As observações não podem ter telefone, e-mail, link, perfil, endereço, CEP, chave PIX nem dados de pagamento.',
       },
     ];
   }
@@ -362,6 +433,19 @@ export function podeDecidir(
   return pedido.decisao === 'pending';
 }
 
+/**
+ * O encontro ainda recebe decisao sobre pedido? So o publicado que nao terminou
+ * (a mesma regra de `expired` que o app aplica ao pedido). Cancelado, removido
+ * ou encerrado responde 409 `event-not-open`: aprovar ali mandaria push sobre um
+ * encontro que nao vai acontecer.
+ */
+export function encontroAbertoParaDecisao(
+  encontro: Pick<PedidoNaFila['encontro'], 'publicacao' | 'startsAt' | 'endsAt'>,
+  agora: Instant,
+): boolean {
+  return encontro.publicacao === 'published' && tempoDoEncontro(encontro, agora) !== 'ended';
+}
+
 // ---------------------------------------------------------------------------
 // Projecoes
 // ---------------------------------------------------------------------------
@@ -492,6 +576,13 @@ export interface PedidoProjetado {
   readonly withdrawn_at: string | null;
 }
 
+/** Ano e mes (`AAAA-MM`) no horario de Brasilia: a conta criada 31/03 as 22h em Sao Paulo e de marco, e nao de abril. */
+export function mesEmSaoPaulo(instante: Date): string {
+  const partes = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit' }).formatToParts(instante);
+  const n = (tipo: string): string => partes.find((x) => x.type === tipo)?.value ?? '';
+  return `${n('year')}-${n('month')}`;
+}
+
 /**
  * D53: do solicitante sai **so** o nome de exibicao (ou `null`, nunca o
  * e-mail), o mes de criacao da conta e o booleano do e-mail confirmado.
@@ -507,7 +598,7 @@ export function projetarPedido(p: PedidoNaFila): PedidoProjetado {
     },
     requester: {
       display_name: p.solicitante.displayName,
-      member_since: p.solicitante.contaCriadaEm.toISOString().slice(0, 7),
+      member_since: mesEmSaoPaulo(p.solicitante.contaCriadaEm),
       email_verified: p.solicitante.emailConfirmado,
     },
     status: p.decisao,

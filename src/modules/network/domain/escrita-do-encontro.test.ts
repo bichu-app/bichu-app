@@ -10,10 +10,15 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { comoData } from '../../../shared/time/clock.js';
+import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import {
   entradaDoCorpo,
+  encontroAbertoParaDecisao,
   errosDasObservacoes,
+  mesEmSaoPaulo,
+  normalizarParaConferencia,
+  semDatas,
   errosDeTexto,
   errosDoHorario,
   lerIfMatch,
@@ -49,8 +54,59 @@ void describe('D59: observacoes sem contato nem pagamento', () => {
     }
   });
 
+  void it('ISCA (QA 28/09): encurtador, dominio, @perfil, PIX quebrado e dados bancarios sao recusados', () => {
+    for (const texto of [
+      'Inscricao em bit.ly/encontro',
+      'Tudo em linktr.ee/organizacao',
+      'veja meusite.com.br',
+      'fale no wa.me/5511987654321',
+      'site . com',
+      'siga @organizacao',
+      'Pague no p i x',
+      'Pague no p-i-x',
+      'Pague no P1X',
+      'Pague no Pïx',
+      'Aceitamos PicPay',
+      'Aceitamos pic pay',
+      'Mercado Pago na entrada',
+      'ag 1234 cc 56789-0',
+      'Agência: 0001 Conta: 12345-6',
+      'deposite em qualquer.dominio/caminho',
+    ]) {
+      assert.deepEqual(codigos(texto), ['contact_or_payment_detected'], texto);
+    }
+  });
+
+  void it('a normalizacao junta letra quebrada, troca digito que imita letra e tira acento', () => {
+    assert.equal(normalizarParaConferencia('P-1-X e Pïx').letras, 'pix e pix');
+    assert.equal(normalizarParaConferencia('p i x').letras, 'pix');
+    assert.equal(normalizarParaConferencia('ag 1234').base, 'ag 1234');
+  });
+
+  void it('datas dd.mm.aaaa e dd/mm/aaaa passam; telefone parecido com data continua recusado', () => {
+    for (const texto of ['Proximo encontro em 10.10.2026.', 'Remarcado de 03/11/2026 para 17/11/2026', 'Dia 1.2.2027, se chover.']) {
+      assert.deepEqual(codigos(texto), [], texto);
+    }
+    for (const texto of ['Liga 10.10.2026.99', 'Chame 11 98765-4321 ate 10/10/2026', '32.13.2026 1198765432']) {
+      assert.deepEqual(codigos(texto), ['contact_or_payment_detected'], texto);
+    }
+    assert.equal(semDatas('de 10.10.2026 a 31/12/2026'), 'de  data  a  data ');
+    assert.equal(semDatas('13.13.2026 e 10.10.26'), '13.13.2026 e 10.10.26');
+  });
+
+  void it('a conversa mediada NAO mudou: redigir.ts continua lendo 10.10.2026 como telefone', () => {
+    assert.equal(redigirCanalMediado('Encontro em 10.10.2026').retirados[0]?.kind, 'phone');
+  });
+
   void it('texto de complemento passa', () => {
-    for (const texto of ['Traga agua e saquinho.', 'Encontro na praca central, perto do coreto.', 'Caes de todos os portes.']) {
+    for (const texto of [
+      'Traga agua e saquinho.',
+      'Encontro na praca central, perto do coreto.',
+      'Caes de todos os portes.',
+      'Traga água.Leve petisco e um mix de brinquedos.',
+      'Picnic liberado na sombra; evite pisar no canteiro.',
+      'A agenda do mês tem 3 encontros e 2 caminhadas.',
+    ]) {
       assert.deepEqual(codigos(texto), [], texto);
     }
   });
@@ -137,12 +193,32 @@ void describe('decisao do pedido', () => {
       requestedAt: d('2026-09-27T10:00:00Z'),
       decidedAt: null,
       withdrawnAt: null,
-      encontro: { slug: 'abc', title: 'Encontro', startsAt: d('2026-10-10T12:00:00Z'), timeZone: 'America/Sao_Paulo' },
+      encontro: { slug: 'abc', title: 'Encontro', startsAt: d('2026-10-10T12:00:00Z'), endsAt: null, timeZone: 'America/Sao_Paulo', publicacao: 'published' },
       solicitante: { displayName: 'Ana', contaCriadaEm: d('2024-07-19T15:30:00Z'), emailConfirmado: false },
     });
     assert.deepEqual(Object.keys(p.requester).sort(), ['display_name', 'email_verified', 'member_since']);
     assert.equal(p.requester.member_since, '2024-07');
     assert.ok(!JSON.stringify(p).includes('0192a3b4'), 'o id interno saiu na projecao');
+  });
+});
+
+void describe('o encontro ainda recebe decisao sobre pedido? (QA 28/09)', () => {
+  const futuro = { startsAt: d('2026-10-10T12:00:00Z'), endsAt: d('2026-10-10T14:00:00Z') };
+  void it('ISCA: cancelado, removido e encerrado nao recebem; so o publicado que nao terminou recebe', () => {
+    assert.equal(encontroAbertoParaDecisao({ ...futuro, publicacao: 'published' }, AGORA), true);
+    assert.equal(encontroAbertoParaDecisao({ ...futuro, publicacao: 'cancelled' }, AGORA), false);
+    assert.equal(encontroAbertoParaDecisao({ ...futuro, publicacao: 'removed' }, AGORA), false);
+    assert.equal(
+      encontroAbertoParaDecisao({ publicacao: 'published', startsAt: d('2026-09-01T12:00:00Z'), endsAt: d('2026-09-01T14:00:00Z') }, AGORA),
+      false,
+    );
+  });
+});
+
+void describe('mes de criacao da conta em America/Sao_Paulo (QA 28/09)', () => {
+  void it('ISCA: 01/04 as 02h UTC ainda e marco em Sao Paulo', () => {
+    assert.equal(mesEmSaoPaulo(d('2026-04-01T02:00:00Z')), '2026-03');
+    assert.equal(mesEmSaoPaulo(d('2026-04-01T03:00:00Z')), '2026-04');
   });
 });
 

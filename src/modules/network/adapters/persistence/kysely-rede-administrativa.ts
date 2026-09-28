@@ -223,7 +223,9 @@ interface LinhaDoPedido {
   event_slug: string;
   event_title: string;
   event_starts_at: Date;
+  event_ends_at: Date | null;
   event_time_zone: string;
+  event_publication: PublicacaoAdministrativa;
   display_name: string | null;
   account_created_at: Date;
   email_verified: boolean;
@@ -233,7 +235,7 @@ interface LinhaDoPedido {
 const COLUNAS_DO_PEDIDO = sql`
   j.id, j.ref, j.status, j.requested_at, j.decided_at, j.withdrawn_at,
   e.slug AS event_slug, e.title AS event_title, e.starts_at AS event_starts_at,
-  e.time_zone AS event_time_zone,
+  e.ends_at AS event_ends_at, e.time_zone AS event_time_zone, e.publication_status AS event_publication,
   u.display_name, u.created_at AS account_created_at,
   (u.email_verified_at IS NOT NULL) AS email_verified`;
 
@@ -245,7 +247,14 @@ function comoPedido(l: LinhaDoPedido): PedidoNaFila {
     requestedAt: l.requested_at,
     decidedAt: l.decided_at,
     withdrawnAt: l.withdrawn_at,
-    encontro: { slug: l.event_slug, title: l.event_title, startsAt: l.event_starts_at, timeZone: l.event_time_zone },
+    encontro: {
+      slug: l.event_slug,
+      title: l.event_title,
+      startsAt: l.event_starts_at,
+      endsAt: l.event_ends_at,
+      timeZone: l.event_time_zone,
+      publicacao: l.event_publication,
+    },
     solicitante: {
       displayName: l.display_name,
       contaCriadaEm: l.account_created_at,
@@ -254,13 +263,17 @@ function comoPedido(l: LinhaDoPedido): PedidoNaFila {
   };
 }
 
+/**
+ * O pedido pelo `ref` ou pelo `id`, de encontro privado em qualquer estado do
+ * painel: o removido tambem e lido, para a decisao responder 409 e nao 404.
+ */
 async function lerPedido(db: DbExecutor, onde: ReturnType<typeof sql<SqlBool>>, travar: boolean): Promise<PedidoNaFila | null> {
   const r = await sql<LinhaDoPedido>`
     SELECT ${COLUNAS_DO_PEDIDO}
       FROM network_event_join_requests j
       JOIN network_events e ON e.id = j.event_id
       JOIN users u ON u.id = j.user_id
-     WHERE e.visibility = 'private' AND e.publication_status IN ('published', 'cancelled') AND ${onde}
+     WHERE e.visibility = 'private' AND e.publication_status IN ('published', 'cancelled', 'removed') AND ${onde}
      ${travar ? sql`FOR UPDATE OF j` : sql``}`.execute(db);
   const linha = r.rows[0];
   return linha === undefined ? null : comoPedido(linha);
