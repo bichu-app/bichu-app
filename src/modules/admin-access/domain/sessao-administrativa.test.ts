@@ -10,8 +10,8 @@ import {
   abreSessaoAdministrativa,
   avaliarSessao,
   derivarTokenAntiCsrf,
-  ehContaDedicada,
   inatividadeRenovada,
+  instanteDaBarreira,
   instanteDaSenha,
   papeisDoPainel,
   prazosDeNovaSessao,
@@ -65,6 +65,16 @@ void describe('prazos da sessao administrativa (D38)', () => {
     assert.equal(precisaRenovarUso(T0, em(MIN)), true);
   });
 
+  void it('a barreira empurrada derruba a sessao anterior, nunca recua, e a seguinte nasce valida', () => {
+    const barreira = instanteDaBarreira(em(400), T0);
+    assert.equal(barreira, em(400));
+    // Barreira atual adiantada ao relogio: a nova fica no segundo seguinte a ela.
+    assert.equal(instanteDaBarreira(em(400), em(700)), em(1_001));
+    assert.equal(avaliarSessao({ ...prazosDeNovaSessao(em(300)), revokedAt: null }, barreira, em(500)), 'anterior_a_barreira');
+    const depois = prazosDeNovaSessao(instanteDaSenha(em(500), barreira));
+    assert.equal(avaliarSessao({ ...depois, revokedAt: null }, barreira, em(1_100)), 'valida');
+  });
+
   void it('a sessao nova nasce do lado valido de uma barreira adiantada ao relogio', () => {
     const barreira = em(700);
     const instante = instanteDaSenha(T0, barreira);
@@ -74,12 +84,15 @@ void describe('prazos da sessao administrativa (D38)', () => {
 });
 
 void describe('papeis', () => {
-  void it('so admin abre o painel na v1; admin e moderator tornam a conta dedicada (D42)', () => {
-    assert.equal(abreSessaoAdministrativa(['tutor', 'admin']), true);
-    assert.equal(abreSessaoAdministrativa(['tutor', 'moderator']), false);
-    assert.equal(ehContaDedicada(['tutor', 'moderator']), true);
-    assert.equal(ehContaDedicada(['tutor']), false);
-    assert.deepEqual(papeisDoPainel(['tutor', 'admin', 'moderator']), ['admin']);
+  // Ate 28/09 este caso provava tambem a "conta dedicada" de D42 (papel em
+  // `user_roles` recusado na porta do app). Com cadastros separados a D42 e do
+  // esquema, e a prova dela e P21 (`cadastros-separados.test.ts` e o bloco P21
+  // de `sessao-administrativa-pelo-http.test.ts`).
+  void it('so admin abre o painel na v1', () => {
+    assert.equal(abreSessaoAdministrativa(['admin']), true);
+    assert.equal(abreSessaoAdministrativa(['moderator']), false);
+    assert.equal(abreSessaoAdministrativa([]), false);
+    assert.deepEqual(papeisDoPainel(['admin', 'moderator']), ['admin']);
   });
 });
 

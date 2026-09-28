@@ -48,7 +48,7 @@ import * as aparelhos from '../../modules/notifications/adapters/http/device-rou
 import * as diretorio from '../../modules/professionals/adapters/http/directory-routes.js';
 import * as vitrine from '../../modules/store/adapters/http/store-routes.js';
 import * as saude from './health.js';
-import * as sessaoAdministrativa from '../../modules/identity/adapters/http/admin-session-routes.js';
+import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 

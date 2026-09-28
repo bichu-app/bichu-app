@@ -12,7 +12,7 @@
  * hash da sessao (ADR-0027 item 8): e o que liga uma escrita a UMA sessao numa
  * investigacao de conta tomada, sem gravar nada que reabra a sessao.
  */
-import type { UserId } from '../../../shared/types/brands.js';
+import type { AdminAccountId } from '../../../shared/types/brands.js';
 import {
   ACOES_ADMINISTRATIVAS,
   type AcaoAdministrativa,
@@ -21,7 +21,8 @@ import {
 
 /** Quem agiu, como a guarda do prefixo o identificou. */
 export interface AtorAdministrativo {
-  readonly userId: UserId;
+  /** `admin_accounts.id`, que vai em `actor_admin_id` e nunca em `actor_user_id`. */
+  readonly adminAccountId: AdminAccountId;
   readonly ip: string | undefined;
   readonly correlationId: string;
   /** Oito primeiros bytes do SHA-256 da sessao, em hexadecimal. */
@@ -61,8 +62,8 @@ export function eventoAdministrativo(
     );
   }
   return {
-    actorKind: 'user',
-    actorUserId: ator.userId,
+    actorKind: 'admin',
+    actorAdminId: ator.adminAccountId,
     actorIp: ator.ip,
     correlationId: ator.correlationId,
     action: declaracao.action,

@@ -25,6 +25,12 @@ export const MODULES = [
   // terceiro. Junta-las faria uma fronteira que a arquitetura nao consegue
   // vigiar, com `professionals` importando `store_items`.
   'store',
+  // ADR-0027 item 20. A sessao e o cadastro do painel sao modulo proprio, e nao
+  // um canto de `identity`: o painel tem contas separadas das do app, e esta
+  // fronteira e o que vigia a separacao no codigo. `admin-access` importa de
+  // `identity` so `ports/senha.ts` e `ports/lista-de-senhas-vazadas.ts`, e
+  // `identity` nao importa nada daqui.
+  'admin-access',
 ];
 
 /**

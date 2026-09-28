@@ -141,8 +141,9 @@ export class ConversationService {
       if (gravada === undefined) return undefined;
       conversa = gravada;
       await this.deps.trilha.record({
-        actorKind: aviso.achadorComConta === null ? 'anonymous' : 'user',
-        ...(aviso.achadorComConta === null ? {} : { actorUserId: aviso.achadorComConta }),
+        ...(aviso.achadorComConta === null
+          ? { actorKind: 'anonymous' as const }
+          : { actorKind: 'user' as const, actorUserId: aviso.achadorComConta }),
         action: 'conversation.opened',
         resourceKind: 'conversation',
         resourceId: conversa,

@@ -8,9 +8,11 @@
  * rota em `sessao-administrativa-pelo-http.test.ts`; as da `Loja` e da `Rede`
  * entram com as rotas delas.
  *
- * A escrita de teste e um `UPDATE` em `users.display_name` de uma conta criada
- * aqui: e uma tabela que existe em todo banco desta suite, e o valor e lido de
- * volta para provar que mudou ou que nao mudou.
+ * A escrita de teste e um `UPDATE` em `admin_accounts.display_name` de uma
+ * conta do painel criada aqui, e o ator do evento e essa mesma conta, como
+ * `actor_kind = 'admin'` (ADR-0027 item 20.2): e o que toda escrita
+ * administrativa grava. O valor e lido de volta para provar que mudou ou que
+ * nao mudou.
  *
  * Tres coisas que so o banco responde, e que dublê nenhum reproduz:
  *
@@ -18,7 +20,7 @@
  *    pelo proprio banco: `correlation_id` e `uuid`, e uma cadeia que nao e UUID
  *    cai em `22P02` dentro da transacao.
  * 2. **O papel da trilha nao vaza para a escrita.** `recordIn` assume
- *    `bichu_audit_writer`, que nao tem `UPDATE` em `users`; um comando DEPOIS
+ *    `bichu_audit_writer`, que nao tem `UPDATE` em `admin_accounts`; um comando DEPOIS
  *    do evento so funciona se o papel anterior foi reposto.
  * 3. **O evento fica gravado com o papel certo**, e nao com o dono da tabela.
  *
@@ -38,22 +40,21 @@ import { loadAppConfig } from '../../src/shared/config/app-config.js';
 import { createDb, type Db } from '../../src/shared/db/pool.js';
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { systemClock } from '../../src/shared/time/clock.js';
-import type { UserId } from '../../src/shared/types/brands.js';
+import type { AdminAccountId } from '../../src/shared/types/brands.js';
 import {
   criarEscritaAuditada,
   criarTrilhaTransacional,
 } from '../../src/modules/audit/adapters/persistence/kysely-audit-log.js';
 import type { AuditEvent, EscritaAuditada } from '../../src/modules/audit/ports/audit-log.js';
-import { criarIdentityRepository } from '../../src/modules/identity/adapters/persistence/kysely-identity-repository.js';
 
 let banco: { db: Db; close: () => Promise<void> };
 let escrita: EscritaAuditada;
-let conta: UserId;
+let conta: AdminAccountId;
 
 function evento(correlationId: string): AuditEvent {
   return {
-    actorKind: 'user',
-    actorUserId: conta,
+    actorKind: 'admin',
+    actorAdminId: conta,
     correlationId,
     action: 'admin.store_partner.updated',
     resourceKind: 'teste_trilha',
@@ -64,7 +65,7 @@ function evento(correlationId: string): AuditEvent {
 
 async function nomeAtual(): Promise<string | null> {
   const linha = await banco.db
-    .selectFrom('users')
+    .selectFrom('admin_accounts')
     .select('display_name')
     .where('id', '=', conta)
     .executeTakeFirstOrThrow();
@@ -88,19 +89,18 @@ before(async () => {
     db: banco.db,
     trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
   });
-  const criada = await criarIdentityRepository(banco.db, ids).criarContaLocal({
+  conta = ids.uuidv7() as AdminAccountId;
+  await banco.db.insertInto('admin_accounts').values({
+    id: conta,
     email: `trilha-${randomUUID().slice(0, 8)}@exemplo.invalid`,
-    displayName: 'antes',
-    acceptedTermsVersion: undefined,
-    passwordPhc: '$pbkdf2-sha512$i=1$c2Fs$aGFzaA',
-    agora: systemClock.now(),
-  });
-  assert.ok(criada !== undefined, 'a conta de teste nao foi criada');
-  conta = criada.id;
+    display_name: 'antes',
+    password_phc: '$pbkdf2-sha512$i=1$c2Fs$aGFzaA',
+    password_updated_at: new Date(),
+  }).execute();
 });
 
 after(async () => {
-  await banco.db.deleteFrom('users').where('id', '=', conta).execute();
+  await banco.db.deleteFrom('admin_accounts').where('id', '=', conta).execute();
   await banco.close();
 });
 
@@ -108,7 +108,7 @@ void describe('EscritaAuditada: escrita e trilha na mesma transacao', () => {
   void it('grava o dado e o evento juntos, e o evento com o papel da trilha', async () => {
     const correlacao = randomUUID();
     const devolvido = await escrita.executar(async (trx) => {
-      await trx.updateTable('users').set({ display_name: 'depois' }).where('id', '=', conta).execute();
+      await trx.updateTable('admin_accounts').set({ display_name: 'depois' }).where('id', '=', conta).execute();
       return { resultado: 'feito', evento: evento(correlacao) };
     });
 
@@ -118,11 +118,11 @@ void describe('EscritaAuditada: escrita e trilha na mesma transacao', () => {
   });
 
   void it('falha da trilha no banco desfaz a escrita que veio antes dela (P17)', async () => {
-    await banco.db.updateTable('users').set({ display_name: 'intacto' }).where('id', '=', conta).execute();
+    await banco.db.updateTable('admin_accounts').set({ display_name: 'intacto' }).where('id', '=', conta).execute();
 
     await assert.rejects(
       escrita.executar(async (trx) => {
-        await trx.updateTable('users').set({ display_name: 'nao-devia-ficar' }).where('id', '=', conta).execute();
+        await trx.updateTable('admin_accounts').set({ display_name: 'nao-devia-ficar' }).where('id', '=', conta).execute();
         // `correlation_id` e `uuid` no banco: o INSERT da trilha falha la dentro.
         return { resultado: undefined, evento: evento('nao-e-uuid') };
       }),
@@ -133,14 +133,16 @@ void describe('EscritaAuditada: escrita e trilha na mesma transacao', () => {
   });
 
   void it('evento incoerente e recusado antes do INSERT, e a escrita tambem cai', async () => {
-    await banco.db.updateTable('users').set({ display_name: 'intacto-2' }).where('id', '=', conta).execute();
+    await banco.db.updateTable('admin_accounts').set({ display_name: 'intacto-2' }).where('id', '=', conta).execute();
 
     await assert.rejects(
       escrita.executar(async (trx) => {
-        await trx.updateTable('users').set({ display_name: 'nao-devia-ficar' }).where('id', '=', conta).execute();
+        await trx.updateTable('admin_accounts').set({ display_name: 'nao-devia-ficar' }).where('id', '=', conta).execute();
         return {
           resultado: undefined,
-          evento: { ...evento(randomUUID()), actorUserId: undefined },
+          // Ator `admin` sem `actorAdminId`: o tipo nao deixa escrever isto, e
+          // a conversao e o caminho por onde um evento assim chegaria.
+          evento: { ...evento(randomUUID()), actorAdminId: undefined } as unknown as AuditEvent,
         };
       }),
       /incoerente/,
@@ -162,7 +164,7 @@ void describe('EscritaAuditada: escrita e trilha na mesma transacao', () => {
       await trilha.recordIn(trx, evento(correlacao));
       const depois = await sql<{ papel: string }>`select current_user as papel`.execute(trx);
       assert.equal(depois.rows[0]?.papel, antes.rows[0]?.papel, 'o papel da trilha ficou valendo');
-      await trx.updateTable('users').set({ display_name: 'depois-do-evento' }).where('id', '=', conta).execute();
+      await trx.updateTable('admin_accounts').set({ display_name: 'depois-do-evento' }).where('id', '=', conta).execute();
     });
 
     assert.equal(await nomeAtual(), 'depois-do-evento');

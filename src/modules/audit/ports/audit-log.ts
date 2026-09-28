@@ -14,7 +14,7 @@
  * coordenada bruta nem conteúdo de mensagem (docs/04-seguranca.md 9).
  */
 import type { DbTransaction } from '../../../shared/db/pool.js';
-import type { UserId } from '../../../shared/types/brands.js';
+import type { AdminAccountId, UserId } from '../../../shared/types/brands.js';
 
 /**
  * Ações da trilha. União fechada pelo mesmo motivo de `ProblemType`: ação
@@ -184,12 +184,31 @@ export const ACOES_ADMINISTRATIVAS = [
 
 export type AcaoAdministrativa = (typeof ACOES_ADMINISTRATIVAS)[number];
 
-export type ActorKind = 'user' | 'anonymous' | 'system';
+/**
+ * Quem agiu. `admin` é a conta do PAINEL (`admin_accounts`, ADR-0027 item
+ * 20.2), e vai em coluna própria: a trilha nunca mistura UUIDs de duas tabelas
+ * em `actor_user_id`.
+ */
+export type ActorKind = 'user' | 'anonymous' | 'system' | 'admin';
 
-export interface AuditEvent {
-  readonly actorKind: ActorKind;
-  /** Obrigatório quando `actorKind` é `user`, e proibido nos demais. */
-  readonly actorUserId?: UserId | undefined;
+/**
+ * O ator, como união discriminada: `user` carrega `actorUserId`, `admin`
+ * carrega `actorAdminId`, e os outros dois não carregam nenhum. Trocar um
+ * `AdminAccountId` por `UserId`, ou gravar ator do painel como `user`, não
+ * compila (T18 de `04-seguranca.md` 22.11).
+ */
+export type AtorDaTrilha =
+  | { readonly actorKind: 'user'; readonly actorUserId: UserId; readonly actorAdminId?: undefined }
+  | { readonly actorKind: 'admin'; readonly actorAdminId: AdminAccountId; readonly actorUserId?: undefined }
+  | {
+      readonly actorKind: 'anonymous' | 'system';
+      readonly actorUserId?: undefined;
+      readonly actorAdminId?: undefined;
+    };
+
+export type AuditEvent = AtorDaTrilha & DadosDoEventoDeTrilha;
+
+export interface DadosDoEventoDeTrilha {
   /** Endereço de origem em claro. A porta o transforma em HMAC; o domínio não. */
   readonly actorIp?: string | undefined;
   readonly correlationId?: string | undefined;

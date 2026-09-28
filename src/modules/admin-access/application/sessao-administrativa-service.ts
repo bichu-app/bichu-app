@@ -1,17 +1,25 @@
 /**
- * Casos de uso da sessao do backoffice (ADR-0027 itens 2, 5 e 8).
+ * Casos de uso da sessao do backoffice (ADR-0027 itens 2, 5, 8 e 20).
  *
  * Este servico e tambem a `PortaDaSessaoAdministrativa` que a guarda do
  * prefixo `/v1/admin` usa: `conferir`, `registrarRecusa` e
  * `consumirReautenticacao`. A guarda nao sabe o que e conta, papel ou banco;
  * este arquivo nao sabe o que e HTTP.
  *
+ * ## A conta e do painel, e so do painel
+ *
+ * Tudo aqui le `admin_accounts` (item 20). O login do painel nao consulta
+ * `users`: um e-mail que so existe no app e, para esta porta, um e-mail sem
+ * conta, com o mesmo 401 e o mesmo tempo (D42, D44, P21). De `identity` este
+ * modulo so usa a porta de senha, para o hash ser o mesmo do app.
+ *
  * ## Toda escrita vai com a trilha, na mesma transacao
  *
- * Abrir, encerrar, encerrar todas, rotacionar e abrir janela passam por
- * `EscritaAuditada.executar`: se a trilha nao grava, a sessao nao existe (D49).
- * Os eventos que nao acompanham escrita nenhuma (login recusado, recusa da
- * guarda sem revogacao) vao pela trilha comum, que nao derruba o pedido.
+ * Abrir, encerrar, encerrar todas, rotacionar, abrir janela e revogar por conta
+ * desativada passam por `EscritaAuditada.executar`: se a trilha nao grava, a
+ * sessao nao existe (D49). Os eventos que nao acompanham escrita nenhuma (login
+ * recusado, recusa da guarda sem revogacao) vao pela trilha comum, que nao
+ * derruba o pedido.
  */
 import { hashDeToken } from '../../../shared/crypto/digest.js';
 import { problemas } from '../../../shared/http/errors.js';
@@ -24,54 +32,63 @@ import type {
 } from '../../../shared/http/superficie-administrativa.js';
 import type { IdGenerator } from '../../../shared/ports/id-generator.js';
 import { comoData, comoIso, type Clock } from '../../../shared/time/clock.js';
-import type { AbsoluteUrl, Instant, TokenHash, UserId } from '../../../shared/types/brands.js';
+import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
 import type { AuditEvent, AuditLog, EscritaAuditada } from '../../audit/ports/audit-log.js';
-import { normalizarEmail } from '../domain/email.js';
-import { consumirTempoDeVerificacao, verificarSenha } from '../domain/password.js';
+import type { ListaDeSenhasVazadas } from '../../identity/ports/lista-de-senhas-vazadas.js';
+import {
+  consumirTempoDeVerificacao,
+  gerarHashDeSenha,
+  normalizarEmail,
+  precisaDeRehash,
+  verificarSenha,
+} from '../../identity/ports/senha.js';
 import {
   abreSessaoAdministrativa,
   avaliarSessao,
   derivarTokenAntiCsrf,
   etiquetaDaSessao,
   inatividadeRenovada,
+  instanteDaBarreira,
   instanteDaSenha,
   JANELA_DE_REAUTENTICACAO_ADMINISTRATIVA_EM_MS,
   papeisDoPainel,
   prazosDeNovaSessao,
   precisaRenovarUso,
+  VALIDADE_DO_NAO_FUI_EU_EM_MS,
 } from '../domain/sessao-administrativa.js';
-import { instanteDeRevogacao } from '../domain/session.js';
-import type { IdentityRepository } from '../ports/identity-repository.js';
-import type { ListaDeSenhasVazadas } from '../ports/lista-de-senhas-vazadas.js';
-import type { Mailer } from '../ports/mailer.js';
+import type { AvisoPorEmail } from '../ports/aviso-por-email.js';
+import type { ContaAdministrativa, RepositorioDeContasAdministrativas } from '../ports/repositorio-de-contas-administrativas.js';
 import type { SessaoAdministrativaRepository } from '../ports/sessao-administrativa-repository.js';
 import {
   NOTA_MINIMA_DO_CAPTCHA_ADMINISTRATIVO,
   type VerificadorDeCaptcha,
 } from '../ports/verificador-de-captcha.js';
-import type { RegistrarOcorrencia } from './dependencies.js';
 
 /** A acao do reCAPTCHA que o documento `/entrar` declara ao colher o token. */
 export const ACAO_DO_CAPTCHA_ADMINISTRATIVO = 'admin_login';
 
-/** Validade do link "nao fui eu" do aviso de sessao aberta: a mesma do aviso de reuso. */
-const VALIDADE_DO_NAO_FUI_EU_EM_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Uma linha de log estruturado. Tipo estrutural, e nao o logger do Fastify:
+ * `application/` nao conhece framework.
+ */
+export type RegistrarOcorrencia = (dados: Record<string, unknown>, mensagem: string) => void;
 
 export interface DependenciasDaSessaoAdministrativa {
   readonly sessoes: SessaoAdministrativaRepository;
-  readonly identidade: Pick<
-    IdentityRepository,
-    'buscarCredencialLocalPorEmail' | 'buscarContaPorId' | 'registrarLogin' | 'criarTokenDeVerificacao'
-  >;
+  readonly contas: RepositorioDeContasAdministrativas;
   readonly escrita: EscritaAuditada;
   readonly trilha: AuditLog;
   readonly captcha: VerificadorDeCaptcha;
   readonly senhasVazadas: ListaDeSenhasVazadas;
-  readonly mailer: Mailer;
+  readonly avisos: AvisoPorEmail;
   readonly ids: IdGenerator;
   readonly clock: Clock;
   readonly hmacDeIp: (ip: string | undefined) => Buffer | null;
-  readonly baseDaWeb: AbsoluteUrl;
+  /**
+   * `ADMIN_ORIGIN`, a origem exata do painel. O link "nao fui eu" aponta para a
+   * pagina `/nao-fui-eu` do PROPRIO painel, e nao para o site do app.
+   */
+  readonly origemDoPainel: string;
   readonly registrarOcorrencia: RegistrarOcorrencia;
 }
 
@@ -113,35 +130,36 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     session: etiqueta,
   });
 
-  /** Login recusado: vai para a trilha comum, porque nao ha escrita a acompanhar. */
+  /**
+   * Login recusado: vai para a trilha comum, porque nao ha escrita a
+   * acompanhar. O ator e anonimo mesmo quando o e-mail tem conta: quem errou a
+   * senha nao provou ser o dono dela. A conta, quando existe, vai como recurso.
+   */
   async function registrarLoginRecusado(
     contexto: ContextoDaRequisicao,
     motivo: string,
-    userId: UserId | undefined,
+    contaAlvo: AdminAccountId | undefined,
   ): Promise<void> {
-    const evento: AuditEvent =
-      userId === undefined
-        ? { actorKind: 'anonymous', actorIp: contexto.ip, correlationId: contexto.correlationId,
-            action: 'admin.session.denied', resourceKind: 'admin_session',
-            metadata: { surface: 'admin', reason: motivo } }
-        : { actorKind: 'user', actorUserId: userId, actorIp: contexto.ip, correlationId: contexto.correlationId,
-            action: 'admin.session.denied', resourceKind: 'admin_session', resourceId: userId,
-            metadata: { surface: 'admin', reason: motivo } };
-    await deps.trilha.record(evento);
+    await deps.trilha.record({
+      actorKind: 'anonymous',
+      actorIp: contexto.ip,
+      correlationId: contexto.correlationId,
+      action: 'admin.session.denied',
+      resourceKind: contaAlvo === undefined ? 'admin_session' : 'admin_account',
+      ...(contaAlvo === undefined ? {} : { resourceId: contaAlvo }),
+      metadata: { surface: 'admin', reason: motivo },
+    });
   }
 
   function visao(
-    displayName: string | null,
+    displayName: string,
     papeis: readonly string[],
     valorDoCookie: string,
     idleExpiresAt: Instant,
     absoluteExpiresAt: Instant,
   ): VisaoDaSessaoAdministrativa {
     return {
-      // `display_name` e obrigatorio no contrato e a coluna aceita nulo; cadeia
-      // vazia e o valor honesto de "a conta nao tem nome", e o e-mail nao pode
-      // entrar no lugar (D51).
-      display_name: displayName ?? '',
+      display_name: displayName,
       roles: papeisDoPainel(papeis),
       csrf_token: derivarTokenAntiCsrf(valorDoCookie),
       idle_expires_at: comoIso(idleExpiresAt),
@@ -150,42 +168,87 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
   }
 
   /**
-   * D46: o dono da conta recebe um e-mail a cada sessao aberta, com o link
-   * "nao fui eu" que ja existe (`disavowSessionAlert`). Ele empurra
-   * `sessions_invalid_before`, que a guarda le a cada requisicao.
+   * D43, forma de 28/09: a senha certa que esta numa base de vazadas NAO tem
+   * resposta propria. O login devolve o mesmo 401 da senha errada, e o aviso vai
+   * por e-mail a TODOS os administradores ativos, o dono incluido: a conta
+   * precisa de `conta-admin redefinir-senha`, rodado no servidor. Nao ha link
+   * de redefinicao, porque nao ha redefinicao fora do comando (item 20.4).
+   *
+   * Sem `await` em quem chama: o envio nao pode alongar esta resposta em
+   * relacao a da senha errada. Falha de envio vai para o log, com a conta.
+   */
+  function avisarSenhaVazada(conta: ContaAdministrativa, agora: Instant, contexto: ContextoDaRequisicao): void {
+    const enviar = async (): Promise<void> => {
+      const destinatarios = await deps.contas.listarAtivas();
+      const naoReceberam: string[] = [];
+      for (const destino of destinatarios) {
+        try {
+          await deps.avisos.enviar({
+            para: destino.email,
+            assunto: 'Uma conta do painel do Bichu precisa trocar a senha',
+            corpo:
+              `Em ${comoIso(agora)} (UTC) alguém entrou no painel administrativo do Bichu com a senha ` +
+              `certa da conta de ${conta.displayName}, e essa senha aparece em vazamentos de outros ` +
+              'sites. Por isso ela não é mais aceita, e o acesso foi recusado.\n\n' +
+              'A senha precisa ser redefinida pelo responsável pelo painel, no servidor, com o comando ' +
+              '`conta-admin redefinir-senha`. Não existe link de redefinição.\n\n' +
+              'Se não foi a própria pessoa que tentou entrar, a senha dela está com outra pessoa.',
+          });
+        } catch {
+          naoReceberam.push(destino.id);
+        }
+      }
+      if (naoReceberam.length > 0) {
+        deps.registrarOcorrencia(
+          { evento: 'admin.session.breach_notice_failed', conta: conta.id, naoReceberam, correlationId: contexto.correlationId },
+          'aviso de senha vazada do painel nao chegou a todos os administradores',
+        );
+      }
+    };
+    void enviar().catch((erro: unknown) => {
+      deps.registrarOcorrencia(
+        { evento: 'admin.session.breach_notice_failed', conta: conta.id, correlationId: contexto.correlationId, err: String(erro) },
+        'aviso de senha vazada do painel nao saiu',
+      );
+    });
+  }
+
+  /**
+   * D46: o dono da conta recebe um e-mail a cada sessao aberta, com o link "nao
+   * fui eu" do proprio painel (D62). O token vai no FRAGMENTO (`#t=`), que o
+   * navegador nao manda ao servidor nem poe em `Referer`: nao chega a log de
+   * borda nenhum. A pagina o envia por `POST /v1/admin/auth/disavow`.
    *
    * Falha do envio nao desfaz o login: a sessao ja esta aberta e gravada com a
    * trilha. Mas nao some: sai no log com a correlacao.
    */
   async function avisarSessaoAberta(
-    userId: UserId,
-    email: string,
+    conta: ContaAdministrativa,
+    sessionId: string,
     agora: Instant,
     contexto: ContextoDaRequisicao,
   ): Promise<void> {
     try {
       const tokenBruto = deps.ids.opaqueToken();
-      await deps.identidade.criarTokenDeVerificacao({
+      await deps.sessoes.criarAviso({
         id: deps.ids.uuidv7(),
-        userId,
-        proposito: 'session_disavow',
-        tokenHash: hashDeToken(tokenBruto).toString('base64') as TokenHash,
-        enviadoPara: email,
+        adminAccountId: conta.id,
+        sessionId,
+        tokenHash: hashDeToken(tokenBruto),
         expiraEm: (agora + VALIDADE_DO_NAO_FUI_EU_EM_MS) as Instant,
-        ipHmac: deps.hmacDeIp(contexto.ip),
       });
-      const base = deps.baseDaWeb.replace(/\/$/, '');
-      await deps.mailer.enviar({
-        para: email,
+      const base = deps.origemDoPainel.replace(/\/$/, '');
+      await deps.avisos.enviar({
+        para: conta.email,
         assunto: 'Uma sessão do painel do Bichu foi aberta com a sua conta',
         corpo:
           `Uma sessão do painel administrativo do Bichu foi aberta com a sua conta em ` +
           `${comoIso(agora)} (UTC).\n\n` +
           'Se foi você, não precisa fazer nada.\n\n' +
-          'Se não foi, abra este link. Ele encerra na hora todas as sessões da conta, ' +
-          'sem pedir senha:\n\n' +
-          `${base}/nao-fui-eu?token=${tokenBruto}\n\n` +
-          'Depois, troque a senha em "Esqueci minha senha" e avise o responsável pelo painel.',
+          'Se não foi, abra este link. Ele encerra na hora todas as sessões da conta e ' +
+          'bloqueia novas entradas, sem pedir senha:\n\n' +
+          `${base}/nao-fui-eu#t=${tokenBruto}\n\n` +
+          'Depois, fale com o responsável pelo painel para redefinir a senha.',
       });
     } catch (erro) {
       deps.registrarOcorrencia(
@@ -195,37 +258,59 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     }
   }
 
+  function eventoDoAdmin(
+    sessao: SessaoAdministrativaConferida,
+    contexto: ContextoDaRequisicao,
+    dados: Pick<AuditEvent, 'action' | 'resourceKind' | 'resourceId' | 'metadata'>,
+  ): AuditEvent {
+    return {
+      actorKind: 'admin',
+      actorAdminId: sessao.adminAccountId,
+      actorIp: contexto.ip,
+      correlationId: contexto.correlationId,
+      ...dados,
+    };
+  }
+
   const porta: PortaDaSessaoAdministrativa = {
-    async conferir(valorDoCookie) {
+    async conferir(valorDoCookie, contexto) {
       const agora = deps.clock.now();
       const tokenHash = hashDeToken(valorDoCookie);
-      const armazenada = await deps.sessoes.buscarPorHash(tokenHash);
-      if (armazenada === undefined) throw problemas.naoAutenticado();
+      const encontrada = await deps.sessoes.contaParaAGuarda(tokenHash);
+      if (encontrada === undefined) throw problemas.naoAutenticado();
+      const { sessao: armazenada, conta } = encontrada;
 
-      const conta = await deps.identidade.buscarContaPorId(armazenada.userId);
-      if (conta === undefined || conta.status !== 'active') throw problemas.sessaoDoPainelVencida();
       if (avaliarSessao(armazenada, conta.sessionsInvalidBefore, agora) !== 'valida') {
         throw problemas.sessaoDoPainelVencida();
       }
 
-      const papeis = await deps.sessoes.papeisDaConta(armazenada.userId);
+      const conferida: SessaoAdministrativaConferida = {
+        sessionId: armazenada.id,
+        adminAccountId: conta.id,
+        displayName: conta.displayName,
+        papeis: [conta.papel],
+        csrfTokenHash: armazenada.csrfTokenHash,
+        etiqueta: etiquetaDaSessao(tokenHash),
+        instanteDaSenha: comoData(armazenada.createdAt),
+        idleExpiresAt: comoData(armazenada.idleExpiresAt),
+        absoluteExpiresAt: comoData(armazenada.absoluteExpiresAt),
+      };
+
+      // Conta desativada com sessao viva: `conta-admin desativar` revoga na
+      // mesma transacao, entao isto so acontece se alguem desativou por fora do
+      // comando. A guarda nao confia nisso: derruba todas as sessoes da conta e
+      // recusa com 403 nesta mesma requisicao.
+      if (conta.status !== 'active') {
+        await porta.registrarRecusa(conferida, 'account_disabled', contexto);
+        throw problemas.proibidoNoPainel();
+      }
+
       let idleExpiresAt = armazenada.idleExpiresAt;
       if (precisaRenovarUso(armazenada.lastSeenAt, agora)) {
         idleExpiresAt = inatividadeRenovada(agora, armazenada.absoluteExpiresAt);
         await deps.sessoes.renovarUso(armazenada.id, agora, idleExpiresAt);
       }
-
-      return {
-        sessionId: armazenada.id,
-        userId: armazenada.userId,
-        displayName: conta.displayName,
-        papeis,
-        csrfTokenHash: armazenada.csrfTokenHash,
-        etiqueta: etiquetaDaSessao(tokenHash),
-        instanteDaSenha: comoData(armazenada.createdAt),
-        idleExpiresAt: comoData(idleExpiresAt),
-        absoluteExpiresAt: comoData(armazenada.absoluteExpiresAt),
-      };
+      return { ...conferida, idleExpiresAt: comoData(idleExpiresAt) };
     },
 
     async registrarRecusa(sessao, motivo: MotivoDaRecusaDaGuarda, contexto) {
@@ -233,24 +318,26 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         { evento: 'admin.guard.denied', motivo, correlationId: contexto.correlationId },
         'ALERTA: a guarda administrativa recusou uma conta identificada',
       );
-      const evento: AuditEvent = {
-        actorKind: 'user',
-        actorUserId: sessao.userId,
-        actorIp: contexto.ip,
-        correlationId: contexto.correlationId,
+      const evento = eventoDoAdmin(sessao, contexto, {
         action: 'admin.guard.denied',
         resourceKind: 'admin_session',
         resourceId: sessao.sessionId,
         metadata: metadataDaSessao(sessao.etiqueta, { reason: motivo }),
-      };
+      });
 
-      // D38: a conta que perdeu TODO papel que abre o painel perde as sessoes
-      // administrativas. A que tem papel de painel e nao tem o da operacao so e
-      // recusada nesta requisicao.
-      if (motivo === 'role_missing' && !abreSessaoAdministrativa(sessao.papeis)) {
+      // D38: a conta desativada, ou que perdeu TODO papel que abre o painel,
+      // perde as sessoes administrativas. A que tem papel de painel e nao tem o
+      // da operacao so e recusada nesta requisicao.
+      const revogacao =
+        motivo === 'account_disabled'
+          ? 'account_disabled'
+          : motivo === 'role_missing' && !abreSessaoAdministrativa(sessao.papeis)
+            ? 'account_invalidated'
+            : undefined;
+      if (revogacao !== undefined) {
         const agora = deps.clock.now();
         await deps.escrita.executar(async (trx) => {
-          const revogadas = await deps.sessoes.revogarTodasDaConta(trx, sessao.userId, 'account_invalidated', agora);
+          const revogadas = await deps.sessoes.revogarTodasDaConta(trx, sessao.adminAccountId, revogacao, agora);
           return {
             resultado: undefined,
             evento: { ...evento, metadata: { ...evento.metadata, revoked_sessions: revogadas } },
@@ -268,7 +355,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       const consumida = await deps.sessoes.consumirJanela({
         tokenHash: hashDeToken(tokenApresentado),
         sessionId: sessao.sessionId,
-        userId: sessao.userId,
+        adminAccountId: sessao.adminAccountId,
         escopo,
         agora: deps.clock.now(),
       });
@@ -281,11 +368,13 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
 
     /**
      * `POST /v1/admin/auth/login`, na ordem do contrato depois do teto: desafio,
-     * senha (com o hash de descarte), papel, base de vazadas, sessao.
+     * senha (com o hash de descarte), conta ativa, base de vazadas, sessao.
      *
-     * Conta inexistente, senha errada, conta sem papel `admin` e conta que nao
-     * esta ativa respondem o MESMO 401, e as quatro passam pela derivacao da
-     * senha: o login nao conta a ninguem quem e administrador (T3, D44).
+     * E-mail sem conta do painel (inclusive o de uma conta do app), senha
+     * errada, senha certa de conta desativada e senha certa que esta numa base
+     * de vazadas respondem o MESMO 401, e todas passam pela derivacao da senha e
+     * pela consulta a base: o login nao conta a ninguem quem e administrador nem
+     * que a senha confere (T3, D43, D44).
      */
     async entrar(entrada: EntradaDoLoginAdministrativo, contexto: ContextoDaRequisicao): Promise<SessaoAberta> {
       const nota = await deps.captcha.avaliar(entrada.captchaToken, ACAO_DO_CAPTCHA_ADMINISTRATIVO);
@@ -298,32 +387,46 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         throw problemas.captchaRecusado();
       }
 
-      const credencial = await deps.identidade.buscarCredencialLocalPorEmail(normalizarEmail(entrada.email));
-      if (credencial === undefined) {
+      // A base de vazadas e consultada em TODA tentativa, e em paralelo com a
+      // derivacao: se so a senha certa a consultasse, a latencia da consulta
+      // diria a quem mede o tempo que a senha confere, que e exatamente o que o
+      // 401 unico existe para esconder. Base fora do ar vale como "nao sei".
+      const consultaAVazadas = deps.senhasVazadas
+        .contem(entrada.password)
+        .catch((): 'desconhecido' => 'desconhecido');
+
+      const conta = await deps.contas.buscarPorEmail(normalizarEmail(entrada.email));
+      if (conta === undefined) {
         await consumirTempoDeVerificacao(entrada.password);
+        await consultaAVazadas;
         await registrarLoginRecusado(contexto, 'unknown_account', undefined);
         throw problemas.credencialRecusada();
       }
-      if (!(await verificarSenha(entrada.password, credencial.passwordPhc))) {
-        await registrarLoginRecusado(contexto, 'bad_password', credencial.userId);
+      const confere = await verificarSenha(entrada.password, conta.passwordPhc);
+      const vazada = (await consultaAVazadas) === true;
+      if (!confere) {
+        await registrarLoginRecusado(contexto, 'bad_password', conta.id);
         throw problemas.credencialRecusada();
       }
-
-      const conta = await deps.identidade.buscarContaPorId(credencial.userId);
-      const papeis = await deps.sessoes.papeisDaConta(credencial.userId);
-      if (conta === undefined || conta.status !== 'active' || !abreSessaoAdministrativa(papeis)) {
-        await registrarLoginRecusado(contexto, 'not_admin_or_inactive', credencial.userId);
+      if (conta.status !== 'active' || !abreSessaoAdministrativa([conta.papel])) {
+        await registrarLoginRecusado(contexto, 'inactive_account', conta.id);
         throw problemas.credencialRecusada();
-      }
-
-      // D43. So depois da senha certa: a recusa aqui diz que a senha confere,
-      // e so o dono dela (ou quem ja a tem) chega a ver este corpo.
-      if ((await deps.senhasVazadas.contem(entrada.password)) === true) {
-        await registrarLoginRecusado(contexto, 'breached_password', conta.id);
-        throw problemas.senhaDoPainelVazada();
       }
 
       const agora = deps.clock.now();
+      // D43. A recusa e o mesmo 401; o que a distingue fica na trilha e no
+      // e-mail aos administradores, que so quem opera o painel le.
+      if (vazada) {
+        await registrarLoginRecusado(contexto, 'breached_password', conta.id);
+        avisarSenhaVazada(conta, agora, contexto);
+        throw problemas.credencialRecusada();
+      }
+
+      // D19: os parametros do hash sobem sem redefinicao em massa.
+      if (precisaDeRehash(conta.passwordPhc)) {
+        await deps.contas.regravarSenha(conta.id, await gerarHashDeSenha(entrada.password), agora);
+      }
+
       const valorDoCookie = deps.ids.opaqueToken();
       const tokenHash = hashDeToken(valorDoCookie);
       const prazos = prazosDeNovaSessao(instanteDaSenha(agora, conta.sessionsInvalidBefore));
@@ -333,7 +436,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       await deps.escrita.executar(async (trx) => {
         await deps.sessoes.criar(trx, {
           id,
-          userId: conta.id,
+          adminAccountId: conta.id,
           tokenHash,
           csrfTokenHash: hashDeToken(derivarTokenAntiCsrf(valorDoCookie)),
           createdAt: prazos.createdAt,
@@ -346,8 +449,8 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         return {
           resultado: undefined,
           evento: {
-            actorKind: 'user',
-            actorUserId: conta.id,
+            actorKind: 'admin',
+            actorAdminId: conta.id,
             actorIp: contexto.ip,
             correlationId: contexto.correlationId,
             action: 'admin.session.opened',
@@ -358,12 +461,12 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         };
       });
 
-      await deps.identidade.registrarLogin(credencial.identityId, agora);
-      await avisarSessaoAberta(conta.id, conta.email, agora, contexto);
+      await deps.contas.registrarLogin(conta.id, agora);
+      await avisarSessaoAberta(conta, id, agora, contexto);
 
       return {
         valorDoCookie,
-        visao: visao(conta.displayName, papeis, valorDoCookie, prazos.idleExpiresAt, prazos.absoluteExpiresAt),
+        visao: visao(conta.displayName, [conta.papel], valorDoCookie, prazos.idleExpiresAt, prazos.absoluteExpiresAt),
       };
     },
 
@@ -384,45 +487,38 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         await deps.sessoes.revogar(trx, sessao.sessionId, 'logout', agora);
         return {
           resultado: undefined,
-          evento: {
-            actorKind: 'user',
-            actorUserId: sessao.userId,
-            actorIp: contexto.ip,
-            correlationId: contexto.correlationId,
+          evento: eventoDoAdmin(sessao, contexto, {
             action: 'admin.session.closed',
             resourceKind: 'admin_session',
             resourceId: sessao.sessionId,
             metadata: metadataDaSessao(sessao.etiqueta),
-          },
+          }),
         };
       });
     },
 
     /**
-     * `POST /v1/admin/auth/logout-all`: empurra `sessions_invalid_before`, que a
-     * guarda le a cada requisicao, e revoga as linhas vivas. As duas coisas e o
-     * evento numa transacao so.
+     * `POST /v1/admin/auth/logout-all`: empurra
+     * `admin_accounts.sessions_invalid_before`, que a guarda le a cada
+     * requisicao, e revoga as linhas vivas. As duas coisas e o evento numa
+     * transacao so.
      */
     async sairDeTodas(sessao: SessaoAdministrativaConferida, contexto: ContextoDaRequisicao): Promise<void> {
       const agora = deps.clock.now();
-      const conta = await deps.identidade.buscarContaPorId(sessao.userId);
+      const conta = await deps.contas.buscarPorId(sessao.adminAccountId);
       if (conta === undefined) throw problemas.sessaoDoPainelVencida();
-      const barreira = instanteDeRevogacao(agora, conta.sessionsInvalidBefore);
+      const barreira = instanteDaBarreira(agora, conta.sessionsInvalidBefore);
       await deps.escrita.executar(async (trx) => {
-        await deps.sessoes.empurrarBarreira(trx, sessao.userId, barreira, agora);
-        const revogadas = await deps.sessoes.revogarTodasDaConta(trx, sessao.userId, 'logout', agora);
+        await deps.contas.empurrarBarreira(trx, sessao.adminAccountId, barreira);
+        const revogadas = await deps.sessoes.revogarTodasDaConta(trx, sessao.adminAccountId, 'logout', agora);
         return {
           resultado: undefined,
-          evento: {
-            actorKind: 'user',
-            actorUserId: sessao.userId,
-            actorIp: contexto.ip,
-            correlationId: contexto.correlationId,
+          evento: eventoDoAdmin(sessao, contexto, {
             action: 'admin.session.all_closed',
             resourceKind: 'admin_session',
             resourceId: sessao.sessionId,
             metadata: metadataDaSessao(sessao.etiqueta, { revoked_sessions: revogadas }),
-          },
+          }),
         };
       });
     },
@@ -438,13 +534,18 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       escopo: EscopoDeReautenticacaoAdministrativa,
       contexto: ContextoDaRequisicao,
     ): Promise<JanelaAberta> {
-      const conta = await deps.identidade.buscarContaPorId(sessao.userId);
-      if (conta === undefined) throw problemas.sessaoDoPainelVencida();
-      const credencial = await deps.identidade.buscarCredencialLocalPorEmail(conta.email);
-      const confere = credencial !== undefined && (await verificarSenha(senha, credencial.passwordPhc));
+      const conta = await deps.contas.buscarPorId(sessao.adminAccountId);
+      const confere = conta !== undefined && (await verificarSenha(senha, conta.passwordPhc));
       if (!confere) {
-        if (credencial === undefined) await consumirTempoDeVerificacao(senha);
-        await registrarLoginRecusado(contexto, 'reauth_bad_password', sessao.userId);
+        if (conta === undefined) await consumirTempoDeVerificacao(senha);
+        await deps.trilha.record(
+          eventoDoAdmin(sessao, contexto, {
+            action: 'admin.session.denied',
+            resourceKind: 'admin_session',
+            resourceId: sessao.sessionId,
+            metadata: metadataDaSessao(sessao.etiqueta, { reason: 'reauth_bad_password' }),
+          }),
+        );
         throw problemas.credencialRecusada();
       }
 
@@ -462,7 +563,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         if (!revogou) throw problemas.sessaoDoPainelVencida();
         await deps.sessoes.criar(trx, {
           id: novaId,
-          userId: sessao.userId,
+          adminAccountId: sessao.adminAccountId,
           tokenHash,
           csrfTokenHash: hashDeToken(derivarTokenAntiCsrf(valorDoCookie)),
           createdAt: sessao.instanteDaSenha.getTime() as Instant,
@@ -475,7 +576,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         await deps.sessoes.criarJanela(trx, {
           id: deps.ids.uuidv7(),
           sessionId: novaId,
-          userId: sessao.userId,
+          adminAccountId: sessao.adminAccountId,
           escopo,
           tokenHash: hashDeToken(reauthToken),
           emitidaEm: agora,
@@ -483,16 +584,12 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         });
         return {
           resultado: undefined,
-          evento: {
-            actorKind: 'user',
-            actorUserId: sessao.userId,
-            actorIp: contexto.ip,
-            correlationId: contexto.correlationId,
+          evento: eventoDoAdmin(sessao, contexto, {
             action: 'admin.session.reauthenticated',
             resourceKind: 'admin_session',
             resourceId: novaId,
             metadata: metadataDaSessao(sessao.etiqueta, { scope: escopo, new_session: etiquetaDaSessao(tokenHash) }),
-          },
+          }),
         };
       });
 

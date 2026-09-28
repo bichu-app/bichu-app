@@ -12,7 +12,7 @@ import { describe, it } from 'node:test';
 import { resolve } from 'node:path';
 
 import { carregarContrato } from '../../../shared/http/contract.js';
-import type { UserId } from '../../../shared/types/brands.js';
+import type { AdminAccountId } from '../../../shared/types/brands.js';
 import { ACOES_ADMINISTRATIVAS } from './audit-log.js';
 import { eventoAdministrativo } from './trilha-administrativa.js';
 
@@ -51,7 +51,7 @@ void describe('ACOES_ADMINISTRATIVAS contra o x-audit do contrato', () => {
 
 void describe('eventoAdministrativo', () => {
   const ator = {
-    userId: '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f' as UserId,
+    adminAccountId: '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f' as AdminAccountId,
     ip: '203.0.113.9',
     correlationId: '018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e70',
     sessao: '0011223344556677',
@@ -63,8 +63,9 @@ void describe('eventoAdministrativo', () => {
       ator,
       { resourceId: 'id-interno', after: { title: 'x' }, metadata: { surface: 'app', session: 'outra', extra: 1 } },
     );
-    assert.equal(evento.actorKind, 'user');
-    assert.equal(evento.actorUserId, ator.userId);
+    assert.equal(evento.actorKind, 'admin');
+    assert.equal(evento.actorAdminId, ator.adminAccountId);
+    assert.equal(evento.actorUserId, undefined);
     assert.equal(evento.action, 'admin.store_item.created');
     assert.equal(evento.resourceId, 'id-interno');
     assert.deepEqual(evento.metadata, { extra: 1, surface: 'admin', session: '0011223344556677' });

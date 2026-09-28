@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import { hashDeToken } from '../crypto/digest.js';
-import type { AbsoluteUrl, UserId } from '../types/brands.js';
+import type { AbsoluteUrl, AdminAccountId } from '../types/brands.js';
 import { problemas } from './errors.js';
 import { escoparRotas, registrarRota, type RegistradorDeRotas } from './registrar-rota.js';
 import { defineRoute, type RouteDefinition } from './route-definition.js';
@@ -28,8 +28,10 @@ import { tetoDeTeste } from './teto-de-teste.js';
 const ORIGEM = 'https://painel.exemplo.test';
 const BASE = 'https://api.bichu.test/problems' as AbsoluteUrl;
 
+// `adminPublic` so vale para as operacoes da lista fechada; a bancada usa o
+// nome do login de verdade num caminho de teste.
 const rotaDeEntrar = defineRoute({
-  operationId: 'testeEntrar',
+  operationId: 'openAdminSession',
   method: 'post',
   path: '/admin/teste/entrar',
   effects: [],
@@ -71,7 +73,7 @@ const CORPO_FECHADO = {
 function sessao(token: string, csrf: string, papeis: readonly string[]): SessaoAdministrativaConferida {
   return {
     sessionId: `sessao-${token}`,
-    userId: `usuario-${token}` as UserId,
+    adminAccountId: `usuario-${token}` as AdminAccountId,
     displayName: 'Operacao',
     papeis,
     csrfTokenHash: hashDeToken(csrf),
@@ -126,7 +128,7 @@ function bancada(rotasExtras: (adm: RegistradorDeRotas) => void = () => {}): Ban
         return reply.status(200).send({ ok: true });
       });
       registrarRota(adm, rotaDeLeitura, {}, async (request, reply) =>
-        reply.status(200).send({ usuario: sessaoAdministrativaDe(request).userId }),
+        reply.status(200).send({ usuario: sessaoAdministrativaDe(request).adminAccountId }),
       );
       registrarRota(adm, rotaDeEscrita, { schema: { body: CORPO_FECHADO } }, async (_r, reply) =>
         reply.status(200).send({ gravado: true }),
@@ -365,6 +367,14 @@ void describe('fronteira de registro do prefixo administrativo', () => {
   void it('rota do escopo sem adminRoles nem adminPublic nao sobe', async () => {
     const semPapel = defineRoute({ operationId: 'x', method: 'get', path: '/admin/sem-papel', effects: [] });
     assert.match(String(await subir(noEscopo(semPapel))), /adminRoles OU adminPublic/);
+  });
+
+  void it('adminPublic fora da lista fechada de operacoes sem sessao nao sobe', async () => {
+    const semSessao = defineRoute({
+      operationId: 'terceiraSemSessao', method: 'post', path: '/admin/sem-sessao', effects: [], adminPublic: true,
+      audit: { action: 'admin.session.opened', resourceKind: 'admin_session' },
+    });
+    assert.match(String(await subir(noEscopo(semSessao))), /fora da lista fechada/);
   });
 
   void it('escrita do escopo sem audit nao sobe, e GET com audit tambem nao', async () => {

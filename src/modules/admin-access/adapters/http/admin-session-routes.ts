@@ -23,7 +23,7 @@ import {
   lerCookieDaSessao,
   sessaoAdministrativaDe,
 } from '../../../../shared/http/superficie-administrativa.js';
-import { normalizarEmail } from '../../domain/email.js';
+import { normalizarEmail } from '../../../identity/ports/senha.js';
 import type { SessaoAdministrativaService } from '../../application/sessao-administrativa-service.js';
 
 export const rotaDeLoginAdministrativo = defineRoute({
@@ -107,8 +107,15 @@ const emailDoCorpo: ResolvedorDeDimensao = (request, sigilo) => {
   return normalizado === '' ? undefined : sigilo.hmac(`admin-email:${normalizado}`);
 };
 
-/** A conta da sessao que a guarda conferiu. A guarda roda antes de todo teto da rota. */
-const contaDaSessao: ResolvedorDeDimensao = (request) => request.sessaoAdministrativa?.userId;
+/**
+ * A conta da sessao que a guarda conferiu. A guarda roda antes de todo teto da
+ * rota. O prefixo `admin:` e o que impede um balde do painel e um do app de
+ * dividirem chave, mesmo que um dia dois UUIDs coincidam (T18, item 20.2).
+ */
+const contaDaSessao: ResolvedorDeDimensao = (request) => {
+  const conta = request.sessaoAdministrativa?.adminAccountId;
+  return conta === undefined ? undefined : `admin:${conta}`;
+};
 
 export function registrarRotasDaSessaoAdministrativa(
   app: RegistradorDeRotas,

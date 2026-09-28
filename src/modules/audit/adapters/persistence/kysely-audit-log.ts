@@ -48,11 +48,19 @@ function comoJson(valor: Record<string, unknown> | undefined): unknown {
   return valor === undefined ? null : valor;
 }
 
+/**
+ * O tipo ja impede o evento incoerente; esta conferencia existe para o que
+ * chega por conversao (`as`) ou por JavaScript sem tipo, e ela antecipa o que
+ * os dois `CHECK` de `audit.events` recusariam, com uma mensagem que diz qual
+ * ator estava errado.
+ */
 function exigirAtorCoerente(evento: AuditEvent): void {
-  if ((evento.actorKind === 'user') !== (evento.actorUserId !== undefined)) {
+  const temUsuario = evento.actorUserId !== undefined;
+  const temAdmin = evento.actorAdminId !== undefined;
+  if ((evento.actorKind === 'user') !== temUsuario || (evento.actorKind === 'admin') !== temAdmin) {
     throw new Error(
       `Evento de auditoria incoerente: actor_kind=${evento.actorKind} com ` +
-        `${evento.actorUserId === undefined ? 'nenhum' : 'um'} actor_user_id.`,
+        `${temUsuario ? 'um' : 'nenhum'} actor_user_id e ${temAdmin ? 'um' : 'nenhum'} actor_admin_id.`,
     );
   }
 }
@@ -72,6 +80,7 @@ async function inserirEvento(
       occurred_at: new Date(deps.clock.now()),
       actor_kind: evento.actorKind,
       actor_user_id: evento.actorUserId ?? null,
+      actor_admin_id: evento.actorAdminId ?? null,
       actor_ip_hmac: hmacDeEnderecoIp(evento.actorIp, deps.ipHmacKey),
       correlation_id: evento.correlationId ?? null,
       action: evento.action,

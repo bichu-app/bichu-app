@@ -72,6 +72,7 @@ import { AppError } from './errors.js';
 import { recusarCampoDesconhecido } from './corpo-fechado.js';
 import {
   CABECALHO_DE_REAUTENTICACAO_ADMINISTRATIVA,
+  OPERACOES_ADMINISTRATIVAS_SEM_SESSAO,
   PREFIXO_ADMINISTRATIVO,
   contextoDaGuarda,
   sessaoAdministrativaDe,
@@ -377,6 +378,14 @@ function exigirFronteiraAdministrativa(
   if (!caminhoAdministrativo) falha('rota sem /admin/ no caminho dentro do escopo administrativo');
   if ((rota.adminRoles === undefined) === (rota.adminPublic !== true)) {
     falha('rota do escopo administrativo precisa declarar adminRoles OU adminPublic, e so um dos dois');
+  }
+  // `adminPublic` e a guarda sem sessao. Ela vale por lista fechada, e nao por
+  // quem lembrou de declarar: uma terceira rota sem sessao e decisao de
+  // arquitetura, nao de registro.
+  if (rota.adminPublic === true && !OPERACOES_ADMINISTRATIVAS_SEM_SESSAO.includes(rota.operationId)) {
+    falha(
+      `adminPublic fora da lista fechada de operacoes sem sessao (${OPERACOES_ADMINISTRATIVAS_SEM_SESSAO.join(', ')})`,
+    );
   }
   if (rota.method === 'get' && rota.audit !== undefined) falha('GET administrativo nao muda estado e nao declara audit');
   if (rota.method !== 'get' && rota.audit === undefined) falha('escrita administrativa sem audit (D49)');

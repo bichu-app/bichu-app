@@ -97,10 +97,11 @@ import {
   criarTrilhaTransacional,
 } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 import { escoparRotasAdministrativas } from '../shared/http/superficie-administrativa.js';
-import { criarSessaoAdministrativaRepository } from '../modules/identity/adapters/persistence/kysely-sessao-administrativa-repository.js';
-import { criarSessaoAdministrativaService } from '../modules/identity/application/sessao-administrativa-service.js';
-import { registrarRotasDaSessaoAdministrativa } from '../modules/identity/adapters/http/admin-session-routes.js';
-import { criarVerificadorDeCaptcha } from '../modules/identity/adapters/external/recaptcha-enterprise.js';
+import { criarSessaoAdministrativaRepository } from '../modules/admin-access/adapters/persistence/kysely-sessao-administrativa-repository.js';
+import { criarRepositorioDeContasAdministrativas } from '../modules/admin-access/adapters/persistence/kysely-contas-administrativas.js';
+import { criarSessaoAdministrativaService } from '../modules/admin-access/application/sessao-administrativa-service.js';
+import { registrarRotasDaSessaoAdministrativa } from '../modules/admin-access/adapters/http/admin-session-routes.js';
+import { criarVerificadorDeCaptcha } from '../modules/admin-access/adapters/external/recaptcha-enterprise.js';
 import { listaDeSenhasVazadasIndisponivel } from '../modules/identity/ports/lista-de-senhas-vazadas.js';
 
 const PREFIXO_DA_API = '/v1';
@@ -267,10 +268,11 @@ export async function main(): Promise<void> {
   });
 
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
-  // `/v1/admin` usa para conferir cookie, papel e janela de reautenticacao.
+  // `/v1/admin` usa para conferir cookie, papel e janela de reautenticacao. A
+  // conta e de `admin_accounts` (ADR-0027 item 20): nada do app entra aqui.
   const sessaoAdministrativa = criarSessaoAdministrativaService({
     sessoes: criarSessaoAdministrativaRepository(db),
-    identidade: repositorioDeIdentidade,
+    contas: criarRepositorioDeContasAdministrativas(db),
     escrita: escritaAuditada,
     trilha,
     // D41. Sem `CAPTCHA_TRANSPORT=recaptcha_enterprise` e as duas variaveis
@@ -285,11 +287,14 @@ export async function main(): Promise<void> {
     // `PasswordBreachList` de `password-policy.ts` nunca foi implementada). A
     // lista responde `desconhecido`, e a pendencia esta na entrega da BICHUS-259.
     senhasVazadas: listaDeSenhasVazadasIndisponivel,
-    mailer,
+    avisos: mailer,
     ids,
     clock: systemClock,
     hmacDeIp: (ip) => hmacDeEnderecoIp(ip, config.ipHmacKey),
-    baseDaWeb: config.webBaseUrl,
+    // O link "nao fui eu" aponta para o painel. Sem `ADMIN_ORIGIN` o prefixo nem
+    // e registrado (abaixo), e nenhum login administrativo acontece; a cadeia
+    // vazia so existe para o servico ser montado igual nos dois casos.
+    origemDoPainel: config.adminOrigin ?? '',
     registrarOcorrencia: (dados, mensagem) => {
       app.log.warn(dados, mensagem);
     },

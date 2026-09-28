@@ -1,18 +1,20 @@
 /**
  * **A sessao do backoffice e a guarda de `/v1/admin`, pela rota, contra
- * Postgres de verdade** (BICHUS-259; ADR-0027 itens 2, 3, 5, 7 e 8; provas
- * P16 e P17 e D35, D36, D37, D38, D39, D40, D42 e D44 de
- * `docs/04-seguranca.md`).
+ * Postgres de verdade** (ADR-0027 itens 2, 3, 5, 7, 8 e 20; provas P16, P17 e
+ * P21 e D35, D36, D37, D38, D39, D40, D42, D43 e D44 de `docs/04-seguranca.md`).
+ *
+ * A conta do painel mora em `admin_accounts` (item 20), e este arquivo a cria
+ * la. Conta do app, quando aparece, e de `users`, e e a outra porta.
  *
  * ## P16: a matriz gerada do contrato
  *
  * Para TODA operacao `/admin/` do contrato que tem rota neste servidor, exceto
- * o login, seis tentativas: sem `X-Internal-Surface` (404), sem cookie (401),
- * `Bearer` valido de conta `admin` (401), sessao de conta `tutor` (403), sessao
- * cujo papel foi removido (403) e, nas escritas, sem `X-CSRF-Token` e com
- * `Origin` de subdominio irmao (403). **Reprova com zero operacoes.** A lista
- * sai do contrato e das rotas registradas, entao a operacao da `Loja` ou da
- * `Rede` que subir entra na matriz sem ninguem editar este arquivo.
+ * as que dispensam sessao, as tentativas: sem `X-Internal-Surface` (404), sem
+ * cookie (401), `Bearer` valido de conta do app (401), sessao de conta
+ * desativada (403) e, nas escritas, sem `X-CSRF-Token` e com `Origin` de
+ * subdominio irmao (403). **Reprova com zero operacoes.** A lista sai do
+ * contrato e das rotas registradas, entao a operacao da `Loja` ou da `Rede`
+ * que subir entra na matriz sem ninguem editar este arquivo.
  *
  * ## P17: a trilha na mesma transacao, por operacao
  *
@@ -37,9 +39,12 @@ import { carregarContrato, type Contrato } from '../../src/shared/http/contract.
 import { criarServidor } from '../../src/shared/http/server.js';
 import { tetoDeTeste } from '../../src/shared/http/teto-de-teste.js';
 import { escoparRotas, type RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
-import { escoparRotasAdministrativas } from '../../src/shared/http/superficie-administrativa.js';
+import {
+  OPERACOES_ADMINISTRATIVAS_SEM_SESSAO,
+  escoparRotasAdministrativas,
+} from '../../src/shared/http/superficie-administrativa.js';
 import type { RouteDefinition } from '../../src/shared/http/route-definition.js';
-import type { UserId } from '../../src/shared/types/brands.js';
+import type { AdminAccountId, UserId } from '../../src/shared/types/brands.js';
 import {
   criarEscritaAuditada,
   criarTrilhaDeAuditoria,
@@ -48,25 +53,31 @@ import {
 import type { TrilhaTransacional } from '../../src/modules/audit/ports/audit-log.js';
 import { criarTokenSigner } from '../../src/modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../../src/modules/identity/adapters/persistence/kysely-identity-repository.js';
-import { criarSessaoAdministrativaRepository } from '../../src/modules/identity/adapters/persistence/kysely-sessao-administrativa-repository.js';
+import { criarSessaoAdministrativaRepository } from '../../src/modules/admin-access/adapters/persistence/kysely-sessao-administrativa-repository.js';
+import { criarRepositorioDeContasAdministrativas } from '../../src/modules/admin-access/adapters/persistence/kysely-contas-administrativas.js';
 import {
   criarVerificadorDeReautenticacao,
   registrarRotasDeIdentidade,
 } from '../../src/modules/identity/adapters/http/routes.js';
-import { registrarRotasDaSessaoAdministrativa } from '../../src/modules/identity/adapters/http/admin-session-routes.js';
+import { registrarRotasDaSessaoAdministrativa } from '../../src/modules/admin-access/adapters/http/admin-session-routes.js';
 import { criarAuthService } from '../../src/modules/identity/application/auth-service.js';
 import {
   criarSessaoAdministrativaService,
   type SessaoAdministrativaService,
-} from '../../src/modules/identity/application/sessao-administrativa-service.js';
-import { gerarHashDeSenha } from '../../src/modules/identity/domain/password.js';
-import { derivarTokenAntiCsrf } from '../../src/modules/identity/domain/sessao-administrativa.js';
+} from '../../src/modules/admin-access/application/sessao-administrativa-service.js';
+import { gerarHashDeSenha } from '../../src/modules/identity/ports/senha.js';
+import { derivarTokenAntiCsrf } from '../../src/modules/admin-access/domain/sessao-administrativa.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
-import { listaDeSenhasVazadasIndisponivel } from '../../src/modules/identity/ports/lista-de-senhas-vazadas.js';
+import type { ListaDeSenhasVazadas } from '../../src/modules/identity/ports/lista-de-senhas-vazadas.js';
 
 const ORIGEM = 'https://painel.exemplo.test';
 const IRMAO = 'https://exemplo.test';
 const SENHA = 'uma frase longa que so a operacao conhece';
+/** A dubla da base de vazadas diz que ESTA senha vazou, e nada sabe das outras. */
+const SENHA_VAZADA = 'uma frase longa que ja apareceu num vazamento';
+const vazadas: ListaDeSenhasVazadas = {
+  contem: (senha) => Promise.resolve(senha === SENHA_VAZADA ? true : 'desconhecido'),
+};
 const CAPTCHA_BOM = 'token-de-captcha-que-o-duble-aprova-0123456789';
 
 interface Servidor {
@@ -81,7 +92,9 @@ let contrato: Contrato;
 let principal: Servidor;
 let comTrilhaQuebrada: Servidor;
 let phc: string;
-const contas: UserId[] = [];
+let phcVazada: string;
+const contasDoApp: UserId[] = [];
+const contasDoPainel: AdminAccountId[] = [];
 const caixa: Mensagem[] = [];
 let assinador: ReturnType<typeof criarTokenSigner>;
 
@@ -105,16 +118,16 @@ async function subir(trilhaQuebrada: boolean): Promise<Servidor> {
 
   const sessoes = criarSessaoAdministrativaService({
     sessoes: criarSessaoAdministrativaRepository(db),
-    identidade: repositorio,
+    contas: criarRepositorioDeContasAdministrativas(db),
     escrita: criarEscritaAuditada({ db, trilha: trilhaQuebrada ? quebrada : real }),
     trilha,
-    captcha: { avaliar: (token) => Promise.resolve(token === CAPTCHA_BOM ? 0.9 : undefined) },
-    senhasVazadas: listaDeSenhasVazadasIndisponivel,
-    mailer,
+    captcha: { avaliar: (token: string | undefined) => Promise.resolve(token === CAPTCHA_BOM ? 0.9 : undefined) },
+    senhasVazadas: vazadas,
+    avisos: mailer,
     ids,
     clock: systemClock,
-    hmacDeIp: (ip) => hmacDeEnderecoIp(ip, config.ipHmacKey),
-    baseDaWeb: config.webBaseUrl,
+    hmacDeIp: (ip: string | undefined) => hmacDeEnderecoIp(ip, config.ipHmacKey),
+    origemDoPainel: ORIGEM,
     registrarOcorrencia: () => {},
   });
 
@@ -186,18 +199,52 @@ function tipo(resposta: Resposta): string {
   return typeof t === 'string' ? (t.split('/').pop() ?? '') : '';
 }
 
-async function conta(papeis: readonly string[]): Promise<{ id: UserId; email: string }> {
-  const email = `painel-${randomUUID().slice(0, 8)}@exemplo.invalid`;
+/**
+ * Uma conta do PAINEL, gravada em `admin_accounts`. O hash e o de uma senha de
+ * teste gerada aqui; nenhuma senha real passa por este arquivo.
+ */
+async function contaDoPainel(
+  opcoes: { email?: string; phc?: string } = {},
+): Promise<{ id: AdminAccountId; email: string }> {
+  const email = opcoes.email ?? `painel-${randomUUID().slice(0, 8)}@exemplo.invalid`;
+  const id = randomUUID() as AdminAccountId;
+  await banco.db.insertInto('admin_accounts').values({
+    id,
+    email,
+    display_name: 'Operacao',
+    password_phc: opcoes.phc ?? phc,
+    password_updated_at: new Date(),
+  }).execute();
+  contasDoPainel.push(id);
+  return { id, email };
+}
+
+/** Uma conta do APP, em `users`, pela porta do app. E a outra porta, e nunca abre o painel. */
+async function contaDoApp(opcoes: { email?: string; phc?: string } = {}): Promise<{ id: UserId; email: string }> {
+  const email = opcoes.email ?? `app-${randomUUID().slice(0, 8)}@exemplo.invalid`;
   const ids = criarIdGenerator(() => systemClock.now());
   const criada = await criarIdentityRepository(banco.db, ids).criarContaLocal({
-    email, displayName: 'Operacao', acceptedTermsVersion: undefined, passwordPhc: phc, agora: systemClock.now(),
+    email, displayName: 'Tutora', acceptedTermsVersion: undefined, passwordPhc: opcoes.phc ?? phc, agora: systemClock.now(),
   });
   assert.ok(criada !== undefined);
-  contas.push(criada.id);
-  for (const papel of papeis.filter((p) => p !== 'tutor')) {
-    await banco.db.insertInto('user_roles').values({ user_id: criada.id, role: papel as never }).execute();
-  }
+  contasDoApp.push(criada.id);
   return { id: criada.id, email };
+}
+
+async function desativar(id: AdminAccountId): Promise<void> {
+  await banco.db.updateTable('admin_accounts').set({ status: 'disabled', disabled_at: new Date() })
+    .where('id', '=', id).execute();
+}
+
+async function sessoesVivas(id: AdminAccountId): Promise<number> {
+  const vivas = await banco.db.selectFrom('admin_sessions').select('id')
+    .where('admin_account_id', '=', id).where('revoked_at', 'is', null).execute();
+  return vivas.length;
+}
+
+/** Espera o envio que o servico dispara sem `await` (o aviso de senha vazada). */
+async function esperarCaixa(condicao: () => boolean): Promise<void> {
+  for (let i = 0; i < 100 && !condicao(); i += 1) await new Promise((r) => setTimeout(r, 20));
 }
 
 interface SessaoDeTeste {
@@ -207,17 +254,21 @@ interface SessaoDeTeste {
 }
 
 /**
- * Uma sessao gravada direto no banco, para a matriz: e a unica forma de ter
- * sessao de TUTOR (o login nunca a abre) e poupa uma derivacao de senha por
- * caso. O caminho do login e provado no seu proprio bloco.
+ * Uma sessao gravada direto no banco, para a matriz: poupa uma derivacao de
+ * senha por caso. O caminho do login e provado no seu proprio bloco.
  */
-async function sessaoDireta(userId: UserId): Promise<SessaoDeTeste> {
+async function sessaoDireta(adminAccountId: AdminAccountId): Promise<SessaoDeTeste> {
   const valor = `sessao-${randomUUID()}-${randomUUID()}`;
-  const agora = systemClock.now();
+  // Nunca antes da barreira da conta, como o login faz (`instanteDaSenha`):
+  // depois de um "sair de todas" a barreira fica ate um segundo a frente do
+  // relogio, e uma sessao gravada com `agora` nasceria revogada.
+  const { sessions_invalid_before: barreira } = await banco.db.selectFrom('admin_accounts')
+    .select('sessions_invalid_before').where('id', '=', adminAccountId).executeTakeFirstOrThrow();
+  const agora = Math.max(systemClock.now(), barreira.getTime());
   const id = randomUUID();
   await banco.db.insertInto('admin_sessions').values({
     id,
-    admin_account_id: userId,
+    admin_account_id: adminAccountId,
     token_hash: hashDeToken(valor),
     csrf_token_hash: hashDeToken(derivarTokenAntiCsrf(valor)),
     created_at: new Date(agora),
@@ -258,6 +309,7 @@ before(async () => {
   contrato = carregarContrato(config.openapiSpecPath);
   assinador = criarTokenSigner(config.token);
   phc = await gerarHashDeSenha(SENHA);
+  phcVazada = await gerarHashDeSenha(SENHA_VAZADA);
   principal = await subir(false);
   comTrilhaQuebrada = await subir(true);
 });
@@ -265,7 +317,8 @@ before(async () => {
 after(async () => {
   await principal?.app.close();
   await comTrilhaQuebrada?.app.close();
-  for (const id of contas) await banco.db.deleteFrom('users').where('id', '=', id).execute();
+  for (const id of contasDoApp) await banco.db.deleteFrom('users').where('id', '=', id).execute();
+  for (const id of contasDoPainel) await banco.db.deleteFrom('admin_accounts').where('id', '=', id).execute();
   await banco?.close();
 });
 
@@ -276,7 +329,7 @@ function caminhoDe(rota: RouteDefinition): string {
 void describe('P16: a matriz da guarda, gerada do contrato (D33, D36, D37, D39)', () => {
   void it('toda operacao /admin/ com rota recusa as seis tentativas, e ha operacoes para conferir', async () => {
     const operacoes = [...contrato.operacoes.values()].filter(
-      (op) => op.path.startsWith('/admin/') && op.operationId !== 'openAdminSession',
+      (op) => op.path.startsWith('/admin/') && !OPERACOES_ADMINISTRATIVAS_SEM_SESSAO.includes(op.operationId),
     );
     const rotas = principal.rotasAdministrativas.filter((rota) =>
       operacoes.some((op) => op.operationId === rota.operationId),
@@ -293,29 +346,27 @@ void describe('P16: a matriz da guarda, gerada do contrato (D33, D36, D37, D39)'
       const caminho = caminhoDe(rota);
       const escrita = rota.method !== 'get';
       const corpo = escrita ? {} : undefined;
-      const admin = await conta(['admin']);
+      const admin = await contaDoPainel();
 
       const valida = await sessaoDireta(admin.id);
       confere(rota, 'sem X-Internal-Surface', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(valida), corpo, semSuperficie: true }), 404);
       confere(rota, 'sem cookie', await chamar(principal, metodo, caminho, { cabecalhos: { origin: ORIGEM }, corpo }), 401);
 
-      const bearer = assinador.emitir(admin.id, systemClock.now(), randomUUID(), randomUUID()).token;
+      const tutora = await contaDoApp();
+      const bearer = assinador.emitir(tutora.id, systemClock.now(), randomUUID(), randomUUID()).token;
       // Com o cookie VALIDO junto: sem ele o 401 viria da falta de cookie, e o
       // caso aprovaria com a recusa do Bearer desligada (a isca mostrou isso).
-      confere(rota, 'Bearer de admin', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(valida, { authorization: `Bearer ${bearer}` }), corpo }), 401);
-
-      const tutor = await conta(['tutor']);
-      confere(rota, 'cookie de tutor', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(await sessaoDireta(tutor.id)), corpo }), 403);
+      confere(rota, 'Bearer do app', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(valida, { authorization: `Bearer ${bearer}` }), corpo }), 401);
 
       if (escrita) {
         confere(rota, 'sem CSRF', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(valida, { 'x-csrf-token': '' }), corpo }), 403);
         confere(rota, 'Origin errado', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(valida, { origin: IRMAO }), corpo }), 403);
       }
 
-      const removido = await conta(['admin']);
-      const daRemovida = await sessaoDireta(removido.id);
-      await banco.db.deleteFrom('user_roles').where('user_id', '=', removido.id).where('role', '=', 'admin' as never).execute();
-      confere(rota, 'papel removido', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(daRemovida), corpo }), 403);
+      const desativada = await contaDoPainel();
+      const daDesativada = await sessaoDireta(desativada.id);
+      await desativar(desativada.id);
+      confere(rota, 'conta desativada', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(daDesativada), corpo }), 403);
     }
 
     assert.deepEqual(falhas, [], `a guarda deixou passar:\n${falhas.join('\n')}`);
@@ -324,7 +375,7 @@ void describe('P16: a matriz da guarda, gerada do contrato (D33, D36, D37, D39)'
 
 void describe('login administrativo (D35, D41, D44, D46)', () => {
   void it('abre a sessao com o cookie na forma exata de D35, e o corpo de AdminSession', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const antes = caixa.length;
     const { resposta } = await entrar(principal, admin.email);
     assert.equal(resposta.status, 200, JSON.stringify(resposta.corpo));
@@ -340,12 +391,19 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
     ]);
     assert.deepEqual(resposta.corpo?.['roles'], ['admin']);
     assert.equal(caixa.length, antes + 1, 'o aviso de sessao aberta nao saiu (D46)');
-    assert.match(caixa.at(-1)?.corpo ?? '', /nao-fui-eu\?token=/);
+    // D62: o token vai no FRAGMENTO de uma pagina do proprio painel, nunca na
+    // consulta (que chega a log de borda e a `Referer`).
+    assert.match(caixa.at(-1)?.corpo ?? '', new RegExp(`${ORIGEM}/nao-fui-eu#t=[A-Za-z0-9_-]{43}`));
+    assert.doesNotMatch(caixa.at(-1)?.corpo ?? '', /\?token=/);
+    const avisos = await banco.db.selectFrom('admin_session_alerts').select('id')
+      .where('admin_account_id', '=', admin.id).execute();
+    assert.equal(avisos.length, 1, 'o link do aviso nao ficou gravado em admin_session_alerts');
   });
 
-  void it('conta inexistente, senha errada e tutor com a senha certa: o MESMO 401', async () => {
-    const tutor = await conta(['tutor']);
-    const admin = await conta(['admin']);
+  void it('conta inexistente, senha errada e conta desativada com a senha certa: o MESMO 401', async () => {
+    const desativada = await contaDoPainel();
+    await desativar(desativada.id);
+    const admin = await contaDoPainel();
     const pedir = (email: string, password: string): Promise<Resposta> =>
       chamar(principal, 'POST', '/admin/auth/login', {
         cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email, password },
@@ -353,7 +411,7 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
     const respostas = [
       await pedir(`ninguem-${randomUUID().slice(0, 6)}@exemplo.invalid`, SENHA),
       await pedir(admin.email, 'outra frase longa qualquer aqui'),
-      await pedir(tutor.email, SENHA),
+      await pedir(desativada.email, SENHA),
     ];
     const sem = respostas.map((r) => ({ status: r.status, type: tipo(r), title: r.corpo?.['title'], detail: r.corpo?.['detail'] }));
     assert.equal(sem[0]?.status, 401);
@@ -362,7 +420,7 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
   });
 
   void it('sem X-Captcha-Token, ou com token que o verificador recusa: 403 captcha-rejected', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     for (const cabecalhos of [{ origin: ORIGEM }, { origin: ORIGEM, 'x-captcha-token': 'recusado-pelo-duble-0123456789' }]) {
       const resposta = await chamar(principal, 'POST', '/admin/auth/login', { cabecalhos, corpo: { email: admin.email, password: SENHA } });
       assert.equal(resposta.status, 403);
@@ -371,7 +429,7 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
   });
 
   void it('D44: o bloqueio por e-mail vale igual para conta que existe e para e-mail que nao existe', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const inexistente = `ninguem-${randomUUID().slice(0, 6)}@exemplo.invalid`;
     const bloqueios: Resposta[] = [];
     for (const email of [admin.email, inexistente]) {
@@ -397,7 +455,7 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
   });
 
   void it('login com Origin de subdominio irmao: 403, e nenhuma sessao', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const resposta = await chamar(principal, 'POST', '/admin/auth/login', {
       cabecalhos: { origin: IRMAO, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email: admin.email, password: SENHA },
     });
@@ -405,11 +463,44 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
     const vivas = await banco.db.selectFrom('admin_sessions').select('id').where('admin_account_id', '=', admin.id).execute();
     assert.equal(vivas.length, 0);
   });
+
+  void it('D43: senha certa e vazada responde o MESMO 401 da senha errada, e avisa todos os administradores', async () => {
+    // A isca que reprova se o `403 password-reset-required` voltar: ele dizia a
+    // quem testa listas de vazamento que o e-mail e de administrador e que a
+    // senha confere (UX 30.5, decisao de seguranca de 28/09).
+    const outra = await contaDoPainel();
+    const vazou = await contaDoPainel({ phc: phcVazada });
+    const pedir = (password: string): Promise<Resposta> =>
+      chamar(principal, 'POST', '/admin/auth/login', {
+        cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM, 'x-correlation-id': randomUUID() },
+        corpo: { email: vazou.email, password },
+      });
+    const antes = caixa.length;
+    const certaVazada = await pedir(SENHA_VAZADA);
+    const errada = await pedir('outra frase longa qualquer aqui');
+    const corpo = (r: Resposta) => ({ status: r.status, type: tipo(r), title: r.corpo?.['title'], detail: r.corpo?.['detail'] });
+    assert.equal(certaVazada.status, 401, `a senha vazada teve resposta propria: ${JSON.stringify(certaVazada.corpo)}`);
+    assert.deepEqual(corpo(certaVazada), corpo(errada));
+    assert.equal(await sessoesVivas(vazou.id), 0, 'a senha vazada abriu sessao');
+
+    const razao = await banco.db.selectFrom('audit.events').select(['metadata', 'resource_id'])
+      .where('action', '=', 'admin.session.denied').where('resource_id', '=', vazou.id).execute();
+    assert.ok(
+      razao.some((l) => (l.metadata as { reason?: string } | null)?.reason === 'breached_password'),
+      'a trilha nao registrou a recusa por senha vazada',
+    );
+    await esperarCaixa(() => caixa.slice(antes).filter((m) => /precisa trocar a senha/.test(m.assunto)).length >= 2);
+    const avisos = caixa.slice(antes).filter((m) => /precisa trocar a senha/.test(m.assunto));
+    const para = new Set(avisos.map((m) => m.para));
+    assert.ok(para.has(outra.email) && para.has(vazou.email), `o aviso nao foi a todos: ${[...para].join(', ')}`);
+    assert.ok(avisos.every((m) => /conta-admin redefinir-senha/.test(m.corpo) && !/https?:\/\//.test(m.corpo)),
+      'o aviso de senha vazada precisa mandar ao comando, e nao a um link');
+  });
 });
 
 void describe('ciclo da sessao (D38, D39, D40)', () => {
   void it('GET /admin/session devolve o mesmo csrf_token do login, e o F5 continua valendo', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const { resposta, sessao } = await entrar(principal, admin.email);
     const leitura = await chamar(principal, 'GET', '/admin/session', { cabecalhos: { cookie: sessao.cookie } });
     assert.equal(leitura.status, 200);
@@ -417,14 +508,14 @@ void describe('ciclo da sessao (D38, D39, D40)', () => {
   });
 
   void it('o token anti-CSRF de OUTRA sessao nao serve (D39)', async () => {
-    const a = await sessaoDireta((await conta(['admin'])).id);
-    const b = await sessaoDireta((await conta(['admin'])).id);
+    const a = await sessaoDireta((await contaDoPainel()).id);
+    const b = await sessaoDireta((await contaDoPainel()).id);
     const resposta = await chamar(principal, 'POST', '/admin/auth/logout', { cabecalhos: comSessao(a, { 'x-csrf-token': b.csrf }) });
     assert.equal(resposta.status, 403);
   });
 
   void it('31 min sem uso e 12 h desde a senha derrubam a sessao (D38)', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const inativa = await sessaoDireta(admin.id);
     await banco.db.updateTable('admin_sessions').set({ idle_expires_at: new Date(Date.now() - 1_000) })
       .where('token_hash', '=', hashDeToken(inativa.cookie.split('=')[1] ?? '')).execute();
@@ -445,19 +536,23 @@ void describe('ciclo da sessao (D38, D39, D40)', () => {
     assert.equal(tipo(r), 'token-expired');
   });
 
-  void it('papel removido: 403 na proxima chamada, e zero sessoes vivas da conta depois (D38)', async () => {
-    const admin = await conta(['admin']);
+  void it('conta desativada: 403 na proxima chamada, e zero sessoes vivas da conta depois (D38)', async () => {
+    // Ate 28/09 este caso removia o papel `admin` de `user_roles`. O papel
+    // agora e `admin_accounts.role`, que so aceita `admin`, e o que tira a
+    // pessoa do painel e desativar a conta (item 20.1).
+    const admin = await contaDoPainel();
     const sessao = await sessaoDireta(admin.id);
     await sessaoDireta(admin.id);
-    await banco.db.deleteFrom('user_roles').where('user_id', '=', admin.id).where('role', '=', 'admin' as never).execute();
+    await desativar(admin.id);
     assert.equal((await chamar(principal, 'GET', '/admin/session', { cabecalhos: { cookie: sessao.cookie } })).status, 403);
-    const vivas = await banco.db.selectFrom('admin_sessions').select('id')
-      .where('admin_account_id', '=', admin.id).where('revoked_at', 'is', null).execute();
-    assert.equal(vivas.length, 0);
+    assert.equal(await sessoesVivas(admin.id), 0);
+    const motivos = await banco.db.selectFrom('admin_sessions').select('revoked_reason')
+      .where('admin_account_id', '=', admin.id).execute();
+    assert.deepEqual([...new Set(motivos.map((m) => m.revoked_reason))], ['account_disabled']);
   });
 
   void it('logout: 204, apaga o cookie, e o identificador deixa de valer', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const sessao = await sessaoDireta(admin.id);
     const correlacao = randomUUID();
     const r = await chamar(principal, 'POST', '/admin/auth/logout', { cabecalhos: comSessao(sessao, { 'x-correlation-id': correlacao }) });
@@ -468,7 +563,7 @@ void describe('ciclo da sessao (D38, D39, D40)', () => {
   });
 
   void it('logout-all derruba as outras sessoes da conta e grava a trilha', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const uma = await sessaoDireta(admin.id);
     const outra = await sessaoDireta(admin.id);
     const correlacao = randomUUID();
@@ -483,7 +578,7 @@ void describe('ciclo da sessao (D38, D39, D40)', () => {
   });
 
   void it('reauth: senha errada 401; certa rotaciona a sessao e abre a janela de um escopo (D40)', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const { resposta: login, sessao } = await entrar(principal, admin.email);
 
     const errada = await chamar(principal, 'POST', '/admin/auth/reauth', {
@@ -530,35 +625,11 @@ function contextoVazio(): { correlationId: string; ip: undefined; userAgent: und
 }
 
 
-void describe('D42: conta dedicada nao entra pela porta do tutor', () => {
-  void it('admin com a senha certa em /v1/auth/login: o mesmo 401 da senha errada', async () => {
-    const admin = await conta(['admin']);
-    const certa = await chamar(principal, 'POST', '/auth/login', { corpo: { email: admin.email, password: SENHA }, semSuperficie: true });
-    const errada = await chamar(principal, 'POST', '/auth/login', { corpo: { email: admin.email, password: 'outra frase longa errada' }, semSuperficie: true });
-    assert.equal(certa.status, 401);
-    assert.deepEqual(
-      { type: tipo(certa), title: certa.corpo?.['title'], detail: certa.corpo?.['detail'] },
-      { type: tipo(errada), title: errada.corpo?.['title'], detail: errada.corpo?.['detail'] },
-    );
-  });
-
-  void it('refresh do app de conta que ganhou papel: 401', async () => {
-    const tutor = await conta(['tutor']);
-    const login = await chamar(principal, 'POST', '/auth/login', { corpo: { email: tutor.email, password: SENHA }, semSuperficie: true });
-    assert.equal(login.status, 200, JSON.stringify(login.corpo));
-    await banco.db.insertInto('user_roles').values({ user_id: tutor.id, role: 'admin' as never }).execute();
-    const renovar = await chamar(principal, 'POST', '/auth/refresh', {
-      corpo: { refresh_token: login.corpo?.['refresh_token'] }, semSuperficie: true,
-    });
-    assert.equal(renovar.status, 401);
-  });
-});
-
 void describe('P17: a trilha na mesma transacao, por operacao da sessao', () => {
   void it('toda escrita administrativa deste servidor grava a sua acao na trilha', async () => {
     const escritas = principal.rotasAdministrativas.filter((rota) => rota.method !== 'get');
     assert.ok(escritas.length > 0, 'nenhuma escrita administrativa registrada: P17 sem o que conferir');
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const faltando: string[] = [];
     for (const rota of escritas) {
       const correlacao = randomUUID();
@@ -578,12 +649,23 @@ void describe('P17: a trilha na mesma transacao, por operacao da sessao', () => 
       if (resposta.status >= 300 || !acoes.includes(rota.audit?.action ?? '')) {
         faltando.push(`${rota.operationId}: ${String(resposta.status)} ${JSON.stringify(acoes)}`);
       }
+      // O ator e a conta do PAINEL, na coluna dela: nunca `actor_user_id`
+      // (apendice A.5). O login e a unica escrita cujo ator ainda nao tinha
+      // sessao, e mesmo ele grava o administrador que acabou de entrar.
+      const atores = await banco.db.selectFrom('audit.events')
+        .select(['actor_kind', 'actor_admin_id', 'actor_user_id', 'action'])
+        .where('correlation_id', '=', correlacao).where('action', '=', rota.audit?.action ?? '').execute();
+      for (const ator of atores) {
+        if (ator.actor_kind !== 'admin' || ator.actor_admin_id !== admin.id || ator.actor_user_id !== null) {
+          faltando.push(`${rota.operationId}: ator ${JSON.stringify(ator)}`);
+        }
+      }
     }
     assert.deepEqual(faltando, []);
   });
 
   void it('falha da trilha: o login nao deixa sessao, e o logout nao derruba a sessao', async () => {
-    const admin = await conta(['admin']);
+    const admin = await contaDoPainel();
     const login = await chamar(comTrilhaQuebrada, 'POST', '/admin/auth/login', {
       cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email: admin.email, password: SENHA },
     });

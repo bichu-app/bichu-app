@@ -7,7 +7,7 @@
  * ```
  * 1. X-Internal-Surface: admin        ausente -> 404  (D33: rota esquecida na borda, porta direta)
  * 2. Authorization presente           -> 401          (D36: o Bearer do app nunca vale aqui, nem de admin)
- * 3. rota publica (so o login)        Origin exato em metodo nao seguro, e acabou
+ * 3. rota sem sessao (lista fechada)  Origin exato em metodo nao seguro, e acabou
  * 4. cookie __Host-bichu_adm          ausente/invalido/vencido -> 401   (D38, lido no banco)
  * 5. metodo nao seguro                Origin exato e X-CSRF-Token da sessao -> senao 403 (D39)
  * 6. papel                            a conta tem um dos `adminRoles` da rota? senao 403 (D37)
@@ -28,8 +28,8 @@
  *
  * ## O que ela NAO sabe
  *
- * Nada de sessao, conta ou papel e decidido aqui: isso e do modulo de
- * identidade, que entrega `PortaDaSessaoAdministrativa`. `shared/http`
+ * Nada de sessao, conta ou papel e decidido aqui: isso e do modulo
+ * `admin-access`, que entrega `PortaDaSessaoAdministrativa`. `shared/http`
  * continua sem conhecer dominio, na mesma direcao de dependencia do verificador
  * de reautenticacao do app.
  */
@@ -41,7 +41,7 @@ import type {
 } from 'fastify';
 
 import { hashDeToken, iguaisEmTempoConstante } from '../crypto/digest.js';
-import type { UserId } from '../types/brands.js';
+import type { AdminAccountId } from '../types/brands.js';
 import { problemas } from './errors.js';
 import type { RegistradorDeRotas } from './registrar-rota.js';
 import type {
@@ -62,11 +62,19 @@ export const PREFIXO_ADMINISTRATIVO = '/admin/';
 
 const METODOS_SEGUROS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
+/**
+ * As UNICAS operacoes do prefixo que dispensam sessao, por lista fechada
+ * (ADR-0027 item 7): o login, que ainda nao tem sessao. `registrarRota` recusa
+ * `adminPublic` em qualquer outra.
+ */
+export const OPERACOES_ADMINISTRATIVAS_SEM_SESSAO: readonly string[] = ['openAdminSession'];
+
 /** A sessao que a guarda conferiu, pendurada na requisicao para a rota. */
 export interface SessaoAdministrativaConferida {
   readonly sessionId: string;
-  readonly userId: UserId;
-  readonly displayName: string | null;
+  /** `admin_accounts.id`. Nunca um `UserId`: a conta do painel nao e conta do app. */
+  readonly adminAccountId: AdminAccountId;
+  readonly displayName: string;
   /** Os papeis da conta, lidos do banco NESTA requisicao (D37). */
   readonly papeis: readonly string[];
   /** SHA-256 do token anti-CSRF da sessao. O valor em claro nao fica guardado. */
@@ -86,10 +94,10 @@ export interface ContextoDaGuarda {
 }
 
 /** Por que a guarda recusou uma conta ja identificada. Vai para a trilha, nunca para a resposta. */
-export type MotivoDaRecusaDaGuarda = 'origin_mismatch' | 'csrf_mismatch' | 'role_missing';
+export type MotivoDaRecusaDaGuarda = 'origin_mismatch' | 'csrf_mismatch' | 'role_missing' | 'account_disabled';
 
 /**
- * O que a guarda precisa do modulo de identidade.
+ * O que a guarda precisa do modulo `admin-access`.
  *
  * Todas recusam **lancando** `AppError`. Devolver booleano deixaria o chamador
  * esquecer de olhar, que e a forma do defeito que a guarda existe para fechar.
@@ -97,15 +105,16 @@ export type MotivoDaRecusaDaGuarda = 'origin_mismatch' | 'csrf_mismatch' | 'role
 export interface PortaDaSessaoAdministrativa {
   /**
    * Confere o valor do cookie no banco: existe, nao revogada, dentro dos dois
-   * prazos, posterior a `sessions_invalid_before`, conta ativa. Renova a
-   * inatividade (no maximo uma escrita por minuto). Recusa com 401.
+   * prazos, posterior a `admin_accounts.sessions_invalid_before`. Renova a
+   * inatividade (no maximo uma escrita por minuto). Recusa com 401; conta
+   * desativada recusa com 403, depois de revogar as sessoes dela.
    */
   conferir(valorDoCookie: string, contexto: ContextoDaGuarda): Promise<SessaoAdministrativaConferida>;
   /**
    * A guarda recusou uma conta identificada. Grava `admin.guard.denied` na
-   * trilha (ADR-0027 item 8). Quando o motivo e papel e a conta ja nao tem
-   * papel NENHUM que abra sessao, as sessoes administrativas dela sao revogadas
-   * com `role_removed` (D38).
+   * trilha (ADR-0027 item 8). Conta desativada perde todas as sessoes
+   * (`account_disabled`); quando o motivo e papel e a conta ja nao tem papel
+   * NENHUM que abra sessao, elas sao revogadas com `account_invalidated` (D38).
    */
   registrarRecusa(
     sessao: SessaoAdministrativaConferida,
@@ -198,13 +207,13 @@ export function sessaoAdministrativaDe(request: FastifyRequest): SessaoAdministr
 
 /** O ator da trilha administrativa, na forma que `eventoAdministrativo` recebe. */
 export function atorAdministrativoDe(request: FastifyRequest): {
-  readonly userId: UserId;
+  readonly adminAccountId: AdminAccountId;
   readonly ip: string | undefined;
   readonly correlationId: string;
   readonly sessao: string;
 } {
   const sessao = sessaoAdministrativaDe(request);
-  return { userId: sessao.userId, ip: request.ip, correlationId: request.id, sessao: sessao.etiqueta };
+  return { adminAccountId: sessao.adminAccountId, ip: request.ip, correlationId: request.id, sessao: sessao.etiqueta };
 }
 
 function tokenAntiCsrfConfere(request: FastifyRequest, sessao: SessaoAdministrativaConferida): boolean {
@@ -246,8 +255,10 @@ function criarGuarda(opcoes: OpcoesDaSuperficieAdministrativa): onRequestAsyncHo
     const inseguro = !METODOS_SEGUROS.has(request.method);
     const origemConfere = request.headers.origin === opcoes.origem;
 
-    // 3. O login. Sem sessao para conferir, mas com Origin: sem isso uma pagina
-    // de subdominio irmao faria login com a credencial que ela tiver (login CSRF).
+    // 3. O login e o "nao fui eu". Sem sessao para conferir, mas com Origin:
+    // sem isso uma pagina de subdominio irmao faria login com a credencial que
+    // ela tiver (login CSRF), ou derrubaria as sessoes de alguem com um token
+    // que ela tenha visto passar.
     if (rota.adminPublic === true) {
       if (inseguro && !origemConfere) throw problemas.proibidoNoPainel();
       return;

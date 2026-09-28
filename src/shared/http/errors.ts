@@ -201,12 +201,6 @@ export const problemas = {
       detail: 'Tente de outra rede. Se continuar, fale com o responsável pelo painel.',
     }),
 
-  /** D43: a senha certa de conta administrativa esta numa base de senhas vazadas. */
-  senhaDoPainelVazada: (): AppError =>
-    new AppError('password-reset-required', 'Troque a sua senha antes de entrar', {
-      detail: 'Esta senha aparece numa lista de senhas vazadas. Redefina pelo e-mail.',
-    }),
-
   /**
    * O texto **não normaliza para um código**: tamanho diferente de 26 depois da
    * normalização, ou caractere fora do alfabeto de Crockford. É erro de

@@ -1,15 +1,16 @@
 /**
- * Persistencia da sessao do backoffice (ADR-0027 item 2, apendice A.1) e da
- * janela de reautenticacao administrativa (D40).
+ * Persistencia da sessao do backoffice (ADR-0027 item 2, apendice A.1), da
+ * janela de reautenticacao administrativa (D40) e do "nao fui eu" (D62).
  *
  * As escritas recebem a transacao da escrita auditada: sessao aberta, sessao
- * encerrada, sessao rotacionada e janela aberta so existem junto com o evento
- * da trilha que as registra (D49). As leituras e a renovacao de uso nao sao
- * escrita administrativa e rodam fora dela.
+ * encerrada, sessao rotacionada, janela aberta e aviso consumido so existem
+ * junto com o evento da trilha que as registra (D49). As leituras e a
+ * renovacao de uso nao sao escrita administrativa e rodam fora dela.
  */
 import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 import type { EscopoDeReautenticacaoAdministrativa } from '../../../shared/http/route-definition.js';
-import type { Instant, UserId } from '../../../shared/types/brands.js';
+import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
+import type { ContaAdministrativa } from './repositorio-de-contas-administrativas.js';
 
 /** Os seis motivos do apendice A.1. O conjunto exato esta em `conjunto-exato-dos-checks.test.ts`. */
 export type MotivoDeRevogacaoAdministrativa =
@@ -22,7 +23,7 @@ export type MotivoDeRevogacaoAdministrativa =
 
 export interface SessaoAdministrativaArmazenada {
   readonly id: string;
-  readonly userId: UserId;
+  readonly adminAccountId: AdminAccountId;
   readonly tokenHash: Buffer;
   readonly csrfTokenHash: Buffer;
   readonly createdAt: Instant;
@@ -32,9 +33,15 @@ export interface SessaoAdministrativaArmazenada {
   readonly revokedAt: Instant | null;
 }
 
+/** A sessao e a conta dona dela, lidas numa consulta so a cada requisicao (D37). */
+export interface SessaoComConta {
+  readonly sessao: SessaoAdministrativaArmazenada;
+  readonly conta: ContaAdministrativa;
+}
+
 export interface NovaSessaoAdministrativa {
   readonly id: string;
-  readonly userId: UserId;
+  readonly adminAccountId: AdminAccountId;
   readonly tokenHash: Buffer;
   readonly csrfTokenHash: Buffer;
   readonly createdAt: Instant;
@@ -48,7 +55,7 @@ export interface NovaSessaoAdministrativa {
 export interface NovaJanelaAdministrativa {
   readonly id: string;
   readonly sessionId: string;
-  readonly userId: UserId;
+  readonly adminAccountId: AdminAccountId;
   readonly escopo: EscopoDeReautenticacaoAdministrativa;
   readonly tokenHash: Buffer;
   readonly emitidaEm: Instant;
@@ -58,15 +65,25 @@ export interface NovaJanelaAdministrativa {
 export interface ConsumoDaJanelaAdministrativa {
   readonly tokenHash: Buffer;
   readonly sessionId: string;
-  readonly userId: UserId;
+  readonly adminAccountId: AdminAccountId;
   readonly escopo: EscopoDeReautenticacaoAdministrativa;
   readonly agora: Instant;
 }
 
+export interface NovoAvisoDeSessao {
+  readonly id: string;
+  readonly adminAccountId: AdminAccountId;
+  readonly sessionId: string;
+  readonly tokenHash: Buffer;
+  readonly expiraEm: Instant;
+}
+
 export interface SessaoAdministrativaRepository {
-  buscarPorHash(tokenHash: Buffer): Promise<SessaoAdministrativaArmazenada | undefined>;
-  /** `user_roles` da conta, lido a cada requisicao (D37). */
-  papeisDaConta(userId: UserId): Promise<readonly string[]>;
+  /**
+   * A sessao pelo hash do cookie, JUNTO com a conta dona dela: uma consulta so
+   * por requisicao. A conta vem de `admin_accounts`, nunca de `users`.
+   */
+  contaParaAGuarda(tokenHash: Buffer): Promise<SessaoComConta | undefined>;
   renovarUso(id: string, agora: Instant, idleExpiresAt: Instant): Promise<void>;
 
   criar(trx: TransacaoDeEscrita, nova: NovaSessaoAdministrativa): Promise<void>;
@@ -74,12 +91,10 @@ export interface SessaoAdministrativaRepository {
   revogar(trx: TransacaoDeEscrita, id: string, motivo: MotivoDeRevogacaoAdministrativa, agora: Instant): Promise<boolean>;
   revogarTodasDaConta(
     trx: TransacaoDeEscrita,
-    userId: UserId,
+    adminAccountId: AdminAccountId,
     motivo: MotivoDeRevogacaoAdministrativa,
     agora: Instant,
   ): Promise<number>;
-  /** Empurra `users.sessions_invalid_before`, sem nunca recua-la. */
-  empurrarBarreira(trx: TransacaoDeEscrita, userId: UserId, barreira: Instant, agora: Instant): Promise<void>;
 
   criarJanela(trx: TransacaoDeEscrita, nova: NovaJanelaAdministrativa): Promise<void>;
   /**
@@ -87,4 +102,7 @@ export interface SessaoAdministrativaRepository {
    * (ADR-0021). Devolve se consumiu.
    */
   consumirJanela(consumo: ConsumoDaJanelaAdministrativa): Promise<boolean>;
+
+  /** Grava o hash do token "nao fui eu" que vai no e-mail de sessao aberta (D62). */
+  criarAviso(novo: NovoAvisoDeSessao): Promise<void>;
 }
