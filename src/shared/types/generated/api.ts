@@ -3080,7 +3080,8 @@ export interface paths {
          *     chega como a primeira noticia). Aprovado nao volta a recusado: o tutor
          *     ja viu o lugar, e recusar depois seria uma segunda decisao que ele
          *     sabe que existiu (`400`, `code: request_not_pending`, nos outros
-         *     casos). O tutor recebe push **so com
+         *     casos). Encontro cancelado, removido ou que ja terminou responde `409`
+         *     (`event-not-open`). O tutor recebe push **so com
          *     o titulo do encontro**, nunca lugar nem horario: o conteudo passa pelo
          *     provedor de push e aparece na tela bloqueada (22.10.1). A partir daqui
          *     `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
@@ -3108,7 +3109,8 @@ export interface paths {
         /**
          * Recusa o pedido, sem avisar o tutor
          * @description So a partir de `pending` sem desistencia; aprovado nao volta a
-         *     recusado. **O tutor nao e avisado**, e
+         *     recusado. Encontro cancelado, removido ou que ja terminou responde
+         *     `409` (`event-not-open`). **O tutor nao e avisado**, e
          *     para ele o pedido continua "aguardando" ate o encontro passar (decisao
          *     do cliente, 23/09): o app recebe `requested`, nunca `declined`. A
          *     recusa e final e invisivel: pedir de novo devolve o mesmo `requested`
@@ -5411,7 +5413,7 @@ export interface components {
                 display_name: string | null;
                 /** @description Se a conta confirmou o e-mail. So o booleano, nunca o endereco nem a data. */
                 email_verified: boolean;
-                /** @description Ano e mes de criacao da conta, e nada mais fino. */
+                /** @description Ano e mes de criacao da conta, no horario de Brasilia (`America/Sao_Paulo`), e nada mais fino. */
                 member_since: string;
             };
             status: components["schemas"]["AdminJoinRequestStatus"];
@@ -5637,6 +5639,18 @@ export interface components {
         };
         /** @description O `slug` pedido ja e de outro recurso do mesmo tipo. */
         SlugTaken: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O encontro do pedido foi cancelado, removido ou ja terminou: nenhuma
+         *     decisao sobre o pedido vale mais, e o painel tira o pedido da fila.
+         */
+        EventNotOpen: {
             headers: {
                 [name: string]: unknown;
             };
@@ -10190,6 +10204,7 @@ export interface operations {
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["EventNotOpen"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -10218,6 +10233,7 @@ export interface operations {
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
+            409: components["responses"]["EventNotOpen"];
             429: components["responses"]["TooManyRequests"];
         };
     };

@@ -545,6 +545,25 @@ void describe('a fila de pedidos (D53 a D56)', () => {
     assert.deepEqual(evento?.before, { status: 'declined' });
   });
 
+  void it('ISCA (QA 28/09): encontro cancelado, removido ou encerrado nao recebe decisao -- 409 event-not-open', async () => {
+    for (const ajuste of [
+      { publicacao: 'cancelled' as const },
+      { publicacao: 'removed' as const },
+      { startsAt: comoData((AGORA - 3 * 3_600_000) as Instant), endsAt: comoData((AGORA - 3_600_000) as Instant) },
+    ]) {
+      b.semear((e) => {
+        for (const [id, g] of e.encontros) e.encontros.set(id, { ...g, publicacao: 'published', ...ajuste });
+      });
+      for (const acao of ['approval', 'decline']) {
+        const r = await chamar(b, 'POST', `/admin/network/join-requests/refPendenteAAAAAAAAAAAA/${acao}`);
+        assert.equal(r.status, 409, `${JSON.stringify(ajuste)} ${acao}: ${r.bruto}`);
+        assert.equal(tipo(r.corpo), 'event-not-open');
+      }
+    }
+    assert.equal(b.estado().trabalhos.filter((t) => t.kind === 'network.join_request_approved').length, 0);
+    assert.ok(!acoesNaTrilha(b).some((a) => a.startsWith('admin.network_join_request.ap')));
+  });
+
   void it('pedido inexistente: 404', async () => {
     const r = await chamar(b, 'POST', '/admin/network/join-requests/refQueNaoExisteXXXXXXXX/approval');
     assert.equal(r.status, 404);

@@ -17,6 +17,7 @@ export const STATUS_DO_PROBLEMA = {
   'not-found':                      404,
   'email-already-registered':       409,
   'slug-taken':                     409,
+  'event-not-open':                 409, // o pedido de participacao nao pode ser decidido porque o encontro foi cancelado, removido ou ja terminou (BICHUS-292). Separado de `validation-failed`/`request_not_pending`: ali o problema e o PEDIDO; aqui e o ENCONTRO, e nenhuma decisao sobre esse pedido vai valer
   'pet-already-lost':               409, // este pet ja tem caso aberto. O banco impoe (indice unico parcial), e o tipo existe para a tela dizer 'voce ja marcou' em vez de 'erro'
   'open-case-limit-reached':        409, // teto de 3 casos ABERTOS SIMULTANEOS por conta (BICHUS-21 criterio 8). Separado de `pet-already-lost`: um diz 'este pet ja esta perdido' e o outro 'voce ja tem tres animais perdidos'. A saida e diferente -- no primeiro a pessoa abre o caso que ja existe, no segundo ela precisa encerrar um. Alem de produto, e privacidade: a lista publica mostra bairro e data, e sem teto uma conta entregaria uma SERIE de pontos no tempo e no espaco da mesma pessoa
   'pet-limit-reached':              409, // teto de pets DA CONTA
@@ -42,7 +43,7 @@ export const STATUS_DO_PROBLEMA = {
   'internal':                       500,
 } as const;
 
-/** União fechada dos 32 tipos declarados no contrato. */
+/** União fechada dos 33 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

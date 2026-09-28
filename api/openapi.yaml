@@ -298,6 +298,7 @@ x-problem-types:
   - { slug: not-found,                     status: 404 }
   - { slug: email-already-registered,      status: 409 }
   - { slug: slug-taken,                    status: 409 }
+  - { slug: event-not-open,                status: 409, note: "o pedido de participacao nao pode ser decidido porque o encontro foi cancelado, removido ou ja terminou (BICHUS-292). Separado de `validation-failed`/`request_not_pending`: ali o problema e o PEDIDO; aqui e o ENCONTRO, e nenhuma decisao sobre esse pedido vai valer" }
   - { slug: pet-already-lost,              status: 409, note: "este pet ja tem caso aberto. O banco impoe (indice unico parcial), e o tipo existe para a tela dizer 'voce ja marcou' em vez de 'erro'" }
   - { slug: open-case-limit-reached,       status: 409, note: "teto de 3 casos ABERTOS SIMULTANEOS por conta (BICHUS-21 criterio 8). Separado de `pet-already-lost`: um diz 'este pet ja esta perdido' e o outro 'voce ja tem tres animais perdidos'. A saida e diferente -- no primeiro a pessoa abre o caso que ja existe, no segundo ela precisa encerrar um. Alem de produto, e privacidade: a lista publica mostra bairro e data, e sem teto uma conta entregaria uma SERIE de pontos no tempo e no espaco da mesma pessoa" }
   - { slug: pet-limit-reached,             status: 409, note: "teto de pets DA CONTA" }
@@ -6021,7 +6022,8 @@ paths:
         chega como a primeira noticia). Aprovado nao volta a recusado: o tutor
         ja viu o lugar, e recusar depois seria uma segunda decisao que ele
         sabe que existiu (`400`, `code: request_not_pending`, nos outros
-        casos). O tutor recebe push **so com
+        casos). Encontro cancelado, removido ou que ja terminou responde `409`
+        (`event-not-open`). O tutor recebe push **so com
         o titulo do encontro**, nunca lugar nem horario: o conteudo passa pelo
         provedor de push e aparece na tela bloqueada (22.10.1). A partir daqui
         `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
@@ -6047,6 +6049,7 @@ paths:
         '401': { $ref: '#/components/responses/AdminUnauthorized' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/EventNotOpen' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /admin/network/join-requests/{requestRef}/decline:
@@ -6059,7 +6062,8 @@ paths:
       summary: Recusa o pedido, sem avisar o tutor
       description: |
         So a partir de `pending` sem desistencia; aprovado nao volta a
-        recusado. **O tutor nao e avisado**, e
+        recusado. Encontro cancelado, removido ou que ja terminou responde
+        `409` (`event-not-open`). **O tutor nao e avisado**, e
         para ele o pedido continua "aguardando" ate o encontro passar (decisao
         do cliente, 23/09): o app recebe `requested`, nunca `declined`. A
         recusa e final e invisivel: pedir de novo devolve o mesmo `requested`
@@ -6085,6 +6089,7 @@ paths:
         '401': { $ref: '#/components/responses/AdminUnauthorized' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/EventNotOpen' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /admin/media/catalog-image-intents:
@@ -6688,6 +6693,20 @@ components:
               value:
                 type: https://dominio-a-definir.com.br/problems/slug-taken
                 title: Este endereco ja esta em uso
+                status: 409
+                correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+    EventNotOpen:
+      description: |
+        O encontro do pedido foi cancelado, removido ou ja terminou: nenhuma
+        decisao sobre o pedido vale mais, e o painel tira o pedido da fila.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+          examples:
+            encerrado:
+              value:
+                type: https://dominio-a-definir.com.br/problems/event-not-open
+                title: Este encontro nao recebe mais decisoes
                 status: 409
                 correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
     PreconditionFailed:
@@ -9542,7 +9561,7 @@ components:
             member_since:
               type: string
               pattern: '^[0-9]{4}-[0-9]{2}$'
-              description: Ano e mes de criacao da conta, e nada mais fino.
+              description: Ano e mes de criacao da conta, no horario de Brasilia (`America/Sao_Paulo`), e nada mais fino.
         status: { $ref: '#/components/schemas/AdminJoinRequestStatus' }
         requested_at: { type: string, format: date-time }
         decided_at: { type: [string, 'null'], format: date-time }

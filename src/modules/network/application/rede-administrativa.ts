@@ -33,6 +33,7 @@ import type { AuditAction, AuditEvent } from '../../audit/ports/audit-log.js';
 import {
   comoEtag,
   diferenca,
+  encontroAbertoParaDecisao,
   entradaDoCorpo,
   errosDasObservacoes,
   errosDeTexto,
@@ -842,6 +843,11 @@ export class RedeAdministrativa {
     return this.deps.repositorio.emTransacao(async (tx) => {
       const atual = await tx.pedidoPorRef(ref);
       if (atual === null) throw problemas.naoEncontrado();
+      if (!encontroAbertoParaDecisao(atual.encontro, agora)) {
+        throw new AppError('event-not-open', 'Este encontro não recebe mais decisões', {
+          detail: 'O encontro foi cancelado, removido ou já terminou.',
+        });
+      }
       if (!podeDecidir(atual, decisao)) {
         throw recusa('status', 'request_not_pending', 'Este pedido não pode mais receber esta decisão.');
       }
