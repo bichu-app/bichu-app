@@ -51,6 +51,8 @@ export interface PropsDaGaleria {
   titulo?: string;
   principal?: string;
   ajuda?: string;
+  /** Marca curta numa imagem (ex.: a foto sem envio da Rede, UX 30.7), tambem lida no nome acessivel do item. */
+  marca?: (imagem: ImagemDaGaleria) => string | undefined;
 }
 
 /**
@@ -69,6 +71,7 @@ export function Galeria({
   titulo = 'Imagens do produto',
   principal = 'Principal',
   ajuda = 'JPG, PNG ou WebP, até 5 MB cada, com pelo menos 800 × 800 pixels. A primeira é a principal: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover.',
+  marca,
 }: PropsDaGaleria) {
   const [anuncio, setAnuncio] = useState('');
   const seletor = useRef<HTMLInputElement>(null);
@@ -199,7 +202,7 @@ export function Galeria({
               key={im.chave}
               className={im.estado === 'erro' || im.estado === 'rejected' ? 'tile err' : 'tile'}
               data-indice={i}
-              aria-label={`Imagem ${i + 1} de ${n}${i === 0 ? `, ${principalMinusculo}` : ''}`}
+              aria-label={`Imagem ${i + 1} de ${n}${i === 0 ? `, ${principalMinusculo}` : ''}${marca?.(im) ? `, ${marca(im)}` : ''}`}
               draggable={podeMover}
               onDragStart={(e) => {
                 arrastando.current = i;
@@ -257,6 +260,7 @@ export function Galeria({
                   </div>
                 )}
               </div>
+              {marca?.(im) && <span className="selo venc t-overline">{marca(im)}</span>}
               {precisaDeDescricao(im) && (
                 <div className={erroDeDescricao ? 'field tile-alt err' : 'field tile-alt'}>
                   <label className="t-caption" htmlFor={idDoAlt}>

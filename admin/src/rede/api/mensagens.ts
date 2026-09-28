@@ -16,8 +16,17 @@ const CODIGOS: Record<string, string> = {
   request_not_pending: 'Este pedido já foi decidido ou a pessoa desistiu. A lista foi atualizada.',
 };
 
-/** 409 `event-not-open` na fila. */
-export const ENCONTRO_FECHADO = 'Este encontro foi cancelado, removido ou já aconteceu. Os pedidos dele não podem mais ser aprovados nem recusados.';
+/**
+ * 409 `event-not-open` na fila (UX 30.7 R2): com o estado conhecido, a frase
+ * diz qual; sem ele, a generica.
+ */
+export function textoDeEncontroFechado(e?: { publication_status: string; timing: string }): string {
+  const estado =
+    e?.publication_status === 'removed' ? 'foi removido' : e?.publication_status === 'cancelled' ? 'foi cancelado' : e?.timing === 'ended' ? 'já aconteceu' : undefined;
+  return estado
+    ? `Este encontro ${estado}. Os pedidos dele não podem mais ser aprovados nem recusados.`
+    : 'Este encontro não está mais aberto a pedidos. Eles não podem mais ser aprovados nem recusados.';
+}
 
 export function mensagemDaFalha(falha: Falha, acao: string): string {
   switch (falha.tipo) {
@@ -39,7 +48,7 @@ export function mensagemDaFalha(falha: Falha, acao: string): string {
     case 'sem-conexao':
       return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
     case 'encontro-fechado':
-      return ENCONTRO_FECHADO;
+      return textoDeEncontroFechado();
     case 'endereco-ocupado':
       return 'Já existe um encontro com um título parecido. Mude o título e tente de novo.';
     case 'sessao':

@@ -15,7 +15,7 @@ import { Link, useParams, useSearchParams } from 'react-router';
 
 import { Banner, LinhasCarregando } from '../../componentes/basicos.tsx';
 import { Icone } from '../../componentes/Icone.tsx';
-import { ENCONTRO_FECHADO, mensagemDaFalha } from '../api/mensagens.ts';
+import { mensagemDaFalha, textoDeEncontroFechado } from '../api/mensagens.ts';
 import { esperaPorExtenso, type Falha, type Resultado } from '../api/redeApi.ts';
 import { SeloDoEncontro } from '../componentes/SeloDoEncontro.tsx';
 import { dataCurta, dataEHora, faixaDeHorario, mesPorExtenso } from '../dominio/horario.ts';
@@ -165,6 +165,8 @@ export default function PedidosDoEncontro() {
       // O encontro fechou (409 event-not-open): nenhuma decisao vai valer; o aviso fixo da fila diz isso.
       setAviso(undefined);
       setFechadoPeloServidor(true);
+      // Reler o encontro da o estado certo para a frase (UX 30.7 R2).
+      void rede.obter(eventSlug).then((e) => e.ok && setEncontro(e.dados));
       return;
     }
     if (!r.ok) {
@@ -250,7 +252,7 @@ export default function PedidosDoEncontro() {
           Aqui aparecem só o nome de exibição, se a conta está validada (e-mail confirmado), o mês em que a conta foi criada e a data do pedido. Pets e contato não
           aparecem. Quem for aprovado passa a ver no app o local e os detalhes. Não há como mandar mensagem pelo Bichu.
         </p>
-        {fechado && <Banner tipo="alerta">{ENCONTRO_FECHADO}</Banner>}
+        {fechado && <Banner tipo="alerta">{textoDeEncontroFechado(encontro)}</Banner>}
         <Banner tipo="info">Recusar não avisa a pessoa. No app, o pedido dela continua como “Pedido enviado” até a data do encontro.</Banner>
         {aviso && (
           <Banner

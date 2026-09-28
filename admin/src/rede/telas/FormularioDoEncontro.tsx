@@ -24,8 +24,10 @@ import {
   corpoDaMudanca,
   formularioDoEncontro,
   formularioVazio,
-  fotosSemEnvio,
+  avisoDeFotosSemEnvio,
   LIMITE_DAS_OBSERVACOES,
+  MARCA_SEM_ENVIO,
+  semEnvio,
   LIMITE_DO_RESUMO,
   montarCriacao,
   planoDeEdicao,
@@ -363,14 +365,9 @@ export default function FormularioDoEncontro() {
         enviar={(arquivo, aoProgredir) => enviarImagem(cliente, arquivo, 'network_event', aoProgredir)}
         mostrarErrosDeDescricao={tentou}
         erro={erroDe('fotos')}
+        marca={(im) => (semEnvio(im) ? MARCA_SEM_ENVIO : undefined)}
       />
-      {fotosSemEnvio(f) > 0 && (
-        <Banner tipo="alerta">
-          {fotosSemEnvio(f) === 1
-            ? 'Uma foto foi enviada por uma conta que não existe mais. Se você mudar as fotos, ela sai do encontro.'
-            : `${fotosSemEnvio(f)} fotos foram enviadas por uma conta que não existe mais. Se você mudar as fotos, elas saem do encontro.`}
-        </Banner>
-      )}
+      {avisoDeFotosSemEnvio(f) && <Banner tipo="alerta">{avisoDeFotosSemEnvio(f)}</Banner>}
 
       <h2 className={`t-title ${estilos.secao ?? ''}`}>Quando e onde</h2>
       <fieldset className={estilos.grupo} disabled={travarLugarEAcesso}>

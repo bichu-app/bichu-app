@@ -4,6 +4,7 @@ import {
   corpoDaMudanca,
   formularioDoEncontro,
   formularioVazio,
+  avisoDeFotosSemEnvio,
   fotosSemEnvio,
   montarCriacao,
   planoDeEdicao,
@@ -230,6 +231,18 @@ describe('foto com upload_id nulo (conta apagada)', () => {
     expect(f.fotos.map((x) => x.chave)).toEqual(['sem-envio-0', '00000000-0000-4000-8000-000000000002']);
     expect(f.fotos[0]?.uploadId).toBeUndefined();
     expect(fotosSemEnvio(f)).toBe(1);
+  });
+
+  it('alerta diz a posição quando é uma foto só, e usa o plural com mais de uma (UX 30.7 R1)', () => {
+    const f = formularioDoEncontro(comOrfa);
+    expect(avisoDeFotosSemEnvio(f)).toBe(
+      'A foto 1 veio de uma conta que não existe mais. Ela fica no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do encontro.',
+    );
+    const duas = { fotos: [...f.fotos, { ...f.fotos[0]!, chave: 'sem-envio-2' }] };
+    expect(avisoDeFotosSemEnvio(duas)).toBe(
+      '2 fotos vieram de uma conta que não existe mais. Elas ficam no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos as tira do encontro.',
+    );
+    expect(avisoDeFotosSemEnvio({ fotos: [f.fotos[1]!] })).toBeNull();
   });
 
   it('editar só o título NÃO manda images, e a foto sem envio fica no encontro', () => {

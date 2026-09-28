@@ -286,6 +286,27 @@ describe('Rede: edição', () => {
     expect(observacoesComContatoEnviadas(duble.registro)).toEqual([]);
   });
 
+  it('foto sem envio: alerta com a posição e a marca na própria foto (UX 30.7 R1)', async () => {
+    const duble = criarDuble({
+      encontros: [
+        encontroDeExemplo({
+          images: [
+            { source: 'uploaded', status: 'ready', url: null, rejection_reason: null, upload_id: '00000000-0000-4000-8000-000000000001', position: 0, alt_text: 'Gramado' },
+            { source: 'uploaded', status: 'ready', url: null, rejection_reason: null, upload_id: null, position: 1, alt_text: 'Lago' },
+          ],
+        }),
+      ],
+      pedidos: [],
+    });
+    montar('/rede/encontro-de-caes-no-parque', duble);
+    expect(
+      await screen.findByText('A foto 2 veio de uma conta que não existe mais. Ela fica no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do encontro.'),
+    ).toBeInTheDocument();
+    const afetada = screen.getByRole('listitem', { name: 'Imagem 2 de 2, Sai se a galeria mudar' });
+    expect(within(afetada).getByText('Sai se a galeria mudar')).toBeInTheDocument();
+    expect(within(screen.getByRole('listitem', { name: 'Imagem 1 de 2, capa' })).queryByText('Sai se a galeria mudar')).toBeNull();
+  });
+
   it('encontro encerrado mostra o aviso de correção', async () => {
     montar('/rede/piquenique-dos-vira-latas');
     expect(await screen.findByText('Este encontro já aconteceu. Você ainda pode corrigir os dados, e a correção aparece no app.')).toBeInTheDocument();
@@ -380,7 +401,7 @@ describe('Rede: fila de pedidos', () => {
     if (!privado) throw new Error('massa sem o privado');
     privado.publication_status = 'cancelled';
     montar(PRIVADO, duble);
-    expect(await screen.findByText(/Este encontro foi cancelado, removido ou já aconteceu\./)).toBeInTheDocument();
+    expect(await screen.findByText('Este encontro foi cancelado. Os pedidos dele não podem mais ser aprovados nem recusados.')).toBeInTheDocument();
     await screen.findByText('Carla M.');
     expect(screen.queryByRole('button', { name: /Aprovar o pedido/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Recusar o pedido/ })).toBeNull();
@@ -393,7 +414,7 @@ describe('Rede: fila de pedidos', () => {
       if (privado) privado.timing = 'ended';
       return b;
     }));
-    expect(await screen.findByText(/Os pedidos dele não podem mais ser aprovados nem recusados\./)).toBeInTheDocument();
+    expect(await screen.findByText('Este encontro já aconteceu. Os pedidos dele não podem mais ser aprovados nem recusados.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Aprovar o pedido/ })).toBeNull();
     expect(duble.pedidos.find((p) => p.ref.startsWith('rq_Carla'))?.status).toBe('pending');
   });

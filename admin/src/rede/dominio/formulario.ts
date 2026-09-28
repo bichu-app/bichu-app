@@ -64,9 +64,26 @@ export function chaveDaImagem(img: { upload_id: string | null; position: number 
   return img.upload_id ?? `sem-envio-${img.position}`;
 }
 
+/** A foto que a galeria nao consegue reenviar: sai do encontro se a galeria mudar. */
+export function semEnvio(x: FotoDoFormulario): boolean {
+  return !x.uploadId && FOTO_QUE_VAI.has(x.estado);
+}
+
 /** Fotos que a galeria nao consegue reenviar: saem do encontro se as fotos mudarem. */
 export function fotosSemEnvio(f: Pick<EstadoDoFormulario, 'fotos'>): number {
-  return f.fotos.filter((x) => !x.uploadId && FOTO_QUE_VAI.has(x.estado)).length;
+  return f.fotos.filter(semEnvio).length;
+}
+
+export const MARCA_SEM_ENVIO = 'Sai se a galeria mudar';
+
+/** UX 30.7 R1: o alerta abaixo da galeria, com a posicao quando for uma foto so. */
+export function avisoDeFotosSemEnvio(f: Pick<EstadoDoFormulario, 'fotos'>): string | null {
+  const posicoes = f.fotos.flatMap((x, i) => (semEnvio(x) ? [i + 1] : []));
+  if (posicoes.length === 0) return null;
+  if (posicoes.length === 1) {
+    return `A foto ${posicoes[0]} veio de uma conta que não existe mais. Ela fica no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do encontro.`;
+  }
+  return `${posicoes.length} fotos vieram de uma conta que não existe mais. Elas ficam no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos as tira do encontro.`;
 }
 
 export interface EstadoDoFormulario {
