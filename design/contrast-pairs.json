@@ -15,7 +15,7 @@
     "1.4.11": "3:1 para componente de interface e objeto grafico. Conteudo puramente decorativo e isento."
   },
   "$valores_historicos": {
-    "$description": "Razoes que aparecem na PROSA do paragrafo 7 como registro do que ja foi e nao e mais. Elas nao pertencem a nenhum par vigente, e por isso o portao do documento (test/a11y/documento_secao7_test.dart) as acusaria como numero velho se nao estivessem declaradas aqui. Declarar e barato; deixar a excecao implicita e como quatro numeros da rampa anterior sobreviveram no texto por dias sem ninguem notar.",
+    "$description": "Razoes que aparecem na PROSA do paragrafo 7 como registro do que ja foi e nao e mais. Elas nao pertencem a nenhum par vigente, e por isso o portao do documento (test/a11y/documento_secao7_test.dart) as acusaria como numero velho se nao estivessem declaradas aqui. ESSE PORTAO FOI REMOVIDO EM 23/09/2026, junto com a dispensa que o segurava: o documento nao entra no repositorio (decisao do cliente de 17/09, reafirmada em 23/09) e portao que nunca tem o que ler nao e portao. Este bloco fica porque o registro do que ja foi e nao e mais continua valendo para quem le a tabela; ele nao alimenta mais verificacao nenhuma. Quem cobra os valores e test/a11y/contraste_tokens_test.dart, a partir dos pares abaixo.",
     "6.88": "text-secondary do tema escuro em #B5B0A2 sobre surface-sunken, abaixo do piso de 7:1. Corrigido para #BEB9AB, que da 7.60."
   },
   "$telas_criticas": [

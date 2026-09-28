@@ -104,7 +104,13 @@ const PADROES_PROIBIDOS: ReadonlyArray<{ nome: string; regex: RegExp }> = [
   // quatro caracteres é todo o trabalho necessário para furar a de cima.
   { nome: 'UUID sem hífens', regex: /(?:^|[^0-9a-z])[0-9a-f]{32}(?:[^0-9a-z]|$)/i },
   // Item 1: e-mail de quem quer que seja.
-  { nome: 'endereço de e-mail', regex: /[\w.+-]+@[\w-]+\.[a-z]{2,}/i },
+  // O olhar-para-trás é o que mantém o custo linear: sem ele o motor recomeça a
+  // varredura de cada posição do mesmo bloco e 256 KB de pior caso construído
+  // custam 38.510 ms em vez de 2,3 ms. Mesma medição de `redigir.ts`.
+  {
+    nome: 'endereço de e-mail',
+    regex: /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}/i,
+  },
   // Item 1: telefone. Cobre o formato brasileiro com e sem DDI, com e sem
   // parênteses, com espaço, ponto ou hífen entre os blocos.
   { nome: 'telefone', regex: /(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}/ },

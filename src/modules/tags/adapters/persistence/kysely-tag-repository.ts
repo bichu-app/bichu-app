@@ -137,6 +137,43 @@ export function construtorDaConferenciaDoPet(db: DbExecutor, petId: PetId, dono:
     .where('deleted_at', 'is', null);
 }
 
+/**
+ * A contagem da janela de emissão, com a emissão mais antiga dentro dela.
+ *
+ * A mais ANTIGA é quem decide quando o balde volta a ter vaga: é ela que sai da
+ * contagem primeiro. Enquanto o retorno era a janela inteira, o corpo do 429
+ * dizia "24 horas" para quem tinha dez minutos de espera.
+ *
+ * **`Date | null` e não `Date`, e a anotação é o assunto desta função.** `MIN()`
+ * sobre zero linhas devolve `NULL` em SQL, e o Kysely adota como tipo da coluna
+ * exatamente o que se escreve aqui: `fn.min<Date>` prometia não-nulo o que o
+ * banco pode devolver nulo. Era a ANOTAÇÃO que mentia, não a guarda de quem lê
+ * o resultado — e era a mentira dela que fazia a análise estática classificar
+ * aquela guarda como "comparação sempre falsa". Aceitar a sugestão da
+ * ferramenta e apagar a guarda deixaria `new Date(null).getTime()` valer época
+ * zero e o `Retry-After` do 429 sair como 1 segundo no dia em que esta consulta
+ * mudar de forma.
+ *
+ * Ela está aqui fora, e não embutida na transação, pelo mesmo motivo dos
+ * construtores vizinhos, mais um: **assim o tipo do resultado tem nome e pode
+ * ser cobrado em tempo de compilação.** Ver
+ * `anotacao-da-janela-nao-mente.test.ts`, que reprova se `mais_antiga` voltar a
+ * ser não-anulável. Sem isso, desfazer a correção não acusava em lugar nenhum:
+ * medido, `tsc --noEmit` continua saindo 0 com `fn.min<Date>` de volta.
+ */
+export function construtorDaJanelaDeEmissao(
+  db: DbExecutor,
+  petId: PetId,
+  inicioDaJanela: Date,
+) {
+  return db
+    .selectFrom('pet_tags')
+    .select(({ fn }) => fn.countAll<string>().as('total'))
+    .select(({ fn }) => fn.min<Date | null>('created_at').as('mais_antiga'))
+    .where('pet_id', '=', petId)
+    .where('created_at', '>=', inicioDaJanela);
+}
+
 /** As tags do pet, com o dono no mesmo `WHERE` que o pet. */
 export function construtorDaListaDeTags(db: DbExecutor, petId: PetId, dono: UserId) {
   return db
@@ -302,18 +339,11 @@ export function criarTagRepository(db: Db): TagRepository {
         if (Number(ativas.total) >= TETO_DE_TAGS_ATIVAS) return { tipo: 'teto_de_ativas' };
 
         const inicioDaJanela = new Date(agora - JANELA_DE_EMISSAO_EM_MS);
-        const doDia = await trx
-          .selectFrom('pet_tags')
-          .select(({ fn }) => fn.countAll<string>().as('total'))
-          // A mais ANTIGA dentro da janela é quem decide quando o balde volta a
-          // ter vaga: é ela que sai da contagem primeiro. Enquanto o retorno era
-          // a janela inteira, o corpo do 429 dizia "24 horas" para quem tinha
-          // dez minutos de espera, e o texto novo transforma esse arredondamento
-          // em um número que a pessoa lê e obedece.
-          .select(({ fn }) => fn.min<Date>('created_at').as('mais_antiga'))
-          .where('pet_id', '=', nova.petId)
-          .where('created_at', '>=', inicioDaJanela)
-          .executeTakeFirstOrThrow();
+        const doDia = await construtorDaJanelaDeEmissao(
+          trx,
+          nova.petId,
+          inicioDaJanela,
+        ).executeTakeFirstOrThrow();
         if (Number(doDia.total) >= TETO_DE_EMISSOES_POR_DIA) {
           const maisAntiga = doDia.mais_antiga;
           const liberaEm =
