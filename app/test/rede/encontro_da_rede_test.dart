@@ -537,7 +537,7 @@ void main() {
 
       expect(find.text(tituloPrivado), findsOneWidget);
       expect(find.text('Domingo, 4 de outubro'), findsOneWidget);
-      expect(find.text('Não conseguimos consultar o seu pedido agora.'), findsOneWidget);
+      expect(find.text('Não conseguimos ver agora se você já pediu para participar.'), findsOneWidget);
       expect(find.text('Pedir para participar'), findsNothing);
       falhar = false;
       await tester.tap(find.text('Tentar de novo'));

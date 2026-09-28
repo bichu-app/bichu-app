@@ -70,7 +70,7 @@ class TelaDoEncontro extends StatefulWidget {
   final String? erroDoPedido;
 
   static const String falhaDoPedido =
-      'Não conseguimos consultar o seu pedido agora.';
+      'Não conseguimos ver agora se você já pediu para participar.';
   static const String rotuloDeTentar = 'Tentar de novo';
 
   static const String tituloDaTela = 'Encontro';

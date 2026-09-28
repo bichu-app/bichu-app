@@ -90,7 +90,7 @@ class AgendaDaRede extends StatefulWidget {
   /// agenda; texto no padrao de 28.2, `Tentar de novo` refaz uma coisa so).
   static const String rotuloDeCarregarMais = 'Carregar mais encontros';
   static const String falhaAoCarregarMais =
-      'Não conseguimos carregar mais encontros.';
+      'Não conseguimos carregar mais encontros agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
 
   static String tituloDoVazioComBusca(String termo) =>

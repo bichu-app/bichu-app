@@ -570,7 +570,7 @@ void main() {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Carregar mais encontros'));
       await tester.pumpAndSettle();
-      expect(find.text('Não conseguimos carregar mais encontros.'), findsOneWidget);
+      expect(find.text('Não conseguimos carregar mais encontros agora.'), findsOneWidget);
       expect(find.text('Tentar de novo'), findsOneWidget);
       expect(find.text('Mostrando 1 a 20 de 25'), findsOneWidget);
     });
