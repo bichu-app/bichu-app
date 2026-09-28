@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-numero-de-adr verificar-numero-de-adr-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: verificar-numero-de-adr verificar-numero-de-adr-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-conformidade-do-app verificar-conformidade-do-app-autoteste verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -492,7 +492,57 @@ verificar-tokens-gerados: ## o Dart de app/lib/theme/ bate com design/tokens.jso
 # `flutter pub get` PRIMEIRO, e nao por habito: `dart run tool/gen_tokens.dart`
 # precisa do pacote resolvido, e sem isso o portao reprovaria por falta de
 # preparo em vez de por divergencia -- que e a reprovacao que ninguem entende.
-verificar-app: verificar-tokens-gerados-autoteste ## a metade Flutter: analise e suite de widget (job `app` da esteira)
+# --------------------------------------------------------------------------
+# O PORTAO DE CONFORMIDADE DO APP (23/09/2026)
+#
+# Regra do cliente, 23/09: toda funcionalidade segue `api/openapi.yaml`, e os
+# quatro clientes usam os mesmos campos e os mesmos valores. Dois ja tinham
+# portao para isso: o backend, com `verificar-tipos-gerados`, e o painel, com
+# o cliente gerado. O APP nao tinha NENHUM.
+#
+# `app/lib/api/` e escrito a mao -- 22 arquivos, 5232 linhas, 45 tipos de
+# modelo. Um campo renomeado no contrato nao quebrava build, nao quebrava
+# `flutter analyze` e nao quebrava a suite: quebrava no aparelho da pessoa,
+# que e o unico lugar onde ninguem esta olhando.
+#
+# POR QUE ELE NAO GERA OS MODELOS, QUE SERIA ESTRUTURALMENTE MELHOR
+#
+# Medido antes de decidir: 45 tipos a mao com 375 usos fora de `app/lib/api`,
+# em 192 arquivos Dart. Os identificadores sao em portugues por regra da casa
+# e o gerador emite os nomes do contrato em ingles, entao gerar nao APAGA a
+# camada a mao -- troca ela por uma camada de traducao do mesmo tamanho. E o
+# contrato tem 68 schemas dos quais o app modela um recorte DE PROPOSITO:
+# gerador que espelha 1:1 entrega ao app exatamente o que ele nao pode ver.
+# A decisao e do Orquestrador; a medicao esta na entrega.
+#
+# POR QUE ELE RODA ANTES DO `flutter pub get`, E NAO DEPOIS
+#
+# Ele nao precisa de Flutter: le texto Dart e YAML com Node. Medido neste
+# worktree com `/usr/bin/time -p`, Node 22.23.2, cinco execucoes -- `real`
+# entre 0,92 e 1,36 s, tipico 1,1 s; o autoteste custa 0,30 s. Contra os
+# 37,0 s de `pub get` + `analyze` + suite, ele e ruido, e a ORDEM e o ponto:
+# contrato divergente reprova em um segundo, e nao depois de meio minuto de
+# suite que nao tem nada com isso. E a mesma razao pela qual
+# `verificar-tokens-gerados` (1,26 s) roda antes de `analyze`.
+#
+# POR QUE EM `verificar-app` E NAO EM `verificar`
+#
+# Pelo criterio de custo da casa, e pelo assunto: ele le `app/lib/api/`, entao
+# mora com a metade Flutter, junto do portao dos tokens, que tambem le `app/`
+# e custa o mesmo. `verificar` e o laco de quem mexe em rota e em `src/`.
+#
+# O QUE ELE NAO FAZ: classe de modelo entra na conferencia quando tem ancora.
+# Enum, nao: TODO enum de `app/lib/api/` tem de se classificar, e enum novo sem
+# classificacao reprova. A assimetria esta registrada na entrega como limite
+# conhecido, e nao como esquecimento.
+verificar-conformidade-do-app-autoteste: ## as iscas do portao de conformidade do app reprovam (nao le a spec)
+	node infra/verificacao/verificar-conformidade-do-app.mjs --autoteste
+
+verificar-conformidade-do-app: ## os campos e enums de app/lib/api/ batem com api/openapi.yaml (1,1 s)
+	node infra/verificacao/verificar-conformidade-do-app.mjs
+
+verificar-app: verificar-tokens-gerados-autoteste verificar-conformidade-do-app-autoteste ## a metade Flutter: analise e suite de widget (job `app` da esteira)
+	@$(MAKE) --no-print-directory verificar-conformidade-do-app
 	cd app && flutter pub get
 	@$(MAKE) --no-print-directory verificar-tokens-gerados
 	cd app && flutter analyze && flutter test

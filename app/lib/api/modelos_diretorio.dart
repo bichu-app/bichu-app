@@ -13,7 +13,7 @@
 
 import 'falhas.dart';
 
-/// A atividade da entrada. Espelha `ProfessionalKind` do contrato.
+/// `#/components/schemas/ProfessionalKind` do contrato.
 ///
 /// **Nao ha valor para ONG**, e a ausencia e decisao pendente do modelo, nao
 /// esquecimento: `professionals` nao tem `entity_kind`. A porta das ONGs em
@@ -43,6 +43,8 @@ enum AtividadeDoDiretorio {
   }
 }
 
+/// `#/components/schemas/VerificationLevel` do contrato.
+///
 /// O que foi provado, derivado da verificacao aprovada mais forte.
 ///
 /// **`nenhum` e estado legitimo e publicavel** (ADR-0011): passeador,
@@ -72,6 +74,8 @@ enum NivelDeVerificacao {
   }
 }
 
+/// `#/components/schemas/EvidenceKind` do contrato.
+///
 /// O TIPO de prova aceita. A resposta devolve o tipo, **nunca o numero**.
 enum TipoDeProva {
   crmv('crmv', 'CRMV'),
@@ -230,6 +234,15 @@ class EntradaDoDiretorio {
   }
 }
 
+/// `#/paths/~1directory~1entries/get/parameters/5/schema` do contrato.
+///
+/// O ponteiro passa pelo INDICE do parametro porque `sort` do diretorio nao
+/// tem espelho em `components/schemas` -- diferente de `OrdemDaLoja`, que
+/// tem `StoreItemPage.effective_sort`. Parametro inserido antes deste desloca
+/// o indice, e o portao reprova: ou o caminho deixa de resolver, ou os valores
+/// deixam de bater. Reprovar alto e o comportamento desejado, porque a correcao
+/// e mover o ponteiro, e ninguem move o que nao sabe que quebrou.
+///
 /// A ordem da listagem. Espelha o parametro `sort` do contrato.
 enum OrdemDoDiretorio {
   distancia('distance', 'Mais perto'),
