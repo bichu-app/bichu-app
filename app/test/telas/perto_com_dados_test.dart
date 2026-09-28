@@ -1185,19 +1185,37 @@ void main() {
       await tocarEmCarregarMais(tester);
       expect(urls.last.queryParameters['page'], '2');
 
-      // Sai da secao e volta. `TickerMode` dispara a recarga.
+      // Sai da secao e volta. O estado da tela SOBREVIVE (o ramo do
+      // `StatefulShellRoute` fica vivo), e e `TickerMode` que dispara a
+      // recarga -- e por isso que `_recorte` pode voltar aqui com `page` em 2.
+      final antesDeSair = urls.length;
       await tester.tap(find.widgetWithText(NavigationDestination, 'Loja'));
       await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(NavigationDestination, 'Perto'));
       await tester.pumpAndSettle();
 
+      final depoisDeVoltar = urls.sublist(antesDeSair);
       expect(
-        urls.last.queryParameters['page'],
-        '1',
+        depoisDeVoltar,
+        isNotEmpty,
+        reason: 'REPROVA: voltar para a aba nao recarregou nada, e o caso '
+            'perdeu o que ele existe para medir.',
+      );
+      // **Todas** as chamadas depois do retorno, e nao so a ultima.
+      //
+      // Enquanto este caso olhava apenas `urls.last` ele ficava VERDE com o
+      // defeito de pe: o retorno pedia a pagina 2 e uma segunda carga, logo
+      // atras, pedia a 1. Medido: `[page=1, page=2, page=2, page=1]`.
+      expect(
+        depoisDeVoltar
+            .map((u) => u.queryParameters['page'])
+            .toSet(),
+        <String>{'1'},
         reason: 'REPROVA: voltar para a aba pediu a pagina que o `Carregar '
-            'mais` tinha deixado no recorte. Com um recorte menor essa pagina '
-            'volta VAZIA, e a lista fica vazia sem ninguem ter mexido em '
-            'filtro nenhum.',
+            'mais` tinha deixado no recorte. Pedidas: '
+            '${depoisDeVoltar.map((u) => u.query).toList()}. Com um recorte '
+            'menor essa pagina volta VAZIA, e a lista fica vazia sem ninguem '
+            'ter mexido em filtro nenhum.',
       );
       expect(nomesNaTela(tester), hasLength(20));
       expect(find.text('Entrada 1'), findsOneWidget);
