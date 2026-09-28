@@ -577,11 +577,9 @@ correspondencias:
     um_para_um: true
     valores: { level_ground_or_ramp: Piso plano ou rampa, accessible_restroom: Banheiro acessível, public_restroom_nearby: Banheiro público próximo, shade: Sombra, benches: Bancos, dog_water_fountain: Bebedouro para cães, parking_nearby: Estacionamento próximo }
   JoinRequestAppState:
-    situacao: pendente
-    onde: "ADR-0027 12.11 (BICHUS-251)"
-    um_para_um: true
-    valores: { requested: Pedido enviado, approved: Pedido aprovado, withdrawn: Pedido cancelado, expired: O encontro passou }
-    nota: "nao ha `declined` no app, de proposito (ADR-0027 12.11)"
+    um_para_um: false
+    valores: { requested: Pedido enviado, approved: Pedido aprovado }
+    nota: "nao ha `declined` no app, de proposito (ADR-0027 12.11). `withdrawn` e `expired` nao tem rotulo no app desde a §24.17.5/6 de 06-design-system.md (28/09): o pedido desistido e o do encontro que passou saem da tela, e nao ganham selo"
 
 # ======================================================================
 # O que a tela usa e NAO existe no contrato. `resolucao` diz quem muda.
