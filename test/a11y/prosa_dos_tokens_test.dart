@@ -28,9 +28,13 @@
 // O QUE ELE NAO CONFERE, dito em voz alta para ninguem confiar demais:
 // `docs/06-design-system.md`. O documento esta FORA do repositorio por decisao
 // do cliente de 17/09/2026, o `actions/checkout` nao o traz, e portanto NENHUM
-// portao da esteira alcanca a prosa dele -- nem este. O paragrafo 7 tem o seu
-// (`documento_secao7_test.dart`), e mesmo aquele so roda porque uma dispensa
-// datada segura a ausencia do arquivo. As 64 mencoes historicas a "Framboesa"
+// portao da esteira alcanca a prosa dele -- nem este. O paragrafo 7 tinha o
+// seu (`documento_secao7_test.dart`), que so rodava porque uma dispensa datada
+// segurava a ausencia do arquivo; em 23/09/2026 o cliente reafirmou que a
+// documentacao fica no Confluence, a dispensa saiu sem sucessora e o portao foi
+// removido com ela. Os VALORES do paragrafo 7 continuam cobrados, porque vivem
+// em `design/contrast-pairs.json` e `contraste_tokens_test.dart` os recalcula;
+// a prosa do documento nao tem mais portao nenhum. As 64 mencoes historicas a "Framboesa"
 // que restaram no documento sao protegidas por convencao escrita no cabecalho
 // dele, nao por codigo. Isso e uma promessa, nao um portao, e esta dito aqui
 // para que ninguem conte o contrario. (BICHUS-193.)
