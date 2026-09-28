@@ -67,11 +67,11 @@ export interface paths {
          *        para a mesma pessoa. Nao ha operacao nova de entrada por link: o
          *        ADR-0020 diz por que ela foi recusada e qual gatilho a traz de volta.
          *
-         *     **Conta administrativa nao entra aqui** (ADR-0027, D42). Conta com
-         *     papel `admin` ou `moderator` recebe o mesmo 401 de credencial invalida,
-         *     com o mesmo corpo e no mesmo tempo, mesmo com a senha certa: a porta do
-         *     tutor, mais frouxa por decisao, nao pode servir de oraculo da senha de
-         *     quem publica no app. O login do painel e `openAdminSession`.
+         *     **Contas do painel e do app sao cadastros separados** (ADR-0027 item
+         *     20, D42). Esta operacao so le as contas do app: a credencial de uma
+         *     conta do painel recebe aqui o mesmo 401 de qualquer e-mail sem conta,
+         *     porque para esta porta ela nao existe. O login do painel e
+         *     `openAdminSession`.
          */
         post: operations["login"];
         delete?: never;
@@ -94,10 +94,6 @@ export interface paths {
          * @description Rotacao obrigatoria: cada refresh token vale **uma** vez e a resposta
          *     traz um novo. Apresentar um token ja consumido revoga a familia inteira
          *     e responde 401 — e assim que o roubo de token e detectado.
-         *
-         *     Refresh de conta com papel `admin` ou `moderator` responde 401 (ADR-0027,
-         *     D42): conceder o papel revoga as sessoes moveis da conta, e esta recusa
-         *     cobre a familia que tenha escapado da revogacao.
          */
         post: operations["refreshSession"];
         delete?: never;
@@ -279,12 +275,9 @@ export interface paths {
          * Define a nova senha pelo token
          * @description Revoga todas as sessoes ativas da conta.
          *
-         *     **E tambem a redefinicao da conta administrativa** (ADR-0027 item 5):
-         *     nao ha segundo fluxo. Para conta com papel `admin`, a nova senha precisa
-         *     ter **15 caracteres ou mais** e nao estar em base de senhas vazadas
-         *     (D43), senao `422 weak-password` com `errors[].code` dizendo qual; a
-         *     revogacao derruba tambem as sessoes administrativas; e **todos** os
-         *     administradores recebem aviso da redefinicao (D46).
+         *     So alcanca contas do app. A conta do painel e outro cadastro, e a senha
+         *     dela so e definida pelo comando `conta-admin` no servidor (ADR-0027
+         *     item 20.4, D61).
          */
         post: operations["confirmPasswordReset"];
         delete?: never;
@@ -2138,11 +2131,10 @@ export interface paths {
         put?: never;
         /**
          * Abre a sessao administrativa
-         * @description O login do painel. **Nao e o login do app**, e as duas portas nao se
-         *     cruzam: conta com papel `admin` ou `moderator` e recusada em
-         *     `POST /auth/login` e `POST /auth/refresh` com o mesmo 401 de credencial
-         *     invalida (D42), e esta operacao so abre sessao para conta com papel
-         *     `admin` (decisao do cliente de 23/09: `moderator` nao entra na v1).
+         * @description O login do painel. **Nao e o login do app**: contas do painel e do app
+         *     sao cadastros separados (ADR-0027 item 20, D42). Esta operacao so le
+         *     as contas do painel, e a credencial de uma conta do app recebe aqui o
+         *     mesmo 401 de qualquer e-mail sem conta.
          *
          *     **Ordem, e ela importa:**
          *
@@ -2153,18 +2145,22 @@ export interface paths {
          *        e o documento `/entrar`, isolado da origem da sessao.
          *     2. Os tetos de `x-rate-limit` sao conferidos **antes** de derivar o hash
          *        (D44).
-         *     3. Conta inexistente, senha errada e senha certa de conta sem papel
-         *        `admin` respondem **o mesmo 401, no mesmo tempo** (hash de descarte):
-         *        o login nao conta a ninguem quem e administrador.
-         *     4. Senha correta que esta na base de senhas vazadas: `403
-         *        password-reset-required` (D43). A redefinicao e o fluxo que ja
-         *        existe (`POST /auth/password-reset`).
+         *     3. E-mail sem conta do painel, senha errada, senha certa de conta
+         *        desativada ou bloqueada, e senha certa que aparece numa base de
+         *        senhas vazadas respondem **o mesmo 401, no mesmo tempo** (hash de
+         *        descarte, e a base consultada em toda tentativa): o login nao conta a
+         *        ninguem quem e administrador nem que a senha confere (D43, D44).
+         *     4. Senha vazada nao tem resposta propria: a recusa vai para a trilha e
+         *        **todos** os administradores recebem um e-mail dizendo que a conta
+         *        precisa de `conta-admin redefinir-senha`. Nao ha redefinicao por
+         *        link: a senha do painel so e definida pelo comando, no servidor
+         *        (item 20.4, D61).
          *
          *     **Sucesso:** `Set-Cookie: __Host-bichu_adm=...; Path=/; Secure;
          *     HttpOnly; SameSite=Strict`, sem `Domain` e sem `Max-Age`. O corpo traz
          *     o `csrf_token` e os dois prazos da sessao. Um e-mail vai para o dono da
-         *     conta a cada sessao aberta, com o link "nao fui eu" de
-         *     `disavowSessionAlert` (D46).
+         *     conta a cada sessao aberta, com o link "nao fui eu" do proprio painel,
+         *     que chama `disavowAdminSessionAlert` (D46, D62).
          */
         post: operations["openAdminSession"];
         delete?: never;
@@ -2189,8 +2185,8 @@ export interface paths {
          *     Sessao ausente, vencida por inatividade ou pelo teto, revogada, ou
          *     anterior a `sessions_invalid_before`: `401`. O painel decide pelo
          *     `type`: `unauthenticated` manda entrar; `token-expired` diz que a
-         *     sessao venceu e manda entrar. Conta que perdeu o papel `admin`: `403`,
-         *     na proxima requisicao depois da remocao (D37).
+         *     sessao venceu e manda entrar. Conta desativada: `403` na proxima
+         *     requisicao, e todas as sessoes dela caem junto (D37, D38).
          */
         get: operations["getAdminSession"];
         put?: never;
@@ -2233,9 +2229,10 @@ export interface paths {
         put?: never;
         /**
          * Encerra todas as sessoes da conta administrativa
-         * @description Empurra `users.sessions_invalid_before`: toda sessao administrativa da
-         *     conta cai na proxima requisicao, em menos de um segundo. A conta
-         *     administrativa e dedicada (D42) e nao tem sessao do app a perder.
+         * @description Empurra `admin_accounts.sessions_invalid_before`: toda sessao
+         *     administrativa da conta cai na proxima requisicao, em menos de um
+         *     segundo. A conta do painel e cadastro proprio (D42) e nao tem sessao do
+         *     app a perder.
          */
         post: operations["closeAllAdminSessions"];
         delete?: never;
@@ -2269,6 +2266,46 @@ export interface paths {
          *     absoluto de 12 horas **nao** renasce.
          */
         post: operations["reauthenticateAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/disavow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "Nao fui eu": derruba as sessoes do painel e bloqueia a conta
+         * @description O aviso de sessao aberta (D46) leva o link
+         *     `https://admin.bichu.app/nao-fui-eu#t=<token>`. O token vai no
+         *     **fragmento**, que o navegador nao manda ao servidor nem poe em
+         *     `Referer`: nao chega a log de borda nenhum. A pagina o envia por esta
+         *     operacao, e **so por `POST`**: cliente de e-mail e antivirus de borda
+         *     pre-carregam link por `GET`, e `GET` aqui responde `405`.
+         *
+         *     Nao pede sessao, porque existe para quem pode ter perdido a sua (e a
+         *     segunda operacao sem sessao do prefixo, por lista fechada, junto com o
+         *     login). `Origin` exato continua exigido (D39, primeira camada); o token
+         *     de 256 bits substitui o `X-CSRF-Token`, que nao teria sessao a que se
+         *     ligar.
+         *
+         *     O efeito, numa transacao: revoga todas as sessoes da conta
+         *     (`disavowed`), empurra `admin_accounts.sessions_invalid_before`, grava o
+         *     bloqueio `disavowed`, grava a trilha, e so entao consome o token. Nao
+         *     troca a senha nem abre sessao: quem tem o link provou ter a caixa de
+         *     entrada, e nao ser o titular. O bloqueio so cai com
+         *     `conta-admin redefinir-senha`. Todos os administradores sao avisados.
+         *
+         *     Vencido (7 dias), ja usado e inexistente respondem o mesmo `410`.
+         */
+        post: operations["disavowAdminSessionAlert"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3889,9 +3926,13 @@ export interface components {
             /**
              * @description Sem `minLength` de proposito: o login nao ensina a politica a quem
              *     testa senha. O minimo de 15 da conta administrativa (D43) e cobrado
-             *     na definicao, em `confirmPasswordReset`.
+             *     na definicao, pelo comando `conta-admin` no servidor (D61).
              */
             password: string;
+        };
+        AdminDisavowRequest: {
+            /** @description O valor do fragmento `#t=` do link, 256 bits em base64url sem preenchimento. */
+            token: string;
         };
         /**
          * @description O que o painel guarda em memoria. **Sem e-mail, sem UUID, sem
@@ -7650,8 +7691,9 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             /**
-             * @description Credencial invalida. **Identica** para conta inexistente, senha
-             *     errada e conta sem papel `admin`.
+             * @description Credencial invalida. **Identica** para e-mail sem conta do painel
+             *     (inclusive o de uma conta do app), senha errada, conta desativada ou
+             *     bloqueada, e senha certa que esta numa base de vazadas.
              */
             401: {
                 headers: {
@@ -7662,10 +7704,10 @@ export interface operations {
                 };
             };
             /**
-             * @description Dois tipos, e o painel mostra texto diferente para cada um:
-             *     `captcha-rejected` (tente de outra rede e fale com o responsavel) e
-             *     `password-reset-required` (a senha esta numa base de vazadas;
-             *     redefina por e-mail).
+             * @description Dois motivos, com o mesmo `type` para os dois: `captcha-rejected`
+             *     (tente de outra rede e fale com o responsavel), ou `Origin` que nao
+             *     e o do painel (`forbidden`). Senha vazada **nao** responde aqui: e
+             *     o 401 de cima, pelo motivo do passo 4.
              */
             403: {
                 headers: {
@@ -7770,6 +7812,31 @@ export interface operations {
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             429: components["responses"]["TooManyRequests"];
+        };
+    };
+    disavowAdminSessionAlert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDisavowRequest"];
+            };
+        };
+        responses: {
+            /** @description As sessoes da conta cairam e a conta ficou bloqueada ate a redefinicao. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["AdminForbidden"];
+            410: components["responses"]["TokenExpired"];
         };
     };
     listAdminStorePartners: {

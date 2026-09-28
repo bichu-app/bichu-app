@@ -82,6 +82,23 @@ export const rotaDeReautenticacaoAdministrativa = defineRoute({
   ],
 });
 
+/**
+ * O "nao fui eu" do painel (D62). Sem sessao, como o login, e por isso na lista
+ * fechada de operacoes sem sessao; `Origin` exato continua valendo pela guarda.
+ * Teto por IP com `log_and_alert`, e nao `deny_429`: recusar trabalharia contra
+ * quem a rota protege, e o token de 256 bits e a defesa real.
+ */
+export const rotaDoNaoFuiEuAdministrativo = defineRoute({
+  operationId: 'disavowAdminSessionAlert',
+  method: 'post',
+  path: '/admin/auth/disavow',
+  effects: ['verifies_secret', 'notifies', 'irreversible_write'],
+  noChallenge: true,
+  adminPublic: true,
+  audit: { action: 'admin.session.disavowed', resourceKind: 'admin_account' },
+  rateLimit: [{ dimension: ['ip'], limit: 10, window: '1h', onExceed: 'log_and_alert' }],
+});
+
 export interface DependenciasDasRotasDaSessaoAdministrativa {
   readonly sessoes: SessaoAdministrativaService;
   readonly contrato: Contrato;
@@ -141,6 +158,17 @@ export function registrarRotasDaSessaoAdministrativa(
       );
       void reply.header('set-cookie', cookieDaSessao(aberta.valorDoCookie));
       return reply.status(200).send(aberta.visao);
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDoNaoFuiEuAdministrativo,
+    { schema: { body: corpoDe(deps.contrato, rotaDoNaoFuiEuAdministrativo.operationId) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const corpo = request.body as { token: string };
+      await deps.sessoes.desautorizar(corpo.token, contextoDaGuarda(request));
+      return reply.status(204).send();
     },
   );
 

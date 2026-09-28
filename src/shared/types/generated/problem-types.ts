@@ -35,7 +35,7 @@ export const STATUS_DO_PROBLEMA = {
   'upload-not-received':            409, // o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar
   'precondition-failed':            412, // ADR-0027: `If-Match` nao corresponde a versao atual do recurso do backoffice. Outra pessoa salvou depois da leitura, e nada foi gravado
   'captcha-rejected':               403, // ADR-0027 / D41: login administrativo sem X-Captcha-Token ou com nota abaixo de 0,5. So existe no login do backoffice; no login do tutor a ausencia do token nunca recusa (ADR-0020)
-  'password-reset-required':        403, // ADR-0027 / D43: senha correta de conta administrativa que aparece numa base de senhas vazadas. O caminho e a redefinicao por e-mail que ja existe
+  'method-not-allowed':             405, // ADR-0027 item 20.5: metodo que a rota administrativa nao aceita (o `GET` do "nao fui eu", que so existe por `POST`). Vem com `Allow`. So na superficie administrativa, e so com `X-Internal-Surface: admin`: sem ele a resposta continua 404 (D33)
   'weak-password':                  422,
   'precondition-required':          428, // ADR-0027: escrita sobre recurso existente do backoffice sem `If-Match`
   'rate-limited':                   429,

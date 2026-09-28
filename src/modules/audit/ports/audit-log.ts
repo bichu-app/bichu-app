@@ -180,6 +180,8 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.network_event.cancelled',
   'admin.network_event.removed',
   'admin.catalog_image.intent_created',
+  /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
+  'admin.session.disavowed',
 ] as const;
 
 export type AcaoAdministrativa = (typeof ACOES_ADMINISTRATIVAS)[number];

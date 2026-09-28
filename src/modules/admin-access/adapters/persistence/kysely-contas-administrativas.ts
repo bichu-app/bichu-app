@@ -92,5 +92,16 @@ export function criarRepositorioDeContasAdministrativas(db: Db): RepositorioDeCo
         .where('id', '=', id)
         .execute();
     },
+
+    async bloquear(trx, id, motivo, agora) {
+      // `blocked_reason IS NULL` na clausula: o primeiro motivo fica. Um "nao
+      // fui eu" sobre uma conta ja bloqueada por falhas nao apaga a historia.
+      await trx
+        .updateTable('admin_accounts')
+        .set({ blocked_reason: motivo, blocked_at: new Date(agora) })
+        .where('id', '=', id)
+        .where('blocked_reason', 'is', null)
+        .execute();
+    },
   };
 }

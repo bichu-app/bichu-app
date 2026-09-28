@@ -195,6 +195,12 @@ export const problemas = {
   sessaoDoPainelVencida: (): AppError =>
     new AppError('token-expired', 'A sua sessão terminou', { nextAction: 'sign_in' }),
 
+  /**
+   * ADR-0027 item 20.5: metodo que o caminho administrativo nao declara. Quem
+   * lanca poe o `Allow` antes (`fecharMetodosDaSuperficie`).
+   */
+  metodoNaoPermitido: (): AppError => new AppError('method-not-allowed', 'Este endereço não aceita este método'),
+
   /** D41: `X-Captcha-Token` ausente, invalido ou com nota abaixo de 0,5 no login do painel. */
   captchaRecusado: (): AppError =>
     new AppError('captcha-rejected', 'Não conseguimos confirmar este acesso', {

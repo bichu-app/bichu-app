@@ -43,7 +43,7 @@ import type {
 import { hashDeToken, iguaisEmTempoConstante } from '../crypto/digest.js';
 import type { AdminAccountId } from '../types/brands.js';
 import { problemas } from './errors.js';
-import type { RegistradorDeRotas } from './registrar-rota.js';
+import { fecharMetodosDaSuperficie, type RegistradorDeRotas } from './registrar-rota.js';
 import type {
   EscopoDeReautenticacaoAdministrativa,
   PapelAdministrativo,
@@ -64,10 +64,16 @@ const METODOS_SEGUROS: ReadonlySet<string> = new Set(['GET', 'HEAD']);
 
 /**
  * As UNICAS operacoes do prefixo que dispensam sessao, por lista fechada
- * (ADR-0027 item 7): o login, que ainda nao tem sessao. `registrarRota` recusa
- * `adminPublic` em qualquer outra.
+ * (ADR-0027 itens 7 e 20.5): o login, que ainda nao tem sessao, e o "nao fui
+ * eu", que existe justamente para quem pode ter perdido a dela.
+ * `registrarRota` recusa `adminPublic` em qualquer outra, e
+ * `portao-contrato-administrativo` recusa no contrato uma terceira operacao
+ * sem `adminSession`.
  */
-export const OPERACOES_ADMINISTRATIVAS_SEM_SESSAO: readonly string[] = ['openAdminSession'];
+export const OPERACOES_ADMINISTRATIVAS_SEM_SESSAO: readonly string[] = [
+  'openAdminSession',
+  'disavowAdminSessionAlert',
+];
 
 /** A sessao que a guarda conferiu, pendurada na requisicao para a rota. */
 export interface SessaoAdministrativaConferida {
@@ -321,6 +327,7 @@ export function escoparRotasAdministrativas(
     });
     try {
       montar(escopo);
+      fecharMetodosDaSuperficie(escopo, opcoes);
     } catch (erro) {
       pronto(erro as Error);
       return;

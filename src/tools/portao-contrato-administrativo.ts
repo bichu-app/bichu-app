@@ -3,18 +3,27 @@
  *
  * Le `api/openapi.yaml` e confere as operacoes sob `/admin/`:
  *
- * 1. toda operacao sob `/admin/`, exceto `openAdminSession`, declara `security`
- *    com `adminSession` e declara `x-admin-roles` nao vazio, so com valores de
- *    `AdminRole`;
+ * 1. toda operacao sob `/admin/`, exceto as da lista fechada de operacoes sem
+ *    sessao (`openAdminSession` e `disavowAdminSessionAlert`, ADR-0027 item
+ *    20.5), declara `security` com `adminSession` e declara `x-admin-roles`
+ *    nao vazio, so com valores de `AdminRole`; as da lista nao declaram nenhum
+ *    dos dois;
  * 2. toda operacao sob `/admin/` de metodo nao seguro declara `x-audit` com
- *    `action` e `resource_kind`, e `adminCsrf` (o login e a unica sem
- *    `adminCsrf`: ele nao tem sessao da qual tirar o token);
+ *    `action` e `resource_kind`, e `adminCsrf` (as da lista fechada sao as
+ *    unicas sem `adminCsrf`: nao tem sessao da qual tirar o token);
  * 3. nenhuma operacao fora de `/admin/` declara `adminSession`, `adminCsrf`,
  *    `adminReauth`, `x-admin-roles` ou `x-audit`;
  * 4. `adminReauth` no `security` e `x-admin-reauth-scope` andam juntos, e o
  *    escopo e um valor de `AdminReauthScope`;
  * 5. nenhuma operacao `GET` administrativa declara `x-audit` (GET nao muda
- *    estado, item 3).
+ *    estado, item 3);
+ * 6. nenhuma operacao sob `/admin/` recebe `password` no corpo, exceto o login
+ *    e a reautenticacao, que CONFEREM senha: nenhuma operacao do contrato
+ *    define ou redefine senha de conta do painel (D61, item 20.4);
+ * 7. `password-reset-required` nao aparece em operacao administrativa nem no
+ *    catalogo de problemas: senha certa e vazada responde o mesmo 401 da senha
+ *    errada (D43, decisao de 28/09). O 403 proprio confirmava a quem testa
+ *    listas de vazamento que o e-mail e de administrador e a senha confere.
  *
  * **Nao achar alvo reprova**: com zero operacoes sob `/admin/` o portao nao
  * verificou nada, e diz isso. As iscas que ele precisa reprovar estao no teste
@@ -25,7 +34,11 @@ import { parse as parseYaml } from 'yaml';
 const METODOS = ['get', 'post', 'put', 'patch', 'delete'] as const;
 const SEGUROS: ReadonlySet<string> = new Set(['get']);
 const PREFIXO = '/admin/';
-const LOGIN = 'openAdminSession';
+/** A lista fechada de `superficie-administrativa.ts`, repetida aqui e nao importada: o portao le o contrato por conta propria. */
+const SEM_SESSAO: ReadonlySet<string> = new Set(['openAdminSession', 'disavowAdminSessionAlert']);
+/** As que conferem senha. Definir senha nenhuma operacao define (D61). */
+const RECEBEM_SENHA: ReadonlySet<string> = new Set(['openAdminSession', 'reauthenticateAdmin']);
+const PROBLEMA_BANIDO = 'password-reset-required';
 const ESQUEMAS_ADMINISTRATIVOS = ['adminSession', 'adminCsrf', 'adminReauth'];
 
 function ehObjeto(valor: unknown): valor is Record<string, unknown> {
@@ -54,6 +67,20 @@ export interface ResultadoDoPortao {
   readonly violacoes: readonly string[];
 }
 
+/** O esquema do corpo JSON da operacao, com `$ref` local resolvido um nivel. */
+function esquemaDoCorpo(spec: Record<string, unknown>, operacao: Record<string, unknown>): Record<string, unknown> | undefined {
+  const corpo = operacao['requestBody'];
+  const conteudo = ehObjeto(corpo) ? corpo['content'] : undefined;
+  const json = ehObjeto(conteudo) ? conteudo['application/json'] : undefined;
+  const esquema = ehObjeto(json) ? json['schema'] : undefined;
+  if (!ehObjeto(esquema)) return undefined;
+  const ref = esquema['$ref'];
+  if (typeof ref !== 'string') return esquema;
+  let alvo: unknown = spec;
+  for (const parte of ref.replace(/^#\//, '').split('/')) alvo = ehObjeto(alvo) ? alvo[parte] : undefined;
+  return ehObjeto(alvo) ? alvo : undefined;
+}
+
 export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDoPortao {
   const spec = parseYaml(textoDaSpec) as unknown;
   if (!ehObjeto(spec) || !ehObjeto(spec['paths'])) {
@@ -64,6 +91,10 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
   const violacoes: string[] = [];
   if (papeis.length === 0) violacoes.push('components.schemas.AdminRole sem enum: nao ha papel contra o que conferir');
   if (escopos.length === 0) violacoes.push('components.schemas.AdminReauthScope sem enum');
+  const catalogo = spec['x-problem-types'];
+  if (Array.isArray(catalogo) && catalogo.some((t) => ehObjeto(t) && t['slug'] === PROBLEMA_BANIDO)) {
+    violacoes.push(`x-problem-types declara ${PROBLEMA_BANIDO}: senha vazada tem de responder o 401 comum (regra 7)`);
+  }
 
   let administrativas = 0;
   for (const [caminho, item] of Object.entries(spec['paths'])) {
@@ -87,8 +118,8 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
       }
 
       administrativas += 1;
-      const ehLogin = id === LOGIN;
-      if (!ehLogin) {
+      const semSessao = SEM_SESSAO.has(id);
+      if (!semSessao) {
         if (!esquemas.has('adminSession')) violacoes.push(`${id}: sem adminSession no security (regra 1)`);
         if (!Array.isArray(papeisDeclarados) || papeisDeclarados.length === 0) {
           violacoes.push(`${id}: sem x-admin-roles (regra 1)`);
@@ -99,7 +130,21 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
           }
         }
       } else if (papeisDeclarados !== undefined || esquemas.size > 0) {
-        violacoes.push(`${id}: o login administrativo e a unica operacao sem sessao; nao declara security nem x-admin-roles`);
+        violacoes.push(`${id}: operacao sem sessao da lista fechada; nao declara security nem x-admin-roles`);
+      }
+      if (!semSessao && esquemas.size === 0) {
+        // Ja acusado acima como "sem adminSession"; o texto daqui diz o que o
+        // conserto NAO e: acrescentar a operacao a lista e decisao de arquitetura.
+        violacoes.push(`${id}: operacao sob /admin/ sem sessao fora da lista fechada (${[...SEM_SESSAO].join(', ')})`);
+      }
+
+      const corpo = esquemaDoCorpo(spec, operacao);
+      const propriedades = corpo === undefined ? undefined : corpo['properties'];
+      if (ehObjeto(propriedades) && 'password' in propriedades && !RECEBEM_SENHA.has(id)) {
+        violacoes.push(`${id}: recebe password no corpo; senha do painel so se define pelo comando (regra 6, D61)`);
+      }
+      if (JSON.stringify(operacao).includes(PROBLEMA_BANIDO)) {
+        violacoes.push(`${id}: cita ${PROBLEMA_BANIDO}; senha vazada responde o 401 comum (regra 7, D43)`);
       }
 
       const inseguro = !SEGUROS.has(metodo);
@@ -107,7 +152,7 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
         ehObjeto(trilha) && typeof trilha['action'] === 'string' && typeof trilha['resource_kind'] === 'string';
       if (inseguro) {
         if (!trilhaCompleta) violacoes.push(`${id}: escrita sem x-audit com action e resource_kind (regra 2)`);
-        if (!ehLogin && !esquemas.has('adminCsrf')) violacoes.push(`${id}: escrita sem adminCsrf (regra 2)`);
+        if (!semSessao && !esquemas.has('adminCsrf')) violacoes.push(`${id}: escrita sem adminCsrf (regra 2)`);
       } else if (trilha !== undefined) {
         violacoes.push(`${id}: GET com x-audit; GET nao muda estado (regra 5)`);
       }

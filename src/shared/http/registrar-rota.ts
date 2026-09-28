@@ -68,7 +68,7 @@ import {
   type Resolvedores,
   DIMENSOES_GENERICAS,
 } from './aplicacao-de-teto.js';
-import { AppError } from './errors.js';
+import { AppError, problemas } from './errors.js';
 import { recusarCampoDesconhecido } from './corpo-fechado.js';
 import {
   CABECALHO_DE_REAUTENTICACAO_ADMINISTRATIVA,
@@ -429,6 +429,7 @@ export function registrarRota<const T extends RouteDefinition>(
   const deps = tetoDe(app);
   const superficie = app.superficieAdministrativa;
   exigirFronteiraAdministrativa(rota, superficie);
+  if (superficie !== undefined) anotarMetodoDaSuperficie(superficie, rota);
   const portaoDeReauth = portaoDeReautenticacao(app, rota);
   const portaoDeReauthAdministrativa = portaoDeReautenticacaoAdministrativa(rota, superficie);
   // O corpo administrativo e FECHADO de verdade: o Ajv do Fastify apaga o campo
@@ -501,4 +502,51 @@ export function registrarRota<const T extends RouteDefinition>(
     },
     handler,
   });
+}
+
+/** Os metodos declarados por caminho, em cada escopo administrativo. */
+const metodosDaSuperficie = new WeakMap<OpcoesDaSuperficieAdministrativa, Map<string, Set<string>>>();
+
+function anotarMetodoDaSuperficie(superficie: OpcoesDaSuperficieAdministrativa, rota: RouteDefinition): void {
+  const porCaminho = metodosDaSuperficie.get(superficie) ?? new Map<string, Set<string>>();
+  metodosDaSuperficie.set(superficie, porCaminho);
+  const metodos = porCaminho.get(rota.path) ?? new Set<string>();
+  metodos.add(METODOS[rota.method]);
+  porCaminho.set(rota.path, metodos);
+}
+
+const METODOS_QUE_O_PAINEL_PODE_RECEBER = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] as const;
+
+/**
+ * `405 method-not-allowed`, com `Allow`, para todo metodo que um caminho da
+ * superficie administrativa NAO declara (ADR-0027 item 20.5).
+ *
+ * Sem isto o `GET` do "nao fui eu" responderia 404, que e a resposta de "esta
+ * rota nao existe": o painel, a borda e quem investiga um log leriam a coisa
+ * errada, e a regra "so por POST" ficaria implicita. Chamado por
+ * `escoparRotasAdministrativas` depois de todas as rotas do escopo, porque so
+ * entao se sabe o que cada caminho declara.
+ *
+ * A rota de 405 nao tem `rotaDeclarada`, entao a guarda do escopo faz so as
+ * duas primeiras conferencias: sem `X-Internal-Surface` continua 404 (D33), e
+ * com `Authorization` continua 401 (D36). A superficie nao se revela a quem nao
+ * veio pela borda administrativa.
+ */
+export function fecharMetodosDaSuperficie(
+  app: RegistradorDeRotas,
+  superficie: OpcoesDaSuperficieAdministrativa,
+): void {
+  for (const [caminho, declarados] of metodosDaSuperficie.get(superficie) ?? []) {
+    const faltando = METODOS_QUE_O_PAINEL_PODE_RECEBER.filter((metodo) => !declarados.has(metodo));
+    if (faltando.length === 0) continue;
+    const permitidos = [...declarados].sort().join(', ');
+    (app as FastifyInstance).route({
+      method: faltando,
+      url: caminho,
+      handler: async (_request, reply) => {
+        void reply.header('Allow', permitidos);
+        throw problemas.metodoNaoPermitido();
+      },
+    });
+  }
 }

@@ -88,6 +88,47 @@ void describe('portao do contrato administrativo', () => {
         void (operacao(s, '/admin/session', 'get')['x-audit'] = { action: 'admin.session.opened', resource_kind: 'x' }),
     },
     {
+      nome: 'terceira operacao sob /admin/ sem sessao (so login e "nao fui eu" podem)',
+      regra: /closeAdminSession: operacao sob \/admin\/ sem sessao fora da lista fechada/,
+      alterar: (s) => {
+        const op = operacao(s, '/admin/auth/logout', 'post');
+        op['security'] = [];
+        delete op['x-admin-roles'];
+      },
+    },
+    {
+      nome: 'o "nao fui eu" declarando sessao, como se nao fosse da lista',
+      regra: /disavowAdminSessionAlert: operacao sem sessao da lista fechada; nao declara security/,
+      alterar: (s) => void (operacao(s, '/admin/auth/disavow', 'post')['security'] = [{ adminSession: [] }]),
+    },
+    {
+      nome: 'operacao administrativa que recebe password no corpo (definir senha pelo contrato)',
+      regra: /closeAllAdminSessions: recebe password no corpo/,
+      alterar: (s) =>
+        void (operacao(s, '/admin/auth/logout-all', 'post')['requestBody'] = {
+          content: { 'application/json': { schema: { type: 'object', properties: { password: { type: 'string' } } } } },
+        }),
+    },
+    {
+      nome: 'o 403 password-reset-required de volta no login',
+      regra: /openAdminSession: cita password-reset-required/,
+      alterar: (s) => {
+        const respostas = operacao(s, '/admin/auth/login', 'post')['responses'] as Record<string, unknown>;
+        respostas['403'] = {
+          description: 'senha vazada',
+          content: { 'application/problem+json': { example: { type: 'https://x/problems/password-reset-required' } } },
+        };
+      },
+    },
+    {
+      nome: 'password-reset-required de volta no catalogo de problemas',
+      regra: /x-problem-types declara password-reset-required/,
+      alterar: (s) => {
+        const spec = s as unknown as { 'x-problem-types': unknown[] };
+        spec['x-problem-types'].push({ slug: 'password-reset-required', status: 403 });
+      },
+    },
+    {
       nome: 'contrato sem nenhuma operacao administrativa',
       regra: /nenhuma operacao sob \/admin\//,
       alterar: (s) => {

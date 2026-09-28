@@ -28,7 +28,7 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import type { AddressInfo } from 'node:net';
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 
 import { loadAppConfig } from '../../src/shared/config/app-config.js';
 import { createDb, type Db } from '../../src/shared/db/pool.js';
@@ -176,7 +176,11 @@ async function chamar(
 ): Promise<Resposta> {
   const cabecalhos: Record<string, string> = {
     accept: 'application/json',
-    'x-forwarded-for': opcoes.ip ?? `198.51.100.${String(Math.floor(Math.random() * 250) + 1)}`,
+    // A faixa /24 muda a cada chamada, e nao so o ultimo octeto: o HMAC de IP
+    // reduz o endereco a /24 antes de virar chave de balde (SEC-010), entao
+    // `198.51.100.x` era UM balde so, e as tentativas invalidas do arquivo
+    // inteiro somavam no teto de 20 por hora do login.
+    'x-forwarded-for': opcoes.ip ?? `10.${String(Math.floor(Math.random() * 250) + 1)}.${String(Math.floor(Math.random() * 250) + 1)}.7`,
     ...(opcoes.semSuperficie === true ? {} : { 'x-internal-surface': 'admin' }),
     ...opcoes.cabecalhos,
   };
@@ -240,6 +244,25 @@ async function sessoesVivas(id: AdminAccountId): Promise<number> {
   const vivas = await banco.db.selectFrom('admin_sessions').select('id')
     .where('admin_account_id', '=', id).where('revoked_at', 'is', null).execute();
   return vivas.length;
+}
+
+/**
+ * Um link "nao fui eu" gravado direto, com um token de teste de 43 caracteres
+ * (a forma de 256 bits em base64url que o contrato exige).
+ */
+async function avisoDireto(
+  adminAccountId: AdminAccountId,
+  opcoes: { expiraEmMs?: number } = {},
+): Promise<string> {
+  const token = randomBytes(32).toString('base64url');
+  await banco.db.insertInto('admin_session_alerts').values({
+    id: randomUUID(),
+    admin_account_id: adminAccountId,
+    session_id: null,
+    token_hash: hashDeToken(token),
+    expires_at: new Date(Date.now() + (opcoes.expiraEmMs ?? 7 * 24 * 3_600_000)),
+  }).execute();
+  return token;
 }
 
 /** Espera o envio que o servico dispara sem `await` (o aviso de senha vazada). */
@@ -625,6 +648,94 @@ function contextoVazio(): { correlationId: string; ip: undefined; userAgent: und
 }
 
 
+void describe('D62: "nao fui eu" do painel, POST /v1/admin/auth/disavow', () => {
+  const desautorizar = (corpo: unknown, cabecalhos: Record<string, string> = { origin: ORIGEM }): Promise<Resposta> =>
+    chamar(principal, 'POST', '/admin/auth/disavow', { cabecalhos, corpo });
+  const corpoDoProblema = (r: Resposta) => ({
+    status: r.status, type: tipo(r), title: r.corpo?.['title'], detail: r.corpo?.['detail'],
+  });
+
+  void it('token do e-mail de sessao aberta: 204, zero sessoes vivas, bloqueio, e o login seguinte recusa', async () => {
+    const admin = await contaDoPainel();
+    const colega = await contaDoPainel();
+    const antes = caixa.length;
+    const { sessao } = await entrar(principal, admin.email);
+    await sessaoDireta(admin.id);
+    const token = /nao-fui-eu#t=([A-Za-z0-9_-]{43})/.exec(caixa.slice(antes).at(-1)?.corpo ?? '')?.[1];
+    assert.ok(token !== undefined, 'o e-mail de sessao aberta nao trouxe o token no fragmento');
+
+    const correlacao = randomUUID();
+    const r = await desautorizar({ token }, { origin: ORIGEM, 'x-correlation-id': correlacao });
+    assert.equal(r.status, 204, JSON.stringify(r.corpo));
+    assert.equal(await sessoesVivas(admin.id), 0);
+    assert.equal((await chamar(principal, 'GET', '/admin/session', { cabecalhos: { cookie: sessao.cookie } })).status, 401);
+    const conta = await banco.db.selectFrom('admin_accounts').select(['blocked_reason', 'blocked_at'])
+      .where('id', '=', admin.id).executeTakeFirstOrThrow();
+    assert.equal(conta.blocked_reason, 'disavowed');
+    assert.deepEqual(await eventosDa(correlacao), ['admin.session.disavowed']);
+    const motivos = await banco.db.selectFrom('admin_sessions').select('revoked_reason')
+      .where('admin_account_id', '=', admin.id).execute();
+    assert.deepEqual([...new Set(motivos.map((m) => m.revoked_reason))], ['disavowed']);
+
+    // Todos os administradores ativos sao avisados, mandando ao comando.
+    const avisos = caixa.slice(antes).filter((m) => /bloqueada pelo/.test(m.assunto));
+    const para = new Set(avisos.map((m) => m.para));
+    assert.ok(para.has(admin.email) && para.has(colega.email), `o aviso nao foi a todos: ${[...para].join(', ')}`);
+    assert.ok(avisos.every((m) => /conta-admin redefinir-senha/.test(m.corpo)));
+
+    // O login seguinte, com a senha CERTA, recebe o mesmo 401 da senha errada:
+    // um corpo proprio para conta bloqueada diria a quem tem a senha que ela
+    // confere (mesma regra da senha vazada, D43).
+    const certa = await entrar(principal, admin.email);
+    const errada = await chamar(principal, 'POST', '/admin/auth/login', {
+      cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email: admin.email, password: 'outra frase longa errada aqui' },
+    });
+    assert.equal(certa.resposta.status, 401);
+    assert.deepEqual(corpoDoProblema(certa.resposta), corpoDoProblema(errada));
+    assert.equal(await sessoesVivas(admin.id), 0);
+  });
+
+  void it('token reusado, vencido e inexistente: o mesmo 410', async () => {
+    const admin = await contaDoPainel();
+    const usado = await avisoDireto(admin.id);
+    assert.equal((await desautorizar({ token: usado })).status, 204);
+    const vencido = await avisoDireto((await contaDoPainel()).id, { expiraEmMs: -1_000 });
+    const respostas = [
+      await desautorizar({ token: usado }),
+      await desautorizar({ token: vencido }),
+      await desautorizar({ token: randomBytes(32).toString('base64url') }),
+    ].map(corpoDoProblema);
+    assert.equal(respostas[0]?.status, 410);
+    assert.deepEqual(respostas[1], respostas[0]);
+    assert.deepEqual(respostas[2], respostas[0]);
+  });
+
+  void it('sem Origin, ou com Origin de subdominio irmao: 403, e nada acontece', async () => {
+    const admin = await contaDoPainel();
+    const token = await avisoDireto(admin.id);
+    const viva = await sessaoDireta(admin.id);
+    assert.equal((await desautorizar({ token }, {})).status, 403);
+    assert.equal((await desautorizar({ token }, { origin: IRMAO })).status, 403);
+    assert.equal((await desautorizar({ token }, { origin: 'https://bichu.app' })).status, 403);
+    assert.equal((await chamar(principal, 'GET', '/admin/session', { cabecalhos: { cookie: viva.cookie } })).status, 200);
+    // O token continua valendo: a recusa por Origin nao o gastou.
+    assert.equal((await desautorizar({ token })).status, 204);
+  });
+
+  void it('GET responde 405 com Allow: POST, e sem X-Internal-Surface continua 404', async () => {
+    const r = await chamar(principal, 'GET', '/admin/auth/disavow');
+    assert.equal(r.status, 405);
+    assert.equal(r.cabecalhos.get('allow'), 'POST');
+    assert.equal(tipo(r), 'method-not-allowed');
+    assert.equal((await chamar(principal, 'GET', '/admin/auth/disavow', { semSuperficie: true })).status, 404);
+  });
+
+  void it('token fora da forma, ou campo a mais: 400', async () => {
+    assert.equal((await desautorizar({ token: 'curto' })).status, 400);
+    assert.equal((await desautorizar({ token: randomBytes(32).toString('base64url'), extra: 1 })).status, 400);
+  });
+});
+
 void describe('P21 (a): as duas portas nao se cruzam (D42, forma de 28/09)', () => {
   const corpoDoProblema = (r: Resposta) => ({
     status: r.status, type: tipo(r), title: r.corpo?.['title'], detail: r.corpo?.['detail'],
@@ -674,6 +785,28 @@ void describe('P17: a trilha na mesma transacao, por operacao da sessao', () => 
     for (const rota of escritas) {
       const correlacao = randomUUID();
       let resposta: Resposta;
+      if (rota.operationId === 'disavowAdminSessionAlert') {
+        // Conta propria: o "nao fui eu" bloqueia, e as outras escritas do laco
+        // nao podem depender de um bloqueio que nao era delas.
+        const alvo = await contaDoPainel();
+        resposta = await chamar(principal, 'POST', rota.path, {
+          cabecalhos: { origin: ORIGEM, 'x-correlation-id': correlacao },
+          corpo: { token: await avisoDireto(alvo.id) },
+        });
+        const acoes = await eventosDa(correlacao);
+        if (resposta.status !== 204 || !acoes.includes(rota.audit?.action ?? '')) {
+          faltando.push(`${rota.operationId}: ${String(resposta.status)} ${JSON.stringify(acoes)}`);
+        }
+        // O ator e anonimo: quem tem o link provou ter a caixa de entrada, e
+        // nao ser o titular (D62). A conta vai como recurso.
+        const linhas = await banco.db.selectFrom('audit.events')
+          .select(['actor_kind', 'actor_admin_id', 'actor_user_id', 'resource_id'])
+          .where('correlation_id', '=', correlacao).execute();
+        if (!linhas.every((l) => l.actor_kind === 'anonymous' && l.actor_admin_id === null && l.resource_id === alvo.id)) {
+          faltando.push(`${rota.operationId}: ator ${JSON.stringify(linhas)}`);
+        }
+        continue;
+      }
       if (rota.adminPublic === true) {
         resposta = await chamar(principal, 'POST', rota.path, {
           cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM, 'x-correlation-id': correlacao },

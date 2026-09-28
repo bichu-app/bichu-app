@@ -165,5 +165,23 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
         })
         .execute();
     },
+
+    async travarAvisoValido(trx, tokenHash, agora) {
+      const linha = await trx
+        .selectFrom('admin_session_alerts')
+        .select(['id', 'admin_account_id'])
+        .where('token_hash', '=', tokenHash)
+        .where('consumed_at', 'is', null)
+        .where('expires_at', '>', new Date(agora))
+        .forUpdate()
+        .executeTakeFirst();
+      return linha === undefined
+        ? undefined
+        : { id: linha.id, adminAccountId: linha.admin_account_id as AdminAccountId };
+    },
+
+    async consumirAviso(trx, id, agora) {
+      await trx.updateTable('admin_session_alerts').set({ consumed_at: new Date(agora) }).where('id', '=', id).execute();
+    },
   };
 }

@@ -78,6 +78,11 @@ export interface NovoAvisoDeSessao {
   readonly expiraEm: Instant;
 }
 
+export interface AvisoDeSessaoValido {
+  readonly id: string;
+  readonly adminAccountId: AdminAccountId;
+}
+
 export interface SessaoAdministrativaRepository {
   /**
    * A sessao pelo hash do cookie, JUNTO com a conta dona dela: uma consulta so
@@ -105,4 +110,11 @@ export interface SessaoAdministrativaRepository {
 
   /** Grava o hash do token "nao fui eu" que vai no e-mail de sessao aberta (D62). */
   criarAviso(novo: NovoAvisoDeSessao): Promise<void>;
+  /**
+   * O aviso pelo hash, se ainda vale (nao consumido, nao vencido), TRAVADO ate
+   * o fim da transacao (`FOR UPDATE`): dois cliques simultaneos nao revogam
+   * duas vezes nem gastam o mesmo token duas vezes.
+   */
+  travarAvisoValido(trx: TransacaoDeEscrita, tokenHash: Buffer, agora: Instant): Promise<AvisoDeSessaoValido | undefined>;
+  consumirAviso(trx: TransacaoDeEscrita, id: string, agora: Instant): Promise<void>;
 }

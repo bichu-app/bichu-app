@@ -178,39 +178,45 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
    * relacao a da senha errada. Falha de envio vai para o log, com a conta.
    */
   function avisarSenhaVazada(conta: ContaAdministrativa, agora: Instant, contexto: ContextoDaRequisicao): void {
-    const enviar = async (): Promise<void> => {
-      const destinatarios = await deps.contas.listarAtivas();
+    void avisarTodosOsAdministradores(
+      {
+        assunto: 'Uma conta do painel do Bichu precisa trocar a senha',
+        corpo:
+          `Em ${comoIso(agora)} (UTC) alguém entrou no painel administrativo do Bichu com a senha ` +
+          `certa da conta de ${conta.displayName}, e essa senha aparece em vazamentos de outros ` +
+          'sites. Por isso ela não é mais aceita, e o acesso foi recusado.\n\n' +
+          'A senha precisa ser redefinida pelo responsável pelo painel, no servidor, com o comando ' +
+          '`conta-admin redefinir-senha`. Não existe link de redefinição.\n\n' +
+          'Se não foi a própria pessoa que tentou entrar, a senha dela está com outra pessoa.',
+      },
+      { evento: 'admin.session.breach_notice_failed', conta: conta.id, correlationId: contexto.correlationId },
+    );
+  }
+
+  /**
+   * Um e-mail para CADA administrador ativo (D46, D61, D62). Falha de um envio
+   * nao impede os outros nem desfaz o que ja foi gravado; quem nao recebeu sai
+   * no log, pelo `id` da conta e nunca pelo endereco.
+   */
+  async function avisarTodosOsAdministradores(
+    mensagem: { readonly assunto: string; readonly corpo: string },
+    ocorrencia: Record<string, unknown>,
+  ): Promise<void> {
+    try {
       const naoReceberam: string[] = [];
-      for (const destino of destinatarios) {
+      for (const destino of await deps.contas.listarAtivas()) {
         try {
-          await deps.avisos.enviar({
-            para: destino.email,
-            assunto: 'Uma conta do painel do Bichu precisa trocar a senha',
-            corpo:
-              `Em ${comoIso(agora)} (UTC) alguém entrou no painel administrativo do Bichu com a senha ` +
-              `certa da conta de ${conta.displayName}, e essa senha aparece em vazamentos de outros ` +
-              'sites. Por isso ela não é mais aceita, e o acesso foi recusado.\n\n' +
-              'A senha precisa ser redefinida pelo responsável pelo painel, no servidor, com o comando ' +
-              '`conta-admin redefinir-senha`. Não existe link de redefinição.\n\n' +
-              'Se não foi a própria pessoa que tentou entrar, a senha dela está com outra pessoa.',
-          });
+          await deps.avisos.enviar({ para: destino.email, ...mensagem });
         } catch {
           naoReceberam.push(destino.id);
         }
       }
       if (naoReceberam.length > 0) {
-        deps.registrarOcorrencia(
-          { evento: 'admin.session.breach_notice_failed', conta: conta.id, naoReceberam, correlationId: contexto.correlationId },
-          'aviso de senha vazada do painel nao chegou a todos os administradores',
-        );
+        deps.registrarOcorrencia({ ...ocorrencia, naoReceberam }, 'aviso do painel nao chegou a todos os administradores');
       }
-    };
-    void enviar().catch((erro: unknown) => {
-      deps.registrarOcorrencia(
-        { evento: 'admin.session.breach_notice_failed', conta: conta.id, correlationId: contexto.correlationId, err: String(erro) },
-        'aviso de senha vazada do painel nao saiu',
-      );
-    });
+    } catch (erro) {
+      deps.registrarOcorrencia({ ...ocorrencia, err: String(erro) }, 'aviso do painel aos administradores nao saiu');
+    }
   }
 
   /**
@@ -412,6 +418,13 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         await registrarLoginRecusado(contexto, 'inactive_account', conta.id);
         throw problemas.credencialRecusada();
       }
+      // Conta bloqueada ("nao fui eu" ou dez falhas): o mesmo 401. Um corpo
+      // proprio aqui diria, a quem tem a senha, que ela confere; o dono sabe que
+      // clicou no link, e o caminho e o mesmo da senha vazada: o comando.
+      if (conta.blockedReason !== null) {
+        await registrarLoginRecusado(contexto, `blocked_${conta.blockedReason}`, conta.id);
+        throw problemas.credencialRecusada();
+      }
 
       const agora = deps.clock.now();
       // D43. A recusa e o mesmo 401; o que a distingue fica na trilha e no
@@ -468,6 +481,56 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         valorDoCookie,
         visao: visao(conta.displayName, [conta.papel], valorDoCookie, prazos.idleExpiresAt, prazos.absoluteExpiresAt),
       };
+    },
+
+    /**
+     * `POST /v1/admin/auth/disavow` (D62). Numa transacao: trava o aviso,
+     * revoga todas as sessoes da conta (`disavowed`), empurra a barreira, grava
+     * o bloqueio, grava a trilha e so entao consome o token. Revogar duas vezes
+     * tem o mesmo efeito de revogar uma; gastar o token antes deixaria uma
+     * falha passageira do banco queimar o unico remedio de quem perdeu a conta.
+     *
+     * Vencido, usado e inexistente: o mesmo `410`. O ator da trilha e anonimo:
+     * quem apresentou o token provou ter a caixa de entrada, e nao ser o
+     * titular.
+     */
+    async desautorizar(tokenBruto: string, contexto: ContextoDaRequisicao): Promise<void> {
+      const agora = deps.clock.now();
+      const alvo = await deps.escrita.executar(async (trx) => {
+        const aviso = await deps.sessoes.travarAvisoValido(trx, hashDeToken(tokenBruto), agora);
+        if (aviso === undefined) throw problemas.tokenDeVerificacaoVencido();
+        const conta = await deps.contas.buscarPorId(aviso.adminAccountId);
+        if (conta === undefined) throw problemas.tokenDeVerificacaoVencido();
+        const revogadas = await deps.sessoes.revogarTodasDaConta(trx, conta.id, 'disavowed', agora);
+        await deps.contas.empurrarBarreira(trx, conta.id, instanteDaBarreira(agora, conta.sessionsInvalidBefore));
+        await deps.contas.bloquear(trx, conta.id, 'disavowed', agora);
+        await deps.sessoes.consumirAviso(trx, aviso.id, agora);
+        return {
+          resultado: conta,
+          evento: {
+            actorKind: 'anonymous',
+            actorIp: contexto.ip,
+            correlationId: contexto.correlationId,
+            action: 'admin.session.disavowed',
+            resourceKind: 'admin_account',
+            resourceId: conta.id,
+            metadata: { surface: 'admin', revoked_sessions: revogadas },
+          },
+        };
+      });
+
+      await avisarTodosOsAdministradores(
+        {
+          assunto: 'Uma conta do painel do Bichu foi bloqueada pelo "não fui eu"',
+          corpo:
+            `Em ${comoIso(agora)} (UTC) alguém com acesso ao e-mail de ${alvo.displayName} usou o link ` +
+            '"não fui eu" do aviso de sessão aberta. Todas as sessões dessa conta foram encerradas, e ' +
+            'ela está bloqueada.\n\n' +
+            'Para liberar, o responsável pelo painel precisa rodar `conta-admin redefinir-senha` no ' +
+            'servidor, com a pessoa digitando a senha nova. Não existe link de redefinição.',
+        },
+        { evento: 'admin.session.disavow_notice_failed', conta: alvo.id, correlationId: contexto.correlationId },
+      );
     },
 
     /** `GET /v1/admin/session`. O anti-CSRF e recalculado do cookie, nunca lido de lugar nenhum. */
