@@ -28,6 +28,7 @@
 import { sql } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import {
+  enderecoNoParceiro,
   ordenarEspecies,
   type CategoriaDaVitrine,
   type ImagemDaVitrine,
@@ -50,8 +51,8 @@ interface LinhaDoItem {
   title: string;
   summary: string;
   category: CategoriaDaVitrine;
-  image_url: string | null;
-  target_url: string;
+  image_path: string | null;
+  target_path: string;
   partner_slug: string;
   partner_name: string;
   partner_host: string;
@@ -160,8 +161,8 @@ const COLUNAS_DO_ITEM = [
   'i.title as title',
   'i.summary as summary',
   'i.category as category',
-  'i.image_url as image_url',
-  'i.target_url as target_url',
+  'i.image_path as image_path',
+  'i.target_path as target_path',
   'p.slug as partner_slug',
   'p.name as partner_name',
   'p.host as partner_host',
@@ -238,17 +239,21 @@ export class KyselyStoreRepository implements StoreRepository {
 
   private comoItem(linha: LinhaDoItem, extra: Complementos): ItemDaVitrine {
     const principal = extra.imagens.get(linha.id)?.[0];
+    // O banco guarda caminho; o endereco externo e composto aqui, com o host do
+    // parceiro que a juncao trouxe. Ver `enderecoNoParceiro`.
+    const externa =
+      linha.image_path === null ? null : enderecoNoParceiro(linha.partner_host, linha.image_path);
     return {
       slug: linha.slug,
       title: linha.title,
       summary: linha.summary,
       category: linha.category,
-      imageUrl: principal !== undefined ? this.urlDeMidia(principal.chave) : linha.image_url,
+      imageUrl: principal !== undefined ? this.urlDeMidia(principal.chave) : externa,
       imageAltText:
-        principal !== undefined ? principal.altText : linha.image_url === null ? null : linha.title,
+        principal !== undefined ? principal.altText : externa === null ? null : linha.title,
       species: ordenarEspecies(extra.especies.get(linha.id) ?? []),
       tags: extra.tags.get(linha.id) ?? [],
-      targetUrl: linha.target_url,
+      targetUrl: enderecoNoParceiro(linha.partner_host, linha.target_path),
       partnerSlug: linha.partner_slug,
       partnerName: linha.partner_name,
       partnerHost: linha.partner_host,

@@ -5,8 +5,8 @@
  *
  * - o painel VE o preco vencido (e o caso negativo: o app continua sem ve-lo,
  *   pela MESMA regra de vencimento);
- * - o destino fora do host do parceiro e recusado com `host_mismatch`, inclusive
- *   o host que so termina com o texto do parceiro sem ser subdominio dele;
+ * - o destino fora do host EXATO do parceiro e recusado com `host_mismatch`, inclusive
+ *   o subdominio e o host que so termina com o texto do parceiro;
  * - nenhuma projecao do painel carrega o `id` interno.
  */
 import assert from 'node:assert/strict';
@@ -15,7 +15,7 @@ import { describe, it } from 'node:test';
 import {
   comoEtag,
   dataDeConsultaNoFuturo,
-  destinosQueDeixariamDeCasar,
+  caminhoDoDestino,
   errosDeTexto,
   errosDoDestino,
   estadoDePublicacao,
@@ -137,20 +137,29 @@ void describe('o preco no painel', () => {
   });
 });
 
-void describe('o destino termina no host do parceiro', () => {
+void describe('o destino esta no host do parceiro, e o banco guarda so o caminho', () => {
   const HOST = 'lojadobairro.test';
   const codigos = (url: string): string[] => errosDoDestino('target_url', url, HOST).map((e) => e.code);
 
-  void it('o host e subdominios dele passam', () => {
+  void it('o host exato passa, sem diferenca de caixa', () => {
     assert.deepEqual(codigos('https://lojadobairro.test/x'), []);
-    assert.deepEqual(codigos('https://www.lojadobairro.test/x?y=1'), []);
-    assert.deepEqual(codigos('https://WWW.LojaDoBairro.TEST/x'), []);
+    assert.deepEqual(codigos('https://LojaDoBairro.TEST/x'), []);
+  });
+
+  void it('subdominio e recusado: o banco guarda o caminho e compoe com o host do parceiro', () => {
+    assert.deepEqual(codigos('https://www.lojadobairro.test/x'), ['host_mismatch']);
   });
 
   void it('ISCA: host que so termina com o TEXTO do parceiro e recusado', () => {
     assert.deepEqual(codigos('https://falsalojadobairro.test/x'), ['host_mismatch']);
     assert.deepEqual(codigos('https://lojadobairro.test.golpe.invalid/x'), ['host_mismatch']);
     assert.deepEqual(codigos('https://outraloja.test/x'), ['host_mismatch']);
+  });
+
+  void it('ISCA: parametro e ancora sao recusados, antes de o CHECK do caminho recusar como 500', () => {
+    assert.deepEqual(codigos('https://lojadobairro.test/x?email=a@b.test'), ['invalid_url']);
+    assert.deepEqual(codigos('https://lojadobairro.test/x#y'), ['invalid_url']);
+    assert.deepEqual(codigos('https://lojadobairro.test/x?'), ['invalid_url']);
   });
 
   void it('D47: http, javascript, data, userinfo e IP literal sao recusados', () => {
@@ -169,12 +178,13 @@ void describe('o destino termina no host do parceiro', () => {
     }
   });
 
-  void it('troca de host: nomeia os destinos que deixariam de casar', () => {
-    const destinos = ['https://lojadobairro.test/a', 'https://www.lojadobairro.test/b'];
-    assert.deepEqual(destinosQueDeixariamDeCasar(destinos, 'lojadobairro.test'), []);
-    assert.deepEqual(destinosQueDeixariamDeCasar(destinos, 'www.lojadobairro.test'), [
-      'https://lojadobairro.test/a',
-    ]);
+  void it('o caminho guardado casa com o CHECK de store_items.target_path', () => {
+    const check = /^\/[^\s?#]*$/;
+    for (const url of ['https://lojadobairro.test', 'https://lojadobairro.test/a b/c', 'https://lojadobairro.test/r/ração']) {
+      assert.deepEqual(codigos(url), [], url);
+      assert.ok(check.test(caminhoDoDestino(url)), caminhoDoDestino(url));
+    }
+    assert.equal(caminhoDoDestino('https://lojadobairro.test/racao/sache'), '/racao/sache');
   });
 });
 

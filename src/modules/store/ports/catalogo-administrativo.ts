@@ -183,8 +183,6 @@ export interface TransacaoDoCatalogo {
     mudanca: MudancaDeParceiro,
     agora: Instant,
   ): Promise<ParceiroAdministrativo | null>;
-  /** Os destinos de todos os itens do parceiro, em qualquer estado. */
-  destinosDosItensDoParceiro(partnerId: string): Promise<readonly string[]>;
 
   itemPorSlug(slug: string): Promise<ItemAdministrativo | null>;
   /** Lanca `SlugOcupado`. */

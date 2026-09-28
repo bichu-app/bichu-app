@@ -34,8 +34,12 @@ import type {
   TagDoItem,
 } from '../../domain/escrita-da-vitrine.js';
 import type { CategoriaDaVitrine, EspecieDoItem } from '../../domain/item-da-vitrine.js';
-import { DIAS_DE_VALIDADE_DO_PRECO, ordenarEspecies } from '../../domain/item-da-vitrine.js';
-import { somarDias } from '../../domain/escrita-da-vitrine.js';
+import {
+  DIAS_DE_VALIDADE_DO_PRECO,
+  enderecoNoParceiro,
+  ordenarEspecies,
+} from '../../domain/item-da-vitrine.js';
+import { caminhoDoDestino, somarDias } from '../../domain/escrita-da-vitrine.js';
 import {
   SlugOcupado,
   type CatalogoAdministrativoRepository,
@@ -158,8 +162,8 @@ interface LinhaDoItem {
   title: string;
   summary: string;
   category: CategoriaDaVitrine;
-  target_url: string;
-  image_url: string | null;
+  target_path: string;
+  image_path: string | null;
   price_amount: number | null;
   price_currency: string | null;
   price_checked_at: Date | string | null;
@@ -245,8 +249,8 @@ function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo
     title: l.title,
     summary: l.summary,
     category: l.category,
-    targetUrl: l.target_url,
-    imageUrl: l.image_url,
+    targetUrl: enderecoNoParceiro(l.partner_host, l.target_path),
+    imageUrl: l.image_path === null ? null : enderecoNoParceiro(l.partner_host, l.image_path),
     priceAmount: l.price_amount === null ? null : Number(l.price_amount),
     priceCurrency: l.price_currency,
     priceCheckedAt: comoDataSimples(l.price_checked_at),
@@ -272,8 +276,8 @@ function consultaDeItens(db: DbExecutor) {
       'i.title as title',
       'i.summary as summary',
       'i.category as category',
-      'i.target_url as target_url',
-      'i.image_url as image_url',
+      'i.target_path as target_path',
+      'i.image_path as image_path',
       'i.price_amount as price_amount',
       'i.price_currency as price_currency',
       'i.price_checked_at as price_checked_at',
@@ -483,18 +487,6 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
       return atualizado === undefined ? null : parceiroPorId(trx, id);
     },
 
-    async destinosDosItensDoParceiro(partnerId) {
-      // `FOR UPDATE` para a troca de host nao correr com um item novo apontando
-      // para o host antigo: o item criado depois desta leitura espera o COMMIT.
-      const linhas = await trx
-        .selectFrom('store_items')
-        .select('target_url')
-        .where('partner_id', '=', partnerId)
-        .forUpdate()
-        .execute();
-      return linhas.map((l) => l.target_url);
-    },
-
     itemPorSlug: (slug) => itemPorSlug(trx, slug),
 
     async inserirItem(novo: NovoItem) {
@@ -509,8 +501,8 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             title: novo.title,
             summary: novo.summary,
             category: novo.category,
-            image_url: null,
-            target_url: novo.targetUrl,
+            image_path: null,
+            target_path: caminhoDoDestino(novo.targetUrl),
             price_amount: novo.preco?.amount ?? null,
             price_currency: novo.preco?.currency ?? null,
             price_checked_at: novo.preco === null ? null : sql<Date>`${novo.preco.checkedAt}::date`,
@@ -540,7 +532,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             ...(mudanca.title === undefined ? {} : { title: mudanca.title }),
             ...(mudanca.summary === undefined ? {} : { summary: mudanca.summary }),
             ...(mudanca.category === undefined ? {} : { category: mudanca.category }),
-            ...(mudanca.targetUrl === undefined ? {} : { target_url: mudanca.targetUrl }),
+            ...(mudanca.targetUrl === undefined ? {} : { target_path: caminhoDoDestino(mudanca.targetUrl) }),
             ...(mudanca.preco === undefined
               ? {}
               : mudanca.preco === null

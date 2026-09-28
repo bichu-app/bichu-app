@@ -23,7 +23,7 @@
 --
 -- - **Nao cria `store_items.image_id`.** A versao anterior do apendice A.2 a
 --   previa, e o item 16 a substituiu por `store_item_images` antes de ela ser
---   migrada. `store_items.image_url` (URL externa da massa) continua, e item
+--   migrada. `store_items.image_path` (caminho externo da massa) continua, e item
 --   com ela nao tem linha em `store_item_images` (regra do caso de uso: um
 --   `CHECK` nao conta linhas de outra tabela).
 -- - **Os tetos de 5 tags por item e de 40 tags ativas sao do caso de uso**, na

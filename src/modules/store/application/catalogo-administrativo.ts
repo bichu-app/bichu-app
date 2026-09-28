@@ -33,7 +33,6 @@ import type { AutorizacaoDeEnvio } from '../../media/ports/object-storage.js';
 import {
   comoEtag,
   dataDeConsultaNoFuturo,
-  destinosQueDeixariamDeCasar,
   errosDeTexto,
   errosDoDestino,
   estadoDePublicacao,
@@ -427,21 +426,10 @@ export class CatalogoAdministrativo {
       const atual = await tx.parceiroPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
 
-      if (patch.host !== undefined && patch.host !== atual.host) {
-        const orfaos = destinosQueDeixariamDeCasar(
-          await tx.destinosDosItensDoParceiro(atual.id),
-          patch.host,
-        );
-        if (orfaos.length > 0) {
-          throw problemas.validacao([
-            {
-              field: 'host',
-              code: 'host_mismatch_items',
-              message: `${String(orfaos.length)} item(ns) deste parceiro deixariam de apontar para o host dele.`,
-            },
-          ]);
-        }
-      }
+      // Trocar o host nao deixa item orfao: o item guarda so o caminho, e o
+      // endereco e composto na leitura com o host do parceiro (migracao
+      // `20260922000009`). Os itens vao junto, e e para isso que o host mora
+      // numa coluna so.
 
       const mudanca: MudancaDeParceiro = {
         ...(patch.slug === undefined ? {} : { slug: patch.slug }),

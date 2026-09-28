@@ -927,8 +927,10 @@ export interface StoreItemsTable {
   title: string;
   summary: string;
   category: CategoriaDaVitrine;
-  image_url: string | null;
-  target_url: string;
+  /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
+  image_path: string | null;
+  /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
+  target_path: string;
   /** Centavos, inteiro. Nunca ponto flutuante. */
   price_amount: number | null;
   price_currency: string | null;
@@ -988,6 +990,139 @@ export interface CatalogImagesTable {
   created_at: Generated<Date>;
 }
 
+/**
+ * O encontro da secao `Rede` (ADR-0025, emendado pela secao 12 do ADR-0027).
+ *
+ * **Identidade interna separada da publica** (ADR-0024): `id` e a chave
+ * primaria e **nunca sai em resposta**; `slug` e o endereco publico e e a unica
+ * chave do encontro que sai.
+ *
+ * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a regra: a
+ * coluna de quem criou o encontro leva a marca de saida no `COMMENT ON COLUMN`
+ * da migracao `20260923000001`, e `src/tools/portao-colunas-que-nao-saem.ts`
+ * varre `src/` atras do nome dela. E o mesmo tratamento da coluna homonima de
+ * `ProfessionalsTable`. Quem precisa dela (a trilha do backoffice) a escreve
+ * por SQL cru.
+ *
+ * Check-in e galeria sairam desta versao (ADR-0027 12.4), com as tabelas.
+ */
+export interface NetworkEventsTable {
+  /** Identidade interna. Alvo das chaves estrangeiras, e nunca projetada. */
+  id: string;
+  /** O endereco publico. Unico, e a unica chave do encontro que sai em resposta. */
+  slug: string;
+  title: string;
+  summary: string;
+  /** O nome do lugar PUBLICO. Nao e logradouro, numero nem CEP. */
+  place_name: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  /**
+   * `geography(Point,4326)`. `never` nos tres sentidos, como `professionals.geo`
+   * e `user_reference_locations.reference_point`: o tipo impede a coluna de ser
+   * selecionada crua ou inserida pelo construtor tipado, e o unico caminho ate
+   * ela e SQL onde `ST_MakePoint`/`ST_Y`/`ST_X` ficam a vista. O ponto so sai
+   * em `getNetworkEventLocation`, com conta (ADR-0027 12.5).
+   */
+  geo: ColumnType<never, never, never>;
+  /** `map_pin` ou nulo, e anda junto de `geo` por `CHECK`. */
+  geo_source: OrigemDoPontoDoEncontro | null;
+  starts_at: Date;
+  ends_at: Date | null;
+  /**
+   * O nome IANA da zona, e ele anda junto de `starts_at` por necessidade:
+   * `timestamptz` sozinho diz o instante e nao diz a hora de parede.
+   */
+  time_zone: Generated<string>;
+  visibility: Generated<VisibilidadeDoEncontro>;
+  admission_kind: Generated<EntradaDoEncontro>;
+  /** Centavos. Nulo quando gratuito; anda junto de moeda e unidade por `CHECK`. */
+  admission_amount: number | null;
+  admission_currency: 'BRL' | null;
+  admission_unit: UnidadeDoValor | null;
+  dog_age: Generated<IdadeDosCaes>;
+  vaccination_required: Generated<boolean>;
+  fenced_off_leash_area: Generated<boolean>;
+  notes: string | null;
+  origin: Generated<OrigemDoEncontro>;
+  publication_status: PublicacaoDoEncontro;
+  published_at: Date | null;
+  cancelled_at: Date | null;
+  cancellation_note: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  version: Generated<number>;
+}
+
+/** O `CHECK` `network_events_origem_do_ponto`. ADR-0006: so `map_pin`. */
+export type OrigemDoPontoDoEncontro = 'map_pin';
+
+export type VisibilidadeDoEncontro = 'public' | 'private';
+export type EntradaDoEncontro = 'free' | 'paid';
+export type UnidadeDoValor = 'per_dog' | 'per_person' | 'per_pair';
+export type IdadeDosCaes = 'any' | 'from_4_months' | 'from_1_year' | 'up_to_1_year';
+export type ItemParaLevar =
+  | 'water'
+  | 'water_bowl'
+  | 'leash'
+  | 'poop_bags'
+  | 'treats'
+  | 'towel'
+  | 'vaccination_card'
+  | 'toy';
+export type EstruturaDoLocal =
+  | 'level_ground_or_ramp'
+  | 'accessible_restroom'
+  | 'public_restroom_nearby'
+  | 'shade'
+  | 'benches'
+  | 'dog_water_fountain'
+  | 'parking_nearby';
+/** A DECISAO guardada. O app nunca ve `declined` (ADR-0027 12.11). */
+export type DecisaoDoPedido = 'pending' | 'approved' | 'declined';
+
+export interface NetworkEventBringItemsTable {
+  event_id: string;
+  item: ItemParaLevar;
+}
+
+export interface NetworkEventSizesTable {
+  event_id: string;
+  size: string;
+}
+
+export interface NetworkEventAmenitiesTable {
+  event_id: string;
+  amenity: EstruturaDoLocal;
+}
+
+/**
+ * O pedido para participar de encontro privado. Da conta, nunca do pet.
+ * `decided_by_user_id` fica fora do tipo: a trilha o escreve por SQL cru, e
+ * nenhuma leitura do app o projeta.
+ */
+export interface NetworkEventJoinRequestsTable {
+  id: string;
+  ref: string;
+  event_id: string;
+  user_id: string;
+  status: Generated<DecisaoDoPedido>;
+  requested_at: Generated<Date>;
+  decided_at: Date | null;
+  withdrawn_at: Date | null;
+}
+
+/** O `CHECK` `network_events_origem_conhecida`. */
+export type OrigemDoEncontro = 'admin' | 'community';
+
+/**
+ * O `CHECK` `network_events_publicacao_conhecida`. Visivel e `published` ou
+ * `cancelled`; `pending_review` e so da comunidade e nunca e visivel;
+ * `removed` e terminal.
+ */
+export type PublicacaoDoEncontro = 'pending_review' | 'published' | 'cancelled' | 'removed';
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
@@ -1032,6 +1167,11 @@ export interface Database {
   store_tags: StoreTagsTable;
   store_item_tags: StoreItemTagsTable;
   store_item_images: StoreItemImagesTable;
+  network_events: NetworkEventsTable;
+  network_event_bring_items: NetworkEventBringItemsTable;
+  network_event_sizes: NetworkEventSizesTable;
+  network_event_amenities: NetworkEventAmenitiesTable;
+  network_event_join_requests: NetworkEventJoinRequestsTable;
   'audit.events': AuditEventsTable;
 }
 

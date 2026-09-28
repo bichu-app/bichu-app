@@ -36,6 +36,27 @@
  *   nenhum preco. E o pior cartao que a vitrine consegue produzir, e e para
  *   isso que serve olhar.
  *
+ * ## Os parceiros sao FICTICIOS, e a pergunta ao cliente continua aberta
+ *
+ * Os tres nomes e os tres hosts sao inventados, e os dominios usam o TLD
+ * `.example`, que a RFC 2606 reserva justamente para isto e que nao resolve em
+ * lugar nenhum. Massa de QA que cita marca real afirma um acordo comercial que
+ * ninguem assinou, e o link levaria mesmo ao site da empresa citada.
+ *
+ * **Isto nao responde a pergunta 14.2 do refinamento** ("a vitrine hoje mostra
+ * a Cobasi e a Petz; existe acordo?"). Ela e do cliente e segue de pe. O que a
+ * massa ficticia faz e tirar a resposta implicita: enquanto ela dizia o nome
+ * de duas empresas reais, o produto ja estava respondendo "sim" por ele.
+ *
+ * ## Caminho, nunca URL
+ *
+ * Cada item guarda o CAMINHO no site do parceiro; o endereco absoluto e
+ * composto na leitura, a partir de `store_partners.host`
+ * (`enderecoNoParceiro`). E por isso que a imagem mora no mesmo host do
+ * destino: um segundo host por parceiro seria uma segunda coluna, e ela nao
+ * existe. Ver a secao 3.6 de `docs/07-devops.md` e a migracao
+ * `20260922000009`.
+ *
  * ## Os dois itens que NUNCA podem aparecer
  *
  * `bola-descontinuada` esta inativo, e `agua-de-coco-pet` pertence a um
@@ -78,8 +99,13 @@ export interface ItemSemeado {
   readonly title: string;
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
-  readonly imageUrl: string | null;
-  readonly targetUrl: string;
+  /**
+   * O caminho da imagem no site do parceiro, com a barra inicial. Nulo quando
+   * o item nao tem imagem, que e estado normal.
+   */
+  readonly imagePath: string | null;
+  /** O caminho do destino no site do parceiro, com a barra inicial. */
+  readonly targetPath: string;
   /** Centavos, inteiro. Nulo quando o item nao tem preco. */
   readonly priceAmount: number | null;
   /**
@@ -97,13 +123,19 @@ export interface ItemSemeado {
 export const VERSAO_DA_VITRINE = '2026-09-22.1';
 
 export const PARCEIROS_DA_VITRINE: readonly ParceiroSemeado[] = [
-  { slug: 'cobasi', name: 'Cobasi', host: 'cobasi.com.br', active: true, sortOrder: 1 },
-  { slug: 'petz', name: 'Petz', host: 'petz.com.br', active: true, sortOrder: 2 },
+  {
+    slug: 'patas-do-bairro',
+    name: 'Patas do Bairro',
+    host: 'patas-do-bairro.example',
+    active: true,
+    sortOrder: 1,
+  },
+  { slug: 'mundo-pet', name: 'Mundo Pet', host: 'mundo-pet.example', active: true, sortOrder: 2 },
   // Inativo. Existe para o item dele ter de onde nao aparecer.
   {
-    slug: 'petlove-antiga',
-    name: 'Petlove',
-    host: 'petlove.com.br',
+    slug: 'bicho-feliz-antiga',
+    name: 'Bicho Feliz',
+    host: 'bicho-feliz.example',
     active: false,
     sortOrder: 3,
   },
@@ -115,12 +147,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   //    depois da virgula, e nenhum ponto de milhar.
   {
     slug: 'bola-pop',
-    partnerSlug: 'cobasi',
+    partnerSlug: 'patas-do-bairro',
     title: 'Bola Pop',
     summary: 'Bola de borracha atóxica que flutua, para brincar na água.',
     category: 'toy',
-    imageUrl: 'https://cdn.cobasi.com.br/vitrine/bola-pop.jpg',
-    targetUrl: 'https://cobasi.com.br/bola-pop-borracha',
+    imagePath: '/vitrine/bola-pop.jpg',
+    targetPath: '/bola-pop-borracha',
     priceAmount: 990,
     precoConsultadoHaDias: 2,
     active: true,
@@ -131,12 +163,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   //    formato brasileiro do americano, e ele so aparece acima de mil.
   {
     slug: 'casinha-termica-grande',
-    partnerSlug: 'petz',
+    partnerSlug: 'mundo-pet',
     title: 'Casinha térmica grande para cães de porte gigante',
     summary: 'Isolamento térmico nas quatro paredes e no teto, com piso elevado.',
     category: 'bed',
-    imageUrl: 'https://cdn.petz.com.br/vitrine/casinha-termica.jpg',
-    targetUrl: 'https://petz.com.br/casinha-termica-gg',
+    imagePath: '/vitrine/casinha-termica.jpg',
+    targetPath: '/casinha-termica-gg',
     priceAmount: 124_990,
     precoConsultadoHaDias: 5,
     active: true,
@@ -145,12 +177,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   // 3. SEM imagem, com preco. O cartao precisa fechar sem a moldura da foto.
   {
     slug: 'shampoo-neutro',
-    partnerSlug: 'cobasi',
+    partnerSlug: 'patas-do-bairro',
     title: 'Shampoo neutro 500 ml',
     summary: 'Para banho entre tosas, sem perfume.',
     category: 'hygiene',
-    imageUrl: null,
-    targetUrl: 'https://cobasi.com.br/shampoo-neutro-500',
+    imagePath: null,
+    targetPath: '/shampoo-neutro-500',
     priceAmount: 4990,
     precoConsultadoHaDias: 9,
     active: true,
@@ -161,12 +193,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   //    ha espaco reservado vazio (criterio A.2.4).
   {
     slug: 'coleira-peitoral',
-    partnerSlug: 'petz',
+    partnerSlug: 'mundo-pet',
     title: 'Coleira peitoral acolchoada',
     summary: 'Regulagem em quatro pontos, com fita refletiva.',
     category: 'accessory',
-    imageUrl: 'https://cdn.petz.com.br/vitrine/peitoral.jpg',
-    targetUrl: 'https://petz.com.br/coleira-peitoral-acolchoada',
+    imagePath: '/vitrine/peitoral.jpg',
+    targetPath: '/coleira-peitoral-acolchoada',
     priceAmount: null,
     precoConsultadoHaDias: null,
     active: true,
@@ -177,12 +209,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   //    unico caminho que a Emenda 1 existe para produzir nunca seria visto.
   {
     slug: 'arranhador-torre',
-    partnerSlug: 'cobasi',
+    partnerSlug: 'patas-do-bairro',
     title: 'Arranhador torre com três plataformas',
     summary: 'Sisal natural nas colunas e nicho fechado na base.',
     category: 'toy',
-    imageUrl: 'https://cdn.cobasi.com.br/vitrine/arranhador-torre.jpg',
-    targetUrl: 'https://cobasi.com.br/arranhador-torre-sisal',
+    imagePath: '/vitrine/arranhador-torre.jpg',
+    targetPath: '/arranhador-torre-sisal',
     priceAmount: 18_990,
     precoConsultadoHaDias: 45,
     active: true,
@@ -194,12 +226,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   //    aplicado e a classe de defeito que ninguem procura.
   {
     slug: 'racao-umida-sache',
-    partnerSlug: 'petz',
+    partnerSlug: 'mundo-pet',
     title: 'Ração úmida sachê frango',
     summary: 'Caixa com doze unidades de 85 g.',
     category: 'food',
-    imageUrl: 'https://cdn.petz.com.br/vitrine/sache-frango.jpg',
-    targetUrl: 'https://petz.com.br/racao-umida-sache-frango',
+    imagePath: '/vitrine/sache-frango.jpg',
+    targetPath: '/racao-umida-sache-frango',
     priceAmount: 7200,
     precoConsultadoHaDias: 30,
     active: true,
@@ -209,12 +241,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   //    uma formatacao que corta zero a direita aparece como `R$ 100,0`.
   {
     slug: 'vermifugo-caes',
-    partnerSlug: 'cobasi',
+    partnerSlug: 'patas-do-bairro',
     title: 'Vermífugo para cães — coração e intestino',
     summary: 'Dose única para cães de até 20 kg. Venda sob prescrição.',
     category: 'health',
-    imageUrl: 'https://cdn.cobasi.com.br/vitrine/vermifugo.jpg',
-    targetUrl: 'https://cobasi.com.br/vermifugo-caes-20kg',
+    imagePath: '/vitrine/vermifugo.jpg',
+    targetPath: '/vermifugo-caes-20kg',
     priceAmount: 10_000,
     precoConsultadoHaDias: 12,
     active: true,
@@ -226,7 +258,7 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   //    este, aguenta os outros nove.
   {
     slug: 'racao-premium-caes',
-    partnerSlug: 'petz',
+    partnerSlug: 'mundo-pet',
     title: 'Ração super premium para cães adultos de porte médio e grande sabor frango e arroz 15 kg',
     // **Exatamente 180 caracteres**, que e o teto do `CHECK`. O resumo mais
     // longo que a coluna aceita e o que mais estica o cartao, e e ele que
@@ -235,8 +267,8 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
       'Fórmula com proteína de frango como primeiro ingrediente, prebióticos para a flora '
       + 'intestinal, ômega 3 e 6 para toda a pelagem e grãos no tamanho adequado para cães de porte médio.',
     category: 'food',
-    imageUrl: null,
-    targetUrl: 'https://petz.com.br/racao-super-premium-caes-adultos-15kg',
+    imagePath: null,
+    targetPath: '/racao-super-premium-caes-adultos-15kg',
     priceAmount: null,
     precoConsultadoHaDias: null,
     active: true,
@@ -245,12 +277,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   // 9. Titulo curto com acento, sem imagem, preco vigente recente.
   {
     slug: 'comedouro-inox',
-    partnerSlug: 'cobasi',
+    partnerSlug: 'patas-do-bairro',
     title: 'Comedouro inox antiderrapante',
     summary: 'Base de silicone, 400 ml.',
     category: 'accessory',
-    imageUrl: null,
-    targetUrl: 'https://cobasi.com.br/comedouro-inox-400',
+    imagePath: null,
+    targetPath: '/comedouro-inox-400',
     priceAmount: 3550,
     precoConsultadoHaDias: 1,
     active: true,
@@ -260,12 +292,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   //     num caso extremo.
   {
     slug: 'cama-ortopedica-media',
-    partnerSlug: 'petz',
+    partnerSlug: 'mundo-pet',
     title: 'Cama ortopédica de espuma viscoelástica',
     summary: 'Capa removível e lavável, indicada para cães idosos.',
     category: 'bed',
-    imageUrl: 'https://cdn.petz.com.br/vitrine/cama-ortopedica.jpg',
-    targetUrl: 'https://petz.com.br/cama-ortopedica-viscoelastica-m',
+    imagePath: '/vitrine/cama-ortopedica.jpg',
+    targetPath: '/cama-ortopedica-viscoelastica-m',
     priceAmount: 27_990,
     precoConsultadoHaDias: 18,
     active: true,
@@ -277,12 +309,12 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   // ------------------------------------------------------------------
   {
     slug: 'bola-descontinuada',
-    partnerSlug: 'cobasi',
+    partnerSlug: 'patas-do-bairro',
     title: 'Bola descontinuada',
     summary: 'Saiu da vitrine e continua na tabela, marcada inativa.',
     category: 'toy',
-    imageUrl: null,
-    targetUrl: 'https://cobasi.com.br/bola-descontinuada',
+    imagePath: null,
+    targetPath: '/bola-descontinuada',
     priceAmount: null,
     precoConsultadoHaDias: null,
     active: false,
@@ -290,15 +322,15 @@ export const MASSA_DA_VITRINE: readonly ItemSemeado[] = [
   },
   {
     slug: 'agua-de-coco-pet',
-    partnerSlug: 'petlove-antiga',
+    partnerSlug: 'bicho-feliz-antiga',
     // Item ATIVO de um parceiro INATIVO. Desativar o parceiro retira a vitrine
     // dele inteira, e um item orfao na tela levaria a um site que decidimos
     // nao mais apontar.
     title: 'Água de coco para pet',
     summary: 'Ativo, mas de um parceiro que saiu.',
     category: 'food',
-    imageUrl: null,
-    targetUrl: 'https://petlove.com.br/agua-de-coco-pet',
+    imagePath: null,
+    targetPath: '/agua-de-coco-pet',
     priceAmount: 1490,
     precoConsultadoHaDias: 3,
     active: true,

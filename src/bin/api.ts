@@ -107,6 +107,8 @@ import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistenc
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { criarVerificadorDeCaptcha } from '../modules/identity/adapters/external/recaptcha-enterprise.js';
 import { listaDeSenhasVazadasIndisponivel } from '../modules/identity/ports/lista-de-senhas-vazadas.js';
+import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
+import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -667,6 +669,17 @@ export async function main(): Promise<void> {
     });
     registrarRotasDaVitrine(escopo, {
       vitrine: criarStoreRepository(db, urlDeMidia),
+      clock: systemClock,
+    });
+    // A `Rede` tem as rotas no mesmo registrador: leituras alcancaveis sem
+    // conta e as que exigem uma. O autenticador e o mesmo do diretorio e o da
+    // transferencia -- o modulo recebe a funcao e continua sem conhecer o
+    // servico de identidade.
+    registrarRotasDaRede(escopo, {
+      rede: criarNetworkRepository(db, ids),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
       clock: systemClock,
     });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);

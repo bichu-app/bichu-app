@@ -515,6 +515,80 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
+  // a secao `Rede` (ADR-0025, emendada pela secao 12 do ADR-0027)
+  // -------------------------------------------------------------------------
+  //
+  // Uma chave so. A presenca e a galeria sairam desta versao (ADR-0027 12.4),
+  // com as quatro chaves que elas tinham; quando voltarem, voltam apontando
+  // para `network_events.id`, e nunca para o `slug` (criterio 2 da BICHUS-19).
+  //
+  // O `SET NULL` e DELIBERADO, pela mesma razao da coluna homonima de
+  // `professionals`: quem criou o encontro e dado de trilha, a exclusao da conta
+  // do administrador nao pode apagar um encontro publico nem ser travada por
+  // ele. O nulo CABE: a coluna e anulavel, e nenhum CHECK de `network_events` a
+  // nomeia -- por isso nao ha par em PARES_DE_NULO_CONTRA_RESTRICAO.
+  //
+  // A quinta forma nao alcanca esta chave: `network_events` nao tem outra chave
+  // estrangeira nesta migracao (`cover_image_id` nasce na do backoffice), entao
+  // o UPDATE do `SET NULL` nao revalida vizinha nenhuma.
+  // As listas do encontro vao junto com ele: nao sao de ninguem.
+  'public.network_event_bring_items.network_event_bring_items_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto: 'o que levar do encontro apagado, que e atributo dele e de mais ninguem.',
+  },
+  'public.network_event_amenities.network_event_amenities_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a estrutura do local do encontro apagado, atributo dele.',
+  },
+  'public.network_event_sizes.network_event_sizes_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto: 'os portes aceitos no encontro apagado, atributo dele.',
+  },
+  // Chave para `code` de dado de referencia, a forma que a BICHUS-19 admite.
+  'public.network_event_sizes.network_event_sizes_size_fkey': {
+    colunas: ['size'],
+    referencia: 'public.ref_sizes',
+    aoApagar: 'NO ACTION',
+  },
+  // O pedido: apagar o encontro leva os pedidos dele, que so existem por ele;
+  // apagar a conta leva o pedido DA PROPRIA conta, e so ele (sem `pet_id` e
+  // sem nada sobre terceiro). Quem decidiu e trilha: `SET NULL`, como a autoria
+  // do encontro, e nenhum CHECK nomeia a coluna.
+  'public.network_event_join_requests.network_event_join_requests_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os pedidos para participar do encontro apagado. Cada um e de uma pessoa, e so faz ' +
+      'sentido com o encontro; o produto nao apaga encontro (marca `removed`), e o expurgo ' +
+      'de D54 e quem apaga pedido.',
+  },
+  'public.network_event_join_requests.network_event_join_requests_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os pedidos da PROPRIA conta, e so eles. A tabela nao tem coluna sobre terceiro, entao a ' +
+      'cascata nao alcanca a experiencia de mais ninguem.',
+  },
+  'public.network_event_join_requests.network_event_join_requests_decided_by_user_id_fkey': {
+    colunas: ['decided_by_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+  'public.network_events.network_events_created_by_user_id_fkey': {
+    colunas: ['created_by_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+
+  // -------------------------------------------------------------------------
   // professionals
   // -------------------------------------------------------------------------
   'public.professionals.professionals_claimed_by_user_id_fkey': {

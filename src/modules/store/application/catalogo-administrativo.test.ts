@@ -231,13 +231,12 @@ void describe('escrita administrativa da Loja', () => {
       assert.deepEqual(codigos(erro), ['host_mismatch']);
     });
 
-    void it('trocar o host do parceiro com item que deixaria de casar: host_mismatch_items', async () => {
+    void it('trocar o host do parceiro leva os itens junto: o item guarda so o caminho', async () => {
       const p = await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
       await m.catalogo.criarItem(AUTOR, ITEM);
-      const erro = await m.catalogo
-        .alterarParceiro(AUTOR, PARCEIRO.slug, p.etag, { host: 'outraloja.test' })
-        .catch((e: unknown) => e);
-      assert.deepEqual(codigos(erro), ['host_mismatch_items']);
+      await m.catalogo.alterarParceiro(AUTOR, PARCEIRO.slug, p.etag, { host: 'outraloja.test' });
+      const lido = await m.catalogo.lerItem(ITEM.slug);
+      assert.equal(lido.recurso.target_url, 'https://outraloja.test/racao-adulto-10kg');
     });
 
     void it('parceiro inexistente no corpo do item: 400, e nao 404', async () => {

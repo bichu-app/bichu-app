@@ -239,7 +239,7 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
       summary: 'Racao seca, porte medio.',
       category: 'food',
       species: ['dog'],
-      target_url: `https://www.${p.host}/racao`,
+      target_url: `https://${p.host}/racao`,
     });
     const editado = await loja.alterarItem(autor, slug, criado.etag, { summary: 'Racao seca, 10 kg.' });
     const publicado = await loja.publicarItem(autor, slug, editado.etag);

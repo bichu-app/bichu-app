@@ -17,13 +17,18 @@ import type {
   NovaIntencaoDeCatalogo,
   PreparadorDeEnvioDeCatalogo,
 } from '../../../media/ports/imagem-de-catalogo.js';
-import type {
-  ImagemDoItem,
-  ItemAdministrativo,
-  ParceiroAdministrativo,
-  TagAdministrativa,
+import {
+  caminhoDoDestino,
+  type ImagemDoItem,
+  type ItemAdministrativo,
+  type ParceiroAdministrativo,
+  type TagAdministrativa,
 } from '../../domain/escrita-da-vitrine.js';
-import { ordenarEspecies, type EspecieDoItem } from '../../domain/item-da-vitrine.js';
+import {
+  enderecoNoParceiro,
+  ordenarEspecies,
+  type EspecieDoItem,
+} from '../../domain/item-da-vitrine.js';
 import {
   SlugOcupado,
   type CatalogoAdministrativoRepository,
@@ -104,7 +109,8 @@ function montarItem(e: Estado, id: string): ItemAdministrativo {
     title: guardado.title,
     summary: guardado.summary,
     category: guardado.category,
-    targetUrl: guardado.targetUrl,
+    // Como o banco: guarda o caminho e compoe com o host ATUAL do parceiro.
+    targetUrl: enderecoNoParceiro(parceiro.host, caminhoDoDestino(guardado.targetUrl)),
     imageUrl: guardado.imageUrl,
     priceAmount: guardado.priceAmount,
     priceCurrency: guardado.priceCurrency,
@@ -216,10 +222,6 @@ export function repositorioEmMemoria(
           r.parceiros.set(id, novo);
           return novo;
         },
-        destinosDosItensDoParceiro: (partnerId) =>
-          Promise.resolve(
-            [...r.itens.values()].filter((i) => i.partnerId === partnerId).map((i) => i.targetUrl),
-          ),
         itemPorSlug: (slug) => {
           const achado = porSlug(r.itens, slug);
           return Promise.resolve(achado === null ? null : montarItem(r, achado.id));

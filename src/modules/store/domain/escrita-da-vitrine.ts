@@ -179,10 +179,17 @@ export const TETO_DA_URL = 2048;
  * Confere a URL de destino de um item contra o host do parceiro (D47 e ADR-0027
  * item 14).
  *
- * **Termina no host**: `lojadobairro.com.br` e `www.lojadobairro.com.br` casam
- * com `lojadobairro.com.br`; `lojadobairro.com.br.golpe.io` e
- * `falsalojadobairro.com.br` nao. A comparacao e por rotulo (`.` + host), e nao
- * por sufixo de texto: `endsWith(host)` sozinho aceitaria o segundo.
+ * **O host e o do parceiro, exatamente.** O banco guarda so o CAMINHO do
+ * destino (`store_items.target_path`, migracao `20260922000009`) e compoe o
+ * endereco na leitura com `store_partners.host`, entao um subdominio
+ * (`www.lojadobairro.com.br` para o parceiro `lojadobairro.com.br`) nao tem onde
+ * ser guardado: aceita-lo aqui seria gravar outro endereco que o enviado.
+ * `lojadobairro.com.br.golpe.io` e `falsalojadobairro.com.br` continuam
+ * recusados pelo mesmo motivo.
+ *
+ * **Sem `?` e sem `#`**: o `CHECK` do caminho os recusa, porque parametro em
+ * link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185). A
+ * recusa e daqui, com `400`, para nao chegar ao banco como erro de restricao.
  *
  * Devolve os erros de campo, e nao lanca: quem chama junta com os outros erros
  * do corpo e responde um 400 so.
@@ -210,7 +217,16 @@ export function errosDoDestino(
   if (ehIpLiteral(url.hostname)) {
     return [{ field: campo, code: 'invalid_url', message: 'O endereço precisa ter nome, não número de IP.' }];
   }
-  if (!destinoTerminaNoHost(url.hostname, hostDoParceiro)) {
+  if (url.search !== '' || url.hash !== '' || targetUrl.includes('?') || targetUrl.includes('#')) {
+    return [
+      {
+        field: campo,
+        code: 'invalid_url',
+        message: 'Sem parâmetros (?) nem âncora (#) no endereço.',
+      },
+    ];
+  }
+  if (url.hostname.toLowerCase() !== hostDoParceiro.toLowerCase()) {
     return [
       {
         field: campo,
@@ -222,29 +238,13 @@ export function errosDoDestino(
   return [];
 }
 
-export function destinoTerminaNoHost(hostname: string, host: string): boolean {
-  const nome = hostname.toLowerCase();
-  const alvo = host.toLowerCase();
-  return nome === alvo || nome.endsWith(`.${alvo}`);
-}
-
 /**
- * O host do parceiro pode mudar para `novoHost` sem deixar item orfao?
- *
- * Recebe os destinos dos itens e devolve os que deixariam de casar. Lista, e nao
- * booleano, para a mensagem poder dizer quantos.
+ * O caminho que o banco guarda, a partir de uma URL que `errosDoDestino` ja
+ * aprovou. O host sai porque e o do parceiro, e o esquema porque e sempre
+ * `https` na composicao (`enderecoNoParceiro`).
  */
-export function destinosQueDeixariamDeCasar(
-  destinos: readonly string[],
-  novoHost: string,
-): string[] {
-  return destinos.filter((destino) => {
-    try {
-      return !destinoTerminaNoHost(new URL(destino).hostname, novoHost);
-    } catch {
-      return true;
-    }
-  });
+export function caminhoDoDestino(targetUrl: string): string {
+  return new URL(targetUrl).pathname;
 }
 
 /**
