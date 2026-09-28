@@ -345,17 +345,17 @@ export function registrarRotasDaRedeAdministrativa(
       page: query.page ?? PAGINA_INICIAL,
       limit: query.limit ?? TAMANHO_PADRAO,
     });
-    // Dado de pessoa: nada de cache em lugar nenhum do caminho.
-    return reply.header('Cache-Control', 'private, no-store').send(pagina);
+    // Dado de pessoa: a superficie administrativa ja responde `no-store`.
+    return reply.send(pagina);
   });
 
   registrarRota(app, rotaDeAprovarPedido, { resolvedores }, async (request: FastifyRequest, reply: FastifyReply) => {
     const aprovado = await rede.aprovarPedido(atorAdministrativoDe(request), parametro(request, 'requestRef'));
-    return reply.header('Cache-Control', 'private, no-store').send(aprovado);
+    return reply.send(aprovado);
   });
 
   registrarRota(app, rotaDeRecusarPedido, { resolvedores }, async (request: FastifyRequest, reply: FastifyReply) => {
     const recusado = await rede.recusarPedido(atorAdministrativoDe(request), parametro(request, 'requestRef'));
-    return reply.header('Cache-Control', 'private, no-store').send(recusado);
+    return reply.send(recusado);
   });
 }

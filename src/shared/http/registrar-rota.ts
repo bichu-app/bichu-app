@@ -378,7 +378,20 @@ function exigirFronteiraAdministrativa(
   if ((rota.adminRoles === undefined) === (rota.adminPublic !== true)) {
     falha('rota do escopo administrativo precisa declarar adminRoles OU adminPublic, e so um dos dois');
   }
-  if (rota.method === 'get' && rota.audit !== undefined) falha('GET administrativo nao muda estado e nao declara audit');
+  // GET com `audit` so quando e LEITURA DE DADO PESSOAL AUDITADA (D55): verbo de
+  // leitura na acao e teto por linhas devolvidas (D56). E a mesma regra que o
+  // portao do contrato administrativo impoe no contrato (regra 5), aqui no
+  // codigo; o inverso (teto por linhas sem trilha) tambem nao sobe.
+  const contaLinhas = (rota.rateLimit ?? []).some((t) => t.counts === 'rows_returned');
+  if (rota.method === 'get' && rota.audit !== undefined) {
+    const verbo = rota.audit.action.split('.').pop() ?? '';
+    if (!['listed', 'read'].includes(verbo) || !contaLinhas) {
+      falha('GET administrativo so declara audit quando e leitura de dado pessoal auditada (verbo de leitura e teto por rows_returned)');
+    }
+  }
+  if (rota.method === 'get' && contaLinhas && rota.audit === undefined) {
+    falha('GET com teto por rows_returned e leitura de pessoa, e sem audit sairia sem trilha (D55)');
+  }
   if (rota.method !== 'get' && rota.audit === undefined) falha('escrita administrativa sem audit (D49)');
 }
 
