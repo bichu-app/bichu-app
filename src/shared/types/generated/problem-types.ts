@@ -33,12 +33,16 @@ export const STATUS_DO_PROBLEMA = {
   'unsupported-media-type':         415, // quatro operacoes ja respondiam 415 e nenhum slug significava isso: o corpo do problema saia com um `type` fora desta lista fechada, que e exatamente o que ela existe para impedir
   'verification-token-expired':     410, // token de USO UNICO (verificacao de e-mail, redefinicao de senha) expirado, ja usado ou inexistente. Separado de `token-expired`, que e 401: as duas operacoes declaram 410 e o slug de 401 nao podia responder por elas. Os tres casos sao a MESMA resposta de proposito -- distinguir contaria a um estranho se aquele token existiu
   'upload-not-received':            409, // o cliente confirmou um envio cujos bytes nao chegaram ao armazenamento. Sem este estado, a foto nascia `processing` para sempre: um cartao de pet carregando eternamente, que ninguem sabe explicar
+  'precondition-failed':            412, // ADR-0027: `If-Match` nao corresponde a versao atual do recurso do backoffice. Outra pessoa salvou depois da leitura, e nada foi gravado
+  'captcha-rejected':               403, // ADR-0027 / D41: login administrativo sem X-Captcha-Token ou com nota abaixo de 0,5. So existe no login do backoffice; no login do tutor a ausencia do token nunca recusa (ADR-0020)
+  'password-reset-required':        403, // ADR-0027 / D43: senha correta de conta administrativa que aparece numa base de senhas vazadas. O caminho e a redefinicao por e-mail que ja existe
   'weak-password':                  422,
+  'precondition-required':          428, // ADR-0027: escrita sobre recurso existente do backoffice sem `If-Match`
   'rate-limited':                   429,
   'internal':                       500,
 } as const;
 
-/** União fechada dos 28 tipos declarados no contrato. */
+/** União fechada dos 32 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

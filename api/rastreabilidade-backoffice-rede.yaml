@@ -1,0 +1,688 @@
+# Matriz de rastreabilidade: telas do backoffice e da Rede contra api/openapi.yaml
+#
+# Status: rascunho
+# Atualizado: 2026-09-23
+# Dono: arquitetura (ADR-0027 item 18)
+#
+# POR QUE ESTE ARQUIVO EXISTE, EM UMA FRASE: regra do cliente de 23/09, "tudo
+# segue o api/openapi.yaml; backend, app, backoffice e site usam os mesmos
+# campos, valores e funcionalidades". Esta matriz liga cada tela e estado dos
+# prototipos a operacao que ela chama e a cada campo, filtro e valor de lista
+# fechada que ela mostra ou envia. Ela e dado para portao, e nao prosa.
+#
+# Prototipos lidos (locais, em docs/, fora do git):
+#   docs/prototipos/backoffice.html     (06-design-system.md secao 25)
+#   docs/prototipos/rede-encontro.html  (06-design-system.md secao 24)
+#
+# COMO LER UMA REFERENCIA DE CAMPO. Cada item de `usa` e uma das formas:
+#   req:<caminho>      propriedade do corpo da requisicao (a.b, a[] para item de lista)
+#   resp:<caminho>     propriedade do corpo da resposta de sucesso (200 ou 201)
+#   query:<nome>       parametro de consulta da operacao
+#   path:<nome>        parametro de caminho da operacao
+#   header:<nome>      cabecalho declarado da operacao
+#   problem:<slug>     tipo de problema de x-problem-types
+#   enum:<Schema>.<v>  valor de lista fechada de components/schemas
+#
+# `situacao` de uma operacao:
+#   contrato   existe em api/openapi.yaml desta branch, e o portao resolve tudo
+#   pendente   ainda nao esta nesta branch; `onde` diz onde ela esta decidida.
+#              O portao lista, nao resolve, e reprova se `onde` faltar.
+#
+# O PORTAO (src/tools/portao-rastreabilidade.ts, ADR-0027 item 18): le este arquivo e api/openapi.yaml e
+# reprova quando (1) um operationId de situacao `contrato` nao existe; (2) uma
+# referencia `req`, `resp`, `query`, `path`, `header`, `problem` ou `enum` nao
+# resolve (seguindo $ref, allOf, oneOf e itens de lista); (3) uma lacuna de
+# `tela_sem_contrato` com `resolucao: contrato` passou a resolver e continua
+# listada (lacuna fechada que ninguem tirou daqui); (4) uma operacao do
+# contrato sob /admin/ ou uma operacao da Rede nao aparece nem em `telas` nem em
+# `contrato_sem_tela` (operacao nova que ninguem classificou). E reprova se o
+# arquivo tiver zero telas, porque um portao sem o que conferir nao aprova.
+
+versao: 1
+contrato: api/openapi.yaml
+
+telas:
+
+  # ====================================================================
+  # Backoffice (docs/prototipos/backoffice.html)
+  # ====================================================================
+
+  - tela: "1 · Login"
+    prototipo: backoffice.html
+    estados: [repouso, entrando, recusada, tentativas, bloqueado, vazada, expirada, verif_recusada, verif_falhou, sem_conexao, saiu]
+    operacoes:
+      - operationId: openAdminSession
+        situacao: contrato
+        usa:
+          - req:email
+          - req:password
+          - header:X-Captcha-Token
+          - resp:display_name
+          - resp:roles
+          - resp:csrf_token
+          - resp:idle_expires_at
+          - resp:absolute_expires_at
+          - enum:AdminRole.admin
+          - problem:invalid-credentials      # 1.3 recusada, mensagem unica
+          - problem:rate-limited             # 1.4 tentativas e 1.5 bloqueado
+          - problem:captcha-rejected         # 1.8 verif_recusada
+          - problem:password-reset-required  # 1.6 vazada
+          - problem:validation-failed
+      - operationId: requestPasswordReset
+        situacao: contrato
+        nota: "botao 'Esqueci minha senha': o fluxo que ja existe (ADR-0027 item 5)"
+        usa:
+          - req:email
+      - operationId: closeAdminSession
+        situacao: contrato
+        nota: "1.11 saiu, e o botao Sair da navegacao"
+        usa: []
+    estados_sem_operacao:
+      verif_falhou: "o script do reCAPTCHA nao carregou no navegador; nenhuma chamada sai"
+      sem_conexao: "falha de rede; nenhuma resposta do contrato"
+      expirada: "resposta 401 token-expired de qualquer operacao administrativa"
+
+  - tela: "Casca e navegacao (todas as telas)"
+    prototipo: backoffice.html
+    estados: [sessao28, sessao12h]
+    operacoes:
+      - operationId: getAdminSession
+        situacao: contrato
+        nota: "nome na navegacao e os prazos que alimentam S.1 (aviso de 28 min) e S.2 (teto de 12 h)"
+        usa:
+          - resp:display_name
+          - resp:idle_expires_at
+          - resp:absolute_expires_at
+          - resp:csrf_token
+          - problem:unauthenticated
+          - problem:token-expired
+
+  - tela: "3 · Loja: lista"
+    prototipo: backoffice.html
+    estados: [dados, paginada, carregando, vazia, semres, erro, salvo, sessao28, sessao12h]
+    operacoes:
+      - operationId: listAdminStoreItems
+        situacao: contrato
+        usa:
+          - query:q
+          - query:category
+          - query:species
+          - query:publication_state
+          - query:price_status
+          - query:sort
+          - query:page
+          - query:limit
+          - resp:items[].slug
+          - resp:items[].title
+          - resp:items[].partner.name
+          - resp:items[].target_url
+          - resp:items[].category
+          - resp:items[].species
+          - resp:items[].images
+          - resp:items[].price.amount
+          - resp:items[].price.checked_at
+          - resp:items[].price.valid_until
+          - resp:items[].price_status
+          - resp:items[].publication_state
+          - resp:items[].updated_at
+          - resp:total
+          - resp:effective_sort
+          - enum:AdminStoreItemPublicationState.draft
+          - enum:AdminStoreItemPublicationState.published
+          - enum:StorePriceStatus.vigente
+          - enum:StorePriceStatus.vencido
+          - enum:StorePriceStatus.sem_preco
+          - enum:Species.dog
+          - enum:Species.cat
+          - enum:Species.other
+        correspondencia_de_ordem:
+          upd: atualizado
+          nome: nome
+          venc: validade   # "Preco vencido primeiro" = menor valid_until primeiro
+      - operationId: publishAdminStoreItem
+        situacao: contrato
+        nota: "item de menu Publicar"
+        usa:
+          - header:If-Match
+      - operationId: retireAdminStoreItem
+        situacao: contrato
+        nota: "item de menu Despublicar; exige senha (lacuna BO-3)"
+        usa:
+          - header:If-Match
+          - problem:reauthentication-required
+      - operationId: updateAdminStoreItem
+        situacao: contrato
+        nota: "dialogo Renovar consulta de preco"
+        usa:
+          - req:price.amount
+          - req:price.checked_at
+          - header:If-Match
+      - operationId: reauthenticateAdmin
+        situacao: contrato
+        usa:
+          - req:password
+          - req:scope
+          - enum:AdminReauthScope.store_item_retirement
+          - resp:reauth_token
+          - resp:csrf_token
+
+  - tela: "3 · Loja: formulario"
+    prototipo: backoffice.html
+    estados: [novo, vencido, erros, salvando, imagens, limite]
+    operacoes:
+      - operationId: getAdminStoreItem
+        situacao: contrato
+        usa:
+          - resp:slug
+          - resp:version
+      - operationId: createAdminStoreItem
+        situacao: contrato
+        nota: "Salvar rascunho; Publicar e esta operacao seguida de publishAdminStoreItem"
+        usa:
+          - req:title
+          - req:summary
+          - req:category
+          - req:species
+          - req:tag_slugs
+          - req:images[].upload_id
+          - req:images[].alt_text
+          - req:partner_slug
+          - req:target_url
+          - req:price.amount
+          - req:price.checked_at
+          - req:price.currency
+          - enum:StoreCategory.food
+          - enum:StoreCategory.toy
+          - enum:StoreCategory.hygiene
+          - enum:StoreCategory.accessory
+          - enum:StoreCategory.health
+          - enum:StoreCategory.bed
+          - problem:validation-failed
+          - problem:slug-taken
+      - operationId: updateAdminStoreItem
+        situacao: contrato
+        nota: "Salvar alteracoes"
+        usa:
+          - req:title
+          - req:summary
+          - req:category
+          - req:species
+          - req:tag_slugs
+          - req:images[].upload_id
+          - req:images[].alt_text
+          - req:partner_slug
+          - req:target_url
+          - req:price.amount
+          - req:price.checked_at
+          - header:If-Match
+          - problem:precondition-failed
+      - operationId: listAdminStorePartners
+        situacao: contrato
+        nota: "select de parceiro: 'so aparecem parceiros ja cadastrados'"
+        usa:
+          - query:active
+          - resp:items[].slug
+          - resp:items[].name
+          - resp:items[].host
+      - operationId: listAdminStoreTags
+        situacao: contrato
+        nota: "chips de tag, ate 5"
+        usa:
+          - query:active
+          - resp:items[].slug
+          - resp:items[].label
+      - operationId: createAdminStoreTag
+        situacao: contrato
+        nota: "dialogo Criar tag (2 a 24 caracteres, ate 40 ativas)"
+        usa:
+          - req:label
+          - resp:slug
+          - problem:slug-taken
+          - problem:validation-failed
+      - operationId: createAdminCatalogImageIntent
+        situacao: contrato
+        nota: "galeria: JPG, PNG ou WebP, ate 5 MB, minimo 800 x 800"
+        usa:
+          - req:purpose
+          - req:content_type
+          - req:byte_size
+          - resp:upload_id
+          - resp:url
+          - resp:method
+          - resp:fields
+          - enum:AdminCatalogImageIntentInput.purpose.store_item
+          - problem:unsupported-media-type
+
+  - tela: "4 · Rede: lista"
+    prototipo: backoffice.html
+    estados: [dados, carregando, vazia, semres, erro, salvo]
+    operacoes:
+      - operationId: listAdminNetworkEvents
+        situacao: contrato
+        usa:
+          - query:q
+          - query:timing
+          - query:sort
+          - resp:items[].slug
+          - resp:items[].title
+          - resp:items[].place.place_name
+          - resp:items[].place.neighborhood
+          - resp:items[].place.city
+          - resp:items[].starts_at
+          - resp:items[].ends_at
+          - resp:items[].timing
+          - resp:items[].visibility
+          - resp:items[].admission.kind
+          - resp:items[].admission.price.amount
+          - resp:items[].admission.price.unit
+          - resp:items[].pending_request_count
+          - resp:items[].images
+          - resp:items[].updated_at
+          - enum:AdminNetworkEventTiming.upcoming
+          - enum:AdminNetworkEventTiming.happening
+          - enum:AdminNetworkEventTiming.ended
+          - enum:NetworkEventVisibility.public
+          - enum:NetworkEventVisibility.private
+        correspondencia_de_ordem:
+          data: agenda
+          upd: atualizado
+      - operationId: removeAdminNetworkEvent
+        situacao: contrato
+        nota: "item de menu Excluir, com senha"
+        usa:
+          - header:If-Match
+          - enum:AdminReauthScope.network_event_removal
+          - problem:reauthentication-required
+
+  - tela: "4 · Rede: formulario"
+    prototipo: backoffice.html
+    estados: [novo, editando, pago, erros, salvando, encerrado, mapa_falha]
+    operacoes:
+      - operationId: getAdminNetworkEvent
+        situacao: contrato
+        usa:
+          - resp:slug
+          - resp:version
+          - resp:place.point.lat
+          - resp:place.point.lon
+      - operationId: createAdminNetworkEvent
+        situacao: contrato
+        nota: "Publicar encontro: criar e publicar (12.9)"
+        usa:
+          - req:title
+          - req:summary
+          - req:images[].upload_id
+          - req:images[].alt_text
+          - req:starts_at
+          - req:ends_at
+          - req:place.point.lat
+          - req:place.point.lon
+          - req:place.place_name
+          - req:place.neighborhood
+          - req:place.city
+          - req:visibility
+          - req:admission.kind
+          - req:admission.price.amount
+          - req:admission.price.unit
+          - req:bring_items
+          - req:notes
+          - req:accepted_sizes
+          - req:dog_age
+          - req:vaccination_required
+          - req:fenced_off_leash_area
+          - req:amenities
+          - enum:EventPriceUnit.per_dog
+          - enum:EventPriceUnit.per_person
+          - enum:EventPriceUnit.per_pair
+          - enum:PetSize.P
+          - enum:PetSize.M
+          - enum:PetSize.G
+          - enum:PetSize.GG
+          - enum:NetworkEventDogAge.any
+          - enum:NetworkEventDogAge.from_4_months
+          - enum:NetworkEventDogAge.from_1_year
+          - enum:NetworkEventDogAge.up_to_1_year
+          - enum:NetworkEventAmenity.level_ground_or_ramp
+          - enum:NetworkEventAmenity.accessible_restroom
+          - enum:NetworkEventAmenity.public_restroom_nearby
+          - enum:NetworkEventAmenity.shade
+          - enum:NetworkEventAmenity.benches
+          - enum:NetworkEventAmenity.dog_water_fountain
+          - enum:NetworkEventAmenity.parking_nearby
+          - enum:NetworkEventBringItem.water
+          - enum:NetworkEventBringItem.water_bowl
+          - enum:NetworkEventBringItem.leash
+          - enum:NetworkEventBringItem.poop_bags
+          - enum:NetworkEventBringItem.treats
+          - enum:NetworkEventBringItem.towel
+          - enum:NetworkEventBringItem.vaccination_card
+          - enum:NetworkEventBringItem.toy
+          - problem:validation-failed
+      - operationId: updateAdminNetworkEvent
+        situacao: contrato
+        nota: "Salvar alteracoes, para titulo, descricao, fotos, o que levar, observacoes e detalhes"
+        usa:
+          - req:title
+          - req:summary
+          - req:images[].upload_id
+          - req:images[].alt_text
+          - req:bring_items
+          - req:notes
+          - req:accepted_sizes
+          - req:dog_age
+          - req:vaccination_required
+          - req:fenced_off_leash_area
+          - req:amenities
+          - header:If-Match
+      - operationId: relocateAdminNetworkEvent
+        situacao: contrato
+        nota: "dialogo 'Salvar a mudanca de local?', com senha"
+        usa:
+          - req:place.point.lat
+          - req:place.point.lon
+          - req:place.place_name
+          - req:starts_at
+          - req:ends_at
+          - req:reason
+          - header:If-Match
+          - enum:AdminReauthScope.network_event_relocation
+      - operationId: changeAdminNetworkEventAccess
+        situacao: contrato
+        nota: "dialogo 'Salvar a mudanca de acesso?', com senha"
+        usa:
+          - req:visibility
+          - req:admission.kind
+          - req:admission.price.amount
+          - req:admission.price.unit
+          - req:reason
+          - header:If-Match
+          - enum:AdminReauthScope.network_event_access_change
+      - operationId: createAdminCatalogImageIntent
+        situacao: contrato
+        nota: "fotos: JPG, PNG ou WebP, ate 5 MB, minimo 1600 x 900; a primeira e a capa"
+        usa:
+          - req:purpose
+          - req:content_type
+          - req:byte_size
+          - enum:AdminCatalogImageIntentInput.purpose.network_event
+
+  - tela: "4 · Rede: pedidos para participar"
+    prototipo: backoffice.html
+    estados: [pend, apr, rec, vazio, carregando, erro, publico]
+    operacoes:
+      - operationId: listAdminNetworkJoinRequests
+        situacao: contrato
+        nota: "abas Pendentes, Aprovados e Recusados, com a contagem de cada uma (uma chamada por aba, `total`)"
+        usa:
+          - query:status
+          - query:event
+          - resp:items[].ref
+          - resp:items[].requester.display_name
+          - resp:items[].requester.member_since
+          - resp:items[].requester.email_verified
+          - resp:items[].requested_at
+          - resp:items[].status
+          - resp:items[].event.title
+          - resp:total
+          - enum:AdminJoinRequestStatus.pending
+          - enum:AdminJoinRequestStatus.approved
+          - enum:AdminJoinRequestStatus.declined
+      - operationId: approveAdminNetworkJoinRequest
+        situacao: contrato
+        nota: "Aprovar, inclusive a partir da aba Recusados"
+        usa:
+          - path:requestRef
+      - operationId: declineAdminNetworkJoinRequest
+        situacao: contrato
+        nota: "Recusar, so a partir de Pendentes"
+        usa:
+          - path:requestRef
+      - operationId: getAdminNetworkEvent
+        situacao: contrato
+        nota: "cabecalho: titulo, data, horario, local, bairro, status e visibilidade"
+        usa:
+          - resp:title
+          - resp:starts_at
+          - resp:ends_at
+          - resp:place.place_name
+          - resp:place.neighborhood
+          - resp:timing
+          - resp:visibility
+
+  # ====================================================================
+  # App, secao Rede (docs/prototipos/rede-encontro.html)
+  # ====================================================================
+
+  - tela: "Agenda: abas Proximos, Meus pedidos, Encerrados"
+    prototipo: rede-encontro.html
+    estados: [normal, carregando, erro, vazio, vazio_com_busca, vazio_com_filtro]
+    operacoes:
+      - operationId: listNetworkEvents
+        situacao: pendente
+        onde: "feat/secao-rede (BICHUS-251), emenda em ADR-0027 12.10 e 12.14"
+        usa:
+          - query:q
+          - query:when
+          - query:admission
+          - query:visibility
+          - query:city
+          - query:size
+          - query:sort
+          - resp:items
+          - resp:applied_filters
+          - resp:effective_sort
+      - operationId: listNearbyNetworkEvents
+        situacao: pendente
+        onde: "ADR-0027 12.14"
+        usa:
+          - query:max_km
+          - query:sort
+          - resp:items[].distance_m
+      - operationId: listMyNetworkEventJoinRequests
+        situacao: pendente
+        onde: "ADR-0027 12.14"
+        usa:
+          - query:q
+          - query:state
+          - query:sort
+
+  - tela: "Pagina do encontro"
+    prototipo: rede-encontro.html
+    estados: [carregado, carregando, erro, semponto, encerrado, cancelado, priv-nenhum, priv-enviado, priv-aprovado]
+    operacoes:
+      - operationId: getNetworkEvent
+        situacao: pendente
+        onde: "feat/secao-rede (BICHUS-251), ADR-0027 12.10"
+        usa:
+          - resp:title
+          - resp:local_date
+          - resp:visibility
+          - resp:status
+      - operationId: getNetworkEventLocation
+        situacao: pendente
+        onde: "ADR-0027 12.5"
+        usa:
+          - resp:point
+      - operationId: getNetworkEventPrivateDetails
+        situacao: pendente
+        onde: "ADR-0027 12.11"
+        usa:
+          - resp:place
+          - resp:summary
+          - resp:images
+          - resp:admission
+          - resp:accepted_sizes
+          - resp:dog_age
+          - resp:vaccination_required
+          - resp:fenced_off_leash_area
+          - resp:amenities
+          - resp:bring_items
+          - resp:notes
+      - operationId: requestToJoinNetworkEvent
+        situacao: pendente
+        onde: "ADR-0027 12.11"
+        usa:
+          - resp:state
+      - operationId: getMyNetworkEventJoinRequest
+        situacao: pendente
+        onde: "ADR-0027 12.11"
+        usa:
+          - resp:state
+
+# ======================================================================
+# Correspondencias codigo -> rotulo. Os rotulos ficam no cliente; o que o
+# portao cobra e que a correspondencia seja 1 para 1 e que todo codigo exista.
+# ======================================================================
+
+correspondencias:
+  StoreCategory:
+    fonte_do_rotulo: app/lib/api/modelos_loja.dart
+    um_para_um: true
+    valores:
+      food: Alimentação
+      toy: Brinquedo
+      hygiene: Higiene
+      accessory: Acessório
+      health: Saúde
+      bed: Cama e conforto
+    nota: "conferido em 23/09: seis codigos, seis rotulos, nenhum sobrando. O backoffice (CATS/CAT_CODE) usa os mesmos seis."
+  Species:
+    um_para_um: true
+    valores: { dog: Cão, cat: Gato, other: Outros animais }
+  PetSize:
+    um_para_um: true
+    valores: { P: Pequeno, M: Médio, G: Grande, GG: Gigante }
+  NetworkEventDogAge:
+    um_para_um: true
+    valores: { any: Qualquer idade, from_4_months: A partir de 4 meses, from_1_year: A partir de 1 ano, up_to_1_year: Até 1 ano }
+  EventPriceUnit:
+    um_para_um: true
+    valores: { per_dog: por cão, per_person: por pessoa, per_pair: por dupla }
+  NetworkEventBringItem:
+    um_para_um: true
+    valores: { water: Água, water_bowl: Pote de água, leash: Guia, poop_bags: Saquinho, treats: Petisco, towel: Toalha, vaccination_card: Carteira de vacinação, toy: Brinquedo }
+  NetworkEventAmenity:
+    um_para_um: true
+    valores: { level_ground_or_ramp: Piso plano ou rampa, accessible_restroom: Banheiro acessível, public_restroom_nearby: Banheiro público próximo, shade: Sombra, benches: Bancos, dog_water_fountain: Bebedouro para cães, parking_nearby: Estacionamento próximo }
+  JoinRequestAppState:
+    situacao: pendente
+    onde: "ADR-0027 12.11 (BICHUS-251)"
+    um_para_um: true
+    valores: { requested: Pedido enviado, approved: Pedido aprovado, withdrawn: Pedido cancelado, expired: O encontro passou }
+    nota: "nao ha `declined` no app, de proposito (ADR-0027 12.11)"
+
+# ======================================================================
+# O que a tela usa e NAO existe no contrato. `resolucao` diz quem muda.
+#   tela      o prototipo muda para caber no contrato
+#   contrato  o contrato mudou (ou muda) para caber na tela
+#   decidir   precisa de decisao antes de alguem mudar
+# ======================================================================
+
+tela_sem_contrato:
+  - id: BO-1
+    tela: "Casca e navegacao"
+    o_que: "e-mail do administrador no rodape da navegacao"
+    resolucao: tela
+    motivo: "AdminSession nao tem e-mail, e openAdminSession e alcancavel sem conta: o portao de contrato publico reprova `email` ali. A navegacao mostra so o nome de exibicao."
+  - id: BO-2
+    tela: "3 · Loja: lista"
+    o_que: "item de menu Excluir produto, com senha"
+    resolucao: tela
+    motivo: "nao ha exclusao de item (ADR-0027 item 14); o gesto e retirar (retireAdminStoreItem), reversivel"
+  - id: BO-3
+    tela: "3 · Loja: lista e formulario"
+    o_que: "Despublicar sem senha, e o texto 'volta a ser rascunho'"
+    resolucao: tela
+    motivo: "retireAdminStoreItem exige reautenticacao (store_item_retirement), e o estado depois e `retired` (Retirado), nao `draft`"
+  - id: BO-4
+    tela: "3 · Loja: formulario"
+    o_que: "pelo menos uma imagem obrigatoria"
+    resolucao: tela
+    motivo: "no contrato a imagem e opcional; item sem imagem e estado normal (a massa tem) e o cartao sabe se desenhar"
+  - id: BO-5
+    tela: "3 · Loja: formulario"
+    o_que: "nao pede slug"
+    resolucao: contrato
+    motivo: "slug passou a opcional em AdminStoreItemInput e AdminNetworkEventInput, derivado do titulo"
+  - id: BO-6
+    tela: "3 · Loja e 4 · Rede: galeria"
+    o_que: "ate 5 MB e dimensao minima"
+    resolucao: contrato
+    motivo: "byte_size de AdminCatalogImageIntentInput passou a 5 MiB; a dimensao minima e conferida pelo worker e volta como `rejected` com motivo"
+  - id: BO-7
+    tela: "4 · Rede: formulario"
+    o_que: "nao pede UF (state)"
+    resolucao: tela
+    motivo: "place.state e obrigatorio: o lugar sao tres rotulos com UF (ADR-0025), e 'Sao Paulo' existe em mais de um estado"
+  - id: BO-8
+    tela: "4 · Rede: formulario"
+    o_que: "Fim obrigatorio e ponto no mapa obrigatorio"
+    resolucao: tela
+    motivo: "no contrato os dois sao opcionais: nem todo encontro declara fim, e o ponto e tolerancia pela D.4. A tela pode destacar o mapa, sem bloquear"
+  - id: BO-9
+    tela: "4 · Rede: formulario"
+    o_que: "nao envia time_zone ('Horario de Brasilia')"
+    resolucao: contrato
+    motivo: "time_zone passou a opcional com padrao America/Sao_Paulo"
+  - id: BO-10
+    tela: "4 · Rede: pedidos para participar"
+    o_que: "Recusar a partir de Aprovados, e Desfazer depois de aprovar"
+    resolucao: tela
+    motivo: "aprovado nao volta a recusado: o tutor ja viu o lugar. Recusado volta a aprovado (o contrato passou a aceitar)"
+  - id: BO-11
+    tela: "4 · Rede: pedidos para participar"
+    o_que: "texto do nome nulo"
+    resolucao: contrato
+    motivo: "requester.display_name passou a anulavel; o rotulo 'Conta sem nome de exibicao' e do painel, e o servidor nunca manda o e-mail no lugar"
+  - id: APP-1
+    tela: "Pagina do encontro"
+    o_que: "itens livres em 'O que levar' (levarOutro)"
+    resolucao: tela
+    motivo: "bring_other saiu do contrato (revisao de UX de 23/09)"
+  - id: APP-2
+    tela: "Agenda, aba Proximos"
+    o_que: "distancia no cartao na ordem por data, com a localizacao permitida"
+    resolucao: contrato
+    situacao: "aprovado pela coordenacao em 23/09; entra no contrato com a BICHUS-251"
+    motivo: "listNearbyNetworkEvents aceita sort=proximos alem da ordem por distancia (ADR-0027 12.14), e o app com regiao cadastrada mostra a distancia no cartao sem mudar de ordem"
+
+# ======================================================================
+# O que existe no contrato e NENHUMA tela usa. Decisao da coordenacao, 23/09:
+# todas as operacoes abaixo sao funcionalidade de verdade e GANHAM TELA. Cada
+# uma fica aqui ate a tela existir no prototipo, e sai daqui para `telas` no
+# mesmo commit em que o prototipo a desenhar ("resolvido quando a tela
+# existir").
+# ======================================================================
+
+contrato_sem_tela:
+  - operationId: createAdminStorePartner
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "nao ha tela de parceiros; o select so lista os cadastrados. Ou a tela nasce, ou parceiro entra por comando de linha"
+  - operationId: getAdminStorePartner
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "tela de parceiros (lista, cadastro e edicao)"
+  - operationId: updateAdminStorePartner
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "tela de parceiros (lista, cadastro e edicao)"
+  - operationId: updateAdminStoreTag
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "nao ha tela de vocabulario: renomear e desativar tag nao tem onde acontecer"
+  - operationId: cancelAdminNetworkEvent
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "nenhuma tela cancela encontro, e o cliente decidiu que o cancelado aparece no app ate o fim previsto. Falta o item de menu Cancelar, com senha"
+  - operationId: closeAllAdminSessions
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "sair de todas as sessoes administrativas nao tem botao"
+  - operationId: withdrawNetworkEventJoinRequest
+    situacao: pendente
+    onde: "ADR-0027 12.11 (BICHUS-251)"
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "o app ganha o gesto de desistir do pedido, com texto a aprovar pela UX"
+  - campo: "AdminStorePartner.sort_order, AdminStoreItem.sort_order"
+    nota: "a ordem de curadoria nao e editavel em tela"
+  - campo: "listAdminStoreItems query:publication_state=retired"
+    nota: "a lista nao tem o chip Retirados"
+  - campo: "listAdminNetworkEvents query:publication_status, query:visibility, query:city"
+    nota: "a lista do painel nao filtra por cancelado, removido, visibilidade nem cidade"
+  - campo: "JoinRequestAppState withdrawn, expired"
+    nota: "o filtro 'Situacao do pedido' do app so tem Enviado e Aprovado"
