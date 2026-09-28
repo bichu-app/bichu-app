@@ -1,0 +1,264 @@
+/*
+ * O que so a Rede usa, por cima de theme/componentes.css. Todo valor visual
+ * sai de tokens.g.css. Larguras de coluna (Data 200, Status 184, 25.2) sao
+ * constante de componente ate o pedido de token de 25.6, em rem.
+ */
+
+/* Selos (25.3 e 25.5.2) */
+.selo-agendado {
+  background: var(--bichu-cor-info-container);
+  color: var(--bichu-cor-info);
+}
+.selo-agora {
+  background: var(--bichu-cor-primary-container);
+  color: var(--bichu-cor-on-primary-container);
+}
+.selo-encerrado,
+.selo-removido {
+  background: var(--bichu-cor-surface-sunken);
+  color: var(--bichu-cor-text-secondary);
+}
+.selo-cancelado {
+  background: var(--bichu-cor-surface-inverse);
+  color: var(--bichu-cor-text-on-inverse);
+}
+
+/* Tabela */
+.colData {
+  width: 12.5rem;
+}
+.colStatus {
+  width: 11.5rem;
+}
+.linhaVis {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--bichu-space-2);
+}
+.vis {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bichu-space-1);
+}
+.pendentes {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--bichu-space-8);
+  padding: 0 var(--bichu-space-3);
+  border-radius: var(--bichu-radius-full);
+  background: var(--bichu-cor-primary-container);
+  color: var(--bichu-cor-on-primary-container);
+  text-decoration: none;
+}
+.pendentes:hover {
+  background: var(--bichu-cor-surface-sunken);
+  color: var(--bichu-cor-text-primary);
+}
+.removido {
+  color: var(--bichu-cor-text-secondary);
+}
+.carregarMais {
+  align-self: center;
+}
+
+/* Formulario */
+.voltar {
+  align-self: flex-start;
+}
+.secao {
+  margin: var(--bichu-space-4) 0 0;
+  padding-top: var(--bichu-space-4);
+  border-top: var(--bichu-border-hairline) solid var(--bichu-cor-outline);
+}
+.row3 {
+  display: grid;
+  gap: var(--bichu-space-4);
+  grid-template-columns: 1fr;
+}
+@media (min-width: 40rem) {
+  .row3 {
+    grid-template-columns: 1fr 1fr 7rem;
+  }
+}
+.grupo {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+.grupo:disabled {
+  opacity: 1;
+}
+.opcoes {
+  display: grid;
+  gap: var(--bichu-space-3);
+}
+.opcao {
+  display: flex;
+  gap: var(--bichu-space-3);
+  align-items: flex-start;
+  padding: var(--bichu-space-4);
+  border: var(--bichu-border-hairline) solid var(--bichu-cor-outline-control);
+  border-radius: var(--bichu-radius-md);
+  cursor: pointer;
+}
+.opcao:hover {
+  background: var(--bichu-cor-surface-sunken);
+}
+.opcao:has(input:checked) {
+  border: var(--bichu-border-medium) solid var(--bichu-cor-primary);
+  background: var(--bichu-cor-primary-container);
+}
+.opcao:has(input:checked) .opcaoAjuda {
+  color: var(--bichu-cor-on-primary-container);
+}
+.opcao:has(input:disabled) {
+  cursor: default;
+}
+.opcao input {
+  accent-color: var(--bichu-cor-primary);
+  width: var(--bichu-icon-size-inline);
+  height: var(--bichu-icon-size-inline);
+  margin: 0;
+  flex: none;
+}
+.opcaoTexto {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bichu-space-1);
+}
+.opcaoAjuda {
+  color: var(--bichu-cor-text-secondary);
+}
+.blocoInterno {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bichu-space-3);
+  padding: var(--bichu-space-4);
+  border-radius: var(--bichu-radius-md);
+  background: var(--bichu-cor-surface-sunken);
+}
+.selecao {
+  height: var(--bichu-space-12);
+  padding: 0 var(--bichu-space-4);
+  border: var(--bichu-border-hairline) solid var(--bichu-cor-outline-control);
+  border-radius: var(--bichu-radius-md);
+  background: var(--bichu-cor-surface);
+  color: var(--bichu-cor-text-primary);
+  font: inherit;
+  width: 100%;
+}
+.area {
+  min-height: 7rem;
+  padding: var(--bichu-space-3) var(--bichu-space-4);
+  resize: vertical;
+  height: auto;
+}
+
+/* Cabecalho do encontro na fila */
+.cabecalho {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--bichu-space-4);
+  align-items: flex-end;
+}
+.cabecalhoTexto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bichu-space-1);
+}
+
+/* Fila de pedidos */
+.fila {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bichu-space-4);
+}
+.abas {
+  display: flex;
+  gap: var(--bichu-space-1);
+  border-bottom: var(--bichu-border-hairline) solid var(--bichu-cor-outline);
+  overflow-x: auto;
+}
+.aba {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--bichu-space-2);
+  min-height: var(--bichu-target-min);
+  padding: 0 var(--bichu-space-4);
+  border: 0;
+  border-bottom: var(--bichu-border-thick) solid transparent;
+  background: none;
+  color: var(--bichu-cor-text-secondary);
+  font: inherit;
+  font-weight: var(--bichu-type-label-font-weight);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.aba[aria-selected='true'] {
+  color: var(--bichu-cor-primary);
+  border-bottom-color: var(--bichu-cor-primary);
+}
+.aba:hover {
+  background: var(--bichu-cor-surface-sunken);
+}
+.abaN {
+  min-width: var(--bichu-space-6);
+  padding: 0 var(--bichu-space-2);
+  border-radius: var(--bichu-radius-full);
+  background: var(--bichu-cor-surface-sunken);
+  color: var(--bichu-cor-text-primary);
+  text-align: center;
+}
+.pedidos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  border: var(--bichu-border-hairline) solid var(--bichu-cor-outline);
+  border-radius: var(--bichu-radius-lg);
+}
+.pedido {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--bichu-space-4);
+  padding: var(--bichu-space-4);
+}
+.pedido + .pedido {
+  border-top: var(--bichu-border-hairline) solid var(--bichu-cor-outline);
+}
+.pedidoTexto {
+  flex: 1;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--bichu-space-1);
+}
+.pedidoNome {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--bichu-space-2);
+}
+.pedidoAcoes {
+  display: flex;
+  gap: var(--bichu-target-gap-consequencia-alta);
+  align-items: center;
+}
+.semNome {
+  color: var(--bichu-cor-text-secondary);
+  font-style: italic;
+}
+.validada {
+  background: var(--bichu-cor-success-container);
+  color: var(--bichu-cor-success);
+}
+.naoValidada {
+  background: var(--bichu-cor-surface-sunken);
+  color: var(--bichu-cor-text-secondary);
+}
