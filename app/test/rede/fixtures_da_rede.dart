@@ -256,7 +256,11 @@ String textoDaTela(WidgetTester tester) {
   return partes.join('\n');
 }
 
-/// Os rotulos semanticos da arvore, para as iscas do leitor de tela.
+/// Os rotulos semanticos da tela da frente, para as iscas do leitor de tela.
+///
+/// **Exige `tester.ensureSemantics()` antes de montar o app**, e reprova se
+/// a arvore vier vazia: uma isca que le uma arvore desligada aprovaria
+/// qualquer coisa.
 String rotulosSemanticos(WidgetTester tester) {
   final partes = <String>[];
   void visitar(SemanticsNode n) {
@@ -270,8 +274,9 @@ String rotulosSemanticos(WidgetTester tester) {
     });
   }
 
-  final raiz = tester.binding.pipelineOwner.semanticsOwner?.rootSemanticsNode;
-  if (raiz != null) visitar(raiz);
-  return partes.join('\n');
+  visitar(tester.getSemantics(find.byType(Scaffold).last));
+  final texto = partes.where((p) => p.isNotEmpty).join('\n');
+  expect(texto, isNotEmpty, reason: 'a arvore semantica veio vazia');
+  return texto;
 }
 

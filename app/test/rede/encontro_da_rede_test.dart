@@ -449,6 +449,7 @@ void main() {
       // ISCA: acrescente em `_caixaDoPrivado` um ramo para um estado de
       // recusa com o titulo `Pedido não aprovado`, e faca o servidor abaixo
       // responder `declined`. Este caso reprova pelo texto.
+      final semantica = tester.ensureSemantics();
       for (final estado in <String>['requested', 'declined']) {
         final rede = redePrivada(estado: estado);
         await abrirEncontro(tester, rede: rede, titulo: tituloPrivado);
@@ -465,8 +466,10 @@ void main() {
         if (estado == 'declined') {
           expect(find.text('Desistir do pedido'), findsNothing);
         }
+        expect(falado, contains('pedido enviado'));
         await tester.pumpWidget(const SizedBox.shrink());
       }
+      semantica.dispose();
     });
 
     testWidgets('aprovado: o conteúdo oculto aparece, sem distância',

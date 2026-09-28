@@ -32,6 +32,14 @@ const List<String> arquivosDaHistoria = <String>[
   // peca em que um hex literal entra sem ninguem notar.
   'lib/widgets/barra_de_listagem.dart',
   'lib/telas/perto/lista_do_diretorio.dart',
+  // A `Rede` no desenho novo (BICHUS-251/279): capa, selos, bloco de dia,
+  // mapa e banner da marca sao pecas em que um hex ou um 12 solto entrariam
+  // sem ninguem notar. O banner usa `BichuCores.claro` e nao hex.
+  'lib/telas/rede/agenda_da_rede.dart',
+  'lib/telas/rede/cartao_do_encontro.dart',
+  'lib/telas/rede/encontro_da_rede.dart',
+  'lib/telas/rede/local_do_encontro.dart',
+  'lib/telas/rede/pecas_da_rede.dart',
 ];
 
 /// Um achado do portao: o arquivo, a linha e o motivo.
