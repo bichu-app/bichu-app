@@ -308,6 +308,10 @@ function bancada(mundo = mundoNovo()): Bancada {
         return Promise.resolve('job-1');
       },
       claim: () => Promise.resolve([]),
+      // Este teste nao exercita a fila; a varredura de orfaos entra na porta
+      // porque o tipo a exige, e devolver lista vazia e o que um dublê honesto
+      // faz -- inventar orfao aqui seria o dublê contando uma historia propria.
+      recuperarOrfaos: () => Promise.resolve([]),
       complete: () => Promise.resolve(),
       fail: () => Promise.resolve(),
     },
