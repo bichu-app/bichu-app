@@ -17,8 +17,14 @@ npm run dev        # servidor de desenvolvimento do Vite
 ## Build
 
 ```sh
-npm run build      # site estático em admin/dist/
+npm run build      # site estático em admin/dist/ (painel e /entrar/)
 ```
+
+O build de produção não gera mapa de código (D48): nem `.map`, nem
+`sourceMappingURL`. O próprio `npm run build` termina com
+`scripts/conferir-dist.mjs`, que reprova se aparecer um dos dois
+(`npm run verify:dist` roda só a conferência). `vite build --mode development`
+mantém o mapa.
 
 O build não lê nada fora de `admin/`. A API é chamada na mesma origem do site,
 pelo caminho relativo `/v1` (SPA e `/v1/admin` servidos em `admin.bichu.app`).

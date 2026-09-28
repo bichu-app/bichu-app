@@ -1,6 +1,4 @@
 /// <reference types="vitest/config" />
-import { fileURLToPath } from 'node:url';
-
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 
@@ -34,14 +32,15 @@ export default defineConfig(({ mode }) => {
       // Dois documentos (ADR-0027 item 5): o painel e o login isolado em /entrar/.
       rollupOptions: {
         input: {
-          painel: fileURLToPath(new URL('./index.html', import.meta.url)),
-          entrar: fileURLToPath(new URL('./entrar/index.html', import.meta.url)),
+          painel: 'index.html',
+          entrar: 'entrar/index.html',
         },
       },
       emptyOutDir: true,
-      // Mapa gerado, mas sem o comentario que o anuncia no bundle: quem decide
-      // se ele e servido ou enviado a um rastreador de erro e quem publica.
-      sourcemap: 'hidden',
+      // D48: build de producao sem `.map` e sem `sourceMappingURL`. Fora de
+      // producao (`vite build --mode development`) o mapa continua completo.
+      // `npm run build` confere o resultado com scripts/conferir-dist.mjs.
+      sourcemap: !producao,
       target: 'es2022',
     },
     test: {
