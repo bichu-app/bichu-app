@@ -73,6 +73,8 @@ export interface SessaoAdministrativaConferida {
   readonly csrfTokenHash: Buffer;
   /** Oito primeiros bytes do hash da sessao, em hexadecimal: o que vai na trilha. */
   readonly etiqueta: string;
+  /** O instante da senha (`created_at`). A rotacao o herda; o teto conta dele. */
+  readonly instanteDaSenha: Date;
   readonly idleExpiresAt: Date;
   readonly absoluteExpiresAt: Date;
 }
@@ -123,7 +125,7 @@ export interface PortaDaSessaoAdministrativa {
 }
 
 export interface OpcoesDaSuperficieAdministrativa {
-  /** `ADMIN_ORIGIN`, a origem exata do painel (`https://admin.bichu.app`). */
+  /** `ADMIN_ORIGIN`, a origem exata do painel (em producao, o host `admin.bichu.app` com esquema https). */
   readonly origem: string;
   readonly sessoes: PortaDaSessaoAdministrativa;
 }
@@ -299,7 +301,6 @@ export function escoparRotasAdministrativas(
   }
   const plugin: FastifyPluginCallback = (escopo, _opcoes, pronto) => {
     escopo.decorate('superficieAdministrativa', opcoes);
-    escopo.decorateRequest('sessaoAdministrativa', undefined);
     escopo.addHook('onRequest', criarGuarda(opcoes));
     // Resposta administrativa nunca vai para cache intermediario (D48). A borda
     // repete o cabecalho; aqui ele vale tambem para quem chega pela porta direta.

@@ -67,6 +67,7 @@ function sessao(id: string, csrf: string, papeis: readonly string[]): SessaoAdmi
     etiqueta: '0011223344556677',
     idleExpiresAt: comoData(AGORA),
     absoluteExpiresAt: comoData(AGORA),
+    instanteDaSenha: comoData(AGORA),
   };
 }
 
