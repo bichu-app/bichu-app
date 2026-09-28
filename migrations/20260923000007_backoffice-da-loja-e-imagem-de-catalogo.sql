@@ -82,7 +82,11 @@ COMMENT ON COLUMN upload_intents.purpose IS
 
 CREATE TABLE catalog_images (
   id                uuid        PRIMARY KEY,
-  upload_intent_id  uuid        NOT NULL UNIQUE REFERENCES upload_intents (id),
+  -- Anulavel, com SET NULL: o envio e de uma conta (`upload_intents.user_id`
+  -- e CASCADE), e a exclusao da conta de um administrador nao pode travar nem
+  -- levar a imagem que ja esta num produto ou num encontro. A imagem fica; o
+  -- que some e a ligacao com o envio (decisao da coordenacao, 28/09).
+  upload_intent_id  uuid        UNIQUE REFERENCES upload_intents (id) ON DELETE SET NULL,
   purpose           text        NOT NULL
                     CONSTRAINT catalog_images_proposito
                     CHECK (purpose IN ('store_item', 'network_event')),
@@ -105,6 +109,8 @@ COMMENT ON TABLE catalog_images IS
   'Imagem de item da Loja ou de encontro da Rede, enviada pelo painel pelo caminho do ADR-0007. Nunca URL externa.';
 COMMENT ON COLUMN catalog_images.id IS
   'Identidade interna. NUNCA sai em resposta: o painel ve `source`, `status` e a URL da derivada.';
+COMMENT ON COLUMN catalog_images.upload_intent_id IS
+  'O envio que originou a imagem. Nulo depois que a conta que enviou foi apagada: a imagem continua no produto ou no encontro, e o painel passa a ve-la sem `upload_id`.';
 COMMENT ON COLUMN catalog_images.public_key IS
   'Chave da derivada no bucket PUBLICO, com 128 bits aleatorios. Nula enquanto processa: a leitura publica so a serve com `status = ready`.';
 

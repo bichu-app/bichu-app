@@ -981,7 +981,8 @@ export interface StoreItemImagesTable {
 export interface CatalogImagesTable {
   /** Identidade interna. Nunca projetada em resposta. */
   id: string;
-  upload_intent_id: string;
+  /** Nulo depois que a conta que enviou foi apagada (`ON DELETE SET NULL`). */
+  upload_intent_id: string | null;
   purpose: PropositoDaImagemDeCatalogo;
   status: Generated<StatusDaFoto>;
   /** Chave da derivada publica. Nula ate `ready`. */

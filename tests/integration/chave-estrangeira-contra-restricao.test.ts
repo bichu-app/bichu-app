@@ -644,14 +644,10 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.store_partners',
     aoApagar: 'NO ACTION',
   },
-  // ADR-0027 A.3 (BICHUS-267). Como o apendice a escreve, sem `ON DELETE`: o
-  // envio de uma imagem de catalogo existente nao se apaga.
-  //
-  // CONSEQUENCIA MEDIDA, e ela esta nos Riscos da entrega: `upload_intents.user_id`
-  // e CASCADE, entao apagar a conta do administrador que enviou uma imagem de
-  // catalogo e RECUSADO por `catalog_images_upload_intent_id_fkey`. Para conta
-  // dedicada, que nao entra no app e nao pede exclusao por ele, isso e trava e
-  // nao perda; a decisao de desligar o envio da conta e do dono do ADR-0027.
+  // ADR-0027 A.3 (BICHUS-267), com a decisao da coordenacao de 28/09: a
+  // referencia ao envio e SET NULL. `upload_intents.user_id` e CASCADE, e com
+  // NO ACTION apagar a conta de um administrador que enviou imagem seria
+  // RECUSADO. A imagem fica no produto ou no encontro; some so a ligacao.
   // ADR-0027 A.2.1 (BICHUS-267). Especie, tags e imagens do item. As tres
   // ligacoes a partir do ITEM sao CASCADE, e o que some junto e so a ligacao:
   // o item nunca e apagado pelo painel (retirar nao apaga), entao a cascata so
@@ -694,7 +690,7 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   'public.catalog_images.catalog_images_upload_intent_id_fkey': {
     colunas: ['upload_intent_id'],
     referencia: 'public.upload_intents',
-    aoApagar: 'NO ACTION',
+    aoApagar: 'SET NULL',
   },
 
   // -------------------------------------------------------------------------

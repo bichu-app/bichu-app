@@ -46,8 +46,12 @@ export type EstadoDaImagem = 'processing' | 'ready' | 'rejected';
 
 /** Uma imagem da galeria do item, como a escrita a enxerga. */
 export interface ImagemDoItem {
-  /** O envio (`upload_intents.id`) de que ela nasceu: e o que o painel devolve em `images`. */
-  readonly uploadId: string;
+  /**
+   * O envio (`upload_intents.id`) de que ela nasceu: e o que o painel devolve
+   * em `images`. Nulo depois que a conta que enviou foi apagada: a imagem
+   * continua no item, sem envio a que apontar.
+   */
+  readonly uploadId: string | null;
   /** `catalog_images.id`, interno. So a trilha e a escrita o veem. */
   readonly imageId: string;
   readonly position: number;
@@ -339,7 +343,7 @@ export function projetarParceiro(p: ParceiroAdministrativo): ParceiroProjetado {
 
 /** `AdminCatalogGalleryImage`: a imagem da galeria como o painel a ve. */
 export interface ImagemProjetada {
-  readonly upload_id: string;
+  readonly upload_id: string | null;
   readonly position: number;
   readonly alt_text: string;
   readonly source: 'uploaded';
