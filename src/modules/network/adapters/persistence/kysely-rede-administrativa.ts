@@ -46,6 +46,7 @@ import {
   type RedeAdministrativaRepository,
   type TransacaoDaRede,
 } from '../../ports/rede-administrativa.js';
+import type { LeituraDoPedidoAprovado } from '../../ports/aviso-de-aprovacao.js';
 import { escaparCuringas } from './kysely-network-repository.js';
 
 const VIOLACAO_DE_UNICIDADE = '23505';
@@ -558,4 +559,21 @@ export async function expurgarPedidosVencidos(db: DbExecutor, agora: Date, dias:
               ELSE COALESCE(e.ends_at, e.starts_at)
             END) < ${agora}::timestamptz - make_interval(days => ${dias})`.execute(db);
   return Number(r.numAffectedRows ?? 0n);
+}
+
+/** O que o worker le para o push de aprovacao: de quem e o pedido e o titulo. */
+export function criarLeituraDoPedidoAprovado(db: DbExecutor): LeituraDoPedidoAprovado {
+  return {
+    async pedidoAprovado(pedidoId) {
+      const linha = await db
+        .selectFrom('network_event_join_requests as j')
+        .innerJoin('network_events as e', 'e.id', 'j.event_id')
+        .select(['j.user_id as user_id', 'e.title as title'])
+        .where('j.id', '=', pedidoId)
+        .where('j.status', '=', 'approved')
+        .where('e.publication_status', 'in', ['published', 'cancelled'])
+        .executeTakeFirst();
+      return linha === undefined ? null : { userId: linha.user_id, tituloDoEncontro: linha.title };
+    },
+  };
 }

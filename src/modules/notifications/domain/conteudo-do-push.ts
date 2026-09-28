@@ -368,3 +368,28 @@ export function montarMensagemDePush(contexto: ContextoDoAviso): ConteudoDoPush 
   assegurarSuperficiePublica(conteudo);
   return conteudo;
 }
+
+/**
+ * O aviso de pedido aprovado para encontro privado da `Rede` (ADR-0027 item
+ * 17, 22.10.1). **Leva so o titulo do encontro**, nunca lugar nem horario: o
+ * conteudo passa pelo provedor de push e aparece na tela bloqueada, e o lugar
+ * do privado e exatamente o que so a conta aprovada ve, dentro do app.
+ *
+ * Nao ha `ref` nos dados: o `slug` do privado e aleatorio, mas "so o titulo" e
+ * a regra, e o app abre em "meus pedidos". A agrupamento e por tipo.
+ *
+ * A porteira roda igual: um titulo com cara de endereco ("Encontro na Rua X,
+ * 100") estoura e o push nao sai, e o tutor ve a aprovacao ao abrir o app.
+ */
+export function montarAvisoDePedidoAprovado(tituloDoEncontro: string): ConteudoDoPush {
+  const conteudo: ConteudoDoPush = {
+    titulo: 'Seu pedido foi aprovado',
+    corpo: tituloDoEncontro,
+    dados: { tipo: 'pedidoAprovado' },
+    chaveDeAgrupamento: 'pedidoAprovado',
+    validadeEmSegundos: VINTE_E_QUATRO_HORAS,
+    prioridade: 'normal',
+  };
+  assegurarSuperficiePublica(conteudo);
+  return conteudo;
+}

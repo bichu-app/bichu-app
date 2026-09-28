@@ -25,7 +25,9 @@ export type JobKind =
   | 'media.purge_expired'
   | 'email.send'
   | 'push.send'
-  | 'match.recompute';
+  | 'match.recompute'
+  /** ADR-0027 item 17: o push de pedido aprovado para encontro privado, so com o titulo. */
+  | 'network.join_request_approved';
 
 export interface JobRecord<P = unknown> {
   readonly id: string;
