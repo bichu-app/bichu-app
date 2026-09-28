@@ -24,7 +24,8 @@ describe('casca e rotas', () => {
     const nav = await screen.findByRole('navigation', { name: 'Seções' });
     await waitFor(() => expect(router.state.location.pathname).toBe('/loja'));
     for (const nome of ['Loja', 'Parceiros', 'Tags', 'Rede']) expect(within(nav).getByRole('link', { name: nome })).toBeInTheDocument();
-    expect(within(nav).getByRole('link', { name: 'Loja' })).toHaveAttribute('aria-current', 'page');
+    // O redirecionamento chega antes da nova renderizacao: esperar, e nao ler no mesmo tique.
+    await waitFor(() => expect(within(nav).getByRole('link', { name: 'Loja' })).toHaveAttribute('aria-current', 'page'));
     expect(screen.getByRole('main')).toBeInTheDocument();
     // BO-1: o rodape mostra so o nome de exibicao.
     expect(within(nav).getByRole('button', { name: 'Conta de Marina Rocha' })).toBeInTheDocument();

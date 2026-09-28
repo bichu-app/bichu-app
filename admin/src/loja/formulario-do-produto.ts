@@ -265,7 +265,7 @@ function mensagemDoCodigo(erro: { field: string; code: string }, campo: CampoDoP
     const indice = /\[(\d+)\]/.exec(erro.field)?.[1];
     const slug = indice !== undefined ? contexto.tagsEnviadas?.[Number(indice)] : undefined;
     const nome = slug ? (contexto.rotuloDaTag?.(slug) ?? slug) : undefined;
-    return nome ? `A tag “${nome}” foi desativada. Desmarque-a para salvar, ou reative-a em Tags.` : 'Uma das tags foi desativada. Desmarque-a para salvar, ou reative-a em Tags.';
+    return nome ? `A tag “${nome}” foi desativada. Desmarque-a para salvar, ou reative-a em Tags.` : 'Uma das tags escolhidas foi desativada. Veja em Tags qual é, e desmarque-a ou reative-a para salvar.';
   }
   return MENSAGEM_PADRAO[campo];
 }

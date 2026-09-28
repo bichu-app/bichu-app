@@ -161,8 +161,7 @@ export default function FormularioDeParceiro() {
     if (tipo === 'validation-failed') {
       const e: Partial<Record<Campo, string>> = {};
       for (const erro of errosDoProblema(error)) {
-        if (erro.code === 'host_mismatch_items') e['p-host'] = 'Os produtos deste parceiro têm links do site atual. Troque os links deles antes de trocar o site do parceiro.';
-        else if (erro.field === 'host') e['p-host'] = 'Escreva só o endereço do site, sem https:// e sem barra.';
+        if (erro.field === 'host') e['p-host'] = 'Escreva só o endereço do site, sem https:// e sem barra.';
         else if (erro.field === 'name') e['p-nome'] = 'Informe o nome do parceiro, de 2 a 80 caracteres.';
         else if (erro.field === 'slug') e['p-slug'] = 'Use de 3 a 30 letras minúsculas, números ou hífen, sem hífen no começo nem no fim.';
         else if (erro.field === 'sort_order') e['p-ordem'] = 'Use um número inteiro, por exemplo 0 ou 10.';

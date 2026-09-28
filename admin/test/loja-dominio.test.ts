@@ -126,5 +126,9 @@ describe('formulario de produto', () => {
       },
       tagsRecusadas: ['sem-graos'],
     });
+    // N5 (UX 30.6): sem o nome da tag.
+    expect(errosDoServidor([{ field: 'tag_slugs[3]', code: 'inactive_tag' }]).erros['f-tags']).toBe(
+      'Uma das tags escolhidas foi desativada. Veja em Tags qual é, e desmarque-a ou reative-a para salvar.',
+    );
   });
 });

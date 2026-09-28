@@ -261,7 +261,7 @@ describe('casos que estavam sem teste', () => {
     resposta = problema(401, 'reauthentication-required');
     fireEvent.change(within(dialogo).getByLabelText('Sua senha'), { target: { value: 'uma frase longa de verdade' } });
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Retirar' }));
-    expect(await within(dialogo).findByText('A confirmação com senha não vale mais. Digite a senha de novo e confirme.')).toBeInTheDocument();
+    expect(await within(dialogo).findByText('A confirmação com senha expirou. Digite a senha de novo e confirme.')).toBeInTheDocument();
     expect(screen.getByText('Publicado')).toBeInTheDocument();
   });
 });

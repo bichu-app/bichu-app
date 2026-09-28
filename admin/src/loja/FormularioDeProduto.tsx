@@ -319,7 +319,7 @@ export default function FormularioDeProduto() {
     }
     if (tipoDoProblema(error) === 'precondition-failed') return { ok: false, mensagem: CONFLITO };
     if (tipoDoProblema(error) === 'reauthentication-required')
-      return { ok: false, mensagem: 'A confirmação com senha não vale mais. Digite a senha de novo e confirme.' };
+      return { ok: false, mensagem: 'A confirmação com senha expirou. Digite a senha de novo e confirme.' };
     return { ok: false, mensagem: 'Não conseguimos retirar o produto. Tente de novo.' };
   }
 

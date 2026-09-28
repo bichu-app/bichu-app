@@ -148,7 +148,7 @@ export default function ListaDeProdutos() {
       return { ok: false, mensagem: 'Alguém alterou este produto antes de você. A lista foi atualizada; confira e tente de novo.' };
     }
     if (tipoDoProblema(error) === 'reauthentication-required')
-      return { ok: false, mensagem: 'A confirmação com senha não vale mais. Digite a senha de novo e confirme.' };
+      return { ok: false, mensagem: 'A confirmação com senha expirou. Digite a senha de novo e confirme.' };
     return { ok: false, mensagem: 'Não conseguimos retirar o produto. Tente de novo.' };
   }
 
