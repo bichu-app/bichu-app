@@ -4,7 +4,7 @@
  * 6): sem chave, sem custo, e a CSP libera so `tile.openstreetmap.org` em
  * `img-src`. **Sem busca de endereco**: seria geocodificacao, e o ADR-0006 a
  * proibe (D.4). A alternativa de teclado (WCAG 2.1.1) e a mira: com o mapa em
- * foco, as setas movem o mapa sob a mira fixa no centro, + e - aproximam
+ * foco, as setas movem o mapa sob a mira fixa no centro, + aproxima e - afasta
  * (teclado nativo do Leaflet) e Enter ou espaco marca o centro.
  *
  * O ponto e opcional no contrato (BO-8): a tela recomenda, nao bloqueia.
@@ -196,7 +196,7 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
         />
         <span className={estilos.mira} aria-hidden="true" />
         <span className={`${estilos.dica} t-body-sm`} id={idDaDica}>
-          Setas movem a mira · Enter marca o ponto · + e − aproximam
+          Setas movem a mira. Enter marca o ponto. + aproxima e − afasta.
         </span>
       </div>
       {mensagemDeErro ? (

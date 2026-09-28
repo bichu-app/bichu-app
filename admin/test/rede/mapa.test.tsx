@@ -25,7 +25,7 @@ describe('seletor de ponto no mapa', () => {
     expect(screen.getByText('Nenhum ponto marcado.')).toBeInTheDocument();
     const mapa = screen.getByRole('application', { name: 'Mapa para marcar o ponto do encontro' });
     expect(mapa).toHaveAttribute('tabindex', '0');
-    expect(mapa).toHaveAccessibleDescription(/Setas movem a mira · Enter marca o ponto · \+ e − aproximam/);
+    expect(mapa).toHaveAccessibleDescription(/Setas movem a mira\. Enter marca o ponto\. \+ aproxima e − afasta\./);
   });
 
   it('Enter marca o centro da mira, sem mouse (WCAG 2.1.1)', async () => {

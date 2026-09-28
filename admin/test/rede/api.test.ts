@@ -89,3 +89,13 @@ describe('cliente da Rede contra o duble', () => {
     expect(esperaPorExtenso(3600)).toBe('1 hora');
   });
 });
+
+describe('mensagens de falha (UX 30, B16 e B19)', async () => {
+  const { mensagemDaFalha } = await import('../../src/rede/api/mensagens.ts');
+  it('removido e título repetido', () => {
+    expect(mensagemDaFalha({ tipo: 'validacao', erros: [{ field: 'slug', code: 'event_removed' }] }, 'salvar')).toBe(
+      'Este encontro foi removido. Ele não aparece no app e não pode mais ser alterado.',
+    );
+    expect(mensagemDaFalha({ tipo: 'endereco-ocupado' }, 'salvar')).toBe('Já existe um encontro com um título parecido. Mude o título e tente de novo.');
+  });
+});

@@ -149,6 +149,7 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
     await usuario.click(screen.getByRole('menuitem', { name: 'Remover' }));
     const dialogo = screen.getByRole('alertdialog');
+    expect(within(dialogo).getByText('O encontro sai do app, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar encontro.')).toBeInTheDocument();
     await usuario.click(within(dialogo).getByRole('button', { name: 'Remover' }));
     expect(within(dialogo).getByText('Digite sua senha para confirmar.', { selector: '.err' })).toBeInTheDocument();
     expect(escritas(duble, 'DELETE', /events\/[^/]+$/)).toHaveLength(0);
@@ -196,6 +197,7 @@ describe('Rede: formulário novo', () => {
     await usuario.selectOptions(screen.getByLabelText('Cobrado'), 'por dupla');
     expect(screen.getByText('R$ 15,50 por dupla')).toBeInTheDocument();
     await usuario.click(screen.getByRole('checkbox', { name: 'Guia' }));
+    expect(screen.getByRole('checkbox', { name: 'Saquinhos para cocô' })).toBeInTheDocument();
     await usuario.click(screen.getByRole('checkbox', { name: 'Gigante' }));
     await usuario.click(screen.getByRole('checkbox', { name: 'Sombra' }));
     await usuario.type(screen.getByLabelText('Observações'), 'Ponto ao lado do coreto.');
@@ -258,6 +260,8 @@ describe('Rede: edição', () => {
     await usuario.type(local, 'Praça General Polidoro');
     await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    expect(within(dialogo).getByText('Vai no e-mail que avisa os administradores. Não aparece no app.')).toBeInTheDocument();
+    expect(within(dialogo).getByText('Todos os administradores recebem um e-mail com o antes e o depois.')).toBeInTheDocument();
     expect(escritas(duble, 'POST', /relocation$/)).toHaveLength(0);
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque fechou para manutenção.');
     await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);

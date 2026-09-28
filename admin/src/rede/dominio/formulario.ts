@@ -378,10 +378,10 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
     if (plano.oQueMudou.includes('local')) {
       const mesmoNome = f.local.trim() === original.place.place_name && f.bairro.trim() === original.place.neighborhood;
       if (!mesmoNome) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
-      else dados.push(f.ponto ? 'o ponto novo no mapa' : 'o encontro sem ponto no mapa');
+      else dados.push(f.ponto ? 'o ponto novo no mapa' : 'o encontro sem mapa');
     }
     frases.push(
-      `O app passa a mostrar ${dados.join(', em ')}. Quem já viu o encontro no app não recebe aviso; todos os administradores recebem.`,
+      `O app passa a mostrar ${dados.join(', em ')}. Quem usa o app não é avisado da mudança.`,
     );
   }
   if (plano.acesso) {
@@ -393,8 +393,10 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
       if (adm.kind === 'paid' && adm.price && eraPago) partes.push(`o valor muda para ${valorComoOAppMostra(adm.price.amount, adm.price.unit)}`);
       else partes.push(adm.kind === 'paid' ? 'agora é pago' : 'agora é gratuito');
     }
-    frases.push(`O encontro ${listaEmPortugues(partes)}. O app passa a mostrar isso na hora, e todos os administradores recebem aviso da mudança.`);
-    if (plano.acesso.visibility === 'private') frases.push('O endereço antigo do encontro no app deixa de funcionar.');
+    frases.push(`O encontro ${listaEmPortugues(partes)}, e o app mostra isso na hora.`);
+    if (plano.acesso.visibility === 'private') frases.push('O link antigo do encontro para de funcionar.');
   }
+  // UX 30, B3 e B11: o aviso aos administradores e uma frase so, no fim, e nao uma por mudanca.
+  if (plano.mudanca || plano.acesso) frases.push('Todos os administradores recebem um e-mail com o antes e o depois.');
   return frases;
 }

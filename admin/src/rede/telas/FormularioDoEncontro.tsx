@@ -297,7 +297,7 @@ export default function FormularioDoEncontro() {
       <>
         <VoltarParaARede />
         <h1 className="t-headline">{encontro?.title}</h1>
-        <Banner tipo="info">Este encontro foi removido e não pode mais ser alterado.</Banner>
+        <Banner tipo="info">Este encontro foi removido. Ele não aparece no app e não pode mais ser alterado.</Banner>
       </>
     );
   }
@@ -521,7 +521,7 @@ export default function FormularioDoEncontro() {
           titulo={tituloDaMudanca(dialogo.plano)}
           corpo={corpoDaMudanca(encontro, f, dialogo.plano)}
           rotuloDoMotivo="Motivo"
-          ajudaDoMotivo="Vai no aviso aos administradores. Não aparece no app."
+          ajudaDoMotivo="Vai no e-mail que avisa os administradores. Não aparece no app."
           rotuloDaAcao="Salvar a mudança"
           perigo={false}
           escopos={dialogo.escopos}

@@ -19,7 +19,7 @@ export const ITENS_PARA_LEVAR: Record<ItemParaLevar, string> = {
   water: 'Água',
   water_bowl: 'Pote de água',
   leash: 'Guia',
-  poop_bags: 'Saquinhos para recolher',
+  poop_bags: 'Saquinhos para cocô',
   treats: 'Petisco',
   towel: 'Toalha',
   vaccination_card: 'Carteira de vacinação',

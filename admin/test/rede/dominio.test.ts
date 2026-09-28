@@ -195,7 +195,21 @@ describe('plano de edição (as três operações)', () => {
     const plano = planoDeEdicao(original, f);
     expect(plano.acesso).toEqual({ visibility: 'private', admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } } });
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de acesso?');
-    expect(corpoDaMudanca(original, f, plano).join(' ')).toContain('agora é privado e agora é pago');
+    expect(corpoDaMudanca(original, f, plano)).toEqual([
+      'O encontro agora é privado e agora é pago, e o app mostra isso na hora.',
+      'O link antigo do encontro para de funcionar.',
+      'Todos os administradores recebem um e-mail com o antes e o depois.',
+    ]);
+  });
+  it('local e acesso juntos: o aviso aos administradores sai uma vez só, no fim (UX 30 B3, B11, B12)', () => {
+    const f = { ...formularioDoEncontro(original), ponto: null, pago: true, valor: '20', unidade: 'per_dog' as const };
+    const plano = planoDeEdicao(original, f);
+    expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local e de acesso?');
+    expect(corpoDaMudanca(original, f, plano)).toEqual([
+      'O app passa a mostrar o encontro sem mapa. Quem usa o app não é avisado da mudança.',
+      'O encontro agora é pago, e o app mostra isso na hora.',
+      'Todos os administradores recebem um e-mail com o antes e o depois.',
+    ]);
   });
 });
 

@@ -145,7 +145,7 @@ export default function ListaDeEncontros() {
       {remover && (
         <DialogoComSenha
           titulo={`Remover “${remover.title}”?`}
-          corpo="O encontro some do app e desta lista, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar encontro."
+          corpo="O encontro sai do app, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar encontro."
           rotuloDaAcao="Remover"
           escopo="network_event_removal"
           executar={(token) => executarRemocao(remover, token)}

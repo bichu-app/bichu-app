@@ -11,7 +11,7 @@ const CODIGOS: Record<string, string> = {
   bidi_control: 'Tire do texto os caracteres invisíveis de direção.',
   event_in_past: 'O início precisa ser depois de agora.',
   event_not_published: 'Este encontro não está mais publicado, e data, local e acesso não mudam.',
-  event_removed: 'Este encontro foi removido e não pode mais ser alterado.',
+  event_removed: 'Este encontro foi removido. Ele não aparece no app e não pode mais ser alterado.',
   admission_incomplete: 'Informe o valor em reais, por exemplo 15 ou 15,50.',
   request_not_pending: 'Este pedido já foi decidido ou a pessoa desistiu. A lista foi atualizada.',
 };
@@ -36,7 +36,7 @@ export function mensagemDaFalha(falha: Falha, acao: string): string {
     case 'sem-conexao':
       return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
     case 'endereco-ocupado':
-      return 'Já existe um encontro com este endereço. Mude o título e tente de novo.';
+      return 'Já existe um encontro com um título parecido. Mude o título e tente de novo.';
     case 'sessao':
       return 'Sua sessão terminou. Entre de novo para continuar.';
     case 'servidor':
