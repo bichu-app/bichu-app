@@ -13,11 +13,10 @@
  *    de `identity` le `users`, e o painel nao le o cadastro do app (D42).
  */
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
 import { describe, it } from 'node:test';
-
-import { ESLint } from 'eslint';
 
 const RAIZ = process.cwd();
 const PERMITIDOS_DE_IDENTITY = new Set(['identity/ports/senha.js', 'identity/ports/lista-de-senhas-vazadas.js']);
@@ -46,16 +45,40 @@ function alvoNoModulo(arquivo: string, especificador: string): string | undefine
   return rel.split(sep).join('/');
 }
 
-async function lint(filePath: string, texto: string): Promise<string[]> {
-  // So a regra de fronteira: as regras que precisam do programa TypeScript
-  // inteiro nao rodam sobre um arquivo que nao existe no disco.
-  const eslint = new ESLint({
-    cwd: RAIZ,
-    overrideConfig: { languageOptions: { parserOptions: { projectService: false, project: null } } },
-    ruleFilter: ({ ruleId }) => ruleId.endsWith('/fronteira-de-modulo'),
-  });
-  const [resultado] = await eslint.lintText(texto, { filePath });
-  return (resultado?.messages ?? []).map((m) => `${m.ruleId ?? 'sem-regra'}: ${m.message}`);
+/**
+ * O ESLint de verdade, com a configuracao do repositorio, num processo filho.
+ *
+ * Filho, e nao `new ESLint()` aqui dentro: carregado neste processo, o ESLint
+ * leva `eslint.config.mjs` e `architecture.rules.mjs` para o relatorio de
+ * cobertura da suite, que so aceita fonte TypeScript. `NODE_V8_COVERAGE` vai
+ * vazio para o filho pelo mesmo motivo. So a regra de fronteira roda: as que
+ * precisam do programa TypeScript inteiro nao rodam sobre arquivo que nao
+ * existe no disco.
+ */
+const SCRIPT_DO_LINT = `
+import { ESLint } from 'eslint';
+const { filePath, texto } = JSON.parse(process.argv[1]);
+const eslint = new ESLint({
+  cwd: process.cwd(),
+  overrideConfig: { languageOptions: { parserOptions: { projectService: false, project: null } } },
+  ruleFilter: ({ ruleId }) => ruleId.endsWith('/fronteira-de-modulo'),
+});
+const [r] = await eslint.lintText(texto, { filePath });
+process.stdout.write(JSON.stringify((r?.messages ?? []).map((m) => (m.ruleId ?? 'sem-regra') + ': ' + m.message)));
+`;
+
+function lint(filePath: string, texto: string): Promise<string[]> {
+  // Vazio, e nao apagado: o Node repoe `NODE_V8_COVERAGE` no filho quando a
+  // chave falta no `env` passado (e assim que a cobertura atravessa processos),
+  // e so respeita a escolha de quem a declara.
+  const ambiente = { ...process.env, NODE_V8_COVERAGE: '' };
+  const filho = spawnSync(
+    process.execPath,
+    ['--input-type=module', '-e', SCRIPT_DO_LINT, JSON.stringify({ filePath, texto })],
+    { cwd: RAIZ, env: ambiente, encoding: 'utf8' },
+  );
+  assert.equal(filho.status, 0, `o ESLint nao rodou: ${filho.stderr}`);
+  return Promise.resolve(JSON.parse(filho.stdout) as string[]);
 }
 
 void describe('fronteira-de-modulo entre admin-access e identity (ESLint)', () => {

@@ -2291,7 +2291,8 @@ export interface paths {
         /**
          * "Nao fui eu": derruba as sessoes do painel e bloqueia a conta
          * @description O aviso de sessao aberta (D46) leva o link
-         *     `https://admin.bichu.app/nao-fui-eu#t=<token>`. O token vai no
+         *     `<origem do painel>/nao-fui-eu#t=<token>` (a origem e `ADMIN_ORIGIN`,
+         *     em producao o host do painel). O token vai no
          *     **fragmento**, que o navegador nao manda ao servidor nem poe em
          *     `Referer`: nao chega a log de borda nenhum. A pagina o envia por esta
          *     operacao, e **so por `POST`**: cliente de e-mail e antivirus de borda
@@ -4494,10 +4495,9 @@ export interface components {
         };
         /**
          * @description Sessao valida, e a requisicao recusada pela guarda: conta sem o papel
-         *     exigido em `x-admin-roles` (inclusive papel removido depois do login,
-         *     D37), ou, em metodo nao seguro, `Origin` diferente de
-         *     `https://admin.bichu.app` ou `X-CSRF-Token` ausente ou divergente
-         *     (D39). A guarda decide antes de ler o recurso, entao o 403 nao diz nada
+         *     exigido em `x-admin-roles` ou desativada (D37, D38), ou, em metodo nao
+         *     seguro, `Origin` diferente da origem do painel (`ADMIN_ORIGIN`) ou
+         *     `X-CSRF-Token` ausente ou divergente (D39). A guarda decide antes de ler o recurso, entao o 403 nao diz nada
          *     sobre ele.
          */
         AdminForbidden: {

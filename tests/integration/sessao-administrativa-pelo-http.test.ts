@@ -499,10 +499,20 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
     assert.ok(daConta !== undefined && doInexistente !== undefined);
     assert.equal(daConta.status, 429);
     assert.ok(Number(daConta.cabecalhos.get('retry-after')) > 0, 'sem Retry-After');
+    // O titulo traz o prazo ("Tente de novo em 49 segundos"), e as duas
+    // respostas saem com um segundo de diferenca perto do fim da janela: o
+    // numero sai da comparacao, e o resto do corpo precisa ser identico.
+    const semPrazo = (r: Resposta): string => String(r.corpo?.['title']).replace(/\d+/g, 'N');
+    const prazo = (r: Resposta): number => Number(/\d+/.exec(String(r.corpo?.['title']))?.[0] ?? NaN);
     assert.deepEqual(
-      { status: doInexistente.status, type: tipo(doInexistente), title: doInexistente.corpo?.['title'] },
-      { status: daConta.status, type: tipo(daConta), title: daConta.corpo?.['title'] },
+      { status: doInexistente.status, type: tipo(doInexistente), title: semPrazo(doInexistente) },
+      { status: daConta.status, type: tipo(daConta), title: semPrazo(daConta) },
     );
+    // A faixa aceita e de um segundo, e so para baixo: o segundo pedido vem
+    // depois do primeiro. Prazo maior, ou mais de um segundo mais curto, seria
+    // balde diferente, que e o que o caso existe para pegar.
+    const diferenca = prazo(daConta) - prazo(doInexistente);
+    assert.ok(diferenca === 0 || diferenca === 1, `prazos ${String(prazo(daConta))} e ${String(prazo(doInexistente))}`);
   });
 
   void it('login com Origin de subdominio irmao: 403, e nenhuma sessao', async () => {
