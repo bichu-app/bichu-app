@@ -31,8 +31,10 @@ import type {
   Cabecalho,
   Classe,
   ObjectStorage,
+  OperacaoDeRede,
   PedidoDeEnvio,
 } from '../../ports/object-storage.js';
+import { PrazoDoArmazenamentoEsgotadoError } from '../../ports/object-storage.js';
 import { ehTipoAceito, ehTipoDeDerivada } from '../../domain/chave-de-objeto.js';
 import type { ObjectStorageConfig } from '../../../../shared/config/app-config.js';
 import type { AbsoluteUrl, ObjectKey } from '../../../../shared/types/brands.js';
@@ -65,7 +67,36 @@ function chaveDeAssinatura(secret: string, dataCurta: string, regiao: string): B
   return hmac(hmac(hmac(hmac(`AWS4${secret}`, dataCurta), regiao), SERVICO), 'aws4_request');
 }
 
+/**
+ * `AbortSignal.timeout` rejeita com `DOMException` de nome `TimeoutError`, no
+ * `fetch` e também na leitura do corpo que ele já tinha começado. É só esse
+ * nome que vira erro de prazo; qualquer outra falha segue como veio.
+ */
+function ehEstouroDePrazo(erro: unknown): boolean {
+  return erro instanceof Error && erro.name === 'TimeoutError';
+}
+
 export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
+  /**
+   * Roda a chamada inteira — pedido E leitura da resposta — sob um prazo só.
+   *
+   * O sinal vai para o `fetch` e continua valendo depois dele: o `arrayBuffer()`
+   * do GET lê pelo mesmo corpo, então um corpo que trava no meio também aborta.
+   * Um prazo que parasse no cabeçalho deixaria exatamente esse caso pendurado.
+   */
+  const comPrazo = async <T>(
+    operacao: OperacaoDeRede,
+    prazoMs: number,
+    chamada: (sinal: AbortSignal) => Promise<T>,
+  ): Promise<T> => {
+    try {
+      return await chamada(AbortSignal.timeout(prazoMs));
+    } catch (erro) {
+      if (ehEstouroDePrazo(erro)) throw new PrazoDoArmazenamentoEsgotadoError(operacao, prazoMs);
+      throw erro;
+    }
+  };
+
   const bucketDa = (classe: Classe): string =>
     classe === 'privado' ? config.bucketPrivate : config.bucketPublic;
 
@@ -254,23 +285,35 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
       return Promise.resolve(url.toString() as AbsoluteUrl);
     },
 
-    async head(classe, chave): Promise<Cabecalho | null> {
+    head(classe, chave): Promise<Cabecalho | null> {
       const url = urlDoObjeto(classe, chave);
-      const resposta = await fetch(url, { method: 'HEAD', headers: assinar('HEAD', url, undefined, new Date()) });
-      if (resposta.status === 404) return null;
-      if (!resposta.ok) throw new Error(`HEAD ${String(resposta.status)} no armazenamento`);
-      return {
-        contentLength: Number(resposta.headers.get('content-length') ?? '0'),
-        contentType: resposta.headers.get('content-type') ?? undefined,
-        etag: resposta.headers.get('etag') ?? undefined,
-      };
+      return comPrazo('HEAD', config.prazoCurtoMs, async (signal) => {
+        const resposta = await fetch(url, {
+          method: 'HEAD',
+          headers: assinar('HEAD', url, undefined, new Date()),
+          signal,
+        });
+        if (resposta.status === 404) return null;
+        if (!resposta.ok) throw new Error(`HEAD ${String(resposta.status)} no armazenamento`);
+        return {
+          contentLength: Number(resposta.headers.get('content-length') ?? '0'),
+          contentType: resposta.headers.get('content-type') ?? undefined,
+          etag: resposta.headers.get('etag') ?? undefined,
+        };
+      });
     },
 
-    async get(classe, chave): Promise<Buffer> {
+    get(classe, chave): Promise<Buffer> {
       const url = urlDoObjeto(classe, chave);
-      const resposta = await fetch(url, { method: 'GET', headers: assinar('GET', url, undefined, new Date()) });
-      if (!resposta.ok) throw new Error(`GET ${String(resposta.status)} no armazenamento`);
-      return Buffer.from(await resposta.arrayBuffer());
+      return comPrazo('GET', config.prazoDeTransferenciaMs, async (signal) => {
+        const resposta = await fetch(url, {
+          method: 'GET',
+          headers: assinar('GET', url, undefined, new Date()),
+          signal,
+        });
+        if (!resposta.ok) throw new Error(`GET ${String(resposta.status)} no armazenamento`);
+        return Buffer.from(await resposta.arrayBuffer());
+      });
     },
 
     async put(classe, chave, bytes, contentType): Promise<void> {
@@ -289,21 +332,30 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
         );
       }
       const url = urlDoObjeto(classe, chave);
-      const resposta = await fetch(url, {
-        method: 'PUT',
-        headers: { ...assinar('PUT', url, bytes, new Date()), 'content-type': contentType },
-        body: new Uint8Array(bytes),
+      await comPrazo('PUT', config.prazoDeTransferenciaMs, async (signal) => {
+        const resposta = await fetch(url, {
+          method: 'PUT',
+          headers: { ...assinar('PUT', url, bytes, new Date()), 'content-type': contentType },
+          body: new Uint8Array(bytes),
+          signal,
+        });
+        if (!resposta.ok) throw new Error(`PUT ${String(resposta.status)} no armazenamento`);
       });
-      if (!resposta.ok) throw new Error(`PUT ${String(resposta.status)} no armazenamento`);
     },
 
-    async delete(classe, chave): Promise<void> {
+    delete(classe, chave): Promise<void> {
       const url = urlDoObjeto(classe, chave);
-      const resposta = await fetch(url, { method: 'DELETE', headers: assinar('DELETE', url, undefined, new Date()) });
-      // 404 no apagar é sucesso: o estado desejado é "não existe".
-      if (!resposta.ok && resposta.status !== 404) {
-        throw new Error(`DELETE ${String(resposta.status)} no armazenamento`);
-      }
+      return comPrazo('DELETE', config.prazoCurtoMs, async (signal) => {
+        const resposta = await fetch(url, {
+          method: 'DELETE',
+          headers: assinar('DELETE', url, undefined, new Date()),
+          signal,
+        });
+        // 404 no apagar é sucesso: o estado desejado é "não existe".
+        if (!resposta.ok && resposta.status !== 404) {
+          throw new Error(`DELETE ${String(resposta.status)} no armazenamento`);
+        }
+      });
     },
   };
 }

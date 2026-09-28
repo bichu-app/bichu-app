@@ -23,6 +23,8 @@ const armazenamento = criarObjectStorage({
   forcePathStyle: true,
   bucketPrivate: 'privado-de-teste',
   bucketPublic: 'publico-de-teste',
+  prazoCurtoMs: 5_000,
+  prazoDeTransferenciaMs: 45_000,
 });
 
 const CHAVE = comoObjectKey('pets/p/original/abc');
