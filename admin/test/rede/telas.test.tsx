@@ -65,7 +65,10 @@ describe('Rede: lista', () => {
   it('busca digitada chega ao servidor e o sem resultado diz o que limpar', async () => {
     const { usuario } = montar('/rede');
     await screen.findByText('4 encontros');
-    await usuario.type(screen.getByRole('searchbox', { name: 'Buscar encontros' }), 'jacaré');
+    const busca = screen.getByRole('searchbox', { name: 'Buscar encontros' });
+    // O servidor busca em title, summary e place_name: o placeholder diz os tres.
+    expect(busca).toHaveAttribute('placeholder', 'Buscar por título, resumo ou local');
+    await usuario.type(busca, 'jacaré');
     expect(await screen.findByText('Nenhum encontro com “jacaré”.')).toBeInTheDocument();
     await usuario.click(screen.getAllByRole('button', { name: 'Limpar busca' }).at(-1) as HTMLElement);
     expect(await screen.findByText('4 encontros')).toBeInTheDocument();
@@ -325,6 +328,30 @@ describe('Rede: fila de pedidos', () => {
     await usuario.click(within(recusado.closest('.banner') as HTMLElement).getByRole('button', { name: 'Desfazer' }));
     expect(await screen.findByText('Pedido de João Pedro aprovado.')).toBeInTheDocument();
     expect(duble.pedidos.find((p) => p.ref.startsWith('rq_Joao'))?.status).toBe('approved');
+  });
+
+  it('decidir atualiza lista e contagens na tela, sem reler a fila (D56)', async () => {
+    const { duble, usuario } = montar(PRIVADO);
+    await screen.findByText('Carla M.');
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Recusados 1' })).toBeInTheDocument());
+    const leituras = () => duble.registro.filter((r) => r.metodo === 'GET' && r.caminho.endsWith('/join-requests')).length;
+    const antes = leituras();
+    await usuario.click(screen.getByRole('button', { name: 'Aprovar o pedido de Carla M.' }));
+    await screen.findByText('Pedido de Carla M. aprovado.');
+    await usuario.click(screen.getByRole('button', { name: 'Recusar o pedido de João Pedro' }));
+    await screen.findByText('Pedido de João Pedro recusado. A pessoa não é avisada.');
+    expect(screen.queryByText('Carla M.')).toBeNull();
+    expect(screen.queryByText('João Pedro')).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Pendentes 1' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Aprovados 2' })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'Recusados 2' })).toBeInTheDocument();
+    expect(leituras()).toBe(antes);
+  });
+
+  it('teto de linhas da fila estourado (429) diz quanto esperar', async () => {
+    montar(PRIVADO, criarDuble({ tetoDeLinhasDaFila: 2 }));
+    expect(await screen.findByText('A fila foi consultada muitas vezes na última hora. Tente de novo em 1 hora.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Atualizar' })).toBeInTheDocument();
   });
 
   it('aba Aprovados não oferece recusar; Recusados oferece aprovar; setas trocam de aba', async () => {

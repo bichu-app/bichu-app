@@ -132,6 +132,25 @@ export default function PedidosDoEncontro() {
     trocarDeAba(destino, true);
   }
 
+  /**
+   * Depois da decisao, a fila e as contagens mudam aqui mesmo, sem nova leitura: cada
+   * leitura da fila vai para a trilha e conta no teto de 300 linhas por hora (D56).
+   */
+  function aplicarDecisao(antes: EstadoDoPedido, depois: Pedido) {
+    setContagens((c) => ({
+      ...c,
+      ...(c[antes] !== undefined ? { [antes]: Math.max(0, (c[antes] ?? 1) - 1) } : {}),
+      ...(c[depois.status] !== undefined ? { [depois.status]: (c[depois.status] ?? 0) + 1 } : {}),
+    }));
+    setFila((f) => {
+      if (f.fase !== 'pronto' || f.chave !== chaveDaFila) return f;
+      const estava = f.itens.some((x) => x.ref === depois.ref);
+      if (antes === aba && estava) return { ...f, itens: f.itens.filter((x) => x.ref !== depois.ref), total: Math.max(0, f.total - 1) };
+      if (depois.status === aba && !estava) return { ...f, itens: [...f.itens, depois], total: f.total + 1 };
+      return f;
+    });
+  }
+
   async function decidir(p: Pedido, decisao: 'aprovar' | 'recusar') {
     if (decidindo) return;
     setDecidindo(p.ref);
@@ -140,16 +159,18 @@ export default function PedidosDoEncontro() {
     const nome = nomeDe(p);
     if (!r.ok) {
       setAviso({ tipo: 'erro', texto: mensagemDaFalha(r.falha, decisao === 'aprovar' ? 'aprovar o pedido' : 'recusar o pedido') });
-      setVersao((v) => v + 1);
+      // Pedido ja decidido por outra pessoa: a fila em tela esta velha, e so entao se rele.
+      if (r.falha.tipo === 'validacao') setVersao((v) => v + 1);
       return;
     }
+    aplicarDecisao(p.status, r.dados);
     setAviso(
       decisao === 'aprovar'
         ? { tipo: 'ok', texto: `Pedido de ${nome} aprovado.` }
         : { tipo: 'ok', texto: `Pedido de ${nome} recusado. A pessoa não é avisada.`, desfazer: r.dados },
     );
-    setVersao((v) => v + 1);
   }
+
 
   if (encontro === undefined) {
     return (

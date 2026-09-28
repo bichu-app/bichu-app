@@ -47,6 +47,8 @@ export interface OpcoesDoDuble {
   atrasoMs?: number;
   /** Faz a proxima leitura da lista falhar com 500. */
   falharLista?: boolean;
+  /** Teto de linhas devolvidas da fila por hora (D56). O servidor usa 300. */
+  tetoDeLinhasDaFila?: number;
 }
 
 const PROBLEMA = 'https://dominio-a-definir.com.br/problems/';
@@ -88,6 +90,7 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   const registro: Requisicao[] = [];
   let falharLista = !!opcoes.falharLista;
   let uploads = 100;
+  let linhasDaFila = 0;
 
   function recalcularPendentes() {
     for (const e of encontros.values()) {
@@ -338,6 +341,14 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       const limit = Math.min(Number(req.consulta.get('limit') ?? 50), 50);
       const page = Number(req.consulta.get('page') ?? 1);
       const pagina: PaginaDePedidos = { items: itens.slice((page - 1) * limit, page * limit), page, limit, total: itens.length };
+      const teto = opcoes.tetoDeLinhasDaFila ?? 300;
+      if (linhasDaFila + pagina.items.length > teto) {
+        return new Response(JSON.stringify({ type: `${PROBLEMA}rate-limited`, title: 'Muitas leituras', status: 429 }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '3600' },
+        });
+      }
+      linhasDaFila += pagina.items.length;
       return json(200, pagina);
     }
 

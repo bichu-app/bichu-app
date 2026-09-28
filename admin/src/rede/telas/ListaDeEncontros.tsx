@@ -192,7 +192,7 @@ export default function ListaDeEncontros() {
       )}
       <BarraDeListagem
         rotuloDaBusca="Buscar encontros"
-        placeholder="Buscar pelo título do encontro"
+        placeholder="Buscar por título, resumo ou local"
         busca={p.q}
         aoBuscar={(v) => mudar({ q: v })}
         seletores={[
