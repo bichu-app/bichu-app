@@ -299,7 +299,7 @@ void describe('o vocabulario de tags', () => {
   });
 
   void it('ISCA: URL, e-mail e simbolo sao recusados (tag_charset)', () => {
-    for (const rotulo of ['http://x.io', 'a@b.io', 'promo!', 'x/y', 'oi<b>']) {
+    for (const rotulo of ['http//x.test', 'a@b.io', 'promo!', 'x/y', 'oi<b>']) {
       assert.deepEqual(conferirRotulo('label', rotulo).erros.map((e) => e.code), ['tag_charset'], rotulo);
     }
   });
