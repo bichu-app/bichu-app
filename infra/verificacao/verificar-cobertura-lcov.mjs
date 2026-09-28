@@ -138,7 +138,8 @@ const FERRAMENTA_FORA_DO_RUNTIME =
 
 const AUSENCIAS_ACEITAS = new Map([
   // -- so tipo: o compilado nao tem uma instrucao sequer ---------------------
-  ['src/modules/audit/ports/audit-log.ts', SO_TIPO],
+  // `audit/ports/audit-log.ts` saiu daqui na BICHUS-259: passou a exportar
+  // `ACOES_ADMINISTRATIVAS`, que e valor, e a suite o carrega.
   // As cinco de 22/09, que chegaram com o alerta, a conversa mediada, o achado
   // avulso e o aparelho. Cada uma esta nomeada, uma linha por arquivo, pelo
   // motivo escrito no topo desta lista: um prefixo `src/modules/**/ports/**`
@@ -151,6 +152,8 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/identity/ports/identity-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/localizacao-de-referencia-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/mailer.ts', SO_TIPO],
+  // BICHUS-259: a porta da sessao administrativa so declara tipos.
+  ['src/modules/identity/ports/sessao-administrativa-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/token-signer.ts', SO_TIPO],
   ['src/modules/lostfound/ports/alcance-do-alerta.ts', SO_TIPO],
   ['src/modules/lostfound/ports/entrega-do-alerta.ts', SO_TIPO],
