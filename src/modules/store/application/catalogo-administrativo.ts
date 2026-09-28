@@ -428,7 +428,7 @@ export class CatalogoAdministrativo {
 
       // Trocar o host nao deixa item orfao: o item guarda so o caminho, e o
       // endereco e composto na leitura com o host do parceiro (migracao
-      // `20260922000009`). Os itens vao junto, e e para isso que o host mora
+      // `20260922000023`). Os itens vao junto, e e para isso que o host mora
       // numa coluna so.
 
       const mudanca: MudancaDeParceiro = {
