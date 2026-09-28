@@ -375,7 +375,11 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
       const fim = f.fim ? instanteDoCampo(f.fim) : null;
       if (ini) dados.push(`${dataCurta(ini)}, ${faixaDeHorario(ini, fim)}`);
     }
-    if (plano.oQueMudou.includes('local')) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
+    if (plano.oQueMudou.includes('local')) {
+      const mesmoNome = f.local.trim() === original.place.place_name && f.bairro.trim() === original.place.neighborhood;
+      if (!mesmoNome) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
+      else dados.push(f.ponto ? 'o ponto novo no mapa' : 'o encontro sem ponto no mapa');
+    }
     frases.push(
       `O app passa a mostrar ${dados.join(', em ')}. Quem já viu o encontro no app não recebe aviso; todos os administradores recebem.`,
     );

@@ -163,6 +163,10 @@ export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalTh
     pedidos: (slug: string, status: EstadoDoPedido, page = 1): Promise<Resultado<PaginaDePedidos>> =>
       executar(() => cliente.GET('/admin/network/join-requests', { params: { query: { event: slug, status, page, limit: 50 } } })),
 
+    /** So a contagem de uma aba: `limit=1` devolve no maximo uma linha (D56 conta linhas). */
+    contarPedidos: (slug: string, status: EstadoDoPedido): Promise<Resultado<PaginaDePedidos>> =>
+      executar(() => cliente.GET('/admin/network/join-requests', { params: { query: { event: slug, status, page: 1, limit: 1 } } })),
+
     aprovar: (ref: string): Promise<Resultado<Pedido>> =>
       executar(() => cliente.POST('/admin/network/join-requests/{requestRef}/approval', { params: { path: { requestRef: ref } } })),
 

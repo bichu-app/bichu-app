@@ -49,6 +49,7 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
   const caixa = useRef<HTMLDivElement>(null);
   const mapa = useRef<L.Map | null>(null);
   const pino = useRef<L.Marker | null>(null);
+  const movendo = useRef(false);
   const [falhou, setFalhou] = useState(false);
   const [tentativa, setTentativa] = useState(0);
   const [foraDoBrasil, setForaDoBrasil] = useState(false);
@@ -96,6 +97,12 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
     });
     camada.addTo(m);
     m.on('click', (e: L.LeafletMouseEvent) => marcar(e.latlng.lat, e.latlng.lng));
+    m.on('movestart', () => {
+      movendo.current = true;
+    });
+    m.on('moveend', () => {
+      movendo.current = false;
+    });
     mapa.current = m;
     return () => {
       m.remove();
@@ -134,8 +141,15 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
   function aoTeclar(evento: React.KeyboardEvent<HTMLDivElement>) {
     if (desabilitado || (evento.key !== 'Enter' && evento.key !== ' ')) return;
     evento.preventDefault();
-    const c = mapa.current?.getCenter();
-    if (c) marcar(c.lat, c.lng);
+    const m = mapa.current;
+    if (!m) return;
+    // Seta seguida de Enter: a mira e o centro de DEPOIS do deslocamento, nao o do meio da animacao.
+    const marcarOCentro = () => {
+      const c = m.getCenter();
+      marcar(c.lat, c.lng);
+    };
+    if (movendo.current) m.once('moveend', marcarOCentro);
+    else marcarOCentro();
   }
 
   function mudarOPonto() {

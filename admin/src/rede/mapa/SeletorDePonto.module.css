@@ -11,6 +11,8 @@
 
 .moldura {
   position: relative;
+  /* Os paineis do Leaflet usam z-index de 400 a 1000: sem contexto proprio, o mapa passaria por cima do dialogo. */
+  isolation: isolate;
   width: min(35rem, 100%);
   aspect-ratio: 7 / 4;
   border-radius: var(--bichu-radius-md);
@@ -67,8 +69,10 @@
 
 .dica {
   position: absolute;
-  left: var(--bichu-space-4);
-  top: var(--bichu-space-4);
+  /* No alto a direita: o canto esquerdo e do controle de zoom. */
+  right: var(--bichu-space-3);
+  top: var(--bichu-space-3);
+  max-width: calc(100% - 4 * var(--bichu-space-12));
   z-index: 500;
   background: var(--bichu-cor-surface);
   color: var(--bichu-cor-text-primary);
