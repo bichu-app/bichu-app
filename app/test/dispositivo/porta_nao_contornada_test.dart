@@ -701,7 +701,13 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// rotulo). Nenhuma encosta na porta `CameraEGaleria`. Medido com `git
 /// rev-parse HEAD:app/lib/telas` sobre `11d36d9`, conferido contra o
 /// "encontrado" do portao. Anterior: `d555005fb7c327572091b26863473674fcd6e965`.
-const String _arvoreDasTelas = '123dc34cc1100ee38bc0571a36bab5b5e25238ca';
+///
+/// **Destravado pela regiao na assinatura das distancias (BICHUS-251),
+/// 28/09/2026.** Muda so `rede/agenda_da_rede.dart`, que passa a regiao de
+/// referencia a `assinaturaDasDistancias`. Nao encosta na porta
+/// `CameraEGaleria`. Medido com `git rev-parse HEAD:app/lib/telas` sobre
+/// `2533bfa`. Anterior: `123dc34cc1100ee38bc0571a36bab5b5e25238ca`.
+const String _arvoreDasTelas = '913a54008f37a5dcf6efba87b080b3000cf4b4f3';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
