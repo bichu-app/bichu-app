@@ -300,7 +300,9 @@ void describe('P16: a matriz da guarda, gerada do contrato (D33, D36, D37, D39)'
       confere(rota, 'sem cookie', await chamar(principal, metodo, caminho, { cabecalhos: { origin: ORIGEM }, corpo }), 401);
 
       const bearer = assinador.emitir(admin.id, systemClock.now(), randomUUID(), randomUUID()).token;
-      confere(rota, 'Bearer de admin', await chamar(principal, metodo, caminho, { cabecalhos: { origin: ORIGEM, authorization: `Bearer ${bearer}` }, corpo }), 401);
+      // Com o cookie VALIDO junto: sem ele o 401 viria da falta de cookie, e o
+      // caso aprovaria com a recusa do Bearer desligada (a isca mostrou isso).
+      confere(rota, 'Bearer de admin', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(valida, { authorization: `Bearer ${bearer}` }), corpo }), 401);
 
       const tutor = await conta(['tutor']);
       confere(rota, 'cookie de tutor', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(await sessaoDireta(tutor.id)), corpo }), 403);
