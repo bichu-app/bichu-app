@@ -707,7 +707,13 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// referencia a `assinaturaDasDistancias`. Nao encosta na porta
 /// `CameraEGaleria`. Medido com `git rev-parse HEAD:app/lib/telas` sobre
 /// `2533bfa`. Anterior: `123dc34cc1100ee38bc0571a36bab5b5e25238ca`.
-const String _arvoreDasTelas = '913a54008f37a5dcf6efba87b080b3000cf4b4f3';
+///
+/// **Destravado pela microcopy N7 e N8 da UX 30.6 (BICHUS-251),
+/// 28/09/2026.** Mudam dois textos em `rede/agenda_da_rede.dart` e
+/// `rede/encontro_da_rede.dart`. Nao encosta na porta `CameraEGaleria`.
+/// Medido com `git rev-parse HEAD:app/lib/telas` sobre `1c99ff7`. Anterior:
+/// `913a54008f37a5dcf6efba87b080b3000cf4b4f3`.
+const String _arvoreDasTelas = 'c0d5bd303bc8d63f231b45df4d039cd36b5bcf21';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
