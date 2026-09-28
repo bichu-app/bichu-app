@@ -154,6 +154,10 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/identity/ports/token-signer.ts', SO_TIPO],
   ['src/modules/lostfound/ports/alcance-do-alerta.ts', SO_TIPO],
   ['src/modules/lostfound/ports/entrega-do-alerta.ts', SO_TIPO],
+  // Chegou com as leituras publicas do site. Conferida pelo MESMO criterio das
+  // outras: nao declara `const`, `function`, `class` nem `enum` -- so `type`,
+  // `interface` e um `import type`, entao o compilado nao tem uma instrucao.
+  ['src/modules/lostfound/ports/leitura-publica-do-caso.ts', SO_TIPO],
   ['src/modules/lostfound/ports/lost-case-repository.ts', SO_TIPO],
   ['src/modules/lostfound/ports/registro-de-disparos.ts', SO_TIPO],
   ['src/modules/media/ports/image-processor.ts', SO_TIPO],
@@ -163,6 +167,10 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/notifications/ports/registro-de-aparelhos.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-entregas.ts', SO_TIPO],
   ['src/modules/pets/ports/fotos-do-pet.ts', SO_TIPO],
+  // Chegou com as leituras publicas do site. Conferida pelo MESMO criterio das
+  // outras: nao declara `const`, `function`, `class` nem `enum` -- so `type` e
+  // `interface`, entao o compilado nao tem uma instrucao.
+  ['src/modules/pets/ports/perfil-publico.ts', SO_TIPO],
   ['src/modules/pets/ports/pet-repository.ts', SO_TIPO],
   ['src/modules/pets/ports/reference-data-repository.ts', SO_TIPO],
   // Chegou com o `Perto` com dados (23/09). Conferida pelo MESMO criterio das
