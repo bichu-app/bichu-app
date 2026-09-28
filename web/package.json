@@ -15,7 +15,7 @@
     "generate:tokens": "node scripts/gerar-tokens-css.mjs",
     "verify:tokens": "node scripts/gerar-tokens-css.mjs --verificar && node scripts/isca-tokens.mjs",
     "verify:valores-soltos": "node scripts/verificar-valores-soltos.mjs",
-    "test:unidade": "node --experimental-strip-types --test tests/unidade/",
+    "test:unidade": "node --experimental-strip-types --test tests/unidade/*.test.ts",
     "test:e2e": "playwright test",
     "verify:orcamento": "node scripts/orcamento.mjs",
     "mock": "node tests/mock/servidor-mock.mjs"
