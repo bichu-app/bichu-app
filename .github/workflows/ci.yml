@@ -311,6 +311,34 @@ jobs:
       - name: nenhum numero de ADR repetido em adr/
         run: node infra/verificacao/verificar-numero-de-adr.mjs
 
+      # CARIMBO DE MIGRACAO REPETIDO (23/09/2026). O irmao do de cima, e o caso
+      # grave da familia. Em 23/09 CINCO migracoes nasceram com
+      # `20260923000001` em cinco branches de tres sessoes que nao se enxergam,
+      # e a `development` ja carregava onze migracoes em quatro carimbos
+      # repetidos antes de alguem olhar.
+      #
+      # ADR repetida confunde quem le; migracao repetida TRAVA O BANCO. Medido
+      # contra um Postgres 16 com o node-pg-migrate 9.0.0 do `package.json`:
+      # num banco que ja aplicou uma das irmas, o `migrate up` seguinte morre em
+      # `checkOrder`, com saida 1, nada aplicado, e nenhuma migracao futura
+      # entrando ate alguem intervir a mao.
+      #
+      # AQUI, no `rapidos`, pelos dois motivos do portao de ADR. Custo: 0,21 s,
+      # leitura de nomes de arquivo mais um `git ls-tree`, sem docker e sem
+      # banco. E lugar: a colisao nasce em branches separadas e so vira defeito
+      # no MERGE, que e o que este job guarda.
+      #
+      # A CONFERENCIA DE ORDEM DEPENDE DO `fetch-depth: 0` deste job: ela
+      # compara com a ponta de `origin/development`, e sem historico ela nao
+      # consegue comparar. Nesse caso o portao REPROVA dizendo isso, em vez de
+      # aprovar por ausencia -- se este job perder o `fetch-depth: 0`, o sintoma
+      # vai ser esta mensagem, e nao um verde silencioso.
+      - name: as iscas do portao de carimbo de migracao reprovam
+        run: node infra/verificacao/verificar-carimbo-de-migracao.mjs --autoteste
+
+      - name: nenhum carimbo repetido em migrations/
+        run: node infra/verificacao/verificar-carimbo-de-migracao.mjs
+
       - name: a borda concorda com o contrato
         run: python3 infra/verificacao/verificar_borda.py
 
