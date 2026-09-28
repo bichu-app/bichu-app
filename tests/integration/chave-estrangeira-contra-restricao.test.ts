@@ -274,6 +274,17 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     aoApagar: 'CASCADE',
     levaJunto: 'a senha da identidade apagada. Da própria pessoa.',
   },
+  'public.reauth_tokens.reauth_tokens_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a janela de reautenticação da própria pessoa (BICHUS-48). A linha vale cinco minutos ' +
+      'e é de uso único, então a cascata não leva embora prova de nada: a conta que sumiu ' +
+      'não tem mais finalidade a reautenticar. O caso que mede isto contra o banco é ' +
+      '"a linha da janela morre junto com a conta (`ON DELETE CASCADE`)", em ' +
+      'tests/integration/reautenticacao-pelo-http.test.ts.',
+  },
   'public.refresh_tokens.refresh_tokens_rotated_to_id_fkey': {
     colunas: ['rotated_to_id'],
     referencia: 'public.refresh_tokens',
