@@ -33,7 +33,11 @@ enum AcaoDeIntencao {
   responderConversa('responder_conversa'),
   encerrarCaso('encerrar_caso'),
   cadastrarPet('cadastrar_pet'),
-  gerarTag('gerar_tag');
+  gerarTag('gerar_tag'),
+
+  /// Pedir para participar de um encontro privado da `Rede` (design system
+  /// 24.17.1, item 5). O `alvo` e o `slug` do encontro.
+  pedirParaParticipar('pedir_para_participar');
 
   const AcaoDeIntencao(this.valor);
 

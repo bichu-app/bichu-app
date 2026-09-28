@@ -357,9 +357,15 @@ class ControleDeOrdenacao {
     required this.efetiva,
     required this.aoEscolher,
     this.porQueNaoEAPedida,
+    this.nota,
   });
 
   final List<OpcaoDeRecorte> opcoes;
+
+  /// Uma linha de explicacao na folha de ordem, sob o titulo. A `Rede` usa
+  /// para dizer de onde `Mais perto` mede e o que fica de fora (design
+  /// system 24.17.1, item 6). Mesma forma de [GrupoDeFiltro.nota].
+  final String? nota;
 
   /// **O codigo da ordem em que a lista esta**, e nao o da que foi pedida.
   final String efetiva;
@@ -658,6 +664,15 @@ class _FolhaDeOrdenacao extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
             Text('Ordenar por', style: textos.titleLarge),
+            if (ordenacao.nota != null) ...<Widget>[
+              const SizedBox(height: BichuEspaco.e1),
+              Text(
+                ordenacao.nota!,
+                style: textos.bodySmall?.copyWith(
+                  color: BichuColors.of(context).cores.textSecondary,
+                ),
+              ),
+            ],
             const SizedBox(height: BichuEspaco.e4),
             for (final opcao in ordenacao.opcoes)
               Semantics(

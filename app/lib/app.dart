@@ -30,6 +30,7 @@ import 'intencao/caso_de_perdido_como_intencao.dart';
 import 'intencao/deposito_de_intencao.dart';
 import 'intencao/guarda_de_acao.dart';
 import 'intencao/intencao_pendente.dart';
+import 'intencao/pedido_de_participacao_como_intencao.dart';
 import 'roteamento/rotas.dart';
 import 'sessao/controlador_de_sessao.dart';
 import 'sessao/deposito_de_sessao.dart';
@@ -297,6 +298,11 @@ class _BichuAppState extends State<BichuApp> {
         // `marcar_perdido` e o proprio desenho da acao: la ha um alvo (o pet)
         // que precisa ser buscado antes; aqui o alvo e o que a execucao cria.
         AcaoDeIntencao.registrarAchado: achadoExecutavel(_achados),
+        // `pedir_para_participar`: depois de autenticar, o pedido e ENVIADO e
+        // a pessoa volta ao encontro com a caixa em `Pedido enviado`
+        // (design system 24.17.1, item 5).
+        AcaoDeIntencao.pedirParaParticipar:
+            pedidoDeParticipacaoExecutavel(_api),
       },
     );
     _sessao = ControladorDeSessao(

@@ -33,6 +33,7 @@ import '../telas/achado/tela_achado_registrado.dart';
 import '../telas/achado/tela_do_achado.dart';
 import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
+import '../telas/rede/encontro_da_rede.dart';
 import '../telas/tela_de_abertura.dart';
 
 /// Os enderecos do app.
@@ -54,6 +55,16 @@ abstract final class Rotas {
   /// todos eles de uma vez.
   static const String pets = '/pets';
   static const String rede = '/rede';
+
+  /// O encontro da `Rede`, sob o ramo da secao: a barra de abas continua, e
+  /// voltar devolve a agenda. Endereco proprio porque a guarda de acao do
+  /// `Pedir para participar` volta para ca depois do login (UX 8.3).
+  static const String encontroDaRede = 'encontros/:slug';
+
+  static const String parametroDoEncontro = 'slug';
+
+  static String encontroDaRedeDe(String slug) =>
+      '/rede/encontros/${Uri.encodeComponent(slug)}';
   static const String perto = '/perto';
   static const String loja = '/loja';
   static const String perfil = '/perfil';
@@ -228,6 +239,10 @@ abstract final class Rotas {
       // mora, e e de la que a pessoa segue em frente de novo depois de um
       // registro que falhou (UX 8.3, regra 4).
       'F3.5' => registrarAchado,
+      // O encontro da `Rede`: a volta de um pedido que falhou depois do login
+      // e a agenda, onde a pessoa reabre o encontro (o `slug` esta no `alvo`
+      // do envelope, e nao no ID da tela).
+      'REDE.ENCONTRO' => rede,
       _ => null,
     };
   }
@@ -545,6 +560,20 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
               GoRoute(
                 path: Rotas.rede,
                 builder: (context, estado) => const AbaRede(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: Rotas.encontroDaRede,
+                    builder: (context, estado) => TelaDoEncontro(
+                      slug: estado.pathParameters[Rotas.parametroDoEncontro]!,
+                      // A distancia vem do cartao, que a leu de
+                      // `listNearbyNetworkEvents`. Por link direto ela nao vem,
+                      // e a linha some sem aviso.
+                      distanciaEmMetros: estado.extra is int
+                          ? estado.extra! as int
+                          : null,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
