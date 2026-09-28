@@ -2264,6 +2264,13 @@ export interface paths {
          *     **Rotaciona a sessao:** a resposta traz `Set-Cookie` com identificador
          *     novo e um `csrf_token` novo; o anterior deixa de valer (D38). O teto
          *     absoluto de 12 horas **nao** renasce.
+         *
+         *     **Dois escopos com uma senha so:** `scopes` com um ou dois escopos
+         *     distintos faz **uma** rotacao e devolve um token por escopo em
+         *     `tokens`, todos presos a sessao nova. Duas reautenticacoes seguidas
+         *     nao servem para isso: a segunda rotaciona a sessao, e o token da
+         *     primeira fica preso a uma sessao revogada. `scope` sozinho continua
+         *     valendo, e a resposta traz `reauth_token` e `scope` como antes.
          */
         post: operations["reauthenticateAdmin"];
         delete?: never;
@@ -3961,15 +3968,33 @@ export interface components {
          * @enum {string}
          */
         AdminReauthScope: "store_item_retirement" | "network_event_relocation" | "network_event_cancellation" | "network_event_removal" | "network_event_access_change";
+        /**
+         * @description Um escopo (`scope`) ou uma lista de um ou dois escopos distintos
+         *     (`scopes`), nunca os dois. A lista existe para a tela que grava duas
+         *     operacoes sensiveis juntas (lugar e acesso do encontro): cada
+         *     reautenticacao rotaciona a sessao, e duas seguidas deixavam o token da
+         *     primeira preso a uma sessao ja revogada.
+         */
         AdminReauthRequest: {
             password: string;
-            scope: components["schemas"]["AdminReauthScope"];
-        };
+            scope?: components["schemas"]["AdminReauthScope"];
+            scopes?: components["schemas"]["AdminReauthScope"][];
+        } & (unknown | unknown);
         AdminReauthGrant: {
+            /** @description O token do primeiro escopo pedido. Igual a `tokens[0].reauth_token`. */
             reauth_token: string;
             /** @example 300 */
             expires_in: number;
             scope: components["schemas"]["AdminReauthScope"];
+            /**
+             * @description Um token por escopo pedido, na ordem do pedido. Cada um e de uso
+             *     unico, vale so para o seu escopo e esta preso a sessao nova; todos
+             *     vencem juntos em `expires_in`.
+             */
+            tokens: {
+                scope: components["schemas"]["AdminReauthScope"];
+                reauth_token: string;
+            }[];
             /** @description O token anti-CSRF novo. A sessao foi rotacionada, e o anterior deixou de valer. */
             csrf_token: string;
         };

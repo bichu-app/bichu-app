@@ -209,19 +209,29 @@ export function registrarRotasDaSessaoAdministrativa(
       resolvedores: { account: contaDaSessao },
     },
     async (request: FastifyRequest, reply: FastifyReply) => {
-      const corpo = request.body as { password: string; scope: EscopoDeReautenticacaoAdministrativa };
+      // O contrato aceita `scope` OU `scopes` (oneOf), e o Ajv ja recusou os
+      // dois juntos e a lista repetida ou vazia.
+      const corpo = request.body as {
+        password: string;
+        scope?: EscopoDeReautenticacaoAdministrativa;
+        scopes?: EscopoDeReautenticacaoAdministrativa[];
+      };
+      const escopos = corpo.scopes ?? (corpo.scope === undefined ? [] : [corpo.scope]);
       const janela = await deps.sessoes.reautenticar(
         sessaoAdministrativaDe(request),
         corpo.password,
-        corpo.scope,
+        escopos,
         contextoDaGuarda(request),
       );
+      const [primeiro] = janela.tokens;
+      if (primeiro === undefined) throw new Error('reautenticacao sem token: o servico recusa lista vazia');
       void reply.header('set-cookie', cookieDaSessao(janela.valorDoCookie));
       return reply.status(200).send({
-        reauth_token: janela.reauthToken,
+        reauth_token: primeiro.reauthToken,
         expires_in: janela.expiresIn,
-        scope: janela.scope,
+        scope: primeiro.scope,
         csrf_token: janela.csrfToken,
+        tokens: janela.tokens.map((t) => ({ scope: t.scope, reauth_token: t.reauthToken })),
       });
     },
   );

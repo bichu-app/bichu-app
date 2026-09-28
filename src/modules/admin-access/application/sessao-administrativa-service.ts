@@ -115,11 +115,14 @@ export interface SessaoAberta {
 
 export interface JanelaAberta {
   readonly valorDoCookie: string;
-  readonly reauthToken: string;
+  /** Um token por escopo pedido, na ordem do pedido, todos presos a sessao nova. */
+  readonly tokens: readonly { readonly scope: EscopoDeReautenticacaoAdministrativa; readonly reauthToken: string }[];
   readonly expiresIn: number;
-  readonly scope: EscopoDeReautenticacaoAdministrativa;
   readonly csrfToken: string;
 }
+
+/** Quantos escopos uma reautenticacao abre de uma vez. O contrato declara o mesmo teto. */
+export const MAXIMO_DE_ESCOPOS_POR_REAUTENTICACAO = 2;
 
 type ContextoDaRequisicao = ContextoDaGuarda;
 
@@ -589,14 +592,30 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
     /**
      * `POST /v1/admin/auth/reauth` (D40): confere a senha, ROTACIONA a sessao
      * (identificador e anti-CSRF novos, mesmo instante da senha, mesmo teto) e
-     * abre uma janela de 5 minutos, uso unico, presa a sessao nova.
+     * abre uma janela de 5 minutos por escopo pedido, cada uma de uso unico e
+     * presa a sessao nova.
+     *
+     * Um ou dois escopos distintos, e UMA rotacao so. Duas reautenticacoes
+     * seguidas nao serviam para gravar duas operacoes sensiveis juntas: a
+     * segunda rotacionava a sessao, e a janela da primeira ficava presa a uma
+     * sessao revogada (`consumirJanela` exige a sessao corrente).
      */
     async reautenticar(
       sessao: SessaoAdministrativaConferida,
       senha: string,
-      escopo: EscopoDeReautenticacaoAdministrativa,
+      escopos: readonly EscopoDeReautenticacaoAdministrativa[],
       contexto: ContextoDaRequisicao,
     ): Promise<JanelaAberta> {
+      // O contrato ja recusa na borda; aqui a regra vale para quem chamar o
+      // servico por outro caminho. Escopo repetido daria dois tokens para a
+      // mesma operacao, que e uma segunda chance que a janela nao concede.
+      if (
+        escopos.length === 0 ||
+        escopos.length > MAXIMO_DE_ESCOPOS_POR_REAUTENTICACAO ||
+        new Set(escopos).size !== escopos.length
+      ) {
+        throw new Error(`reautenticacao administrativa com escopos invalidos: ${JSON.stringify(escopos)}`);
+      }
       const conta = await deps.contas.buscarPorId(sessao.adminAccountId);
       const confere = conta !== undefined && (await verificarSenha(senha, conta.passwordPhc));
       if (!confere) {
@@ -616,7 +635,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       const valorDoCookie = deps.ids.opaqueToken();
       const tokenHash = hashDeToken(valorDoCookie);
       const novaId = deps.ids.uuidv7();
-      const reauthToken = deps.ids.opaqueToken();
+      const tokens = escopos.map((scope) => ({ scope, reauthToken: deps.ids.opaqueToken() }));
       const absoluteExpiresAt = sessao.absoluteExpiresAt.getTime() as Instant;
 
       await deps.escrita.executar(async (trx) => {
@@ -636,31 +655,32 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
           userAgent: contexto.userAgent,
           ipHmac: deps.hmacDeIp(contexto.ip),
         });
-        await deps.sessoes.criarJanela(trx, {
-          id: deps.ids.uuidv7(),
-          sessionId: novaId,
-          adminAccountId: sessao.adminAccountId,
-          escopo,
-          tokenHash: hashDeToken(reauthToken),
-          emitidaEm: agora,
-          expiraEm: (agora + JANELA_DE_REAUTENTICACAO_ADMINISTRATIVA_EM_MS) as Instant,
-        });
+        for (const { scope, reauthToken } of tokens) {
+          await deps.sessoes.criarJanela(trx, {
+            id: deps.ids.uuidv7(),
+            sessionId: novaId,
+            adminAccountId: sessao.adminAccountId,
+            escopo: scope,
+            tokenHash: hashDeToken(reauthToken),
+            emitidaEm: agora,
+            expiraEm: (agora + JANELA_DE_REAUTENTICACAO_ADMINISTRATIVA_EM_MS) as Instant,
+          });
+        }
         return {
           resultado: undefined,
           evento: eventoDoAdmin(sessao, contexto, {
             action: 'admin.session.reauthenticated',
             resourceKind: 'admin_session',
             resourceId: novaId,
-            metadata: metadataDaSessao(sessao.etiqueta, { scope: escopo, new_session: etiquetaDaSessao(tokenHash) }),
+            metadata: metadataDaSessao(sessao.etiqueta, { scopes: escopos, new_session: etiquetaDaSessao(tokenHash) }),
           }),
         };
       });
 
       return {
         valorDoCookie,
-        reauthToken,
+        tokens,
         expiresIn: JANELA_DE_REAUTENTICACAO_ADMINISTRATIVA_EM_MS / 1000,
-        scope: escopo,
         csrfToken: derivarTokenAntiCsrf(valorDoCookie),
       };
     },

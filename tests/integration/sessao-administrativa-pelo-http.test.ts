@@ -43,7 +43,8 @@ import {
   OPERACOES_ADMINISTRATIVAS_SEM_SESSAO,
   escoparRotasAdministrativas,
 } from '../../src/shared/http/superficie-administrativa.js';
-import type { RouteDefinition } from '../../src/shared/http/route-definition.js';
+import { defineRoute, type RouteDefinition } from '../../src/shared/http/route-definition.js';
+import { registrarRota } from '../../src/shared/http/registrar-rota.js';
 import type { AdminAccountId, UserId } from '../../src/shared/types/brands.js';
 import {
   criarEscritaAuditada,
@@ -79,6 +80,31 @@ const vazadas: ListaDeSenhasVazadas = {
   contem: (senha) => Promise.resolve(senha === SENHA_VAZADA ? true : 'desconhecido'),
 };
 const CAPTCHA_BOM = 'token-de-captcha-que-o-duble-aprova-0123456789';
+
+/**
+ * Duas operacoes sensiveis de TESTE, fora do contrato, cada uma exigindo um
+ * escopo: e o par "mover o encontro" e "trocar o acesso" que o painel grava
+ * junto. As rotas reais sao da `Rede`, em outra branch; o portao de
+ * `X-Admin-Reauth-Token` e o mesmo para qualquer rota que declare o escopo.
+ */
+const rotaDeTesteMover = defineRoute({
+  operationId: 'testeMoverEncontro',
+  method: 'post',
+  path: '/admin/teste/mover',
+  effects: [],
+  adminRoles: ['admin'],
+  adminReauthScope: 'network_event_relocation',
+  audit: { action: 'admin.network_event.relocated', resourceKind: 'network_event' },
+});
+const rotaDeTesteAcesso = defineRoute({
+  operationId: 'testeTrocarAcesso',
+  method: 'post',
+  path: '/admin/teste/acesso',
+  effects: [],
+  adminRoles: ['admin'],
+  adminReauthScope: 'network_event_access_change',
+  audit: { action: 'admin.network_event.updated', resourceKind: 'network_event' },
+});
 
 interface Servidor {
   readonly app: RegistradorDeRotas;
@@ -155,6 +181,8 @@ async function subir(trilhaQuebrada: boolean): Promise<Servidor> {
     registrarRotasDeIdentidade(v1, deps);
     escoparRotasAdministrativas(v1, { origem: ORIGEM, sessoes }, (adm) => {
       registrarRotasDaSessaoAdministrativa(adm, { sessoes, contrato });
+      registrarRota(adm, rotaDeTesteMover, {}, async (_r, reply) => reply.status(204).send());
+      registrarRota(adm, rotaDeTesteAcesso, {}, async (_r, reply) => reply.status(204).send());
     });
   });
   await app.listen({ port: 0, host: '127.0.0.1' });
@@ -622,6 +650,7 @@ void describe('ciclo da sessao (D38, D39, D40)', () => {
     assert.equal(certa.status, 200, JSON.stringify(certa.corpo));
     assert.equal(certa.corpo?.['expires_in'], 300);
     assert.equal(certa.corpo?.['scope'], 'store_item_retirement');
+    assert.deepEqual(certa.corpo?.['tokens'], [{ scope: 'store_item_retirement', reauth_token: certa.corpo?.['reauth_token'] }]);
     assert.notEqual(certa.corpo?.['csrf_token'], sessao.csrf);
     assert.deepEqual(await eventosDa(correlacao), ['admin.session.reauthenticated']);
 
@@ -640,6 +669,85 @@ void describe('ciclo da sessao (D38, D39, D40)', () => {
     await assert.rejects(principal.sessoes.consumirReautenticacao(conferida, 'network_event_removal', token, contextoVazio()));
     await principal.sessoes.consumirReautenticacao(conferida, 'store_item_retirement', token, contextoVazio());
     await assert.rejects(principal.sessoes.consumirReautenticacao(conferida, 'store_item_retirement', token, contextoVazio()));
+  });
+});
+
+void describe('D40: dois escopos com uma senha so (mover e trocar acesso juntos)', () => {
+  async function reautenticar(sessao: SessaoDeTeste, corpo: Record<string, unknown>): Promise<{ resposta: Resposta; nova: SessaoDeTeste }> {
+    const resposta = await chamar(principal, 'POST', '/admin/auth/reauth', { cabecalhos: comSessao(sessao), corpo: { password: SENHA, ...corpo } });
+    const valor = /__Host-bichu_adm=([^;]+)/.exec(resposta.cabecalhos.get('set-cookie') ?? '')?.[1] ?? '';
+    const csrf = typeof resposta.corpo?.['csrf_token'] === 'string' ? resposta.corpo['csrf_token'] : '';
+    return { resposta, nova: { cookie: `__Host-bichu_adm=${valor}`, csrf, id: '' } };
+  }
+  const tokenDe = (r: Resposta, escopo: string): string => {
+    const lista = (r.corpo?.['tokens'] ?? []) as { scope: string; reauth_token: string }[];
+    return lista.find((t) => t.scope === escopo)?.reauth_token ?? '';
+  };
+
+  void it('uma reautenticacao com dois escopos, e as duas operacoes em sequencia passam', async () => {
+    const admin = await contaDoPainel();
+    const { sessao } = await entrar(principal, admin.email);
+    const { resposta, nova } = await reautenticar(sessao, {
+      scopes: ['network_event_relocation', 'network_event_access_change'],
+    });
+    assert.equal(resposta.status, 200, JSON.stringify(resposta.corpo));
+    const mover = tokenDe(resposta, 'network_event_relocation');
+    const acesso = tokenDe(resposta, 'network_event_access_change');
+    assert.ok(mover !== '' && acesso !== '' && mover !== acesso, JSON.stringify(resposta.corpo));
+    assert.equal(resposta.corpo?.['reauth_token'], mover, 'reauth_token precisa ser o do primeiro escopo pedido');
+
+    const primeira = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': mover }) });
+    const segunda = await chamar(principal, 'POST', '/admin/teste/acesso', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': acesso }) });
+    assert.equal(primeira.status, 204, JSON.stringify(primeira.corpo));
+    assert.equal(segunda.status, 204, JSON.stringify(segunda.corpo));
+    // Uso unico, cada um.
+    const deNovo = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': mover }) });
+    assert.equal(deNovo.status, 401);
+  });
+
+  void it('isca: o token de um escopo nao abre a operacao do outro, nem depois de gasto o certo', async () => {
+    const admin = await contaDoPainel();
+    const { sessao } = await entrar(principal, admin.email);
+    const { resposta, nova } = await reautenticar(sessao, {
+      scopes: ['network_event_relocation', 'network_event_access_change'],
+    });
+    const mover = tokenDe(resposta, 'network_event_relocation');
+    const acesso = tokenDe(resposta, 'network_event_access_change');
+    const trocado = await chamar(principal, 'POST', '/admin/teste/acesso', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': mover }) });
+    assert.equal(trocado.status, 401, 'o token de mover abriu a troca de acesso');
+    assert.equal(tipo(trocado), 'reauthentication-required');
+    const trocado2 = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': acesso }) });
+    assert.equal(trocado2.status, 401, 'o token de acesso abriu o mover');
+    // A tentativa errada nao gastou os tokens certos.
+    assert.equal((await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': mover }) })).status, 204);
+  });
+
+  void it('o caso do defeito: duas reautenticacoes seguidas deixam a primeira janela presa a sessao revogada', async () => {
+    // Documenta por que `scopes` existe. Se um dia isto passar a dar 204, a
+    // rotacao deixou de revogar a sessao anterior, que e outro defeito (D38).
+    const admin = await contaDoPainel();
+    const { sessao } = await entrar(principal, admin.email);
+    const um = await reautenticar(sessao, { scope: 'network_event_relocation' });
+    const dois = await reautenticar(um.nova, { scope: 'network_event_access_change' });
+    const primeira = await chamar(principal, 'POST', '/admin/teste/mover', {
+      cabecalhos: comSessao(dois.nova, { 'x-admin-reauth-token': String(um.resposta.corpo?.['reauth_token']) }),
+    });
+    assert.equal(primeira.status, 401);
+  });
+
+  void it('escopo repetido, tres escopos, lista vazia, ou scope e scopes juntos: 400', async () => {
+    const admin = await contaDoPainel();
+    const sessao = await sessaoDireta(admin.id);
+    for (const corpo of [
+      { scopes: ['network_event_relocation', 'network_event_relocation'] },
+      { scopes: ['network_event_relocation', 'network_event_access_change', 'store_item_retirement'] },
+      { scopes: [] },
+      { scope: 'network_event_relocation', scopes: ['network_event_access_change'] },
+      {},
+    ]) {
+      const r = await chamar(principal, 'POST', '/admin/auth/reauth', { cabecalhos: comSessao(sessao), corpo: { password: SENHA, ...corpo } });
+      assert.equal(r.status, 400, `${JSON.stringify(corpo)} -> ${String(r.status)}`);
+    }
   });
 });
 
@@ -778,7 +886,9 @@ void describe('P21 (a): as duas portas nao se cruzam (D42, forma de 28/09)', () 
 
 void describe('P17: a trilha na mesma transacao, por operacao da sessao', () => {
   void it('toda escrita administrativa deste servidor grava a sua acao na trilha', async () => {
-    const escritas = principal.rotasAdministrativas.filter((rota) => rota.method !== 'get');
+    const escritas = principal.rotasAdministrativas.filter(
+      (rota) => rota.method !== 'get' && contrato.operacoes.has(rota.operationId),
+    );
     assert.ok(escritas.length > 0, 'nenhuma escrita administrativa registrada: P17 sem o que conferir');
     const admin = await contaDoPainel();
     const faltando: string[] = [];
