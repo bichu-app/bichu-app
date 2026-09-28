@@ -250,7 +250,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       if (motivo === 'role_missing' && !abreSessaoAdministrativa(sessao.papeis)) {
         const agora = deps.clock.now();
         await deps.escrita.executar(async (trx) => {
-          const revogadas = await deps.sessoes.revogarTodasDaConta(trx, sessao.userId, 'role_removed', agora);
+          const revogadas = await deps.sessoes.revogarTodasDaConta(trx, sessao.userId, 'account_invalidated', agora);
           return {
             resultado: undefined,
             evento: { ...evento, metadata: { ...evento.metadata, revoked_sessions: revogadas } },

@@ -76,16 +76,27 @@ interface ListaFechada {
  * conjunto inteiro em vez de para o valor que está acrescentando.
  */
 const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
-  // BICHUS-259 (ADR-0027, apendice A.1). Os cinco motivos de revogacao da
-  // sessao administrativa. Espelha `MotivoDeRevogacaoAdministrativa` em
-  // `src/modules/identity/ports/sessao-administrativa-repository.ts` e o tipo
-  // da coluna em `src/shared/db/schema.ts`. Os tres andam juntos.
+  // BICHUS-259 (ADR-0027, apendice A.1, forma de 28/09). Os seis motivos de
+  // revogacao da sessao administrativa. `role_removed` saiu: o papel mora em
+  // `admin_accounts.role`, que so aceita `admin`, e a conta que perde o painel
+  // e desativada (`account_disabled`). Espelha `MotivoDeRevogacaoAdministrativa`
+  // em `src/modules/admin-access/ports/sessao-administrativa-repository.ts` e o
+  // tipo da coluna em `src/shared/db/schema.ts`. Os tres andam juntos.
   'public.admin_sessions.admin_sessions_revoked_reason_check': {
     coluna: 'revoked_reason',
-    valores: ['logout', 'rotated', 'role_removed', 'account_invalidated', 'disavowed'],
+    valores: [
+      'logout',
+      'rotated',
+      'account_disabled',
+      'account_invalidated',
+      'disavowed',
+      'password_reset',
+    ],
   },
-  // BICHUS-259 (D40). Os quatro escopos de `X-Admin-Reauth-Token`. Espelha
-  // `AdminReauthScope` do contrato, `EscopoDeReautenticacaoAdministrativa` em
+  // BICHUS-259 (D40, ADR-0027 item 5). Os CINCO escopos de
+  // `X-Admin-Reauth-Token`; `network_event_access_change` entrou em 28/09 pela
+  // 000006, e nao por uma migracao da `Rede`. Espelha `AdminReauthScope` do
+  // contrato, `EscopoDeReautenticacaoAdministrativa` em
   // `src/shared/http/route-definition.ts` e o tipo da coluna em
   // `src/shared/db/schema.ts`.
   'public.admin_reauth_tokens.admin_reauth_tokens_escopo': {
@@ -95,7 +106,26 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
       'network_event_relocation',
       'network_event_cancellation',
       'network_event_removal',
+      'network_event_access_change',
     ],
+  },
+  // ADR-0027 item 20.1. O papel da conta do painel. Um valor so na v1, e
+  // escrito como `= ANY (ARRAY['admin'])` na migracao para o catalogo guardar
+  // lista, e nao igualdade. `AdminRole` do contrato e `PapelAdministrativo` em
+  // `src/shared/http/route-definition.ts`.
+  'public.admin_accounts.admin_accounts_role_check': {
+    coluna: 'role',
+    valores: ['admin'],
+  },
+  'public.admin_accounts.admin_accounts_status_check': {
+    coluna: 'status',
+    valores: ['active', 'disabled'],
+  },
+  // `failed_logins` (D44, dez falhas em 24 h) e `disavowed` (D62). Os dois so
+  // caem com `conta-admin redefinir-senha`.
+  'public.admin_accounts.admin_accounts_blocked_reason_check': {
+    coluna: 'blocked_reason',
+    valores: ['failed_logins', 'disavowed'],
   },
   'public.alert_dispatches.alert_dispatches_estado': {
     coluna: 'reach_status',
@@ -106,9 +136,13 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     // `no_location` é "não existe raio, o caso não tem coordenada".
     valores: ['computed', 'unavailable', 'queued', 'no_location'],
   },
+  // `admin` entrou em 28/09 (ADR-0027 apendice A.5): o ator do painel tem
+  // coluna propria, `actor_admin_id`, e nunca vai em `actor_user_id`. As linhas
+  // anteriores nao foram reescritas. `ActorKind` em
+  // `src/modules/audit/ports/audit-log.ts` e o tipo da coluna em `schema.ts`.
   'audit.events.events_actor_kind_check': {
     coluna: 'actor_kind',
-    valores: ['user', 'anonymous', 'system'],
+    valores: ['user', 'anonymous', 'system', 'admin'],
   },
   'public.conversation_messages.conversation_messages_sender_role_conhecido': {
     coluna: 'sender_role',
@@ -354,7 +388,11 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'role',
     // Capacidade é conjunto, não ordem: esta lista não declara hierarquia, e
     // nenhuma rota deve resolver permissão comparando posições dela.
-    valores: ['tutor', 'moderator', 'admin'],
+    //
+    // Só `tutor` desde 28/09 (ADR-0027 item 20.2, D42): o painel tem cadastro
+    // próprio, e papel de painel em conta do app deixou de ser representável.
+    // A 000006 aborta, nomeando a linha, se encontrar outro valor aqui.
+    valores: ['tutor'],
   },
   'public.users.users_account_kind_check': {
     coluna: 'account_kind',
@@ -451,6 +489,18 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK ((host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text))",
   'audit.events.audit_events_ator_coerente':
     "CHECK (((actor_kind = 'user'::text) = (actor_user_id IS NOT NULL)))",
+  // O gêmeo do de cima para o ator do painel (ADR-0027 apêndice A.5). As linhas
+  // históricas têm `actor_admin_id` nulo e `actor_kind` diferente de `admin`, e
+  // por isso cabem nele sem reescrita.
+  'audit.events.audit_events_ator_admin_coerente':
+    "CHECK (((actor_kind = 'admin'::text) = (actor_admin_id IS NOT NULL)))",
+  // ADR-0027 item 20.1. Desativada tem instante, ativa não tem.
+  'public.admin_accounts.admin_accounts_desativada_tem_quando':
+    "CHECK (((status = 'disabled'::text) = (disabled_at IS NOT NULL)))",
+  // O mesmo formato de `local_credentials_phc_pbkdf2_sha512`: o hash do painel
+  // sai das mesmas funções que o do app.
+  'public.admin_accounts.admin_accounts_phc_pbkdf2_sha512':
+    "CHECK ((password_phc ~~ '$pbkdf2-sha512$%'::text))",
   // O par mentiroso do alcance: estado não calculado com número, ou `computed`
   // sem número. `kysely-registro-de-disparos.ts` grava `null` em
   // `recipients_total` para `unavailable`, e é este CHECK que impede o inverso.
@@ -752,7 +802,16 @@ void describe('o registro cobre o banco: restrição nova sem entrada reprova, n
   void it('cada CHECK não-lista tem exatamente a definição declarada', () => {
     for (const [chave, esperada] of Object.entries(CHECKS_QUE_NAO_SAO_LISTA_FECHADA)) {
       const atual = naoSimples.get(chave);
-      if (atual === undefined) continue; // o caso acima já reprovou, com nome.
+      // Assertiva, e não `continue`. Com `continue`, uma entrada que o
+      // classificador nunca pôs aqui (porque a restrição caiu no OUTRO registro,
+      // ou porque não menciona literal) passava por este caso sem conferir nada,
+      // e só o caso de cobertura acima acusava. Um caso que pode terminar verde
+      // sem ter comparado é o silêncio que este arquivo existe para quebrar.
+      assert.ok(
+        atual !== undefined,
+        `${chave} está declarada em CHECKS_QUE_NAO_SAO_LISTA_FECHADA e o banco não a tem ` +
+          'nesse registro: ou sumiu, ou virou lista fechada simples, ou deixou de mencionar literal.',
+      );
       assert.equal(
         atual,
         esperada,
@@ -760,6 +819,27 @@ void describe('o registro cobre o banco: restrição nova sem entrada reprova, n
           'expressão que o banco APLICA, e mudança aqui é mudança de regra.',
       );
     }
+  });
+
+  void it('toda lista declarada caiu no registro de lista fechada, e nenhuma no de CHECK comum', () => {
+    // Uma lista fechada pode mudar de forma no catálogo sem ninguém ver: `IN`
+    // de um valor só vira `col = 'v'::text`, e uma cláusula a mais vira
+    // disjunção. Nos dois casos ela sai de `simples` e entra em `naoSimples`,
+    // e o conjunto deixa de ser conferido como conjunto. Este caso nomeia a
+    // restrição que escorregou, em vez de deixar o `get()` devolver `undefined`.
+    const escorregaram = Object.keys(LISTAS_FECHADAS).filter((c) => !simples.has(c) || naoSimples.has(c));
+    assert.deepEqual(
+      escorregaram,
+      [],
+      'lista declarada em LISTAS_FECHADAS que o banco não guarda como lista fechada simples. ' +
+        'Escreva a restrição como `col IN (...)`, ou `col = ANY (ARRAY[...])` quando houver um valor só.',
+    );
+    // A que motivou este caso, pelo nome: o ator da trilha (ADR-0027 A.5).
+    assert.deepEqual(
+      [...(simples.get('audit.events.events_actor_kind_check')?.valores ?? [])].sort(),
+      ['admin', 'anonymous', 'system', 'user'],
+      'audit.events.events_actor_kind_check não está no registro de lista fechada com os quatro atores',
+    );
   });
 
   void it('a inspeção tem o que inspecionar: as duas classes estão povoadas', () => {

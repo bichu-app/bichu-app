@@ -3915,10 +3915,11 @@ export interface components {
         };
         /**
          * @description As operacoes sensiveis do backoffice (D40). Um token de um escopo nao
-         *     abre operacao de outro.
+         *     abre operacao de outro. `network_event_access_change` e a troca de
+         *     visibilidade (publico/privado) de encontro publicado (ADR-0027 item 5).
          * @enum {string}
          */
-        AdminReauthScope: "store_item_retirement" | "network_event_relocation" | "network_event_cancellation" | "network_event_removal";
+        AdminReauthScope: "store_item_retirement" | "network_event_relocation" | "network_event_cancellation" | "network_event_removal" | "network_event_access_change";
         AdminReauthRequest: {
             password: string;
             scope: components["schemas"]["AdminReauthScope"];

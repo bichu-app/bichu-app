@@ -23,7 +23,7 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
         .selectFrom('admin_sessions')
         .select([
           'id',
-          'user_id',
+          'admin_account_id',
           'token_hash',
           'csrf_token_hash',
           'created_at',
@@ -37,7 +37,7 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
       if (linha === undefined) return undefined;
       const armazenada: SessaoAdministrativaArmazenada = {
         id: linha.id,
-        userId: linha.user_id as UserId,
+        userId: linha.admin_account_id as UserId,
         tokenHash: linha.token_hash,
         csrfTokenHash: linha.csrf_token_hash,
         createdAt: linha.created_at.getTime() as Instant,
@@ -70,7 +70,7 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
         .insertInto('admin_sessions')
         .values({
           id: nova.id,
-          user_id: nova.userId,
+          admin_account_id: nova.userId,
           token_hash: nova.tokenHash,
           csrf_token_hash: nova.csrfTokenHash,
           created_at: new Date(nova.createdAt),
@@ -97,7 +97,7 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
       const resultado = await trx
         .updateTable('admin_sessions')
         .set({ revoked_at: new Date(agora), revoked_reason: motivo })
-        .where('user_id', '=', userId)
+        .where('admin_account_id', '=', userId)
         .where('revoked_at', 'is', null)
         .executeTakeFirst();
       return Number(resultado.numUpdatedRows);
@@ -120,7 +120,7 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
         .values({
           id: nova.id,
           session_id: nova.sessionId,
-          user_id: nova.userId,
+          admin_account_id: nova.userId,
           scope: nova.escopo,
           token_hash: nova.tokenHash,
           issued_at: new Date(nova.emitidaEm),
@@ -138,7 +138,7 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
         .set({ consumed_at: new Date(consumo.agora) })
         .where('token_hash', '=', consumo.tokenHash)
         .where('session_id', '=', consumo.sessionId)
-        .where('user_id', '=', consumo.userId)
+        .where('admin_account_id', '=', consumo.userId)
         .where('scope', '=', consumo.escopo)
         .where('consumed_at', 'is', null)
         .where('expires_at', '>', new Date(consumo.agora))

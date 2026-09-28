@@ -63,7 +63,33 @@ export interface LocalCredentialsTable {
 
 export interface UserRolesTable {
   user_id: string;
-  role: 'tutor' | 'moderator' | 'admin';
+  /** So `tutor` desde 28/09: o painel tem cadastro proprio (ADR-0027 item 20.2). */
+  role: 'tutor';
+}
+
+/** O papel da conta do painel. Espelha `AdminRole` do contrato. */
+export type PapelDaContaAdministrativa = 'admin';
+export type EstadoDaContaAdministrativa = 'active' | 'disabled';
+export type MotivoDoBloqueioAdministrativo = 'failed_logins' | 'disavowed';
+
+/**
+ * O cadastro do painel (ADR-0027 item 20.1). Sem FK para `users`, e nada do app
+ * a referencia: uma porta nao acha a conta da outra.
+ */
+export interface AdminAccountsTable {
+  id: string;
+  email: string;
+  display_name: string;
+  role: Generated<PapelDaContaAdministrativa>;
+  password_phc: string;
+  password_updated_at: Date;
+  status: Generated<EstadoDaContaAdministrativa>;
+  disabled_at: Date | null;
+  blocked_reason: MotivoDoBloqueioAdministrativo | null;
+  blocked_at: Date | null;
+  sessions_invalid_before: Generated<Date>;
+  last_login_at: Date | null;
+  created_at: CriadoEm;
 }
 
 /**
@@ -72,7 +98,7 @@ export interface UserRolesTable {
  */
 export interface AdminSessionsTable {
   id: string;
-  user_id: string;
+  admin_account_id: string;
   token_hash: Buffer;
   csrf_token_hash: Buffer;
   /** O instante da senha, herdado na rotacao. */
@@ -84,9 +110,10 @@ export interface AdminSessionsTable {
   revoked_reason:
     | 'logout'
     | 'rotated'
-    | 'role_removed'
+    | 'account_disabled'
     | 'account_invalidated'
     | 'disavowed'
+    | 'password_reset'
     | null;
   user_agent: string | null;
   ip_hmac: Buffer | null;
@@ -96,16 +123,28 @@ export interface AdminSessionsTable {
 export interface AdminReauthTokensTable {
   id: string;
   session_id: string;
-  user_id: string;
+  admin_account_id: string;
   scope:
     | 'store_item_retirement'
     | 'network_event_relocation'
     | 'network_event_cancellation'
-    | 'network_event_removal';
+    | 'network_event_removal'
+    | 'network_event_access_change';
   token_hash: Buffer;
   issued_at: Date;
   expires_at: Date;
   consumed_at: Date | null;
+}
+
+/** O "nao fui eu" do aviso de sessao administrativa aberta (D62). */
+export interface AdminSessionAlertsTable {
+  id: string;
+  admin_account_id: string;
+  session_id: string | null;
+  token_hash: Buffer;
+  expires_at: Date;
+  consumed_at: Date | null;
+  created_at: CriadoEm;
 }
 
 export interface VerificationTokensTable {
@@ -416,8 +455,10 @@ export interface MatchCandidatesTable {
 export interface AuditEventsTable {
   id: string;
   occurred_at: Generated<Date>;
-  actor_kind: 'user' | 'anonymous' | 'system';
+  actor_kind: 'user' | 'anonymous' | 'system' | 'admin';
   actor_user_id: string | null;
+  /** `admin_accounts.id` de quem agiu no painel; nulo em todo ator que nao e `admin`. */
+  actor_admin_id: string | null;
   actor_ip_hmac: Buffer | null;
   correlation_id: string | null;
   action: string;
@@ -940,8 +981,10 @@ export interface Database {
   verification_tokens: VerificationTokensTable;
   refresh_tokens: RefreshTokensTable;
   reauth_tokens: ReauthTokensTable;
+  admin_accounts: AdminAccountsTable;
   admin_sessions: AdminSessionsTable;
   admin_reauth_tokens: AdminReauthTokensTable;
+  admin_session_alerts: AdminSessionAlertsTable;
   idempotency_keys: IdempotencyKeysTable;
   rate_limit_counters: RateLimitCountersTable;
   ref_data_versions: RefDataVersionsTable;

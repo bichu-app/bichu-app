@@ -195,7 +195,7 @@ async function conta(papeis: readonly string[]): Promise<{ id: UserId; email: st
   assert.ok(criada !== undefined);
   contas.push(criada.id);
   for (const papel of papeis.filter((p) => p !== 'tutor')) {
-    await banco.db.insertInto('user_roles').values({ user_id: criada.id, role: papel as 'admin' }).execute();
+    await banco.db.insertInto('user_roles').values({ user_id: criada.id, role: papel as never }).execute();
   }
   return { id: criada.id, email };
 }
@@ -217,7 +217,7 @@ async function sessaoDireta(userId: UserId): Promise<SessaoDeTeste> {
   const id = randomUUID();
   await banco.db.insertInto('admin_sessions').values({
     id,
-    user_id: userId,
+    admin_account_id: userId,
     token_hash: hashDeToken(valor),
     csrf_token_hash: hashDeToken(derivarTokenAntiCsrf(valor)),
     created_at: new Date(agora),
@@ -314,7 +314,7 @@ void describe('P16: a matriz da guarda, gerada do contrato (D33, D36, D37, D39)'
 
       const removido = await conta(['admin']);
       const daRemovida = await sessaoDireta(removido.id);
-      await banco.db.deleteFrom('user_roles').where('user_id', '=', removido.id).where('role', '=', 'admin').execute();
+      await banco.db.deleteFrom('user_roles').where('user_id', '=', removido.id).where('role', '=', 'admin' as never).execute();
       confere(rota, 'papel removido', await chamar(principal, metodo, caminho, { cabecalhos: comSessao(daRemovida), corpo }), 403);
     }
 
@@ -402,7 +402,7 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
       cabecalhos: { origin: IRMAO, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email: admin.email, password: SENHA },
     });
     assert.equal(resposta.status, 403);
-    const vivas = await banco.db.selectFrom('admin_sessions').select('id').where('user_id', '=', admin.id).execute();
+    const vivas = await banco.db.selectFrom('admin_sessions').select('id').where('admin_account_id', '=', admin.id).execute();
     assert.equal(vivas.length, 0);
   });
 });
@@ -449,10 +449,10 @@ void describe('ciclo da sessao (D38, D39, D40)', () => {
     const admin = await conta(['admin']);
     const sessao = await sessaoDireta(admin.id);
     await sessaoDireta(admin.id);
-    await banco.db.deleteFrom('user_roles').where('user_id', '=', admin.id).where('role', '=', 'admin').execute();
+    await banco.db.deleteFrom('user_roles').where('user_id', '=', admin.id).where('role', '=', 'admin' as never).execute();
     assert.equal((await chamar(principal, 'GET', '/admin/session', { cabecalhos: { cookie: sessao.cookie } })).status, 403);
     const vivas = await banco.db.selectFrom('admin_sessions').select('id')
-      .where('user_id', '=', admin.id).where('revoked_at', 'is', null).execute();
+      .where('admin_account_id', '=', admin.id).where('revoked_at', 'is', null).execute();
     assert.equal(vivas.length, 0);
   });
 
@@ -546,7 +546,7 @@ void describe('D42: conta dedicada nao entra pela porta do tutor', () => {
     const tutor = await conta(['tutor']);
     const login = await chamar(principal, 'POST', '/auth/login', { corpo: { email: tutor.email, password: SENHA }, semSuperficie: true });
     assert.equal(login.status, 200, JSON.stringify(login.corpo));
-    await banco.db.insertInto('user_roles').values({ user_id: tutor.id, role: 'admin' }).execute();
+    await banco.db.insertInto('user_roles').values({ user_id: tutor.id, role: 'admin' as never }).execute();
     const renovar = await chamar(principal, 'POST', '/auth/refresh', {
       corpo: { refresh_token: login.corpo?.['refresh_token'] }, semSuperficie: true,
     });
@@ -588,7 +588,7 @@ void describe('P17: a trilha na mesma transacao, por operacao da sessao', () => 
       cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email: admin.email, password: SENHA },
     });
     assert.equal(login.status, 500);
-    const sessoes = await banco.db.selectFrom('admin_sessions').select('id').where('user_id', '=', admin.id).execute();
+    const sessoes = await banco.db.selectFrom('admin_sessions').select('id').where('admin_account_id', '=', admin.id).execute();
     assert.equal(sessoes.length, 0, 'a sessao ficou gravada sem a trilha');
 
     const viva = await sessaoDireta(admin.id);

@@ -285,22 +285,25 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // O que faltava era a linha AQUI. O veredito deste registro é escrito à mão —
   // o catálogo sabe que a linha some, não sabe de quem ela é — e sem ela o caso
   // "toda chave estrangeira do banco está declarada aqui" reprovava a suíte.
-  // BICHUS-259 (ADR-0027). As tres chaves da sessao administrativa levam a
-  // linha junto, e nenhuma delas guarda memoria: quem agiu esta em
-  // `audit.events`, que nao referencia `users` de proposito.
-  'public.admin_sessions.admin_sessions_user_id_fkey': {
-    colunas: ['user_id'],
-    referencia: 'public.users',
+  // BICHUS-259 (ADR-0027 item 20, forma de 28/09). As chaves do cadastro do
+  // painel apontam para `admin_accounts`, e NUNCA para `users`: o caso "nenhuma
+  // tabela admin_* aponta para users", no fim deste arquivo, reprova se alguma
+  // voltar. Conta do painel nao se apaga, desativa, entao as cascatas abaixo so
+  // correm num expurgo operacional; e nenhuma delas guarda memoria, porque quem
+  // agiu esta em `audit.events`, que nao referencia nenhuma das duas tabelas.
+  'public.admin_sessions.admin_sessions_admin_account_id_fkey': {
+    colunas: ['admin_account_id'],
+    referencia: 'public.admin_accounts',
     aoApagar: 'CASCADE',
     levaJunto:
-      'as sessoes administrativas da conta. Uma sessao que sobrevivesse a conta seria uma ' +
+      'as sessoes da propria conta do painel. Uma sessao que sobrevivesse a conta seria uma ' +
       'credencial sem dono lida a cada requisicao.',
   },
-  'public.admin_reauth_tokens.admin_reauth_tokens_user_id_fkey': {
-    colunas: ['user_id'],
-    referencia: 'public.users',
+  'public.admin_reauth_tokens.admin_reauth_tokens_admin_account_id_fkey': {
+    colunas: ['admin_account_id'],
+    referencia: 'public.admin_accounts',
     aoApagar: 'CASCADE',
-    levaJunto: 'a janela de reautenticacao administrativa da conta, pelo mesmo motivo de reauth_tokens.',
+    levaJunto: 'a janela de reautenticacao da propria conta do painel, pelo mesmo motivo de reauth_tokens.',
   },
   'public.admin_reauth_tokens.admin_reauth_tokens_session_id_fkey': {
     colunas: ['session_id'],
@@ -309,6 +312,21 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     levaJunto:
       'a janela aberta dentro da sessao. Ela so vale presa a sessao que a pediu, entao nao ha ' +
       'o que guardar sem ela.',
+  },
+  'public.admin_session_alerts.admin_session_alerts_admin_account_id_fkey': {
+    colunas: ['admin_account_id'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'CASCADE',
+    levaJunto: 'os links "nao fui eu" da propria conta do painel, que sem ela nao tem o que derrubar.',
+  },
+  // `SET NULL`: o expurgo de sessoes vencidas ha 30 dias nao pode apagar o
+  // remedio de quem ainda nao leu o e-mail (o link vale 7 dias, mas a sessao
+  // que ele anunciou pode ter sido rotacionada e expurgada antes). Nenhum CHECK
+  // cobre `session_id`, entao o nulo cabe.
+  'public.admin_session_alerts.admin_session_alerts_session_id_fkey': {
+    colunas: ['session_id'],
+    referencia: 'public.admin_sessions',
+    aoApagar: 'SET NULL',
   },
   'public.reauth_tokens.reauth_tokens_user_id_fkey': {
     colunas: ['user_id'],

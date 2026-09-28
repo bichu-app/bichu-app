@@ -11,13 +11,14 @@ import type { TransacaoDeEscrita } from '../../audit/ports/audit-log.js';
 import type { EscopoDeReautenticacaoAdministrativa } from '../../../shared/http/route-definition.js';
 import type { Instant, UserId } from '../../../shared/types/brands.js';
 
-/** Os cinco motivos do apendice A.1. O conjunto exato esta em `conjunto-exato-dos-checks.test.ts`. */
+/** Os seis motivos do apendice A.1. O conjunto exato esta em `conjunto-exato-dos-checks.test.ts`. */
 export type MotivoDeRevogacaoAdministrativa =
   | 'logout'
   | 'rotated'
-  | 'role_removed'
+  | 'account_disabled'
   | 'account_invalidated'
-  | 'disavowed';
+  | 'disavowed'
+  | 'password_reset';
 
 export interface SessaoAdministrativaArmazenada {
   readonly id: string;

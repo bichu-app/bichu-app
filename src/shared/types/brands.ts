@@ -22,6 +22,12 @@ type Brand<T, B extends string> = T & { readonly [brand]: B };
 
 /** UUIDv7 gerado pelo NOSSO banco. Única chave que o resto do sistema referencia (ADR-0002). */
 export type UserId = Brand<string, 'UserId'>;
+/**
+ * `admin_accounts.id`: a conta do PAINEL (ADR-0027 item 20). Marca propria, e
+ * nao `UserId`, porque as duas identidades vivem em tabelas separadas por
+ * decisao: trocar uma pela outra nao compila (T18 de `04-seguranca.md` 22.11).
+ */
+export type AdminAccountId = Brand<string, 'AdminAccountId'>;
 export type PetId = Brand<string, 'PetId'>;
 export type CaseId = Brand<string, 'CaseId'>;
 export type TagId = Brand<string, 'TagId'>;
