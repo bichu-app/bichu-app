@@ -75,6 +75,11 @@ function naoUsado(nome: string): never {
 }
 
 class RepositorioDaTroca implements IdentityRepository {
+  /** D42 (BICHUS-259): as contas deste dublê sao todas de tutor. */
+  papeisDaConta(): Promise<readonly string[]> {
+    return Promise.resolve(['tutor']);
+  }
+
   public readonly tokensGravados: NovoTokenDeVerificacao[] = [];
   public readonly pedidosGravados: { userId: UserId; novoEmail: string }[] = [];
 

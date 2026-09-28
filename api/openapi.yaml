@@ -3474,6 +3474,473 @@ paths:
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   # ----------------------------------------------------------------------
+  # A secao `Rede`: os encontros da comunidade (ADR-0025)
+  # ----------------------------------------------------------------------
+
+  /network/events:
+    get:
+      operationId: listNetworkEvents
+      tags: [network]
+      x-effects: [expensive_query]
+      summary: A agenda de encontros da Rede
+      description: |
+        A secao `Rede`: os encontros que a comunidade marca em praca e parque.
+
+        **LEIA O ADR-0025 E A SECAO 12 DO ADR-0027 ANTES DE MEXER NESTA
+        OPERACAO.**
+
+        ## Nao ha pessoa nenhuma nesta resposta
+
+        Check-in e galeria sairam desta versao por decisao do cliente (ADR-0027
+        12.4). Quando voltarem, voltam pelas decisoes 1 a 3 do ADR-0025: a
+        presenca e da PESSOA e nunca do pet, sai como numero e nunca como lista,
+        e a foto nao tem autor na saida. O motivo e o item 7 do ADR-0010: uma
+        lista de presenca num encontro de bairro publica, de graca, que dois
+        animais sao do mesmo tutor.
+
+        ## Encontro privado sai como teaser, e nao entra em recorte oculto
+
+        O privado aparece com **so titulo, data local e estado**
+        (`NetworkEventPrivateTeaser`, ADR-0027 12.10). Ele casa `q` so pelo
+        titulo e **fica fora** de `city`, `admission` e `size`: aparecer num
+        recorte que so casa pelo valor oculto entregaria o valor (P19).
+
+        ## Nao ha coordenada nesta resposta, nem ordem por distancia
+
+        O encontro pode ter ponto marcado no mapa (ADR-0027 12.2), e **o ponto
+        nao sai aqui**: esta operacao e alcancavel sem conta. Ele sai so em
+        `getNetworkEventLocation`, com `bearerAuth` obrigatorio (emenda 1 do
+        ADR-0010). O lugar nesta resposta sao tres rotulos de texto --
+        `place_name`, `neighborhood`, `city`/`state` --, que e o teto de
+        precisao que o ADR-0010 permite em superficie publica.
+
+        **A ordem por distancia nao existe aqui.** Ela e
+        `listNearbyNetworkEvents`, com conta. O filtro de lugar e por `city`
+        digitada, como a listagem publica de perdidos.
+
+        ## A agenda nao mistura passado e futuro sem dizer qual e qual
+
+        `when` tem default `upcoming`: a lista abre com o que ainda vai
+        acontecer. `past` traz o que passou, `all` traz os dois e **nao e o
+        default**.
+
+        **`status` e calculado no SERVIDOR**, nunca no aplicativo. O encontro
+        CANCELADO continua na agenda ate o fim previsto, com `status`
+        `cancelled`; depois do fim, segue a regra do encerrado e sai `ended`
+        (ADR-0027 12.6, decisao do cliente de 23/09/2026).
+
+        ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTA SECAO
+
+        A escrita e do backoffice, em `/admin/network/events` (ADR-0027), e nao
+        daqui.
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "agenda publica: nao ha conta para contar, entao o teto e por IP, e generoso porque a aba recarrega a cada troca de filtro"
+      parameters:
+        - $ref: '#/components/parameters/NetworkEventQuery'
+        - $ref: '#/components/parameters/NetworkEventCity'
+        - $ref: '#/components/parameters/NetworkEventWhenParam'
+        - $ref: '#/components/parameters/NetworkEventSortParam'
+        - $ref: '#/components/parameters/NetworkEventAdmissionParam'
+        - $ref: '#/components/parameters/NetworkEventVisibilityParam'
+        - $ref: '#/components/parameters/NetworkEventSizeParam'
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+      responses:
+        '200':
+          description: |
+            Pagina da agenda. `total` alimenta a linha de resumo da barra de
+            listagem e `applied_filters` alimenta a distincao entre "a Rede
+            ainda nao tem encontro" e "o seu recorte esvaziou a agenda".
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkEventPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /network/events/{eventSlug}:
+    get:
+      operationId: getNetworkEvent
+      tags: [network]
+      x-effects: []
+      summary: Um encontro
+      description: |
+        **Um corpo so, e esse corpo e o publico** (ADR-0021). A autenticacao e
+        opcional porque a `Rede` e navegavel deslogado, e o corpo e identico nos
+        dois casos: nada nesta resposta e derivado de quem chama.
+
+        **Sem coordenada.** Autenticacao opcional e, para o portao de contrato
+        publico, operacao publica (P5 de `04-seguranca.md`). O ponto do encontro
+        sai em `getNetworkEventLocation`, que exige conta (ADR-0027 12.5).
+
+        **Encontro privado sai como teaser** (`NetworkEventPrivateTeaser`: so
+        titulo, data local e estado) para qualquer chamador, inclusive o
+        aprovado: o conteudo dele sai em `getNetworkEventPrivateDetails`
+        (ADR-0027 12.10). A forma vem do evento, e nao de quem pergunta.
+
+        Encontro que nao existe, que espera revisao (`pending_review`) ou que
+        foi retirado (`removed`) responde **404 nos tres casos**, com o mesmo
+        corpo: distinguir contaria a um estranho que aquele `slug` existiu. O
+        encontro cancelado e visivel, com `status` `cancelled` ate o fim
+        previsto.
+      security:
+        - bearerAuth: []
+        - {}
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 600
+          window: 1h
+          on_exceed: deny_429
+          note: "leitura de um evento: teto por IP porque a operacao e alcancavel sem conta, e o dobro da listagem porque abrir a galeria de varios encontros seguidos e uso normal"
+      parameters:
+        - name: eventSlug
+          in: path
+          required: true
+          description: O endereco publico do encontro. UUID nao sai nesta secao.
+          schema: { type: string, minLength: 3, maxLength: 30 }
+      responses:
+        '200':
+          description: O encontro.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkEvent' }
+        # `eventSlug` tem forma declarada, entao a validacao de parametro pode
+        # recusar -- e operacao que pode recusar declara 400. Sem esta linha a
+        # aplicacao NAO SOBE: `rotas-registradas-contra-o-contrato` compara o que
+        # o registro instala com o que o contrato promete, e reprova nominalmente.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /network/events/nearby:
+    get:
+      operationId: listNearbyNetworkEvents
+      tags: [network]
+      x-effects: [expensive_query]
+      summary: A agenda por distancia, pela regiao cadastrada de quem chama
+      description: |
+        **So com conta, sem alternativa vazia** (ADR-0027 12.14): a ordem que
+        depende da regiao de quem chama e uma resposta que muda conforme o
+        chamador, que o ADR-0021 proibe na leitura publica.
+
+        **A posicao do tutor nao vai na requisicao.** A operacao usa a regiao de
+        referencia ja gravada (`user_reference_locations`, quantizada em 100 m),
+        como `Perto`. Nenhuma coordenada sai do aparelho a cada busca, e nada de
+        localizacao entra em URL.
+
+        **Encontro privado nao entra**, aprovado ou nao: a posicao dele numa
+        lista por distancia ja e localizacao. `distance_m` sai arredondada a
+        100 m so para encontro publico com ponto; encontro sem ponto vem no fim,
+        com distancia nula. Sem regiao cadastrada, a lista sai em ordem de data,
+        toda `distance_m` sai nula e `effective_sort` diz `proximos`.
+        `sort=proximos` pede a ordem de data mesmo com regiao, e a distancia
+        continua no cartao (APP-2 da matriz).
+
+        Aceita os filtros da leitura publica e `max_km` (2, 5 ou 10), que
+        exclui encontro sem ponto e so recorta com regiao cadastrada. **O
+        caminho `nearby` e reservado**: nenhum encontro pode ter esse `slug`.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "exige conta, entao o teto e por conta; o mesmo numero da agenda publica por IP"
+      parameters:
+        - $ref: '#/components/parameters/NetworkEventQuery'
+        - $ref: '#/components/parameters/NetworkEventCity'
+        - $ref: '#/components/parameters/NetworkEventWhenParam'
+        - $ref: '#/components/parameters/NetworkEventAdmissionParam'
+        - $ref: '#/components/parameters/NetworkEventSizeParam'
+        - name: sort
+          in: query
+          schema: { $ref: '#/components/schemas/NetworkEventNearbySort' }
+        - name: max_km
+          in: query
+          schema: { type: integer, enum: [2, 5, 10] }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+      responses:
+        '200':
+          description: Pagina da agenda por distancia, so com encontros publicos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkEventNearbyPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /network/events/{eventSlug}/location:
+    get:
+      operationId: getNetworkEventLocation
+      tags: [network]
+      x-effects: []
+      summary: O ponto do encontro no mapa, so para quem tem conta
+      description: |
+        O ponto marcado no mapa pelo administrador (`geo_source = map_pin`,
+        ADR-0006), para o aplicativo desenhar o encontro no mapa. E a emenda 1
+        do ADR-0010, com escopo fechado: **ponto de evento publicado, em
+        resposta autenticada**. Coordenada de pessoa, de pet, de caso e de
+        achado continua proibida em qualquer superficie.
+
+        **So com conta, e sem alternativa vazia.** `listNetworkEvents` e
+        publica e `getNetworkEvent` tem autenticacao opcional; nenhuma das duas
+        pode carregar o ponto, porque o portao de contrato publico trata
+        autenticacao opcional como publica e o ADR-0021 proibe a resposta que
+        muda conforme o chamador (ADR-0027 12.5). Sem conta, a tela mostra os
+        rotulos do lugar e nao mostra mapa.
+
+        `point` e **nulo** quando o encontro nao tem ponto marcado: o ponto e
+        opcional (ADR-0027 12.2), e a ausencia e estado normal.
+
+        **Lugar publico, nunca residencia** (ADR-0027 secao 13): quem cria o
+        encontro e o administrador, o formulario do painel diz que o local e
+        logradouro publico, e criar, mover e cancelar avisam todos os
+        administradores. Nenhuma restricao de banco distingue uma praca de uma
+        casa, e este contrato nao afirma que distingue.
+
+        O encontro e visivel para esta operacao sob a mesma regra de
+        `getNetworkEvent` (publicado ou cancelado), com a autorizacao na
+        clausula `WHERE`: encontro que nao existe, que espera revisao ou que
+        foi retirado responde 404, com o mesmo corpo. **Encontro privado so
+        devolve o ponto para conta com pedido aprovado**; as outras recebem o
+        mesmo 404 (ADR-0027 12.11). O 401 vem antes de qualquer consulta: sem
+        conta nao se descobre nem se o `slug` existe.
+
+        Responde com `Cache-Control: private, no-store`.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 600
+          window: 1h
+          on_exceed: deny_429
+          note: "a operacao EXIGE conta, entao o teto e por conta (ADR-0027 12.5) -- e no Brasil um teto por `ip` pegaria vizinho inocente atras do CGNAT. O mesmo numero do detalhe, porque a tela do encontro chama as duas a cada abertura; o que ele segura e a raspagem dos pontos de todos os encontros por uma conta so"
+      parameters:
+        - name: eventSlug
+          in: path
+          required: true
+          description: O endereco publico do encontro.
+          schema: { type: string, minLength: 3, maxLength: 30 }
+      responses:
+        '200':
+          description: O ponto do encontro, ou `point` nulo quando nao ha ponto marcado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkEventLocation' }
+        # Mesma razao de `getNetworkEvent`: `eventSlug` tem forma declarada.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /network/events/{eventSlug}/private-details:
+    get:
+      operationId: getNetworkEventPrivateDetails
+      tags: [network]
+      x-effects: []
+      summary: O conteudo oculto do encontro privado, so para conta aprovada
+      description: |
+        Lugar, horario, resumo, imagens, valor, portes, idade, regras,
+        estrutura, "o que levar" e observacoes do encontro **privado**, para a
+        conta com pedido **aprovado** (ADR-0027 12.11). A autorizacao e um
+        `EXISTS` sobre o pedido na clausula `WHERE`.
+
+        **404, com o mesmo corpo, nos tres casos**: o encontro nao e privado,
+        nao existe (ou nao e visivel), ou a conta nao tem pedido aprovado. Nao
+        ha corpo menor para quem nao foi aprovado: nao ha corpo nenhum.
+
+        Responde com `Cache-Control: private, no-store`.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 600
+          window: 1h
+          on_exceed: deny_429
+          note: "exige conta; o mesmo teto do detalhe e do ponto, porque a tela do encontro chama as tres"
+      parameters:
+        - $ref: '#/components/parameters/NetworkEventSlugParam'
+      responses:
+        '200':
+          description: O conteudo oculto do encontro.
+          headers:
+            Cache-Control:
+              schema: { type: string, enum: ['private, no-store'] }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkEventPrivateDetails' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /network/events/{eventSlug}/join-request:
+    post:
+      operationId: requestToJoinNetworkEvent
+      tags: [network]
+      x-effects: []
+      summary: Pedir para participar de um encontro privado
+      description: |
+        Cria o pedido **da conta** (nunca do pet; sem corpo, sem texto livre) e
+        responde **200** com o estado que o app ve. Encontro publico, inexistente
+        ou nao visivel responde 404.
+
+        **Idempotente, e a recusa e invisivel** (ADR-0027 12.11): pedir de novo
+        nunca cria linha nova. Sobre pedido recusado, devolve `requested` e nao o
+        recoloca na fila. Nenhuma resposta difere entre recusado e pendente.
+        Encontro que ja terminou responde 400 (`code: event_ended`), para o
+        pendente e para o recusado igualmente.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+          note: "escrita por conta; baixo porque pedir e raro"
+      parameters:
+        - $ref: '#/components/parameters/NetworkEventSlugParam'
+      responses:
+        '200':
+          description: O estado do pedido, no vocabulario do app.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkEventJoinRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    get:
+      operationId: getMyNetworkEventJoinRequest
+      tags: [network]
+      x-effects: []
+      summary: O estado do pedido da propria conta
+      description: |
+        O estado do pedido **da propria conta**, no vocabulario do app
+        (`JoinRequestAppState`, sem `declined`). Sem pedido, 404.
+
+        **A desistencia nao deixa rastro legivel.** O pendente desistido e
+        apagado (D54) e o recusado desistido e guardado so para nao lavar a
+        recusa; os dois respondem 404 aqui. Se o recusado desistido respondesse
+        `withdrawn` e o pendente desistido respondesse 404, a desistencia
+        separaria o recusado do pendente.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 600
+          window: 1h
+          on_exceed: deny_429
+      parameters:
+        - $ref: '#/components/parameters/NetworkEventSlugParam'
+      responses:
+        '200':
+          description: O estado do pedido.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkEventJoinRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+    delete:
+      operationId: withdrawNetworkEventJoinRequest
+      tags: [network]
+      x-effects: []
+      summary: Desistir do pedido
+      description: |
+        Desiste enquanto o app ve `requested`, e responde 200 com `withdrawn`.
+        Aprovado ou encontro encerrado respondem 400 (`code:
+        join_request_final`). Sem pedido (inclusive o ja desistido), 404.
+
+        Pedido **pendente** e apagado na hora (D54). Pedido **recusado** grava a
+        desistencia e continua recusado: apaga-lo faria o proximo pedido nascer
+        pendente e lavaria a recusa. A resposta e a mesma nos dois casos.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 60
+          window: 1h
+          on_exceed: deny_429
+      parameters:
+        - $ref: '#/components/parameters/NetworkEventSlugParam'
+      responses:
+        '200':
+          description: A desistencia foi registrada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/NetworkEventJoinRequest' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /network/join-requests:
+    get:
+      operationId: listMyNetworkEventJoinRequests
+      tags: [network]
+      x-effects: []
+      summary: Meus pedidos para participar
+      description: |
+        Os encontros privados em que **a propria conta** pediu para participar,
+        cada um com o teaser e o `JoinRequestAppState`. Nao devolve conteudo
+        oculto nem para aprovado: o conteudo continua em `private-details`.
+
+        Aceita `q` (**so titulo**), `state` e `sort=proximos`. **Nao aceita
+        `admission` nem `size`**: filtrar por valor oculto entregaria o valor.
+        Pedidos desistidos nao aparecem, pela mesma razao de
+        `getMyNetworkEventJoinRequest`, e por isso `state=withdrawn` devolve a
+        lista vazia.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+      parameters:
+        - name: q
+          in: query
+          description: Busca so no titulo.
+          schema: { type: string, minLength: 2, maxLength: 80 }
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/JoinRequestAppState' }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [proximos], default: proximos }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+      responses:
+        '200':
+          description: Pagina dos pedidos da conta.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MyNetworkEventJoinRequestPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  # ----------------------------------------------------------------------
   # Superficie publica
   # ----------------------------------------------------------------------
 
@@ -4503,7 +4970,31 @@ paths:
                     scope: network_event_relocation
                     csrf_token: Qm9uZGlhLCBpc3RvIGUgc28gdW0gZXhlbXBsbw
         '400': { $ref: '#/components/responses/ValidationFailed' }
-        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '401':
+          description: |
+            Tres tipos, e o painel trata dois deles de jeito diferente:
+            `invalid-credentials` e a senha errada (a pessoa continua na tela e
+            tenta de novo; o corpo e o mesmo do login recusado, e a tentativa vai
+            para a trilha como `admin.session.denied`); `unauthenticated` e
+            `token-expired` sao a sessao que nao existe ou venceu, e levam ao
+            login, como em `AdminUnauthorized`.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+              examples:
+                senhaErrada:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/invalid-credentials
+                    title: E-mail ou senha nao conferem
+                    status: 401
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
+                semSessao:
+                  value:
+                    type: https://dominio-a-definir.com.br/problems/unauthenticated
+                    title: Entre para continuar
+                    status: 401
+                    next_action: sign_in
+                    correlation_id: 018f7c1e-7a2b-7c3d-9e4f-2b1a0c9d8e7f
         '403': { $ref: '#/components/responses/AdminForbidden' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
@@ -4609,9 +5100,9 @@ paths:
       summary: Altera um parceiro
       description: |
         `If-Match` obrigatorio: dois administradores editando o mesmo parceiro
-        nao se sobrescrevem em silencio. Trocar `host` e recusado com `400`
-        (`code: host_mismatch_items`) se algum item do parceiro deixaria de
-        apontar para o host dele. Trocar `slug` e permitido; o caminho muda, e a
+        nao se sobrescrevem em silencio. Trocar `host` leva os itens junto: o
+        item guarda so o caminho do destino, e o endereco e composto com o
+        host do parceiro na leitura. Trocar `slug` e permitido; o caminho muda, e a
         resposta traz o novo.
       security:
         - adminSession: []
@@ -5062,7 +5553,12 @@ paths:
       tags: [admin]
       x-effects: []
       summary: Encontros da Rede, em todos os estados
-      description: A lista do painel, com publicados, cancelados e removidos, e o estado temporal calculado no servidor.
+      description: |
+        A lista do painel, com o estado temporal calculado no servidor.
+        **Removido nao aparece por padrao**: removido some da lista (a UX o
+        trata como apagado para quem opera), e so volta quando pedido pelo
+        filtro fechado `publication_status=removed`, que devolve so os
+        removidos. Sem filtro vem publicado e cancelado.
       security:
         - adminSession: []
       x-admin-roles: [admin]
@@ -5073,6 +5569,7 @@ paths:
           schema: { type: string, minLength: 2, maxLength: 80 }
         - name: publication_status
           in: query
+          description: 'Sem ele, `published` e `cancelled`. `removed` so aparece quando pedido aqui.'
           schema: { $ref: '#/components/schemas/AdminNetworkEventPublicationStatus' }
         - name: timing
           in: query
@@ -5267,6 +5764,7 @@ paths:
         - $ref: '#/components/parameters/IfMatch'
       responses:
         '204': { description: Encontro removido. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/AdminReauthRequired' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
@@ -5712,6 +6210,65 @@ components:
         `x-admin-reauth-scope`. Nao e o `X-Reauth-Token` do app, que e preso ao
         `jti` do JWT movel.
   parameters:
+    NetworkEventQuery:
+      name: q
+      in: query
+      description: |
+        Busca por texto no **titulo, no nome do lugar e no bairro**, no servidor.
+        **O encontro privado casa so pelo titulo**: casar pelo bairro entregaria
+        onde ele e (ADR-0027 12.14).
+      schema: { type: string, minLength: 2, maxLength: 80 }
+    NetworkEventCity:
+      name: city
+      in: query
+      description: |
+        A cidade DIGITADA, nunca coordenada (ADR-0006). **Exclui encontro
+        privado**: a cidade dele e oculta, e aparecer no recorte a entregaria.
+      schema: { type: string, minLength: 2, maxLength: 60 }
+    NetworkEventWhenParam:
+      name: when
+      in: query
+      description: |
+        O recorte no tempo, calculado no servidor e **no fuso de cada encontro**.
+        `upcoming` e o default. `today` e a data local de hoje no fuso do
+        encontro; `weekend` e o sabado e o domingo correntes (ou os proximos);
+        `next_30_days` e inicio entre agora e agora mais 30 dias.
+      schema: { $ref: '#/components/schemas/NetworkEventWhen' }
+    NetworkEventSortParam:
+      name: sort
+      in: query
+      description: |
+        **O default depende de `when`, e por isso `effective_sort` existe.** Com
+        `past`, o default e `recentes`; com os outros, `proximos`.
+      schema: { $ref: '#/components/schemas/NetworkEventSort' }
+    NetworkEventAdmissionParam:
+      name: admission
+      in: query
+      description: |
+        Gratuito ou pago. **Exclui encontro privado**: a condicao de acesso dele
+        e oculta, e aparecer no recorte "pago" a entregaria (ADR-0027 12.14).
+      schema: { type: string, enum: [free, paid] }
+    NetworkEventVisibilityParam:
+      name: visibility
+      in: query
+      description: |
+        A visibilidade e visivel, entao filtra os dois. **Sem padrao**, de
+        proposito: o `default: public` de `NetworkEventVisibility` aplicado aqui
+        tiraria todo encontro privado da agenda sem ninguem ter pedido.
+      schema: { type: string, enum: [public, private] }
+    NetworkEventSizeParam:
+      name: size
+      in: query
+      description: |
+        Encontros que aceitam aquele porte. **Exclui encontro privado**, pelo
+        mesmo motivo de `admission`.
+      schema: { $ref: '#/components/schemas/PetSize' }
+    NetworkEventSlugParam:
+      name: eventSlug
+      in: path
+      required: true
+      description: O endereco publico do encontro.
+      schema: { type: string, minLength: 3, maxLength: 30 }
     PetId:
       name: petId
       in: path
@@ -6089,8 +6646,8 @@ components:
       description: |
         Sessao valida, e a requisicao recusada pela guarda: conta sem o papel
         exigido em `x-admin-roles` (inclusive papel removido depois do login,
-        D37), ou, em metodo nao seguro, `Origin` diferente de
-        `https://admin.bichu.app` ou `X-CSRF-Token` ausente ou divergente
+        D37), ou, em metodo nao seguro, `Origin` diferente da origem do
+        painel (`ADMIN_ORIGIN`) ou `X-CSRF-Token` ausente ou divergente
         (D39). A guarda decide antes de ler o recurso, entao o 403 nao diz nada
         sobre ele.
       content:
@@ -7621,6 +8178,428 @@ components:
             ausencia.
           additionalProperties: { type: string }
 
+    NetworkEventWhen:
+      type: string
+      enum: [upcoming, past, all, today, weekend, next_30_days]
+      default: upcoming
+      description: |
+        O recorte no tempo da agenda, calculado no servidor e no fuso de cada
+        encontro. `all` existe e **nao e o default**. `today`, `weekend` e
+        `next_30_days` sao os sub-menus da agenda (ADR-0027 12.14).
+
+    NetworkEventSort:
+      type: string
+      enum: [proximos, recentes]
+      description: |
+        `proximos` e a data em ordem crescente; `recentes` e decrescente. **A
+        leitura publica nao ordena por distancia**: essa ordem e
+        `listNearbyNetworkEvents`, com conta.
+
+    NetworkEventNearbySort:
+      type: string
+      enum: [distancia, proximos]
+      default: distancia
+      description: |
+        `distancia` usa a regiao cadastrada de quem chama; sem regiao, a ordem
+        efetiva e `proximos`, e `effective_sort` diz isso.
+
+    NetworkEventStatus:
+      type: string
+      enum: [upcoming, happening, ended, cancelled]
+      description: |
+        **Calculado no servidor, sempre.** `cancelled` prevalece sobre o estado
+        temporal ate o fim previsto, para as pessoas confirmarem o
+        cancelamento: **com `ends_at`, ate o `ends_at`; sem `ends_at`, ate
+        23:59:59 do dia do encontro no `time_zone` dele** (decisoes do cliente
+        de 23/09 e 28/09/2026). Depois disso sai `ended`. No encontro
+        publicado sem `ends_at` nada muda: ele e `upcoming` ate comecar e
+        `ended` a partir dai (ADR-0025 item 6). O recorte `when=upcoming` segue a
+        mesma regra. Cliente que nao conhece um valor precisa trata-lo sem
+        quebrar.
+
+    NetworkEventVisibility:
+      type: string
+      description: |
+        `private`: para quem nao tem pedido aprovado, o app recebe so titulo e
+        data; o resto sai em operacao separada, so para conta aprovada
+        (ADR-0027 item 17 e 12.10 a 12.12).
+      enum: [public, private]
+      default: public
+
+    NetworkEventPlace:
+      type: object
+      required: [place_name, neighborhood, city, state]
+      description: |
+        O lugar, em rotulo e **nunca em coordenada**. `place_name` e o nome do
+        lugar publico como as pessoas o chamam, e nao logradouro, numero nem
+        CEP -- os tres sao endereco, e o ADR-0010 item 2 os proibe aqui.
+
+        **Nao ha campo de latitude, de longitude nem de distancia neste objeto,
+        em nenhuma precisao.** Ele sai em operacoes alcancaveis sem conta, e o
+        ponto do encontro so sai em `getNetworkEventLocation`, com conta
+        (ADR-0027 12.5). Acrescentar `lat` aqui faz o portao de contrato
+        publico reprovar, e a isca
+        `infra/verificacao/iscas/deve-reprovar-ponto-do-encontro-no-detalhe-publico.yaml`
+        existe para provar isso.
+      properties:
+        place_name: { type: string, example: 'Praça Benedito Calixto' }
+        neighborhood: { type: string, example: 'Pinheiros' }
+        city: { type: string, example: 'São Paulo' }
+        state: { type: string, example: 'SP' }
+
+    EventPriceUnit:
+      type: string
+      description: |
+        A que o valor se refere. Lista fechada por `CHECK`; o rotulo e do app.
+        `per_pair` e tutor e cao juntos.
+      enum: [per_dog, per_person, per_pair]
+
+    NetworkEventPrice:
+      type: object
+      description: |
+        O valor que o organizador informa, **informativo**: o Bichu nao cobra e
+        nao guarda forma de pagar (decisao do cliente de 23/09).
+      required: [amount, currency, unit]
+      additionalProperties: false
+      properties:
+        amount: { type: integer, minimum: 1, maximum: 100000000, description: Centavos. }
+        currency: { type: string, enum: [BRL] }
+        unit: { $ref: '#/components/schemas/EventPriceUnit' }
+
+    NetworkEventAdmission:
+      type: object
+      required: [kind, price]
+      additionalProperties: false
+      properties:
+        kind: { type: string, enum: [free, paid] }
+        price:
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventPrice'
+            - type: 'null'
+
+    NetworkEventAcceptedSizes:
+      type: array
+      minItems: 1
+      maxItems: 4
+      uniqueItems: true
+      default: [P, M, G, GG]
+      description: |
+        Portes aceitos, um ou mais, com os valores de `PetSize` (`ref_sizes`),
+        os do cadastro de pet. O padrao e todos; o app escreve "Todos os
+        portes" quando os quatro estao marcados.
+      items: { $ref: '#/components/schemas/PetSize' }
+
+    NetworkEventDogAge:
+      type: string
+      description: Idade dos caes, uma escolha. Lista fechada por `CHECK`.
+      enum: [any, from_4_months, from_1_year, up_to_1_year]
+      default: any
+
+    NetworkEventAmenity:
+      type: string
+      description: |
+        Acessibilidade e estrutura do local. Lista fechada por `CHECK` em
+        `network_event_amenities`; acrescentar valor e tres arquivos no mesmo
+        commit (ADR-0023 secao 3).
+      enum: [level_ground_or_ramp, accessible_restroom, public_restroom_nearby, shade, benches, dog_water_fountain, parking_nearby]
+
+    NetworkEventAmenities:
+      type: array
+      maxItems: 7
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/NetworkEventAmenity' }
+
+    NetworkEventBringItem:
+      type: string
+      description: |
+        O que levar, na parte fechada: o que se repete em todo encontro, com
+        icone e texto do app. Lista fechada por `CHECK` em
+        `network_event_bring_items`; acrescentar valor e tres arquivos no mesmo
+        commit (ADR-0023 secao 3).
+      enum: [water, water_bowl, leash, poop_bags, treats, towel, vaccination_card, toy]
+
+    NetworkEventBringItems:
+      type: array
+      maxItems: 8
+      uniqueItems: true
+      items: { $ref: '#/components/schemas/NetworkEventBringItem' }
+
+    NetworkEventNotes:
+      type: string
+      minLength: 2
+      maxLength: 500
+      description: |
+        Observacoes, so como complemento, ate 500 caracteres (o numero da
+        designer, e o mesmo em que o detector e medido). **Texto puro, sem
+        canal de contato nem de pagamento** (D59): telefone, e-mail, URL,
+        endereco, CEP e chave PIX sao **recusados** com `400` (`code:
+        contact_or_payment_detected`), pelo detector do canal mediado, com
+        normalizacao NFKC e remocao de largura zero. Caractere de controle
+        bidirecional (U+202A a U+202E, U+2066 a U+2069) e recusado em todo
+        texto administrativo (`code: bidi_control`). O app nao transforma nada
+        em link. Mudar as observacoes avisa todos os administradores (D60).
+
+    NetworkEventImage:
+      type: object
+      required: [url, alt_text]
+      additionalProperties: false
+      description: |
+        Uma imagem da galeria do encontro. A primeira da lista e a capa.
+        `url` e composta na leitura a partir da chave publica da imagem: o banco
+        nao guarda URL (`docs/07-devops.md` 3.6).
+      properties:
+        url: { type: string, format: uri }
+        alt_text: { type: string, minLength: 2, maxLength: 150 }
+
+    NetworkEventImages:
+      type: array
+      maxItems: 8
+      description: Ate 8, na ordem do painel; a primeira e a capa. Vazia e estado normal.
+      items: { $ref: '#/components/schemas/NetworkEventImage' }
+
+    NetworkEventPublic:
+      type: object
+      required: [slug, title, summary, place, starts_at, time_zone, status, visibility, admission, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, bring_items, images]
+      description: |
+        O encontro **publico**: o cartao da agenda e o detalhe. **Nao ha
+        nenhum campo com pessoas**, nao ha coordenada e nao ha UUID.
+      properties:
+        slug: { type: string }
+        title: { type: string, maxLength: 120 }
+        summary: { type: string, maxLength: 180 }
+        place: { $ref: '#/components/schemas/NetworkEventPlace' }
+        starts_at:
+          type: string
+          format: date-time
+          description: O instante absoluto. A hora de PAREDE sai de `time_zone`.
+        ends_at: { type: string, format: date-time, nullable: true }
+        time_zone:
+          type: string
+          example: 'America/Sao_Paulo'
+          description: O nome IANA da zona do evento. Sem ele a hora de parede sai errada.
+        status: { $ref: '#/components/schemas/NetworkEventStatus' }
+        visibility: { type: string, enum: [public] }
+        cover_image_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A `url` da imagem de posicao 0, derivada na leitura e nunca gravada no
+            banco. Nula sem imagem; o cartao sabe se desenhar sem ela.
+        images: { $ref: '#/components/schemas/NetworkEventImages' }
+        admission: { $ref: '#/components/schemas/NetworkEventAdmission' }
+        accepted_sizes: { $ref: '#/components/schemas/NetworkEventAcceptedSizes' }
+        dog_age: { $ref: '#/components/schemas/NetworkEventDogAge' }
+        vaccination_required: { type: boolean }
+        fenced_off_leash_area:
+          type: boolean
+          description: O local tem area cercada para caes soltos. Atributo do lugar, nao permissao.
+        amenities: { $ref: '#/components/schemas/NetworkEventAmenities' }
+        bring_items: { $ref: '#/components/schemas/NetworkEventBringItems' }
+        notes:
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventNotes'
+            - type: 'null'
+
+    NetworkEventPrivateTeaser:
+      type: object
+      required: [slug, title, local_date, visibility, status]
+      additionalProperties: false
+      description: |
+        O encontro **privado**, para quem nao tem pedido aprovado: **so titulo e
+        data** (decisao do cliente, ADR-0027 12.10). **Lista permitida**: estas
+        cinco propriedades e nenhuma outra, e o portao P19
+        (`src/tools/portao-teaser-do-privado.ts`) reprova propriedade nova.
+
+        `local_date` e a data local no fuso do encontro, no lugar de
+        `starts_at`, `ends_at` e `time_zone`: o nome do fuso entregaria o
+        estado. Sem capa: a foto de um encontro costuma ser a foto do lugar. O
+        `slug` do privado e gerado pelo servidor, aleatorio, e nao diz o lugar.
+      properties:
+        slug: { type: string }
+        title: { type: string, maxLength: 120 }
+        local_date: { type: string, format: date }
+        visibility: { type: string, enum: [private] }
+        status: { $ref: '#/components/schemas/NetworkEventStatus' }
+
+    NetworkEventSummary:
+      description: |
+        O cartao da agenda: o encontro publico inteiro, ou o teaser do privado.
+        A forma vem da propriedade do **evento** (`visibility`), igual para
+        qualquer chamador, e nao de quem pergunta (ADR-0021).
+      oneOf:
+        - $ref: '#/components/schemas/NetworkEventPublic'
+        - $ref: '#/components/schemas/NetworkEventPrivateTeaser'
+      discriminator:
+        propertyName: visibility
+        mapping:
+          public: '#/components/schemas/NetworkEventPublic'
+          private: '#/components/schemas/NetworkEventPrivateTeaser'
+
+    NetworkEvent:
+      description: |
+        O encontro, na leitura do detalhe. Mesma regra do cartao: publico
+        inteiro, ou teaser do privado para todo mundo, inclusive o aprovado. O
+        conteudo do privado sai em `getNetworkEventPrivateDetails`.
+      oneOf:
+        - $ref: '#/components/schemas/NetworkEventPublic'
+        - $ref: '#/components/schemas/NetworkEventPrivateTeaser'
+      discriminator:
+        propertyName: visibility
+        mapping:
+          public: '#/components/schemas/NetworkEventPublic'
+          private: '#/components/schemas/NetworkEventPrivateTeaser'
+
+    NetworkEventPage:
+      type: object
+      required: [items, page, limit, total, effective_sort, effective_when, applied_filters]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/NetworkEventSummary' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        effective_sort:
+          allOf:
+            - $ref: '#/components/schemas/NetworkEventSort'
+          description: A ordem em que a lista de fato saiu.
+        effective_when:
+          allOf:
+            - $ref: '#/components/schemas/NetworkEventWhen'
+          description: O recorte de tempo que valeu.
+        applied_filters:
+          type: object
+          description: |
+            O recorte que de fato valeu. Traz `scope: all` quando nada foi
+            recortado.
+          additionalProperties: { type: string }
+
+    NetworkEventNearby:
+      description: O encontro publico com a distancia de quem chama. Privado nao entra nesta lista.
+      allOf:
+        - $ref: '#/components/schemas/NetworkEventPublic'
+        - type: object
+          required: [distance_m]
+          properties:
+            distance_m:
+              type: integer
+              nullable: true
+              description: Metros, arredondados a 100. Nula sem ponto ou sem regiao cadastrada.
+
+    NetworkEventNearbyPage:
+      type: object
+      required: [items, page, limit, total, effective_sort, effective_when, applied_filters]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/NetworkEventNearby' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        effective_sort: { $ref: '#/components/schemas/NetworkEventNearbySort' }
+        effective_when: { $ref: '#/components/schemas/NetworkEventWhen' }
+        applied_filters:
+          type: object
+          additionalProperties: { type: string }
+
+    NetworkEventPrivateDetails:
+      type: object
+      required: [slug, title, summary, place, starts_at, time_zone, status, images, admission, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, bring_items]
+      description: |
+        O conteudo oculto do encontro privado, so para conta aprovada. A mesma
+        forma dos campos do encontro publico, sem `visibility`.
+      properties:
+        slug: { type: string }
+        title: { type: string }
+        summary: { type: string }
+        place: { $ref: '#/components/schemas/NetworkEventPlace' }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time, nullable: true }
+        time_zone: { type: string }
+        status: { $ref: '#/components/schemas/NetworkEventStatus' }
+        cover_image_url: { type: string, format: uri, nullable: true }
+        images: { $ref: '#/components/schemas/NetworkEventImages' }
+        admission: { $ref: '#/components/schemas/NetworkEventAdmission' }
+        accepted_sizes: { $ref: '#/components/schemas/NetworkEventAcceptedSizes' }
+        dog_age: { $ref: '#/components/schemas/NetworkEventDogAge' }
+        vaccination_required: { type: boolean }
+        fenced_off_leash_area: { type: boolean }
+        amenities: { $ref: '#/components/schemas/NetworkEventAmenities' }
+        bring_items: { $ref: '#/components/schemas/NetworkEventBringItems' }
+        notes:
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventNotes'
+            - type: 'null'
+
+    JoinRequestAppState:
+      type: string
+      description: |
+        O estado do pedido **que o tutor ve**. **Nao ha `declined`** (decisao do
+        cliente, ADR-0027 12.11): o recusado aparece como `requested` ate o
+        encontro passar e como `expired` depois, igual a um pendente que ninguem
+        decidiu. `requested` e nao `pending`, de proposito: `pending` e a decisao
+        guardada, e `requested` e o que o tutor sabe.
+      enum: [requested, approved, withdrawn, expired]
+
+    NetworkEventJoinRequest:
+      type: object
+      required: [state, requested_at]
+      additionalProperties: false
+      properties:
+        state: { $ref: '#/components/schemas/JoinRequestAppState' }
+        requested_at: { type: string, format: date-time }
+
+    MyNetworkEventJoinRequest:
+      type: object
+      required: [event, state, requested_at]
+      additionalProperties: false
+      properties:
+        event: { $ref: '#/components/schemas/NetworkEventPrivateTeaser' }
+        state: { $ref: '#/components/schemas/JoinRequestAppState' }
+        requested_at: { type: string, format: date-time }
+
+    MyNetworkEventJoinRequestPage:
+      type: object
+      required: [items, page, limit, total, effective_sort, applied_filters]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/MyNetworkEventJoinRequest' }
+        page: { type: integer }
+        limit: { type: integer }
+        total: { type: integer }
+        effective_sort: { type: string, enum: [proximos] }
+        applied_filters:
+          type: object
+          additionalProperties: { type: string }
+
+    NetworkEventPoint:
+      type: object
+      required: [lat, lon]
+      additionalProperties: false
+      description: |
+        O ponto do encontro, marcado no mapa (`map_pin`, ADR-0006). Sem campo de
+        origem nem de precisao: a origem e sempre `map_pin`. Os limites sao os
+        de `GeoPoint` e os de `AdminMapPin`.
+      properties:
+        lat: { type: number, format: double, minimum: -34, maximum: 6 }
+        lon: { type: number, format: double, minimum: -74, maximum: -32 }
+
+    NetworkEventLocation:
+      type: object
+      required: [point]
+      additionalProperties: false
+      description: |
+        A resposta de `getNetworkEventLocation`. **So sai com conta** (emenda 1
+        do ADR-0010). `point` nulo e o encontro sem ponto marcado: a tela mostra
+        os rotulos e nao mostra mapa.
+      properties:
+        point:
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventPoint'
+            - type: 'null'
+
     PublicLostPetPage:
       type: object
       required: [items, page, limit, total]
@@ -7974,7 +8953,8 @@ components:
           allOf:
             - $ref: '#/components/schemas/HttpsUrl'
           description: |
-            Precisa terminar no host do parceiro (`400`, `code: host_mismatch`).
+            Precisa estar no host EXATO do parceiro (`400`, `code: host_mismatch`),
+            sem `?` nem `#` (`400`, `code: invalid_url`): o banco guarda so o caminho.
             Nenhum identificador de pessoa, em codificacao nenhuma.
         price:
           allOf:
@@ -8060,20 +9040,6 @@ components:
         applied_filters:
           type: object
           additionalProperties: { type: string }
-
-    NetworkEventPoint:
-      type: object
-      required: [lat, lon]
-      additionalProperties: false
-      description: |
-        O ponto do encontro, marcado no mapa (`map_pin`, ADR-0006). Sem campo de
-        origem nem de precisao: a origem e sempre `map_pin`. Os limites sao os
-        de `GeoPoint`. **Um schema so para o painel e para o app**: e o mesmo
-        `NetworkEventPoint` da emenda da `Rede` (`feat/secao-rede-emenda-servidor`),
-        com a mesma forma e os mesmos limites; `AdminMapPin` deixou de existir.
-      properties:
-        lat: { type: number, format: double, minimum: -34, maximum: 6 }
-        lon: { type: number, format: double, minimum: -74, maximum: -32 }
 
     AdminNetworkEventPlaceInput:
       type: object
@@ -8359,9 +9325,15 @@ components:
           required: [upload_id, position, alt_text]
           properties:
             upload_id:
-              type: string
+              type: [string, 'null']
               format: uuid
-              description: O identificador que o painel devolve em `images` para manter, reordenar ou remover esta imagem.
+              description: |
+                O identificador que o painel devolve em `images` para manter,
+                reordenar ou remover esta imagem. **Nulo** quando a conta que
+                enviou a imagem foi apagada: a imagem continua no produto ou no
+                encontro (`catalog_images.upload_intent_id` e `ON DELETE SET
+                NULL`), e o painel so a mantem reenviando a galeria sem ela ou
+                com uma imagem nova.
             position: { type: integer, minimum: 0, maximum: 7 }
             alt_text: { type: string }
 
@@ -8458,45 +9430,6 @@ components:
                 mesma de `image_url`. Vazia e estado normal.
               items: { $ref: '#/components/schemas/StoreItemImage' }
 
-    NetworkEventVisibility:
-      type: string
-      description: |
-        `private`: para quem nao tem pedido aprovado, o app recebe so titulo e
-        data; o resto sai em operacao separada, so para conta aprovada
-        (ADR-0027 item 17 e 12.10 a 12.12).
-      enum: [public, private]
-      default: public
-
-    NetworkEventBringItem:
-      type: string
-      description: |
-        O que levar, na parte fechada: o que se repete em todo encontro, com
-        icone e texto do app. Lista fechada por `CHECK` em
-        `network_event_bring_items`; acrescentar valor e tres arquivos no mesmo
-        commit (ADR-0023 secao 3).
-      enum: [water, water_bowl, leash, poop_bags, treats, towel, vaccination_card, toy]
-
-    NetworkEventBringItems:
-      type: array
-      maxItems: 8
-      uniqueItems: true
-      items: { $ref: '#/components/schemas/NetworkEventBringItem' }
-
-    NetworkEventNotes:
-      type: string
-      minLength: 2
-      maxLength: 500
-      description: |
-        Observacoes, so como complemento, ate 500 caracteres (o numero da
-        designer, e o mesmo em que o detector e medido). **Texto puro, sem
-        canal de contato nem de pagamento** (D59): telefone, e-mail, URL,
-        endereco, CEP e chave PIX sao **recusados** com `400` (`code:
-        contact_or_payment_detected`), pelo detector do canal mediado, com
-        normalizacao NFKC e remocao de largura zero. Caractere de controle
-        bidirecional (U+202A a U+202E, U+2066 a U+2069) e recusado em todo
-        texto administrativo (`code: bidi_control`). O app nao transforma nada
-        em link. Mudar as observacoes avisa todos os administradores (D60).
-
     AdminNetworkEventAdmissionInput:
       type: object
       description: |
@@ -8527,13 +9460,6 @@ components:
         amount: { type: integer, minimum: 1, maximum: 100000000, description: Centavos. }
         currency: { type: string, enum: [BRL] }
         unit: { $ref: '#/components/schemas/EventPriceUnit' }
-
-    EventPriceUnit:
-      type: string
-      description: |
-        A que o valor se refere. Lista fechada por `CHECK`; o rotulo e do app.
-        `per_pair` e tutor e cao juntos.
-      enum: [per_dog, per_person, per_pair]
 
     AdminNetworkEventAdmission:
       type: object
@@ -8644,35 +9570,3 @@ components:
           type: array
           maxItems: 40
           items: { $ref: '#/components/schemas/StoreTagRef' }
-
-    NetworkEventAcceptedSizes:
-      type: array
-      minItems: 1
-      maxItems: 4
-      uniqueItems: true
-      default: [P, M, G, GG]
-      description: |
-        Portes aceitos, um ou mais, com os valores de `PetSize` (`ref_sizes`),
-        os do cadastro de pet. O padrao e todos; o app escreve "Todos os
-        portes" quando os quatro estao marcados.
-      items: { $ref: '#/components/schemas/PetSize' }
-
-    NetworkEventDogAge:
-      type: string
-      description: Idade dos caes, uma escolha. Lista fechada por `CHECK`.
-      enum: [any, from_4_months, from_1_year, up_to_1_year]
-      default: any
-
-    NetworkEventAmenity:
-      type: string
-      description: |
-        Acessibilidade e estrutura do local. Lista fechada por `CHECK` em
-        `network_event_amenities`; acrescentar valor e tres arquivos no mesmo
-        commit (ADR-0023 secao 3).
-      enum: [level_ground_or_ramp, accessible_restroom, public_restroom_nearby, shade, benches, dog_water_fountain, parking_nearby]
-
-    NetworkEventAmenities:
-      type: array
-      maxItems: 7
-      uniqueItems: true
-      items: { $ref: '#/components/schemas/NetworkEventAmenity' }

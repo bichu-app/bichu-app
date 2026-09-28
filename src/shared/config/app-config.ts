@@ -87,6 +87,15 @@ export interface AppConfig {
    * nenhum link já entregue deixa de ser um link que alguém tem.
    */
   readonly webBaseUrl: AbsoluteUrl;
+  /**
+   * `ADMIN_ORIGIN`: a origem exata do painel (em producao, o host `admin.bichu.app` com esquema https), contra
+   * a qual o `Origin` de toda escrita administrativa e comparado (ADR-0027 item
+   * 3, D39). **Opcional de proposito:** sem ela o prefixo `/v1/admin` nao e
+   * registrado e responde 404, que e o estado de hoje. Um ambiente que ainda
+   * nao tem painel continua subindo como sobe, e nenhum ambiente serve a
+   * superficie administrativa sem saber de que origem ela aceita escrita.
+   */
+  readonly adminOrigin: string | undefined;
   readonly apiBaseUrl: AbsoluteUrl;
   readonly mediaPublicBaseUrl: AbsoluteUrl;
   readonly problemBaseUrl: AbsoluteUrl;
@@ -690,6 +699,7 @@ export function loadAppConfig(): AppConfig {
     publicBaseUrl,
     tagBaseUrl,
     webBaseUrl,
+    adminOrigin: optionalEnv('ADMIN_ORIGIN'),
     apiBaseUrl: urlAbsoluta(requireEnv('API_BASE_URL')),
     mediaPublicBaseUrl: urlAbsoluta(requireEnv('MEDIA_PUBLIC_BASE_URL')),
     // O contrato fixa `type` sob `<domínio>/problems/`. O domínio vem de

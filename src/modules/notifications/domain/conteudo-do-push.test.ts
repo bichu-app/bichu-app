@@ -26,6 +26,7 @@ import {
   VazamentoNoPushError,
   type ContextoDoAviso,
 } from './conteudo-do-push.js';
+import { montarAvisoDePedidoAprovado } from './conteudo-do-push.js';
 
 /** Valores que existem no banco e que NÃO podem sair. */
 const TELEFONE = '(11) 98888-7777';
@@ -306,5 +307,19 @@ void describe('prioridade e validade seguem o ADR-0008', () => {
     // que o ADR-0008 pede: um caso nunca empilha várias notificações.
     const outroScan = montarMensagemDePush(contexto({ tipo: 'tagEscaneada', bairro: 'Pinheiros' }));
     assert.equal(scan.chaveDeAgrupamento, outroScan.chaveDeAgrupamento);
+  });
+});
+
+// BICHUS-292 (ADR-0027 item 17).
+void describe('o push de pedido aprovado leva so o titulo', () => {
+  void it('titulo e corpo: a frase fixa e o titulo do encontro; dados so com o tipo', () => {
+    const c = montarAvisoDePedidoAprovado('Encontro de galgos');
+    assert.equal(c.titulo, 'Seu pedido foi aprovado');
+    assert.equal(c.corpo, 'Encontro de galgos');
+    assert.deepEqual(c.dados, { tipo: 'pedidoAprovado' });
+  });
+
+  void it('ISCA: titulo com cara de endereco nao sai (a porteira falha fechado)', () => {
+    assert.throws(() => montarAvisoDePedidoAprovado('Encontro na Rua das Flores, 120'), VazamentoNoPushError);
   });
 });

@@ -125,6 +125,11 @@ interface Linha {
 }
 
 class BancoDeMentira implements IdentityRepository {
+  /** D42 (BICHUS-259): as contas deste dublê sao todas de tutor. */
+  papeisDaConta(): Promise<readonly string[]> {
+    return Promise.resolve(['tutor']);
+  }
+
   public readonly linhas: Linha[] = [];
   public conta: Conta;
   public readonly credencial: CredencialLocal;

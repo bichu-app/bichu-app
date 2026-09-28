@@ -180,6 +180,33 @@ export const problemas = {
 
   naoEncontrado: (): AppError => new AppError('not-found', 'Não encontramos isso'),
 
+  // --- Backoffice (ADR-0027). Textos do contrato, `AdminForbidden`,
+  // `AdminUnauthorized` e o 403 de `openAdminSession`. ---------------------
+
+  /**
+   * A guarda do prefixo `/v1/admin` recusou: papel, `Origin` ou `X-CSRF-Token`
+   * (D37, D39). Um corpo so para as tres causas: a guarda decide antes de ler o
+   * recurso, e dizer QUAL das tres falhou ensinaria a quem forja a requisicao
+   * o que falta acertar.
+   */
+  proibidoNoPainel: (): AppError => new AppError('forbidden', 'Você não tem permissão para isto'),
+
+  /** A sessao administrativa venceu, foi revogada ou e anterior a `sessions_invalid_before`. */
+  sessaoDoPainelVencida: (): AppError =>
+    new AppError('token-expired', 'A sua sessão terminou', { nextAction: 'sign_in' }),
+
+  /** D41: `X-Captcha-Token` ausente, invalido ou com nota abaixo de 0,5 no login do painel. */
+  captchaRecusado: (): AppError =>
+    new AppError('captcha-rejected', 'Não conseguimos confirmar este acesso', {
+      detail: 'Tente de outra rede. Se continuar, fale com o responsável pelo painel.',
+    }),
+
+  /** D43: a senha certa de conta administrativa esta numa base de senhas vazadas. */
+  senhaDoPainelVazada: (): AppError =>
+    new AppError('password-reset-required', 'Troque a sua senha antes de entrar', {
+      detail: 'Esta senha aparece numa lista de senhas vazadas. Redefina pelo e-mail.',
+    }),
+
   /**
    * O texto **não normaliza para um código**: tamanho diferente de 26 depois da
    * normalização, ou caractere fora do alfabeto de Crockford. É erro de

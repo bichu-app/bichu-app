@@ -285,6 +285,31 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   // O que faltava era a linha AQUI. O veredito deste registro é escrito à mão —
   // o catálogo sabe que a linha some, não sabe de quem ela é — e sem ela o caso
   // "toda chave estrangeira do banco está declarada aqui" reprovava a suíte.
+  // BICHUS-259 (ADR-0027). As tres chaves da sessao administrativa levam a
+  // linha junto, e nenhuma delas guarda memoria: quem agiu esta em
+  // `audit.events`, que nao referencia `users` de proposito.
+  'public.admin_sessions.admin_sessions_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'as sessoes administrativas da conta. Uma sessao que sobrevivesse a conta seria uma ' +
+      'credencial sem dono lida a cada requisicao.',
+  },
+  'public.admin_reauth_tokens.admin_reauth_tokens_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a janela de reautenticacao administrativa da conta, pelo mesmo motivo de reauth_tokens.',
+  },
+  'public.admin_reauth_tokens.admin_reauth_tokens_session_id_fkey': {
+    colunas: ['session_id'],
+    referencia: 'public.admin_sessions',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'a janela aberta dentro da sessao. Ela so vale presa a sessao que a pediu, entao nao ha ' +
+      'o que guardar sem ela.',
+  },
   'public.reauth_tokens.reauth_tokens_user_id_fkey': {
     colunas: ['user_id'],
     referencia: 'public.users',
@@ -490,6 +515,80 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
   },
 
   // -------------------------------------------------------------------------
+  // a secao `Rede` (ADR-0025, emendada pela secao 12 do ADR-0027)
+  // -------------------------------------------------------------------------
+  //
+  // Uma chave so. A presenca e a galeria sairam desta versao (ADR-0027 12.4),
+  // com as quatro chaves que elas tinham; quando voltarem, voltam apontando
+  // para `network_events.id`, e nunca para o `slug` (criterio 2 da BICHUS-19).
+  //
+  // O `SET NULL` e DELIBERADO, pela mesma razao da coluna homonima de
+  // `professionals`: quem criou o encontro e dado de trilha, a exclusao da conta
+  // do administrador nao pode apagar um encontro publico nem ser travada por
+  // ele. O nulo CABE: a coluna e anulavel, e nenhum CHECK de `network_events` a
+  // nomeia -- por isso nao ha par em PARES_DE_NULO_CONTRA_RESTRICAO.
+  //
+  // A quinta forma nao alcanca esta chave: `network_events` nao tem outra chave
+  // estrangeira nesta migracao (`cover_image_id` nasce na do backoffice), entao
+  // o UPDATE do `SET NULL` nao revalida vizinha nenhuma.
+  // As listas do encontro vao junto com ele: nao sao de ninguem.
+  'public.network_event_bring_items.network_event_bring_items_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto: 'o que levar do encontro apagado, que e atributo dele e de mais ninguem.',
+  },
+  'public.network_event_amenities.network_event_amenities_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a estrutura do local do encontro apagado, atributo dele.',
+  },
+  'public.network_event_sizes.network_event_sizes_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto: 'os portes aceitos no encontro apagado, atributo dele.',
+  },
+  // Chave para `code` de dado de referencia, a forma que a BICHUS-19 admite.
+  'public.network_event_sizes.network_event_sizes_size_fkey': {
+    colunas: ['size'],
+    referencia: 'public.ref_sizes',
+    aoApagar: 'NO ACTION',
+  },
+  // O pedido: apagar o encontro leva os pedidos dele, que so existem por ele;
+  // apagar a conta leva o pedido DA PROPRIA conta, e so ele (sem `pet_id` e
+  // sem nada sobre terceiro). Quem decidiu e trilha: `SET NULL`, como a autoria
+  // do encontro, e nenhum CHECK nomeia a coluna.
+  'public.network_event_join_requests.network_event_join_requests_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os pedidos para participar do encontro apagado. Cada um e de uma pessoa, e so faz ' +
+      'sentido com o encontro; o produto nao apaga encontro (marca `removed`), e o expurgo ' +
+      'de D54 e quem apaga pedido.',
+  },
+  'public.network_event_join_requests.network_event_join_requests_user_id_fkey': {
+    colunas: ['user_id'],
+    referencia: 'public.users',
+    aoApagar: 'CASCADE',
+    levaJunto:
+      'os pedidos da PROPRIA conta, e so eles. A tabela nao tem coluna sobre terceiro, entao a ' +
+      'cascata nao alcanca a experiencia de mais ninguem.',
+  },
+  'public.network_event_join_requests.network_event_join_requests_decided_by_user_id_fkey': {
+    colunas: ['decided_by_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+  'public.network_events.network_events_created_by_user_id_fkey': {
+    colunas: ['created_by_user_id'],
+    referencia: 'public.users',
+    aoApagar: 'SET NULL',
+  },
+
+  // -------------------------------------------------------------------------
   // professionals
   // -------------------------------------------------------------------------
   'public.professionals.professionals_claimed_by_user_id_fkey': {
@@ -544,6 +643,67 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     colunas: ['partner_id'],
     referencia: 'public.store_partners',
     aoApagar: 'NO ACTION',
+  },
+  // ADR-0027 A.3 (BICHUS-267), com a decisao da coordenacao de 28/09: a
+  // referencia ao envio e SET NULL. `upload_intents.user_id` e CASCADE, e com
+  // NO ACTION apagar a conta de um administrador que enviou imagem seria
+  // RECUSADO. A imagem fica no produto ou no encontro; some so a ligacao.
+  // ADR-0027 A.2.1 (BICHUS-267). Especie, tags e imagens do item. As tres
+  // ligacoes a partir do ITEM sao CASCADE, e o que some junto e so a ligacao:
+  // o item nunca e apagado pelo painel (retirar nao apaga), entao a cascata so
+  // anda num expurgo operacional. As ligacoes para o OUTRO lado (especie, tag,
+  // imagem) sao NO ACTION: apagar uma especie, uma tag ou uma imagem que um
+  // item usa precisa falhar, como apagar uma raca com pet apontando.
+  'public.store_item_species.store_item_species_item_id_fkey': {
+    colunas: ['item_id'],
+    referencia: 'public.store_items',
+    aoApagar: 'CASCADE',
+    levaJunto: 'as especies do item apagado. Catalogo, sem dado de pessoa.',
+  },
+  'public.store_item_species.store_item_species_species_fkey': {
+    colunas: ['species'],
+    referencia: 'public.ref_species',
+    aoApagar: 'NO ACTION',
+  },
+  'public.store_item_tags.store_item_tags_item_id_fkey': {
+    colunas: ['item_id'],
+    referencia: 'public.store_items',
+    aoApagar: 'CASCADE',
+    levaJunto: 'as ligacoes do item apagado com o vocabulario. A tag fica.',
+  },
+  'public.store_item_tags.store_item_tags_tag_id_fkey': {
+    colunas: ['tag_id'],
+    referencia: 'public.store_tags',
+    aoApagar: 'NO ACTION',
+  },
+  'public.store_item_images.store_item_images_item_id_fkey': {
+    colunas: ['item_id'],
+    referencia: 'public.store_items',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a ordem e o texto alternativo das imagens do item apagado. A imagem em catalog_images fica.',
+  },
+  'public.store_item_images.store_item_images_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
+  // ADR-0027 A.4.2 (BICHUS-273). A galeria do encontro, na forma da do item:
+  // a ligacao a partir do ENCONTRO e CASCADE, a imagem de catalogo e NO ACTION.
+  'public.network_event_images.network_event_images_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a ordem e o texto alternativo das imagens do encontro apagado. A imagem em catalog_images fica.',
+  },
+  'public.network_event_images.network_event_images_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
+  'public.catalog_images.catalog_images_upload_intent_id_fkey': {
+    colunas: ['upload_intent_id'],
+    referencia: 'public.upload_intents',
+    aoApagar: 'SET NULL',
   },
 
   // -------------------------------------------------------------------------

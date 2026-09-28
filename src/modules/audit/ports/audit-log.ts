@@ -13,6 +13,7 @@
  * **Nunca registrar** senha, token de qualquer espécie, código de tag em claro,
  * coordenada bruta nem conteúdo de mensagem (docs/04-seguranca.md 9).
  */
+import type { DbTransaction } from '../../../shared/db/pool.js';
 import type { UserId } from '../../../shared/types/brands.js';
 
 /**
@@ -143,7 +144,55 @@ export type AuditAction =
    * A posse mudou e as tags cairam. Ator `system`: quem executa e o trabalho
    * agendado 24 h antes, e nao a pessoa que aceitou.
    */
-  | 'pet_transfer.consummated';
+  | 'pet_transfer.consummated'
+  // Backoffice (ADR-0027, apendice A.5). O padrao e `admin.<recurso>.<verbo>`
+  // (D49), e cada valor e o `x-audit.action` de uma operacao do contrato, ou um
+  // dos eventos que o item 8 manda gravar sem ser escrita (login recusado,
+  // recusa da guarda). A lista entra inteira de uma vez, e nao fatia a fatia:
+  // `src/modules/audit/ports/acoes-administrativas.test.ts` confere que todo
+  // `x-audit.action` do contrato esta aqui, e o contrato ja declara todas.
+  | AcaoAdministrativa;
+
+/**
+ * As acoes da superficie administrativa, como valor e como tipo.
+ *
+ * Existe como lista, e nao so como uniao, porque a declaracao da rota mora em
+ * `shared/http/route-definition.ts`, que nao conhece este modulo: la a acao e
+ * uma cadeia `admin.*`, e e aqui que ela vira `AuditAction` (ver
+ * `eventoAdministrativo`, em `trilha-administrativa.ts`).
+ */
+export const ACOES_ADMINISTRATIVAS = [
+  'admin.session.opened',
+  'admin.session.denied',
+  'admin.session.closed',
+  'admin.session.all_closed',
+  'admin.session.reauthenticated',
+  'admin.guard.denied',
+  'admin.store_partner.created',
+  'admin.store_partner.updated',
+  'admin.store_item.created',
+  'admin.store_item.updated',
+  'admin.store_item.published',
+  'admin.store_item.retired',
+  // Emenda do item 16 do ADR-0027 (23/09): o vocabulario de tags da Loja.
+  'admin.store_tag.created',
+  'admin.store_tag.updated',
+  'admin.network_event.created',
+  'admin.network_event.updated',
+  'admin.network_event.relocated',
+  'admin.network_event.cancelled',
+  'admin.network_event.removed',
+  // Emenda do item 17 do ADR-0027 (23/09): encontro privado e fila de pedidos.
+  // Entram aqui porque o contrato ja as declara em `x-audit`, e a conferencia
+  // de `acoes-administrativas.test.ts` e nos dois sentidos.
+  'admin.network_event.access_changed',
+  'admin.network_join_request.listed',
+  'admin.network_join_request.approved',
+  'admin.network_join_request.declined',
+  'admin.catalog_image.intent_created',
+] as const;
+
+export type AcaoAdministrativa = (typeof ACOES_ADMINISTRATIVAS)[number];
 
 export type ActorKind = 'user' | 'anonymous' | 'system';
 
@@ -162,6 +211,90 @@ export interface AuditEvent {
   readonly metadata?: Record<string, unknown> | undefined;
 }
 
+/**
+ * A trilha do app. `record` abre a PROPRIA transacao e, se falhar, avisa por
+ * `onFailure` sem derrubar o pedido: um incidente no esquema de auditoria nao e
+ * motivo para o tutor nao conseguir avisar que o pet sumiu.
+ *
+ * **Nao serve a escrita administrativa** (ADR-0027 item 8, D49): la a falha da
+ * trilha desfaz a escrita. Para isso existem `TrilhaTransacional` e
+ * `EscritaAuditada`, abaixo.
+ */
 export interface AuditLog {
   record(event: AuditEvent): Promise<void>;
+}
+
+/**
+ * A transacao em que a escrita e a trilha acontecem juntas.
+ *
+ * E a transacao do Kysely, e o nome proprio diz o papel dela aqui: quem a
+ * recebe escreve **dentro** dela e nunca a confirma nem a desfaz por conta
+ * propria. Quem confirma e `EscritaAuditada.executar`.
+ */
+export type TransacaoDeEscrita = DbTransaction;
+
+/**
+ * A forma transacional da trilha (ADR-0027 item 8).
+ *
+ * `recordIn` grava o evento **na transacao recebida**, assumindo
+ * `bichu_audit_writer` so para o `INSERT` e devolvendo o papel anterior logo
+ * depois, e **lanca** quando nao consegue. Nao ha `onFailure` aqui, e a
+ * ausencia e a regra: quem chama deixa a excecao subir, e a transacao inteira
+ * e desfeita, escrita incluida (D49, P17).
+ */
+export interface TrilhaTransacional {
+  recordIn(trx: TransacaoDeEscrita, event: AuditEvent): Promise<void>;
+}
+
+/**
+ * A soma de um campo numerico de `metadata` nos eventos de um ator, numa janela,
+ * lida NA transacao de quem chama (D56).
+ *
+ * Existe para o teto por linhas devolvidas da fila de pedidos da `Rede`: o que
+ * se mede e quanto dado de pessoa saiu, e a trilha ja guarda esse numero em
+ * toda leitura (D55). Somar da trilha faz o teto e o registro serem a mesma
+ * fonte: uma leitura sem trilha nao aconteceu, e nao conta, porque nao saiu.
+ */
+export interface ContagemNaTrilha {
+  somarNaJanela(
+    trx: TransacaoDeEscrita,
+    consulta: {
+      readonly actorUserId: UserId;
+      readonly action: AuditAction;
+      readonly campo: string;
+      readonly desde: Date;
+    },
+  ): Promise<{ readonly total: number; readonly maisAntigo: Date | null }>;
+}
+
+/** O que o trabalho de uma escrita auditada devolve: o resultado e o evento. */
+export interface ResultadoAuditado<T> {
+  readonly resultado: T;
+  /**
+   * O evento, montado DEPOIS da escrita (ja com o `id` que ela gerou e com o
+   * `after` que ela produziu). Um trabalho que nao grava evento nao e escrita
+   * auditada: o tipo nao admite ausencia.
+   */
+  readonly evento: AuditEvent;
+}
+
+/**
+ * **A interface que toda escrita administrativa usa.** Uma transacao, a
+ * escrita dentro dela, o evento gravado na mesma transacao, e o `COMMIT` so
+ * depois dos dois. Falha do trabalho ou da trilha: `ROLLBACK` de tudo, e a
+ * excecao sobe (vira 500 na rota, com o dado intacto).
+ *
+ *   const item = await escrita.executar(async (trx) => {
+ *     const gravado = await repositorio.criarItem(trx, dados);
+ *     return {
+ *       resultado: gravado,
+ *       evento: eventoAdministrativo(rota.audit, ator, { resourceId: gravado.id, after: ... }),
+ *     };
+ *   });
+ *
+ * O evento e gravado por ULTIMO, depois do trabalho: nenhum comando da escrita
+ * roda sob o papel da trilha.
+ */
+export interface EscritaAuditada {
+  executar<T>(trabalho: (trx: TransacaoDeEscrita) => Promise<ResultadoAuditado<T>>): Promise<T>;
 }

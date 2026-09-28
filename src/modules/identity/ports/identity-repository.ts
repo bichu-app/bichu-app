@@ -161,6 +161,12 @@ export interface IdentityRepository {
   atualizarPerfil(id: UserId, campos: CamposDoPerfil, agora: Instant): Promise<Conta | undefined>;
   buscarContaPorEmail(email: string): Promise<Conta | undefined>;
   buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined>;
+  /**
+   * `user_roles` da conta. O login e a renovacao do app o leem para recusar a
+   * conta dedicada (ADR-0027, D42): papel nunca vai em claim, e a recusa vale
+   * na proxima chamada depois da concessao.
+   */
+  papeisDaConta(userId: UserId): Promise<readonly string[]>;
 
   /** Regrava o hash com os parâmetros vigentes (rehash transparente). */
   regravarCredencial(identityId: string, passwordPhc: string, agora: Instant): Promise<void>;

@@ -1,7 +1,7 @@
 # Matriz de rastreabilidade: telas do backoffice e da Rede contra api/openapi.yaml
 #
 # Status: rascunho
-# Atualizado: 2026-09-23
+# Atualizado: 2026-09-28
 # Dono: arquitetura (ADR-0027 item 18)
 #
 # POR QUE ESTE ARQUIVO EXISTE, EM UMA FRASE: regra do cliente de 23/09, "tudo
@@ -165,6 +165,7 @@ telas:
           - enum:AdminReauthScope.store_item_retirement
           - resp:reauth_token
           - resp:csrf_token
+          - problem:invalid-credentials
 
   - tela: "3 · Loja: formulario"
     prototipo: backoffice.html
@@ -292,6 +293,17 @@ telas:
         usa:
           - header:If-Match
           - enum:AdminReauthScope.network_event_removal
+          - problem:reauthentication-required
+      - operationId: cancelAdminNetworkEvent
+        situacao: contrato
+        nota: "item de menu Cancelar, com motivo e senha (feat/backoffice-telas-rede, 73b78a4); o cancelado segue no app ate o fim previsto"
+        usa:
+          - req:note
+          - header:If-Match
+          - resp:publication_status
+          - resp:cancellation_note
+          - enum:AdminNetworkEventPublicationStatus.cancelled
+          - enum:AdminReauthScope.network_event_cancellation
           - problem:reauthentication-required
 
   - tela: "4 · Rede: formulario"
@@ -565,11 +577,9 @@ correspondencias:
     um_para_um: true
     valores: { level_ground_or_ramp: Piso plano ou rampa, accessible_restroom: Banheiro acessível, public_restroom_nearby: Banheiro público próximo, shade: Sombra, benches: Bancos, dog_water_fountain: Bebedouro para cães, parking_nearby: Estacionamento próximo }
   JoinRequestAppState:
-    situacao: pendente
-    onde: "ADR-0027 12.11 (BICHUS-251)"
-    um_para_um: true
-    valores: { requested: Pedido enviado, approved: Pedido aprovado, withdrawn: Pedido cancelado, expired: O encontro passou }
-    nota: "nao ha `declined` no app, de proposito (ADR-0027 12.11)"
+    um_para_um: false
+    valores: { requested: Pedido enviado, approved: Pedido aprovado }
+    nota: "nao ha `declined` no app, de proposito (ADR-0027 12.11). `withdrawn` e `expired` nao tem rotulo no app desde a §24.17.5/6 de 06-design-system.md (28/09): o pedido desistido e o do encontro que passou saem da tela, e nao ganham selo"
 
 # ======================================================================
 # O que a tela usa e NAO existe no contrato. `resolucao` diz quem muda.
@@ -667,9 +677,6 @@ contrato_sem_tela:
   - operationId: updateAdminStoreTag
     resolucao: "tela: resolvido quando a tela existir"
     nota: "nao ha tela de vocabulario: renomear e desativar tag nao tem onde acontecer"
-  - operationId: cancelAdminNetworkEvent
-    resolucao: "tela: resolvido quando a tela existir"
-    nota: "nenhuma tela cancela encontro, e o cliente decidiu que o cancelado aparece no app ate o fim previsto. Falta o item de menu Cancelar, com senha"
   - operationId: closeAllAdminSessions
     resolucao: "tela: resolvido quando a tela existir"
     nota: "sair de todas as sessoes administrativas nao tem botao"

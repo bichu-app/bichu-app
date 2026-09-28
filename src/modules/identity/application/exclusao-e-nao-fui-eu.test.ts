@@ -123,6 +123,11 @@ interface LinhaDeToken {
  * afirmação seguinte passar por acidente.
  */
 class BancoDeMentira implements IdentityRepository {
+  /** D42 (BICHUS-259): as contas deste dublê sao todas de tutor. */
+  papeisDaConta(): Promise<readonly string[]> {
+    return Promise.resolve(['tutor']);
+  }
+
   public conta: Conta = contaViva();
   public readonly refresh: LinhaDeRefresh[] = [
     { familyId: 'fam-celular', revokedAt: null, revokedReason: null },

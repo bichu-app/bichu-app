@@ -1,14 +1,19 @@
 /**
- * A porta de leitura da vitrine.
+ * A porta de leitura PUBLICA da vitrine: a lista, o detalhe e as tags do
+ * filtro (ADR-0027 item 16).
  *
- * Uma operacao so, e de proposito, pela mesma razao de `DirectoryRepository`: a
- * secao `Loja` le uma pagina e nada mais. Nao ha detalhe, nao ha contagem por
- * categoria, e **nao ha escrita** -- a ultima nao e omissao de conveniencia, e
- * o criterio 20 da BICHUS-185: enquanto a decisao 9.6 do contrato de escrita
- * nao voltar do cliente, nao existe operacao de escrita de catalogo. Porta que
- * declara o que ainda nao existe vira metodo vazio em todo dobre de teste.
+ * **Nao ha escrita aqui.** A escrita do catalogo e do painel, pela porta
+ * `CatalogoAdministrativoRepository`, atras da guarda de `/v1/admin`. Esta porta
+ * so enxerga o que esta publicado, de parceiro ativo, e a regra mora na
+ * clausula `WHERE` de cada consulta (ADR-0021).
  */
-import type { CategoriaDaVitrine, ItemDaVitrine } from '../domain/item-da-vitrine.js';
+import type {
+  CategoriaDaVitrine,
+  EspecieDoItem,
+  ImagemDaVitrine,
+  ItemDaVitrine,
+  TagDaVitrine,
+} from '../domain/item-da-vitrine.js';
 
 /**
  * As ordens que a rota aceita.
@@ -32,6 +37,13 @@ export interface RecorteDaVitrine {
    */
   readonly q?: string | undefined;
   readonly category?: CategoriaDaVitrine | undefined;
+  /** Itens que servem a esta especie, entre outras. */
+  readonly species?: EspecieDoItem | undefined;
+  /**
+   * `slug` de uma tag ATIVA. Tag inexistente ou inativa devolve a lista vazia,
+   * e nao erro: o link antigo continua abrindo.
+   */
+  readonly tag?: string | undefined;
   readonly sort: OrdemDaVitrine;
   /** 1-based, como o contrato a declara. */
   readonly page: number;
@@ -48,6 +60,19 @@ export interface PaginaDaVitrine {
   readonly total: number;
 }
 
+export interface DetalheDaVitrine {
+  readonly item: ItemDaVitrine;
+  /** So as PRONTAS, em ordem. */
+  readonly imagens: readonly ImagemDaVitrine[];
+}
+
 export interface StoreRepository {
   listarVitrine(recorte: RecorteDaVitrine): Promise<PaginaDaVitrine>;
+  /**
+   * O item publicado, de parceiro ativo. Rascunho, retirado, inexistente e de
+   * parceiro inativo sao o MESMO `null` (ADR-0021): o 404 nao conta qual.
+   */
+  detalhe(slug: string): Promise<DetalheDaVitrine | null>;
+  /** Tags ativas com pelo menos um item publicado de parceiro ativo, em ordem alfabetica, ate 40. */
+  tagsVisiveis(): Promise<readonly TagDaVitrine[]>;
 }

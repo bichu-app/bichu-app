@@ -74,13 +74,62 @@ export const CATEGORIAS_DA_VITRINE: readonly CategoriaDaVitrine[] = [
  */
 export const DIAS_DE_VALIDADE_DO_PRECO = 30;
 
+/**
+ * As especies que `store_item_species.species` admite, as de `ref_species` e as
+ * do cadastro de pet (ADR-0027 item 16). A ordem e a de `ref_species.sort_order`,
+ * e e a ordem em que a resposta as lista.
+ */
+export type EspecieDoItem = 'dog' | 'cat' | 'other';
+
+export const ESPECIES_DO_ITEM: readonly EspecieDoItem[] = ['dog', 'cat', 'other'];
+
+/** Ordena pela ordem do cadastro, para a resposta nao variar com a ordem de gravacao. */
+export function ordenarEspecies(especies: readonly string[]): EspecieDoItem[] {
+  return ESPECIES_DO_ITEM.filter((e) => especies.includes(e));
+}
+
+/** A tag como a leitura publica a mostra: so ativa, pelo `slug`. */
+export interface TagDaVitrine {
+  readonly slug: string;
+  readonly label: string;
+}
+
+/**
+ * O endereco absoluto de um caminho no site do parceiro.
+ *
+ * O banco guarda o CAMINHO do item e o HOST do parceiro em colunas separadas
+ * (migracao `20260922000009`; a secao 3.6 de `docs/07-devops.md` e normativa
+ * no porque), e e aqui que os dois viram a URL unica que a resposta publica
+ * devolve. Nao ha esquema guardado em lugar nenhum: ele e sempre `https`,
+ * porque link de saida em claro numa vitrine nossa e uma recomendacao nossa
+ * de digitar dado em canal aberto.
+ *
+ * Compor aqui torna ESTRUTURAL o que antes era conferido: o destino de um item
+ * nao tem como apontar para fora do host do parceiro que ele declara, porque o
+ * host nao vem do item. E trocar o dominio de um parceiro volta a ser o UPDATE
+ * de uma coluna que a chave estrangeira da migracao promete.
+ */
+export function enderecoNoParceiro(host: string, caminho: string): string {
+  return `https://${host}${caminho}`;
+}
+
 /** O item como o repositorio o entrega. Sem `active`, sem UUID -- nao ha um. */
 export interface ItemDaVitrine {
   readonly slug: string;
   readonly title: string;
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
+  /**
+   * A imagem principal, ja como URL publica: a primeira imagem PRONTA do item
+   * (`store_item_images`, menor `position`), ou a URL externa da massa. Imagem
+   * em processamento ou recusada nunca chega aqui (ADR-0027 item 10).
+   */
   readonly imageUrl: string | null;
+  /** O texto alternativo da principal. A imagem externa da massa leva o titulo do item. */
+  readonly imageAltText: string | null;
+  readonly species: readonly EspecieDoItem[];
+  /** So tags ATIVAS. A inativa continua ligada ao item e some do app. */
+  readonly tags: readonly TagDaVitrine[];
   readonly targetUrl: string;
   readonly partnerSlug: string;
   readonly partnerName: string;
@@ -99,8 +148,11 @@ export interface ItemProjetado {
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
   readonly image_url: string | null;
+  readonly image_alt_text: string | null;
   readonly target_url: string;
   readonly partner: { readonly slug: string; readonly name: string; readonly host: string };
+  readonly species: readonly EspecieDoItem[];
+  readonly tags: readonly TagDaVitrine[];
   /**
    * Centavos. **Ausente quando vencido**, e ausente quando nunca houve preco.
    * Os dois casos sao distinguidos por `price_status`, e nao pela tela
@@ -149,12 +201,19 @@ export function diasDeCalendario(desde: string, ate: Instant): number {
 /**
  * O estado do preco de um item, agora.
  *
+ * Recebe so os dois campos que decidem, porque a projecao do painel
+ * (`projetarItemAdministrativo`) usa esta MESMA funcao: "vencido" precisa querer
+ * dizer a mesma coisa no app e no painel.
+ *
  * **A fronteira e `> DIAS_DE_VALIDADE_DO_PRECO`, e nao `>=`.** Trinta dias de
  * validade significa que o trigesimo dia ainda vale; recusar no trigesimo faria
  * a validade ser de vinte e nove, e a divergencia entre o numero escrito e o
  * numero aplicado e a classe de defeito que ninguem procura.
  */
-export function estadoDoPreco(item: ItemDaVitrine, agora: Instant): EstadoDoPreco {
+export function estadoDoPreco(
+  item: Pick<ItemDaVitrine, 'priceAmount' | 'priceCheckedAt'>,
+  agora: Instant,
+): EstadoDoPreco {
   if (item.priceAmount === null || item.priceCheckedAt === null) return 'sem_preco';
   return diasDeCalendario(item.priceCheckedAt, agora) > DIAS_DE_VALIDADE_DO_PRECO
     ? 'vencido'
@@ -178,11 +237,46 @@ export function projetarItem(item: ItemDaVitrine, agora: Instant): ItemProjetado
     summary: item.summary,
     category: item.category,
     image_url: item.imageUrl,
+    image_alt_text: item.imageAltText,
     target_url: item.targetUrl,
     partner: { slug: item.partnerSlug, name: item.partnerName, host: item.partnerHost },
+    species: [...item.species],
+    tags: item.tags.map((t) => ({ slug: t.slug, label: t.label })),
     price_amount: vigente ? item.priceAmount : null,
     price_currency: vigente ? item.priceCurrency : null,
     price_checked_at: vigente ? item.priceCheckedAt : null,
     price_status: estado,
   };
+}
+
+/** Uma imagem do detalhe publico: so pronta, ja como URL. */
+export interface ImagemDaVitrine {
+  readonly url: string;
+  readonly altText: string;
+}
+
+export interface DetalheProjetado extends ItemProjetado {
+  readonly images: readonly { readonly url: string; readonly alt_text: string }[];
+}
+
+/**
+ * O detalhe publico (`getStoreItem`): o mesmo item da lista, mais todas as
+ * imagens PRONTAS em ordem. Com a regra de vencimento da lista, porque e a
+ * mesma funcao que projeta os dois.
+ *
+ * Item da massa com URL externa e sem imagem enviada traz a externa como a
+ * unica imagem, com o titulo do item de texto alternativo (`StoreItemImage`).
+ */
+export function projetarDetalhe(
+  item: ItemDaVitrine,
+  imagens: readonly ImagemDaVitrine[],
+  agora: Instant,
+): DetalheProjetado {
+  const galeria =
+    imagens.length > 0
+      ? imagens.map((i) => ({ url: i.url, alt_text: i.altText }))
+      : item.imageUrl === null
+        ? []
+        : [{ url: item.imageUrl, alt_text: item.imageAltText ?? item.title }];
+  return { ...projetarItem(item, agora), images: galeria };
 }

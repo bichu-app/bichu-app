@@ -104,7 +104,13 @@ const PADROES_PROIBIDOS: ReadonlyArray<{ nome: string; regex: RegExp }> = [
   // quatro caracteres é todo o trabalho necessário para furar a de cima.
   { nome: 'UUID sem hífens', regex: /(?:^|[^0-9a-z])[0-9a-f]{32}(?:[^0-9a-z]|$)/i },
   // Item 1: e-mail de quem quer que seja.
-  { nome: 'endereço de e-mail', regex: /[\w.+-]+@[\w-]+\.[a-z]{2,}/i },
+  // O olhar-para-trás é o que mantém o custo linear: sem ele o motor recomeça a
+  // varredura de cada posição do mesmo bloco e 256 KB de pior caso construído
+  // custam 38.510 ms em vez de 2,3 ms. Mesma medição de `redigir.ts`.
+  {
+    nome: 'endereço de e-mail',
+    regex: /(?<![\w.+-])[\w.+-]+@[\w-]+(?:\.[\w-]+)*\.[a-z]{2,}/i,
+  },
   // Item 1: telefone. Cobre o formato brasileiro com e sem DDI, com e sem
   // parênteses, com espaço, ponto ou hífen entre os blocos.
   { nome: 'telefone', regex: /(?:\+?55[\s.-]?)?\(?\d{2}\)?[\s.-]?9?\d{4}[\s.-]?\d{4}/ },
@@ -365,6 +371,31 @@ export function montarMensagemDePush(contexto: ContextoDoAviso): ConteudoDoPush 
     prioridade: perfil.prioridade,
   };
 
+  assegurarSuperficiePublica(conteudo);
+  return conteudo;
+}
+
+/**
+ * O aviso de pedido aprovado para encontro privado da `Rede` (ADR-0027 item
+ * 17, 22.10.1). **Leva so o titulo do encontro**, nunca lugar nem horario: o
+ * conteudo passa pelo provedor de push e aparece na tela bloqueada, e o lugar
+ * do privado e exatamente o que so a conta aprovada ve, dentro do app.
+ *
+ * Nao ha `ref` nos dados: o `slug` do privado e aleatorio, mas "so o titulo" e
+ * a regra, e o app abre em "meus pedidos". A agrupamento e por tipo.
+ *
+ * A porteira roda igual: um titulo com cara de endereco ("Encontro na Rua X,
+ * 100") estoura e o push nao sai, e o tutor ve a aprovacao ao abrir o app.
+ */
+export function montarAvisoDePedidoAprovado(tituloDoEncontro: string): ConteudoDoPush {
+  const conteudo: ConteudoDoPush = {
+    titulo: 'Seu pedido foi aprovado',
+    corpo: tituloDoEncontro,
+    dados: { tipo: 'pedidoAprovado' },
+    chaveDeAgrupamento: 'pedidoAprovado',
+    validadeEmSegundos: VINTE_E_QUATRO_HORAS,
+    prioridade: 'normal',
+  };
   assegurarSuperficiePublica(conteudo);
   return conteudo;
 }

@@ -138,7 +138,8 @@ const FERRAMENTA_FORA_DO_RUNTIME =
 
 const AUSENCIAS_ACEITAS = new Map([
   // -- so tipo: o compilado nao tem uma instrucao sequer ---------------------
-  ['src/modules/audit/ports/audit-log.ts', SO_TIPO],
+  // `audit/ports/audit-log.ts` saiu daqui na BICHUS-259: passou a exportar
+  // `ACOES_ADMINISTRATIVAS`, que e valor, e a suite o carrega.
   // As cinco de 22/09, que chegaram com o alerta, a conversa mediada, o achado
   // avulso e o aparelho. Cada uma esta nomeada, uma linha por arquivo, pelo
   // motivo escrito no topo desta lista: um prefixo `src/modules/**/ports/**`
@@ -151,6 +152,8 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/identity/ports/identity-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/localizacao-de-referencia-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/mailer.ts', SO_TIPO],
+  // BICHUS-259: a porta da sessao administrativa so declara tipos.
+  ['src/modules/identity/ports/sessao-administrativa-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/token-signer.ts', SO_TIPO],
   ['src/modules/lostfound/ports/alcance-do-alerta.ts', SO_TIPO],
   ['src/modules/lostfound/ports/entrega-do-alerta.ts', SO_TIPO],
@@ -160,6 +163,7 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/media/ports/media-repository.ts', SO_TIPO],
   ['src/modules/media/ports/object-storage.ts', SO_TIPO],
   ['src/modules/messaging/ports/conversation-repository.ts', SO_TIPO],
+  ['src/modules/network/ports/network-repository.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-aparelhos.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-entregas.ts', SO_TIPO],
   ['src/modules/pets/ports/fotos-do-pet.ts', SO_TIPO],
@@ -169,6 +173,10 @@ const AUSENCIAS_ACEITAS = new Map([
   // outras: nao declara `const`, `function`, `class` nem `enum`, e o compilado
   // em `dist/_tests` e `export {};` -- 59 bytes, nenhuma instrucao.
   ['src/modules/professionals/ports/directory-repository.ts', SO_TIPO],
+  // Chegou com a `Loja` (23/09). Conferida pelo MESMO criterio das outras:
+  // nao declara `const`, `function`, `class` nem `enum`, e o compilado em
+  // `dist/_tests` e `export {};` -- 55 bytes, nenhuma instrucao.
+  ['src/modules/store/ports/store-repository.ts', SO_TIPO],
   ['src/modules/tags/ports/autenticador.ts', SO_TIPO],
   ['src/modules/tags/ports/rasterizador-de-qr.ts', SO_TIPO],
   ['src/modules/tags/ports/tag-repository.ts', SO_TIPO],
@@ -198,8 +206,12 @@ const AUSENCIAS_ACEITAS = new Map([
   // o comeco de uma lista que so cresce. No fechamento do dia saiu tambem
   // `kysely-lost-case-repository.ts`, pelo mesmo motivo: o proprio verificador
   // acusou a excecao como obsoleta.
-  ['src/modules/media/application/media-service.ts', SEM_SUITE_QUE_CARREGUE],
-  ['src/modules/media/application/processar-foto.ts', SEM_SUITE_QUE_CARREGUE],
+  // SAIRAM EM 28/09, pela invariante 2 desta lista, e foi o proprio verificador
+  // que acusou: `media-service.ts` e `processar-foto.ts` passaram a APARECER no
+  // relatorio de integracao, porque `tests/integration/foto-de-ponta-a-ponta.
+  // test.ts` (BICHUS-245) carrega a foto de ponta a ponta contra o
+  // armazenamento de objeto da pilha efemera. A dispensa que sobra depois de o
+  // teste chegar e o comeco de uma lista que so cresce.
   ['src/modules/notifications/adapters/persistence/kysely-registro-de-entregas.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/pets/adapters/persistence/kysely-reference-data-repository.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/shared/queue/kysely-job-queue.ts', SEM_SUITE_QUE_CARREGUE],

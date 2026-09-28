@@ -47,7 +47,11 @@ import * as webhook from '../../modules/notifications/adapters/http/webhook-de-e
 import * as aparelhos from '../../modules/notifications/adapters/http/device-routes.js';
 import * as diretorio from '../../modules/professionals/adapters/http/directory-routes.js';
 import * as vitrine from '../../modules/store/adapters/http/store-routes.js';
+import * as lojaAdministrativa from '../../modules/store/adapters/http/admin-store-routes.js';
+import * as rede from '../../modules/network/adapters/http/network-routes.js';
+import * as redeAdministrativa from '../../modules/network/adapters/http/admin-network-routes.js';
 import * as saude from './health.js';
+import * as sessaoAdministrativa from '../../modules/identity/adapters/http/admin-session-routes.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
 
@@ -74,7 +78,32 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   vitrine,
+  // BICHUS-259. A sessao administrativa, primeira familia de `/v1/admin`.
+  sessaoAdministrativa,
+  // BICHUS-266/267. A escrita administrativa da Loja, dentro da guarda do
+  // prefixo /v1/admin.
+  lojaAdministrativa,
+  // ADR-0025. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
+  rede,
+  // BICHUS-273/292. A escrita administrativa da Rede, dentro da guarda do
+  // prefixo /v1/admin.
+  redeAdministrativa,
   saude,
+];
+
+/**
+ * As operacoes de `/admin/` que o contrato ja declara e que ainda nao tem rota
+ * (ADR-0027: a `Loja`, a `Rede` e a intencao de envio de imagem sao de outras
+ * fatias). A lista e EXATA nos dois sentidos, e e ela que torna o caso de baixo
+ * verificavel: operacao administrativa nova no contrato sem rota e fora daqui
+ * reprova; operacao daqui que ganhou rota e continua listada reprova tambem.
+ * Quem implementa uma delas tira a linha no mesmo commit.
+ */
+const OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA: readonly string[] = [
+  // Vazia desde BICHUS-273/292: a `Loja` e a intencao de envio de imagem sairam
+  // com BICHUS-266/267, e a `Rede` e a fila de pedidos com esta fatia. Operacao
+  // administrativa nova no contrato sem rota entra aqui, no mesmo commit.
 ];
 
 function ehRota(valor: unknown): valor is RouteDefinition {
@@ -481,6 +510,72 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
         'so `deny_429` recusa (`aplicacao-de-teto.ts`, `recusa()`), e trocar por qualquer outra ' +
         'palavra do vocabulario deixa a rota declarando teto e servindo sem teto.',
     );
+  });
+
+  void it('papel, trilha, reautenticacao e acesso publico de /admin/ batem com o contrato (ADR-0027 item 7)', () => {
+    const contrato = carregarContrato(CAMINHO_DA_SPEC);
+    const divergentes: string[] = [];
+    let administrativas = 0;
+
+    for (const rota of rotasDeclaradas()) {
+      const operacao = contrato.operacoes.get(rota.operationId);
+      if (operacao === undefined) continue; // o primeiro caso ja reprovou.
+      const bruto = operacao.raw;
+      const ehAdministrativa = operacao.path.startsWith('/admin/');
+      if (ehAdministrativa) administrativas += 1;
+
+      const papeisDoContrato = bruto['x-admin-roles'];
+      const papeisDoCodigo = rota.adminRoles === undefined ? undefined : [...rota.adminRoles];
+      if (JSON.stringify(papeisDoContrato) !== JSON.stringify(papeisDoCodigo)) {
+        divergentes.push(
+          `${rota.operationId}: x-admin-roles ${JSON.stringify(papeisDoContrato)}, adminRoles ${JSON.stringify(papeisDoCodigo)}`,
+        );
+      }
+
+      const trilha = bruto['x-audit'] as { action?: unknown; resource_kind?: unknown } | undefined;
+      const trilhaDoContrato =
+        trilha === undefined ? undefined : { action: trilha.action, resourceKind: trilha.resource_kind };
+      if (JSON.stringify(trilhaDoContrato) !== JSON.stringify(rota.audit)) {
+        divergentes.push(
+          `${rota.operationId}: x-audit ${JSON.stringify(trilhaDoContrato)}, audit ${JSON.stringify(rota.audit)}`,
+        );
+      }
+
+      const escopo = bruto['x-admin-reauth-scope'];
+      if ((typeof escopo === 'string' ? escopo : undefined) !== rota.adminReauthScope) {
+        divergentes.push(
+          `${rota.operationId}: x-admin-reauth-scope ${String(escopo)}, adminReauthScope ${String(rota.adminReauthScope)}`,
+        );
+      }
+
+      const publicaNoContrato = ehAdministrativa && operacao.security.length === 0;
+      if (publicaNoContrato !== (rota.adminPublic === true)) {
+        divergentes.push(
+          `${rota.operationId}: security vazio sob /admin/ = ${String(publicaNoContrato)}, adminPublic = ${String(rota.adminPublic)}`,
+        );
+      }
+    }
+
+    assert.ok(administrativas > 0, 'nenhuma rota de /admin/ conferida: a leitura deixou de casar');
+    assert.deepEqual(divergentes, [], `Declaracao administrativa divergente do contrato:\n${divergentes.join('\n')}`);
+  });
+
+  void it('toda operacao de /admin/ do contrato tem rota, exceto as listadas como ainda sem rota', () => {
+    const contrato = carregarContrato(CAMINHO_DA_SPEC);
+    const comRota = new Set(rotasDeclaradas().map((rota) => rota.operationId));
+    const doContrato = [...contrato.operacoes.values()]
+      .filter((operacao) => operacao.path.startsWith('/admin/'))
+      .map((operacao) => operacao.operationId);
+
+    const semRotaNemLista = doContrato.filter(
+      (id) => !comRota.has(id) && !OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA.includes(id),
+    );
+    const listadasComRota = OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA.filter((id) => comRota.has(id));
+    const listadasForaDoContrato = OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA.filter((id) => !doContrato.includes(id));
+
+    assert.deepEqual(semRotaNemLista, [], 'operacao administrativa do contrato sem rota e fora da lista de pendentes');
+    assert.deepEqual(listadasComRota, [], 'operacao listada como pendente ja tem rota: tire-a da lista');
+    assert.deepEqual(listadasForaDoContrato, [], 'operacao listada como pendente que o contrato nao declara');
   });
 
   void it('a lista de módulos acima cobre TODAS as `defineRoute` de src/', () => {
