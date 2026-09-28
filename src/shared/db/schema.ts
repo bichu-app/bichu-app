@@ -1094,6 +1094,14 @@ export interface NetworkEventSizesTable {
   size: string;
 }
 
+/** A galeria do encontro (ADR-0027 A.4.2); `position = 0` e a capa. */
+export interface NetworkEventImagesTable {
+  event_id: string;
+  image_id: string;
+  position: number;
+  alt_text: string;
+}
+
 export interface NetworkEventAmenitiesTable {
   event_id: string;
   amenity: EstruturaDoLocal;
@@ -1173,6 +1181,7 @@ export interface Database {
   network_event_bring_items: NetworkEventBringItemsTable;
   network_event_sizes: NetworkEventSizesTable;
   network_event_amenities: NetworkEventAmenitiesTable;
+  network_event_images: NetworkEventImagesTable;
   network_event_join_requests: NetworkEventJoinRequestsTable;
   'audit.events': AuditEventsTable;
 }

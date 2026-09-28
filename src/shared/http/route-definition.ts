@@ -112,7 +112,12 @@ export interface RateLimitEntry {
    */
   readonly bucket?: BaldeCompartilhado;
   readonly dimension: readonly string[];
-  readonly counts?: 'requests' | 'distinct_identities' | 'distinct_cases' | 'distinct_emails';
+  /**
+   * `rows_returned` (D56) conta LINHAS devolvidas, e nao requisicoes: a porta de
+   * teto nao o aplica, e a subida o lista como nao aplicado. Quem o aplica e o
+   * caso de uso da operacao que o declara, somando da trilha.
+   */
+  readonly counts?: 'requests' | 'distinct_identities' | 'distinct_cases' | 'distinct_emails' | 'rows_returned';
   readonly appliesTo?: 'invalid_attempts';
   readonly when?: 'pet_lost' | 'pet_not_lost';
   readonly limit: number;

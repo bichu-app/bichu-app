@@ -289,7 +289,7 @@ before(async () => {
   void app.register(
     (escopo, _opcoes, pronto) => {
       registrarRotasDaRede(escopo, {
-        rede: criarNetworkRepository(banco.db, { uuidv7: () => randomUUID() }),
+        rede: criarNetworkRepository(banco.db, { uuidv7: () => randomUUID() }, (chave) => `https://midia.exemplo.invalid/${chave}`),
         autenticador: {
           autenticar: (token: string) =>
             FORMA_DE_UUID.test(token)

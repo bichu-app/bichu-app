@@ -246,6 +246,27 @@ export interface TrilhaTransacional {
   recordIn(trx: TransacaoDeEscrita, event: AuditEvent): Promise<void>;
 }
 
+/**
+ * A soma de um campo numerico de `metadata` nos eventos de um ator, numa janela,
+ * lida NA transacao de quem chama (D56).
+ *
+ * Existe para o teto por linhas devolvidas da fila de pedidos da `Rede`: o que
+ * se mede e quanto dado de pessoa saiu, e a trilha ja guarda esse numero em
+ * toda leitura (D55). Somar da trilha faz o teto e o registro serem a mesma
+ * fonte: uma leitura sem trilha nao aconteceu, e nao conta, porque nao saiu.
+ */
+export interface ContagemNaTrilha {
+  somarNaJanela(
+    trx: TransacaoDeEscrita,
+    consulta: {
+      readonly actorUserId: UserId;
+      readonly action: AuditAction;
+      readonly campo: string;
+      readonly desde: Date;
+    },
+  ): Promise<{ readonly total: number; readonly maisAntigo: Date | null }>;
+}
+
 /** O que o trabalho de uma escrita auditada devolve: o resultado e o evento. */
 export interface ResultadoAuditado<T> {
   readonly resultado: T;

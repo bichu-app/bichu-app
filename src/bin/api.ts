@@ -93,6 +93,7 @@ import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/htt
 import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
 import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
 import {
+  criarContagemNaTrilha,
   criarEscritaAuditada,
   criarTrilhaTransacional,
 } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
@@ -101,6 +102,10 @@ import { criarSessaoAdministrativaRepository } from '../modules/identity/adapter
 import { criarSessaoAdministrativaService } from '../modules/identity/application/sessao-administrativa-service.js';
 import { registrarRotasDaSessaoAdministrativa } from '../modules/identity/adapters/http/admin-session-routes.js';
 import { registrarRotasDaLojaAdministrativa } from '../modules/store/adapters/http/admin-store-routes.js';
+import { registrarRotasDaRedeAdministrativa } from '../modules/network/adapters/http/admin-network-routes.js';
+import { RedeAdministrativa } from '../modules/network/application/rede-administrativa.js';
+import { criarRedeAdministrativaRepository } from '../modules/network/adapters/persistence/kysely-rede-administrativa.js';
+import { criarAvisoAosAdministradores } from '../modules/network/adapters/external/aviso-aos-administradores-por-email.js';
 import { CatalogoAdministrativo } from '../modules/store/application/catalogo-administrativo.js';
 import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters/persistence/kysely-catalogo-administrativo.js';
 import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
@@ -286,6 +291,27 @@ export async function main(): Promise<void> {
     ids,
     clock: systemClock,
     urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+  });
+
+  // BICHUS-273/292. A escrita administrativa da Rede e a fila de pedidos. A
+  // trilha e a mesma forma transacional (D49); a contagem da fila (D56) le da
+  // propria trilha; o aviso a todos os administradores sai pelo mesmo mailer.
+  const redeAdministrativa = new RedeAdministrativa({
+    repositorio: criarRedeAdministrativaRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+      contagem: criarContagemNaTrilha(),
+      imagens: registroDeImagemDeCatalogo,
+    }),
+    avisos: criarAvisoAosAdministradores({
+      db,
+      mailer,
+      registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
+    }),
+    ids,
+    clock: systemClock,
+    urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+    registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
   });
 
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
@@ -676,7 +702,7 @@ export async function main(): Promise<void> {
     // transferencia -- o modulo recebe a funcao e continua sem conhecer o
     // servico de identidade.
     registrarRotasDaRede(escopo, {
-      rede: criarNetworkRepository(db, ids),
+      rede: criarNetworkRepository(db, ids, urlDeMidia),
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
@@ -721,6 +747,8 @@ export async function main(): Promise<void> {
           registrarRotasDaSessaoAdministrativa(administrativo, { sessoes: sessaoAdministrativa, contrato });
           // BICHUS-266/267. A escrita da Loja e a intencao de envio de imagem.
           registrarRotasDaLojaAdministrativa(administrativo, { catalogo: catalogoAdministrativo, contrato });
+          // BICHUS-273/292. A escrita da Rede e a fila de pedidos.
+          registrarRotasDaRedeAdministrativa(administrativo, { rede: redeAdministrativa, contrato });
         },
       );
     } else {

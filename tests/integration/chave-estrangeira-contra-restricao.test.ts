@@ -687,6 +687,19 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.catalog_images',
     aoApagar: 'NO ACTION',
   },
+  // ADR-0027 A.4.2 (BICHUS-273). A galeria do encontro, na forma da do item:
+  // a ligacao a partir do ENCONTRO e CASCADE, a imagem de catalogo e NO ACTION.
+  'public.network_event_images.network_event_images_event_id_fkey': {
+    colunas: ['event_id'],
+    referencia: 'public.network_events',
+    aoApagar: 'CASCADE',
+    levaJunto: 'a ordem e o texto alternativo das imagens do encontro apagado. A imagem em catalog_images fica.',
+  },
+  'public.network_event_images.network_event_images_image_id_fkey': {
+    colunas: ['image_id'],
+    referencia: 'public.catalog_images',
+    aoApagar: 'NO ACTION',
+  },
   'public.catalog_images.catalog_images_upload_intent_id_fkey': {
     colunas: ['upload_intent_id'],
     referencia: 'public.upload_intents',

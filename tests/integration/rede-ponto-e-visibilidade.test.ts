@@ -136,7 +136,7 @@ before(async () => {
   banco = createDb(CONEXAO);
   cliente = new pg.Client({ connectionString: CONEXAO });
   await cliente.connect();
-  repo = criarNetworkRepository(banco.db, { uuidv7: () => randomUUID() });
+  repo = criarNetworkRepository(banco.db, { uuidv7: () => randomUUID() }, (chave) => `https://midia.exemplo.invalid/${chave}`);
 
   await cliente.query('DELETE FROM network_events WHERE slug LIKE $1', [`${PREFIXO}%`]);
   for (const linha of LINHAS) await inserir(linha);

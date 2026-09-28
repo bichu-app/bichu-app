@@ -37,9 +37,11 @@
  *
  * ## Imagens
  *
- * A tabela de imagens do encontro depende de `catalog_images`, que nasce numa
- * migracao posterior a esta (`20260923000007`, na fatia da `Loja`). Ate ela
- * existir nesta linha, a lista de imagens sai vazia e `cover_image_url` nula.
+ * A galeria (`network_event_images`, migracao `20260923000009`) vem na mesma
+ * consulta, por subconsulta escalar em JSON, so com imagem PRONTA
+ * (`catalog_images.status = 'ready'`): a derivada nunca e servida antes
+ * (ADR-0027 item 10). O banco guarda a chave; a URL e composta aqui, e a capa
+ * (`cover_image_url`) e a de posicao 0, no dominio.
  */
 import { randomBytes } from 'node:crypto';
 import { sql, type Expression, type SqlBool } from 'kysely';
@@ -110,6 +112,7 @@ interface LinhaDoEncontro {
   accepted_sizes: string[];
   amenities: string[];
   bring_items: string[];
+  images: { k: string; a: string }[] | null;
 }
 
 /**
@@ -152,6 +155,10 @@ function colunasDoEncontro() {
       SELECT b.item FROM network_event_bring_items b
        WHERE b.event_id = e.id
        ORDER BY array_position(${sql.val(ORDEM_DO_QUE_LEVAR)}::text[], b.item))`.as('bring_items'),
+    sql<{ k: string; a: string }[] | null>`(
+      SELECT json_agg(json_build_object('k', c.public_key, 'a', i.alt_text) ORDER BY i.position)
+        FROM network_event_images i JOIN catalog_images c ON c.id = i.image_id
+       WHERE i.event_id = e.id AND c.status = 'ready' AND c.public_key IS NOT NULL)`.as('images'),
   ] as const;
 }
 
@@ -292,6 +299,8 @@ export class KyselyNetworkRepository implements NetworkRepository {
   constructor(
     private readonly db: Db,
     private readonly ids: { uuidv7(): string },
+    /** A URL publica da derivada. O banco guarda so a chave. */
+    private readonly urlDeMidia: (chave: string) => string,
   ) {}
 
   async listarAgenda(recorte: RecorteDaAgenda): Promise<PaginaDaAgenda> {
@@ -313,7 +322,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .offset((recorte.page - 1) * recorte.limit)
       .execute()) as unknown as LinhaDoEncontro[];
 
-    return { itens: linhas.map(comoEncontro), total };
+    return { itens: linhas.map((l) => comoEncontro(l, this.urlDeMidia)), total };
   }
 
   async listarPorDistancia(recorte: RecorteDaAgendaPorDistancia): Promise<PaginaPorDistancia> {
@@ -363,7 +372,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
 
     return {
       itens: linhas.map((linha) => ({
-        encontro: comoEncontro(linha),
+        encontro: comoEncontro(linha, this.urlDeMidia),
         distanciaM: linha.distancia_m === null ? null : Number(linha.distancia_m),
       })),
       total,
@@ -376,7 +385,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .where('e.slug', '=', slug)
       .select(colunasDoEncontro())
       .executeTakeFirst()) as unknown as LinhaDoEncontro | undefined;
-    return linha === undefined ? undefined : comoEncontro(linha);
+    return linha === undefined ? undefined : comoEncontro(linha, this.urlDeMidia);
   }
 
   async buscarLocalDoEncontro(slug: string, chamador: string): Promise<LocalDoEncontro | undefined> {
@@ -395,7 +404,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .where(aprovado(chamador))
       .select(colunasDoEncontro())
       .executeTakeFirst()) as unknown as LinhaDoEncontro | undefined;
-    return linha === undefined ? undefined : comoEncontro(linha);
+    return linha === undefined ? undefined : comoEncontro(linha, this.urlDeMidia);
   }
 
   async pedirParaParticipar(slug: string, chamador: string, agora: Instant): Promise<DesfechoDoPedido> {
@@ -425,14 +434,14 @@ export class KyselyNetworkRepository implements NetworkRepository {
         ON CONFLICT (event_id, user_id) DO UPDATE SET withdrawn_at = NULL
       `.execute(trx);
 
-      const pedido = await lerPedido(trx, slug, chamador);
+      const pedido = await lerPedido(trx, slug, chamador, this.urlDeMidia);
       if (pedido === undefined) return { tipo: 'nao_encontrado' } as const;
       return { tipo: 'ok', pedido } as const;
     });
   }
 
   lerMeuPedido(slug: string, chamador: string): Promise<PedidoDaConta | undefined> {
-    return lerPedido(this.db, slug, chamador);
+    return lerPedido(this.db, slug, chamador, this.urlDeMidia);
   }
 
   async desistirDoPedido(
@@ -521,7 +530,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .offset((recorte.page - 1) * recorte.limit)
       .execute()) as unknown as LinhaDoPedido[];
 
-    return { itens: linhas.map(comoPedido), total: Number(contagem?.total ?? 0) };
+    return { itens: linhas.map((l) => comoPedido(l, this.urlDeMidia)), total: Number(contagem?.total ?? 0) };
   }
 }
 
@@ -530,6 +539,7 @@ async function lerPedido(
   db: DbExecutor,
   slug: string,
   chamador: string,
+  urlDeMidia: (chave: string) => string,
 ): Promise<PedidoDaConta | undefined> {
   const linha = (await consultaBase(db)
     .innerJoin('network_event_join_requests as j', 'j.event_id', 'e.id')
@@ -539,19 +549,19 @@ async function lerPedido(
     .where('j.withdrawn_at', 'is', null)
     .select([...colunasDoEncontro(), 'j.status as decisao', 'j.requested_at as pedido_em'])
     .executeTakeFirst()) as unknown as LinhaDoPedido | undefined;
-  return linha === undefined ? undefined : comoPedido(linha);
+  return linha === undefined ? undefined : comoPedido(linha, urlDeMidia);
 }
 
-function comoPedido(linha: LinhaDoPedido): PedidoDaConta {
+function comoPedido(linha: LinhaDoPedido, urlDeMidia: (chave: string) => string): PedidoDaConta {
   return {
     decisao: linha.decisao,
     pedidoEm: linha.pedido_em.getTime() as Instant,
-    encontro: comoEncontro(linha),
+    encontro: comoEncontro(linha, urlDeMidia),
   };
 }
 
 /** A linha do banco na forma do dominio. */
-function comoEncontro(linha: LinhaDoEncontro): EncontroDaRede {
+function comoEncontro(linha: LinhaDoEncontro, urlDeMidia: (chave: string) => string): EncontroDaRede {
   return {
     slug: linha.slug,
     title: linha.title,
@@ -584,10 +594,14 @@ function comoEncontro(linha: LinhaDoEncontro): EncontroDaRede {
     estrutura: linha.amenities,
     paraLevar: linha.bring_items,
     observacoes: linha.notes,
-    imagens: [],
+    imagens: (linha.images ?? []).map((i) => ({ url: urlDeMidia(i.k), textoAlternativo: i.a })),
   };
 }
 
-export function criarNetworkRepository(db: Db, ids: { uuidv7(): string }): NetworkRepository {
-  return new KyselyNetworkRepository(db, ids);
+export function criarNetworkRepository(
+  db: Db,
+  ids: { uuidv7(): string },
+  urlDeMidia: (chave: string) => string,
+): NetworkRepository {
+  return new KyselyNetworkRepository(db, ids, urlDeMidia);
 }
