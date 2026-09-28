@@ -640,5 +640,46 @@ void main() {
       expect(find.text('Encontro privado'), findsOneWidget);
       expect(find.text('Este encontro já aconteceu.'), findsOneWidget);
     });
-});
+    testWidgets('guarda: Agora não fecha a folha sem guardar nada', (tester) async {
+      final rede = redePrivada();
+      final envelope = DepositoDeIntencaoEmMemoria();
+      telaAlta(tester);
+      await abrirOApp(tester, rede: rede.call, envelope: envelope);
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+      await tester.pumpAndSettle();
+      await abrirCartao(tester, tituloPrivado);
+      await tester.tap(find.text('Pedir para participar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Agora não'));
+      await tester.pumpAndSettle();
+      expect(find.text('Entre para pedir'), findsNothing);
+      expect(find.byType(TelaEntrar), findsNothing);
+      expect(await envelope.ler(), isNull);
+    });
+
+    testWidgets('guarda: tocar em Entrar abre a tela de entrar', (tester) async {
+      // ISCA: em `_abrirGuarda`, apague `context.push(Rotas.entrar)`. A
+      // intencao fica guardada mas a pessoa continua no encontro, e este caso
+      // reprova no `TelaEntrar`.
+      final rede = redePrivada();
+      final envelope = DepositoDeIntencaoEmMemoria();
+      telaAlta(tester);
+      await abrirOApp(tester, rede: rede.call, envelope: envelope);
+      await tester.tap(find.widgetWithText(NavigationDestination, 'Rede'));
+      await tester.pumpAndSettle();
+      await abrirCartao(tester, tituloPrivado);
+      await tester.tap(find.text('Pedir para participar'));
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.descendant(
+          of: find.byType(BottomSheet),
+          matching: find.text('Entrar'),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Entre para pedir'), findsNothing);
+      expect(find.byType(TelaEntrar), findsOneWidget);
+      expect(await envelope.ler(), contains('pedir_para_participar'));
+    });
+  });
 }

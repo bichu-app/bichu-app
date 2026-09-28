@@ -1438,8 +1438,11 @@ class RecorteDaRede {
         limite: limite,
       );
 
-  /// O que decide QUAIS encontros publicos entram nas distancias.
-  String get assinaturaDasDistancias => <Object?>[
+  /// O que decide as distancias guardadas: QUAIS encontros publicos entram
+  /// e DE ONDE se mede. A [regiao] e a regiao de referencia de quem chama;
+  /// quando ela muda, a assinatura muda e as medidas antigas sao apagadas.
+  String assinaturaDasDistancias({required String regiao}) => <Object?>[
+        regiao,
         cidade,
         quando?.codigo,
         entrada?.codigo,

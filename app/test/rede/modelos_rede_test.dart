@@ -228,6 +228,22 @@ void main() {
   });
 
   group('o recorte manda so o que cada operacao aceita', () {
+    test('ISCA -- a assinatura das distancias muda com a regiao', () {
+      // ISCA: tire `regiao` da lista de `assinaturaDasDistancias`. As medidas
+      // da regiao antiga sobreviveriam a troca, e este caso reprova.
+      const r = RecorteDaRede(cidade: 'São Paulo');
+      expect(
+        r.assinaturaDasDistancias(regiao: 'Pinheiros/São Paulo/SP/'),
+        isNot(r.assinaturaDasDistancias(regiao: 'Butantã/São Paulo/SP/')),
+      );
+      // O termo de busca continua fora: digitar nao apaga as medidas.
+      expect(
+        const RecorteDaRede(termo: 'passeio', cidade: 'São Paulo')
+            .assinaturaDasDistancias(regiao: 'x'),
+        r.assinaturaDasDistancias(regiao: 'x'),
+      );
+    });
+
     test('listNearbyNetworkEvents nao recebe visibility nem coordenada', () {
       const r = RecorteDaRede(
         visibilidade: VisibilidadeDoEncontro.publico,

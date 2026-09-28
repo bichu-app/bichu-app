@@ -400,6 +400,39 @@ void main() {
       expect(find.text('Porte do cão'), findsNothing);
     });
 
+    testWidgets('busca e Situação do pedido vão a join-requests', (tester) async {
+      final rede = redeComAgenda(
+        pedidos: paginaDePedidos(<Map<String, dynamic>>[
+          <String, dynamic>{
+            'event': teaserPrivado(),
+            'state': 'requested',
+            'requested_at': '2026-09-28T12:00:00Z',
+          },
+        ]),
+      );
+      await abrirRede(tester, rede: rede);
+      await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).first, 'border');
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+      var q = rede.chamadasA('GET /v1/network/join-requests').last.url.queryParameters;
+      expect(q['q'], 'border');
+
+      await tester.tap(find.byTooltip('Filtrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Aprovado'));
+      await tester.pumpAndSettle();
+      q = rede.chamadasA('GET /v1/network/join-requests').last.url.queryParameters;
+      expect(q['state'], 'approved');
+      expect(q['q'], 'border');
+      expect(q['sort'], 'proximos');
+      for (final proibido in <String>['admission', 'size', 'max_km', 'city']) {
+        expect(q.containsKey(proibido), isFalse);
+      }
+    });
+
     testWidgets('vazio de Meus pedidos', (tester) async {
       await abrirRede(tester, rede: redeComAgenda());
       await tester.tap(find.widgetWithText(Tab, 'Meus pedidos'));

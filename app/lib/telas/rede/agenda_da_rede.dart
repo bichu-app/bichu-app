@@ -365,7 +365,10 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     RecorteDaRede recorte,
     List<String> slugs,
   ) async {
-    final assinatura = recorte.assinaturaDasDistancias;
+    final r = Escopo.of(context).sessao.usuario?.regiaoDeReferencia;
+    final assinatura = recorte.assinaturaDasDistancias(
+      regiao: <Object?>[r?.bairro, r?.cidade, r?.uf, r?.cep].join('/'),
+    );
     if (assinatura != _assinaturaDasMedidas) {
       _limparMedidas();
       _assinaturaDasMedidas = assinatura;
