@@ -155,13 +155,13 @@ export default function FormularioDeParceiro() {
 
   function recusa(error: unknown) {
     const tipo = tipoDoProblema(error);
-    if (tipo === 'slug-taken') return mostrar({ 'p-slug': 'Já existe um parceiro com este identificador.' });
+    if (tipo === 'slug-taken') return mostrar({ 'p-slug': 'Já existe um parceiro com este identificador. Escolha outro.' });
     if (tipo === 'precondition-failed')
-      return setFalha({ texto: 'Alguém alterou este parceiro antes de você. Nada foi gravado. Recarregue para ver a versão atual.', recarregar: true });
+      return setFalha({ texto: 'Alguém alterou este parceiro enquanto você editava, e nada foi gravado. Recarregar traz a versão atual e descarta o que você mudou aqui.', recarregar: true });
     if (tipo === 'validation-failed') {
       const e: Partial<Record<Campo, string>> = {};
       for (const erro of errosDoProblema(error)) {
-        if (erro.code === 'host_mismatch_items') e['p-host'] = 'Há produtos deste parceiro com link de outro site. Corrija os links antes de trocar o site.';
+        if (erro.code === 'host_mismatch_items') e['p-host'] = 'Os produtos deste parceiro têm links do site atual. Troque os links deles antes de trocar o site do parceiro.';
         else if (erro.field === 'host') e['p-host'] = 'Escreva só o endereço do site, sem https:// e sem barra.';
         else if (erro.field === 'name') e['p-nome'] = 'Informe o nome do parceiro, de 2 a 80 caracteres.';
         else if (erro.field === 'slug') e['p-slug'] = 'Use de 3 a 30 letras minúsculas, números ou hífen, sem hífen no começo nem no fim.';
@@ -238,7 +238,11 @@ export default function FormularioDeParceiro() {
           aoMudar={(v) => mudar({ slug: v.toLowerCase(), slugEditado: true })}
           maximo={30}
           erro={erros['p-slug']}
-          ajuda="Usado nos filtros do painel. Letras minúsculas, números e hífen. Sai do nome; mude se quiser."
+          ajuda={
+            editando
+              ? 'Aparece no endereço da lista de produtos filtrada por este parceiro. Letras minúsculas, números e hífen. Vem do nome, e você pode mudar. Se mudar, os links já salvos da lista filtrada param de filtrar.'
+              : 'Aparece no endereço da lista de produtos filtrada por este parceiro. Letras minúsculas, números e hífen. Vem do nome, e você pode mudar.'
+          }
         />
         <CampoDeTexto
           id="p-host"

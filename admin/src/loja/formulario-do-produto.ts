@@ -107,7 +107,7 @@ export function validarProduto(
   const link = v.link.trim();
   if (!/^https:\/\/[^\s/]+/i.test(link) || !hostDoLink(link)) e['f-link'] = 'O link precisa começar com https://.';
   else if (contexto.hostDoParceiro && !linkEDoParceiro(link, contexto.hostDoParceiro))
-    e['f-link'] = 'O link precisa ser do site do parceiro escolhido.';
+    e['f-link'] = mensagemDoHost(contexto.hostDoParceiro);
 
   const temPreco = v.preco.trim() !== '';
   const temData = v.consultadoEm.trim() !== '';
@@ -208,11 +208,23 @@ const CAMPO_DO_SERVIDOR: [RegExp, CampoDoProduto][] = [
   [/^price/, 'f-preco'],
 ];
 
-const MENSAGEM_DO_CODIGO: Record<string, string> = {
-  host_mismatch: 'O link precisa ser do site do parceiro escolhido.',
-  unknown_tag: 'Uma das tags escolhidas não existe mais. Tire-a e salve de novo.',
-  inactive_tag: 'Uma das tags escolhidas está desativada e não pode ser ligada de novo.',
-};
+/** UX 30.4 L1: com o site do parceiro carregado, a frase o mostra entre parenteses. */
+export function mensagemDoHost(host: string | undefined): string {
+  return host ? `O link precisa ser do site do parceiro escolhido (${host}).` : 'O link precisa ser do site do parceiro escolhido.';
+}
+
+export interface ContextoDoServidor {
+  hostDoParceiro?: string | undefined;
+  /** O `tag_slugs` enviado, na ordem: o erro do servidor aponta o indice. */
+  tagsEnviadas?: string[];
+  rotuloDaTag?: (slug: string) => string | undefined;
+}
+
+export interface RecusaDoServidor {
+  erros: ErrosDoProduto;
+  /** UX 30.4 L3 e L4: as tags recusadas, para o chip aparecer marcado com o erro. */
+  tagsRecusadas: string[];
+}
 
 const MENSAGEM_PADRAO: Record<CampoDoProduto, string> = {
   'f-nome': 'Informe o nome do produto.',
@@ -228,12 +240,32 @@ const MENSAGEM_PADRAO: Record<CampoDoProduto, string> = {
 };
 
 /** `errors[]` de `validation-failed` -> erros dos campos da tela. O texto e da tela, nunca do servidor. */
-export function errosDoServidor(erros: { field: string; code: string }[]): ErrosDoProduto {
+export function errosDoServidor(erros: { field: string; code: string }[], contexto: ContextoDoServidor = {}): RecusaDoServidor {
   const e: ErrosDoProduto = {};
+  const tagsRecusadas: string[] = [];
   for (const erro of erros) {
     const campo = CAMPO_DO_SERVIDOR.find(([padrao]) => padrao.test(erro.field))?.[1];
-    if (!campo || e[campo]) continue;
-    e[campo] = MENSAGEM_DO_CODIGO[erro.code] ?? MENSAGEM_PADRAO[campo];
+    if (!campo) continue;
+    if (erro.code === 'unknown_tag' || erro.code === 'inactive_tag') {
+      const indice = /\[(\d+)\]/.exec(erro.field)?.[1];
+      const slug = indice !== undefined ? contexto.tagsEnviadas?.[Number(indice)] : undefined;
+      if (slug) tagsRecusadas.push(slug);
+    }
+    if (e[campo]) continue;
+    e[campo] = mensagemDoCodigo(erro, campo, contexto);
   }
-  return e;
+  return { erros: e, tagsRecusadas };
+}
+
+function mensagemDoCodigo(erro: { field: string; code: string }, campo: CampoDoProduto, contexto: ContextoDoServidor): string {
+  if (erro.code === 'host_mismatch') return mensagemDoHost(contexto.hostDoParceiro);
+  if (erro.code === 'unknown_tag')
+    return 'Uma das tags mudou de nome desde que você abriu este formulário. Desmarque a tag indicada, escolha de novo e salve.';
+  if (erro.code === 'inactive_tag') {
+    const indice = /\[(\d+)\]/.exec(erro.field)?.[1];
+    const slug = indice !== undefined ? contexto.tagsEnviadas?.[Number(indice)] : undefined;
+    const nome = slug ? (contexto.rotuloDaTag?.(slug) ?? slug) : undefined;
+    return nome ? `A tag “${nome}” foi desativada. Desmarque-a para salvar, ou reative-a em Tags.` : 'Uma das tags foi desativada. Desmarque-a para salvar, ou reative-a em Tags.';
+  }
+  return MENSAGEM_PADRAO[campo];
 }

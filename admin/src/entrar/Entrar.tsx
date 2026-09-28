@@ -33,10 +33,6 @@ const VERIFICACAO_NAO_CARREGOU: Aviso = {
   tipo: 'alerta',
   texto: 'A verificação de segurança do login não carregou. Desative o bloqueador de anúncios nesta página ou use outro navegador.',
 };
-const SENHA_VAZADA: Aviso = {
-  tipo: 'alerta',
-  texto: 'Esta senha aparece em vazamentos de outros sites e não é aceita no backoffice. Redefina a senha para entrar.',
-};
 
 export interface PropsDoEntrar {
   obterToken: ObterTokenDoCaptcha;
@@ -103,11 +99,6 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
       }
       if (tipo === 'captcha-rejected') {
         setAviso(VERIFICACAO_RECUSADA);
-        return;
-      }
-      if (tipo === 'password-reset-required') {
-        setSenha('');
-        setAviso(SENHA_VAZADA);
         return;
       }
       // invalid-credentials, validation-failed e qualquer outra recusa: a mesma tela (D44).

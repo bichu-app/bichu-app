@@ -41,7 +41,7 @@ const AVISO = {
 };
 
 const FALHA_DE_REDE = 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
-const CONFLITO = 'Alguém alterou este produto antes de você. Nada foi gravado. Recarregue para ver a versão atual antes de salvar.';
+const CONFLITO = 'Alguém alterou este produto enquanto você editava, e nada foi gravado. Recarregar traz a versão atual e descarta o que você mudou aqui.';
 
 /** O que vai para o rascunho da sessao: sem arquivo e sem previa local, que nao sobrevivem a recarga. */
 function paraRascunho(v: ValoresDoProduto): ValoresDoProduto {
@@ -73,6 +73,7 @@ export default function FormularioDeProduto() {
   const [valores, setValores] = useState<ValoresDoProduto>(VALORES_VAZIOS);
   const [base, setBase] = useState<ValoresDoProduto>(VALORES_VAZIOS);
   const [errosDoServidorNaTela, setErrosDoServidorNaTela] = useState<ErrosDoProduto>({});
+  const [tagsRecusadas, setTagsRecusadas] = useState<string[]>([]);
   const [tentouSalvar, setTentouSalvar] = useState<Acao>();
   const [salvando, setSalvando] = useState<Acao>();
   const [falha, setFalha] = useState<{ texto: string; recarregar?: boolean }>();
@@ -91,6 +92,7 @@ export default function FormularioDeProduto() {
   const mudar = useCallback(<K extends keyof ValoresDoProduto>(campo: K, valor: ValoresDoProduto[K]) => {
     setValores((v) => ({ ...v, [campo]: valor }));
     setErrosDoServidorNaTela({});
+    setTagsRecusadas([]);
   }, []);
 
   // Carga: item (com ETag), parceiros ativos e o vocabulario de tags ativas.
@@ -241,9 +243,14 @@ export default function FormularioDeProduto() {
   function tratarRecusa(error: unknown, status: number) {
     const tipo = tipoDoProblema(error);
     if (tipo === 'validation-failed') {
-      const doServidor = errosDoServidor(errosDoProblema(error));
-      if (Object.keys(doServidor).length > 0) {
-        setErrosDoServidorNaTela(doServidor);
+      const doServidor = errosDoServidor(errosDoProblema(error), {
+        hostDoParceiro: parceiroEscolhido?.host,
+        tagsEnviadas: valores.tags,
+        rotuloDaTag: (slug) => tags.find((t) => t.slug === slug)?.label ?? item?.tags.find((t) => t.slug === slug)?.label,
+      });
+      if (Object.keys(doServidor.erros).length > 0) {
+        setErrosDoServidorNaTela(doServidor.erros);
+        setTagsRecusadas(doServidor.tagsRecusadas);
         return focarResumo();
       }
     }
@@ -408,33 +415,39 @@ export default function FormularioDeProduto() {
           {tagsDoItemInativas.map((t) => {
             const marcada = valores.tags.includes(t.slug);
             return (
-              <button
+              <ChipDeTag
                 key={t.slug}
-                type="button"
-                className="chip"
-                aria-pressed={marcada}
-                disabled={!marcada}
-                onClick={() => mudar('tags', valores.tags.filter((x) => x !== t.slug))}
-              >
-                {marcada && <Icone nome="tick" tamanho="s16" />}
-                {t.label} (inativa)
-              </button>
+                rotulo={`${t.label} (inativa)`}
+                marcada={marcada}
+                recusada={tagsRecusadas.includes(t.slug)}
+                desabilitada={!marcada}
+                aoClicar={() => mudar('tags', valores.tags.filter((x) => x !== t.slug))}
+              />
             );
           })}
+          {/* UX 30.4 L3: tag marcada que o servidor nao reconhece mais (renomeada) continua visivel, marcada com o erro. */}
+          {valores.tags
+            .filter((slug) => !tags.some((t) => t.slug === slug) && !tagsDoItemInativas.some((t) => t.slug === slug))
+            .map((slug) => (
+              <ChipDeTag
+                key={slug}
+                rotulo={item?.tags.find((t) => t.slug === slug)?.label ?? slug}
+                marcada
+                recusada={tagsRecusadas.includes(slug)}
+                aoClicar={() => mudar('tags', valores.tags.filter((x) => x !== slug))}
+              />
+            ))}
           {tags.map((t) => {
             const marcada = valores.tags.includes(t.slug);
             return (
-              <button
+              <ChipDeTag
                 key={t.slug}
-                type="button"
-                className="chip"
-                aria-pressed={marcada}
-                disabled={!marcada && cheio}
-                onClick={() => mudar('tags', marcada ? valores.tags.filter((x) => x !== t.slug) : [...valores.tags, t.slug])}
-              >
-                {marcada && <Icone nome="tick" tamanho="s16" />}
-                {t.label}
-              </button>
+                rotulo={t.label}
+                marcada={marcada}
+                recusada={tagsRecusadas.includes(t.slug)}
+                desabilitada={!marcada && cheio}
+                aoClicar={() => mudar('tags', marcada ? valores.tags.filter((x) => x !== t.slug) : [...valores.tags, t.slug])}
+              />
             );
           })}
           <button type="button" className="btn ghost sm" onClick={() => setCriarTag(true)}>
@@ -593,6 +606,36 @@ export default function FormularioDeProduto() {
         />
       )}
     </>
+  );
+}
+
+/** Chip de tag (aria-pressed). Recusada pelo servidor: borda de erro, icone e o erro do campo como descricao. */
+function ChipDeTag({
+  rotulo,
+  marcada,
+  recusada,
+  desabilitada = false,
+  aoClicar,
+}: {
+  rotulo: string;
+  marcada: boolean;
+  recusada: boolean;
+  desabilitada?: boolean;
+  aoClicar: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={recusada ? 'chip err' : 'chip'}
+      aria-pressed={marcada}
+      disabled={desabilitada}
+      aria-describedby={recusada ? 'f-tags-erro' : undefined}
+      onClick={aoClicar}
+    >
+      {recusada ? <Icone nome="error" tamanho="s16" /> : marcada && <Icone nome="tick" tamanho="s16" />}
+      {rotulo}
+      {recusada && <span className="sr"> (recusada)</span>}
+    </button>
   );
 }
 

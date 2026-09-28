@@ -102,7 +102,30 @@ describe('3 · Loja: formulario', () => {
     await preencherObrigatorios();
     fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
     await screen.findByText('Corrija 1 campo para salvar:');
-    expect(screen.getByLabelText('Link do produto no parceiro *')).toHaveAccessibleDescription('O link precisa ser do site do parceiro escolhido.');
+    expect(screen.getByLabelText('Link do produto no parceiro *')).toHaveAccessibleDescription(
+      'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br).',
+    );
+  });
+
+  it('L3: tag recusada pelo servidor aparece marcada com o erro no proprio chip', async () => {
+    montar('/loja/novo', {
+      'POST /admin/store/items': problema(400, 'validation-failed', { errors: [{ field: 'tag_slugs[1]', code: 'unknown_tag' }] }),
+    });
+    await preencherObrigatorios();
+    fireEvent.click(screen.getByRole('button', { name: 'adulto' }));
+    fireEvent.click(screen.getByRole('button', { name: 'filhote' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+    await screen.findByText('Corrija 1 campo para salvar:');
+    const recusado = screen.getByRole('button', { name: /^filhote/ });
+    expect(recusado).toHaveClass('err');
+    expect(recusado).toHaveAttribute('aria-pressed', 'true');
+    expect(recusado).toHaveAccessibleDescription(
+      'Uma das tags mudou de nome desde que você abriu este formulário. Desmarque a tag indicada, escolha de novo e salve.',
+    );
+    expect(screen.getByRole('button', { name: 'adulto' })).not.toHaveClass('err');
+    // Desmarcar tira o erro do chip.
+    fireEvent.click(recusado);
+    expect(screen.getByRole('button', { name: 'filhote' })).not.toHaveClass('err');
   });
 
   it('tags: ate 5 do vocabulario; a sexta fica inativa', async () => {

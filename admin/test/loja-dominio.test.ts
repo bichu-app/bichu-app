@@ -85,22 +85,46 @@ describe('formulario de produto', () => {
     expect(validarProduto({ ...validos, consultadoEm: '' }, hoje)['f-data']).toBe('Com preço, informe também a data da consulta.');
     expect(validarProduto({ ...validos, consultadoEm: '2026-09-29' }, hoje)['f-data']).toBe('A data da consulta não pode ser depois de hoje.');
     expect(validarProduto({ ...validos, link: 'http://petcenteraurora.com.br/x' }, hoje)['f-link']).toBe('O link precisa começar com https://.');
-    expect(validarProduto({ ...validos, link: 'https://outraloja.com.br/x' }, hoje)['f-link']).toBe('O link precisa ser do site do parceiro escolhido.');
+    expect(validarProduto({ ...validos, link: 'https://outraloja.com.br/x' }, hoje)['f-link']).toBe(
+      'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br).',
+    );
     // Host parecido nao e o do parceiro.
     expect(validarProduto({ ...validos, link: 'https://falsopetcenteraurora.com.br/x' }, hoje)['f-link']).toBeDefined();
   });
 
   it('traduz o validation-failed do servidor pelo codigo, nunca pelo texto', () => {
     expect(
-      errosDoServidor([
-        { field: 'target_url', code: 'host_mismatch' },
-        { field: 'price.checked_at', code: 'future' },
-        { field: 'tag_slugs[1]', code: 'unknown_tag' },
-      ]),
+      errosDoServidor(
+        [
+          { field: 'target_url', code: 'host_mismatch' },
+          { field: 'price.checked_at', code: 'future' },
+          { field: 'tag_slugs[1]', code: 'unknown_tag' },
+        ],
+        { tagsEnviadas: ['adulto', 'porte-medio'] },
+      ),
     ).toEqual({
-      'f-link': 'O link precisa ser do site do parceiro escolhido.',
-      'f-data': 'A data da consulta não pode ser depois de hoje.',
-      'f-tags': 'Uma das tags escolhidas não existe mais. Tire-a e salve de novo.',
+      erros: {
+        'f-link': 'O link precisa ser do site do parceiro escolhido.',
+        'f-data': 'A data da consulta não pode ser depois de hoje.',
+        'f-tags': 'Uma das tags mudou de nome desde que você abriu este formulário. Desmarque a tag indicada, escolha de novo e salve.',
+      },
+      tagsRecusadas: ['porte-medio'],
+    });
+    // L1 com o site conhecido; L4 com o nome da tag.
+    expect(
+      errosDoServidor(
+        [
+          { field: 'target_url', code: 'host_mismatch' },
+          { field: 'tag_slugs[0]', code: 'inactive_tag' },
+        ],
+        { hostDoParceiro: 'petcenteraurora.com.br', tagsEnviadas: ['sem-graos'], rotuloDaTag: () => 'sem grãos' },
+      ),
+    ).toEqual({
+      erros: {
+        'f-link': 'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br).',
+        'f-tags': 'A tag “sem grãos” foi desativada. Desmarque-a para salvar, ou reative-a em Tags.',
+      },
+      tagsRecusadas: ['sem-graos'],
     });
   });
 });

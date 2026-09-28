@@ -52,6 +52,8 @@ describe('1 · Login', () => {
       problema(401, 'invalid-credentials', { title: 'outro titulo qualquer' }),
       problema(400, 'validation-failed', { errors: [{ field: 'email', code: 'format' }] }),
       problema(403, 'forbidden'),
+      // O estado 1.6 saiu (UX 30.5): senha vazada nao tem ramo proprio na tela.
+      problema(403, 'password-reset-required'),
     ];
     const telas: string[] = [];
     for (const caso of casos) {

@@ -755,6 +755,11 @@ legend.lab-row {
   border-color: transparent;
   padding-left: var(--bichu-space-2);
 }
+.chip.err,
+.chip.err[aria-pressed='true'] {
+  border: var(--bichu-border-medium) solid var(--bichu-cor-error);
+  color: var(--bichu-cor-error);
+}
 .chip:disabled {
   color: var(--bichu-cor-on-disabled);
   cursor: default;
