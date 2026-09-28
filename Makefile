@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
+.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -465,11 +465,128 @@ verificar-manifesto-do-aplicativo-autoteste: ## as iscas do portao de boa-formac
 verificar-manifesto-do-aplicativo: ## o XML que o build do aplicativo le esta bem formado (50 ms)
 	python3 infra/verificacao/verificar_manifesto_android.py --raiz .
 
-apk: ## compila o APK de release de hml e confere o que saiu (o mesmo do job `apk` da esteira)
+# `verificar-apk-autoteste` COMO PRE-REQUISITO, e nao ao lado: ate 28/09 o
+# alvo das iscas existia fora dos dois agregadores, entao o fechamento rodava o
+# conferidor do APK SEM as iscas que impedem ele de aprovar lixo -- um portao
+# cego, do mesmo tipo que `verificar-app` ja evita com as iscas dos tokens.
+apk: verificar-apk-autoteste ## compila o APK de release de hml e confere o que saiu (o mesmo do job `apk` da esteira)
 	sh infra/verificacao/verificar-apk.sh
 
 verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (nao compila nada)
 	sh infra/verificacao/verificar-apk.sh --autoteste
+
+# ---------------------------------------------------------------------------
+# OS PORTOES QUE SO EXISTIAM NA ESTEIRA (28/09/2026)
+#
+# O cliente decidiu NAO contratar o GitHub Actions. A esteira nao roda e nao vai
+# voltar a rodar por decisao, e `make fechar-integracao` local passou a ser o
+# unico portao que existe. Tudo que morava so em `.github/workflows/ci.yml`
+# deixou de ser conferido no dia em que a cobranca parou -- e nada acusou, porque
+# a esteira parada nao reprova: ela fica `skipped`.
+#
+# ESTE BLOCO TRAZ O QUE E BARATO E NAO PEDE REDE NEM SEGREDO. Medido nesta
+# maquina com `/usr/bin/time -p`, Node 22, Python 3:
+#
+#   npm run typecheck (tsc --noEmit)                            2,79 s
+#   npm run lint      (eslint .)                                8,34 s
+#   verificar_passos_condicionais.py                            0,07 s
+#   verificar_consulta_externa.py                               0,05 s
+#   verificar_veredito_do_sonar.py --autoteste                  0,04 s
+#   verificar_quebras_de_contrato.py --autoteste                0,02 s
+#   executar-unitaria.mjs --autoteste                           0,13 s
+#   verificar-colunas-que-nao-saem.sh .                         0,37 s
+#   comparar-destinos.js                                        0,07 s
+#   buscar_veredito_do_sonar.py --autoteste                     3,64 s
+#   verificar-boot-do-alvo-prod-local.sh (quente / frio)   2,89 / 32 s
+#
+# O CRITERIO DE ONDE CADA UM MORA E O DA CASA, E ELE E CUSTO: o que cabe no laco
+# de quem desenvolve vai para `verificar`; o que sobe docker ou leva segundos vai
+# para `fechar-integracao`, ao lado de `verificar-subida-da-api` (15-27 s) e do
+# `apk`. Os dois ultimos da tabela ficaram no fechamento por isso, e so por isso.
+#
+# O QUE NAO VEIO, dito aqui e nao so na entrega:
+#
+# - `npx --yes @stoplight/spectral-cli@6.15.0` (1,44 s na esteira). Spectral NAO
+#   e dependencia declarada deste projeto: o `npx --yes` PUXA DA REDE a cada
+#   execucao. Trazer o portao exige acrescentar `devDependency`, e isso nao e
+#   decisao de quem opera a esteira. Fica registrado como o buraco que e.
+# - `npm run verify:types` (0,75 s). Ele termina em `git diff --exit-code`, que
+#   responde a pergunta da esteira (o gerado esta commitado) e REPROVA o estado
+#   correto de quem regerou e ainda nao commitou. `verificar-tipos-gerados`, que
+#   ja esta em `verificar`, pergunta o que importa aqui e nao depende do git.
+#   Duplicar seria trocar um portao melhor por um pior com dois nomes.
+# - `npm run verify:isolamento-da-pilha`. Ele NAO entra em alvo nenhum:
+#   `infra/integracao/isca-de-isolamento.mjs:271` roda `git worktree prune` na
+#   raiz, dentro de `limpar()`, tambem ligada a `SIGINT`. Isso apaga a
+#   administracao de worktree das outras sessoes deste repositorio, e ja apagou.
+#   Ele e da esteira, que roda em runner descartavel, e continua sendo so dela.
+# - varredura de segredo (`gitleaks/gitleaks-action@v2`, ci.yml linha 346). E
+#   acao do GitHub e nao existe em lugar nenhum aqui: `gitleaks` nao esta
+#   instalado, nao ha alvo, nao ha gancho. NAO CONSERTADO de proposito: instalar
+#   ferramenta e decisao do cliente. O tamanho do buraco esta na entrega.
+
+verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
+	npm run typecheck
+
+# ESLINT NAO EXISTIA EM ALVO NENHUM, e era o achado mais grave da varredura de
+# 28/09: `npm run lint` vivia so no `ci.yml`, e `eslint.config.mjs` tem DUAS
+# regras proprias -- `arquitetura/fronteira-de-modulo` e
+# `arquitetura/marca-so-pela-porta` -- que ninguem exercitava desde que a esteira
+# parou. Medido: 371 arquivos lintados, zero mensagens. Lint que nao acha arquivo
+# aprova tudo calado, e por isso o numero de arquivos esta escrito aqui.
+#
+# ELE NAO REPROVA ARVORE SUJA LEGITIMA, e isso foi conferido: o `eslint` nao
+# consulta o git. Medido com a arvore suja (arquivo modificado mais arquivo NAO
+# rastreado) -- saida 0, e o arquivo nao rastreado foi lintado junto. E a
+# diferenca que custou uma iteracao no portao dos tipos gerados, onde a forma da
+# esteira (`git diff --exit-code`) reprovava quem tinha regerado e nao commitado.
+verificar-lint: ## ESLint, com as regras proprias de fronteira de modulo (8,34 s, 371 arquivos)
+	npm run lint
+
+verificar-passos-condicionais: ## nenhum passo de workflow e pulado por premissa do proprio job, iscas dentro (0,07 s)
+	python3 infra/verificacao/verificar_passos_condicionais.py
+
+verificar-consulta-externa: ## nenhum passo trata "nao consegui perguntar" como resposta, iscas dentro (0,05 s)
+	python3 infra/verificacao/verificar_consulta_externa.py
+
+verificar-veredito-do-sonar-autoteste: ## as iscas do juizo do veredito do SonarCloud reprovam (0,04 s)
+	python3 infra/verificacao/verificar_veredito_do_sonar.py --autoteste
+
+# 3,64 s medidos, e o motivo esta no proprio script: ele sobe oito SonarCloud de
+# mentira em 127.0.0.1, um por caso. Nao ha rede e nao ha docker, mas e o item
+# mais caro do grupo -- por isso ele mora no fechamento e nao no laco.
+verificar-busca-do-veredito-autoteste: ## as iscas da traducao HTTP->envelope do veredito reprovam (3,64 s, sem rede)
+	python3 infra/verificacao/buscar_veredito_do_sonar.py --autoteste
+
+# O DEFEITO QUE ELE GUARDA E `# tests 0` COM SAIDA 0: suite que nao roda nada
+# aprova, e o total de testes e o numero em que todo mundo confia. Sem estas
+# iscas o executor podia parar de enxergar caso compilado e nada acusaria.
+verificar-suite-unitaria-autoteste: ## as iscas do executor da suite reprovam: suite que nao roda nada nao passa (0,13 s)
+	node infra/suite/executar-unitaria.mjs --autoteste
+
+verificar-colunas-que-nao-saem: ## portao de saida: nenhuma coluna que nao sai escorre para resposta, iscas primeiro (0,37 s)
+	sh infra/verificacao/verificar-colunas-que-nao-saem.sh .
+
+verificar-quebras-de-contrato-autoteste: ## as iscas do juizo de quebra de contrato reprovam (0,02 s)
+	python3 infra/verificacao/verificar_quebras_de_contrato.py --autoteste
+
+# ELE EXIGE `dist/`, e por isso vem DEPOIS de `verificar-contrato-publico`, que
+# e quem roda `npm run build` na lista. Posto antes, reprovaria por artefato
+# ausente em vez de por divergencia -- a reprovacao que ninguem entende e que
+# termina em alguem tirando o alvo da lista.
+verificar-destinos: ## todo servico com `profiles:` declarado como ausente no destino hospedado, iscas dentro (0,07 s)
+	node dist/tools/comparar-destinos.js
+
+# A OUTRA METADE DO JUIZO DA MORTE DO ALVO `prod`. O Makefile tinha so
+# `verificar-boot-do-alvo-prod-autoteste`: as iscas provam que o juizo ENXERGA, e
+# NADA aplicava o juizo ao alvo `prod` de verdade. Essa metade vivia na linha
+# 1076 do `ci.yml`, com `docker build`.
+#
+# Custo medido: 2,89 s com a imagem quente, 32 s com a camada de codigo
+# invalidada -- o mesmo perfil de `verificar-subida-da-api` (15-27 s), e ele mora
+# no fechamento pelo mesmo motivo.
+verificar-boot-do-alvo-prod: ## BICHUS-213: o alvo `prod` constroi e morre no gerenciador de segredos (2,89 s quente, 32 s frio)
+	sh infra/verificacao/verificar-boot-do-alvo-prod-local.sh
 
 # Tudo que nao precisa de nuvem nem de segredo, na ordem da esteira. E o que
 # `make up` seguido de `make verificar` responde antes de abrir um PR.
@@ -479,7 +596,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-contrato-publico verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-destinos verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
@@ -592,7 +709,9 @@ fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da
 	@echo "  subida da API em 15 s quente e 27 s com a camada de codigo invalidada."
 	@rm -f $(RECIBO_DE_FECHAMENTO)
 	@$(MAKE) --no-print-directory verificar
+	@$(MAKE) --no-print-directory verificar-busca-do-veredito-autoteste
 	@$(MAKE) --no-print-directory verificar-subida-da-api
+	@$(MAKE) --no-print-directory verificar-boot-do-alvo-prod
 	@$(MAKE) --no-print-directory verificar-app
 	@$(MAKE) --no-print-directory apk
 	@$(MAKE) --no-print-directory carimbar-fechamento
