@@ -25,6 +25,9 @@ import type {
   Pedido,
   Problema,
 } from '../dominio/tipos.ts';
+import type { components } from '../../api/generated/api.ts';
+
+type AdminSession = components['schemas']['AdminSession'];
 import { encontrosDeExemplo, pedidosDeExemplo } from './massa.ts';
 
 export const SENHA_DO_DUBLE = 'senha-do-duble-de-teste';
@@ -139,6 +142,21 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   function responder(req: Requisicao): Response {
     const partes = req.caminho.replace(/^.*?\/admin\//, '').split('/');
     const [area, recurso, id, sub] = partes;
+
+    if (area === 'session' && req.metodo === 'GET') {
+      const agora = Date.now();
+      return json(200, {
+        display_name: 'Marina Rocha',
+        roles: ['admin'],
+        csrf_token: aleatorio(40),
+        idle_expires_at: new Date(agora + 30 * 60_000).toISOString(),
+        absolute_expires_at: new Date(agora + 12 * 3_600_000).toISOString(),
+      } satisfies AdminSession);
+    }
+
+    if (area === 'auth' && (recurso === 'logout' || recurso === 'logout-all') && req.metodo === 'POST') {
+      return new Response(null, { status: 204 });
+    }
 
     if (area === 'auth' && recurso === 'reauth' && req.metodo === 'POST') {
       const corpo = req.corpo as { password?: string; scope?: EscopoDeReautenticacao };
