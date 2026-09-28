@@ -13,7 +13,8 @@ import {
   desistirDaFoto,
 } from './desistir-da-foto.js';
 import type { MediaRepository } from '../ports/media-repository.js';
-import type { Instant, ObjectKey } from '../../../shared/types/brands.js';
+import { comoObjectKey } from '../domain/chave-de-objeto.js';
+import type { Instant } from '../../../shared/types/brands.js';
 
 interface Recusa {
   readonly foto: string;
@@ -25,21 +26,21 @@ function repositorioDublado(
 ): { repositorio: MediaRepository; recusas: Recusa[] } {
   const recusas: Recusa[] = [];
   const repositorio = {
-    async buscarParaProcessar(id: string) {
-      if (foto === null || foto.id !== id) return null;
-      return {
+    buscarParaProcessar(id: string) {
+      if (foto === null || foto.id !== id) return Promise.resolve(null);
+      return Promise.resolve({
         id: foto.id,
         status: foto.status as 'processing' | 'ready' | 'rejected',
-        originalKey: 'privado/original.jpg' as ObjectKey,
-      };
+        originalKey: comoObjectKey('pets/0192f0a1b2c34d5e6f708192a3b4c5d6/original/foto.jpg'),
+      });
     },
-    async marcarRecusada(id: string, motivo: string) {
+    marcarRecusada(id: string, motivo: string) {
       // O dublê repete a guarda do adaptador de verdade
       // (`kysely-media-repository.ts`: `.where('status', '=', 'processing')`).
       // Sem ela aqui, o teste aprovaria uma chamada que o banco recusaria, e o
       // dublê estaria mais permissivo que a produção — que é como dublê mente.
-      if (foto?.status !== 'processing') return;
-      recusas.push({ foto: id, motivo });
+      if (foto?.status === 'processing') recusas.push({ foto: id, motivo });
+      return Promise.resolve();
     },
   } as unknown as MediaRepository;
   return { repositorio, recusas };

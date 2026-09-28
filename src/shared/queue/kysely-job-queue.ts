@@ -162,6 +162,18 @@ export function criarJobQueue(db: Db, ids: IdGenerator): JobQueue {
      * devolveria `NULL` (nem verdadeiro nem falso) e a pularia em silêncio. O
      * predicado explícito é o que faz essa linha aparecer como o que ela é —
      * presa, e não recuperada.
+     *
+     * **A retentativa não é imediata**, e é por isso que `run_after` avança.
+     * Devolver com `run_after = now()` faria a carga que acabou de derrubar o
+     * processo ser a primeira coisa que o processo novo pega, e a queda viraria
+     * laço apertado. A mesma espera de `fail` dá folga para o processo subir,
+     * drenar o que é saudável, e só então reencontrar o suspeito — e é também o
+     * que separa duas orfandades por minutos, que é o que faz a segunda
+     * significar "a carga" em vez de "a mesma implantação".
+     *
+     * Nenhuma prosa dentro do template: um acento grave num comentário SQL
+     * encerra o literal, e o erro que ele produz (`',' expected`) aponta para
+     * uma linha que não tem nada de errado.
      */
     async recuperarOrfaos(criterios: CriteriosDeOrfandade): Promise<readonly TrabalhoRecuperado[]> {
       const segundosDoPrazo = criterios.prazoEmMs / 1000;
@@ -185,11 +197,6 @@ export function criarJobQueue(db: Db, ids: IdGenerator): JobQueue {
                finished_at = CASE
                  WHEN j.orphan_recoveries + 1 >= ${criterios.tetoDeOrfandade}
                  THEN now() ELSE j.finished_at END,
-               -- A retentativa NÃO é imediata. Devolver com `run_after = now()`
-               -- faria a carga que acabou de derrubar o processo ser a primeira
-               -- coisa que o processo novo pega, e a queda viraria laço apertado.
-               -- A mesma espera de `fail` dá folga para o processo subir, drenar
-               -- o que é saudável, e só então reencontrar o suspeito.
                run_after = CASE
                  WHEN j.orphan_recoveries + 1 >= ${criterios.tetoDeOrfandade}
                  THEN j.run_after

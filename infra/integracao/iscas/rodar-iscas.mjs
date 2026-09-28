@@ -109,6 +109,47 @@ const ISCAS = [
     substituto: `        mc anonymous set download "local/$$OBJECT_BUCKET_PRIVATE"`,
     casoQueReprova: '3 — o balde privado RECUSA leitura anônima do original (critério 22)',
   },
+  {
+    nome: 'cache-do-libvips-ligado',
+    porque:
+      'religa o cache do libvips, que e o padrao do sharp e o que retinha memoria entre ' +
+      'fotos. Uma foto NUNCA estourou -- o limite de 50 megapixels funciona e a inspecao ' +
+      'recusa antes de decodificar. O que estourava era a SERIE: medido no container com ' +
+      'o `mem_limit: 448m`, dez fotos do pior caso aceito dao 331 -> 632 MiB e morrem no ' +
+      'cgroup na SEGUNDA, saida 137. Com o cache desligado, pico de 304 MiB e as dez ' +
+      'passam. Um caso que processe UMA foto aprova este defeito, e um caso que use uma ' +
+      'foto de 12 megapixels tambem: medido, 12 MP nao estoura nem com o cache ligado.',
+    alvo: 'src/modules/media/adapters/external/sharp-image-processor.ts',
+    trecho: 'sharp.cache(false);',
+    substituto:
+      '// ISCA EM EXECUCAO: o cache do libvips esta LIGADO. Se voce esta lendo isto num\n' +
+      '// arquivo do repositorio, a isca nao foi restaurada e o worker volta a morrer na\n' +
+      '// segunda foto grande.',
+    casoQueReprova:
+      '1 — dez fotos do pior caso ACEITO em série, e o processo sobrevive dentro do orçamento',
+  },
+  {
+    nome: 'nada-devolve-orfao',
+    porque:
+      'faz a varredura de orfaos nao achar nada, que era o estado antes desta correcao: ' +
+      '`claim` so olha `pending`, e `complete`/`fail` exigem processo vivo, entao trabalho ' +
+      'cujo processo morreu ficava `running` para sempre e a foto `processing` para sempre ' +
+      '-- sem erro, sem alarme e sem ninguem tentando de novo. E o defeito SILENCIOSO, que ' +
+      'e o mais caro: a tela do tutor continua girando e nada na maquina acusa.\n' +
+      '  Esta isca derruba o caso 2 e NAO derruba o caso 3, e a assimetria e honesta: o ' +
+      'caso 3 exige que um trabalho recem-reservado nao seja roubado, e um mecanismo morto ' +
+      'satisfaz isso sem fazer nada. Caso que exige ausencia nunca detecta ausencia de ' +
+      'mecanismo; quem faz isso e o caso 2.',
+    alvo: 'src/shared/queue/kysely-job-queue.ts',
+    // `LIMIT ${criterios.limite}` existe uma vez no arquivo inteiro: `claim` usa
+    // `LIMIT ${limit}`. Trocar por zero deixa a consulta rodar, compilar e
+    // atualizar nada -- que e exatamente o comportamento de antes, em vez de um
+    // erro de compilacao com outra cor.
+    trecho: 'LIMIT ${criterios.limite}',
+    substituto: 'LIMIT 0 -- ISCA EM EXECUCAO: nada devolve orfao',
+    casoQueReprova:
+      '2 — processo MORTO no meio do trabalho, e a foto NÃO fica presa em processing',
+  },
 ];
 
 function sha256(caminho) {
