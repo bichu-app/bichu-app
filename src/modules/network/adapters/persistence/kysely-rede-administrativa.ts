@@ -46,14 +46,13 @@ import {
   type RedeAdministrativaRepository,
   type TransacaoDaRede,
 } from '../../ports/rede-administrativa.js';
-import type { LeituraDoPedidoAprovado } from '../../ports/aviso-de-aprovacao.js';
+import { TRABALHO_DE_AVISO_DE_APROVACAO, type LeituraDoPedidoAprovado } from '../../ports/aviso-de-aprovacao.js';
 import { escaparCuringas } from './kysely-network-repository.js';
 
 const VIOLACAO_DE_UNICIDADE = '23505';
 const INDICE_DO_SLUG = 'network_events_slug_unico';
 /** Uma trava por conta, no espaco de chaves da fila: `hashtext` do texto abaixo. */
 const PREFIXO_DA_TRAVA_DA_FILA = 'admin.network_join_request.listed:';
-export const TRABALHO_DE_AVISO_DE_APROVACAO = 'network.join_request_approved' as const;
 
 interface LinhaDoEncontro {
   id: string;

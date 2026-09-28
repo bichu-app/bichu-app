@@ -65,8 +65,8 @@ import type { TransferId } from '../modules/transfers/ports/transfer-repository.
 import {
   criarLeituraDoPedidoAprovado,
   expurgarPedidosVencidos,
-  TRABALHO_DE_AVISO_DE_APROVACAO,
 } from '../modules/network/adapters/persistence/kysely-rede-administrativa.js';
+import { TRABALHO_DE_AVISO_DE_APROVACAO } from '../modules/network/ports/aviso-de-aprovacao.js';
 import { DIAS_DE_RETENCAO_DO_PEDIDO } from '../modules/network/domain/escrita-do-encontro.js';
 import { avisarPedidoAprovado } from '../modules/network/application/avisar-pedido-aprovado.js';
 import { criarAvisoDeAprovacaoPorPush } from '../modules/notifications/adapters/external/aviso-de-aprovacao-por-push.js';

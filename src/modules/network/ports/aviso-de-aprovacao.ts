@@ -6,6 +6,9 @@
  * porta e o que o worker precisa: saber de quem e o pedido e o titulo do
  * encontro, e entregar a cada aparelho da conta.
  */
+/** O tipo do trabalho na fila, o mesmo de `JobKind` (`shared/ports/job-queue.ts`). */
+export const TRABALHO_DE_AVISO_DE_APROVACAO = 'network.join_request_approved' as const;
+
 export interface PedidoAprovadoParaAviso {
   readonly userId: string;
   readonly tituloDoEncontro: string;

@@ -6646,8 +6646,8 @@ components:
       description: |
         Sessao valida, e a requisicao recusada pela guarda: conta sem o papel
         exigido em `x-admin-roles` (inclusive papel removido depois do login,
-        D37), ou, em metodo nao seguro, `Origin` diferente de
-        `https://admin.bichu.app` ou `X-CSRF-Token` ausente ou divergente
+        D37), ou, em metodo nao seguro, `Origin` diferente da origem do
+        painel (`ADMIN_ORIGIN`) ou `X-CSRF-Token` ausente ou divergente
         (D39). A guarda decide antes de ler o recurso, entao o 403 nao diz nada
         sobre ele.
       content:

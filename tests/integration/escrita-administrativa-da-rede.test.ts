@@ -49,6 +49,7 @@ import {
 } from '../../src/modules/network/adapters/persistence/kysely-rede-administrativa.js';
 import { criarNetworkRepository } from '../../src/modules/network/adapters/persistence/kysely-network-repository.js';
 import { RedeAdministrativa, type Autor } from '../../src/modules/network/application/rede-administrativa.js';
+import { criarAvisoAosAdministradores } from '../../src/modules/network/adapters/external/aviso-aos-administradores-por-email.js';
 
 const DIA = 86_400_000;
 const relogio: Clock = { now: () => Date.now() as Instant };
@@ -362,5 +363,40 @@ void describe('a fila de pedidos, contra Postgres (D53 a D56)', () => {
     await expurgarPedidosVencidos(banco.db, new Date(relogio.now()), 30);
     const sobraram = await sql<{ ref: string }>`select ref from network_event_join_requests where ref in (${refVelho}, ${refRecente})`.execute(banco.db);
     assert.deepEqual(sobraram.rows.map((x) => x.ref), [refRecente]);
+  });
+});
+
+void describe('o aviso a todos os administradores (D52, D60), contra Postgres', () => {
+  void it('vai para toda conta ativa com papel admin, e nunca para a conta sem o papel', async () => {
+    const enviados: { para: string; assunto: string }[] = [];
+    const aviso = criarAvisoAosAdministradores({
+      db: banco.db,
+      mailer: {
+        enviar: (m) => {
+          enviados.push({ para: m.para, assunto: m.assunto });
+          return Promise.resolve();
+        },
+      },
+      registrarOcorrencia: () => undefined,
+    });
+    await aviso.avisar({ assunto: 'Encontro criado: teste', linhas: ['linha'] });
+    const doAutor = await banco.db.selectFrom('users').select('email').where('id', '=', autor.userId).executeTakeFirstOrThrow();
+    const doTutor = await banco.db.selectFrom('users').select('email').where('id', '=', tutor).executeTakeFirstOrThrow();
+    assert.ok(enviados.some((e) => e.para === doAutor.email), 'o administrador nao recebeu o aviso');
+    assert.ok(!enviados.some((e) => e.para === doTutor.email), 'a conta sem papel admin recebeu o aviso');
+    assert.match(enviados[0]?.assunto ?? '', /^\[Bichu painel\] Encontro criado/);
+  });
+
+  void it('se nenhum envio sai, o aviso falha alto (o caso de uso registra, e a escrita fica)', async () => {
+    const ocorrencias: unknown[] = [];
+    const aviso = criarAvisoAosAdministradores({
+      db: banco.db,
+      mailer: { enviar: () => Promise.reject(new Error('smtp fora do ar')) },
+      registrarOcorrencia: (dados) => {
+        ocorrencias.push(dados);
+      },
+    });
+    await assert.rejects(() => aviso.avisar({ assunto: 'x', linhas: [] }), /nenhum administrador recebeu/);
+    assert.ok(ocorrencias.length > 0);
   });
 });
