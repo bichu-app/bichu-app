@@ -391,6 +391,19 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 /// **O valor anterior desta constante era `4a29c9d07d3aaf5c4067be2885b3efbd8b4876e6`**,
 /// medido na base `feat/tela-de-perto` (`98a91a2`).
+///
+/// **Remedido na mescla de `development` (920a221) nesta branch, 23/09/2026.**
+/// Pelo mesmo motivo de sempre, e ele nao cansa de valer: os dois lados
+/// destravaram a constante pela propria historia, e **a arvore que existe
+/// depois da mescla nao e nenhuma das duas**. Desta branch veio a secao
+/// `Rede`; da `development` veio a ancoragem do botao de criar conta no
+/// rodape, que mexe em `telas/conta/`.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, e o
+/// portao de diretivas abaixo continua cobrando isso sem depender desta
+/// constante. Medido com o indice temporario deste portao sobre a arvore ja
+/// mesclada. Anteriores: `59de12f643235735ac6a21249b1408fbf3651c93` (esta
+/// branch) e `65bcd97d9088e6da8668127c8cb4d38f5e19d718` (`development`).
 /// **Destravado uma nona vez pelo travamento de `Criar conta` em aparelho
 /// fisico de 22/09/2026.** O cliente nao conseguia criar conta nem entrar, e
 /// a varredura que saiu dali achou uma classe inteira: o `setState` que
@@ -545,6 +558,60 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// sendo um ato deliberado. Anteriores:
 /// `47d3281e75ece2ffd5e85586047c465868427d6f` (esta branch) e
 /// `72832de16b55beaff488096e442d64b1846bed0c` (`development`).
+// BICHUS-251 (ADR-0025): a secao `Rede` ganhou tela. `app/lib/telas/rede/`
+// nasceu com a agenda e o detalhe do encontro, e `abas.dart` perdeu a casca
+// honesta. Nenhuma tela mudou por causa da camera -- que e o que o criterio
+// 10 vigia --, e a porta `CameraEGaleria` nao foi tocada.
+///
+/// **Remedido na mescla de `feat/tela-de-loja` (69c6a27) nesta branch,
+/// 23/09/2026.** Os dois lados destravaram a constante pelo proprio motivo, e
+/// por isso **nenhum dos dois valores vale depois da mescla**: a arvore
+/// mesclada nao e a que nenhum dos dois mediu sozinho. Desta branch veio a
+/// secao `Rede` (`telas/rede/`, com `abas.dart` e `casca_com_abas.dart`); do
+/// outro lado veio a identidade interna da vitrine, que nao toca em
+/// `app/lib/telas`.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, que e o
+/// que o criterio 10 da BICHUS-161 protege, e o portao de diretivas abaixo
+/// continua cobrando isso por conta propria, sem depender desta constante.
+///
+/// O valor abaixo foi MEDIDO com o mesmo indice temporario que este portao usa
+/// (`GIT_INDEX_FILE` + `read-tree HEAD` + `add -A app/lib/telas` +
+/// `write-tree` + `rev-parse <arvore>:app/lib/telas`) sobre a arvore ja
+/// mesclada, e nao copiado de relato nenhum. As justificativas acima ficaram
+/// TODAS, dos dois lados: cada uma diz o que mudou de um lado, e e isso que
+/// mantem a troca sendo um ato deliberado. Anteriores:
+/// `a64f0919fd008d7165c19d40149e74431b8ae019` (esta branch) e
+/// `77a37422c91cce0d6d91b979bbdc2835da0ea585` (`feat/tela-de-loja`).
+///
+/// **Remedido na mescla de `development` (920a221) nesta branch, 23/09/2026.**
+/// Pelo mesmo motivo de sempre: os dois lados destravaram a constante pela
+/// propria historia, e **a arvore que existe depois da mescla nao e nenhuma
+/// das duas**. Desta branch veio a secao `Rede` (`telas/rede/`); da
+/// `development` veio a ancoragem do botao de `Criar conta` no rodape, que
+/// mexe em `telas/conta/tela_criar_conta.dart`.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, e o
+/// portao de diretivas abaixo continua cobrando isso sem depender desta
+/// constante. Medido com o indice temporario deste portao sobre a arvore ja
+/// mesclada, e nao copiado de relato nenhum. As justificativas acima ficaram
+/// TODAS, dos dois lados. Anteriores:
+/// `59de12f643235735ac6a21249b1408fbf3651c93` (esta branch) e
+/// `65bcd97d9088e6da8668127c8cb4d38f5e19d718` (`development`).
+///
+/// **Destravado pela emenda da BICHUS-251, 23/09/2026: check-in e galeria
+/// saem do app nesta versao, por decisao do cliente.** Mudam
+/// `rede/encontro_da_rede.dart` (sem botao de confirmar presenca, sem contagem
+/// e sem galeria), `rede/agenda_da_rede.dart` (o cartao perde a linha de
+/// contagem) e `abas.dart` (so o comentario da secao). Nenhuma delas encosta
+/// na porta `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161
+/// protege, e o portao de diretivas abaixo continua cobrando isso sem
+/// depender desta constante. O trabalho removido esta na branch
+/// `guarda/rede-checkin-galeria`. Medido com `git rev-parse
+/// HEAD:app/lib/telas` sobre o commit da emenda (9c9a72d), e conferido contra
+/// o "encontrado" que este portao imprimiu antes da troca. Anterior:
+/// `e113de4b6d5741694bde0b5a3135817229911625`.
+///
 /// **Remedido no merge de `feat/tela-de-loja` para a `development`,
 /// 23/09/2026, e pela terceira vez seguida pelo mesmo motivo.** Os dois
 /// lados estavam certos sobre a propria historia e errados sobre o
@@ -602,24 +669,8 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// indice temporario que este portao usa, sobre a arvore de trabalho.
 /// Anterior: `883961325403f0e22fe845c4442014e93ff1e479`.
 ///
-/// DESTRAVADO pelas tres ligacoes que faltavam no app (o aviso ao tutor pela
-/// plaquinha, o ouvinte de push e o dreno da fila offline). Duas telas mudaram,
-/// e **nenhuma das duas contorna a porta `CameraEGaleria`** -- que e o que o
-/// criterio 10 da BICHUS-161 cobra:
-///
-/// - `telas/escanear/tela_do_pet_da_tag.dart` ganhou o botao `Avisar o tutor`.
-///   Ele chama `TagsApi.avisarOTutor`, uma rota do contrato. Nenhum plugin de
-///   aparelho, nenhum canal de plataforma: o portao ESTRUTURAL abaixo continua
-///   valendo sobre este arquivo e continua verde, e e ele que pega o contorno de
-///   verdade.
-/// - `telas/casca_com_abas.dart` ganhou a faixa do aviso que chegou. Ela le um
-///   `ChangeNotifier` do escopo; o `firebase_messaging` fica atras da porta
-///   `MensagensDePush`, em `lib/dispositivo/`, que e exatamente onde o portao
-///   estrutural manda que ele fique.
-///
-/// A foto continua entrando pela porta: nenhuma tela do assistente de cadastro
-/// (`app/lib/telas/pet/`) mudou nesta rodada.
-const String _arvoreDasTelas = 'e8ff3313ee47f5ddc82cd69f9325c147a6fbfe07';
+// Remedida na integracao backoffice-v1 (acesso + rede-admin).
+const String _arvoreDasTelas = '54312e72ad5c8622555a4614c15189ab559f9622';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

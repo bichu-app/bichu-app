@@ -47,6 +47,9 @@ import * as webhook from '../../modules/notifications/adapters/http/webhook-de-e
 import * as aparelhos from '../../modules/notifications/adapters/http/device-routes.js';
 import * as diretorio from '../../modules/professionals/adapters/http/directory-routes.js';
 import * as vitrine from '../../modules/store/adapters/http/store-routes.js';
+import * as lojaAdministrativa from '../../modules/store/adapters/http/admin-store-routes.js';
+import * as rede from '../../modules/network/adapters/http/network-routes.js';
+import * as redeAdministrativa from '../../modules/network/adapters/http/admin-network-routes.js';
 import * as saude from './health.js';
 import * as sessaoAdministrativa from '../../modules/admin-access/adapters/http/admin-session-routes.js';
 
@@ -77,6 +80,15 @@ const MODULOS: readonly Record<string, unknown>[] = [
   vitrine,
   // BICHUS-259. A sessao administrativa, primeira familia de `/v1/admin`.
   sessaoAdministrativa,
+  // BICHUS-266/267. A escrita administrativa da Loja, dentro da guarda do
+  // prefixo /v1/admin.
+  lojaAdministrativa,
+  // ADR-0025. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
+  rede,
+  // BICHUS-273/292. A escrita administrativa da Rede, dentro da guarda do
+  // prefixo /v1/admin.
+  redeAdministrativa,
   saude,
 ];
 
@@ -89,24 +101,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
  * Quem implementa uma delas tira a linha no mesmo commit.
  */
 const OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA: readonly string[] = [
-  'listAdminStorePartners',
-  'createAdminStorePartner',
-  'getAdminStorePartner',
-  'updateAdminStorePartner',
-  'listAdminStoreItems',
-  'createAdminStoreItem',
-  'getAdminStoreItem',
-  'updateAdminStoreItem',
-  'publishAdminStoreItem',
-  'retireAdminStoreItem',
-  'listAdminNetworkEvents',
-  'createAdminNetworkEvent',
-  'getAdminNetworkEvent',
-  'updateAdminNetworkEvent',
-  'removeAdminNetworkEvent',
-  'relocateAdminNetworkEvent',
-  'cancelAdminNetworkEvent',
-  'createAdminCatalogImageIntent',
+  // Vazia desde BICHUS-273/292: a `Loja` e a intencao de envio de imagem sairam
+  // com BICHUS-266/267, e a `Rede` e a fila de pedidos com esta fatia. Operacao
+  // administrativa nova no contrato sem rota entra aqui, no mesmo commit.
 ];
 
 function ehRota(valor: unknown): valor is RouteDefinition {

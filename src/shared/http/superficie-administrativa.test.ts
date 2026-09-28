@@ -386,7 +386,26 @@ void describe('fronteira de registro do prefixo administrativo', () => {
       operationId: 'y', method: 'get', path: '/admin/leitura', effects: [], adminRoles: ['admin'],
       audit: { action: 'admin.store_item.created', resourceKind: 'store_item' },
     });
-    assert.match(String(await subir(noEscopo(leituraComTrilha))), /nao muda estado/);
+    assert.match(String(await subir(noEscopo(leituraComTrilha))), /leitura de dado pessoal auditada/);
+  });
+
+  void it('GET com audit de leitura e teto por rows_returned sobe (a fila, D55/D56); sem o teto, ou sem o audit, nao', async () => {
+    const teto = { dimension: ['account'], counts: 'rows_returned', limit: 300, window: '1h', onExceed: 'deny_429' } as const;
+    const fila = defineRoute({
+      operationId: 'f', method: 'get', path: '/admin/fila', effects: [], adminRoles: ['admin'],
+      audit: { action: 'admin.network_join_request.listed', resourceKind: 'network_join_request' },
+      rateLimit: [teto],
+    });
+    assert.equal(await subir(noEscopo(fila)), undefined);
+    const semTeto = defineRoute({
+      operationId: 'g', method: 'get', path: '/admin/fila', effects: [], adminRoles: ['admin'],
+      audit: { action: 'admin.network_join_request.listed', resourceKind: 'network_join_request' },
+    });
+    assert.match(String(await subir(noEscopo(semTeto))), /leitura de dado pessoal auditada/);
+    const semTrilha = defineRoute({
+      operationId: 'h', method: 'get', path: '/admin/fila', effects: [], adminRoles: ['admin'], rateLimit: [teto],
+    });
+    assert.match(String(await subir(noEscopo(semTrilha))), /sairia sem trilha/);
   });
 
   void it('rota do escopo sem /admin/ no caminho nao sobe', async () => {

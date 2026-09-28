@@ -174,11 +174,21 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.store_item.updated',
   'admin.store_item.published',
   'admin.store_item.retired',
+  // Emenda do item 16 do ADR-0027 (23/09): o vocabulario de tags da Loja.
+  'admin.store_tag.created',
+  'admin.store_tag.updated',
   'admin.network_event.created',
   'admin.network_event.updated',
   'admin.network_event.relocated',
   'admin.network_event.cancelled',
   'admin.network_event.removed',
+  // Emenda do item 17 do ADR-0027 (23/09): encontro privado e fila de pedidos.
+  // Entram aqui porque o contrato ja as declara em `x-audit`, e a conferencia
+  // de `acoes-administrativas.test.ts` e nos dois sentidos.
+  'admin.network_event.access_changed',
+  'admin.network_join_request.listed',
+  'admin.network_join_request.approved',
+  'admin.network_join_request.declined',
   'admin.catalog_image.intent_created',
   /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
   'admin.session.disavowed',
@@ -255,6 +265,27 @@ export type TransacaoDeEscrita = DbTransaction;
  */
 export interface TrilhaTransacional {
   recordIn(trx: TransacaoDeEscrita, event: AuditEvent): Promise<void>;
+}
+
+/**
+ * A soma de um campo numerico de `metadata` nos eventos de um ator, numa janela,
+ * lida NA transacao de quem chama (D56).
+ *
+ * Existe para o teto por linhas devolvidas da fila de pedidos da `Rede`: o que
+ * se mede e quanto dado de pessoa saiu, e a trilha ja guarda esse numero em
+ * toda leitura (D55). Somar da trilha faz o teto e o registro serem a mesma
+ * fonte: uma leitura sem trilha nao aconteceu, e nao conta, porque nao saiu.
+ */
+export interface ContagemNaTrilha {
+  somarNaJanela(
+    trx: TransacaoDeEscrita,
+    consulta: {
+      readonly actorUserId: UserId;
+      readonly action: AuditAction;
+      readonly campo: string;
+      readonly desde: Date;
+    },
+  ): Promise<{ readonly total: number; readonly maisAntigo: Date | null }>;
 }
 
 /** O que o trabalho de uma escrita auditada devolve: o resultado e o evento. */

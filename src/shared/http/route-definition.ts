@@ -97,9 +97,27 @@ export interface DeclaracaoDeTrilha {
   readonly resourceKind: string;
 }
 
+/**
+ * Os baldes compartilhados do backoffice (ADR-0027 item 11, D52), como o
+ * contrato os nomeia na `note` de `x-rate-limit`. O teto e da CONTA, somadas as
+ * operacoes, e nao de cada operacao: 120 escritas em 10 minutos no total, e
+ * nao 120 por operacao.
+ */
+export type BaldeCompartilhado = 'admin_write' | 'admin_publication';
+
 export interface RateLimitEntry {
+  /**
+   * O balde compartilhado. Ausente, a chave e da propria operacao (o padrao de
+   * todo o app). Presente, operacoes diferentes somam no mesmo contador.
+   */
+  readonly bucket?: BaldeCompartilhado;
   readonly dimension: readonly string[];
-  readonly counts?: 'requests' | 'distinct_identities' | 'distinct_cases' | 'distinct_emails';
+  /**
+   * `rows_returned` (D56) conta LINHAS devolvidas, e nao requisicoes: a porta de
+   * teto nao o aplica, e a subida o lista como nao aplicado. Quem o aplica e o
+   * caso de uso da operacao que o declara, somando da trilha.
+   */
+  readonly counts?: 'requests' | 'distinct_identities' | 'distinct_cases' | 'distinct_emails' | 'rows_returned';
   readonly appliesTo?: 'invalid_attempts';
   readonly when?: 'pet_lost' | 'pet_not_lost';
   readonly limit: number;

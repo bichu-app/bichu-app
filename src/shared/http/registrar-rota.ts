@@ -387,7 +387,23 @@ function exigirFronteiraAdministrativa(
       `adminPublic fora da lista fechada de operacoes sem sessao (${OPERACOES_ADMINISTRATIVAS_SEM_SESSAO.join(', ')})`,
     );
   }
-  if (rota.method === 'get' && rota.audit !== undefined) falha('GET administrativo nao muda estado e nao declara audit');
+  // GET administrativo nao muda estado e nao declara audit, com UMA excecao: a
+  // LEITURA DE DADO PESSOAL AUDITADA (D55), que exige verbo de leitura na acao
+  // E teto por linhas devolvidas (D56). Rota sem sessao nunca e essa excecao:
+  // leitura de pessoa sem conta identificada nao tem a quem atribuir a trilha.
+  // E a mesma regra que o portao do contrato administrativo impoe no contrato
+  // (regra 5), aqui no codigo; o inverso (teto por linhas sem trilha) tambem
+  // nao sobe.
+  const contaLinhas = (rota.rateLimit ?? []).some((t) => t.counts === 'rows_returned');
+  if (rota.method === 'get' && rota.audit !== undefined) {
+    const verbo = rota.audit.action.split('.').pop() ?? '';
+    if (rota.adminPublic === true || !['listed', 'read'].includes(verbo) || !contaLinhas) {
+      falha('GET administrativo nao muda estado e nao declara audit, salvo leitura de dado pessoal auditada com sessao (verbo de leitura e teto por rows_returned, D55/D56)');
+    }
+  }
+  if (rota.method === 'get' && contaLinhas && rota.audit === undefined) {
+    falha('GET com teto por rows_returned e leitura de pessoa, e sem audit sairia sem trilha (D55)');
+  }
   if (rota.method !== 'get' && rota.audit === undefined) falha('escrita administrativa sem audit (D49)');
 }
 

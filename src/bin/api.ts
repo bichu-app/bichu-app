@@ -93,6 +93,7 @@ import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/htt
 import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
 import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
 import {
+  criarContagemNaTrilha,
   criarEscritaAuditada,
   criarTrilhaTransacional,
 } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
@@ -101,8 +102,19 @@ import { criarSessaoAdministrativaRepository } from '../modules/admin-access/ada
 import { criarRepositorioDeContasAdministrativas } from '../modules/admin-access/adapters/persistence/kysely-contas-administrativas.js';
 import { criarSessaoAdministrativaService } from '../modules/admin-access/application/sessao-administrativa-service.js';
 import { registrarRotasDaSessaoAdministrativa } from '../modules/admin-access/adapters/http/admin-session-routes.js';
+import { registrarRotasDaLojaAdministrativa } from '../modules/store/adapters/http/admin-store-routes.js';
+import { registrarRotasDaRedeAdministrativa } from '../modules/network/adapters/http/admin-network-routes.js';
+import { RedeAdministrativa } from '../modules/network/application/rede-administrativa.js';
+import { criarRedeAdministrativaRepository } from '../modules/network/adapters/persistence/kysely-rede-administrativa.js';
+import { criarAvisoAosAdministradores } from '../modules/network/adapters/external/aviso-aos-administradores-por-email.js';
+import { CatalogoAdministrativo } from '../modules/store/application/catalogo-administrativo.js';
+import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters/persistence/kysely-catalogo-administrativo.js';
+import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
+import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { criarVerificadorDeCaptcha } from '../modules/admin-access/adapters/external/recaptcha-enterprise.js';
 import { listaDeSenhasVazadasIndisponivel } from '../modules/identity/ports/lista-de-senhas-vazadas.js';
+import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
+import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -265,6 +277,42 @@ export async function main(): Promise<void> {
   const escritaAuditada = criarEscritaAuditada({
     db,
     trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+  });
+
+  // BICHUS-266/267. A escrita administrativa da Loja. A trilha e a MESMA forma
+  // transacional de cima (D49); a intencao de envio assina pelo mesmo
+  // armazenamento da foto do pet, no prefixo proprio do catalogo.
+  const catalogoAdministrativo = new CatalogoAdministrativo({
+    repositorio: criarCatalogoAdministrativoRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+      imagens: registroDeImagemDeCatalogo,
+    }),
+    envios: criarPreparadorDeEnvioDeCatalogo({ armazenamento: criarObjectStorage(config.objectStorage), ids }),
+    ids,
+    clock: systemClock,
+    urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+  });
+
+  // BICHUS-273/292. A escrita administrativa da Rede e a fila de pedidos. A
+  // trilha e a mesma forma transacional (D49); a contagem da fila (D56) le da
+  // propria trilha; o aviso a todos os administradores sai pelo mesmo mailer.
+  const redeAdministrativa = new RedeAdministrativa({
+    repositorio: criarRedeAdministrativaRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+      contagem: criarContagemNaTrilha(),
+      imagens: registroDeImagemDeCatalogo,
+    }),
+    avisos: criarAvisoAosAdministradores({
+      db,
+      mailer,
+      registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
+    }),
+    ids,
+    clock: systemClock,
+    urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+    registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
   });
 
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
@@ -650,7 +698,21 @@ export async function main(): Promise<void> {
       },
       clock: systemClock,
     });
-    registrarRotasDaVitrine(escopo, { vitrine: criarStoreRepository(db), clock: systemClock });
+    registrarRotasDaVitrine(escopo, {
+      vitrine: criarStoreRepository(db, urlDeMidia),
+      clock: systemClock,
+    });
+    // A `Rede` tem as rotas no mesmo registrador: leituras alcancaveis sem
+    // conta e as que exigem uma. O autenticador e o mesmo do diretorio e o da
+    // transferencia -- o modulo recebe a funcao e continua sem conhecer o
+    // servico de identidade.
+    registrarRotasDaRede(escopo, {
+      rede: criarNetworkRepository(db, ids, urlDeMidia),
+      autenticador: {
+        autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
+      },
+      clock: systemClock,
+    });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
@@ -688,6 +750,10 @@ export async function main(): Promise<void> {
         { origem: config.adminOrigin, sessoes: sessaoAdministrativa },
         (administrativo) => {
           registrarRotasDaSessaoAdministrativa(administrativo, { sessoes: sessaoAdministrativa, contrato });
+          // BICHUS-266/267. A escrita da Loja e a intencao de envio de imagem.
+          registrarRotasDaLojaAdministrativa(administrativo, { catalogo: catalogoAdministrativo, contrato });
+          // BICHUS-273/292. A escrita da Rede e a fila de pedidos.
+          registrarRotasDaRedeAdministrativa(administrativo, { rede: redeAdministrativa, contrato });
         },
       );
     } else {

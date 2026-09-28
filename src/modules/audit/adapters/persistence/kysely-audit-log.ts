@@ -19,6 +19,7 @@ import type { Clock } from '../../../../shared/time/clock.js';
 import type {
   AuditEvent,
   AuditLog,
+  ContagemNaTrilha,
   EscritaAuditada,
   TrilhaTransacional,
 } from '../../ports/audit-log.js';
@@ -142,6 +143,34 @@ export function criarTrilhaTransacional(deps: DependenciasDaGravacao): TrilhaTra
       await assumirPapel(trx, PAPEL_DE_ESCRITA);
       await inserirEvento(trx, deps, evento);
       await assumirPapel(trx, papelAnterior);
+    },
+  };
+}
+
+/**
+ * A soma na trilha, sob `bichu_audit_writer` (que tem `SELECT` em
+ * `audit.events`) e com o papel anterior reposto logo depois, pelo mesmo motivo
+ * de `recordIn`.
+ */
+export function criarContagemNaTrilha(): ContagemNaTrilha {
+  return {
+    async somarNaJanela(trx, consulta) {
+      const atual = await sql<{ papel: string }>`select current_user as papel`.execute(trx);
+      const papelAnterior = atual.rows[0]?.papel;
+      if (papelAnterior === undefined) {
+        throw new Error('O banco nao respondeu current_user; a contagem nao sabe que papel repor.');
+      }
+      await assumirPapel(trx, PAPEL_DE_ESCRITA);
+      const linha = await sql<{ total: string | null; mais_antigo: Date | null }>`
+        select coalesce(sum((metadata ->> ${consulta.campo})::int), 0) as total,
+               min(occurred_at) as mais_antigo
+          from audit.events
+         where actor_user_id = ${consulta.actorUserId}::uuid
+           and action = ${consulta.action}
+           and occurred_at > ${consulta.desde}::timestamptz`.execute(trx);
+      await assumirPapel(trx, papelAnterior);
+      const r = linha.rows[0];
+      return { total: Number(r?.total ?? 0), maisAntigo: r?.mais_antigo ?? null };
     },
   };
 }

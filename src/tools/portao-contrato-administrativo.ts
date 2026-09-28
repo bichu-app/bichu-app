@@ -15,12 +15,19 @@
  *    `adminReauth`, `x-admin-roles` ou `x-audit`;
  * 4. `adminReauth` no `security` e `x-admin-reauth-scope` andam juntos, e o
  *    escopo e um valor de `AdminReauthScope`;
- * 5. nenhuma operacao `GET` administrativa declara `x-audit` (GET nao muda
- *    estado, item 3);
- * 6. nenhuma operacao sob `/admin/` recebe `password` no corpo, exceto o login
+ * 5. `GET` administrativo so declara `x-audit` quando e LEITURA DE DADO PESSOAL
+ *    AUDITADA (D55): o verbo da acao e de leitura (`.listed`, `.read`), a
+ *    operacao declara o teto por linhas devolvidas (`x-rate-limit` com
+ *    `counts: rows_returned`, D56) e NAO e da lista fechada sem sessao (leitura
+ *    de pessoa sem conta identificada nao tem a quem atribuir a trilha). Fora
+ *    disso, GET com `x-audit` continua reprovado (GET nao muda estado, item 3),
+ *    e um verbo de escrita num GET reprova sempre;
+ * 6. o inverso: `GET` administrativo com teto por `rows_returned` e leitura de
+ *    pessoa, e sem `x-audit` ele sairia sem trilha (D55);
+ * 7. nenhuma operacao sob `/admin/` recebe `password` no corpo, exceto o login
  *    e a reautenticacao, que CONFEREM senha: nenhuma operacao do contrato
  *    define ou redefine senha de conta do painel (D61, item 20.4);
- * 7. `password-reset-required` nao aparece em operacao administrativa nem no
+ * 8. `password-reset-required` nao aparece em operacao administrativa nem no
  *    catalogo de problemas: senha certa e vazada responde o mesmo 401 da senha
  *    errada (D43, decisao de 28/09). O 403 proprio confirmava a quem testa
  *    listas de vazamento que o e-mail e de administrador e a senha confere.
@@ -40,6 +47,19 @@ const SEM_SESSAO: ReadonlySet<string> = new Set(['openAdminSession', 'disavowAdm
 const RECEBEM_SENHA: ReadonlySet<string> = new Set(['openAdminSession', 'reauthenticateAdmin']);
 const PROBLEMA_BANIDO = 'password-reset-required';
 const ESQUEMAS_ADMINISTRATIVOS = ['adminSession', 'adminCsrf', 'adminReauth'];
+/** Verbos de acao que descrevem leitura, e nao mudanca de estado. */
+const VERBOS_DE_LEITURA: ReadonlySet<string> = new Set(['listed', 'read']);
+
+/** A operacao declara o teto por linhas devolvidas (D56)? */
+function contaLinhasDevolvidas(tetos: unknown): boolean {
+  return Array.isArray(tetos) && tetos.some((t) => ehObjeto(t) && t['counts'] === 'rows_returned');
+}
+
+function verboDaAcao(trilha: unknown): string | null {
+  if (!ehObjeto(trilha) || typeof trilha['action'] !== 'string') return null;
+  const partes = trilha['action'].split('.');
+  return partes[partes.length - 1] ?? null;
+}
 
 function ehObjeto(valor: unknown): valor is Record<string, unknown> {
   return typeof valor === 'object' && valor !== null && !Array.isArray(valor);
@@ -93,7 +113,7 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
   if (escopos.length === 0) violacoes.push('components.schemas.AdminReauthScope sem enum');
   const catalogo = spec['x-problem-types'];
   if (Array.isArray(catalogo) && catalogo.some((t) => ehObjeto(t) && t['slug'] === PROBLEMA_BANIDO)) {
-    violacoes.push(`x-problem-types declara ${PROBLEMA_BANIDO}: senha vazada tem de responder o 401 comum (regra 7)`);
+    violacoes.push(`x-problem-types declara ${PROBLEMA_BANIDO}: senha vazada tem de responder o 401 comum (regra 8)`);
   }
 
   let administrativas = 0;
@@ -141,10 +161,10 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
       const corpo = esquemaDoCorpo(spec, operacao);
       const propriedades = corpo === undefined ? undefined : corpo['properties'];
       if (ehObjeto(propriedades) && 'password' in propriedades && !RECEBEM_SENHA.has(id)) {
-        violacoes.push(`${id}: recebe password no corpo; senha do painel so se define pelo comando (regra 6, D61)`);
+        violacoes.push(`${id}: recebe password no corpo; senha do painel so se define pelo comando (regra 7, D61)`);
       }
       if (JSON.stringify(operacao).includes(PROBLEMA_BANIDO)) {
-        violacoes.push(`${id}: cita ${PROBLEMA_BANIDO}; senha vazada responde o 401 comum (regra 7, D43)`);
+        violacoes.push(`${id}: cita ${PROBLEMA_BANIDO}; senha vazada responde o 401 comum (regra 8, D43)`);
       }
 
       const inseguro = !SEGUROS.has(metodo);
@@ -153,8 +173,24 @@ export function conferirContratoAdministrativo(textoDaSpec: string): ResultadoDo
       if (inseguro) {
         if (!trilhaCompleta) violacoes.push(`${id}: escrita sem x-audit com action e resource_kind (regra 2)`);
         if (!semSessao && !esquemas.has('adminCsrf')) violacoes.push(`${id}: escrita sem adminCsrf (regra 2)`);
-      } else if (trilha !== undefined) {
-        violacoes.push(`${id}: GET com x-audit; GET nao muda estado (regra 5)`);
+      } else {
+        const leituraDePessoa = contaLinhasDevolvidas(operacao['x-rate-limit']);
+        if (trilha !== undefined) {
+          const verbo = verboDaAcao(trilha);
+          if (!trilhaCompleta || verbo === null || !VERBOS_DE_LEITURA.has(verbo)) {
+            violacoes.push(
+              `${id}: GET com x-audit de verbo que nao e de leitura; GET nao muda estado (regra 5)`,
+            );
+          } else if (!leituraDePessoa) {
+            violacoes.push(
+              `${id}: GET com x-audit sem teto por rows_returned; so a leitura de dado pessoal auditada (D55, D56) declara trilha (regra 5)`,
+            );
+          } else if (semSessao) {
+            violacoes.push(`${id}: GET sem sessao com x-audit; leitura auditada exige conta identificada (regra 5)`);
+          }
+        } else if (leituraDePessoa) {
+          violacoes.push(`${id}: GET com teto por rows_returned e sem x-audit; leitura de pessoa sem trilha (regra 6, D55)`);
+        }
       }
 
       const pedeReauth = esquemas.has('adminReauth');

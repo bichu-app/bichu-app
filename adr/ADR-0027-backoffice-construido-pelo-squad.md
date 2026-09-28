@@ -185,7 +185,9 @@ isso, em todo método que não seja `GET`/`HEAD` em `/v1/admin/*` (D39):
 
 Qualquer falha: `403 forbidden`. **`GET` não muda estado** em `/v1/admin/*`, e
 isso é regra de contrato: nenhuma operação `GET` administrativa declara
-`x-audit`.
+`x-audit`, **com uma exceção deliberada**: a leitura da fila de pedidos
+(`listAdminNetworkJoinRequests`), que é leitura de pessoa e grava na trilha
+por D55 (item 17). A exceção não muda estado de negócio; ela só registra.
 
 ### 4. CORS: nenhum, e é por isso que o painel e a API administrativa dividem a origem
 
@@ -378,7 +380,10 @@ continua para o app.
 Também gravam: login com sucesso e com falha, recusa pelo reCAPTCHA, logout,
 reautenticação, e **toda recusa da guarda com conta identificada** (um tutor
 batendo em `/v1/admin` é o sinal mais útil desta superfície, e gera alerta).
-Leitura administrativa não grava na v1: `Loja` e `Rede` não têm dado pessoal.
+Leitura administrativa não grava na v1, porque `Loja` e `Rede` não têm dado
+pessoal, **exceto a fila de pedidos**, que grava
+`admin.network_join_request.listed` com os filtros e a quantidade devolvida,
+nunca os nomes (D55).
 Retenção de 24 meses; **não há tela de trilha na v1**.
 
 ### 9. Sem MFA: risco aceito pelo cliente
@@ -416,8 +421,8 @@ direto ao bucket privado. JPEG, PNG e WebP; **SVG recusado sempre**. O envio
 declara `purpose` (`store_item` | `network_event`) e fica gravado em
 `upload_intents` com `kind = 'catalog_image'`.
 
-A confirmação é a própria escrita do item ou do evento, com `image_upload_id` /
-`cover_upload_id`. Ela **só aceita** envio de `kind = 'catalog_image'`, com o
+A confirmação é a própria escrita do item ou do evento, na lista `images`
+(itens 16 e 17). Ela **só aceita** envio de `kind = 'catalog_image'`, com o
 mesmo `purpose`, criado por conta `admin`: foto de pet, de achador ou de outro
 propósito é recusada com `400` (T9). Ela enfileira o processamento (bytes
 reais, EXIF/XMP/IPTC removidos, reescrita, teto de pixels, derivadas) e a
@@ -500,8 +505,8 @@ estão no apêndice A.4. `active boolean` é substituída por `publication_statu
 e os índices `network_events_agenda` e `network_events_por_cidade` passam a
 `WHERE publication_status IN ('published', 'cancelled')`. `created_by_user_id`
 leva no `COMMENT ON COLUMN` a marca que `portao-colunas-que-nao-saem.ts` lê.
-`cover_image_id` **não** entra nesta migração: ele aponta para `catalog_images`,
-que nasce na migração do backoffice, e é acrescentado lá.
+`network_event_images` **não** entra nesta migração: ela aponta para
+`catalog_images`, que nasce na migração do backoffice, e é criada lá (A.4.2).
 
 **12.4 Check-in e galeria saem desta migração e do contrato.** O cliente os
 tirou da tela. `network_event_checkins`, `network_event_photos`,
@@ -545,8 +550,8 @@ mostra os rótulos e não mostra mapa. O P5 de `04-seguranca.md` não precisa de
 emenda: nenhuma operação com alternativa `{}` carrega `lat`/`lon`.
 
 **12.6 Cancelado.** `NetworkEventStatus` ganha `cancelled`, que prevalece sobre
-o estado temporal. Por quanto tempo o evento cancelado continua na lista é a
-pergunta 1 no fim; até a resposta, o padrão é continuar até o fim previsto.
+o estado temporal. **O cancelado continua visível até o fim previsto**
+(decisão do cliente, 23/09), com o selo por extenso.
 
 **12.7 O texto do ADR-0025.** O item 5 ("o evento não tem coordenada", "não há
 mapa, em zoom nenhum") fica **superado** por este ADR e pela emenda 1 do
@@ -564,6 +569,203 @@ administradores e conta no teto de publicações, e corrigir o lugar ou o
 horário de um evento recém-criado já é mudança de evento publicado, com
 reautenticação. Título, resumo e capa se editam livremente. Salvar pela metade
 fica no formulário do painel, não no banco.
+
+**12.10 Encontro privado na leitura pública.** `NetworkEventSummary` e
+`NetworkEvent` passam a ser `oneOf` de duas formas, discriminadas por
+`visibility`: a pública, que é a de hoje mais os campos do item 17; e
+`NetworkEventPrivateTeaser`, com **exatamente** `slug`, `title`,
+`local_date`, `visibility: private` e `status`, e `additionalProperties:
+false`. **`local_date`** é a data local (`AAAA-MM-DD`) calculada no fuso do
+encontro, no lugar de `starts_at`, `ends_at` e `time_zone`: o cliente disse
+título e data, a tela não mostra o horário, e o nome do fuso
+(`America/Porto_Velho`) entregaria o estado. **Sem capa**: a foto de um
+encontro costuma ser a foto do lugar (22.10.4). **O `slug` do privado é gerado
+pelo servidor**, aleatório, e não é editável: ele sai no teaser para todo
+mundo, e um `slug` digitado pelo administrador poderia dizer o lugar. Público
+que vira privado ganha `slug` novo, e o antigo passa a 404 sem
+redirecionamento. A diferença vem da propriedade do **evento**,
+igual para qualquer chamador, então não é ramo privilegiado (ADR-0021).
+Encontro privado **não entra em filtro por nada que é oculto nele** (`city`,
+`admission`, `size`): aparecer no recorte entregaria o valor.
+
+**Divergência com a designer, resolvida pela decisão do cliente:** a §24.13.5
+de `06-design-system.md` mostra a **capa** no privado não aprovado. O cliente
+decidiu **só título e data**, então a capa fica do lado oculto e o app usa o
+banner da marca (§24.12.2) nesse estado.
+
+**12.11 As operações novas do app**, todas `bearerAuth` sem alternativa vazia:
+
+| Operação | Caminho | O que faz |
+|---|---|---|
+| `requestToJoinNetworkEvent` | `POST /network/events/{eventSlug}/join-request` | cria o pedido da conta, sempre 200 com o estado que o app vê; encontro público ou inexistente responde 404; sem corpo. Idempotência abaixo |
+| `getMyNetworkEventJoinRequest` | `GET /network/events/{eventSlug}/join-request` | o estado do pedido **da própria conta**, no vocabulário do app; sem pedido, 404 |
+| `withdrawNetworkEventJoinRequest` | `DELETE /network/events/{eventSlug}/join-request` | desiste enquanto o app vê `requested`; aprovado ou encontro encerrado, 400 |
+| `getNetworkEventPrivateDetails` | `GET /network/events/{eventSlug}/private-details` | o conteúdo oculto do privado. 404 se o encontro não é privado, não existe, ou a conta não tem pedido `approved`, com o mesmo corpo nos três casos |
+
+**O app nunca vê `declined`** (decisão do cliente, 23/09). O estado que as
+três operações e "meus pedidos" devolvem é `JoinRequestAppState`, com os
+valores `requested`, `approved`, `withdrawn` e `expired`. O nome do estado de
+espera é **`requested`**, e não `pending`, de propósito: `pending` é a decisão
+guardada no banco e no painel, e `requested` é o que o tutor sabe, que é só
+que pediu. Dois nomes para duas coisas diferentes impedem que alguém
+"corrija" o app para mostrar a decisão. **A regra deve ser mantida como
+está:** o recusado aparece para o tutor como `requested` até o encontro
+passar, e depois como `expired`, igual a um pendente que ninguém decidiu.
+
+| O banco tem | O app vê |
+|---|---|
+| `pending` ou `declined`, sem desistência, encontro a vir ou acontecendo | **`requested`** ("aguardando a equipe") |
+| `approved` | `approved` |
+| desistência (`withdrawn_at`) | `withdrawn` |
+| `pending` ou `declined`, sem desistência, encontro encerrado | `expired` ("o encontro passou") |
+
+A recusa não gera push; a aprovação gera. **Idempotência, com a recusa
+invisível:** pedir de novo nunca cria linha nova (`UNIQUE (event_id, user_id)`)
+e sempre devolve 200 com o estado do app. Sobre pedido recusado, devolve
+`requested` e **não** o recoloca na fila. Sobre pedido desistido, limpa
+`withdrawn_at`: se a decisão guardada era `pending`, ele volta à fila; se era
+`declined`, continua recusado e invisível. Desistir de um recusado responde 200
+e grava `withdrawn_at`, sem mudar a decisão. Assim, nenhuma sequência de
+pedir, desistir e pedir de novo lava uma recusa, e nenhuma resposta difere
+entre recusado e pendente.
+
+**Retenção (D54), e como ela convive com a recusa invisível.** Desistência de
+pedido **ainda não decidido** apaga a linha na hora: não há decisão a guardar,
+e pedir de novo cria um pedido novo, pendente, sem lavar nada. Desistência de
+pedido **recusado** grava `withdrawn_at` e mantém a linha, porque apagá-la
+faria o próximo pedido nascer pendente e lavaria a recusa; ela sai com os
+decididos. Aprovado e recusado são apagados **30 dias depois do fim do
+encontro** (ou do cancelamento), pelo worker de expurgo. A trilha guarda a
+decisão pelo `ref` e pelo administrador, sem o nome de quem pediu. A push de
+aprovação leva **só o título** do encontro; a recusa não gera push.
+
+`getNetworkEventLocation` (12.5) passa a ter a mesma regra: encontro privado só
+devolve o ponto para conta aprovada; os outros recebem 404. Tetos por conta. O
+caminho é singular (`join-request`) porque cada conta tem no máximo um pedido
+por encontro: não há identificador de pedido na superfície do app.
+
+**12.12 O portão que prova que o corpo não traz o que é oculto (P19).** No
+espírito de P5, e com as duas metades que P5 tem:
+
+1. **No contrato**, por lista permitida e não por lista proibida:
+   `NetworkEventPrivateTeaser` tem que declarar exatamente as sete
+   propriedades de 12.10 e `additionalProperties: false`, e toda operação da
+   `Rede` alcançável sem aprovação que devolve encontro tem que usar o
+   `oneOf` com ele. Propriedade nova no teaser reprova, e campo que a designer
+   acrescentar amanhã fica fora dele sem ninguém lembrar. Reprova também se não
+   encontrar o schema, ou se não encontrar nenhuma operação que o use.
+2. **Na execução**, teste de integração com isca: a massa cria um encontro
+   privado com **todo** campo oculto preenchido por sentinela (`ISCA-LUGAR`,
+   `ISCA-BAIRRO`, `ISCA-RESUMO`, `ISCA-NOTA`, `ISCA-ALT`, um
+   valor em centavos que não existe em outra linha, um ponto em coordenada
+   que não existe em outra linha, imagens com chave própria, e todos os portes
+   e itens de estrutura marcados) e chama lista, detalhe, `location`,
+   `private-details`, o estado do pedido e "meus pedidos" como anônimo, como
+   tutor sem pedido, com pedido pendente, **recusado**, desistido e recusado
+   depois de desistido. **As operações testadas são todas as que tocam
+   encontro ou pedido**: `listNetworkEvents`, `getNetworkEvent`,
+   `listNearbyNetworkEvents`, `getNetworkEventLocation`,
+   `getNetworkEventPrivateDetails`, `requestToJoinNetworkEvent`,
+   `getMyNetworkEventJoinRequest`, `withdrawNetworkEventJoinRequest` e
+   `listMyNetworkEventJoinRequests`, **incluindo as respostas de erro**
+   (`400`, `404`) de cada uma. O teste
+   varre **o corpo bruto da resposta como texto**, não os campos, e reprova se
+   qualquer sentinela aparecer. **Controle positivo obrigatório:** a mesma
+   varredura sobre `private-details` do tutor aprovado precisa achar todas as
+   sentinelas; se não achar, o teste reprova, porque um teste que não enxerga a
+   sentinela aprovaria qualquer coisa. Zero encontros privados na massa também
+   reprova.
+3. **A recusa não se distingue do pendente.** Para o mesmo encontro, as
+   respostas do estado do pedido e de "meus pedidos" para a conta pendente e
+   para a conta recusada têm que ser **idênticas byte a byte** depois de
+   normalizar os carimbos de data do próprio pedido; o mesmo para a resposta
+   de pedir de novo. Qualquer campo, cabeçalho de cache ou tamanho de corpo que
+   difira reprova.
+4. **Presença, e não só conteúdo** (22.10.4). A sentinela prova que o valor
+   oculto não sai no corpo; ela não prova que o privado não aparece num recorte
+   que só casa por causa do valor oculto. Para cada busca e filtro que toca
+   campo oculto (`q` por lugar e bairro, `city`, `admission`, `size`,
+   `max_km` e o que vier), a massa cria **dois privados iguais em tudo menos no
+   atributo oculto**, e o teste exige que **nenhum recorte os separe**: os dois
+   ausentes, ou os dois presentes, com o mesmo `total`. Um recorte que separa os
+   dois entrega o atributo.
+5. **O `slug` do privado não carrega o lugar.** O teste cria o privado com
+   sentinela no lugar e reprova se o `slug` a contiver, e reprova se a criação
+   aceitar `slug` enviado para privado.
+
+`private-details` e `location` respondem com `Cache-Control: private,
+no-store`. **Risco residual, sem portão possível:** o administrador pode
+escrever o lugar no título do privado; o formulário avisa que ali o título é
+público.
+
+**12.13 Tabelas.** A emenda da migração ganha as colunas do apêndice A.4.1, as
+listas `network_event_bring_items`, `network_event_sizes` e
+`network_event_amenities`, e a tabela `network_event_join_requests` (A.6). A
+galeria (`network_event_images`, A.4.2) vai na migração do backoffice. **Não
+há limite de vagas** (decisão do cliente): nenhuma coluna de capacidade.
+
+**12.14 Busca, filtros e sub-menus na agenda.** `listNetworkEvents` (pública)
+passa a aceitar, e devolve em `applied_filters` e `effective_sort` o recorte e
+a ordem que **de fato** valeram, no desenho de `listStoreItems`. **Um
+vocabulário só, alinhado com o que `feat/secao-rede` já tem e com a §24.14.3
+da designer:** o parâmetro de período é o **`when` que já existe** (não há
+`period`), que ganha valores; a ordem é o `sort` que já existe (`proximos`,
+`recentes`); o valor é `admission`, o mesmo nome do campo na resposta (a
+designer escreveu `price`, e o app usa `admission`); o porte é `size`, com os
+valores de `PetSize`.
+
+| Parâmetro | Valores | Regra |
+|---|---|---|
+| `q` | 2 a 80 caracteres | título, nome do lugar e bairro, no servidor. **Encontro privado casa só pelo título**: casar pelo bairro entregaria onde ele é |
+| `when` | os de hoje (`upcoming`, `past`, `all`) e os novos `today`, `weekend`, `next_30_days` | calculado no servidor, **no fuso de cada encontro** (`time_zone`): `today` é a data local de hoje naquele fuso; `weekend` é o sábado e o domingo correntes ou os próximos; `next_30_days` é início entre agora e agora + 30 dias. A designer escreveu `next30`; o valor é `next_30_days` |
+| `admission` | `free`, `paid` | **exclui encontro privado**: a condição de acesso dele é oculta, e aparecer no recorte "pago" a entregaria |
+| `size` | `P`, `M`, `G`, `GG` | encontros que aceitam aquele porte. **Exclui encontro privado**, pelo mesmo motivo |
+| `visibility` | `public`, `private` | a visibilidade é visível, então filtra os dois |
+| `city` | como hoje | exclui encontro privado (12.10) |
+| `sort` | `proximos`, `recentes` | os que já existem. A pública não ordena por distância |
+
+**`q` não vira dimensão de teto, e a política não muda.** A dimensão
+`[ip, q]` contaria repetição do mesmo termo, e o custo real de busca vem de
+termos diferentes, que o balde por IP já conta. A operação passa a declarar
+`x-effects: [expensive_query]` e mantém o teto `[ip]` que já tem. Dimensão
+nova de teto é decisão de política com quem responde por segurança, e não há
+motivo para abri-la aqui.
+
+**Ordem por distância é outra operação**, `GET /network/events/nearby`
+(`listNearbyNetworkEvents`), com `bearerAuth` sem alternativa vazia, pelo
+mesmo motivo de `/location`: a ordem que depende da região de referência de
+quem chama é uma resposta que muda conforme o chamador, que o ADR-0021 proíbe
+na pública, e ordenar por distância com autenticação opcional passaria no
+portão como pública. Ela usa a região de referência do tutor, como `Perto`;
+sem região, responde a mesma lista em ordem de data e diz isso em
+`effective_sort`, que é o desenho de P.5. Devolve `distance_m` arredondada a
+100 m só para encontro **público com ponto**; encontro sem ponto vem no fim
+com distância nula (P.3); **encontro privado não entra**, porque a posição
+dele numa lista por distância já é localização. Aceita os mesmos filtros da
+pública e **`max_km`** (`2`, `5`, `10`), que exclui encontro sem ponto (a nota
+da §24.14.3), e **`sort`** com `distancia` (padrão) **ou `proximos`**
+(aprovado pela coordenação em 23/09, APP-2): com `proximos`, a lista sai em
+ordem de data e cada cartão traz a distância, que é o que a agenda do app
+mostra com a região cadastrada. **A posição do tutor não vai na requisição**: a operação usa a
+região de referência já gravada (`user_reference_locations`, quantizada em
+100 m), e não latitude e longitude em parâmetro de consulta. Isso responde a
+preocupação da §24.14.6: nenhuma coordenada sai do aparelho a cada busca, e
+nada de localização entra em URL, log de borda ou histórico. **Por isso a D58
+de `04-seguranca.md` (posição na requisição) não entra** (decisão do cliente,
+23/09): não há parâmetro de posição em operação nenhuma. Se um dia houver, a
+D58 e o P20 passam a valer antes. **O privado, aprovado ou não, fica fora** de
+`listNearbyNetworkEvents`.
+
+**"Meus pedidos" é leitura separada**, `GET /network/join-requests`
+(`listMyNetworkEventJoinRequests`), `bearerAuth`, paginada: os encontros
+privados em que **a própria conta** pediu para participar, cada um com o
+teaser de 12.10 e o `JoinRequestAppState`. Não é filtro da pública, e não
+devolve conteúdo oculto nem para aprovado: o conteúdo continua em
+`private-details`. Aceita `q` (só título), `state` (`requested`, `approved`,
+`withdrawn`, `expired`; **não há `declined`**, e o grupo "Recusado" da
+§24.14.3 sai do app) e `sort=proximos`. **Não aceita `admission` nem `size`**:
+filtrar por valor oculto entregaria o valor. Distância também não, porque
+todos ali são privados.
 
 ### 13. Como a regra "lugar público, nunca residência" é garantida
 
@@ -615,6 +817,11 @@ de forma, só com acréscimos (apêndice A.2):
   itens que deixariam de casar é recusado com `code: host_mismatch_items`.
 - `store_catalog_versions` perde a finalidade; nenhuma escrita administrativa a
   toca. **Dívida:** sai quando a massa deixar de usá-la.
+- `store_items.image_url` guarda URL, o que a regra 3.6 de `07-devops.md`
+  proíbe (o banco guarda chave, nunca URL). O painel não a escreve (item 6).
+  **Dívida:** sai quando a massa passar a gravar imagem em
+  `store_item_images`, pelo mesmo caminho que tirou `cover_image_url` do
+  encontro (A.4.2).
 - A pergunta 14.3 (quem reconfere o preço) muda de meio, não de dono: continua
   na mesa do cliente.
 
@@ -630,7 +837,292 @@ motivo no item citado:
 | Aviso de login | dispositivo ou rede nova | toda sessão | 5 |
 | Mídia anexada | só já processada | anexada em processamento, servida só pronta | 10 |
 
-### 16. Fronteira da v1
+### 16. O produto da `Loja` ganha espécie, tags e várias imagens (pedido do cliente, 23/09)
+
+**Espécie: os três valores que o produto já usa, e múltipla escolha.** O item
+declara `species`, um conjunto de um a três valores de `Species` (`dog`,
+`cat`, `other`), guardado em `store_item_species` com chave estrangeira para
+`ref_species (code)`. São os mesmos valores do cadastro de pet, e é isso que
+decide: o app filtra a vitrine pela espécie dos pets do tutor sem traduzir uma
+lista na outra, e uma espécie nova entra nos dois lugares ao mesmo tempo, pelo
+caminho de lista fechada. Uma lista mais granular só na `Loja` (ave, peixe,
+roedor) teria valores que nenhum pet cadastrado tem, e seria uma segunda
+taxonomia da mesma coisa, que é o que diverge. `other` é "outros pets",
+genérico de propósito, porque é o que `pets.species` guarda. **Não vai
+pergunta ao cliente:** se ele quiser espécies mais finas, a pergunta é para o
+cadastro de pet primeiro, e a `Loja` acompanha. Espécie é obrigatória na
+criação; produto que serve a todas declara as três.
+
+**Tags: vocabulário curado, e o item só referencia.** Texto livre no item
+foi recusado por dois motivos. Primeiro, é conteúdo publicado sem revisão
+nenhuma, digitado no meio de outro formulário. Segundo, texto livre não
+filtra: `Ração`, `racao` e `ração ` viram três filtros. O desenho:
+
+- a tag nasce **uma vez**, por operação própria (`createAdminStoreTag`), com
+  trilha própria (`admin.store_tag.created`);
+- o rótulo tem **2 a 24 caracteres**, só letras, dígitos, espaço e hífen
+  (conferido no servidor: nada de URL, e-mail ou símbolo); o servidor apara as
+  pontas e junta espaços;
+- o `slug` é derivado do rótulo: NFKD, sem marca diacrítica, minúsculo, espaço
+  vira hífen. **Unicidade é pelo `slug`**, então duas grafias do mesmo rótulo
+  são a mesma tag, e a segunda é recusada com `409 slug-taken`;
+- **até 5 tags por item**; **até 40 tags ativas** no vocabulário, porque um
+  filtro com duzentas opções não filtra;
+- não há exclusão: **desativar tira a tag de toda a leitura pública** (do
+  item, de `listStoreTags` e do filtro) e a **mantém ligada por dentro**;
+  reativar a devolve a todos os itens sem o administrador refazer nada;
+- **o teto de 5 por item conta todas as tags ligadas, ativas e
+  desativadas** (decisão de 23/09). Contar só as ativas faria a reativação
+  empurrar um item para 6 em silêncio, ou obrigaria a reativação a falhar; do
+  jeito escolhido, reativar sempre funciona e nenhum item passa de 5. O custo
+  é a desativada ocupar uma vaga, e o painel a mostra como desativada para o
+  administrador tirar do item se quiser. Ligar de novo uma tag desativada é
+  recusado (`code: inactive_tag`); manter a que já estava ligada é permitido.
+
+**A escolha, explícita para o app: lista curada, portanto filtro de lista
+fechada.** O componente de listagem do app já filtra por lista fechada e não
+tem filtro digitável; com vocabulário curado, a tag entra como mais um grupo
+fechado, ao lado de categoria e espécie, **sem mudar o componente, nem `Perto`
+nem `Loja`**. As opções do grupo vêm de `GET /v1/store/tags` (`listStoreTags`,
+pública), que devolve só as tags ativas com pelo menos um item publicado.
+Busca livre por tag foi recusada também por isso: exigiria um tipo novo de
+grupo no componente, para um ganho que o vocabulário curado já entrega.
+
+O que contém o risco de conteúdo é a soma: o vocabulário é pequeno, cada
+entrada passa por uma operação auditada que só um `admin` alcança, o conjunto
+de caracteres não comporta link, e todo administrador vê a lista inteira na
+tela do vocabulário. **O app filtra por uma tag de cada vez** (`tag=<slug>`),
+combinada com categoria e espécie; tag inativa ou inexistente devolve a lista
+vazia, e não 400, para o link antigo continuar abrindo.
+
+**Várias imagens: tabela ordenada, a primeira é a principal.**
+`store_item_images` liga o item a até **8** imagens de `catalog_images`, com
+`position` de 0 a 7. **A principal é a de `position` 0**, e não há
+sinalizador de principal: dois lugares para dizer qual é a principal divergem
+na primeira troca. **Cada imagem tem texto alternativo obrigatório**, de 2 a
+150 caracteres (`store_item_images.alt_text`), porque o app as mostra e o
+leitor de tela precisa dizer o que são. **Obrigatório em toda posição, e não
+só na 0**: assim a obrigação acompanha a imagem que vira principal numa
+reordenação sem regra à parte, e nenhuma troca de ordem deixa a principal sem
+texto. A leitura pública devolve `alt_text` em cada imagem do detalhe e
+`image_alt_text` junto da principal na lista; o mesmo modelo serve ao encontro
+(item 17). O painel manda `images`, uma lista de `{upload_id, alt_text}` na
+ordem em que o app mostra, e **a lista substitui a anterior inteira**: reordenar é mandar a ordem
+nova, remover é omitir, `[]` tira todas. Uma escrita, uma transação, uma linha
+de trilha; operações separadas de acrescentar, remover e mover seriam três
+caminhos para o mesmo estado, cada um com a sua corrida.
+
+Isso **substitui** o `store_items.image_id` do apêndice A.2, que não chegou a
+ser migrado. `store_items.image_url` (URL externa, só da massa) continua;
+item com imagem externa não tem linha em `store_item_images`, e a regra é do
+caso de uso, porque um `CHECK` não conta linhas de outra tabela.
+
+**O que a leitura pública devolve.** A lista (`listStoreItems`) continua
+trazendo **só a principal**, no `image_url` que já existe, para não pesar a
+vitrine. O detalhe é **operação nova**, `GET /v1/store/items/{itemSlug}`
+(`getStoreItem`), pública pelas mesmas razões da lista, com **todas as imagens
+prontas** em ordem. Imagem em processamento ou recusada nunca sai. Rascunho,
+retirado, inexistente e parceiro inativo respondem o mesmo 404 (ADR-0021). O
+preço vencido sai sem valor, como na lista.
+
+**Operações que mudam no painel:** `createAdminStoreItem` e
+`updateAdminStoreItem` (`species`, `tag_slugs`, `images` no lugar de
+`image_upload_id`); `AdminStoreItem` (`species`, `tags`, `images` no lugar de
+`image`); `listAdminStoreItems` (filtros `species` e `tag`). Novas:
+`listAdminStoreTags`, `createAdminStoreTag`, `updateAdminStoreTag`; e, na
+leitura pública, `listStoreTags`.
+
+**Nota de impacto para o app** (outra sessão): (1) `StoreItemSummary` ganha
+`species` e `tags`, **opcionais até a implementação**, e o app trata ausência
+como "não informado", nunca como "serve a todas"; (2) `listStoreItems` ganha
+os filtros `species` e `tag`, declarados antes do código, e **o app só
+oferece esses filtros depois de o backend os implementar**; (3) o cartão da
+lista não muda (`image_url` continua sendo a principal); (4) a tela de detalhe
+passa a chamar `getStoreItem` para a galeria; (5) o grupo de filtro de tags
+é **lista fechada** alimentada por `listStoreTags`, sem componente novo. Nada do que a demonstração de
+30/09 usa muda de forma: tudo é acréscimo.
+
+### 17. O encontro ganha campos próprios, e pode ser privado (decisões do cliente, 23/09)
+
+**Campos próprios, e nenhum deles é texto em observações.** Tipos e
+obrigatoriedade estão no apêndice A.4.1; o resumo:
+
+| Campo | Forma | Obrigatório |
+|---|---|---|
+| `visibility` | `public` \| `private` | sim, padrão `public` |
+| `admission.kind` | `free` \| `paid` | sim, padrão `free` |
+| `admission.price` | centavos + `BRL` + `unit` (`per_dog`, `per_person`, `per_pair`), informativo | só quando `paid`, e então sim |
+| `images` | até 8, `{upload_id, alt_text}`, posição 0 é a capa, texto alternativo de 2 a 150 **obrigatório em cada uma** | não (sem imagem, o app usa o banner da marca) |
+| `accepted_sizes` | conjunto de `PetSize` (`P`, `M`, `G`, `GG`) | sim, padrão os quatro |
+| `dog_age` | `any`, `from_4_months`, `from_1_year`, `up_to_1_year` | sim, padrão `any` |
+| `vaccination_required` | booleano | sim, padrão `true` |
+| `fenced_off_leash_area` | booleano: o local tem área cercada para cães soltos | sim, padrão `false` |
+| `amenities` | conjunto de `level_ground_or_ramp`, `accessible_restroom`, `public_restroom_nearby`, `shade`, `benches`, `dog_water_fountain`, `parking_nearby` | não |
+| `bring_items` | lista fechada, até 8 valores | não |
+| `notes` | texto, 2 a 500, sem contato nem pagamento (D59) | não, e só complemento |
+
+**Pago é só o valor, informativo** (decisão do cliente, 23/09). O Bichu não
+cobra, não tem provedor de pagamento e **não guarda forma de pagar**: nem
+instrução, nem link. O valor é o que o organizador informa, sem vencimento
+(não é preço de referência de terceiro, como o da `Loja`), com **unidade de
+lista fechada** (`per_dog`, `per_person`, `per_pair`, obrigatória quando
+pago), para o app escrever sempre "R$ 15 por cão" no mesmo formato e ninguém
+escrever "grátis!!!" num campo de valor. A unidade não reintroduz forma de
+pagar: ela diz a que o valor se refere, e só. **Não há limite de vagas.** Condição de acesso
+(visibilidade, gratuito ou pago, valor) só muda por operação própria,
+`changeAdminNetworkEventAccess`, com reautenticação no escopo
+`network_event_access_change` e aviso a todos os administradores: trocar o
+valor muda o que as pessoas esperam pagar na porta, e tornar público um
+privado entrega o lugar. Na criação ela entra livre, porque criar já avisa
+todos.
+
+**Os campos da designer** (§24.12.4 de `06-design-system.md`) entram um por
+coluna ou lista, com os valores dela: portes com os valores de `PetSize` e
+`ref_sizes` (os do cadastro de pet, mesma razão da espécie no item 16), idade
+em lista fechada de escolha única, vacinação e cães soltos em booleano com os
+padrões dela, estrutura do local em lista fechada múltipla. **A galeria da
+equipe usa o modelo do produto** (item 16): até 8 imagens, posição 0 é a capa,
+texto alternativo obrigatório em cada uma, o que cumpre "texto alternativo da
+capa obrigatório quando há capa" sem uma regra à parte. A designer propôs até
+4 fotos além da capa; o painel já desenhou 8 com capa, e 8 é o teto.
+
+**"O que levar" é só lista fechada** (`water`, `water_bowl`, `leash`,
+`poop_bags`, `treats`, `towel`, `vaccination_card`, `toy`), que o app mostra
+com ícone e texto próprio. Os itens livres que este documento chegou a prever
+(`bring_other`) **saíram** (revisão de UX, 23/09): texto livre do
+administrador iria direto para a página pública, e a exceção cabe nas
+observações, que já passam pelo detector de D59.
+
+**Cães soltos é atributo do lugar, não permissão.** O campo é
+`fenced_off_leash_area` ("o local tem área cercada para cães soltos"), e não
+`off_leash_allowed`. O Bichu não autoriza ninguém a soltar cão: quem regula
+guia em espaço público é a regra do lugar e do município. O que o
+administrador sabe, e o tutor precisa saber, é se existe a área cercada.
+
+**Campo novo que vier depois** entra do mesmo jeito: **cada um é
+coluna ou lista própria, por migração aditiva**, e campo opcional novo em
+corpo de requisição é mudança compatível dentro de `/v1`. **Não há saco
+`jsonb` de "detalhes"**: ele seria o texto em observações com outro nome, sem
+validação, sem lista fechada e sem portão. O que precisa ficar oculto no
+encontro privado entra, por padrão, no lado oculto: fora do teaser de 12.10, e o portão de 12.12 o cobra sem ninguém lembrar.
+
+**Encontro privado.** Para quem não foi aprovado, a agenda e o detalhe trazem
+**só título e data**. Lugar (inclusive bairro e cidade), ponto, resumo,
+imagens (a capa inclusive), valor, portes, idade, regras, estrutura, "o que
+levar" e observações **não saem no corpo**. Não
+é o app que esconde: o servidor não manda (12.10 a 12.12).
+
+- **O pedido é da conta, nunca do pet** (ADR-0010 item 7): a tabela
+  `network_event_join_requests` não tem `pet_id`, não tem texto livre e não tem
+  lista em lugar nenhum do app. O tutor vê só o estado do **próprio** pedido;
+  ninguém vê quem mais pediu ou foi aprovado, nem como contagem.
+- **A fila existe só no painel**, com aprovar e recusar, cada decisão na
+  trilha. **Aprovar gera push; recusar não avisa ninguém**, e para o tutor o
+  pedido continua "aguardando" até o encontro passar (12.11).
+- **O conteúdo aprovado sai em operação separada** (ADR-0021, como
+  `/location`), com a autorização na cláusula `WHERE`. A mesma operação,
+  chamada por quem não foi aprovado, responde 404, e não um corpo menor.
+- A recusa é final e invisível. Pedir de novo é idempotente e não lava a
+  recusa (12.11).
+
+**O que a fila leva ao painel, e como o risco está coberto.** A fila mostra
+**só** o nome de exibição (e, quando ele é nulo, o texto fixo `Sem nome de
+exibição`, nunca o e-mail), o mês em que a conta foi criada e **se o e-mail foi
+confirmado**, como booleano, além da data do pedido. Nada de e-mail, telefone,
+pets, identificador estável ou histórico, e **nenhum filtro por solicitante**.
+É leitura de dado de pessoa no backoffice, e o risco não é o nome sozinho: é
+o nome junto de um lugar e de uma hora. **O cliente estendeu o RA-01 à fila em
+23/09, com D53 a D57** (`04-seguranca.md` 22.10.1):
+
+- **D53**, projeção mínima fechada, com `additionalProperties: false`;
+- **D54**, retenção curta (12.11);
+- **D55**, toda leitura da fila grava na trilha, com filtros e quantidade;
+- **D56**, teto de **300 linhas devolvidas por hora por conta**, páginas de
+  até 50, com alerta. O vocabulário de `counts` ganha `rows_returned` para
+  isso, porque o que se mede é quanto dado de pessoa sai, e não quantas vezes
+  se pediu;
+- **D57**, a tela de "pedir para participar" diz, antes do toque, que a equipe
+  verá o nome de exibição e o mês de criação da conta.
+
+**Observações e itens livres (D59, D60).** `notes` tem **até 500 caracteres**,
+o número da designer e o mesmo em que o detector é medido (um número só no
+contrato, no banco e no protótipo). Em `notes`, telefone,
+e-mail, URL, endereço, CEP e chave PIX são **recusados** com `400`, pelo
+detector do canal mediado, e caractere de controle bidirecional é recusado em
+todo texto administrativo. Sem campo de "como pagar", as observações seriam o
+lugar natural da chave PIX trocada por uma conta tomada; o detector tira o
+valor desse golpe. **Mudar as observações avisa todos os administradores**,
+com o antes e o depois, sem reautenticação.
+
+**Mensagem do tutor ao administrador: v2, só a fronteira.** Quando vier, ela é
+conversa mediada, e não canal novo: `conversations` ganha a âncora
+`network_event_id` (a mudança aditiva que a seção 4.11 de `03-arquitetura.md`
+já previu), a redação de telefone, e-mail e endereço de `messaging` vale igual,
+a caixa do painel lê as conversas dessa âncora, e o push ao tutor é o que já
+existe. Nada do modelo desta v1 impede isso, e nada dele precisa ser desfeito.
+
+### 18. Matriz de rastreabilidade: uma fonte só para as quatro pontas
+
+**Regra do cliente, 23/09: tudo segue `api/openapi.yaml`.** Backend, app,
+backoffice e site usam os mesmos campos, os mesmos valores e as mesmas
+funcionalidades. Para isso ser verificável, e não só declarado, a ligação entre
+cada tela e o contrato vive em **`api/rastreabilidade-backoffice-rede.yaml`**,
+rastreado no git, ao lado do contrato: cada tela e estado dos protótipos
+(`docs/prototipos/backoffice.html` e `rede-encontro.html`), a operação que ela
+chama (`operationId`), e cada campo, filtro, valor de lista fechada e tipo de
+problema que ela mostra ou envia, numa notação que uma máquina resolve.
+
+A matriz tem três listas além das telas: as **correspondências código →
+rótulo** (os rótulos ficam no cliente, e a correspondência tem que ser 1 para
+1; a de `category` foi conferida contra `app/lib/api/modelos_loja.dart` e é),
+o que a **tela usa e o contrato não tem** (`tela_sem_contrato`, cada item com
+quem muda), e o que o **contrato tem e nenhuma tela usa** (`contrato_sem_tela`).
+
+**O que a primeira leitura achou, e o que já foi resolvido no contrato:**
+`slug` passou a opcional (derivado do título) no item e no encontro público,
+porque nenhum formulário o pede; `time_zone` passou a opcional com padrão
+`America/Sao_Paulo`; o envio de imagem de catálogo passou a 5 MiB, com a
+dimensão mínima conferida pelo worker; o nome de exibição nulo na fila passou
+a `null`, com o rótulo no painel; e o painel pode **reverter uma recusa**
+(recusado → aprovado), mas não uma aprovação. **O que a tela muda:** tirar o
+e-mail do administrador da navegação (o login é alcançável sem conta, e o
+portão reprova `email` ali), tirar "Excluir produto" (retirar é o gesto),
+pedir senha ao despublicar, pedir UF no encontro, não obrigar fim nem ponto
+no mapa, não obrigar imagem no produto, e tirar os itens livres de "o que
+levar" do app. **O que o contrato tem sem tela**, e é lacuna de produto:
+cancelar encontro (o cliente decidiu que o cancelado aparece até o fim
+previsto, e nenhuma tela cancela), cadastro de parceiro, vocabulário de tags,
+sair de todas as sessões e desistir do pedido no app. A questão APP-2 (distância no
+cartão em ordem por data) foi aprovada: `listNearbyNetworkEvents` aceita
+`sort=proximos` (12.14). **Decisão da coordenação, 23/09:** cancelar encontro,
+sair de todas as sessões, cadastro de parceiro e vocabulário de tags ganham
+tela no painel, e desistir do pedido ganha gesto no app, com texto a aprovar
+pela UX. Na matriz eles ficam em `contrato_sem_tela` com "resolvido quando a
+tela existir", e saem de lá no commit em que o protótipo os desenhar.
+
+**O portão existe:** `src/tools/portao-rastreabilidade.ts`, com a isca
+permanente `src/tools/iscas/rastreabilidade-deve-reprovar.yaml` (quatro
+defeitos de propósito, e o portão reprova se deixar de achar qualquer um) e o
+teste `portao-rastreabilidade.test.ts`, que roda **na suíte unitária** (`npm
+test`, job `codigo`) contra a matriz e o contrato de verdade, e varia uma
+regra por caso. Executável: `node dist/tools/portao-rastreabilidade.js`
+depois de `npm run build`. **A fiação em `make verificar` e no job
+`contrato`** é de quem é dono do `Makefile` e de `.github/workflows/`, e está
+pedida na entrega com as linhas exatas. O que ele faz: lê a matriz e o contrato e reprova quando um `operationId`
+de situação `contrato` não existe; quando uma referência de campo, parâmetro,
+cabeçalho, problema ou valor de lista fechada não resolve, seguindo `$ref`,
+`allOf`, `oneOf` e itens de lista; quando uma lacuna marcada `resolucao:
+contrato` já resolve e continua listada; quando uma operação de `/admin/` ou
+da `Rede` não aparece nem em `telas` nem em `contrato_sem_tela`; e quando a
+matriz tem zero telas; e quando uma correspondência código → rótulo cita código
+fora da lista fechada, ou declara `um_para_um` e deixa valor sem rótulo.
+Operação ou correspondência `pendente` (ainda em outra branch) exige `onde`, e
+passa a ser resolvida quando a branch mesclar. Medido em 23/09: 9 telas, 250
+referências resolvidas, 9 pendentes com `onde`, e a isca reprovando pelos
+quatro motivos; com a isca desarmada, o portão reprova dizendo que ficou
+cego.
+
+### 19. Fronteira da v1
 
 Fora, sem desenho aqui: `Perto` no painel (o contrato de escrita do ADR-0023 e
 o do ADR-0026 continuam referência; levá-lo ao painel reabre o RA-01);
@@ -725,12 +1217,42 @@ Nas duas:
 | `updated_at` | `timestamptz` | `NOT NULL DEFAULT now()` |
 | `version` | `integer` | `NOT NULL DEFAULT 1 CHECK (version > 0)`, incrementada a cada escrita; é o `ETag` |
 
-Só em `store_items`: `image_id uuid REFERENCES catalog_images (id)`, nulo, com
-`CHECK (num_nonnulls(image_url, image_id) <= 1)`; e `published_at timestamptz`,
+Só em `store_items`: `published_at timestamptz`,
 nulo, a primeira publicação, com `CHECK (NOT active OR published_at IS NOT NULL)`.
 A massa grava `published_at` junto com `active = true`. Nenhuma coluna de autor:
 quem criou e quem mudou está em `audit.events`, o único lugar onde isso é
 imutável.
+
+### A.2.1 Espécie, tags e imagens do item (item 16)
+
+`store_item_species`: `item_id uuid NOT NULL REFERENCES store_items (id) ON
+DELETE CASCADE`, `species text NOT NULL REFERENCES ref_species (code)`,
+`PRIMARY KEY (item_id, species)`. Chave estrangeira para `code` de dado de
+referência é a forma que o portão da BICHUS-19 admite. Pelo menos uma espécie
+é regra do caso de uso (criação e publicação).
+
+`store_tags`: `id uuid` PK; `slug text NOT NULL` com o formato de `Slug` e
+`CREATE UNIQUE INDEX store_tags_slug_unico ON store_tags (slug)`; `label text
+NOT NULL CHECK (char_length(btrim(label)) BETWEEN 2 AND 24)`; `active boolean
+NOT NULL DEFAULT true`; `created_at`, `updated_at`, `version` como em A.2. O
+`slug` é a chave de normalização (sem acento, minúsculo): é o índice único
+dele que recusa a segunda grafia. O teto de 40 ativas é do caso de uso.
+
+`store_item_tags`: `item_id uuid NOT NULL REFERENCES store_items (id) ON DELETE
+CASCADE`, `tag_id uuid NOT NULL REFERENCES store_tags (id)`, `PRIMARY KEY
+(item_id, tag_id)`. Chave estrangeira para `id`, nunca para `slug` (ADR-0024).
+O teto de 5 por item é do caso de uso, na mesma transação da escrita.
+
+`store_item_images`: `item_id uuid NOT NULL REFERENCES store_items (id) ON
+DELETE CASCADE`, `image_id uuid NOT NULL UNIQUE REFERENCES catalog_images
+(id)`, `position smallint NOT NULL CHECK (position BETWEEN 0 AND 7)`,
+`alt_text text NOT NULL CHECK (char_length(btrim(alt_text)) BETWEEN 2 AND
+150)`, `PRIMARY KEY (item_id, image_id)`, e `CONSTRAINT store_item_images_ordem_unica
+UNIQUE (item_id, position) DEFERRABLE INITIALLY DEFERRED`, para que reordenar
+seja um conjunto de `UPDATE` na mesma transação sem colidir no meio. A imagem
+principal é `position = 0`. `catalog_images.purpose` precisa ser `store_item`
+(caso de uso). O teto de 8 é o próprio `CHECK` de `position` somado à
+unicidade.
 
 ### A.3 `catalog_images` (nova) e `upload_intents` (alteração)
 
@@ -777,15 +1299,91 @@ Na migração da `Rede`, além de 12.1 e 12.2:
   lista, aditivo.
 - `CHECK (origin = 'community' OR publication_status <> 'pending_review')`.
 
-Na migração do backoffice:
-`ADD COLUMN cover_image_id uuid REFERENCES catalog_images (id)` com
-`CHECK (num_nonnulls(cover_image_url, cover_image_id) <= 1)`.
+### A.4.1 Campos do encontro (item 17)
+
+Na mesma emenda da migração da `Rede`:
+
+| Coluna | Tipo | Restrição |
+|---|---|---|
+| `visibility` | `text` | `NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private'))` |
+| `admission_kind` | `text` | `NOT NULL DEFAULT 'free' CHECK (admission_kind IN ('free', 'paid'))` |
+| `admission_amount` | `integer` | nulo, `CHECK (admission_amount IS NULL OR admission_amount BETWEEN 1 AND 100000000)`, centavos |
+| `admission_currency` | `text` | nulo, `CHECK (admission_currency IS NULL OR admission_currency = 'BRL')` |
+| `admission_unit` | `text` | nulo, `CHECK (admission_unit IS NULL OR admission_unit IN ('per_dog', 'per_person', 'per_pair'))` |
+| `dog_age` | `text` | `NOT NULL DEFAULT 'any' CHECK (dog_age IN ('any', 'from_4_months', 'from_1_year', 'up_to_1_year'))` |
+| `vaccination_required` | `boolean` | `NOT NULL DEFAULT true` |
+| `fenced_off_leash_area` | `boolean` | `NOT NULL DEFAULT false`: o lugar tem área cercada para cães soltos |
+| `notes` | `text` | nulo, `CHECK (notes IS NULL OR char_length(btrim(notes)) BETWEEN 2 AND 500)`; o detector de D59 é do caso de uso |
+
+- `CHECK ((admission_kind = 'free') = (admission_amount IS NULL))`,
+  `CHECK ((admission_amount IS NULL) = (admission_currency IS NULL))`,
+  `CHECK ((admission_amount IS NULL) = (admission_unit IS NULL))`. Não há
+  coluna de forma de pagar nem de capacidade.
+- `network_event_bring_items`: `event_id uuid NOT NULL REFERENCES
+  network_events (id) ON DELETE CASCADE`, `item text NOT NULL CHECK (item IN
+  ('water', 'water_bowl', 'leash', 'poop_bags', 'treats', 'towel',
+  'vaccination_card', 'toy'))`, `PRIMARY KEY (event_id, item)`.
+- `network_event_sizes`: `event_id uuid NOT NULL REFERENCES network_events (id)
+  ON DELETE CASCADE`, `size text NOT NULL REFERENCES ref_sizes (code)`,
+  `PRIMARY KEY (event_id, size)`. Pelo menos um é regra do caso de uso; a
+  criação sem o campo grava os quatro.
+- `network_event_amenities`: `event_id` como acima, `amenity text NOT NULL
+  CHECK (amenity IN ('level_ground_or_ramp', 'accessible_restroom',
+  'public_restroom_nearby', 'shade', 'benches', 'dog_water_fountain',
+  'parking_nearby'))`, `PRIMARY KEY (event_id, amenity)`.
+
+### A.4.2 `network_event_images` (na migração do backoffice)
+
+A mesma forma de `store_item_images` (A.2.1): `event_id uuid NOT NULL
+REFERENCES network_events (id) ON DELETE CASCADE`, `image_id uuid NOT NULL
+UNIQUE REFERENCES catalog_images (id)`, `position smallint NOT NULL CHECK
+(position BETWEEN 0 AND 7)`, `alt_text text NOT NULL CHECK
+(char_length(btrim(alt_text)) BETWEEN 2 AND 150)`, `PRIMARY KEY (event_id,
+image_id)`, `UNIQUE (event_id, position) DEFERRABLE INITIALLY DEFERRED`. A capa
+é `position = 0`. `catalog_images.purpose` precisa ser `network_event`.
+**`network_events.cover_image_url` sai** (decisão da coordenação, 23/09): o
+banco guarda chave de objeto, nunca URL (regra 3.6 de `07-devops.md`, cobrada
+pelo portão de portabilidade), e a capa já é a posição 0 desta tabela. A massa
+passa a gravar a capa como linha aqui. O `cover_image_id` que este apêndice
+previa antes também sai: a galeria substitui os dois. **A mesma regra alcança
+`store_items.image_url`**, que já está na `development` (`20260922000009`) e
+guarda URL de parceiro; ele continua só como dado da massa, e a remoção fica
+registrada como dívida do item 14.
 
 Regras que o `CHECK` não expressa, no caso de uso, com `400 validation-failed`:
 criar exige que o fim (ou o início, sem fim) não tenha passado
 (`code: event_in_past`); `PATCH` de evento publicado não muda data, horário,
 fuso nem lugar (`code: use_relocation`); cancelar só a partir de `published`;
 `removed` é terminal.
+
+### A.6 `network_event_join_requests` (nova, item 17)
+
+| Coluna | Tipo | Restrição |
+|---|---|---|
+| `id` | `uuid` | PK |
+| `ref` | `text` | `NOT NULL UNIQUE`, 128 bits aleatórios em base64url: o identificador que o painel usa no caminho, porque UUIDv7 carrega o instante |
+| `event_id` | `uuid` | `NOT NULL REFERENCES network_events (id) ON DELETE CASCADE` |
+| `user_id` | `uuid` | `NOT NULL REFERENCES users (id) ON DELETE CASCADE` |
+| `status` | `text` | `NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined'))`: a decisão, e só ela |
+| `requested_at` | `timestamptz` | `NOT NULL DEFAULT now()` |
+| `decided_at` | `timestamptz` | nulo |
+| `withdrawn_at` | `timestamptz` | nulo; só existe em pedido **recusado** do qual o tutor desistiu (pedido pendente desistido é apagado na hora, D54), para que desistir e pedir de novo não lave a recusa (12.11) |
+| `decided_by_user_id` | `uuid` | nulo, `REFERENCES users (id) ON DELETE SET NULL`; nunca projetado |
+
+- `UNIQUE (event_id, user_id)`: um pedido por conta por encontro.
+- `CHECK ((status IN ('approved', 'declined')) = (decided_at IS NOT NULL))`.
+- `CHECK (status <> 'approved' OR withdrawn_at IS NULL)`: aprovado não desiste.
+- Índice `network_event_join_requests_fila ON (requested_at) WHERE status = 'pending' AND withdrawn_at IS NULL`.
+- O estado que o app vê (`JoinRequestAppState`) é derivado na leitura, e
+  `declined` nunca é projetado para o app.
+- `CHECK (withdrawn_at IS NULL OR status = 'declined')`.
+- **Retenção (D54):** o worker de expurgo apaga aprovado e recusado 30 dias
+  depois de `ends_at` (ou `starts_at`, sem fim) ou de `cancelled_at`; o índice
+  de apoio é sobre `event_id`, juntando com `network_events`.
+- **Sem `pet_id` e sem texto livre**, de propósito (ADR-0010 item 7; a
+  conversa é v2). Nenhuma operação do app lê esta tabela além da linha da
+  própria conta, e a leitura que libera conteúdo é um `EXISTS` sobre ela na
+  cláusula `WHERE`.
 
 ### A.5 `audit.events`
 
@@ -795,7 +1393,11 @@ Sem mudança de esquema. As ações novas entram na união `AuditAction`:
 `admin.guard.denied`, `admin.store_partner.created`,
 `admin.store_partner.updated`, `admin.store_item.created`,
 `admin.store_item.updated`, `admin.store_item.published`,
-`admin.store_item.retired`, `admin.network_event.created`,
+`admin.store_item.retired`, `admin.store_tag.created`,
+`admin.store_tag.updated`, `admin.network_event.created`,
+`admin.network_event.access_changed`, `admin.network_join_request.listed`,
+`admin.network_join_request.approved`,
+`admin.network_join_request.declined`,
 `admin.network_event.updated`, `admin.network_event.relocated`, `admin.network_event.cancelled`,
 `admin.network_event.removed`, `admin.catalog_image.intent_created`.
 
@@ -810,18 +1412,13 @@ Sem mudança de esquema. As ações novas entram na união `AuditAction`:
   requisição, o aviso a cada sessão e os tiles do OSM.
 - A migração `20260923000001` não foi aplicada em nenhum banco compartilhado.
 
-## Pergunta ao cliente
+## Perguntas ao cliente
 
-**1. Evento cancelado: continua visível no app até a data prevista, ou some?**
-
-- **(a) Continua visível até o fim previsto, marcado como cancelado.** Quem se
-  programou para ir abre o app e descobre antes de sair de casa.
-- **(b) Some da lista no ato do cancelamento.**
-
-**Recomendação: (a).** Em (b), quem viu o encontro ontem e não o acha hoje não
-sabe se foi cancelado ou se procurou errado, e vai à praça.
-**Custo de não decidir:** fica (a), que é o padrão da seção 12.6; mudar depois
-é trocar um filtro.
+As três perguntas desta seção foram respondidas pelo cliente em 23/09 e estão
+fechadas: o encontro cancelado continua visível até o fim previsto (12.6); a
+recusa é invisível ao tutor, e pedir de novo é idempotente sem lavar a recusa
+(12.11); os administradores não recebem e-mail a cada pedido, e a fila fica no
+painel com a contagem de pendentes. Nenhuma pergunta aberta.
 
 ---
 DÉDALO, Arquiteto de Software

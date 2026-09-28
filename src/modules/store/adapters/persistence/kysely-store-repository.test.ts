@@ -110,8 +110,15 @@ const semBanco = new Kysely<Database>({
 
 const RECORTE: RecorteDaVitrine = { sort: 'curadoria', page: 1, limit: 20 };
 
+/** A derivada de imagem de catalogo, que o item desta massa nao tem. */
+const URL_DE_MIDIA = (chave: string): string => `https://midia.example/${chave}`;
+
+/** Especie, tags e imagens da pagina: tres consultas, vazias nesta massa. */
+const COMPLEMENTOS_VAZIOS: readonly (readonly unknown[])[] = [[], [], []];
+
 function linhaDaVitrine(sobrescrever: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    id: '0192a3b4-0000-7000-8000-000000000001',
     slug: 'bola-pop',
     title: 'Bola Pop',
     summary: 'Bola de borracha atóxica que flutua.',
@@ -130,7 +137,8 @@ function linhaDaVitrine(sobrescrever: Record<string, unknown> = {}): Record<stri
 
 async function umItem(sobrescrever: Record<string, unknown> = {}) {
   const repo = criarStoreRepository(
-    bancoQueDevolve([{ total: '1' }], [linhaDaVitrine(sobrescrever)]),
+    bancoQueDevolve([{ total: '1' }], [linhaDaVitrine(sobrescrever)], ...COMPLEMENTOS_VAZIOS),
+    URL_DE_MIDIA,
   );
   const pagina = await repo.listarVitrine(RECORTE);
   const item = pagina.itens[0];
@@ -167,13 +175,16 @@ void describe('o endereço do item é COMPOSTO, e o host não vem do item', () =
 
 void describe('a linha vira `ItemDaVitrine` sem perder nem inventar campo', () => {
   void it('o total é o do recorte, lido da consulta de contagem', async () => {
-    const repo = criarStoreRepository(bancoQueDevolve([{ total: '7' }], [linhaDaVitrine()]));
+    const repo = criarStoreRepository(
+      bancoQueDevolve([{ total: '7' }], [linhaDaVitrine()], ...COMPLEMENTOS_VAZIOS),
+      URL_DE_MIDIA,
+    );
     const pagina = await repo.listarVitrine(RECORTE);
     assert.equal(pagina.total, 7);
   });
 
   void it('a contagem ausente é zero, e não `NaN`', async () => {
-    const repo = criarStoreRepository(bancoQueDevolve([], []));
+    const repo = criarStoreRepository(bancoQueDevolve([], []), URL_DE_MIDIA);
     const pagina = await repo.listarVitrine(RECORTE);
     assert.equal(pagina.total, 0);
     assert.deepEqual(pagina.itens, []);

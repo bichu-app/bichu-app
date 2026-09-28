@@ -167,6 +167,7 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/media/ports/image-processor.ts', SO_TIPO],
   ['src/modules/media/ports/media-repository.ts', SO_TIPO],
   ['src/modules/messaging/ports/conversation-repository.ts', SO_TIPO],
+  ['src/modules/network/ports/network-repository.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-aparelhos.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-entregas.ts', SO_TIPO],
   ['src/modules/pets/ports/fotos-do-pet.ts', SO_TIPO],

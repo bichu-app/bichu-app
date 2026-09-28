@@ -57,7 +57,13 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
-import { projetarItem, type CategoriaDaVitrine } from '../../domain/item-da-vitrine.js';
+import {
+  projetarDetalhe,
+  projetarItem,
+  type CategoriaDaVitrine,
+  type EspecieDoItem,
+} from '../../domain/item-da-vitrine.js';
+import { problemas } from '../../../../shared/http/errors.js';
 import type { OrdemDaVitrine, StoreRepository } from '../../ports/store-repository.js';
 import type { Clock } from '../../../../shared/ports/index.js';
 
@@ -82,6 +88,27 @@ export const rotaDaVitrine = defineRoute({
   rateLimit: [{ dimension: ['ip'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * O detalhe do item (ADR-0027 item 16), publico pelas mesmas razoes da lista e
+ * com o mesmo teto, porque quem abre o detalhe veio dela.
+ */
+export const rotaDoDetalheDaVitrine = defineRoute({
+  operationId: 'getStoreItem',
+  method: 'get',
+  path: '/store/items/:itemSlug',
+  effects: [],
+  rateLimit: [{ dimension: ['ip'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
+/** As tags do grupo de filtro do app: lista fechada, sem campo digitavel. */
+export const rotaDasTagsDaVitrine = defineRoute({
+  operationId: 'listStoreTags',
+  method: 'get',
+  path: '/store/tags',
+  effects: [],
+  rateLimit: [{ dimension: ['ip'], limit: 300, window: '1h', onExceed: 'deny_429' }],
+});
+
 /** Os mesmos defaults que o contrato declara. Copiados de la, nao escolhidos aqui. */
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
@@ -95,6 +122,8 @@ export interface DependenciasDasRotasDaVitrine {
 interface QueryDaVitrine {
   readonly q?: string;
   readonly category?: CategoriaDaVitrine;
+  readonly species?: EspecieDoItem;
+  readonly tag?: string;
   readonly sort?: OrdemDaVitrine;
   readonly page?: number;
   readonly limit?: number;
@@ -111,6 +140,8 @@ function recortesAplicados(query: QueryDaVitrine): Record<string, string> {
   const aplicados: Record<string, string> = {};
   if (query.q !== undefined && query.q.trim() !== '') aplicados['q'] = query.q.trim();
   if (query.category !== undefined) aplicados['category'] = query.category;
+  if (query.species !== undefined) aplicados['species'] = query.species;
+  if (query.tag !== undefined) aplicados['tag'] = query.tag;
   if (Object.keys(aplicados).length === 0) aplicados['scope'] = 'all';
   return aplicados;
 }
@@ -137,6 +168,8 @@ export function registrarRotasDaVitrine(
       const pagina = await deps.vitrine.listarVitrine({
         ...(termo === undefined || termo === '' ? {} : { q: termo }),
         ...(query.category === undefined ? {} : { category: query.category }),
+        ...(query.species === undefined ? {} : { species: query.species }),
+        ...(query.tag === undefined ? {} : { tag: query.tag }),
         sort,
         page,
         limit,
@@ -159,5 +192,18 @@ export function registrarRotasDaVitrine(
         applied_filters: recortesAplicados(query),
       });
     },
+  );
+
+  registrarRota(app, rotaDoDetalheDaVitrine, {}, async (request: FastifyRequest, reply: FastifyReply) => {
+    const slug = (request.params as { itemSlug?: string }).itemSlug ?? '';
+    const detalhe = await deps.vitrine.detalhe(slug);
+    // Rascunho, retirado, inexistente e parceiro inativo: o MESMO 404, com o
+    // mesmo corpo (ADR-0021). A distincao ficou na clausula WHERE.
+    if (detalhe === null) throw problemas.naoEncontrado();
+    return reply.send(projetarDetalhe(detalhe.item, detalhe.imagens, deps.clock.now()));
+  });
+
+  registrarRota(app, rotaDasTagsDaVitrine, {}, async (_request: FastifyRequest, reply: FastifyReply) =>
+    reply.send({ items: await deps.vitrine.tagsVisiveis() }),
   );
 }

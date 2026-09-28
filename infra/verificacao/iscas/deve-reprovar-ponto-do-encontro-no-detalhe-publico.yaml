@@ -1,0 +1,93 @@
+# ISCA. Este arquivo EXISTE PARA SER REPROVADO pelo portao de contrato publico
+# (`src/tools/portao-contrato-publico.ts`, P5 de `04-seguranca.md`). Ele nao e
+# o contrato do produto e nunca deve ser mesclado nele. Nao corrija este
+# arquivo: corrigi-lo cega o portao para o defeito que ele descreve.
+#
+# O defeito: o ponto do encontro da `Rede` saindo no DETALHE, que tem
+# autenticacao OPCIONAL (`bearerAuth` ou `{}`). A emenda 1 do ADR-0010 so
+# admite o ponto em resposta autenticada, e o ADR-0027 12.5 o pos numa
+# operacao propria (`getNetworkEventLocation`, `bearerAuth` sem alternativa
+# vazia) justamente porque o portao trata autenticacao opcional como publica.
+#
+# A forma copia a do contrato de verdade, e nao uma forma facil: o detalhe e
+# `allOf` sobre o cartao, e o ponto vem aninhado em `place.point`, dentro de
+# `oneOf` com nulo. Se o portao parar de descer por `allOf`/`oneOf` ou parar de
+# tratar `{}` como publico, esta isca passa e a esteira acusa.
+#
+# A operacao que DEVE carregar o ponto esta aqui tambem, com `bearerAuth` so.
+# Ela nao pode ser acusada; o `.esperado` ao lado nomeia so a do detalhe.
+openapi: 3.1.0
+info:
+  title: isca do ponto do encontro no detalhe publico
+  version: '0'
+
+paths:
+  /network/events/{eventSlug}:
+    get:
+      operationId: iscaPontoNoDetalhePublico
+      summary: o detalhe com autenticacao opcional levando o ponto junto
+      security:
+        - bearerAuth: []
+        - {}
+      parameters:
+        - name: eventSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IscaEncontro' }
+
+  /network/events/{eventSlug}/location:
+    get:
+      operationId: iscaPontoSoComConta
+      summary: o lugar certo do ponto, e ele nao pode ser acusado
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: eventSlug
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: ok
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  point:
+                    oneOf:
+                      - $ref: '#/components/schemas/IscaPonto'
+                      - type: 'null'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    IscaPonto:
+      type: object
+      properties:
+        lat: { type: number }
+        lon: { type: number }
+    IscaCartao:
+      type: object
+      properties:
+        slug: { type: string }
+        place:
+          type: object
+          properties:
+            place_name: { type: string }
+            point:
+              oneOf:
+                - $ref: '#/components/schemas/IscaPonto'
+                - type: 'null'
+    IscaEncontro:
+      allOf:
+        - $ref: '#/components/schemas/IscaCartao'
