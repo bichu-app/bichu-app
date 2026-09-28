@@ -1828,7 +1828,7 @@ jobs:
           echo "ambiente do site: $(printf '%s\n' "$recebidas" | tr '\n' ' ')"
           if [ "$falhas" != 0 ]; then exit 1; fi
 
-      - name: serve a pagina inicial, a rota do servidor e 404 de verdade
+      - name: serve a pagina inicial, a rota do servidor (503 sem API) e 404 de verdade
         run: |
           # Pelo NOME DO SERVICO na rede do compose (`web:4321`), que e como a
           # borda o alcanca. O cliente e o Node da propria imagem: nenhuma
@@ -1840,7 +1840,9 @@ jobs:
             const casos = [
               ["/", 200, "text/html", "public, max-age=0, must-revalidate"],
               ["/healthz", 200, "text/plain", "no-store"],
-              ["/t/CODIGO-DE-TESTE", 404, "text/html", "no-store"],
+              // Sem a API no ar (este job sobe so o site), /t/ responde 503 com
+              // a pagina de tentar de novo, nunca 200 vazio (ADR-0028, item 3).
+              ["/t/CODIGO-DE-TESTE", 503, "text/html", "no-store"],
               ["/nao-existe-'"$GITHUB_RUN_ID"'", 404, null, "no-store"],
             ];
             let falhas = 0;
