@@ -202,11 +202,21 @@ const AUSENCIAS_ACEITAS = new Map([
   // o comeco de uma lista que so cresce. No fechamento do dia saiu tambem
   // `kysely-lost-case-repository.ts`, pelo mesmo motivo: o proprio verificador
   // acusou a excecao como obsoleta.
-  ['src/modules/media/application/media-service.ts', SEM_SUITE_QUE_CARREGUE],
-  ['src/modules/media/application/processar-foto.ts', SEM_SUITE_QUE_CARREGUE],
+  //
+  // SAIRAM TRES EM 28/09, pela mesma invariante 2, e o verificador acusou as
+  // tres no fechamento:
+  //
+  // - `media-service.ts` e `processar-foto.ts` passaram a APARECER no relatorio
+  //   de integracao quando a bancada da BICHUS-245
+  //   (`tests/integration/foto-de-ponta-a-ponta.test.ts`) mesclou na
+  //   development: ela importa os dois e exercita a foto de ponta a ponta. As
+  //   duas entradas ja estavam obsoletas antes da correcao do worker.
+  // - `kysely-job-queue.ts` passou a aparecer com
+  //   `tests/integration/worker-sobrevive-a-serie-e-nao-deixa-foto-presa.test.ts`,
+  //   que exercita `enqueue` e a recuperacao de orfao contra Postgres de
+  //   verdade.
   ['src/modules/notifications/adapters/persistence/kysely-registro-de-entregas.ts', SEM_SUITE_QUE_CARREGUE],
   ['src/modules/pets/adapters/persistence/kysely-reference-data-repository.ts', SEM_SUITE_QUE_CARREGUE],
-  ['src/shared/queue/kysely-job-queue.ts', SEM_SUITE_QUE_CARREGUE],
   [
     'src/shared/ports/index.ts',
     're-exportacao de portas. So `SegredoIndisponivelError` sobrevive a compilacao, e quem precisa ' +
