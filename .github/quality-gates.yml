@@ -29,9 +29,9 @@ dispensas:
   # no resumo da execucao com `::warning::` e nao derruba o PR. Apagar esta
   # entrada torna o veredito bloqueante, sem tocar no workflow.
   - portao: sonarcloud-veredito
-    motivo: "primeira analise trata o repositorio inteiro como codigo novo e reprova os 74% contra o piso de 80% do Sonar way; a janela existe para criar linha de base em development"
+    motivo: "primeira analise trata o repositorio inteiro como codigo novo e reprova os 74% contra o piso de 80% do Sonar way; a janela existe para criar linha de base em development. Renovada em 28/09: o job `sonar` segue reprovando por cobranca do GitHub (o runner recusa o job com pagamento em falha ou limite de gasto), entao a linha de base ainda nao pode ser criada; destrava quando a cobranca for resolvida"
     responsavel: squad
-    vence_em: 2026-09-24
+    vence_em: 2026-10-15
 
   # AS DUAS DE BAIXO MUDARAM DE NATUREZA EM 22/09/2026, E NAO SO DE DATA.
   #
@@ -172,4 +172,4 @@ dispensas:
   - portao: documento-secao7
     motivo: "docs/ fora do repositorio por decisao de 17/09/2026: o checkout da CI nao traz docs/06-design-system.md e o portao do paragrafo 7 nao tem o que ler"
     responsavel: cliente
-    vence_em: 2026-09-24
+    vence_em: 2026-10-15
