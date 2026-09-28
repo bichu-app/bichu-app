@@ -10,6 +10,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
 
 /// `Perto` — o diretorio de profissionais e estabelecimentos.
@@ -63,6 +64,18 @@ class ListaDoDiretorio extends StatefulWidget {
   static const String explicacaoDoVazioFiltrado =
       'Tire um filtro para ver mais profissionais da sua região.';
 
+  /// A frase do fim da lista (paragrafo 11.20), no plural e no singular.
+  ///
+  /// `todos os 1 profissionais` e o que uma frase montada dentro do rodape
+  /// produziria, e e por isso que ela e montada aqui.
+  static String fimDaLista(int total) => total == 1
+      ? 'Você viu o único profissional desta região.'
+      : 'Você viu todos os $total profissionais desta região.';
+
+  /// Quando a pagina seguinte nao chega. A lista ja carregada **fica**.
+  static const String falhaAoCarregarMais =
+      'Não foi possível carregar mais profissionais.';
+
   /// Por que a lista nao saiu por distancia, quando falta a localizacao.
   ///
   /// **Palavra por palavra, num lugar so.** O texto afirma a ordem real antes
@@ -87,6 +100,21 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
   RecorteDoDiretorio _recorte = const RecorteDoDiretorio();
   PaginaDoDiretorio? _pagina;
   String? _textoDaFalha;
+
+  /// As entradas de **todas** as paginas ja pedidas, na ordem em que chegaram.
+  ///
+  /// `_pagina.itens` tem so a ultima pagina, e ler dela para desenhar a lista
+  /// e o defeito que esta tela tinha: a pagina 2 substituiria a 1 em vez de
+  /// continuar. O que a pagina ainda manda e o `total`, o `limit` e a ordem
+  /// efetiva.
+  final List<EntradaDoDiretorio> _itens = <EntradaDoDiretorio>[];
+
+  /// A pagina seguinte esta em voo.
+  bool _carregandoMais = false;
+
+  /// Por que a pagina seguinte nao chegou. Nulo quando chegou, e nulo tambem
+  /// enquanto ninguem pediu.
+  String? _falhaDeMais;
 
   bool _visivel = false;
   bool _cargaAgendada = false;
@@ -116,19 +144,37 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     });
   }
 
+  /// Carrega a **primeira** pagina do recorte atual, sempre.
+  ///
+  /// A normalizacao do `page` nao e zelo: este metodo e chamado tambem pelo
+  /// retorno a aba (`didChangeDependencies`) e pelo `Atualizar` da faixa de
+  /// falha, e nesses dois caminhos `_recorte.pagina` pode estar em 3 por causa
+  /// do `Carregar mais`. Sem ela, voltar para a aba pediria a pagina 3 e
+  /// mostraria vinte entradas do meio como se fossem a lista inteira -- e com
+  /// um recorte pequeno a pagina 3 volta **vazia**, que e o "a lista ficou
+  /// vazia sem motivo" que ninguem consegue reproduzir.
   Future<void> _carregar() async {
     if (!mounted) return;
     final escopo = Escopo.of(context);
+    final recorte =
+        _recorte.pagina == 1 ? _recorte : _recorte.com(pagina: 1);
     setState(() {
+      _recorte = recorte;
       _fase = _Fase.carregando;
       _textoDaFalha = null;
+      _falhaDeMais = null;
+      _carregandoMais = false;
+      _itens.clear();
     });
 
     try {
-      final pagina = await escopo.diretorio.listar(_recorte);
+      final pagina = await escopo.diretorio.listar(recorte);
       if (!mounted) return;
       setState(() {
         _pagina = pagina;
+        _itens
+          ..clear()
+          ..addAll(pagina.itens);
         _fase = _Fase.lista;
       });
     } on FalhaDeChamada catch (falha) {
@@ -158,6 +204,50 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
   void _trocarRecorte(RecorteDoDiretorio novo) {
     setState(() => _recorte = novo);
     _carregar();
+  }
+
+  /// Pede a pagina seguinte e **acrescenta** o que vier.
+  ///
+  /// A falha aqui nao apaga a lista, ao contrario da falha da pagina 1. Na
+  /// pagina 1 o recorte mudou e os cartoes antigos seriam a resposta errada;
+  /// aqui o recorte e o mesmo, e as entradas na tela continuam sendo a
+  /// resposta certa para ele.
+  Future<void> _carregarMais() async {
+    if (!mounted || _carregandoMais) return;
+    final atual = _pagina;
+    if (atual == null) return;
+
+    final escopo = Escopo.of(context);
+    final proximo = _recorte.com(pagina: atual.pagina + 1);
+    setState(() {
+      _carregandoMais = true;
+      _falhaDeMais = null;
+    });
+
+    try {
+      final pagina = await escopo.diretorio.listar(proximo);
+      if (!mounted) return;
+      setState(() {
+        _recorte = proximo;
+        _pagina = pagina;
+        _itens.addAll(pagina.itens);
+        _carregandoMais = false;
+      });
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      setState(() {
+        _carregandoMais = false;
+        _falhaDeMais =
+            textoDoTetoDoDiretorio(falha) ?? ListaDoDiretorio.falhaAoCarregarMais;
+      });
+    } on FormatException catch (erro) {
+      if (!mounted) return;
+      setState(() {
+        _carregandoMais = false;
+        _falhaDeMais = ListaDoDiretorio.falhaAoCarregarMais;
+      });
+      debugPrint('Resposta do diretorio fora do contrato: $erro');
+    }
   }
 
   @override
@@ -293,7 +383,7 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
       ];
     }
 
-    if (pagina.itens.isEmpty) {
+    if (_itens.isEmpty) {
       // **Dois vazios, e eles dizem coisas diferentes.** Um diz que a secao
       // ainda nao tem gente; o outro diz que o recorte da pessoa e que nao
       // tem. Uma frase so para os dois mandaria embora quem so precisava
@@ -313,39 +403,20 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     }
 
     return <Widget>[
-      for (var i = 0; i < pagina.itens.length; i++) ...<Widget>[
+      for (var i = 0; i < _itens.length; i++) ...<Widget>[
         if (i > 0) const SizedBox(height: BichuEspaco.e3),
-        CartaoDoDiretorio(entrada: pagina.itens[i]),
+        CartaoDoDiretorio(entrada: _itens[i]),
       ],
-      const SizedBox(height: BichuEspaco.e4),
-      _LinhaDaPagina(pagina: pagina),
+      const SizedBox(height: espacoAcimaDoRodape),
+      RodapeDaPaginacao(
+        carregados: _itens.length,
+        total: pagina.total,
+        carregando: _carregandoMais,
+        textoDaFalha: _falhaDeMais,
+        fimDaLista: ListaDoDiretorio.fimDaLista,
+        aoPedirMais: _carregarMais,
+      ),
     ];
-  }
-}
-
-/// A linha `Mostrando 1 a 10 de 10`, que e o que faz a pessoa saber que chegou
-/// ao fim da lista.
-///
-/// **Sem botao de proxima pagina nesta versao.** A paginacao existe no
-/// contrato e o app so pede a pagina 1: um botao aqui teria destino, mas a
-/// massa publicada tem dez entradas e a segunda pagina nunca existiria para
-/// ser exercitada. Quando a base crescer, o lugar e este.
-class _LinhaDaPagina extends StatelessWidget {
-  const _LinhaDaPagina({required this.pagina});
-
-  final PaginaDoDiretorio pagina;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    final primeiro = (pagina.pagina - 1) * pagina.limite + 1;
-    final ultimo = primeiro + pagina.itens.length - 1;
-
-    return Text(
-      'Mostrando $primeiro a $ultimo de ${pagina.total}',
-      style: textos.bodySmall?.copyWith(color: cores.textSecondary),
-    );
   }
 }
 
