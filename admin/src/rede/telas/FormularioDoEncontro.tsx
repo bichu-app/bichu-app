@@ -24,6 +24,7 @@ import {
   corpoDaMudanca,
   formularioDoEncontro,
   formularioVazio,
+  fotosSemEnvio,
   LIMITE_DAS_OBSERVACOES,
   LIMITE_DO_RESUMO,
   montarCriacao,
@@ -363,6 +364,13 @@ export default function FormularioDoEncontro() {
         mostrarErrosDeDescricao={tentou}
         erro={erroDe('fotos')}
       />
+      {fotosSemEnvio(f) > 0 && (
+        <Banner tipo="alerta">
+          {fotosSemEnvio(f) === 1
+            ? 'Uma foto foi enviada por uma conta que não existe mais. Se você mudar as fotos, ela sai do encontro.'
+            : `${fotosSemEnvio(f)} fotos foram enviadas por uma conta que não existe mais. Se você mudar as fotos, elas saem do encontro.`}
+        </Banner>
+      )}
 
       <h2 className={`t-title ${estilos.secao ?? ''}`}>Quando e onde</h2>
       <fieldset className={estilos.grupo} disabled={travarLugarEAcesso}>

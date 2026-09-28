@@ -4,6 +4,7 @@ import {
   corpoDaMudanca,
   formularioDoEncontro,
   formularioVazio,
+  fotosSemEnvio,
   montarCriacao,
   planoDeEdicao,
   tituloDaMudanca,
@@ -25,7 +26,7 @@ describe('observações (D59, conveniência de tela)', () => {
       ['telefone', 'com largura zero 1\u200B1\u200B9\u200B8\u200B7\u200B6\u200B5\u200B4\u200B3'],
       ['telefone', 'dígitos de largura total \uFF11\uFF11\uFF19\uFF18\uFF17\uFF16\uFF15\uFF14\uFF13\uFF12\uFF11'],
       ['email', 'escreve para ana@exemplo.com.br'],
-      ['email', 'ana arroba exemplo . com'],
+      ['email', 'ana arroba exemplo ponto com'],
       ['link', 'inscrição em https://exemplo.com/x'],
       ['link', 'veja www.exemplo.com'],
       ['link', 'site exemplo.com.br'],
@@ -33,7 +34,8 @@ describe('observações (D59, conveniência de tela)', () => {
       ['pix', 'chave 123e4567-e89b-12d3-a456-426614174000'],
       ['endereco', 'fica na Rua das Flores, 123'],
       ['endereco', 'Av. Paulista perto do metrô'],
-      ['endereco', 'portão nº 40'],
+      ['endereco', 'Praça Benedito Calixto, 100'],
+      ['endereco', 'cep 01234-000'],
       ['bidi', 'texto com \u202E invertido'],
     ];
     for (const [tipo, texto] of casos) {
@@ -210,6 +212,33 @@ describe('plano de edição (as três operações)', () => {
       'O encontro agora é pago, e o app mostra isso na hora.',
       'Todos os administradores recebem um e-mail com o antes e o depois.',
     ]);
+  });
+});
+
+describe('foto com upload_id nulo (conta apagada)', () => {
+  const comOrfa = encontroDeExemplo({
+    images: [
+      { source: 'uploaded', status: 'ready', url: null, rejection_reason: null, upload_id: null, position: 0, alt_text: 'Cães no gramado' },
+      { source: 'uploaded', status: 'ready', url: null, rejection_reason: null, upload_id: '00000000-0000-4000-8000-000000000002', position: 1, alt_text: 'Lago do parque' },
+    ],
+  });
+
+  it('ganha chave estável que não depende do upload_id', () => {
+    const f = formularioDoEncontro(comOrfa);
+    expect(f.fotos.map((x) => x.chave)).toEqual(['sem-envio-0', '00000000-0000-4000-8000-000000000002']);
+    expect(f.fotos[0]?.uploadId).toBeUndefined();
+    expect(fotosSemEnvio(f)).toBe(1);
+  });
+
+  it('editar só o título NÃO manda images, e a foto sem envio fica no encontro', () => {
+    const f = { ...formularioDoEncontro(comOrfa), titulo: 'Outro título' };
+    expect(planoDeEdicao(comOrfa, f).patch).toEqual({ title: 'Outro título' });
+  });
+
+  it('mudar as fotos manda a galeria sem a foto que não pode ser reenviada', () => {
+    const f = formularioDoEncontro(comOrfa);
+    f.fotos = [...f.fotos].reverse();
+    expect(planoDeEdicao(comOrfa, f).patch).toEqual({ images: [{ upload_id: '00000000-0000-4000-8000-000000000002', alt_text: 'Lago do parque' }] });
   });
 });
 

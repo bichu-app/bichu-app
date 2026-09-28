@@ -55,6 +55,20 @@ export interface FotoDoFormulario {
 
 const FOTO_QUE_VAI = new Set<EstadoDaFoto>(['enviada', 'processing', 'ready']);
 
+/**
+ * Chave estavel de uma foto que veio do servidor. `upload_id` pode ser nulo
+ * (AdminCatalogGalleryImage): a foto continua no encontro e precisa de uma chave
+ * que nao dependa dele. A posicao e unica na galeria lida.
+ */
+export function chaveDaImagem(img: { upload_id: string | null; position: number }): string {
+  return img.upload_id ?? `sem-envio-${img.position}`;
+}
+
+/** Fotos que a galeria nao consegue reenviar: saem do encontro se as fotos mudarem. */
+export function fotosSemEnvio(f: Pick<EstadoDoFormulario, 'fotos'>): number {
+  return f.fotos.filter((x) => !x.uploadId && FOTO_QUE_VAI.has(x.estado)).length;
+}
+
 export interface EstadoDoFormulario {
   titulo: string;
   resumo: string;
@@ -122,9 +136,9 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     fotos: [...e.images]
       .sort((a, b) => a.position - b.position)
       .map((img) => ({
-        chave: img.upload_id,
+        chave: chaveDaImagem(img),
         estado: img.status,
-        uploadId: img.upload_id,
+        ...(img.upload_id ? { uploadId: img.upload_id } : {}),
         previa: img.url ?? null,
         motivo: img.rejection_reason ?? null,
         alt: img.alt_text,
@@ -288,12 +302,17 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
   const patch: EncontroPatch = {};
   if (f.titulo.trim() !== original.title) patch.title = f.titulo.trim();
   if (f.resumo.trim() !== original.summary) patch.summary = f.resumo.trim();
-  const novas = imagens(f);
+  // A galeria compara pela chave estavel de cada foto, e nao pelo `upload_id`: a foto com
+  // `upload_id` nulo (conta que a enviou foi apagada) nao pode ir em `images`, e mandar a
+  // galeria sem ela a remove. So vai `images` quando as fotos mudaram de verdade.
   const antigas = [...original.images].sort((a, b) => a.position - b.position);
   const fotosIguais =
-    novas.length === antigas.length &&
-    novas.every((x, i) => x.upload_id === antigas[i]?.upload_id && x.alt_text === antigas[i]?.alt_text);
-  if (!fotosIguais) patch.images = novas;
+    f.fotos.length === antigas.length &&
+    f.fotos.every((x, i) => {
+      const a = antigas[i];
+      return !!a && x.chave === chaveDaImagem(a) && x.alt.trim() === a.alt_text;
+    });
+  if (!fotosIguais) patch.images = imagens(f);
   if (!mesmoConjunto(f.levar, original.bring_items)) patch.bring_items = [...f.levar];
   const notas = f.observacoes.trim() || null;
   if (notas !== (original.notes ?? null)) patch.notes = notas;
