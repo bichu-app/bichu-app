@@ -6,6 +6,10 @@
  * `tests/integration/sessao-administrativa-pelo-http.test.ts` (P16).
  */
 import assert from 'node:assert/strict';
+import { AppError } from './errors.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 import { describe, it } from 'node:test';
 
 import { hashDeToken } from '../crypto/digest.js';
@@ -88,11 +92,14 @@ interface Bancada {
   readonly app: RegistradorDeRotas;
   readonly recusas: MotivoDaRecusaDaGuarda[];
   readonly log: string[];
+  /** Quantas janelas foram consumidas e quantas devolvidas (QA bug 4). */
+  readonly janelas: { consumidas: number; devolvidas: number };
 }
 
 function bancada(rotasExtras: (adm: RegistradorDeRotas) => void = () => {}): Bancada {
   const recusas: MotivoDaRecusaDaGuarda[] = [];
   const log: string[] = [];
+  const janelas = { consumidas: 0, devolvidas: 0 };
   const sessoes = new Map<string, SessaoAdministrativaConferida>([
     ['cookie-admin', sessao('admin', 'csrf-admin-0123456789abcdef0123456789', ['tutor', 'admin'])],
     ['cookie-outra', sessao('outra', 'csrf-outra-0123456789abcdef0123456789', ['admin'])],
@@ -107,10 +114,18 @@ function bancada(rotasExtras: (adm: RegistradorDeRotas) => void = () => {}): Ban
       recusas.push(motivo);
       return Promise.resolve();
     },
-    consumirReautenticacao: (_s, escopo, token) =>
-      escopo === 'store_item_retirement' && token === 'janela-certa'
-        ? Promise.resolve()
-        : Promise.reject(problemas.reautenticacaoNecessaria()),
+    consumirReautenticacao: (_s, escopo, token) => {
+      if (escopo !== 'store_item_retirement' || token !== 'janela-certa') {
+        return Promise.reject(problemas.reautenticacaoNecessaria());
+      }
+      janelas.consumidas += 1;
+      return Promise.resolve({
+        devolver: () => {
+          janelas.devolvidas += 1;
+          return Promise.resolve();
+        },
+      });
+    },
   };
 
   const app = criarServidor({
@@ -133,11 +148,18 @@ function bancada(rotasExtras: (adm: RegistradorDeRotas) => void = () => {}): Ban
       registrarRota(adm, rotaDeEscrita, { schema: { body: CORPO_FECHADO } }, async (_r, reply) =>
         reply.status(200).send({ gravado: true }),
       );
-      registrarRota(adm, rotaSensivel, {}, async (_r, reply) => reply.status(200).send({ retirado: true }));
+      // `x-teste-resposta` escolhe o desfecho da escrita: 412 (versao nao
+      // confere), 500 (falha qualquer) ou, sem ele, 200.
+      registrarRota(adm, rotaSensivel, {}, async (r, reply) => {
+        const desfecho = r.headers['x-teste-resposta'];
+        if (desfecho === '412') throw new AppError('precondition-failed', 'Alguém alterou isto antes de você');
+        if (desfecho === '500') throw new Error('falha depois da escrita');
+        return reply.status(200).send({ retirado: true });
+      });
       rotasExtras(adm);
     });
   });
-  return { app, recusas, log };
+  return { app, recusas, log, janelas };
 }
 
 type Cabecalhos = Record<string, string>;
@@ -273,15 +295,79 @@ void describe('guarda do prefixo /v1/admin', () => {
 
   void it('operacao com adminReauthScope exige X-Admin-Reauth-Token do escopo (D40)', async () => {
     const { app } = bancada();
-    const sem = await app.inject({ method: 'POST', url: '/v1/admin/teste/sensivel', headers: cabecalhos(ESCRITA_CERTA) });
+    const sem = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/teste/sensivel',
+      headers: cabecalhos({ ...ESCRITA_CERTA, 'if-match': '"1"' }),
+    });
     assert.equal(sem.statusCode, 401);
     assert.equal(tipoDe(sem.body), 'reauthentication-required');
     const com = await app.inject({
       method: 'POST',
       url: '/v1/admin/teste/sensivel',
-      headers: cabecalhos({ ...ESCRITA_CERTA, 'x-admin-reauth-token': 'janela-certa' }),
+      headers: cabecalhos({ ...ESCRITA_CERTA, 'if-match': '"1"', 'x-admin-reauth-token': 'janela-certa' }),
     });
     assert.equal(com.statusCode, 200);
+  });
+
+  void it('QA bug 4: sem If-Match, 428 ANTES de gastar a janela', async () => {
+    const { app, janelas } = bancada();
+    const resposta = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/teste/sensivel',
+      headers: cabecalhos({ ...ESCRITA_CERTA, 'x-admin-reauth-token': 'janela-certa' }),
+    });
+    assert.equal(resposta.statusCode, 428);
+    assert.equal(tipoDe(resposta.body), 'precondition-required');
+    assert.deepEqual(janelas, { consumidas: 0, devolvidas: 0 }, 'o 428 gastou a janela');
+  });
+
+  void it('QA bug 4: 412 devolve a janela; 200 e 500 NAO devolvem', async () => {
+    const pedir = (app: RegistradorDeRotas, extra: Cabecalhos) =>
+      app.inject({
+        method: 'POST',
+        url: '/v1/admin/teste/sensivel',
+        headers: cabecalhos({ ...ESCRITA_CERTA, 'if-match': '"1"', 'x-admin-reauth-token': 'janela-certa', ...extra }),
+      });
+    const recusada = bancada();
+    assert.equal((await pedir(recusada.app, { 'x-teste-resposta': '412' })).statusCode, 412);
+    assert.deepEqual(recusada.janelas, { consumidas: 1, devolvidas: 1 }, 'o 412 nao devolveu a janela');
+    // ISCA: a gravacao que deu certo nao devolve (seria a janela servindo duas vezes)...
+    const gravada = bancada();
+    assert.equal((await pedir(gravada.app, {})).statusCode, 200);
+    assert.deepEqual(gravada.janelas, { consumidas: 1, devolvidas: 0 });
+    // ...nem a falha que pode ter vindo depois de gravar.
+    const quebrada = bancada();
+    assert.equal((await pedir(quebrada.app, { 'x-teste-resposta': '500' })).statusCode, 500);
+    assert.deepEqual(quebrada.janelas, { consumidas: 1, devolvidas: 0 });
+  });
+
+  void it('QA bug 4: toda operacao com x-admin-reauth-scope exige If-Match no contrato', () => {
+    // A guarda responde 428 sem gastar a janela quando falta o If-Match, e so
+    // pode fazer isso porque TODA operacao com reautenticacao e escrita
+    // versionada. Operacao nova com escopo e sem If-Match reprova aqui.
+    const texto = readFileSync(resolve(process.cwd(), 'api/openapi.yaml'), 'utf8');
+    const spec = parseYaml(texto) as {
+      paths: Record<string, Record<string, Record<string, unknown>>>;
+      components: { parameters: Record<string, { name: string; in: string; required?: boolean }> };
+    };
+    const sem: string[] = [];
+    let conferidas = 0;
+    for (const item of Object.values(spec.paths)) {
+      for (const operacao of Object.values(item)) {
+        if (typeof operacao !== 'object' || operacao === null || !('x-admin-reauth-scope' in operacao)) continue;
+        conferidas += 1;
+        const parametros = ((operacao['parameters'] as unknown[] | undefined) ?? []).map((p) => {
+          const ref = (p as { $ref?: string }).$ref;
+          return ref === undefined ? (p as { name: string; in: string; required?: boolean }) : spec.components.parameters[ref.split('/').pop() ?? ''];
+        });
+        if (!parametros.some((p) => p?.in === 'header' && p.name === 'If-Match' && p.required === true)) {
+          sem.push(String(operacao['operationId']));
+        }
+      }
+    }
+    assert.ok(conferidas >= 5, `so ${String(conferidas)} operacoes com reautenticacao no contrato`);
+    assert.deepEqual(sem, []);
   });
 
   void it('nenhuma resposta do prefixo traz Access-Control-Allow-* (D34)', async () => {

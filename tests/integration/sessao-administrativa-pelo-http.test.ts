@@ -69,6 +69,7 @@ import {
 } from '../../src/modules/admin-access/application/sessao-administrativa-service.js';
 import { gerarHashDeSenha } from '../../src/modules/identity/ports/senha.js';
 import { derivarTokenAntiCsrf } from '../../src/modules/admin-access/domain/sessao-administrativa.js';
+import { AppError } from '../../src/shared/http/errors.js';
 import type { Mailer, Mensagem } from '../../src/modules/identity/ports/mailer.js';
 import type { ListaDeSenhasVazadas } from '../../src/modules/identity/ports/lista-de-senhas-vazadas.js';
 
@@ -187,7 +188,14 @@ async function subir(trilhaQuebrada: boolean): Promise<Servidor> {
     registrarRotasDeIdentidade(v1, deps);
     escoparRotasAdministrativas(v1, { origem: ORIGEM, sessoes }, (adm) => {
       registrarRotasDaSessaoAdministrativa(adm, { sessoes, contrato });
-      registrarRota(adm, rotaDeTesteMover, {}, async (_r, reply) => reply.status(204).send());
+      // `x-teste-versao: velha` faz a rota responder 412, como a escrita real
+      // quando o `If-Match` nao confere (QA bug 4).
+      registrarRota(adm, rotaDeTesteMover, {}, async (r, reply) => {
+        if (r.headers['x-teste-versao'] === 'velha') {
+          throw new AppError('precondition-failed', 'Alguém alterou isto antes de você');
+        }
+        return reply.status(204).send();
+      });
       registrarRota(adm, rotaDeTesteAcesso, {}, async (_r, reply) => reply.status(204).send());
     });
   });
@@ -821,12 +829,12 @@ void describe('D40: dois escopos com uma senha so (mover e trocar acesso juntos)
     assert.ok(mover !== '' && acesso !== '' && mover !== acesso, JSON.stringify(resposta.corpo));
     assert.equal(resposta.corpo?.['reauth_token'], mover, 'reauth_token precisa ser o do primeiro escopo pedido');
 
-    const primeira = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': mover }) });
-    const segunda = await chamar(principal, 'POST', '/admin/teste/acesso', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': acesso }) });
+    const primeira = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'if-match': '"1"', 'x-admin-reauth-token': mover }) });
+    const segunda = await chamar(principal, 'POST', '/admin/teste/acesso', { cabecalhos: comSessao(nova, { 'if-match': '"1"', 'x-admin-reauth-token': acesso }) });
     assert.equal(primeira.status, 204, JSON.stringify(primeira.corpo));
     assert.equal(segunda.status, 204, JSON.stringify(segunda.corpo));
     // Uso unico, cada um.
-    const deNovo = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': mover }) });
+    const deNovo = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'if-match': '"1"', 'x-admin-reauth-token': mover }) });
     assert.equal(deNovo.status, 401);
   });
 
@@ -838,13 +846,13 @@ void describe('D40: dois escopos com uma senha so (mover e trocar acesso juntos)
     });
     const mover = tokenDe(resposta, 'network_event_relocation');
     const acesso = tokenDe(resposta, 'network_event_access_change');
-    const trocado = await chamar(principal, 'POST', '/admin/teste/acesso', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': mover }) });
+    const trocado = await chamar(principal, 'POST', '/admin/teste/acesso', { cabecalhos: comSessao(nova, { 'if-match': '"1"', 'x-admin-reauth-token': mover }) });
     assert.equal(trocado.status, 401, 'o token de mover abriu a troca de acesso');
     assert.equal(tipo(trocado), 'reauthentication-required');
-    const trocado2 = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': acesso }) });
+    const trocado2 = await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'if-match': '"1"', 'x-admin-reauth-token': acesso }) });
     assert.equal(trocado2.status, 401, 'o token de acesso abriu o mover');
     // A tentativa errada nao gastou os tokens certos.
-    assert.equal((await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': mover }) })).status, 204);
+    assert.equal((await chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'if-match': '"1"', 'x-admin-reauth-token': mover }) })).status, 204);
   });
 
   void it('o caso do defeito: duas reautenticacoes seguidas deixam a primeira janela presa a sessao revogada', async () => {
@@ -855,9 +863,30 @@ void describe('D40: dois escopos com uma senha so (mover e trocar acesso juntos)
     const um = await reautenticar(sessao, { scope: 'network_event_relocation' });
     const dois = await reautenticar(um.nova, { scope: 'network_event_access_change' });
     const primeira = await chamar(principal, 'POST', '/admin/teste/mover', {
-      cabecalhos: comSessao(dois.nova, { 'x-admin-reauth-token': String(um.resposta.corpo?.['reauth_token']) }),
+      cabecalhos: comSessao(dois.nova, { 'if-match': '"1"', 'x-admin-reauth-token': String(um.resposta.corpo?.['reauth_token']) }),
     });
     assert.equal(primeira.status, 401);
+  });
+
+  void it('QA bug 4: 412 e 428 nao gastam a janela; o 204 gasta, e ela nao serve de novo', async () => {
+    const admin = await contaDoPainel();
+    const sessao = await sessaoDireta(admin.id);
+    const { resposta, nova } = await reautenticar(sessao, { scope: 'network_event_relocation' });
+    const token = String(resposta.corpo?.['reauth_token']);
+    const mover = (extra: Record<string, string>) =>
+      chamar(principal, 'POST', '/admin/teste/mover', { cabecalhos: comSessao(nova, { 'x-admin-reauth-token': token, ...extra }) });
+
+    const semVersao = await mover({});
+    assert.equal(semVersao.status, 428, JSON.stringify(semVersao.corpo));
+    const versaoVelha = await mover({ 'if-match': '"1"', 'x-teste-versao': 'velha' });
+    assert.equal(versaoVelha.status, 412, JSON.stringify(versaoVelha.corpo));
+    // ISCA: a janela sobreviveu aos dois, e a gravacao que da certo a gasta.
+    assert.equal((await mover({ 'if-match': '"2"' })).status, 204, 'o 412 ou o 428 gastou a janela');
+    const reuso = await mover({ 'if-match': '"3"' });
+    assert.equal(reuso.status, 401, 'a janela serviu de novo depois de uma gravacao que deu certo');
+    // E um 412 DEPOIS da gravacao nao a ressuscita.
+    assert.equal((await mover({ 'if-match': '"3"', 'x-teste-versao': 'velha' })).status, 401);
+    assert.equal((await mover({ 'if-match': '"3"' })).status, 401);
   });
 
   void it('escopo repetido, tres escopos, lista vazia, ou scope e scopes juntos: 400', async () => {

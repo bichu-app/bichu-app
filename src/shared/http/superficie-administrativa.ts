@@ -129,14 +129,24 @@ export interface PortaDaSessaoAdministrativa {
   ): Promise<void>;
   /**
    * Confere e CONSOME `X-Admin-Reauth-Token` para o escopo, preso a esta
-   * sessao. Recusa com `401 reauthentication-required`.
+   * sessao. Recusa com `401 reauthentication-required`. Devolve como desfazer
+   * ESTE consumo, que a rota usa so quando a escrita nao aconteceu (412/428).
    */
   consumirReautenticacao(
     sessao: SessaoAdministrativaConferida,
     escopo: EscopoDeReautenticacaoAdministrativa,
     tokenApresentado: string | undefined,
     contexto: ContextoDaGuarda,
-  ): Promise<void>;
+  ): Promise<ReautenticacaoConsumida | void>;
+}
+
+/**
+ * O consumo de uma janela de reautenticacao, com o caminho de volta. Devolver
+ * so restaura a MESMA janela, consumida por ESTA requisicao, e ainda dentro do
+ * prazo: nao ressuscita janela vencida nem a de outra requisicao.
+ */
+export interface ReautenticacaoConsumida {
+  devolver(): Promise<void>;
 }
 
 export interface OpcoesDaSuperficieAdministrativa {

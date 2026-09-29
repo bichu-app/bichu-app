@@ -104,9 +104,21 @@ export interface SessaoAdministrativaRepository {
   criarJanela(trx: TransacaoDeEscrita, nova: NovaJanelaAdministrativa): Promise<void>;
   /**
    * Consome a janela: o `UPDATE` que confere e o que marca, na mesma clausula
-   * (ADR-0021). Devolve se consumiu.
+   * (ADR-0021). Devolve o `id` da janela consumida, ou `undefined`.
    */
-  consumirJanela(consumo: ConsumoDaJanelaAdministrativa): Promise<boolean>;
+  consumirJanela(consumo: ConsumoDaJanelaAdministrativa): Promise<string | undefined>;
+  /**
+   * Desfaz UM consumo (QA bug 4): a janela `id`, da sessao, consumida
+   * exatamente em `consumidaEm` (o instante que ESTA requisicao gravou) e
+   * ainda no prazo, volta a valer. Qualquer outra janela, ou a mesma consumida
+   * por outra requisicao, fica como esta. Devolve se desfez.
+   */
+  devolverJanela(devolucao: {
+    readonly id: string;
+    readonly sessionId: string;
+    readonly consumidaEm: Instant;
+    readonly agora: Instant;
+  }): Promise<boolean>;
 
   /** Grava o hash do token "nao fui eu" que vai no e-mail de sessao aberta (D62). */
   criarAviso(novo: NovoAvisoDeSessao): Promise<void>;

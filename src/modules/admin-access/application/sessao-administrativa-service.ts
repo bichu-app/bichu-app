@@ -425,14 +425,25 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       if (tokenApresentado === undefined || tokenApresentado === '') {
         throw problemas.reautenticacaoNecessaria();
       }
-      const consumida = await deps.sessoes.consumirJanela({
+      const consumidaEm = deps.clock.now();
+      const id = await deps.sessoes.consumirJanela({
         tokenHash: hashDeToken(tokenApresentado),
         sessionId: sessao.sessionId,
         adminAccountId: sessao.adminAccountId,
         escopo,
-        agora: deps.clock.now(),
+        agora: consumidaEm,
       });
-      if (!consumida) throw problemas.reautenticacaoNecessaria();
+      if (id === undefined) throw problemas.reautenticacaoNecessaria();
+      return {
+        devolver: async () => {
+          await deps.sessoes.devolverJanela({
+            id,
+            sessionId: sessao.sessionId,
+            consumidaEm,
+            agora: deps.clock.now(),
+          });
+        },
+      };
     },
   };
 

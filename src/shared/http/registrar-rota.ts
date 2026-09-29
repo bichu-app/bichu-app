@@ -52,6 +52,7 @@ import type {
   FastifyReply,
   FastifyRequest,
   onRequestAsyncHookHandler,
+  onSendAsyncHookHandler,
   preValidationHookHandler,
   RouteShorthandOptions,
 } from 'fastify';
@@ -77,6 +78,7 @@ import {
   contextoDaGuarda,
   sessaoAdministrativaDe,
   type OpcoesDaSuperficieAdministrativa,
+  type ReautenticacaoConsumida,
 } from './superficie-administrativa.js';
 import type { ProblemType } from './problem.js';
 import type { RateLimitEntry, ReauthScope, RouteDefinition } from './route-definition.js';
@@ -120,6 +122,8 @@ declare module 'fastify' {
      * `onResponse`, que é o único gancho que roda sempre.
      */
     tentativaInvalida?: true;
+    /** O consumo da janela de reautenticacao desta requisicao, para devolver em 412/428. */
+    reautenticacaoConsumida?: ReautenticacaoConsumida | undefined;
   }
 }
 
@@ -419,13 +423,56 @@ function portaoDeReautenticacaoAdministrativa(
   const escopo = rota.adminReauthScope;
   if (escopo === undefined || superficie === undefined) return undefined;
   return async (request) => {
+    // QA bug 4 (28/09): a precondicao que da para conferir SEM o recurso vem
+    // ANTES de gastar a janela. Toda operacao com `x-admin-reauth-scope` e
+    // escrita versionada com `If-Match` obrigatorio (conferido contra o
+    // contrato em `superficie-administrativa.test.ts`); sem ele, e o 428 que a
+    // rota daria, e a janela fica intacta para a pessoa tentar de novo.
+    const versao = request.headers['if-match'];
+    if (versao === undefined || versao === '') {
+      throw new AppError('precondition-required', 'Falta a versão que você leu');
+    }
     const apresentado = request.headers[CABECALHO_DE_REAUTENTICACAO_ADMINISTRATIVA];
-    await superficie.sessoes.consumirReautenticacao(
+    const consumo = await superficie.sessoes.consumirReautenticacao(
       sessaoAdministrativaDe(request),
       escopo,
       typeof apresentado === 'string' ? apresentado : undefined,
       contextoDaGuarda(request),
     );
+    if (consumo !== undefined) request.reautenticacaoConsumida = consumo;
+  };
+}
+
+/**
+ * Respostas que provam que a escrita NAO aconteceu: a versao do `If-Match` nao
+ * confere (412) ou faltou (428). Nelas a janela gasta volta. Qualquer outra
+ * resposta, sucesso inclusive, mantem o consumo: devolver depois de uma
+ * gravacao que deu certo seria a reautenticacao servindo duas vezes.
+ */
+const DEVOLVEM_A_JANELA: ReadonlySet<number> = new Set([412, 428]);
+
+/**
+ * Devolve a janela ANTES de a resposta sair (`onSend`, e nao `onResponse`):
+ * quem recebe o 412 recarrega e tenta de novo na hora, e a janela precisa ja
+ * estar de volta quando o segundo pedido chegar.
+ */
+function devolucaoDaReautenticacaoAdministrativa(
+  rota: RouteDefinition,
+  superficie: OpcoesDaSuperficieAdministrativa | undefined,
+): onSendAsyncHookHandler | undefined {
+  if (rota.adminReauthScope === undefined || superficie === undefined) return undefined;
+  return async (request, reply, carga) => {
+    const consumo = request.reautenticacaoConsumida;
+    if (consumo === undefined || !DEVOLVEM_A_JANELA.has(reply.statusCode)) return carga;
+    request.reautenticacaoConsumida = undefined;
+    try {
+      await consumo.devolver();
+    } catch (erro) {
+      // A resposta continua a mesma: a pessoa reautentica de novo, que e o
+      // comportamento de antes. Mas nao some.
+      request.log.error({ err: erro, operationId: rota.operationId }, 'a janela de reautenticacao nao foi devolvida');
+    }
+    return carga;
   };
 }
 
@@ -456,6 +503,7 @@ export function registrarRota<const T extends RouteDefinition>(
   }
   const portaoDeReauth = portaoDeReautenticacao(app, rota);
   const portaoDeReauthAdministrativa = portaoDeReautenticacaoAdministrativa(rota, superficie);
+  const devolucaoDaReauth = devolucaoDaReautenticacaoAdministrativa(rota, superficie);
   // O corpo administrativo e FECHADO de verdade: o Ajv do Fastify apaga o campo
   // desconhecido em silencio (`removeAdditional`), e numa escrita do painel isso
   // e responder 200 a um campo que nao foi gravado. O guarda roda antes do Ajv.
@@ -502,6 +550,7 @@ export function registrarRota<const T extends RouteDefinition>(
       ...(opcoes.onRequest ?? []),
     ],
     preValidation: [tetoDoCorpo, ...corpoFechado, ...(opcoes.preValidation ?? [])],
+    ...(devolucaoDaReauth === undefined ? {} : { onSend: [devolucaoDaReauth] }),
     onError: (request, _reply, erro, pronto) => {
       if (erro instanceof AppError && TIPOS_DE_TENTATIVA_INVALIDA.has(erro.problemType)) {
         request.tentativaInvalida = true;

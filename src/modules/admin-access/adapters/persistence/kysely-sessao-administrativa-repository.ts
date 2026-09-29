@@ -150,7 +150,19 @@ export function criarSessaoAdministrativaRepository(db: Db): SessaoAdministrativ
         .where('expires_at', '>', new Date(consumo.agora))
         .returning('id')
         .executeTakeFirst();
-      return linha !== undefined;
+      return linha?.id;
+    },
+
+    async devolverJanela(devolucao) {
+      const resultado = await db
+        .updateTable('admin_reauth_tokens')
+        .set({ consumed_at: null })
+        .where('id', '=', devolucao.id)
+        .where('session_id', '=', devolucao.sessionId)
+        .where('consumed_at', '=', new Date(devolucao.consumidaEm))
+        .where('expires_at', '>', new Date(devolucao.agora))
+        .executeTakeFirst();
+      return Number(resultado.numUpdatedRows) === 1;
     },
 
     async criarAviso(novo) {
