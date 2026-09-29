@@ -112,6 +112,10 @@ import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters
 import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { criarVerificadorDeCaptcha } from '../modules/admin-access/adapters/external/recaptcha-enterprise.js';
+import {
+  captchaDeDesenvolvimentoLigado,
+  captchaDeDesenvolvimentoLocal,
+} from '../modules/admin-access/adapters/external/captcha-de-desenvolvimento-local.js';
 import { criarListaDeSenhasVazadasPorFaixa } from '../modules/identity/adapters/external/lista-de-senhas-vazadas-por-faixa.js';
 import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
@@ -327,11 +331,17 @@ export async function main(): Promise<void> {
     // D41. Sem `CAPTCHA_TRANSPORT=recaptcha_enterprise` e as duas variaveis
     // dele, o verificador recusa todo login administrativo: nao ha modo que
     // aprove sem avaliar.
-    captcha: criarVerificadorDeCaptcha({
-      transporte: optionalEnv('CAPTCHA_TRANSPORT'),
-      siteKey: optionalEnv('CAPTCHA_SITE_KEY'),
-      projeto: optionalEnv('CAPTCHA_PROJECT'),
-    }),
+    // QA, 28/09: na pilha local, e so nela, `CAPTCHA_DESENVOLVIMENTO_LOCAL`
+    // troca o verificador pelo que aprova o token de desenvolvimento do painel.
+    // `assertSafeBoot()`, no topo deste `main`, ja recusou a subida se a
+    // variavel apareceu em producao, fora de dev ou em host que nao e local.
+    captcha: captchaDeDesenvolvimentoLigado(optionalEnv('CAPTCHA_DESENVOLVIMENTO_LOCAL'))
+      ? captchaDeDesenvolvimentoLocal
+      : criarVerificadorDeCaptcha({
+          transporte: optionalEnv('CAPTCHA_TRANSPORT'),
+          siteKey: optionalEnv('CAPTCHA_SITE_KEY'),
+          projeto: optionalEnv('CAPTCHA_PROJECT'),
+        }),
     // D43: a MESMA base do `conta-admin` (consulta por faixa, k-anonimato,
     // 5 s de teto). Senha vazada responde o 401 comum e avisa os
     // administradores; base fora do ar no LOGIN deixa entrar e grava isso na
