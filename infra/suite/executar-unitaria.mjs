@@ -110,11 +110,14 @@ const INTEGRACAO = join('tests', 'integration');
  * das duas pontas ao mesmo tempo. Partindo da raiz, mover para qualquer lugar
  * acusa.
  *
- * O que fica de fora aqui nao hospeda teste TypeScript que alguem espere rodar:
- * dependencia, saida de build, o app Flutter (Dart) e o `.git`. Os testes de
- * ponta a ponta do Cypress sao `*.cy.ts` e nao entram nesta conta.
+ * O que fica de fora aqui nao hospeda teste TypeScript que ESTE executor deva
+ * rodar: dependencia, saida de build, o app Flutter (Dart), o `.git`, e o
+ * painel (`admin/`, ADR-0027), que e projeto proprio com `package.json`,
+ * `tsconfig` e suite proprios (`vitest run`, `npm test` dentro de `admin/`,
+ * cobrado no fechamento). Os testes de ponta a ponta do Cypress sao `*.cy.ts`
+ * e nao entram nesta conta.
  */
-const NAO_VARRER = new Set(['node_modules', '.git', 'dist', 'coverage', 'app', 'build', '.dart_tool']);
+const NAO_VARRER = new Set(['node_modules', '.git', 'dist', 'coverage', 'app', 'admin', 'build', '.dart_tool']);
 /** Onde o placar e escrito para ser LIDO, e nao adivinhado. */
 const RELATORIO = join(COMPILADO, 'unitaria.tap');
 
