@@ -296,3 +296,36 @@ dispensas:
   # Isso e a opcao (b) da secao 12 de `.jarvis/DECISOES-PARA-23-09.md`, e ela
   # pede que o texto do paragrafo 7 pare de afirmar que tem portao. Esse texto
   # vive fora do repositorio. O registro fica em `docs/07-devops.md` secao 5.3.
+
+  # BICHUS (PR #6, leituras publicas do site), 28/09/2026. Tres quebras que o
+  # `oasdiff` acusa contra `development` e que sao DESENHO da feature, nao
+  # regressao. Medido com tufin/oasdiff:v1.32.1: sao exatamente estas tres em
+  # nivel ERR (a quarta, `area_label` nulo em getPublicLostCase, sai em nivel
+  # WARN e o portao nao a reprova).
+  #
+  # 1. `getLostCasePoster` perdeu `bearerAuth`: o cartaz virou publico. O papel
+  #    colado no poste e igual para todo mundo e a resposta nao pode variar com
+  #    quem pede (ADR-0017). Autenticacao opcional que nao decidia campo nenhum
+  #    saiu.
+  # 2 e 3. `area_label` passou a nullable em `/poster` e na listagem publica: o
+  #    caso pode ser aberto so com coordenada (BICHUS-21 criterio 5), e sem
+  #    geocodificacao no MVP nao ha bairro para devolver. Nulo e o valor
+  #    verdadeiro; o rotulo fixo fica com o cliente.
+  #
+  # Vencem em 15/10/2026: depois do merge a base passa a carregar o contrato
+  # novo, a quebra deixa de aparecer e as entradas devem sair.
+  - portao: oasdiff-cartaz-publico-sem-auth
+    mudanca: "api-security-removed getLostCasePoster"
+    motivo: "o cartaz do pet perdido virou publico (ADR-0017): o papel colado no poste e igual para todos e a resposta nao pode variar com quem pede; a autenticacao opcional nao decidia campo nenhum"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-rotulo-de-area-nulo-no-cartaz
+    mudanca: "response-property-became-nullable getLostCasePoster"
+    motivo: "area_label nulo quando o caso so tem coordenada (BICHUS-21 criterio 5); sem geocodificacao no MVP nao ha bairro para devolver"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-rotulo-de-area-nulo-na-listagem
+    mudanca: "response-property-became-nullable listPublicLostPets"
+    motivo: "area_label nulo quando o caso so tem coordenada (BICHUS-21 criterio 5); sem geocodificacao no MVP nao ha bairro para devolver"
+    responsavel: squad
+    vence_em: 2026-10-15
