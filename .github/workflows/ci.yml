@@ -712,93 +712,27 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: ambiente de teste
+        # ERA UMA TERCEIRA COPIA DA MESMA RECEITA, e ela divergia das outras
+        # duas. Eram nove `sed` mais um bloco de Python, com `TAG_CODE_KEY` fixa
+        # em `'c1' * 32` enquanto a pilha efemera a sorteava e a maquina de quem
+        # desenvolve nao tinha nada. A divergencia entre essas copias e o que
+        # cegou o portao no defeito do token do provedor de e-mail, em
+        # 29/09/2026: o ambiente que a esteira montava nao era o ambiente que
+        # `make up` monta, e a suite ficou verde com a subida quebrada.
+        #
+        # Agora e uma leitura so para tres bocas (este job, a pilha efemera dos
+        # worktrees e `make env-dev`), em `infra/segredos-descartaveis.mjs`. A
+        # marca distingue a origem: se um destes valores aparecer num log de
+        # producao, ela diz de onde veio em vez de virar misterio.
+        #
+        # O gerador NAO preenche `MAIL_API_TOKEN` -- ele fica VAZIO de proposito,
+        # e preenche-lo aqui era metade do defeito de 29/09. O passo seguinte
+        # sabe disso pelo transporte.
+        #
+        # `--marca` e a UNICA diferenca deste job. Nenhum valor e impresso: o
+        # relatorio traz o nome e o porque de cada chave, nunca o conteudo.
         run: |
-          cp .env.example .env
-          # Valores de ambiente de teste, descartaveis e sem valor fora daqui.
-          senha=ci-descartavel
-          sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$senha/" .env
-          # DATABASE_URL CARREGA A SENHA. Trocar so POSTGRES_PASSWORD deixava a
-          # url com senha vazia, e a api subia e falhava na primeira consulta
-          # com "password authentication failed" -- erro de credencial num job
-          # que ninguem associa a credencial.
-          sed -i "s#^DATABASE_URL=.*#DATABASE_URL=postgres://bichu:$senha@db:5432/bichu#" .env
-          sed -i 's/^OBJECT_STORAGE_ACCESS_KEY_ID=.*/OBJECT_STORAGE_ACCESS_KEY_ID=ci-descartavel/' .env
-          sed -i 's/^OBJECT_STORAGE_SECRET_ACCESS_KEY=.*/OBJECT_STORAGE_SECRET_ACCESS_KEY=ci-descartavel-segredo/' .env
-          # O MinIO exige esta chave para cifrar no servidor, e a politica de
-          # upload assinada manda `x-amz-server-side-encryption` (BICHUS-87,
-          # criterio 22). Sem ela o `compose.yaml` nem valida -- ele usa
-          # `${OBJECT_STORAGE_KMS_KEY:?}`.
-          #
-          # NAO e coberta pela guarda `nenhuma variavel exigida ficou vazia`: a
-          # guarda le os `requireEnv()` do codigo da APLICACAO, e esta variavel
-          # e exigida pelo COMPOSE. A guarda continua valendo para o que ela
-          # cobre; este comentario existe para a proxima pessoa nao concluir que
-          # ela cobre tudo.
-          sed -i "s|^OBJECT_STORAGE_KMS_KEY=.*|OBJECT_STORAGE_KMS_KEY=ci-descartavel:$(openssl rand -base64 32)|" .env
-          # `SECRET_STORE_PROJECT` so e EXIGIDA em prod/preprod, onde os segredos
-          # vem do gerenciador (ADR-0022). Este job roda em `dev` e nunca a le.
-          # Ela esta aqui porque a guarda abaixo conta `requireEnv('NOME')` por
-          # TEXTO e nao conhece condicional -- e isso e de proposito: ensina-la a
-          # entender `if` faria dela uma analise de fluxo, e analise de fluxo
-          # incompleta e o tipo de guarda que aprova o que nao entende.
-          # Valor descartavel, jamais usado: nenhum segredo e buscado em `dev`.
-          sed -i 's|^SECRET_STORE_PROJECT=.*|SECRET_STORE_PROJECT=projeto-de-ci-descartavel|' .env
-          grep -q '^SECRET_STORE_PROJECT=' .env || echo 'SECRET_STORE_PROJECT=projeto-de-ci-descartavel' >> .env
-          # `FCM_PROJECT` so e EXIGIDA com `PUSH_TRANSPORT=fcm` (ADR-0008). Este
-          # job roda em `log`, que e o padrao do .env.example, e nunca a le --
-          # com `log` nada sai do processo. Ela esta aqui pelo MESMO motivo de
-          # `SECRET_STORE_PROJECT` logo acima: a guarda seguinte conta
-          # `requireEnv('NOME')` por TEXTO e nao conhece condicional, e isso e
-          # de proposito. Sem esta linha a guarda reprova o job citando
-          # FCM_PROJECT, que foi como ela reprovou hoje.
-          #
-          # Valor descartavel e que NAO PARECE um projeto de verdade: se um dia
-          # este job passar a rodar com `fcm`, o envio precisa falhar dizendo
-          # que o projeto nao existe -- e nao acertar um projeto de alguem.
-          sed -i 's|^FCM_PROJECT=.*|FCM_PROJECT=projeto-de-ci-que-nao-existe|' .env
-          grep -q '^FCM_PROJECT=' .env || echo 'FCM_PROJECT=projeto-de-ci-que-nao-existe' >> .env
-          # `MAIL_API_TOKEN` nasce VAZIA no `.env.example` e so e EXIGIDA com
-          # `MAIL_TRANSPORT=postmark` (ADR-0009). Este job roda em `smtp`, que e o
-          # padrao do .env.example, e nunca a le. Ela esta aqui pelo MESMO motivo
-          # de `FCM_PROJECT` logo acima -- a guarda seguinte conta
-          # `requireEnv('NOME')` por TEXTO e nao conhece condicional --, e a
-          # propria guarda manda fazer isto: "acrescente um valor descartavel no
-          # passo \"ambiente de teste\"".
-          #
-          # Valor descartavel e que NAO PARECE um token de servidor do Postmark
-          # (que e um UUID): se um dia este job passar a rodar com `postmark`, a
-          # chamada precisa falhar com 401 do provedor, e nao autenticar na conta
-          # de alguem. Token de verdade mora no GCP Secret Manager (ADR-0022) e
-          # nao entra em workflow, em .env nem em log.
-          sed -i 's|^MAIL_API_TOKEN=.*|MAIL_API_TOKEN=token-de-ci-que-nao-autentica|' .env
-          grep -q '^MAIL_API_TOKEN=' .env || echo 'MAIL_API_TOKEN=token-de-ci-que-nao-autentica' >> .env
-          # `MAIL_WEBHOOK_SECRET` nasce VAZIA no `.env.example` e e exigida por
-          # `requireEnv` -- a guarda antiga nao a via, pelo motivo explicado no
-          # passo de baixo. Com a leitura corrigida ela passa a reprovar aqui,
-          # que e o comportamento certo: ela e a UNICA autenticacao do webhook
-          # de entrega, e `app-config.ts` recusa menos de 32 bytes.
-          sed -i "s|^MAIL_WEBHOOK_SECRET=.*|MAIL_WEBHOOK_SECRET=ci-descartavel-$(openssl rand -hex 24)|" .env
-          # Chaves geradas NO JOB e jogadas fora com o runner: chave de
-          # assinatura de verdade nunca entra em repositorio nem em log.
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/ativa.pem 2>/dev/null
-          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/rotacao.pem 2>/dev/null
-          python3 - <<'FIM'
-          import base64, pathlib, re
-          env = pathlib.Path('.env')
-          texto = env.read_text()
-          def trocar(chave, valor):
-              global texto
-              texto = re.sub(rf'^{chave}=.*$', f'{chave}={valor}', texto, flags=re.M)
-          trocar('JWT_ACTIVE_PRIVATE_KEY', base64.b64encode(pathlib.Path('/tmp/ativa.pem').read_bytes()).decode())
-          trocar('JWT_NEXT_PRIVATE_KEY', base64.b64encode(pathlib.Path('/tmp/rotacao.pem').read_bytes()).decode())
-          trocar('IP_HMAC_KEY', base64.b64encode(b'ci-descartavel-de-32-bytes-no-min').decode())
-          # Hex de 64 caracteres: app-config.ts recusa qualquer outro tamanho.
-          trocar('TAG_CODE_KEY', 'c1' * 32)
-          # DIFERENTE da de cima, e nao por estetica: `app-config.ts` recusa
-          # subir com as duas iguais (ADR-0004, Emenda 1).
-          trocar('TAG_CODE_INDEX_KEY', 'd2' * 32)
-          env.write_text(texto)
-          FIM
+          node infra/gerar-env-de-dev.mjs --marca ci-descartavel
           docker compose config -q
 
       - name: nenhuma variavel exigida ficou vazia
@@ -824,9 +758,22 @@ jobs:
         # que gera o `.env` da pilha de integracao dos worktrees. Duas copias
         # da mesma leitura divergem, e a que diverge para menos aprova o que
         # nao conferiu.
+        #
+        # A LEITURA DO AMBIENTE E A DISPENSA TAMBEM SAIRAM DAQUI, em 29/09/2026.
+        # Esta guarda tinha a SUA copia de "ler as linhas do .env" e cobrava
+        # TODA variavel exigida, sem conhecer condicional -- e era por isso que o
+        # passo acima precisava preencher `MAIL_API_TOKEN` com um token falso so
+        # para cala-la. Aquele valor falso era metade do defeito do token do
+        # provedor: ele fazia a esteira montar um ambiente que `make up` nao
+        # monta.
+        #
+        # Agora a dispensa e CONDICIONADA ao ramo que o ambiente toma, e vem do
+        # mesmo modulo que a pilha efemera usa: com `smtp` o token fica vazio e a
+        # guarda sabe por que; com `postmark` ela volta a cobra-lo pelo nome.
         run: |
           node --input-type=module -e '
             import { lerVariaveisExigidas, autoteste } from "./infra/integracao/variaveis-exigidas.mjs";
+            import { exigidasQueFaltam, lerAmbiente, DISPENSADAS_PELO_RAMO_NAO_TOMADO } from "./infra/segredos-descartaveis.mjs";
             import { readFileSync } from "node:fs";
             console.log(autoteste());
             const { exigidas, opacas } = lerVariaveisExigidas("src");
@@ -835,16 +782,18 @@ jobs:
                 + "guarda (variavel ou template literal). Ela NAO esta sendo conferida: " + opacas.join("; "));
               process.exit(1);
             }
-            const env = Object.fromEntries(readFileSync(".env", "utf8").split("\n")
-              .filter((l) => l.includes("=") && !l.trimStart().startsWith("#"))
-              .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]));
-            const faltando = exigidas.filter((v) => (env[v] ?? "").trim() === "");
+            const ambiente = lerAmbiente(readFileSync(".env", "utf8"));
+            const faltando = exigidasQueFaltam({ ambiente, exigidas });
             if (faltando.length > 0) {
               console.log("::error::o .env deste job nao preenche variavel exigida pelo codigo: "
-                + faltando.join(", ") + " -- acrescente um valor descartavel no passo \"ambiente de teste\"");
+                + faltando.join(", ") + " -- se ela e gerada, acrescente uma entrada em RECEITA, "
+                + "em infra/segredos-descartaveis.mjs");
               process.exit(1);
             }
-            console.log(exigidas.length + " variaveis exigidas pelo codigo, todas preenchidas");
+            for (const d of DISPENSADAS_PELO_RAMO_NAO_TOMADO.filter((d) => d.dispensavel(ambiente))) {
+              console.log(d.nome + " fica VAZIA neste ambiente: " + d.porque);
+            }
+            console.log(exigidas.length + " variaveis exigidas pelo codigo, todas preenchidas ou dispensadas pelo ramo");
           '
 
       # BICHUS-210. O commit entra por ARGUMENTO DE BUILD e fica gravado na

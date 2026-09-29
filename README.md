@@ -51,7 +51,7 @@ Leia nesta ordem. São quatro arquivos, e eles respondem quase tudo:
 O ambiente inteiro sobe em containers, sem conta em nuvem nenhuma.
 
 ```sh
-cp .env.example .env     # preencha os valores vazios (chaves de dev, senhas)
+make setup               # ganchos de git e o `.env` com as chaves geradas
 make up                  # constrói a imagem, aplica as migrações e sobe tudo
 curl http://localhost:3000/v1/health   # ou a porta que o `make up` imprimir
 ```

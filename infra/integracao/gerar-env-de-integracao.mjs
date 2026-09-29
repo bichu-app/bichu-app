@@ -26,32 +26,23 @@
  * O arquivo sai em `.env.integracao`, coberto por `.env.*` no `.gitignore`.
  * Ele e reescrito a cada execucao: nao ha estado para envelhecer.
  */
-import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 import { lerVariaveisExigidas, autoteste } from './variaveis-exigidas.mjs';
+// A receita de valores descartaveis mora FORA da integracao desde 29/09/2026,
+// porque ela nao e da integracao: as mesmas chaves sao o que `make env-dev`
+// poe na maquina de quem desenvolve e o que o `ci.yml` poe no runner. Eram
+// tres copias, e a divergencia entre elas foi o que cegou o portao no defeito
+// do token do provedor. Ver o topo de `infra/segredos-descartaveis.mjs`.
+import {
+  DISPENSADAS_PELO_RAMO_NAO_TOMADO,
+  aplicar,
+  exigidasQueFaltam,
+  lerAmbiente,
+  segredosDescartaveis,
+} from '../segredos-descartaveis.mjs';
 
 const MARCA = 'integracao-descartavel';
-
-/**
- * Chave RSA gerada AGORA e jogada fora com o processo. Chave de assinatura de
- * verdade nunca entra em repositorio, em worktree nem em log (ADR-0022).
- */
-function chaveRsaEmBase64() {
-  const dir = mkdtempSync(join(tmpdir(), 'bichu-int-'));
-  const pem = join(dir, 'chave.pem');
-  try {
-    execFileSync('openssl', ['genpkey', '-algorithm', 'RSA', '-pkeyopt', 'rsa_keygen_bits:2048', '-out', pem], {
-      stdio: ['ignore', 'ignore', 'pipe'],
-    });
-    return readFileSync(pem).toString('base64');
-  } finally {
-    rmSync(dir, { recursive: true, force: true });
-  }
-}
 
 /**
  * Os valores que o `.env.example` deixa em branco de proposito, e os que
@@ -63,18 +54,18 @@ function chaveRsaEmBase64() {
  * isso que nenhuma porta precisa ser publicada no hospedeiro.
  */
 function valoresDeIntegracao() {
-  const senha = `${MARCA}-postgres`;
   return {
+    // As chaves, senhas e credenciais vem da receita unica. Senha do Postgres e
+    // `DATABASE_URL` inclusas, JUNTAS: a senha viaja dentro da URL, e trocar so
+    // uma das duas deixa a falha sair como "password authentication failed",
+    // que ninguem associa a este arquivo.
+    ...segredosDescartaveis(MARCA),
+
     ENVIRONMENT: 'dev',
     NODE_ENV: 'development',
 
     POSTGRES_USER: 'bichu',
-    POSTGRES_PASSWORD: senha,
     POSTGRES_DB: 'bichu',
-    // A senha viaja DENTRO da URL. Trocar so POSTGRES_PASSWORD deixa a url com
-    // senha vazia e a falha sai como "password authentication failed", que
-    // ninguem associa a este arquivo.
-    DATABASE_URL: `postgres://bichu:${senha}@db:5432/bichu`,
 
     // Armazenamento de objeto AGORA SOBE nesta pilha (BICHUS-245). Ate aqui
     // este valor apontava para um host que nao resolve, e o comentario dizia
@@ -90,8 +81,6 @@ function valoresDeIntegracao() {
     // publicada no hospedeiro.
     OBJECT_STORAGE_ENDPOINT: 'http://objeto:9000',
     OBJECT_STORAGE_REGION: 'us-east-1',
-    OBJECT_STORAGE_ACCESS_KEY_ID: `${MARCA}-chave`,
-    OBJECT_STORAGE_SECRET_ACCESS_KEY: `${MARCA}-segredo`,
     OBJECT_STORAGE_FORCE_PATH_STYLE: 'true',
     // Os MESMOS nomes de `.env.example`, e nao nomes de teste. O caso de
     // seguranca afirma coisas sobre a politica dos baldes; afirma-las sobre
@@ -99,14 +88,10 @@ function valoresDeIntegracao() {
     // nao existe.
     OBJECT_BUCKET_PRIVATE: 'bichu-media-private',
     OBJECT_BUCKET_PUBLIC: 'bichu-media-public',
-    // `<nome>:<32 bytes em base64>` e a forma que o KMS embutido do MinIO
-    // exige. Sorteada a cada execucao e jogada fora com a pilha.
-    OBJECT_STORAGE_KMS_KEY: `${MARCA}:${randomBytes(32).toString('base64')}`,
 
     MAIL_TRANSPORT: 'smtp',
     MAIL_HOST: 'mail',
     MAIL_PORT: '1025',
-    MAIL_WEBHOOK_SECRET: `${MARCA}-webhook-com-32-bytes-no-minimo`,
     // VAZIO, e o vazio E O TESTE. Ate 29/09/2026 esta linha preenchia um token
     // falso, e era ela que cegava o portao: a pilha de integracao subia com um
     // valor que a pilha de quem desenvolve nao tem, entao a suite ficava verde
@@ -125,24 +110,11 @@ function valoresDeIntegracao() {
     // -- se um dia esta pilha rodar com `fcm`, o envio precisa falhar dizendo
     // que o projeto nao existe, e nao acertar o projeto de alguem.
     PUSH_TRANSPORT: 'log',
-    FCM_PROJECT: `projeto-${MARCA}-que-nao-existe`,
-    SECRET_STORE_PROJECT: `projeto-${MARCA}-que-nao-existe`,
 
-    // Hex de 64 caracteres: app-config.ts recusa qualquer outro tamanho.
-    TAG_CODE_KEY: randomBytes(32).toString('hex'),
-    // A chave do INDICE CEGO (ADR-0004, Emenda 1), exigida sem padrao desde a
-    // migracao 20260921000001. Ela faltava aqui, e a conferencia logo abaixo
-    // derrubava a geracao antes de a pilha subir -- reprovando, que e o
-    // comportamento certo, mas deixando a suite de integracao inalcancavel de
-    // dentro de worktree. Sorteada SEPARADAMENTE de `TAG_CODE_KEY`: app-config
-    // recusa a subida se as duas forem iguais, e tem razao, porque a mesma
-    // chave no indice e no envelope faria um dump entregar o codigo da tag.
-    TAG_CODE_INDEX_KEY: randomBytes(32).toString('hex'),
-    IP_HMAC_KEY: randomBytes(32).toString('base64'),
+    // Os identificadores das chaves, e nao as chaves: eles nomeiam ESTA pilha
+    // no JWKS, entao ficam aqui e nao na receita compartilhada.
     JWT_ACTIVE_KID: `${MARCA}-ativa`,
     JWT_NEXT_KID: `${MARCA}-rotacao`,
-    JWT_ACTIVE_PRIVATE_KEY: chaveRsaEmBase64(),
-    JWT_NEXT_PRIVATE_KEY: chaveRsaEmBase64(),
 
     // A BICHUS-178 tornou esta exigida, sem padrao embutido. `postgres` e o que
     // a suite de concorrencia precisa: o driver em memoria nao atravessa
@@ -152,41 +124,6 @@ function valoresDeIntegracao() {
 
     OPENAPI_SPEC_PATH: 'api/openapi.yaml',
   };
-}
-
-/**
- * Exigidas pelo TEXTO do codigo, e NAO pelo ambiente que este arquivo monta.
- *
- * `lerVariaveisExigidas` conta `requireEnv('NOME')` por TEXTO e nao conhece
- * condicional -- e isso e de proposito, porque ensina-la a entender `if` faria
- * dela uma analise de fluxo, e analise de fluxo incompleta aprova o que nao
- * entende. O preco dessa cegueira, ate 29/09/2026, era um valor falso aqui para
- * calar a conferencia; e um valor falso aqui foi exatamente o que deixou a
- * suite verde com a subida real quebrada.
- *
- * A saida nao e afrouxar a conferencia: e dizer QUAL ramo este ambiente toma, e
- * deixar a conferencia cobrar o nome de volta assim que o ramo mudar. Cada
- * entrada traz o predicado, em JavaScript, sobre o ambiente JA RENDERIZADO.
- */
-const DISPENSADAS_PELO_RAMO_NAO_TOMADO = [
-  {
-    nome: 'MAIL_API_TOKEN',
-    // O gemeo de `exigeTokenDoProvedor` em `src/shared/config/transporte-de-email.ts`.
-    // Escrito aqui porque este arquivo e `.mjs` e nao importa TypeScript; se um
-    // dia os dois discordarem, quem acusa e a subida `postmark` de
-    // `verificar-subida-da-api.mjs`, que exige a RECUSA por este nome.
-    dispensavel: (ambiente) => (ambiente['MAIL_TRANSPORT'] ?? 'smtp') !== 'postmark',
-    porque:
-      'o token do provedor so e lido com MAIL_TRANSPORT=postmark (ADR-0009). ' +
-      'Com `smtp` ele fica VAZIO de proposito: preenche-lo esconderia a subida ' +
-      'que o desenvolvedor de verdade faz.',
-  },
-];
-
-function aplicar(texto, chave, valor) {
-  const linha = `${chave}=${valor}`;
-  const expressao = new RegExp(`^${chave}=.*$`, 'm');
-  return expressao.test(texto) ? texto.replace(expressao, linha) : `${texto}\n${linha}`;
 }
 
 export function gerar({
@@ -229,15 +166,7 @@ export function gerar({
         'portanto NAO esta sendo conferida: ' + opacas.join('; '),
     );
   }
-  const ambiente = Object.fromEntries(
-    texto
-      .split('\n')
-      .filter((l) => l.includes('=') && !l.trimStart().startsWith('#'))
-      .map((l) => {
-        const i = l.indexOf('=');
-        return [l.slice(0, i), l.slice(i + 1)];
-      }),
-  );
+  const ambiente = lerAmbiente(texto);
   const dispensadas = new Map(
     DISPENSADAS_PELO_RAMO_NAO_TOMADO.filter((d) => d.dispensavel(ambiente)).map((d) => [
       d.nome,
@@ -249,15 +178,13 @@ export function gerar({
   // token. Aquele ambiente e invalido de proposito -- provar que a subida
   // recusa exige gerar o arquivo que a faz recusar. Fora dali, variavel exigida
   // que falta continua derrubando a geracao nomeando a variavel.
-  const deProposito = new Set(faltandoDeProposito);
-  const faltando = exigidas.filter(
-    (v) => (ambiente[v] ?? '').trim() === '' && !dispensadas.has(v) && !deProposito.has(v),
-  );
+  const faltando = exigidasQueFaltam({ ambiente, exigidas, faltandoDeProposito });
   if (faltando.length > 0) {
     throw new Error(
       `o ambiente de integracao nao preenche variavel exigida pelo codigo: ${faltando.join(', ')}. ` +
-        'Acrescente um valor descartavel em valoresDeIntegracao(), em ' +
-        'infra/integracao/gerar-env-de-integracao.mjs.',
+        'Se ela e gerada, acrescente uma entrada em RECEITA, em ' +
+        'infra/segredos-descartaveis.mjs; se ela e topologia desta pilha, o ' +
+        'lugar dela e valoresDeIntegracao(), aqui mesmo.',
     );
   }
   for (const [nome, porque] of dispensadas) {
