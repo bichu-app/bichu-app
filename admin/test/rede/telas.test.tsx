@@ -275,6 +275,27 @@ describe('Rede: edição', () => {
     expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
   });
 
+  it('bug 1: local e acesso juntos pedem a senha uma vez e gravam os dois', async () => {
+    const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
+    const local = await screen.findByLabelText('Nome do local *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.click(screen.getByRole('radio', { name: /^Pago/ }));
+    await usuario.type(screen.getByLabelText('Valor em reais *'), '20');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local e de acesso?' });
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque passou a cobrar.');
+    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
+    expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
+    const reauths = duble.registro.filter((r) => r.caminho.endsWith('/auth/reauth'));
+    expect(reauths).toHaveLength(1);
+    expect(reauths[0]?.corpo).toMatchObject({ scopes: ['network_event_relocation', 'network_event_access_change'] });
+    expect(escritas(duble, 'POST', /relocation$/)).toHaveLength(1);
+    expect(escritas(duble, 'POST', /access$/)).toHaveLength(1);
+    expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
+  });
+
   it('observação com telefone na edição também não sai (isca)', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
     const obs = await screen.findByLabelText('Observações');

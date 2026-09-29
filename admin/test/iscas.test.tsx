@@ -63,7 +63,7 @@ describe('isca: X-CSRF-Token em toda escrita administrativa', () => {
     const servidor = criarServidorFalso({
       'GET /admin/session': json(200, SESSAO),
       'POST /admin/store/partners': json(201, {}),
-      'POST /admin/auth/reauth': json(200, { reauth_token: 'r1', expires_in: 300, scope: 'store_item_retirement', csrf_token: tokenNovo }),
+      'POST /admin/auth/reauth': json(200, { reauth_token: 'r1', expires_in: 300, scope: 'store_item_retirement', tokens: [{ scope: 'store_item_retirement', reauth_token: 'r1' }], csrf_token: tokenNovo }),
       'DELETE /admin/store/items/{itemSlug}/publication': json(200, {}),
     });
     function Escritas() {
@@ -129,7 +129,7 @@ describe('isca: nada da sessao em localStorage nem sessionStorage', () => {
     const servidor = criarServidorFalso({
       'POST /admin/auth/login': json(200, SESSAO),
       'GET /admin/session': json(200, SESSAO),
-      'POST /admin/auth/reauth': json(200, { reauth_token: 'reauth-secreto-1', expires_in: 300, scope: 'store_item_retirement', csrf_token: tokenNovo }),
+      'POST /admin/auth/reauth': json(200, { reauth_token: 'reauth-secreto-1', expires_in: 300, scope: 'store_item_retirement', tokens: [{ scope: 'store_item_retirement', reauth_token: 'reauth-secreto-1' }], csrf_token: tokenNovo }),
     });
     const entrar = render(<Entrar obterToken={() => Promise.resolve('token-do-captcha-com-mais-de-vinte')} busca="" navegarParaFora={vi.fn()} fetch={servidor.fetch} />);
     fireEvent.change(screen.getByLabelText('E-mail'), { target: { value: 'operacao@exemplo.com.br' } });

@@ -64,7 +64,7 @@ describe('sessao por cookie com anti-CSRF (ADR-0027 itens 2 e 3)', () => {
     let sessaoAtual: ReturnType<typeof useSessao> | undefined;
     const servidor = criarServidorFalso({
       'GET /admin/session': json(200, SESSAO),
-      'POST /admin/auth/reauth': json(200, { reauth_token: 'reauth-1', expires_in: 300, scope: 'store_item_retirement', csrf_token: 'csrf-novo-0123456789abcdef0123456789abcd' }),
+      'POST /admin/auth/reauth': json(200, { reauth_token: 'reauth-1', expires_in: 300, scope: 'store_item_retirement', tokens: [{ scope: 'store_item_retirement', reauth_token: 'reauth-1' }], csrf_token: 'csrf-novo-0123456789abcdef0123456789abcd' }),
       'POST /admin/store/tags': json(201, {}),
     });
     render(

@@ -95,14 +95,14 @@ export interface OpcoesDaApiDaRede {
   fetch?: typeof globalThis.fetch;
 }
 
-/** A mesma forma de `reautenticar` da sessao do painel. */
+/** A mesma forma de `reautenticarEscopos` da sessao do painel: uma senha, um ou dois escopos. */
 export type ResultadoDaReautenticacao =
-  | { ok: true; token: string }
+  | { ok: true; tokens: Partial<Record<EscopoDeReautenticacao, string>> }
   | { ok: false; motivo: 'incorreta' }
   | { ok: false; motivo: 'tentativas'; espera: string; segundos: number }
   | { ok: false; motivo: 'falha' };
 
-export type Reautenticar = (senha: string, escopo: EscopoDeReautenticacao) => Promise<ResultadoDaReautenticacao>;
+export type Reautenticar = (senha: string, escopos: EscopoDeReautenticacao[]) => Promise<ResultadoDaReautenticacao>;
 
 const reauth = (token: string) => ({ 'X-Admin-Reauth-Token': token });
 
@@ -223,10 +223,12 @@ export function esperaPorExtenso(segundos: number | null): string {
  * token anti-CSRF novo.
  */
 export function reautenticarPeloCliente(cliente: ClienteDaApi): Reautenticar {
-  return async (senha, escopo) => {
+  return async (senha, escopos) => {
     try {
-      const { data, error, response } = await cliente.POST('/admin/auth/reauth', { body: { password: senha, scope: escopo } });
-      if (data) return { ok: true, token: data.reauth_token };
+      const { data, error, response } = await cliente.POST('/admin/auth/reauth', {
+        body: escopos.length === 1 && escopos[0] ? { password: senha, scope: escopos[0] } : { password: senha, scopes: escopos },
+      });
+      if (data) return { ok: true, tokens: Object.fromEntries(data.tokens.map((t) => [t.scope, t.reauth_token])) };
       if (response.status === 429) {
         const s = Number(response.headers.get('Retry-After')) || null;
         return { ok: false, motivo: 'tentativas', espera: esperaPorExtenso(s), segundos: s ?? 0 };

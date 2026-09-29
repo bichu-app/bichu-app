@@ -146,7 +146,7 @@ describe('3 · Loja: formulario', () => {
     const { servidor } = montar('/loja/racao-adulto-15kg', {
       'GET /admin/store/items/{itemSlug}': json(200, item(), { ETag: '"4"' }),
       'PATCH /admin/store/items/{itemSlug}': json(200, item({ version: 5 }), { ETag: '"5"' }),
-      'POST /admin/auth/reauth': json(200, { reauth_token: 'r-1', expires_in: 300, scope: 'store_item_retirement', csrf_token: 'csrf-2-0123456789abcdef0123456789abcdef' }),
+      'POST /admin/auth/reauth': json(200, { reauth_token: 'r-1', expires_in: 300, scope: 'store_item_retirement', tokens: [{ scope: 'store_item_retirement', reauth_token: 'r-1' }], csrf_token: 'csrf-2-0123456789abcdef0123456789abcdef' }),
       'DELETE /admin/store/items/{itemSlug}/publication': json(200, item({ publication_state: 'retired' })),
     });
     expect(await screen.findByLabelText('Preço (R$)')).toHaveValue('189,90');

@@ -24,8 +24,10 @@ export function sensiveisSemReautenticacao(registro: readonly Requisicao[]): str
   let escoposDisponiveis: string[] = [];
   for (const r of registro) {
     if (r.metodo === 'POST' && r.caminho.endsWith('/admin/auth/reauth')) {
-      const corpo = r.corpo as { password?: string; scope?: string } | undefined;
-      if (corpo?.password && corpo.scope) escoposDisponiveis.push(corpo.scope);
+      const corpo = r.corpo as { password?: string; scope?: string; scopes?: string[] } | undefined;
+      // Cada reautenticacao rotaciona a sessao: o que a anterior liberou deixa de valer.
+      escoposDisponiveis = [];
+      if (corpo?.password) escoposDisponiveis.push(...(corpo.scopes ?? (corpo.scope ? [corpo.scope] : [])));
       continue;
     }
     const regra = ESCOPO_DA_OPERACAO.find(([re, metodo]) => r.metodo === metodo && re.test(r.caminho));

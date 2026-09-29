@@ -248,7 +248,7 @@ describe('casos que estavam sem teste', () => {
   it('retirar recusado: 403 e janela de senha invalida mantem o dialogo aberto com o motivo', async () => {
     let resposta: Resposta = problema(403, 'forbidden');
     montar('/loja', {
-      'POST /admin/auth/reauth': json(200, { reauth_token: 'r', expires_in: 300, scope: 'network_event_removal', csrf_token: 'csrf-novo-0123456789abcdef0123456789abcd' }),
+      'POST /admin/auth/reauth': json(200, { reauth_token: 'r', expires_in: 300, scope: 'store_item_retirement', tokens: [{ scope: 'store_item_retirement', reauth_token: 'r' }], csrf_token: 'csrf-novo-0123456789abcdef0123456789abcd' }),
       'DELETE /admin/store/items/{itemSlug}/publication': () => resposta,
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Mais ações para Ração seca para cães adultos 15 kg' }));

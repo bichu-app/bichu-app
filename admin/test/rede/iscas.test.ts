@@ -50,6 +50,26 @@ describe('isca: cancelar e remover sem a senha de reautenticação', () => {
     ).toHaveLength(1);
   });
 
+  it('REPROVA usar o token de uma reautenticação que outra, depois dela, já rotacionou', () => {
+    expect(
+      sensiveisSemReautenticacao([
+        REAUTH('network_event_relocation'),
+        REAUTH('network_event_access_change'),
+        req('POST', '/admin/network/events/x/relocation', { 'x-admin-reauth-token': 't' }),
+      ]),
+    ).toHaveLength(1);
+  });
+
+  it('aprova dois escopos numa reautenticação só (scopes)', () => {
+    expect(
+      sensiveisSemReautenticacao([
+        req('POST', '/admin/auth/reauth', {}, { password: 'uma senha', scopes: ['network_event_relocation', 'network_event_access_change'] }),
+        req('POST', '/admin/network/events/x/relocation', { 'x-admin-reauth-token': 't1' }),
+        req('POST', '/admin/network/events/x/access', { 'x-admin-reauth-token': 't2' }),
+      ]),
+    ).toEqual([]);
+  });
+
   it('aprova o caminho certo', () => {
     expect(
       sensiveisSemReautenticacao([

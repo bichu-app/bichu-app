@@ -162,12 +162,25 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     }
 
     if (area === 'auth' && recurso === 'reauth' && req.metodo === 'POST') {
-      const corpo = req.corpo as { password?: string; scope?: EscopoDeReautenticacao };
+      const corpo = req.corpo as { password?: string; scope?: EscopoDeReautenticacao; scopes?: EscopoDeReautenticacao[] };
       if (corpo.password !== SENHA_DO_DUBLE) return problema(401, 'invalid-credentials', 'Senha incorreta');
-      if (!corpo.scope) return problema(400, 'validation-failed', 'Falta o escopo');
-      const token = aleatorio(32);
-      tokens.set(token, corpo.scope);
-      return json(200, { reauth_token: token, expires_in: 300, scope: corpo.scope, csrf_token: aleatorio(40) } satisfies ConcessaoDeReautenticacao);
+      if (!!corpo.scope === !!corpo.scopes) return problema(400, 'validation-failed', 'scope ou scopes, nunca os dois');
+      const escopos = corpo.scopes ?? (corpo.scope ? [corpo.scope] : []);
+      if (escopos.length < 1 || escopos.length > 2 || new Set(escopos).size !== escopos.length) {
+        return problema(400, 'validation-failed', 'De um a dois escopos distintos');
+      }
+      // Como o servidor: a reautenticacao rotaciona a sessao, e os tokens da anterior deixam de valer.
+      tokens.clear();
+      const emitidos = escopos.map((scope) => ({ scope, reauth_token: aleatorio(32) }));
+      emitidos.forEach((t) => tokens.set(t.reauth_token, t.scope));
+      const [primeiro] = emitidos as [{ scope: EscopoDeReautenticacao; reauth_token: string }];
+      return json(200, {
+        reauth_token: primeiro.reauth_token,
+        expires_in: 300,
+        scope: primeiro.scope,
+        tokens: emitidos,
+        csrf_token: aleatorio(40),
+      } satisfies ConcessaoDeReautenticacao);
     }
 
     if (area === 'media' && recurso === 'catalog-image-intents' && req.metodo === 'POST') {

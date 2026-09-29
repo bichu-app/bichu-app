@@ -8,7 +8,7 @@ export function useRede() {
   const sessao = useSessao();
   const cliente = sessao.api;
   const rede = useMemo(() => criarApiDaRede({ cliente }), [cliente]);
-  const reautenticar = useMemo<Reautenticar>(() => (senha, escopo) => sessao.reautenticar(senha, escopo), [sessao]);
+  const reautenticar = useMemo<Reautenticar>(() => (senha, escopos) => sessao.reautenticarEscopos(senha, escopos), [sessao]);
   return { rede, reautenticar, cliente };
 }
 

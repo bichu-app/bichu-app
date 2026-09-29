@@ -41,10 +41,10 @@ describe('cliente da Rede contra o duble', () => {
     const { duble, api, reautenticar } = montar();
     const sem = await api.remover('', 'encontro-de-caes-no-parque', '"1"');
     expect(!sem.ok && sem.falha).toEqual({ tipo: 'precisa-da-senha' });
-    expect(await reautenticar('errada', 'network_event_removal')).toEqual({ ok: false, motivo: 'incorreta' });
-    const t = await reautenticar(SENHA_DO_DUBLE, 'network_event_removal');
+    expect(await reautenticar('errada', ['network_event_removal'])).toEqual({ ok: false, motivo: 'incorreta' });
+    const t = await reautenticar(SENHA_DO_DUBLE, ['network_event_removal']);
     if (!t.ok) throw new Error('reautenticação do duble falhou');
-    const r = await api.remover(t.token, 'encontro-de-caes-no-parque', '"1"');
+    const r = await api.remover(t.tokens.network_event_removal ?? '', 'encontro-de-caes-no-parque', '"1"');
     expect(r.ok).toBe(true);
     expect(duble.encontros.get('encontro-de-caes-no-parque')?.publication_status).toBe('removed');
     // A primeira tentativa, sem token, e exatamente o que a verificacao acusa.
@@ -53,15 +53,34 @@ describe('cliente da Rede contra o duble', () => {
 
   it('token de um escopo não abre outro, e não vale duas vezes', async () => {
     const { api, reautenticar } = montar();
-    const t = await reautenticar(SENHA_DO_DUBLE, 'network_event_cancellation');
+    const t = await reautenticar(SENHA_DO_DUBLE, ['network_event_cancellation']);
     if (!t.ok) throw new Error('reautenticação do duble falhou');
-    const outro = await api.remover(t.token, 'encontro-de-caes-no-parque', '"1"');
+    const outro = await api.remover(t.tokens.network_event_cancellation ?? '', 'encontro-de-caes-no-parque', '"1"');
     expect(!outro.ok && outro.falha.tipo).toBe('precisa-da-senha');
-    const t2 = await reautenticar(SENHA_DO_DUBLE, 'network_event_cancellation');
+    const t2 = await reautenticar(SENHA_DO_DUBLE, ['network_event_cancellation']);
     if (!t2.ok) throw new Error('reautenticação do duble falhou');
-    expect((await api.cancelar(t2.token, 'encontro-de-caes-no-parque', '"1"', 'Obra na praça')).ok).toBe(true);
-    const repetido = await api.cancelar(t2.token, 'encontro-de-caes-no-parque', '"2"', 'Obra na praça');
+    expect((await api.cancelar(t2.tokens.network_event_cancellation ?? '', 'encontro-de-caes-no-parque', '"1"', 'Obra na praça')).ok).toBe(true);
+    const repetido = await api.cancelar(t2.tokens.network_event_cancellation ?? '', 'encontro-de-caes-no-parque', '"2"', 'Obra na praça');
     expect(!repetido.ok && repetido.falha.tipo).toBe('precisa-da-senha');
+  });
+
+  it('bug 1: uma senha, dois escopos numa reautenticação só; duas seguidas invalidam o primeiro token', async () => {
+    const { duble, api, reautenticar } = montar();
+    const juntos = await reautenticar(SENHA_DO_DUBLE, ['network_event_relocation', 'network_event_access_change']);
+    if (!juntos.ok) throw new Error('reautenticação do duble falhou');
+    expect(duble.registro.filter((r) => r.caminho.endsWith('/auth/reauth'))).toHaveLength(1);
+    expect(duble.registro.at(-1)?.corpo).toMatchObject({ scopes: ['network_event_relocation', 'network_event_access_change'] });
+    const movido = await api.mover(juntos.tokens.network_event_relocation ?? '', 'encontro-de-caes-no-parque', '"1"', { starts_at: '2026-10-11T13:00:00Z', reason: 'chuva' });
+    expect(movido.ok).toBe(true);
+    const acesso = await api.mudarAcesso(juntos.tokens.network_event_access_change ?? '', 'encontro-de-caes-no-parque', '"2"', { admission: { kind: 'paid', price: { amount: 1000, currency: 'BRL', unit: 'per_dog' } }, reason: 'chuva' });
+    expect(acesso.ok).toBe(true);
+
+    // O defeito que o bug 1 era: duas reautenticacoes seguidas; a segunda rotaciona a sessao.
+    const a = await reautenticar(SENHA_DO_DUBLE, ['network_event_relocation']);
+    const b = await reautenticar(SENHA_DO_DUBLE, ['network_event_access_change']);
+    if (!a.ok || !b.ok) throw new Error('reautenticação do duble falhou');
+    const velho = await api.mover(a.tokens.network_event_relocation ?? '', 'encontro-de-caes-no-parque', '"3"', { starts_at: '2026-10-11T14:00:00Z', reason: 'x' });
+    expect(!velho.ok && velho.falha.tipo).toBe('precisa-da-senha');
   });
 
   it('fila: aprovar não volta a recusado; recusado pode ser aprovado', async () => {

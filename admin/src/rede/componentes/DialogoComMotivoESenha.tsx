@@ -81,13 +81,10 @@ export function DialogoComMotivoESenha({
     }
     setCarregando(true);
     try {
-      const tokens: Partial<Record<EscopoDeReautenticacao, string>> = {};
-      for (const escopo of escopos) {
-        const r = await reautenticar(senha, escopo);
-        if (r.ok) {
-          tokens[escopo] = r.token;
-          continue;
-        }
+      // Uma reautenticacao com `scopes` para todos os escopos: duas seguidas
+      // rotacionariam a sessao e o primeiro token deixaria de valer (bug 1).
+      const r = await reautenticar(senha, escopos);
+      if (!r.ok) {
         if (r.motivo === 'incorreta') {
           setSenha('');
           setErroDaSenha('Senha incorreta.');
@@ -100,7 +97,7 @@ export function DialogoComMotivoESenha({
         return;
       }
       setSenha('');
-      const resultado = await executar(tokens, m);
+      const resultado = await executar(r.tokens, m);
       if (resultado.ok) aoFechar();
       else setFalha(resultado.mensagem);
     } finally {
