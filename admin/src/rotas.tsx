@@ -1,6 +1,7 @@
 import { Navigate, type RouteObject } from 'react-router';
 
 import { Casca } from './casca/Casca.tsx';
+import NaoFuiEu from './naoFuiEu/NaoFuiEu.tsx';
 import { rotasDaLoja } from './loja/rotas.tsx';
 import { rotasDaRede } from './rede/rotas.tsx';
 import Carregando from './rotas/Carregando.tsx';
@@ -19,6 +20,8 @@ export type OpcoesDasRotas = Omit<PropsDoProvedor, 'children'>;
  */
 export function criarRotas(opcoes: OpcoesDasRotas = {}): RouteObject[] {
   return [
+    // Fora da sessao (D62): serve a quem pode ter perdido a sua.
+    { path: '/nao-fui-eu', element: <NaoFuiEu {...(opcoes.fetch ? { fetch: opcoes.fetch } : {})} /> },
     {
       path: '/',
       HydrateFallback: Carregando,

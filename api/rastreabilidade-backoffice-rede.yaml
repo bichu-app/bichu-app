@@ -82,6 +82,23 @@ telas:
       sem_conexao: "falha de rede; nenhuma resposta do contrato"
       expirada: "resposta 401 token-expired de qualquer operacao administrativa"
 
+  - tela: "Nao fui eu (/nao-fui-eu)"
+    prototipo: admin/src/naoFuiEu/NaoFuiEu.tsx
+    nota: "ADR-0027 item 20.5 e D62: o token vem no fragmento do link do e-mail de sessao aberta, sai da barra de endereco e so vai ao servidor por POST depois do clique"
+    estados: [confirmar, enviando, feito, vencido, incompleto, recusado, sem_conexao]
+    operacoes:
+      - operationId: disavowAdminSessionAlert
+        situacao: contrato
+        usa:
+          - req:token
+          - problem:token-expired            # 410 vencido, usado ou inexistente
+          - problem:validation-failed        # 400 incompleto
+          - problem:forbidden                # 403 Origin fora do painel
+    estados_sem_operacao:
+      confirmar: "o link foi aberto; nada sai antes do clique"
+      incompleto: "sem token no fragmento, ou fora do formato de 43 caracteres base64url; nenhuma chamada sai"
+      sem_conexao: "falha de rede; nenhuma resposta do contrato"
+
   - tela: "Casca e navegacao (todas as telas)"
     prototipo: backoffice.html
     estados: [sessao28, sessao12h]
@@ -665,9 +682,6 @@ tela_sem_contrato:
 # ======================================================================
 
 contrato_sem_tela:
-  - operationId: disavowAdminSessionAlert
-    resolucao: "tela: resolvido quando a pagina /nao-fui-eu existir"
-    nota: "ADR-0027 item 20.5: o link do e-mail de sessao aberta leva o token no fragmento, e a pagina o envia por POST"
   - operationId: createAdminStorePartner
     resolucao: "tela: resolvido quando a tela existir"
     nota: "nao ha tela de parceiros; o select so lista os cadastrados. Ou a tela nasce, ou parceiro entra por comando de linha"
