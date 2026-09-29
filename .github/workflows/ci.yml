@@ -757,13 +757,14 @@ jobs:
           # que o projeto nao existe -- e nao acertar um projeto de alguem.
           sed -i 's|^FCM_PROJECT=.*|FCM_PROJECT=projeto-de-ci-que-nao-existe|' .env
           grep -q '^FCM_PROJECT=' .env || echo 'FCM_PROJECT=projeto-de-ci-que-nao-existe' >> .env
-          # `MAIL_API_TOKEN` nasce VAZIA no `.env.example` e so e EXIGIDA com
+          # `MAIL_API_TOKEN` nasce com um valor DESCARTAVEL no `.env.example`
+          # (ela precisa existir na subida: esta em `SEGREDOS_DE_RUNTIME` e a
+          # resolucao e incondicional) e so tem o CONTEUDO lido com
           # `MAIL_TRANSPORT=postmark` (ADR-0009). Este job roda em `smtp`, que e o
-          # padrao do .env.example, e nunca a le. Ela esta aqui pelo MESMO motivo
-          # de `FCM_PROJECT` logo acima -- a guarda seguinte conta
-          # `requireEnv('NOME')` por TEXTO e nao conhece condicional --, e a
-          # propria guarda manda fazer isto: "acrescente um valor descartavel no
-          # passo \"ambiente de teste\"".
+          # padrao do .env.example, e nunca a le. A troca abaixo continua aqui
+          # pelo MESMO motivo de `FCM_PROJECT` logo acima -- a guarda seguinte
+          # conta `requireEnv('NOME')` por TEXTO e nao conhece condicional --, e
+          # da a este job um valor proprio, distinguivel no log do de `dev`.
           #
           # Valor descartavel e que NAO PARECE um token de servidor do Postmark
           # (que e um UUID): se um dia este job passar a rodar com `postmark`, a
