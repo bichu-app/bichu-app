@@ -34,6 +34,10 @@
 import type { NomeDeSegredo, SecretProvider } from '../ports/secret-provider.js';
 import { SegredoIndisponivelError } from '../ports/secret-provider.js';
 import { ehAmbienteHospedado } from './ambiente-hospedado.js';
+import {
+  exigeTokenDoProvedor,
+  transporteDeEmailDoAmbiente,
+} from './transporte-de-email.js';
 
 /**
  * Os segredos que saem do arquivo e passam a viver no gerenciador.
@@ -81,56 +85,85 @@ export const SEGREDOS_DE_RUNTIME: readonly NomeDeSegredo[] = [
   'OBJECT_STORAGE_ACCESS_KEY_ID',
   'OBJECT_STORAGE_SECRET_ACCESS_KEY',
   /**
-   * O token de servidor do Postmark (ADR-0009). Entra nesta lista COM o codigo
-   * que a le, e nao antes: `app-config.ts` agora tem o
-   * `requireEnv('MAIL_API_TOKEN')` no ramo de `MAIL_TRANSPORT=postmark` e
-   * `postmark-mailer.ts` o emite no cabecalho `X-Postmark-Server-Token`. Ver o
-   * bloco logo abaixo desta lista, que registra o dia em que ela estava aqui sem
-   * consumidor nenhum.
+   * O token de servidor do Postmark (ADR-0009). Fica NESTA lista, que e a
+   * declaracao do universo de segredos de runtime -- e nao a lista que toda
+   * subida resolve. Quem resolve e `segredosDeRuntime()`, logo abaixo, e ele so
+   * entra quando `exigeTokenDoProvedor` diz que o transporte precisa dele.
    *
-   * A resolucao e INCONDICIONAL e a exigencia e CONDICIONAL, e a assimetria e
-   * deliberada: buscar por transporte faria esta lista depender de
-   * `MAIL_TRANSPORT`, que e configuracao comum, e um ambiente hospedado que
-   * trocasse o transporte passaria a precisar de um segredo que ninguem foi
-   * buscar -- descoberto no primeiro envio, que e onde nao se descobre nada.
-   * O preco e conhecido e esta escrito: **o projeto de cada ambiente hospedado
-   * precisa ter este segredo antes de o processo subir.** Homologacao tem desde
-   * 19/09; producao precisa ganhar o dele.
+   * A ASSIMETRIA ACABOU, e o registro do porque esta no bloco seguinte.
    */
   'MAIL_API_TOKEN',
 ];
 
 /**
- * `MAIL_API_TOKEN` VOLTOU para a lista acima, e o que estava escrito aqui era o
- * registro da ausencia. Ele fica, corrigido, porque o criterio que ele guarda
- * continua valendo para o proximo nome que alguem quiser acrescentar.
+ * A RESOLUCAO DO TOKEN DO PROVEDOR ERA INCONDICIONAL, E ISSO DERRUBAVA A
+ * SUBIDA LOCAL. O que estava escrito aqui defendia a assimetria; ele fica,
+ * corrigido, porque o preco dela foi medido e nao deve ser pago de novo.
  *
- * O que dizia: *"o segredo existe no cofre desde 19/09, com valor real de
- * homologacao. O que nao existe e quem o leia: nao ha `requireEnv('MAIL_API_TOKEN')`
- * em lugar nenhum de `src/`, porque o adaptador do Postmark ainda nao foi
- * escrito."* As duas metades daquela frase eram verdade e **nao sao mais**: o
- * adaptador e `identity/adapters/external/postmark-mailer.ts`, e o
+ * O que dizia: *"a resolucao e INCONDICIONAL e a exigencia e CONDICIONAL, e a
+ * assimetria e deliberada: buscar por transporte faria esta lista depender de
+ * `MAIL_TRANSPORT` ... e um ambiente hospedado que trocasse o transporte
+ * passaria a precisar de um segredo que ninguem foi buscar"*.
+ *
+ * O QUE ACONTECEU DE VERDADE (29/09/2026, medido pelo caminho do README):
+ * `cp .env.example .env`, preencher os valores vazios, `make up` -- e `api` e
+ * `worker` morrem na subida com
+ *
+ *     - MAIL_API_TOKEN: A variavel de ambiente nao esta definida, ou esta vazia.
+ *
+ * com `MAIL_TRANSPORT=smtp`, que e o padrao do `.env.example`, e com o proprio
+ * `.env.example` prometendo tres linhas acima que o token "nao e lido com
+ * `smtp` nem com `log`". A promessa e a subida discordavam, e quem pagava era
+ * quem estava chegando no projeto -- e, desde 23/09, o Backoffice e o Web, que
+ * puxam desta branch e veriam "a api morre na subida" sem pista do motivo.
+ *
+ * O MEDO QUE A ASSIMETRIA GUARDAVA CONTINUA ATENDIDO, e por construcao: quem
+ * resolve e quem exige leem a MESMA funcao (`exigeTokenDoProvedor`, em
+ * `transporte-de-email.ts`) sobre a MESMA variavel. Um ambiente hospedado em
+ * `postmark` resolve o token E o exige; nao existe mais o estado "exigido e nao
+ * buscado", porque nao existem mais duas respostas. O que a assimetria protegia
+ * era a divergencia entre as duas metades, e a correcao foi tirar a segunda
+ * metade de circulacao, nao afrouxar a primeira.
+ *
+ * O CRITERIO DE ENTRADA NA LISTA CONTINUA VALENDO, e e por ele que o nome fica
+ * declarado: *"so o que e segredo de verdade e o que `app-config.ts` de fato le
+ * hoje"*. O consumidor existe -- `identity/adapters/external/postmark-mailer.ts`
+ * emite o token no cabecalho `X-Postmark-Server-Token`, e o
  * `requireEnv('MAIL_API_TOKEN')` esta em `app-config.ts`, no ramo de
- * `MAIL_TRANSPORT=postmark`.
- *
- * O que o registro preserva e a razao da reprovacao daquele dia. Eu acrescentei o
- * nome a lista mais cedo em 19/09 e o QA reprovou, com razao: a entrada violava o
- * criterio escrito tres paragrafos acima dela -- "so o que e segredo de verdade
- * **e o que `app-config.ts` de fato le hoje**". Na pratica, o ambiente hospedado
- * passaria a MORRER NA SUBIDA por um valor que nenhum consumidor usa. Exigir o
- * que nao se usa nao protege nada e derruba ambiente. A diferenca entre aquele
- * dia e hoje nao e de opiniao: e o consumidor, que agora existe e esta nomeado
- * duas linhas acima.
+ * `MAIL_TRANSPORT=postmark`. Exigir o que NAO se usa nao protege nada e derruba
+ * ambiente: era verdade em 19/09, sobre ambiente hospedado, e voltou a ser
+ * verdade em 29/09, sobre a maquina de quem desenvolve.
  *
  * O nome do segredo e o mesmo nos dois ambientes; o que muda e o PROJETO
  * apontado por `SECRET_STORE_PROJECT`. E por isso que nao existe
- * `MAIL_API_TOKEN_HML`: nome por ambiente reintroduziria a tabela de traducao que
- * o ADR-0022 proibe e cegaria a guarda da esteira.
+ * `MAIL_API_TOKEN_HML`: nome por ambiente reintroduziria a tabela de traducao
+ * que o ADR-0022 proibe e cegaria a guarda da esteira.
  *
  * O token da Cloudflare continua FORA desta lista, por um motivo que nada disto
  * muda: ele e credencial de OPERACAO, usada para mexer em DNS, e a aplicacao
  * nunca chama a Cloudflare. Cofre sim, lista de runtime nao.
  */
+
+/**
+ * Os segredos que ESTA subida vai resolver.
+ *
+ * `SEGREDOS_DE_RUNTIME` declara o universo -- e o literal que
+ * `infra/verificacao/verificar_boot_do_alvo_prod.py` le por TEXTO, e por isso
+ * ele nao encolhe. Esta funcao e o recorte: ela tira da lista o que o processo
+ * comprovadamente NAO vai ler.
+ *
+ * Hoje o recorte tem UM caso, e ele e o do token do provedor. A regra nao foi
+ * escrita como uma tabela de excecoes de proposito: cada nome que sair desta
+ * lista tem de sair por um predicado que a EXIGENCIA tambem le, e nao por uma
+ * segunda opiniao sobre o mesmo ambiente.
+ */
+export function segredosDeRuntime(
+  transporteDeEmail: string = transporteDeEmailDoAmbiente(),
+  declarados: readonly NomeDeSegredo[] = SEGREDOS_DE_RUNTIME,
+): readonly NomeDeSegredo[] {
+  if (exigeTokenDoProvedor(transporteDeEmail)) return declarados;
+  return declarados.filter((nome) => nome !== 'MAIL_API_TOKEN');
+}
 
 /**
  * Quando os segredos vêm do gerenciador, e quando vêm do ambiente.
@@ -166,7 +199,7 @@ export function exigeGerenciadorDeSegredos(environment: string): boolean {
  */
 export async function resolverSegredos(
   provider: SecretProvider,
-  nomes: readonly NomeDeSegredo[] = SEGREDOS_DE_RUNTIME,
+  nomes: readonly NomeDeSegredo[] = segredosDeRuntime(),
 ): Promise<void> {
   const resolvidos = new Map<NomeDeSegredo, string>();
   const faltando: string[] = [];

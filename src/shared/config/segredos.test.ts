@@ -21,6 +21,7 @@ import {
   SEGREDOS_DE_RUNTIME,
   exigeGerenciadorDeSegredos,
   resolverSegredos,
+  segredosDeRuntime,
 } from './segredos.js';
 
 const A = 'SEGREDO_DE_TESTE_A';
@@ -215,6 +216,104 @@ void describe('ISCA: o token do provedor de e-mail e buscado no cofre', () => {
         'MAIL_API_TOKEN',
       ]);
       assert.equal(process.env['MAIL_API_TOKEN'], 'valor-de-cofre-dublado');
+    } finally {
+      if (original === undefined) delete process.env['MAIL_API_TOKEN'];
+      else process.env['MAIL_API_TOKEN'] = original;
+    }
+  });
+});
+
+/**
+ * A ISCA DA REGRESSAO DE 29/09: o token do provedor so e RESOLVIDO quando o
+ * transporte precisa dele.
+ *
+ * O mecanismo que estes casos desligam e o `filter` de `segredosDeRuntime()`.
+ * Sem ele a lista volta a ser resolvida inteira, e `api` e `worker` voltam a
+ * morrer na subida por `MAIL_API_TOKEN` vazio COM `MAIL_TRANSPORT=smtp` -- que
+ * e o padrao do `.env.example` e o caminho que o README manda um desenvolvedor
+ * novo seguir. Foi assim, medido, com a suite inteira verde.
+ *
+ * O caso de `postmark` e a outra metade, e ele existe contra a correcao
+ * preguicosa: tirar o nome da lista em todo caso deixaria o ambiente hospedado
+ * sem o token que `postmark-mailer.ts` emite no cabecalho, e o primeiro pedido
+ * de redefinicao de senha de alguem voltaria 401.
+ */
+void describe('ISCA: o token do provedor so e resolvido no transporte que o le', () => {
+  void it('com `smtp`, MAIL_API_TOKEN fica FORA da lista que a subida resolve', () => {
+    assert.ok(
+      !segredosDeRuntime('smtp').includes('MAIL_API_TOKEN'),
+      'REPROVA: a subida com `MAIL_TRANSPORT=smtp` voltou a resolver ' +
+        '`MAIL_API_TOKEN`. Com `smtp` ninguem le o token, e cobra-lo mata `api` e ' +
+        '`worker` na subida pelo caminho do README -- a regressao de 29/09.',
+    );
+  });
+
+  void it('com `log`, tambem fica de fora: nada sai do processo', () => {
+    assert.ok(!segredosDeRuntime('log').includes('MAIL_API_TOKEN'));
+  });
+
+  void it('com `postmark`, MAIL_API_TOKEN CONTINUA na lista resolvida', () => {
+    assert.ok(
+      segredosDeRuntime('postmark').includes('MAIL_API_TOKEN'),
+      'REPROVA: `postmark` entrega de verdade e emite o token no cabecalho ' +
+        '`X-Postmark-Server-Token`. Nao busca-lo deixaria o ambiente hospedado ' +
+        'subir para falhar com 401 no primeiro envio.',
+    );
+  });
+
+  void it('o recorte NAO mexe em nenhum outro segredo da lista', () => {
+    const outros = SEGREDOS_DE_RUNTIME.filter((n) => n !== 'MAIL_API_TOKEN');
+    assert.deepEqual([...segredosDeRuntime('smtp')], [...outros]);
+    assert.deepEqual([...segredosDeRuntime('postmark')], [...SEGREDOS_DE_RUNTIME]);
+  });
+
+  void it('valor desconhecido nao busca o token: quem morre por ele e app-config', () => {
+    // `MAIL_TRANSPORT=mailpit` foi o valor de verdade encontrado em 19/09.
+    // Cobrar o token aqui trocaria a mensagem boa ("nao e um transporte
+    // conhecido", com os aceitos) por "falta MAIL_API_TOKEN", que manda a
+    // pessoa para o lugar errado.
+    assert.ok(!segredosDeRuntime('mailpit').includes('MAIL_API_TOKEN'));
+  });
+
+  void it('o padrao vem do ambiente, e sem MAIL_TRANSPORT ele e `smtp`', () => {
+    const original = process.env['MAIL_TRANSPORT'];
+    try {
+      delete process.env['MAIL_TRANSPORT'];
+      assert.ok(!segredosDeRuntime().includes('MAIL_API_TOKEN'));
+      process.env['MAIL_TRANSPORT'] = 'postmark';
+      assert.ok(segredosDeRuntime().includes('MAIL_API_TOKEN'));
+    } finally {
+      if (original === undefined) delete process.env['MAIL_TRANSPORT'];
+      else process.env['MAIL_TRANSPORT'] = original;
+    }
+  });
+
+  void it('a subida com `smtp` e sem token NAO morre: nenhum nome e cobrado', async () => {
+    // O caso de comportamento, e nao de lista: um provedor que nao tem o token
+    // e uma resolucao que, mesmo assim, precisa terminar sem lancar.
+    const original = process.env['MAIL_API_TOKEN'];
+    try {
+      delete process.env['MAIL_API_TOKEN'];
+      await resolverSegredos(provedorFalso({ [A]: 'presente' }), segredosDeRuntime('smtp', [A, 'MAIL_API_TOKEN']));
+      assert.equal(process.env['MAIL_API_TOKEN'], undefined);
+    } finally {
+      if (original === undefined) delete process.env['MAIL_API_TOKEN'];
+      else process.env['MAIL_API_TOKEN'] = original;
+    }
+  });
+
+  void it('a subida com `postmark` e sem token MORRE nomeando MAIL_API_TOKEN', async () => {
+    const original = process.env['MAIL_API_TOKEN'];
+    try {
+      delete process.env['MAIL_API_TOKEN'];
+      await assert.rejects(
+        () =>
+          resolverSegredos(
+            provedorFalso({ [A]: 'presente' }),
+            segredosDeRuntime('postmark', [A, 'MAIL_API_TOKEN']),
+          ),
+        /MAIL_API_TOKEN/,
+      );
     } finally {
       if (original === undefined) delete process.env['MAIL_API_TOKEN'];
       else process.env['MAIL_API_TOKEN'] = original;

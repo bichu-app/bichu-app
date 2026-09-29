@@ -14,6 +14,7 @@
 import { createPrivateKey, createPublicKey, type KeyObject } from 'node:crypto';
 import { boolEnv, optionalEnv, requireEnv } from './env.js';
 import { ehAmbienteHospedado } from './ambiente-hospedado.js';
+import { exigeTokenDoProvedor } from './transporte-de-email.js';
 import type { AbsoluteUrl } from '../types/brands.js';
 import type { RateLimitDriver } from '../ports/rate-limit-store.js';
 
@@ -538,18 +539,16 @@ function exigeProjetoDoFcm(transporte: 'fcm' | 'log'): boolean {
 }
 
 /**
- * Qual transporte de e-mail exige o token do provedor.
+ * `exigeTokenDoProvedor` MUDOU DE CASA, e o motivo e o mesmo de
+ * `ehAmbienteHospedado`: `segredos.ts` passou a precisar da mesma pergunta para
+ * decidir QUAIS segredos sao resolvidos na subida, e copia-la teria criado a
+ * segunda verdade. Ela vive em `./transporte-de-email.js`, importada no topo
+ * deste arquivo, e continua sendo lida aqui com o nome de sempre.
  *
- * Funcao com nome, e nao `=== 'postmark'` embutido na linha do `requireEnv`,
- * pelo mesmo motivo de `exigeProjetoDoFcm`: e ela que decide se o processo sobe,
- * e uma decisao dessas precisa de um lugar para ser lida e apontada. A forma
- * gemea nao e coincidencia -- as duas respondem a mesma pergunta para dois
- * canais, e escrever a segunda diferente da primeira e como as duas listas de
- * caractere proibido da BICHUS-198 comecaram.
+ * A copia ja cobrou o preco uma vez: enquanto este arquivo exigia o token so no
+ * ramo `postmark` e `segredos.ts` o resolvia sempre, `api` e `worker` morriam na
+ * subida por `MAIL_API_TOKEN` vazio com `MAIL_TRANSPORT=smtp`.
  */
-function exigeTokenDoProvedor(transporte: 'smtp' | 'postmark' | 'log'): boolean {
-  return transporte === 'postmark';
-}
 
 /**
  * O transporte do push, e o projeto quando ele for usado.

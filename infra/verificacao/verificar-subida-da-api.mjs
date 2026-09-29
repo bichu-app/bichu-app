@@ -55,12 +55,18 @@
  *   node infra/verificacao/verificar-subida-da-api.mjs --autoteste  so as iscas
  */
 import { execFileSync, spawnSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 
 import { gerar } from '../integracao/gerar-env-de-integracao.mjs';
 import { identidadeDaPilha } from '../integracao/identidade-da-pilha.mjs';
 
 const ARQUIVO = 'infra/integracao/compose.integracao.yaml';
 const ENV = '.env.integracao';
+/**
+ * O ambiente da SEGUNDA subida: o mesmo, em `MAIL_TRANSPORT=postmark`, sem
+ * token. Ele existe porque a primeira subida so prova metade da regra.
+ */
+const ENV_DA_RECUSA = '.env.integracao.postmark';
 /** O subconjunto minimo que faz a API subir: banco, esquema e o processo. */
 const SERVICOS = ['db', 'migracao', 'api'];
 
@@ -99,6 +105,23 @@ export function julgar({ estadoDoWait, sonda, log }) {
       break;
     }
   }
+  // A REGRESSAO DE 29/09, com nome proprio. Sem esta regra a volta do defeito
+  // sairia como "a pilha nao ficou de pe", que e o que QUALQUER morte diz -- e
+  // uma isca sobre ela nao conseguiria mostrar ESTA regra reprovando.
+  //
+  // O ambiente desta pilha sobe em `MAIL_TRANSPORT=smtp` com `MAIL_API_TOKEN`
+  // VAZIA, de proposito (ver gerar-env-de-integracao.mjs). Com `smtp` ninguem
+  // le o token: o nome dele aparecer no log de subida significa que alguem
+  // voltou a cobra-lo fora do ramo `postmark`.
+  if (texto.includes('MAIL_API_TOKEN')) {
+    motivos.push(
+      'a subida com `MAIL_TRANSPORT=smtp` cobrou `MAIL_API_TOKEN`: o token do ' +
+        'provedor so e lido com `postmark` (ADR-0009), e o `.env.example` promete ' +
+        'isso. E a regressao de 29/09 -- `api` e `worker` morrendo na subida pelo ' +
+        'caminho que o README manda um desenvolvedor novo seguir.',
+    );
+  }
+
   // As conferencias de subida falam por `Error`. Qualquer uma delas no log e
   // reprovacao, mesmo com o processo de pe: a proxima replica pode nao subir.
   if (/\b(FATAL|UnhandledPromiseRejection|Error: Opera[cç][aã]o fora do contrato)\b/.test(texto)) {
@@ -120,6 +143,103 @@ export function julgar({ estadoDoWait, sonda, log }) {
     motivos.push(
       `a sonda nao afirma que o banco esta de pe (\`${JSON.stringify(banco)}\`): ` +
         'subida que nao alcanca o esquema nao e subida.',
+    );
+  }
+
+  return motivos;
+}
+
+/**
+ * A OUTRA METADE, e ela e a que faltava: o ramo `postmark` sem token precisa
+ * RECUSAR subir.
+ *
+ * Um portao que so prova "sobe com `smtp`" aprovaria a correcao preguicosa --
+ * parar de exigir o token em lugar nenhum. Entrega de verdade sem token volta
+ * 401 no primeiro pedido de redefinicao de senha de alguem, em producao, com a
+ * pessoa na tela. As duas direcoes, ou nenhuma.
+ *
+ * `estadoDaSaida` e o codigo de saida do processo, ou `'nenhuma'` quando ele
+ * nao terminou no prazo -- ficar vivo TAMBEM e reprovacao, e com outras
+ * palavras, pelo mesmo motivo de `verificar_boot_do_alvo_prod.py`.
+ */
+export function julgarRecusaSemToken({ estadoDaSaida, log }) {
+  const motivos = [];
+  const texto = typeof log === 'string' ? log : '';
+
+  if (estadoDaSaida === 0) {
+    motivos.push(
+      'o processo SUBIU com `MAIL_TRANSPORT=postmark` e `MAIL_API_TOKEN` vazia. ' +
+        'Entrega de verdade sem token volta 401 no primeiro envio, e um processo ' +
+        'de pe afirma que esta configurado. Verde aqui seria confianca falsa.',
+    );
+  } else if (estadoDaSaida === 'nenhuma') {
+    motivos.push(
+      'o processo NAO terminou no prazo. Ele deveria recusar subir em segundos, ' +
+        'na leitura da configuracao. Continuar vivo significa que a sequencia de ' +
+        'subida mudou, e esta verificacao precisa ser reapontada antes de valer.',
+    );
+  }
+
+  // O nome no texto e UMA regra a mais, e nao um detalhe da de cima: morrer por
+  // outro motivo (banco fora, porta ocupada) daria o mesmo codigo de saida e
+  // aprovaria um portao que so olhasse a saida.
+  if (!texto.includes('MAIL_API_TOKEN')) {
+    motivos.push(
+      'a recusa nao NOMEIA `MAIL_API_TOKEN`. O processo morreu por outro motivo, ' +
+        'e uma recusa que aprova qualquer morte nao prova nada -- quem le o log ' +
+        'precisa saber qual variavel falta, que e a promessa da secao 11.2.',
+    );
+  }
+
+  return motivos;
+}
+
+/**
+ * O ambiente da pilha de integracao NAO pode mascarar o caso.
+ *
+ * Esta e a regra que faltava em 29/09, e ela e a mais grave das tres: o defeito
+ * atravessou um `fechar-integracao` VERDE porque `gerar-env-de-integracao.mjs`
+ * preenchia `MAIL_API_TOKEN` com um token falso. A suite exercitava um ambiente
+ * que a maquina de quem desenvolve nao tem, e chamava isso de prova.
+ *
+ * Recebe o TEXTO do `.env` gerado, e nao o objeto: o que a pilha le e o arquivo.
+ */
+export function julgarAmbienteDeIntegracao(texto) {
+  const motivos = [];
+  const ler = (chave) => {
+    const achado = (typeof texto === 'string' ? texto : '')
+      .split('\n')
+      .filter((l) => !l.trimStart().startsWith('#'))
+      .find((l) => l.startsWith(`${chave}=`));
+    return achado === undefined ? undefined : achado.slice(chave.length + 1).trim();
+  };
+
+  const transporte = ler('MAIL_TRANSPORT');
+  const token = ler('MAIL_API_TOKEN');
+
+  if (transporte === undefined) {
+    motivos.push(
+      '`MAIL_TRANSPORT` nao esta declarada no ambiente gerado: sem ela nao da ' +
+        'para saber qual ramo esta pilha exercita, e aprovar sem saber e o ponto ' +
+        'cego que esta regra existe para nao ser.',
+    );
+    return motivos;
+  }
+
+  if (transporte !== 'postmark' && (token ?? '') !== '') {
+    motivos.push(
+      `o ambiente gerado esta em \`MAIL_TRANSPORT=${transporte}\` e MESMO ASSIM ` +
+        'preenche `MAIL_API_TOKEN`. E a cegueira de 29/09 voltando: com um valor ' +
+        'ali a pilha sobe, a suite fica verde, e quem segue o `.env.example` -- que ' +
+        'deixa o token VAZIO -- continua sem conseguir subir. O vazio e o teste.',
+    );
+  }
+
+  if (transporte === 'postmark' && (token ?? '') === '') {
+    motivos.push(
+      'o ambiente gerado esta em `MAIL_TRANSPORT=postmark` com `MAIL_API_TOKEN` ' +
+        'vazia. Esta pilha existe para SUBIR: o caso da recusa e a segunda ' +
+        'subida, com o seu proprio ambiente, e nao este.',
     );
   }
 
@@ -186,11 +306,97 @@ const ISCAS = [
     precisaReprovar: true,
   },
   {
+    // A ISCA DA REGRESSAO. Desligar a regra de `MAIL_API_TOKEN` em `julgar()`
+    // faz o autoteste cair citando ESTE nome, e nao "a pilha nao ficou de pe".
+    nome: 'a subida com `smtp` morreu cobrando MAIL_API_TOKEN (a regressao de 29/09)',
+    evidencia: {
+      estadoDoWait: 1,
+      sonda: undefined,
+      log:
+        'Error: Nao foi possivel ler 1 segredo(s) de runtime em variavel de ambiente. A aplicacao NAO sobe sem eles:\n' +
+        '  - MAIL_API_TOKEN: A variavel de ambiente nao esta definida, ou esta vazia.\n',
+    },
+    precisaReprovar: true,
+  },
+  {
+    // A MESMA regra, com a pilha DE PE. Sem este caso, desligar a regra de
+    // `MAIL_API_TOKEN` continuaria reprovando o caso de cima pela regra do
+    // `estadoDoWait`, e a isca aprovaria a regra quebrada -- que e o defeito
+    // que o comentario de `verificar_boot_do_alvo_prod.py` registra.
+    nome: 'a pilha subiu, e o log ainda assim cobra MAIL_API_TOKEN com `smtp`',
+    evidencia: {
+      estadoDoWait: 0,
+      sonda: SONDA_BOA,
+      log: 'aviso: MAIL_API_TOKEN vazia; o mailer vai falhar no primeiro envio\n',
+    },
+    precisaReprovar: true,
+  },
+  {
     // CONTROLE POSITIVO. Sem ele o autoteste ficaria verde com um juizo que
     // reprova tudo -- e um portao que reprova tudo e tao inutil quanto o que
     // aprova tudo, com a diferenca de que este ninguem consegue ignorar.
     nome: 'CONTROLE POSITIVO: subida boa precisa PASSAR',
     evidencia: { estadoDoWait: 0, sonda: SONDA_BOA, log: 'servidor ouvindo em 0.0.0.0:3000\n' },
+    precisaReprovar: false,
+  },
+];
+
+/** As iscas da RECUSA: `postmark` sem token nao pode subir. */
+const ISCAS_DA_RECUSA = [
+  {
+    nome: 'o processo SUBIU com `postmark` e sem token',
+    evidencia: { estadoDaSaida: 0, log: 'servidor ouvindo em 0.0.0.0:3000\nMAIL_API_TOKEN\n' },
+    precisaReprovar: true,
+  },
+  {
+    nome: 'o processo com `postmark` e sem token nao terminou no prazo',
+    evidencia: { estadoDaSaida: 'nenhuma', log: 'MAIL_API_TOKEN\n' },
+    precisaReprovar: true,
+  },
+  {
+    nome: 'morreu, e a recusa NAO nomeia MAIL_API_TOKEN',
+    evidencia: { estadoDaSaida: 1, log: 'Error: connect ECONNREFUSED 172.18.0.2:5432\n' },
+    precisaReprovar: true,
+  },
+  {
+    // CONTROLE POSITIVO da recusa.
+    nome: 'CONTROLE POSITIVO: a recusa certa precisa PASSAR',
+    evidencia: {
+      estadoDaSaida: 1,
+      log:
+        'Error: Nao foi possivel ler 1 segredo(s) de runtime em variavel de ambiente. A aplicacao NAO sobe sem eles:\n' +
+        '  - MAIL_API_TOKEN: A variavel de ambiente nao esta definida, ou esta vazia.\n',
+    },
+    precisaReprovar: false,
+  },
+];
+
+/** As iscas do AMBIENTE: o gerador nao pode mascarar o caso. */
+const ISCAS_DO_AMBIENTE = [
+  {
+    nome: 'o gerador voltou a preencher MAIL_API_TOKEN com `smtp` (a cegueira de 29/09)',
+    texto: 'MAIL_TRANSPORT=smtp\nMAIL_API_TOKEN=integracao-descartavel-token-que-nao-autentica\n',
+    precisaReprovar: true,
+  },
+  {
+    nome: 'o mesmo com `log`, que tambem nao le o token',
+    texto: 'MAIL_TRANSPORT=log\nMAIL_API_TOKEN=qualquer-coisa\n',
+    precisaReprovar: true,
+  },
+  {
+    nome: 'o ambiente nao declara MAIL_TRANSPORT nenhuma',
+    texto: 'MAIL_API_TOKEN=\n',
+    precisaReprovar: true,
+  },
+  {
+    nome: '`postmark` com token vazio nao e o ambiente desta pilha',
+    texto: 'MAIL_TRANSPORT=postmark\nMAIL_API_TOKEN=\n',
+    precisaReprovar: true,
+  },
+  {
+    // CONTROLE POSITIVO do ambiente: e assim que o gerador precisa sair.
+    nome: 'CONTROLE POSITIVO: `smtp` com o token VAZIO precisa PASSAR',
+    texto: '# comentario\nMAIL_TRANSPORT=smtp\nMAIL_API_TOKEN=\n',
     precisaReprovar: false,
   },
 ];
@@ -209,12 +415,35 @@ export function autoteste() {
       );
     }
   }
+  for (const isca of ISCAS_DA_RECUSA) {
+    const motivos = julgarRecusaSemToken(isca.evidencia);
+    const reprovou = motivos.length > 0;
+    if (reprovou !== isca.precisaReprovar) {
+      cegueiras.push(
+        isca.precisaReprovar
+          ? `o juizo da RECUSA aprovou um caso que precisa reprovar: ${isca.nome}`
+          : `o juizo da RECUSA reprovou um caso que precisa passar: ${isca.nome} (${motivos.join('; ')})`,
+      );
+    }
+  }
+  for (const isca of ISCAS_DO_AMBIENTE) {
+    const motivos = julgarAmbienteDeIntegracao(isca.texto);
+    const reprovou = motivos.length > 0;
+    if (reprovou !== isca.precisaReprovar) {
+      cegueiras.push(
+        isca.precisaReprovar
+          ? `o juizo do AMBIENTE aprovou um caso que precisa reprovar: ${isca.nome}`
+          : `o juizo do AMBIENTE reprovou um caso que precisa passar: ${isca.nome} (${motivos.join('; ')})`,
+      );
+    }
+  }
   return cegueiras;
 }
 
 function exigirAsIscas() {
   const cegueiras = autoteste();
-  console.log(`  [${cegueiras.length === 0 ? 'ok' : 'REPROVA'}] autoteste das iscas (${String(ISCAS.length)} casos)`);
+  const quantas = ISCAS.length + ISCAS_DA_RECUSA.length + ISCAS_DO_AMBIENTE.length;
+  console.log(`  [${cegueiras.length === 0 ? 'ok' : 'REPROVA'}] autoteste das iscas (${String(quantas)} casos)`);
   if (cegueiras.length === 0) return;
   console.error('\nO PORTAO PAROU DE ENXERGAR. Nao cheguei a subir nada:\n');
   for (const c of cegueiras) console.error(`  - ${c}`);
@@ -280,6 +509,18 @@ function subirEJulgar() {
   const { conferidas } = gerar();
   console.log(`ambiente:  ${ENV} gerado, ${String(conferidas)} variaveis exigidas pelo codigo preenchidas`);
 
+  // O AMBIENTE E JULGADO ANTES DE QUALQUER DOCKER. Um `.env` que mascara o caso
+  // faz a subida seguinte provar outra coisa -- foi assim que o defeito de
+  // 29/09 atravessou um `fechar-integracao` verde.
+  const motivosDoAmbiente = julgarAmbienteDeIntegracao(readFileSync(ENV, 'utf8'));
+  if (motivosDoAmbiente.length > 0) {
+    console.error('\nREPROVADO: o ambiente da pilha de integracao mascara o caso. Nao subi nada.\n');
+    for (const m of motivosDoAmbiente) console.error(`  - ${m}`);
+    console.error('');
+    process.exit(1);
+  }
+  console.log('ambiente:  MAIL_TRANSPORT=smtp com MAIL_API_TOKEN VAZIA -- o caminho do .env.example');
+
   // Uma pilha anterior interrompida deixaria conteiner de pe com dado velho.
   compose(['down', '-v', '--remove-orphans', '--timeout', '5'], { stdio: 'ignore' });
 
@@ -332,6 +573,71 @@ function subirEJulgar() {
 
   const motivos = julgar({ estadoDoWait, sonda, log });
 
+  // ---------------------------------------------------------------------
+  // A SEGUNDA METADE: `postmark` sem token precisa RECUSAR subir.
+  // ---------------------------------------------------------------------
+  // Sem pilha: a imagem ja esta construida e o processo morre na leitura da
+  // configuracao, antes de abrir conexao com qualquer coisa. `docker run`
+  // direto, como em `verificar-boot-do-alvo-prod-local.sh`, e pelo mesmo
+  // motivo -- e tambem sem `--network`, para nao encostar em pilha de ninguem.
+  //
+  // Sem este bloco, a correcao preguicosa (parar de exigir o token em lugar
+  // nenhum) passaria neste portao.
+  gerar({
+    destino: ENV_DA_RECUSA,
+    sobrepor: { MAIL_TRANSPORT: 'postmark', MAIL_API_TOKEN: '' },
+    // O ambiente da recusa e INVALIDO de proposito: e o arquivo que faz a
+    // subida recusar. Sem esta linha a propria geracao derruba antes, citando
+    // `MAIL_API_TOKEN` -- que e o comportamento certo para todo o resto.
+    faltandoDeProposito: ['MAIL_API_TOKEN'],
+  });
+  const nomeDaRecusa = `prova-recusa-${String(process.pid)}`;
+  spawnSync('docker', ['rm', '-f', nomeDaRecusa], { stdio: 'ignore' });
+  // `-d` E UM LACO LIMITADO, e nao `docker run` em primeiro plano.
+  //
+  // MEDIDO, e nao deduzido: com o mecanismo desligado a mao (predicado sempre
+  // `false` E a rede de baixo de `postmark-mailer.ts` fora), o processo SOBE e
+  // fica de pe. Um `docker run` sincrono ficava pendurado para sempre, e a
+  // reprovacao que este bloco existe para produzir nunca saia -- o ramo
+  // `'nenhuma'` de `julgarRecusaSemToken` era inalcancavel, e um portao que nao
+  // consegue reprovar e o portao cego que esta tarefa veio consertar.
+  //
+  // NAO USA `timeout`: nesta maquina o binario NAO EXISTE (nem `gtimeout`), o
+  // shell responde 127 e o `if` leria isso como veredito. E a mesma decisao, e
+  // pelo mesmo motivo, de `infra/verificacao/verificar-boot-do-alvo-prod-local.sh`.
+  spawnSync(
+    'docker',
+    ['run', '-d', '--name', nomeDaRecusa, '--env-file', ENV_DA_RECUSA, `bichu-app:${tagDaPilha}`],
+    { encoding: 'utf8' },
+  );
+  const esperaMaxima = Number.parseInt(process.env.BICHU_ESPERA_DA_RECUSA ?? '30', 10);
+  let estadoDaSaida = 'nenhuma';
+  for (let i = 0; i < esperaMaxima; i += 1) {
+    const vivo = spawnSync('docker', ['inspect', '-f', '{{.State.Running}}', nomeDaRecusa], {
+      encoding: 'utf8',
+    });
+    if ((vivo.stdout ?? '').trim() === 'false') {
+      const codigo = spawnSync('docker', ['inspect', '-f', '{{.State.ExitCode}}', nomeDaRecusa], {
+        encoding: 'utf8',
+      });
+      estadoDaSaida = Number.parseInt((codigo.stdout ?? '').trim(), 10);
+      break;
+    }
+    // `sleep 1` sem dependencia externa: o laco precisa rodar igual em qualquer
+    // maquina, e `Atomics.wait` e o unico sono sincrono que o Node garante.
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
+  }
+  const logsDaRecusa = spawnSync('docker', ['logs', nomeDaRecusa], { encoding: 'utf8' });
+  const logDaRecusa = `${logsDaRecusa.stdout ?? ''}${logsDaRecusa.stderr ?? ''}`;
+  spawnSync('docker', ['rm', '-f', nomeDaRecusa], { stdio: 'ignore' });
+  const motivosDaRecusa = julgarRecusaSemToken({ estadoDaSaida, log: logDaRecusa });
+  if (motivosDaRecusa.length > 0) {
+    console.error('\n--- log da recusa (`postmark` sem token) ---');
+    console.error(logDaRecusa.split('\n').slice(-20).join('\n'));
+    console.error('-------------------------------------------\n');
+  }
+  motivos.push(...motivosDaRecusa);
+
   if (motivos.length > 0) {
     console.error('\n--- log da api ---');
     console.error(log.split('\n').slice(-40).join('\n'));
@@ -347,6 +653,10 @@ function subirEJulgar() {
   }
 
   console.log(`\nsubida da API APROVADA: sonda \`${String(sonda.status)}\`, banco de pe, sem erro no log.`);
+  console.log(
+    '  e as duas direcoes do token do provedor: SOBE com `smtp` sem token, ' +
+      'e RECUSA com `postmark` sem token, nomeando MAIL_API_TOKEN.',
+  );
 }
 
 // ---------------------------------------------------------------------------

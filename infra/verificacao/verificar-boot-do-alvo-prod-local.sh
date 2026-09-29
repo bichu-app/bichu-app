@@ -45,8 +45,16 @@ fi
 BUILD_TARGET=prod IMAGE_TAG=prod BUILD_COMMIT=$(git rev-parse HEAD) \
   docker compose build api
 
+# `MAIL_TRANSPORT=postmark` entrou em 29/09, e nao e detalhe: producao entrega
+# e-mail pelo provedor (ADR-0009), e desde a correcao do token condicional a
+# lista de segredos que a subida resolve DEPENDE do transporte. Provar o alvo
+# `prod` em `smtp` -- que e o padrao do `.env` de quem desenvolve -- provaria uma
+# subida que producao nunca faz, e cobraria sete dos oito segredos que
+# `SEGREDOS_DE_RUNTIME` declara. Com o transporte de producao, o juizo volta a
+# ver a lista inteira, que e o que ele existe para conferir.
 docker run -d --name "$nome" --env-file .env \
-  -e NODE_ENV=production -e BIND_HOST=0.0.0.0 -e PORT=3000 bichu-app:prod > /dev/null
+  -e NODE_ENV=production -e BIND_HOST=0.0.0.0 -e PORT=3000 \
+  -e MAIL_TRANSPORT=postmark bichu-app:prod > /dev/null
 
 # `docker wait` sem teto penduraria a rodada inteira quando o container NAO morre
 # -- e nao morrer tambem e reprovacao, e precisa ser dita com outras palavras.
