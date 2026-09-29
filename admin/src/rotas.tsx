@@ -2,6 +2,7 @@ import { Navigate, type RouteObject } from 'react-router';
 
 import { Casca } from './casca/Casca.tsx';
 import { rotasDaLoja } from './loja/rotas.tsx';
+import { rotasDaRede } from './rede/rotas.tsx';
 import Carregando from './rotas/Carregando.tsx';
 import NaoEncontrada from './rotas/NaoEncontrada.tsx';
 import { ProvedorDeSessao, type PropsDoProvedor } from './sessao/ProvedorDeSessao.tsx';
@@ -26,7 +27,12 @@ export function criarRotas(opcoes: OpcoesDasRotas = {}): RouteObject[] {
           <Casca />
         </ProvedorDeSessao>
       ),
-      children: [{ index: true, element: <Navigate to="/loja" replace /> }, ...rotasDaLoja, { path: '*', element: <NaoEncontrada /> }],
+      children: [
+        { index: true, element: <Navigate to="/loja" replace /> },
+        ...rotasDaLoja,
+        ...rotasDaRede,
+        { path: '*', element: <NaoEncontrada /> },
+      ],
     },
   ];
 }

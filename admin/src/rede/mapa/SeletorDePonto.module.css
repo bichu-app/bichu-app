@@ -1,0 +1,126 @@
+/*
+ * Seletor de ponto (25.3). Mapa em 560 x 320 no formulario de 640 (25.2):
+ * 35rem x 20rem, em rem para acompanhar o zoom. A largura do mapa espera o
+ * pedido de token de 25.6; ate la e constante do componente.
+ */
+.envoltorio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--bichu-space-2);
+}
+
+.moldura {
+  position: relative;
+  /* Os paineis do Leaflet usam z-index de 400 a 1000: sem contexto proprio, o mapa passaria por cima do dialogo. */
+  isolation: isolate;
+  width: min(35rem, 100%);
+  aspect-ratio: 7 / 4;
+  border-radius: var(--bichu-radius-md);
+  border: var(--bichu-border-hairline) solid var(--bichu-cor-outline-control);
+  overflow: hidden;
+}
+
+.moldura.erro {
+  border: var(--bichu-border-medium) solid var(--bichu-cor-error);
+}
+
+.mapa {
+  position: absolute;
+  inset: 0;
+  cursor: crosshair;
+  background: var(--bichu-cor-surface-sunken);
+}
+
+.mapa:focus-visible {
+  outline: var(--bichu-focus-width) solid var(--bichu-cor-focus-ring);
+  outline-offset: calc(-1 * var(--bichu-focus-width));
+}
+
+.mapa[aria-disabled='true'] {
+  cursor: default;
+}
+
+/* A mira fica no centro e so aparece com o mapa em foco pelo teclado. */
+.mira {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--bichu-space-10);
+  height: var(--bichu-space-10);
+  transform: translate(-50%, -50%);
+  border: var(--bichu-border-medium) solid var(--bichu-cor-primary);
+  border-radius: var(--bichu-radius-full);
+  pointer-events: none;
+  display: none;
+  z-index: 500;
+}
+
+.mira::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--bichu-space-2);
+  height: var(--bichu-space-2);
+  transform: translate(-50%, -50%);
+  border-radius: var(--bichu-radius-full);
+  background: var(--bichu-cor-primary);
+}
+
+.dica {
+  position: absolute;
+  /* No alto a direita: o canto esquerdo e do controle de zoom. */
+  right: var(--bichu-space-3);
+  top: var(--bichu-space-3);
+  max-width: calc(100% - 4 * var(--bichu-space-12));
+  z-index: 500;
+  background: var(--bichu-cor-surface);
+  color: var(--bichu-cor-text-primary);
+  border-radius: var(--bichu-radius-sm);
+  padding: var(--bichu-space-2) var(--bichu-space-3);
+  box-shadow: var(--bichu-shadow-sm);
+  pointer-events: none;
+  /* Escondida sem sair da arvore: `aria-describedby` continua lendo. */
+  clip-path: inset(50%);
+}
+
+.mapa:focus-visible ~ .mira {
+  display: block;
+}
+
+.mapa:focus-visible ~ .dica {
+  clip-path: none;
+}
+
+.pino {
+  color: var(--bichu-cor-primary);
+}
+
+.pino svg {
+  width: 100%;
+  height: 100%;
+  fill: var(--bichu-cor-surface);
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: var(--bichu-space-2);
+  flex-wrap: wrap;
+}
+
+.falha {
+  width: min(35rem, 100%);
+  aspect-ratio: 7 / 4;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--bichu-space-3);
+  border-radius: var(--bichu-radius-md);
+  border: var(--bichu-border-hairline) solid var(--bichu-cor-outline-control);
+  background: var(--bichu-cor-surface-sunken);
+  text-align: center;
+  padding: var(--bichu-space-4);
+}
