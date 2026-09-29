@@ -56,6 +56,148 @@
 }
 
 # --------------------------------------------------------------------------
+# Arquivos de associacao de deep link, como TRECHO importado por host
+# --------------------------------------------------------------------------
+# ADR-0017, emenda 1: todo host que aparece num link nosso que precisa abrir o
+# app serve a SUA copia destes dois arquivos, com conteudo identico. Com o
+# ADR-0028 sao tres blocos que os servem (a origem da aplicacao, o apex do site
+# e o host da tag), e o trecho existe para que eles NAO possam divergir: uma
+# copia escrita tres vezes e a que um dia ganha um redirecionamento num lado so.
+#
+# Os arquivos de associacao de deep link. Servidos ESTATICOS, com tipo
+# exato e SEM redirecionamento: o Android e a Apple exigem 200 direto e
+# application/json, e quem busca e o sistema operacional, nao o navegador.
+# Um redirecionamento aqui invalida o deep link nas duas plataformas sem
+# produzir erro em lugar nenhum. Ver docs/07-devops.md 7 e 16.12.
+#
+# Quem hospeda: ate 23/09 este comentario dizia que, em producao, os dois
+# arquivos seriam servidos por um time web noutro servidor. A decisao do
+# cliente de 23/09 trouxe o site para esta mesma borda (ADR-0028), e o item 6
+# dele manda os arquivos ficarem AQUI, servidos pela borda e fora da imagem do
+# site: o conteudo e do app (identificador e impressao digital da chave do
+# APK), e um deploy do site nao pode apagar a associacao por engano. Os tres
+# requisitos continuam: HTTPS, 200 direto com application/json, e zero
+# redirecionamento.
+(associacao_deep_link) {
+	handle /.well-known/assetlinks.json {
+		header Content-Type application/json
+		header Cache-Control "public, max-age=3600"
+		root * /srv/well-known
+		rewrite * /assetlinks.json
+		file_server
+	}
+	handle /.well-known/apple-app-site-association {
+		header Content-Type application/json
+		header Cache-Control "public, max-age=3600"
+		root * /srv/well-known
+		rewrite * /apple-app-site-association
+		file_server
+	}
+}
+
+# --------------------------------------------------------------------------
+# O gateway `/v1` (ADR-0016), como TRECHO importado por host
+# --------------------------------------------------------------------------
+# ADR-0028: `/v1/*` e servido em mais de um host (o da API e os do site, na
+# mesma origem da pagina). O trecho existe para que a protecao grossa e a
+# tabela de `/v1` sejam UMA so: importada, e nao copiada. Uma copia por host e
+# a que um dia fica com outro `max_size`, e `verificar_borda.py` le o primeiro
+# `max_size` do arquivo -- que e o deste trecho.
+#
+# O que NAO esta aqui, de proposito: a documentacao (`@docs`), que so existe
+# no host da API, atras de credencial (ADR-0018). Nos hosts do site ela e
+# fechada ANTES por `documentacao_fora_do_host_da_api`.
+(gateway_v1) {
+	# Protecao GROSSA, e so ela. Espelha `x-edge-limits` do contrato.
+	#
+	# NAO HA TETO DE REQUISICOES POR IP AQUI, e a ausencia e decisao: o Caddy
+	# sem plugin nao tem limitador de taxa, e plugin significa imagem propria
+	# na borda. Os tetos por IP existem e estao em `x-rate-limit`, aplicados
+	# no servico, que e o unico lugar que sabe o que e um `code` e o que e
+	# uma `finder_identity`. Quem procurar protecao de taxa aqui nao vai
+	# achar, e e por isso que esta escrito.
+	#
+	# ATE 21/09/2026 A FRASE ACIMA ERA FALSA. O servico declarava os tetos e
+	# nao aplicava nenhum: `hit()` nunca era chamado. A borda declinava de
+	# proteger apoiada numa protecao que nao existia, e os dois lados tinham
+	# escrito que o outro cuidava. Passou a ser verdade com a BICHUS-178 e o
+	# ADR-0016 Emenda 1, e quem quiser conferir em vez de acreditar roda
+	# `src/tools/portao-de-vigencia-do-teto.ts`, que sobe a borda e estoura o
+	# teto de uma rota real.
+	#
+	# 12 MiB: o maior upload aceito pelo contrato e 10 MiB, e o resto e
+	# folga de envelope. Os bytes da imagem nao passam por aqui de qualquer
+	# forma — vao direto para o armazenamento, com URL assinada.
+	request_body {
+		max_size 12MiB
+	}
+
+	# Cabecalho que a borda preencheria e que um cliente NAO pode forjar.
+	# Hoje a lista tem um item so; ela existe desde hoje para que o dia em
+	# que alguem introduzir um `X-Bichu-User` nao seja o dia em que alguem
+	# descobre que da para envia-lo de fora.
+	request_header -X-Internal-*
+
+	# `media` ja tem bloco proprio, apontando para o MESMO upstream. Ele nao
+	# faz nada hoje, e e esse o ponto: extrair o modulo `media` passa a ser
+	# trocar `api:3000` por `media:3000` NESTA LINHA, sem versao nova do app
+	# e sem mudanca no contrato. Costura escrita no dia da extracao e costura
+	# inventada sob pressao, com o app ja publicado em loja.
+	# `/v1/admin*` NAO passa por aqui, em host nenhum que importe este trecho
+	# (docs/04-seguranca.md, D33). O backoffice tem host proprio, com bloco
+	# proprio que serve `/v1/admin/*` antes de qualquer outra coisa; em todo
+	# outro host (hml, api, apex, tag) a rota administrativa responde 404 da
+	# borda. Sem barra no fim, de proposito: pega `/v1/admin` e `/v1/admin/...`.
+	# Primeiro no trecho porque a ordem entre `handle` e a ordem do arquivo.
+	# Resolucao combinada com a borda do backoffice (branch
+	# infra/backoffice-container): a regra mora AQUI, e o verificador de la le
+	# regra de dentro de trecho importado.
+	handle /v1/admin* {
+		respond "nao encontrado" 404
+	}
+
+	handle /v1/media/* {
+		reverse_proxy api:3000
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+}
+
+# --------------------------------------------------------------------------
+# A documentacao fora do host da API (ADR-0028, item 5)
+# --------------------------------------------------------------------------
+# Nos hosts do site, `/v1/*` vai para a API. Sem este trecho, `/v1/docs` e
+# `/v1/openapi.yaml` iriam junto -- e SEM o `basic_auth`, que so existe no
+# bloco da aplicacao. 404 na borda, sem 401 e sem 403: o caminho nao existe
+# nesses hosts.
+(documentacao_fora_do_host_da_api) {
+	@docs_fora path /v1/docs /v1/docs/* /v1/openapi.yaml
+	handle @docs_fora {
+		respond "nao encontrado" 404
+	}
+}
+
+# --------------------------------------------------------------------------
+# O que a origem da aplicacao responde fora das rotas conhecidas
+# --------------------------------------------------------------------------
+# ADR-0028, item 5: em desenvolvimento os quatro papeis dividem um host
+# (`localhost:3000`), entao o catch-all LOCAL e o site. Nos hosts da API
+# hospedados (`hml`, `api`) ele continua 404 (ADR-0017, item 5).
+#
+# Quem escolhe e `BORDA_RESTO_DA_APP`, com padrao `fechado`: esquecer a
+# variavel num host hospedado da o desfecho seguro. Valor fora dos dois
+# nomes abaixo e erro de configuracao e a borda nao sobe ("File to import not
+# found: resto_<valor>"), em vez de cair num dos dois em silencio.
+(resto_fechado) {
+	respond "nao encontrado" 404
+}
+(resto_site) {
+	reverse_proxy web:4321
+}
+
+# --------------------------------------------------------------------------
 # Origem da aplicacao
 # --------------------------------------------------------------------------
 # `HOSTS_EXTRA_APP` existe para o corte de DNS da BICHUS-146, e a forma dele nao
@@ -86,34 +228,7 @@
 		Referrer-Policy no-referrer
 	}
 
-	# Os arquivos de associacao de deep link. Servidos ESTATICOS, com tipo
-	# exato e SEM redirecionamento: o Android e a Apple exigem 200 direto e
-	# application/json, e quem busca e o sistema operacional, nao o navegador.
-	# Um redirecionamento aqui invalida o deep link nas duas plataformas sem
-	# produzir erro em lugar nenhum. Ver docs/07-devops.md 7 e 16.12.
-	#
-	# EM PRODUCAO ESTES DOIS BLOCOS NAO SAO NOSSOS (ADR-0017). Eles precisam
-	# ser servidos no host do deep link, que e o host da plaquinha
-	# (TAG_BASE_URL = WEB_BASE_URL), e esse host passou a ser do time web. O
-	# conteudo continua nosso (identificador do app e impressao digital da
-	# chave do APK); a hospedagem e deles, com os mesmos tres requisitos:
-	# HTTPS, 200 direto com application/json, e zero redirecionamento.
-	# Aqui os blocos ficam para o ambiente LOCAL, onde tudo mora no mesmo
-	# host e o deep link precisa continuar exercitado.
-	handle /.well-known/assetlinks.json {
-		header Content-Type application/json
-		header Cache-Control "public, max-age=3600"
-		root * /srv/well-known
-		rewrite * /assetlinks.json
-		file_server
-	}
-	handle /.well-known/apple-app-site-association {
-		header Content-Type application/json
-		header Cache-Control "public, max-age=3600"
-		root * /srv/well-known
-		rewrite * /apple-app-site-association
-		file_server
-	}
+	import associacao_deep_link
 
 	# JWKS e a descoberta OIDC. Servidos PELO SERVICO, e nao estaticos: as
 	# chaves rodam, e um arquivo estatico com chave rotacionada e uma chave
@@ -163,41 +278,6 @@
 	# A tabela de roteamento do gateway (ADR-0016)
 	# ------------------------------------------------------------------
 
-	# Protecao GROSSA, e so ela. Espelha `x-edge-limits` do contrato.
-	#
-	# NAO HA TETO DE REQUISICOES POR IP AQUI, e a ausencia e decisao: o Caddy
-	# sem plugin nao tem limitador de taxa, e plugin significa imagem propria
-	# na borda. Os tetos por IP existem e estao em `x-rate-limit`, aplicados
-	# no servico, que e o unico lugar que sabe o que e um `code` e o que e
-	# uma `finder_identity`. Quem procurar protecao de taxa aqui nao vai
-	# achar, e e por isso que esta escrito.
-	#
-	# ATE 21/09/2026 A FRASE ACIMA ERA FALSA. O servico declarava os tetos e
-	# nao aplicava nenhum: `hit()` nunca era chamado. A borda declinava de
-	# proteger apoiada numa protecao que nao existia, e os dois lados tinham
-	# escrito que o outro cuidava. Passou a ser verdade com a BICHUS-178 e o
-	# ADR-0016 Emenda 1, e quem quiser conferir em vez de acreditar roda
-	# `src/tools/portao-de-vigencia-do-teto.ts`, que sobe a borda e estoura o
-	# teto de uma rota real.
-	#
-	# 12 MiB: o maior upload aceito pelo contrato e 10 MiB, e o resto e
-	# folga de envelope. Os bytes da imagem nao passam por aqui de qualquer
-	# forma — vao direto para o armazenamento, com URL assinada.
-	request_body {
-		max_size 12MiB
-	}
-
-	# Cabecalho que a borda preencheria e que um cliente NAO pode forjar.
-	# Hoje a lista tem um item so; ela existe desde hoje para que o dia em
-	# que alguem introduzir um `X-Bichu-User` nao seja o dia em que alguem
-	# descobre que da para envia-lo de fora.
-	request_header -X-Internal-*
-
-	# `media` ja tem bloco proprio, apontando para o MESMO upstream. Ele nao
-	# faz nada hoje, e e esse o ponto: extrair o modulo `media` passa a ser
-	# trocar `api:3000` por `media:3000` NESTA LINHA, sem versao nova do app
-	# e sem mudanca no contrato. Costura escrita no dia da extracao e costura
-	# inventada sob pressao, com o app ja publicado em loja.
 	# Swagger UI (ADR-0018). Fechada por credencial NA BORDA, e ausente em
 	# producao. Este bloco e a metade "autenticacao"; a metade "so fora de
 	# producao" e a variavel: em producao o `docs_upstream` aponta para
@@ -216,37 +296,15 @@
 		reverse_proxy api:3000
 	}
 
-	# A SUPERFICIE ADMINISTRATIVA NAO EXISTE NESTE HOST (docs/04-seguranca.md,
-	# D33). `/v1/admin*` so e servido no bloco do backoffice, no fim deste
-	# arquivo; aqui ele responde 404 DA BORDA, em texto puro, sem tocar a
-	# aplicacao.
+	# O gateway `/v1`, DEPOIS do `@docs` e nao antes: a ordem entre `handle`
+	# de matcher nomeado e `handle` de caminho e a ordem do arquivo. Com o
+	# `import` acima do `@docs`, `/v1/*` casava primeiro e a documentacao saia
+	# SEM o `basic_auth` -- conferido em 23/09 pela configuracao adaptada.
 	#
-	# Sem esta linha, o `handle /v1/*` logo abaixo entrega qualquer
-	# `/v1/admin/...` ao servico -- medido em 23/09: `hml.bichu.app/v1/admin/ping`
-	# respondia 404 `application/problem+json` com `x-correlation-id`, ou seja,
-	# a APLICACAO respondia. No dia em que a primeira rota administrativa
-	# subisse, ela estaria publicada em `hml` e no apex sem nenhuma linha nova
-	# aqui, e o host administrativo seria so um segundo endereco para a mesma
-	# superficie.
-	#
-	# `/v1/admin*`, sem barra, de proposito: pega `/v1/admin`, `/v1/admin/...`
-	# e qualquer variacao de grafia que um roteador tolerante aceitasse. O
-	# Caddy ordena `handle` por especificidade de caminho, entao este vem antes
-	# de `/v1/*` independentemente da posicao no arquivo.
-	#
-	# `verificar_borda.py` reprova se este bloco sumir, com isca guardada em
-	# `infra/verificacao/iscas/caddyfile-app-sem-bloqueio-admin`.
-	handle /v1/admin* {
-		respond "nao encontrado" 404
-	}
-
-	handle /v1/media/* {
-		reverse_proxy api:3000
-	}
-
-	handle /v1/* {
-		reverse_proxy api:3000
-	}
+	# O trecho `gateway_v1` carrega o `handle /v1/admin*` que responde 404 DA
+	# BORDA (D33): a superficie administrativa so e servida no bloco do
+	# backoffice, no fim deste arquivo. `verificar_borda.py` reprova se ele sumir.
+	import gateway_v1
 
 	# Fechado de proposito (ADR-0017). As oito rotas publicas em HTML sairam
 	# deste servico e sao servidas pelo front web de outro time, no host de
@@ -256,8 +314,107 @@
 	# Com a borda fechada, o que nao e /v1 nao chega, e a remocao e
 	# verificavel de fora.
 	handle {
+		import resto_{$BORDA_RESTO_DA_APP:fechado}
+	}
+}
+
+# --------------------------------------------------------------------------
+# Os hosts do site (ADR-0028, item 5)
+# --------------------------------------------------------------------------
+# Decisao do cliente de 23/09/2026: o site roda nesta mesma maquina, atras
+# desta mesma borda, num container proprio (`web:4321`). Tres blocos, um por
+# papel de host, e a tabela deles esta no item 5 do ADR-0028.
+#
+# AS DUAS REGRAS DO CABECALHO VALEM IGUAL AQUI: nada reescreve caminho (so
+# `handle`, e o 308 abaixo e redirecionamento, nao reescrita), e nenhum numero
+# de limite novo -- o de `/v1` vem de `gateway_v1`, o mesmo do bloco da API.
+#
+# A BORDA NAO ACRESCENTA CABECALHO DE PAGINA (ADR-0028, item 7). CSP,
+# `Referrer-Policy`, `X-Robots-Tag` e cache das paginas saem do container do
+# site, para a politica viajar com a imagem quando ele mudar de lugar. Aqui so
+# as respostas de `/v1` recebem os mesmos cabecalhos que recebem no host da
+# API.
+#
+# O VALOR PADRAO DOS TRES NAO E DOMINIO NENHUM, de proposito:
+# `http://site.localhost`, `http://tag.localhost` e `http://www.localhost`
+# nao resolvem em DNS publico e nao pedem certificado. Os blocos existem, sao
+# exercitados pela esteira pela porta 80 de dentro da borda, e os hosts reais
+# (`bichu.app`, `tag.bichu.app`) continuam onde estao, em `HOSTS_EXTRA_APP`,
+# ate o corte.
+#
+# O CORTE (roteiro de provisionamento, passo 14), sempre com o `web` ja
+# saudavel antes -- na ordem contraria o apex responde 502:
+#
+#   HOSTS_EXTRA_APP=, https://api.bichu.app   (sai o apex e a tag, entra api)
+#   SITE_HOSTS=https://bichu.app
+#   SITE_TAG_HOSTS=https://tag.bichu.app
+#   SITE_WWW_HOSTS=https://www.bichu.app
+#   SITE_BASE_URL=https://bichu.app
+#
+# Um nome em dois blocos e configuracao invalida e a borda NAO sobe
+# ("ambiguous site definition"): esquecer de tirar o apex de
+# `HOSTS_EXTRA_APP` reprova alto, em vez de servir o bloco errado.
+#
+# `www` e `api` ainda nao resolvem. Para os dois vale a ordem do bloco da
+# aplicacao: configuracao primeiro, DNS logo depois, na mesma janela, porque o
+# certificado sai por HTTP-01 e cada tentativa sem DNS consome o limite do
+# emissor.
+
+# bichu.app: o site, com `/v1` na mesma origem da pagina (ADR-0028, item 4).
+{$SITE_HOSTS:http://site.localhost} {
+	encode zstd gzip
+
+	import associacao_deep_link
+	import documentacao_fora_do_host_da_api
+
+	@api path /v1/*
+	header @api {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	import gateway_v1
+
+	handle {
+		reverse_proxy web:4321
+	}
+}
+
+# tag.bichu.app: o host impresso na plaquinha, com a menor superficie
+# possivel. So a pagina da tag e os artefatos dela vao para o site; `/` leva
+# ao site no apex; todo o resto e 404 na borda.
+{$SITE_TAG_HOSTS:http://tag.localhost} {
+	encode zstd gzip
+
+	import associacao_deep_link
+	import documentacao_fora_do_host_da_api
+
+	@api path /v1/*
+	header @api {
+		-Server
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+	}
+	import gateway_v1
+
+	handle /t/* {
+		reverse_proxy web:4321
+	}
+	handle /_astro/* {
+		reverse_proxy web:4321
+	}
+	handle / {
+		redir {$SITE_BASE_URL:http://site.localhost}/ 308
+	}
+	handle {
 		respond "nao encontrado" 404
 	}
+}
+
+# www.bichu.app: nenhum link nosso usa `www`, entao ele nao serve arquivo de
+# associacao nem pagina. So leva ao apex, preservando caminho e consulta.
+{$SITE_WWW_HOSTS:http://www.localhost} {
+	redir {$SITE_BASE_URL:http://site.localhost}{uri} 308
 }
 
 # --------------------------------------------------------------------------

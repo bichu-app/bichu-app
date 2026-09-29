@@ -50,3 +50,7 @@ infra/maps-keys.txt
 backup
 coverage
 *.log
+
+# O site: outra imagem, com contexto proprio (`web/`). Fora do contexto da API
+# para que dependencia e build do site nao invalidem o cache desta imagem.
+web

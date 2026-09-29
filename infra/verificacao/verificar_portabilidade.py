@@ -115,7 +115,17 @@ def motivo_anotado(linha: str) -> str | None:
     return marca.group(1) if marca is not None else None
 
 
+# Lockfile e gerado pelo gerenciador de pacotes e carrega, por natureza, a URL
+# do registro de onde cada pacote veio. Ele nao e codigo nosso e nao decide host
+# nenhum em tempo de execucao. Entrou com `web/` (ADR-0028), a primeira raiz
+# varrida que tem `package.json` proprio. Isento pelo NOME exato, e nao por
+# extensao: um `.json` qualquer em `web/` continua varrido.
+ARQUIVOS_GERADOS = ("package-lock.json",)
+
+
 def isento(rel: str) -> bool:
+    if rel.rsplit("/", 1)[-1] in ARQUIVOS_GERADOS:
+        return True
     for padrao in ISENTOS:
         if padrao.endswith("/") and "*" not in padrao and rel.startswith(padrao):
             return True
