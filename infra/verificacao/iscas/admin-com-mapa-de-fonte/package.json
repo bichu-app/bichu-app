@@ -3,6 +3,7 @@
   "private": true,
   "description": "ISCA de admin/Dockerfile (D48). O build PRECISA reprovar: gera um index.html valido e um JS com sourceMappingURL e .map ao lado. Ver infra/verificacao/verificar-backoffice.sh.",
   "scripts": {
-    "build": "node -e \"const f=require('fs');f.mkdirSync('dist/assets',{recursive:true});f.writeFileSync('dist/index.html','<!doctype html><title>isca</title>');f.writeFileSync('dist/assets/a.js','x;\\n//# sourceMappingURL=a.js.map');f.writeFileSync('dist/assets/a.js.map','{}')\""
+    "build": "node -e \"const f=require('fs');f.mkdirSync('dist/assets',{recursive:true});f.writeFileSync('dist/index.html','<!doctype html><title>isca</title>');f.writeFileSync('dist/assets/a.js','x;\\n//# sourceMappingURL=a.js.map');f.writeFileSync('dist/assets/a.js.map','{}')\"",
+    "build:imagem": "node -e \"const f=require('fs');f.mkdirSync('dist/assets',{recursive:true});f.writeFileSync('dist/index.html','<!doctype html><title>isca</title>');f.writeFileSync('dist/assets/a.js','x;\\n//# sourceMappingURL=a.js.map');f.writeFileSync('dist/assets/a.js.map','{}')\""
   }
 }

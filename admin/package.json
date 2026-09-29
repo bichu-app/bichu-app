@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/conferir-dist.mjs",
+    "build:imagem": "tsc -b tsconfig.app.json tsconfig.node.json && vite build && node scripts/conferir-dist.mjs",
     "verify:dist": "node scripts/conferir-dist.mjs",
     "preview": "vite preview",
     "lint": "eslint .",

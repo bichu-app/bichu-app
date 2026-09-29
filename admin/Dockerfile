@@ -69,8 +69,15 @@ COPY . .
 # DevTools no host administrativo. Conferido AQUI, no unico caminho que produz a
 # imagem, e nao so na esteira: a configuracao do Vite e de quem escreve o app, e
 # um `sourcemap: true` esquecido nao pode chegar ao ar por nenhum caminho.
+#
+# `build:imagem`, e nao `build`: a unica diferenca e que o `tsc -b` aqui
+# confere so o app e a configuracao do Vite, e nao `tsconfig.test.json`. O
+# contexto de build e `admin/`, e ha teste do painel que le o dominio do
+# servidor em `../src/` de proposito (observacoes, D59): no contexto da imagem
+# esse caminho nao existe, e o build morria em TS2307. O teste continua
+# conferido no `npm run build` e na suite do painel, fora da imagem.
 RUN set -eu; \
-    npm run build; \
+    npm run build:imagem; \
     if [ ! -f "$SAIDA/index.html" ]; then \
       echo "ERRO: o build do backoffice nao produziu index.html em $SAIDA/." >&2; \
       exit 1; \

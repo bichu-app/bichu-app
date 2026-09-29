@@ -45,7 +45,14 @@ reprova() { echo "::error::$1"; echo "REPROVA: $1" >&2; falhas=1; }
 printf '%s\n' POSTGRES_PASSWORD=x OBJECT_STORAGE_ACCESS_KEY_ID=x \
   OBJECT_STORAGE_SECRET_ACCESS_KEY=x OBJECT_STORAGE_KMS_KEY=x \
   "BUILD_COMMIT=$commit" > "$trabalho/sonda.env"
+# As URLs da borda FIXAS aqui, na frente do compose, e nao no `sonda.env`: pelo
+# `make`, o Makefile EXPORTA `PUBLIC_BASE_URL` com a porta desta maquina
+# (`portas.local.mk`, 3300 quando a 3000 esta ocupada pela pilha principal), e
+# variavel de ambiente vence o `--env-file` na interpolacao. A borda passava a
+# escutar na 3300, a sonda batia em `edge:3000` e reprovava com ECONNREFUSED
+# (28/09). A pilha da sonda nao publica porta: a 3000 e so dentro da rede dela.
 dc() {
+  PUBLIC_BASE_URL=http://localhost:3000 MEDIA_PUBLIC_BASE_URL=http://localhost:3001 \
   docker compose -p "$projeto" --env-file "$trabalho/sonda.env" \
     -f compose.yaml -f infra/verificacao/compose.sonda-do-backoffice.yaml "$@"
 }
@@ -88,7 +95,12 @@ mkdir -p "$trabalho/sem-manifesto" "$trabalho/com-mapa"
 cp admin/Dockerfile admin/Caddyfile "$trabalho/sem-manifesto/"
 isca_de_build sem-manifesto "$trabalho/sem-manifesto" 'admin/ sem package.json' "$commit"
 cp admin/Dockerfile admin/Caddyfile infra/verificacao/iscas/admin-com-mapa-de-fonte/package*.json "$trabalho/com-mapa/"
-isca_de_build com-mapa-de-fonte "$trabalho/com-mapa" 'gerou mapa de codigo-fonte' "$commit"
+# A frase e o CAMINHO do mapa que o passo imprime, e nao a mensagem: o log
+# `--progress=plain` repete o texto do RUN, mensagem incluida, e a isca passava
+# por qualquer falha anterior do mesmo passo (conferido em 28/09 com o script
+# `build:imagem` ausente na isca: reprovou por "Missing script" e foi contada
+# como reprovada pelo motivo certo).
+isca_de_build com-mapa-de-fonte "$trabalho/com-mapa" 'dist/assets/a.js.map' "$commit"
 
 echo "== 4. pilha isolada: admin, borda e o eco no lugar da api"
 dc up -d --no-deps --wait admin-web api edge
