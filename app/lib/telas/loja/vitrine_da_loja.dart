@@ -9,6 +9,7 @@ import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_listagem.dart';
 import '../../widgets/faixa_de_aviso.dart';
+import '../../widgets/rodape_da_paginacao.dart';
 import '../casca_com_abas.dart';
 
 /// `Loja` — a vitrine curada que leva a loja do parceiro.
@@ -86,6 +87,18 @@ class VitrineDaLoja extends StatefulWidget {
 
   static const String exemploDaBusca = 'ração, coleira, shampoo';
 
+  /// A frase do fim da lista (paragrafo 11.20), no plural e no singular.
+  ///
+  /// Nao diz "desta região" como a de `Perto`: a vitrine e a mesma para todo
+  /// mundo, e nao ha recorte geografico nenhum nesta rota.
+  static String fimDaLista(int total) => total == 1
+      ? 'Você viu o único produto da vitrine.'
+      : 'Você viu todos os $total produtos da vitrine.';
+
+  /// Quando a pagina seguinte nao chega. A lista ja carregada **fica**.
+  static const String falhaAoCarregarMais =
+      'Não foi possível carregar mais produtos.';
+
   @override
   State<VitrineDaLoja> createState() => _VitrineDaLojaState();
 }
@@ -99,6 +112,19 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
   RecorteDaLoja _recorte = const RecorteDaLoja();
   PaginaDaLoja? _pagina;
   String? _textoDaFalha;
+
+  /// Os itens de **todas** as paginas ja pedidas, na ordem em que chegaram.
+  ///
+  /// `_pagina.itens` tem so a ultima pagina, e desenhar a lista a partir dela
+  /// e o defeito que esta tela tinha: a pagina 2 substituiria a 1 em vez de
+  /// continuar.
+  final List<ItemDaLoja> _itens = <ItemDaLoja>[];
+
+  /// A pagina seguinte esta em voo.
+  bool _carregandoMais = false;
+
+  /// Por que a pagina seguinte nao chegou. Nulo quando chegou.
+  String? _falhaDeMais;
 
   /// O controlador da busca vive no ESTADO, e nao no `build`.
   ///
@@ -137,19 +163,36 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
     });
   }
 
+  /// Carrega a **primeira** pagina do recorte atual, sempre.
+  ///
+  /// A normalizacao do `page` nao e zelo: este metodo e chamado tambem pelo
+  /// retorno a aba (`didChangeDependencies`) e pelo `Atualizar` da faixa de
+  /// falha, e nesses dois caminhos `_recorte.pagina` pode estar em 3 por causa
+  /// do `Carregar mais`. Sem ela, voltar para a aba pediria a pagina 3 e
+  /// mostraria vinte itens do meio como se fossem a vitrine inteira -- e com
+  /// um recorte pequeno a pagina 3 volta **vazia**, que e o "a lista ficou
+  /// vazia sem motivo" que ninguem consegue reproduzir.
   Future<void> _carregar() async {
     if (!mounted) return;
     final escopo = Escopo.of(context);
+    final recorte = _recorte.pagina == 1 ? _recorte : _recorte.com(pagina: 1);
     setState(() {
+      _recorte = recorte;
       _fase = _Fase.carregando;
       _textoDaFalha = null;
+      _falhaDeMais = null;
+      _carregandoMais = false;
+      _itens.clear();
     });
 
     try {
-      final pagina = await escopo.loja.listar(_recorte);
+      final pagina = await escopo.loja.listar(recorte);
       if (!mounted) return;
       setState(() {
         _pagina = pagina;
+        _itens
+          ..clear()
+          ..addAll(pagina.itens);
         _fase = _Fase.lista;
       });
     } on FalhaDeChamada catch (falha) {
@@ -176,6 +219,49 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
   void _trocarRecorte(RecorteDaLoja novo) {
     setState(() => _recorte = novo);
     _carregar();
+  }
+
+  /// Pede a pagina seguinte e **acrescenta** o que vier.
+  ///
+  /// A falha aqui nao apaga a vitrine, ao contrario da falha da pagina 1. Na
+  /// pagina 1 o recorte mudou e os cartoes antigos seriam a resposta errada;
+  /// aqui o recorte e o mesmo, e os itens na tela continuam sendo a resposta
+  /// certa para ele.
+  Future<void> _carregarMais() async {
+    if (!mounted || _carregandoMais) return;
+    final atual = _pagina;
+    if (atual == null) return;
+
+    final escopo = Escopo.of(context);
+    final proximo = _recorte.com(pagina: atual.pagina + 1);
+    setState(() {
+      _carregandoMais = true;
+      _falhaDeMais = null;
+    });
+
+    try {
+      final pagina = await escopo.loja.listar(proximo);
+      if (!mounted) return;
+      setState(() {
+        _recorte = proximo;
+        _pagina = pagina;
+        _itens.addAll(pagina.itens);
+        _carregandoMais = false;
+      });
+    } on FalhaDeChamada catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _carregandoMais = false;
+        _falhaDeMais = VitrineDaLoja.falhaAoCarregarMais;
+      });
+    } on FormatException catch (erro) {
+      if (!mounted) return;
+      setState(() {
+        _carregandoMais = false;
+        _falhaDeMais = VitrineDaLoja.falhaAoCarregarMais;
+      });
+      debugPrint('Resposta da vitrine fora do contrato: $erro');
+    }
   }
 
   @override
@@ -308,7 +394,7 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
       ];
     }
 
-    if (pagina.itens.isEmpty) {
+    if (_itens.isEmpty) {
       // **Dois vazios, e eles dizem coisas diferentes.** Um diz que a vitrine
       // ainda nao tem produto; o outro diz que o recorte da pessoa e que nao
       // tem. Uma frase so mandaria embora quem so precisava apagar a busca.
@@ -327,12 +413,19 @@ class _VitrineDaLojaState extends State<VitrineDaLoja> {
     }
 
     return <Widget>[
-      for (var i = 0; i < pagina.itens.length; i++) ...<Widget>[
+      for (var i = 0; i < _itens.length; i++) ...<Widget>[
         if (i > 0) const SizedBox(height: BichuEspaco.e3),
-        CartaoDaLoja(item: pagina.itens[i]),
+        CartaoDaLoja(item: _itens[i]),
       ],
-      const SizedBox(height: BichuEspaco.e4),
-      _LinhaDaPagina(pagina: pagina),
+      const SizedBox(height: espacoAcimaDoRodape),
+      RodapeDaPaginacao(
+        carregados: _itens.length,
+        total: pagina.total,
+        carregando: _carregandoMais,
+        textoDaFalha: _falhaDeMais,
+        fimDaLista: VitrineDaLoja.fimDaLista,
+        aoPedirMais: _carregarMais,
+      ),
     ];
   }
 }
@@ -358,26 +451,6 @@ class _AvisoDoParceiro extends StatelessWidget {
         VitrineDaLoja.avisoDeQueNaoSomosOVendedor,
         style: textos.bodySmall?.copyWith(color: cores.textPrimary),
       ),
-    );
-  }
-}
-
-/// `Mostrando 1 a 10 de 10`.
-class _LinhaDaPagina extends StatelessWidget {
-  const _LinhaDaPagina({required this.pagina});
-
-  final PaginaDaLoja pagina;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    final primeiro = (pagina.pagina - 1) * pagina.limite + 1;
-    final ultimo = primeiro + pagina.itens.length - 1;
-
-    return Text(
-      'Mostrando $primeiro a $ultimo de ${pagina.total}',
-      style: textos.bodySmall?.copyWith(color: cores.textSecondary),
     );
   }
 }

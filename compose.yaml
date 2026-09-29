@@ -99,16 +99,51 @@ services:
     # Armazenamento de objeto falando a API S3. Nao e "MinIO no lugar da AWS":
     # e a API S3, que o MinIO implementa e que S3 e GCS tambem atendem.
     #
-    # Registro: o MinIO NAO esta mais no Docker Hub (`minio/minio` responde
-    # "pull access denied"). A imagem oficial vive no quay.io. Quem for
-    # atualizar a tag vai esbarrar nisso e perder tempo achando que e
-    # credencial. O que pina de verdade e o digest, nao a tag.
-    image: quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # IMAGEM: `bitnamilegacy/minio`, por decisao do cliente em 29/09/2026.
+    # A imagem OFICIAL do MinIO saiu dos registros anonimos: `minio/minio` e
+    # `minio/mc` respondem "pull access denied ... repository does not exist"
+    # no Docker Hub, e no quay.io (digest fixado, `:latest` e tags RELEASE.*)
+    # respondem 401 -- a API do quay diz "Requires authentication". Sem login
+    # de registro, nao ha imagem oficial baixavel, e o job `integracao` da
+    # esteira parava com "unauthorized" ao puxar estas duas imagens.
+    #
+    # A escolha foi trocar para o mirror `bitnamilegacy/*`, unico maintido e
+    # baixavel anonimo por digest. DIVIDA REGISTRADA: `bitnamilegacy` e um
+    # namespace CONGELADO (a Bitnami restringiu as imagens gratuitas em
+    # 28/08/2026; a "legacy" e backup temporario). Ver o PR desta mudanca e
+    # `adr/` sobre storage; quando houver decisao de registro autenticado
+    # oficial, isto volta para a imagem do MinIO sem mudar o comportamento.
+    #
+    # O CONTRATO DA IMAGEM MUDOU, e por isso os campos abaixo mudaram junto:
+    #  - roda como uid 1001 (nao-root). O volume monta no diretorio de dados do
+    #    Bitnami (`/bitnami/minio/data`), que a imagem cria com grupo 0 e bit de
+    #    escrita de grupo, e o processo (gid 0) escreve nele;
+    #  - NAO existe mais `command: server ...`: o entrypoint do Bitnami monta o
+    #    comando sozinho a partir das variaveis (porta da API 9000, do console
+    #    9001, e o diretorio `MINIO_DATA_DIR`);
+    #  - o console e por `MINIO_CONSOLE_PORT_NUMBER` (nao ha `MINIO_CONSOLE_ADDRESS`
+    #    no MinIO: o oficial usa a flag `--console-address`, que o Bitnami gera a
+    #    partir deste numero). 9001 e o padrao; fica explicito para casar com
+    #    `MINIO_BROWSER_REDIRECT_URL`;
+    #  - a sonda deixa de ser `mc ready local` (dependia de um alias que so
+    #    existe no init) e passa a bater no endpoint de saude do proprio MinIO.
+    # O que a integracao exercita continua igual: SSE-S3 (MINIO_KMS_SECRET_KEY),
+    # URL assinada pelo host (MINIO_SERVER_URL) e a politica anonima do bucket.
+    image: docker.io/bitnamilegacy/minio@sha256:6dabb4a2088c9a79908de3bc05f4586c23ad2182c8908e7e3acbf61c1467fb20
     mem_limit: 320m
-    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY_ID:?defina no .env}
       MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?defina no .env}
+      # Onde o MinIO guarda os objetos DENTRO do container Bitnami. O volume
+      # `dados_objeto` monta exatamente aqui (mudou de `/data`, que era o padrao
+      # da imagem oficial).
+      MINIO_DATA_DIR: /bitnami/minio/data
+      # Porta do console (browser). O Bitnami transforma isto na flag
+      # `--console-address :9001`; 9001 e o padrao e casa com o redirect abaixo.
+      MINIO_CONSOLE_PORT_NUMBER: "9001"
+      # Sem TLS: o edge termina o TLS, e a origem de midia fala http na rede
+      # interna. Explicito para o setup do Bitnami nao supor https.
+      MINIO_SCHEME: http
       # O MinIO assina a URL com o host pelo qual ele se conhece. Se isto
       # divergir do host publico, TODA URL assinada quebra, com erro de
       # assinatura que nao diz que e de host. E o defeito classico de
@@ -123,25 +158,39 @@ services:
       # um KMS. O KMS embutido (`MINIO_KMS_SECRET_KEY`) atende, e e o caminho
       # que o proprio MinIO documenta para ambiente sem KMS externo.
       #
+      # FORMATO: `<id>:<base64 de 32 bytes>`. Chave curta faz o MinIO NAO subir,
+      # e o setup do Bitnami fica em laco "Adding local Minio host..." sem nunca
+      # ficar saudavel -- medido em 29/09. O `.env.example` gera o valor certo.
+      #
       # Chave de DESENVOLVIMENTO, descartavel, com valor no `.env`. Em producao
       # isto vira o KMS do provedor, que e configuracao e nao codigo -- o
       # cabecalho que a aplicacao envia e o mesmo nos dois.
       MINIO_KMS_SECRET_KEY: ${OBJECT_STORAGE_KMS_KEY:?defina no .env}
     volumes:
-      - dados_objeto:/data
+      - dados_objeto:/bitnami/minio/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # Endpoint de saude do proprio MinIO, pela porta da API. `curl` existe na
+      # imagem Bitnami. Substitui `mc ready local`, que precisava de um alias
+      # `local` que so o `objeto_init` configura.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
       interval: 5s
       timeout: 3s
       retries: 20
-      start_period: 15s
+      start_period: 20s
     restart: unless-stopped
 
   objeto_init:
     # Cria os dois buckets do ADR-0007 e aplica a politica. Idempotente: pode
     # rodar em toda subida. O bucket privado NAO recebe politica anonima, e e
     # essa separacao fisica que protege o original com EXIF.
-    image: quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    #
+    # IMAGEM: `bitnamilegacy/minio-client` (o `mc`), pelo mesmo motivo do
+    # `objeto` acima -- a `minio/mc` oficial saiu dos registros anonimos. Duas
+    # diferencas de contrato tratadas aqui: (1) o entrypoint padrao do Bitnami e
+    # um `run.sh` proprio, entao sobrescrevo com o script de init; (2) roda como
+    # uid 1001 com HOME nao-gravavel (`/`), entao o `mc` grava a config em
+    # `/tmp/.mc` via `--config-dir`, senao ele falha ao salvar o alias.
+    image: docker.io/bitnamilegacy/minio-client@sha256:73bd39f7899a0cef12b8dd5df13aa93a3ed1aaa44236542442e9ac76819ac158
     depends_on:
       objeto:
         condition: service_healthy
@@ -155,6 +204,10 @@ services:
       - -c
       - |
         set -eu
+        # `mc` grava a config do alias em disco; com HOME=/ (nao-gravavel pelo
+        # uid 1001 do Bitnami) o alias nao salva. `--config-dir /tmp/.mc` poe a
+        # config num lugar gravavel.
+        mc() { command mc --config-dir /tmp/.mc "$$@"; }
         mc alias set local http://objeto:9000 "$$CHAVE" "$$SEGREDO"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PRIVATE"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PUBLIC"
