@@ -27,7 +27,13 @@
  */
 import { sql } from 'kysely';
 import type { Db } from '../db/pool.js';
-import type { JobKind, JobQueue, JobRecord } from '../ports/job-queue.js';
+import type {
+  CriteriosDeOrfandade,
+  JobKind,
+  JobQueue,
+  JobRecord,
+  TrabalhoRecuperado,
+} from '../ports/job-queue.js';
 import type { IdGenerator } from '../ports/id-generator.js';
 import type { Instant } from '../types/brands.js';
 
@@ -35,6 +41,16 @@ import type { Instant } from '../types/brands.js';
 function proximaTentativaEmMs(tentativas: number): number {
   return Math.min(60_000 * 5 ** (tentativas - 1), 6 * 60 * 60 * 1000);
 }
+
+/**
+ * O texto que fica em `last_error` quando a recuperação encontra um órfão.
+ *
+ * Prefixo estável porque é por ele que se conta, no banco, quantas vezes o
+ * worker morreu com trabalho na mão: `last_error LIKE 'trabalho orfao%'`. Erro
+ * de biblioteca não tem forma previsível e não se conta; este tem.
+ */
+const MOTIVO_DA_ORFANDADE =
+  'trabalho orfao: o processo morreu segurando a reserva e a trava venceu';
 
 export function criarJobQueue(db: Db, ids: IdGenerator): JobQueue {
   return {
@@ -130,6 +146,82 @@ export function criarJobQueue(db: Db, ids: IdGenerator): JobQueue {
         })
         .where('id', '=', id)
         .execute();
+    },
+
+    /**
+     * A ÚNICA saída de `running`, e é por isso que ela existe.
+     *
+     * Uma instrução só, com `SKIP LOCKED` pelo mesmo motivo de `claim`: duas
+     * instâncias varrendo não podem recuperar a mesma linha duas vezes, e sem
+     * `SKIP LOCKED` a segunda ficaria esperando a primeira para depois contar
+     * uma orfandade que já foi contada.
+     *
+     * `locked_at IS NOT NULL` é redundante com `status = 'running'` no código de
+     * hoje e não é redundante por acaso: uma linha `running` com `locked_at`
+     * nulo é estado que não deveria existir, e `locked_at < agora - prazo`
+     * devolveria `NULL` (nem verdadeiro nem falso) e a pularia em silêncio. O
+     * predicado explícito é o que faz essa linha aparecer como o que ela é —
+     * presa, e não recuperada.
+     *
+     * **A retentativa não é imediata**, e é por isso que `run_after` avança.
+     * Devolver com `run_after = now()` faria a carga que acabou de derrubar o
+     * processo ser a primeira coisa que o processo novo pega, e a queda viraria
+     * laço apertado. A mesma espera de `fail` dá folga para o processo subir,
+     * drenar o que é saudável, e só então reencontrar o suspeito — e é também o
+     * que separa duas orfandades por minutos, que é o que faz a segunda
+     * significar "a carga" em vez de "a mesma implantação".
+     *
+     * Nenhuma prosa dentro do template: um acento grave num comentário SQL
+     * encerra o literal, e o erro que ele produz (`',' expected`) aponta para
+     * uma linha que não tem nada de errado.
+     */
+    async recuperarOrfaos(criterios: CriteriosDeOrfandade): Promise<readonly TrabalhoRecuperado[]> {
+      const segundosDoPrazo = criterios.prazoEmMs / 1000;
+
+      const resultado = await sql<{
+        id: string;
+        kind: string;
+        payload: unknown;
+        orphan_recoveries: number;
+        status: string;
+      }>`
+        UPDATE jobs AS j
+           SET orphan_recoveries = j.orphan_recoveries + 1,
+               locked_at = NULL,
+               last_error = ${MOTIVO_DA_ORFANDADE} || ' (orfandade '
+                            || (j.orphan_recoveries + 1) || ' de '
+                            || ${criterios.tetoDeOrfandade} || ')',
+               status = CASE
+                 WHEN j.orphan_recoveries + 1 >= ${criterios.tetoDeOrfandade}
+                 THEN 'failed' ELSE 'pending' END,
+               finished_at = CASE
+                 WHEN j.orphan_recoveries + 1 >= ${criterios.tetoDeOrfandade}
+                 THEN now() ELSE j.finished_at END,
+               run_after = CASE
+                 WHEN j.orphan_recoveries + 1 >= ${criterios.tetoDeOrfandade}
+                 THEN j.run_after
+                 ELSE now() + make_interval(
+                   secs => ${proximaTentativaEmMs(1)} / 1000.0) END
+         WHERE j.id IN (
+           SELECT id
+             FROM jobs
+            WHERE status = 'running'
+              AND locked_at IS NOT NULL
+              AND locked_at < now() - make_interval(secs => ${segundosDoPrazo})
+            ORDER BY locked_at
+            FOR UPDATE SKIP LOCKED
+            LIMIT ${criterios.limite}
+         )
+        RETURNING j.id, j.kind, j.payload, j.orphan_recoveries, j.status
+      `.execute(db);
+
+      return resultado.rows.map((l) => ({
+        id: l.id,
+        kind: l.kind as JobKind,
+        payload: l.payload,
+        orfandades: l.orphan_recoveries,
+        desistiu: l.status === 'failed',
+      }));
     },
   };
 }

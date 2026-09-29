@@ -27,6 +27,7 @@ export const STATUS_DO_PROBLEMA = {
   'transfer-already-in-progress':   409, // BICHUS-66: este pet ja tem transferencia viva. O banco impoe (indice unico parcial `pet_transfers_uma_viva_por_pet`), e o tipo existe para a tela oferecer a SAIDA -- cancelar a que esta em andamento -- em vez de 'erro'. Separado de `pet-already-lost`, que e o OUTRO 409 da mesma operacao e tem saida oposta: ali a pessoa encerra o caso de perdido, aqui ela cancela um convite
   'transfer-already-effective':     409, // BICHUS-66: a transferencia ja se consumou, e depois disso o caminho e transferir de volta, nao cancelar. E 409 e nao 410 de proposito: a rota EXIGE conta e o tutor tem direito de saber em que pe esta a propria transferencia -- o 410 sem distincao e da superficie PUBLICA do token, onde dizer qual dos tres casos ocorreu entregaria a um estranho o estado de uma transferencia alheia
   'conversation-closed':            410,
+  'lost-case-closed':               410, // o link publico do caso (`/p/`, `/cartaz/`, destino do push) nao leva mais a caso aberto: encerrado, pet excluido, falecido ou arquivado, e token desconhecido. Os cinco sao a MESMA resposta de proposito -- distinguir contaria a um estranho o que aconteceu com o animal de outra pessoa, ou se aquele token existiu. Separado de `conversation-closed` porque a tela e outra: quem abre o cartaz nao esta numa conversa, e o site e o app decidem pelo `type`
   'tag-revoked':                    410, // tag revogada e SEMPRE 410 com `next_action`, nunca 404 (ADR-0004)
   'tag-code-not-found':             404,
   'tag-code-malformed':             400,
@@ -38,7 +39,7 @@ export const STATUS_DO_PROBLEMA = {
   'internal':                       500,
 } as const;
 
-/** União fechada dos 28 tipos declarados no contrato. */
+/** União fechada dos 29 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

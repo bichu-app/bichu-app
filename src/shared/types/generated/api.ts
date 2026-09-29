@@ -1611,6 +1611,78 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/store/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A vitrine curada da Loja
+         * @description A secao `Loja`: uma vitrine curada de produtos de parceiro, cada um com
+         *     o link que abre a loja do parceiro. **A compra acontece la, nao aqui.**
+         *
+         *     **E PUBLICA, e a divergencia em relacao a `listDirectoryEntries` e
+         *     deliberada.** `Perto` exige conta porque `phone_e164` e `distance_m`
+         *     sao o conteudo util dela, e o portao de contrato publico reprova os
+         *     dois em operacao alcancavel sem conta. **A Loja nao tem nenhum dos
+         *     dois.** Um item e titulo, resumo, imagem, preco de referencia e o link
+         *     publico do parceiro -- tudo ja publicado no site dele. O criterio 24 da
+         *     BICHUS-185 pede esta operacao publica por extenso, e a BICHUS-189
+         *     repete: "a Loja e navegavel deslogado, entao a operacao nao exige
+         *     conta". Autorizacao na clausula `WHERE` (ADR-0021), sem ramo
+         *     privilegiado.
+         *
+         *     **Nenhum UUID sai daqui.** A chave do item e a do parceiro sao o
+         *     `slug`, e nao ha campo de UUID nesta resposta -- nem opcional, nem
+         *     nulavel. O ADR-0010 item 6 proibe UUID interno em saida publica, e
+         *     quem impede o engano nao e a boa vontade de quem escreve a consulta:
+         *     `src/tools/portao-contrato-publico.ts` reprova qualquer campo
+         *     `format: uuid` em operacao alcancavel sem conta (SEC-001).
+         *
+         *     As tabelas tem, sim, identidade interna (`store_partners.id`,
+         *     `store_items.id`), e ela e o alvo da chave estrangeira entre as duas
+         *     (ADR-0024). Ela nunca e projetada. Separar as duas identidades e o
+         *     desenho de `pets` e de `professionals`, e existe porque chave
+         *     estrangeira sobre endereco publico e o que o criterio 2 da BICHUS-19
+         *     proibe -- endereco publico e valor que muda e que sai impresso.
+         *
+         *     **NAO EXISTE OPERACAO DE ESCRITA DE CATALOGO NESTE CONTRATO**, e a
+         *     ausencia e o criterio 20 da BICHUS-185. A entrada de dados e a decisao
+         *     9.6 de `api/contrato-de-escrita-do-diretorio.md`, pendente do cliente:
+         *     catalogo versionado no repositorio (BICHUS-189) ou backoffice de outra
+         *     esteira. Nos dois caminhos o esquema e o mesmo; no segundo a escrita
+         *     nasce em `/v1/admin/...` como manda o ADR-0023.
+         *
+         *     ## O preco de referencia, e o vencimento que o SERVIDOR aplica
+         *
+         *     `price_amount` e **inteiro em centavos**, nunca ponto flutuante.
+         *     Ele e **opcional**, e item sem preco e estado normal, nao lacuna.
+         *
+         *     Quando ha preco, `price_currency` e `price_checked_at` vem junto,
+         *     sempre -- e `price_checked_at` e a data em que uma PESSOA abriu a
+         *     pagina do parceiro e leu aquele numero.
+         *
+         *     **Passados 30 dias da consulta, o servidor OMITE o valor** e
+         *     `price_status` vem `vencido`. Nao e a tela que esconde: se a regra
+         *     morasse no aplicativo, um aparelho com build antigo mostraria preco
+         *     vencido para sempre, e nao haveria como parar isso sem passar pela loja
+         *     de aplicativos. O item **continua na vitrine**; o que some e o numero.
+         *
+         *     **Nao ha preco riscado, "de/por", desconto nem comparacao** (criterio
+         *     19): nao ha campo para nenhum deles, e um portao reprova se algum
+         *     nascer.
+         */
+        get: operations["listStoreItems"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/lost-pets": {
         parameters: {
             query?: never;
@@ -1679,6 +1751,17 @@ export interface paths {
          *
          *     Devolve a mesma projecao publica da listagem: foto, sinais, **bairro** e
          *     data. Nunca contato, endereco, ponto exato nem UUID interno.
+         *
+         *     **A autenticacao e opcional e decide um campo so**, `can_report_sighting`,
+         *     que e falso para o tutor do caso. Sem `Authorization`, a leitura e a
+         *     anonima. **Com `Authorization` presente e invalido, a resposta e 401**,
+         *     e nao a leitura anonima: rebaixar em silencio esconderia do app que a
+         *     sessao acabou, e o toque seguinte em "vi este pet" falharia sem
+         *     explicacao. E a mesma regra de `GET /tags/{code}`.
+         *
+         *     A resposta varia com quem chama, e por isso sai com
+         *     `Cache-Control: no-store`: um cache compartilhado que guardasse a versao
+         *     do tutor serviria `can_report_sighting: false` ao vizinho.
          */
         get: operations["getPublicLostCase"];
         put?: never;
@@ -1709,8 +1792,16 @@ export interface paths {
          *     ganhar campo sem que o cartaz caiba em uma folha, e o dia em que os dois
          *     forem o mesmo recurso, um dos dois vai piorar.
          *
-         *     Nunca traz contato, endereco, ponto exato nem UUID interno — a mesma
+         *     Nunca traz contato, endereco, ponto exato nem UUID interno, a mesma
          *     regra da projecao publica.
+         *
+         *     **Sem autenticacao.** O papel colado no poste e igual para todo mundo, e
+         *     a resposta nao pode variar com quem pede. Ate 23/09/2026 esta operacao
+         *     declarava autenticacao opcional sem que o token decidisse coisa alguma;
+         *     o servidor ignora `Authorization` aqui, e por isso nao ha 401.
+         *
+         *     **Nao ha 429.** O unico teto e `serve_cache`, que responde do cache e
+         *     nao recusa, como em `getFinderConversation`.
          */
         get: operations["getLostCasePoster"];
         put?: never;
@@ -2976,10 +3067,26 @@ export interface components {
             breed_label?: string | null;
             size: components["schemas"]["PetSize"];
             primary_color?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description **Quando o animal foi visto pela ultima vez**, como o tutor informou
+             *     (`lost_cases.last_seen_at`), e nao quando o caso foi aberto. Quem
+             *     abre o caso no dia seguinte ao sumico precisa que a pagina diga "desde
+             *     ontem", e e esse o numero que orienta quem esta procurando. O nome do
+             *     campo fica, porque e o que a tela mostra ("perdido desde").
+             */
             lost_since: string;
-            /** @description Bairro e cidade. Este e o nivel maximo de precisao publica. */
-            area_label: string;
+            /**
+             * @description Bairro e cidade. Este e o nivel maximo de precisao publica.
+             *
+             *     **Nulo quando o caso foi aberto so com coordenada** (BICHUS-21
+             *     criterio 5). A coordenada nunca sai e nao ha geocodificacao no MVP,
+             *     entao nao ha rotulo verdadeiro para dar. O texto que a tela mostra
+             *     nesse caso ("Regiao nao informada") e do cliente: rotulo fixo dentro
+             *     de um campo de dado e indistinguivel de um bairro com esse nome. E a
+             *     mesma regra de `LostCaseReachPreview.area_label`.
+             */
+            area_label: string | null;
             /** Format: uri */
             photo_url?: string | null;
             /** Format: uri */
@@ -2998,30 +3105,40 @@ export interface components {
             size: components["schemas"]["PetSize"];
             primary_color?: string | null;
             distinctive_marks?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Quando o animal foi visto pela ultima vez (`lost_cases.last_seen_at`),
+             *     e nao quando o caso foi aberto. Mesmo significado de
+             *     `PublicLostPet.lost_since`.
+             */
             lost_since: string;
-            /** @description Bairro e cidade. Nivel maximo de precisao publica. */
-            area_label: string;
+            /**
+             * @description Bairro e cidade. Nivel maximo de precisao publica. Nulo quando o caso
+             *     so tem coordenada, pela mesma regra de `PublicLostPet.area_label`.
+             */
+            area_label: string | null;
             /**
              * Format: uri
-             * @description Derivada em resolucao de **impressao**, maior que a da listagem. Um
-             *     cartaz e visto a dois metros de distancia; a miniatura da lista
+             * @description A derivada `card` da foto principal, **1024 px de largura**. Em meia
+             *     folha A4 (cerca de 17 cm) isso da uns 150 dpi, o bastante para um
+             *     cartaz lido a dois metros. Nunca a `thumb` (160 px): a miniatura
              *     impressa vira uma mancha, e o cartaz deixa de servir para a unica
-             *     coisa que ele faz.
+             *     coisa que ele faz. Nao ha derivada so para impressao, e ela so se
+             *     paga se a medida de 150 dpi se mostrar insuficiente no papel.
              */
             photo_url?: string | null;
             /**
-             * @description Texto livre curto do tutor, se houver. Passa pela mesma redacao de
-             *     contato das mensagens: telefone ou e-mail escritos aqui sao
-             *     retirados, porque o cartaz e publico e um numero em poste e a porta
-             *     do golpe do falso achador.
-             */
-            reward_note?: string | null;
-            /**
              * Format: uri
-             * @description O endereco curto que vira o QR do papel. E por ele que quem viu o
-             *     animal chega ao canal mediado, sem telefone e sem endereco no
-             *     cartaz.
+             * @description O endereco que o QR do papel codifica: a pagina do caso,
+             *     `{WEB_BASE_URL}/p/{shareToken}`, o mesmo valor de
+             *     `PublicLostCase.share_url`. E por ele que quem viu o animal chega ao
+             *     canal mediado, sem telefone e sem endereco no cartaz.
+             *
+             *     **Nao ha encurtador**, e o contrato nao promete um. "Curto" quer
+             *     dizer apenas que e o endereco mais curto que leva ao caso; o nome
+             *     fica porque renomear agora nao muda o que o QR carrega. Um encurtador proprio seria
+             *     mais um servico e mais um dominio para manter, e um de terceiro
+             *     colocaria outra empresa entre o cartaz e o caso.
              */
             short_url: string;
         };
@@ -3048,9 +3165,16 @@ export interface components {
             /** @description O mesmo cartao de manejo da pagina do achador. */
             care_notes?: string | null;
             /**
-             * @description Falso para o proprio tutor. Verdadeiro para qualquer outra conta:
-             *     e o botao "vi este pet", que cria o achado ja vinculado pelo
-             *     `share_token`.
+             * @description Falso **so** para o proprio tutor. Verdadeiro para qualquer outra
+             *     conta **e para quem chama sem conta**: e o botao "vi este pet", e
+             *     ele existe para quem viu o animal, tenha conta ou nao.
+             *
+             *     O toque leva a `POST /found-reports` (`createStrayFoundReport`)
+             *     com o `share_token` do caso, que vincula o achado direto a ele.
+             *     Aquela operacao exige conta, entao para o anonimo o toque passa
+             *     antes pela entrada: **a conta e pedida no toque, nao na leitura**.
+             *     Esconder o botao de quem nao entrou esconderia justamente de
+             *     quem chegou pelo cartaz.
              */
             can_report_sighting?: boolean;
             /** Format: uri */
@@ -3151,6 +3275,102 @@ export interface components {
             /**
              * @description O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
              *     foi informado, porque "nada filtrado" e uma informacao e nao uma
+             *     ausencia.
+             */
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description A categoria do produto. Lista fechada, imposta por `CHECK` no banco e
+         *     nao por `enum` nativo do Postgres: acrescentar valor a um `enum` nativo
+         *     exige alterar o tipo com o produto no ar. Acrescentar valor aqui e
+         *     sempre tres arquivos no mesmo commit (ADR-0023 secao 3).
+         * @enum {string}
+         */
+        StoreCategory: "food" | "toy" | "hygiene" | "accessory" | "health" | "bed";
+        /**
+         * @description O parceiro que vende o item. **Sem UUID**: `slug` e a unica chave do
+         *     parceiro que sai daqui. A identidade interna (`store_partners.id`)
+         *     existe no esquema, e o ADR-0024 registra por que ela e separada do
+         *     endereco publico -- ela nunca e projetada, e o portao de contrato
+         *     publico reprova quem tentar.
+         */
+        StorePartnerRef: {
+            slug: string;
+            name: string;
+            /**
+             * @description Apenas o host, sem esquema, caminho nem consulta. E o que permite a
+             *     tela nomear o destino ANTES da saida ("Abrir na Cobasi"), como manda
+             *     a consequencia 1 da BICHUS-185.
+             */
+            host: string;
+        };
+        /**
+         * @description **Tres estados, e nao dois.** `sem_preco` e `vencido` produzem a mesma
+         *     ausencia de numero e pedem textos diferentes: item que nunca teve preco
+         *     nao mostra a linha (ausencia de preco e estado normal); item com preco
+         *     vencido diz que o preco nao esta confirmado e aponta o parceiro. Um
+         *     booleano faria a tela escolher uma frase so para os dois casos.
+         * @enum {string}
+         */
+        StorePriceStatus: "vigente" | "vencido" | "sem_preco";
+        StoreItemSummary: {
+            /** @description O endereco publico do item. Nao ha UUID nesta tabela. */
+            slug: string;
+            title: string;
+            /** @description Uma linha. O teto de 180 caracteres e o que a mantem uma linha. */
+            summary: string;
+            category: components["schemas"]["StoreCategory"];
+            /**
+             * Format: uri
+             * @description Sempre https. Nulo e estado normal, e o cartao sabe se desenhar sem imagem.
+             */
+            image_url?: string | null;
+            /**
+             * Format: uri
+             * @description O destino no site do parceiro. **Nenhum identificador de pessoa
+             *     entra aqui, em codificacao nenhuma** (consequencia 3 da
+             *     BICHUS-185). A tela abre no navegador do sistema, nunca em webview
+             *     embutida: webview com a nossa moldura em volta faz o Bichu parecer
+             *     o vendedor.
+             */
+            target_url: string;
+            partner: components["schemas"]["StorePartnerRef"];
+            /**
+             * @description **Centavos, inteiro.** Ponto flutuante para dinheiro erra na soma e
+             *     o erro aparece meses depois. Nulo quando nao ha preco **e tambem
+             *     quando o preco venceu** -- `price_status` distingue os dois.
+             */
+            price_amount?: number | null;
+            /** @enum {string|null} */
+            price_currency?: "BRL" | null;
+            /**
+             * Format: date
+             * @description A data em que uma PESSOA leu aquele numero na pagina do parceiro.
+             *     Nunca a data do commit, do deploy nem `now()`. **Sai junto com o
+             *     valor quando o preco vence**: manter a data sem o valor entregaria
+             *     ao aplicativo o que ele precisa para reconstruir o preco antigo.
+             */
+            price_checked_at?: string | null;
+            price_status: components["schemas"]["StorePriceStatus"];
+        };
+        StoreItemPage: {
+            items: components["schemas"]["StoreItemSummary"][];
+            page: number;
+            limit: number;
+            total: number;
+            /**
+             * @description **A ordem em que a lista de fato saiu**, e nao a que foi pedida. A
+             *     barra de listagem mostra a ordem REAL; uma tela que lesse a ordem do
+             *     proprio estado local afirmaria a pedida sobre uma lista que o
+             *     servidor pode ter ordenado de outro jeito.
+             * @enum {string}
+             */
+            effective_sort: "curadoria" | "nome";
+            /**
+             * @description O recorte que de fato valeu. Traz `scope: all` quando nada foi
+             *     recortado, porque "nada filtrado" e uma informacao e nao uma
              *     ausencia.
              */
             applied_filters?: {
@@ -3293,6 +3513,27 @@ export interface components {
         };
         /** @description Nao existe, ou nao e visivel para quem perguntou. */
         NotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O link publico do caso nao leva mais a caso aberto. `type` e sempre
+         *     `lost-case-closed`, e cobre, **com o mesmo corpo**: caso encerrado; pet
+         *     excluido, falecido ou arquivado; e token desconhecido. A superficie
+         *     publica nao distingue o motivo, porque distinguir contaria a um estranho
+         *     o que aconteceu com o animal de outra pessoa, ou se aquele token um dia
+         *     existiu. Nao e 404 pela mesma razao da tag revogada (ADR-0004): link
+         *     impresso num cartaz nao pode terminar numa pagina sem saida.
+         *
+         *     `next_action: register_stray_found_report` e a saida: quem chegou por um
+         *     cartaz antigo e esta vendo um animal parecido ainda consegue registrar o
+         *     achado avulso, e o cruzamento por atributos faz o resto.
+         */
+        LostCaseClosed: {
             headers: {
                 [name: string]: unknown;
             };
@@ -5899,6 +6140,52 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    listStoreItems: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Busca por texto em titulo e resumo, **no servidor**. A tela declara
+                 *     alcance de servidor por causa disto; filtrar em memoria os itens da
+                 *     pagina seria uma busca que funciona com 10 registros e mente com
+                 *     200.
+                 */
+                q?: string;
+                /** @description Filtra por categoria do produto. */
+                category?: components["schemas"]["StoreCategory"];
+                /**
+                 * @description `curadoria` e a ordem da vitrine, escolhida a mao, e e o default: a
+                 *     Loja e uma lista curada e a primeira coisa que ela comunica e a
+                 *     escolha. **Nao ha ordem por preco**, porque o preco e opcional e
+                 *     vence: a lista se reordenaria sozinha, e "do mais barato" e uma
+                 *     afirmacao comparativa que o criterio 19 proibe.
+                 */
+                sort?: "curadoria" | "nome";
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina da vitrine. `total` alimenta a linha de resumo da barra de
+             *     listagem e `applied_filters` alimenta a distincao entre "a vitrine
+             *     esta vazia" e "o seu recorte esvaziou a vitrine".
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreItemPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listPublicLostPets: {
         parameters: {
             query: {
@@ -5968,7 +6255,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getPublicLostCase: {
@@ -5983,7 +6272,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Caso. */
+            /** @description Caso aberto. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5992,15 +6281,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicLostCase"];
                 };
             };
-            /** @description Caso encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            410: components["responses"]["LostCaseClosed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getLostCasePoster: {
@@ -6024,15 +6308,8 @@ export interface operations {
                     "application/json": components["schemas"]["LostCasePoster"];
                 };
             };
-            /** @description Caso encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            410: components["responses"]["LostCaseClosed"];
         };
     };
     checkPasswordResetToken: {

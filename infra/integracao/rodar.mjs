@@ -158,7 +158,14 @@ console.log(`ambiente:  ${ENV} gerado, ${String(conferidas)} variaveis exigidas 
 compose(['down', '-v', '--remove-orphans', '--timeout', '5'], { stdio: 'ignore' });
 
 exigir(compose(['build', 'testes', 'migracao']), 'a construcao da imagem de teste falhou');
-exigir(compose(['up', '-d', '--wait', 'db', 'mail']), 'o banco ou o receptor de e-mail nao ficaram saudaveis');
+// `objeto` entra aqui e nao so no `depends_on` do `testes` de proposito: com
+// `--wait` a sonda que nao fica verde reprova NESTE passo, com esta mensagem.
+// Deixado so no `depends_on`, um armazenamento que nao sobe apareceria como
+// falha do `compose run` da suite, que e o passo errado para procurar.
+exigir(
+  compose(['up', '-d', '--wait', 'db', 'mail', 'objeto']),
+  'o banco, o receptor de e-mail ou o armazenamento de objeto nao ficaram saudaveis',
+);
 
 // A marca de descartabilidade. Ela e aplicada AQUI, por quem provisionou o
 // banco, e conferida la dentro pela guarda antes da primeira escrita. Quem

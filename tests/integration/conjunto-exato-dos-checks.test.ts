@@ -216,6 +216,14 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'kind',
     valores: ['vet', 'groomer', 'walker', 'sitter', 'trainer', 'clinic'],
   },
+  // BICHUS-185 / BICHUS-189. A categoria do produto da vitrine. Espelha
+  // `CategoriaDaVitrine` em `src/modules/store/domain/item-da-vitrine.ts` e o
+  // `enum` `StoreCategory` do contrato -- os tres arquivos que o ADR-0023
+  // secao 3 exige no mesmo commit.
+  'public.store_items.store_items_categoria': {
+    coluna: 'category',
+    valores: ['food', 'toy', 'hygiene', 'accessory', 'health', 'bed'],
+  },
   'public.professionals.professionals_source_check': {
     coluna: 'source',
     // 'community' foi NEGADO pelo cliente em 21/09. Reintroduzir aqui seria
@@ -363,6 +371,63 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
  * escreveu. Diferença entre os dois é o defeito de 22/09 em outra coluna.
  */
 const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
+  // ------------------------------------------------------------------
+  // A vitrine da `Loja` (BICHUS-185 / BICHUS-189, migracao 20260922000009).
+  // Nenhum destes e lista fechada: sao formato, faixa e coerencia entre
+  // colunas. O unico conjunto fechado da vitrine e `store_items_categoria`,
+  // que esta em LISTAS_FECHADAS.
+  // ------------------------------------------------------------------
+  //
+  // CINCO CHECKS DA VITRINE **NAO** ESTAO AQUI, E A AUSENCIA E DELIBERADA.
+  //
+  // `store_items_preco_anda_completo`, `store_items_preco_e_positivo`,
+  // `store_items_resumo_tem_tamanho`, `store_items_titulo_tem_tamanho` e
+  // `store_partners_nome_tem_tamanho` foram declarados aqui e **reprovaram**:
+  // nenhum deles menciona literal de texto, entao `MENCIONA_LITERAL` nao casa,
+  // o classificador nunca os poe em `naoSimples`, e eles ficavam como entrada
+  // fantasma -- declarada aqui e inexistente para o portao.
+  //
+  // O estrago nao era so a reprovacao. `cada CHECK nao-lista tem exatamente a
+  // definicao declarada` faz `naoSimples.get(chave)` e, achando `undefined`,
+  // segue adiante com `continue`. A entrada PARECIA fixar a definicao e nao
+  // fixava nada: o portao cobrava a coisa errada, em silencio, que e
+  // exatamente a classe que este arquivo existe para fechar.
+  //
+  // Os dois registros deste arquivo cobrem CHECK com literal de texto: o
+  // primeiro a lista fechada simples, o segundo todo o resto que mencione
+  // literal. Faixa numerica e coerencia entre colunas nao sao dominio de
+  // valores e nao pertencem a nenhum dos dois. Quem responde por elas e a
+  // propria migracao, e o caso de banco que tenta violar cada uma.
+  //
+  // **Nao reponha estas cinco aqui.** Repor devolve a reprovacao e, pior,
+  // devolve o silencio do `continue`.
+  //
+  // `BRL` no MVP. Nao e lista fechada de verdade -- e um valor unico com a
+  // forma de uma --, e por isso mora aqui: declara-lo como conjunto faria o
+  // registro prometer uma lista que nao existe.
+  'public.store_items.store_items_moeda':
+    "CHECK (((price_currency IS NULL) OR (price_currency = 'BRL'::text)))",
+  // Formato do endereco publico, COPIADO de `pets.slug`. Nao ha UUID nestas
+  // duas tabelas: `slug` e a chave primaria, porque elas so existem para sair
+  // em resposta publica (ADR-0010 item 6).
+  'public.store_items.store_items_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  'public.store_partners.store_partners_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  // Caminho, e nao URL: o banco nao guarda endereco (docs/07-devops.md secao
+  // 3.6), e o absoluto e composto na leitura com o host do parceiro. O
+  // esquema `https` deixou de ser assunto do banco porque deixou de ser
+  // dado -- ele e constante da composicao. Sem `?` e sem `#`: parametro em
+  // link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185).
+  'public.store_items.store_items_destino_e_caminho':
+    "CHECK ((target_path ~ '^/[^[:space:]?#]*$'::text))",
+  'public.store_items.store_items_imagem_e_caminho':
+    "CHECK (((image_path IS NULL) OR (image_path ~ '^/[^[:space:]?#]*$'::text)))",
+  // So o HOST, sem esquema, caminho nem consulta. Guardar a URL inteira
+  // convidaria um parametro a viajar junto, e parametro em link de saida e
+  // onde dado pessoal vaza (consequencia 3 da BICHUS-185).
+  'public.store_partners.store_partners_host_e_so_host':
+    "CHECK ((host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text))",
   'audit.events.audit_events_ator_coerente':
     "CHECK (((actor_kind = 'user'::text) = (actor_user_id IS NOT NULL)))",
   // O par mentiroso do alcance: estado não calculado com número, ou `computed`

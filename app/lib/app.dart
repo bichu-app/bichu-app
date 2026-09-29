@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +10,8 @@ import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/diretorio_api.dart';
+import 'api/loja_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fila_offline.dart';
 import 'api/fotos_pendentes.dart';
@@ -15,6 +19,7 @@ import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'config/app_config.dart';
 import 'dispositivo/avisos.dart';
+import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
@@ -44,6 +49,7 @@ class BichuApp extends StatefulWidget {
     this.camera,
     this.leitorDeQr,
     this.avisos,
+    this.mensagensDePush,
     this.localizacao,
     this.depositoDeIntencao,
     this.cacheDeMeusPets,
@@ -101,6 +107,22 @@ class BichuApp extends StatefulWidget {
   /// tem canal de plataforma ligado, e um `FirebaseMessaging.instance` no
   /// caminho travaria a suite inteira num `Future` que nunca resolve.
   final Avisos? avisos;
+
+  /// Injetavel para teste. Em producao e [MensagensDePushPorFirebase] quando o
+  /// `main()` conseguiu inicializar o Firebase, e
+  /// [MensagensDePushNaoEmbarcadas] quando nao.
+  ///
+  /// O padrao aqui e [MensagensDePushNaoEmbarcadas] pela mesma razao do padrao
+  /// de [avisos], e com um agravante: `FirebaseMessaging.onMessage` num
+  /// ambiente sem canal de plataforma devolve uma stream que **nunca emite e
+  /// nunca fecha**, e `getInitialMessage()` um `Future` que nunca resolve. O
+  /// `await` do arranque penduraria a suite inteira, sem mensagem.
+  ///
+  /// **E o unico jeito de um caso exercitar os tres estados do push.** Nao ha
+  /// como pedir ao Flutter que mate o processo e o reabra por um toque em
+  /// notificacao; sem esta porta, o estado `fechado` so seria verificavel num
+  /// aparelho, a mao, uma vez.
+  final MensagensDePush? mensagensDePush;
 
   /// Injetavel para teste. Em producao e [LocalizacaoPorGeolocator].
   ///
@@ -182,16 +204,27 @@ class BichuApp extends StatefulWidget {
   State<BichuApp> createState() => _BichuAppState();
 }
 
-class _BichuAppState extends State<BichuApp> {
+/// A raiz observa o ciclo de vida por causa da fila offline.
+///
+/// **`WidgetsBindingObserver` aqui, e nao um segundo `VigiaDeAviso`.** O vigia
+/// de permissao ja observa `resumed`, e seria tentador pendurar o dreno nele --
+/// mas ele existe para reconciliar permissao de notificacao, e uma classe que
+/// tambem drenasse fila passaria a ter dois motivos para mudar. O `State` da
+/// raiz e quem tem os dois objetos (a sessao e a fila) e e quem vive tanto
+/// quanto o processo.
+class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final ApiClient _api;
   late final AuthApi _auth;
   late final PetsApi _pets;
   late final CasosApi _casos;
   late final AchadosApi _achados;
+  late final DiretorioApi _diretorio;
+  late final LojaApi _loja;
   late final EnvioDeFoto _envioDeFoto;
   late final FotosPendentes _fotosPendentes;
   late final RetomadaDeFotos _retomadaDeFotos;
   late final FilaOffline _fila;
+  late final RetomadaDaFila _retomadaDaFila;
   late final TagsApi _tags;
   late final DevicesApi _devices;
   late final CameraEGaleria _camera;
@@ -206,10 +239,12 @@ class _BichuAppState extends State<BichuApp> {
   late final OportunidadesDeAviso _oportunidades;
   late final AvisoDeCadastro _avisoDeCadastro;
   late final VigiaDeAviso _vigiaDeAviso;
+  late final OuvinteDeAvisos _avisosRecebidos;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     // O cliente pergunta o token ao controlador a cada chamada, em vez de
     // receber uma copia: assim a renovacao chega a requisicao seguinte sem
     // ninguem precisar reconstruir o cliente.
@@ -224,6 +259,8 @@ class _BichuAppState extends State<BichuApp> {
     _pets = PetsApi(_api);
     _casos = CasosApi(_api);
     _achados = AchadosApi(_api);
+    _diretorio = DiretorioApi(_api);
+    _loja = LojaApi(_api);
     // A FILA, LIGADA (BICHUS-21). Ela existia em `lib/` desde a BICHUS-31 e
     // nada no app a construia: o criterio 6 desta historia -- "sem conexao a
     // tela inteira funciona: o envio acontece em F3.2" -- so e verdade com
@@ -232,6 +269,13 @@ class _BichuAppState extends State<BichuApp> {
     _fila = FilaOffline(
       deposito: widget.depositoDaFila ?? DepositoEmArquivo(),
     );
+    // O DRENO DA FILA, LIGADO.
+    //
+    // `reenviarTudo` existia desde a BICHUS-31 e **nao tinha nenhum call
+    // site**: duas telas enfileiravam de verdade e nada nunca tirava nada de
+    // la. Caso de perdido e achado registrados sem sinal ficavam no disco para
+    // sempre, com a tela prometendo o contrario.
+    _retomadaDaFila = RetomadaDaFila(fila: _fila, api: _api);
     _tags = TagsApi(_api);
     _devices = DevicesApi(_api);
     _camera = widget.camera ?? const CameraDoAparelho();
@@ -267,6 +311,18 @@ class _BichuAppState extends State<BichuApp> {
       agora: widget.agora ?? DateTime.now,
     );
     _vigiaDeAviso = VigiaDeAviso(avisos: _avisos, devices: _devices)..ligar();
+    // O OUVINTE DE PUSH, LIGADO.
+    //
+    // Ele nao existia: `firebase_messaging` estava no `pubspec`, o aparelho era
+    // registrado e o token subia, e **nada no app escutava**. O servidor
+    // disparava o alerta de 5 km, o FCM entregava, e a mensagem morria no
+    // aparelho -- sem nada falhar em lugar nenhum.
+    //
+    // `ligar()` e chamado de `_arrancar()`, e nao aqui: ele tem um `await`
+    // (`getInitialMessage`), e o `initState` nao espera.
+    _avisosRecebidos = OuvinteDeAvisos(
+      mensagens: widget.mensagensDePush ?? const MensagensDePushNaoEmbarcadas(),
+    );
     _localizacao = widget.localizacao ?? const LocalizacaoNaoEmbarcada();
     _guarda = GuardaDeAcao(
       deposito: widget.depositoDeIntencao ?? DepositoDeIntencaoEmArquivo(),
@@ -379,7 +435,40 @@ class _BichuAppState extends State<BichuApp> {
   /// para a foto subir.
   Future<void> _arrancar() async {
     await _sessao.iniciar();
+    // **O OUVINTE DE PUSH vem ANTES do que depende de sessao, e depois de
+    // `iniciar()`.** Depois, porque `getInitialMessage()` pode levar a pessoa a
+    // uma tela e o roteador ainda esta redirecionando para a abertura enquanto
+    // a sessao carrega. Antes das varreduras, porque um aviso que abriu o app
+    // e o motivo pelo qual a pessoa o abriu: ele nao espera duas idas a rede.
+    //
+    // A falha inteira e engolida dentro de `ligar()`: isto roda antes de
+    // qualquer tela existir, e uma excecao aqui derrubaria o arranque do app
+    // por causa de um plugin.
+    await _avisosRecebidos.ligar();
     await _retomarAsFotos();
+    await _drenarAFila();
+  }
+
+  /// A fila offline sai do disco. **O primeiro dos DOIS momentos**; o outro e a
+  /// retomada do app, em [didChangeAppLifecycleState].
+  ///
+  /// **Atras da sessao, e isso nao e detalhe -- e a mesma armadilha que
+  /// `_retomarAsFotos` documenta.** As duas rotas que a fila carrega sao
+  /// `bearerAuth`; sem token elas respondem 401. Uma varredura sem esta guarda
+  /// rodaria no arranque de quem esta deslogado e, se a classificacao de 401
+  /// escorregasse para "recusa permanente", apagaria exatamente o caso do pet
+  /// sumido que a fila existe para salvar.
+  ///
+  /// A defesa e dupla de proposito: esta guarda cobre o arranque, e
+  /// `RetomadaDaFila` classifica 401 como "mantem" para cobrir o token que
+  /// expira **no meio** da varredura -- que a guarda nao ve.
+  Future<void> _drenarAFila() async {
+    try {
+      if (await _sessao.tokenValido() == null) return;
+      await _retomadaDaFila.drenar();
+    } on Object {
+      return;
+    }
   }
 
   /// O criterio 7 da BICHUS-87: a foto que nao subiu sobe quando da.
@@ -402,9 +491,32 @@ class _BichuAppState extends State<BichuApp> {
     }
   }
 
+  /// O SEGUNDO momento em que a fila drena: o app voltou para o primeiro plano.
+  ///
+  /// **Por que os dois, e nao so o arranque.** O arranque cobre o app que o
+  /// sistema MATOU para liberar memoria, que e o caso do aparelho barato com o
+  /// app em segundo plano. Esta cobre o app que ficou VIVO no bolso enquanto a
+  /// pessoa saia do elevador ou do metro: sem ela, a fila so drenaria quando o
+  /// sistema resolvesse matar o processo, o que pode nao acontecer por dias --
+  /// e a tela prometeu "assim que o sinal voltar".
+  ///
+  /// **O que isto NAO e: reagir ao sinal voltar.** Detectar mudanca de
+  /// conectividade exige um pacote que este app nao declara. A retomada e a
+  /// aproximacao honesta, e ela esta escrita como aproximacao.
+  ///
+  /// `unawaited` porque o ciclo de vida nao tem como esperar, e a varredura nao
+  /// pode segurar a volta do app. A falha e tratada dentro de `_drenarAFila`.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) return;
+    unawaited(_drenarAFila());
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _vigiaDeAviso.dispose();
+    _avisosRecebidos.dispose();
     _sessao.dispose();
     _envioDeFoto.fechar();
     _api.fechar();
@@ -418,6 +530,8 @@ class _BichuAppState extends State<BichuApp> {
       auth: _auth,
       pets: _pets,
       casos: _casos,
+      diretorio: _diretorio,
+      loja: _loja,
       achados: _achados,
       envioDeFoto: _envioDeFoto,
       retomadaDeFotos: _retomadaDeFotos,
@@ -427,6 +541,7 @@ class _BichuAppState extends State<BichuApp> {
       camera: _camera,
       leitorDeQr: _leitorDeQr,
       avisos: _avisos,
+      avisosRecebidos: _avisosRecebidos,
       oportunidades: _oportunidades,
       vigiaDeAviso: _vigiaDeAviso,
       localizacao: _localizacao,

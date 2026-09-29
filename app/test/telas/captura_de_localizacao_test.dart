@@ -48,6 +48,8 @@ import 'package:bichu/api/casos_api.dart';
 import 'package:bichu/api/envio_de_foto.dart';
 import 'package:bichu/api/fotos_pendentes.dart';
 import 'package:bichu/api/devices_api.dart';
+import 'package:bichu/api/diretorio_api.dart';
+import 'package:bichu/api/loja_api.dart';
 import 'package:bichu/api/fila_offline.dart';
 import 'package:bichu/api/imagem_do_qr.dart';
 import 'package:bichu/api/modelos_localizacao.dart';
@@ -60,6 +62,7 @@ import 'package:bichu/dispositivo/localizacao.dart';
 import 'package:bichu/dispositivo/oportunidades_de_aviso.dart';
 import 'package:bichu/sessao/registro_do_aviso_de_cadastro.dart';
 import 'package:bichu/dispositivo/vigia_de_aviso.dart';
+import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:bichu/escopo.dart';
 import 'package:bichu/intencao/deposito_de_intencao.dart';
 import 'package:bichu/intencao/guarda_de_acao.dart';
@@ -122,6 +125,10 @@ Future<_Caixa> _montar(
       auth: auth,
       pets: PetsApi(api),
       casos: CasosApi(api),
+      // O diretorio de `Perto` entrou no escopo junto com a listagem.
+      diretorio: DiretorioApi(api),
+      // A vitrine de `Loja` entrou no escopo junto com a listagem dela.
+      loja: LojaApi(api),
       // BICHUS-35: a camada de achado entrou no escopo junto com F3.5.
       achados: AchadosApi(api),
       // O envio de foto entra com a camera ausente: este caso nao sobe foto
@@ -142,6 +149,13 @@ Future<_Caixa> _montar(
       // 54) e sao as variantes que nao encostam em canal de plataforma, que e
       // o que um teste de widget suporta.
       leitorDeQr: const LeitorDeQrNaoEmbarcado(),
+      // O ouvinte de push entra com a porta NAO EMBARCADA, pela mesma razao das
+      // outras cinco: `FirebaseMessaging.onMessage` num ambiente sem canal de
+      // plataforma devolve stream que nunca emite e nunca fecha, e
+      // `getInitialMessage()` um `Future` que nunca resolve -- o `pumpAndSettle`
+      // deste caso esperaria para sempre.
+      avisosRecebidos:
+          OuvinteDeAvisos(mensagens: const MensagensDePushNaoEmbarcadas()),
       avisos: const AvisosNaoEmbarcados(),
       oportunidades:
           OportunidadesDeAviso(deposito: DepositoDeOportunidadesEmMemoria()),

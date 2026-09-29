@@ -7,6 +7,7 @@ import '../../escopo.dart';
 import '../../intencao/ir_para_o_destino.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
 import '../../widgets/faixa_de_aviso.dart';
@@ -44,12 +45,18 @@ class TelaEntrar extends StatefulWidget {
 }
 
 class _TelaEntrarState extends State<TelaEntrar> {
-  late final TextEditingController _email =
-      TextEditingController(text: widget.emailInicial ?? '');
+  late final TextEditingController _email = TextEditingController(
+    text: widget.emailInicial ?? '',
+  );
   final TextEditingController _senha = TextEditingController();
 
   final FocusNode _focoDoEmail = FocusNode();
   final FocusNode _focoDaSenha = FocusNode();
+
+  final ScrollController _rolagem = ScrollController();
+
+  /// Onde a faixa de recusa nasce, para `_levarAte` ter um alvo.
+  final GlobalKey _alvoDaFaixa = GlobalKey();
 
   bool _senhaVisivel = false;
   bool _enviando = false;
@@ -63,7 +70,32 @@ class _TelaEntrarState extends State<TelaEntrar> {
     _senha.dispose();
     _focoDoEmail.dispose();
     _focoDaSenha.dispose();
+    _rolagem.dispose();
     super.dispose();
+  }
+
+  /// Traz o alvo da recusa para dentro da janela.
+  ///
+  /// Necessario desde que o botao saiu da rolagem: quem toca num botao
+  /// alcancavel de qualquer ponto pode estar num ponto em que a recusa fica
+  /// fora da tela, e recusar onde ninguem olha e indistinguivel de nao
+  /// responder.
+  ///
+  /// Roda **depois do quadro**, porque quem chama acabou de fazer `setState` e
+  /// a faixa ainda nao tem altura: medir antes do relayout leva a pessoa para
+  /// onde a faixa nao esta. `alignment: 0.5` centraliza, porque conteudo
+  /// colado na borda fica meio escondido atras do teclado.
+  void _levarAte(GlobalKey alvo) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final contexto = alvo.currentContext;
+      if (contexto == null) return;
+      Scrollable.ensureVisible(
+        contexto,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   /// Validacao local, antes de gastar uma ida a rede.
@@ -157,6 +189,7 @@ class _TelaEntrarState extends State<TelaEntrar> {
       // Nada e apagado: nem o e-mail, nem a senha. O caso dominante e um
       // caractere trocado, e quem digita de novo do zero erra de novo.
       setState(() => _faixa = MensagensDeErro.deEntrar(falha));
+      _levarAte(_alvoDaFaixa);
     } on Object catch (erro, pilha) {
       // O QUE NAO E FalhaDeChamada -- 201 fora do contrato faz `Sessao.doJson`
       // estourar `TypeError`, e o chaveiro pode estourar `PlatformException`.
@@ -167,8 +200,10 @@ class _TelaEntrarState extends State<TelaEntrar> {
       registrarFalhaInesperada(erro, pilha, onde: 'ao entrar na conta');
       if (!mounted) return;
       setState(
-        () => _faixa = const MensagemDeErro(texto: MensagensDeErro.servidorFora),
+        () =>
+            _faixa = const MensagemDeErro(texto: MensagensDeErro.servidorFora),
       );
+      _levarAte(_alvoDaFaixa);
     } finally {
       if (mounted) setState(() => _enviando = false);
     }
@@ -177,94 +212,130 @@ class _TelaEntrarState extends State<TelaEntrar> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: const BarraDeConta(
-        titulo: 'Entrar',
-        saida: TipoDeSaida.voltar,
+      appBar: const BarraDeConta(titulo: 'Entrar', saida: TipoDeSaida.voltar),
+      // O BOTAO DE ENTRAR NAO ROLA COM O FORMULARIO, E ISSO FOI MEDIDO.
+      //
+      // Medido em 23/09/2026 nos quatro gabaritos do design system (secao 13),
+      // com o teclado de 270 dp aberto e os dois campos preenchidos. O botao
+      // ocupava 286..334 dp de um conteudo de 414 dp, e a area rolavel era:
+      //
+      //   320 x 568  ->  234 dp de janela, faltavam 100 dp de rolagem
+      //   360 x 640  ->  306 dp de janela, faltavam  28 dp de rolagem
+      //   375 x 667  ->  333 dp de janela, o botao cabia
+      //   412 x 915  ->  581 dp de janela, o botao cabia
+      //
+      // O numero que decide nao e esse. E o da tela DEPOIS do 401, que e o
+      // estado de quem digitou a senha errada -- ou seja, exatamente quem ja
+      // tem conta e voltou. A faixa de recusa acrescenta 236 dp acima do
+      // botao, e ai faltavam 360 dp em 320 x 568, 264 dp em 360 x 640 e 231 dp
+      // em 375 x 667, um gabarito em que a tela estava certa antes do erro.
+      // A pessoa erra a senha e o caminho para tentar de novo sai da tela.
+      //
+      // Pior que a rolagem: em 320 x 568 o `ListView` **nao chegava a
+      // construir** o botao. Ele nao estava na arvore, entao nao podia ser
+      // focado nem lido por leitor de tela, e nenhum portao pegava isso.
+      bottomNavigationBar: BarraDeAcaoFixa(
+        acoes: <Widget>[
+          BotaoPrimario(
+            rotulo: 'Entrar',
+            carregando: _enviando,
+            // Continua habilitado sem conexao, pelo mesmo motivo de F1.1: o
+            // detector de offline erra, e deixar a pessoa sem caminho e pior
+            // que deixa-la tentar.
+            aoTocar: _entrar,
+          ),
+        ],
       ),
+      // **`SingleChildScrollView` + `Column`, e nao `ListView`**, pelo motivo
+      // registrado em `pet/tela_editar_pet.dart` e em F1.1: o `ListView` so
+      // constroi o que cabe, e o que nao existe na arvore nao e alcancavel por
+      // leitor de tela. Sao sete filhos e nenhuma lista de tamanho aberto:
+      // construir todos custa nada, e e o que da a `_levarAte` para onde
+      // rolar. Preguica de construcao serve a lista de registros, nao a
+      // formulario de seis campos.
       body: SafeArea(
-        child: ListView(
+        child: SingleChildScrollView(
+          controller: _rolagem,
           padding: const EdgeInsets.all(BichuEspaco.e4),
-          children: <Widget>[
-            BichuField(
-              rotulo: 'E-mail',
-              controlador: _email,
-              foco: _focoDoEmail,
-              erro: _erroDoEmail,
-              tipoDeTeclado: TextInputType.emailAddress,
-              autofill: const <String>[AutofillHints.email],
-              correcaoAutomatica: false,
-              acaoDeTeclado: TextInputAction.next,
-              // Depois que o campo errou uma vez, revalidar enquanto digita,
-              // para o erro sumir assim que for corrigido (UX 13).
-              aoMudar: _erroDoEmail == null
-                  ? null
-                  : (_) => setState(() => _erroDoEmail = null),
-            ),
-            const SizedBox(height: BichuEspaco.e6),
-            BichuField(
-              rotulo: 'Senha',
-              controlador: _senha,
-              foco: _focoDaSenha,
-              erro: _erroDaSenha,
-              aoMudar: _erroDaSenha == null
-                  ? null
-                  : (_) => setState(() => _erroDaSenha = null),
-              obscurecer: !_senhaVisivel,
-              autofill: const <String>[AutofillHints.password],
-              correcaoAutomatica: false,
-              acaoDeTeclado: TextInputAction.done,
-              aoEnviar: (_) => _entrar(),
-              sufixo: BotaoRevelarSenha(
-                visivel: _senhaVisivel,
-                aoAlternar: () =>
-                    setState(() => _senhaVisivel = !_senhaVisivel),
-              ),
-            ),
-            const SizedBox(height: BichuEspaco.e4),
-            Align(
-              alignment: Alignment.centerLeft,
-              child: TextButton(
-                // `push`: recuperar a senha e um passo **adiante** no mesmo
-                // desvio. Voltar de la devolve esta tela com o e-mail ainda
-                // digitado, que e o que `go` destruia.
-                onPressed: () => context.push(
-                  Rotas.esqueciMinhaSenha,
-                  extra: _email.text.trim(),
-                ),
-                child: const Text('Esqueci minha senha'),
-              ),
-            ),
-            if (_faixa != null) ...<Widget>[
-              const SizedBox(height: BichuEspaco.e6),
-              FaixaDeAviso(
-                texto: _faixa!.texto,
-                rotuloDaAcao: _faixa!.acao,
-                aoTocarNaAcao: _faixa!.acao == null
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              BichuField(
+                rotulo: 'E-mail',
+                controlador: _email,
+                foco: _focoDoEmail,
+                erro: _erroDoEmail,
+                tipoDeTeclado: TextInputType.emailAddress,
+                autofill: const <String>[AutofillHints.email],
+                correcaoAutomatica: false,
+                acaoDeTeclado: TextInputAction.next,
+                // Depois que o campo errou uma vez, revalidar enquanto digita,
+                // para o erro sumir assim que for corrigido (UX 13).
+                aoMudar: _erroDoEmail == null
                     ? null
-                    : () => context.push(
+                    : (_) => setState(() => _erroDoEmail = null),
+              ),
+              const SizedBox(height: BichuEspaco.e6),
+              BichuField(
+                rotulo: 'Senha',
+                controlador: _senha,
+                foco: _focoDaSenha,
+                erro: _erroDaSenha,
+                aoMudar: _erroDaSenha == null
+                    ? null
+                    : (_) => setState(() => _erroDaSenha = null),
+                obscurecer: !_senhaVisivel,
+                autofill: const <String>[AutofillHints.password],
+                correcaoAutomatica: false,
+                acaoDeTeclado: TextInputAction.done,
+                aoEnviar: (_) => _entrar(),
+                sufixo: BotaoRevelarSenha(
+                  visivel: _senhaVisivel,
+                  aoAlternar: () =>
+                      setState(() => _senhaVisivel = !_senhaVisivel),
+                ),
+              ),
+              const SizedBox(height: BichuEspaco.e4),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  // `push`: recuperar a senha e um passo **adiante** no mesmo
+                  // desvio. Voltar de la devolve esta tela com o e-mail ainda
+                  // digitado, que e o que `go` destruia.
+                  onPressed: () => context.push(
+                    Rotas.esqueciMinhaSenha,
+                    extra: _email.text.trim(),
+                  ),
+                  child: const Text('Esqueci minha senha'),
+                ),
+              ),
+              if (_faixa != null) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e6),
+                FaixaDeAviso(
+                  key: _alvoDaFaixa,
+                  texto: _faixa!.texto,
+                  rotuloDaAcao: _faixa!.acao,
+                  aoTocarNaAcao: _faixa!.acao == null
+                      ? null
+                      : () => context.push(
                           Rotas.esqueciMinhaSenha,
                           extra: _email.text.trim(),
                         ),
+                ),
+              ],
+              const SizedBox(height: BichuEspaco.e6),
+              Center(
+                child: TextButton(
+                  // `pushReplacement`, e nao `push`: `Entrar` e `Criar conta`
+                  // sao o mesmo passo do mesmo desvio, e nao dois passos. Quem
+                  // alterna entre as duas e volta quer sair do desvio, nao
+                  // percorrer de tras para a frente cada troca que fez.
+                  onPressed: () => context.pushReplacement(Rotas.criarConta),
+                  child: const Text('Criar conta'),
+                ),
               ),
             ],
-            const SizedBox(height: BichuEspaco.e8),
-            BotaoPrimario(
-              rotulo: 'Entrar',
-              carregando: _enviando,
-              aoTocar: _entrar,
-            ),
-            const SizedBox(height: BichuEspaco.e4),
-            Center(
-              child: TextButton(
-                // `pushReplacement`, e nao `push`: `Entrar` e `Criar conta`
-                // sao o mesmo passo do mesmo desvio, e nao dois passos. Quem
-                // alterna entre as duas e volta quer sair do desvio, nao
-                // percorrer de tras para a frente cada troca que fez.
-                onPressed: () => context.pushReplacement(Rotas.criarConta),
-                child: const Text('Criar conta'),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

@@ -39,6 +39,8 @@ import * as pets from '../../modules/pets/adapters/http/pet-routes.js';
 import * as referencia from '../../modules/pets/adapters/http/reference-data-routes.js';
 import * as midia from '../../modules/media/adapters/http/media-routes.js';
 import * as casos from '../../modules/lostfound/adapters/http/lost-case-routes.js';
+import * as casoPublico from '../../modules/lostfound/adapters/http/leitura-publica-do-caso-routes.js';
+import * as perfilPublico from '../../modules/pets/adapters/http/perfil-publico-routes.js';
 import * as achados from '../../modules/found/adapters/http/found-report-routes.js';
 import * as tags from '../../modules/tags/adapters/http/tag-routes.js';
 import * as conversas from '../../modules/messaging/adapters/http/conversation-routes.js';
@@ -46,6 +48,7 @@ import * as transferencias from '../../modules/transfers/adapters/http/transfer-
 import * as webhook from '../../modules/notifications/adapters/http/webhook-de-entrega.js';
 import * as aparelhos from '../../modules/notifications/adapters/http/device-routes.js';
 import * as diretorio from '../../modules/professionals/adapters/http/directory-routes.js';
+import * as vitrine from '../../modules/store/adapters/http/store-routes.js';
 import * as saude from './health.js';
 
 const CAMINHO_DA_SPEC = resolve(process.cwd(), 'api/openapi.yaml');
@@ -57,6 +60,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   referencia,
   midia,
   casos,
+  // BICHUS-76 e BICHUS-45: as leituras publicas que o site consome.
+  casoPublico,
+  perfilPublico,
   // BICHUS-35. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   achados,
@@ -70,6 +76,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   diretorio,
+  // Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
+  // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
+  vitrine,
   saude,
 ];
 

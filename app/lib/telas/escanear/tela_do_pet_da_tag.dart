@@ -1,8 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../api/api_client.dart';
+import '../../api/falhas.dart';
+import '../../api/fila_offline.dart';
+import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
+import '../../api/pets_api.dart';
+import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/botao_primario.dart';
+import '../../widgets/faixa_de_aviso.dart';
 import '../../widgets/saida_da_tela.dart';
 
 /// O que a tela do codigo resolvido mostra, e por que ela tem **duas** formas
@@ -37,14 +45,27 @@ enum FormaDaTelaDaTag {
 ///
 /// ## O que esta tela **nao** tem, e cada ausencia e decisao
 ///
-/// **Nenhum botao `Avisar o tutor`.** Ele e a razao de a F2.2 existir, e por
-/// isso a ausencia dele esta escrita aqui e no relatorio da entrega, e nao
-/// escondida. `POST /v1/tags/{code}/found-reports` **nao tem cliente neste
-/// app**: nao ha metodo em `TagsApi`, nao ha fila, nao ha tela de confirmacao.
-/// Desenhar o botao mesmo assim repetiria o defeito que o criterio 2 da
-/// BICHUS-62 existe para fechar -- as duas acoes `Ver meus pets` que
-/// apontavam para o vazio. Um botao que nao avisa ninguem e pior que nenhum
-/// botao: o achador vai embora **acreditando** que avisou.
+/// **O botao `Avisar o tutor` EXISTE, e ele e a razao de a F2.2 existir.** Ele
+/// chama `POST /v1/tags/{code}/found-reports` por `TagsApi.avisarOTutor`. Esta
+/// tela passou a vida inteira sem ele, e o efeito era o pior possivel: as duas
+/// primeiras etapas do laco do produto -- achar o animal, escanear a
+/// plaquinha -- funcionavam, e a terceira, avisar o tutor, nao existia. Quem
+/// achava o pet chegava aqui e ia embora sem caminho.
+///
+/// **A operacao nao exige conta**, e essa e a excecao permanente do contrato
+/// (`security: [bearerAuth, {}]`). O achador com o bicho no colo nao vai criar
+/// cadastro, e o corpo do pedido tambem e opcional: um toque, zero campos.
+/// Data e hora sao do servidor.
+///
+/// **Sem sinal o aviso vai para a fila, e o botao diz que foi para a fila.** O
+/// criterio 2 da BICHUS-31 proibe tela de sucesso para o que nao aconteceu, e
+/// aqui a mentira seria a mais caro do produto: quem acredita que avisou solta
+/// o animal.
+///
+/// **A foto do achador continua de fora, e a ausencia e do contrato.**
+/// `FoundReportFromTagInput` tem `found_at` e `client_note`, e nenhum campo de
+/// imagem; a foto entra depois por `PATCH /found-reports/{id}`, que nao tem
+/// cliente neste app. O aviso nao depende dela.
 ///
 /// **Nenhuma acao de dono.** `Ver o caso`, `Ver a Nina`, `Marcar como perdida`
 /// e `Ver o arquivo da tag` precisam de `pet_id` e de `tag_id`, e o contrato
@@ -71,9 +92,18 @@ enum FormaDaTelaDaTag {
 /// moldura sobem **o nome em `display-lg` e o cartao de sinais**, que e
 /// exatamente a regra que o paragrafo manda aplicar quando nao ha foto.
 class TelaDoPetDaTag extends StatelessWidget {
-  const TelaDoPetDaTag({required this.tag, super.key});
+  const TelaDoPetDaTag({required this.tag, required this.codigo, super.key});
 
   final TagResolvida tag;
+
+  /// O codigo da plaquinha, **como veio no caminho da rota**.
+  ///
+  /// Ele nao sai de `TagResolvida`: a resposta publica de `GET /tags/{code}`
+  /// nao devolve o codigo, de proposito (ele **e** a credencial). Quem tem o
+  /// codigo e quem escaneou, e o endereco `/t/<codigo>` o carrega -- que e
+  /// exatamente por que a rota existe como endereco e nao como navegacao
+  /// imperativa.
+  final String codigo;
 
   /// A faixa do modo dono sem caso aberto (UX F2.3, primeira configuracao).
   ///
@@ -198,6 +228,16 @@ class TelaDoPetDaTag extends StatelessWidget {
               if (_temTexto(tag.notasDeCuidado)) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e4),
                 _CartaoDeManejo(tag: tag),
+              ],
+              // O BOTAO DE AVISAR O TUTOR, so na forma do achador.
+              //
+              // **No modo dono ele nao aparece, e nao e economia de tela:** o
+              // dono avisando a si mesmo geraria um aviso real, gastaria o
+              // teto de 1 por `code`+`finder_identity` em 6 h e faria o tutor
+              // receber um push de que alguem esta com o proprio pet dele.
+              if (forma == FormaDaTelaDaTag.achouOPet) ...<Widget>[
+                const SizedBox(height: BichuEspaco.e6),
+                _AvisoAoTutor(tag: tag, codigo: codigo),
               ],
             ],
           ),
@@ -334,6 +374,187 @@ class _CartaoDeManejo extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Em que pe esta o aviso ao tutor.
+///
+/// **`naFila` e um desfecho, e nao um erro.** Ele existe porque o criterio 2 da
+/// BICHUS-31 proibe tela de sucesso para o que nao aconteceu -- e aqui a
+/// mentira seria a mais caro do produto inteiro: quem acredita que avisou solta
+/// o animal e vai embora.
+///
+/// `/// Local:` este enum **nao vem do contrato**. Ele descreve o estado de uma
+/// tela, e a API nao tem campo correspondente -- `FoundReportCreated` responde
+/// `owner_notified`, que e outra pergunta (se o aviso foi agrupado a um
+/// recente) e nao substitui esta.
+enum _EstadoDoAviso { pronto, enviando, avisado, naFila, falhou }
+
+/// O botao `Avisar o tutor` e os quatro desfechos dele.
+///
+/// ## Por que ele tem estado proprio, e nao vive na tela
+///
+/// `TelaDoPetDaTag` e `StatelessWidget` de proposito: ela e uma leitura, e o
+/// que ela mostra nao muda depois de montada. O aviso e a unica parte que muda,
+/// e por isso ele e o unico pedaco com estado. Tornar a tela inteira
+/// `StatefulWidget` por causa de um botao reconstruiria o cartao de sinais e o
+/// de manejo a cada toque.
+///
+/// ## A chave de idempotencia nasce UMA vez, no `initState`
+///
+/// **Nao no `onPressed`, e essa e a parte que se erra.** Se ela nascesse no
+/// toque, a pessoa que toca, ve `Está demorando` e toca de novo mandaria duas
+/// chaves diferentes -- e o servidor, corretamente, trataria os dois pedidos
+/// como avisos distintos. O tutor receberia dois pushes do mesmo achador. A
+/// chave e da ACAO ("este achador esta avisando sobre esta plaquinha"), e nao
+/// da tentativa; e e a mesma que vai para a fila quando a rede cai.
+class _AvisoAoTutor extends StatefulWidget {
+  const _AvisoAoTutor({required this.tag, required this.codigo});
+
+  final TagResolvida tag;
+  final String codigo;
+
+  /// O rotulo do botao, que muda quando este aparelho **ja avisou** nas
+  /// ultimas 24 h (`already_notified`).
+  ///
+  /// Muda o texto e **nao** desabilita: o teto do contrato para
+  /// `code`+`finder_identity` e `group_notification`, ou seja, o segundo aviso
+  /// e anexado a conversa e nunca descartado. Quem achou o animal de novo, ou
+  /// tem algo novo a dizer, precisa poder falar.
+  static String rotuloDe(TagResolvida tag) =>
+      tag.jaAvisouDesteAparelho ? 'Avisar o tutor de novo' : 'Avisar o tutor';
+
+  /// O texto do desfecho bom.
+  ///
+  /// Afirma no passado, e nao promete: quando esta frase aparece, o servidor
+  /// respondeu 201. `owner_notified: false` **nao** muda este texto -- ver o
+  /// campo [AvisoDoAchadorCriado.tutorAvisado].
+  static const String textoDeAvisado =
+      'O tutor foi avisado. Ele recebeu o aviso no celular agora.';
+
+  /// O texto de quando o aviso foi para a fila.
+  ///
+  /// Diz o que aconteceu (ficou guardado) e o que falta (o sinal), e **nao**
+  /// diz que o tutor foi avisado.
+  static const String textoDaFila =
+      'Você está sem sinal. O aviso ficou guardado e sai sozinho quando o '
+      'sinal voltar. Se puder, fique por perto do animal.';
+
+  @override
+  State<_AvisoAoTutor> createState() => _AvisoAoTutorState();
+}
+
+class _AvisoAoTutorState extends State<_AvisoAoTutor> {
+  /// A chave da ACAO. Ver o cabecalho da classe.
+  final String _chave = ApiClient.novaChaveDeIdempotencia();
+
+  _EstadoDoAviso _estado = _EstadoDoAviso.pronto;
+  String? _erro;
+
+  Future<void> _avisar() async {
+    final escopo = Escopo.of(context);
+    setState(() {
+      _estado = _EstadoDoAviso.enviando;
+      _erro = null;
+    });
+
+    try {
+      await escopo.tags.avisarOTutor(widget.codigo, idempotencyKey: _chave);
+      if (!mounted) return;
+      setState(() => _estado = _EstadoDoAviso.avisado);
+    } on FalhaDeConexao {
+      // A fila, com a MESMA chave. O corpo e o mesmo que a chamada mandaria,
+      // montado pela funcao do cliente e nao a mao aqui.
+      await escopo.fila.enfileirar(
+        AcaoEnfileirada(
+          id: ApiClient.novaChaveDeIdempotencia(),
+          metodo: 'POST',
+          caminho: TagsApi.caminhoDoAviso(widget.codigo),
+          corpo: TagsApi.corpoDoAviso(),
+          idempotencyKey: _chave,
+          criadaEm: DateTime.now(),
+        ),
+      );
+      if (!mounted) return;
+      setState(() => _estado = _EstadoDoAviso.naFila);
+    } on FalhaDeChamada catch (falha) {
+      if (!mounted) return;
+      setState(() {
+        _estado = _EstadoDoAviso.falhou;
+        _erro = MensagensDeErro.de(falha).texto;
+      });
+    } on Object catch (erro, pilha) {
+      // O `catch (FalhaDeChamada)` acima parece exaustivo e nao e: corpo 200
+      // fora do contrato estoura `TypeError` dentro de
+      // `AvisoDoAchadorCriado.doJson`, e disco cheio estoura no `enfileirar`.
+      // Sem este ramo o botao ficaria girando para sempre, com o erro engolido
+      // -- que e exatamente o defeito que `registrarFalhaInesperada` existe
+      // para acabar.
+      registrarFalhaInesperada(erro, pilha, onde: 'aviso ao tutor pela tag');
+      if (!mounted) return;
+      setState(() {
+        _estado = _EstadoDoAviso.falhou;
+        _erro = MensagensDeErro.servidorFora;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (_estado) {
+      _EstadoDoAviso.avisado => const _DesfechoDoAviso(
+          texto: _AvisoAoTutor.textoDeAvisado,
+          peso: PesoDaFaixa.informativo,
+        ),
+      _EstadoDoAviso.naFila => const _DesfechoDoAviso(
+          texto: _AvisoAoTutor.textoDaFila,
+          peso: PesoDaFaixa.informativo,
+        ),
+      _EstadoDoAviso.pronto ||
+      _EstadoDoAviso.enviando ||
+      _EstadoDoAviso.falhou => Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: <Widget>[
+            if (_erro != null) ...<Widget>[
+              FaixaDeAviso(texto: _erro!),
+              const SizedBox(height: BichuEspaco.e4),
+            ],
+            BotaoPrimario(
+              rotulo: _AvisoAoTutor.rotuloDe(widget.tag),
+              carregando: _estado == _EstadoDoAviso.enviando,
+              // **Nao desabilita por estado de rede**, e nem enquanto envia o
+              // botao perde o rotulo: `BotaoPrimario` trata `carregando`.
+              aoTocar: _estado == _EstadoDoAviso.enviando ? null : _avisar,
+            ),
+          ],
+        ),
+    };
+  }
+}
+
+/// O desfecho do aviso, no lugar do botao.
+///
+/// **Substitui o botao em vez de ficar abaixo dele**, e isso e deliberado: um
+/// botao `Avisar o tutor` ainda em pe depois de o aviso sair convida o segundo
+/// toque, e o segundo toque com a mesma chave devolve a resposta original --
+/// entao a pessoa tocaria e nada mudaria na tela. Botao que nao produz efeito
+/// visivel e o formato mais curto de fazer alguem achar que o app travou.
+///
+/// `liveRegion` porque quem usa leitor de tela precisa ouvir o desfecho sem
+/// varrer a tela de novo: o foco estava no botao, e o botao acabou de sumir.
+class _DesfechoDoAviso extends StatelessWidget {
+  const _DesfechoDoAviso({required this.texto, required this.peso});
+
+  final String texto;
+  final PesoDaFaixa peso;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      container: true,
+      child: FaixaDeAviso(texto: texto, peso: peso),
     );
   }
 }

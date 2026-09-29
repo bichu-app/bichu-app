@@ -26,8 +26,24 @@
 # nucleo mata dentro daquele grupo, e o Postgres nem fica sabendo. O worker
 # morre, reinicia, e o trabalho volta para a tabela `jobs`.
 #
-# Soma dos limites: 1888 MB, deixando ~160 MB para o sistema operacional.
-# (1792 ate 23/09; o `web`, com 96 MB, entrou nessa data pelo ADR-0028.)
+# Soma dos limites DO QUE RODA DE FATO: 1760 MB, deixando ~288 MB para o
+# sistema operacional. Entram `db` 640, `objeto` 320, `api` 192, `worker` 448,
+# `web` 96 e `edge` 64. Ficam fora `migracao` (256, termina antes de `api` e
+# `worker` subirem), `mail` (perfis dev/qa, nao sobe no hospedado) e
+# `ferramentas` (1 GB, perfil proprio, so sob `docker compose run`: e o teto do
+# `tsc`, e nao de runtime). Era 1664 na development; o `web` (site, ADR-0028)
+# entrou aqui com 96, medido.
+#
+# 288 MB e a folga sobre o piso de 300 que a development considerava seguro --
+# ela caiu 96 com o `web`. Piso: nucleo, systemd e sshd (~80), dockerd e
+# containerd (~100), Ops Agent (~80 a 100, exigido pelo alerta de memoria do
+# ADR-0029) e o resto para cache de pagina. Fica APERTADO: se o alerta de
+# memoria do ADR-0029 disparar, o gatilho de e2-medium e este.
+#
+# NO MERGE, ESTA LINHA NAO SE RESOLVE ESCOLHENDO UM LADO. Duas branches que
+# mexem em teto produzem dois numeros certos para a arvore de cada uma e um
+# errado para a juncao. Quem integra SOMA os `mem_limit` do que roda de fato e
+# MEDE de novo com `docker stats` na pilha juntada.
 # Se apertar, e2-medium e REINICIO e nao migracao: parar, trocar o tipo,
 # religar. Dura minutos.
 #
@@ -86,16 +102,51 @@ services:
     # Armazenamento de objeto falando a API S3. Nao e "MinIO no lugar da AWS":
     # e a API S3, que o MinIO implementa e que S3 e GCS tambem atendem.
     #
-    # Registro: o MinIO NAO esta mais no Docker Hub (`minio/minio` responde
-    # "pull access denied"). A imagem oficial vive no quay.io. Quem for
-    # atualizar a tag vai esbarrar nisso e perder tempo achando que e
-    # credencial. O que pina de verdade e o digest, nao a tag.
-    image: quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # IMAGEM: `bitnamilegacy/minio`, por decisao do cliente em 29/09/2026.
+    # A imagem OFICIAL do MinIO saiu dos registros anonimos: `minio/minio` e
+    # `minio/mc` respondem "pull access denied ... repository does not exist"
+    # no Docker Hub, e no quay.io (digest fixado, `:latest` e tags RELEASE.*)
+    # respondem 401 -- a API do quay diz "Requires authentication". Sem login
+    # de registro, nao ha imagem oficial baixavel, e o job `integracao` da
+    # esteira parava com "unauthorized" ao puxar estas duas imagens.
+    #
+    # A escolha foi trocar para o mirror `bitnamilegacy/*`, unico maintido e
+    # baixavel anonimo por digest. DIVIDA REGISTRADA: `bitnamilegacy` e um
+    # namespace CONGELADO (a Bitnami restringiu as imagens gratuitas em
+    # 28/08/2026; a "legacy" e backup temporario). Ver o PR desta mudanca e
+    # `adr/` sobre storage; quando houver decisao de registro autenticado
+    # oficial, isto volta para a imagem do MinIO sem mudar o comportamento.
+    #
+    # O CONTRATO DA IMAGEM MUDOU, e por isso os campos abaixo mudaram junto:
+    #  - roda como uid 1001 (nao-root). O volume monta no diretorio de dados do
+    #    Bitnami (`/bitnami/minio/data`), que a imagem cria com grupo 0 e bit de
+    #    escrita de grupo, e o processo (gid 0) escreve nele;
+    #  - NAO existe mais `command: server ...`: o entrypoint do Bitnami monta o
+    #    comando sozinho a partir das variaveis (porta da API 9000, do console
+    #    9001, e o diretorio `MINIO_DATA_DIR`);
+    #  - o console e por `MINIO_CONSOLE_PORT_NUMBER` (nao ha `MINIO_CONSOLE_ADDRESS`
+    #    no MinIO: o oficial usa a flag `--console-address`, que o Bitnami gera a
+    #    partir deste numero). 9001 e o padrao; fica explicito para casar com
+    #    `MINIO_BROWSER_REDIRECT_URL`;
+    #  - a sonda deixa de ser `mc ready local` (dependia de um alias que so
+    #    existe no init) e passa a bater no endpoint de saude do proprio MinIO.
+    # O que a integracao exercita continua igual: SSE-S3 (MINIO_KMS_SECRET_KEY),
+    # URL assinada pelo host (MINIO_SERVER_URL) e a politica anonima do bucket.
+    image: docker.io/bitnamilegacy/minio@sha256:6dabb4a2088c9a79908de3bc05f4586c23ad2182c8908e7e3acbf61c1467fb20
     mem_limit: 320m
-    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY_ID:?defina no .env}
       MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?defina no .env}
+      # Onde o MinIO guarda os objetos DENTRO do container Bitnami. O volume
+      # `dados_objeto` monta exatamente aqui (mudou de `/data`, que era o padrao
+      # da imagem oficial).
+      MINIO_DATA_DIR: /bitnami/minio/data
+      # Porta do console (browser). O Bitnami transforma isto na flag
+      # `--console-address :9001`; 9001 e o padrao e casa com o redirect abaixo.
+      MINIO_CONSOLE_PORT_NUMBER: "9001"
+      # Sem TLS: o edge termina o TLS, e a origem de midia fala http na rede
+      # interna. Explicito para o setup do Bitnami nao supor https.
+      MINIO_SCHEME: http
       # O MinIO assina a URL com o host pelo qual ele se conhece. Se isto
       # divergir do host publico, TODA URL assinada quebra, com erro de
       # assinatura que nao diz que e de host. E o defeito classico de
@@ -110,25 +161,39 @@ services:
       # um KMS. O KMS embutido (`MINIO_KMS_SECRET_KEY`) atende, e e o caminho
       # que o proprio MinIO documenta para ambiente sem KMS externo.
       #
+      # FORMATO: `<id>:<base64 de 32 bytes>`. Chave curta faz o MinIO NAO subir,
+      # e o setup do Bitnami fica em laco "Adding local Minio host..." sem nunca
+      # ficar saudavel -- medido em 29/09. O `.env.example` gera o valor certo.
+      #
       # Chave de DESENVOLVIMENTO, descartavel, com valor no `.env`. Em producao
       # isto vira o KMS do provedor, que e configuracao e nao codigo -- o
       # cabecalho que a aplicacao envia e o mesmo nos dois.
       MINIO_KMS_SECRET_KEY: ${OBJECT_STORAGE_KMS_KEY:?defina no .env}
     volumes:
-      - dados_objeto:/data
+      - dados_objeto:/bitnami/minio/data
     healthcheck:
-      test: ["CMD", "mc", "ready", "local"]
+      # Endpoint de saude do proprio MinIO, pela porta da API. `curl` existe na
+      # imagem Bitnami. Substitui `mc ready local`, que precisava de um alias
+      # `local` que so o `objeto_init` configura.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
       interval: 5s
       timeout: 3s
       retries: 20
-      start_period: 15s
+      start_period: 20s
     restart: unless-stopped
 
   objeto_init:
     # Cria os dois buckets do ADR-0007 e aplica a politica. Idempotente: pode
     # rodar em toda subida. O bucket privado NAO recebe politica anonima, e e
     # essa separacao fisica que protege o original com EXIF.
-    image: quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
+    #
+    # IMAGEM: `bitnamilegacy/minio-client` (o `mc`), pelo mesmo motivo do
+    # `objeto` acima -- a `minio/mc` oficial saiu dos registros anonimos. Duas
+    # diferencas de contrato tratadas aqui: (1) o entrypoint padrao do Bitnami e
+    # um `run.sh` proprio, entao sobrescrevo com o script de init; (2) roda como
+    # uid 1001 com HOME nao-gravavel (`/`), entao o `mc` grava a config em
+    # `/tmp/.mc` via `--config-dir`, senao ele falha ao salvar o alias.
+    image: docker.io/bitnamilegacy/minio-client@sha256:73bd39f7899a0cef12b8dd5df13aa93a3ed1aaa44236542442e9ac76819ac158
     depends_on:
       objeto:
         condition: service_healthy
@@ -142,6 +207,10 @@ services:
       - -c
       - |
         set -eu
+        # `mc` grava a config do alias em disco; com HOME=/ (nao-gravavel pelo
+        # uid 1001 do Bitnami) o alias nao salva. `--config-dir /tmp/.mc` poe a
+        # config num lugar gravavel.
+        mc() { command mc --config-dir /tmp/.mc "$$@"; }
         mc alias set local http://objeto:9000 "$$CHAVE" "$$SEGREDO"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PRIVATE"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PUBLIC"
@@ -227,7 +296,16 @@ services:
         #
         #   BUILD_COMMIT=$(git rev-parse HEAD) docker compose build
         BUILD_COMMIT: ${BUILD_COMMIT:-}
-    mem_limit: 320m
+    # 192m, MEDIDO em 23/09 (pilha isolada, carga pela borda: 150 conexoes por
+    # 90 s, mistura de /v1/health, login com PBKDF2, JWKS e 404):
+    #
+    #   repouso 54 MiB   pico 93 MiB   -- contra 320m ate aqui
+    #
+    # 192 e o dobro do pico. `--max-old-space-size` NAO e necessario: o Node 22
+    # le o teto do cgroup e dimensiona o heap por ele (com 320m o limite de
+    # heap medido era 259 MiB). O `tsc` nao roda aqui: e o servico
+    # `ferramentas`, com teto proprio.
+    mem_limit: 192m
     command: ["node", "dist/bin/api.js"]
     env_file: [.env]
     environment:
@@ -313,14 +391,41 @@ services:
         # compara `docker inspect` de api e worker, reprovaria por uma
         # divergencia que nao e de codigo.
         BUILD_COMMIT: ${BUILD_COMMIT:-}
+    # 448m FICA, e nao desce para 320 como a `api`: FOLGA ANTES DE ECONOMIA.
+    #
+    # Medido pela sessao App no container (sharp 0.35.4, libvips 8.18.6), com
+    # este mesmo teto, sobre o pior caso aceito (50 MP exatos, JPEG
+    # progressivo), dez fotos em serie:
+    #
+    #   cache do libvips ligado (padrao) .. morto pelo cgroup na SEGUNDA foto,
+    #                                        saida 137
+    #   cache desligado .................. pico 304 a 313 MiB, estavel, saida 0
+    #
+    # O conserto e `sharp.cache(false)`, codigo do worker, na branch da App
+    # `correcao/worker-que-morre-na-sequencia` (5eb4e2b). Com ele, 320m
+    # deixaria 7 a 16 MiB de folga sobre o pico: isso nao e teto, e aposta. Por
+    # isso 448m, cerca de 135 MiB acima do pico medido.
+    #
+    # `MALLOC_TRIM_THRESHOLD_` NAO entra aqui, embora a versao anterior deste
+    # comentario a citasse: a mesma medicao a testou nos dois sentidos e a
+    # diferenca foi de 4 a 6 MiB (ruido), e com o cache ligado o processo morre
+    # igual, com ela ou sem ela. A retencao e do cache do libvips, nao do
+    # alocador da glibc.
+    #
+    # E a morte nao e ruidosa: o trabalho em curso fica `running` para sempre
+    # (`claim` so pega `pending`), a foto fica `processing` para sempre, e o
+    # tutor nao ve erro.
+    #
+    # Nao ha `WORKER_IMAGE_CONCURRENCY` aqui, e isso e de proposito: ate
+    # 28/09 havia, com o comentario "uma imagem por vez", mas NENHUMA linha do
+    # repositorio lia a variavel. Um limite declarado que nao existe e pior que
+    # nenhum, porque convence quem le. A guarda real contra duas decodificacoes
+    # ao mesmo tempo e a passada sem reentrada do worker, na mesma branch da
+    # App: tres decodificacoes simultaneas matam o processo nestes 448m mesmo
+    # com o cache desligado.
     mem_limit: 448m
     command: ["node", "dist/bin/worker.js"]
     env_file: [.env]
-    environment:
-      # UMA imagem por vez. Duas fotos grandes em paralelo estouram 448 MB com
-      # folga, e ai o limite protege o Postgres mas o worker morre em toda
-      # foto. Processar em serie e mais lento e e o que cabe em 2 GB.
-      WORKER_IMAGE_CONCURRENCY: "1"
     depends_on:
       db: {condition: service_healthy}
       objeto: {condition: service_healthy}
@@ -372,9 +477,9 @@ services:
   #     estiver aqui. Subir 320m para caber um compilador faz o portao passar a
   #     abencoar, em producao, uma api com o dobro do teto que ela precisa -- e
   #     ele existe justamente para o teto ser real.
-  #  2. A soma no topo deste arquivo (1792 MB, ~256 MB para o sistema) e o
-  #     orcamento da e2-small de 2 GB. `api` em 700m levaria a soma a 2172 MB, e
-  #     o limite deixaria de caber na maquina que ele protege.
+  #  2. A soma no topo deste arquivo (1792 MB quando isto foi escrito, 1664
+  #     desde 23/09) e o orcamento da e2-small de 2 GB. `api` em 700m a levaria
+  #     a 2172 MB, e o limite deixaria de caber na maquina que ele protege.
   #
   # Entao a compilacao sai do servico com teto de runtime e ganha o seu.
   # Nao e desenho novo: `infra/integracao/compose.integracao.yaml` ja separa

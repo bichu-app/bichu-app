@@ -57,6 +57,8 @@ import { registrarRotasDeReferencia } from '../modules/pets/adapters/http/refere
 import { criarPetRepository } from '../modules/pets/adapters/persistence/kysely-pet-repository.js';
 import { PetService } from '../modules/pets/application/pet-service.js';
 import { registrarRotasDePets } from '../modules/pets/adapters/http/pet-routes.js';
+import { registrarRotaDoPerfilPublico } from '../modules/pets/adapters/http/perfil-publico-routes.js';
+import { criarLeituraDoPerfilPublico } from '../modules/pets/adapters/persistence/kysely-perfil-publico.js';
 import { criarMediaRepository } from '../modules/media/adapters/persistence/kysely-media-repository.js';
 import type { FotoResumida } from '../modules/pets/ports/fotos-do-pet.js';
 import type { PetId } from '../shared/types/brands.js';
@@ -66,6 +68,9 @@ import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-rout
 import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
 import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
+import { registrarRotasDaLeituraPublicaDoCaso } from '../modules/lostfound/adapters/http/leitura-publica-do-caso-routes.js';
+import { criarLeituraPublicaDoCaso } from '../modules/lostfound/adapters/persistence/kysely-leitura-publica-do-caso.js';
+import { LeituraPublicaDoCasoService } from '../modules/lostfound/application/leitura-publica-do-caso.js';
 import { criarAlcancePorPostGIS } from '../modules/lostfound/adapters/persistence/kysely-alcance-por-postgis.js';
 import { criarRegistroDeDisparos } from '../modules/lostfound/adapters/persistence/kysely-registro-de-disparos.js';
 import { criarFoundReportRepository } from '../modules/found/adapters/persistence/kysely-found-report-repository.js';
@@ -90,6 +95,8 @@ import {
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { criarDirectoryRepository } from '../modules/professionals/adapters/persistence/kysely-directory-repository.js';
 import { registrarRotasDoDiretorio } from '../modules/professionals/adapters/http/directory-routes.js';
+import { registrarRotasDaVitrine } from '../modules/store/adapters/http/store-routes.js';
+import { criarStoreRepository } from '../modules/store/adapters/persistence/kysely-store-repository.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -595,11 +602,28 @@ export async function main(): Promise<void> {
       },
       clock: systemClock,
     });
+    registrarRotasDaVitrine(escopo, { vitrine: criarStoreRepository(db), clock: systemClock });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
+    // BICHUS-45. O perfil publico por `/@{slug}`, sem conta.
+    registrarRotaDoPerfilPublico(escopo, {
+      perfis: criarLeituraDoPerfilPublico(db),
+      baseDeMidia: config.mediaPublicBaseUrl,
+    });
     registrarRotasDeLocalizacao(escopo, dependenciasDasRotasDeLocalizacao);
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
+    // BICHUS-76. A pagina do caso e o cartaz, pelo `share_token`. O token e a
+    // credencial; a conta, quando vem, so decide `can_report_sighting`. As
+    // bases sao as mesmas das outras rotas: o link aponta para o site
+    // (`WEB_BASE_URL`) e a foto para as derivadas publicas (`MEDIA_PUBLIC_BASE_URL`).
+    registrarRotasDaLeituraPublicaDoCaso(escopo, {
+      leitura: new LeituraPublicaDoCasoService(criarLeituraPublicaDoCaso(db), {
+        baseDaWeb: config.webBaseUrl,
+        baseDeMidia: config.mediaPublicBaseUrl,
+      }),
+      autenticador: dependenciasDasRotasDeCaso.autenticador,
+    });
     registrarRotasDeAchado(escopo, dependenciasDasRotasDeAchado);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
     registrarRotasDeTransferencia(escopo, {

@@ -5,12 +5,15 @@ import 'api/auth_api.dart';
 import 'api/achados_api.dart';
 import 'api/casos_api.dart';
 import 'api/devices_api.dart';
+import 'api/diretorio_api.dart';
+import 'api/loja_api.dart';
 import 'api/envio_de_foto.dart';
 import 'api/fotos_pendentes.dart';
 import 'api/fila_offline.dart';
 import 'api/imagem_do_qr.dart';
 import 'api/pets_api.dart';
 import 'dispositivo/avisos.dart';
+import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
@@ -33,6 +36,8 @@ class Escopo extends InheritedWidget {
     required this.auth,
     required this.pets,
     required this.casos,
+    required this.diretorio,
+    required this.loja,
     required this.achados,
     required this.envioDeFoto,
     required this.retomadaDeFotos,
@@ -42,6 +47,7 @@ class Escopo extends InheritedWidget {
     required this.camera,
     required this.leitorDeQr,
     required this.avisos,
+    required this.avisosRecebidos,
     required this.oportunidades,
     required this.vigiaDeAviso,
     required this.localizacao,
@@ -60,6 +66,16 @@ class Escopo extends InheritedWidget {
 
   /// As rotas de caso de perdido (`tags: [lost]` do contrato).
   final CasosApi casos;
+
+  /// O diretorio de `Perto` (`tags: [directory]` do contrato).
+  final DiretorioApi diretorio;
+
+  /// A vitrine de `Loja` (`tags: [store]` do contrato).
+  ///
+  /// **A unica rota do escopo que nao exige conta.** A vitrine e navegavel
+  /// deslogado (criterio 24 da BICHUS-185), e nada na resposta dela e privado
+  /// de ninguem: tudo ja esta publicado no site do parceiro.
+  final LojaApi loja;
 
   /// As rotas de achado avulso (`tags: [found]` do contrato), ligadas pela
   /// BICHUS-35.
@@ -118,6 +134,15 @@ class Escopo extends InheritedWidget {
   /// camera: notificacao nao se verifica em simulador, e o que o teste precisa
   /// exercitar e a reacao da tela aos quatro estados.
   final Avisos avisos;
+
+  /// O ouvinte dos avisos que CHEGAM (os tres estados do push).
+  ///
+  /// Fica no escopo, e nao na tela, pela mesma razao da fila offline: e UM
+  /// objeto no app inteiro. Um ouvinte por tela registraria N assinaturas na
+  /// mesma stream e a pessoa veria o mesmo aviso N vezes; e, pior, o estado
+  /// `fechado` (`getInitialMessage`) entrega a mensagem UMA vez -- a segunda
+  /// instancia a perderia.
+  final OuvinteDeAvisos avisosRecebidos;
 
   /// Quais das DUAS oportunidades de UX 10.1 ja foram gastas neste aparelho
   /// (BICHUS-24).
@@ -205,6 +230,7 @@ class Escopo extends InheritedWidget {
       camera != anterior.camera ||
       leitorDeQr != anterior.leitorDeQr ||
       avisos != anterior.avisos ||
+      avisosRecebidos != anterior.avisosRecebidos ||
       oportunidades != anterior.oportunidades ||
       vigiaDeAviso != anterior.vigiaDeAviso ||
       localizacao != anterior.localizacao ||

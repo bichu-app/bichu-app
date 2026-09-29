@@ -447,6 +447,11 @@ export interface JobsTable {
   status: Generated<StatusDoTrabalho>;
   attempts: Generated<number>;
   max_attempts: Generated<number>;
+  /**
+   * Quantas vezes o processo morreu segurando este trabalho (migração
+   * 20260923000008). Não é `attempts`: esta acusa a carga, aquela o ambiente.
+   */
+  orphan_recoveries: Generated<number>;
   last_error: string | null;
   run_after: Generated<Date>;
   locked_at: Date | null;
@@ -829,6 +834,63 @@ export interface EntityVerificationsTable {
   created_at: CriadoEm;
 }
 
+/** Espelha `CategoriaDaVitrine` de `modules/store/domain/item-da-vitrine.ts`. */
+export type CategoriaDaVitrine = 'food' | 'toy' | 'hygiene' | 'accessory' | 'health' | 'bed';
+
+/**
+ * A versao corrente da vitrine da `Loja`. Mesma forma de `ref_data_versions`.
+ */
+export interface StoreCatalogVersionsTable {
+  version: string;
+  published_at: Generated<Date>;
+  is_current: Generated<boolean>;
+}
+
+/**
+ * O parceiro da vitrine.
+ *
+ * **Identidade interna separada da publica** (ADR-0024), que e o desenho de
+ * `pets` e de `professionals`: `id` e a chave primaria e nunca sai em resposta;
+ * `slug` e o endereco publico e e a unica chave do parceiro que sai. O ADR-0010
+ * item 6 proibe UUID na SAIDA publica, nao no esquema, e quem impede o engano e
+ * o portao de `src/tools/portao-contrato-publico.ts`.
+ */
+export interface StorePartnersTable {
+  /** Identidade interna. Nunca projetada em resposta. */
+  id: string;
+  /** O endereco publico do parceiro. Unico. */
+  slug: string;
+  name: string;
+  /** Apenas o host, sem esquema nem caminho nem consulta. */
+  host: string;
+  active: Generated<boolean>;
+  sort_order: Generated<number>;
+}
+
+/** O item da vitrine. Mesmo desenho de `StorePartnersTable`. */
+export interface StoreItemsTable {
+  /** Identidade interna. Nunca projetada em resposta. */
+  id: string;
+  /** O endereco publico do item. Unico. */
+  slug: string;
+  /** Aponta para `store_partners.id`, nunca para o `slug` dele. */
+  partner_id: string;
+  title: string;
+  summary: string;
+  category: CategoriaDaVitrine;
+  /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
+  image_path: string | null;
+  /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
+  target_path: string;
+  /** Centavos, inteiro. Nunca ponto flutuante. */
+  price_amount: number | null;
+  price_currency: string | null;
+  /** Data pura: a da consulta HUMANA ao preco, nunca derivada de carimbo. */
+  price_checked_at: Date | null;
+  active: Generated<boolean>;
+  sort_order: Generated<number>;
+}
+
 export interface Database {
   users: UsersTable;
   user_reference_locations: UserReferenceLocationsTable;
@@ -863,6 +925,9 @@ export interface Database {
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;
   entity_verifications: EntityVerificationsTable;
+  store_catalog_versions: StoreCatalogVersionsTable;
+  store_partners: StorePartnersTable;
+  store_items: StoreItemsTable;
   'audit.events': AuditEventsTable;
 }
 

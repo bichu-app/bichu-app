@@ -459,6 +459,30 @@ export const problemas = {
     }),
 
   /**
+   * 410. O link público do caso (página ou cartaz) não leva mais a um caso
+   * aberto (BICHUS-76).
+   *
+   * **Uma resposta para todos os motivos:** caso encerrado (com qualquer
+   * desfecho), pet excluído, falecido ou arquivado, e token que nunca existiu.
+   * O contrato declara só 200 e 410 nas duas operações, e o ADR-0017 fixa o
+   * mesmo par para `/p/` e `/cartaz/`. Distinguir contaria a um estranho o que
+   * aconteceu com o animal de outra pessoa, e o reencontro é o desfecho que
+   * menos precisa virar notícia para quem só viu um cartaz.
+   *
+   * O tipo é `lost-case-closed` (`components/responses/LostCaseClosed`), e não
+   * `conversation-closed`, que é da conversa do achador: o site e o app decidem
+   * a tela pelo `type`, e quem abre um cartaz não está numa conversa. O
+   * `next_action` é o que o contrato declara, o mesmo do ADR-0004 para a tag
+   * desativada: quem chegou aqui pode estar com um animal parecido no colo, e
+   * não pode dar num beco sem saída.
+   */
+  casoPublicoEncerrado: (): AppError =>
+    new AppError('lost-case-closed', 'Este caso não está mais aberto', {
+      detail: 'Se você encontrou um animal, registre o achado para a vizinhança ver.',
+      nextAction: 'register_stray_found_report',
+    }),
+
+  /**
    * 429 de janela que REABRE.
    *
    * ## O texto anterior mentia duas vezes
