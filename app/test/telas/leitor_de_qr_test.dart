@@ -577,6 +577,14 @@ void main() {
   });
 
   group('o erro do codigo decide por type, e nunca por status', () {
+    /// 16 simbolos, com hifen como a plaquinha imprime.
+    ///
+    /// Eram 10 e 11 simbolos ate 28/09, e passavam porque a tela mandava
+    /// qualquer texto nao vazio ao servidor. Com a conferencia de forma local
+    /// (o truncamento silencioso que o cliente achou), um codigo curto para no
+    /// app e o desfecho que estes casos medem nunca chega da rede.
+    const String bemFormado = 'BCH7-K2M9-1QDX-4N2Z';
+
     Future<void> digitarEEnviar(WidgetTester tester, String codigo) async {
       await tocar(tester, find.text(TextosDoCadastro.digitarOCodigo));
       await tester.enterText(find.byType(TextField).first, codigo);
@@ -591,7 +599,7 @@ void main() {
         permissao: EstadoDaPermissao.indisponivel,
         rede: (_) async => problema('tag-code-malformed', 400),
       );
-      await digitarEEnviar(tester, 'BCH-7K2M-91Q');
+      await digitarEEnviar(tester, bemFormado);
 
       expect(
         find.textContaining('Confira o código'),
@@ -612,7 +620,7 @@ void main() {
         permissao: EstadoDaPermissao.indisponivel,
         rede: (_) async => problema('tag-code-not-found', 404),
       );
-      await digitarEEnviar(tester, 'BCH-7K2M-91QD');
+      await digitarEEnviar(tester, bemFormado);
 
       expect(
         find.textContaining('não é de nenhuma tag do Bichu'),
@@ -638,7 +646,7 @@ void main() {
         permissao: EstadoDaPermissao.indisponivel,
         rede: (_) async => problema('tag-code-not-found', 404),
       );
-      await digitarEEnviar(tester, 'BCH-7K2M-91QD');
+      await digitarEEnviar(tester, bemFormado);
 
       expect(
         find.textContaining('Nao foi possivel concluir'),

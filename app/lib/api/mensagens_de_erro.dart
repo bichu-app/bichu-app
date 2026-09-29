@@ -144,6 +144,35 @@ abstract final class MensagensDeErro {
       'Esse código não é de nenhuma tag do Bichu. Confira se algum caractere '
       'saiu trocado, ou registre o achado sem o código.';
 
+  /// O campo do codigo vazio, no toque em `Continuar` (UX secao 13: o
+  /// requisito e dito antes do erro, e o toque que nao faz nada e o erro que
+  /// nao se diz).
+  ///
+  /// Mesma forma de [digiteSeuEmail] e [digiteSuaSenha], porque e o mesmo
+  /// caso: campo obrigatorio vazio na hora de enviar.
+  static const String digiteOCodigo = 'Digite o código.';
+
+  /// O codigo digitado nao tem 16 simbolos, conferido **no app** antes da
+  /// chamada.
+  ///
+  /// **O numero entra na frase**, e e ele que faz a mensagem valer a pena. O
+  /// defeito que esta frase fecha era a mascara cortar no 16o em silencio:
+  /// quem colava 26 simbolos via 16 na tela, mandava um fragmento e recebia do
+  /// servidor uma recusa sobre um codigo que nunca digitou. Dizer "confira o
+  /// codigo" aqui seria trocar um silencio por um encolher de ombros; dizer o
+  /// numero e a unica forma de a pessoa entender por que.
+  ///
+  /// Duas frases curtas, e nenhuma explicacao de por que sao 16:
+  /// [ajudaDoCampoDeCodigo] ja esta acima do campo, e repetir a regra dentro
+  /// do erro e o texto a mais que o cliente reprovou em 28/09.
+  static String codigoComTamanhoDiferente(int digitados) =>
+      'O código tem 16 caracteres. Você digitou $digitados.';
+
+  /// O codigo digitado tem caractere que o codigo nao usa (na pratica `U`),
+  /// conferido **no app** antes da chamada.
+  static const String codigoComCaractereDeFora =
+      'Confira o código. Tem um caractere que a plaquinha não usa.';
+
   /// A saida que devolve o foco ao campo **com o que foi digitado** (UX 12.4).
   ///
   /// Limpar o campo aqui seria cobrar de novo o trabalho que ja falhou uma

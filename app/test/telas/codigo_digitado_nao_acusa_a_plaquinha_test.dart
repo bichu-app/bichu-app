@@ -61,7 +61,10 @@ import 'ajuda_de_tela.dart';
 /// do toque e comparam os dois, porque a mascara e da BICHUS-54 e uma
 /// expectativa copiada a mao aqui viraria reprovacao pelo motivo errado no dia
 /// em que ela mudar.
-const String _codigoDigitado = 'BCH7K2M91QDX4N2';
+/// 16 simbolos, e o numero importa desde 28/09: a tela confere a FORMA antes de
+/// chamar o servidor, e um codigo de 15 nunca chegaria ao 404 que estes casos
+/// medem. Eram 15 aqui, e a correcao do truncamento silencioso e quem contou.
+const String _codigoDigitado = 'BCH7K2M91QDX4N2Z';
 
 /// A espera entre as retentativas automaticas da tela, em segundos.
 ///

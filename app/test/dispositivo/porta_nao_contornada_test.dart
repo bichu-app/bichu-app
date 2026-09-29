@@ -626,7 +626,34 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// seguinte pelo `RodapeDaPaginacao`. Nada a ver com camera: nenhuma das duas
 /// toca em foto, e as telas do assistente de cadastro (`app/lib/telas/pet/`)
 /// seguem intocadas.
-const String _arvoreDasTelas = 'cfba3eb42ecc9c32b91a500e7748fb50463a7b92';
+/// Troca de 28/09, correcao do truncamento silencioso na digitacao do codigo da
+/// plaquinha (achado do cliente por telefone, sem chave de issue no
+/// acionamento). DOIS arquivos de `app/lib/telas` mudam, e **nenhum dos dois
+/// encosta na porta `CameraEGaleria`** -- que e o que o criterio 10 da
+/// BICHUS-161 protege:
+///
+/// - `escanear/mascara_do_codigo_da_tag.dart` parou de descartar entrada em
+///   silencio. Ela cortava no 16o simbolo e apagava o `U` sem nada na tela
+///   mudar: quem colava um codigo de 26 simbolos mandava os 16 primeiros ao
+///   servidor e lia uma recusa sobre um codigo que nunca digitou. Agora ela
+///   descarta apenas o que `normalizarCodigoDaTag` tambem descarta
+///   (`[^0-9A-Za-z]`), e formata em grupos de quatro tantos quantos vierem.
+/// - `escanear/tela_leitor_de_qr.dart` passou a conferir a FORMA do codigo
+///   digitado -- tamanho e alfabeto -- antes de chamar `GET /v1/tags/{code}`,
+///   com o numero na mensagem. O simbolo de verificacao continua sendo do
+///   servidor (ADR-0004, Emenda 1): **nada da aritmetica dele entrou no app**,
+///   e ha caso cobrando isso nos dois sentidos.
+///
+/// A mudanca e do TECLADO, e nao da camera: `escanear/codigo_lido_do_qr.dart`
+/// ganhou o diagnostico de forma e `temFormaDeCodigoDeTag` passou a derivar
+/// dele, com o comportamento do caminho do QR identico entrada por entrada. As
+/// telas do assistente de cadastro (`app/lib/telas/pet/`) seguem intocadas, e
+/// nenhuma tela ganhou importe de plugin de aparelho -- quem pega o contorno de
+/// verdade e o portao ESTRUTURAL abaixo, que continua valendo e continua verde.
+///
+/// Medido pelo indice temporario que este portao usa, sobre a arvore de
+/// trabalho. Anterior: `cfba3eb42ecc9c32b91a500e7748fb50463a7b92`.
+const String _arvoreDasTelas = 'ed8f71b6479f15c4f9cfeb6fb727d090dbacab14';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
