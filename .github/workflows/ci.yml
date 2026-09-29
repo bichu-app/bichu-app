@@ -1120,8 +1120,15 @@ jobs:
           IMAGE_TAG: prod
         run: |
           docker compose build api
+          # `MAIL_TRANSPORT=postmark`: a MESMA linha de
+          # `infra/verificacao/verificar-boot-do-alvo-prod-local.sh`, e pelo
+          # mesmo motivo. Producao entrega pelo provedor (ADR-0009), e desde
+          # 29/09 a lista de segredos que a subida resolve depende do
+          # transporte: em `smtp` o token do provedor NAO e buscado, e este
+          # juizo cobraria sete dos oito nomes de `SEGREDOS_DE_RUNTIME`.
           docker run -d --name prova-prod --network bichu_default --env-file .env \
-            -e NODE_ENV=production -e BIND_HOST=0.0.0.0 -e PORT=3000 bichu-app:prod
+            -e NODE_ENV=production -e BIND_HOST=0.0.0.0 -e PORT=3000 \
+            -e MAIL_TRANSPORT=postmark bichu-app:prod
 
           # `docker wait` devolve o codigo de saida do processo. O `timeout`
           # existe porque um container que NAO morre tambem e reprovacao, e

@@ -107,7 +107,19 @@ function valoresDeIntegracao() {
     MAIL_HOST: 'mail',
     MAIL_PORT: '1025',
     MAIL_WEBHOOK_SECRET: `${MARCA}-webhook-com-32-bytes-no-minimo`,
-    MAIL_API_TOKEN: `${MARCA}-token-que-nao-autentica`,
+    // VAZIO, e o vazio E O TESTE. Ate 29/09/2026 esta linha preenchia um token
+    // falso, e era ela que cegava o portao: a pilha de integracao subia com um
+    // valor que a pilha de quem desenvolve nao tem, entao a suite ficava verde
+    // enquanto `make up` pelo caminho do README matava `api` e `worker` por
+    // `MAIL_API_TOKEN` vazio COM `MAIL_TRANSPORT=smtp`. O defeito atravessou um
+    // `fechar-integracao` verde por causa desta unica linha.
+    //
+    // Com `smtp` o token nao e lido por ninguem (`exigeTokenDoProvedor`), entao
+    // preenche-lo so servia para esconder a unica coisa que precisava aparecer.
+    // A conferencia de variaveis exigidas logo abaixo sabe disto, e a excecao
+    // dela e CONDICIONADA ao transporte: com `postmark` o token volta a ser
+    // cobrado aqui.
+    MAIL_API_TOKEN: '',
 
     // `log`: nada sai do processo. O projeto NAO existe, e isso e de proposito
     // -- se um dia esta pilha rodar com `fcm`, o envio precisa falhar dizendo
@@ -142,18 +154,56 @@ function valoresDeIntegracao() {
   };
 }
 
+/**
+ * Exigidas pelo TEXTO do codigo, e NAO pelo ambiente que este arquivo monta.
+ *
+ * `lerVariaveisExigidas` conta `requireEnv('NOME')` por TEXTO e nao conhece
+ * condicional -- e isso e de proposito, porque ensina-la a entender `if` faria
+ * dela uma analise de fluxo, e analise de fluxo incompleta aprova o que nao
+ * entende. O preco dessa cegueira, ate 29/09/2026, era um valor falso aqui para
+ * calar a conferencia; e um valor falso aqui foi exatamente o que deixou a
+ * suite verde com a subida real quebrada.
+ *
+ * A saida nao e afrouxar a conferencia: e dizer QUAL ramo este ambiente toma, e
+ * deixar a conferencia cobrar o nome de volta assim que o ramo mudar. Cada
+ * entrada traz o predicado, em JavaScript, sobre o ambiente JA RENDERIZADO.
+ */
+const DISPENSADAS_PELO_RAMO_NAO_TOMADO = [
+  {
+    nome: 'MAIL_API_TOKEN',
+    // O gemeo de `exigeTokenDoProvedor` em `src/shared/config/transporte-de-email.ts`.
+    // Escrito aqui porque este arquivo e `.mjs` e nao importa TypeScript; se um
+    // dia os dois discordarem, quem acusa e a subida `postmark` de
+    // `verificar-subida-da-api.mjs`, que exige a RECUSA por este nome.
+    dispensavel: (ambiente) => (ambiente['MAIL_TRANSPORT'] ?? 'smtp') !== 'postmark',
+    porque:
+      'o token do provedor so e lido com MAIL_TRANSPORT=postmark (ADR-0009). ' +
+      'Com `smtp` ele fica VAZIO de proposito: preenche-lo esconderia a subida ' +
+      'que o desenvolvedor de verdade faz.',
+  },
+];
+
 function aplicar(texto, chave, valor) {
   const linha = `${chave}=${valor}`;
   const expressao = new RegExp(`^${chave}=.*$`, 'm');
   return expressao.test(texto) ? texto.replace(expressao, linha) : `${texto}\n${linha}`;
 }
 
-export function gerar({ exemplo = '.env.example', destino = '.env.integracao' } = {}) {
+export function gerar({
+  exemplo = '.env.example',
+  destino = '.env.integracao',
+  sobrepor = {},
+  faltandoDeProposito = [],
+} = {}) {
   console.log(autoteste());
 
   let texto = readFileSync(exemplo, 'utf8');
   const valores = valoresDeIntegracao();
-  for (const [chave, valor] of Object.entries(valores)) texto = aplicar(texto, chave, valor);
+  // `sobrepor` vem depois dos valores padrao, e existe para UM uso: a segunda
+  // subida de `verificar-subida-da-api.mjs`, que precisa do mesmo ambiente em
+  // `MAIL_TRANSPORT=postmark` para provar que a subida RECUSA sem o token.
+  const valoresFinais = { ...valores, ...sobrepor };
+  for (const [chave, valor] of Object.entries(valoresFinais)) texto = aplicar(texto, chave, valor);
 
   const cabecalho = [
     '# GERADO por infra/integracao/gerar-env-de-integracao.mjs. NAO EDITE.',
@@ -188,13 +238,30 @@ export function gerar({ exemplo = '.env.example', destino = '.env.integracao' } 
         return [l.slice(0, i), l.slice(i + 1)];
       }),
   );
-  const faltando = exigidas.filter((v) => (ambiente[v] ?? '').trim() === '');
+  const dispensadas = new Map(
+    DISPENSADAS_PELO_RAMO_NAO_TOMADO.filter((d) => d.dispensavel(ambiente)).map((d) => [
+      d.nome,
+      d.porque,
+    ]),
+  );
+  // `faltandoDeProposito` existe para UM uso, e ele precisa do nome escrito:
+  // o ambiente da RECUSA de `verificar-subida-da-api.mjs`, que e `postmark` SEM
+  // token. Aquele ambiente e invalido de proposito -- provar que a subida
+  // recusa exige gerar o arquivo que a faz recusar. Fora dali, variavel exigida
+  // que falta continua derrubando a geracao nomeando a variavel.
+  const deProposito = new Set(faltandoDeProposito);
+  const faltando = exigidas.filter(
+    (v) => (ambiente[v] ?? '').trim() === '' && !dispensadas.has(v) && !deProposito.has(v),
+  );
   if (faltando.length > 0) {
     throw new Error(
       `o ambiente de integracao nao preenche variavel exigida pelo codigo: ${faltando.join(', ')}. ` +
         'Acrescente um valor descartavel em valoresDeIntegracao(), em ' +
         'infra/integracao/gerar-env-de-integracao.mjs.',
     );
+  }
+  for (const [nome, porque] of dispensadas) {
+    console.log(`  ${nome} fica VAZIA neste ambiente: ${porque}`);
   }
   return { destino, conferidas: exigidas.length };
 }
