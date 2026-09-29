@@ -14,8 +14,12 @@ na homologação como se fosse problema de rede.
 
 ```bash
 flutter pub get
-flutter run --dart-define=API_BASE_URL=http://localhost:3000
+flutter run --dart-define=API_BASE_URL=http://localhost:3000 --dart-define-from-file=config/mapa.json
 ```
+
+`config/mapa.json` traz o endereço dos tiles do mapa da Rede e o `User-Agent`
+que a política do OpenStreetMap pede. Sem ele o app sobe, e o mapa do encontro
+mostra "Não conseguimos carregar o mapa agora."
 
 Para alcançar a API a partir de um **aparelho físico** na mesma Wi-Fi, use o IP
 da máquina, e não `localhost`. Troque `SEU_IP` pelo endereço da sua máquina
@@ -30,7 +34,8 @@ Build para instalar no aparelho:
 ```bash
 flutter build apk --debug \
   --dart-define=API_BASE_URL=http://SEU_IP:3000 \
-  --dart-define=TERMS_VERSION=2026-09-17
+  --dart-define=TERMS_VERSION=2026-09-17 \
+  --dart-define-from-file=config/mapa.json
 adb install -r build/app/outputs/flutter-apk/app-debug.apk
 ```
 

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../../api/modelos_rede.dart';
@@ -44,17 +45,43 @@ class PontoConhecido extends PontoNoBloco {
 /// pede identificacao do app no `User-Agent` e atribuicao visivel, e as duas
 /// estao aqui. Nao ha chave nem segredo no binario. O estilo do mapa nao e
 /// token (pedido P-M2, design system 24.8).
+///
+/// **O endereco dos tiles e o `User-Agent` vem do build**, e nao do codigo
+/// (portao de portabilidade, docs/07-devops.md 3.9): `--dart-define-from-file=
+/// config/mapa.json`, o mesmo arquivo que `infra/verificacao/verificar-apk.sh`
+/// usa. Build sem o arquivo nao tem de onde tirar o mapa: o bloco cai no
+/// estado "Nao conseguimos carregar o mapa agora.", sem pedido a host nenhum.
 abstract final class FonteDeTiles {
-  static const String agente = 'Bichu/1.0 (app Android; +https://bichu.app)';
+  /// Modelo com `{z}`, `{x}` e `{y}`.
+  static const String modelo = String.fromEnvironment('MAP_TILES_URL');
+  static const String agente = String.fromEnvironment('MAP_USER_AGENT');
 
   static ImageProvider Function(int zoom, int x, int y) construir = _osm;
 
-  static ImageProvider _osm(int zoom, int x, int y) => NetworkImage(
-        'https://tile.openstreetmap.org/$zoom/$x/$y.png',
-        headers: const <String, String>{'User-Agent': agente},
-      );
+  static ImageProvider _osm(int zoom, int x, int y) {
+    if (modelo.isEmpty) return const _SemFonteDeTiles();
+    return NetworkImage(
+      modelo.replaceAll('{z}', '$zoom').replaceAll('{x}', '$x').replaceAll('{y}', '$y'),
+      headers: agente.isEmpty ? null : <String, String>{'User-Agent': agente},
+    );
+  }
 
   static void restaurar() => construir = _osm;
+}
+
+/// Imagem que falha na hora: o build nao declarou de onde vem o mapa.
+class _SemFonteDeTiles extends ImageProvider<_SemFonteDeTiles> {
+  const _SemFonteDeTiles();
+
+  @override
+  Future<_SemFonteDeTiles> obtainKey(ImageConfiguration configuration) =>
+      SynchronousFuture<_SemFonteDeTiles>(this);
+
+  @override
+  ImageStreamCompleter loadImage(_SemFonteDeTiles key, ImageDecoderCallback decode) =>
+      OneFrameImageStreamCompleter(
+        Future<ImageInfo>.error(StateError('MAP_TILES_URL ausente no build')),
+      );
 }
 
 /// O bloco `Local do encontro` (design system 24.4, textos da UX 28.1).
