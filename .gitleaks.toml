@@ -1,0 +1,29 @@
+# Configuracao do gitleaks da esteira (job `varredura de segredo`).
+#
+# Mantem TODAS as regras padrao do gitleaks (`useDefault = true`): esta config
+# NAO substitui o conjunto de regras, so ACRESCENTA um allowlist. Sem o extend,
+# um `.gitleaks.toml` proprio zera as regras e o portao passaria a aprovar tudo
+# em silencio -- o pior tipo de portao.
+[extend]
+useDefault = true
+
+# Falso-positivo CONFIRMADO, e um so.
+#
+# O gitleaks varre o HISTORICO de commits, nao a arvore final. Em 28/09 o
+# commit 0551c2e introduziu, em `web/scripts/orcamento.mjs`, um literal de teste
+# na construcao da URL de redefinicao de senha (`...&new_password=<literal>`),
+# que a regra `generic-api-key` leu como segredo. O literal JA FOI REMOVIDO da
+# arvore em 9aab928 (passou a usar `${SENHAS.vazada}`, da fixture do mock), mas
+# ele permanece no historico daquele commit, entao a varredura continua achando.
+#
+# Este allowlist e escopado ao ACHADO, e a nada alem dele: `condition = "AND"`
+# exige que o achado esteja NO commit 0551c2e E no arquivo orcamento.mjs. Como
+# esse arquivo so recebeu esse achado, o efeito e ignorar exatamente essa
+# ocorrencia historica -- nenhum outro arquivo, nenhum outro commit, nenhuma
+# outra regra. Segredo real futuro, em qualquer outro lugar (inclusive neste
+# mesmo arquivo noutro commit), continua reprovando.
+[allowlist]
+description = "falso-positivo: literal de teste de senha em orcamento.mjs (commit 0551c2e), ja removido da arvore em 9aab928"
+condition = "AND"
+commits = ["0551c2e477137272cf83f0888715770bd731f0f4"]
+paths = ['''web/scripts/orcamento\.mjs''']
