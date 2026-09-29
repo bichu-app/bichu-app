@@ -6,6 +6,14 @@
 /// comportamento de tela nao pode mudar junto.
 library;
 
+/// Catalogo: os slugs de `#/x-problem-types` que a tela trata por NOME.
+///
+/// O contrato lista 28 e este enum nomeia os que levam a uma saida propria;
+/// o resto cai em `desconhecido` e no texto generico de erro, que e o desenho
+/// certo e nao uma lacuna. Por isso o portao de conformidade exige aqui so a
+/// metade que pega o defeito desta classe: todo slug nomeado aqui tem de
+/// existir no contrato. Slug renomeado na spec reprova pelo nome.
+///
 /// Os `type` que o contrato nomeia hoje.
 ///
 /// O `type` e uma URI estavel sob `https://<dominio>/problems/`. O app compara
@@ -102,6 +110,8 @@ enum ProblemTipo {
   }
 }
 
+/// `#/components/schemas/Problem/properties/next_action` do contrato.
+///
 /// O caminho alternativo que o servidor oferece quando existe um.
 ///
 /// A tela monta a acao a partir deste campo, **em vez de deduzir pelo status**:
@@ -110,7 +120,17 @@ enum ProximaAcao {
   registrarAchadoAvulso('register_stray_found_report'),
   verificarEmail('verify_email'),
   enviarFotoDoPet('upload_pet_photo'),
-  entrar('sign_in');
+  entrar('sign_in'),
+
+  /// O servidor pede que a pessoa tente de novo mais tarde. E o caminho que
+  /// acompanha `rate-limited` e a familia 5xx.
+  ///
+  /// Achado pelo portao de conformidade em 23/09/2026: o contrato declara
+  /// CINCO valores em `next_action` e este enum tinha quatro. `de()` devolvia
+  /// `null` para `retry_later`, e o campo chegava a tela como "nenhuma saida
+  /// oferecida" -- indistinguivel de uma resposta que de fato nao oferece
+  /// nenhuma. O servidor dizia o que fazer e o app descartava, em silencio.
+  tentarMaisTarde('retry_later');
 
   const ProximaAcao(this.valor);
 

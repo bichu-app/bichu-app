@@ -16,7 +16,7 @@
 /// exatamente a razao de a regra morar no servidor.
 library;
 
-/// A categoria de um item, espelhada do `enum` `StoreCategory` do contrato.
+/// `#/components/schemas/StoreCategory` do contrato.
 enum CategoriaDaLoja {
   alimento('food', 'Alimentação'),
   brinquedo('toy', 'Brinquedo'),
@@ -39,6 +39,8 @@ enum CategoriaDaLoja {
   }
 }
 
+/// `#/components/schemas/StorePriceStatus` do contrato.
+///
 /// Os tres estados de preco. **Tres, e nao dois.**
 ///
 /// `semPreco` e `vencido` produzem a mesma ausencia de numero e pedem textos
@@ -212,6 +214,8 @@ String dataCurta(String iso) {
   return '${partes[2].padLeft(2, '0')}/${partes[1].padLeft(2, '0')}';
 }
 
+/// `#/components/schemas/StoreItemPage/properties/effective_sort` do contrato.
+///
 /// A ordem em que a vitrine sai.
 enum OrdemDaLoja {
   curadoria('curadoria', 'Seleção do Bichu'),

@@ -4,7 +4,7 @@
 /// entrada, nao sugestao: campo que nao esta la nao aparece aqui.
 library;
 
-/// `Species` do contrato.
+/// `#/components/schemas/Species` do contrato.
 enum Especie {
   cao('dog', 'Cão'),
   gato('cat', 'Gato'),
@@ -34,7 +34,7 @@ enum Especie {
   }
 }
 
-/// `PetSize` do contrato.
+/// `#/components/schemas/PetSize` do contrato.
 ///
 /// O contrato declara **quatro** valores (`P`, `M`, `G`, `GG`) e a tela F1.3
 /// desenha **tres** botoes. Os quatro ficam aqui porque a resposta do servidor
@@ -60,7 +60,7 @@ enum Porte {
   }
 }
 
-/// `Sex` do contrato.
+/// `#/components/schemas/Sex` do contrato.
 enum Sexo {
   macho('male', 'Macho'),
   femea('female', 'Fêmea'),
@@ -105,7 +105,7 @@ class OpcaoDeReferencia {
   }
 }
 
-/// `ReferenceData` do contrato: a lista fechada de especies, racas, portes e
+/// `#/components/schemas/ReferenceData` do contrato.
 /// cores, com a versao que o cliente precisa devolver em `ref_data_version`.
 class DadosDeReferencia {
   const DadosDeReferencia({
@@ -146,6 +146,9 @@ class DadosDeReferencia {
   }
 }
 
+/// `#/components/schemas/Pet/allOf/1/properties/care_notes_redactions/items/properties/kind`
+/// do contrato.
+///
 /// O que a redacao do servidor retirou de `care_notes` ao gravar.
 ///
 /// Vazio quando nada foi retirado. Existe para a tela **dizer o que
@@ -172,7 +175,7 @@ enum RedacaoDeCuidados {
   }
 }
 
-/// `Pet.status` do contrato.
+/// `#/components/schemas/Pet/allOf/1/properties/status` do contrato.
 ///
 /// O app **nao** deduz estado a partir de `open_case_id`: sao dois campos e
 /// eles respondem coisas diferentes (`lost` e o estado do animal; o caso e o
@@ -202,7 +205,7 @@ enum StatusDoPet {
   }
 }
 
-/// `PetPhoto.status` do contrato.
+/// `#/components/schemas/PetPhoto/properties/status` do contrato.
 enum StatusDaFoto {
   processando('processing'),
   pronta('ready'),
@@ -221,7 +224,7 @@ enum StatusDaFoto {
   }
 }
 
-/// `PetPhoto` do contrato.
+/// `#/components/schemas/PetPhoto` do contrato.
 ///
 /// `thumb_url` e `card_url` sao **anulaveis no contrato**, inclusive com
 /// `status: ready`. Quem consome precisa tratar foto pronta sem URL como foto
@@ -262,7 +265,7 @@ class FotoDoPet {
   }
 }
 
-/// `Pet` do contrato, nos campos que estas telas usam.
+/// `#/components/schemas/Pet` do contrato.
 class Pet {
   const Pet({
     required this.id,
@@ -466,6 +469,8 @@ class TagEmitida {
   }
 }
 
+/// `#/components/schemas/TagResolution/properties/viewer` do contrato.
+///
 /// Quem esta do outro lado do codigo escaneado (`TagResolution.viewer`).
 ///
 /// **E sinal de navegacao, e nao chave que destranca campo.** O corpo da

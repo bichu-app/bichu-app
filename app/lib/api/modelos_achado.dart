@@ -18,6 +18,8 @@
 ///   falso achador (ADR-0010 item 7).
 library;
 
+/// `#/components/schemas/FoundReport/properties/origin` do contrato.
+///
 /// `FoundReport.origin`.
 enum OrigemDoAchado {
   leituraDeTag('tag_scan'),
@@ -41,6 +43,8 @@ enum OrigemDoAchado {
   }
 }
 
+/// `#/components/schemas/FoundReport/properties/status` do contrato.
+///
 /// `FoundReport.status`.
 enum StatusDoAchado {
   aberto('open'),

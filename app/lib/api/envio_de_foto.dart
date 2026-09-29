@@ -43,7 +43,7 @@ import 'package:http/http.dart' as http;
 import '../dispositivo/camera_e_galeria.dart';
 import 'falhas.dart';
 
-/// As credenciais de upload (`UploadIntent` do contrato).
+/// `#/components/schemas/UploadIntent` do contrato.
 ///
 /// **`method` e lido, nunca presumido.** O contrato declara `POST` com
 /// `fields` (politica de formulario assinada, que e o caminho de hoje em MinIO
@@ -245,6 +245,9 @@ abstract class IntencaoDeFotoDeAchado {
   });
 }
 
+/// Local: desfecho de uma tentativa de envio, decidido no aparelho. Nao
+/// trafega e nao espelha lista fechada do contrato.
+///
 /// Como terminou o envio.
 ///
 /// Tres desfechos e nao dois, pela mesma razao dos tres estados de permissao:

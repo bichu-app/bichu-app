@@ -1,60 +1,135 @@
 import 'api_client.dart';
+import 'falhas.dart';
 import 'modelos_rede.dart';
 
-/// As duas operacoes da secao `Rede` que este app consome (`tags: [network]`
-/// do contrato).
+/// As operacoes da secao `Rede` que o app consome (`tags: [network]`).
 ///
-/// **NAO HA OPERACAO DE ESCRITA DE EVENTO AQUI, e a ausencia e a decisao 4 do
-/// ADR-0025.** Nao existe criar, editar nem apagar encontro, e nao existe envio
-/// de foto: nao ha moderacao, denuncia nem remocao em lugar nenhum deste
-/// repositorio, e o cliente ja negou o equivalente para o diretorio na emenda 1
-/// do ADR-0011. Quando a escrita existir, ela nasce em `/v1/admin/...` como
-/// manda o ADR-0023 -- e nao neste arquivo.
+/// Nenhuma escrita de encontro: criar, editar e cancelar sao do backoffice
+/// (`/admin/network/events`, ADR-0027). O que o app escreve e so o pedido de
+/// participacao da propria conta, e a desistencia dele.
 ///
-/// ## Check-in e galeria saem desta versao (BICHUS-251, decisao de 23/09/2026)
+/// ## Quem leva token
 ///
-/// O cliente tirou do app a confirmacao de presenca e a exibicao da galeria
-/// antes do merge da secao. `checkInNetworkEvent` **nao e consumido** e nao ha
-/// metodo para ele aqui; `gallery`, `viewer_checked_in`, `checkin_count` e
-/// `photo_count` podem continuar chegando na resposta e sao ignorados na
-/// leitura. O trabalho anterior esta preservado na branch
-/// `guarda/rede-checkin-galeria`, e volta por ela quando o cliente pedir.
+/// - `listNetworkEvents` e `getNetworkEvent`: **sem token** (`exigeToken:
+///   false`). O corpo e identico para qualquer chamador (ADR-0021); anexar a
+///   sessao so a exporia a uma rota que nao precisa dela.
+/// - `listNearbyNetworkEvents`, `getNetworkEventLocation`,
+///   `getNetworkEventPrivateDetails` e as tres do pedido: **com token**, sem
+///   alternativa vazia no contrato. Quem chama so chama com a pessoa logada;
+///   sem sessao, a tela nem tenta, e por isso nao ha mapa para quem nao entrou.
 ///
-/// ## As duas leituras sao anonimas
+/// ## Nenhuma chamada devolve lista vazia quando quebra
 ///
-/// [listar] e [detalhar] passam `exigeToken: false`. O token so importava no
-/// detalhe por causa de `viewer_checked_in` ("voce ja confirmou presenca?"), e
-/// esse campo nao e mais lido: anexar o `Bearer` agora so exporia a sessao a
-/// uma rota que nao precisa dela.
+/// Falha sobe como `FalhaDeChamada`. Quem chama distingue "a Rede ainda nao
+/// tem encontro" de "nao consegui perguntar". As excecoes sao os 404 que o
+/// contrato declara como resposta normal ("sem pedido", "sem conteudo para
+/// esta conta"), e so elas viram nulo aqui.
 class RedeApi {
   const RedeApi(this._api);
 
   final ApiClient _api;
 
-  /// `GET /v1/network/events` (`listNetworkEvents`) -- uma pagina da agenda.
-  ///
-  /// **Nao trata falha e nao devolve pagina vazia quando a chamada quebra.**
-  /// Quem chama precisa distinguir "a Rede ainda nao tem encontro" de "nao
-  /// consegui perguntar": um `catch` que devolvesse lista vazia produziria o
-  /// estado vazio que parece sucesso.
-  Future<PaginaDaRede> listar([
-    RecorteDaRede recorte = const RecorteDaRede(),
-  ]) async {
+  /// `GET /v1/network/events` (`listNetworkEvents`).
+  Future<PaginaDaRede> listar(Map<String, String> query) async {
     final json = await _api.get(
       '/network/events',
-      query: recorte.query,
+      query: query,
       exigeToken: false,
     );
-    return PaginaDaRede.doJson(json);
+    return _ler(() => PaginaDaRede.doJson(json));
+  }
+
+  /// `GET /v1/network/events/nearby` (`listNearbyNetworkEvents`).
+  ///
+  /// A posicao nao vai na requisicao: o servidor usa a regiao ja cadastrada
+  /// (ADR-0027 12.14). Este metodo nao recebe coordenada, e o GPS do aparelho
+  /// nao participa de nada na `Rede`.
+  Future<PaginaPorPerto> listarPorPerto(Map<String, String> query) async {
+    final json = await _api.get('/network/events/nearby', query: query);
+    return _ler(() => PaginaPorPerto.doJson(json));
   }
 
   /// `GET /v1/network/events/{eventSlug}` (`getNetworkEvent`).
-  ///
-  /// Evento inativo e evento inexistente respondem **404 nos dois casos**, com
-  /// o mesmo corpo: distinguir contaria a um estranho que aquele `slug`
-  /// existiu.
   Future<EncontroDaRede> detalhar(String slug) async {
-    final json = await _api.get('/network/events/$slug', exigeToken: false);
-    return EncontroDaRede.doJson(json);
+    final json = await _api.get(_caminho(slug), exigeToken: false);
+    return _ler(() => EncontroDaRede.doJson(json));
   }
+
+  /// `GET /v1/network/events/{eventSlug}/location`
+  /// (`getNetworkEventLocation`), com conta.
+  Future<LocalizacaoDoEncontro> localizacao(String slug) async {
+    final json = await _api.get('${_caminho(slug)}/location');
+    return _ler(() => LocalizacaoDoEncontro.doJson(json));
+  }
+
+  /// `GET /v1/network/events/{eventSlug}/private-details`
+  /// (`getNetworkEventPrivateDetails`).
+  ///
+  /// Nulo no 404, que o contrato usa para "a conta nao foi aprovada" com o
+  /// mesmo corpo de "nao existe": nao ha corpo menor para quem nao foi
+  /// aprovado, e a tela fica com o teaser.
+  Future<DetalhesDoPrivado?> detalhesDoPrivado(String slug) async {
+    try {
+      final json = await _api.get('${_caminho(slug)}/private-details');
+      return _ler<DetalhesDoPrivado>(() => DetalhesDoPrivado.doJson(json));
+    } on FalhaDaApi catch (falha) {
+      if (falha.problem.status == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// `POST /v1/network/events/{eventSlug}/join-request`
+  /// (`requestToJoinNetworkEvent`). Sem corpo. Idempotente no servidor.
+  Future<PedidoDeParticipacao> pedir(String slug) async {
+    final json = await _api.post('${_caminho(slug)}/join-request');
+    return _ler(() => PedidoDeParticipacao.doJson(json));
+  }
+
+  /// `GET /v1/network/events/{eventSlug}/join-request`
+  /// (`getMyNetworkEventJoinRequest`). Nulo no 404: sem pedido, inclusive o
+  /// desistido.
+  Future<PedidoDeParticipacao?> meuPedido(String slug) async {
+    try {
+      final json = await _api.get('${_caminho(slug)}/join-request');
+      return _ler<PedidoDeParticipacao>(
+        () => PedidoDeParticipacao.doJson(json),
+      );
+    } on FalhaDaApi catch (falha) {
+      if (falha.problem.status == 404) return null;
+      rethrow;
+    }
+  }
+
+  /// `DELETE /v1/network/events/{eventSlug}/join-request`
+  /// (`withdrawNetworkEventJoinRequest`).
+  Future<PedidoDeParticipacao> desistir(String slug) async {
+    final json = await _api.delete('${_caminho(slug)}/join-request');
+    return _ler(() => PedidoDeParticipacao.doJson(json));
+  }
+
+  /// `GET /v1/network/join-requests` (`listMyNetworkEventJoinRequests`).
+  Future<PaginaDeMeusPedidos> meusPedidos(Map<String, String> query) async {
+    final json = await _api.get('/network/join-requests', query: query);
+    return _ler(() => PaginaDeMeusPedidos.doJson(json));
+  }
+
+  /// Le uma resposta, e resposta fora do contrato sai como `FormatException`.
+  ///
+  /// Os modelos conferem tipo antes de ler, mas um campo de tipo inesperado
+  /// ainda pode estourar `TypeError` num lugar que ninguem previu. As telas
+  /// tratam `FormatException` como "resposta fora do contrato" (estado de
+  /// falha com `Atualizar`); um `TypeError` escaparia desse tratamento e
+  /// deixaria a tela girando.
+  static T _ler<T>(T Function() ler) {
+    try {
+      return ler();
+    } on TypeError catch (erro) {
+      throw FormatException('resposta da Rede fora do contrato: $erro');
+    }
+  }
+
+  /// O `slug` vem da resposta do servidor: vai codificado, como os ids das
+  /// outras rotas do app.
+  static String _caminho(String slug) =>
+      '/network/events/${Uri.encodeComponent(slug)}';
 }
