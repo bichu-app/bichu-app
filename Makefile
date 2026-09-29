@@ -425,6 +425,25 @@ verificar-carimbo-de-migracao-autoteste: ## as iscas do portao de carimbo de mig
 verificar-carimbo-de-migracao: ## dois arquivos de migrations/ com o mesmo carimbo reprovam, nomeando todos (0,21 s)
 	node infra/verificacao/verificar-carimbo-de-migracao.mjs
 
+# ---------------------------------------------------------------------------
+# O BURACO QUE ESTE PORTAO FECHA
+#
+# Todo caminho que exercita migracao aqui migra DO ZERO: `reset`, `test-int`,
+# `verificar-subida-da-api` e a esteira. Em 28/09 a 20260921000001 aplicou em
+# banco vazio e MORREU com 23514 contra o banco de dev, que tem dado -- e levou
+# `make up` e `make test` junto, porque os dois esperam
+# `migracao: service_completed_successfully`.
+#
+# A prova em banco vazio nao vale para esta classe. Este alvo aplica as massas de
+# `infra/migracao/massa/` no instante anterior a migracao de cada uma e segue
+# dali, e confere o ESTADO FINAL por `.depois.sql` -- porque apagar o dado errado
+# tambem sai 0.
+verificar-migracao-em-banco-com-dado-autoteste: ## as iscas do plano das massas reprovam (nao usa docker)
+	node infra/verificacao/verificar-migracao-em-banco-com-dado.mjs --autoteste
+
+verificar-migracao-em-banco-com-dado: commit-de-build ## a migracao aplica sobre DADO preexistente, nao so em banco vazio (pilha efemera)
+	node infra/verificacao/verificar-migracao-em-banco-com-dado.mjs
+
 verificar-tipos-gerados: ## o gerado de src/shared/types/generated/ bate com api/openapi.yaml (1,06 s)
 	node infra/verificacao/verificar-tipos-gerados.mjs
 
@@ -596,7 +615,7 @@ verificar-boot-do-alvo-prod: ## BICHUS-213: o alvo `prod` constroi e morre no ge
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-destinos verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-destinos verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
@@ -702,7 +721,7 @@ verificar-app: verificar-tokens-gerados-autoteste ## a metade Flutter: analise e
 RECIBO_DE_FECHAMENTO := fechamento.local.txt
 
 fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da API + Flutter + APK
-	@echo "fechamento de integracao: verificar -> verificar-subida-da-api -> verificar-app -> apk."
+	@echo "fechamento de integracao: verificar -> verificar-subida-da-api -> verificar-migracao-em-banco-com-dado -> verificar-app -> apk."
 	@echo "  Isto NAO e o \`make verificar\` do dia a dia: ele compila um APK de verdade"
 	@echo "  e sobe a API numa pilha efemera."
 	@echo "  Medido neste worktree: apk em 7,6 s quente e 35,6 s com \`build/\` frio;"
@@ -712,6 +731,7 @@ fechar-integracao: ## o conjunto que FECHA uma integracao: verificar + subida da
 	@$(MAKE) --no-print-directory verificar-busca-do-veredito-autoteste
 	@$(MAKE) --no-print-directory verificar-subida-da-api
 	@$(MAKE) --no-print-directory verificar-boot-do-alvo-prod
+	@$(MAKE) --no-print-directory verificar-migracao-em-banco-com-dado
 	@$(MAKE) --no-print-directory verificar-app
 	@$(MAKE) --no-print-directory apk
 	@$(MAKE) --no-print-directory carimbar-fechamento
