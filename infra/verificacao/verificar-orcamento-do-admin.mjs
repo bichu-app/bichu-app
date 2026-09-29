@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global URL, console, process */
 // Orcamento do painel como PORTAO (ADR-0027 item 1): medido no que o build
 // produziu, e quebrando a esteira quando estoura. Orcamento que nao quebra o
 // build e decoracao.

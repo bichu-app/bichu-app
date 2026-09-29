@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* global Buffer, URL, console, process */
 // A borda entrega o backoffice como a seguranca pediu, PELA BORDA DE PE.
 //
 // docs/04-seguranca.md secao 22: D33 (superficie administrativa so no host
