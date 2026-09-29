@@ -1,0 +1,18 @@
+---
+// Pagina 404, pre-renderizada. O servidor.mjs a serve com status 404 para todo
+// caminho que nao e arquivo nem rota. `noindex`, og generica.
+import Publica from '../layouts/Publica.astro';
+import Estado from '../componentes/Estado.astro';
+import { PAGINA_404 as T } from '../conteudo/erro.ts';
+---
+<Publica titulo={T.tituloDaPagina} descricao={T.descricaoDaPagina}>
+  <Estado icone="search_off" titulo={T.titulo}>
+    <p class="estado__texto">{T.texto}</p>
+    <p class="estado__texto">{T.plaquinha}</p>
+  </Estado>
+  <Fragment slot="acao">
+    <div class="acao">
+      <a class="botao botao--primario botao--largo" href="/">{T.inicio}</a>
+    </div>
+  </Fragment>
+</Publica>

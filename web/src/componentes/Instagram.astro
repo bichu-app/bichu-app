@@ -1,0 +1,33 @@
+---
+// Bloco do Instagram com a grade de posts ILUSTRATIVOS (ilustracao, nunca foto;
+// sem rosto, nome ou lugar reconhecivel: regra de privacidade do prototipo).
+import IconeInstagram from './IconeInstagram.astro';
+import { INSTAGRAM } from '../conteudo/instagram.ts';
+import { CONTATO } from '../conteudo/comum.ts';
+import p1 from '../assets/posts/post-ilustrativo-1.svg';
+import p2 from '../assets/posts/post-ilustrativo-2.svg';
+import p3 from '../assets/posts/post-ilustrativo-3.svg';
+import p4 from '../assets/posts/post-ilustrativo-4.svg';
+import p5 from '../assets/posts/post-ilustrativo-5.svg';
+import p6 from '../assets/posts/post-ilustrativo-6.svg';
+
+interface Props { nivel?: 2 | 3 }
+const { nivel = 3 } = Astro.props;
+const arquivos = [p1, p2, p3, p4, p5, p6];
+const Titulo = nivel === 2 ? 'h2' : 'h3';
+---
+<div class="instagram">
+  <div class="instagram__texto">
+    <Titulo class="titulo-item" id={nivel === 2 ? 'instagram-titulo' : undefined}>{INSTAGRAM.titulo}</Titulo>
+    <p class="instagram__lead">{INSTAGRAM.lead}</p>
+    <a class="link" href={CONTATO.instagram.url} target="_blank" rel="noopener noreferrer" aria-label={INSTAGRAM.linkRotulo}>
+      <IconeInstagram /><span>{INSTAGRAM.link}</span>
+    </a>
+  </div>
+  <ul class="grade-posts" aria-label={INSTAGRAM.gradeRotulo}>
+    {INSTAGRAM.posts.map((p) => {
+      const a = arquivos[p.arquivo - 1]!;
+      return <li><img src={a.src} alt={p.alt} width={a.width} height={a.height} loading="lazy" /></li>;
+    })}
+  </ul>
+</div>

@@ -1,0 +1,36 @@
+---
+// Cabecalho do institucional. No celular o menu e um <details>: abre e fecha
+// sem JavaScript. Link atual com aria-current="page".
+import Icone from './Icone.astro';
+import logotipo from '../assets/marca/logo-horizontal.svg';
+import { MARCA, NAVEGACAO } from '../conteudo/comum.ts';
+
+interface Props {
+  atual: string;
+  /** A pagina tem a secao #baixe-app? Se nao tiver, a acao leva a da home. */
+  temBaixeApp: boolean;
+}
+const { atual, temBaixeApp } = Astro.props;
+const acao = temBaixeApp ? '#baixe-app' : '/#baixe-app';
+const links = NAVEGACAO.links.map((l) => ({ ...l, atual: l.href === atual }));
+---
+<header class="cabecalho">
+  <a class="cabecalho__marca" href="/" aria-label={MARCA.rotuloInicio}>
+    <img class="cabecalho__logo" src={logotipo.src} alt={MARCA.altLogotipo} width={logotipo.width} height={logotipo.height} />
+  </a>
+  <nav class="nav" aria-label={NAVEGACAO.rotulo}>
+    <ul class="nav__lista">
+      {links.map((l) => <li><a class="nav__link" href={l.href} aria-current={l.atual ? 'page' : undefined}>{l.texto}</a></li>)}
+    </ul>
+    <a class="botao botao--primario" href={acao}>{NAVEGACAO.acao}</a>
+  </nav>
+  <details class="nav-celular">
+    <summary class="nav-celular__botao"><Icone nome="menu" /> {NAVEGACAO.menu}</summary>
+    <nav class="nav-celular__painel" aria-label={NAVEGACAO.rotulo}>
+      <ul class="nav__lista">
+        {links.map((l) => <li><a class="nav__link" href={l.href} aria-current={l.atual ? 'page' : undefined}>{l.texto}</a></li>)}
+      </ul>
+      <a class="botao botao--primario" href={acao}>{NAVEGACAO.acao}</a>
+    </nav>
+  </details>
+</header>

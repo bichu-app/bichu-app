@@ -1,0 +1,21 @@
+---
+// A saida comum das telas 400, 404, 410 e 429 de /t/ (UX F4.5): quem esta com
+// um animal agora nao precisa do codigo.
+//
+// ISOLADO DE PROPOSITO. Na v1 o achado sem plaquinha nao tem backend na web
+// (depende da ADR-0030) e o app ainda nao esta nas lojas, entao nao ha botao:
+// ha texto honesto dizendo onde isso vai acontecer. Na v2 este componente
+// troca o paragrafo por um botao "Registrar que achei um pet" com destino real,
+// e nenhuma pagina que o usa precisa mudar.
+import { REGISTRAR_ACHADO } from '../conteudo/tag.ts';
+
+interface Props {
+  /** Na tela 400 a acao principal e procurar o codigo; esta saida fica secundaria. */
+  destaque?: boolean;
+}
+const { destaque = true } = Astro.props;
+---
+<div class:list={['registrar-achado', destaque ? 'acao' : 'registrar-achado--secundario']}>
+  <p class="acao__titulo">{REGISTRAR_ACHADO.titulo}</p>
+  <p class="acao__nota">{REGISTRAR_ACHADO.semDestino}</p>
+</div>

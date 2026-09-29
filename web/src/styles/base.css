@@ -1,0 +1,144 @@
+/* Base comum a todas as paginas do site: reset, tipografia, foco, botoes,
+   links e icones. Todo valor sai de tokens.g.css (gerado de design/tokens.json).
+   Pontos de quebra: 600 (web.breakpoint.medium), 905 (expanded), 1240 (large).
+   CSS nao aceita var() em @media; o varredor de valores soltos confere que
+   todo @media daqui usa um desses numeros. */
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; overflow-x: clip; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+body, h1, h2, h3, h4, p, ul, ol, figure, fieldset { margin: 0; }
+ul, ol { padding: 0; list-style: none; }
+fieldset { padding: 0; border: 0; min-width: 0; }
+img, svg { display: block; max-width: 100%; height: auto; }
+[hidden] { display: none !important; }
+
+body {
+  font-family: var(--type-body-family);
+  font-size: var(--type-body-size);
+  line-height: var(--type-body-line);
+  font-weight: var(--type-body-weight);
+  color: var(--cor-text-primary);
+  background: var(--cor-surface);
+  overflow-x: clip;
+}
+
+/* ---------- foco: um so, visivel em qualquer fundo (focus.width, focus.offset) ---------- */
+:focus-visible {
+  outline: var(--focus-width) solid var(--cor-focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-sm);
+}
+
+/* ---------- tipografia ---------- */
+h1, h2, h3, h4 { color: var(--cor-text-primary); }
+.titulo-display {
+  font-family: var(--type-display-lg-family);
+  font-weight: var(--type-display-lg-weight);
+  font-size: var(--type-display-lg-size);
+  line-height: var(--type-display-lg-line);
+  letter-spacing: var(--type-display-lg-tracking);
+  text-wrap: balance;
+}
+.titulo-secao {
+  font-family: var(--type-display-family);
+  font-weight: var(--type-display-weight);
+  font-size: var(--type-headline-size);
+  line-height: var(--type-headline-line);
+  letter-spacing: var(--type-display-tracking);
+  text-wrap: balance;
+}
+@media (min-width: 905px) {
+  .titulo-secao { font-size: var(--type-display-size); line-height: var(--type-display-line); }
+}
+.titulo-item {
+  font-family: var(--type-title-lg-family);
+  font-weight: var(--type-title-lg-weight);
+  font-size: var(--type-title-size);
+  line-height: var(--type-title-line);
+}
+@media (min-width: 905px) {
+  .titulo-item { font-size: var(--type-title-lg-size); line-height: var(--type-title-lg-line); }
+}
+.texto-grande { font-size: var(--type-body-lg-size); line-height: var(--type-body-lg-line); }
+.texto-pequeno { font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
+.sobretitulo {
+  font-family: var(--type-overline-family);
+  font-weight: var(--type-overline-weight);
+  font-size: var(--type-overline-size);
+  line-height: var(--type-overline-line);
+  letter-spacing: var(--type-overline-tracking);
+  text-transform: uppercase;
+}
+
+/* ---------- icone: SVG embutido, cor do texto em volta ---------- */
+.icone {
+  width: var(--icon-size-default);
+  height: var(--icon-size-default);
+  flex: none;
+  fill: currentColor;
+}
+
+/* ---------- pular para o conteudo ---------- */
+.pular-para-conteudo {
+  position: absolute; left: var(--space-4); top: var(--space-4);
+  z-index: 100;
+  transform: translateY(-200%);
+  padding: var(--space-3) var(--space-4);
+  min-height: var(--target-min);
+  display: inline-flex; align-items: center;
+  background: var(--cor-surface-inverse); color: var(--cor-text-on-inverse);
+  font-weight: var(--font-weight-semibold);
+  border-radius: var(--radius-md);
+  text-decoration: none;
+}
+.pular-para-conteudo:focus { transform: none; }
+
+/* ---------- botoes: alvo de 48, estados completos ---------- */
+.botao {
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2);
+  min-height: var(--target-min);
+  padding: var(--space-3) var(--space-6);
+  font-family: var(--type-label-lg-family); font-weight: var(--type-label-lg-weight);
+  font-size: var(--type-label-lg-size); line-height: var(--type-label-lg-line); letter-spacing: var(--type-label-lg-tracking);
+  text-decoration: none; text-align: center;
+  border: var(--border-medium) solid transparent;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background-color var(--motion-fast) var(--easing-standard);
+}
+.botao:focus-visible { border-radius: var(--radius-full); }
+/* Manteiga e a cor de acao da folha. O texto sobre ela e sempre on-action-fill. */
+.botao--primario { background: var(--cor-action-fill); color: var(--cor-on-action-fill); }
+.botao--primario:hover { background: var(--cor-action-fill-pressed); }
+.botao--secundario { background: transparent; color: var(--cor-primary); border-color: var(--cor-primary); }
+.botao--secundario:hover { background: var(--cor-primary-container); }
+.botao--largo { width: 100%; min-height: var(--target-critico); }
+.botao[aria-disabled="true"], .botao:disabled { background: var(--cor-disabled-surface); color: var(--cor-on-disabled); border-color: transparent; cursor: not-allowed; }
+/* Enviando: o rotulo continua visivel (componente Botao), e o giro so aparece com JS. */
+.botao[aria-busy="true"] { cursor: progress; }
+.botao__giro { display: none; }
+.botao[aria-busy="true"] .botao__giro { display: block; }
+@media (prefers-reduced-motion: no-preference) {
+  .botao[aria-busy="true"] .botao__giro { animation: girar var(--motion-skeleton) linear infinite; }
+}
+@keyframes girar { to { transform: rotate(1turn); } }
+
+/* ---------- link de texto ---------- */
+.link {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  min-height: var(--target-min);
+  color: var(--cor-primary); font-weight: var(--font-weight-semibold);
+  text-decoration: underline; text-underline-offset: var(--space-1); text-decoration-thickness: var(--border-medium);
+  width: fit-content;
+}
+.link:hover { text-decoration-thickness: var(--border-thick); }
+
+/* ---------- texto so para leitor de tela ---------- */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}

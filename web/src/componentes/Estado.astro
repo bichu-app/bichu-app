@@ -1,0 +1,17 @@
+---
+// Tela de desfecho das paginas publicas: icone, titulo (o h1 da pagina) e texto.
+import Icone from './Icone.astro';
+import type { NomeDoSimbolo } from '../icones/simbolos.ts';
+
+interface Props {
+  icone: NomeDoSimbolo;
+  titulo: string;
+  tom?: 'neutro' | 'sucesso' | 'alerta';
+}
+const { icone, titulo, tom = 'neutro' } = Astro.props;
+---
+<section class="estado" aria-labelledby="estado-titulo">
+  <Icone nome={icone} class:list={['estado__icone', tom !== 'neutro' && `estado__icone--${tom}`]} />
+  <h1 class="estado__titulo" id="estado-titulo">{titulo}</h1>
+  <slot />
+</section>

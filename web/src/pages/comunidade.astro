@@ -1,0 +1,117 @@
+---
+// /comunidade: encontros na praca, o que ninguem ve num encontro e a indicacao
+// de profissionais. Traducao de comunidade.html do prototipo (direcao A).
+import Institucional from '../layouts/Institucional.astro';
+import Icone from '../componentes/Icone.astro';
+import IconeEmail from '../componentes/IconeEmail.astro';
+import Ilustracao from '../componentes/Ilustracao.astro';
+import Manuscrito from '../componentes/Manuscrito.astro';
+import Passos from '../componentes/Passos.astro';
+import Instagram from '../componentes/Instagram.astro';
+import BaixeApp from '../componentes/BaixeApp.astro';
+import iconeProximidade from '../assets/marca/icone-pilar-proximidade.svg';
+import p1 from '../assets/posts/post-ilustrativo-1.svg';
+import p2 from '../assets/posts/post-ilustrativo-2.svg';
+import p4 from '../assets/posts/post-ilustrativo-4.svg';
+import type { NomeDoSimbolo } from '../icones/simbolos.ts';
+import { COMUNIDADE as T } from '../conteudo/comunidade.ts';
+import { INSTAGRAM } from '../conteudo/instagram.ts';
+import { CONTATO, RODAPE } from '../conteudo/comum.ts';
+
+const galeria = [
+  { img: p1, alt: INSTAGRAM.posts[0].alt },
+  { img: p2, alt: INSTAGRAM.posts[1].alt },
+  { img: p4, alt: INSTAGRAM.posts[3].alt },
+];
+const ex = T.eventos.exemplo;
+const pro = T.profissionais.exemplo;
+---
+<Institucional titulo={T.titulo} descricao={T.descricao} atual="/comunidade" temBaixeApp>
+  <section class="hero hero--pagina" aria-labelledby="hero-titulo">
+    <span class="blob blob--1" aria-hidden="true"></span>
+    <div class="hero__texto">
+      <p class="secao__sobretitulo sobretitulo">{T.hero.sobretitulo}</p>
+      <h1 class="hero__titulo titulo-display" id="hero-titulo">{T.hero.titulo}</h1>
+      <p class="hero__lead">{T.hero.lead}</p>
+    </div>
+    <div class="hero__ilustracao">
+      <Ilustracao recorte="encontro" alt={T.hero.alt} principal />
+    </div>
+  </section>
+
+  <span class="divisor-onda" aria-hidden="true"></span>
+  <section class="secao secao--comunidade rede" id="eventos" aria-labelledby="eventos-titulo">
+    <span class="blob blob--3" aria-hidden="true"></span>
+    <div class="secao__cabecalho">
+      <p class="secao__sobretitulo sobretitulo">{T.eventos.sobretitulo}</p>
+      <h2 class="titulo-secao" id="eventos-titulo">{T.eventos.titulo}</h2>
+      <p class="secao__lead texto-grande">{T.eventos.lead}</p>
+    </div>
+    <Passos passos={T.eventos.passos} />
+    <article class="cartao-evento" aria-labelledby="exemplo-evento-titulo">
+      <p class="nota-exemplo">{ex.nota}</p>
+      <p class="cartao-evento__data">{ex.data}</p>
+      <h3 class="titulo-item" id="exemplo-evento-titulo">{ex.titulo}</h3>
+      <p class="cartao-evento__linha"><Icone nome="park" /> {ex.lugar}</p>
+      <p class="cartao-evento__linha"><Icone nome="group" /> {ex.vao}</p>
+      <p class="cartao-evento__linha">{ex.origem}</p>
+      <p class="cartao-evento__checkin"><Icone nome="how_to_reg" /> {ex.checkin}</p>
+      <div class="cartao-evento__galeria">
+        <h4>{ex.galeria}</h4>
+        <ul class="grade-posts" aria-label={ex.galeriaRotulo}>
+          {galeria.map((g) => <li><img src={g.img.src} alt={g.alt} width={g.img.width} height={g.img.height} loading="lazy" /></li>)}
+        </ul>
+      </div>
+    </article>
+  </section>
+
+  <section class="secao garantias" id="privacidade-nos-encontros" aria-labelledby="garantias-titulo">
+    <div class="secao__cabecalho">
+      <h2 class="titulo-secao" id="garantias-titulo">{T.garantias.titulo}</h2>
+      <p class="secao__lead texto-grande">{T.garantias.lead}</p>
+    </div>
+    <ul class="garantias__lista">
+      {T.garantias.itens.map((g) => (
+        <li class="garantia">
+          <span class="garantia__icone"><Icone nome={g.icone as NomeDoSimbolo} /></span>
+          <h3 class="titulo-item">{g.titulo}</h3>
+          <p class="garantia__texto">{g.texto}</p>
+        </li>
+      ))}
+    </ul>
+  </section>
+
+  <section class="secao profissionais" id="profissionais" aria-labelledby="profissionais-titulo">
+    <div class="secao__cabecalho">
+      <h2 class="titulo-secao" id="profissionais-titulo">{T.profissionais.titulo}</h2>
+      <p class="secao__lead texto-grande">{T.profissionais.lead}</p>
+      <Manuscrito variante="frase">{T.profissionais.manuscrito}</Manuscrito>
+    </div>
+    <Passos passos={T.profissionais.passos} />
+    <article class="cartao-profissional" aria-labelledby="exemplo-profissional-nome">
+      <p class="nota-exemplo">{pro.nota}</p>
+      <img class="cartao-profissional__icone" src={iconeProximidade.src} alt="" width="64" height="64" loading="lazy" />
+      <h3 class="titulo-item" id="exemplo-profissional-nome">{pro.nome}</h3>
+      <p class="cartao-profissional__linha">{pro.atividade}</p>
+      <p class="cartao-profissional__selo"><Icone nome="verified" /> {pro.selo}</p>
+      <p class="cartao-profissional__linha">
+        <span class="estrelas" role="img" aria-label={pro.estrelasRotulo}><span aria-hidden="true">★★★★☆</span></span>
+        {pro.avaliacoes}
+      </p>
+      <p class="cartao-profissional__linha">{pro.resposta}</p>
+    </article>
+    <a class="botao botao--secundario" href={T.profissionais.botao.href}>{T.profissionais.botao.texto}</a>
+  </section>
+
+  <section class="secao secao--alternada" aria-labelledby="instagram-titulo">
+    <Instagram nivel={2} />
+  </section>
+
+  <section class="secao fale-conosco" aria-labelledby="fale-titulo">
+    <h2 class="titulo-secao" id="fale-titulo">{T.faleConosco.titulo}</h2>
+    <p class="texto-grande">{T.faleConosco.texto}</p>
+    <a class="link" href={`mailto:${CONTATO.email}`} aria-label={RODAPE.emailRotulo}><IconeEmail /><span>{CONTATO.email}</span></a>
+  </section>
+
+  <BaixeApp titulo={T.baixeApp.titulo} texto={T.baixeApp.texto} />
+</Institucional>

@@ -1,0 +1,172 @@
+/* Paginas publicas: diretas, uma coluna de leitura, a acao principal presa
+   embaixo no celular. Tema claro e escuro (data-tema="automatico").
+   Nenhuma forma decorativa acima da dobra. */
+
+.publica__topo {
+  display: flex; align-items: center;
+  padding: var(--space-1) var(--layout-margem-celular);
+  border-bottom: var(--border-hairline) solid var(--cor-outline);
+}
+.publica__marca { display: inline-flex; align-items: center; min-height: var(--target-min); }
+.publica__logo { height: var(--space-10); width: auto; }
+/* O logotipo e a tinta Carmim sobre claro; no escuro ele precisa de chao claro. */
+:root[data-tema="automatico"] .publica__marca { border-radius: var(--radius-sm); }
+@media (prefers-color-scheme: dark) {
+  :root[data-tema="automatico"] .publica__marca { background: var(--neutral-25); padding-inline: var(--space-2); }
+}
+
+.publica {
+  display: grid; gap: var(--space-6); align-content: start;
+  width: min(100% - 2 * var(--layout-margem-celular), var(--layout-coluna-max));
+  margin-inline: auto;
+  padding-block: var(--space-8) var(--space-12);
+  min-height: 60vh;
+}
+.publica > * { min-width: 0; }
+
+/* ---------- estado: icone, titulo, texto (400, 404, 410, 429, erro, sucesso) ---------- */
+.estado { display: grid; gap: var(--space-4); justify-items: center; text-align: center; }
+.estado__icone { width: var(--icon-size-grande); height: var(--icon-size-grande); color: var(--cor-text-secondary); }
+.estado__icone--sucesso { color: var(--cor-success); }
+.estado__icone--alerta { color: var(--cor-error); }
+.estado__titulo {
+  font-family: var(--type-headline-family); font-weight: var(--type-headline-weight);
+  font-size: var(--type-headline-size); line-height: var(--type-headline-line);
+  letter-spacing: var(--type-headline-tracking); text-wrap: balance;
+}
+.estado__texto { color: var(--cor-text-secondary); font-size: var(--type-body-lg-size); line-height: var(--type-body-lg-line); text-wrap: pretty; }
+.estado__codigo { font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); color: var(--cor-text-muted); }
+
+/* ---------- caixa neutra (endereco da plaquinha, cuidados) ---------- */
+.caixa {
+  display: grid; gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--cor-surface-sunken);
+  border: var(--border-hairline) solid var(--cor-outline-control);
+  border-radius: var(--radius-lg);
+}
+.caixa--centro { text-align: center; }
+.caixa__titulo { font-family: var(--type-title-family); font-weight: var(--type-title-weight); font-size: var(--type-title-size); line-height: var(--type-title-line); }
+.caixa__rotulo { color: var(--cor-text-secondary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
+.endereco { font-weight: var(--font-weight-bold); overflow-wrap: anywhere; }
+
+/* ---------- faixa de pet perdido (superficie critica, urgency) ---------- */
+.faixa-perdido {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 var(--space-3); align-items: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--cor-urgency); color: var(--cor-on-urgency);
+  border-radius: var(--radius-lg);
+}
+.faixa-perdido .icone { grid-row: span 2; }
+.faixa-perdido__titulo { font-family: var(--type-title-family); font-weight: var(--type-title-weight); font-size: var(--type-title-size); line-height: var(--type-title-line); color: inherit; }
+.faixa-perdido__texto { font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
+
+/* ---------- o pet ---------- */
+.pet { display: grid; gap: var(--space-4); justify-items: center; text-align: center; }
+/* Moldura solida do sistema (par. 5.1), fatores de design/tokens.json (moldura.*). */
+.pet__foto {
+  width: min(100%, calc(var(--space-16) * 4));
+  aspect-ratio: 1 / var(--moldura-proporcao);
+  object-fit: cover;
+  border-radius:
+    calc(var(--moldura-raio-superior) * 100%) calc(var(--moldura-raio-superior) * 100%)
+    calc(var(--moldura-raio-inferior) * 100%) calc(var(--moldura-raio-inferior) * 100%) /
+    calc(var(--moldura-raio-superior) / var(--moldura-proporcao) * 100%) calc(var(--moldura-raio-superior) / var(--moldura-proporcao) * 100%)
+    calc(var(--moldura-raio-inferior) / var(--moldura-proporcao) * 100%) calc(var(--moldura-raio-inferior) / var(--moldura-proporcao) * 100%);
+  background: var(--cor-primary-container);
+}
+.pet__nome {
+  font-family: var(--type-display-lg-family); font-weight: var(--type-display-lg-weight);
+  font-size: var(--type-display-lg-size); line-height: var(--type-display-lg-line);
+  letter-spacing: var(--type-display-lg-tracking); overflow-wrap: anywhere;
+}
+.pet__sinais { color: var(--cor-text-secondary); font-size: var(--type-body-lg-size); line-height: var(--type-body-lg-line); }
+.pet__cuidados { text-align: start; width: 100%; }
+.pet__cuidados-texto { font-size: var(--type-body-lg-size); line-height: var(--type-body-lg-line); overflow-wrap: anywhere; }
+
+.garantia-contato { display: grid; justify-items: center; gap: var(--space-2); text-align: center; color: var(--cor-text-secondary); }
+.garantia-contato .icone { width: var(--icon-size-inline); height: var(--icon-size-inline); }
+.aviso-recompensa { font-weight: var(--font-weight-bold); text-align: center; text-wrap: balance; }
+
+/* ---------- area da acao principal: presa embaixo no celular ---------- */
+.acao {
+  position: sticky; bottom: 0; z-index: 5;
+  display: grid; gap: var(--space-2); justify-items: center; text-align: center;
+  padding: var(--space-4) var(--layout-margem-celular) var(--space-5);
+  background: var(--cor-surface);
+  border-top: var(--border-hairline) solid var(--cor-outline);
+}
+.acao > * { width: min(100%, var(--layout-coluna-max)); }
+.acao__nota { color: var(--cor-text-secondary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
+.acao__titulo { font-family: var(--type-title-family); font-weight: var(--type-title-weight); font-size: var(--type-title-size); line-height: var(--type-title-line); text-wrap: balance; }
+.acao form { display: grid; }
+
+/* ---------- formulario ---------- */
+.formulario { display: grid; gap: var(--space-5); }
+.campo { display: grid; gap: var(--space-2); }
+.campo__rotulo { font-family: var(--type-label-family); font-weight: var(--type-label-weight); font-size: var(--type-label-size); line-height: var(--type-label-line); color: var(--cor-text-secondary); }
+.campo__caixa { position: relative; display: flex; align-items: center; }
+.campo__entrada {
+  width: 100%; min-height: var(--target-critico);
+  padding: var(--space-3) var(--space-4);
+  font: inherit; font-size: var(--type-body-lg-size); line-height: var(--type-body-lg-line);
+  color: var(--cor-text-primary); background: var(--cor-surface);
+  border: var(--border-hairline) solid var(--cor-outline-control);
+  border-radius: var(--radius-lg);
+}
+.campo__entrada:focus-visible { outline-offset: 0; border-radius: var(--radius-lg); }
+.campo__caixa--com-botao .campo__entrada { padding-inline-end: calc(var(--target-min) + var(--space-2)); }
+.campo__revelar {
+  position: absolute; inset-inline-end: var(--space-1);
+  display: grid; place-items: center;
+  width: var(--target-min); height: var(--target-min);
+  color: var(--cor-text-secondary); background: transparent; border: 0; border-radius: var(--radius-full);
+  cursor: pointer;
+}
+.campo__ajuda { color: var(--cor-text-secondary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
+.campo--erro .campo__rotulo { color: var(--cor-error); }
+.campo--erro .campo__entrada { border: var(--border-medium) solid var(--cor-error); }
+.campo__erro { display: flex; gap: var(--space-2); align-items: start; color: var(--cor-error); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
+.campo__erro .icone { width: var(--icon-size-inline); height: var(--icon-size-inline); }
+.separador { border: 0; border-top: var(--border-hairline) solid var(--cor-outline); margin: 0; width: 100%; }
+
+/* ---------- alerta de falha dentro do formulario ---------- */
+.alerta {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-1) var(--space-3);
+  padding: var(--space-4);
+  background: var(--cor-error-container); color: var(--cor-error);
+  border: var(--border-hairline) solid var(--cor-error);
+  border-radius: var(--radius-lg);
+}
+.alerta .icone { grid-row: span 2; }
+.alerta__titulo { font-family: var(--type-title-family); font-weight: var(--type-title-weight); font-size: var(--type-title-size); line-height: var(--type-title-line); color: inherit; }
+.alerta__texto { font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line); }
+
+/* ---------- convite ao app, no fim da confirmacao ---------- */
+.convite-app { color: var(--cor-text-secondary); }
+
+/* ---------- troca de texto por aparelho, sem JS e sem farejar user-agent ---------- */
+.so-toque { display: none; }
+@media (pointer: coarse) { .so-toque { display: revert; } .so-mouse { display: none; } }
+
+/* ---------- rodape do achador ---------- */
+.rodape-achador {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3);
+  padding: var(--space-6) var(--layout-margem-celular);
+  color: var(--cor-text-secondary);
+  border-top: var(--border-hairline) solid var(--cor-outline);
+  font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-line);
+}
+.rodape-achador__simbolo { width: var(--icon-size-destaque); height: auto; }
+.rodape-achador__links { display: flex; gap: var(--space-1); align-items: center; }
+.rodape-achador__link { display: inline-flex; align-items: center; min-height: var(--target-min); color: var(--cor-primary); text-underline-offset: var(--space-1); }
+.patinha {
+  display: inline-block; width: var(--icon-size-inline); height: var(--icon-size-inline); margin-inline-start: auto;
+  background: var(--cor-action-fill);
+  mask: url("../assets/formas/patinha.svg") center / contain no-repeat;
+}
+
+@media (min-width: 905px) {
+  .publica { padding-block: var(--space-12) var(--space-16); }
+  .publica__topo, .rodape-achador { padding-inline: var(--web-grid-margem-expanded); }
+}

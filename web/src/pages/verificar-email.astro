@@ -1,0 +1,87 @@
+---
+// /verificar-email?token=...: o link do e-mail de confirmacao.
+// "GET nunca executa" (ADR-0028, item 2; SEC-005): varredor de antivirus e
+// previa de mensageiro abrem o link antes da pessoa. O GET mostra o botao, e a
+// confirmacao acontece no POST do formulario (confirmEmailVerification).
+// A sessao que o 200 devolve e descartada: o site nao guarda sessao (item 3).
+export const prerender = false;
+
+import Publica from '../layouts/Publica.astro';
+import Estado from '../componentes/Estado.astro';
+import BotaoEnviar from '../componentes/BotaoEnviar.astro';
+import ScriptDeEnvio from '../componentes/ScriptDeEnvio.astro';
+import { clienteDaApi, executar } from '../api/chamar.ts';
+import { telaAoConfirmarEmail, type TelaDoEmail } from '../dominio/telas-de-conta.ts';
+import { espera } from '../dominio/texto-do-pet.ts';
+import { VERIFICAR_EMAIL as T, COMUM_PUBLICO } from '../conteudo/conta.ts';
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+
+let token = Astro.url.searchParams.get('token') ?? '';
+let tela: TelaDoEmail = { tela: 'confirmar', http: 200 };
+
+if (Astro.request.method === 'POST') {
+  const formulario = await Astro.request.formData().catch(() => null);
+  const enviado = formulario?.get('token');
+  token = typeof enviado === 'string' ? enviado : '';
+  let cliente: string | undefined;
+  try { cliente = Astro.clientAddress; } catch { cliente = undefined; }
+  const api = clienteDaApi(Astro.request, cliente);
+  const r = await executar(() => api.POST('/auth/email-verification/confirm', { body: { token } }));
+  tela = telaAoConfirmarEmail(r);
+  Astro.response.status = tela.http;
+  if (tela.http >= 500) Astro.response.headers.set('Retry-After', '10');
+}
+const mostraFormulario = tela.tela === 'confirmar' || tela.tela === 'nao-confirmou';
+---
+<Publica titulo={T.tituloDaPagina} descricao={T.descricaoDaPagina}>
+  {tela.tela === 'confirmar' && (
+    <Estado icone="mail" titulo={T.titulo}>
+      <p class="estado__texto">{T.texto}</p>
+    </Estado>
+  )}
+  {tela.tela === 'nao-confirmou' && (
+    <Estado icone="error" tom="alerta" titulo={T.naoConfirmouTitulo}>
+      <p class="estado__texto">{T.naoConfirmouTexto}</p>
+    </Estado>
+  )}
+  {tela.tela === 'confirmado' && (
+    <Estado icone="check_circle" tom="sucesso" titulo={T.confirmadoTitulo}>
+      <p class="estado__texto">{T.confirmadoTexto}</p>
+    </Estado>
+  )}
+  {tela.tela === 'expirado' && (
+    <Estado icone="schedule" titulo={T.expiradoTitulo}>
+      <p class="estado__texto so-toque">{T.expiradoTextoToque}</p>
+      <p class="estado__texto so-mouse">{T.expiradoTextoMouse}</p>
+    </Estado>
+  )}
+  {tela.tela === 'espere' && (
+    <Estado icone="hourglass" titulo={COMUM_PUBLICO.espereTitulo}>
+      <p class="estado__texto">{COMUM_PUBLICO.espereTexto(espera(tela.esperaSegundos))}</p>
+    </Estado>
+  )}
+  {tela.tela === 'fora-do-ar' && (
+    <Estado icone="schedule" titulo={COMUM_PUBLICO.foraDoArTitulo}>
+      <p class="estado__texto">{COMUM_PUBLICO.foraDoArTexto}</p>
+    </Estado>
+  )}
+  {tela.tela === 'erro' && (
+    <Estado icone="error" titulo={COMUM_PUBLICO.erroTitulo}>
+      <p class="estado__texto">{COMUM_PUBLICO.erroTexto}</p>
+      {tela.correlationId && <p class="estado__codigo"><code>{tela.correlationId}</code></p>}
+    </Estado>
+  )}
+  <Fragment slot="acao">
+    {mostraFormulario && (
+      <div class="acao">
+        <form method="post" action="/verificar-email" data-envio>
+          <input type="hidden" name="token" value={token} />
+          <BotaoEnviar rotulo={tela.tela === 'nao-confirmou' ? T.tentarDeNovo : T.botao} enviando={T.enviando} />
+        </form>
+      </div>
+    )}
+  </Fragment>
+  {mostraFormulario && <ScriptDeEnvio />}
+</Publica>

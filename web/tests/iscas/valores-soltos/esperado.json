@@ -1,0 +1,9 @@
+[
+  { "arquivo": "isca.css", "linha": 2, "regra": "cor literal (#hex)" },
+  { "arquivo": "isca.css", "linha": 3, "regra": "cor literal (funcao de cor)" },
+  { "arquivo": "isca.css", "linha": 4, "regra": "@media fora de web.breakpoint" },
+  { "arquivo": "isca.css", "linha": 5, "regra": "distancia em px escrita a mao" },
+  { "arquivo": "isca.css", "linha": 6, "regra": "cor por nome" },
+  { "arquivo": "isca.css", "linha": 7, "regra": "papel \"action-fill\" pintando texto" },
+  { "arquivo": "isca.astro", "linha": 3, "regra": "atributo style=" }
+]

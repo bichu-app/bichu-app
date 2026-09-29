@@ -1811,19 +1811,93 @@ jobs:
   # SEM FILTRO DE CAMINHO, pelo mesmo motivo do job `isolamento`: `skipped` e o
   # que o `portao` recusa.
   #
-  # O QUE ESTE JOB AINDA NAO FAZ, e o ADR-0028 (item 10) pede: `astro check`,
-  # tipos do contrato regenerados, portao dos tokens com isca, orcamento de
-  # 30 KB por rota, LCP/CLS/INP, cabecalho por rota e o toque sem JavaScript.
-  # Cada um precisa de uma pagina real para medir, e o site hoje e um
-  # placeholder tecnico. Entram com as paginas; este job e o item 8 (imagem
-  # construida e container saudavel).
+  # OS PORTOES DO ITEM 10 DO ADR-0028, que entraram com as paginas reais (site
+  # v1, 23/09/2026), rodam ANTES da imagem, cada um com a propria isca:
+  #   10.1 `astro check`;
+  #   10.2 tipos e cliente do contrato regenerados e comparados (`verify:api`,
+  #        o mesmo padrao do admin/), com isca;
+  #   10.3 tokens do site regenerados e comparados, com isca, e o varredor de
+  #        valor solto em web/src, com iscas;
+  #   10.4 orcamento de 30 KB por rota, contra o mock gerado do contrato, com
+  #        isca (um teto de 1 KB PRECISA reprovar) e reprovando rota sem medicao;
+  #   10.6 cabecalho por rota e 10.7 o toque unico sem JavaScript, na suite
+  #        de ponta a ponta (Playwright), com axe-core em cada pagina e estado;
+  #   10.8 a imagem construida e o container saudavel (os passos abaixo).
+  # O QUE AINDA FALTA: 10.5 (LCP, CLS e INP em 4G simulado). Esta registrado
+  # na entrega do site v1 e nao e cobrado aqui.
   web:
     name: imagem do site constroi, sobe restrita e serve
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     needs: rapidos
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: dependencias do site
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      # 10.2: nenhum tipo de resposta escrito a mao. Regenera e compara com o
+      # versionado, e a isca (contrato alterado) PRECISA reprovar.
+      - name: tipos e cliente do contrato (verify:api, com isca)
+        working-directory: web
+        run: npm run verify:api
+
+      # 10.3: tokens.g.css regenerado de design/tokens.json e comparado; a isca
+      # muda raspberry.700 numa copia e PRECISA reprovar nomeando o arquivo.
+      # A forma da esteira (arvore limpa) confere tambem contra o HEAD.
+      - name: tokens do site (verify:tokens, com isca)
+        working-directory: web
+        run: |
+          npm run verify:tokens
+          node scripts/gerar-tokens-css.mjs
+          if ! git diff --exit-code -- src/styles/tokens.g.css; then
+            echo "::error::web/src/styles/tokens.g.css divergiu de design/tokens.json. Rode 'npm run generate:tokens' de dentro de web/ e versione o resultado; se o valor gerado esta errado, o errado e o token"
+            exit 1
+          fi
+
+      - name: nenhum valor solto em web/src (com iscas)
+        working-directory: web
+        run: npm run verify:valores-soltos
+
+      - name: astro check
+        working-directory: web
+        run: npm run check
+
+      - name: testes de unidade do site
+        working-directory: web
+        run: npm run test:unidade
+
+      - name: build do site
+        working-directory: web
+        run: npm run build
+
+      # 10.4. A isca primeiro: com teto de 1 KB o orcamento PRECISA reprovar.
+      - name: orcamento por rota (isca, depois o de verdade)
+        working-directory: web
+        run: |
+          if ORCAMENTO_TETO=1024 node scripts/orcamento.mjs > isca-orcamento.out 2>&1; then
+            echo "::error::o orcamento APROVOU com teto de 1 KB. Ele parou de medir"; cat isca-orcamento.out; exit 1
+          fi
+          grep -q 'ESTOUROU' isca-orcamento.out || { echo "::error::a isca do orcamento reprovou pelo motivo errado"; cat isca-orcamento.out; exit 1; }
+          npm run verify:orcamento | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: navegador da suite de ponta a ponta
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      # 10.6 e 10.7: cabecalho por rota, o aviso pela tag concluido com o
+      # JavaScript desligado, todos os estados de /t/, /verificar-email e
+      # /redefinir-senha contra o mock gerado do contrato, e axe-core.
+      - name: ponta a ponta (Playwright), com e sem JavaScript
+        working-directory: web
+        run: npm run test:e2e
 
       - name: o commit de que esta imagem vai sair
         run: echo "BUILD_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
@@ -1878,7 +1952,7 @@ jobs:
           echo "ambiente do site: $(printf '%s\n' "$recebidas" | tr '\n' ' ')"
           if [ "$falhas" != 0 ]; then exit 1; fi
 
-      - name: serve a pagina inicial, a rota do servidor e 404 de verdade
+      - name: serve a pagina inicial, a rota do servidor (503 sem API) e 404 de verdade
         run: |
           # Pelo NOME DO SERVICO na rede do compose (`web:4321`), que e como a
           # borda o alcanca. O cliente e o Node da propria imagem: nenhuma
@@ -1890,7 +1964,9 @@ jobs:
             const casos = [
               ["/", 200, "text/html", "public, max-age=0, must-revalidate"],
               ["/healthz", 200, "text/plain", "no-store"],
-              ["/t/CODIGO-DE-TESTE", 404, "text/html", "no-store"],
+              // Sem a API no ar (este job sobe so o site), /t/ responde 503 com
+              // a pagina de tentar de novo, nunca 200 vazio (ADR-0028, item 3).
+              ["/t/CODIGO-DE-TESTE", 503, "text/html", "no-store"],
               ["/nao-existe-'"$GITHUB_RUN_ID"'", 404, null, "no-store"],
             ];
             let falhas = 0;

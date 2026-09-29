@@ -1,0 +1,7 @@
+---
+// Acento manuscrito da folha de identidade. Sempre decorativo e redundante com
+// um texto normal por perto, entao fica fora da arvore de acessibilidade.
+interface Props { variante?: 'selo' | 'frase' }
+const { variante = 'selo' } = Astro.props;
+---
+<p class={variante === 'selo' ? 'selo-manuscrito' : 'selo-frase'} aria-hidden="true"><slot /></p>

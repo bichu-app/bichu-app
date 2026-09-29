@@ -1,0 +1,17 @@
+---
+// Erro inesperado numa rota do servidor. Nunca pagina em branco (ADR-0028, item 3).
+import Publica from '../layouts/Publica.astro';
+import Estado from '../componentes/Estado.astro';
+import { PAGINA_500 as T } from '../conteudo/erro.ts';
+Astro.response.headers.set('Cache-Control', 'no-store');
+---
+<Publica titulo={T.tituloDaPagina} descricao={T.descricaoDaPagina}>
+  <Estado icone="error" titulo={T.titulo}>
+    <p class="estado__texto">{T.texto}</p>
+  </Estado>
+  <Fragment slot="acao">
+    <div class="acao">
+      <a class="botao botao--primario botao--largo" href={Astro.url.pathname}>{T.tentarDeNovo}</a>
+    </div>
+  </Fragment>
+</Publica>

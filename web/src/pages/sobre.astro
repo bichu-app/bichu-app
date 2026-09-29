@@ -1,0 +1,29 @@
+---
+import Institucional from '../layouts/Institucional.astro';
+import Icone from '../componentes/Icone.astro';
+import Ilustracao from '../componentes/Ilustracao.astro';
+import Manuscrito from '../componentes/Manuscrito.astro';
+import { SOBRE as T } from '../conteudo/institucional.ts';
+---
+<Institucional titulo={T.titulo} descricao={T.descricao} atual="/sobre">
+  <section class="hero hero--pagina" aria-labelledby="hero-titulo">
+    <span class="blob blob--1" aria-hidden="true"></span>
+    <span class="blob blob--2" aria-hidden="true"></span>
+    <div class="hero__texto">
+      <h1 class="hero__titulo titulo-display" id="hero-titulo">{T.hero.titulo}</h1>
+      <Manuscrito>{T.hero.manuscrito}</Manuscrito>
+      <p class="hero__lead">{T.hero.lead}</p>
+    </div>
+    <div class="hero__ilustracao">
+      <Ilustracao recorte="encontro" alt={T.hero.alt} principal />
+    </div>
+  </section>
+
+  <section class="secao faixa-privacidade" aria-labelledby="naofaz-titulo">
+    <span class="faixa-privacidade__icone"><Icone nome="lock" /></span>
+    <div class="faixa-privacidade__texto">
+      <h2 class="titulo-secao" id="naofaz-titulo">{T.naoFaz.titulo}</h2>
+      <p class="texto-grande">{T.naoFaz.texto}</p>
+    </div>
+  </section>
+</Institucional>

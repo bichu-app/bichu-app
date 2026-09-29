@@ -1,0 +1,21 @@
+---
+// Lista de passos com icone em circulo (58% do circulo, centrado por grid).
+import Icone from './Icone.astro';
+import type { NomeDoSimbolo } from '../icones/simbolos.ts';
+
+interface Props {
+  passos: readonly { icone: string; titulo: string; texto: string }[];
+  numerados?: boolean;
+  classe?: string;
+}
+const { passos, numerados = false, classe } = Astro.props;
+---
+<ol class:list={['passos', numerados && 'passos--numerados', passos.length === 4 && 'passos--quatro', classe]}>
+  {passos.map((p) => (
+    <li class="passo">
+      <span class="passo__icone"><Icone nome={p.icone as NomeDoSimbolo} /></span>
+      <h3 class="titulo-item">{p.titulo}</h3>
+      <p class="passo__texto">{p.texto}</p>
+    </li>
+  ))}
+</ol>

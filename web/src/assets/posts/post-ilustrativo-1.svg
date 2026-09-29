@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-label="Cachorro correndo na grama"><rect width="400" height="400" fill="#DDEFE6"/><path d="M0 300C120 280 280 286 400 300V400H0Z" fill="#A9CFBB"/>
+<g fill="none" stroke="#E7B93E" stroke-width="16" stroke-linecap="round"><path d="M140 250L100 290"/><path d="M170 256L150 304"/><path d="M262 252L290 296"/><path d="M290 244L336 272"/><path d="M296 214Q330 190 344 160"/></g>
+<ellipse cx="220" cy="226" rx="94" ry="46" transform="rotate(-8 220 226)" fill="#E7B93E"/><circle cx="124" cy="190" r="50" fill="#E7B93E"/>
+<path d="M136 150C168 136 186 150 176 176C160 172 146 164 136 150Z" fill="#AE8718"/><ellipse cx="84" cy="206" rx="22" ry="16" fill="#FBEFC8"/><circle cx="70" cy="200" r="8" fill="#54031D"/>
+<path d="M110 180Q120 170 130 180" fill="none" stroke="#54031D" stroke-width="6" stroke-linecap="round"/><path d="M92 218Q98 244 108 220Z" fill="#E8A7A0"/>
+<g fill="none" stroke="#FAFAF8" stroke-width="6" stroke-linecap="round"><path d="M340 230H380M330 250H370"/></g></svg>

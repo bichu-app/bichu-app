@@ -1,0 +1,11 @@
+---
+// Chamada final "Entre na rede". Sem selo e sem link de loja (regra 1).
+import EmBreveLojas from './EmBreveLojas.astro';
+interface Props { titulo: string; texto?: string }
+const { titulo, texto } = Astro.props;
+---
+<section class="secao baixe-app" id="baixe-app" aria-labelledby="baixe-titulo">
+  <h2 class="titulo-secao" id="baixe-titulo">{titulo}</h2>
+  {texto && <p class="texto-grande">{texto}</p>}
+  <EmBreveLojas />
+</section>

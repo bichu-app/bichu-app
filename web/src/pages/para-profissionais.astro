@@ -1,0 +1,31 @@
+---
+import Institucional from '../layouts/Institucional.astro';
+import Ilustracao from '../componentes/Ilustracao.astro';
+import Manuscrito from '../componentes/Manuscrito.astro';
+import iconeProximidade from '../assets/marca/icone-pilar-proximidade.svg';
+import { PARA_PROFISSIONAIS as T } from '../conteudo/institucional.ts';
+---
+<Institucional titulo={T.titulo} descricao={T.descricao} atual="/para-profissionais">
+  <section class="hero hero--pagina" aria-labelledby="hero-titulo">
+    <span class="blob blob--1" aria-hidden="true"></span>
+    <div class="hero__texto">
+      <h1 class="hero__titulo titulo-display" id="hero-titulo">{T.hero.titulo}</h1>
+      <p class="hero__lead">{T.hero.lead}</p>
+    </div>
+    <div class="hero__ilustracao">
+      <Ilustracao recorte="moldura" alt={T.hero.alt} principal />
+    </div>
+  </section>
+
+  <span class="divisor-onda" aria-hidden="true"></span>
+  <section class="secao secao--comunidade indicacao" aria-labelledby="indicacao-titulo">
+    <div class="indicacao__conteudo">
+      <img class="indicacao__icone" src={iconeProximidade.src} alt="" width="96" height="96" loading="lazy" />
+      <div class="secao__cabecalho">
+        <h2 class="titulo-secao" id="indicacao-titulo">{T.indicacao.titulo}</h2>
+        <p class="secao__lead texto-grande">{T.indicacao.lead}</p>
+      </div>
+      <Manuscrito variante="frase">{T.indicacao.manuscrito}</Manuscrito>
+    </div>
+  </section>
+</Institucional>

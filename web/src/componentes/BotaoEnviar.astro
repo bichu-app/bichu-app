@@ -1,0 +1,19 @@
+---
+// Botao de envio de formulario publico. O rotulo continua visivel enquanto
+// envia (componente Botao); o giro e o anuncio so aparecem com JavaScript.
+import Icone from './Icone.astro';
+
+interface Props {
+  rotulo: string;
+  enviando: string;
+  variante?: 'primario' | 'secundario';
+  /** id do formulario, quando o botao mora fora dele (a barra de acao presa embaixo). */
+  form?: string;
+}
+const { rotulo, enviando, variante = 'primario', form } = Astro.props;
+---
+<button class:list={['botao', `botao--${variante}`, 'botao--largo']} type="submit" form={form} data-enviando={enviando}>
+  <Icone nome="progress_activity" class="botao__giro" />
+  {rotulo}
+</button>
+<p class="sr-only" role="status" aria-live="polite" data-anuncio></p>

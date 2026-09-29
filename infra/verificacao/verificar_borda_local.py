@@ -81,10 +81,27 @@ ARQUIVOS_DE_PLATAFORMA = [
 # metade, e essa so a verificacao externa e agendada consegue afirmar.
 CAMINHOS_DA_DOCUMENTACAO = ["/v1/docs", "/v1/openapi.yaml"]
 
-# ADR-0017: o que nao e `/v1` nem `/.well-known` NAO chega ao back-end. O
-# catch-all que existia entregava qualquer caminho ao servico, e uma rota
-# removida do contrato continuava respondendo enquanto o codigo dela existisse.
-CAMINHO_QUE_NAO_EXISTE = "/t/ABC123"
+# O INVARIANTE (ADR-0017, atualizado pelo ADR-0028): fora de `/v1`, de
+# `/.well-known` e das rotas legitimas do site, a borda NAO alcanca o back-end.
+#
+# Ate o ADR-0028 o probe era `/t/ABC123` esperando 404 da borda. O ADR-0028
+# tornou `/t/*` uma ROTA DO SITE (servida por `web`, nao mais fechada), entao
+# esse caminho deixou de provar o invariante -- ele agora e legitimo. Sao dois
+# probes no lugar de um:
+#
+#  - CAMINHO_FORA_DE_TUDO: nao e `/v1`, nem `/.well-known`, nem rota do site.
+#    Na pilha de dev (BORDA_RESTO_DA_APP=site) ele cai no catch-all, que e o
+#    SITE -- e a prova de "nao vazou para o back-end" e a resposta vir DO SITE:
+#    404 em `text/html` (a pagina 404 do site). Uma resposta do back-end
+#    (problem+json, json, ou o `text/plain` do `respond` da borda) reprova aqui,
+#    que e exatamente o vazamento de catch-all que este probe existe para pegar.
+#    Nos hosts hospedados de API (BORDA_RESTO_DA_APP=fechado) esse mesmo
+#    catch-all responde 404 da propria borda, e isso e coberto por
+#    `verificar-hosts-do-site.mjs`; aqui a pilha serve o site.
+#  - CAMINHO_DE_SITE: `/t/{code}`, rota legitima do site (ADR-0028), que TEM de
+#    ser servida pelo site (text/html), e nao pelo back-end.
+CAMINHO_FORA_DE_TUDO = "/nao-e-rota-de-ninguem-borda-nao-vaza-backend"
+CAMINHO_DE_SITE = "/t/CODIGO-INEXISTENTE-DE-TESTE"
 
 # O webhook de entrega do provedor de e-mail (BICHUS-13, criterios 7 e 9).
 #
@@ -332,16 +349,42 @@ def main(argv: list[str]) -> int:
     print(f"  [{'ok' if not resultado else 'REPROVA'}] {CAMINHO_DO_WEBHOOK} chega a aplicacao e exige assinatura")
     falhas.extend(resultado)
 
+    # Fora de `/v1` (e de `/.well-known` e `/webhooks`) a borda nao alcanca o
+    # back-end. Na pilha de dev o catch-all e o site, entao a prova de que nao
+    # vazou para o back-end e a resposta vir DO SITE: 404 em `text/html`. Uma
+    # resposta do back-end (problem+json, json, ou o `text/plain` do `respond`
+    # da borda) reprova -- e o vazamento que este probe existe para pegar.
     try:
-        status, _cab, _corpo = buscar(base, CAMINHO_QUE_NAO_EXISTE)
-        resultado = [] if status == 404 else [
-            f"{CAMINHO_QUE_NAO_EXISTE}: esperado 404, veio {status}. O que nao e `/v1` nem "
-            "`/.well-known` nao pode chegar ao back-end (ADR-0017): com o catch-all aberto, "
-            "rota removida do contrato continua respondendo enquanto o codigo dela existir"
+        status, cab, _corpo = buscar(base, CAMINHO_FORA_DE_TUDO)
+        tipo = cab.get("content-type", "")
+        problemas = []
+        if status != 404:
+            problemas.append(f"esperado 404, veio {status}")
+        if "text/html" not in tipo:
+            problemas.append(
+                f"content-type {tipo!r} nao e a pagina 404 do site (text/html): a resposta "
+                "parece vir do back-end, e fora de `/v1` a borda nao pode alcanca-lo"
+            )
+        resultado = [] if not problemas else [f"{CAMINHO_FORA_DE_TUDO}: " + "; ".join(problemas)]
+    except Reprovacao as e:
+        resultado = [f"{CAMINHO_FORA_DE_TUDO}: nao foi possivel verificar: {e}"]
+    print(f"  [{'ok' if not resultado else 'REPROVA'}] fora de `/v1` a borda cai no site, nao no back-end")
+    falhas.extend(resultado)
+
+    # ADR-0028: `/t/{code}` e rota do site e tem de ser SERVIDA por ele.
+    # Complementa `verificar-hosts-do-site.mjs`, que confere o outro lado (nos
+    # hosts de API, `/t/*` e caminho fechado).
+    try:
+        status, cab, _corpo = buscar(base, CAMINHO_DE_SITE)
+        tipo = cab.get("content-type", "")
+        resultado = [] if "text/html" in tipo else [
+            f"{CAMINHO_DE_SITE}: content-type {tipo!r}; `/t/{{code}}` e rota do site (ADR-0028) "
+            "e deve ser servida pelo site (text/html), nao pelo back-end (veio status "
+            f"{status})"
         ]
     except Reprovacao as e:
-        resultado = [f"{CAMINHO_QUE_NAO_EXISTE}: nao foi possivel verificar: {e}"]
-    print(f"  [{'ok' if not resultado else 'REPROVA'}] borda fechada fora de `/v1`")
+        resultado = [f"{CAMINHO_DE_SITE}: nao foi possivel verificar: {e}"]
+    print(f"  [{'ok' if not resultado else 'REPROVA'}] `/t/{{code}}` servida pelo site")
     falhas.extend(resultado)
 
     try:
