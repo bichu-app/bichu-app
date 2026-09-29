@@ -35,7 +35,7 @@ import { sql } from 'kysely';
 import { loadAppConfig } from '../../src/shared/config/app-config.js';
 import { createDb, type Db } from '../../src/shared/db/pool.js';
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
-import type { AbsoluteUrl, Instant, UserId } from '../../src/shared/types/brands.js';
+import type { AbsoluteUrl, AdminAccountId, Instant } from '../../src/shared/types/brands.js';
 import { chaveDoOriginalDeCatalogo } from '../../src/modules/media/domain/chave-de-objeto.js';
 import type { Clock } from '../../src/shared/time/clock.js';
 import { criarServidor } from '../../src/shared/http/server.js';
@@ -105,14 +105,25 @@ function catalogo(trilha: TrilhaTransacional): CatalogoAdministrativo {
 
 let loja: CatalogoAdministrativo;
 
-async function trilhaDe(resourceId: string): Promise<{ action: string; metadata: unknown }[]> {
+/** A foto de pet do app, semeada so para a isca de T9 (e limpa no `after`). */
+let fotoDePet: { tutor: string; pet: string; intencao: string } | undefined;
+
+async function trilhaDe(
+  resourceId: string,
+): Promise<{ action: string; metadata: unknown; actorKind: string; actorAdminId: string | null; actorUserId: string | null }[]> {
   const linhas = await banco.db
     .selectFrom('audit.events')
-    .select(['action', 'metadata'])
+    .select(['action', 'metadata', 'actor_kind', 'actor_admin_id', 'actor_user_id'])
     .where('resource_id', '=', resourceId)
     .orderBy('occurred_at', 'asc')
     .execute();
-  return linhas.map((l) => ({ action: l.action, metadata: l.metadata }));
+  return linhas.map((l) => ({
+    action: l.action,
+    metadata: l.metadata,
+    actorKind: l.actor_kind,
+    actorAdminId: l.actor_admin_id,
+    actorUserId: l.actor_user_id,
+  }));
 }
 
 async function idDoItem(slug: string): Promise<string> {
@@ -181,12 +192,17 @@ before(async () => {
   banco = createDb(config.databaseUrl);
   const ids = criarIdGenerator(() => relogio.now());
 
-  const userId = randomUUID() as UserId;
-  await sql`
-    insert into users (id, email, display_name, email_verified_at, created_at, updated_at)
-    values (${userId}::uuid, ${`bo-loja-${sufixo()}@exemplo.invalid`}, 'Operacao', now(), now(), now())
-  `.execute(banco.db);
-  autor = { userId, sessao: 'a1b2c3d4e5f60718', ip: '203.0.113.7', correlationId: randomUUID() };
+  // A conta do painel, em `admin_accounts` (ADR-0027 item 20): nada de `users`.
+  // O hash e de teste e nunca confere com senha nenhuma.
+  const adminAccountId = ids.uuidv7() as AdminAccountId;
+  await banco.db.insertInto('admin_accounts').values({
+    id: adminAccountId,
+    email: `bo-loja-${sufixo()}@exemplo.invalid`,
+    display_name: 'Operacao',
+    password_phc: '$pbkdf2-sha512$i=1$c2Fs$aGFzaA',
+    password_updated_at: new Date(),
+  }).execute();
+  autor = { adminAccountId, sessao: 'a1b2c3d4e5f60718', ip: '203.0.113.7', correlationId: randomUUID() };
 
   loja = catalogo(criarTrilhaTransacional({ ids, clock: relogio, ipHmacKey: config.ipHmacKey }));
 
@@ -214,16 +230,21 @@ after(async () => {
       await banco.db.deleteFrom('store_items').where('partner_id', '=', id.id).execute();
       await banco.db.deleteFrom('store_partners').where('id', '=', id.id).execute();
     }
-    // `catalog_images.upload_intent_id` e SET NULL desde 28/09, entao a conta
-    // ja sairia antes das imagens; as imagens de teste sao apagadas mesmo assim,
-    // para nao sobrarem linhas orfas na pilha.
+    // As imagens de teste saem antes das intencoes, para nao sobrarem linhas
+    // orfas na pilha; a conta do painel sai por ultimo (nada a referencia).
     await sql`
       delete from catalog_images
-       where upload_intent_id in (select id from upload_intents where user_id = ${autor.userId}::uuid)
+       where upload_intent_id in (select id from catalog_upload_intents where admin_account_id = ${autor.adminAccountId}::uuid)
     `.execute(banco.db);
-    await banco.db.deleteFrom('upload_intents').where('user_id', '=', autor.userId).execute();
+    await banco.db.deleteFrom('catalog_upload_intents').where('admin_account_id', '=', autor.adminAccountId).execute();
     await banco.db.deleteFrom('store_tags').where('label', 'like', 'Tg %').execute();
-    await banco.db.deleteFrom('users').where('id', '=', autor.userId).execute();
+    if (fotoDePet !== undefined) {
+      await banco.db.deleteFrom('upload_intents').where('id', '=', fotoDePet.intencao).execute();
+      await banco.db.deleteFrom('pets').where('id', '=', fotoDePet.pet).execute();
+      await banco.db.deleteFrom('users').where('id', '=', fotoDePet.tutor).execute();
+    }
+    await sql`delete from audit.events where actor_admin_id = ${autor.adminAccountId}::uuid`.execute(banco.db).catch(() => undefined);
+    await banco.db.deleteFrom('admin_accounts').where('id', '=', autor.adminAccountId).execute();
     await banco.close();
   }
 });
@@ -250,7 +271,14 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
       doItem.map((e) => e.action),
       ['admin.store_item.created', 'admin.store_item.updated', 'admin.store_item.published', 'admin.store_item.retired'],
     );
-    for (const e of doItem) assert.deepEqual(e.metadata, { surface: 'admin', session: autor.sessao });
+    for (const e of doItem) {
+      assert.deepEqual(e.metadata, { surface: 'admin', session: autor.sessao });
+      // ADR-0027 20.7 fatia 6: a trilha do painel e `actor_kind = 'admin'`,
+      // com o id em `actor_admin_id`, e nunca em `actor_user_id`.
+      assert.equal(e.actorKind, 'admin');
+      assert.equal(e.actorAdminId, autor.adminAccountId);
+      assert.equal(e.actorUserId, null);
+    }
 
     const doParceiro = await trilhaDe(await idDoParceiro(p.slug));
     assert.deepEqual(doParceiro.map((e) => e.action), ['admin.store_partner.created']);
@@ -511,6 +539,40 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
       .where('upload_intent_id', '=', capa.uploadId)
       .execute();
     assert.equal(imagens.length, 0, 'a capa virou imagem de catalogo mesmo recusada');
+  });
+
+  void it('ISCA T9 contra o banco: foto de pet do app (upload_intents) na escrita do item e 400', async () => {
+    const tutor = randomUUID();
+    const pet = randomUUID();
+    const intencao = randomUUID();
+    fotoDePet = { tutor, pet, intencao };
+    await sql`insert into users (id, email, display_name, email_verified_at, created_at, updated_at)
+              values (${tutor}::uuid, ${`bo-loja-tutor-${sufixo()}@exemplo.invalid`}, 'Tutor', now(), now(), now())`.execute(banco.db);
+    await sql`insert into pets (id, owner_user_id, name, species_code, size_code)
+              values (${pet}::uuid, ${tutor}::uuid, 'Rex', 'dog', 'M')`.execute(banco.db);
+    await sql`insert into upload_intents (id, user_id, pet_id, kind, object_key, declared_type, max_bytes, expires_at)
+              values (${intencao}::uuid, ${tutor}::uuid, ${pet}::uuid, 'pet_photo', ${`t9/${intencao}`}, 'image/jpeg', 1000, now() + interval '1 hour')`.execute(banco.db);
+
+    const p = await novoParceiro();
+    const slug = `bo-t9p-${sufixo()}`;
+    const erro = await loja
+      .criarItem(autor, {
+        slug,
+        partner_slug: p.slug,
+        title: 'Item com foto de pet',
+        summary: 'Nao deve nascer.',
+        category: 'toy',
+        species: ['dog'],
+        target_url: `https://${p.host}/x`,
+        images: [{ upload_id: intencao, alt_text: 'Foto de pet' }],
+      })
+      .catch((e: unknown) => e);
+    assert.ok(erro instanceof AppError && erro.problemType === 'validation-failed', String(erro));
+    assert.equal(erro.status, 400);
+    const linha = await banco.db.selectFrom('store_items').select('id').where('slug', '=', slug).executeTakeFirst();
+    assert.equal(linha, undefined);
+    const confirmada = await banco.db.selectFrom('upload_intents').select('confirmed_at').where('id', '=', intencao).executeTakeFirstOrThrow();
+    assert.equal(confirmada.confirmed_at, null, 'a foto de pet foi confirmada pelo painel');
   });
 
   void it('tags e especie filtram a vitrine publica; tag inativa some do item e do vocabulario', async () => {

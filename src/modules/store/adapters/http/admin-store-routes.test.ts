@@ -40,7 +40,7 @@ import {
 } from '../../../../shared/http/superficie-administrativa.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import { comoData } from '../../../../shared/time/clock.js';
-import type { AbsoluteUrl, Instant, UserId } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, AdminAccountId, Instant } from '../../../../shared/types/brands.js';
 import { CatalogoAdministrativo } from '../../application/catalogo-administrativo.js';
 import {
   novoId,
@@ -60,7 +60,7 @@ const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 function sessao(id: string, csrf: string, papeis: readonly string[]): SessaoAdministrativaConferida {
   return {
     sessionId: `sessao-${id}`,
-    userId: `0192a3b4-0000-7000-8000-0000000000${id === 'admin' ? 'a1' : 'b2'}` as UserId,
+    adminAccountId: `0192a3b4-0000-7000-8000-0000000000${id === 'admin' ? 'a1' : 'b2'}` as AdminAccountId,
     displayName: 'Operacao',
     papeis,
     csrfTokenHash: hashDeToken(csrf),

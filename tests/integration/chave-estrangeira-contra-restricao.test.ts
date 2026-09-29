@@ -595,10 +595,19 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
       'os pedidos da PROPRIA conta, e so eles. A tabela nao tem coluna sobre terceiro, entao a ' +
       'cascata nao alcanca a experiencia de mais ninguem.',
   },
-  'public.network_event_join_requests.network_event_join_requests_decided_by_user_id_fkey': {
-    colunas: ['decided_by_user_id'],
-    referencia: 'public.users',
-    aoApagar: 'SET NULL',
+  // ADR-0027 item 20.2 (20260928000005). Quem decide o pedido e quem cria o
+  // encontro do painel sao contas de `admin_accounts`, e nunca de `users`. Sem
+  // `ON DELETE`: conta do painel nao se apaga, desativa; a trava (`NO ACTION`)
+  // e o que faz um expurgo operacional parar em vez de apagar a autoria.
+  'public.network_event_join_requests.network_event_join_requests_decided_by_admin_id_fkey': {
+    colunas: ['decided_by_admin_id'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'NO ACTION',
+  },
+  'public.network_events.network_events_created_by_admin_id_fkey': {
+    colunas: ['created_by_admin_id'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'NO ACTION',
   },
   'public.network_events.network_events_created_by_user_id_fkey': {
     colunas: ['created_by_user_id'],
@@ -718,10 +727,17 @@ const CHAVES_ESTRANGEIRAS: Readonly<Record<string, ChaveDeclarada>> = {
     referencia: 'public.catalog_images',
     aoApagar: 'NO ACTION',
   },
+  // ADR-0027 A.3 (item 20.2): a imagem de catalogo nasce de uma intencao do
+  // PAINEL, em tabela propria, e nao de `upload_intents`, que e do app.
   'public.catalog_images.catalog_images_upload_intent_id_fkey': {
     colunas: ['upload_intent_id'],
-    referencia: 'public.upload_intents',
+    referencia: 'public.catalog_upload_intents',
     aoApagar: 'SET NULL',
+  },
+  'public.catalog_upload_intents.catalog_upload_intents_admin_account_id_fkey': {
+    colunas: ['admin_account_id'],
+    referencia: 'public.admin_accounts',
+    aoApagar: 'NO ACTION',
   },
 
   // -------------------------------------------------------------------------
@@ -800,6 +816,17 @@ const PARES_DE_NULO_CONTRA_RESTRICAO: Readonly<Record<string, ParDeclarado>> = {
   // Portão que reprovasse isto é portão desligado na primeira semana. A
   // frouxidão (profissional `claimed` sem titular) é assunto de modelo de
   // dados, não de contradição declarativa, e está em Riscos.
+  // ADR-0027 A.4 (20260928000005). `network_events_autor_da_comunidade` e
+  // `created_by_user_id IS NULL OR origin = 'community'`: o nulo satisfaz o
+  // PRIMEIRO ramo, entao apagar o tutor que criou o encontro da comunidade
+  // conclui, e o encontro fica sem autor.
+  'public.network_events.network_events_created_by_user_id_fkey + network_events_autor_da_comunidade': {
+    coluna: 'created_by_user_id',
+    veredito: 'compativel',
+    medicao:
+      "o CHECK e `created_by_user_id IS NULL OR origin = 'community'`; com o nulo o primeiro " +
+      'ramo e verdadeiro, e o SET NULL da exclusao do tutor nao o viola.',
+  },
   'public.professionals.professionals_claimed_by_user_id_fkey + professionals_titularidade_tem_marco':
     {
       coluna: 'claimed_by_user_id',

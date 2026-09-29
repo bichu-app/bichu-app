@@ -470,11 +470,11 @@ export interface AuditEventsTable {
 }
 
 /** O que o cliente vai enviar direto ao armazenamento (ADR-0007, BICHUS-87). */
-export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo' | 'catalog_image';
+export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
 
 /**
- * O proposito da imagem de catalogo (ADR-0027 item 10). So em
- * `kind = 'catalog_image'`, e a escrita que confirma o envio exige o mesmo.
+ * O proposito da imagem de catalogo (ADR-0027 item 10). Gravado em
+ * `catalog_upload_intents`, e a escrita que confirma o envio exige o mesmo.
  */
 export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event';
 
@@ -490,8 +490,6 @@ export interface UploadIntentsTable {
    */
   found_report_id: string | null;
   kind: TipoDeEnvio;
-  /** Obrigatorio em `catalog_image`, nulo nos demais (`upload_intents_proposito_so_no_catalogo`). */
-  purpose: Generated<PropositoDaImagemDeCatalogo | null>;
   /** Chave no armazenamento privado. **Nunca** uma URL. */
   object_key: string;
   /** O que o cliente DECLAROU. Diagnóstico, nunca verdade. */
@@ -500,6 +498,24 @@ export interface UploadIntentsTable {
   expires_at: Date;
   confirmed_at: Date | null;
   created_at: CriadoEm;
+}
+
+/**
+ * A intencao de envio de imagem de catalogo, do painel (ADR-0027 A.3, item
+ * 20.2). Separada de `upload_intents`, que e do app e aponta para `users`.
+ */
+export interface CatalogUploadIntentsTable {
+  id: string;
+  /** `admin_accounts.id`. Sem `ON DELETE`: conta do painel desativa, nao se apaga. */
+  admin_account_id: string;
+  purpose: PropositoDaImagemDeCatalogo;
+  /** Chave no armazenamento privado. **Nunca** uma URL. */
+  object_key: string;
+  declared_type: string;
+  max_bytes: number;
+  expires_at: Date;
+  confirmed_at: Date | null;
+  created_at: Generated<Date>;
 }
 
 /** `processing` → `ready` ou `rejected`. Nunca volta. */
@@ -1027,7 +1043,7 @@ export interface StoreItemImagesTable {
 export interface CatalogImagesTable {
   /** Identidade interna. Nunca projetada em resposta. */
   id: string;
-  /** Nulo depois que a conta que enviou foi apagada (`ON DELETE SET NULL`). */
+  /** Nulo depois que o varredor apagou a intencao de envio (`ON DELETE SET NULL`). */
   upload_intent_id: string | null;
   purpose: PropositoDaImagemDeCatalogo;
   status: Generated<StatusDaFoto>;
@@ -1154,8 +1170,8 @@ export interface NetworkEventAmenitiesTable {
 
 /**
  * O pedido para participar de encontro privado. Da conta, nunca do pet.
- * `decided_by_user_id` fica fora do tipo: a trilha o escreve por SQL cru, e
- * nenhuma leitura do app o projeta.
+ * `decided_by_admin_id` (conta do painel, ADR-0027 item 20.2) fica fora do
+ * tipo: a decisao o escreve por SQL cru, e nenhuma leitura o projeta.
  */
 export interface NetworkEventJoinRequestsTable {
   id: string;
@@ -1207,6 +1223,7 @@ export interface Database {
   found_reports: FoundReportsTable;
   match_candidates: MatchCandidatesTable;
   upload_intents: UploadIntentsTable;
+  catalog_upload_intents: CatalogUploadIntentsTable;
   pet_photos: PetPhotosTable;
   jobs: JobsTable;
   notification_deliveries: NotificationDeliveriesTable;

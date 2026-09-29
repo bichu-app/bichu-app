@@ -165,7 +165,7 @@ export function criarContagemNaTrilha(): ContagemNaTrilha {
         select coalesce(sum((metadata ->> ${consulta.campo})::int), 0) as total,
                min(occurred_at) as mais_antigo
           from audit.events
-         where actor_user_id = ${consulta.actorUserId}::uuid
+         where actor_admin_id = ${consulta.actorAdminId}::uuid
            and action = ${consulta.action}
            and occurred_at > ${consulta.desde}::timestamptz`.execute(trx);
       await assumirPapel(trx, papelAnterior);

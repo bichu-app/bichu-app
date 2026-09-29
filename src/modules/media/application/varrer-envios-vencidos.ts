@@ -4,8 +4,9 @@
  * O envio direto ao armazenamento tem um custo que o desenho paga de propósito:
  * **nós não sabemos se ele aconteceu.** O cliente pede a autorização, envia (ou
  * não, ou pela metade) e confirma (ou não). Quem nunca confirma deixa para trás
- * uma linha em `upload_intents` e, possivelmente, um objeto no bucket privado
- * que nenhuma linha de `pet_photos` referencia.
+ * uma linha em `upload_intents` (ou em `catalog_upload_intents`, o envio do
+ * painel, ADR-0027 A.3) e, possivelmente, um objeto no bucket privado que
+ * nenhuma linha de `pet_photos` nem de `catalog_images` referencia.
  *
  * Esse objeto é o pior tipo de lixo que existe num armazenamento cobrado por
  * volume: **invisível**. Ele não aparece em nenhuma tela, não quebra nada, e

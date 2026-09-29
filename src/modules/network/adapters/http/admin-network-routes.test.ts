@@ -36,7 +36,7 @@ import {
 } from '../../../../shared/http/superficie-administrativa.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import { comoData } from '../../../../shared/time/clock.js';
-import type { AbsoluteUrl, Instant, UserId } from '../../../../shared/types/brands.js';
+import type { AbsoluteUrl, AdminAccountId, Instant } from '../../../../shared/types/brands.js';
 import { RedeAdministrativa } from '../../application/rede-administrativa.js';
 import { repositorioDaRedeEmMemoria, type EstadoDaRede } from '../persistence/rede-em-memoria-de-teste.js';
 import * as rotas from './admin-network-routes.js';
@@ -47,7 +47,7 @@ const AGORA = Date.UTC(2026, 8, 28, 15, 0, 0) as Instant;
 const CSRF_ADMIN = 'csrf-admin-0123456789abcdef0123456789';
 const CSRF_TUTOR = 'csrf-tutor-0123456789abcdef0123456789';
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
-const ADMIN_ID = '0192a3b4-0000-7000-8000-0000000000a1' as UserId;
+const ADMIN_ID = '0192a3b4-0000-7000-8000-0000000000a1' as AdminAccountId;
 const ESCOPOS = new Set([
   'network_event_relocation',
   'network_event_cancellation',
@@ -58,7 +58,7 @@ const ESCOPOS = new Set([
 function sessao(id: 'admin' | 'tutor', csrf: string, papeis: readonly string[]): SessaoAdministrativaConferida {
   return {
     sessionId: `sessao-${id}`,
-    userId: (id === 'admin' ? ADMIN_ID : '0192a3b4-0000-7000-8000-0000000000b2') as UserId,
+    adminAccountId: (id === 'admin' ? ADMIN_ID : '0192a3b4-0000-7000-8000-0000000000b2') as AdminAccountId,
     displayName: 'Operacao',
     papeis,
     csrfTokenHash: hashDeToken(csrf),
@@ -499,8 +499,8 @@ void describe('a fila de pedidos (D53 a D56)', () => {
   void it('D56: com 300 linhas devolvidas na hora, a fila responde 429 com Retry-After; a pagina e cortada no que falta', async () => {
     b.semear((e) => {
       e.trilha.push({
-        actorKind: 'user',
-        actorUserId: ADMIN_ID,
+        actorKind: 'admin',
+        actorAdminId: ADMIN_ID,
         action: 'admin.network_join_request.listed',
         resourceKind: 'network_join_request',
         metadata: { rows_returned: 299 },

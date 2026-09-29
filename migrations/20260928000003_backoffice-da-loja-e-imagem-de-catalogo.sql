@@ -12,8 +12,8 @@
 --   `WHERE version = <o que a pessoa leu>` (ADR-0021 aplicado a concorrencia).
 -- - A.2: `store_items.published_at`, a PRIMEIRA publicacao.
 -- - A.3: `catalog_images`, na forma de `pet_photos`.
--- - A.3: `upload_intents` aceita `catalog_image`, com `purpose` obrigatorio
---   nele e proibido nos demais.
+-- - A.3: `catalog_upload_intents`, a intencao de envio do painel, com
+--   `admin_account_id` e sem tocar `upload_intents`, que e do app (item 20.2).
 -- - A.2.1 (item 16, pedido do cliente de 23/09): especie em
 --   `store_item_species`, vocabulario curado em `store_tags` ligado por
 --   `store_item_tags`, e ate 8 imagens por item em `store_item_images`, com
@@ -46,9 +46,8 @@
 -- e o `COMMENT ON COLUMN` diz isso. A alternativa, deixar a migracao falhar ate
 -- alguem decidir, travaria homologacao por uma data de dado de exemplo.
 --
--- SOBRE O `down`: devolve o esquema da `20260922000009`. Intencao de envio de
--- catalogo e apagada antes de a lista de `kind` voltar a ser a antiga, porque o
--- `CHECK` antigo a recusaria.
+-- SOBRE O `down`: devolve o esquema da vitrine anterior a esta migracao.
+-- `upload_intents` nunca foi tocada, entao nao ha o que devolver nela.
 
 -- Up Migration
 
@@ -56,37 +55,47 @@
 -- A imagem de catalogo (A.3)
 -- ---------------------------------------------------------------------------
 
-ALTER TABLE upload_intents
-  DROP CONSTRAINT upload_intents_kind_check;
-
-ALTER TABLE upload_intents
-  ADD CONSTRAINT upload_intents_kind_check
-    CHECK (kind IN ('pet_photo', 'found_report_photo', 'finder_photo', 'catalog_image')),
-
+-- A intencao de envio do painel e tabela propria (ADR-0027 item 20.2, A.3), e
+-- nao uma variante de `upload_intents`: aquela e do app e aponta para `users`,
+-- e o painel tem cadastro proprio. Foto de pet, de achador ou de aviso nem
+-- existe aqui, entao a chave estrangeira de `catalog_images` recusa o envio
+-- errado antes do caso de uso (T9 fechado por esquema).
+CREATE TABLE catalog_upload_intents (
+  id                uuid        PRIMARY KEY,
+  -- Sem ON DELETE: conta do painel nao se apaga, desativa (item 20.1).
+  admin_account_id  uuid        NOT NULL REFERENCES admin_accounts (id),
   -- O proposito fica gravado no envio, e a escrita que confirma exige o mesmo
-  -- (T9): a capa de um encontro nao vira imagem de produto, e foto de pet nao
-  -- vira nenhuma das duas.
-  ADD COLUMN purpose text,
-  ADD CONSTRAINT upload_intents_proposito_de_catalogo
-    CHECK (purpose IS NULL OR purpose IN ('store_item', 'network_event')),
-  ADD CONSTRAINT upload_intents_proposito_so_no_catalogo
-    CHECK ((kind = 'catalog_image') = (purpose IS NOT NULL)),
+  -- (T9): a capa de um encontro nao vira imagem de produto.
+  purpose           text        NOT NULL
+                    CONSTRAINT catalog_upload_intents_proposito
+                    CHECK (purpose IN ('store_item', 'network_event')),
+  -- A chave do objeto no armazenamento PRIVADO. Nunca uma URL.
+  object_key        text        NOT NULL,
+  -- O que o painel DECLAROU; quem valida e o worker, pelos bytes reais.
+  declared_type     text        NOT NULL,
+  max_bytes         integer     NOT NULL
+                    CONSTRAINT catalog_upload_intents_teto_positivo
+                    CHECK (max_bytes > 0),
+  expires_at        timestamptz NOT NULL,
+  confirmed_at      timestamptz,
+  created_at        timestamptz NOT NULL DEFAULT now()
+);
 
-  -- Imagem de catalogo nao pertence a pet. Sem isto, uma intencao de catalogo
-  -- com `pet_id` apareceria na ficha do animal pelo caminho de `pet_photos`.
-  ADD CONSTRAINT upload_intents_catalogo_sem_pet
-    CHECK (kind <> 'catalog_image' OR pet_id IS NULL);
+CREATE UNIQUE INDEX catalog_upload_intents_object_key_unico ON catalog_upload_intents (object_key);
+-- O varredor de envios vencidos procura os nao confirmados pelo prazo.
+CREATE INDEX catalog_upload_intents_pendentes
+  ON catalog_upload_intents (expires_at) WHERE confirmed_at IS NULL;
 
-COMMENT ON COLUMN upload_intents.purpose IS
-  'So em `kind = catalog_image`: `store_item` ou `network_event`. A escrita que confirma o envio exige o mesmo proposito (ADR-0027 item 10, T9).';
+COMMENT ON TABLE catalog_upload_intents IS
+  'Intencao de envio de imagem de catalogo (Loja e Rede) pelo painel, ADR-0027 A.3. Separada de upload_intents, que e do app: nenhuma FK para users.';
 
 CREATE TABLE catalog_images (
   id                uuid        PRIMARY KEY,
-  -- Anulavel, com SET NULL: o envio e de uma conta (`upload_intents.user_id`
-  -- e CASCADE), e a exclusao da conta de um administrador nao pode travar nem
-  -- levar a imagem que ja esta num produto ou num encontro. A imagem fica; o
-  -- que some e a ligacao com o envio (decisao da coordenacao, 28/09).
-  upload_intent_id  uuid        UNIQUE REFERENCES upload_intents (id) ON DELETE SET NULL,
+  -- Anulavel, com SET NULL: o varredor pode apagar a intencao de envio depois
+  -- de confirmada sem levar a imagem que ja esta num produto ou num encontro.
+  -- A imagem fica; o que some e a ligacao com o envio (decisao da
+  -- coordenacao, 28/09).
+  upload_intent_id  uuid        UNIQUE REFERENCES catalog_upload_intents (id) ON DELETE SET NULL,
   purpose           text        NOT NULL
                     CONSTRAINT catalog_images_proposito
                     CHECK (purpose IN ('store_item', 'network_event')),
@@ -249,15 +258,4 @@ ALTER TABLE store_partners
 
 DROP TABLE IF EXISTS catalog_images;
 
-DELETE FROM upload_intents WHERE kind = 'catalog_image';
-
-ALTER TABLE upload_intents
-  DROP CONSTRAINT IF EXISTS upload_intents_catalogo_sem_pet,
-  DROP CONSTRAINT IF EXISTS upload_intents_proposito_so_no_catalogo,
-  DROP CONSTRAINT IF EXISTS upload_intents_proposito_de_catalogo,
-  DROP COLUMN IF EXISTS purpose,
-  DROP CONSTRAINT IF EXISTS upload_intents_kind_check;
-
-ALTER TABLE upload_intents
-  ADD CONSTRAINT upload_intents_kind_check
-    CHECK (kind IN ('pet_photo', 'found_report_photo', 'finder_photo'));
+DROP TABLE IF EXISTS catalog_upload_intents;

@@ -24,13 +24,12 @@ export interface DependenciasDoAviso {
 export function criarAvisoAosAdministradores(deps: DependenciasDoAviso): AvisoAosAdministradores {
   return {
     async avisar({ assunto, linhas }) {
+      // Os administradores sao as contas ATIVAS de `admin_accounts` (ADR-0027
+      // item 20): conta do app nunca recebe aviso do painel.
       const contas = await deps.db
-        .selectFrom('user_roles as r')
-        .innerJoin('users as u', 'u.id', 'r.user_id')
-        .select(['u.email as email'])
-        .where('r.role', '=', 'admin')
-        .where('u.status', '=', 'active')
-        .where('u.deleted_at', 'is', null)
+        .selectFrom('admin_accounts')
+        .select(['email'])
+        .where('status', '=', 'active')
         .execute();
       if (contas.length === 0) {
         deps.registrarOcorrencia({ evento: 'admin.network_event.notice_no_recipient' }, 'aviso sem administrador ativo para receber');

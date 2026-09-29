@@ -28,7 +28,7 @@ import { AppError, problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import { comoData as comoDataDoRelogio } from '../../../shared/time/clock.js';
-import type { Instant, UserId } from '../../../shared/types/brands.js';
+import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
 import type { AuditAction, AuditEvent } from '../../audit/ports/audit-log.js';
 import {
   comoEtag,
@@ -78,7 +78,8 @@ import {
 
 /** Quem escreve, para a trilha. Nunca o e-mail. */
 export interface Autor {
-  readonly userId: UserId;
+  /** `admin_accounts.id` (ADR-0027 item 20). Nunca um `UserId`. */
+  readonly adminAccountId: AdminAccountId;
   /** Os 8 primeiros bytes, em hex, do hash da sessao (ADR-0027 item 8). */
   readonly sessao: string;
   readonly ip?: string | undefined;
@@ -293,8 +294,8 @@ export class RedeAdministrativa {
     corpo: { before?: Record<string, unknown>; after?: Record<string, unknown>; extra?: Record<string, unknown> },
   ): AuditEvent {
     return {
-      actorKind: 'user',
-      actorUserId: autor.userId,
+      actorKind: 'admin',
+      actorAdminId: autor.adminAccountId,
       actorIp: autor.ip,
       correlationId: autor.correlationId,
       action,
@@ -792,9 +793,9 @@ export class RedeAdministrativa {
     const agora = this.agora();
     const limite = Math.min(recorte.limit, TAMANHO_MAXIMO_DA_PAGINA_DA_FILA);
     return this.deps.repositorio.emTransacao(async (tx) => {
-      await tx.travarLeituraDaFila(autor.userId);
+      await tx.travarLeituraDaFila(autor.adminAccountId);
       const desde = comoDataDoRelogio((agora - JANELA_DO_TETO_DA_FILA_EM_MS) as Instant);
-      const usadas = await tx.linhasDevolvidasDesde(autor.userId, desde);
+      const usadas = await tx.linhasDevolvidasDesde(autor.adminAccountId, desde);
       const restantes = TETO_DE_LINHAS_DA_FILA_POR_HORA - usadas.total;
       if (restantes <= 0) {
         this.deps.registrarOcorrencia(
@@ -851,7 +852,7 @@ export class RedeAdministrativa {
       if (!podeDecidir(atual, decisao)) {
         throw recusa('status', 'request_not_pending', 'Este pedido não pode mais receber esta decisão.');
       }
-      const decidido = await tx.decidirPedido(atual.id, decisao, autor.userId, agora);
+      const decidido = await tx.decidirPedido(atual.id, decisao, autor.adminAccountId, agora);
       if (decisao === 'approved') {
         await tx.enfileirarAvisoDeAprovacao({ trabalhoId: this.deps.ids.uuidv7(), pedidoId: atual.id });
       }

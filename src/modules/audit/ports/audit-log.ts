@@ -289,7 +289,8 @@ export interface ContagemNaTrilha {
   somarNaJanela(
     trx: TransacaoDeEscrita,
     consulta: {
-      readonly actorUserId: UserId;
+      /** A leitura auditada e do painel: a conta e de `admin_accounts` (ADR-0027 item 20.2). */
+      readonly actorAdminId: AdminAccountId;
       readonly action: AuditAction;
       readonly campo: string;
       readonly desde: Date;

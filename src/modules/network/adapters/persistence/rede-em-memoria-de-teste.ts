@@ -265,7 +265,7 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
         linhasDevolvidasDesde: (conta, desde) => {
           const eventos = r.trilha.filter(
             (t) =>
-              t.actorUserId === conta && t.action === 'admin.network_join_request.listed' && t.em > desde.getTime(),
+              t.actorAdminId === conta && t.action === 'admin.network_join_request.listed' && t.em > desde.getTime(),
           );
           const total = eventos.reduce((soma, t) => soma + Number(t.metadata?.['rows_returned'] ?? 0), 0);
           const maisAntiga = eventos.length === 0 ? null : comoData(Math.min(...eventos.map((t) => t.em)) as Instant);

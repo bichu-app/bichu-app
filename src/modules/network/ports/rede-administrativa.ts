@@ -16,7 +16,7 @@
  */
 import type { AuditEvent } from '../../audit/ports/audit-log.js';
 import type { EnvioDeCatalogo } from '../../media/ports/imagem-de-catalogo.js';
-import type { Instant } from '../../../shared/types/brands.js';
+import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
 import type {
   DecisaoDoPedido,
   EncontroAdministrativo,
@@ -129,14 +129,14 @@ export interface TransacaoDaRede {
 
   /** Com `FOR UPDATE`. So pedido de encontro privado que nao foi removido. */
   pedidoPorRef(ref: string): Promise<PedidoNaFila | null>;
-  decidirPedido(id: string, decisao: 'approved' | 'declined', decisor: string, agora: Instant): Promise<PedidoNaFila>;
+  decidirPedido(id: string, decisao: 'approved' | 'declined', decisor: AdminAccountId, agora: Instant): Promise<PedidoNaFila>;
   /** O aviso de aprovacao ao tutor, enfileirado NA transacao da decisao. */
   enfileirarAvisoDeAprovacao(entrada: { readonly trabalhoId: string; readonly pedidoId: string }): Promise<void>;
 
   /** Serializa as leituras da fila da mesma conta, para o teto de D56 nao correr. */
-  travarLeituraDaFila(conta: string): Promise<void>;
+  travarLeituraDaFila(conta: AdminAccountId): Promise<void>;
   /** Linhas ja devolvidas a esta conta desde `desde`, somadas da trilha (D56). */
-  linhasDevolvidasDesde(conta: string, desde: Date): Promise<{ total: number; maisAntiga: Date | null }>;
+  linhasDevolvidasDesde(conta: AdminAccountId, desde: Date): Promise<{ total: number; maisAntiga: Date | null }>;
   listarFila(recorte: RecorteDaFila): Promise<Pagina<PedidoNaFila>>;
 
   registrarNaTrilha(evento: AuditEvent): Promise<void>;

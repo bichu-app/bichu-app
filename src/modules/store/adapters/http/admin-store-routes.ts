@@ -234,8 +234,12 @@ function corpoDe(contrato: Contrato, operationId: string): Record<string, unknow
  * depois do `onRequest` da guarda, entao ela ja existe; se nao existir, a
  * entrada e pulada, e a guarda ja respondeu antes disso.
  */
-const contaDoTeto = (request: FastifyRequest): string | undefined =>
-  request.sessaoAdministrativa?.userId;
+const contaDoTeto = (request: FastifyRequest): string | undefined => {
+  const conta = request.sessaoAdministrativa?.adminAccountId;
+  // `admin:`, e nao `account:`: um balde do painel e um do app nunca dividem
+  // chave (ADR-0027 item 20.2).
+  return conta === undefined ? undefined : `admin:${conta}`;
+};
 
 function parametro(request: FastifyRequest, nome: string): string {
   return (request.params as Record<string, string>)[nome] ?? '';

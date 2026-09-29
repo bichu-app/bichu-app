@@ -80,6 +80,45 @@ void describe('a lista de colunas sai das migrações, e não daqui', () => {
       'a migração de professionals deixou de marcar created_by_user_id como coluna que não sai',
     );
   });
+
+  void it('ADR-0027 20.7 fatia 7: a migracao real marca network_events.created_by_admin_id', () => {
+    const conteudo = readFileSync('migrations/20260928000005_autoria-do-painel-na-rede.sql', 'utf8');
+    const colunas = lerColunasQueNaoSaem([{ caminho: 'migracao', conteudo }]);
+    assert.ok(
+      colunas.some((c) => c.tabela === 'network_events' && c.coluna === 'created_by_admin_id'),
+      'a migracao da autoria do painel deixou de marcar created_by_admin_id como coluna que nao sai',
+    );
+  });
+
+  void it('ISCA fatia 7: created_by_admin_id projetado numa resposta do painel e no codigo reprova', () => {
+    const proibida = new Set(['created_by_admin_id']);
+    const noContrato = inspecionarContrato(
+      spec(`
+openapi: 3.1.0
+info: { title: isca, version: '0' }
+paths:
+  /admin/network/events/{slug}:
+    get:
+      operationId: getAdminNetworkEvent
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slug: { type: string }
+                  created_by_admin_id: { type: string, format: uuid }
+`),
+      proibida,
+    );
+    assert.equal(noContrato[0]?.coluna, 'created_by_admin_id');
+    const naFonte = inspecionarFontes(
+      [{ caminho: 'isca.ts', conteudo: 'return { slug: l.slug, created_by_admin_id: l.created_by_admin_id };' }],
+      proibida,
+    );
+    assert.equal(naFonte.length, 1);
+  });
 });
 
 void describe('o contrato', () => {

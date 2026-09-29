@@ -13,8 +13,9 @@
  * A coluna de autoria do encontro leva a marca "nunca sai do servidor" e o
  * portao `portao-colunas-que-nao-saem` recusa o nome dela em `src/`. Ela NAO e
  * escrita aqui: quem criou esta em `audit.events`, gravado na mesma transacao
- * (`admin.network_event.created`, com `actor_user_id` e a sessao). A coluna de
- * quem decidiu o pedido nao tem a marca, e e escrita por SQL cru.
+ * (`admin.network_event.created`, com `actor_admin_id` e a sessao). A coluna de
+ * quem decidiu o pedido (`decided_by_admin_id`, conta do painel) nao tem a
+ * marca, e e escrita por SQL cru.
  *
  * ## A trilha
  *
@@ -23,7 +24,6 @@
  */
 import { sql, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
-import type { UserId } from '../../../../shared/types/brands.js';
 import type { EstruturaDoLocal, IdadeDosCaes, ItemParaLevar } from '../../../../shared/db/schema.js';
 import type { ContagemNaTrilha, TrilhaTransacional } from '../../../audit/ports/audit-log.js';
 import type { RegistroDeImagemDeCatalogo } from '../../../media/ports/imagem-de-catalogo.js';
@@ -448,12 +448,13 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
     pedidoPorRef: (ref) => lerPedido(trx, sql<SqlBool>`j.ref = ${ref}`, true),
 
     async decidirPedido(id, decisao, decisor, agora) {
-      // `decided_by_user_id` fica fora do tipo da tabela (nenhuma leitura o
-      // projeta), e por isso o UPDATE e SQL cru.
+      // `decided_by_admin_id` fica fora do tipo da tabela (nenhuma leitura o
+      // projeta), e por isso o UPDATE e SQL cru. E conta do painel
+      // (`admin_accounts`), nunca de `users` (ADR-0027 item 20.2).
       await sql`
         UPDATE network_event_join_requests
            SET status = ${decisao}, decided_at = ${new Date(agora)}::timestamptz,
-               decided_by_user_id = ${decisor}::uuid
+               decided_by_admin_id = ${decisor}::uuid
          WHERE id = ${id}::uuid`.execute(trx);
       const lido = await lerPedido(trx, sql<SqlBool>`j.id = ${id}::uuid`, false);
       if (lido === null) throw new Error(`pedido ${id} sumiu dentro da propria transacao`);
@@ -477,7 +478,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
 
     async linhasDevolvidasDesde(conta, desde) {
       const r = await deps.contagem.somarNaJanela(trx, {
-        actorUserId: conta as UserId,
+        actorAdminId: conta,
         action: 'admin.network_join_request.listed',
         campo: 'rows_returned',
         desde,

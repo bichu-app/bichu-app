@@ -21,7 +21,7 @@ import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
 
 import { AppError } from '../../../shared/http/errors.js';
-import type { Instant, UserId } from '../../../shared/types/brands.js';
+import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
 import {
   novoId,
   preparadorFalso,
@@ -34,7 +34,7 @@ import { CatalogoAdministrativo, type Autor } from './catalogo-administrativo.js
 
 const AGORA = Date.UTC(2026, 8, 23, 15, 0, 0) as Instant;
 const AUTOR: Autor = {
-  userId: '0192a3b4-0000-7000-8000-00000000a0a0' as UserId,
+  adminAccountId: '0192a3b4-0000-7000-8000-00000000a0a0' as AdminAccountId,
   sessao: 'a1b2c3d4e5f60718',
   ip: '203.0.113.9',
   correlationId: 'corr-1',
@@ -116,8 +116,9 @@ void describe('escrita administrativa da Loja', () => {
       );
       const idDoItem = [...m.estado().itens.values()][0]?.id;
       for (const evento of trilha) {
-        assert.equal(evento.actorKind, 'user');
-        assert.equal(evento.actorUserId, AUTOR.userId);
+        assert.equal(evento.actorKind, 'admin');
+        assert.equal(evento.actorAdminId, AUTOR.adminAccountId);
+        assert.equal(evento.actorUserId, undefined, 'a trilha do painel nunca poe o id do admin em actor_user_id');
         assert.deepEqual(evento.metadata, { surface: 'admin', session: AUTOR.sessao });
         assert.match(evento.resourceId ?? '', /^[0-9a-f-]{36}$/, 'resource_id e o id interno, nunca o slug');
       }

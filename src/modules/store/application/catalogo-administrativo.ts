@@ -23,7 +23,7 @@
 import { AppError, problemas } from '../../../shared/http/errors.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
-import type { Instant, UserId } from '../../../shared/types/brands.js';
+import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
 import type { AuditAction, AuditEvent } from '../../audit/ports/audit-log.js';
 import type {
   PreparadorDeEnvioDeCatalogo,
@@ -75,7 +75,8 @@ import {
 
 /** Quem escreve, para a trilha. Nunca o e-mail (BICHUS-56 criterio 3). */
 export interface Autor {
-  readonly userId: UserId;
+  /** `admin_accounts.id` (ADR-0027 item 20). Nunca um `UserId`. */
+  readonly adminAccountId: AdminAccountId;
   /** Os 8 primeiros bytes, em hex, do hash da sessao (ADR-0027 item 8). */
   readonly sessao: string;
   readonly ip?: string | undefined;
@@ -338,8 +339,8 @@ export class CatalogoAdministrativo {
     corpo: { before?: Record<string, unknown>; after?: Record<string, unknown> },
   ): AuditEvent {
     return {
-      actorKind: 'user',
-      actorUserId: autor.userId,
+      actorKind: 'admin',
+      actorAdminId: autor.adminAccountId,
       actorIp: autor.ip,
       correlationId: autor.correlationId,
       action,
@@ -945,7 +946,7 @@ export class CatalogoAdministrativo {
     await this.deps.repositorio.emTransacao(async (tx) => {
       await tx.registrarIntencaoDeCatalogo({
         id: envio.uploadId,
-        userId: autor.userId,
+        adminAccountId: autor.adminAccountId,
         purpose: corpo.purpose,
         objectKey: envio.chave,
         declaredType: envio.contentType,

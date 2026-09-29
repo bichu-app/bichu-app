@@ -434,8 +434,9 @@ CREATE TABLE network_event_join_requests (
   -- pedir de novo nao lave a recusa (12.11).
   withdrawn_at        timestamptz,
 
-  -- Quem decidiu, para a trilha. Nunca projetado.
-  decided_by_user_id  uuid        REFERENCES users (id) ON DELETE SET NULL,
+  -- Quem decidiu nao mora aqui: e conta do painel (`admin_accounts`), que
+  -- nasce numa migracao posterior, e a coluna `decided_by_admin_id` entra com
+  -- ela (20260928000005, ADR-0027 item 20.2).
 
   CONSTRAINT network_event_join_requests_um_por_conta UNIQUE (event_id, user_id),
   CONSTRAINT network_event_join_requests_decidido_tem_instante

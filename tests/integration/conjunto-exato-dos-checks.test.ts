@@ -425,9 +425,15 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   },
   'public.upload_intents.upload_intents_kind_check': {
     coluna: 'kind',
-    // `catalog_image` entrou com o backoffice (ADR-0027 item 10, BICHUS-267):
-    // a imagem de item da Loja ou de encontro da Rede enviada pelo painel.
-    valores: ['pet_photo', 'found_report_photo', 'finder_photo', 'catalog_image'],
+    // A imagem de catalogo do painel NAO mora aqui desde 28/09 (ADR-0027 item
+    // 20.2): ela tem tabela propria, `catalog_upload_intents`. Esta tabela e do
+    // app e volta a lista da `development`.
+    valores: ['pet_photo', 'found_report_photo', 'finder_photo'],
+  },
+  // ADR-0027 A.3 (item 20.2). O proposito da intencao de envio do painel.
+  'public.catalog_upload_intents.catalog_upload_intents_proposito': {
+    coluna: 'purpose',
+    valores: ['store_item', 'network_event'],
   },
   'public.user_devices.user_devices_permissao': {
     coluna: 'push_permission',
@@ -572,6 +578,12 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // humana" um estado do banco, porque `pending_review` nunca e visivel.
   'public.network_events.network_events_revisao_so_da_comunidade':
     "CHECK (((origin = 'community'::text) OR (publication_status <> 'pending_review'::text)))",
+  // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
+  // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
+  'public.network_events.network_events_autor_da_comunidade':
+    "CHECK (((created_by_user_id IS NULL) OR (origin = 'community'::text)))",
+  'public.network_events.network_events_autor_do_painel':
+    "CHECK (((created_by_admin_id IS NULL) OR (origin = 'admin'::text)))",
 
   // ------------------------------------------------------------------
   // A vitrine da `Loja` (BICHUS-185 / BICHUS-189, migracao 20260922000009).
@@ -800,18 +812,6 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ser ligada. O CHECK é o que impede a intenção de foto de achado sem achado.
   'public.upload_intents.upload_intents_foto_de_achado_tem_aviso':
     "CHECK (((kind <> 'found_report_photo'::text) OR (found_report_id IS NOT NULL)))",
-  // ADR-0027 A.3 (BICHUS-267). O proposito da imagem de catalogo: lista
-  // fechada que admite nulo, e por isso nao tem a forma simples. Os dois
-  // valores sao o `enum` de `AdminCatalogImageIntentInput.purpose`.
-  'public.upload_intents.upload_intents_proposito_de_catalogo':
-    "CHECK (((purpose IS NULL) OR (purpose = ANY (ARRAY['store_item'::text, 'network_event'::text]))))",
-  // Nas DUAS direcoes: catalogo tem proposito, e o que nao e catalogo NAO tem.
-  // Uma foto de pet com `purpose = 'store_item'` seria exatamente a linha que
-  // a confirmacao de T9 existe para recusar.
-  'public.upload_intents.upload_intents_proposito_so_no_catalogo':
-    "CHECK (((kind = 'catalog_image'::text) = (purpose IS NOT NULL)))",
-  'public.upload_intents.upload_intents_catalogo_sem_pet':
-    "CHECK (((kind <> 'catalog_image'::text) OR (pet_id IS NULL)))",
   'public.users.users_phone_e164_formato':
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+55[0-9]{10,11}$'::text)))",
 };

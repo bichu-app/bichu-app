@@ -16,8 +16,9 @@
  *   (ISCA aprovado -> recusado);
  * - **a galeria nasce em `network_event_images`** e a leitura publica devolve
  *   `images` e `cover_image_url` so com imagem pronta;
- * - **apagar a conta do administrador que enviou a imagem nao trava**, e a
- *   imagem fica no encontro (`ON DELETE SET NULL`, decisao de 28/09);
+ * - **apagar a intencao de envio nao leva a imagem do encontro**
+ *   (`ON DELETE SET NULL`, decisao de 28/09), e a conta do painel que enviou
+ *   nao se apaga por baixo da imagem (item 20.1: conta desativa, nao some);
  * - **D54**: pedido de encontro terminado ha mais de 30 dias sai do banco.
  *
  * ## Este arquivo REPROVA quando nao consegue verificar
@@ -33,7 +34,7 @@ import { sql } from 'kysely';
 import { loadAppConfig } from '../../src/shared/config/app-config.js';
 import { createDb, type Db } from '../../src/shared/db/pool.js';
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
-import type { Instant, UserId } from '../../src/shared/types/brands.js';
+import type { AdminAccountId, Instant } from '../../src/shared/types/brands.js';
 import type { Clock } from '../../src/shared/time/clock.js';
 import { AppError } from '../../src/shared/http/errors.js';
 import {
@@ -61,6 +62,8 @@ let autor: Autor;
 let tutor: string;
 const avisos: string[] = [];
 const contas: string[] = [];
+/** Contas do painel criadas pela massa, em `admin_accounts` (ADR-0027 item 20). */
+const contasDoPainel: string[] = [];
 const slugs: string[] = [];
 
 function sufixo(): string {
@@ -118,14 +121,30 @@ async function idDoEncontro(slug: string): Promise<string> {
   return l.id;
 }
 
-async function trilhaDe(resourceId: string): Promise<{ action: string; before: unknown; after: unknown; metadata: unknown }[]> {
+async function trilhaDe(resourceId: string): Promise<
+  { action: string; before: unknown; after: unknown; metadata: unknown; actor_kind: string; actor_admin_id: string | null; actor_user_id: string | null }[]
+> {
   const linhas = await banco.db
     .selectFrom('audit.events')
-    .select(['action', 'before', 'after', 'metadata'])
+    .select(['action', 'before', 'after', 'metadata', 'actor_kind', 'actor_admin_id', 'actor_user_id'])
     .where('resource_id', '=', resourceId)
     .orderBy('occurred_at', 'asc')
     .execute();
   return linhas;
+}
+
+/** Uma conta do painel. O hash e de teste e nunca confere com senha nenhuma. */
+async function novaContaDoPainel(nome: string): Promise<AdminAccountId> {
+  const id = ids.uuidv7() as AdminAccountId;
+  await banco.db.insertInto('admin_accounts').values({
+    id,
+    email: `rede-painel-${sufixo()}@exemplo.invalid`,
+    display_name: nome,
+    password_phc: '$pbkdf2-sha512$i=1$c2Fs$aGFzaA',
+    password_updated_at: new Date(),
+  }).execute();
+  contasDoPainel.push(id);
+  return id;
 }
 
 async function novaConta(ajuste: { displayName?: string | null; verificada?: boolean } = {}): Promise<string> {
@@ -153,7 +172,7 @@ async function envio(purpose: 'network_event' | 'store_item', dono: string): Pro
   const id = ids.uuidv7();
   await registroDeImagemDeCatalogo.registrarIntencao(banco.db, {
     id,
-    userId: dono,
+    adminAccountId: dono,
     purpose,
     objectKey: chaveDoOriginalDeCatalogo(ids.random128()),
     declaredType: 'image/jpeg',
@@ -171,9 +190,8 @@ function codigo(erro: unknown): string | undefined {
 before(async () => {
   config = loadAppConfig();
   banco = createDb(config.databaseUrl);
-  const userId = await novaConta({ displayName: 'Operacao' });
-  await banco.db.insertInto('user_roles').values({ user_id: userId, role: 'admin' }).execute();
-  autor = { userId: userId as UserId, sessao: 'a1b2c3d4e5f60718', ip: '203.0.113.7', correlationId: randomUUID() };
+  const adminAccountId = await novaContaDoPainel('Operacao');
+  autor = { adminAccountId, sessao: 'a1b2c3d4e5f60718', ip: '203.0.113.7', correlationId: randomUUID() };
   tutor = await novaConta({ displayName: null });
   r = rede(criarTrilhaTransacional({ ids, clock: relogio, ipHmacKey: config.ipHmacKey }));
 });
@@ -183,6 +201,12 @@ after(async () => {
   for (const slug of slugs) await banco.db.deleteFrom('network_events').where('slug', '=', slug).execute();
   await sql`delete from jobs where kind = 'network.join_request_approved'`.execute(banco.db);
   for (const id of contas) await banco.db.deleteFrom('users').where('id', '=', id).execute();
+  await sql`delete from catalog_images where upload_intent_id in
+              (select id from catalog_upload_intents where admin_account_id = any(${contasDoPainel}::uuid[]))`.execute(banco.db);
+  await sql`delete from catalog_upload_intents where admin_account_id = any(${contasDoPainel}::uuid[])`.execute(banco.db);
+  await sql`update network_event_join_requests set decided_by_admin_id = null
+             where decided_by_admin_id = any(${contasDoPainel}::uuid[])`.execute(banco.db);
+  for (const id of contasDoPainel) await banco.db.deleteFrom('admin_accounts').where('id', '=', id).execute();
   await banco.close();
 });
 
@@ -195,9 +219,32 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     const trilha = await trilhaDe(id);
     assert.deepEqual(trilha.map((t) => t.action), ['admin.network_event.created']);
     assert.deepEqual(trilha[0]?.metadata, { surface: 'admin', session: autor.sessao });
+    // ADR-0027 20.7 fatia 7: a trilha do painel e `actor_kind = 'admin'`, com o
+    // id em `actor_admin_id`, e nunca em `actor_user_id`.
+    assert.equal(trilha[0]?.actor_kind, 'admin');
+    assert.equal(trilha[0]?.actor_admin_id, autor.adminAccountId);
+    assert.equal(trilha[0]?.actor_user_id, null);
     assert.ok(!JSON.stringify(trilha).includes('-23.561'), 'a coordenada foi para a trilha');
     const peloSlug = await banco.db.selectFrom('audit.events').select('id').where('resource_id', '=', criado.recurso.slug).execute();
     assert.equal(peloSlug.length, 0);
+  });
+
+  void it('fatia 7: autor do painel so em encontro admin, autor do app so em encontro community (CHECK)', async () => {
+    const criado = await criar();
+    const id = await idDoEncontro(criado.recurso.slug);
+    // O autor do painel cabe no encontro do painel.
+    await sql`update network_events set created_by_admin_id = ${autor.adminAccountId}::uuid where id = ${id}::uuid`.execute(banco.db);
+    // ISCA: encontro `community` com autor do painel viola o CHECK.
+    const doPainelNaComunidade = await sql`update network_events set origin = 'community' where id = ${id}::uuid`
+      .execute(banco.db)
+      .catch((e: unknown) => e);
+    assert.equal((doPainelNaComunidade as { constraint?: string }).constraint, 'network_events_autor_do_painel');
+    // ISCA: encontro `admin` com autor do app viola o outro CHECK.
+    const doAppNoPainel = await sql`update network_events set created_by_user_id = ${tutor}::uuid where id = ${id}::uuid`
+      .execute(banco.db)
+      .catch((e: unknown) => e);
+    assert.equal((doAppNoPainel as { constraint?: string }).constraint, 'network_events_autor_da_comunidade');
+    await sql`update network_events set created_by_admin_id = null where id = ${id}::uuid`.execute(banco.db);
   });
 
   void it('ISCA: com a trilha falhando, o encontro NAO e gravado', async () => {
@@ -243,7 +290,7 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
 
 void describe('a galeria do encontro e a conta do administrador', () => {
   void it('galeria em network_event_images; a leitura publica so mostra imagem pronta, e a capa e a posicao 0', async () => {
-    const upload = await envio('network_event', autor.userId);
+    const upload = await envio('network_event', autor.adminAccountId);
     const criado = await criar({ images: [{ upload_id: upload, alt_text: 'Caes correndo no gramado' }] });
     const id = await idDoEncontro(criado.recurso.slug);
     const galeria = await banco.db.selectFrom('network_event_images').selectAll().where('event_id', '=', id).execute();
@@ -259,16 +306,18 @@ void describe('a galeria do encontro e a conta do administrador', () => {
   });
 
   void it('T9: envio de imagem de produto nao serve para encontro', async () => {
-    const upload = await envio('store_item', autor.userId);
+    const upload = await envio('store_item', autor.adminAccountId);
     const erro = await r.criarEncontro(autor, corpo({ images: [{ upload_id: upload, alt_text: 'Produto' }] }) as never).catch((e: unknown) => e);
     assert.equal(codigo(erro), 'upload_not_usable');
   });
 
-  void it('apagar a conta do administrador que enviou a imagem NAO trava, e a imagem fica no encontro', async () => {
-    const outro = await novaConta({ displayName: 'Outro admin' });
+  void it('apagar a intencao de envio NAO leva a imagem do encontro; a conta do painel que enviou nao se apaga', async () => {
+    const outro = await novaContaDoPainel('Outro admin');
     const upload = await envio('network_event', outro);
     const criado = await criar({ images: [{ upload_id: upload, alt_text: 'Capa do encontro' }] });
-    await banco.db.deleteFrom('users').where('id', '=', outro).execute();
+    const apagarConta = await banco.db.deleteFrom('admin_accounts').where('id', '=', outro).execute().catch((e: unknown) => e);
+    assert.equal((apagarConta as { code?: string }).code, '23503', 'a conta do painel sumiu por baixo do envio');
+    await banco.db.deleteFrom('catalog_upload_intents').where('id', '=', upload).execute();
     const imagem = await sql<{ upload_intent_id: string | null }>`
       select c.upload_intent_id from network_event_images i join catalog_images c on c.id = i.image_id
        where i.event_id = ${await idDoEncontro(criado.recurso.slug)}::uuid`.execute(banco.db);
@@ -289,7 +338,7 @@ void describe('a fila de pedidos, contra Postgres (D53 a D56)', () => {
       .selectFrom('audit.events')
       .select(['metadata'])
       .where('action', '=', 'admin.network_join_request.listed')
-      .where('actor_user_id', '=', autor.userId)
+      .where('actor_admin_id', '=', autor.adminAccountId)
       .orderBy('occurred_at', 'desc')
       .executeTakeFirst();
     assert.ok(linha !== undefined, 'a leitura da fila nao foi gravada na trilha (D55)');
@@ -299,13 +348,13 @@ void describe('a fila de pedidos, contra Postgres (D53 a D56)', () => {
   });
 
   void it('D56: com 300 linhas na hora somadas da trilha, a leitura responde 429', async () => {
-    const outro = await novaConta({ displayName: 'Admin do teto' });
-    const autorDoTeto: Autor = { ...autor, userId: outro as UserId };
+    const outro = await novaContaDoPainel('Admin do teto');
+    const autorDoTeto: Autor = { ...autor, adminAccountId: outro };
     const trilha = criarTrilhaTransacional({ ids, clock: relogio, ipHmacKey: config.ipHmacKey });
     await banco.db.transaction().execute((trx) =>
       trilha.recordIn(trx, {
-        actorKind: 'user',
-        actorUserId: outro as UserId,
+        actorKind: 'admin',
+        actorAdminId: outro,
         action: 'admin.network_join_request.listed',
         resourceKind: 'network_join_request',
         metadata: { rows_returned: 300 },
@@ -322,9 +371,9 @@ void describe('a fila de pedidos, contra Postgres (D53 a D56)', () => {
     const ref = await pedir(evento, tutor);
     const aprovado = await r.aprovarPedido(autor, ref);
     assert.equal(aprovado.status, 'approved');
-    const linha = await sql<{ decided_by_user_id: string; status: string }>`
-      select decided_by_user_id, status from network_event_join_requests where ref = ${ref}`.execute(banco.db);
-    assert.equal(linha.rows[0]?.decided_by_user_id, autor.userId);
+    const linha = await sql<{ decided_by_admin_id: string; status: string }>`
+      select decided_by_admin_id, status from network_event_join_requests where ref = ${ref}`.execute(banco.db);
+    assert.equal(linha.rows[0]?.decided_by_admin_id, autor.adminAccountId);
     const trabalhos = await sql<{ n: string }>`
       select count(*) as n from jobs where kind = 'network.join_request_approved'
          and payload ->> 'join_request_id' = (select id::text from network_event_join_requests where ref = ${ref})`.execute(banco.db);
@@ -392,7 +441,13 @@ void describe('a fila de pedidos, contra Postgres (D53 a D56)', () => {
 });
 
 void describe('o aviso a todos os administradores (D52, D60), contra Postgres', () => {
-  void it('vai para toda conta ativa com papel admin, e nunca para a conta sem o papel', async () => {
+  void it('vai para toda conta ativa do painel, e nunca para conta do app nem para conta desativada', async () => {
+    const desativada = await novaContaDoPainel('Desativada');
+    await banco.db
+      .updateTable('admin_accounts')
+      .set({ status: 'disabled', disabled_at: new Date() })
+      .where('id', '=', desativada)
+      .execute();
     const enviados: { para: string; assunto: string }[] = [];
     const aviso = criarAvisoAosAdministradores({
       db: banco.db,
@@ -405,10 +460,12 @@ void describe('o aviso a todos os administradores (D52, D60), contra Postgres', 
       registrarOcorrencia: () => undefined,
     });
     await aviso.avisar({ assunto: 'Encontro criado: teste', linhas: ['linha'] });
-    const doAutor = await banco.db.selectFrom('users').select('email').where('id', '=', autor.userId).executeTakeFirstOrThrow();
+    const doAutor = await banco.db.selectFrom('admin_accounts').select('email').where('id', '=', autor.adminAccountId).executeTakeFirstOrThrow();
     const doTutor = await banco.db.selectFrom('users').select('email').where('id', '=', tutor).executeTakeFirstOrThrow();
+    const doDesativado = await banco.db.selectFrom('admin_accounts').select('email').where('id', '=', desativada).executeTakeFirstOrThrow();
     assert.ok(enviados.some((e) => e.para === doAutor.email), 'o administrador nao recebeu o aviso');
-    assert.ok(!enviados.some((e) => e.para === doTutor.email), 'a conta sem papel admin recebeu o aviso');
+    assert.ok(!enviados.some((e) => e.para === doTutor.email), 'a conta do app recebeu o aviso do painel');
+    assert.ok(!enviados.some((e) => e.para === doDesativado.email), 'a conta desativada do painel recebeu o aviso');
     assert.match(enviados[0]?.assunto ?? '', /^\[Bichu painel\] Encontro criado/);
   });
 

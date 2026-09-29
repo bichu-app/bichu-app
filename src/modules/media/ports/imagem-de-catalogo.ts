@@ -61,7 +61,8 @@ export interface PreparadorDeEnvioDeCatalogo {
 
 export interface NovaIntencaoDeCatalogo {
   readonly id: string;
-  readonly userId: string;
+  /** `admin_accounts.id`: o envio de catalogo e do painel, nunca de `users`. */
+  readonly adminAccountId: string;
   readonly purpose: PropositoDaImagem;
   readonly objectKey: ObjectKey;
   readonly declaredType: string;
