@@ -112,7 +112,7 @@ import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters
 import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
 import { criarVerificadorDeCaptcha } from '../modules/admin-access/adapters/external/recaptcha-enterprise.js';
-import { listaDeSenhasVazadasIndisponivel } from '../modules/identity/ports/lista-de-senhas-vazadas.js';
+import { criarListaDeSenhasVazadasPorFaixa } from '../modules/identity/adapters/external/lista-de-senhas-vazadas-por-faixa.js';
 import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
 
@@ -332,10 +332,14 @@ export async function main(): Promise<void> {
       siteKey: optionalEnv('CAPTCHA_SITE_KEY'),
       projeto: optionalEnv('CAPTCHA_PROJECT'),
     }),
-    // D43: nao ha base de senhas vazadas no produto ainda (a porta
-    // `PasswordBreachList` de `password-policy.ts` nunca foi implementada). A
-    // lista responde `desconhecido`, e a pendencia esta na entrega da BICHUS-259.
-    senhasVazadas: listaDeSenhasVazadasIndisponivel,
+    // D43: a MESMA base do `conta-admin` (consulta por faixa, k-anonimato,
+    // 5 s de teto). Senha vazada responde o 401 comum e avisa os
+    // administradores; base fora do ar no LOGIN deixa entrar e grava isso na
+    // trilha (decisao do cliente, 28/09: recusar trancaria todos os
+    // administradores do lado de fora numa queda do servico externo). O
+    // `conta-admin` continua recusando nesse caso, porque definir senha e o
+    // unico momento em que da para dizer nao sem trancar ninguem.
+    senhasVazadas: criarListaDeSenhasVazadasPorFaixa(),
     avisos: mailer,
     ids,
     clock: systemClock,

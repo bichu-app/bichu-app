@@ -77,8 +77,11 @@ const IRMAO = 'https://exemplo.test';
 const SENHA = 'uma frase longa que so a operacao conhece';
 /** A dubla da base de vazadas diz que ESTA senha vazou, e nada sabe das outras. */
 const SENHA_VAZADA = 'uma frase longa que ja apareceu num vazamento';
+/** A dubla CONFERE esta (responde "nao vazou"), para o caso em que a base esta de pe. */
+const SENHA_CONFERIDA = 'uma frase longa que a base de vazadas conferiu';
 const vazadas: ListaDeSenhasVazadas = {
-  contem: (senha) => Promise.resolve(senha === SENHA_VAZADA ? true : 'desconhecido'),
+  contem: (senha) =>
+    Promise.resolve(senha === SENHA_VAZADA ? true : senha === SENHA_CONFERIDA ? false : 'desconhecido'),
 };
 const CAPTCHA_BOM = 'token-de-captcha-que-o-duble-aprova-0123456789';
 
@@ -120,6 +123,7 @@ let principal: Servidor;
 let comTrilhaQuebrada: Servidor;
 let phc: string;
 let phcVazada: string;
+let phcConferida: string;
 const contasDoApp: UserId[] = [];
 const contasDoPainel: AdminAccountId[] = [];
 const caixa: Mensagem[] = [];
@@ -363,6 +367,7 @@ before(async () => {
   assinador = criarTokenSigner(config.token);
   phc = await gerarHashDeSenha(SENHA);
   phcVazada = await gerarHashDeSenha(SENHA_VAZADA);
+  phcConferida = await gerarHashDeSenha(SENHA_CONFERIDA);
   principal = await subir(false);
   comTrilhaQuebrada = await subir(true);
 });
@@ -646,6 +651,26 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
     assert.ok(para.has(outra.email) && para.has(vazou.email), `o aviso nao foi a todos: ${[...para].join(', ')}`);
     assert.ok(avisos.every((m) => /conta-admin redefinir-senha/.test(m.corpo) && !/https?:\/\//.test(m.corpo)),
       'o aviso de senha vazada precisa mandar ao comando, e nao a um link');
+  });
+
+  void it('QA bug 2: base de vazadas fora do ar no login deixa entrar, e a trilha diz que nao conferiu', async () => {
+    const semBase = await contaDoPainel();
+    const comBase = await contaDoPainel({ phc: phcConferida });
+    const entrar = (email: string, password: string): Promise<Resposta> =>
+      chamar(principal, 'POST', '/admin/auth/login', {
+        cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email, password },
+      });
+    assert.equal((await entrar(semBase.email, SENHA)).status, 200, 'base fora do ar trancou o login');
+    assert.equal((await entrar(comBase.email, SENHA_CONFERIDA)).status, 200);
+    const aberta = async (conta: AdminAccountId) => {
+      const linha = await banco.db.selectFrom('audit.events').select('metadata')
+        .where('action', '=', 'admin.session.opened').where('actor_admin_id', '=', conta)
+        .orderBy('occurred_at', 'desc').executeTakeFirstOrThrow();
+      return linha.metadata as Record<string, unknown>;
+    };
+    assert.equal((await aberta(semBase.id))['breach_check'], 'unavailable', 'a trilha nao registrou a falta de conferencia');
+    // ISCA: com a base de pe e a senha conferida, nada de marca.
+    assert.equal((await aberta(comBase.id))['breach_check'], undefined, 'marcou falta de conferencia com a base respondendo');
   });
 });
 

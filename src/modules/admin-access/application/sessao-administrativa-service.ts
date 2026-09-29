@@ -476,7 +476,8 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         throw problemas.credencialRecusada();
       }
       const confere = await verificarSenha(entrada.password, conta.passwordPhc);
-      const vazada = (await consultaAVazadas) === true;
+      const vereditoDaBase = await consultaAVazadas;
+      const vazada = vereditoDaBase === true;
       if (!confere) {
         await registrarSenhaErrada(conta, contexto);
         throw problemas.credencialRecusada();
@@ -536,12 +537,23 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
             action: 'admin.session.opened',
             resourceKind: 'admin_session',
             resourceId: id,
-            metadata: metadataDaSessao(etiqueta),
+            // Base de vazadas fora do ar no login: entra (decisao do cliente,
+            // 28/09), e a trilha diz que a senha NAO foi conferida.
+            metadata: metadataDaSessao(
+              etiqueta,
+              vereditoDaBase === 'desconhecido' ? { breach_check: 'unavailable' } : {},
+            ),
           },
         };
       });
 
       await deps.contas.registrarLogin(conta.id, agora);
+      if (vereditoDaBase === 'desconhecido') {
+        deps.registrarOcorrencia(
+          { evento: 'admin.session.breach_check_unavailable', conta: conta.id, correlationId: contexto.correlationId },
+          'login administrativo sem conferencia da base de senhas vazadas (base fora do ar)',
+        );
+      }
       await avisarSessaoAberta(conta, id, agora, contexto);
 
       return {

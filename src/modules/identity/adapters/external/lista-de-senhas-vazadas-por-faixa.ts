@@ -54,7 +54,7 @@ export function criarListaDeSenhasVazadasPorFaixa(buscar: Buscar = globalThis.fe
       const sufixo = hash.slice(TAMANHO_DO_PREFIXO);
       try {
         const resposta = await buscar(`${ENDERECO_DA_FAIXA}${prefixo}`, {
-          headers: { 'Add-Padding': 'true', 'User-Agent': 'bichu-conceder-papel' },
+          headers: { 'Add-Padding': 'true', 'User-Agent': 'bichu-senhas-vazadas' },
           signal: AbortSignal.timeout(TIMEOUT_MS),
         });
         if (!resposta.ok) return 'desconhecido';
