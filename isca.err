@@ -1,0 +1,13 @@
+Dockerfile:48
+--------------------
+  47 |     ARG BUILD_COMMIT
+  48 | >>> RUN set -eu; \
+  49 | >>>     if ! printf '%s' "${BUILD_COMMIT:-}" | grep -Eq '^[0-9a-f]{7,40}$'; then \
+  50 | >>>       echo "ERRO: BUILD_COMMIT nao foi injetado neste build (veio '${BUILD_COMMIT:-}')." >&2; \
+  51 | >>>       echo "  Via compose: BUILD_COMMIT=\$(git rev-parse HEAD) docker compose build web" >&2; \
+  52 | >>>       exit 1; \
+  53 | >>>     fi; \
+  54 | >>>     printf '%s' "$BUILD_COMMIT" > /commit
+  55 |     
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c set -eu;     if ! printf '%s' \"${BUILD_COMMIT:-}\" | grep -Eq '^[0-9a-f]{7,40}$'; then       echo \"ERRO: BUILD_COMMIT nao foi injetado neste build (veio '${BUILD_COMMIT:-}').\" >&2;       echo \"  Via compose: BUILD_COMMIT=\\$(git rev-parse HEAD) docker compose build web\" >&2;       exit 1;     fi;     printf '%s' \"$BUILD_COMMIT\" > /commit" did not complete successfully: exit code: 1

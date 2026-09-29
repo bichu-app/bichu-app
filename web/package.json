@@ -1,0 +1,17 @@
+{
+  "name": "bichu-web",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12 <23"
+  },
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "start": "node servidor.mjs"
+  },
+  "dependencies": {
+    "@astrojs/node": "11.1.6",
+    "astro": "7.3.4"
+  }
+}
