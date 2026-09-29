@@ -46,7 +46,12 @@ import {
   registrarRota,
   zerarInventario,
 } from '../../../../shared/http/registrar-rota.js';
-import { criarContadorDesligado, criarContadorEmMemoria } from '../../../../shared/http/rate-limit.js';
+import {
+  criarContadorDesligado,
+  criarContadorEmMemoria,
+  inicioDaJanela,
+  janelaEmSegundos,
+} from '../../../../shared/http/rate-limit.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import {
   resolvedoresDoEnvio,
@@ -150,6 +155,42 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
       for (let i = 0; i <= TETO_POR_HORA; i += 1) await enviar(app, CONVERSA);
       const outra = await enviar(app, OUTRA_CONVERSA);
       assert.equal(outra.statusCode, 201, 'o teto de uma conversa calou a pessoa na outra');
+    } finally {
+      await app.close();
+    }
+  });
+
+  /**
+   * O MESMO caso, com o relógio preso dentro da hora em que os baldes colidiam.
+   *
+   * O caso acima usa `Date.now()`, então ele só via o defeito se a suíte por
+   * acaso rodasse entre 00:00 e 01:00 UTC — foi por isso que ele reprovou duas
+   * vezes num dia e catorze vezes não no outro, e por isso a hipótese foi para
+   * carga da máquina. Um caso de regressão que depende da hora em que a esteira
+   * roda não é um caso de regressão: é o mesmo defeito intermitente, de novo.
+   *
+   * `inicioDaJanela` é `floor(t/janela)*janela` sobre a época, então os inícios
+   * de `1h` e de `24h` coincidem exatamente na primeira hora do dia UTC. Este
+   * caso prende o relógio ali e passa a valer em qualquer hora do dia.
+   */
+  void it('00:30 UTC — a hora em que as duas entradas somavam no mesmo balde', async () => {
+    zerarInventario();
+    // Primeira hora do dia UTC: `inicioDaJanela(t, 1h) === inicioDaJanela(t, 24h)`.
+    const dentroDaColisao = Date.parse('2026-09-29T00:30:00Z');
+    assert.equal(
+      inicioDaJanela(dentroDaColisao, janelaEmSegundos('1h')).getTime(),
+      inicioDaJanela(dentroDaColisao, janelaEmSegundos('24h')).getTime(),
+      'a premissa deste caso caiu: os dois inícios de janela deixaram de coincidir',
+    );
+    const app = servidor(criarContadorEmMemoria(() => dentroDaColisao));
+    try {
+      for (let i = 0; i < TETO_POR_HORA; i += 1) {
+        const resposta = await enviar(app, CONVERSA);
+        assert.equal(resposta.statusCode, 201, `a ${String(i + 1)}ª foi recusada cedo demais`);
+      }
+      const estourou = await enviar(app, CONVERSA);
+      assert.equal(estourou.statusCode, 429, 'a 31ª passou: o teto parou de valer');
+      assert.equal(tipoDe(estourou.body), 'rate-limited');
     } finally {
       await app.close();
     }

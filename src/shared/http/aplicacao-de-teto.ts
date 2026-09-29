@@ -281,14 +281,57 @@ export function resolvedoresGenericos(deps: DependenciasDoTeto): Resolvedores {
   };
 }
 
-/** A chave do balde. A dimensão entra no nome para que dois tetos não se somem. */
+/**
+ * A chave do balde. Ela precisa identificar a POLÍTICA, e não só a dimensão.
+ *
+ * ## O defeito que esta função teve, e o que ele custava
+ *
+ * Até aqui a chave era `operationId:dimensão[:appliesTo]|valores`. Faltava tudo
+ * o que distingue duas entradas declaradas na MESMA dimensão — e o contrato
+ * declara cinco operações assim. Duas entradas montavam a mesma chave, o
+ * contador somava as duas no mesmo balde, e **cada requisição era contada duas
+ * vezes**. O teto recusava na metade do número que a política escreveu.
+ *
+ * `postConversationMessage` declara 30/`1h` (`deny_429`) e 200/`24h` na
+ * dimensão `conversation_participant`. O contador ainda separava os baldes pelo
+ * início da janela, então o sintoma só aparecia quando os dois inícios
+ * coincidem — e `inicioDaJanela` é `floor(t/janela)*janela` sobre a época, então
+ * os inícios de `1h` e de `24h` coincidem **toda madrugada entre 00:00 e 01:00
+ * UTC**, que é 21h no Brasil, horário de pico da conversa. Nessa hora o teto de
+ * 30 recusava na **16ª** mensagem, com 429. Fora dela, nada.
+ *
+ * O sintoma é o pior formato possível: some antes de alguém conseguir olhar, e
+ * volta todo dia. A suíte deste repositório o mostrou como caso intermitente —
+ * reprovou duas vezes no dia 22/09 e nenhuma em catorze tentativas no dia 28/09,
+ * o que levou a hipótese para carga da máquina. Não era carga: era a hora.
+ *
+ * ## Por que a janela no nome não bastava
+ *
+ * `openLostCase` declara 5/`24h` e 20/`24h` na dimensão `account`: **mesma
+ * janela**. Para essas duas a janela no nome não separa nada, e a contagem em
+ * dobro não tem hora — vale o dia inteiro, todo dia. Por isso a chave carrega
+ * também `limit` e `onExceed`: é o conjunto que identifica a entrada, e duas
+ * entradas aplicáveis distintas passam a ser dois baldes por construção, sem
+ * depender de as janelas serem diferentes.
+ *
+ * `createStrayFoundReport` (10/`24h` `deny_429` + 30/`30d`) tinha a terceira
+ * forma: os inícios de `24h` e `30d` coincidem um dia a cada trinta, e nesse dia
+ * inteiro o teto de 10 recusava na 6ª.
+ *
+ * ## O custo
+ *
+ * Trocar a chave **zera os contadores uma vez**, no deploy. É o custo certo: o
+ * contador antigo estava somando entradas que não deviam se somar.
+ */
 export function montarChave(
   operationId: string,
   entrada: RateLimitEntry,
   valores: readonly string[],
 ): string {
   const sufixo = entrada.appliesTo === undefined ? '' : `:${entrada.appliesTo}`;
-  return `${operationId}:${entrada.dimension.join('+')}${sufixo}|${valores.join('|')}`;
+  const janela = entrada.window.trim();
+  const politica = `${janela}:${String(entrada.limit)}:${entrada.onExceed}`;
+  return `${operationId}:${entrada.dimension.join('+')}@${politica}${sufixo}|${valores.join('|')}`;
 }
 
 /**
