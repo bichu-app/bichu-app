@@ -626,7 +626,15 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// seguinte pelo `RodapeDaPaginacao`. Nada a ver com camera: nenhuma das duas
 /// toca em foto, e as telas do assistente de cadastro (`app/lib/telas/pet/`)
 /// seguem intocadas.
-const String _arvoreDasTelas = 'cfba3eb42ecc9c32b91a500e7748fb50463a7b92';
+///
+/// Troca de 28/09, correcao da gaveta lateral (sem chave de issue no
+/// acionamento: o cliente reprovou o menu por escrito e a correcao saiu na
+/// hora): `telas/gaveta_de_secoes.dart` passou a mostrar so o submenu da secao
+/// atual, uma linha por item, e `telas/casca_com_abas.dart` deixou de montar a
+/// gaveta e o gatilho nas secoes sem sub-destino. Nada a ver com camera:
+/// nenhuma das duas toca em foto, e as telas do assistente de cadastro
+/// (`app/lib/telas/pet/`) seguem intocadas.
+const String _arvoreDasTelas = '587b9bb6d5b7f7213ee053444e57d99b5ed9df19';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

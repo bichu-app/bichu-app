@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../roteamento/rotas.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
-import 'casca_com_abas.dart';
 
 /// A FORMA de um sub-destino, e por que ela decide se ele entra na gaveta.
 ///
@@ -65,7 +64,6 @@ class SubDestino {
     required this.forma,
     required this.estado,
     this.rota,
-    this.descricao,
   });
 
   /// O nome curto, como a UX 27.5 o escreve.
@@ -77,9 +75,6 @@ class SubDestino {
   /// O endereco, quando existe. Nulo e a afirmacao de que ainda nao ha para
   /// onde ir, e o portao a cobra.
   final String? rota;
-
-  /// A linha de apoio do item na gaveta. So os itens vivos tem.
-  final String? descricao;
 
   /// Se ele vira item da gaveta.
   ///
@@ -134,7 +129,6 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.adocoes,
-        descricao: 'Os pets da vizinhança que estão procurando uma casa.',
       ),
       SubDestino(
         rotulo: 'Busca',
@@ -161,7 +155,6 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.escanear,
-        descricao: 'Leia o QR da coleira de um pet.',
       ),
       SubDestino(
         rotulo: 'Registrar achado avulso',
@@ -172,7 +165,6 @@ abstract final class RegistroDeSubDestinos {
         // sustenta.
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.registrarAchado,
-        descricao: 'Achou um animal na rua? Registre aqui.',
       ),
       SubDestino(
         rotulo: 'Possíveis correspondências',
@@ -268,7 +260,6 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.adocoes,
-        descricao: 'Abre a lista de Pets já filtrada em adoção.',
       ),
       SubDestino(
         rotulo: 'Avaliações da comunidade',
@@ -360,7 +351,6 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.cadastrarPet,
-        descricao: 'Os três passos do cadastro do seu pet.',
       ),
       SubDestino(
         rotulo: 'A tag do meu pet',
@@ -374,7 +364,6 @@ abstract final class RegistroDeSubDestinos {
         forma: FormaDoSubDestino.destino,
         estado: EstadoDoSubDestino.existe,
         rota: Rotas.escanear,
-        descricao: 'A segunda porta do leitor, na sua conta.',
       ),
       SubDestino(
         rotulo: 'Convidar vizinhos',
@@ -453,110 +442,78 @@ abstract final class RegistroDeSubDestinos {
 
 /// Os textos da gaveta, num lugar so.
 ///
-/// Fora do widget porque o portao de navegacao os compara com o que a tela
-/// pinta, e uma constante privada obrigaria o teste a repetir a frase a mao --
-/// que e a tautologia que este projeto ja pegou tres vezes. O caso que compara
-/// texto renderizado com a constante que o produz esta marcado como tal.
+/// Sao dois, e o numero e a decisao: o cliente reprovou a gaveta em 23/09 com
+/// "parece mais uma pagina do que menu, com tanto texto, tanta explicacao".
+/// Sairam o titulo, o paragrafo que explicava a divisao com a barra de baixo e
+/// as linhas de `Em construcao` que nomeavam nove telas inexistentes. Menu nao
+/// carrega roadmap, e explicacao de navegacao que precisa ser escrita na
+/// propria navegacao e navegacao que nao ficou clara.
+///
+/// O que sobra e o nome acessivel do gatilho, que **nao** e pintado na gaveta.
 abstract final class TextosDaGaveta {
-  static const String titulo = 'Atalhos das seções';
-
-  /// A frase do criterio 4 do acionamento: **qual menu navega para onde.**
+  /// O nome acessivel do gatilho (11.23.3).
   ///
-  /// No Material 3 a gaveta e ALTERNATIVA a barra inferior, e nao complemento.
-  /// Este app vai ter os dois por decisao do cliente, e dois menus sem divisao
-  /// declarada viram dois menus competindo. A divisao e esta, e ela e
-  /// estrutural e nao so escrita: **a gaveta nao tem item de secao nenhum**, e
-  /// o portao reprova se algum aparecer.
-  static const String comoOsDoisSeDividem =
-      'As cinco seções ficam na barra de baixo. Aqui ficam só os caminhos '
-      'dentro de cada seção.';
-
-  static const String abrirAGaveta = 'Abrir os atalhos das seções';
-
-  /// O prefixo da linha que NOMEIA o que ainda nao existe.
-  static const String emConstrucao = 'Em construção: ';
-
-  /// Como a linha de pendentes termina, quando a secao nao tem atalho vivo.
-  static const String semAtalhoVivo =
-      'Esta seção ainda não tem nenhum atalho pronto.';
+  /// Ele diz o que o botao ABRE, e nao so "menu": com uma barra de cinco
+  /// secoes logo abaixo, "menu" seria ambiguo entre os dois. E ele diz
+  /// **desta secao**, porque e so isso que a gaveta passou a mostrar.
+  static const String abrirAGaveta = 'Abrir o submenu desta seção';
 }
 
-/// A gaveta lateral com o submenu de cada uma das cinco seções.
+/// A gaveta lateral: **o submenu da secao em que a pessoa esta**, e nada mais.
 ///
-/// ## O que ela NAO faz, e e a decisao que a define
+/// ## A decisao que a define, e que mudou em 23/09
 ///
-/// **Ela nao navega para secao.** Os cinco nomes aparecem como CABECALHO de
-/// grupo, sem toque, sem seta e sem papel de botao. Quem troca de secao e a
-/// barra de baixo; quem entra num caminho dentro da secao e a gaveta. No
-/// Material 3 a gaveta e alternativa a barra inferior, e ter as duas sem essa
-/// divisao produziria dois menus oferecendo a mesma viagem -- o risco que o
-/// product manager apontou por escrito.
+/// Ela mostrava as cinco secoes com os sub-destinos de todas, um titulo, um
+/// paragrafo de explicacao e tres linhas nomeando o que nao existe: 736
+/// caracteres em 22 blocos de texto para seis itens que navegam. O cliente
+/// leu e reprovou: **a gaveta tinha virado uma pagina, e ela replicava o menu
+/// principal em vez de abrir o submenu dele.**
 ///
-/// ## O que ela faz com o que nao esta construido
+/// O que ela e agora: uma linha por sub-destino da secao ATUAL, so o rotulo,
+/// nada das outras quatro. A barra de baixo troca de secao; a gaveta entra nos
+/// caminhos de dentro da secao em que se esta. A divisao entre os dois menus
+/// deixou de ser uma frase na tela e passou a ser a estrutura: nao ha como a
+/// gaveta oferecer a mesma viagem que a barra, porque ela nao conhece secao
+/// nenhuma alem da propria.
 ///
-/// O criterio 2 da BICHUS-62 proibe renderizar acao sem destino, e este app ja
-/// teve dois botoes apontando para o vazio. Entre as duas saidas permitidas --
-/// nao aparecer, ou aparecer visivelmente indisponivel --, esta gaveta escolhe
-/// **nao renderizar controle nenhum** para o que nao existe, e NOMEAR em texto
-/// corrido o que vem depois.
+/// ## O nome da secao NAO aparece como cabecalho
 ///
-/// A razao e medida, e nao de gosto: o inventario de 27.5 tem quarenta e oito
-/// linhas e so quinze delas sao destino de menu; das quinze, seis existem.
-/// Renderizar as outras nove como item desabilitado poria nove controles
-/// mortos ao lado de seis vivos, e item desabilitado e exatamente a forma em
-/// que o defeito `btn=true tap=false` ja apareceu quatro vezes neste
-/// repositorio. Texto nao tem papel de botao, nao entra na ordem de foco como
-/// controle e nao promete toque -- e continua dizendo ao cliente o que vem,
-/// que e o que ele pediu em 27.0.
+/// A barra de topo desta mesma tela ja pinta `Pets`, `Perto` ou `Perfil` ao
+/// lado do proprio gatilho que abriu a gaveta. Repetir a palavra dentro dela
+/// seria a terceira vez que ela aparece na mesma tela -- e foi exatamente a
+/// duplicacao que o cliente apontou. Quem abre o submenu acabou de tocar no
+/// botao daquela secao: ele nao precisa ser informado de onde esta.
+///
+/// ## Secao sem sub-destino nao tem gaveta
+///
+/// `Rede` e `Loja` nao tem nenhum sub-destino construido. Uma gaveta vazia e
+/// um controle que abre o nada, que e o criterio 2 da BICHUS-62 pelo caminho
+/// mais silencioso. Elas nao montam a gaveta e nao desenham o gatilho -- ver
+/// `ControleDaGaveta.temSubDestinos`, que e onde isso e decidido.
 class GavetaDeSecoes extends StatelessWidget {
-  const GavetaDeSecoes({super.key});
+  const GavetaDeSecoes({required this.rotaDaSecao, super.key});
+
+  /// A secao cujo submenu esta gaveta mostra. **A atual, e so ela.**
+  final String rotaDaSecao;
 
   @override
   Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-    // A mesma regra de 25.7.3 que vale para a barra vale aqui: no build de
-    // entrega, secao `planejada` nao e renderizada -- nem na barra, nem na
-    // gaveta. Uma gaveta que mostrasse os cinco grupos num build em que a
-    // barra mostra dois seria a contradicao aparecendo na tela.
-    final secoes = CascaComAbas.visiveisEm(CascaComAbas.configuracao);
-    final referencia =
-        CascaComAbas.configuracao == ConfiguracaoDeBuild.referencia;
+    final itens = RegistroDeSubDestinos.itensDe(rotaDaSecao);
 
     return Drawer(
       child: SafeArea(
         child: ListView(
           // Pelo mesmo motivo de `TelaDeAba`: o padrao do `ListView` embrulha
           // cada filho num `IndexedSemantics` e colapsa o grupo inteiro num
-          // no so, anunciado como botao. Foi o defeito que a BICHUS-62 achou,
-          // e aqui ele juntaria o cabecalho da secao com os itens dela.
+          // no so, anunciado como botao. Foi o defeito que a BICHUS-62 achou.
           addSemanticIndexes: false,
           padding: const EdgeInsets.symmetric(
             horizontal: BichuEspaco.e4,
             vertical: BichuEspaco.e4,
           ),
           children: <Widget>[
-            Semantics(
-              header: true,
-              child: Text(TextosDaGaveta.titulo, style: textos.titleLarge),
-            ),
-            const SizedBox(height: BichuEspaco.e2),
-            Text(
-              TextosDaGaveta.comoOsDoisSeDividem,
-              style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-            ),
-            const SizedBox(height: BichuEspaco.e4),
-            for (final secao in secoes) ...<Widget>[
-              const Divider(),
-              _GrupoDaSecao(
-                rotulo: secao.rotulo,
-                rotaDaSecao: secao.rota,
-                itens: RegistroDeSubDestinos.itensDe(secao.rota),
-                pendentes: referencia
-                    ? RegistroDeSubDestinos.pendentesDe(secao.rota)
-                    : const <SubDestino>[],
-              ),
-            ],
+            for (final item in itens)
+              ItemDaGaveta(item: item, rotaDaSecao: rotaDaSecao),
           ],
         ),
       ),
@@ -564,67 +521,7 @@ class GavetaDeSecoes extends StatelessWidget {
   }
 }
 
-/// Um grupo da gaveta: o nome da secao como CABECALHO, e os caminhos dela.
-class _GrupoDaSecao extends StatelessWidget {
-  const _GrupoDaSecao({
-    required this.rotulo,
-    required this.rotaDaSecao,
-    required this.itens,
-    required this.pendentes,
-  });
-
-  final String rotulo;
-  final String rotaDaSecao;
-  final List<SubDestino> itens;
-  final List<SubDestino> pendentes;
-
-  @override
-  Widget build(BuildContext context) {
-    final cores = BichuColors.of(context).cores;
-    final textos = Theme.of(context).textTheme;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: <Widget>[
-        Padding(
-          padding: const EdgeInsets.symmetric(vertical: BichuEspaco.e2),
-          // **Cabecalho, e nao item.** Sem `InkWell`, sem `onTap`, sem seta:
-          // o leitor de tela anuncia titulo, e nao botao, e nao ha o que
-          // tocar. E esta a fronteira entre a gaveta e a barra de baixo.
-          child: Semantics(
-            header: true,
-            child: Text(
-              rotulo,
-              style: textos.titleMedium?.copyWith(color: cores.textSecondary),
-            ),
-          ),
-        ),
-        for (final item in itens)
-          ItemDaGaveta(item: item, rotaDaSecao: rotaDaSecao),
-        if (pendentes.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(
-              top: BichuEspaco.e2,
-              bottom: BichuEspaco.e2,
-            ),
-            // Texto corrido, e **nunca** um controle desabilitado. Ele nomeia
-            // o que vem e nao promete toque nenhum.
-            child: Text(
-              itens.isEmpty
-                  ? '${TextosDaGaveta.semAtalhoVivo} '
-                        '${TextosDaGaveta.emConstrucao}'
-                        '${pendentes.map((p) => p.rotulo).join(', ')}.'
-                  : '${TextosDaGaveta.emConstrucao}'
-                        '${pendentes.map((p) => p.rotulo).join(', ')}.',
-              style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Um caminho vivo: nome, explicacao e endereco. A rota nao aceita nulo.
+/// Um caminho vivo: **uma linha, so o rotulo**. A rota nao aceita nulo.
 class ItemDaGaveta extends StatelessWidget {
   const ItemDaGaveta({
     required this.item,
@@ -655,8 +552,12 @@ class ItemDaGaveta extends StatelessWidget {
       // O piso de alvo de toque do 6.5. `ListTile` nasce com 56 e o piso
       // critico de navegacao e 64.
       minTileHeight: BichuAlvoDeToque.critico,
+      // **`title` e mais nada.** Nao ha `subtitle` aqui, e a ausencia e a
+      // decisao: as seis linhas de apoio ("Leia o QR da coleira de um pet.")
+      // eram metade do texto da gaveta e nenhuma delas dizia algo que o
+      // rotulo nao dissesse. O campo `descricao` saiu do `SubDestino` junto,
+      // para que a linha de apoio nao tenha de onde voltar.
       title: Text(item.rotulo),
-      subtitle: item.descricao == null ? null : Text(item.descricao!),
       trailing: Icon(Icons.chevron_right, color: cores.textSecondary),
       onTap: () {
         // O roteador e lido ANTES de fechar a gaveta: depois do `pop` este
@@ -710,9 +611,7 @@ class BotaoDaGaveta extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return IconButton(
-      // O `tooltip` vira o nome acessivel (11.23.3). Ele diz o que o botao
-      // ABRE, e nao so "menu": com uma barra de cinco secoes logo abaixo,
-      // "menu" seria ambiguo entre os dois.
+      // O `tooltip` vira o nome acessivel (11.23.3).
       tooltip: TextosDaGaveta.abrirAGaveta,
       // O desenho do glifo continua em 24 dp, que e o padrao do `IconButton`
       // e o que o 11.23.1 pede. O que muda e o ALVO, abaixo.
@@ -751,11 +650,25 @@ class BotaoDaGaveta extends StatelessWidget {
 class ControleDaGaveta extends InheritedWidget {
   const ControleDaGaveta({
     required this.abrir,
+    required this.temSubDestinos,
     required super.child,
     super.key,
   });
 
   final VoidCallback abrir;
+
+  /// Se a secao ATUAL tem algum sub-destino construido.
+  ///
+  /// **E daqui que sai a decisao de desenhar o gatilho**, e nao de
+  /// `raizDeSecao` sozinho. `Rede` e `Loja` nao tem nenhum: um hamburguer ali
+  /// abriria uma gaveta vazia, que e acao sem destino (criterio 2 da
+  /// BICHUS-62) na forma mais silenciosa que existe -- o controle responde ao
+  /// toque, a cortina escurece a tela e nao ha nada para tocar.
+  ///
+  /// A casca tambem nao MONTA a gaveta nessas secoes, e as duas coisas andam
+  /// juntas de proposito: gaveta montada sem gatilho ainda seria alcancavel
+  /// por `openDrawer` de qualquer codigo futuro.
+  final bool temSubDestinos;
 
   /// O controle, ou nulo quando nao ha casca acima.
   ///
@@ -783,5 +696,6 @@ class ControleDaGaveta extends InheritedWidget {
   }
 
   @override
-  bool updateShouldNotify(ControleDaGaveta anterior) => abrir != anterior.abrir;
+  bool updateShouldNotify(ControleDaGaveta anterior) =>
+      abrir != anterior.abrir || temSubDestinos != anterior.temSubDestinos;
 }

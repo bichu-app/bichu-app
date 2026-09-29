@@ -113,6 +113,40 @@ Future<void> abrirAGaveta(WidgetTester tester) async {
   );
 }
 
+/// Vai para a secao [rotulo] pela barra de baixo.
+Future<void> irParaASecao(WidgetTester tester, String rotulo) async {
+  await tester.tap(find.widgetWithText(NavigationDestination, rotulo));
+  await tester.pumpAndSettle();
+}
+
+/// O `Scaffold` DA CASCA, que e o unico que carrega a barra de baixo.
+Scaffold cascaDaVez(WidgetTester tester) {
+  final cascas = tester
+      .widgetList<Scaffold>(find.byType(Scaffold))
+      .where((s) => s.bottomNavigationBar != null)
+      .toList();
+  expect(
+    cascas,
+    hasLength(1),
+    reason:
+        'REPROVA: achei ${cascas.length} casca(s) com barra de baixo. Sem '
+        'exatamente uma, todo caso que le `drawer` daqui esta lendo a tela '
+        'errada e passaria por acidente.',
+  );
+  return cascas.single;
+}
+
+/// Os textos que a gaveta ABERTA pinta agora, sem rolar.
+List<String> textosDaGaveta(WidgetTester tester) {
+  return tester
+      .widgetList<Text>(
+        find.descendant(of: find.byType(Drawer), matching: find.byType(Text)),
+      )
+      .map((t) => t.data ?? '')
+      .where((t) => t.isNotEmpty)
+      .toList();
+}
+
 /// A lista rolavel DA GAVETA, e nao qualquer uma da tela.
 ///
 /// `find.byType(Scrollable)` devolve varias: a da gaveta, a do corpo da aba e
@@ -258,20 +292,28 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        final cascas = tester
+        // A CASCA, achada pela barra de baixo e nao pela gaveta.
+        //
+        // Ate 22/09 este caso procurava o `Scaffold` com `drawer != null` e
+        // exigia exatamente um em toda secao. Desde 23/09 `Rede` e `Loja` nao
+        // montam gaveta -- elas nao tem sub-destino --, e procurar por ela ali
+        // acharia zero. A barra de baixo identifica a casca nas cinco, e quem
+        // cobra a gaveta por secao e a isca D.
+        final casca = cascaDaVez(tester);
+        final comSubmenu = tester
             .widgetList<Scaffold>(find.byType(Scaffold))
             .where((s) => s.drawer != null)
             .toList();
         expect(
-          cascas,
-          hasLength(1),
+          comSubmenu.length,
+          lessThanOrEqualTo(1),
           reason:
               'REPROVA: a secao "${destino.rotulo}" montou '
-              '${cascas.length} `Scaffold` com gaveta. Duas gavetas na mesma '
-              'tela e dois gatilhos disputando a mesma borda.',
+              '${comSubmenu.length} `Scaffold` com gaveta. Duas gavetas na '
+              'mesma tela e dois gatilhos disputando a mesma borda.',
         );
         expect(
-          cascas.single.drawerEnableOpenDragGesture,
+          casca.drawerEnableOpenDragGesture,
           isFalse,
           reason:
               'REPROVA: a secao "${destino.rotulo}" deixou o arrasto de '
@@ -654,6 +696,10 @@ void main() {
             // gatilho instalado, e nao o que o toque faz.
             home: ControleDaGaveta(
               abrir: () {},
+              // A bancada mede LARGURA de barra com o gatilho instalado, e
+              // por isso ela declara que ha submenu: sem isto o `TelaDeAba`
+              // real nao desenharia o botao e nao haveria o que medir.
+              temSubDestinos: true,
               child: Scaffold(
                 appBar: AppBar(
                   toolbarHeight: BichuAlvoDeToque.critico,
@@ -719,12 +765,44 @@ void main() {
       );
     });
 
-    testWidgets('o nome da secao na gaveta e CABECALHO, e nao botao', (
+    testWidgets('nenhum NOME DE SECAO e pintado dentro da gaveta', (
       tester,
     ) async {
+      // Este caso mudou de sinal em 23/09, e a mudanca e a correcao.
+      //
+      // Ate 22/09 ele COBRAVA os cinco nomes de secao como cabecalho de grupo
+      // dentro da gaveta, porque a gaveta mostrava as cinco. O cliente leu o
+      // resultado e reprovou com a frase exata: "voce replicou no menu
+      // lateral, exatamente o mesmo menu principal". Um cabecalho que nao
+      // navega nao deixa de ser o menu principal repetido: ele e o menu
+      // principal repetido e mudo.
+      //
+      // Agora a gaveta mostra o submenu de UMA secao -- a atual --, e o nome
+      // dela ja esta na barra de topo, ao lado do proprio gatilho que a abriu.
+      // Pintar a palavra de novo seria a terceira vez na mesma tela.
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
       await abrirAGaveta(tester);
+
+      final pintados = tester
+          .widgetList<Text>(
+            find.descendant(
+              of: find.byType(Drawer),
+              matching: find.byType(Text),
+            ),
+          )
+          .map((t) => t.data ?? '')
+          .toList();
+      for (final destino in CascaComAbas.destinos) {
+        expect(
+          pintados,
+          isNot(contains(destino.rotulo)),
+          reason:
+              'REPROVA: a gaveta pinta "${destino.rotulo}", que e nome de '
+              'SECAO. Com ou sem toque, e o menu principal replicado dentro '
+              'do submenu -- exatamente o que o cliente reprovou em 23/09.',
+        );
+      }
 
       final ativaveis = rotulosAtivaveis(tester);
       for (final destino in CascaComAbas.destinos) {
@@ -732,47 +810,12 @@ void main() {
           ativaveis,
           isNot(contains(destino.rotulo)),
           reason:
-              'REPROVA: o cabecalho "${destino.rotulo}" da gaveta virou '
-              'controle. Ele nomeia o grupo; quem troca de secao e a barra de '
-              'baixo. Um cabecalho tocavel e a gaveta comecando a competir '
-              'com ela.',
-        );
-      }
-
-      final cabecalhos = todosOsNos(tester)
-          .where((n) => n.getSemanticsData().flagsCollection.isHeader)
-          .map((n) => n.label)
-          .toList();
-      for (final destino in CascaComAbas.destinos) {
-        expect(
-          cabecalhos,
-          contains(destino.rotulo),
-          reason:
-              'REPROVA: "${destino.rotulo}" nao e anunciado como '
-              'cabecalho na gaveta. Sem o papel de cabecalho, quem usa leitor '
-              'de tela nao consegue pular de grupo em grupo e le a gaveta '
-              'inteira linha a linha.',
+              'REPROVA: "${destino.rotulo}" e ativavel com a gaveta aberta. '
+              'Quem troca de secao e a barra de baixo, e com a gaveta aberta '
+              'ela esta atras da cortina.',
         );
       }
       handle.dispose();
-    });
-
-    testWidgets('a gaveta DIZ na tela qual menu leva aonde', (tester) async {
-      // TAUTOLOGIA ASSUMIDA: este caso compara o texto pintado com a
-      // constante que o produz, e por isso ele **nao** e a prova deste grupo.
-      // A prova sao os dois casos acima, que medem estrutura. Este aqui
-      // guarda outra coisa: que a frase nao seja apagada em silencio.
-      await abrirOApp(tester, rede: _semServidor);
-      await abrirAGaveta(tester);
-
-      expect(
-        find.text(TextosDaGaveta.comoOsDoisSeDividem),
-        findsOneWidget,
-        reason:
-            'REPROVA: a gaveta nao explica a divisao de trabalho com a '
-            'barra de baixo. Sem a frase, quem abre ve dois menus e precisa '
-            'descobrir sozinho por que o mesmo nome esta nos dois.',
-      );
     });
   });
 
@@ -810,8 +853,7 @@ void main() {
       );
     });
 
-    test('o inventario de 27.5 tem 48 linhas, 15 destinos e 6 atalhos vivos',
-        () {
+    test('o inventario de 27.5 tem 48 linhas, 15 destinos e 6 atalhos vivos', () {
       // Os quatro numeros estao escritos A MAO, e e de proposito: eles sao a
       // segunda fonte da verdade contra o registro, como `ordemDecidida` e
       // contra `CascaComAbas.destinos` na BICHUS-164.
@@ -833,14 +875,16 @@ void main() {
       expect(
         RegistroDeSubDestinos.porSecao.keys.length,
         5,
-        reason: 'REPROVA: o registro deixou de ter uma entrada por secao. '
+        reason:
+            'REPROVA: o registro deixou de ter uma entrada por secao. '
             'Sao cinco secoes, e uma secao sem entrada some da gaveta sem '
             'que nenhum outro caso acuse.',
       );
       expect(
         todos.length,
         48,
-        reason: 'REPROVA: o inventario de 27.5 saiu de 48 linhas e foi para '
+        reason:
+            'REPROVA: o inventario de 27.5 saiu de 48 linhas e foi para '
             '${todos.length}. Se a UX acrescentou sub-destino, este numero '
             'sobe junto e de proposito; se alguem apagou linha, este caso e '
             'o unico lugar que acusa.',
@@ -852,7 +896,8 @@ void main() {
       expect(
         destinos.length,
         15,
-        reason: 'REPROVA: os destinos de MENU sairam de 15 e foram para '
+        reason:
+            'REPROVA: os destinos de MENU sairam de 15 e foram para '
             '${destinos.length}. A maioria das 48 linhas nunca foi item de '
             'menu -- filtro e folha, busca e campo, aviso e faixa -- e e a '
             'FORMA que decide. Mudanca aqui significa que alguem reclassificou '
@@ -864,17 +909,21 @@ void main() {
       expect(
         vivos.length,
         6,
-        reason: 'REPROVA: os atalhos VIVOS sairam de 6 e foram para '
+        reason:
+            'REPROVA: os atalhos VIVOS sairam de 6 e foram para '
             '${vivos.length}: ${vivos.map((d) => d.rotulo).join(', ')}. '
             'Subir e o caminho normal, e so quando a tela do outro lado '
             'existir; descer significa que um atalho da gaveta morreu.',
       );
 
-      final porConstruir = todos.where((d) => d.pendente).toList(growable: false);
+      final porConstruir = todos
+          .where((d) => d.pendente)
+          .toList(growable: false);
       expect(
         porConstruir.length,
         9,
-        reason: 'REPROVA: os destinos de menu POR CONSTRUIR sairam de 9 e '
+        reason:
+            'REPROVA: os destinos de menu POR CONSTRUIR sairam de 9 e '
             'foram para ${porConstruir.length}. Estes sao os que a gaveta '
             'NOMEIA em texto e nunca renderiza como controle; o numero cair '
             'sem que `vivos` suba e um nome que desapareceu da tela.',
@@ -883,7 +932,8 @@ void main() {
       expect(
         vivos.length + porConstruir.length,
         destinos.length,
-        reason: 'REPROVA: ha destino de menu que nao e nem vivo nem pendente. '
+        reason:
+            'REPROVA: ha destino de menu que nao e nem vivo nem pendente. '
             'A unica maneira de isso acontecer e um `destino` marcado '
             '`existe` com rota nula, que e um atalho que a gaveta esconde sem '
             'nomear: ele nao vira item e tambem nao entra na linha de '
@@ -958,6 +1008,20 @@ void main() {
             rede: _semServidor,
             deposito: depositoLogado(),
           );
+          // A GAVETA E O SUBMENU DA SECAO ATUAL (23/09): e preciso estar NELA.
+          //
+          // Antes deste dia a gaveta listava as cinco secoes e qualquer atalho
+          // era alcancavel de qualquer aba -- que era o defeito, e nao a
+          // comodidade. Este passo e o preco da correcao, e ele tambem passou
+          // a exercitar o caminho real: ninguem abre o submenu de `Perfil`
+          // estando em `Pets`.
+          await tester.tap(
+            find.widgetWithText(
+              NavigationDestination,
+              CascaComAbas.porRota(vivo.secao).rotulo,
+            ),
+          );
+          await tester.pumpAndSettle();
           await abrirAGaveta(tester);
 
           final alvo = find.byKey(
@@ -1073,43 +1137,6 @@ void main() {
       handle.dispose();
     });
 
-    testWidgets('a gaveta NOMEIA o que ainda nao existe, sem prometer toque', (
-      tester,
-    ) async {
-      // O cliente pediu para ver o escopo (UX 27.0). Ele ve, em texto: o que
-      // nao existe e NOMEADO e nao e controle. As duas metades sao uma coisa
-      // so -- esconder sem nomear perderia o pedido dele; nomear como botao
-      // quebraria o criterio 2.
-      await abrirOApp(tester, rede: _semServidor);
-      await abrirAGaveta(tester);
-
-      final textos = await textosDaGavetaInteira(tester);
-      expect(
-        textos.any((t) => t.contains(TextosDaGaveta.emConstrucao)),
-        isTrue,
-        reason:
-            'REPROVA: a gaveta nao diz o que vem depois. O cliente pediu '
-            'para ver o escopo, e uma gaveta com seis itens e nenhuma palavra '
-            'sobre o resto responde metade do pedido.',
-      );
-
-      final semNome = <String>[];
-      for (final pendente in pendentes()) {
-        if (!textos.any((t) => t.contains(pendente.rotulo))) {
-          semNome.add(pendente.rotulo);
-        }
-      }
-      expect(
-        semNome,
-        isEmpty,
-        reason:
-            'REPROVA: estes sub-destinos sumiram da gaveta em vez de '
-            'virar texto: ${semNome.join(', ')}.\n'
-            'Esconder sem nomear responde metade do pedido do cliente de '
-            '27.0, que e ver o escopo.',
-      );
-    });
-
     test('nenhum ListTile da gaveta pode nascer com `onTap` nulo', () {
       // Varredura de FONTE, e de proposito: o `onTap: null` escrito num ramo
       // que nenhum caso monta passa calado pela arvore. E o defeito exato do
@@ -1210,6 +1237,341 @@ void main() {
             'REPROVA: a gaveta abriu sem cortina modal. Sem ela o toque '
             'atravessa para a tela de tras, e a gaveta deixa de ser modal '
             'tambem para quem enxerga.',
+      );
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  group('7. a gaveta e SUBMENU, e nao o menu principal (23/09)', () {
+    // O cliente reprovou a gaveta de 22/09 com duas frases, e cada uma virou
+    // duas iscas aqui:
+    //
+    //   "parece mais uma pagina do que menu, com tanto texto, tanta
+    //    explicacao"                                    -> iscas B e C
+    //   "voce replicou no menu lateral exatamente o mesmo menu principal;
+    //    ali e para voce utilizar submenu"              -> iscas A e D
+    //
+    // Medido antes: 736 caracteres em 22 blocos de texto para 6 itens que
+    // navegam. Um titulo, um paragrafo de explicacao, cinco cabecalhos de
+    // secao, tres paragrafos de `Em construcao` nomeando nove telas
+    // inexistentes e seis linhas de apoio.
+
+    testWidgets('isca A: a gaveta nao mostra sub-destino de OUTRA secao', (
+      tester,
+    ) async {
+      // O MECANISMO: `GavetaDeSecoes` recebe `rotaDaSecao` e lista
+      // `RegistroDeSubDestinos.itensDe(rotaDaSecao)` -- uma secao, a atual.
+      // Desligar = voltar a iterar as cinco secoes. Esta isca reprova pelo
+      // nome do caso, dizendo qual item invadiu e de onde ele veio.
+      await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
+
+      final conferidas = <String>[];
+      for (final destino in CascaComAbas.destinos) {
+        await irParaASecao(tester, destino.rotulo);
+        if (find.byTooltip(TextosDaGaveta.abrirAGaveta).evaluate().isEmpty) {
+          // Secao sem submenu nao tem gatilho. Quem cobra isso e a isca D.
+          continue;
+        }
+        await abrirAGaveta(tester);
+        conferidas.add(destino.rotulo);
+
+        for (final item in RegistroDeSubDestinos.itensDe(destino.rota)) {
+          expect(
+            find.byKey(ItemDaGaveta.chaveDe(destino.rota, item.rotulo)),
+            findsOneWidget,
+            reason:
+                'REPROVA: o submenu de "${destino.rotulo}" nao mostra o '
+                'proprio atalho "${item.rotulo}". A correcao de 23/09 tirou as '
+                'outras secoes da gaveta; tirar tambem os itens da secao atual '
+                'a deixaria vazia, e nenhum dos 6 atalhos vivos pode ficar '
+                'inalcancavel.',
+          );
+        }
+
+        final invasores = <String>[];
+        for (final vivo in itensVivos()) {
+          if (vivo.secao == destino.rota) continue;
+          if (find
+              .byKey(ItemDaGaveta.chaveDe(vivo.secao, vivo.item.rotulo))
+              .evaluate()
+              .isNotEmpty) {
+            invasores.add('${vivo.item.rotulo} (de ${vivo.secao})');
+          }
+        }
+        expect(
+          invasores,
+          isEmpty,
+          reason:
+              'REPROVA: estando em "${destino.rotulo}", a gaveta mostra item '
+              'de outra secao: ${invasores.join(', ')}.\n'
+              'Ai ela volta a ser o indice do app inteiro -- o menu principal '
+              'replicado --, e nao o submenu da secao em que se esta. Foi a '
+              'reprovacao do cliente em 23/09.',
+        );
+
+        // Fecha pelo caminho do sistema, que o grupo 1 ja provou que fecha a
+        // gaveta em vez de desempilhar a tela.
+        await voltarDoSistema(tester);
+        expect(
+          find.byType(Drawer),
+          findsNothing,
+          reason:
+              'REPROVA: a gaveta de "${destino.rotulo}" nao fechou, e a volta '
+              'do laco mediria a secao anterior achando que mudou.',
+        );
+      }
+
+      expect(
+        conferidas,
+        <String>['Pets', 'Perto', 'Perfil'],
+        reason:
+            'REPROVA: conferi ${conferidas.length} secao(oes) com submenu '
+            '(${conferidas.join(', ')}) em vez das tres que tem atalho vivo. '
+            'Se a lista encolher, esta isca passou a olhar menos gaveta do que '
+            'existe; se crescer, uma secao ganhou submenu e ninguem disse.',
+      );
+    });
+
+    testWidgets('isca B: nenhum item da gaveta tem linha descritiva', (
+      tester,
+    ) async {
+      // O MECANISMO: `ItemDaGaveta` pinta `title` e nao tem `subtitle`, e o
+      // campo `descricao` saiu do `SubDestino` para a linha de apoio nao ter
+      // de onde voltar. Desligar = devolver o `subtitle`.
+      //
+      // A medida e dura de proposito: o conjunto de textos que a gaveta pinta
+      // tem de ser IGUAL ao conjunto de rotulos dos itens dela. Nao "conter",
+      // nao "comecar por": igual. Qualquer palavra a mais -- subtitulo,
+      // cabecalho, titulo, explicacao -- reprova.
+      await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
+
+      for (final destino in CascaComAbas.destinos) {
+        await irParaASecao(tester, destino.rotulo);
+        if (find.byTooltip(TextosDaGaveta.abrirAGaveta).evaluate().isEmpty) {
+          continue;
+        }
+        await abrirAGaveta(tester);
+
+        final tiles = tester
+            .widgetList<ListTile>(
+              find.descendant(
+                of: find.byType(Drawer),
+                matching: find.byType(ListTile),
+              ),
+            )
+            .toList();
+        expect(
+          tiles,
+          isNotEmpty,
+          reason:
+              'REPROVA: a gaveta de "${destino.rotulo}" nao tem item nenhum, e '
+              'esta isca passaria por vazio.',
+        );
+        for (final tile in tiles) {
+          expect(
+            tile.subtitle,
+            isNull,
+            reason:
+                'REPROVA: um item da gaveta de "${destino.rotulo}" voltou a '
+                'ter linha de apoio. As seis que existiam eram metade do texto '
+                'da gaveta e nenhuma dizia algo que o rotulo nao dissesse: '
+                '"Leia o QR da coleira de um pet." embaixo de '
+                '"Escanear uma tag".',
+          );
+        }
+
+        final esperados = RegistroDeSubDestinos.itensDe(
+          destino.rota,
+        ).map((i) => i.rotulo).toList()..sort();
+        final pintados = textosDaGaveta(tester)..sort();
+        expect(
+          pintados,
+          esperados,
+          reason:
+              'REPROVA: a gaveta de "${destino.rotulo}" pinta\n  '
+              '${pintados.join('\n  ')}\n'
+              'e os rotulos dos itens dela sao\n  '
+              '${esperados.join('\n  ')}\n'
+              'Uma linha por item, so o rotulo: e o que o cliente pediu em '
+              '23/09 depois de contar 736 caracteres para 6 itens.',
+        );
+
+        await voltarDoSistema(tester);
+      }
+    });
+
+    test('isca B (fonte): nao ha `subtitle` no arquivo da gaveta', () {
+      // Varredura de FONTE, pelo mesmo motivo do caso de `onTap: null`: um
+      // `subtitle` escrito num ramo que nenhum caso monta passa calado pela
+      // arvore. O campo `descricao` tambem e cobrado aqui -- ele era a fonte
+      // da linha de apoio, e reintroduzi-lo e o primeiro passo para ela
+      // voltar.
+      const caminho = 'lib/telas/gaveta_de_secoes.dart';
+      final arquivo = File(caminho);
+      expect(
+        arquivo.existsSync(),
+        isTrue,
+        reason: 'REPROVA: nao achei "$caminho".',
+      );
+      final semComentarios = arquivo
+          .readAsStringSync()
+          .split('\n')
+          .map((l) => l.replaceAll(RegExp('//.*'), ''))
+          .join('\n');
+      expect(
+        semComentarios,
+        isNot(contains('subtitle')),
+        reason:
+            'REPROVA: ha `subtitle` em "$caminho". A gaveta de 23/09 e uma '
+            'linha por item, so o rotulo.',
+      );
+      expect(
+        semComentarios,
+        isNot(contains('descricao')),
+        reason:
+            'REPROVA: o campo `descricao` voltou ao registro de sub-destinos. '
+            'Ele era a fonte das seis linhas de apoio que o cliente reprovou; '
+            'com o campo de volta, a linha volta no primeiro `subtitle:`.',
+      );
+    });
+
+    testWidgets('isca C: a gaveta nao fala de tela que nao existe', (
+      tester,
+    ) async {
+      // O MECANISMO: os tres paragrafos de `Em construcao` sairam da gaveta,
+      // e as constantes que os produziam sairam de `TextosDaGaveta`.
+      // Desligar = devolver o paragrafo que nomeia os pendentes.
+      //
+      // Roadmap em menu tem um custo que nao e de gosto: `Mensagens`,
+      // `Doações`, `Carrinho e pedido`, `Meus pedidos`, `Convidar vizinhos`,
+      // `Editar o perfil`, `Notificações`, `Transferir um pet` e `Termos` sao
+      // nove telas que o app nao tem. Quem le nove nomes num menu tenta tocar
+      // em algum.
+      await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
+
+      final porConstruir = pendentes();
+      expect(
+        porConstruir,
+        isNotEmpty,
+        reason:
+            'REPROVA: o registro nao tem sub-destino pendente nenhum, e esta '
+            'isca nao teria nome nenhum para procurar na gaveta.',
+      );
+
+      for (final destino in CascaComAbas.destinos) {
+        await irParaASecao(tester, destino.rotulo);
+        if (find.byTooltip(TextosDaGaveta.abrirAGaveta).evaluate().isEmpty) {
+          continue;
+        }
+        await abrirAGaveta(tester);
+        // Rola a gaveta inteira: texto abaixo da dobra nao tem `Element`, e
+        // uma isca que so olhasse a primeira tela aprovaria um paragrafo de
+        // roadmap no rodape.
+        final textos = await textosDaGavetaInteira(tester);
+
+        for (final marca in <String>[
+          'Em construção',
+          'construção',
+          'Atalhos',
+        ]) {
+          expect(
+            textos.any((t) => t.contains(marca)),
+            isFalse,
+            reason:
+                'REPROVA: a gaveta de "${destino.rotulo}" pinta "$marca". '
+                'Menu nao carrega roadmap: o que nao existe nao se anuncia no '
+                'lugar em que tudo o mais e tocavel.',
+          );
+        }
+
+        final nomeados = <String>[];
+        for (final p in porConstruir) {
+          if (textos.any((t) => t.contains(p.rotulo))) {
+            nomeados.add(p.rotulo);
+          }
+        }
+        expect(
+          nomeados,
+          isEmpty,
+          reason:
+              'REPROVA: a gaveta de "${destino.rotulo}" nomeia tela que nao '
+              'existe: ${nomeados.join(', ')}.\n'
+              'Nenhuma delas tem rota registrada; o nome no menu e uma promessa '
+              'que o toque nao cumpre.',
+        );
+
+        await voltarDoSistema(tester);
+      }
+    });
+
+    testWidgets('isca D: secao sem sub-destino nao desenha o gatilho', (
+      tester,
+    ) async {
+      // O MECANISMO, em dois lugares que andam juntos: `TelaDeAba` exige
+      // `ControleDaGaveta.temSubDestinos` para desenhar o `BotaoDaGaveta`, e a
+      // casca passa `drawer: null` quando a secao nao tem atalho vivo.
+      // Desligar qualquer um dos dois = um hamburguer que escurece a tela para
+      // nao oferecer nada, ou uma gaveta alcancavel por `openDrawer` sem
+      // gatilho.
+      await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
+
+      final semSubmenu = <String>[];
+      for (final destino in CascaComAbas.destinos) {
+        await irParaASecao(tester, destino.rotulo);
+        final tem = RegistroDeSubDestinos.itensDe(destino.rota).isNotEmpty;
+        if (!tem) semSubmenu.add(destino.rotulo);
+
+        expect(
+          find.byType(BotaoDaGaveta),
+          tem ? findsOneWidget : findsNothing,
+          reason: tem
+              ? 'REPROVA: "${destino.rotulo}" tem submenu e perdeu o gatilho. '
+                    'Os atalhos dela ficaram inalcancaveis: a gaveta nao abre '
+                    'por arrasto de borda.'
+              : 'REPROVA: "${destino.rotulo}" nao tem nenhum sub-destino '
+                    'construido e desenhou o gatilho da gaveta. Um hamburguer '
+                    'que abre uma cortina vazia e acao sem destino (criterio 2 '
+                    'da BICHUS-62) na forma mais silenciosa que existe: ele '
+                    'responde ao toque.',
+        );
+
+        final casca = cascaDaVez(tester);
+        if (tem) {
+          expect(
+            casca.drawer,
+            isA<GavetaDeSecoes>(),
+            reason:
+                'REPROVA: "${destino.rotulo}" tem submenu e a casca nao montou '
+                'a gaveta.',
+          );
+          expect(
+            (casca.drawer! as GavetaDeSecoes).rotaDaSecao,
+            destino.rota,
+            reason:
+                'REPROVA: estando em "${destino.rotulo}" a casca montou a '
+                'gaveta de outra secao. E a isca A pelo lado da construcao: '
+                'gaveta apontada para a secao errada mostra submenu alheio.',
+          );
+        } else {
+          expect(
+            casca.drawer,
+            isNull,
+            reason:
+                'REPROVA: "${destino.rotulo}" nao tem sub-destino e a casca '
+                'montou a gaveta de qualquer jeito. Sem gatilho ela fica '
+                'invisivel hoje e alcancavel por `openDrawer` amanha.',
+          );
+        }
+      }
+
+      expect(
+        semSubmenu,
+        <String>['Rede', 'Loja'],
+        reason:
+            'REPROVA: as secoes sem sub-destino sao ${semSubmenu.join(', ')} e '
+            'nao `Rede, Loja`. Se a lista ficar vazia esta isca deixou de '
+            'exercitar o cenario que o cliente apontou e passa por vacuidade; '
+            'se crescer, uma secao perdeu os atalhos dela.',
       );
     });
   });
