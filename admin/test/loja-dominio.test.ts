@@ -132,3 +132,22 @@ describe('formulario de produto', () => {
     );
   });
 });
+
+describe('galeria no corpo da alteracao', () => {
+  it('sem mudanca na galeria, images nao vai; com mudanca, vai sem a imagem sem envio', async () => {
+    const { valoresDoItem, corpoDeAlteracao: corpo } = await import('../src/loja/formulario-do-produto.ts');
+    const { item } = await import('./apoio/massa.ts');
+    const base = valoresDoItem(
+      item({
+        images: [
+          { source: 'uploaded', status: 'ready', url: null, rejection_reason: null, upload_id: null, position: 0, alt_text: 'Frente' },
+          { source: 'uploaded', status: 'ready', url: null, rejection_reason: null, upload_id: '00000000-0000-4000-8000-000000000002', position: 1, alt_text: 'Verso' },
+        ],
+      }),
+    );
+    expect(corpo({ ...base, titulo: 'Outro nome' }, base)).not.toHaveProperty('images');
+    expect(corpo({ ...base, imagens: [...base.imagens].reverse() }, base).images).toEqual([
+      { upload_id: '00000000-0000-4000-8000-000000000002', alt_text: 'Verso' },
+    ]);
+  });
+});

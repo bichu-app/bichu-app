@@ -16,7 +16,10 @@ import { DialogoCriarTag } from './DialogoCriarTag.tsx';
 import { DialogoRenovarPreco } from './DialogoRenovarPreco.tsx';
 import { CATEGORIAS, dataCivilParaTexto, eCategoria, ESPECIES, hojeCivil, MAXIMO_DE_TAGS, type Especie } from './dominio.ts';
 import {
+  avisoDeImagensSemEnvio,
   corpoDeAlteracao,
+  MARCA_SEM_ENVIO,
+  semEnvio,
   corpoDeCriacao,
   errosDoServidor,
   ORDEM_DOS_CAMPOS,
@@ -248,7 +251,7 @@ export default function FormularioDeProduto() {
       } else if (atual && versaoAtual) {
         const { data, error, response } = await api.PATCH('/admin/store/items/{itemSlug}', {
           params: { path: { itemSlug: atual.slug }, header: { 'If-Match': versaoAtual } },
-          body: corpoDeAlteracao(valores),
+          body: corpoDeAlteracao(valores, base),
         });
         if (!data) return tratarRecusa(error, response.status);
         atual = data;
@@ -524,7 +527,9 @@ export default function FormularioDeProduto() {
         proposito="store_item"
         mostrarErrosDeDescricao={!!tentouSalvar}
         erro={erro('imagens')}
+        marca={(im) => (semEnvio(im) ? MARCA_SEM_ENVIO : undefined)}
       />
+      {avisoDeImagensSemEnvio(valores) && <Banner tipo="alerta">{avisoDeImagensSemEnvio(valores)}</Banner>}
 
       <div className={erro('f-parceiro') ? 'field err' : 'field'}>
         <label htmlFor="f-parceiro">Parceiro *</label>

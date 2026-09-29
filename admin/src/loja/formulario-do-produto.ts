@@ -152,11 +152,33 @@ export function corpoDeCriacao(v: ValoresDoProduto): Esquemas['AdminStoreItemInp
   };
 }
 
+/** A imagem que a galeria nao consegue reenviar (`upload_id` nulo): sai do item se a galeria mudar. */
+export function semEnvio(im: ImagemDaGaleria): boolean {
+  return im.uploadId === undefined && (im.estado === 'ready' || im.estado === 'processing' || im.estado === 'enviada');
+}
+
+export const MARCA_SEM_ENVIO = 'Sai se a galeria mudar';
+
+/** O alerta abaixo da galeria (a mesma regra da Rede, UX 30.7 R1), com a posicao quando for uma imagem so. */
+export function avisoDeImagensSemEnvio(v: Pick<ValoresDoProduto, 'imagens'>): string | null {
+  const posicoes = v.imagens.flatMap((im, i) => (semEnvio(im) ? [i + 1] : []));
+  if (posicoes.length === 0) return null;
+  if (posicoes.length === 1) {
+    return `A imagem ${String(posicoes[0])} veio de uma conta que não existe mais. Ela fica no produto enquanto você não mexer na galeria; qualquer mudança nas imagens a tira do produto.`;
+  }
+  return `${String(posicoes.length)} imagens vieram de uma conta que não existe mais. Elas ficam no produto enquanto você não mexer na galeria; qualquer mudança nas imagens as tira do produto.`;
+}
+
+const assinaturaDaGaleria = (v: Pick<ValoresDoProduto, 'imagens'>) => JSON.stringify(v.imagens.map((im) => [im.chave, im.alt.trim()]));
+
 /**
- * `updateAdminStoreItem`. Manda o formulario inteiro: `species`, `tag_slugs` e
- * `images` substituem o conjunto, e `price: null` tira o preco.
+ * `updateAdminStoreItem`. Manda o formulario inteiro: `species` e `tag_slugs`
+ * substituem o conjunto, e `price: null` tira o preco. `images` so vai quando a
+ * galeria mudou em relacao a `base`: a imagem com `upload_id` nulo nao pode ir
+ * no corpo, e mandar a galeria sem ela a tiraria do item numa edicao de titulo.
  */
-export function corpoDeAlteracao(v: ValoresDoProduto): Esquemas['AdminStoreItemPatch'] {
+export function corpoDeAlteracao(v: ValoresDoProduto, base?: Pick<ValoresDoProduto, 'imagens'>): Esquemas['AdminStoreItemPatch'] {
+  const galeriaMudou = !base || assinaturaDaGaleria(v) !== assinaturaDaGaleria(base);
   return {
     partner_slug: v.parceiro,
     title: v.titulo.trim(),
@@ -165,7 +187,7 @@ export function corpoDeAlteracao(v: ValoresDoProduto): Esquemas['AdminStoreItemP
     species: v.especies,
     tag_slugs: v.tags,
     target_url: v.link.trim(),
-    images: imagensDoCorpo(v),
+    ...(galeriaMudou ? { images: imagensDoCorpo(v) } : {}),
     price: preco(v) ?? null,
   };
 }

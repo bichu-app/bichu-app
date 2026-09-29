@@ -265,3 +265,35 @@ describe('casos que estavam sem teste', () => {
     expect(screen.getByText('Publicado')).toBeInTheDocument();
   });
 });
+
+describe('imagem sem envio (upload_id nulo) na galeria da Loja', () => {
+  const imagens: Parameters<typeof item>[0] = {
+    images: [
+      { source: 'uploaded', status: 'ready', url: null, rejection_reason: null, upload_id: '00000000-0000-4000-8000-000000000001', position: 0, alt_text: 'Saco de ração' },
+      { source: 'uploaded', status: 'ready', url: null, rejection_reason: null, upload_id: null, position: 1, alt_text: 'Tabela nutricional' },
+    ],
+  };
+
+  it('a imagem afetada tem a marca e o alerta diz a posição', async () => {
+    montar('/loja/racao-adulto-15kg', { 'GET /admin/store/items/{itemSlug}': json(200, item(imagens), { ETag: '"4"' }) });
+    expect(
+      await screen.findByText('A imagem 2 veio de uma conta que não existe mais. Ela fica no produto enquanto você não mexer na galeria; qualquer mudança nas imagens a tira do produto.'),
+    ).toBeInTheDocument();
+    const afetada = screen.getByRole('listitem', { name: 'Imagem 2 de 2, Sai se a galeria mudar' });
+    expect(within(afetada).getByText('Sai se a galeria mudar')).toBeInTheDocument();
+    expect(within(screen.getByRole('listitem', { name: 'Imagem 1 de 2, principal' })).queryByText('Sai se a galeria mudar')).toBeNull();
+  });
+
+  it('editar só o nome não manda images, e a imagem sem envio fica no produto', async () => {
+    const { servidor } = montar('/loja/racao-adulto-15kg', {
+      'GET /admin/store/items/{itemSlug}': json(200, item(imagens), { ETag: '"4"' }),
+      'PATCH /admin/store/items/{itemSlug}': json(200, item({ ...imagens, version: 5 }), { ETag: '"5"' }),
+    });
+    fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Ração seca 15 kg' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(servidor.requisicoes.some((r) => r.metodo === 'PATCH')).toBe(true));
+    const patch = servidor.requisicoes.find((r) => r.metodo === 'PATCH')?.corpo as Record<string, unknown>;
+    expect(patch.title).toBe('Ração seca 15 kg');
+    expect(patch).not.toHaveProperty('images');
+  });
+});
