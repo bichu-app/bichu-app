@@ -9947,7 +9947,14 @@ export interface operations {
                 /** @description Sem ele, `published` e `cancelled`. `removed` so aparece quando pedido aqui. */
                 publication_status?: components["schemas"]["AdminNetworkEventPublicationStatus"];
                 timing?: components["schemas"]["AdminNetworkEventTiming"];
-                visibility?: components["schemas"]["NetworkEventVisibility"];
+                /**
+                 * @description Sem ele, **publico e privado**: o painel ve todo encontro. O esquema
+                 *     e inline, e nao `NetworkEventVisibility`, de proposito: aquele tem
+                 *     `default: public` (o padrao de quem CRIA), e o validador aplica
+                 *     default de parametro, o que tirava o encontro privado da lista do
+                 *     painel quando o filtro nao vinha (QA, 28/09).
+                 */
+                visibility?: "public" | "private";
                 city?: string;
                 /** @description `agenda` e por inicio, do mais proximo; `atualizado` poe o que mudou por ultimo primeiro. */
                 sort?: "agenda" | "atualizado";

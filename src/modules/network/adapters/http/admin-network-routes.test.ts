@@ -22,7 +22,9 @@
  */
 import assert from 'node:assert/strict';
 import { beforeEach, describe, it } from 'node:test';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 import { hashDeToken } from '../../../../shared/crypto/digest.js';
 import { carregarContrato } from '../../../../shared/http/contract.js';
@@ -324,6 +326,40 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     const removidos = await chamar(b, 'GET', '/admin/network/events?publication_status=removed');
     assert.equal(removidos.corpo['total'], 1);
     assert.deepEqual(removidos.corpo['applied_filters'], { publication_status: 'removed' });
+  });
+
+  void it('ISCA do QA (bug 1): sem filtro de visibilidade, a lista do painel traz publico E privado', async () => {
+    await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    await chamar(b, 'POST', '/admin/network/events', { corpo: PRIVADO });
+    const tudo = await chamar(b, 'GET', '/admin/network/events');
+    assert.equal(tudo.status, 200, tudo.bruto);
+    assert.equal(tudo.corpo['total'], 2, 'o encontro privado sumiu da lista do painel sem filtro');
+    assert.deepEqual(tudo.corpo['applied_filters'], { scope: 'all' });
+    const privados = await chamar(b, 'GET', '/admin/network/events?visibility=private');
+    assert.equal(privados.corpo['total'], 1);
+    assert.deepEqual(privados.corpo['applied_filters'], { visibility: 'private' });
+  });
+
+  void it('ISCA do QA (bug 1): o filtro visibility de listAdminNetworkEvents NAO tem default no contrato', () => {
+    // O default de `NetworkEventVisibility` (public) e o de quem CRIA. Num
+    // parametro de filtro ele vira "so publicos" em todo cliente gerado do
+    // contrato, e o encontro privado some da lista do painel.
+    const texto = readFileSync(resolve(process.cwd(), 'api/openapi.yaml'), 'utf8');
+    const spec = parseYaml(texto) as {
+      paths: Record<string, Record<string, { operationId?: string; parameters?: unknown[] }>>;
+      components: { schemas: Record<string, Record<string, unknown>> };
+    };
+    const operacao = spec.paths['/admin/network/events']?.['get'];
+    assert.equal(operacao?.operationId, 'listAdminNetworkEvents');
+    const parametro = (operacao?.parameters ?? []).find(
+      (p): p is { name: string; schema: Record<string, unknown> } =>
+        typeof p === 'object' && p !== null && (p as { name?: unknown }).name === 'visibility',
+    );
+    assert.ok(parametro !== undefined, 'o contrato perdeu o filtro visibility');
+    const ref = parametro.schema['$ref'];
+    const esquema =
+      typeof ref === 'string' ? spec.components.schemas[ref.replace('#/components/schemas/', '')] : parametro.schema;
+    assert.equal(esquema?.['default'], undefined, 'o filtro visibility voltou a ter default');
   });
 
   void it('mover grava point_changed e NUNCA a coordenada na trilha; o aviso diz o antes e o depois', async () => {

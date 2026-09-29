@@ -5645,7 +5645,13 @@ paths:
           schema: { $ref: '#/components/schemas/AdminNetworkEventTiming' }
         - name: visibility
           in: query
-          schema: { $ref: '#/components/schemas/NetworkEventVisibility' }
+          description: |
+            Sem ele, **publico e privado**: o painel ve todo encontro. O esquema
+            e inline, e nao `NetworkEventVisibility`, de proposito: aquele tem
+            `default: public` (o padrao de quem CRIA), e o validador aplica
+            default de parametro, o que tirava o encontro privado da lista do
+            painel quando o filtro nao vinha (QA, 28/09).
+          schema: { type: string, enum: [public, private] }
         - name: city
           in: query
           schema: { type: string, minLength: 2, maxLength: 60 }

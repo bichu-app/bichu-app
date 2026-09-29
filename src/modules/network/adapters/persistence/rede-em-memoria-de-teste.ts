@@ -299,6 +299,7 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
     listarEncontros: (recorte) => {
       const itens = [...estado.encontros.values()]
         .filter((g) => (recorte.publicacao === undefined ? g.publicacao !== 'removed' : g.publicacao === recorte.publicacao))
+        .filter((g) => recorte.visibilidade === undefined || g.visibilidade === recorte.visibilidade)
         .map((g) => montar(estado, g));
       const inicio = (recorte.page - 1) * recorte.limit;
       return Promise.resolve({ itens: itens.slice(inicio, inicio + recorte.limit), total: itens.length });
