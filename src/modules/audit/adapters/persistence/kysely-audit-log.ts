@@ -172,6 +172,24 @@ export function criarContagemNaTrilha(): ContagemNaTrilha {
       const r = linha.rows[0];
       return { total: Number(r?.total ?? 0), maisAntigo: r?.mais_antigo ?? null };
     },
+
+    async contarNaJanela(trx, consulta) {
+      const atual = await sql<{ papel: string }>`select current_user as papel`.execute(trx);
+      const papelAnterior = atual.rows[0]?.papel;
+      if (papelAnterior === undefined) {
+        throw new Error('O banco nao respondeu current_user; a contagem nao sabe que papel repor.');
+      }
+      await assumirPapel(trx, PAPEL_DE_ESCRITA);
+      const linha = await sql<{ total: string }>`
+        select count(*) as total
+          from audit.events
+         where action = ${consulta.action}
+           and resource_id = ${consulta.resourceId}
+           and metadata ->> 'reason' = ${consulta.motivo}
+           and occurred_at > ${consulta.desde}::timestamptz`.execute(trx);
+      await assumirPapel(trx, papelAnterior);
+      return Number(linha.rows[0]?.total ?? 0);
+    },
   };
 }
 

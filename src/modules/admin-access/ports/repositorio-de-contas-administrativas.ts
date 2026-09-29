@@ -39,6 +39,12 @@ export interface RepositorioDeContasAdministrativas {
   regravarSenha(id: AdminAccountId, passwordPhc: string, agora: Instant): Promise<void>;
   /** Empurra `sessions_invalid_before`, sem nunca recua-la. */
   empurrarBarreira(trx: TransacaoDeEscrita, id: AdminAccountId, barreira: Instant): Promise<void>;
+  /**
+   * `SELECT ... FOR UPDATE` na conta: serializa as falhas de login concorrentes
+   * da mesma conta, para que duas tentativas simultaneas nao contem nove cada
+   * e nenhuma bloqueie (D44).
+   */
+  travarParaContarFalhas(trx: TransacaoDeEscrita, id: AdminAccountId): Promise<void>;
   /** Grava o bloqueio que so `conta-admin redefinir-senha` desfaz. Nao sobrescreve bloqueio anterior. */
   bloquear(trx: TransacaoDeEscrita, id: AdminAccountId, motivo: MotivoDoBloqueio, agora: Instant): Promise<void>;
 }

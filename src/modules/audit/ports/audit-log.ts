@@ -300,6 +300,22 @@ export interface ContagemNaTrilha {
       readonly desde: Date;
     },
   ): Promise<{ readonly total: number; readonly maisAntigo: Date | null }>;
+
+  /**
+   * Quantos eventos de `action` sobre `resourceId`, com `metadata.reason =
+   * motivo`, desde `desde`. E a contagem duravel das falhas de login do painel
+   * (D44): 10 em 24 horas bloqueiam a conta, e um reinicio do processo nao
+   * pode zerar isso.
+   */
+  contarNaJanela(
+    trx: TransacaoDeEscrita,
+    consulta: {
+      readonly action: AuditAction;
+      readonly resourceId: string;
+      readonly motivo: string;
+      readonly desde: Date;
+    },
+  ): Promise<number>;
 }
 
 /** O que o trabalho de uma escrita auditada devolve: o resultado e o evento. */

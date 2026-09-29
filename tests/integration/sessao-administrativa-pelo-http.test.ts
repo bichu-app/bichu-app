@@ -45,8 +45,9 @@ import {
 } from '../../src/shared/http/superficie-administrativa.js';
 import { defineRoute, type RouteDefinition } from '../../src/shared/http/route-definition.js';
 import { registrarRota } from '../../src/shared/http/registrar-rota.js';
-import type { AdminAccountId, UserId } from '../../src/shared/types/brands.js';
+import type { AdminAccountId, Instant, UserId } from '../../src/shared/types/brands.js';
 import {
+  criarContagemNaTrilha,
   criarEscritaAuditada,
   criarTrilhaDeAuditoria,
   criarTrilhaTransacional,
@@ -147,6 +148,7 @@ async function subir(trilhaQuebrada: boolean): Promise<Servidor> {
     contas: criarRepositorioDeContasAdministrativas(db),
     escrita: criarEscritaAuditada({ db, trilha: trilhaQuebrada ? quebrada : real }),
     trilha,
+    contagem: criarContagemNaTrilha(),
     captcha: { avaliar: (token: string | undefined) => Promise.resolve(token === CAPTCHA_BOM ? 0.9 : undefined) },
     senhasVazadas: vazadas,
     avisos: mailer,
@@ -513,6 +515,94 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
     // balde diferente, que e o que o caso existe para pegar.
     const diferenca = prazo(daConta) - prazo(doInexistente);
     assert.ok(diferenca === 0 || diferenca === 1, `prazos ${String(prazo(daConta))} e ${String(prazo(doInexistente))}`);
+  });
+
+  /**
+   * Semeia `quantas` recusas de senha errada da conta na trilha, gravadas em
+   * `quando`, pela mesma trilha transacional da aplicacao (o papel de escrita).
+   */
+  async function semearFalhas(
+    conta: AdminAccountId,
+    quantas: number,
+    opcoes: { quando?: number; motivo?: string; recurso?: string } = {},
+  ): Promise<void> {
+    const config = loadAppConfig();
+    const quando = (opcoes.quando ?? systemClock.now()) as Instant;
+    const trilhaNoTempo = criarTrilhaTransacional({
+      ids: criarIdGenerator(() => quando),
+      clock: { now: () => quando },
+      ipHmacKey: config.ipHmacKey,
+    });
+    await banco.db.transaction().execute(async (trx) => {
+      for (let i = 0; i < quantas; i += 1) {
+        await trilhaNoTempo.recordIn(trx, {
+          actorKind: 'anonymous',
+          action: 'admin.session.denied',
+          resourceKind: 'admin_account',
+          resourceId: opcoes.recurso ?? conta,
+          metadata: { surface: 'admin', reason: opcoes.motivo ?? 'bad_password' },
+        });
+      }
+    });
+  }
+
+  const tentarSenha = (email: string, password: string): Promise<Resposta> =>
+    chamar(principal, 'POST', '/admin/auth/login', {
+      cabecalhos: { origin: ORIGEM, 'x-captcha-token': CAPTCHA_BOM }, corpo: { email, password },
+    });
+
+  const bloqueioDe = async (id: AdminAccountId) =>
+    banco.db.selectFrom('admin_accounts').select(['blocked_reason', 'blocked_at']).where('id', '=', id).executeTakeFirstOrThrow();
+
+  void it('D44: a decima senha errada em 24 h grava failed_logins, e a senha certa depois recebe o MESMO 401', async () => {
+    const admin = await contaDoPainel();
+    await semearFalhas(admin.id, 9);
+    const decima = await tentarSenha(admin.email, 'errada errada errada');
+    assert.equal(decima.status, 401);
+    const conta = await bloqueioDe(admin.id);
+    assert.equal(conta.blocked_reason, 'failed_logins');
+    assert.ok(conta.blocked_at !== null);
+    const marcada = await banco.db.selectFrom('audit.events').select('metadata')
+      .where('action', '=', 'admin.session.denied').where('resource_id', '=', admin.id)
+      .orderBy('occurred_at', 'desc').executeTakeFirstOrThrow();
+    assert.deepEqual(marcada.metadata, { surface: 'admin', reason: 'bad_password', blocked: 'failed_logins' });
+
+    const certa = await tentarSenha(admin.email, SENHA);
+    const errada = await tentarSenha(`ninguem-${randomUUID().slice(0, 6)}@exemplo.invalid`, SENHA);
+    assert.equal(certa.status, 401, 'a senha certa abriu sessao numa conta bloqueada por falhas');
+    assert.deepEqual(
+      { type: tipo(certa), title: certa.corpo?.['title'], detail: certa.corpo?.['detail'] },
+      { type: tipo(errada), title: errada.corpo?.['title'], detail: errada.corpo?.['detail'] },
+    );
+    const vivas = await banco.db.selectFrom('admin_sessions').select('id')
+      .where('admin_account_id', '=', admin.id).where('revoked_at', 'is', null).execute();
+    assert.equal(vivas.length, 0);
+  });
+
+  void it('ISCA D44: a nona falha nao bloqueia', async () => {
+    const admin = await contaDoPainel();
+    await semearFalhas(admin.id, 8);
+    assert.equal((await tentarSenha(admin.email, 'errada errada errada')).status, 401);
+    assert.equal((await bloqueioDe(admin.id)).blocked_reason, null);
+  });
+
+  void it('ISCA D44: falhas de mais de 24 h, de outro motivo ou de outra conta nao contam', async () => {
+    const admin = await contaDoPainel();
+    const outra = await contaDoPainel();
+    await semearFalhas(admin.id, 9, { quando: systemClock.now() - 25 * 60 * 60 * 1000 });
+    await semearFalhas(admin.id, 9, { motivo: 'captcha' });
+    await semearFalhas(admin.id, 9, { recurso: outra.id });
+    assert.equal((await tentarSenha(admin.email, 'errada errada errada')).status, 401);
+    assert.equal((await bloqueioDe(admin.id)).blocked_reason, null, 'contou falha que nao era desta janela, motivo ou conta');
+  });
+
+  void it('D44: o bloqueio por disavowed nao e sobrescrito por failed_logins', async () => {
+    const admin = await contaDoPainel();
+    await banco.db.updateTable('admin_accounts').set({ blocked_reason: 'disavowed', blocked_at: new Date() })
+      .where('id', '=', admin.id).execute();
+    await semearFalhas(admin.id, 9);
+    assert.equal((await tentarSenha(admin.email, 'errada errada errada')).status, 401);
+    assert.equal((await bloqueioDe(admin.id)).blocked_reason, 'disavowed');
   });
 
   void it('login com Origin de subdominio irmao: 403, e nenhuma sessao', async () => {

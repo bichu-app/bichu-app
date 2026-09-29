@@ -33,7 +33,7 @@ import type {
 import type { IdGenerator } from '../../../shared/ports/id-generator.js';
 import { comoData, comoIso, type Clock } from '../../../shared/time/clock.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
-import type { AuditEvent, AuditLog, EscritaAuditada } from '../../audit/ports/audit-log.js';
+import type { AuditEvent, AuditLog, ContagemNaTrilha, EscritaAuditada } from '../../audit/ports/audit-log.js';
 import type { ListaDeSenhasVazadas } from '../../identity/ports/lista-de-senhas-vazadas.js';
 import {
   consumirTempoDeVerificacao,
@@ -56,6 +56,7 @@ import {
   precisaRenovarUso,
   VALIDADE_DO_NAO_FUI_EU_EM_MS,
 } from '../domain/sessao-administrativa.js';
+import { MOTIVO_DA_FALHA_QUE_CONTA, atingiuOBloqueio, inicioDaJanela } from '../domain/bloqueio-por-falhas.js';
 import type { AvisoPorEmail } from '../ports/aviso-por-email.js';
 import type { ContaAdministrativa, RepositorioDeContasAdministrativas } from '../ports/repositorio-de-contas-administrativas.js';
 import type { SessaoAdministrativaRepository } from '../ports/sessao-administrativa-repository.js';
@@ -78,6 +79,8 @@ export interface DependenciasDaSessaoAdministrativa {
   readonly contas: RepositorioDeContasAdministrativas;
   readonly escrita: EscritaAuditada;
   readonly trilha: AuditLog;
+  /** A contagem duravel das falhas de login, lida da trilha (D44: 10 em 24 h bloqueiam). */
+  readonly contagem: ContagemNaTrilha;
   readonly captcha: VerificadorDeCaptcha;
   readonly senhasVazadas: ListaDeSenhasVazadas;
   readonly avisos: AvisoPorEmail;
@@ -152,6 +155,67 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       ...(contaAlvo === undefined ? {} : { resourceId: contaAlvo }),
       metadata: { surface: 'admin', reason: motivo },
     });
+  }
+
+  /**
+   * Senha errada de conta que existe (D44). Numa transacao: trava a conta,
+   * conta as falhas da janela de 24 horas na trilha, bloqueia na decima
+   * (`failed_logins`, que so `conta-admin redefinir-senha` desfaz) e grava a
+   * recusa DESTA tentativa, na mesma transacao. Falha da trilha desfaz o
+   * bloqueio: bloqueio sem registro seria uma conta trancada sem explicacao.
+   *
+   * A resposta continua o mesmo 401 da senha errada, antes e depois do
+   * bloqueio: o bloqueio nao diz a quem tenta que a conta existe.
+   */
+  async function registrarSenhaErrada(conta: ContaAdministrativa, contexto: ContextoDaRequisicao): Promise<void> {
+    const agora = deps.clock.now();
+    const bloqueou = await deps.escrita.executar(async (trx) => {
+      await deps.contas.travarParaContarFalhas(trx, conta.id);
+      const anteriores = await deps.contagem.contarNaJanela(trx, {
+        action: 'admin.session.denied',
+        resourceId: conta.id,
+        motivo: MOTIVO_DA_FALHA_QUE_CONTA,
+        desde: inicioDaJanela(agora),
+      });
+      const bloqueia = conta.blockedReason === null && atingiuOBloqueio(anteriores);
+      if (bloqueia) await deps.contas.bloquear(trx, conta.id, 'failed_logins', agora);
+      return {
+        resultado: bloqueia,
+        evento: {
+          actorKind: 'anonymous',
+          actorIp: contexto.ip,
+          correlationId: contexto.correlationId,
+          action: 'admin.session.denied',
+          resourceKind: 'admin_account',
+          resourceId: conta.id,
+          metadata: {
+            surface: 'admin',
+            reason: MOTIVO_DA_FALHA_QUE_CONTA,
+            ...(bloqueia ? { blocked: 'failed_logins' } : {}),
+          },
+        },
+      };
+    });
+    if (!bloqueou) return;
+    deps.registrarOcorrencia(
+      { evento: 'admin.account.blocked_failed_logins', conta: conta.id, correlationId: contexto.correlationId },
+      'ALERTA: conta do painel bloqueada por dez falhas de login em 24 horas',
+    );
+    // Sem `await`: o envio nao pode alongar esta resposta em relacao a da senha
+    // errada comum, pelo mesmo motivo de `avisarSenhaVazada`.
+    void avisarTodosOsAdministradores(
+      {
+        assunto: 'Uma conta do painel do Bichu foi bloqueada por tentativas de senha',
+        corpo:
+          `Em ${comoIso(agora)} (UTC) a conta de ${conta.displayName} chegou a dez tentativas de senha ` +
+          'errada em 24 horas, e está bloqueada. As sessões já abertas continuam; novas entradas são ' +
+          'recusadas.\n\n' +
+          'Para liberar, o responsável pelo painel precisa rodar `conta-admin redefinir-senha` no ' +
+          'servidor, com a pessoa digitando a senha nova. Não existe link de redefinição.\n\n' +
+          'Se não foi a própria pessoa errando a senha, alguém está tentando entrar com o e-mail dela.',
+      },
+      { evento: 'admin.account.block_notice_failed', conta: conta.id, correlationId: contexto.correlationId },
+    );
   }
 
   function visao(
@@ -414,7 +478,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       const confere = await verificarSenha(entrada.password, conta.passwordPhc);
       const vazada = (await consultaAVazadas) === true;
       if (!confere) {
-        await registrarLoginRecusado(contexto, 'bad_password', conta.id);
+        await registrarSenhaErrada(conta, contexto);
         throw problemas.credencialRecusada();
       }
       if (conta.status !== 'active' || !abreSessaoAdministrativa([conta.papel])) {

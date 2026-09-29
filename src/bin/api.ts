@@ -323,6 +323,7 @@ export async function main(): Promise<void> {
     contas: criarRepositorioDeContasAdministrativas(db),
     escrita: escritaAuditada,
     trilha,
+    contagem: criarContagemNaTrilha(),
     // D41. Sem `CAPTCHA_TRANSPORT=recaptcha_enterprise` e as duas variaveis
     // dele, o verificador recusa todo login administrativo: nao ha modo que
     // aprove sem avaliar.

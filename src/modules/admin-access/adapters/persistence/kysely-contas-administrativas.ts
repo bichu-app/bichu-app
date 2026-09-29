@@ -93,6 +93,10 @@ export function criarRepositorioDeContasAdministrativas(db: Db): RepositorioDeCo
         .execute();
     },
 
+    async travarParaContarFalhas(trx, id) {
+      await trx.selectFrom('admin_accounts').select('id').where('id', '=', id).forUpdate().execute();
+    },
+
     async bloquear(trx, id, motivo, agora) {
       // `blocked_reason IS NULL` na clausula: o primeiro motivo fica. Um "nao
       // fui eu" sobre uma conta ja bloqueada por falhas nao apaga a historia.
