@@ -24,8 +24,9 @@ import {
   captchaNaoConfigurado,
   type VerificadorDeCaptcha,
 } from '../../ports/verificador-de-captcha.js';
+import { TOKEN_DA_CONTA_DE_SERVICO } from '../../../../shared/adapters/external/metadados-do-gcp.js';
 
-const METADADOS = 'http://metadata.google.internal/computeMetadata/v1/instance/service-account/token';
+const METADADOS = TOKEN_DA_CONTA_DE_SERVICO;
 const API = 'https://recaptchaenterprise.googleapis.com/v1';
 const TIMEOUT_MS = 5_000;
 const MARGEM_DO_TOKEN_MS = 60_000;

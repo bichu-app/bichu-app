@@ -14,6 +14,15 @@ import { describe, it } from 'node:test';
 import { SegredoIndisponivelError } from '../../ports/secret-provider.js';
 import { criarSecretProviderGerenciado, type Buscar } from './gcp-secret-manager.js';
 
+/**
+ * O endereco EXATO do token (29/09: a forma `service-account/token` respondia
+ * 404 na VM e passava aqui, porque o duble respondia a qualquer URL com
+ * `metadata`). Literal, e nao importado: trocar a constante do adaptador
+ * reprova este arquivo.
+ */
+const METADADOS_EXATO =
+  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
+
 const CONFIG = { projeto: 'projeto-de-teste', versao: 'latest' };
 const NOME = 'SEGREDO_DE_TESTE';
 const VALOR_QUE_NAO_PODE_VAZAR = 'valor-descartavel-que-nao-pode-aparecer-em-log';
@@ -33,7 +42,9 @@ function buscarFalso(
   const buscar: Buscar = (entrada) => {
     const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
     chamadas.push(url);
-    if (url.includes('metadata')) return Promise.resolve(new Response(TOKEN, { status: 200 }));
+    if (url === METADADOS_EXATO) return Promise.resolve(new Response(TOKEN, { status: 200 }));
+    // Qualquer outra forma do endereco de metadados: 404, como na VM.
+    if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
     return Promise.resolve(responder(url));
   };
   return { buscar, chamadas };
@@ -50,7 +61,7 @@ void describe('o nome da variável É o identificador do segredo', () => {
   void it('pede exatamente o nome recebido, sem prefixo nem minúsculas', async () => {
     const { buscar, chamadas } = buscarFalso(() => respostaComValor('v'));
     await criarSecretProviderGerenciado(CONFIG, buscar).obter(NOME);
-    const pedido = chamadas.find((url) => !url.includes('metadata'));
+    const pedido = chamadas.find((url) => url !== METADADOS_EXATO);
     assert.ok(pedido?.includes(`/secrets/${NOME}/versions/latest:access`), pedido);
   });
 });
@@ -125,13 +136,15 @@ void describe('o valor não vaza e não é adulterado', () => {
     const provedor = criarSecretProviderGerenciado(CONFIG, buscar);
     await provedor.obter('UM');
     await provedor.obter('OUTRO');
-    assert.equal(chamadas.filter((url) => url.includes('metadata')).length, 1);
+    assert.equal(chamadas.filter((url) => url === METADADOS_EXATO).length, 1);
   });
 
   void it('instância sem conta de serviço: o metadados recusa e o nome vai junto', async () => {
     const buscar: Buscar = (entrada) => {
       const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
-      if (url.includes('metadata')) return Promise.resolve(new Response('', { status: 404 }));
+      if (url === METADADOS_EXATO) return Promise.resolve(new Response('', { status: 404 }));
+      // Qualquer outra forma do endereco de metadados: 404, como na VM.
+      if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
       return Promise.resolve(respostaComValor('v'));
     };
     await assert.rejects(

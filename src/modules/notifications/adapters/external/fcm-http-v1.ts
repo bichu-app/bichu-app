@@ -75,10 +75,10 @@ import type {
   ResultadoDoEnvio,
 } from '../../ports/push-sender.js';
 import { PushNaoEnviadoError } from '../../ports/push-sender.js';
+import { TOKEN_DA_CONTA_DE_SERVICO } from '../../../../shared/adapters/external/metadados-do-gcp.js';
 
 /** Fonte da credencial da instância. Não é domínio público: só resolve dentro da VM. */
-const METADADOS =
-  'http://metadata.google.internal/computeMetadata/v1/instance/service-account/token';
+const METADADOS = TOKEN_DA_CONTA_DE_SERVICO;
 const ENVIO = 'https://fcm.googleapis.com/v1';
 
 /** O envio não pode ficar pendurado: a fila reenfileira, o processo segue. */
