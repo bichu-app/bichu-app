@@ -748,7 +748,12 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// desenho novo com a paginacao da `development`, e nao e nenhuma das duas.
 /// Medido com o indice temporario deste portao sobre a arvore mesclada.
 /// Anteriores: `863560db...` (integracao) e `c0d5bd30...` (desenho novo).
-const String _arvoreDasTelas = '6bcbdd0f3945c3352da0e15250c48b46aac5b25f';
+///
+/// **Remedido pela BICHUS-251, 28/09/2026:** `rede/local_do_encontro.dart`
+/// passou a ler o endereco dos tiles e o `User-Agent` do build
+/// (`config/mapa.json`, portao de portabilidade). Nao toca camera nem aparelho.
+/// Anterior: `6bcbdd0f...`.
+const String _arvoreDasTelas = '67a10122bd57d7231e13ebfc68d6615e94ef8e6d'; // BICHUS-251
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
