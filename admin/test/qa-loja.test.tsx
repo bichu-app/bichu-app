@@ -277,7 +277,7 @@ describe('imagem sem envio (upload_id nulo) na galeria da Loja', () => {
   it('a imagem afetada tem a marca e o alerta diz a posição', async () => {
     montar('/loja/racao-adulto-15kg', { 'GET /admin/store/items/{itemSlug}': json(200, item(imagens), { ETag: '"4"' }) });
     expect(
-      await screen.findByText('A imagem 2 veio de uma conta que não existe mais. Ela fica no produto enquanto você não mexer na galeria; qualquer mudança nas imagens a tira do produto.'),
+      await screen.findByText('A imagem 2 veio de uma conta que não existe mais. Ela fica no produto enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, a tira do produto. Para mudar a galeria sem perdê-la, envie o mesmo arquivo de novo.'),
     ).toBeInTheDocument();
     const afetada = screen.getByRole('listitem', { name: 'Imagem 2 de 2, Sai se a galeria mudar' });
     expect(within(afetada).getByText('Sai se a galeria mudar')).toBeInTheDocument();

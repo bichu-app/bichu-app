@@ -164,9 +164,9 @@ export function avisoDeImagensSemEnvio(v: Pick<ValoresDoProduto, 'imagens'>): st
   const posicoes = v.imagens.flatMap((im, i) => (semEnvio(im) ? [i + 1] : []));
   if (posicoes.length === 0) return null;
   if (posicoes.length === 1) {
-    return `A imagem ${String(posicoes[0])} veio de uma conta que não existe mais. Ela fica no produto enquanto você não mexer na galeria; qualquer mudança nas imagens a tira do produto.`;
+    return `A imagem ${String(posicoes[0])} veio de uma conta que não existe mais. Ela fica no produto enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, a tira do produto. Para mudar a galeria sem perdê-la, envie o mesmo arquivo de novo.`;
   }
-  return `${String(posicoes.length)} imagens vieram de uma conta que não existe mais. Elas ficam no produto enquanto você não mexer na galeria; qualquer mudança nas imagens as tira do produto.`;
+  return `${String(posicoes.length)} imagens vieram de uma conta que não existe mais. Elas ficam no produto enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, as tira do produto. Para mudar a galeria sem perdê-las, envie os mesmos arquivos de novo.`;
 }
 
 const assinaturaDaGaleria = (v: Pick<ValoresDoProduto, 'imagens'>) => JSON.stringify(v.imagens.map((im) => [im.chave, im.alt.trim()]));

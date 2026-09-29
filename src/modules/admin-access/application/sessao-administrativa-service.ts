@@ -321,7 +321,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
           'Se não foi, abra este link. Ele encerra na hora todas as sessões da conta e ' +
           'bloqueia novas entradas, sem pedir senha:\n\n' +
           `${base}/nao-fui-eu#t=${tokenBruto}\n\n` +
-          'Depois, fale com o responsável pelo painel para redefinir a senha.',
+          'Depois, fale com o responsável pelo backoffice para redefinir a senha.',
       });
     } catch (erro) {
       deps.registrarOcorrencia(

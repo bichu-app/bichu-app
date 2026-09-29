@@ -146,6 +146,13 @@ describe('galeria no corpo da alteracao', () => {
       }),
     );
     expect(corpo({ ...base, titulo: 'Outro nome' }, base)).not.toHaveProperty('images');
+    const { avisoDeImagensSemEnvio } = await import('../src/loja/formulario-do-produto.ts');
+    expect(avisoDeImagensSemEnvio(base)).toBe(
+      'A imagem 1 veio de uma conta que não existe mais. Ela fica no produto enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, a tira do produto. Para mudar a galeria sem perdê-la, envie o mesmo arquivo de novo.',
+    );
+    expect(avisoDeImagensSemEnvio({ imagens: [base.imagens[0]!, { ...base.imagens[0]!, chave: 'sem-envio-9' }] })).toBe(
+      '2 imagens vieram de uma conta que não existe mais. Elas ficam no produto enquanto você não mexer na galeria; qualquer mudança nas imagens, até numa descrição, as tira do produto. Para mudar a galeria sem perdê-las, envie os mesmos arquivos de novo.',
+    );
     expect(corpo({ ...base, imagens: [...base.imagens].reverse() }, base).images).toEqual([
       { upload_id: '00000000-0000-4000-8000-000000000002', alt_text: 'Verso' },
     ]);

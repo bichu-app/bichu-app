@@ -26,6 +26,7 @@ describe('/nao-fui-eu', () => {
   it('abrir o link nao dispara nada: sem POST, sem sessao, e o token sai da barra de endereco', async () => {
     const { servidor } = montar({ status: 204 });
     expect(await screen.findByRole('heading', { name: 'Não foi você que entrou?' })).toBeInTheDocument();
+    expect(screen.getByText(/^Se você não entrou no backoffice no horário que o e-mail informa, confirme abaixo\./)).toBeInTheDocument();
     expect(servidor.requisicoes).toHaveLength(0);
     expect(window.location.hash).toBe('');
     expect(window.location.href).not.toContain(TOKEN);
@@ -35,6 +36,7 @@ describe('/nao-fui-eu', () => {
     const { servidor } = montar({ status: 204 });
     fireEvent.click(await screen.findByRole('button', { name: 'Encerrar as sessões e bloquear a conta' }));
     expect(await screen.findByRole('heading', { name: 'Sessões encerradas e conta bloqueada' })).toBeInTheDocument();
+    expect(screen.getByText('Para voltar a entrar, fale com o responsável pelo backoffice: é ele quem define a senha nova. Os administradores foram avisados por e-mail.')).toBeInTheDocument();
     expect(servidor.requisicoes).toHaveLength(1);
     const [req] = servidor.requisicoes;
     expect(req?.metodo).toBe('POST');
@@ -48,6 +50,9 @@ describe('/nao-fui-eu', () => {
     montar(problema(410, 'token-expired'));
     fireEvent.click(await screen.findByRole('button', { name: 'Encerrar as sessões e bloquear a conta' }));
     expect(await screen.findByRole('heading', { name: 'Este link não vale mais' })).toBeInTheDocument();
+    // UX 30.8 D11 e D12: o 410 junta vencido, usado e inexistente; a tela nao afirma a causa.
+    expect(screen.getByText('Cada link deste aviso vale por 7 dias e uma vez só.')).toBeInTheDocument();
+    expect(screen.getByText(/^Se você confirmou há pouco e a página falhou, o bloqueio pode já ter sido feito\./)).toBeInTheDocument();
   });
 
   it('link sem token, ou com token fora do formato, nao oferece o botao nem chama o servidor', async () => {

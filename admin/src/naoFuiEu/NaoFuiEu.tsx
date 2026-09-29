@@ -61,14 +61,16 @@ export default function NaoFuiEu({ fetch }: { fetch?: typeof globalThis.fetch })
             <h1 className="t-title-lg">Sessões encerradas e conta bloqueada</h1>
             <Banner tipo="ok">Todas as sessões da sua conta no backoffice foram encerradas, e ninguém entra com ela até a senha ser trocada.</Banner>
             <p className="t-body">
-              Para voltar a entrar, fale com o responsável pelo backoffice: a senha nova é definida por ele, no servidor. Todos os administradores já receberam um aviso.
+              Para voltar a entrar, fale com o responsável pelo backoffice: é ele quem define a senha nova. Os administradores foram avisados por e-mail.
             </p>
           </>
         ) : fase === 'vencido' ? (
           <>
             <h1 className="t-title-lg">Este link não vale mais</h1>
-            <Banner tipo="alerta">O link venceu ou já foi usado. Ele vale por 7 dias e uma vez só.</Banner>
-            <p className="t-body">Se você ainda acha que alguém entrou na sua conta, fale com o responsável pelo backoffice.</p>
+            <Banner tipo="alerta">Cada link deste aviso vale por 7 dias e uma vez só.</Banner>
+            <p className="t-body">
+              Se você confirmou há pouco e a página falhou, o bloqueio pode já ter sido feito. Se ainda acha que alguém entrou na sua conta, fale com o responsável pelo backoffice.
+            </p>
           </>
         ) : fase === 'incompleto' ? (
           <>
@@ -80,7 +82,7 @@ export default function NaoFuiEu({ fetch }: { fetch?: typeof globalThis.fetch })
           <>
             <h1 className="t-title-lg">Não foi você que entrou?</h1>
             <p className="t-body">
-              Se você não entrou no backoffice na hora do e-mail, confirme abaixo. Todas as sessões da sua conta são encerradas, inclusive a de quem entrou, e a conta fica
+              Se você não entrou no backoffice no horário que o e-mail informa, confirme abaixo. Todas as sessões da sua conta são encerradas, inclusive a de quem entrou, e a conta fica
               bloqueada até o responsável pelo backoffice trocar a senha. Todos os administradores recebem um aviso.
             </p>
             <p className="t-body c-sec">Se foi você, feche esta página. Nada muda.</p>
