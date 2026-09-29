@@ -26,20 +26,22 @@
 # nucleo mata dentro daquele grupo, e o Postgres nem fica sabendo. O worker
 # morre, reinicia, e o trabalho volta para a tabela `jobs`.
 #
-# Soma dos limites DO QUE RODA DE FATO: 1792 MB, deixando ~256 MB para o
-# sistema operacional. Entram `db` 640, `objeto` 320, `api` 192, `worker` 448,
-# `edge` 64, `admin-web` 32 (medido em 23/09) e `web` 96 (ADR-0028). Ficam fora
-# `migracao` (256, termina antes de `api` e `worker` subirem), `mail` (perfis
-# dev/qa, nao sobe no hospedado) e `ferramentas` (1 GB, perfil proprio, so sob
-# `docker compose run`: e o teto do `tsc`, e nao de runtime). Juncao de 28/09 da
-# `integracao/backoffice-v1`: 1664 + 32 do painel + 96 do site.
+# Soma dos limites DO QUE RODA DE FATO: 1728 MB, deixando ~320 MB para o
+# sistema operacional. Entram `db` 640, `objeto` 256, `api` 192, `worker` 448,
+# `edge` 64, `admin-web` 32 e `web` 96 (ADR-0028). Ficam fora `migracao` (256,
+# termina antes de `api` e `worker` subirem), `mail` (perfis dev/qa, nao sobe
+# no hospedado) e `ferramentas` (1 GB, perfil proprio, so sob `docker compose
+# run`: e o teto do `tsc`, e nao de runtime).
 #
-# ATENCAO: 256 MB fica ABAIXO do piso de 300 que este bloco fixou (nucleo,
-# systemd e sshd ~80, dockerd e containerd ~100, Ops Agent ~80 a 100, exigido
-# pelo alerta de memoria do ADR-0029, e o resto para cache de pagina). A juncao
-# do painel com o site nao cabe na e2-small com folga segura: ou um teto desce
-# por medida, ou a maquina sobe. Decisao pendente; a soma foi feita pelos
-# `mem_limit`, e a medida com `docker stats` na pilha juntada ainda falta.
+# Juncao de 28/09 da `integracao/backoffice-v1`: 1664 + 32 do painel + 96 do
+# site dava 1792 e ~256 MB de folga, abaixo do piso de 300 (nucleo, systemd e
+# sshd ~80, dockerd e containerd ~100, Ops Agent ~80 a 100, exigido pelo alerta
+# de memoria do ADR-0029, e o resto para cache de pagina). A maquina NAO subiu
+# (decisao da coordenacao): o `objeto` desceu de 320 para 256 POR MEDIDA (ver o
+# servico). Picos medidos com `docker stats` na pilha juntada, 90 s de leitura
+# publica, site e painel, 20 em paralelo: db 77, objeto 73 (130 com envio
+# pesado), api 63, web 35, worker 34 (sem foto; o pico dele e o da foto de
+# 50 MP, 313 MiB, ver o servico), edge 25, admin-web 14 MiB.
 #
 # NO MERGE, ESTA LINHA NAO SE RESOLVE ESCOLHENDO UM LADO. Duas branches que
 # mexem em teto ou acrescentam servico produzem dois numeros certos para a
@@ -109,7 +111,15 @@ services:
     # atualizar a tag vai esbarrar nisso e perder tempo achando que e
     # credencial. O que pina de verdade e o digest, nao a tag.
     image: quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
-    mem_limit: 320m
+    # 256m, e nao 320m, MEDIDO em 28/09 na pilha juntada (integracao do
+    # backoffice), com `docker stats` a cada 2 s: 73 MiB sob 90 s de leitura
+    # publica do app, do site e do painel, e pico de 130 MiB com 24 objetos de
+    # 8 MiB enviados e lidos 8 em paralelo -- mais pesado que o uso real (a
+    # foto do pet e a imagem de catalogo tem teto de 5 MiB e saem uma por vez).
+    # 256m deixa ~126 MiB sobre esse pico, e devolve os 64 MB que a juncao do
+    # painel e do site tirou da folga do sistema. Repetido com o teto novo:
+    # mesmo pico, nenhuma morte por cgroup.
+    mem_limit: 256m
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY_ID:?defina no .env}
@@ -426,10 +436,10 @@ services:
   #     estiver aqui. Subir 320m para caber um compilador faz o portao passar a
   #     abencoar, em producao, uma api com o dobro do teto que ela precisa -- e
   #     ele existe justamente para o teto ser real.
-  #  2. A soma no topo deste arquivo (1792 MB quando isto foi escrito, e de
-  #     novo 1792 desde 28/09, com o painel e o site) e o orcamento da e2-small
-  #     de 2 GB. `api` em 700m a levaria a 2300 MB, e o limite deixaria de caber
-  #     na maquina que ele protege.
+  #  2. A soma no topo deste arquivo (1792 MB quando isto foi escrito, 1728
+  #     desde 28/09, com o painel e o site) e o orcamento da e2-small de 2 GB.
+  #     `api` em 700m a levaria a 2236 MB, e o limite deixaria de caber na
+  #     maquina que ele protege.
   #
   # Entao a compilacao sai do servico com teto de runtime e ganha o seu.
   # Nao e desenho novo: `infra/integracao/compose.integracao.yaml` ja separa
