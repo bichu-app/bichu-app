@@ -147,11 +147,13 @@ const AUSENCIAS_ACEITAS = new Map([
   // inclusive a que alguem escrever amanha ja com codigo de verdade dentro.
   // Conferido arquivo a arquivo: nenhuma das cinco declara `const`, `function`,
   // `class` ou `enum`, entao o compilado nao tem uma instrucao sequer.
-  // ADR-0027 item 20: as tres portas de `admin-access` que so declaram tipos.
+  // ADR-0027 item 20: as quatro portas de `admin-access` que so declaram tipos.
   // A da sessao veio de `identity/ports/`; as outras duas nasceram com o
-  // cadastro proprio do painel. `verificador-de-captcha.ts` NAO esta aqui: ela
+  // cadastro proprio do painel, e `comando-de-contas.ts` com o `conta-admin`
+  // (item 20.3). `verificador-de-captcha.ts` NAO esta aqui: ela
   // exporta valor, e o teste do reCAPTCHA a carrega.
   ['src/modules/admin-access/ports/aviso-por-email.ts', SO_TIPO],
+  ['src/modules/admin-access/ports/comando-de-contas.ts', SO_TIPO],
   ['src/modules/admin-access/ports/repositorio-de-contas-administrativas.ts', SO_TIPO],
   ['src/modules/admin-access/ports/sessao-administrativa-repository.ts', SO_TIPO],
   ['src/modules/found/ports/found-report-repository.ts', SO_TIPO],
