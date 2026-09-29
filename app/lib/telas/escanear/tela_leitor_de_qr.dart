@@ -253,6 +253,13 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
   /// quem nem encostou no teclado.
   bool _codigoFoiDigitado = false;
 
+  /// O que o campo do codigo mostra **embaixo dele**, quando a forma nao fecha.
+  ///
+  /// Separado de [_faixa] de proposito: a faixa e a resposta do servidor, e
+  /// este e o que o app viu sozinho, antes de gastar a viagem. Junta-los faria
+  /// um limpar o outro, e a pessoa perderia o motivo no meio do caminho.
+  String? _erroDoCampo;
+
   int _tentativa = 0;
   int _segundosParaTentar = 0;
   Timer? _contagem;
@@ -394,8 +401,77 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
 
   void _irParaDigitacao() {
     _ofertaManual?.cancel();
-    setState(() => _estado = EstadoDoLeitor.digitando);
+    setState(() {
+      _estado = EstadoDoLeitor.digitando;
+      // Um aviso de forma da visita anterior ao campo nao vale para o campo
+      // que esta abrindo agora.
+      _erroDoCampo = null;
+    });
     _focoDoCodigo.requestFocus();
+  }
+
+  /// O texto que a pessoa le para cada motivo de [FormaDoCodigo].
+  ///
+  /// **Nenhum ramo devolve `null` para uma forma que nao fecha.** Um `default`
+  /// silencioso aqui reabriria o defeito exato que esta correcao fecha: forma
+  /// errada, nada na tela, chamada ao servidor.
+  static String? _textoDaForma(FormaDoCodigo forma, String digitado) {
+    return switch (forma) {
+      FormaDoCodigo.valida => null,
+      FormaDoCodigo.vazia => MensagensDeErro.digiteOCodigo,
+      FormaDoCodigo.curta || FormaDoCodigo.longa =>
+        MensagensDeErro.codigoComTamanhoDiferente(simbolosDoCodigo(digitado)),
+      FormaDoCodigo.foraDoAlfabeto => MensagensDeErro.codigoComCaractereDeFora,
+    };
+  }
+
+  /// Confere a forma a cada toque, e avisa **so do que nao melhora sozinho**.
+  ///
+  /// Sobra de simbolo e caractere de fora sao definitivos: o proximo toque nao
+  /// conserta nenhum dos dois, e esperar o `Continuar` para dizer isso e
+  /// deixar a pessoa terminar de digitar um codigo que ja nao serve. Falta de
+  /// simbolo e o estado normal de quem esta no meio da palavra, e acusar ali
+  /// seria um campo que reclama de cada letra.
+  void _conferirEnquantoDigita(String texto) {
+    final forma = formaDoCodigoDeTag(texto.trim());
+    final aviso = switch (forma) {
+      FormaDoCodigo.longa ||
+      FormaDoCodigo.foraDoAlfabeto => _textoDaForma(forma, texto.trim()),
+      _ => null,
+    };
+    if (aviso == _erroDoCampo) return;
+    setState(() => _erroDoCampo = aviso);
+  }
+
+  /// O toque em `Continuar`: **confere a forma aqui, e so chama se fechar.**
+  ///
+  /// Ate 28/09 este caminho testava `digitado.isEmpty` e mais nada, e a
+  /// mascara cortava no 16o simbolo em silencio: quem colava 26 mandava os 16
+  /// primeiros e recebia do servidor uma recusa sobre um codigo que nunca
+  /// existiu na tela dele. Conferir tamanho e alfabeto aqui troca essa recusa
+  /// generica por uma frase que diz o numero -- e poupa uma viagem que so podia
+  /// terminar em 400.
+  ///
+  /// **Forma, e nunca o simbolo de verificacao.** Ele e do servidor
+  /// (ADR-0004, Emenda 1), e um codigo de 16 simbolos do alfabeto certo com o
+  /// simbolo de verificacao errado **sai daqui e vai ser recusado la**, como
+  /// sempre foi. Repetir a aritmetica dele no app criaria a segunda fonte da
+  /// mesma regra.
+  void _enviarODigitado() {
+    final digitado = _codigo.text.trim();
+    final forma = formaDoCodigoDeTag(digitado);
+    if (forma != FormaDoCodigo.valida) {
+      setState(() {
+        _erroDoCampo = _textoDaForma(forma, digitado);
+        // A resposta anterior do servidor sai da tela: ela era sobre outro
+        // texto, e deixar as duas juntas faz a pessoa ler a errada.
+        _faixa = null;
+      });
+      _focoDoCodigo.requestFocus();
+      return;
+    }
+    setState(() => _erroDoCampo = null);
+    _resolver(digitado, digitado: true);
   }
 
   /// Devolve o foco ao campo **sem tocar no que esta escrito nele**.
@@ -587,6 +663,8 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
         controlador: _codigo,
         foco: _focoDoCodigo,
         faixa: _faixa,
+        erroDoCampo: _erroDoCampo,
+        aoMudar: _conferirEnquantoDigita,
       ),
     };
   }
@@ -652,11 +730,7 @@ class _TelaLeitorDeQrState extends State<TelaLeitorDeQr> {
           rotulo: 'Continuar',
           critico: true,
           carregando: _resolvendo,
-          aoTocar: () {
-            final digitado = _codigo.text.trim();
-            if (digitado.isEmpty) return;
-            _resolver(digitado, digitado: true);
-          },
+          aoTocar: _enviarODigitado,
         ),
         // `Digitar de novo` (BICHUS-153, criterio 3). Ela aparece **so
         // quando o 404 do caminho digitado esta na tela**: em qualquer outro
@@ -1133,11 +1207,18 @@ class _Digitacao extends StatelessWidget {
     required this.controlador,
     required this.foco,
     required this.faixa,
+    required this.erroDoCampo,
+    required this.aoMudar,
   });
 
   final TextEditingController controlador;
   final FocusNode foco;
   final MensagemDeErro? faixa;
+
+  /// O que o app viu sozinho na forma do codigo, antes de chamar o servidor.
+  final String? erroDoCampo;
+
+  final ValueChanged<String> aoMudar;
 
   @override
   Widget build(BuildContext context) {
@@ -1157,11 +1238,20 @@ class _Digitacao extends StatelessWidget {
             correcaoAutomatica: false,
             capitalizacao: TextCapitalization.characters,
             acaoDeTeclado: TextInputAction.done,
-            // A mascara `XXXX-XXXX-XXXX-XXXX` (ADR-0004, Emenda 1). Ela formata
-            // e nao valida: o simbolo de verificacao e conferido no servidor, e
-            // continua sendo, porque duas fontes para a mesma regra divergem.
+            // A mascara `XXXX-XXXX-XXXX-XXXX` (ADR-0004, Emenda 1). Ela
+            // formata e **nao corta**: desde 28/09 um texto mais longo aparece
+            // inteiro, e quem confere tamanho e alfabeto e
+            // `_enviarODigitado`. O simbolo de verificacao continua sendo
+            // conferido no servidor, porque duas fontes para a mesma regra
+            // divergem.
             formatadores: const <TextInputFormatter>[MascaraDoCodigoDaTag()],
             exemplo: 'XXXX-XXXX-XXXX-XXXX',
+            // O erro fica NO CAMPO, e nao na faixa de baixo: e sobre o que
+            // esta escrito ali, e `BichuField` o associa ao campo e o anuncia
+            // por regiao viva (UX secao 13). A faixa e para a resposta do
+            // servidor.
+            erro: erroDoCampo,
+            aoMudar: aoMudar,
           ),
           if (faixa != null) ...<Widget>[
             const SizedBox(height: BichuEspaco.e6),

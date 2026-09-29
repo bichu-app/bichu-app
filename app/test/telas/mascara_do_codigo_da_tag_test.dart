@@ -8,6 +8,13 @@ import 'package:flutter_test/flutter_test.dart';
 /// nao perde simbolo**. Uma mascara que engolisse um caractere produziria um
 /// codigo errado com a forma certa, e a pessoa receberia 400 sem entender por
 /// que -- o campo mostraria exatamente o que ela digitou.
+///
+/// **Dois casos daqui estavam invertidos ate 28/09**, e e exatamente o defeito
+/// acima: eles exigiam que a mascara engolisse o 17o simbolo e o `U`. O cliente
+/// achou pelo telefone. A regra agora e uma so: a mascara descarta **somente** o
+/// que `normalizarCodigoDaTag` tambem descarta (`[^0-9A-Za-z]`), e quem recusa
+/// tamanho e alfabeto e `formaDoCodigoDeTag`, com o numero na frase. As iscas
+/// da tela estao em `codigo_da_tag_sem_truncar_test.dart`.
 void main() {
   TextEditingValue digitado(String texto) => TextEditingValue(
         text: texto,
@@ -50,8 +57,23 @@ void main() {
       expect(aplicar(' GQSM 0XHB.T4D9/G31S '), 'GQSM-0XHB-T4D9-G31S');
     });
 
-    test('para em 16 simbolos: o 17o nao entra', () {
-      expect(aplicar('GQSM0XHBT4D9G31SZZZZ'), 'GQSM-0XHB-T4D9-G31S');
+    test('NAO para em 16 simbolos: o 17o entra, e aparece', () {
+      // ESTE CASO ESTAVA INVERTIDO, e o cliente pagou por isso (28/09). Ele
+      // dizia "o 17o nao entra", e era verdade: a mascara cortava calada, o app
+      // mandava um fragmento de 16 simbolos ao servidor e a pessoa recebia uma
+      // recusa sobre um codigo que ela nunca tinha digitado.
+      //
+      // Guardar a sobra nao e permissividade: e a unica forma de a tela poder
+      // DIZER que o tamanho nao fecha, e de a pessoa poder conferir o que
+      // digitou contra o que esta na plaquinha. Quem recusa e
+      // `formaDoCodigoDeTag`, na hora do `Continuar`, com o numero na frase.
+      expect(aplicar('GQSM0XHBT4D9G31SZZZZ'), 'GQSM-0XHB-T4D9-G31S-ZZZZ');
+      expect(
+        aplicar('GQSM0XHBT4D9G31SZZZZ').replaceAll('-', '').length,
+        20,
+        reason: 'REPROVA: a mascara voltou a cortar. Nenhum simbolo digitado '
+            'pode desaparecer sem a tela dizer.',
+      );
     });
 
     test('I, L e O passam intactos: quem substitui e o servidor', () {
@@ -60,8 +82,16 @@ void main() {
       expect(aplicar('ILO1'), 'ILO1');
     });
 
-    test('U nao entra: ele nao tem substituicao e nunca vira codigo', () {
-      expect(aplicar('GUQS'), 'GQS');
+    test('U entra e fica visivel: quem o recusa e a conferencia de forma', () {
+      // TAMBEM INVERTIDO, e pelo mesmo motivo. Enquanto o `U` desaparecia sob o
+      // dedo, nenhuma conferencia de alfabeto podia acusa-lo -- o caractere ja
+      // nao estava no campo quando alguem olhava --, e a pessoa via a letra
+      // aparecer e ir embora sem explicacao.
+      //
+      // E o MESMO conjunto que o servidor guarda: `normalizarCodigoDaTag` tira
+      // `[^0-9A-Za-z]` e o `U` sobrevive a essa limpeza para ser recusado
+      // depois, com motivo.
+      expect(aplicar('GUQS'), 'GUQS');
     });
 
     test('o cursor fica onde a pessoa deixou, e nao no fim do campo', () {

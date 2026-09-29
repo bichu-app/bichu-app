@@ -15,6 +15,28 @@ import 'package:flutter/services.dart';
 /// mao de quem nao atualiza. O campo que aceita um codigo com o simbolo errado e
 /// recebe 400 esta correto; o erro chega pela resposta.
 ///
+/// ## ELA NAO CORTA NO 16o, E ISSO FOI UM DEFEITO DE CLIENTE
+///
+/// Ate 28/09 havia um `if (escritos == simbolos) break;` aqui, e um `continue`
+/// para todo caractere fora do alfabeto tolerante. Os dois **descartavam
+/// entrada em silencio**: quem colava um codigo de 26 simbolos -- a forma
+/// antiga, que ainda existe impressa -- via o campo aceitar os 16 primeiros
+/// como se fossem o codigo dele, e recebia do servidor uma recusa que nao
+/// tinha relacao nenhuma com o que estava na tela. O cliente achou isso no
+/// telefone, e a frase dele foi que o app "descartou sem avisar".
+///
+/// Agora ela guarda **todo simbolo alfanumerico** que chega, e formata em
+/// grupos de quatro tantos quantos vierem: 26 simbolos ficam visiveis como 26.
+/// Quem confere tamanho e alfabeto e `formaDoCodigoDeTag`, antes da chamada, e
+/// a mensagem que a pessoa le diz o numero que ela digitou. **A mascara nunca
+/// mais decide sozinha o que sobra do que a pessoa escreveu.**
+///
+/// O que ela continua descartando e o que **o servidor tambem descarta**, e so
+/// isso: hifen, espaco, ponto e o resto da pontuacao. `normalizarCodigoDaTag`
+/// abre com `replace(/[^0-9A-Za-z]/g, '')`, entao o campo e o contrato jogam
+/// fora exatamente o mesmo conjunto, e o que sobra no campo e o que o servidor
+/// vai ver. Separador nao e entrada perdida: e o formato da plaquinha.
+///
 /// Ela tambem **nao normaliza `I`/`L`/`O`**. Quem digitar `O` ve `O` na tela, e o
 /// servidor resolve para `0` -- transformar na tela faria o caractere pular sob
 /// o dedo de quem digita, que e o tipo de correcao automatica que a pesquisa de
@@ -44,6 +66,23 @@ class MascaraDoCodigoDaTag extends TextInputFormatter {
   /// aceitar no campo ao lado.
   static final RegExp aceitos = RegExp('[0-9A-TV-Z]');
 
+  /// O que o campo **guarda**: todo digito e toda letra de A a Z, `U`
+  /// incluido.
+  ///
+  /// E mais largo que [aceitos] de proposito, e a diferenca e a razao de ele
+  /// existir. Enquanto a mascara filtrava por [aceitos], um `U` digitado
+  /// **desaparecia sob o dedo** e uma conferencia de alfabeto no valor do
+  /// campo nunca podia reprovar: o caractere que ela deveria acusar ja tinha
+  /// sido apagado antes de ela olhar. Guardar o `U` e o que faz
+  /// `formaDoCodigoDeTag` ter algo para dizer.
+  ///
+  /// E o MESMO conjunto que `normalizarCodigoDaTag` preserva no servidor
+  /// (`[^0-9A-Za-z]` e o que ele joga fora). Duas regras que precisam ser
+  /// iguais escritas nos dois lados e sempre um risco; escrever aqui a do
+  /// servidor, e nao uma mais estreita, pelo menos garante que o campo nunca
+  /// esconda um caractere que o servidor teria visto.
+  static final RegExp mantidos = RegExp('[0-9A-Z]');
+
   /// 16 simbolos, em quatro grupos de quatro.
   static const int simbolos = 16;
   static const int tamanhoDoGrupo = 4;
@@ -53,12 +92,15 @@ class MascaraDoCodigoDaTag extends TextInputFormatter {
 
   /// Aplica a mascara a um texto qualquer. Exposta para teste e para quem
   /// precisar formatar um codigo ja conhecido.
+  /// **Sem teto.** O `break` no 16o simbolo que morava aqui era o defeito do
+  /// cliente: ele fazia o 17o em diante sumir sem nada na tela mudar. Um texto
+  /// longo formata em grupos de quatro ate o fim, e a sobra fica **visivel**
+  /// para quem digitou poder ve-la.
   static String formatar(String bruto) {
     final buffer = StringBuffer();
     var escritos = 0;
     for (final caractere in bruto.toUpperCase().split('')) {
-      if (!aceitos.hasMatch(caractere)) continue;
-      if (escritos == simbolos) break;
+      if (!mantidos.hasMatch(caractere)) continue;
       if (escritos > 0 && escritos % tamanhoDoGrupo == 0) buffer.write('-');
       buffer.write(caractere);
       escritos += 1;
@@ -82,7 +124,7 @@ class MascaraDoCodigoDaTag extends TextInputFormatter {
         .substring(0, novo.selection.baseOffset.clamp(0, novo.text.length))
         .toUpperCase()
         .split('')
-        .where(aceitos.hasMatch)
+        .where(mantidos.hasMatch)
         .length;
 
     var deslocamento = 0;
