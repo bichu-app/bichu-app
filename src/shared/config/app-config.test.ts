@@ -84,6 +84,12 @@ function ambienteCompleto(): Record<string, string> {
     // da variavel, que e o comportamento pedido pelos criterios 5 e 11.
     MAIL_WEBHOOK_SECRET: 'segredo-de-teste-com-32-bytes!!!',
     MAIL_TRANSPORT: 'smtp',
+    // Preenchido na bancada para que os casos possam APAGÁ-LO de propósito,
+    // exatamente como `FCM_PROJECT` logo abaixo. Ele não é lido com `smtp` nem
+    // com `log`, e é isso que o contrapeso do bloco de `MAIL_TRANSPORT` afirma.
+    // Valor de bancada: não autentica em lugar nenhum e não tem a forma de um
+    // token de servidor do Postmark (que é um UUID).
+    MAIL_API_TOKEN: 'token-de-bancada-que-nao-autentica',
     // O padrão local do push, declarado aqui em vez de herdado do processo: um
     // `PUSH_TRANSPORT` de fora entrando na bancada faria os casos abaixo medir
     // o ambiente de quem roda o teste, e não o código.
@@ -198,21 +204,53 @@ void describe('MAIL_TRANSPORT: valor desconhecido nao vira envio real', () => {
     );
   });
 
-  void it('`postmark` ganha mensagem propria, porque o roteiro mandava usa-lo', () => {
-    // O roteiro de provisionamento dizia `MAIL_TRANSPORT=postmark` para
-    // homologacao. Quem seguir uma versao antiga cai aqui, e uma mensagem
-    // generica o faria duvidar da instrucao em vez de entender o estado: a
-    // chave pode estar no cofre, mas o adaptador nao existe (ADR-0009).
+  // Este bloco tinha aqui um caso chamado "`postmark` ganha mensagem propria,
+  // porque o roteiro mandava usa-lo": ele afirmava que a subida MORRIA com
+  // `MAIL_TRANSPORT=postmark`, citando o ADR-0009, porque o adaptador nao
+  // existia. O adaptador existe (`identity/adapters/external/postmark-mailer.ts`)
+  // e o caso virou o seu contrario, logo abaixo. Ele fica registrado aqui porque
+  // um caso apagado sem explicacao parece cobertura que alguem perdeu.
+
+  void it('ISCA: `postmark` e ACEITO na subida, e chega ao `MailConfig`', () => {
+    // A isca da uniao de transportes. Tirar `postmark` de `app-config.ts`
+    // reprova ESTE caso pelo nome -- e sem ele o transporte que entrega de
+    // verdade e inalcancavel: a subida morre antes de qualquer envio, em
+    // homologacao e em producao, dizendo que o valor e desconhecido.
     aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: 'postmark' });
+    const config = loadAppConfig();
+    assert.equal(
+      config.mail.transport,
+      'postmark',
+      'REPROVA: `postmark` nao e um transporte aceito, e o unico caminho de entrega ' +
+        'real do produto (ADR-0009) nao sobe.',
+    );
+    assert.equal(
+      config.mail.apiToken,
+      'token-de-bancada-que-nao-autentica',
+      'REPROVA: o transporte subiu sem o token do provedor chegar ao `MailConfig`. ' +
+        'O adaptador emitiria cabecalho sem credencial e colheria 401 no primeiro ' +
+        'pedido de redefinicao de senha de alguem.',
+    );
+  });
+
+  void it('ISCA: `postmark` SEM MAIL_API_TOKEN nao sobe, e a falha cita a variavel', () => {
+    // A isca da leitura do segredo. Trocar o `requireEnv('MAIL_API_TOKEN')` por
+    // um `optionalEnv` reprova ESTE caso pelo nome. O valor vem do gerenciador de
+    // segredos (ADR-0022, `SEGREDOS_DE_RUNTIME`), que o escreve em `process.env`
+    // ANTES desta leitura -- e por isso a ausencia aqui e a ausencia no cofre.
+    aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: 'postmark', MAIL_API_TOKEN: undefined });
     assert.throws(
       () => loadAppConfig(),
-      (erro: unknown) => erro instanceof Error && erro.message.includes('ADR-0009'),
-      'REPROVA: `postmark` caiu na mensagem generica, e quem seguiu o roteiro fica sem saber por que.',
+      (erro: unknown) => erro instanceof Error && erro.message.includes('MAIL_API_TOKEN'),
+      'REPROVA: o processo subiu com o transporte do provedor e sem o token dele. A ' +
+        'falha apareceria no primeiro pedido de redefinicao de senha, em producao.',
     );
   });
 
   // Contrapesos. Sem eles, uma implementacao que recusasse TUDO passaria nos
-  // dois casos acima -- e recusar tudo tambem derruba a subida.
+  // casos acima -- e recusar tudo tambem derruba a subida. O segundo e o que
+  // impede a correcao preguicosa de exigir o token sempre: ela derrubaria o
+  // `dev` desta maquina, que roda `smtp` contra o mailpit.
   void it('`smtp` e `log` sobem, e ausente vale `smtp`', () => {
     for (const [valor, esperado] of [
       ['smtp', 'smtp'],
@@ -223,6 +261,20 @@ void describe('MAIL_TRANSPORT: valor desconhecido nao vira envio real', () => {
     }
     aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: undefined });
     assert.equal(loadAppConfig().mail.transport, 'smtp');
+  });
+
+  void it('o token do provedor NAO e exigido com `smtp` nem com `log`', () => {
+    for (const valor of ['smtp', 'log'] as const) {
+      aplicar({ ...ambienteCompleto(), MAIL_TRANSPORT: valor, MAIL_API_TOKEN: undefined });
+      const config = loadAppConfig();
+      assert.equal(config.mail.transport, valor);
+      assert.equal(
+        config.mail.apiToken,
+        undefined,
+        '`undefined` e o valor certo aqui: e assim que se le, do proprio tipo, que ' +
+          'nenhum envio autentica em provedor nenhum.',
+      );
+    }
   });
 });
 

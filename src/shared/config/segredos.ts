@@ -80,32 +80,56 @@ export const SEGREDOS_DE_RUNTIME: readonly NomeDeSegredo[] = [
    * armazenamento recusa, e a falha apareceria no primeiro envio de foto. */
   'OBJECT_STORAGE_ACCESS_KEY_ID',
   'OBJECT_STORAGE_SECRET_ACCESS_KEY',
+  /**
+   * O token de servidor do Postmark (ADR-0009). Entra nesta lista COM o codigo
+   * que a le, e nao antes: `app-config.ts` agora tem o
+   * `requireEnv('MAIL_API_TOKEN')` no ramo de `MAIL_TRANSPORT=postmark` e
+   * `postmark-mailer.ts` o emite no cabecalho `X-Postmark-Server-Token`. Ver o
+   * bloco logo abaixo desta lista, que registra o dia em que ela estava aqui sem
+   * consumidor nenhum.
+   *
+   * A resolucao e INCONDICIONAL e a exigencia e CONDICIONAL, e a assimetria e
+   * deliberada: buscar por transporte faria esta lista depender de
+   * `MAIL_TRANSPORT`, que e configuracao comum, e um ambiente hospedado que
+   * trocasse o transporte passaria a precisar de um segredo que ninguem foi
+   * buscar -- descoberto no primeiro envio, que e onde nao se descobre nada.
+   * O preco e conhecido e esta escrito: **o projeto de cada ambiente hospedado
+   * precisa ter este segredo antes de o processo subir.** Homologacao tem desde
+   * 19/09; producao precisa ganhar o dele.
+   */
+  'MAIL_API_TOKEN',
 ];
 
 /**
- * `MAIL_API_TOKEN` NAO esta na lista acima, e a ausencia e deliberada.
+ * `MAIL_API_TOKEN` VOLTOU para a lista acima, e o que estava escrito aqui era o
+ * registro da ausencia. Ele fica, corrigido, porque o criterio que ele guarda
+ * continua valendo para o proximo nome que alguem quiser acrescentar.
  *
- * O segredo existe no cofre desde 19/09, com valor real de homologacao. O que
- * nao existe e quem o leia: nao ha `requireEnv('MAIL_API_TOKEN')` em lugar
- * nenhum de `src/`, porque o adaptador do Postmark ainda nao foi escrito
- * (ADR-0009). Em homologacao o transporte e `log`.
+ * O que dizia: *"o segredo existe no cofre desde 19/09, com valor real de
+ * homologacao. O que nao existe e quem o leia: nao ha `requireEnv('MAIL_API_TOKEN')`
+ * em lugar nenhum de `src/`, porque o adaptador do Postmark ainda nao foi
+ * escrito."* As duas metades daquela frase eram verdade e **nao sao mais**: o
+ * adaptador e `identity/adapters/external/postmark-mailer.ts`, e o
+ * `requireEnv('MAIL_API_TOKEN')` esta em `app-config.ts`, no ramo de
+ * `MAIL_TRANSPORT=postmark`.
  *
- * Eu o acrescentei a lista mais cedo no mesmo dia e o QA reprovou, com razao:
- * a entrada violava o criterio escrito tres paragrafos acima dela -- "so o que
- * e segredo de verdade **e o que `app-config.ts` de fato le hoje**". Na
- * pratica, o ambiente hospedado passaria a MORRER NA SUBIDA por um valor que
- * nenhum consumidor usa. Exigir o que nao se usa nao protege nada e derruba
- * ambiente.
+ * O que o registro preserva e a razao da reprovacao daquele dia. Eu acrescentei o
+ * nome a lista mais cedo em 19/09 e o QA reprovou, com razao: a entrada violava o
+ * criterio escrito tres paragrafos acima dela -- "so o que e segredo de verdade
+ * **e o que `app-config.ts` de fato le hoje**". Na pratica, o ambiente hospedado
+ * passaria a MORRER NA SUBIDA por um valor que nenhum consumidor usa. Exigir o
+ * que nao se usa nao protege nada e derruba ambiente. A diferenca entre aquele
+ * dia e hoje nao e de opiniao: e o consumidor, que agora existe e esta nomeado
+ * duas linhas acima.
  *
- * Quando o adaptador existir, a linha volta -- junto com o codigo que a le, e
- * nao antes. O nome do segredo e o mesmo nos dois ambientes; o que muda e o
- * PROJETO apontado por `SECRET_STORE_PROJECT`. E por isso que nao existe
- * `MAIL_API_TOKEN_HML`: nome por ambiente reintroduziria a tabela de traducao
- * que o ADR-0022 proibe e cegaria a guarda da esteira.
+ * O nome do segredo e o mesmo nos dois ambientes; o que muda e o PROJETO
+ * apontado por `SECRET_STORE_PROJECT`. E por isso que nao existe
+ * `MAIL_API_TOKEN_HML`: nome por ambiente reintroduziria a tabela de traducao que
+ * o ADR-0022 proibe e cegaria a guarda da esteira.
  *
- * O token da Cloudflare segue a mesma regra, por outro motivo: ele e credencial
- * de OPERACAO, usada para mexer em DNS, e a aplicacao nunca chama a Cloudflare.
- * Cofre sim, lista de runtime nao.
+ * O token da Cloudflare continua FORA desta lista, por um motivo que nada disto
+ * muda: ele e credencial de OPERACAO, usada para mexer em DNS, e a aplicacao
+ * nunca chama a Cloudflare. Cofre sim, lista de runtime nao.
  */
 
 /**

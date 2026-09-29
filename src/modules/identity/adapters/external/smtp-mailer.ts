@@ -9,8 +9,11 @@
  * uma biblioteca de e-mail inteira para falar com um contêiner de teste seria
  * pagar uma dependência de produção por uma conveniência de desenvolvimento.
  *
- * São ~70 linhas de um protocolo de 1982 que não muda. Quando o Postmark entrar,
- * ele entra como **outro transporte** ao lado deste, atrás da mesma porta.
+ * São ~70 linhas de um protocolo de 1982 que não muda. O Postmark **entrou**, e
+ * entrou como previsto: outro transporte ao lado deste, atrás da mesma porta, em
+ * `postmark-mailer.ts`. `criarMailer` escolhe entre os três por `MAIL_TRANSPORT`,
+ * e as defesas de cabeçalho que os dois precisam mudaram de casa para
+ * `defesas-de-cabecalho.ts` — este arquivo as reexporta, e o porquê está lá.
  *
  * ## O que este arquivo deliberadamente não implementa
  *
@@ -22,7 +25,25 @@
 import { createConnection, type Socket } from 'node:net';
 import type { Mailer, Mensagem } from '../../ports/mailer.js';
 import type { MailConfig } from '../../../../shared/config/app-config.js';
-import { motivoDaRecusaDeEndereco } from '../../domain/gramatica-de-endereco.js';
+import {
+  conferirDestinatario,
+  conferirRemetente,
+  limparAssunto,
+} from './defesas-de-cabecalho.js';
+import { criarMailerDoPostmark } from './postmark-mailer.js';
+
+/**
+ * Reexportadas, e não redefinidas.
+ *
+ * `domain/borda-e-fio-recusam-a-mesma-classe.test.ts` e `smtp-mailer.test.ts`
+ * importam as duas **deste caminho**, e são elas que provam que a borda do
+ * cadastro e o fio recusam a mesma classe de caractere. Mudar o import das
+ * provas junto com a mudança de casa teria trocado o caminho e o comportamento
+ * no mesmo commit, e uma prova que se move junto com o que ela prova não é
+ * prova. Elas moram em `defesas-de-cabecalho.ts` porque o transporte do Postmark
+ * precisa das mesmas.
+ */
+export { conferirDestinatario, conferirRemetente };
 
 /** Uma troca do protocolo: manda a linha, espera o código esperado. */
 async function dizer(
@@ -58,76 +79,6 @@ export function escaparPontos(corpo: string): string {
 }
 
 /**
- * A classe recusada mora em `domain/gramatica-de-endereco.ts`, e este adaptador
- * a **importa** em vez de repeti-la.
- *
- * O motivo é a BICHUS-198: enquanto a lista viveu aqui dentro, a validação de
- * forma do cadastro tinha a sua própria, mais frouxa, e o resultado era a conta
- * nascendo antes de o envio recusar o endereço. Uma cópia aqui resolveria hoje
- * e divergiria amanhã. O arquivo do domínio explica por que a lista é aquela e
- * por que ela fecha.
- */
-
-/**
- * Recusa o destinatário perigoso, em vez de limpá-lo.
- *
- * **Recusa, e não limpeza** — aqui a decisão é o contrário da do assunto, de
- * propósito. Assunto com quebra continua sendo o assunto que a pessoa escreveu,
- * só que numa linha; endereço com CRLF não é endereço mal formatado, é
- * tentativa. Limpar entregaria a mensagem, em silêncio, a um endereço que
- * ninguém escreveu, e o remetente continuaria achando que ela chegou a quem
- * devia. Um `Bcc:` enxertado assim entrega ao atacante cópia integral do aviso
- * de segurança da vítima, com o link de redefinição de senha dentro.
- *
- * Exportada pelo mesmo motivo de `escaparPontos`: é a defesa inteira, e defesa
- * que não dá para olhar de fora é defesa que uma refatoração apaga sem deixar
- * linha vermelha.
- */
-export function conferirDestinatario(para: string): void {
-  const motivo = motivoDaRecusaDeEndereco(para);
-  if (motivo !== null) {
-    throw new Error(`destinatário recusado: endereço com ${motivo}`);
-  }
-}
-
-/**
- * Tudo que fecha uma linha de cabeçalho. Ao contrário do destinatário, aqui a
- * decisão é **limpar**: o assunto é texto que a pessoa vai ler, e um assunto com
- * quebra continua sendo o assunto que alguém escreveu, só que numa linha só.
- *
- * Por ponto de código, e não por classe de expressão regular: quatro destes são
- * invisíveis no editor, e escritos como literal uma cópia descuidada do arquivo
- * apaga a defesa sem que a linha pareça ter mudado.
- */
-const QUEBRAS_DE_LINHA_NO_ASSUNTO = new Set([
-  0x0a, // LF
-  0x0d, // CR
-  0x0b, // VT, lido como quebra por parte dos analisadores de cabeçalho
-  0x0c, // FF, idem
-  0x85, // NEL. O `\s` do JavaScript NAO cobre este.
-  0x2028, // LINE SEPARATOR
-  0x2029, // PARAGRAPH SEPARATOR
-]);
-
-/** Toda sequência de quebra vira um espaço só, como o `[\r\n]+` que veio antes. */
-function limparAssunto(assunto: string): string {
-  let saida = '';
-  let quebrou = false;
-  for (const ch of assunto) {
-    if (QUEBRAS_DE_LINHA_NO_ASSUNTO.has(ch.codePointAt(0) ?? 0)) {
-      quebrou = true;
-      continue;
-    }
-    if (quebrou) {
-      saida += ' ';
-      quebrou = false;
-    }
-    saida += ch;
-  }
-  return quebrou ? `${saida} ` : saida;
-}
-
-/**
  * Monta o bloco de DATA inteiro: cabeçalhos, corpo escapado e o terminador.
  *
  * Exportada pelo mesmo motivo de `escaparPontos`: a limpeza do assunto aqui
@@ -136,6 +87,11 @@ function limparAssunto(assunto: string): string {
  * montado, o teste só conseguiria afirmar que o envio não explodiu, que é
  * exatamente o que um atacante que recebeu cópia do aviso de segurança da
  * vítima também observaria.
+ *
+ * Este é o gêmeo de `montarCorpoDaApi` em `postmark-mailer.ts`: os dois montam a
+ * mensagem para um transporte e os dois chamam as mesmas duas defesas. O que não
+ * é gêmeo é `escaparPontos`, que existe só por causa do terminador de dados do
+ * SMTP e não tem equivalente em JSON.
  */
 export function montarMensagem(config: MailConfig, m: Mensagem): string {
   conferirDestinatario(m.para);
@@ -157,47 +113,22 @@ export function montarMensagem(config: MailConfig, m: Mensagem): string {
   return `${cabecalhos}\r\n${escaparPontos(m.corpo)}\r\n.`;
 }
 
-/**
- * O remetente vem da configuração, e a configuração também é entrada.
- *
- * `From: ${fromName} <${from}>` e `MAIL FROM:<${from}>` interpolam três valores
- * de `MailConfig` com a mesma falta de cerimônia que o destinatário tinha. A
- * origem é variável de ambiente, não formulário, o que baixa a probabilidade e
- * não muda o efeito: um `\r\n` em `MAIL_FROM_NAME` injeta cabeçalho em **todo**
- * e-mail que o produto manda, e ninguém percebe, porque falha de escape não
- * levanta erro.
- *
- * A recusa é na criação do mailer, e não no envio, para o processo **não subir**
- * com uma configuração dessas — do mesmo jeito que rota sem `security`
- * declarado não sobe. Descobrir no primeiro envio significa descobrir em
- * produção, com a mensagem já entregue.
- *
- * `fromName` é nome de exibição e pode ter espaço; o que ele não pode ter é
- * quebra de linha nem os delimitadores do `angle-addr`.
- */
-export function conferirRemetente(config: MailConfig): void {
-  for (const [variavel, valor] of [
-    ['MAIL_FROM', config.from],
-    ['MAIL_REPLY_TO', config.replyTo],
-  ] as const) {
-    const motivo = motivoDaRecusaDeEndereco(valor);
-    if (motivo !== null) {
-      throw new Error(`remetente recusado: ${variavel} com ${motivo}`);
-    }
-  }
-  // O nome de exibição pode ter espaço; o que ele não pode é fechar a linha do
-  // cabeçalho ou os delimitadores do `angle-addr` que o cercam.
-  const nomeQuebra = [...config.fromName].some((ch) => {
-    const cp = ch.codePointAt(0) ?? 0;
-    return QUEBRAS_DE_LINHA_NO_ASSUNTO.has(cp) || cp === 0x3c || cp === 0x3e;
-  });
-  if (nomeQuebra) {
-    throw new Error('remetente recusado: MAIL_FROM_NAME com quebra de linha ou delimitador');
-  }
-}
-
 export function criarMailer(config: MailConfig): Mailer {
+  // ANTES de escolher o transporte, e não dentro de cada um: o remetente é o
+  // mesmo nos três, e uma conferência por transporte seria a terceira cópia da
+  // mesma regra esperando para divergir.
   conferirRemetente(config);
+
+  // O transporte do provedor entra AQUI, atrás da mesma porta, como o cabeçalho
+  // deste arquivo previa. Ele é quem entrega a gente de verdade (ADR-0009); o
+  // SMTP abaixo continua existindo para o receptor local (mailpit), e o `log`
+  // para desenvolvimento.
+  //
+  // A escolha fica nesta função, e não em `bin/api.ts` e `bin/worker.ts`, porque
+  // são DOIS pontos de montagem: um `if` por transporte em cada um deles é a
+  // forma de o worker continuar mandando pelo mailpit depois de a API já estar no
+  // provedor, e a divergência não levantaria erro nenhum.
+  if (config.transport === 'postmark') return criarMailerDoPostmark(config);
 
   if (config.transport === 'log') {
     return {

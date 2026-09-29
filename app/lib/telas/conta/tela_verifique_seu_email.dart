@@ -143,8 +143,27 @@ class _TelaVerifiqueSeuEmailState extends State<TelaVerifiqueSeuEmail> {
         child: ListView(
           padding: const EdgeInsets.all(BichuEspaco.e4),
           children: <Widget>[
+            // NAO diz "Enviamos", e a palavra foi retirada de proposito.
+            //
+            // O 201 do cadastro prova que a CONTA nasceu, e nada mais: o envio
+            // acontece dentro de `enviarVerificacaoDoCadastro`
+            // (`identity/application/auth-service.ts`), num `try/catch` que
+            // registra `email.send_failed` e **nao derruba a conta** -- por
+            // decisao, e a razao esta escrita la: propagar devolveria 500 a
+            // quem ja tem conta criada e sessao aberta, e a pessoa tentaria de
+            // novo para colher um 409.
+            //
+            // Entao o app nao tem como saber que o e-mail saiu, e afirmar que
+            // saiu e a unica parte errada desta tela. Quem nao recebeu nada
+            // procurava na caixa de spam de um e-mail que nunca foi mandado.
+            //
+            // O que ficou e o ESTADO (falta confirmar) e o REMEDIO (reenviar,
+            // ou corrigir o endereco), que sao os dois controles logo abaixo --
+            // eles sao verdade independentemente do que aconteceu no servidor.
+            // Uma linha, e nao um paragrafo de explicacao: o cliente reprovou
+            // texto em excesso em outra tela no mesmo dia.
             Text(
-              'Enviamos um link para ${widget.email}. Confirme quando puder.',
+              'Falta confirmar ${widget.email}. Se o link não chegar, reenvie.',
               style: textos.bodyLarge,
             ),
             if (_faixa != null) ...<Widget>[

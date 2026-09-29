@@ -159,7 +159,12 @@ export interface PushConfig {
  * visível no nome.
  */
 export interface MailConfig {
-  readonly transport: 'smtp' | 'log';
+  /**
+   * `postmark` e o unico que entrega a gente de verdade (ADR-0009); `smtp` fala
+   * com o receptor local (mailpit) e nao sabe autenticar; `log` escreve e nao
+   * manda. A ordem aqui e a da entrega, e nao a alfabetica, de proposito.
+   */
+  readonly transport: 'smtp' | 'postmark' | 'log';
   readonly host: string;
   readonly port: number;
   /**
@@ -182,6 +187,24 @@ export interface MailConfig {
    * byte".
    */
   readonly webhookSecret: Buffer;
+  /**
+   * O token de servidor do provedor (`MAIL_API_TOKEN`), que vai no cabecalho
+   * `X-Postmark-Server-Token` de cada envio. Vem do gerenciador de segredos
+   * (ADR-0022), e o nome do segredo no cofre e igual ao da variavel.
+   *
+   * `undefined` com `smtp` e com `log`, e e assim que se le, do proprio tipo,
+   * que **nenhum envio autentica em provedor nenhum** -- e nao um token vazio
+   * que iria no cabecalho e voltaria como 401 no primeiro pedido de redefinicao
+   * de senha de alguem. Com `postmark` ele e obrigatorio; ver
+   * `exigeTokenDoProvedor`. E exatamente a forma de `PushConfig.projeto`.
+   *
+   * **`string` e nao `Buffer`, ao contrario de `webhookSecret` logo acima, e a
+   * assimetria tem motivo:** aquele e COMPARADO com o que chega de fora, e
+   * comparacao de segredo precisa ser em tempo constante, o que so opera sobre
+   * bytes. Este e EMITIDO num cabecalho HTTP, nunca comparado com nada. Um
+   * `Buffer` aqui so adiaria a conversao para dentro do adaptador.
+   */
+  readonly apiToken: string | undefined;
 }
 
 /**
@@ -515,6 +538,20 @@ function exigeProjetoDoFcm(transporte: 'fcm' | 'log'): boolean {
 }
 
 /**
+ * Qual transporte de e-mail exige o token do provedor.
+ *
+ * Funcao com nome, e nao `=== 'postmark'` embutido na linha do `requireEnv`,
+ * pelo mesmo motivo de `exigeProjetoDoFcm`: e ela que decide se o processo sobe,
+ * e uma decisao dessas precisa de um lugar para ser lida e apontada. A forma
+ * gemea nao e coincidencia -- as duas respondem a mesma pergunta para dois
+ * canais, e escrever a segunda diferente da primeira e como as duas listas de
+ * caractere proibido da BICHUS-198 comecaram.
+ */
+function exigeTokenDoProvedor(transporte: 'smtp' | 'postmark' | 'log'): boolean {
+  return transporte === 'postmark';
+}
+
+/**
  * O transporte do push, e o projeto quando ele for usado.
  *
  * **O padrão é `log`, e não `fcm`.** A assimetria é a mesma da porteira de
@@ -694,21 +731,23 @@ export function loadAppConfig(): AppConfig {
   // Falha ruidosa, como o resto da configuracao: morre citando o valor visto e
   // os aceitos.
   const transporteBruto = optionalEnv('MAIL_TRANSPORT') ?? 'smtp';
-  if (transporteBruto !== 'smtp' && transporteBruto !== 'log') {
-    // `postmark` ganha mensagem propria porque o roteiro de provisionamento
-    // mandava usar exatamente esse valor em homologacao, e quem seguir uma
-    // versao antiga dele vai cair aqui. Dizer so "valor desconhecido" mandaria
-    // a pessoa duvidar da propria instrucao em vez de entender o estado.
-    const explicacao =
-      transporteBruto === 'postmark'
-        ? 'O adaptador do Postmark ainda NAO existe (ADR-0009): a chave pode ja ' +
-          'estar no cofre, mas nao ha codigo que a use. Ate ele existir, use ' +
-          '"log" em homologacao -- o e-mail e escrito no log e nada sai.'
-        : 'Use "smtp" (envia de verdade) ou "log" (so escreve no log).';
+  if (
+    transporteBruto !== 'smtp' &&
+    transporteBruto !== 'postmark' &&
+    transporteBruto !== 'log'
+  ) {
+    // `postmark` ENTROU na uniao, e a mensagem propria que ele tinha aqui foi
+    // embora com o adaptador que passou a existir. Ela dizia "o adaptador ainda
+    // NAO existe (ADR-0009)... use `log` em homologacao", e mandar alguem para o
+    // `log` agora seria mandar para um transporte que nao entrega -- o defeito
+    // que o cartao deste adaptador existe para fechar.
     throw new Error(
       `MAIL_TRANSPORT="${transporteBruto}" nao e um transporte conhecido. ` +
-        explicacao +
-        ' Valor desconhecido virava envio real em silencio ate 19/09.',
+        'Use "postmark" (o provedor do ADR-0009: entrega de verdade, por HTTP, e ' +
+        'exige MAIL_API_TOKEN), "smtp" (o receptor LOCAL, mailpit: sem AUTH e sem ' +
+        'STARTTLS, nao serve para provedor nenhum) ou "log" (so escreve no log, e ' +
+        'nada sai do processo). Valor desconhecido virava envio real em silencio ' +
+        'ate 19/09.',
     );
   }
 
@@ -733,6 +772,22 @@ export function loadAppConfig(): AppConfig {
     );
   }
 
+  // `requireEnv` com o nome LITERAL, e DENTRO do ramo -- igual ao
+  // `requireEnv('FCM_PROJECT')` de `carregarPush`, e pelo mesmo motivo escrito
+  // la: a guarda da esteira le `requireEnv('X')` por TEXTO e nao conhece
+  // condicional, entao `MAIL_API_TOKEN` precisa de um valor descartavel no passo
+  // "ambiente de teste" do workflow mesmo sem nunca ser lida com `smtp`. Isso e
+  // o ponto cego conhecido da guarda, e ele e de proposito: ensina-la a entender
+  // `if` faria dela uma analise de fluxo, e analise de fluxo incompleta aprova o
+  // que nao entende.
+  //
+  // O token NAO tem padrao embutido e NAO e aceito vazio. Um padrao aqui iria
+  // para o cabecalho `X-Postmark-Server-Token` e voltaria 401 no primeiro pedido
+  // de redefinicao de senha de alguem -- em producao, com a pessoa na tela.
+  const apiToken = exigeTokenDoProvedor(transporteBruto)
+    ? requireEnv('MAIL_API_TOKEN')
+    : optionalEnv('MAIL_API_TOKEN');
+
   const mail: MailConfig = {
     transport: transporteBruto,
     host: optionalEnv('MAIL_HOST') ?? 'mail',
@@ -741,6 +796,7 @@ export function loadAppConfig(): AppConfig {
     fromName: optionalEnv('MAIL_FROM_NAME') ?? 'Bichu',
     replyTo: optionalEnv('MAIL_REPLY_TO') ?? requireEnv('MAIL_FROM'),
     webhookSecret,
+    apiToken,
   };
 
   return {

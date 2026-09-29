@@ -626,6 +626,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// seguinte pelo `RodapeDaPaginacao`. Nada a ver com camera: nenhuma das duas
 /// toca em foto, e as telas do assistente de cadastro (`app/lib/telas/pet/`)
 /// seguem intocadas.
+///
 /// Troca de 28/09, correcao do truncamento silencioso na digitacao do codigo da
 /// plaquinha (achado do cliente por telefone, sem chave de issue no
 /// acionamento). DOIS arquivos de `app/lib/telas` mudam, e **nenhum dos dois
@@ -662,25 +663,44 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// nenhuma das duas toca em foto, e as telas do assistente de cadastro
 /// (`app/lib/telas/pet/`) seguem intocadas.
 ///
-/// **Destravado na integracao de 28/09/2026 que juntou as duas correcoes
-/// acima na `development`** (sem chave de issue no acionamento: as duas
-/// sairam de achado do cliente). O motivo do bump e o MERGE em si: cada
+/// **Destravado na integracao de 28/09/2026 que juntou o codigo da plaquinha
+/// e a gaveta na `development`**, com `e180a88c22a8cf905ef8d5f38a260b3399d4a7ce`.
+/// Essa trava intermediaria viveu um commit e esta registrada aqui para que a
+/// procedencia nao tenha buraco.
+///
+/// Troca de 28/09, transporte de e-mail real (sem chave de issue no
+/// acionamento): `telas/conta/tela_verifique_seu_email.dart` parou de AFIRMAR
+/// que o e-mail de verificacao foi enviado. O 201 do cadastro prova que a conta
+/// nasceu, e nada mais -- o envio e engolido por um `try/catch` no servidor, por
+/// decisao (criterio 3 de BICHUS-147). A tela passou a dizer o estado e o
+/// remedio, que sao verdade independentemente do que aconteceu no envio.
+///
+/// Nada a ver com camera: a tela nao toca em foto, nao importa plugin de
+/// aparelho nenhum -- o portao ESTRUTURAL abaixo continua valendo sobre ela e
+/// continua verde -- e as telas do assistente de cadastro (`app/lib/telas/pet/`)
+/// seguem intocadas.
+///
+/// **Destravado de novo na MESMA integracao de 28/09/2026, quando o
+/// transporte de e-mail real entrou por decisao do cliente** e a mescla
+/// passou a ter TRES correcoes dentro (sem chave de issue no acionamento: as
+/// tres sairam de achado do cliente). O motivo do bump e o MERGE: cada
 /// branch travou a arvore que ELA produziu -- `ed8f71b6` a do codigo da
-/// plaquinha, `587b9bb6` a da gaveta --, e a arvore que tem as duas dentro
-/// nao e nenhuma das duas. Os cinco arquivos que mudaram sao exatamente a
-/// uniao dos dois conjuntos (`escanear/mascara_do_codigo_da_tag.dart`,
-/// `escanear/codigo_lido_do_qr.dart`, `escanear/tela_leitor_de_qr.dart`,
-/// `gaveta_de_secoes.dart` e `casca_com_abas.dart`): nada entrou aqui que
-/// nao estivesse em uma das duas travas ja justificadas, e nenhum deles
-/// encosta na porta `CameraEGaleria` nem ganhou importe de plugin de
+/// plaquinha, `587b9bb6` a da gaveta, `5523613a` a do e-mail --, e a arvore
+/// que tem as tres dentro nao e nenhuma das tres. Os seis arquivos que
+/// mudaram sao exatamente a uniao dos tres conjuntos
+/// (`escanear/mascara_do_codigo_da_tag.dart`, `escanear/codigo_lido_do_qr.dart`,
+/// `escanear/tela_leitor_de_qr.dart`, `gaveta_de_secoes.dart`,
+/// `casca_com_abas.dart` e `conta/tela_verifique_seu_email.dart`): nada entrou
+/// aqui que nao estivesse em uma das tres travas ja justificadas, nenhum deles
+/// encosta na porta `CameraEGaleria` e nenhum ganhou importe de plugin de
 /// aparelho -- quem cobra isso e o portao ESTRUTURAL abaixo, que continua
 /// valendo e continua verde. As telas do assistente de cadastro
 /// (`app/lib/telas/pet/`) seguem intocadas.
 ///
 /// Medido pelo indice temporario que este portao usa, sobre a arvore de
-/// trabalho da mescla. Anteriores: `ed8f71b6479f15c4f9cfeb6fb727d090dbacab14`
-/// (codigo da tag) e `587b9bb6d5b7f7213ee053444e57d99b5ed9df19` (gaveta).
-const String _arvoreDasTelas = 'e180a88c22a8cf905ef8d5f38a260b3399d4a7ce';
+/// trabalho da mescla. Anterior: `e180a88c22a8cf905ef8d5f38a260b3399d4a7ce`
+/// (a mescla de duas), e antes dela as tres travas de branch citadas acima.
+const String _arvoreDasTelas = '6d8d8235940c99a9ea5dbd5532aab678c49e4f0e';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

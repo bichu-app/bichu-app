@@ -67,6 +67,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # `node_modules` PRECISA existir neste job, e a razao e um portao so:
+      # `verificar-carimbo-de-migracao.mjs` importa `node-pg-migrate` (utils/
+      # comparators e fileNameUtils) para carimbar migracao pela MESMA regra que
+      # a ferramenta usa, igual ao `verificar-marcador-de-migracao.mjs` do job
+      # `contrato`. Sem as deps, ele morre com ERR_MODULE_NOT_FOUND e derruba o
+      # job inteiro -- foi o que aconteceu no run 36500685268. Os outros portoes
+      # Node daqui usam so builtins; este nao. `cache: npm` mantem o job rapido.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
       - name: dispensas datadas
         run: python3 infra/verificacao/verificar_dispensas.py
 
@@ -743,6 +757,21 @@ jobs:
           # que o projeto nao existe -- e nao acertar um projeto de alguem.
           sed -i 's|^FCM_PROJECT=.*|FCM_PROJECT=projeto-de-ci-que-nao-existe|' .env
           grep -q '^FCM_PROJECT=' .env || echo 'FCM_PROJECT=projeto-de-ci-que-nao-existe' >> .env
+          # `MAIL_API_TOKEN` nasce VAZIA no `.env.example` e so e EXIGIDA com
+          # `MAIL_TRANSPORT=postmark` (ADR-0009). Este job roda em `smtp`, que e o
+          # padrao do .env.example, e nunca a le. Ela esta aqui pelo MESMO motivo
+          # de `FCM_PROJECT` logo acima -- a guarda seguinte conta
+          # `requireEnv('NOME')` por TEXTO e nao conhece condicional --, e a
+          # propria guarda manda fazer isto: "acrescente um valor descartavel no
+          # passo \"ambiente de teste\"".
+          #
+          # Valor descartavel e que NAO PARECE um token de servidor do Postmark
+          # (que e um UUID): se um dia este job passar a rodar com `postmark`, a
+          # chamada precisa falhar com 401 do provedor, e nao autenticar na conta
+          # de alguem. Token de verdade mora no GCP Secret Manager (ADR-0022) e
+          # nao entra em workflow, em .env nem em log.
+          sed -i 's|^MAIL_API_TOKEN=.*|MAIL_API_TOKEN=token-de-ci-que-nao-autentica|' .env
+          grep -q '^MAIL_API_TOKEN=' .env || echo 'MAIL_API_TOKEN=token-de-ci-que-nao-autentica' >> .env
           # `MAIL_WEBHOOK_SECRET` nasce VAZIA no `.env.example` e e exigida por
           # `requireEnv` -- a guarda antiga nao a via, pelo motivo explicado no
           # passo de baixo. Com a leitura corrigida ela passa a reprovar aqui,
