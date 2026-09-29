@@ -208,6 +208,16 @@ export default tseslint.config(
       // pelo SwiftPM, nao codigo deste repositorio. Ja esta no .gitignore; o
       // ESLint nao le .gitignore, entao precisa ser dito aqui tambem.
       'app/build/**',
+      // O site web (Astro) e uma aplicacao separada, com toolchain e regras
+      // proprias, como o `app/` Flutter acima. As regras deste config sao do
+      // backend Node/TypeScript e nao servem para `.astro`, para o runtime de
+      // navegador nem para o tsconfig do site -- rodar `eslint .` sobre `web/`
+      // produzia mais de mil erros de parser/projeto. A qualidade do site e
+      // coberta por `make verificar-site` (astro check, verify:api,
+      // verify:valores-soltos e a suite de unidade). DIVIDA: dar ao `web/` um
+      // eslint proprio depois; hoje ele nao tem lint dedicado.
+      'web/**',
+      'web/dist/**',
       // Iscas do portao de saida: arvores de mentira que existem para ser
       // REPROVADAS por `verificar-colunas-que-nao-saem.sh`. Elas imitam
       // `src/`, `api/` e `migrations/` e nao estao no tsconfig, entao o
