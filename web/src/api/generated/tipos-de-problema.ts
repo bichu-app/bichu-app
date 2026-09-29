@@ -23,6 +23,7 @@ export const TIPOS_DE_PROBLEMA = {
   "transfer-already-in-progress": 409,
   "transfer-already-effective": 409,
   "conversation-closed": 410,
+  "lost-case-closed": 410,
   "tag-revoked": 410,
   "tag-code-not-found": 404,
   "tag-code-malformed": 400,
