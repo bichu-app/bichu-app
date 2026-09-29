@@ -19,7 +19,7 @@ import { readdirSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { CODIGOS, TOKENS } from '../tests/mock/cenarios.mjs';
+import { CODIGOS, SENHAS, TOKENS } from '../tests/mock/cenarios.mjs';
 
 const AQUI = dirname(fileURLToPath(import.meta.url));
 const WEB = resolve(AQUI, '..');
@@ -59,7 +59,10 @@ const MEDICOES = {
   'redefinir-senha.astro': [
     `/redefinir-senha?token=${TOKENS.senhaValido}`,
     `/redefinir-senha?token=${TOKENS.senhaVencido}`,
-    ['POST', '/redefinir-senha', `token=${TOKENS.senhaValido}&new_password=senha-que-vazou-1234`],
+    // A senha vem da fixture do mock (SENHAS.vazada), fonte unica: e o valor que
+    // faz o mock responder 422 `weak-password`, o estado que esta rota mede. Nao
+    // repetir o literal aqui tambem evita que o gitleaks o leia como segredo.
+    ['POST', '/redefinir-senha', `token=${TOKENS.senhaValido}&new_password=${SENHAS.vazada}`],
   ],
   'robots.txt.ts': ['/robots.txt'],
   'sitemap.xml.ts': ['/sitemap.xml'],
