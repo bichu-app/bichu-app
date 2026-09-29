@@ -60,6 +60,11 @@ export interface OpcoesDoServidor {
    * ser servida sem a segunda credencial.
    */
   readonly reautenticacao?: VerificadorDeReautenticacao;
+  /**
+   * Para onde o log vai. So o teste de redacao passa um destino (para ler o que
+   * foi escrito); em execucao e a saida padrao, como sempre foi.
+   */
+  readonly destinoDoLog?: { write(linha: string): void };
 }
 
 /** Só aceita correlação vinda de fora se ela tiver a forma de um UUID. */
@@ -157,12 +162,29 @@ export function criarServidor(opcoes: OpcoesDoServidor): RegistradorDeRotas {
     disableRequestLogging: false,
     logger: {
       level: opcoes.isProduction ? 'info' : 'debug',
+      ...(opcoes.destinoDoLog === undefined ? {} : { stream: opcoes.destinoDoLog }),
       redact: {
         // Credencial nunca entra no log, nem por acidente de serialização.
         paths: [
           'req.headers.authorization',
           'req.headers.cookie',
           'req.headers["x-reauth-token"]',
+          // Backoffice (ADR-0027). O cookie `__Host-bichu_adm` viaja em
+          // `req.headers.cookie`, ja acima; o `Set-Cookie` que o login e a
+          // reautenticacao devolvem carrega o MESMO valor, e o anti-CSRF e a
+          // janela de reautenticacao sao credenciais por si.
+          'req.headers["x-csrf-token"]',
+          'req.headers["x-admin-reauth-token"]',
+          'res.headers["set-cookie"]',
+          // E a mesma lista sob `headers` na raiz do objeto logado: e a forma
+          // de quem escreve `request.log.info({ headers: request.headers })`
+          // para depurar, e `req.headers.*` nao a alcanca.
+          'headers.authorization',
+          'headers.cookie',
+          'headers["set-cookie"]',
+          'headers["x-reauth-token"]',
+          'headers["x-csrf-token"]',
+          'headers["x-admin-reauth-token"]',
           'req.body.password',
           'req.body.new_password',
           'req.body.current_password',

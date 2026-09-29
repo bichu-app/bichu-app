@@ -1,0 +1,46 @@
+# ISCA de verificar_borda.py (ADR-0016 emenda 2). PRECISA REPROVAR.
+# O teto do login administrativo na borda e 20 por minuto, e o contrato
+# (`x-edge-limits.admin_login_requests_per_minute_per_ip`) diz 10. Numero de
+# borda que diverge do contrato e o que o ADR-0016 chama de silencioso. O resto
+# esta certo, de proposito.
+{
+	admin off
+}
+
+{$PUBLIC_BASE_URL}{$HOSTS_EXTRA_APP} {
+	handle /v1/admin* {
+		respond "nao encontrado" 404
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+}
+
+{$ADMIN_HOSTS:http://admin.localhost} {
+	rate_limit {
+		zone admin_login {
+			match {
+				method POST
+				path /v1/admin/auth/login
+			}
+			key {remote_host}
+			events 20
+			window 1m
+		}
+		zone admin_api {
+			match {
+				path /v1/admin/*
+			}
+			key {remote_host}
+			events 600
+			window 1m
+		}
+	}
+
+	handle /v1/admin/* {
+		request_header -X-Internal-*
+		request_header X-Internal-Surface admin
+		reverse_proxy api:3000
+	}
+}

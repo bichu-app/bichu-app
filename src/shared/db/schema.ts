@@ -63,7 +63,88 @@ export interface LocalCredentialsTable {
 
 export interface UserRolesTable {
   user_id: string;
-  role: 'tutor' | 'moderator' | 'admin';
+  /** So `tutor` desde 28/09: o painel tem cadastro proprio (ADR-0027 item 20.2). */
+  role: 'tutor';
+}
+
+/** O papel da conta do painel. Espelha `AdminRole` do contrato. */
+export type PapelDaContaAdministrativa = 'admin';
+export type EstadoDaContaAdministrativa = 'active' | 'disabled';
+export type MotivoDoBloqueioAdministrativo = 'failed_logins' | 'disavowed';
+
+/**
+ * O cadastro do painel (ADR-0027 item 20.1). Sem FK para `users`, e nada do app
+ * a referencia: uma porta nao acha a conta da outra.
+ */
+export interface AdminAccountsTable {
+  id: string;
+  email: string;
+  display_name: string;
+  role: Generated<PapelDaContaAdministrativa>;
+  password_phc: string;
+  password_updated_at: Date;
+  status: Generated<EstadoDaContaAdministrativa>;
+  disabled_at: Date | null;
+  blocked_reason: MotivoDoBloqueioAdministrativo | null;
+  blocked_at: Date | null;
+  sessions_invalid_before: Generated<Date>;
+  last_login_at: Date | null;
+  created_at: CriadoEm;
+}
+
+/**
+ * Sessao do backoffice (ADR-0027 item 2, apendice A.1). O cookie guarda o valor;
+ * aqui fica so o SHA-256 dele e o do token anti-CSRF.
+ */
+export interface AdminSessionsTable {
+  id: string;
+  admin_account_id: string;
+  token_hash: Buffer;
+  csrf_token_hash: Buffer;
+  /** O instante da senha, herdado na rotacao. */
+  created_at: Date;
+  last_seen_at: Date;
+  idle_expires_at: Date;
+  absolute_expires_at: Date;
+  revoked_at: Date | null;
+  revoked_reason:
+    | 'logout'
+    | 'rotated'
+    | 'account_disabled'
+    | 'account_invalidated'
+    | 'disavowed'
+    | 'password_reset'
+    | null;
+  user_agent: string | null;
+  ip_hmac: Buffer | null;
+}
+
+/** Janela de reautenticacao administrativa (D40), presa a sessao. */
+export interface AdminReauthTokensTable {
+  id: string;
+  session_id: string;
+  admin_account_id: string;
+  scope:
+    | 'store_item_retirement'
+    | 'network_event_relocation'
+    | 'network_event_cancellation'
+    | 'network_event_removal'
+    | 'network_event_access_change';
+  token_hash: Buffer;
+  issued_at: Date;
+  expires_at: Date;
+  consumed_at: Date | null;
+}
+
+/** O "nao fui eu" do aviso de sessao administrativa aberta (D62). */
+export interface AdminSessionAlertsTable {
+  id: string;
+  admin_account_id: string;
+  session_id: string | null;
+  token_hash: Buffer;
+  expires_at: Date;
+  consumed_at: Date | null;
+  created_at: CriadoEm;
 }
 
 export interface VerificationTokensTable {
@@ -374,8 +455,10 @@ export interface MatchCandidatesTable {
 export interface AuditEventsTable {
   id: string;
   occurred_at: Generated<Date>;
-  actor_kind: 'user' | 'anonymous' | 'system';
+  actor_kind: 'user' | 'anonymous' | 'system' | 'admin';
   actor_user_id: string | null;
+  /** `admin_accounts.id` de quem agiu no painel; nulo em todo ator que nao e `admin`. */
+  actor_admin_id: string | null;
   actor_ip_hmac: Buffer | null;
   correlation_id: string | null;
   action: string;
@@ -388,6 +471,12 @@ export interface AuditEventsTable {
 
 /** O que o cliente vai enviar direto ao armazenamento (ADR-0007, BICHUS-87). */
 export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
+
+/**
+ * O proposito da imagem de catalogo (ADR-0027 item 10). Gravado em
+ * `catalog_upload_intents`, e a escrita que confirma o envio exige o mesmo.
+ */
+export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event';
 
 export interface UploadIntentsTable {
   id: string;
@@ -409,6 +498,24 @@ export interface UploadIntentsTable {
   expires_at: Date;
   confirmed_at: Date | null;
   created_at: CriadoEm;
+}
+
+/**
+ * A intencao de envio de imagem de catalogo, do painel (ADR-0027 A.3, item
+ * 20.2). Separada de `upload_intents`, que e do app e aponta para `users`.
+ */
+export interface CatalogUploadIntentsTable {
+  id: string;
+  /** `admin_accounts.id`. Sem `ON DELETE`: conta do painel desativa, nao se apaga. */
+  admin_account_id: string;
+  purpose: PropositoDaImagemDeCatalogo;
+  /** Chave no armazenamento privado. **Nunca** uma URL. */
+  object_key: string;
+  declared_type: string;
+  max_bytes: number;
+  expires_at: Date;
+  confirmed_at: Date | null;
+  created_at: Generated<Date>;
 }
 
 /** `processing` → `ready` ou `rejected`. Nunca volta. */
@@ -865,6 +972,10 @@ export interface StorePartnersTable {
   host: string;
   active: Generated<boolean>;
   sort_order: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  /** O `ETag` do painel. Incrementada a cada escrita. */
+  version: Generated<number>;
 }
 
 /** O item da vitrine. Mesmo desenho de `StorePartnersTable`. */
@@ -889,7 +1000,199 @@ export interface StoreItemsTable {
   price_checked_at: Date | null;
   active: Generated<boolean>;
   sort_order: Generated<number>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  /** O `ETag` do painel. Incrementada a cada escrita. */
+  version: Generated<number>;
+  /** A PRIMEIRA publicacao. Nunca reescrita. */
+  published_at: Date | null;
 }
+
+/** A que especies o item serve (ADR-0027 A.2.1). Valores de `ref_species`. */
+export interface StoreItemSpeciesTable {
+  item_id: string;
+  species: 'dog' | 'cat' | 'other';
+}
+
+/** O vocabulario curado de tags da Loja (ADR-0027 A.2.1). */
+export interface StoreTagsTable {
+  /** Identidade interna. Nunca projetada em resposta. */
+  id: string;
+  slug: string;
+  label: string;
+  active: Generated<boolean>;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  version: Generated<number>;
+}
+
+export interface StoreItemTagsTable {
+  item_id: string;
+  tag_id: string;
+}
+
+/** Ate 8 imagens por item; `position = 0` e a principal (ADR-0027 A.2.1). */
+export interface StoreItemImagesTable {
+  item_id: string;
+  image_id: string;
+  position: number;
+  alt_text: string;
+}
+
+/** A imagem de catalogo (ADR-0027 A.3). Mesma forma de `pet_photos`. */
+export interface CatalogImagesTable {
+  /** Identidade interna. Nunca projetada em resposta. */
+  id: string;
+  /** Nulo depois que o varredor apagou a intencao de envio (`ON DELETE SET NULL`). */
+  upload_intent_id: string | null;
+  purpose: PropositoDaImagemDeCatalogo;
+  status: Generated<StatusDaFoto>;
+  /** Chave da derivada publica. Nula ate `ready`. */
+  public_key: string | null;
+  rejection_reason: string | null;
+  created_at: Generated<Date>;
+}
+
+/**
+ * O encontro da secao `Rede` (ADR-0025, emendado pela secao 12 do ADR-0027).
+ *
+ * **Identidade interna separada da publica** (ADR-0024): `id` e a chave
+ * primaria e **nunca sai em resposta**; `slug` e o endereco publico e e a unica
+ * chave do encontro que sai.
+ *
+ * **ESTE TIPO TEM UMA COLUNA A MENOS QUE A TABELA**, e a diferenca e a regra: a
+ * coluna de quem criou o encontro leva a marca de saida no `COMMENT ON COLUMN`
+ * da migracao `20260928000001`, e `src/tools/portao-colunas-que-nao-saem.ts`
+ * varre `src/` atras do nome dela. E o mesmo tratamento da coluna homonima de
+ * `ProfessionalsTable`. Quem precisa dela (a trilha do backoffice) a escreve
+ * por SQL cru.
+ *
+ * Check-in e galeria sairam desta versao (ADR-0027 12.4), com as tabelas.
+ */
+export interface NetworkEventsTable {
+  /** Identidade interna. Alvo das chaves estrangeiras, e nunca projetada. */
+  id: string;
+  /** O endereco publico. Unico, e a unica chave do encontro que sai em resposta. */
+  slug: string;
+  title: string;
+  summary: string;
+  /** O nome do lugar PUBLICO. Nao e logradouro, numero nem CEP. */
+  place_name: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  /**
+   * `geography(Point,4326)`. `never` nos tres sentidos, como `professionals.geo`
+   * e `user_reference_locations.reference_point`: o tipo impede a coluna de ser
+   * selecionada crua ou inserida pelo construtor tipado, e o unico caminho ate
+   * ela e SQL onde `ST_MakePoint`/`ST_Y`/`ST_X` ficam a vista. O ponto so sai
+   * em `getNetworkEventLocation`, com conta (ADR-0027 12.5).
+   */
+  geo: ColumnType<never, never, never>;
+  /** `map_pin` ou nulo, e anda junto de `geo` por `CHECK`. */
+  geo_source: OrigemDoPontoDoEncontro | null;
+  starts_at: Date;
+  ends_at: Date | null;
+  /**
+   * O nome IANA da zona, e ele anda junto de `starts_at` por necessidade:
+   * `timestamptz` sozinho diz o instante e nao diz a hora de parede.
+   */
+  time_zone: Generated<string>;
+  visibility: Generated<VisibilidadeDoEncontro>;
+  admission_kind: Generated<EntradaDoEncontro>;
+  /** Centavos. Nulo quando gratuito; anda junto de moeda e unidade por `CHECK`. */
+  admission_amount: number | null;
+  admission_currency: 'BRL' | null;
+  admission_unit: UnidadeDoValor | null;
+  dog_age: Generated<IdadeDosCaes>;
+  vaccination_required: Generated<boolean>;
+  fenced_off_leash_area: Generated<boolean>;
+  notes: string | null;
+  origin: Generated<OrigemDoEncontro>;
+  publication_status: PublicacaoDoEncontro;
+  published_at: Date | null;
+  cancelled_at: Date | null;
+  cancellation_note: string | null;
+  created_at: Generated<Date>;
+  updated_at: Generated<Date>;
+  version: Generated<number>;
+}
+
+/** O `CHECK` `network_events_origem_do_ponto`. ADR-0006: so `map_pin`. */
+export type OrigemDoPontoDoEncontro = 'map_pin';
+
+export type VisibilidadeDoEncontro = 'public' | 'private';
+export type EntradaDoEncontro = 'free' | 'paid';
+export type UnidadeDoValor = 'per_dog' | 'per_person' | 'per_pair';
+export type IdadeDosCaes = 'any' | 'from_4_months' | 'from_1_year' | 'up_to_1_year';
+export type ItemParaLevar =
+  | 'water'
+  | 'water_bowl'
+  | 'leash'
+  | 'poop_bags'
+  | 'treats'
+  | 'towel'
+  | 'vaccination_card'
+  | 'toy';
+export type EstruturaDoLocal =
+  | 'level_ground_or_ramp'
+  | 'accessible_restroom'
+  | 'public_restroom_nearby'
+  | 'shade'
+  | 'benches'
+  | 'dog_water_fountain'
+  | 'parking_nearby';
+/** A DECISAO guardada. O app nunca ve `declined` (ADR-0027 12.11). */
+export type DecisaoDoPedido = 'pending' | 'approved' | 'declined';
+
+export interface NetworkEventBringItemsTable {
+  event_id: string;
+  item: ItemParaLevar;
+}
+
+export interface NetworkEventSizesTable {
+  event_id: string;
+  size: string;
+}
+
+/** A galeria do encontro (ADR-0027 A.4.2); `position = 0` e a capa. */
+export interface NetworkEventImagesTable {
+  event_id: string;
+  image_id: string;
+  position: number;
+  alt_text: string;
+}
+
+export interface NetworkEventAmenitiesTable {
+  event_id: string;
+  amenity: EstruturaDoLocal;
+}
+
+/**
+ * O pedido para participar de encontro privado. Da conta, nunca do pet.
+ * `decided_by_admin_id` (conta do painel, ADR-0027 item 20.2) fica fora do
+ * tipo: a decisao o escreve por SQL cru, e nenhuma leitura o projeta.
+ */
+export interface NetworkEventJoinRequestsTable {
+  id: string;
+  ref: string;
+  event_id: string;
+  user_id: string;
+  status: Generated<DecisaoDoPedido>;
+  requested_at: Generated<Date>;
+  decided_at: Date | null;
+  withdrawn_at: Date | null;
+}
+
+/** O `CHECK` `network_events_origem_conhecida`. */
+export type OrigemDoEncontro = 'admin' | 'community';
+
+/**
+ * O `CHECK` `network_events_publicacao_conhecida`. Visivel e `published` ou
+ * `cancelled`; `pending_review` e so da comunidade e nunca e visivel;
+ * `removed` e terminal.
+ */
+export type PublicacaoDoEncontro = 'pending_review' | 'published' | 'cancelled' | 'removed';
 
 export interface Database {
   users: UsersTable;
@@ -903,6 +1206,10 @@ export interface Database {
   verification_tokens: VerificationTokensTable;
   refresh_tokens: RefreshTokensTable;
   reauth_tokens: ReauthTokensTable;
+  admin_accounts: AdminAccountsTable;
+  admin_sessions: AdminSessionsTable;
+  admin_reauth_tokens: AdminReauthTokensTable;
+  admin_session_alerts: AdminSessionAlertsTable;
   idempotency_keys: IdempotencyKeysTable;
   rate_limit_counters: RateLimitCountersTable;
   ref_data_versions: RefDataVersionsTable;
@@ -916,6 +1223,7 @@ export interface Database {
   found_reports: FoundReportsTable;
   match_candidates: MatchCandidatesTable;
   upload_intents: UploadIntentsTable;
+  catalog_upload_intents: CatalogUploadIntentsTable;
   pet_photos: PetPhotosTable;
   jobs: JobsTable;
   notification_deliveries: NotificationDeliveriesTable;
@@ -928,6 +1236,17 @@ export interface Database {
   store_catalog_versions: StoreCatalogVersionsTable;
   store_partners: StorePartnersTable;
   store_items: StoreItemsTable;
+  catalog_images: CatalogImagesTable;
+  store_item_species: StoreItemSpeciesTable;
+  store_tags: StoreTagsTable;
+  store_item_tags: StoreItemTagsTable;
+  store_item_images: StoreItemImagesTable;
+  network_events: NetworkEventsTable;
+  network_event_bring_items: NetworkEventBringItemsTable;
+  network_event_sizes: NetworkEventSizesTable;
+  network_event_amenities: NetworkEventAmenitiesTable;
+  network_event_images: NetworkEventImagesTable;
+  network_event_join_requests: NetworkEventJoinRequestsTable;
   'audit.events': AuditEventsTable;
 }
 

@@ -25,6 +25,19 @@ export const MODULES = [
   // terceiro. Junta-las faria uma fronteira que a arquitetura nao consegue
   // vigiar, com `professionals` importando `store_items`.
   'store',
+  // ADR-0027 item 20. A sessao e o cadastro do painel sao modulo proprio, e nao
+  // um canto de `identity`: o painel tem contas separadas das do app, e esta
+  // fronteira e o que vigia a separacao no codigo. `admin-access` importa de
+  // `identity` so `ports/senha.ts` e `ports/lista-de-senhas-vazadas.ts`, e
+  // `identity` nao importa nada daqui.
+  'admin-access',
+  // BICHUS/Rede (ADR-0025). Os encontros da comunidade sao modulo proprio pela
+  // mesma razao de `store`: e uma listagem do mesmo formato que `Perto` e
+  // `Loja` e nao compartilha tabela, regra nem publico com nenhuma das duas.
+  // E ha uma razao a mais aqui, que e de privacidade: `network_event_checkins`
+  // e a unica tabela desta secao que identifica alguem, e manter a fronteira e
+  // o que garante que nenhum outro modulo consiga le-la a nao ser por `ports/`.
+  'network',
 ];
 
 /**

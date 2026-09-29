@@ -42,7 +42,14 @@ from pathlib import Path
 # esquema -- e cairiam na mesma categoria que a configuracao do back-end, que ja
 # fica de fora. Varrer so `web/src/` poe o CODIGO da aplicacao do site na mesma
 # regra do `src/` do back-end, sem varrer o que no back-end tambem nao e varrido.
-RAIZES_VARRIDAS = ("src/", "migrations/", "app/lib/", "web/src/")
+# `admin/src/` desde 23/09: a SPA do backoffice chama `/v1/admin/*` por caminho
+# RELATIVO (mesma origem, D34 da seguranca), entao host literal no codigo que
+# vai ao navegador e defeito duas vezes -- amarra o build a um ambiente e abre
+# caminho para CORS. So `src/` da SPA, e nao `admin/` inteiro: o
+# `vite.config.ts` pode legitimamente apontar o proxy de desenvolvimento para
+# `http://localhost:3000`, e `package-lock.json` e `node_modules/` sao URL de
+# registro, nao amarracao.
+RAIZES_VARRIDAS = ("src/", "migrations/", "app/lib/", "web/src/", "admin/src/")
 
 # Dentro do codigo, o adaptador externo e onde falar com provedor e legitimo.
 ISENTOS = (

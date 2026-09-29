@@ -59,18 +59,18 @@
  * Em 50 KB a separação continua sendo de duas ordens de grandeza e o caminho
  * da reprovação custa segundos.
  *
- * Pela mesma razão a medição abaixo **desiste na primeira execução** quando ela
- * já estourou o teto: o melhor de três só vale para separar ruído de escalonador
- * num número que passou, e repetir três vezes algo que já reprovou só atrasa a
- * mensagem.
+ * Pela mesma razão a medição abaixo **desiste na primeira execução** que passa
+ * do orçamento de 1 s (metade do menor caso quebrado): repetir algo que já é
+ * regressão só atrasa a mensagem. Abaixo disso, ela amostra de três a quinze
+ * vezes e fica com a menor (ver `ORCAMENTO_DAS_REPETICOES_EM_MS`).
  *
  * ## Sobre medir tempo em teste
  *
  * A objeção usual é instabilidade, e ela não se aplica nesta ordem de grandeza:
- * o que se separa aqui são dezenas de milissegundos e milhares. O melhor de
- * três, e não a média, porque uma execução atrapalhada pelo escalonador do
- * sistema operacional é ruído para cima, nunca para baixo, e a menor das três é
- * a que menos mente. Isto não é micro-benchmark; é a diferença entre linear e
+ * o que se separa aqui são dezenas de milissegundos e milhares. A menor
+ * amostra, e não a média, porque uma execução atrapalhada pelo escalonador do
+ * sistema operacional é ruído para cima, nunca para baixo, e a menor é a que
+ * menos mente. Isto não é micro-benchmark; é a diferença entre linear e
  * quadrático.
  */
 import assert from 'node:assert/strict';
@@ -127,23 +127,71 @@ const PIORES_CASOS: ReadonlyArray<{ nome: string; texto: string; desligado: stri
 ];
 
 /**
- * O menor de três, desistindo na primeira que já estourou.
+ * Orçamento de tempo das REPETIÇÕES de um caso, em milissegundos.
  *
- * Sem a desistência, um caso quebrado paga quatro execuções lentas antes de
- * reprovar, e foi isso que tornou a primeira versão desta isca inutilizável.
+ * QA, 28/09: sob carga (a suíte inteira em paralelo com a pilha de integração
+ * e o build do painel), o melhor de três da porteira do push chegava a 60 ms
+ * sem nada ter regredido: as três execuções caíam no mesmo pico do
+ * escalonador. Carga é ruído para CIMA, nunca para baixo, então a resposta é
+ * amostrar mais enquanto houver tempo, e ficar com a menor. O teto não mudou.
+ *
+ * O orçamento é o que mantém a reprovação rápida: 1 s é metade do MENOR caso
+ * quebrado medido (1.665,8 ms), então uma regressão estoura o orçamento já na
+ * primeira execução e reprova sem repetir, como antes.
+ */
+const ORCAMENTO_DAS_REPETICOES_EM_MS = 1_000;
+/** No mínimo três amostras (o critério antigo), no máximo quinze. */
+const AMOSTRAS_MINIMAS = 3;
+const AMOSTRAS_MAXIMAS = 15;
+
+/**
+ * A menor amostra. Para cedo em dois casos: já há ao menos três amostras e a
+ * menor está dentro do teto (passou), ou o orçamento acabou (o que houver
+ * decide). Uma execução acima do orçamento é regressão, e não ruído: nenhuma
+ * carga transforma 2 ms em 1 s.
  */
 function menorTempoEmMs(executar: () => void, teto: number): number {
   executar(); // aquecimento: a primeira execução paga a compilação do regex.
   let menor = Number.POSITIVE_INFINITY;
-  for (let i = 0; i < 3; i++) {
+  const inicioDoCaso = process.hrtime.bigint();
+  for (let i = 0; i < AMOSTRAS_MAXIMAS; i++) {
     const inicio = process.hrtime.bigint();
     executar();
     const gasto = Number(process.hrtime.bigint() - inicio) / 1e6;
     if (gasto < menor) menor = gasto;
-    if (menor > teto) return menor;
+    if (gasto > ORCAMENTO_DAS_REPETICOES_EM_MS) return menor;
+    if (i + 1 >= AMOSTRAS_MINIMAS && menor <= teto) return menor;
+    if (Number(process.hrtime.bigint() - inicioDoCaso) / 1e6 > ORCAMENTO_DAS_REPETICOES_EM_MS) return menor;
   }
   return menor;
 }
+
+/** Ocupa a CPU por `ms` milissegundos: simula trabalho, e nao espera. */
+function ocupar(ms: number): void {
+  const fim = process.hrtime.bigint() + BigInt(Math.round(ms * 1e6));
+  while (process.hrtime.bigint() < fim) {
+    // laço vazio de proposito
+  }
+}
+
+void describe('a medição aguenta carga sem deixar de acusar (QA bug 7)', () => {
+  void it('ISCA: picos de carga em várias amostras não reprovam um caso rápido', () => {
+    let chamadas = 0;
+    // Aquecimento + quatro amostras sob "carga" de 80 ms, depois o custo real de 1 ms.
+    const gasto = menorTempoEmMs(() => {
+      chamadas += 1;
+      ocupar(chamadas <= 5 ? 80 : 1);
+    }, TETO_DO_PUSH_EM_MS);
+    assert.ok(gasto <= TETO_DO_PUSH_EM_MS, `a medição reprovou um caso rápido sob carga: ${gasto.toFixed(1)} ms`);
+  });
+
+  void it('ISCA: um custo que está SEMPRE acima do teto continua reprovando', () => {
+    const gasto = menorTempoEmMs(() => {
+      ocupar(TETO_DO_PUSH_EM_MS + 15);
+    }, TETO_DO_PUSH_EM_MS);
+    assert.ok(gasto > TETO_DO_PUSH_EM_MS, 'a medição aprovou um custo que nunca ficou dentro do teto');
+  });
+});
 
 void describe('SEC-025 — a redação do canal mediado é linear no tamanho da entrada', () => {
   for (const caso of PIORES_CASOS) {

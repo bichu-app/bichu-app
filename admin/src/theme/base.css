@@ -1,0 +1,38 @@
+/* Base global. Todo valor visual sai de tokens.g.css; nada aqui escreve cor. */
+:root {
+  color-scheme: light dark;
+}
+
+:root[data-tema='claro'] {
+  color-scheme: light;
+}
+
+:root[data-tema='escuro'] {
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  background: var(--bichu-cor-surface);
+  color: var(--bichu-cor-text-primary);
+  font-family: var(--bichu-type-body-font-family), var(--bichu-font-family-sistema);
+  font-weight: var(--bichu-type-body-font-weight);
+  font-size: var(--bichu-type-body-font-size);
+  line-height: var(--bichu-type-body-line-height);
+}
+
+:focus-visible {
+  outline: var(--bichu-focus-width) solid var(--bichu-cor-focus-ring);
+  outline-offset: var(--bichu-focus-offset);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -5,6 +5,9 @@
 de que o servico aplicava `x-rate-limit`. **Ele nao aplica.** A conclusao (aplicar
 no servico) fica; a premissa foi corrigida e a aplicacao passa a ser estrutural.
 Ver a emenda no fim do documento.
+**Emenda 2, 23/09/2026 (ADR-0027 item 11):** o host `admin.bichu.app` ganha
+teto de taxa **na borda**, com imagem própria do Caddy. A recusa da secao 4
+continua valendo para os hosts do app. Ver o fim do documento.
 **Data:** 2026-09-17
 **Revisa:** ADR-0001 (a seção "Borda" e a menção a `media` como primeira
 fronteira extraível)
@@ -445,3 +448,39 @@ rodar, esta fechado.
 seção 6 registrava que o limite roda em processo e precisa trocar de driver antes
 da segunda instância. Essa continua. O que esta emenda acrescenta é que, antes
 dela, **existe o problema anterior de o limite não rodar**.
+
+
+---
+
+# Emenda 2 — 23/09/2026: teto na borda para o host administrativo
+
+**O que muda:** o bloco de `admin.bichu.app` aplica, na borda, 10 requisições
+por minuto por IP em `POST /v1/admin/auth/login` e 600 por minuto por IP em
+`/v1/admin/*`, com `429` e `Retry-After` (D45 de `docs/04-seguranca.md`). Isso
+exige imagem própria do Caddy com o plugin de taxa, construída na esteira em
+estágio múltiplo e fixada por digest.
+
+**Por que a recusa da seção 4 não vale aqui:** ela dizia que o teto na borda
+não acrescentaria nada, porque os tetos com a dimensão certa moram no serviço.
+Para a API do app isso continua certo. Para o login administrativo não: sem MFA
+e sem restrição de rede, por decisão do cliente, ele é a única parede, e a
+emenda 1 deste documento registra que até 21/09 o serviço declarava tetos e não
+aplicava nenhum. Uma camada que não depende do código da aplicação é o que
+cobre esse modo de falhar.
+
+**O que continua:** os hosts do app não ganham teto na borda; a borda continua
+sem validar token; o serviço continua revalidando tudo.
+
+**Como o número é verificado:** os dois valores entram em `x-edge-limits`
+**no mesmo commit** do Caddyfile e da extensão de
+`infra/verificacao/verificar_borda.py`. O verificador de hoje ignora chave que
+não conhece, e número declarado sem imposição é o que a seção 4 já chamava de
+pior que nenhum.
+
+**Portabilidade:** na borda gerenciada, o equivalente é uma regra de taxa do
+balanceador (Cloud Armor, no GCP). O número no contrato continua sendo a fonte.
+
+Além do teto, o bloco administrativo remove todo `X-Internal-*` de entrada e
+define `X-Internal-Surface: admin`, que a aplicação exige em `/v1/admin/*`; e
+os demais hosts respondem 404 da borda para `/v1/admin/*` (D33, ADR-0027
+item 1).

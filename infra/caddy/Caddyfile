@@ -300,6 +300,10 @@
 	# de matcher nomeado e `handle` de caminho e a ordem do arquivo. Com o
 	# `import` acima do `@docs`, `/v1/*` casava primeiro e a documentacao saia
 	# SEM o `basic_auth` -- conferido em 23/09 pela configuracao adaptada.
+	#
+	# O trecho `gateway_v1` carrega o `handle /v1/admin*` que responde 404 DA
+	# BORDA (D33): a superficie administrativa so e servida no bloco do
+	# backoffice, no fim deste arquivo. `verificar_borda.py` reprova se ele sumir.
 	import gateway_v1
 
 	# Fechado de proposito (ADR-0017). As oito rotas publicas em HTML sairam
@@ -446,5 +450,192 @@
 
 	handle {
 		respond "nao encontrado" 404
+	}
+}
+
+# --------------------------------------------------------------------------
+# Origem do backoffice (`admin.bichu.app`)
+# --------------------------------------------------------------------------
+# Decisao do cliente de 23/09/2026: o backoffice e uma SPA estatica, num
+# container proprio (`admin-web`, ADR-0027 item 1), atras desta mesma borda. Mesmo desenho do site:
+# ROTEAMENTO POR HOST, bloco proprio, e mudar o backoffice de lugar e trocar
+# `admin-web:8080` NESTA linha.
+#
+# MESMA ORIGEM, SEM CORS (docs/04-seguranca.md, D34). A SPA chama `/v1/admin/*`
+# por caminho relativo, e ESTE bloco repassa esse prefixo a API. Nenhuma
+# resposta leva `Access-Control-Allow-*`, e nenhum outro host alcanca
+# `/v1/admin*`: o bloco da aplicacao responde 404 da borda (D33).
+#
+# O que este bloco NAO faz, e cada ausencia e regra:
+#   - nao repassa o resto de `/v1/*`: o host administrativo nao e um segundo
+#     endereco para a API inteira. `/v1/...` fora de `/v1/admin/` e 404 aqui;
+#   - nao tem `request_body` proprio: `verificar_borda.py` le o PRIMEIRO
+#     `max_size` do arquivo como espelho de `x-edge-limits`, e um numero so do
+#     backoffice seria numero sem dono no contrato. O teto de corpo que vale
+#     aqui e o padrao do Caddy, e o do servico;
+#   - nao serve os arquivos de associacao de deep link: nenhum link que abre o
+#     app aponta para este host.
+#
+# O VALOR PADRAO NAO E UM DOMINIO, de proposito, como no site:
+# `http://admin.localhost` faz o bloco existir e ser exercitado pela esteira
+# (porta 80 de dentro da borda, com esse `Host`) sem pedir certificado. Em
+# homologacao e producao, no `.env` do host: `ADMIN_HOSTS=https://admin.bichu.app`,
+# e o edge RECRIADO (`docker compose up -d --no-deps admin edge`): a borda roda
+# com `admin off`, entao nao ha `caddy reload`.
+#
+# ORDEM QUE NAO PODE SER INVERTIDA, a mesma do apex: o certificado sai por
+# HTTP-01, entao este bloco precisa conhecer o nome ANTES de o DNS apontar para
+# ca. Config primeiro, DNS depois. Em `.app` (HSTS pre-carregado) um nome sem
+# certificado e erro duro de navegador.
+
+# --------------------------------------------------------------------------
+# OS CABECALHOS DO BACKOFFICE: UM LUGAR SO (docs/04-seguranca.md, D41 e D48)
+# --------------------------------------------------------------------------
+# Tudo o que o navegador recebe de politica de seguranca no host administrativo
+# esta neste trecho, e em nenhum outro lugar. Na BORDA, e nao no container da
+# SPA, para nao se perder numa troca de container (D48). O container so cuida
+# da classe de cache dos arquivos com hash e do fallback da SPA.
+#
+# Os hosts de fora, todos por NOME EXATO, sem curinga (ADR-0027 item 6):
+#   MEDIA_PUBLIC_BASE_URL       a origem de midia (`img-src`), do ambiente: a
+#                               capa de item e de evento e imagem NOSSA;
+#   https://tile.openstreetmap.org  os tiles do mapa (`img-src`), fixo: Leaflet
+#                               empacotado, tile carregado como imagem;
+#   ADMIN_CSP_UPLOAD            o host de `UploadIntent.url` do ambiente
+#                               (`connect-src`), o destino do POST assinado.
+# `ADMIN_CSP_UPLOAD` e VAZIO POR PADRAO: hoje o endpoint do armazenamento e
+# `http://objeto:9000`, nome interno que navegador nenhum alcanca, e o host
+# publico do envio ainda nao esta escrito em lugar nenhum. Enquanto vazio, o
+# envio de imagem pelo painel fica bloqueado pela CSP, que e o lado certo de
+# errar.
+#
+# Sem 'unsafe-inline' e sem 'unsafe-eval' em `script-src`, em nenhuma hipotese.
+# O `>` na frente do nome ADIA o cabecalho para a saida: o valor da borda vale
+# por cima do que a API ou o container mandarem (um `Cache-Control` que a API
+# ponha numa resposta de `/v1/admin/*`, por exemplo).
+# O argumento do `import` (`site`, `erro`) so existe para dar nome distinto aos
+# matchers: o trecho e importado duas vezes no mesmo bloco (a rota normal e a
+# de erro), e o Caddy recusa matcher com o mesmo nome definido duas vezes.
+#
+# `Cache-Control: no-store` em tudo que NAO e arquivo com hash: o HTML, `/`,
+# `/entrar` e `/v1/admin/*` (D48). `/assets/*` fica com o `immutable` que o
+# container poe.
+(cabecalhos_do_backoffice) {
+	header {
+		-Server
+		Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+		X-Frame-Options DENY
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
+		Cross-Origin-Opener-Policy same-origin
+		Cross-Origin-Resource-Policy same-origin
+		X-Robots-Tag "noindex, nofollow, noarchive"
+	}
+
+	@backoffice_sem_hash_{args[0]} not path /assets/*
+	header @backoffice_sem_hash_{args[0]} >Cache-Control no-store
+
+	# A CSP DO BACKOFFICE, em toda URL menos a pagina de login.
+	@backoffice_fora_do_login_{args[0]} not path /entrar /entrar/ /entrar/*
+	header @backoffice_fora_do_login_{args[0]} >Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: {$MEDIA_PUBLIC_BASE_URL} https://tile.openstreetmap.org; font-src 'self'; connect-src 'self' {$ADMIN_CSP_UPLOAD}; worker-src 'self' blob:; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+
+	# EXCECAO MARCADA: A PAGINA DE LOGIN (D41), E SO ELA.
+	# O login e um documento HTML proprio (`/entrar`) com reCAPTCHA v3, e so
+	# ELE admite os hosts do Google: o script de terceiro nunca roda na origem
+	# em que a sessao ja esta aberta. Depois do login a SPA navega com recarga
+	# completa para `/`, cujo documento tem a CSP de cima. `frame-src` com os
+	# dois hosts que o reCAPTCHA usa para o quadro invisivel (documentacao do
+	# Google para CSP); o resto e identico ao de cima.
+	#
+	# Quem mexer: host novo aqui e superficie nova de script na pagina que
+	# recebe a senha do administrador. A sonda P18 reprova se a CSP de `/`
+	# contiver host do Google.
+	@backoffice_login_{args[0]} path /entrar /entrar/ /entrar/*
+	header @backoffice_login_{args[0]} >Content-Security-Policy "default-src 'none'; script-src 'self' https://www.google.com/recaptcha/ https://www.gstatic.com/recaptcha/; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src https://www.google.com/recaptcha/ https://recaptcha.google.com/recaptcha/; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+}
+
+{$ADMIN_HOSTS:http://admin.localhost} {
+	encode zstd gzip
+
+	import cabecalhos_do_backoffice site
+
+	# TETO DE TAXA NA BORDA, E SO NESTE HOST (ADR-0016 emenda 2, ADR-0027 item
+	# 11, D45). Os hosts do app continuam sem teto na borda: la os tetos moram
+	# no servico, com a dimensao certa (ADR-0016 item 4). Aqui o login e a unica
+	# parede depois da recusa de MFA e de restricao de rede, e uma camada que nao
+	# depende do codigo da aplicacao cobre o dia em que o servico declarar teto e
+	# nao aplicar -- que ja aconteceu neste repositorio, ate 21/09.
+	#
+	# Exige o plugin `caddy-ratelimit`, que e o motivo de a borda ter imagem
+	# propria (`infra/caddy/Dockerfile`). Os numeros ESPELHAM `x-edge-limits` do
+	# contrato (`admin_login_requests_per_minute_per_ip`,
+	# `admin_requests_per_minute_per_ip`), e `verificar_borda.py` reprova quando
+	# divergirem, quando uma zona nao tiver numero la, e quando `rate_limit`
+	# aparecer em qualquer outro bloco.
+	#
+	# Chave `{remote_host}`: o IP de quem conectou na borda. Vale porque a borda
+	# recebe a conexao direto (registro DNS sem proxy, "nuvem cinza", docs/07
+	# 16.4). Com um proxy na frente, todo mundo teria o IP do proxy e o teto
+	# viraria global -- trocar para cabecalho de IP encaminhado exige saber de
+	# quem confiar nele, e e decisao propria.
+	#
+	# Um login conta nas DUAS zonas, e esta certo: 10 < 600, o teto do login e o
+	# que vale para ele. Estouro: `429` com `Retry-After`, pela rota de erro
+	# abaixo, que carrega os cabecalhos do host.
+	rate_limit {
+		zone admin_login {
+			match {
+				method POST
+				path /v1/admin/auth/login
+			}
+			key {remote_host}
+			events 10
+			window 1m
+		}
+		zone admin_api {
+			match {
+				path /v1/admin/*
+			}
+			key {remote_host}
+			events 600
+			window 1m
+		}
+	}
+
+	# Cabecalho interno forjado pelo cliente sai ANTES de tudo, no host inteiro.
+	request_header -X-Internal-*
+
+	# A superficie administrativa: repassada a API COM a marca de que chegou
+	# pelo host administrativo. A guarda da aplicacao recusa com 404 toda
+	# requisicao a `/v1/admin/*` sem `X-Internal-Surface: admin` (D33), o que
+	# cobre rota esquecida neste arquivo e acesso direto a porta do container.
+	#
+	# A ORDEM DAS DUAS LINHAS E A PROTECAO: primeiro apaga o que o cliente
+	# mandou, depois poe o valor da borda. Invertidas, o valor forjado de fora
+	# sobreviveria. `verificar_borda.py` confere essa ordem, com isca em
+	# `infra/verificacao/iscas/caddyfile-admin-sem-limpar-interno`.
+	handle /v1/admin/* {
+		request_header -X-Internal-*
+		request_header X-Internal-Surface admin
+		reverse_proxy api:3000
+	}
+
+	# O resto da API nao e servido neste host.
+	handle /v1/* {
+		respond "nao encontrado" 404
+	}
+
+	handle {
+		reverse_proxy admin-web:8080
+	}
+
+	# Erro gerado PELA BORDA (upstream fora do ar: 502) sai sem os cabecalhos
+	# acima, porque `handle_errors` e outra rota. Medido em 23/09: um 502 em
+	# `/v1/admin/*` vinha sem CSP, sem HSTS e com `Server`. A pagina de erro do
+	# host administrativo tambem e pagina do host administrativo.
+	handle_errors {
+		import cabecalhos_do_backoffice erro
+		respond "{err.status_code}" {err.status_code}
 	}
 }

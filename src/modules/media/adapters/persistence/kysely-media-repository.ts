@@ -370,14 +370,25 @@ export function criarMediaRepository(db: Db): MediaRepository {
     },
 
     async listarIntencoesVencidas(agora: Instant, limite: number): Promise<readonly IntencaoVencida[]> {
+      // As DUAS tabelas de intencao: a do app (`upload_intents`) e a do painel
+      // (`catalog_upload_intents`, ADR-0027 A.3). Uma intencao confirmada vira
+      // `pet_photos` ou `catalog_images`; esta consulta so enxerga as que nunca
+      // viraram, e por isso nao ha risco de apagar o original de uma foto viva.
+      // Uma consulta so, com UNION ALL: a ordem por vencimento e o limite valem
+      // para as duas tabelas juntas.
+      const vencimento = new Date(Number(agora));
       const linhas = await db
         .selectFrom('upload_intents')
-        .select(['id', 'object_key'])
+        .select(['id', 'object_key', 'expires_at'])
         .where('confirmed_at', 'is', null)
-        .where('expires_at', '<', new Date(Number(agora)))
-        // Uma intenção confirmada vira `pet_photos`; esta consulta só enxerga as
-        // que nunca viraram, e por isso não há risco de apagar o original de
-        // uma foto viva.
+        .where('expires_at', '<', vencimento)
+        .unionAll(
+          db
+            .selectFrom('catalog_upload_intents')
+            .select(['id', 'object_key', 'expires_at'])
+            .where('confirmed_at', 'is', null)
+            .where('expires_at', '<', vencimento),
+        )
         .orderBy('expires_at')
         .limit(limite)
         .execute();
@@ -385,7 +396,11 @@ export function criarMediaRepository(db: Db): MediaRepository {
     },
 
     async descartarIntencao(id: string): Promise<void> {
+      // O `id` e UUIDv7 e nao se repete entre as duas tabelas; apagar nas duas
+      // pelo mesmo `id`, e so a nao confirmada, e o que dispensa a porta de
+      // saber de qual tabela a intencao veio.
       await db.deleteFrom('upload_intents').where('id', '=', id).where('confirmed_at', 'is', null).execute();
+      await db.deleteFrom('catalog_upload_intents').where('id', '=', id).where('confirmed_at', 'is', null).execute();
     },
 
     async excluirFoto(pet: PetId, foto: string, dono: UserId, agora: Instant): Promise<boolean> {

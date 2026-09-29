@@ -1,7 +1,11 @@
 # ADR-0010: Privacidade e LGPD — retenção, dado de terceiro e o que a rota pública jamais exibe
 
-**Status:** aceito
+**Status:** aceito, com emenda 1
 **Data:** 2026-09-17
+
+**Emenda 1, 23/09/2026 (ADR-0027 item 13):** o ponto de um encontro publicado
+da `Rede` sai em resposta **autenticada** do app. Escopo fechado; os itens 4 e
+5 continuam valendo para tudo o mais. Ver o fim do documento.
 
 ## Contexto
 
@@ -128,3 +132,35 @@ Aberto e dependente do cliente: quem responde pelos pedidos de titular, qual
 endereço de contato do encarregado aparece na política de privacidade, e quem
 assina os textos de termos e privacidade. Sem isso, a rota pública não pode ir ao
 ar com link de política funcionando.
+
+
+---
+
+# Emenda 1 — 23/09/2026: o ponto do encontro da `Rede`, em resposta autenticada
+
+**Decisão do cliente, 23/09:** o app mostra ao tutor o ponto do encontro da
+`Rede` no mapa.
+
+**O que muda, e só isto:** a coordenada de um evento da `Rede` com
+`publication_status` em `published` ou `cancelled` sai na operação
+`getNetworkEventLocation`, que exige conta (`bearerAuth` sem alternativa
+vazia). Os itens 4 e 5 continuam valendo sem exceção para coordenada de pessoa,
+de pet, de caso e de achado, em qualquer superfície, e mapa com pino continua
+proibido em superfície alcançável sem conta.
+
+**Por que a regra não se aplica a este ponto:** os itens 4 e 5 existem porque
+coordenada localiza pessoa ou animal. O ponto de um encontro numa praça
+localiza um lugar público. O risco real é o "encontro" marcado numa residência,
+e nenhum `CHECK` distingue praça de casa. A garantia é humana e rastreável, e
+está no item 13 do ADR-0027: só administrador cria evento na v1; publicar,
+mover e cancelar avisa todos os administradores; mover e cancelar exigem
+reautenticação; tudo fica na trilha; e evento criado pela comunidade, quando
+existir, só é projetado depois de revisão humana.
+
+**Por que numa operação própria:** a listagem da `Rede` é pública e o detalhe
+tem autenticação opcional. Pôr o ponto em qualquer das duas faria a resposta
+mudar conforme o chamador, que é o que o ADR-0021 proíbe, e o portão de
+contrato público trata autenticação opcional como pública.
+
+A trilha de auditoria continua sem coordenada bruta: a mudança do ponto grava
+`{"point_changed": true}`, nunca o valor.

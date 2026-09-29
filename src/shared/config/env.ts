@@ -32,6 +32,55 @@ export function boolEnv(name: string, fallback = false): boolean {
   return value === undefined ? fallback : value === 'true';
 }
 
+/** O nome e o unico valor que ligam o desafio de desenvolvimento do painel. */
+export const VARIAVEL_DO_CAPTCHA_DE_DESENVOLVIMENTO = 'CAPTCHA_DESENVOLVIMENTO_LOCAL';
+
+/** Host que so resolve na propria maquina: `localhost`, loopback, `*.localhost` e `*.test`. */
+export function ehHostLocal(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return (
+    host === 'localhost' ||
+    host === '127.0.0.1' ||
+    host === '[::1]' ||
+    host.endsWith('.localhost') ||
+    host.endsWith('.test')
+  );
+}
+
+/**
+ * QA, 28/09: o desafio de desenvolvimento do login do painel (ver
+ * `admin-access/adapters/external/captcha-de-desenvolvimento-local.ts`) so
+ * existe na pilha local. Devolve o motivo da recusa, ou `undefined`.
+ *
+ * A variavel PRESENTE ja e o gatilho, com qualquer valor: uma
+ * `CAPTCHA_DESENVOLVIMENTO_LOCAL` num ambiente hospedado e engano de
+ * configuracao mesmo quando o valor nao ligaria o modo, e quem le o log de um
+ * boot que morreu precisa ver isso antes de alguem "consertar" o valor.
+ */
+export function recusaDoCaptchaDeDesenvolvimento(ambiente: NodeJS.ProcessEnv): string | undefined {
+  const valor = ambiente[VARIAVEL_DO_CAPTCHA_DE_DESENVOLVIMENTO];
+  if (valor === undefined || valor === '') return undefined;
+  const motivos: string[] = [];
+  if (ambiente['NODE_ENV'] === 'production') motivos.push('NODE_ENV=production');
+  const nome = ambiente['ENVIRONMENT'] ?? 'dev';
+  if (nome !== 'dev') motivos.push(`ENVIRONMENT=${nome}`);
+  for (const chave of ['PUBLIC_BASE_URL', 'ADMIN_ORIGIN']) {
+    const url = ambiente[chave];
+    if (url !== undefined && url !== '' && !ehHostLocal(url)) motivos.push(`${chave}=${url} (host que nao e local)`);
+  }
+  if (motivos.length === 0) return undefined;
+  return (
+    `${VARIAVEL_DO_CAPTCHA_DE_DESENVOLVIMENTO} presente com ${motivos.join(', ')}. ` +
+    'O desafio de desenvolvimento aprova um token fixo no login do painel e so pode existir na ' +
+    'pilha local. Tire a variavel do ambiente.'
+  );
+}
+
 /**
  * Travas de subida. Chamadas por bin/api.ts e bin/worker.ts ANTES de ouvir
  * qualquer porta.
@@ -50,6 +99,9 @@ export function assertSafeBoot(): void {
         'Ele só é legítimo em `dev` e em teste. Use `memory` ou `postgres`.',
     );
   }
+
+  const recusaDoCaptcha = recusaDoCaptchaDeDesenvolvimento(process.env);
+  if (recusaDoCaptcha !== undefined) throw new Error(recusaDoCaptcha);
 
   const isProduction = process.env.NODE_ENV === 'production';
   if (!isProduction) return;

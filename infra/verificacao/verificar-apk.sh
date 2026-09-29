@@ -55,6 +55,8 @@ ENVIRONMENT="${ENVIRONMENT:-hml}"
 TERMS_VERSION="${TERMS_VERSION:-2026-09-17}"
 TERMS_URL="${TERMS_URL:-https://bichu.app/termos}"
 PRIVACY_URL="${PRIVACY_URL:-https://bichu.app/privacidade}"
+# O endereco dos tiles do mapa e o User-Agent que a politica do OpenStreetMap
+# pede moram em app/config/mapa.json, fora do codigo (portao de portabilidade).
 
 # ---------------------------------------------------------------------------
 # A conferencia. Fica numa funcao so para que o autoteste exercite EXATAMENTE a
@@ -206,7 +208,8 @@ rm -f "$APK"
     --dart-define=ENVIRONMENT="$ENVIRONMENT" \
     --dart-define=TERMS_VERSION="$TERMS_VERSION" \
     --dart-define=TERMS_URL="$TERMS_URL" \
-    --dart-define=PRIVACY_URL="$PRIVACY_URL"
+    --dart-define=PRIVACY_URL="$PRIVACY_URL" \
+    --dart-define-from-file=config/mapa.json
 ) || {
   echo "REPROVA: \`flutter build apk --release\` falhou. Leia o erro acima: se ele fala de compileSdk, de AAR metadata ou de versao de AGP, alguma dependencia subiu o piso da cadeia de ferramentas e o projeto ficou para tras" >&2
   exit 1

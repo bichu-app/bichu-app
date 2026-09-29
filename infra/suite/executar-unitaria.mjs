@@ -118,8 +118,12 @@ const INTEGRACAO = join('tests', 'integration');
  * `tests/integration/`, e sao rodados la, nao por esta suite da raiz -- pela
  * mesma razao que os do app Flutter nao sao. Os testes de ponta a ponta do
  * Cypress sao `*.cy.ts` e nao entram nesta conta.
+ *
+ * O painel (`admin/`, ADR-0027) fica de fora pela MESMA razao: projeto proprio
+ * com `package.json`, `tsconfig` e suite proprios (`vitest run`, `npm test`
+ * dentro de `admin/`), cobrado no fechamento.
  */
-const NAO_VARRER = new Set(['node_modules', '.git', 'dist', 'coverage', 'app', 'web', 'build', '.dart_tool']);
+const NAO_VARRER = new Set(['node_modules', '.git', 'dist', 'coverage', 'app', 'web', 'admin', 'build', '.dart_tool']);
 /** Onde o placar e escrito para ser LIDO, e nao adivinhado. */
 const RELATORIO = join(COMPILADO, 'unitaria.tap');
 

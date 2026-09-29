@@ -138,7 +138,8 @@ const FERRAMENTA_FORA_DO_RUNTIME =
 
 const AUSENCIAS_ACEITAS = new Map([
   // -- so tipo: o compilado nao tem uma instrucao sequer ---------------------
-  ['src/modules/audit/ports/audit-log.ts', SO_TIPO],
+  // `audit/ports/audit-log.ts` saiu daqui na BICHUS-259: passou a exportar
+  // `ACOES_ADMINISTRATIVAS`, que e valor, e a suite o carrega.
   // As cinco de 22/09, que chegaram com o alerta, a conversa mediada, o achado
   // avulso e o aparelho. Cada uma esta nomeada, uma linha por arquivo, pelo
   // motivo escrito no topo desta lista: um prefixo `src/modules/**/ports/**`
@@ -146,6 +147,15 @@ const AUSENCIAS_ACEITAS = new Map([
   // inclusive a que alguem escrever amanha ja com codigo de verdade dentro.
   // Conferido arquivo a arquivo: nenhuma das cinco declara `const`, `function`,
   // `class` ou `enum`, entao o compilado nao tem uma instrucao sequer.
+  // ADR-0027 item 20: as quatro portas de `admin-access` que so declaram tipos.
+  // A da sessao veio de `identity/ports/`; as outras duas nasceram com o
+  // cadastro proprio do painel, e `comando-de-contas.ts` com o `conta-admin`
+  // (item 20.3). `verificador-de-captcha.ts` NAO esta aqui: ela
+  // exporta valor, e o teste do reCAPTCHA a carrega.
+  ['src/modules/admin-access/ports/aviso-por-email.ts', SO_TIPO],
+  ['src/modules/admin-access/ports/comando-de-contas.ts', SO_TIPO],
+  ['src/modules/admin-access/ports/repositorio-de-contas-administrativas.ts', SO_TIPO],
+  ['src/modules/admin-access/ports/sessao-administrativa-repository.ts', SO_TIPO],
   ['src/modules/found/ports/found-report-repository.ts', SO_TIPO],
   ['src/modules/identity/application/dependencies.ts', SO_TIPO],
   ['src/modules/identity/ports/identity-repository.ts', SO_TIPO],
@@ -163,6 +173,7 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/media/ports/image-processor.ts', SO_TIPO],
   ['src/modules/media/ports/media-repository.ts', SO_TIPO],
   ['src/modules/messaging/ports/conversation-repository.ts', SO_TIPO],
+  ['src/modules/network/ports/network-repository.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-aparelhos.ts', SO_TIPO],
   ['src/modules/notifications/ports/registro-de-entregas.ts', SO_TIPO],
   ['src/modules/pets/ports/fotos-do-pet.ts', SO_TIPO],

@@ -948,20 +948,73 @@ void main() {
   group('25.7.3 — casca nao vira entrega', () {
     test('nenhuma secao `planejada` produz destino visivel no build de entrega',
         () {
-      // **A guarda que o proprio 25.7.3 exige por escrito:** reprovar tambem
-      // quando nao houver nenhuma secao `planejada` no registro, porque ai o
-      // portao nao esta verificando nada e ficaria verde por vazio.
-      final planejadas = CascaComAbas.destinos
+      // ESTE CASO MUDOU DE PROPOSITO EM 23/09/2026, e a versao anterior dele
+      // previu exatamente isto por escrito: "ou todas ganharam conteudo real
+      // -- e ai este caso precisa mudar de proposito".
+      //
+      // Foi o que aconteceu. A `Rede` era a ULTIMA secao `planejada` do
+      // registro, e o ADR-0025 lhe deu tabela, rota e tela. Nao ha mais
+      // nenhuma.
+      //
+      // A guarda antiga exigia que existisse ao menos uma secao `planejada`,
+      // para o portao nao ficar verde por nao ter o que filtrar. Ela nao pode
+      // continuar: hoje ela reprovaria o estado CORRETO do produto.
+      //
+      // O que entra no lugar NAO e apagar a guarda. E provar o filtro com uma
+      // lista propria, contendo uma secao `planejada` de mentira. Assim o caso
+      // continua exercendo `visiveisEm` de verdade -- a funcao de producao, e
+      // nao uma copia do predicado -- mesmo com o registro real sem nenhuma.
+      const planejadaDeMentira = DestinoDeNavegacao(
+        rotulo: 'Isca',
+        reforcoAcessivel: 'secao de mentira, so deste caso',
+        reforcoDaPagina: 'Existe para provar que o filtro de entrega filtra.',
+        icone: Icons.science_outlined,
+        iconeSelecionado: Icons.science,
+        rota: '/isca-que-nao-existe',
+        estado: EstadoDaSecao.planejada,
+        campoSemantico: CampoSemantico.comunidade,
+      );
+      final comUmaPlanejada = <DestinoDeNavegacao>[
+        ...CascaComAbas.destinos,
+        planejadaDeMentira,
+      ];
+
+      final filtrados = CascaComAbas.visiveisEm(
+        ConfiguracaoDeBuild.entrega,
+        entre: comUmaPlanejada,
+      ).map((d) => d.rotulo).toList();
+      expect(
+        filtrados,
+        isNot(contains('Isca')),
+        reason: 'REPROVA: `visiveisEm` devolveu uma secao `planejada` no build '
+            'de entrega. O filtro parou de filtrar, e com o registro real sem '
+            'nenhuma secao planejada isso passaria despercebido ate o dia em '
+            'que a proxima secao nascesse.',
+      );
+      expect(
+        CascaComAbas.visiveisEm(
+          ConfiguracaoDeBuild.referencia,
+          entre: comUmaPlanejada,
+        ).map((d) => d.rotulo).toList(),
+        contains('Isca'),
+        reason: 'REPROVA: o build de REFERENCIA precisa mostrar a secao '
+            'planejada. Se ele tambem a esconde, o filtro deixou de distinguir '
+            'as duas configuracoes e o caso acima passaria por motivo errado.',
+      );
+
+      // E o fato novo, afirmado por extenso para que perde-lo REPROVE: todas
+      // as cinco secoes do registro tem conteudo.
+      final aindaPlanejadas = CascaComAbas.destinos
           .where((d) => d.estado == EstadoDaSecao.planejada)
           .map((d) => d.rotulo)
           .toList();
       expect(
-        planejadas,
-        isNotEmpty,
-        reason: 'REPROVA: nenhuma secao do registro esta em `planejada`. Ou '
-            'todas ganharam conteudo real -- e ai este caso precisa mudar de '
-            'proposito -- ou o campo `estado` deixou de ser preenchido e o '
-            'portao passou a aprovar por vazio.',
+        aindaPlanejadas,
+        isEmpty,
+        reason: 'REPROVA: ${aindaPlanejadas.join(', ')} voltou(aram) a '
+            '`planejada`. Se uma secao perdeu o conteudo, o caso de cima ja '
+            'garante que ela nao vaza para a barra de entrega -- mas o '
+            'registro precisa dizer isso em voz alta, e nao por omissao.',
       );
 
       final vazaram = CascaComAbas.visiveisEm(ConfiguracaoDeBuild.entrega)

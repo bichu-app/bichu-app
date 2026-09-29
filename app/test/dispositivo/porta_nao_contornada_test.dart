@@ -391,6 +391,19 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 /// **O valor anterior desta constante era `4a29c9d07d3aaf5c4067be2885b3efbd8b4876e6`**,
 /// medido na base `feat/tela-de-perto` (`98a91a2`).
+///
+/// **Remedido na mescla de `development` (920a221) nesta branch, 23/09/2026.**
+/// Pelo mesmo motivo de sempre, e ele nao cansa de valer: os dois lados
+/// destravaram a constante pela propria historia, e **a arvore que existe
+/// depois da mescla nao e nenhuma das duas**. Desta branch veio a secao
+/// `Rede`; da `development` veio a ancoragem do botao de criar conta no
+/// rodape, que mexe em `telas/conta/`.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, e o
+/// portao de diretivas abaixo continua cobrando isso sem depender desta
+/// constante. Medido com o indice temporario deste portao sobre a arvore ja
+/// mesclada. Anteriores: `59de12f643235735ac6a21249b1408fbf3651c93` (esta
+/// branch) e `65bcd97d9088e6da8668127c8cb4d38f5e19d718` (`development`).
 /// **Destravado uma nona vez pelo travamento de `Criar conta` em aparelho
 /// fisico de 22/09/2026.** O cliente nao conseguia criar conta nem entrar, e
 /// a varredura que saiu dali achou uma classe inteira: o `setState` que
@@ -545,6 +558,60 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// sendo um ato deliberado. Anteriores:
 /// `47d3281e75ece2ffd5e85586047c465868427d6f` (esta branch) e
 /// `72832de16b55beaff488096e442d64b1846bed0c` (`development`).
+// BICHUS-251 (ADR-0025): a secao `Rede` ganhou tela. `app/lib/telas/rede/`
+// nasceu com a agenda e o detalhe do encontro, e `abas.dart` perdeu a casca
+// honesta. Nenhuma tela mudou por causa da camera -- que e o que o criterio
+// 10 vigia --, e a porta `CameraEGaleria` nao foi tocada.
+///
+/// **Remedido na mescla de `feat/tela-de-loja` (69c6a27) nesta branch,
+/// 23/09/2026.** Os dois lados destravaram a constante pelo proprio motivo, e
+/// por isso **nenhum dos dois valores vale depois da mescla**: a arvore
+/// mesclada nao e a que nenhum dos dois mediu sozinho. Desta branch veio a
+/// secao `Rede` (`telas/rede/`, com `abas.dart` e `casca_com_abas.dart`); do
+/// outro lado veio a identidade interna da vitrine, que nao toca em
+/// `app/lib/telas`.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, que e o
+/// que o criterio 10 da BICHUS-161 protege, e o portao de diretivas abaixo
+/// continua cobrando isso por conta propria, sem depender desta constante.
+///
+/// O valor abaixo foi MEDIDO com o mesmo indice temporario que este portao usa
+/// (`GIT_INDEX_FILE` + `read-tree HEAD` + `add -A app/lib/telas` +
+/// `write-tree` + `rev-parse <arvore>:app/lib/telas`) sobre a arvore ja
+/// mesclada, e nao copiado de relato nenhum. As justificativas acima ficaram
+/// TODAS, dos dois lados: cada uma diz o que mudou de um lado, e e isso que
+/// mantem a troca sendo um ato deliberado. Anteriores:
+/// `a64f0919fd008d7165c19d40149e74431b8ae019` (esta branch) e
+/// `77a37422c91cce0d6d91b979bbdc2835da0ea585` (`feat/tela-de-loja`).
+///
+/// **Remedido na mescla de `development` (920a221) nesta branch, 23/09/2026.**
+/// Pelo mesmo motivo de sempre: os dois lados destravaram a constante pela
+/// propria historia, e **a arvore que existe depois da mescla nao e nenhuma
+/// das duas**. Desta branch veio a secao `Rede` (`telas/rede/`); da
+/// `development` veio a ancoragem do botao de `Criar conta` no rodape, que
+/// mexe em `telas/conta/tela_criar_conta.dart`.
+///
+/// Nenhuma das pecas dos dois lados encosta na porta `CameraEGaleria`, e o
+/// portao de diretivas abaixo continua cobrando isso sem depender desta
+/// constante. Medido com o indice temporario deste portao sobre a arvore ja
+/// mesclada, e nao copiado de relato nenhum. As justificativas acima ficaram
+/// TODAS, dos dois lados. Anteriores:
+/// `59de12f643235735ac6a21249b1408fbf3651c93` (esta branch) e
+/// `65bcd97d9088e6da8668127c8cb4d38f5e19d718` (`development`).
+///
+/// **Destravado pela emenda da BICHUS-251, 23/09/2026: check-in e galeria
+/// saem do app nesta versao, por decisao do cliente.** Mudam
+/// `rede/encontro_da_rede.dart` (sem botao de confirmar presenca, sem contagem
+/// e sem galeria), `rede/agenda_da_rede.dart` (o cartao perde a linha de
+/// contagem) e `abas.dart` (so o comentario da secao). Nenhuma delas encosta
+/// na porta `CameraEGaleria`, que e o que o criterio 10 da BICHUS-161
+/// protege, e o portao de diretivas abaixo continua cobrando isso sem
+/// depender desta constante. O trabalho removido esta na branch
+/// `guarda/rede-checkin-galeria`. Medido com `git rev-parse
+/// HEAD:app/lib/telas` sobre o commit da emenda (9c9a72d), e conferido contra
+/// o "encontrado" que este portao imprimiu antes da troca. Anterior:
+/// `e113de4b6d5741694bde0b5a3135817229911625`.
+///
 /// **Remedido no merge de `feat/tela-de-loja` para a `development`,
 /// 23/09/2026, e pela terceira vez seguida pelo mesmo motivo.** Os dois
 /// lados estavam certos sobre a propria historia e errados sobre o
@@ -700,7 +767,96 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// Medido pelo indice temporario que este portao usa, sobre a arvore de
 /// trabalho da mescla. Anterior: `e180a88c22a8cf905ef8d5f38a260b3399d4a7ce`
 /// (a mescla de duas), e antes dela as tres travas de branch citadas acima.
-const String _arvoreDasTelas = '6d8d8235940c99a9ea5dbd5532aab678c49e4f0e';
+///
+/// ---- procedencia do outro lado da mescla de 29/09 ----
+///
+/// Remedida na mescla de `origin/development` (`b3360aa`) na
+/// `integracao/backoffice-v1`, 28/09/2026: a arvore mesclada junta as telas da
+/// Rede (rede-admin) com a paginacao acima, e nao e nenhuma das duas. Medido
+/// com o indice temporario deste portao sobre a arvore mesclada.
+/// **Remedido na mescla de `development` (`09c430a`) na
+/// `feat/secao-rede-emenda-servidor`, 23/09/2026.** Os dois lados
+/// destravaram a constante pela propria historia: desta branch, a emenda da
+/// Rede (`5669853d...`); da `development`, as telas de conta com a acao
+/// primaria fora da rolagem (`cad6c7b5...`). A arvore mesclada nao e nenhuma
+/// das duas. Nenhuma das pecas encosta na porta `CameraEGaleria`. Medido com
+/// o indice temporario deste portao sobre a arvore ja mesclada.
+///
+/// **Destravado pela Rede no desenho novo (BICHUS-251, emendada, e
+/// BICHUS-279), 28/09/2026.** Mudam `rede/agenda_da_rede.dart` (abas
+/// `Próximos`, `Meus pedidos` e `Encerrados` na `BarraDeListagem`),
+/// `rede/encontro_da_rede.dart` (capa, secoes, pedido do privado, cancelado e
+/// encerrado) e entram `rede/cartao_do_encontro.dart`,
+/// `rede/local_do_encontro.dart` (mapa estatico pela `/location`, so com
+/// conta) e `rede/pecas_da_rede.dart`. Nenhuma delas encosta na porta
+/// `CameraEGaleria`: nao leem camera nem galeria e nao pedem permissao
+/// nenhuma (o calendario e o app de mapas saem por
+/// `dispositivo/saida_do_app.dart`, sem permissao), e o portao de diretivas
+/// abaixo continua cobrando isso sem depender desta constante. Medido com
+/// `git rev-parse HEAD:app/lib/telas` sobre o commit `d897eef` da
+/// branch `feat/secao-rede-app-desenho-novo`, e conferido contra o
+/// "encontrado" que este portao imprimiu antes da troca. Anterior:
+/// `61c6945773d63c8f502e26039f0b69435f03659c`.
+///
+/// **Destravado pelas correcoes do QA na Rede (BICHUS-251), 28/09/2026.**
+/// Mudam `rede/agenda_da_rede.dart` (paginacao, espera da busca, distancias
+/// desacopladas e presas a regiao cadastrada, microcopy A4/A13/A14),
+/// `rede/encontro_da_rede.dart` (falha do pedido dentro da caixa, retomada
+/// da guarda, microcopy A5) e `rede/cartao_do_encontro.dart` (pilula so com
+/// rotulo). Nenhuma encosta na porta `CameraEGaleria`. Medido com `git
+/// rev-parse HEAD:app/lib/telas` sobre `11d36d9`, conferido contra o
+/// "encontrado" do portao. Anterior: `d555005fb7c327572091b26863473674fcd6e965`.
+///
+/// **Destravado pela regiao na assinatura das distancias (BICHUS-251),
+/// 28/09/2026.** Muda so `rede/agenda_da_rede.dart`, que passa a regiao de
+/// referencia a `assinaturaDasDistancias`. Nao encosta na porta
+/// `CameraEGaleria`. Medido com `git rev-parse HEAD:app/lib/telas` sobre
+/// `2533bfa`. Anterior: `123dc34cc1100ee38bc0571a36bab5b5e25238ca`.
+///
+/// **Destravado pela microcopy N7 e N8 da UX 30.6 (BICHUS-251),
+/// 28/09/2026.** Mudam dois textos em `rede/agenda_da_rede.dart` e
+/// `rede/encontro_da_rede.dart`. Nao encosta na porta `CameraEGaleria`.
+/// Medido com `git rev-parse HEAD:app/lib/telas` sobre `1c99ff7`. Anterior:
+/// `913a54008f37a5dcf6efba87b080b3000cf4b4f3`.
+///
+/// **Remedido na mescla de `feat/secao-rede-app-desenho-novo` (`1a51c07`) na
+/// `integracao/backoffice-v1`, 28/09/2026.** A arvore mesclada junta a Rede no
+/// desenho novo com a paginacao da `development`, e nao e nenhuma das duas.
+/// Medido com o indice temporario deste portao sobre a arvore mesclada.
+/// Anteriores: `863560db...` (integracao) e `c0d5bd30...` (desenho novo).
+///
+/// **Remedido pela BICHUS-251, 28/09/2026:** `rede/local_do_encontro.dart`
+/// passou a ler o endereco dos tiles e o `User-Agent` do build
+/// (`config/mapa.json`, portao de portabilidade). Nao toca camera nem aparelho.
+/// Anterior: `6bcbdd0f...`.
+///
+/// **Remedido na mescla de `integracao/backoffice-v1` na `development`,
+/// 29/09/2026** (fechar o paralelismo de branches, por decisao do cliente:
+/// tudo que se faz tem que refletir no ambiente). A arvore mesclada junta as
+/// telas da Rede do lado da integracao com o codigo da plaquinha, a gaveta e
+/// a tela de verificacao de e-mail do lado da `development`, e NAO e nenhuma
+/// das duas -- e por isso que a constante muda: pelo MERGE, e nao por uma
+/// tela nova. Os doze arquivos que mudam sao exatamente a uniao dos dois
+/// conjuntos ja justificados acima: `abas.dart`, `casca_com_abas.dart`,
+/// `gaveta_de_secoes.dart`, `conta/tela_verifique_seu_email.dart`,
+/// `escanear/codigo_lido_do_qr.dart`,
+/// `escanear/mascara_do_codigo_da_tag.dart`,
+/// `escanear/tela_leitor_de_qr.dart` e as cinco telas de
+/// `rede/` (`agenda_da_rede.dart`, `cartao_do_encontro.dart`,
+/// `encontro_da_rede.dart`, `local_do_encontro.dart`, `pecas_da_rede.dart`).
+/// Nada entrou aqui que nao estivesse em uma das travas ja justificadas,
+/// nenhum deles encosta na porta `CameraEGaleria` e nenhum ganhou importe de
+/// plugin de aparelho -- quem cobra isso e o portao ESTRUTURAL abaixo, que
+/// continua valendo e continua verde. `abas.dart` passou a montar
+/// `AgendaDaRede()` no lugar do `EstadoVazio` "Rede esta em construcao", que
+/// e o efeito que o cliente pediu para ver no ambiente.
+///
+/// Medido pelo indice temporario que este portao usa, sobre a arvore de
+/// trabalho da mescla (`read-tree HEAD`, `add -A -- app/lib/telas`,
+/// `write-tree`), e conferido por `ls-tree`. Anteriores:
+/// `6d8d8235940c99a9ea5dbd5532aab678c49e4f0e` (`development`) e
+/// `67a10122bd57d7231e13ebfc68d6615e94ef8e6d` (`integracao/backoffice-v1`).
+const String _arvoreDasTelas = '5af94a5a286fc5e78b296fdd458b9a6058563fbe'; // mescla 29/09 development x integracao/backoffice-v1 (BICHUS-251 + BICHUS-278)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

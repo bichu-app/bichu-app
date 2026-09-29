@@ -50,9 +50,10 @@
  */
 import type { NomeDeSegredo, SecretProvider } from '../../ports/secret-provider.js';
 import { SegredoIndisponivelError } from '../../ports/secret-provider.js';
+import { TOKEN_DA_CONTA_DE_SERVICO } from './metadados-do-gcp.js';
 
 /** Fonte da credencial da instância. Não é domínio público: só resolve dentro da VM. */
-const METADADOS = 'http://metadata.google.internal/computeMetadata/v1/instance/service-account/token';
+const METADADOS = TOKEN_DA_CONTA_DE_SERVICO;
 const GERENCIADOR = 'https://secretmanager.googleapis.com/v1';
 
 /** A subida não pode ficar pendurada esperando rede. Morre e o supervisor reinicia. */

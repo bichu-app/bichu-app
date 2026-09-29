@@ -125,6 +125,17 @@ export const problemas = {
       detail: 'Confira os dois campos e tente de novo. Se esqueceu a senha, dá para criar uma nova.',
     }),
 
+  /**
+   * O mesmo 401 no painel (ADR-0027 D43, D61), SEM o convite a criar senha
+   * nova: a conta do painel nao tem recuperacao por e-mail (item 20.4), e o
+   * `/entrar` ja diz, em texto fixo, a quem pedir a redefinicao. O corpo e o
+   * mesmo para conta inexistente, senha errada, desativada, bloqueada e vazada.
+   */
+  credencialDoPainelRecusada: (): AppError =>
+    new AppError('invalid-credentials', 'E-mail ou senha não conferem', {
+      detail: 'Confira os dois campos e tente de novo.',
+    }),
+
   sessaoExpirada: (): AppError =>
     new AppError('token-expired', 'Entre de novo', {
       detail: 'Sua sessão terminou.',
@@ -179,6 +190,33 @@ export const problemas = {
     }),
 
   naoEncontrado: (): AppError => new AppError('not-found', 'Não encontramos isso'),
+
+  // --- Backoffice (ADR-0027). Textos do contrato, `AdminForbidden`,
+  // `AdminUnauthorized` e o 403 de `openAdminSession`. ---------------------
+
+  /**
+   * A guarda do prefixo `/v1/admin` recusou: papel, `Origin` ou `X-CSRF-Token`
+   * (D37, D39). Um corpo so para as tres causas: a guarda decide antes de ler o
+   * recurso, e dizer QUAL das tres falhou ensinaria a quem forja a requisicao
+   * o que falta acertar.
+   */
+  proibidoNoPainel: (): AppError => new AppError('forbidden', 'Você não tem permissão para isto'),
+
+  /** A sessao administrativa venceu, foi revogada ou e anterior a `sessions_invalid_before`. */
+  sessaoDoPainelVencida: (): AppError =>
+    new AppError('token-expired', 'A sua sessão terminou', { nextAction: 'sign_in' }),
+
+  /**
+   * ADR-0027 item 20.5: metodo que o caminho administrativo nao declara. Quem
+   * lanca poe o `Allow` antes (`fecharMetodosDaSuperficie`).
+   */
+  metodoNaoPermitido: (): AppError => new AppError('method-not-allowed', 'Este endereço não aceita este método'),
+
+  /** D41: `X-Captcha-Token` ausente, invalido ou com nota abaixo de 0,5 no login do painel. */
+  captchaRecusado: (): AppError =>
+    new AppError('captcha-rejected', 'Não conseguimos confirmar este acesso', {
+      detail: 'Tente de outra rede. Se continuar, fale com o responsável pelo painel.',
+    }),
 
   /**
    * O texto **não normaliza para um código**: tamanho diferente de 26 depois da

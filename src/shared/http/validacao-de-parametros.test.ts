@@ -63,6 +63,8 @@ import { carregarContrato, type Contrato } from './contract.js';
 import { criarServidor } from './server.js';
 import { ocultarCodigoDaTagNaUrl } from './redacao-de-url.js';
 import { vigiarParametrosDasRotas, _decisaoDeStatus } from './validacao-de-parametros.js';
+import { escoparRotasAdministrativas, type PortaDaSessaoAdministrativa } from './superficie-administrativa.js';
+import { rotaDoNaoFuiEuAdministrativo } from '../../modules/admin-access/adapters/http/admin-session-routes.js';
 import { PetService } from '../../modules/pets/application/pet-service.js';
 import type {
   CodigosConhecidos,
@@ -735,5 +737,45 @@ void describe('a decisão de status, no único lugar que a contém', () => {
     assert.equal(_decisaoDeStatus.podeRecusar({ type: 'string' }), false);
     assert.equal(_decisaoDeStatus.podeRecusar({ type: 'string', format: 'uuid' }), true);
     assert.equal(_decisaoDeStatus.podeRecusar({ type: 'string', minLength: 1 }), true);
+  });
+});
+
+void describe('a rota de 405 do painel nao e cobrada como operacao do contrato', () => {
+  function bancadaDoPainel(config?: Record<string, unknown>): { app: RegistradorDeRotas; conferir: () => void } {
+    const app = criarServidor({ problemBaseUrl: BASE_DE_PROBLEMAS, isProduction: false, teto: tetoDeTeste() });
+    const conferir = vigiarParametrosDasRotas(app, contratoDoDisco(), PREFIXO);
+    void escoparRotas(app, PREFIXO, (v1) => {
+      escoparRotasAdministrativas(
+        v1,
+        { origem: 'https://painel.exemplo.test', sessoes: {} as PortaDaSessaoAdministrativa },
+        (adm) =>
+          registrarRota(adm, rotaDoNaoFuiEuAdministrativo, config === undefined ? {} : { config }, (_r, reply) =>
+            Promise.resolve(reply.status(204).send()),
+          ),
+      );
+    }).catch(() => {});
+    return { app, conferir };
+  }
+
+  void it('o POST do contrato e as rotas de 405 dos outros metodos sobem, e a conferencia de subida aprova', async () => {
+    const { app, conferir } = bancadaDoPainel();
+    await app.ready();
+    // A bancada so tem uma rota, sem parametro, entao a conferencia reclama de
+    // "nenhuma rota recebeu validacao"; o que este caso cobra e a OUTRA queixa,
+    // a de rota sem operacao no contrato, que as rotas de 405 disparavam.
+    let queixa = '';
+    try {
+      conferir();
+    } catch (erro) {
+      queixa = erro instanceof Error ? erro.message : String(erro);
+    }
+    assert.doesNotMatch(queixa, /sem operação correspondente no contrato/);
+    assert.match(queixa, /Nenhuma rota recebeu validação de parâmetro/, 'a conferencia deixou de rodar');
+    await app.close();
+  });
+
+  void it('isca: rota comum nao consegue se passar por rota de 405 pela marca de config', async () => {
+    const { app } = bancadaDoPainel({ metodoNaoPermitido: true });
+    await assert.rejects(async () => { await app.ready(); }, /metodoNaoPermitido/);
   });
 });

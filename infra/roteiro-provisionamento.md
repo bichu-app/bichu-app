@@ -395,13 +395,33 @@ O `compose.yaml` é o artefato, e é o **mesmo** dos dois destinos. O que muda �
 o arquivo de ambiente — é isso que torna a portabilidade do critério 12 um fato
 verificável em vez de uma frase.
 
+**Antes do `scp`, limpe na VM os três diretórios que o código apaga, e não só
+acrescenta.** `scp --recurse` copia por cima e nunca remove: um arquivo que saiu
+do repositório continua em `~/bichu/src`, e o `tsc` do build o compila; uma
+migração renumerada (a de 28/09 trocou `20260923000001/6/7/9` por
+`20260928000001` a `20260928000005`) continua em `~/bichu/migrations` com o nome
+antigo, e o migrador a aplica de novo ou morre no `checkOrder`. `admin/` pelo
+mesmo motivo. O `rm` é só destes três, e nunca do `~/bichu` inteiro: o `.env`
+do host mora lá e não tem cópia em lugar nenhum.
+
 ```bash
+gcloud compute ssh bichu-hml --project=bichu-app-508914 \
+  --zone=southamerica-east1-a --tunnel-through-iap \
+  --command 'cd ~/bichu && rm -rf -- ./src ./migrations ./admin && ls'
+
 gcloud compute scp --project=bichu-app-508914 --zone=southamerica-east1-a \
   --tunnel-through-iap --recurse \
   ./compose.yaml ./Dockerfile ./Makefile ./migrations ./infra ./api \
   ./package.json ./package-lock.json ./tsconfig.json ./tsconfig.build.json ./src \
+  ./admin \
   bichu-hml:~/bichu/
 ```
+
+`./admin` entrou em 28/09 com o backoffice (ADR-0027): sem ele o
+`docker compose build admin-web` reconstrói o painel que já estava na VM, ou
+reprova no `package.json` ausente. O `admin/node_modules` e o `admin/dist`
+locais não precisam ir (o build faz `npm ci` e gera o pacote dentro da imagem);
+se estiverem na árvore, apague-os antes ou aceite o tempo de cópia.
 
 **As cinco últimas entradas dessa lista são uma correção de 22/09, e vale dizer
 o que a falta delas fazia.** Até aqui a lista copiava a receita do build e não o
@@ -697,6 +717,136 @@ curl -sI https://bichu.app/.well-known/apple-app-site-association \
 
 ---
 
+### Passo 11.1 — `admin.bichu.app`, o backoffice (ADR-0027)
+
+> **Em qual máquina.** Pelo ADR-0029, homologação e produção ficam em VMs
+> separadas: `admin.bichu.app` aponta para `bichu-prod`, e homologação ganha o
+> seu host próprio (sugestão: `admin-hml.bichu.app`, com `ADMIN_HOSTS` da
+> `bichu-hml` apontando para ele). Em 23/09 `bichu-prod` **não existe**
+> (`gcloud compute instances list` lista só `bichu-hml`); os passos abaixo valem
+> igual nas duas, trocando o nome.
+
+O backoffice é o container `admin-web`, atrás da mesma borda, na mesma origem
+que `/v1/admin/*`. A borda passou a ser imagem própria (plugin de taxa, emenda 2
+do ADR-0016), então este passo **constrói** a borda no host, e não só a recria.
+
+**Ordem que não se inverte: configuração, depois DNS.** O certificado sai por
+HTTP-01, e o Caddy só tenta emitir para nome que esteja num bloco. Nome no DNS
+sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
+`http://` para diagnosticar.
+
+1. Com os arquivos atualizados no host pelo passo 7 (limpeza e `scp`, que
+   levam `admin/`), no `.env`:
+
+   ```bash
+   ADMIN_HOSTS=https://admin.bichu.app
+   # A chave de SITE do reCAPTCHA Enterprise, publica, e build arg do admin-web
+   # (sem ela o login do painel recusa). O mesmo valor de CAPTCHA_SITE_KEY.
+   VITE_CAPTCHA_SITE_KEY=<chave de site do reCAPTCHA>
+   # ADMIN_CSP_UPLOAD=<host público de UploadIntent.url>  -- quando decidido;
+   # vazio, o envio de imagem pelo painel fica bloqueado pela CSP
+   ```
+
+2. Construir e recriar **só** os dois serviços. Recriar a borda derruba as
+   conexões abertas por alguns segundos, em todos os hosts: faça fora de uso.
+
+   **A VM não tem Git** (passo 8): `git rev-parse` lá devolve vazio. O commit
+   sai **da máquina local**, de onde os arquivos saíram, e vai na linha:
+
+   ```bash
+   COMMIT=$(git rev-parse HEAD)     # AQUI, no repositorio local. Nao na VM.
+   echo "$COMMIT"
+   ```
+
+   Na VM, com esse valor:
+
+   ```bash
+   BUILD_COMMIT="$COMMIT" docker compose build edge admin-web
+   docker compose up -d --no-deps admin-web edge
+   docker compose run --rm --no-deps --entrypoint caddy edge list-modules --skip-standard
+   # esperado: um único módulo não-padrão, http.handlers.rate_limit
+   ```
+
+   A partir daqui, e **antes do DNS**, `/v1/admin*` já responde 404 da borda
+   nos hosts do app (D33):
+
+   ```bash
+   curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://hml.bichu.app/v1/admin/ping
+   # 404 text/plain -- com application/problem+json quem respondeu foi a API
+   ```
+
+3. O registro, **em nuvem cinza** (sem proxy): o teto de taxa é por IP de quem
+   conecta na borda, e com proxy todo mundo teria o IP da Cloudflare. A zona
+   `bichu.app` está na Cloudflare (`aurora`/`wesley.ns.cloudflare.com`).
+
+   ```bash
+   # O token de DNS esta no Secret Manager (`CLOUDFLARE_DNS_TOKEN`), lido para
+   # a variavel sem passar por tela nem historico. IP_PROD = o do `bichu-prod-ip`.
+   CF_API_TOKEN=$(gcloud secrets versions access latest --secret=CLOUDFLARE_DNS_TOKEN --project=bichu-app-508914)
+   IP_PROD=$(gcloud compute addresses describe bichu-prod-ip --region=southamerica-east1 --project=bichu-app-508914 --format='value(address)')
+   ZONA=$(curl -sS "https://api.cloudflare.com/client/v4/zones?name=bichu.app" \
+     -H "Authorization: Bearer $CF_API_TOKEN" | jq -r '.result[0].id')
+   curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONA/dns_records" \
+     -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
+     --data "{\"type\":\"A\",\"name\":\"admin\",\"content\":\"$IP_PROD\",\"ttl\":300,\"proxied\":false,\"comment\":\"backoffice admin-web (ADR-0027)\"}" \
+     | jq '{success, errors, id: .result.id, proxied: .result.proxied}'
+   ```
+
+   Só o `A`. Sem `AAAA` (a VM não tem IPv6, e `AAAA` órfão leva o cliente IPv6
+   para lugar nenhum) e sem mexer em nenhum outro registro.
+
+**Implantação de versão nova do backoffice** (depois da primeira): o
+`admin-web` não tem banco, não tem segredo e não tem estado, então implantar é
+reconstruir a imagem e recriar só ele. Guardar a imagem que está no ar ANTES,
+com o commit dela, é o que torna o retorno um comando só:
+
+```bash
+docker image tag bichu-admin-web:local bichu-admin-web:anterior   # ponto de retorno
+docker run --rm --entrypoint cat bichu-admin-web:anterior /etc/bichu/commit; echo
+# local: COMMIT=$(git rev-parse HEAD), limpeza de admin/ e scp do passo 7
+BUILD_COMMIT="$COMMIT" docker compose build admin-web
+docker compose up -d --no-deps admin-web
+docker run --rm --entrypoint cat bichu-admin-web:local /etc/bichu/commit; echo   # o commit novo
+```
+
+A borda só é reconstruída quando `infra/caddy/Dockerfile` muda; mudança só no
+Caddyfile é `docker compose up -d --no-deps --force-recreate edge`, que derruba
+as conexões de todos os hosts por alguns segundos.
+
+**Retorno (rollback)**, em segundos e sem rede:
+
+```bash
+docker image tag bichu-admin-web:anterior bichu-admin-web:local
+docker compose up -d --no-deps --force-recreate admin-web
+docker run --rm --entrypoint cat bichu-admin-web:local /etc/bichu/commit; echo   # = o commit anterior
+```
+
+Se o problema for da borda (Caddyfile), o retorno é, **na máquina local**,
+`git show <commit anterior>:infra/caddy/Caddyfile > Caddyfile.anterior`, o
+`scp` desse arquivo para `~/bichu/infra/caddy/Caddyfile` na VM,
+e recriar o `edge`: a VM não tem Git para fazer o `checkout` lá. Retirar o backoffice do
+ar inteiro sem tocar nos outros hosts: `ADMIN_HOSTS=http://admin.localhost` no
+`.env` e recriar o `edge` (o nome some da borda; o registro DNS pode ficar).
+
+O retorno é testado em homologação antes da primeira implantação de produção:
+implantar um commit, voltar, e conferir o commit servido pelos dois comandos
+`cat /etc/bichu/commit` acima.
+
+**Verificação:**
+
+```bash
+dig +short admin.bichu.app @1.1.1.1          # = IP de bichu-prod, e só ele
+dig +short AAAA admin.bichu.app @1.1.1.1     # vazio
+docker compose logs edge | grep -i 'admin.bichu.app' | grep -i 'certificate obtained'
+curl -sSI https://admin.bichu.app/ | grep -iE '^(HTTP|strict-transport|content-security|x-robots|cache-control)'
+# 200, HSTS, CSP sem unsafe-* e sem google, X-Robots-Tag noindex, no-store
+curl -sSI https://admin.bichu.app/v1/health | head -1        # 404: o host admin não é a API inteira
+for i in $(seq 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST https://admin.bichu.app/v1/admin/auth/login; done; echo
+# os dez primeiros NÃO são 429; o 11º é 429 (espere 1 min antes de repetir)
+```
+
+---
+
 ## Parte C — O que precisa existir antes de a máquina receber o primeiro dado
 
 ### Passo 12 — `pg_dump` diário guardado FORA do host (critério 10 de BICHUS-13)
@@ -824,7 +974,94 @@ silêncio.
 
 ---
 
-### Passo 14 — O site (container `web`), e o corte dos hosts para ele
+### Passo 14 — Conta administrativa do backoffice (ADR-0027 item 20.3; D43, D51, D61, D63)
+
+O painel tem **cadastro próprio** (`admin_accounts`), separado das contas do app
+(item 20): uma conta do app nunca entra no painel, e uma do painel nunca entra
+no app. Conta do painel **não se cria nem se redefine por tela** (D51, D61): é
+um comando no servidor, que só quem entra na máquina roda, e que grava cada
+escrita em `audit.events` com `actor_kind = 'system'` e o nome de quem rodou em
+`metadata.operator`, na mesma transação.
+
+**A senha é do cliente, e só dele.** Quem digita a senha de uma conta do painel
+é a pessoa que vai usá-la, no terminal, na hora. **Nenhum agente gera, grava,
+lê ou digita essa senha, e nenhum roteiro de agente roda `criar`,
+`redefinir-senha` ou `reativar`.** A senha é pedida **duas vezes, sem eco**, e
+nunca entra por argumento, variável de ambiente ou arquivo: o comando recusa
+`--senha`, `--password`, `-p` e afins pelo **nome**, sem repetir o valor, e
+recusa rodar sem terminal. Se alguém digitou a senha como argumento, ela ficou
+no histórico do shell: escolha outra.
+
+O `-it` é obrigatório. Sem ele não há terminal, e o comando sai com código 2
+antes de perguntar qualquer coisa.
+
+```bash
+# criar a conta do painel (pede "sim" e a senha duas vezes)
+docker compose run --rm -it api node dist/bin/conta-admin.js criar \
+  --email operacao@exemplo.com.br --nome "Nome que aparece no painel" --operador "Nome de quem roda"
+
+# redefinir a senha: encerra todas as sessoes e remove o bloqueio (dez falhas ou "nao fui eu")
+docker compose run --rm -it api node dist/bin/conta-admin.js redefinir-senha --email <e-mail>
+
+# desativar (a conta nao se apaga; as sessoes caem na hora)
+docker compose run --rm -it api node dist/bin/conta-admin.js desativar --email <e-mail>
+
+# reativar: volta a ativa COM senha nova, digitada no mesmo passo
+docker compose run --rm -it api node dist/bin/conta-admin.js reativar --email <e-mail>
+
+# encerrar todas as sessoes sem mexer na senha
+docker compose run --rm -it api node dist/bin/conta-admin.js encerrar-sessoes --email <e-mail>
+
+# listar: e-mail, nome, estado, bloqueio e ultimo login (nunca o hash)
+docker compose run --rm -it api node dist/bin/conta-admin.js listar
+
+# ajuda
+docker compose run --rm api node dist/bin/conta-admin.js --ajuda
+```
+
+A senha de conta do painel segue D43: **mínimo de 15 caracteres, máximo de 256**,
+sem regra de composição, recusada se parecer com o e-mail, e **conferida contra
+a base pública de senhas vazadas**. A consulta manda para fora só os 5 primeiros
+caracteres hexadecimais do SHA-1 da senha (k-anonimato), e exige saída HTTPS do
+container da `api` para `api.pwnedpasswords.com`. **Sem essa saída, a senha é
+recusada e nada é gravado.** Pela D63, ela também é recusada se for **a mesma
+senha da conta do app com o mesmo e-mail**: quem descobrir uma não pode ganhar a
+outra. Só o hash vai para o banco, no mesmo esquema do login (PBKDF2-SHA512 em
+PHC).
+
+**Recuperação de senha (item 20.4):** não existe link por e-mail. Quem esqueceu
+a senha, foi bloqueado por dez falhas em 24 horas, ou clicou "não fui eu", pede
+ao responsável, que roda `redefinir-senha`, e a pessoa digita a senha nova.
+
+`criar`, `redefinir-senha`, `desativar` e `reativar` **avisam por e-mail todos os
+administradores ativos**, e `criar` avisa também o dono do endereço novo. Falha
+de envio não desfaz a escrita: o comando diz no terminal quem não recebeu. É o
+que faz uma conta criada por quem tomou a máquina aparecer na caixa de alguém.
+
+Códigos de saída, para quem roda por roteiro:
+
+| Código | Significado |
+|---|---|
+| 0 | feito, ou nada a fazer (a conta já estava desativada, ou já ativa) |
+| 1 | erro inesperado (a mensagem traz nome e código do erro, nunca a linha do banco) |
+| 2 | uso: subcomando ou opção inválida, senha por argumento, sem terminal |
+| 3 | não há conta administrativa com esse e-mail; **nada é criado** |
+| 4 | senha recusada: curta, longa, vazada, igual à do app, digitações diferentes, ou base de vazadas inalcançável |
+| 5 | cancelado: a confirmação não foi `sim`, ou Ctrl-C |
+| 6 | conflito: `criar` para e-mail que já tem conta do painel |
+
+**Verificação:** a trilha registra quem, quando e o quê, e **nunca** a senha.
+
+```bash
+docker compose exec -T db psql -U bichu -d bichu -c "
+  select occurred_at, action, actor_kind, metadata->>'operator' as operador, before, after
+    from audit.events
+   where action like 'admin.account.%'
+   order by occurred_at desc limit 10"
+# esperado: actor_kind = system, operador preenchido, resource_kind = admin_account
+```
+
+### Passo 15 — O site (container `web`), e o corte dos hosts para ele
 
 Decisão do cliente de 23/09/2026 e ADR-0028: o site (institucional e páginas
 públicas) é um container Astro com renderização no servidor, **nesta mesma

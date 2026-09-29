@@ -1,0 +1,7 @@
+# Trechos que a saida do portao PRECISA conter ao reprovar esta isca, um por
+# linha. Linha em branco e linha com `#` sao ignoradas. Ver o cabecalho de
+# `deve-reprovar-vazamento-em-rota-publica.esperado` para o motivo de conferir
+# o texto e nao so o codigo de saida.
+iscaPontoNoDetalhePublico
+lat
+lon

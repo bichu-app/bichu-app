@@ -22,6 +22,15 @@ import { VazamentoNoPushError } from '../../domain/conteudo-do-push.js';
 import { PushNaoEnviadoError, type MensagemDePush } from '../../ports/push-sender.js';
 import { criarPushSenderFcm, type Buscar } from './fcm-http-v1.js';
 
+/**
+ * O endereco EXATO do token (29/09: a forma `service-account/token` respondia
+ * 404 na VM e passava aqui, porque o duble respondia a qualquer URL com
+ * `metadata`). Literal, e nao importado: trocar a constante do adaptador
+ * reprova este arquivo.
+ */
+const METADADOS_EXATO =
+  'http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token';
+
 const CONFIG = { projeto: 'projeto-de-teste' };
 const TOKEN_DO_APARELHO = 'token-de-aparelho-que-nao-pode-aparecer-em-log';
 
@@ -54,7 +63,9 @@ function buscarFalso(responder: (url: string) => Response): {
   const buscar: Buscar = (entrada, init) => {
     const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
     chamadas.push({ url, corpo: typeof init?.body === 'string' ? init.body : undefined });
-    if (url.includes('metadata')) return Promise.resolve(new Response(CREDENCIAL, { status: 200 }));
+    if (url === METADADOS_EXATO) return Promise.resolve(new Response(CREDENCIAL, { status: 200 }));
+    // Qualquer outra forma do endereco de metadados: 404, como na VM.
+    if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
     return Promise.resolve(responder(url));
   };
   return { buscar, chamadas };
@@ -113,14 +124,14 @@ void describe('o que vai para o fio é o que o ADR-0008 descreve', () => {
   void it('pede ao projeto configurado, na rota de envio da v1', async () => {
     const { buscar, chamadas } = buscarFalso(() => aceito());
     await criarPushSenderFcm(CONFIG, buscar).enviar(mensagem());
-    const envio = chamadas.find((c) => !c.url.includes('metadata'));
+    const envio = chamadas.find((c) => c.url !== METADADOS_EXATO);
     assert.ok(envio?.url.includes('/projects/projeto-de-teste/messages:send'), envio?.url);
   });
 
   void it('leva `notification`, e não só `data`: sem ela o app encerrado não mostra nada', async () => {
     const { buscar, chamadas } = buscarFalso(() => aceito());
     await criarPushSenderFcm(CONFIG, buscar).enviar(mensagem());
-    const envio = chamadas.find((c) => !c.url.includes('metadata'));
+    const envio = chamadas.find((c) => c.url !== METADADOS_EXATO);
     const corpo: unknown = JSON.parse(envio?.corpo ?? '{}');
     assert.deepEqual(
       (corpo as { message: { notification: unknown } }).message.notification,
@@ -133,7 +144,7 @@ void describe('o que vai para o fio é o que o ADR-0008 descreve', () => {
     await criarPushSenderFcm(CONFIG, buscar).enviar(
       mensagem({ validadeEmSegundos: 21_600, prioridade: 'alta' }),
     );
-    const envio = chamadas.find((c) => !c.url.includes('metadata'));
+    const envio = chamadas.find((c) => c.url !== METADADOS_EXATO);
     const android = (JSON.parse(envio?.corpo ?? '{}') as {
       message: { android: Record<string, unknown> };
     }).message.android;
@@ -147,7 +158,7 @@ void describe('o que vai para o fio é o que o ADR-0008 descreve', () => {
   void it('NÃO manda bloco de iOS: a chave APNs é pendência de BICHUS-136', async () => {
     const { buscar, chamadas } = buscarFalso(() => aceito());
     await criarPushSenderFcm(CONFIG, buscar).enviar(mensagem());
-    const envio = chamadas.find((c) => !c.url.includes('metadata'));
+    const envio = chamadas.find((c) => c.url !== METADADOS_EXATO);
     const message = (JSON.parse(envio?.corpo ?? '{}') as { message: Record<string, unknown> })
       .message;
     // Um bloco vazio não adiantaria, e um bloco preenchido esconderia a
@@ -158,7 +169,7 @@ void describe('o que vai para o fio é o que o ADR-0008 descreve', () => {
   void it('sem foto, não vai bloco de notificação do Android com imagem vazia', async () => {
     const { buscar, chamadas } = buscarFalso(() => aceito());
     await criarPushSenderFcm(CONFIG, buscar).enviar(mensagem());
-    const envio = chamadas.find((c) => !c.url.includes('metadata'));
+    const envio = chamadas.find((c) => c.url !== METADADOS_EXATO);
     const android = (JSON.parse(envio?.corpo ?? '{}') as {
       message: { android: Record<string, unknown> };
     }).message.android;
@@ -288,7 +299,9 @@ void describe('falha ruidosa: a mensagem diz O QUE fazer, e não o erro do trans
   void it('rede fora do ar é retentável, e não se confunde com credencial', async () => {
     const buscar: Buscar = (entrada) => {
       const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
-      if (url.includes('metadata')) return Promise.resolve(new Response(CREDENCIAL, { status: 200 }));
+      if (url === METADADOS_EXATO) return Promise.resolve(new Response(CREDENCIAL, { status: 200 }));
+      // Qualquer outra forma do endereco de metadados: 404, como na VM.
+      if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
       return Promise.reject(new Error('getaddrinfo ENOTFOUND'));
     };
     await assert.rejects(
@@ -303,7 +316,9 @@ void describe('a credencial vem do metadados, e nunca de arquivo', () => {
   void it('instância sem conta de serviço falha citando a causa, e NÃO é retentável', async () => {
     const buscar: Buscar = (entrada) => {
       const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
-      if (url.includes('metadata')) return Promise.resolve(new Response('', { status: 404 }));
+      if (url === METADADOS_EXATO) return Promise.resolve(new Response('', { status: 404 }));
+      // Qualquer outra forma do endereco de metadados: 404, como na VM.
+      if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
       return Promise.resolve(aceito());
     };
     await assert.rejects(
@@ -319,9 +334,11 @@ void describe('a credencial vem do metadados, e nunca de arquivo', () => {
   void it('metadados responde 200 sem `access_token`: não segue com credencial vazia', async () => {
     const buscar: Buscar = (entrada) => {
       const url = typeof entrada === 'string' ? entrada : new Request(entrada).url;
-      if (url.includes('metadata')) {
+      if (url === METADADOS_EXATO) {
         return Promise.resolve(new Response(JSON.stringify({ expires_in: 3600 }), { status: 200 }));
       }
+      // Qualquer outra forma do endereco de metadados: 404, como na VM.
+      if (url.includes('metadata.google.internal')) return Promise.resolve(new Response('', { status: 404 }));
       return Promise.resolve(aceito());
     };
     await assert.rejects(
@@ -340,7 +357,7 @@ void describe('a credencial vem do metadados, e nunca de arquivo', () => {
     const remetente = criarPushSenderFcm(CONFIG, buscar);
     await remetente.enviar(mensagem());
     await remetente.enviar(mensagem({ token: 'outro-aparelho' }));
-    assert.equal(chamadas.filter((c) => c.url.includes('metadata')).length, 1);
+    assert.equal(chamadas.filter((c) => c.url === METADADOS_EXATO).length, 1);
   });
 });
 

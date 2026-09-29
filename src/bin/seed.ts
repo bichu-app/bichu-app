@@ -57,6 +57,15 @@ import {
   PARCEIROS_DA_VITRINE,
   VERSAO_DA_VITRINE,
 } from './massa-da-vitrine.js';
+import {
+  ENCONTROS_COM_PONTO,
+  ENCONTROS_PRIVADOS,
+  ENCONTROS_VISIVEIS,
+  MASSA_DA_REDE,
+  MOMENTO_DA_REDE,
+  camposDe,
+  momentoDoEncontro,
+} from './massa-da-rede.js';
 
 /** Sai 2, e nao 1: separa "recusei" de "quebrei" para quem le em esteira. */
 const SAIDA_MASSA_NAO_DEFINIDA = 2;
@@ -74,6 +83,7 @@ const TABELAS_EXIGIDAS = [
   'store_catalog_versions',
   'store_partners',
   'store_items',
+  'network_events',
 ] as const;
 
 /**
@@ -154,6 +164,12 @@ async function limparMassaAnterior(db: Db): Promise<void> {
   await sql`delete from store_items where slug = any(${sql.val(itens)}::text[])`.execute(db);
   await sql`delete from store_partners where slug = any(${sql.val(parceiros)}::text[])`.execute(db);
   await sql`delete from store_catalog_versions where version = ${VERSAO_DA_VITRINE}`.execute(db);
+
+  // A `Rede`. So os encontros da massa, pelo `slug`, que e o identificador que
+  // ESTE arquivo conhece: o `id` e gerado a cada semeadura. Nunca `truncate` --
+  // a massa fixa convive com o que quem desenvolve criou a mao.
+  const encontros = MASSA_DA_REDE.map((um) => um.slug);
+  await sql`delete from network_events where slug = any(${sql.val(encontros)}::text[])`.execute(db);
 }
 
 /**
@@ -220,17 +236,93 @@ export async function semearVitrine(db: Db, hoje: Date): Promise<void> {
         `o item '${item.slug}' aponta para o parceiro '${item.partnerSlug}', que nao esta em PARCEIROS_DA_VITRINE`,
       );
     }
+    // `published_at` em TODO item da massa, inclusive no inativo (ADR-0027
+    // A.2): a massa descreve itens que estiveram na vitrine, e o inativo e o
+    // retirado, nao o rascunho. `store_items_publicado_tem_data` recusaria o
+    // ativo sem data, e o inativo sem data viraria `draft` no painel.
     await sql`
       insert into store_items (
         id, slug, partner_id, title, summary, category, image_path, target_path,
-        price_amount, price_currency, price_checked_at, active, sort_order
+        price_amount, price_currency, price_checked_at, active, sort_order, published_at
       ) values (
         ${ids.uuidv7()}::uuid, ${item.slug}, ${partnerId}::uuid, ${item.title}, ${item.summary},
         ${item.category}, ${item.imagePath}, ${item.targetPath},
         ${item.priceAmount}, ${item.priceAmount === null ? null : 'BRL'},
-        ${data}::date, ${item.active}, ${item.sortOrder}
+        ${data}::date, ${item.active}, ${item.sortOrder}, ${hoje}::timestamptz
       )
     `.execute(db);
+  }
+}
+
+/**
+ * Grava os encontros da `Rede`. Idempotente pelo `limparMassaAnterior`.
+ *
+ * ## O INSTANTE E MONTADO PELO POSTGRES, e nao aqui
+ *
+ * `massa-da-rede.ts` produz o TEXTO da hora de parede e o nome IANA da zona em
+ * que esse texto deve ser lido; quem resolve o deslocamento e o
+ * `::timestamp AT TIME ZONE` abaixo. Somar `-03:00` a mao seria reimplementar
+ * horario de verao.
+ *
+ * ## O ponto entra por SQL, e a ORDEM E (lon, lat)
+ *
+ * `ST_MakePoint(x, y)` e `(longitude, latitude)`, ao contrario de como as
+ * pessoas escrevem. A massa guarda `{ lat, lon }` com nome, e a troca acontece
+ * so aqui, a vista. `geo_source` anda junto por `CHECK`.
+ *
+ * ## Publicacao
+ *
+ * `origin = 'admin'` e `published_at` preenchido em todo encontro publicado
+ * (ADR-0027 12.8). O retirado tambem foi publicado antes de sair, entao ele
+ * tambem tem `published_at`.
+ */
+export async function semearRede(db: Db, hoje: Date): Promise<void> {
+  // A identidade interna e gerada AQUI, e de proposito nao esta na massa
+  // (ADR-0024): o `id` nao e catalogo, ele nunca sai em resposta. Gerar na hora
+  // prova a decisao pelo caminho mais curto: se alguma consulta dependesse do
+  // valor do `id`, esta semeadura quebraria a cada execucao.
+  const ids = criarIdGenerator(() => Date.now());
+
+  for (const encontro of MASSA_DA_REDE) {
+    const momento = momentoDoEncontro(encontro, hoje);
+    const campos = camposDe(encontro);
+    const id = ids.uuidv7();
+    const ponto =
+      encontro.ponto === null
+        ? sql`null`
+        : sql`ST_SetSRID(ST_MakePoint(${encontro.ponto.lon}, ${encontro.ponto.lat}), 4326)::geography`;
+    const origemDoPonto = encontro.ponto === null ? null : 'map_pin';
+    const pago = campos.admission;
+    await sql`
+      insert into network_events (
+        id, slug, title, summary, place_name, neighborhood, city, state,
+        geo, geo_source, starts_at, ends_at, time_zone,
+        origin, publication_status, published_at,
+        visibility, admission_kind, admission_amount, admission_currency, admission_unit,
+        dog_age, vaccination_required, fenced_off_leash_area, notes
+      ) values (
+        ${id}::uuid, ${encontro.slug}, ${encontro.title}, ${encontro.summary},
+        ${encontro.placeName}, ${encontro.neighborhood}, ${encontro.city}, ${encontro.state},
+        ${ponto}, ${origemDoPonto},
+        ${momento.inicioLocal}::timestamp at time zone ${momento.zonaDeLeitura},
+        ${momento.fimLocal}::timestamp at time zone ${momento.zonaDeLeitura},
+        ${encontro.timeZone},
+        'admin', ${encontro.publicationStatus}, ${MOMENTO_DA_REDE}::timestamptz,
+        ${campos.visibility}, ${pago === null ? 'free' : 'paid'},
+        ${pago === null ? null : pago.centavos}, ${pago === null ? null : 'BRL'},
+        ${pago === null ? null : pago.unidade},
+        ${campos.idade}, ${campos.vacinacao}, ${campos.areaCercada}, ${campos.observacoes}
+      )
+    `.execute(db);
+    for (const porte of campos.portes) {
+      await sql`insert into network_event_sizes (event_id, size) values (${id}::uuid, ${porte})`.execute(db);
+    }
+    for (const item of campos.estrutura) {
+      await sql`insert into network_event_amenities (event_id, amenity) values (${id}::uuid, ${item})`.execute(db);
+    }
+    for (const item of campos.paraLevar) {
+      await sql`insert into network_event_bring_items (event_id, item) values (${id}::uuid, ${item})`.execute(db);
+    }
   }
 }
 
@@ -257,6 +349,7 @@ function pontoDaEntrada(entrada: EntradaSemeada) {
 export async function semear(db: Db, hoje: Date = new Date()): Promise<void> {
   await limparMassaAnterior(db);
   await semearVitrine(db, hoje);
+  await semearRede(db, hoje);
 
   for (const entrada of MASSA_DO_DIRETORIO) {
     await sql`
@@ -340,9 +433,15 @@ export async function main(): Promise<void> {
       `massa da vitrine semeada: ${String(MASSA_DA_VITRINE.length)} itens, ` +
         `${String(ITENS_VISIVEIS.length)} visiveis, ` +
         `${String(PARCEIROS_DA_VITRINE.length)} parceiros.`,
+      `massa da Rede semeada: ${String(MASSA_DA_REDE.length)} encontros, ` +
+        `${String(ENCONTROS_VISIVEIS.length)} visiveis, ` +
+        `${String(ENCONTROS_COM_PONTO.length)} com ponto no mapa, ` +
+        `${String(ENCONTROS_PRIVADOS.length)} privados.`,
       '',
       'As duas nao publicadas (um rascunho e um oculto) existem de proposito: sao o',
-      'que da o que medir a isca do filtro de `status`.',
+      'que da o que medir a isca do filtro de `status`. Na Rede o equivalente e o',
+      'encontro retirado, e ele e FUTURO: no passado, `when=upcoming` o esconderia',
+      'sozinho e o filtro de `publication_status` continuaria sem ser exercido.',
       '',
       'AINDA SEM MASSA: conta de tutor, pet e caso de perdido. Quais sao essas e',
       'decisao de QA com produto, nao de quem escreveu o comando.',

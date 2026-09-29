@@ -218,6 +218,11 @@ export default tseslint.config(
       // eslint proprio depois; hoje ele nao tem lint dedicado.
       'web/**',
       'web/dist/**',
+      // Backoffice web: projeto proprio, com package.json, tsconfig e
+      // eslint.config.mjs dele (`cd admin && npm run lint`). O servico de
+      // projeto daqui nao conhece o tsconfig de admin/ e o parser morreria
+      // antes de qualquer regra.
+      'admin/**',
       // Iscas do portao de saida: arvores de mentira que existem para ser
       // REPROVADAS por `verificar-colunas-que-nao-saem.sh`. Elas imitam
       // `src/`, `api/` e `migrations/` e nao estao no tsconfig, entao o

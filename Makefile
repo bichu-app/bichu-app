@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site
+.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -454,8 +454,22 @@ verificar-contrato-publico: ## BICHUS-55: portao de contrato publico, iscas prim
 	npm run build
 	sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
 
-verificar-borda: ## ADR-0016: x-edge-limits, prefixo e rota de /.well-known, por leitura
+verificar-borda: ## ADR-0016: x-edge-limits, prefixo, rota de /.well-known e `/v1/admin*` so no host admin, por leitura
 	python3 infra/verificacao/verificar_borda.py
+
+# O BACKOFFICE (`admin/`, ADR-0027). Duas metades, pelo mesmo motivo das outras
+# do repositorio: o autoteste da sonda roda em `make verificar` porque nao usa
+# docker nem rede e leva menos de um segundo; a verificacao inteira (imagem,
+# iscas de build, pilha ISOLADA e a sonda pela borda) sobe containers e fica
+# fora de `verificar`, como `verificar-subida-da-api`. E o MESMO script do job
+# `admin` da esteira. Nao toca a pilha `bichu` de quem esta desenvolvendo: o
+# projeto e outro, e nenhuma porta e publicada.
+verificar-backoffice-autoteste: ## as iscas da sonda do backoffice e do orcamento do painel reprovam (nao usa docker)
+	node infra/verificacao/verificar-backoffice-na-borda.mjs --autoteste
+	node infra/verificacao/verificar-orcamento-do-admin.mjs --autoteste
+
+verificar-backoffice: commit-de-build ## ADR-0027: imagem do admin-web, iscas de build, pilha isolada e sonda D33/D34/D41/D48 (~35 s)
+	bash infra/verificacao/verificar-backoffice.sh
 
 verificar-borda-local: ## a borda de pe responde o que o contrato promete, pela porta publicada
 	python3 infra/verificacao/verificar_borda_local.py $${PUBLIC_BASE_URL:-http://localhost:$(PORTA)} .
@@ -615,7 +629,7 @@ verificar-boot-do-alvo-prod: ## BICHUS-213: o alvo `prod` constroi e morre no ge
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-destinos verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-destinos verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
@@ -671,7 +685,57 @@ verificar-site: verificar-tokens-web ## site: contrato, tokens, valores soltos, 
 # `flutter pub get` PRIMEIRO, e nao por habito: `dart run tool/gen_tokens.dart`
 # precisa do pacote resolvido, e sem isso o portao reprovaria por falta de
 # preparo em vez de por divergencia -- que e a reprovacao que ninguem entende.
-verificar-app: verificar-tokens-gerados-autoteste ## a metade Flutter: analise e suite de widget (job `app` da esteira)
+# --------------------------------------------------------------------------
+# O PORTAO DE CONFORMIDADE DO APP (23/09/2026)
+#
+# Regra do cliente, 23/09: toda funcionalidade segue `api/openapi.yaml`, e os
+# quatro clientes usam os mesmos campos e os mesmos valores. Dois ja tinham
+# portao para isso: o backend, com `verificar-tipos-gerados`, e o painel, com
+# o cliente gerado. O APP nao tinha NENHUM.
+#
+# `app/lib/api/` e escrito a mao -- 22 arquivos, 5232 linhas, 45 tipos de
+# modelo. Um campo renomeado no contrato nao quebrava build, nao quebrava
+# `flutter analyze` e nao quebrava a suite: quebrava no aparelho da pessoa,
+# que e o unico lugar onde ninguem esta olhando.
+#
+# POR QUE ELE NAO GERA OS MODELOS, QUE SERIA ESTRUTURALMENTE MELHOR
+#
+# Medido antes de decidir: 45 tipos a mao com 375 usos fora de `app/lib/api`,
+# em 192 arquivos Dart. Os identificadores sao em portugues por regra da casa
+# e o gerador emite os nomes do contrato em ingles, entao gerar nao APAGA a
+# camada a mao -- troca ela por uma camada de traducao do mesmo tamanho. E o
+# contrato tem 68 schemas dos quais o app modela um recorte DE PROPOSITO:
+# gerador que espelha 1:1 entrega ao app exatamente o que ele nao pode ver.
+# A decisao e do Orquestrador; a medicao esta na entrega.
+#
+# POR QUE ELE RODA ANTES DO `flutter pub get`, E NAO DEPOIS
+#
+# Ele nao precisa de Flutter: le texto Dart e YAML com Node. Medido neste
+# worktree com `/usr/bin/time -p`, Node 22.23.2, cinco execucoes -- `real`
+# entre 0,92 e 1,36 s, tipico 1,1 s; o autoteste custa 0,30 s. Contra os
+# 37,0 s de `pub get` + `analyze` + suite, ele e ruido, e a ORDEM e o ponto:
+# contrato divergente reprova em um segundo, e nao depois de meio minuto de
+# suite que nao tem nada com isso. E a mesma razao pela qual
+# `verificar-tokens-gerados` (1,26 s) roda antes de `analyze`.
+#
+# POR QUE EM `verificar-app` E NAO EM `verificar`
+#
+# Pelo criterio de custo da casa, e pelo assunto: ele le `app/lib/api/`, entao
+# mora com a metade Flutter, junto do portao dos tokens, que tambem le `app/`
+# e custa o mesmo. `verificar` e o laco de quem mexe em rota e em `src/`.
+#
+# O QUE ELE NAO FAZ: classe de modelo entra na conferencia quando tem ancora.
+# Enum, nao: TODO enum de `app/lib/api/` tem de se classificar, e enum novo sem
+# classificacao reprova. A assimetria esta registrada na entrega como limite
+# conhecido, e nao como esquecimento.
+verificar-conformidade-do-app-autoteste: ## as iscas do portao de conformidade do app reprovam (nao le a spec)
+	node infra/verificacao/verificar-conformidade-do-app.mjs --autoteste
+
+verificar-conformidade-do-app: ## os campos e enums de app/lib/api/ batem com api/openapi.yaml (1,1 s)
+	node infra/verificacao/verificar-conformidade-do-app.mjs
+
+verificar-app: verificar-tokens-gerados-autoteste verificar-conformidade-do-app-autoteste ## a metade Flutter: analise e suite de widget (job `app` da esteira)
+	@$(MAKE) --no-print-directory verificar-conformidade-do-app
 	cd app && flutter pub get
 	@$(MAKE) --no-print-directory verificar-tokens-gerados
 	cd app && flutter analyze && flutter test
@@ -786,11 +850,11 @@ restore: ## restaura o dump mais recente de ./backup
 	 echo "restaurando $$ultimo"; \
 	 set -o pipefail; gunzip -c "$$ultimo" | $(COMPOSE) exec -T db psql -U $${POSTGRES_USER:-bichu} -d $${POSTGRES_DB:-bichu}
 
-pin-digests: ## reresolve os digests das imagens do compose e da base do Dockerfile
+pin-digests: ## reresolve os digests das imagens do compose e de todo Dockerfile (API, admin/, borda)
 	@# Sem `pipefail`, `grep` que nao acha nada sai 1, o `sort` sai 0 e o
 	@# `while` nao executa: o alvo termina VERDE tendo conferido ZERO
 	@# referencias, que e o estado em que ele mais precisava falar.
-	@set -o pipefail; grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' compose.yaml Dockerfile | sort -u | while read -r ref; do \
+	@set -o pipefail; grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' $(wildcard compose.yaml Dockerfile */Dockerfile infra/*/Dockerfile) | sort -u | while read -r ref; do \
 	  tag=$${ref%@*}; \
 	  novo=$$(docker buildx imagetools inspect "$$tag" --format '{{.Manifest.Digest}}' 2>/dev/null); \
 	  if [ -n "$$novo" ]; then echo "$$tag -> $$novo"; else echo "$$tag -> NAO RESOLVEU"; fi; \

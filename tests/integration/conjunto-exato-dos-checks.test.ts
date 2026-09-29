@@ -76,6 +76,57 @@ interface ListaFechada {
  * conjunto inteiro em vez de para o valor que está acrescentando.
  */
 const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
+  // BICHUS-259 (ADR-0027, apendice A.1, forma de 28/09). Os seis motivos de
+  // revogacao da sessao administrativa. `role_removed` saiu: o papel mora em
+  // `admin_accounts.role`, que so aceita `admin`, e a conta que perde o painel
+  // e desativada (`account_disabled`). Espelha `MotivoDeRevogacaoAdministrativa`
+  // em `src/modules/admin-access/ports/sessao-administrativa-repository.ts` e o
+  // tipo da coluna em `src/shared/db/schema.ts`. Os tres andam juntos.
+  'public.admin_sessions.admin_sessions_revoked_reason_check': {
+    coluna: 'revoked_reason',
+    valores: [
+      'logout',
+      'rotated',
+      'account_disabled',
+      'account_invalidated',
+      'disavowed',
+      'password_reset',
+    ],
+  },
+  // BICHUS-259 (D40, ADR-0027 item 5). Os CINCO escopos de
+  // `X-Admin-Reauth-Token`; `network_event_access_change` entrou em 28/09 pela
+  // 000006, e nao por uma migracao da `Rede`. Espelha `AdminReauthScope` do
+  // contrato, `EscopoDeReautenticacaoAdministrativa` em
+  // `src/shared/http/route-definition.ts` e o tipo da coluna em
+  // `src/shared/db/schema.ts`.
+  'public.admin_reauth_tokens.admin_reauth_tokens_escopo': {
+    coluna: 'scope',
+    valores: [
+      'store_item_retirement',
+      'network_event_relocation',
+      'network_event_cancellation',
+      'network_event_removal',
+      'network_event_access_change',
+    ],
+  },
+  // ADR-0027 item 20.1. O papel da conta do painel. Um valor so na v1, e
+  // escrito como `= ANY (ARRAY['admin'])` na migracao para o catalogo guardar
+  // lista, e nao igualdade. `AdminRole` do contrato e `PapelAdministrativo` em
+  // `src/shared/http/route-definition.ts`.
+  'public.admin_accounts.admin_accounts_role_check': {
+    coluna: 'role',
+    valores: ['admin'],
+  },
+  'public.admin_accounts.admin_accounts_status_check': {
+    coluna: 'status',
+    valores: ['active', 'disabled'],
+  },
+  // `failed_logins` (D44, dez falhas em 24 h) e `disavowed` (D62). Os dois so
+  // caem com `conta-admin redefinir-senha`.
+  'public.admin_accounts.admin_accounts_blocked_reason_check': {
+    coluna: 'blocked_reason',
+    valores: ['failed_logins', 'disavowed'],
+  },
   'public.alert_dispatches.alert_dispatches_estado': {
     coluna: 'reach_status',
     // `EstadoDoDisparo` em `src/modules/lostfound/domain/disparo-do-alerta.ts`,
@@ -85,9 +136,13 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     // `no_location` é "não existe raio, o caso não tem coordenada".
     valores: ['computed', 'unavailable', 'queued', 'no_location'],
   },
+  // `admin` entrou em 28/09 (ADR-0027 apendice A.5): o ator do painel tem
+  // coluna propria, `actor_admin_id`, e nunca vai em `actor_user_id`. As linhas
+  // anteriores nao foram reescritas. `ActorKind` em
+  // `src/modules/audit/ports/audit-log.ts` e o tipo da coluna em `schema.ts`.
   'audit.events.events_actor_kind_check': {
     coluna: 'actor_kind',
-    valores: ['user', 'anonymous', 'system'],
+    valores: ['user', 'anonymous', 'system', 'admin'],
   },
   'public.conversation_messages.conversation_messages_sender_role_conhecido': {
     coluna: 'sender_role',
@@ -184,6 +239,18 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'status',
     valores: ['processing', 'ready', 'rejected'],
   },
+  // ADR-0027 A.3 (BICHUS-267). A imagem de catalogo, na forma de `pet_photos`:
+  // os mesmos tres estados, e o proposito gravado no envio. Os dois conjuntos
+  // sao os `enum` de `AdminCatalogImage.status` e de
+  // `AdminCatalogImageIntentInput.purpose` no contrato.
+  'public.catalog_images.catalog_images_estado': {
+    coluna: 'status',
+    valores: ['processing', 'ready', 'rejected'],
+  },
+  'public.catalog_images.catalog_images_proposito': {
+    coluna: 'purpose',
+    valores: ['store_item', 'network_event'],
+  },
   'public.pet_tags.pet_tags_revocation_reason_check': {
     coluna: 'revocation_reason',
     valores: [
@@ -223,6 +290,60 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   'public.store_items.store_items_categoria': {
     coluna: 'category',
     valores: ['food', 'toy', 'hygiene', 'accessory', 'health', 'bed'],
+  },
+  // A `Rede` (ADR-0027 12.3 e apendice A.4). Tres arquivos no mesmo commit,
+  // como o ADR-0023 secao 3 exige: a migracao, esta entrada e o `enum` do
+  // contrato -- que, para estas duas colunas, e o de `AdminNetworkEvent` em
+  // `/admin/network/*` (ADR-0027), e nao o da leitura publica, que nao as
+  // projeta. `pending_review` nao esta no `enum` administrativo de proposito:
+  // o encontro da comunidade nao existe na v1, e o `CHECK`
+  // `network_events_revisao_so_da_comunidade` impede o administrador de cair
+  // nele.
+  'public.network_events.network_events_origem_conhecida': {
+    coluna: 'origin',
+    valores: ['admin', 'community'],
+  },
+  'public.network_events.network_events_publicacao_conhecida': {
+    coluna: 'publication_status',
+    valores: ['pending_review', 'published', 'cancelled', 'removed'],
+  },
+  // Os campos do encontro e o pedido para participar (ADR-0027 item 17, A.4.1
+  // e A.6). O `enum` do contrato de cada um: `NetworkEventVisibility`,
+  // `NetworkEventAdmission.kind`, `NetworkEventDogAge`, `NetworkEventBringItem`,
+  // `NetworkEventAmenity`. A decisao do pedido nao tem `enum` no app de
+  // proposito: o app ve `JoinRequestAppState`, sem `declined`; o `enum` dela e
+  // o `AdminJoinRequestStatus` do painel (ADR-0027).
+  'public.network_events.network_events_visibilidade_conhecida': {
+    coluna: 'visibility',
+    valores: ['public', 'private'],
+  },
+  'public.network_events.network_events_entrada_conhecida': {
+    coluna: 'admission_kind',
+    valores: ['free', 'paid'],
+  },
+  'public.network_events.network_events_idade_conhecida': {
+    coluna: 'dog_age',
+    valores: ['any', 'from_4_months', 'from_1_year', 'up_to_1_year'],
+  },
+  'public.network_event_bring_items.network_event_bring_items_item_conhecido': {
+    coluna: 'item',
+    valores: ['water', 'water_bowl', 'leash', 'poop_bags', 'treats', 'towel', 'vaccination_card', 'toy'],
+  },
+  'public.network_event_amenities.network_event_amenities_estrutura_conhecida': {
+    coluna: 'amenity',
+    valores: [
+      'level_ground_or_ramp',
+      'accessible_restroom',
+      'public_restroom_nearby',
+      'shade',
+      'benches',
+      'dog_water_fountain',
+      'parking_nearby',
+    ],
+  },
+  'public.network_event_join_requests.network_event_join_requests_decisao_conhecida': {
+    coluna: 'status',
+    valores: ['pending', 'approved', 'declined'],
   },
   'public.professionals.professionals_source_check': {
     coluna: 'source',
@@ -304,7 +425,15 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
   },
   'public.upload_intents.upload_intents_kind_check': {
     coluna: 'kind',
+    // A imagem de catalogo do painel NAO mora aqui desde 28/09 (ADR-0027 item
+    // 20.2): ela tem tabela propria, `catalog_upload_intents`. Esta tabela e do
+    // app e volta a lista da `development`.
     valores: ['pet_photo', 'found_report_photo', 'finder_photo'],
+  },
+  // ADR-0027 A.3 (item 20.2). O proposito da intencao de envio do painel.
+  'public.catalog_upload_intents.catalog_upload_intents_proposito': {
+    coluna: 'purpose',
+    valores: ['store_item', 'network_event'],
   },
   'public.user_devices.user_devices_permissao': {
     coluna: 'push_permission',
@@ -333,7 +462,11 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     coluna: 'role',
     // Capacidade é conjunto, não ordem: esta lista não declara hierarquia, e
     // nenhuma rota deve resolver permissão comparando posições dela.
-    valores: ['tutor', 'moderator', 'admin'],
+    //
+    // Só `tutor` desde 28/09 (ADR-0027 item 20.2, D42): o painel tem cadastro
+    // próprio, e papel de painel em conta do app deixou de ser representável.
+    // A 000006 aborta, nomeando a linha, se encontrar outro valor aqui.
+    valores: ['tutor'],
   },
   'public.users.users_account_kind_check': {
     coluna: 'account_kind',
@@ -371,6 +504,87 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
  * escreveu. Diferença entre os dois é o defeito de 22/09 em outra coluna.
  */
 const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
+  // ------------------------------------------------------------------
+  // A secao `Rede` (ADR-0025, migracao 20260928000001, emendada pela secao
+  // 12 do ADR-0027).
+  //
+  // Os abaixo sao os CHECKs da `Rede` que MENCIONAM literal de texto e nao
+  // sao lista fechada simples. Os de faixa numerica e comparacao entre colunas
+  // (`..._titulo_tem_tamanho`, `..._resumo_tem_tamanho`,
+  // `..._lugar_tem_tamanho`, `..._bairro_tem_tamanho`,
+  // `..._cidade_tem_tamanho`, `..._nota_de_cancelamento_tem_tamanho`,
+  // `..._versao_positiva`, `..._ponto_anda_com_origem` e
+  // `network_events_fim_depois_do_comeco`) nao tem literal de texto, a
+  // classificacao do cabecalho nao os colhe, e declara-los aqui faria o caso
+  // "restricao declarada que o banco nao tem mais" reprovar.
+  //
+  // As duas listas fechadas da secao (`origin` e `publication_status`) estao
+  // em LISTAS_FECHADAS. `status` (`upcoming` / `happening` / `ended` /
+  // `cancelled`) continua **nao sendo coluna**: e calculado na projecao, no
+  // servidor, porque um rotulo gravado envelhece sozinho.
+  // ------------------------------------------------------------------
+  //
+  // Formato do endereco publico, COPIADO de `pets.slug` e identico ao de
+  // `store_items`. `slug` e unico ao lado de `id uuid` primaria (ADR-0024).
+  'public.network_events.network_events_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  // Duas maiusculas, e so. Nao e lista fechada das 27 UFs de proposito:
+  // enumera-las poria o domicilio politico do Brasil numa restricao de banco,
+  // que muda por lei e nao por migracao. O formato e o que o cartao precisa
+  // para caber.
+  'public.network_events.network_events_uf_tem_duas_letras':
+    "CHECK ((state ~ '^[A-Z]{2}$'::text))",
+  // A FORMA do nome IANA, e so a forma. Que a zona EXISTA e conferido pelo
+  // gatilho `network_events_fuso_existe`, e a divisao de trabalho e deliberada:
+  // consultar `pg_timezone_names` nao e imutavel, e o Postgres recusa funcao
+  // volatil em restricao -- um CHECK com ela nem chega a ser criado.
+  //
+  // Os dois juntos sao o que separa `America/Sao_Paulo` de `America/Sao_Pualo`,
+  // que passa na forma e renderiza a hora errada para sempre sem nada acusar.
+  'public.network_events.network_events_fuso_tem_forma_iana':
+    "CHECK ((time_zone ~ '^[A-Za-z]+/[A-Za-z_]+$'::text))",
+  // A origem do ponto: so `map_pin`, a que o ADR-0006 admite e a unica que um
+  // operador produz tocando o mapa. Nao ha geocodificacao. Uma lista de um
+  // valor so escrita como igualdade, e nao como `IN`, por isso mora aqui.
+  'public.network_events.network_events_origem_do_ponto':
+    "CHECK (((geo_source IS NULL) OR (geo_source = 'map_pin'::text)))",
+  // Cancelado tem o instante do cancelamento.
+  'public.network_events.network_events_cancelado_tem_instante':
+    "CHECK (((publication_status <> 'cancelled'::text) OR (cancelled_at IS NOT NULL)))",
+  // O que e visivel foi publicado algum dia: `published_at` e a primeira
+  // publicacao, e o cancelado tambem a tem.
+  'public.network_events.network_events_visivel_foi_publicado':
+    "CHECK (((publication_status <> ALL (ARRAY['published'::text, 'cancelled'::text])) OR (published_at IS NOT NULL)))",
+  // A moeda: so BRL, e so quando ha valor.
+  'public.network_events.network_events_moeda_conhecida':
+    "CHECK (((admission_currency IS NULL) OR (admission_currency = 'BRL'::text)))",
+  // A unidade do valor, lista fechada escrita com `IS NULL OR`, por isso aqui.
+  'public.network_events.network_events_unidade_do_valor_conhecida':
+    "CHECK (((admission_unit IS NULL) OR (admission_unit = ANY (ARRAY['per_dog'::text, 'per_person'::text, 'per_pair'::text]))))",
+  // Gratuito nao tem valor; pago tem.
+  'public.network_events.network_events_valor_so_quando_pago':
+    "CHECK (((admission_kind = 'free'::text) = (admission_amount IS NULL)))",
+  // O identificador opaco do pedido, base64url.
+  'public.network_event_join_requests.network_event_join_requests_ref_formato':
+    "CHECK ((ref ~ '^[A-Za-z0-9_-]{20,32}$'::text))",
+  // Decidido tem instante.
+  'public.network_event_join_requests.network_event_join_requests_decidido_tem_instante':
+    "CHECK (((status = ANY (ARRAY['approved'::text, 'declined'::text])) = (decided_at IS NOT NULL)))",
+  // So o recusado guarda desistencia (D54, 12.11).
+  'public.network_event_join_requests.network_event_join_requests_desistencia_so_do_recusado':
+    "CHECK (((withdrawn_at IS NULL) OR (status = 'declined'::text)))",
+  // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
+  // que torna "o ponto de evento da comunidade so aparece depois de revisao
+  // humana" um estado do banco, porque `pending_review` nunca e visivel.
+  'public.network_events.network_events_revisao_so_da_comunidade':
+    "CHECK (((origin = 'community'::text) OR (publication_status <> 'pending_review'::text)))",
+  // ADR-0027 A.4 (item 20.2, 20260928000005). Cada autor so na sua origem: o
+  // de `users` so em encontro `community`, o de `admin_accounts` so em `admin`.
+  'public.network_events.network_events_autor_da_comunidade':
+    "CHECK (((created_by_user_id IS NULL) OR (origin = 'community'::text)))",
+  'public.network_events.network_events_autor_do_painel':
+    "CHECK (((created_by_admin_id IS NULL) OR (origin = 'admin'::text)))",
+
   // ------------------------------------------------------------------
   // A vitrine da `Loja` (BICHUS-185 / BICHUS-189, migracao 20260922000009).
   // Nenhum destes e lista fechada: sao formato, faixa e coerencia entre
@@ -414,6 +628,11 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
   'public.store_partners.store_partners_slug_formato':
     "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
+  // ADR-0027 A.2.1 (BICHUS-267). O vocabulario de tags usa o MESMO formato de
+  // endereco publico do item e do parceiro: o `slug` da tag e o parametro de
+  // filtro do app e o de caminho do painel.
+  'public.store_tags.store_tags_slug_formato':
+    "CHECK ((slug ~ '^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$'::text))",
   // Caminho, e nao URL: o banco nao guarda endereco (docs/07-devops.md secao
   // 3.6), e o absoluto e composto na leitura com o host do parceiro. O
   // esquema `https` deixou de ser assunto do banco porque deixou de ser
@@ -430,6 +649,18 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK ((host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text))",
   'audit.events.audit_events_ator_coerente':
     "CHECK (((actor_kind = 'user'::text) = (actor_user_id IS NOT NULL)))",
+  // O gêmeo do de cima para o ator do painel (ADR-0027 apêndice A.5). As linhas
+  // históricas têm `actor_admin_id` nulo e `actor_kind` diferente de `admin`, e
+  // por isso cabem nele sem reescrita.
+  'audit.events.audit_events_ator_admin_coerente':
+    "CHECK (((actor_kind = 'admin'::text) = (actor_admin_id IS NOT NULL)))",
+  // ADR-0027 item 20.1. Desativada tem instante, ativa não tem.
+  'public.admin_accounts.admin_accounts_desativada_tem_quando':
+    "CHECK (((status = 'disabled'::text) = (disabled_at IS NOT NULL)))",
+  // O mesmo formato de `local_credentials_phc_pbkdf2_sha512`: o hash do painel
+  // sai das mesmas funções que o do app.
+  'public.admin_accounts.admin_accounts_phc_pbkdf2_sha512':
+    "CHECK ((password_phc ~~ '$pbkdf2-sha512$%'::text))",
   // O par mentiroso do alcance: estado não calculado com número, ou `computed`
   // sem número. `kysely-registro-de-disparos.ts` grava `null` em
   // `recipients_total` para `unavailable`, e é este CHECK que impede o inverso.
@@ -517,6 +748,13 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   'public.pet_photos.pet_photos_pronta_tem_derivadas':
     "CHECK (((status <> 'ready'::text) OR ((thumb_key IS NOT NULL) AND (card_key IS NOT NULL))))",
   'public.pet_photos.pet_photos_recusada_tem_motivo':
+    "CHECK (((status <> 'rejected'::text) OR (rejection_reason IS NOT NULL)))",
+  // ADR-0027 A.3 (BICHUS-267). A mesma forma de `pet_photos`: pronta tem a
+  // chave da derivada publica, recusada tem motivo. E a primeira que impede
+  // servir a imagem antes de pronta pelo caminho do banco.
+  'public.catalog_images.catalog_images_pronta_tem_chave':
+    "CHECK (((status <> 'ready'::text) OR (public_key IS NOT NULL)))",
+  'public.catalog_images.catalog_images_recusada_tem_motivo':
     "CHECK (((status <> 'rejected'::text) OR (rejection_reason IS NOT NULL)))",
   'public.pet_tags.pet_tags_code_suffix_alfabeto':
     "CHECK ((code_suffix ~ '^[0-9A-HJKMNP-TV-Z]{4}$'::text))",
@@ -731,7 +969,16 @@ void describe('o registro cobre o banco: restrição nova sem entrada reprova, n
   void it('cada CHECK não-lista tem exatamente a definição declarada', () => {
     for (const [chave, esperada] of Object.entries(CHECKS_QUE_NAO_SAO_LISTA_FECHADA)) {
       const atual = naoSimples.get(chave);
-      if (atual === undefined) continue; // o caso acima já reprovou, com nome.
+      // Assertiva, e não `continue`. Com `continue`, uma entrada que o
+      // classificador nunca pôs aqui (porque a restrição caiu no OUTRO registro,
+      // ou porque não menciona literal) passava por este caso sem conferir nada,
+      // e só o caso de cobertura acima acusava. Um caso que pode terminar verde
+      // sem ter comparado é o silêncio que este arquivo existe para quebrar.
+      assert.ok(
+        atual !== undefined,
+        `${chave} está declarada em CHECKS_QUE_NAO_SAO_LISTA_FECHADA e o banco não a tem ` +
+          'nesse registro: ou sumiu, ou virou lista fechada simples, ou deixou de mencionar literal.',
+      );
       assert.equal(
         atual,
         esperada,
@@ -739,6 +986,27 @@ void describe('o registro cobre o banco: restrição nova sem entrada reprova, n
           'expressão que o banco APLICA, e mudança aqui é mudança de regra.',
       );
     }
+  });
+
+  void it('toda lista declarada caiu no registro de lista fechada, e nenhuma no de CHECK comum', () => {
+    // Uma lista fechada pode mudar de forma no catálogo sem ninguém ver: `IN`
+    // de um valor só vira `col = 'v'::text`, e uma cláusula a mais vira
+    // disjunção. Nos dois casos ela sai de `simples` e entra em `naoSimples`,
+    // e o conjunto deixa de ser conferido como conjunto. Este caso nomeia a
+    // restrição que escorregou, em vez de deixar o `get()` devolver `undefined`.
+    const escorregaram = Object.keys(LISTAS_FECHADAS).filter((c) => !simples.has(c) || naoSimples.has(c));
+    assert.deepEqual(
+      escorregaram,
+      [],
+      'lista declarada em LISTAS_FECHADAS que o banco não guarda como lista fechada simples. ' +
+        'Escreva a restrição como `col IN (...)`, ou `col = ANY (ARRAY[...])` quando houver um valor só.',
+    );
+    // A que motivou este caso, pelo nome: o ator da trilha (ADR-0027 A.5).
+    assert.deepEqual(
+      [...(simples.get('audit.events.events_actor_kind_check')?.valores ?? [])].sort(),
+      ['admin', 'anonymous', 'system', 'user'],
+      'audit.events.events_actor_kind_check não está no registro de lista fechada com os quatro atores',
+    );
   });
 
   void it('a inspeção tem o que inspecionar: as duas classes estão povoadas', () => {

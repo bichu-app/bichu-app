@@ -26,24 +26,28 @@
 # nucleo mata dentro daquele grupo, e o Postgres nem fica sabendo. O worker
 # morre, reinicia, e o trabalho volta para a tabela `jobs`.
 #
-# Soma dos limites DO QUE RODA DE FATO: 1760 MB, deixando ~288 MB para o
-# sistema operacional. Entram `db` 640, `objeto` 320, `api` 192, `worker` 448,
-# `web` 96 e `edge` 64. Ficam fora `migracao` (256, termina antes de `api` e
-# `worker` subirem), `mail` (perfis dev/qa, nao sobe no hospedado) e
-# `ferramentas` (1 GB, perfil proprio, so sob `docker compose run`: e o teto do
-# `tsc`, e nao de runtime). Era 1664 na development; o `web` (site, ADR-0028)
-# entrou aqui com 96, medido.
+# Soma dos limites DO QUE RODA DE FATO: 1728 MB, deixando ~320 MB para o
+# sistema operacional. Entram `db` 640, `objeto` 256, `api` 192, `worker` 448,
+# `edge` 64, `admin-web` 32 e `web` 96 (ADR-0028). Ficam fora `migracao` (256,
+# termina antes de `api` e `worker` subirem), `mail` (perfis dev/qa, nao sobe
+# no hospedado) e `ferramentas` (1 GB, perfil proprio, so sob `docker compose
+# run`: e o teto do `tsc`, e nao de runtime).
 #
-# 288 MB e a folga sobre o piso de 300 que a development considerava seguro --
-# ela caiu 96 com o `web`. Piso: nucleo, systemd e sshd (~80), dockerd e
-# containerd (~100), Ops Agent (~80 a 100, exigido pelo alerta de memoria do
-# ADR-0029) e o resto para cache de pagina. Fica APERTADO: se o alerta de
-# memoria do ADR-0029 disparar, o gatilho de e2-medium e este.
+# Juncao de 28/09 da `integracao/backoffice-v1`: 1664 + 32 do painel + 96 do
+# site dava 1792 e ~256 MB de folga, abaixo do piso de 300 (nucleo, systemd e
+# sshd ~80, dockerd e containerd ~100, Ops Agent ~80 a 100, exigido pelo alerta
+# de memoria do ADR-0029, e o resto para cache de pagina). A maquina NAO subiu
+# (decisao da coordenacao): o `objeto` desceu de 320 para 256 POR MEDIDA (ver o
+# servico). Picos medidos com `docker stats` na pilha juntada, 90 s de leitura
+# publica, site e painel, 20 em paralelo: db 77, objeto 73 (130 com envio
+# pesado), api 63, web 35, worker 34 (sem foto; o pico dele e o da foto de
+# 50 MP, 313 MiB, ver o servico), edge 25, admin-web 14 MiB.
 #
 # NO MERGE, ESTA LINHA NAO SE RESOLVE ESCOLHENDO UM LADO. Duas branches que
-# mexem em teto produzem dois numeros certos para a arvore de cada uma e um
-# errado para a juncao. Quem integra SOMA os `mem_limit` do que roda de fato e
-# MEDE de novo com `docker stats` na pilha juntada.
+# mexem em teto ou acrescentam servico produzem dois numeros certos para a
+# arvore de cada uma e um errado para a juncao. Quem integra SOMA os
+# `mem_limit` do que roda de fato e MEDE de novo com `docker stats` na pilha
+# juntada.
 # Se apertar, e2-medium e REINICIO e nao migracao: parar, trocar o tipo,
 # religar. Dura minutos.
 #
@@ -102,51 +106,24 @@ services:
     # Armazenamento de objeto falando a API S3. Nao e "MinIO no lugar da AWS":
     # e a API S3, que o MinIO implementa e que S3 e GCS tambem atendem.
     #
-    # IMAGEM: `bitnamilegacy/minio`, por decisao do cliente em 29/09/2026.
-    # A imagem OFICIAL do MinIO saiu dos registros anonimos: `minio/minio` e
-    # `minio/mc` respondem "pull access denied ... repository does not exist"
-    # no Docker Hub, e no quay.io (digest fixado, `:latest` e tags RELEASE.*)
-    # respondem 401 -- a API do quay diz "Requires authentication". Sem login
-    # de registro, nao ha imagem oficial baixavel, e o job `integracao` da
-    # esteira parava com "unauthorized" ao puxar estas duas imagens.
-    #
-    # A escolha foi trocar para o mirror `bitnamilegacy/*`, unico maintido e
-    # baixavel anonimo por digest. DIVIDA REGISTRADA: `bitnamilegacy` e um
-    # namespace CONGELADO (a Bitnami restringiu as imagens gratuitas em
-    # 28/08/2026; a "legacy" e backup temporario). Ver o PR desta mudanca e
-    # `adr/` sobre storage; quando houver decisao de registro autenticado
-    # oficial, isto volta para a imagem do MinIO sem mudar o comportamento.
-    #
-    # O CONTRATO DA IMAGEM MUDOU, e por isso os campos abaixo mudaram junto:
-    #  - roda como uid 1001 (nao-root). O volume monta no diretorio de dados do
-    #    Bitnami (`/bitnami/minio/data`), que a imagem cria com grupo 0 e bit de
-    #    escrita de grupo, e o processo (gid 0) escreve nele;
-    #  - NAO existe mais `command: server ...`: o entrypoint do Bitnami monta o
-    #    comando sozinho a partir das variaveis (porta da API 9000, do console
-    #    9001, e o diretorio `MINIO_DATA_DIR`);
-    #  - o console e por `MINIO_CONSOLE_PORT_NUMBER` (nao ha `MINIO_CONSOLE_ADDRESS`
-    #    no MinIO: o oficial usa a flag `--console-address`, que o Bitnami gera a
-    #    partir deste numero). 9001 e o padrao; fica explicito para casar com
-    #    `MINIO_BROWSER_REDIRECT_URL`;
-    #  - a sonda deixa de ser `mc ready local` (dependia de um alias que so
-    #    existe no init) e passa a bater no endpoint de saude do proprio MinIO.
-    # O que a integracao exercita continua igual: SSE-S3 (MINIO_KMS_SECRET_KEY),
-    # URL assinada pelo host (MINIO_SERVER_URL) e a politica anonima do bucket.
-    image: docker.io/bitnamilegacy/minio@sha256:6dabb4a2088c9a79908de3bc05f4586c23ad2182c8908e7e3acbf61c1467fb20
-    mem_limit: 320m
+    # Registro: o MinIO NAO esta mais no Docker Hub (`minio/minio` responde
+    # "pull access denied"). A imagem oficial vive no quay.io. Quem for
+    # atualizar a tag vai esbarrar nisso e perder tempo achando que e
+    # credencial. O que pina de verdade e o digest, nao a tag.
+    image: quay.io/minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    # 256m, e nao 320m, MEDIDO em 28/09 na pilha juntada (integracao do
+    # backoffice), com `docker stats` a cada 2 s: 73 MiB sob 90 s de leitura
+    # publica do app, do site e do painel, e pico de 130 MiB com 24 objetos de
+    # 8 MiB enviados e lidos 8 em paralelo -- mais pesado que o uso real (a
+    # foto do pet e a imagem de catalogo tem teto de 5 MiB e saem uma por vez).
+    # 256m deixa ~126 MiB sobre esse pico, e devolve os 64 MB que a juncao do
+    # painel e do site tirou da folga do sistema. Repetido com o teto novo:
+    # mesmo pico, nenhuma morte por cgroup.
+    mem_limit: 256m
+    command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${OBJECT_STORAGE_ACCESS_KEY_ID:?defina no .env}
       MINIO_ROOT_PASSWORD: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?defina no .env}
-      # Onde o MinIO guarda os objetos DENTRO do container Bitnami. O volume
-      # `dados_objeto` monta exatamente aqui (mudou de `/data`, que era o padrao
-      # da imagem oficial).
-      MINIO_DATA_DIR: /bitnami/minio/data
-      # Porta do console (browser). O Bitnami transforma isto na flag
-      # `--console-address :9001`; 9001 e o padrao e casa com o redirect abaixo.
-      MINIO_CONSOLE_PORT_NUMBER: "9001"
-      # Sem TLS: o edge termina o TLS, e a origem de midia fala http na rede
-      # interna. Explicito para o setup do Bitnami nao supor https.
-      MINIO_SCHEME: http
       # O MinIO assina a URL com o host pelo qual ele se conhece. Se isto
       # divergir do host publico, TODA URL assinada quebra, com erro de
       # assinatura que nao diz que e de host. E o defeito classico de
@@ -161,39 +138,25 @@ services:
       # um KMS. O KMS embutido (`MINIO_KMS_SECRET_KEY`) atende, e e o caminho
       # que o proprio MinIO documenta para ambiente sem KMS externo.
       #
-      # FORMATO: `<id>:<base64 de 32 bytes>`. Chave curta faz o MinIO NAO subir,
-      # e o setup do Bitnami fica em laco "Adding local Minio host..." sem nunca
-      # ficar saudavel -- medido em 29/09. O `.env.example` gera o valor certo.
-      #
       # Chave de DESENVOLVIMENTO, descartavel, com valor no `.env`. Em producao
       # isto vira o KMS do provedor, que e configuracao e nao codigo -- o
       # cabecalho que a aplicacao envia e o mesmo nos dois.
       MINIO_KMS_SECRET_KEY: ${OBJECT_STORAGE_KMS_KEY:?defina no .env}
     volumes:
-      - dados_objeto:/bitnami/minio/data
+      - dados_objeto:/data
     healthcheck:
-      # Endpoint de saude do proprio MinIO, pela porta da API. `curl` existe na
-      # imagem Bitnami. Substitui `mc ready local`, que precisava de um alias
-      # `local` que so o `objeto_init` configura.
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/minio/health/live"]
+      test: ["CMD", "mc", "ready", "local"]
       interval: 5s
       timeout: 3s
       retries: 20
-      start_period: 20s
+      start_period: 15s
     restart: unless-stopped
 
   objeto_init:
     # Cria os dois buckets do ADR-0007 e aplica a politica. Idempotente: pode
     # rodar em toda subida. O bucket privado NAO recebe politica anonima, e e
     # essa separacao fisica que protege o original com EXIF.
-    #
-    # IMAGEM: `bitnamilegacy/minio-client` (o `mc`), pelo mesmo motivo do
-    # `objeto` acima -- a `minio/mc` oficial saiu dos registros anonimos. Duas
-    # diferencas de contrato tratadas aqui: (1) o entrypoint padrao do Bitnami e
-    # um `run.sh` proprio, entao sobrescrevo com o script de init; (2) roda como
-    # uid 1001 com HOME nao-gravavel (`/`), entao o `mc` grava a config em
-    # `/tmp/.mc` via `--config-dir`, senao ele falha ao salvar o alias.
-    image: docker.io/bitnamilegacy/minio-client@sha256:73bd39f7899a0cef12b8dd5df13aa93a3ed1aaa44236542442e9ac76819ac158
+    image: quay.io/minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     depends_on:
       objeto:
         condition: service_healthy
@@ -207,10 +170,6 @@ services:
       - -c
       - |
         set -eu
-        # `mc` grava a config do alias em disco; com HOME=/ (nao-gravavel pelo
-        # uid 1001 do Bitnami) o alias nao salva. `--config-dir /tmp/.mc` poe a
-        # config num lugar gravavel.
-        mc() { command mc --config-dir /tmp/.mc "$$@"; }
         mc alias set local http://objeto:9000 "$$CHAVE" "$$SEGREDO"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PRIVATE"
         mc mb --ignore-existing "local/$$OBJECT_BUCKET_PUBLIC"
@@ -477,9 +436,10 @@ services:
   #     estiver aqui. Subir 320m para caber um compilador faz o portao passar a
   #     abencoar, em producao, uma api com o dobro do teto que ela precisa -- e
   #     ele existe justamente para o teto ser real.
-  #  2. A soma no topo deste arquivo (1792 MB quando isto foi escrito, 1664
-  #     desde 23/09) e o orcamento da e2-small de 2 GB. `api` em 700m a levaria
-  #     a 2172 MB, e o limite deixaria de caber na maquina que ele protege.
+  #  2. A soma no topo deste arquivo (1792 MB quando isto foi escrito, 1728
+  #     desde 28/09, com o painel e o site) e o orcamento da e2-small de 2 GB.
+  #     `api` em 700m a levaria a 2236 MB, e o limite deixaria de caber na
+  #     maquina que ele protege.
   #
   # Entao a compilacao sai do servico com teto de runtime e ganha o seu.
   # Nao e desenho novo: `infra/integracao/compose.integracao.yaml` ja separa
@@ -619,7 +579,18 @@ services:
     # Sao duas PORTAS e nao dois subdominios de localhost: `app.bichu.localhost`
     # resolveria no laptop e NAO resolve no telefone de ninguem, e o teste com
     # segundo aparelho depende disso (secao 3.10).
-    image: caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
+    #
+    # IMAGEM PROPRIA desde 23/09: o `caddy:2.8-alpine` de prateleira, pelo
+    # mesmo digest, com o binario trocado por um que tem o plugin de taxa -- o
+    # teto do host administrativo (ADR-0016 emenda 2). Ver `infra/caddy/Dockerfile`.
+    # O Caddyfile continua montado abaixo, e nao copiado na imagem: mudar regra
+    # de borda segue sendo recriar o container, sem reconstruir.
+    image: bichu-edge:${IMAGE_TAG:-local}
+    build:
+      context: ./infra/caddy
+      args:
+        # Mesma regra dos outros servicos que constroem (BICHUS-210).
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
     mem_limit: 64m
     # Porta do hospedeiro IGUAL a porta de dentro, e nao um mapeamento cruzado:
     # o Caddy escuta na porta que esta em PUBLIC_BASE_URL, entao 3100:3000
@@ -673,6 +644,31 @@ services:
       - caddy_dados:/data
       - caddy_config:/config
     environment:
+      # O BACKOFFICE (container `admin-web`, decisao do cliente de 23/09/2026).
+      #
+      #   ADMIN_HOSTS       o endereco do bloco do backoffice: a SPA e o
+      #                     `/v1/admin/*` na MESMA origem (sem CORS, D34 da
+      #                     seguranca). Pode listar mais de um, com virgula;
+      #   ADMIN_CSP_UPLOAD  o host de `UploadIntent.url` do ambiente, no
+      #                     `connect-src` da CSP (ADR-0027 item 6). Nome exato.
+      #
+      # ADMIN_CSP_UPLOAD e VAZIO por padrao: o endpoint do armazenamento hoje e
+      # `http://objeto:9000`, interno, e o host publico do envio nao esta
+      # decidido. Vazio, o envio de imagem pelo painel fica BLOQUEADO pela CSP,
+      # que e o lado certo de errar. O host dos tiles do mapa e fixo e esta no
+      # proprio Caddyfile.
+      #
+      # ADMIN_HOSTS tem PADRAO AQUI, e nao vazio, pelo mesmo motivo do site:
+      # vazio chega ao Caddy como variavel DEFINIDA, o padrao do Caddyfile nao
+      # se aplica, e a borda recusa subir com um bloco sem endereco.
+      # `admin.localhost` nao e dominio de ninguem e nao pede certificado.
+      #
+      # Em homologacao/producao, no `.env` do host, e o edge RECRIADO:
+      #   ADMIN_HOSTS=https://admin.bichu.app
+      # O corte, e a ordem config-antes-do-DNS, estao no bloco do backoffice em
+      # infra/caddy/Caddyfile.
+      ADMIN_HOSTS: ${ADMIN_HOSTS:-http://admin.localhost}
+      ADMIN_CSP_UPLOAD: ${ADMIN_CSP_UPLOAD:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       OBJECT_BUCKET_PUBLIC: ${OBJECT_BUCKET_PUBLIC:-bichu-media-public}
@@ -706,6 +702,76 @@ services:
       # onde os quatro papeis dividem `localhost`). Ver o Caddyfile.
       BORDA_RESTO_DA_APP: ${BORDA_RESTO_DA_APP:-fechado}
     depends_on: [api, objeto]
+    restart: unless-stopped
+
+  admin-web:
+    # O BACKOFFICE: SPA React + TypeScript de `admin/`, servida como arquivo
+    # estatico. Decisao do cliente de 23/09/2026: mesma VM, IMAGEM SEPARADA, em
+    # `admin.bichu.app`, consumindo `/v1/admin` da API. Mesmo desenho do
+    # container `web` do site, de proposito: mudar o backoffice de lugar e mover
+    # este servico e trocar um upstream na borda.
+    #
+    # O que ele NAO tem, e cada ausencia e a regra:
+    #   - sem `env_file`: a SPA nao le `.env`, entao nao ha como um segredo da
+    #     API vazar para um arquivo que qualquer navegador baixa. Ela chama
+    #     `/v1/admin/*` por caminho RELATIVO, na mesma origem, entao nem o
+    #     endereco da API ela precisa saber. O unico `environment` e o teto do
+    #     coletor de lixo do Caddy, logo abaixo;
+    #   - sem `depends_on` de `db`/`api`: ele sobe e serve sozinho. Cair a API
+    #     deixa o backoffice sem dados, nao sem tela;
+    #   - sem `ports`: so a borda o alcanca, pela rede interna do compose;
+    #   - sem `profiles`: sobe nos dois destinos, entao NAO entra em
+    #     `SERVICOS_AUSENTES_NO_HOSPEDADO` (src/tools/comparar-destinos.ts).
+    #
+    # Contexto de build `./admin`, e so ele. Ver `admin/Dockerfile`.
+    image: bichu-admin-web:${IMAGE_TAG:-local}
+    build:
+      context: ./admin
+      args:
+        # Mesma regra da api (BICHUS-210): `verificar_commit_de_build.py` exige
+        # o argumento em todo servico que constroi, e `admin/Dockerfile` reprova
+        # o build sem ele.
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+        # D41. A chave de SITE do reCAPTCHA, publica, que o Vite poe no pacote
+        # do `/entrar`. Vem do `.env` do host; vazia, o login do painel recusa.
+        VITE_CAPTCHA_SITE_KEY: ${VITE_CAPTCHA_SITE_KEY:-}
+    # MEDIDO em 23/09/2026, imagem com o pacote pre-comprimido no build:
+    #
+    #   repouso                                   14 a 17 MiB
+    #   teto aberto (256m), 200 conexoes          pico 55 MiB -- o Go nao sabe
+    #                                             do teto do cgroup e so coleta
+    #                                             lixo quando o heap dobra
+    #   32m sem GOMEMLIMIT, 200 conexoes          0 OOM, mas 5567 batidas no
+    #                                             teto e 48,7 s para 60 mil
+    #                                             requisicoes: o nucleo segura o
+    #                                             processo em reclamacao
+    #   32m com GOMEMLIMIT=24MiB, 200 conexoes    0 OOM, 237 batidas, 9,5 s
+    #   48m com GOMEMLIMIT=32MiB, 200 conexoes    0 OOM, 1 batida, 8,7 s
+    #
+    # Fica 32m com 24MiB. Duzentas conexoes simultaneas e carga sintetica: o
+    # backoffice tem um punhado de pessoas, e 16 MB a menos na soma do topo
+    # valem mais na e2-small do que o segundo caso contra o terceiro.
+    #
+    # GOMEMLIMIT e o limite MACIO do coletor do Go (o Caddy e Go): com ele o
+    # heap para abaixo do teto do cgroup em vez de encostar nele. O par anda
+    # junto: mexer em um sem o outro devolve o primeiro caso da tabela.
+    mem_limit: 32m
+    environment:
+      GOMEMLIMIT: 24MiB
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      # A mesma sonda declarada na imagem, repetida aqui para ficar visivel de
+      # fora dela: pede a pagina inicial, entao so passa com conteudo servido.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
 
 volumes:

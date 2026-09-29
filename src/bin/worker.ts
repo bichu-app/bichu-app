@@ -23,7 +23,7 @@ import { criarSecretProvider } from '../shared/adapters/external/env-var-secret-
 import { createDb } from '../shared/db/pool.js';
 import { manterProcessoVivo } from '../shared/process/vida-do-processo.js';
 import { criarPassadaSemReentrada } from '../shared/process/passada-sem-reentrada.js';
-import { systemClock } from '../shared/time/clock.js';
+import { comoData, systemClock } from '../shared/time/clock.js';
 import {
   criarTrilhaDeAuditoria,
   expurgarEventosVencidos,
@@ -39,6 +39,12 @@ import {
   desistirDaFoto,
   type CargaDoTrabalhoDeFoto,
 } from '../modules/media/application/desistir-da-foto.js';
+import {
+  processarImagemDeCatalogo,
+  type CargaDaImagemDeCatalogo,
+} from '../modules/media/application/processar-imagem-de-catalogo.js';
+import { criarImagensDeCatalogoDoWorker } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
+import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../modules/media/ports/imagem-de-catalogo.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
 import { expurgarContasExcluidas } from '../modules/identity/application/expurgar-contas-excluidas.js';
 import { criarIdentityRepository } from '../modules/identity/adapters/persistence/kysely-identity-repository.js';
@@ -60,6 +66,15 @@ import {
 } from '../modules/transfers/adapters/persistence/kysely-consultas-de-apoio.js';
 import { PetTransferService } from '../modules/transfers/application/pet-transfer-service.js';
 import type { TransferId } from '../modules/transfers/ports/transfer-repository.js';
+
+import {
+  criarLeituraDoPedidoAprovado,
+  expurgarPedidosVencidos,
+} from '../modules/network/adapters/persistence/kysely-rede-administrativa.js';
+import { TRABALHO_DE_AVISO_DE_APROVACAO } from '../modules/network/ports/aviso-de-aprovacao.js';
+import { DIAS_DE_RETENCAO_DO_PEDIDO } from '../modules/network/domain/escrita-do-encontro.js';
+import { avisarPedidoAprovado } from '../modules/network/application/avisar-pedido-aprovado.js';
+import { criarAvisoDeAprovacaoPorPush } from '../modules/notifications/adapters/external/aviso-de-aprovacao-por-push.js';
 
 import type { CaseId } from '../shared/types/brands.js';
 
@@ -272,6 +287,15 @@ export async function main(): Promise<void> {
     clock: systemClock,
   };
 
+  // ADR-0027 item 10 (BICHUS-267). A imagem de catalogo do painel, pelo mesmo
+  // armazenamento e o mesmo processador da foto do pet.
+  const dependenciasDaImagemDeCatalogo = {
+    imagens: criarImagensDeCatalogoDoWorker(banco.db),
+    armazenamento: dependenciasDaFoto.armazenamento,
+    processador: dependenciasDaFoto.imagens,
+    ids,
+  };
+
   // BICHUS-18. O DISPARO DO ALERTA DE 5 KM, montado aqui e em lugar nenhum
   // mais. É esta fiação que liga as três funções que a BICHUS-91 deixou com o
   // chamador nomeado e ausente: `enderecoDeEnvio` e `revogarPorTokenRecusado`
@@ -409,6 +433,17 @@ export async function main(): Promise<void> {
     }
   };
 
+  // BICHUS-292. O push de pedido aprovado para encontro privado da Rede, so
+  // com o titulo. A API enfileira na transacao da decisao; aqui ele sai.
+  const avisoDeAprovacao = {
+    pedidos: criarLeituraDoPedidoAprovado(banco.db),
+    entrega: criarAvisoDeAprovacaoPorPush({
+      aparelhos: criarRegistroDeAparelhos(banco.db, ids),
+      push,
+      revogarPorTokenRecusado: (token) => aparelhos.revogarPorTokenRecusado(token),
+    }),
+  };
+
   const rodarFila = async (): Promise<void> => {
     const trabalhos = await fila.claim(TRABALHOS_POR_PASSADA);
     for (const trabalho of trabalhos) {
@@ -440,6 +475,24 @@ export async function main(): Promise<void> {
               ...desfecho,
             }),
           );
+          continue;
+        }
+
+        if (trabalho.kind === TRABALHO_DE_AVISO_DE_APROVACAO) {
+          const { join_request_id: pedidoId } = trabalho.payload as { join_request_id: string };
+          const desfecho = await avisarPedidoAprovado(avisoDeAprovacao, pedidoId);
+          await fila.complete(trabalho.id);
+          console.info(JSON.stringify({ evento: 'network.approval_push', ...desfecho }));
+          continue;
+        }
+
+        if (trabalho.kind === TRABALHO_DE_IMAGEM_DE_CATALOGO) {
+          const imagem = await processarImagemDeCatalogo(
+            dependenciasDaImagemDeCatalogo,
+            trabalho.payload as CargaDaImagemDeCatalogo,
+          );
+          await fila.complete(trabalho.id);
+          console.info(JSON.stringify({ evento: `catalogo.${imagem.tipo}`, imagem: imagem.imagemId }));
           continue;
         }
 
@@ -565,6 +618,13 @@ export async function main(): Promise<void> {
     );
   };
 
+  // BICHUS-292 (D54). Pedido de encontro que acabou ha mais de 30 dias sai do
+  // banco. A trilha guarda a decisao pelo `ref`, sem o nome de quem pediu.
+  const rodarExpurgoDePedidos = async (): Promise<void> => {
+    const removidos = await expurgarPedidosVencidos(banco.db, comoData(systemClock.now()), DIAS_DE_RETENCAO_DO_PEDIDO);
+    if (removidos > 0) console.info(JSON.stringify({ evento: 'network.join_request_purge', removidos }));
+  };
+
   const encerrar = (sinal: string): void => {
     if (vida.estaEncerrando) return;
     console.info(JSON.stringify({ evento: 'worker.shutdown', sinal }));
@@ -576,6 +636,15 @@ export async function main(): Promise<void> {
   await rodarExpurgo();
   await rodarExpurgoDeLocalizacao();
   await rodarExpurgoDeContas();
+  await rodarExpurgoDePedidos();
+
+  const temporizadorDosPedidos = setInterval(() => {
+    if (vida.estaEncerrando) return;
+    rodarExpurgoDePedidos().catch((erro: unknown) => {
+      console.error(JSON.stringify({ evento: 'network.join_request_purge_failed', erro: String(erro) }));
+    });
+  }, INTERVALO_DO_EXPURGO_EM_MILISSEGUNDOS);
+  temporizadorDosPedidos.unref();
 
   const temporizadorDaVarredura = setInterval(() => {
     if (vida.estaEncerrando) return;
@@ -674,6 +743,7 @@ export async function main(): Promise<void> {
   clearInterval(temporizadorDeOrfaos);
   clearInterval(temporizadorDaVarredura);
   clearInterval(temporizadorDaLocalizacao);
+  clearInterval(temporizadorDosPedidos);
   await banco.close();
 }
 
