@@ -17,7 +17,11 @@ import { afterEach, describe, it } from 'node:test';
 import type { NomeDeSegredo, SecretProvider } from '../ports/secret-provider.js';
 import { SegredoIndisponivelError } from '../ports/secret-provider.js';
 import { criarSecretProviderDeAmbiente } from '../adapters/external/env-var-secret-provider.js';
-import { exigeGerenciadorDeSegredos, resolverSegredos } from './segredos.js';
+import {
+  SEGREDOS_DE_RUNTIME,
+  exigeGerenciadorDeSegredos,
+  resolverSegredos,
+} from './segredos.js';
 
 const A = 'SEGREDO_DE_TESTE_A';
 const B = 'SEGREDO_DE_TESTE_B';
@@ -171,5 +175,49 @@ void describe('onde o gerenciador entra, e onde ele deliberadamente não entra',
     // dois usam o MESMO predicado de propósito.
     process.env['NODE_ENV'] = 'production';
     assert.equal(exigeGerenciadorDeSegredos('dev'), true);
+  });
+});
+
+/**
+ * A lista de segredos de runtime e o token do provedor de e-mail.
+ *
+ * O caso é uma isca de **cobertura da lista**, e não de comportamento da
+ * resolução: o mecanismo que ele desliga é a linha `'MAIL_API_TOKEN'` em
+ * `SEGREDOS_DE_RUNTIME`. Sem ela, nada reprova — a subida em ambiente hospedado
+ * fica verde, o token nunca é buscado no cofre, `requireEnv('MAIL_API_TOKEN')`
+ * morre no arranque por uma variável que ninguém foi pedir, e a mensagem manda o
+ * operador procurar um `.env` que o ADR-0022 tirou de lá.
+ *
+ * A lista de segredos é justamente o tipo de coisa que nenhum teste de caminho
+ * feliz cobre: ela é lida uma vez, na subida, num ambiente que a suíte não
+ * levanta.
+ */
+void describe('ISCA: o token do provedor de e-mail e buscado no cofre', () => {
+  void it('MAIL_API_TOKEN esta em SEGREDOS_DE_RUNTIME, junto com o codigo que o le', () => {
+    assert.ok(
+      SEGREDOS_DE_RUNTIME.includes('MAIL_API_TOKEN'),
+      'REPROVA: `MAIL_API_TOKEN` saiu da lista de segredos de runtime. Em ambiente ' +
+        'hospedado ele nao seria buscado no gerenciador (ADR-0022), e o ' +
+        '`requireEnv(\'MAIL_API_TOKEN\')` de `app-config.ts` derrubaria a subida com ' +
+        '`MAIL_TRANSPORT=postmark` -- nenhum e-mail transacional sairia, e a mensagem ' +
+        'mandaria o operador procurar a variavel num arquivo que o ADR-0022 tirou da VM.',
+    );
+  });
+
+  void it('a resolucao escreve o valor do cofre em process.env sob o MESMO nome', async () => {
+    // O outro lado da isca: estar na lista só serve se a resolução de fato puser
+    // o valor onde `app-config.ts` vai ler. Um dublê, nunca a chave real — quem
+    // dispara com chave de verdade é o cliente ou o deploy.
+    const original = process.env['MAIL_API_TOKEN'];
+    try {
+      delete process.env['MAIL_API_TOKEN'];
+      await resolverSegredos(provedorFalso({ MAIL_API_TOKEN: 'valor-de-cofre-dublado' }), [
+        'MAIL_API_TOKEN',
+      ]);
+      assert.equal(process.env['MAIL_API_TOKEN'], 'valor-de-cofre-dublado');
+    } finally {
+      if (original === undefined) delete process.env['MAIL_API_TOKEN'];
+      else process.env['MAIL_API_TOKEN'] = original;
+    }
   });
 });

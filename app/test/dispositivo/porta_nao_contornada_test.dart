@@ -626,7 +626,19 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// seguinte pelo `RodapeDaPaginacao`. Nada a ver com camera: nenhuma das duas
 /// toca em foto, e as telas do assistente de cadastro (`app/lib/telas/pet/`)
 /// seguem intocadas.
-const String _arvoreDasTelas = 'cfba3eb42ecc9c32b91a500e7748fb50463a7b92';
+///
+/// Troca de 28/09, transporte de e-mail real (sem chave de issue no
+/// acionamento): `telas/conta/tela_verifique_seu_email.dart` parou de AFIRMAR
+/// que o e-mail de verificacao foi enviado. O 201 do cadastro prova que a conta
+/// nasceu, e nada mais -- o envio e engolido por um `try/catch` no servidor, por
+/// decisao (criterio 3 de BICHUS-147). A tela passou a dizer o estado e o
+/// remedio, que sao verdade independentemente do que aconteceu no envio.
+///
+/// Nada a ver com camera: a tela nao toca em foto, nao importa plugin de
+/// aparelho nenhum -- o portao ESTRUTURAL abaixo continua valendo sobre ela e
+/// continua verde -- e as telas do assistente de cadastro (`app/lib/telas/pet/`)
+/// seguem intocadas.
+const String _arvoreDasTelas = '5523613a2e729bf0c03d9f50d8802ecf74278267';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

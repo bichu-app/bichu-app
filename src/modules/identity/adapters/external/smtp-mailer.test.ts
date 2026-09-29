@@ -85,6 +85,10 @@ const CONFIG: MailConfig = {
   // o caminho oposto (`POST /webhooks/postmark`). Está aqui só porque
   // `MailConfig` é um tipo só para os dois sentidos do e-mail.
   webhookSecret: Buffer.from('segredo-de-teste-com-32-bytes!!!', 'utf8'),
+  // `undefined` e o valor certo para `smtp`: o token e do transporte do provedor
+  // (`postmark-mailer.ts`), e um valor aqui faria esta bancada afirmar coisas
+  // sobre uma configuracao que nao existe.
+  apiToken: undefined,
 };
 
 const ENDERECO_DA_VITIMA = 'vitima@exemplo.test';
