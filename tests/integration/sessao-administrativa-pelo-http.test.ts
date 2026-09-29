@@ -483,6 +483,8 @@ void describe('login administrativo (D35, D41, D44, D46)', () => {
     assert.equal(sem[0]?.status, 401);
     assert.deepEqual(sem[1], sem[0]);
     assert.deepEqual(sem[2], sem[0]);
+    // QA bug 6: o 401 do painel nao convida a recuperar senha (item 20.4).
+    assert.doesNotMatch(String(sem[0]?.detail), /esquec|nova|recuper|redefin|criar/i, String(sem[0]?.detail));
   });
 
   void it('sem X-Captcha-Token, ou com token que o verificador recusa: 403 captcha-rejected', async () => {

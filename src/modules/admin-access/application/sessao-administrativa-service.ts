@@ -484,25 +484,25 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
         await consumirTempoDeVerificacao(entrada.password);
         await consultaAVazadas;
         await registrarLoginRecusado(contexto, 'unknown_account', undefined);
-        throw problemas.credencialRecusada();
+        throw problemas.credencialDoPainelRecusada();
       }
       const confere = await verificarSenha(entrada.password, conta.passwordPhc);
       const vereditoDaBase = await consultaAVazadas;
       const vazada = vereditoDaBase === true;
       if (!confere) {
         await registrarSenhaErrada(conta, contexto);
-        throw problemas.credencialRecusada();
+        throw problemas.credencialDoPainelRecusada();
       }
       if (conta.status !== 'active' || !abreSessaoAdministrativa([conta.papel])) {
         await registrarLoginRecusado(contexto, 'inactive_account', conta.id);
-        throw problemas.credencialRecusada();
+        throw problemas.credencialDoPainelRecusada();
       }
       // Conta bloqueada ("nao fui eu" ou dez falhas): o mesmo 401. Um corpo
       // proprio aqui diria, a quem tem a senha, que ela confere; o dono sabe que
       // clicou no link, e o caminho e o mesmo da senha vazada: o comando.
       if (conta.blockedReason !== null) {
         await registrarLoginRecusado(contexto, `blocked_${conta.blockedReason}`, conta.id);
-        throw problemas.credencialRecusada();
+        throw problemas.credencialDoPainelRecusada();
       }
 
       const agora = deps.clock.now();
@@ -511,7 +511,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
       if (vazada) {
         await registrarLoginRecusado(contexto, 'breached_password', conta.id);
         avisarSenhaVazada(conta, agora, contexto);
-        throw problemas.credencialRecusada();
+        throw problemas.credencialDoPainelRecusada();
       }
 
       // D19: os parametros do hash sobem sem redefinicao em massa.
@@ -715,7 +715,7 @@ export function criarSessaoAdministrativaService(deps: DependenciasDaSessaoAdmin
             metadata: metadataDaSessao(sessao.etiqueta, { reason: 'reauth_bad_password' }),
           }),
         );
-        throw problemas.credencialRecusada();
+        throw problemas.credencialDoPainelRecusada();
       }
 
       const agora = deps.clock.now();

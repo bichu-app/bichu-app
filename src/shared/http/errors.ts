@@ -125,6 +125,17 @@ export const problemas = {
       detail: 'Confira os dois campos e tente de novo. Se esqueceu a senha, dá para criar uma nova.',
     }),
 
+  /**
+   * O mesmo 401 no painel (ADR-0027 D43, D61), SEM o convite a criar senha
+   * nova: a conta do painel nao tem recuperacao por e-mail (item 20.4), e o
+   * `/entrar` ja diz, em texto fixo, a quem pedir a redefinicao. O corpo e o
+   * mesmo para conta inexistente, senha errada, desativada, bloqueada e vazada.
+   */
+  credencialDoPainelRecusada: (): AppError =>
+    new AppError('invalid-credentials', 'E-mail ou senha não conferem', {
+      detail: 'Confira os dois campos e tente de novo.',
+    }),
+
   sessaoExpirada: (): AppError =>
     new AppError('token-expired', 'Entre de novo', {
       detail: 'Sua sessão terminou.',
