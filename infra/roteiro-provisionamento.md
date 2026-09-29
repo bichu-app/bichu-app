@@ -1,5 +1,5 @@
 > **Status:** pronto para aplicar
-> **Atualizado:** 2026-09-19
+> **Atualizado:** 2026-09-23
 > **Issue:** BICHUS-135 (destrava BICHUS-13, critérios 3, 6, 7, 8, 9, 10 e 12)
 > **Decisão que este roteiro executa:** `docs/07-devops.md` 16.1, 16.2 e 16.3 — ADR-0013.
 
@@ -821,6 +821,111 @@ A segunda linha é a verificação que importa: a recusa do `make reset` é a ú
 proteção automática entre um comando de hábito e a massa de teste do QA. Se ela
 não recusar, o `ENVIRONMENT` do host ficou em `dev` e o passo 7 falhou em
 silêncio.
+
+---
+
+### Passo 14 — O site (container `web`), e o corte dos hosts para ele
+
+Decisão do cliente de 23/09/2026 e ADR-0028: o site (institucional e páginas
+públicas) é um container Astro com renderização no servidor, **nesta mesma
+VM**, em **imagem separada** da API (`web/Dockerfile`), atrás da mesma borda.
+O mecanismo de implantação é o do passo 7, e não outro: os arquivos vão para o
+host e o compose constrói lá. Não há registry no caminho, nem para a API nem
+para o site.
+
+**Implantar ou atualizar o site** (não toca API, banco nem borda):
+
+```bash
+gcloud compute scp --project=bichu-app-508914 --zone=southamerica-east1-a \
+  --tunnel-through-iap --recurse ./web bichu-hml:~/bichu/
+# no host, em ~/bichu, com o commit de que os arquivos saíram:
+BUILD_COMMIT=<sha> docker compose build web
+docker compose up -d --no-deps --wait web
+```
+
+`--wait` é a metade que importa: a borda só pode passar a mandar um host para
+o `web` depois de ele estar saudável. Na ordem contrária o host responde 502.
+
+Enquanto as variáveis `SITE_*` não estiverem no `.env`, os blocos do site na
+borda existem só com os nomes de teste (`site.localhost`, `tag.localhost`,
+`www.localhost`), que nenhum DNS resolve. `bichu.app` e `tag.bichu.app`
+continuam em `HOSTS_EXTRA_APP`, respondendo como hoje.
+
+**Verificação — o site responde pela rede interna, e nada público mudou:**
+
+```bash
+docker compose exec -T web node -e "fetch('http://web:4321/healthz').then(r=>console.log(r.status))"   # 200
+curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://bichu.app/   # 404 text/plain, igual a antes
+curl -sS https://hml.bichu.app/v1/health                                       # 200, status ok
+```
+
+**Ensaiar a tabela do ADR-0028 sem tocar a borda que está no ar.** Uma borda
+descartável, na mesma rede do compose, com a configuração do corte e
+certificado interno (`local_certs`, só na cópia de ensaio): ela alcança o `web`
+e a `api` reais, não publica 80 nem 443, e some ao final.
+
+```bash
+sed 's/^\tadmin off$/\tadmin off\n\tlocal_certs/' infra/caddy/Caddyfile > /tmp/Caddyfile.ensaio
+docker run -d --name borda-ensaio --network bichu_default -p 127.0.0.1:18443:443 \
+  -v /tmp/Caddyfile.ensaio:/etc/caddy/Caddyfile:ro -v "$PWD/infra/caddy/well-known:/srv/well-known:ro" \
+  -e PUBLIC_BASE_URL=https://hml.bichu.app -e 'HOSTS_EXTRA_APP=, https://api.bichu.app' \
+  -e MEDIA_PUBLIC_BASE_URL=https://img-hml.bichu.app -e 'HOSTS_EXTRA_MIDIA=, https://img.bichu.app' \
+  -e OBJECT_BUCKET_PUBLIC=bichu-media-public -e SITE_HOSTS=https://bichu.app \
+  -e SITE_TAG_HOSTS=https://tag.bichu.app -e SITE_WWW_HOSTS=https://www.bichu.app \
+  -e SITE_BASE_URL=https://bichu.app \
+  caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
+curl -sk -o /dev/null -w '%{http_code} %{content_type}\n' --resolve bichu.app:18443:127.0.0.1 https://bichu.app:18443/
+docker rm -f borda-ensaio
+```
+
+**O corte.** Só quando o site real existir; o placeholder técnico **não** vai
+para `bichu.app`. `bichu.app` e `tag.bichu.app` já resolvem para esta máquina
+e já têm certificado no volume `caddy_dados`, então para eles o corte é só de
+configuração. `www` e `api` ainda não resolvem: configuração primeiro, DNS
+logo depois, na mesma janela.
+
+0. `compose.yaml` e `infra/caddy/Caddyfile` do host são os deste repositório
+   (o serviço `edge` repassa as variáveis `SITE_*` e `BORDA_RESTO_DA_APP`).
+   Com o `compose.yaml` antigo, as variáveis abaixo não chegam à borda.
+1. `docker compose up -d --no-deps --wait web` e `web` saudável.
+2. No `.env` do host:
+
+   ```
+   HOSTS_EXTRA_APP=, https://api.bichu.app
+   SITE_HOSTS=https://bichu.app
+   SITE_TAG_HOSTS=https://tag.bichu.app
+   SITE_WWW_HOSTS=https://www.bichu.app
+   SITE_BASE_URL=https://bichu.app
+   ```
+
+   `BORDA_RESTO_DA_APP` **não** entra: sem ela o catch-all de `hml` e `api`
+   continua 404.
+3. Validar antes de aplicar (um nome em dois blocos reprova aqui, e não com a
+   borda fora do ar):
+
+   ```bash
+   docker compose config edge --format json | python3 -c "import json,sys; print('\n'.join(f'{k}={v}' for k,v in json.load(sys.stdin)['services']['edge']['environment'].items()))" > /tmp/edge.env
+   docker run --rm --env-file /tmp/edge.env -v "$PWD/infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+     caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17 \
+     caddy validate --config /etc/caddy/Caddyfile && rm /tmp/edge.env
+   ```
+
+4. `docker compose up -d --no-deps edge`. **Recria** o edge, e é inevitável: a
+   borda roda com `admin off`, sem `caddy reload`, e variável de ambiente só
+   entra em container novo. São alguns segundos sem resposta em `hml` também;
+   fora de sessão de teste do cliente.
+5. Criar no DNS `www` e `api` (A para o IP do passo 2, `proxied:false`).
+
+**Conferência depois, de fora** (ADR-0028, item 5): `hml.bichu.app/v1/health`
+200 e `hml.bichu.app/t/x` 404; `bichu.app/` 200 `text/html`;
+`bichu.app/v1/health` 200; `bichu.app/v1/docs` 404 sem pedir credencial;
+`tag.bichu.app/t/<código inexistente>` respondendo pela página do site;
+`tag.bichu.app/` 308 para `https://bichu.app/`; os quatro alvos de
+`infra/verificacao/associacao.yml` em 200.
+
+**Reverter:** voltar as cinco linhas do passo 2 ao valor anterior
+(`HOSTS_EXTRA_APP=, https://bichu.app, https://tag.bichu.app` e sem as `SITE_*`)
+e repetir o passo 4.
 
 ---
 

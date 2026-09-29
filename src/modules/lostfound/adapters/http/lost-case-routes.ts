@@ -39,6 +39,7 @@ import {
   type CentroDoAlcance,
 } from '../../domain/previa-do-alcance.js';
 import { rotuloDaArea } from '../../domain/abertura-do-caso.js';
+import { linksDoCaso } from '../../domain/projecao-publica-do-caso.js';
 import type { DisparoGravado } from '../../ports/registro-de-disparos.js';
 import type {
   CandidatoDecidido,
@@ -271,7 +272,10 @@ function comoRespostaDoCaso(
   { caso, alerta }: CasoComAlerta,
   baseDaWeb: AbsoluteUrl,
 ): Record<string, unknown> {
-  const base = baseDaWeb.replace(/\/$/, '');
+  // Um montador só para os links do caso, o mesmo das rotas públicas. Enquanto
+  // eram dois, este saía em `/c/`, que é a conversa do achador (ADR-0017), e o
+  // link compartilhado pelo tutor abria a página errada.
+  const links = linksDoCaso(baseDaWeb, caso.shareToken);
   return {
     id: caso.id,
     pet_id: caso.petId,
@@ -287,8 +291,8 @@ function comoRespostaDoCaso(
     alert: comoRespostaDoAlerta(caso, alerta),
     candidate_count: 0,
     unread_message_count: 0,
-    share_url: `${base}/c/${caso.shareToken}`,
-    poster_url: `${base}/cartaz/${caso.shareToken}`,
+    share_url: links.shareUrl,
+    poster_url: links.posterUrl,
     closed_at: caso.closedAt === null ? null : caso.closedAt.toISOString(),
     resolution:
       caso.closureOutcome === null

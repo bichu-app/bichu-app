@@ -1,0 +1,33 @@
+---
+// Rodape do institucional, em Carmim, com Instagram @bichu.app e oi@bichu.app.
+import IconeInstagram from './IconeInstagram.astro';
+import IconeEmail from './IconeEmail.astro';
+import lockup from '../assets/marca/lockup-claro.svg';
+import { CONTATO, MARCA, RODAPE } from '../conteudo/comum.ts';
+---
+<span class="divisor-onda divisor-onda--carmim" aria-hidden="true"></span>
+<footer class="rodape">
+  <div class="rodape__colunas">
+    <div class="rodape__coluna">
+      <img class="rodape__lockup" src={lockup.src} alt={MARCA.nome} width={lockup.width} height={lockup.height} loading="lazy" />
+      <p class="texto-pequeno">{MARCA.descritor}</p>
+    </div>
+    {RODAPE.colunas.map((coluna) => (
+      <div class="rodape__coluna">
+        <h2 class="rodape__titulo sobretitulo">{coluna.titulo}</h2>
+        <ul>
+          {coluna.links.map((l) => <li><a class="link" href={l.href}>{l.texto}</a></li>)}
+        </ul>
+      </div>
+    ))}
+  </div>
+  <div class="rodape__contato">
+    <a class="link" href={CONTATO.instagram.url} target="_blank" rel="noopener noreferrer" aria-label={RODAPE.instagramRotulo}>
+      <IconeInstagram /><span>{CONTATO.instagram.usuario}</span>
+    </a>
+    <a class="link" href={`mailto:${CONTATO.email}`} aria-label={RODAPE.emailRotulo}>
+      <IconeEmail /><span>{CONTATO.email}</span>
+    </a>
+  </div>
+  <p class="rodape__legal texto-pequeno">{RODAPE.legal}</p>
+</footer>

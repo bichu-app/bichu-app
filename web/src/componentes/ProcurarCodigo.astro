@@ -1,0 +1,23 @@
+---
+// Tela 400 de /t/ (UX F4.5, frame 228:31): o codigo digitado volta no campo, e
+// "Procurar este codigo" funciona sem JavaScript (GET em /t?codigo=).
+import Estado from './Estado.astro';
+import RegistrarAchado from './RegistrarAchado.astro';
+import { TAG } from '../conteudo/tag.ts';
+interface Props { codigo: string }
+const { codigo } = Astro.props;
+---
+<Estado icone="edit" titulo={TAG.malformadoTitulo}>
+  <p class="estado__texto">{TAG.malformadoTexto}</p>
+</Estado>
+<form class="formulario" method="get" action="/t">
+  <div class="campo">
+    <label class="campo__rotulo" for="codigo">{TAG.campoCodigo}</label>
+    <input class="campo__entrada" id="codigo" name="codigo" type="text" value={codigo} required
+      autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="codigo-ajuda" />
+    <p class="campo__ajuda" id="codigo-ajuda">{TAG.ajudaCodigo}</p>
+  </div>
+  <button class="botao botao--primario botao--largo" type="submit">{TAG.botaoProcurar}</button>
+</form>
+<hr class="separador" />
+<RegistrarAchado destaque={false} />

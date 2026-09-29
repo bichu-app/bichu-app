@@ -1,0 +1,13 @@
+---
+// Icone de interface: Material Symbols Rounded embutido como SVG, sempre
+// decorativo (o texto ao lado e que diz o que ele significa). A cor e a do
+// texto em volta (`fill: currentColor`, em base.css).
+import { SIMBOLOS, type NomeDoSimbolo } from '../icones/simbolos.ts';
+
+interface Props {
+  nome: NomeDoSimbolo;
+  class?: string;
+}
+const { nome, class: classe } = Astro.props;
+---
+<svg class:list={['icone', classe]} viewBox="0 -960 960 960" aria-hidden="true" focusable="false"><path d={SIMBOLOS[nome]} /></svg>

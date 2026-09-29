@@ -1,0 +1,219 @@
+---
+// /t/{code}: a pagina de quem achou o pet (F4). Renderizada no servidor a cada
+// requisicao (ADR-0028, itens 1 e 2): o HTML ja sai com o pet, e o aviso e um
+// <form method="post"> que funciona sem JavaScript (D31).
+//
+//   GET  -> resolveTagCode             (GET  /v1/tags/{code})
+//   POST -> createFoundReportFromTag   (POST /v1/tags/{code}/found-reports)
+//
+// Quem acha nunca ve telefone nem endereco do tutor: a pagina so mostra o que
+// `TagResolution` traz, e o contrato nao traz nenhum dos dois.
+export const prerender = false;
+
+import Publica from '../../layouts/Publica.astro';
+import Estado from '../../componentes/Estado.astro';
+import Icone from '../../componentes/Icone.astro';
+import BotaoEnviar from '../../componentes/BotaoEnviar.astro';
+import RegistrarAchado from '../../componentes/RegistrarAchado.astro';
+import ProcurarCodigo from '../../componentes/ProcurarCodigo.astro';
+import EmBreveLojas from '../../componentes/EmBreveLojas.astro';
+import ScriptDeEnvio from '../../componentes/ScriptDeEnvio.astro';
+import { clienteDaApi, executar } from '../../api/chamar.ts';
+import { telaAoAbrir, telaAoAvisar, type TelaAoAbrir, type TelaAoAvisar } from '../../dominio/telas-da-tag.ts';
+import { descricaoDoPet, desde, espera, frase } from '../../dominio/texto-do-pet.ts';
+import { origemDaMidia, fotoPermitida } from '../../dominio/midia.ts';
+import { TAG } from '../../conteudo/tag.ts';
+import { AVISO_RECOMPENSA } from '../../conteudo/comum.ts';
+import { COMUM_PUBLICO } from '../../conteudo/conta.ts';
+
+const codigo = Astro.params.code ?? '';
+let endereco: string;
+try {
+  endereco = `${Astro.url.host}${decodeURIComponent(Astro.url.pathname)}`;
+} catch {
+  endereco = `${Astro.url.host}${Astro.url.pathname}`;
+}
+
+Astro.response.headers.set('Cache-Control', 'no-store');
+Astro.response.headers.set('X-Robots-Tag', 'noindex, nofollow');
+
+let cliente: string | undefined;
+try {
+  cliente = Astro.clientAddress;
+} catch {
+  cliente = undefined;
+}
+const api = clienteDaApi(Astro.request, cliente);
+
+let aoAbrir: TelaAoAbrir | null = null;
+let aoAvisar: TelaAoAvisar | null = null;
+// A chave de idempotencia nasce quando o formulario e desenhado; num novo envio
+// depois de falha, a MESMA chave volta, e a API devolve o aviso original em vez
+// de avisar o tutor duas vezes.
+let chave: string = crypto.randomUUID();
+
+if (Astro.request.method === 'POST') {
+  const formulario = await Astro.request.formData().catch(() => null);
+  const enviada = formulario?.get('chave');
+  if (typeof enviada === 'string' && enviada.length > 0) chave = enviada;
+  const r = await executar(() =>
+    api.POST('/tags/{code}/found-reports', {
+      params: { path: { code: codigo }, header: { 'Idempotency-Key': chave } },
+      body: {},
+    }),
+  );
+  aoAvisar = telaAoAvisar(r);
+  Astro.response.status = aoAvisar.http;
+} else {
+  const r = await executar(() => api.GET('/tags/{code}', { params: { path: { code: codigo } } }));
+  aoAbrir = telaAoAbrir(r);
+  Astro.response.status = aoAbrir.http;
+}
+
+const tela = aoAvisar ?? aoAbrir;
+if (!tela) throw new Error('sem tela');
+if (tela.http >= 500) Astro.response.headers.set('Retry-After', '10');
+
+// A foto do pet vem da midia publica (img.bichu.app), e so essa origem entra na CSP.
+const midia = origemDaMidia(process.env.MEDIA_PUBLIC_BASE_URL);
+if (midia) Astro.csp?.insertDirective(`img-src 'self' ${midia}`);
+
+const resolucao = tela.tela === 'pet' ? tela.resolucao : null;
+const pet = resolucao?.pet ?? null;
+const foto = pet ? fotoPermitida(pet.photo_url, midia) : null;
+if (pet?.photo_url && !foto) {
+  process.stderr.write(`${JSON.stringify({ ts: new Date().toISOString(), aviso: 'foto do pet fora de MEDIA_PUBLIC_BASE_URL; mostrada como sem foto', rota: '/t/' })}\n`);
+}
+const perdido = resolucao?.lost?.is_lost ? desde(resolucao.lost.since) : undefined;
+const cuidados = frase(pet?.care_notes);
+const marcas = frase(pet?.distinctive_marks);
+const correlacao = tela.tela === 'erro' ? tela.correlationId : null;
+---
+<Publica titulo={TAG.tituloDaPagina} descricao={TAG.descricaoDaPagina}>
+  {tela.tela === 'pet' && pet && (
+    <>
+      {perdido !== undefined && (
+        <div class="faixa-perdido" role="note">
+          <Icone nome="info" />
+          <p class="faixa-perdido__titulo">{TAG.perdidoTitulo}</p>
+          <p class="faixa-perdido__texto">{TAG.perdidoTexto(pet.display_name, perdido)}</p>
+        </div>
+      )}
+      <section class="pet" aria-labelledby="pet-nome">
+        {foto && <img class="pet__foto" src={foto} alt={TAG.altFoto(pet.display_name)} width="256" height="282" fetchpriority="high" />}
+        <h1 class="pet__nome" id="pet-nome">{pet.display_name}</h1>
+        <p class="pet__sinais">{descricaoDoPet(pet)}{marcas && <> {marcas}</>}</p>
+        {!foto && <p class="pet__sinais">{TAG.semFoto}</p>}
+        {cuidados && (
+          <div class="caixa pet__cuidados">
+            <h2 class="caixa__titulo">{TAG.cuidadosTitulo(pet.display_name)}</h2>
+            <p class="caixa__rotulo">{TAG.cuidadosAtribuicao(pet.display_name)}</p>
+            <p class="pet__cuidados-texto">{cuidados}</p>
+          </div>
+        )}
+      </section>
+      <div class="garantia-contato">
+        <Icone nome="lock" />
+        <p>{TAG.garantiaContato}</p>
+      </div>
+      <p class="aviso-recompensa">{AVISO_RECOMPENSA}</p>
+    </>
+  )}
+
+  {tela.tela === 'avisado' && (
+    <>
+      <Estado icone="check_circle" tom="sucesso" titulo={TAG.avisadoTitulo(tela.nome)}>
+        <p class="estado__texto">{TAG.avisadoTexto}</p>
+      </Estado>
+      <p class="aviso-recompensa">{AVISO_RECOMPENSA}</p>
+      <div class="caixa convite-app">
+        <p>{TAG.conviteApp}</p>
+        <EmBreveLojas />
+      </div>
+    </>
+  )}
+
+  {tela.tela === 'recebido' && (
+    <>
+      <Estado icone="check_circle" tom="sucesso" titulo={TAG.recebidoTitulo}>
+        <p class="estado__texto">{TAG.recebidoTexto}</p>
+        <p class="estado__texto">{TAG.emPerigo}</p>
+      </Estado>
+      <p class="aviso-recompensa">{AVISO_RECOMPENSA}</p>
+    </>
+  )}
+
+  {tela.tela === 'nao-avisou' && (
+    <Estado icone="error" tom="alerta" titulo={TAG.naoAvisouTitulo}>
+      <p class="estado__texto">{TAG.naoAvisouTexto}</p>
+      <div class="caixa caixa--centro">
+        <p class="caixa__rotulo">{TAG.guardeEndereco}</p>
+        <p class="endereco">{endereco}</p>
+      </div>
+    </Estado>
+  )}
+
+  {tela.tela === 'nao-abriu' && (
+    <Estado icone="wifi_off" titulo={TAG.naoAbriuTitulo}>
+      <p class="estado__texto">{TAG.naoAbriuTexto}</p>
+      <div class="caixa caixa--centro"><p class="endereco">{endereco}</p></div>
+    </Estado>
+  )}
+
+  {tela.tela === 'fora-do-ar' && (
+    <Estado icone="schedule" titulo={TAG.foraDoArTitulo}>
+      <p class="estado__texto">{TAG.foraDoArTexto}</p>
+      <div class="caixa caixa--centro"><p class="endereco">{endereco}</p></div>
+    </Estado>
+  )}
+
+  {tela.tela === 'codigo-malformado' && <ProcurarCodigo codigo={codigo} />}
+
+  {tela.tela === 'codigo-inexistente' && (
+    <Estado icone="search_off" titulo={TAG.inexistenteTitulo}>
+      <p class="estado__texto">{TAG.inexistenteTexto}</p>
+    </Estado>
+  )}
+
+  {tela.tela === 'tag-desativada' && <Estado icone="link_off" titulo={TAG.desativadaTitulo} />}
+
+  {tela.tela === 'espere' && (
+    <Estado icone="hourglass" titulo={TAG.espereTitulo}>
+      <p class="estado__texto">{TAG.espereTexto(espera(tela.esperaSegundos))}</p>
+    </Estado>
+  )}
+
+  {tela.tela === 'erro' && (
+    <Estado icone="error" titulo={COMUM_PUBLICO.erroTitulo}>
+      <p class="estado__texto">{correlacao ? COMUM_PUBLICO.erroTexto : TAG.naoAbriuTexto}</p>
+      {correlacao && <p class="estado__codigo"><code>{correlacao}</code></p>}
+    </Estado>
+  )}
+
+  <Fragment slot="acao">
+    {tela.tela === 'pet' && (
+      <div class="acao">
+        <form method="post" data-envio>
+          <input type="hidden" name="chave" value={chave} />
+          <BotaoEnviar rotulo={resolucao?.already_notified ? TAG.botaoAvisarDeNovo : TAG.botaoAvisar} enviando={TAG.enviando} />
+        </form>
+        <p class="acao__nota">{TAG.abaixoDoBotao}</p>
+      </div>
+    )}
+    {tela.tela === 'nao-avisou' && (
+      <div class="acao">
+        <form method="post" data-envio>
+          <input type="hidden" name="chave" value={chave} />
+          <BotaoEnviar rotulo={TAG.tentarDeNovo} enviando={TAG.enviando} />
+        </form>
+      </div>
+    )}
+    {(tela.tela === 'nao-abriu' || tela.tela === 'fora-do-ar' || tela.tela === 'erro') && (
+      <div class="acao">
+        <a class="botao botao--primario botao--largo" href={Astro.url.pathname}>{TAG.tentarDeNovo}</a>
+      </div>
+    )}
+    {(tela.tela === 'codigo-inexistente' || tela.tela === 'tag-desativada' || tela.tela === 'espere') && <RegistrarAchado />}
+  </Fragment>
+  {(tela.tela === 'pet' || tela.tela === 'nao-avisou') && <ScriptDeEnvio />}
+</Publica>

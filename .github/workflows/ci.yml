@@ -937,6 +937,47 @@ jobs:
       - name: os quatro /.well-known respondem pela borda, sem redirecionamento
         run: python3 infra/verificacao/verificar_borda_local.py http://localhost:3000 .
 
+      # OS HOSTS DO SITE PELA BORDA (ADR-0028, item 5). Os blocos do site no
+      # Caddyfile tem como padrao `site.localhost`, `tag.localhost` e
+      # `www.localhost`, na porta 80 de dentro da borda, que esta pilha nao
+      # publica: a requisicao sai do container `web`, atravessa o Caddy de
+      # verdade e chega ao `web` e a `api` reais. A tabela e a lista estao em
+      # `infra/verificacao/verificar-hosts-do-site.mjs`.
+      #
+      # A isca vem primeiro: a mesma tabela contra a porta da ORIGEM DA
+      # APLICACAO (3000), onde nenhum host do site existe, PRECISA reprovar.
+      # Se passar, o script parou de distinguir um host do outro.
+      - name: a borda entrega cada host do site pela tabela do ADR-0028
+        run: |
+          if docker compose exec -T web node --input-type=module - http://edge:3000 \
+              < infra/verificacao/verificar-hosts-do-site.mjs > isca.out 2>&1; then
+            cat isca.out
+            echo "::error::a tabela de hosts APROVOU contra a origem da aplicacao, onde os hosts do site nao existem. A verificacao parou de enxergar"
+            exit 1
+          fi
+          echo "isca reprovada, como devia ($(tail -1 isca.out))"
+          docker compose exec -T web node --input-type=module - http://edge:80 \
+            < infra/verificacao/verificar-hosts-do-site.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Em desenvolvimento os quatro papeis dividem `localhost:3000`, e o que
+      # nao e rota da API vai para o site (`BORDA_RESTO_DA_APP=site` no
+      # `.env.example`). Nos hosts hospedados da API o padrao e `fechado`, e
+      # isso e conferido de fora pelo passo 14 do roteiro.
+      - name: em desenvolvimento, localhost entrega API e site juntos
+        run: |
+          r=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code} %{content_type}' http://localhost:3000/)
+          echo "localhost:3000/ -> $r"
+          case "$r" in "200 text/html"*) ;; *) echo "::error::o catch-all local nao chegou ao site: '$r'. Ver BORDA_RESTO_DA_APP"; exit 1 ;; esac
+          r=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code} %{content_type}' http://localhost:3000/v1/health)
+          echo "localhost:3000/v1/health -> $r"
+          case "$r" in "200 application/json"*) ;; *) echo "::error::/v1 deixou de ir para a API no host local: '$r'"; exit 1 ;; esac
+          # D33: a rota administrativa e 404 da borda fora do host do backoffice,
+          # tambem no host da API. Vale igual em hml e producao, que importam o
+          # mesmo trecho `gateway_v1`.
+          r=$(curl -sS -o /dev/null --max-time 10 -w '%{http_code} %{content_type}' http://localhost:3000/v1/admin/qualquer)
+          echo "localhost:3000/v1/admin/qualquer -> $r"
+          case "$r" in "404 text/plain"*) ;; *) echo "::error::/v1/admin chegou alem da borda no host da API: '$r'"; exit 1 ;; esac
+
       - name: api e worker rodam a MESMA imagem
         # A frase "uma imagem, dois pontos de entrada" (ADR-0001) so vale
         # enquanto for verdade no runtime. Aqui ela vira verificacao.
@@ -1768,15 +1809,206 @@ jobs:
       - name: isca de isolamento da pilha de integracao
         run: npm run verify:isolamento-da-pilha
 
+  # ===========================================================================
+  # A IMAGEM DO SITE (web/), decisao do cliente de 23/09/2026 e ADR-0028
+  # ===========================================================================
+  # O site (Astro com renderizacao no servidor, Node na 4321) roda na mesma VM,
+  # em imagem SEPARADA da API. Este job constroi essa
+  # imagem pelo MESMO caminho que o host usa (`docker compose build web`) e a
+  # sobe com as MESMAS restricoes que o compose declara, porque restricao que so
+  # vale no YAML e restricao que ninguem viu funcionar.
+  #
+  # NAO PUBLICA EM REGISTRY, e nao e esquecimento: a API tambem nao publica. O
+  # mecanismo de hoje e o do roteiro (`infra/roteiro-provisionamento.md`, passo
+  # 7): o repositorio vai para o host e o compose constroi la. Inventar registry
+  # so para o site daria dois mecanismos de implantacao para uma maquina so.
+  #
+  # SEM FILTRO DE CAMINHO, pelo mesmo motivo do job `isolamento`: `skipped` e o
+  # que o `portao` recusa.
+  #
+  # OS PORTOES DO ITEM 10 DO ADR-0028, que entraram com as paginas reais (site
+  # v1, 23/09/2026), rodam ANTES da imagem, cada um com a propria isca:
+  #   10.1 `astro check`;
+  #   10.2 tipos e cliente do contrato regenerados e comparados (`verify:api`,
+  #        o mesmo padrao do admin/), com isca;
+  #   10.3 tokens do site regenerados e comparados, com isca, e o varredor de
+  #        valor solto em web/src, com iscas;
+  #   10.4 orcamento de 30 KB por rota, contra o mock gerado do contrato, com
+  #        isca (um teto de 1 KB PRECISA reprovar) e reprovando rota sem medicao;
+  #   10.6 cabecalho por rota e 10.7 o toque unico sem JavaScript, na suite
+  #        de ponta a ponta (Playwright), com axe-core em cada pagina e estado;
+  #   10.8 a imagem construida e o container saudavel (os passos abaixo).
+  # O QUE AINDA FALTA: 10.5 (LCP, CLS e INP em 4G simulado). Esta registrado
+  # na entrega do site v1 e nao e cobrado aqui.
+  web:
+    name: imagem do site constroi, sobe restrita e serve
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: rapidos
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: dependencias do site
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      # 10.2: nenhum tipo de resposta escrito a mao. Regenera e compara com o
+      # versionado, e a isca (contrato alterado) PRECISA reprovar.
+      - name: tipos e cliente do contrato (verify:api, com isca)
+        working-directory: web
+        run: npm run verify:api
+
+      # 10.3: tokens.g.css regenerado de design/tokens.json e comparado; a isca
+      # muda raspberry.700 numa copia e PRECISA reprovar nomeando o arquivo.
+      # A forma da esteira (arvore limpa) confere tambem contra o HEAD.
+      - name: tokens do site (verify:tokens, com isca)
+        working-directory: web
+        run: |
+          npm run verify:tokens
+          node scripts/gerar-tokens-css.mjs
+          if ! git diff --exit-code -- src/styles/tokens.g.css; then
+            echo "::error::web/src/styles/tokens.g.css divergiu de design/tokens.json. Rode 'npm run generate:tokens' de dentro de web/ e versione o resultado; se o valor gerado esta errado, o errado e o token"
+            exit 1
+          fi
+
+      - name: nenhum valor solto em web/src (com iscas)
+        working-directory: web
+        run: npm run verify:valores-soltos
+
+      - name: astro check
+        working-directory: web
+        run: npm run check
+
+      - name: testes de unidade do site
+        working-directory: web
+        run: npm run test:unidade
+
+      - name: build do site
+        working-directory: web
+        run: npm run build
+
+      # 10.4. A isca primeiro: com teto de 1 KB o orcamento PRECISA reprovar.
+      - name: orcamento por rota (isca, depois o de verdade)
+        working-directory: web
+        run: |
+          if ORCAMENTO_TETO=1024 node scripts/orcamento.mjs > isca-orcamento.out 2>&1; then
+            echo "::error::o orcamento APROVOU com teto de 1 KB. Ele parou de medir"; cat isca-orcamento.out; exit 1
+          fi
+          grep -q 'ESTOUROU' isca-orcamento.out || { echo "::error::a isca do orcamento reprovou pelo motivo errado"; cat isca-orcamento.out; exit 1; }
+          npm run verify:orcamento | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: navegador da suite de ponta a ponta
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      # 10.6 e 10.7: cabecalho por rota, o aviso pela tag concluido com o
+      # JavaScript desligado, todos os estados de /t/, /verificar-email e
+      # /redefinir-senha contra o mock gerado do contrato, e axe-core.
+      - name: ponta a ponta (Playwright), com e sem JavaScript
+        working-directory: web
+        run: npm run test:e2e
+
+      - name: o commit de que esta imagem vai sair
+        run: echo "BUILD_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      # A isca primeiro: sem BUILD_COMMIT o build do site PRECISA reprovar,
+      # como o da API. Se passar, o portao do Dockerfile parou de valer.
+      - name: isca -- sem commit, o build do site reprova
+        run: |
+          if docker build --quiet web >/dev/null 2>isca.err; then
+            echo "::error::web/Dockerfile construiu SEM BUILD_COMMIT. A conferencia do commit parou de valer"
+            exit 1
+          fi
+          grep -q 'BUILD_COMMIT nao foi injetado' isca.err || {
+            echo "::error::o build sem commit reprovou, mas por outro motivo:"; cat isca.err; exit 1; }
+          echo "isca reprovada pelo motivo certo"
+
+      # O compose precisa renderizar para construir, e ele exige quatro chaves
+      # com `:?` que o site nem usa. Valores descartaveis, num arquivo fora do
+      # repositorio: o site nao le `.env`, e este job prova isso abaixo.
+      - name: constroi pelo compose, como no host
+        run: |
+          printf '%s\n' POSTGRES_PASSWORD=x OBJECT_STORAGE_ACCESS_KEY_ID=x \
+            OBJECT_STORAGE_SECRET_ACCESS_KEY=x OBJECT_STORAGE_KMS_KEY=x > "$RUNNER_TEMP/web.env"
+          docker compose --env-file "$RUNNER_TEMP/web.env" build web
+          docker compose --env-file "$RUNNER_TEMP/web.env" up -d --wait --no-deps web
+
+      - name: sobe com as restricoes declaradas, e sem segredo nenhum
+        run: |
+          c=bichu-web-1
+          falhas=0
+          confere() { # descricao do defeito, valor obtido, valor esperado
+            if [ "$2" != "$3" ]; then echo "::error::$1 (veio '$2', esperado '$3')"; falhas=1; fi
+          }
+          confere "o site nao roda como o usuario sem privilegio da imagem" "$(docker inspect $c --format '{{.Config.User}}')" node
+          confere "a raiz do container do site nao e somente leitura" "$(docker inspect $c --format '{{.HostConfig.ReadonlyRootfs}}')" true
+          confere "o site nao derrubou todas as capacidades" "$(docker inspect $c --format '{{.HostConfig.CapDrop}}')" "[ALL]"
+          confere "o limite de memoria do site nao e os 96 MB do ADR-0028" "$(docker inspect $c --format '{{.HostConfig.Memory}}')" 100663296
+          confere "o site publica porta no hospedeiro; so a borda pode alcanca-lo" "$(docker inspect $c --format '{{range $p, $b := .NetworkSettings.Ports}}{{if $b}}{{$p}} {{end}}{{end}}')" ""
+          # LISTA FECHADA do que o site pode receber de ambiente: o que a
+          # propria imagem declara, mais as quatro do ADR-0028 (item 9). Chave
+          # nova no container que nao esta aqui reprova, seja segredo ou nao --
+          # e e assim que um `env_file: [.env]` acrescentado por engano aparece.
+          da_imagem=$(docker image inspect bichu-web:local --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sed '/^$/d')
+          if [ -z "$da_imagem" ]; then
+            echo "::error::nao consegui ler o ambiente da imagem; sem lista, a conferencia fica cega"
+            exit 1
+          fi
+          permitidas=$(printf '%s\n' "$da_imagem" API_INTERNAL_URL MEDIA_PUBLIC_BASE_URL SITE_BASE_URL NODE_OPTIONS | sort -u)
+          recebidas=$(docker inspect $c --format '{{range .Config.Env}}{{println .}}{{end}}' | cut -d= -f1 | sed '/^$/d' | sort -u)
+          sobra=$(comm -13 <(printf '%s\n' "$permitidas") <(printf '%s\n' "$recebidas"))
+          confere "o site recebeu variavel fora da lista do ADR-0028" "$(printf '%s\n' "$sobra" | tr '\n' ' ' | sed 's/ *$//')" ""
+          echo "ambiente do site: $(printf '%s\n' "$recebidas" | tr '\n' ' ')"
+          if [ "$falhas" != 0 ]; then exit 1; fi
+
+      - name: serve a pagina inicial, a rota do servidor (503 sem API) e 404 de verdade
+        run: |
+          # Pelo NOME DO SERVICO na rede do compose (`web:4321`), que e como a
+          # borda o alcanca. O cliente e o Node da propria imagem: nenhuma
+          # imagem a mais so para testar.
+          # `docker exec` e nao `docker compose exec`: o compose confere o
+          # `env_file: [.env]` dos OUTROS servicos ate para um `exec`, e este
+          # job nao tem `.env` -- de proposito, o site nao usa.
+          docker exec bichu-web-1 node --input-type=module -e '
+            const casos = [
+              ["/", 200, "text/html", "public, max-age=0, must-revalidate"],
+              ["/healthz", 200, "text/plain", "no-store"],
+              // Sem a API no ar (este job sobe so o site), /t/ responde 503 com
+              // a pagina de tentar de novo, nunca 200 vazio (ADR-0028, item 3).
+              ["/t/CODIGO-DE-TESTE", 503, "text/html", "no-store"],
+              ["/nao-existe-'"$GITHUB_RUN_ID"'", 404, null, "no-store"],
+            ];
+            let falhas = 0;
+            for (const [caminho, status, tipo, cache] of casos) {
+              const r = await fetch("http://web:4321" + caminho, { redirect: "manual" });
+              const t = r.headers.get("content-type") ?? "", c = r.headers.get("cache-control") ?? "";
+              const csp = r.headers.get("content-security-policy") ?? "";
+              const erros = [];
+              if (r.status !== status) erros.push(`status ${r.status}, esperado ${status}`);
+              if (tipo && !t.startsWith(tipo)) erros.push(`tipo ${t}, esperado ${tipo}`);
+              if (c !== cache) erros.push(`cache-control "${c}", esperado "${cache}"`);
+              if (!csp.includes("frame-ancestors")) erros.push("sem frame-ancestors (ADR-0028, item 7)");
+              console.log(`${erros.length ? "::error::" : ""}${caminho} -> ${r.status} ${t} | ${c}${erros.length ? " | " + erros.join("; ") : ""}`);
+              falhas += erros.length ? 1 : 0;
+            }
+            process.exit(falhas ? 1 : 0);
+          '
+
   portao:
     name: portao
     runs-on: ubuntu-latest
-    needs: [rapidos, codigo, contrato, integracao, isolamento, app, apk, tokens, contraste, sonar]
+    needs: [rapidos, codigo, contrato, integracao, isolamento, web, app, apk, tokens, contraste, sonar]
     if: always()
     steps:
       - name: consolidar
         run: |
-          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.isolamento.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
+          estados="${{ needs.rapidos.result }} ${{ needs.codigo.result }} ${{ needs.contrato.result }} ${{ needs.integracao.result }} ${{ needs.isolamento.result }} ${{ needs.web.result }} ${{ needs.app.result }} ${{ needs.apk.result }} ${{ needs.tokens.result }} ${{ needs.contraste.result }} ${{ needs.sonar.result }}"
           echo "estados: $estados"
           for e in $estados; do
             case "$e" in

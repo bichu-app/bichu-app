@@ -110,11 +110,16 @@ const INTEGRACAO = join('tests', 'integration');
  * das duas pontas ao mesmo tempo. Partindo da raiz, mover para qualquer lugar
  * acusa.
  *
- * O que fica de fora aqui nao hospeda teste TypeScript que alguem espere rodar:
- * dependencia, saida de build, o app Flutter (Dart) e o `.git`. Os testes de
- * ponta a ponta do Cypress sao `*.cy.ts` e nao entram nesta conta.
+ * O que fica de fora aqui nao hospeda teste TypeScript que alguem espere rodar
+ * POR ESTA suite: dependencia, saida de build, o app Flutter (Dart) e o `.git`.
+ * `web/` entra na mesma conta (ADR-0028): e um subprojeto fechado, com runner e
+ * cobertura proprios (`make verificar-site`, que roda `cd web && npm run
+ * test:unidade`). Os testes do site vivem em `web/tests/`, fora de `src/` e de
+ * `tests/integration/`, e sao rodados la, nao por esta suite da raiz -- pela
+ * mesma razao que os do app Flutter nao sao. Os testes de ponta a ponta do
+ * Cypress sao `*.cy.ts` e nao entram nesta conta.
  */
-const NAO_VARRER = new Set(['node_modules', '.git', 'dist', 'coverage', 'app', 'build', '.dart_tool']);
+const NAO_VARRER = new Set(['node_modules', '.git', 'dist', 'coverage', 'app', 'web', 'build', '.dart_tool']);
 /** Onde o placar e escrito para ser LIDO, e nao adivinhado. */
 const RELATORIO = join(COMPILADO, 'unitaria.tap');
 

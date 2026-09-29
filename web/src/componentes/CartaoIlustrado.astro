@@ -1,0 +1,12 @@
+---
+// Cartao no modelo "Evento no bairro" da folha (referencia/07).
+import { Image } from 'astro:assets';
+import Icone from './Icone.astro';
+import imagem from '../assets/ilustracoes/ilustracao-evento-no-bairro.png';
+interface Props { titulo: string; href: string }
+const { titulo, href } = Astro.props;
+---
+<a class="cartao-ilustrado" href={href}>
+  <Image class="cartao-ilustrado__imagem" src={imagem} alt="" widths={[360, 720]} sizes="360px" format="webp" loading="lazy" />
+  <span class="cartao-ilustrado__titulo">{titulo} <Icone nome="chevron_right" /></span>
+</a>

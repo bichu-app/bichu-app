@@ -1,0 +1,56 @@
+---
+// Casca de toda pagina: idioma, metadados, SEO e Open Graph (ADR-0028, itens 2 e 11).
+// Nenhuma fonte web, nenhum script de terceiro. Os estilos entram pelo layout
+// de cada familia de pagina (Institucional ou Publica).
+import '../styles/tokens.g.css';
+import '../styles/base.css';
+import favicon from '../assets/marca/simbolo-reduzido.svg?url';
+import { MARCA } from '../conteudo/comum.ts';
+
+interface Props {
+  titulo: string;
+  descricao: string;
+  /** Institucional: true. Rota com token ou de uso unico, 404 e erro: false. */
+  indexar: boolean;
+  /** Tema escuro automatico: so nas paginas publicas, que tem desenho escuro. */
+  temaAutomatico?: boolean;
+  /** Imagem da previa de link; so no institucional (ADR-0028, item 2: `/t/` e generica). */
+  imagemOg?: { src: string; largura: number; altura: number; alt: string };
+}
+
+const { titulo, descricao, indexar, temaAutomatico = false, imagemOg } = Astro.props;
+const canonico = new URL(Astro.url.pathname, Astro.site).href;
+const tituloCompleto = titulo === MARCA.nome ? `${MARCA.nome}, ${MARCA.descritor}` : `${titulo} · ${MARCA.nome}`;
+const imagemAbsoluta = imagemOg ? new URL(imagemOg.src, Astro.site).href : null;
+---
+<!doctype html>
+<html lang="pt-BR" data-tema={temaAutomatico ? 'automatico' : undefined}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{tituloCompleto}</title>
+    <meta name="description" content={descricao} />
+    <meta name="robots" content={indexar ? 'index, follow' : 'noindex, nofollow'} />
+    {temaAutomatico && <meta name="color-scheme" content="light dark" />}
+    {indexar && <link rel="canonical" href={canonico} />}
+    <link rel="icon" href={favicon} type="image/svg+xml" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={MARCA.nome} />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:title" content={tituloCompleto} />
+    <meta property="og:description" content={descricao} />
+    {indexar && <meta property="og:url" content={canonico} />}
+    {imagemAbsoluta && imagemOg && (
+      <>
+        <meta property="og:image" content={imagemAbsoluta} />
+        <meta property="og:image:width" content={String(imagemOg.largura)} />
+        <meta property="og:image:height" content={String(imagemOg.altura)} />
+        <meta property="og:image:alt" content={imagemOg.alt} />
+        <meta name="twitter:card" content="summary_large_image" />
+      </>
+    )}
+  </head>
+  <body>
+    <slot />
+  </body>
+</html>

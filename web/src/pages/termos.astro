@@ -1,0 +1,14 @@
+---
+// Casca juridica com o rascunho v0.3. noindex ate o texto final (pre-requisito do cliente).
+import Institucional from '../layouts/Institucional.astro';
+import { Content } from '../conteudo/juridico/termos.md';
+import { LEGAL } from '../conteudo/legal.ts';
+const T = LEGAL.termos;
+---
+<Institucional titulo={T.tituloDaPagina} descricao={T.descricao} atual="/termos" indexar={false}>
+  <section class="secao legal" aria-labelledby="legal-titulo">
+    <p class="legal__aviso" role="note"><strong>{LEGAL.aviso}</strong> <span>{LEGAL.versao}</span></p>
+    <h1 class="titulo-display" id="legal-titulo">{T.titulo}</h1>
+    <div class="legal__texto"><Content /></div>
+  </section>
+</Institucional>

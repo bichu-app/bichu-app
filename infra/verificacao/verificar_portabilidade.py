@@ -30,7 +30,19 @@ from pathlib import Path
 # workflows) e contrato (api/openapi.yaml) tem URL por natureza e ficam de fora:
 # e justamente para la que o hostname deve ser empurrado. Varrer configuracao
 # faria o portao acusar o proprio remedio.
-RAIZES_VARRIDAS = ("src/", "migrations/", "app/lib/", "web/")
+#
+# O SITE E VARRIDO EM `web/src/`, e nao em `web/` inteiro. O back-end varre
+# `src/` e deixa de fora os testes (que vivem em `tests/`, fora das raizes), a
+# configuracao e o `dist/`. O site e um subprojeto fechado (ADR-0028) que nao
+# tem essa separacao geografica: os testes (`web/tests/`), a configuracao
+# (`web/*.config.*`, `web/astro.config.mjs`), os scripts de build e medicao
+# (`web/scripts/`), o servidor minimo de bootstrap (`web/servidor.mjs`) e a
+# saida de build (`web/dist/`) moram todos sob `web/`. Todos sao URL por
+# natureza -- host de mock local, base canonica afirmada em teste, namespace de
+# esquema -- e cairiam na mesma categoria que a configuracao do back-end, que ja
+# fica de fora. Varrer so `web/src/` poe o CODIGO da aplicacao do site na mesma
+# regra do `src/` do back-end, sem varrer o que no back-end tambem nao e varrido.
+RAIZES_VARRIDAS = ("src/", "migrations/", "app/lib/", "web/src/")
 
 # Dentro do codigo, o adaptador externo e onde falar com provedor e legitimo.
 ISENTOS = (
@@ -108,7 +120,18 @@ def motivo_anotado(linha: str) -> str | None:
     return marca.group(1) if marca is not None else None
 
 
+# Lockfile e gerado pelo gerenciador de pacotes e carrega, por natureza, a URL
+# do registro de onde cada pacote veio. Ele nao e codigo nosso e nao decide host
+# nenhum em tempo de execucao. Isento pelo NOME exato, e nao por extensao: um
+# `.json` qualquer numa raiz varrida continua varrido. (O `web/package-lock.json`
+# fica fora da raiz `web/src/` desde que a varredura do site foi estreitada para
+# ela, mas a isencao segue como defesa: um lockfile numa raiz varrida nao acusa.)
+ARQUIVOS_GERADOS = ("package-lock.json",)
+
+
 def isento(rel: str) -> bool:
+    if rel.rsplit("/", 1)[-1] in ARQUIVOS_GERADOS:
+        return True
     for padrao in ISENTOS:
         if padrao.endswith("/") and "*" not in padrao and rel.startswith(padrao):
             return True

@@ -1,0 +1,7 @@
+/* ISCA: cada linha abaixo e um valor solto que o varredor PRECISA acusar. */
+.a { color: #9E0B3A; }
+.b { background: rgb(158 11 58); }
+@media (min-width: 700px) { .c { display: none; } }
+.d { padding: 13px; }
+.e { border-color: white; }
+.f { color: var(--cor-action-fill); }
