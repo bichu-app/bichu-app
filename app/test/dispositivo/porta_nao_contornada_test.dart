@@ -653,7 +653,34 @@ const String _caminhoDasTelas = 'app/lib/telas';
 ///
 /// Medido pelo indice temporario que este portao usa, sobre a arvore de
 /// trabalho. Anterior: `cfba3eb42ecc9c32b91a500e7748fb50463a7b92`.
-const String _arvoreDasTelas = 'ed8f71b6479f15c4f9cfeb6fb727d090dbacab14';
+///
+/// Troca de 28/09, correcao da gaveta lateral (sem chave de issue no
+/// acionamento: o cliente reprovou o menu por escrito e a correcao saiu na
+/// hora): `telas/gaveta_de_secoes.dart` passou a mostrar so o submenu da secao
+/// atual, uma linha por item, e `telas/casca_com_abas.dart` deixou de montar a
+/// gaveta e o gatilho nas secoes sem sub-destino. Nada a ver com camera:
+/// nenhuma das duas toca em foto, e as telas do assistente de cadastro
+/// (`app/lib/telas/pet/`) seguem intocadas.
+///
+/// **Destravado na integracao de 28/09/2026 que juntou as duas correcoes
+/// acima na `development`** (sem chave de issue no acionamento: as duas
+/// sairam de achado do cliente). O motivo do bump e o MERGE em si: cada
+/// branch travou a arvore que ELA produziu -- `ed8f71b6` a do codigo da
+/// plaquinha, `587b9bb6` a da gaveta --, e a arvore que tem as duas dentro
+/// nao e nenhuma das duas. Os cinco arquivos que mudaram sao exatamente a
+/// uniao dos dois conjuntos (`escanear/mascara_do_codigo_da_tag.dart`,
+/// `escanear/codigo_lido_do_qr.dart`, `escanear/tela_leitor_de_qr.dart`,
+/// `gaveta_de_secoes.dart` e `casca_com_abas.dart`): nada entrou aqui que
+/// nao estivesse em uma das duas travas ja justificadas, e nenhum deles
+/// encosta na porta `CameraEGaleria` nem ganhou importe de plugin de
+/// aparelho -- quem cobra isso e o portao ESTRUTURAL abaixo, que continua
+/// valendo e continua verde. As telas do assistente de cadastro
+/// (`app/lib/telas/pet/`) seguem intocadas.
+///
+/// Medido pelo indice temporario que este portao usa, sobre a arvore de
+/// trabalho da mescla. Anteriores: `ed8f71b6479f15c4f9cfeb6fb727d090dbacab14`
+/// (codigo da tag) e `587b9bb6d5b7f7213ee053444e57d99b5ed9df19` (gaveta).
+const String _arvoreDasTelas = 'e180a88c22a8cf905ef8d5f38a260b3399d4a7ce';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

@@ -623,7 +623,13 @@ void main() {
       // O rotulo esta escrito a mao, com acento, e NAO lido de
       // `TextosDaGaveta`: comparar o texto renderizado com a constante que o
       // produz aprovaria qualquer troca de palavra.
-      final gatilho = find.byTooltip('Abrir os atalhos das seções');
+      //
+      // Ele era `Abrir os atalhos das seções` ate 22/09 e mudou em 23/09, com
+      // a gaveta: ela deixou de ser o indice das cinco secoes e passou a ser o
+      // submenu da secao atual, entao o nome acessivel do gatilho passou a
+      // dizer isso. A troca reprovou AQUI antes de ser escrita, que e o
+      // servico que este literal presta.
+      final gatilho = find.byTooltip('Abrir o submenu desta seção');
       expect(
         gatilho,
         findsOneWidget,

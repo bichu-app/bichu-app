@@ -340,6 +340,15 @@ class _CascaComAbasState extends State<CascaComAbas> {
       for (final destino in visiveis) destinos.indexOf(destino),
     ];
     final selecionado = ramos.indexOf(navegacao.currentIndex);
+    // A SECAO ATUAL, e o que ela tem de submenu.
+    //
+    // Sai de `navegacao.currentIndex`, que e o indice em `destinos` -- e nao
+    // de `selecionado`, que e a posicao na barra e some quando o build de
+    // entrega esconde uma secao. A gaveta mostra o submenu DESTA secao, e a
+    // barra de topo dela so desenha o gatilho quando ha submenu: e a mesma
+    // conta nos dois lugares, feita uma vez aqui.
+    final rotaAtual = destinos[navegacao.currentIndex].rota;
+    final temSubDestinos = RegistroDeSubDestinos.itensDe(rotaAtual).isNotEmpty;
 
     return Scaffold(
       key: _casca,
@@ -354,7 +363,11 @@ class _CascaComAbasState extends State<CascaComAbas> {
       //
       // Efeito colateral desejado: `Adoções` e as outras telas empilhadas no
       // navegador raiz cobrem a casca e portanto nao tem gaveta nenhuma.
-      drawer: const GavetaDeSecoes(),
+      //
+      // **A gaveta e a da secao ATUAL, e ela nao existe quando a secao nao tem
+      // sub-destino construido** (`Rede` e `Loja`, hoje). Gaveta montada e
+      // vazia seria uma cortina que escurece a tela para nao oferecer nada.
+      drawer: temSubDestinos ? GavetaDeSecoes(rotaDaSecao: rotaAtual) : null,
       // **O GESTO DE VOLTAR.** O padrao do Flutter e `true`, e com ele a
       // borda esquerda passaria a abrir a gaveta. No iOS a borda esquerda ja
       // E o voltar deste app; no Android o voltar por gesto sai de QUALQUER
@@ -364,6 +377,7 @@ class _CascaComAbasState extends State<CascaComAbas> {
       drawerEnableOpenDragGesture: false,
       body: ControleDaGaveta(
         abrir: () => _casca.currentState?.openDrawer(),
+        temSubDestinos: temSubDestinos,
         // O AVISO QUE CHEGOU, ACIMA DO CONTEUDO.
         //
         // **Ele mora aqui e nao numa tela**, e a razao e a mesma da gaveta: o
@@ -388,10 +402,7 @@ class _CascaComAbasState extends State<CascaComAbas> {
         // pagina, e sem o filete ela **nao existe visualmente**.
         decoration: BoxDecoration(
           border: Border(
-            top: BorderSide(
-              color: cores.outline,
-              width: BichuBorda.hairline,
-            ),
+            top: BorderSide(color: cores.outline, width: BichuBorda.hairline),
           ),
         ),
         child: NavigationBar(
@@ -498,7 +509,12 @@ class TelaDeAba extends StatelessWidget {
     // seria um controle sem nada para abrir -- o criterio 2 da BICHUS-62
     // quebrado pelo caminho menos exercitado a mao. Medido: tres casos de
     // `marcar_como_perdido_test.dart` reprovaram assim.
-    final comGaveta = raizDeSecao && ControleDaGaveta.maybeOf(context) != null;
+    // E a segunda metade: `temSubDestinos`. Sem ela, `Rede` e `Loja`
+    // desenhariam um hamburguer que abre uma gaveta vazia -- e a casca nem
+    // monta gaveta nessas secoes, entao o toque escureceria a tela para nada.
+    final comGaveta =
+        raizDeSecao &&
+        (ControleDaGaveta.maybeOf(context)?.temSubDestinos ?? false);
 
     return Scaffold(
       appBar: AppBar(
@@ -506,10 +522,7 @@ class TelaDeAba extends StatelessWidget {
         // O `rotulo` continua indo para o leitor de tela: vetor sem nome e
         // vetor mudo.
         title: tituloEmMarca
-            ? MarcaLockup(
-                largura: MarcaLockup.pisoDeLargura,
-                rotulo: titulo,
-              )
+            ? MarcaLockup(largura: MarcaLockup.pisoDeLargura, rotulo: titulo)
             : Text(titulo),
         // 64 dp, e nao os 56 do padrao do M3.
         //
