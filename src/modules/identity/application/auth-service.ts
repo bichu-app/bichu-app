@@ -364,12 +364,17 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
    * Lê a conta ANTES de escrever porque o endereço antigo precisa ser conhecido
    * depois da troca — é para ele que sai o aviso de conclusão, e depois do
    * `UPDATE` ele não existe mais em lugar nenhum.
+   *
+   * Devolve a conta JÁ TROCADA, e não o `UserId`: quem chama abre uma sessão em
+   * seguida e o `user` daquela resposta tem de trazer o endereço novo. Devolver
+   * o identificador obrigaria a uma segunda leitura do banco para reconstruir o
+   * que este escopo já tem na mão.
    */
   async function concluirTrocaDeEmail(
     hash: TokenHash,
     agora: Instant,
     contexto: ContextoDaRequisicao,
-  ): Promise<UserId> {
+  ): Promise<Conta> {
     const consumido = await deps.repositorio.consumirTokenDeVerificacao(
       hash,
       'email_change',
@@ -411,7 +416,7 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       resourceId: consumido.userId,
     });
 
-    return consumido.userId;
+    return atualizada;
   }
 
   /**
@@ -1035,11 +1040,42 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
      *
      * `undefined` cobre inexistente, expirado e já consumido, e os três viram
      * 410 — distinguir contaria a um estranho se aquele token existiu.
+     *
+     * ## Por que sai daqui uma SESSÃO, e não o perfil
+     *
+     * O contrato declara `SessionResponse` no 200 desde a primeira onda, e a
+     * descrição diz por quê: «devolve a sessão quando a requisição veio sem
+     * token de acesso, para que a intenção pendente execute em seguida». Quem
+     * abre o link está na página `/verificar-email`, que não tem token nenhum;
+     * devolver só o perfil ali obriga a pessoa a entrar de novo e mata a
+     * intenção que ela tinha guardada (UX 8.3). O app já lê a resposta como
+     * sessão (`app/lib/api/auth_api.dart`, `Sessao.doJson`) — era o servidor
+     * que estava fora do contrato, medido em homologação em 29/09/2026.
+     *
+     * A sessão sai nos DOIS propósitos, verificação e troca de endereço,
+     * porque o 200 desta operação é um só e o chamador não sabe qual dos dois
+     * token ele apresentou — quem abre o link não escolhe rota.
+     *
+     * ## O que isto custa, e por que o custo é aceito
+     *
+     * `abrirSessao` nasceu para o cadastro e o login, os dois momentos em que a
+     * SENHA foi verificada, e é dessa verificação que o teto absoluto de 180
+     * dias começa a contar. Aqui não houve senha: a prova é a posse da caixa de
+     * entrada. O teto passa a contar de uma prova mais fraca, e isso está
+     * aceito porque quem tem a caixa de entrada já toma a conta pela
+     * redefinição de senha — o link não abre uma porta que estivesse fechada.
+     * `continuarConectado` é FALSO, como no cadastro: a escolha nasce
+     * desmarcada e ninguém a fez nesta requisição.
+     *
+     * A abertura vai para a trilha como `auth.session_opened_by_email_link`, e
+     * não como `auth.login_succeeded`: numa investigação de tomada de conta a
+     * pergunta é justamente quais sessões nasceram SEM senha, e um
+     * `login_succeeded` aqui apagaria a diferença.
      */
     async confirmarVerificacaoDeEmail(
       tokenBruto: string,
       contexto: ContextoDaRequisicao,
-    ): Promise<UserId> {
+    ): Promise<SessionView> {
       const agora = deps.clock.now();
       const hash = comoTokenHash(tokenBruto);
 
@@ -1055,6 +1091,9 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         agora,
       );
 
+      let conta: Conta;
+      let proposito: PropositoDoToken;
+
       if (verificacao !== undefined) {
         await deps.repositorio.marcarEmailVerificado(verificacao.userId, agora);
         await deps.trilha.record({
@@ -1066,10 +1105,34 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
           resourceKind: 'user',
           resourceId: verificacao.userId,
         });
-        return verificacao.userId;
+
+        // Relido DEPOIS da escrita, e não reaproveitado de antes: é este objeto
+        // que vira o `user` da resposta, e ele precisa dizer
+        // `email_verified: true` — que é a única diferença que a tela procura.
+        const atualizada = await deps.repositorio.buscarContaPorId(verificacao.userId);
+        // A conta sumiu entre consumir o token e reler. O mesmo 410 de sempre:
+        // qualquer outra coisa aqui conta a um estranho o que aconteceu.
+        if (atualizada === undefined) throw problemas.tokenDeVerificacaoVencido();
+        conta = atualizada;
+        proposito = 'email_verify';
+      } else {
+        conta = await concluirTrocaDeEmail(hash, agora, contexto);
+        proposito = 'email_change';
       }
 
-      return await concluirTrocaDeEmail(hash, agora, contexto);
+      const par = await abrirSessao(conta, false, contexto, agora);
+      await deps.trilha.record({
+        actorKind: 'user',
+        actorUserId: conta.id,
+        actorIp: contexto.ip,
+        correlationId: contexto.correlationId,
+        action: 'auth.session_opened_by_email_link',
+        resourceKind: 'user',
+        resourceId: conta.id,
+        metadata: { purpose: proposito },
+      });
+
+      return projetarSessao(conta, par, agora);
     },
 
     /**
