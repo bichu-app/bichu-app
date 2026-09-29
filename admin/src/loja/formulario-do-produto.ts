@@ -180,9 +180,14 @@ export function valoresDoItem(item: Esquemas['AdminStoreItem']): ValoresDoProdut
     tags: item.tags.map((t) => t.slug),
     imagens: [...item.images]
       .sort((a, b) => a.position - b.position)
+      // `upload_id` e anulavel no contrato desde a Rede (a intencao de envio
+      // pode ter sido apagada, e a imagem fica): a chave cai para a posicao,
+      // como em `rede/dominio/formulario.ts`. Sem `uploadId`, a imagem nao
+      // volta no corpo da escrita. O tratamento visivel desse caso na Loja
+      // (a marca "sem envio" que a Rede tem) fica para a tela.
       .map((im) => ({
-        chave: im.upload_id,
-        uploadId: im.upload_id,
+        chave: im.upload_id ?? `sem-envio-${String(im.position)}`,
+        ...(im.upload_id === null ? {} : { uploadId: im.upload_id }),
         alt: im.alt_text,
         estado: im.status,
         motivo: im.rejection_reason ?? null,
