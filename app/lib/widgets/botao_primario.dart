@@ -106,18 +106,57 @@ class BotaoPrimario extends StatelessWidget {
 /// Botao tonal sobre superficie clara fica com 1.3:1 de contraste de
 /// container, e o usuario nao identifica onde e o alvo sob sol; por isso o
 /// sistema nao usa `FilledTonalButton` (divergencia 7 da secao 15.6).
+/// [carregando] segue o paragrafo 11.20: o rotulo **permanece** e o indicador
+/// entra a esquerda dele. Mesma razao do [BotaoPrimario] -- trocar o rotulo por
+/// um indicador tira da tela a unica pista do que esta acontecendo no momento
+/// em que a pessoa mais precisa dela.
+///
+/// Este botao **nao** embrulha o filho em `Semantics(excludeSemantics: true)`,
+/// e por isso nao precisa redeclarar `onTap`: o `OutlinedButton` publica a
+/// propria acao, e ja sai com `tap=true`. Carregando, `onPressed` fica nulo e
+/// o botao se anuncia desabilitado, que e a verdade.
 class BotaoSecundario extends StatelessWidget {
   const BotaoSecundario({
     required this.rotulo,
     required this.aoTocar,
     super.key,
+    this.carregando = false,
   });
 
   final String rotulo;
   final VoidCallback? aoTocar;
 
+  final bool carregando;
+
   @override
   Widget build(BuildContext context) {
-    return OutlinedButton(onPressed: aoTocar, child: Text(rotulo));
+    if (!carregando) {
+      return OutlinedButton(onPressed: aoTocar, child: Text(rotulo));
+    }
+
+    final cores = BichuColors.of(context).cores;
+
+    return OutlinedButton(
+      onPressed: null,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        children: <Widget>[
+          SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2.5,
+              color: cores.textSecondary,
+              // Quem usa leitor de tela ouve o botao DESABILITADO e nao
+              // saberia por que. O indicador diz.
+              semanticsLabel: 'Carregando',
+            ),
+          ),
+          const SizedBox(width: BichuEspaco.e3),
+          Flexible(child: Text(rotulo, textAlign: TextAlign.center)),
+        ],
+      ),
+    );
   }
 }

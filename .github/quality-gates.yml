@@ -38,29 +38,69 @@ dispensas:
   # `make fechar-integracao` local e o unico portao que existe. O registro fica em
   # `docs/07-devops.md` secao 5.3.
 
-  # AS DUAS DE BAIXO MUDARAM DE NATUREZA EM 22/09/2026, E NAO SO DE DATA.
+  # `apk-assinado` FOI REDATADA EM 28/09/2026, E O MOTIVO FOI REESCRITO INTEIRO.
   #
-  # Ate hoje elas diziam "o insumo nao chegou" -- chave de assinatura, conta
-  # Apple -- e isso e a frase de quem ESPERA. O cliente decidiu hoje que o app
-  # nao vai para loja nenhuma por ora, e a frase de quem DECIDIU e outra: o que
-  # estas duas verificacoes protegem e a submissao a loja, e a submissao saiu do
-  # horizonte. Quem ler daqui a um mes precisa encontrar a decisao, nao a espera.
+  # O texto de 22/09 dizia "o app nao vai para loja por ora" e punha como
+  # condicao de saida "houver decisao de submeter o app a uma loja". ESSA
+  # DECISAO ACONTECEU, em 23/09, e foi para o outro lado: o cliente decidiu
+  # publicar so Android (BICHUS-253). A condicao de saida escrita aqui estava
+  # SATISFEITA, e a dispensa continuava de pe -- que e pior que uma vencida,
+  # porque quem le conclui que ela esta prestes a cair e ela nao esta.
   #
-  # O GATILHO DE REATIVACAO E UM EVENTO, NAO UMA DATA: as duas caem no dia em
-  # que existir decisao de submeter o app a uma loja. `verificar_dispensas.py`
-  # so entende `vence_em`, entao o evento vive no `motivo` -- de proposito, e
-  # nao num campo novo: campo que o portao nao le e dispensa inerte com outro
-  # nome, que e o defeito que o SonarCloud ja teve em 18/09. A data e curta e
-  # nao e arbitraria: 29/09 e a vespera do fim de desenvolvimento (30/09/2026),
-  # que e quando a pergunta "vamos submeter?" tem resposta de verdade.
+  # E o mesmo defeito que a entrada `ios` teve, e ela foi corrigida em 23/09.
+  # Esta nao: as duas nasceram no mesmo dia com o mesmo texto, uma foi reescrita
+  # e a outra ficou com a frase antiga. Dispensa em par e dispensa que divergem.
   #
-  # O QUE ESTAS DUAS ENTRADAS NAO DISPENSAM, e vale dizer porque o nome engana:
-  # `verificar_borda_local.py` tambem as consulta, para tratar `assetlinks.json`
-  # e `apple-app-site-association` VAZIOS como aviso em vez de falha. Isso e
-  # DEEP LINK (BICHUS-94, 136 e 38), nao e loja, e continua valendo como
-  # trabalho futuro: a impressao digital ainda depende do keystore e o `appID`
-  # ainda depende do Team ID. A decisao de hoje tira a submissao do caminho
-  # critico; ela nao diz que o deep link abre.
+  # O QUE CONTINUA VERDADE, MEDIDO EM 28/09 E NAO DEDUZIDO:
+  #
+  #   1. `app/android/app/build.gradle.kts:45` ainda tem o TODO do template do
+  #      Flutter e `buildTypes.release` ainda usa
+  #      `signingConfigs.getByName("debug")`. O APK e assinado com a chave de
+  #      DEPURACAO.
+  #   2. Nao existe keystore de release. `.gitignore` exclui `*.keystore` e
+  #      `*.jks`, e nao ha `signingConfig` de release em lugar nenhum.
+  #   3. `infra/caddy/well-known/assetlinks.json` tem
+  #      `sha256_cert_fingerprints: []`. O link da plaquinha abre o NAVEGADOR,
+  #      nao o app.
+  #   4. A decisao entre keystore proprio e Play App Signing e do cliente, esta
+  #      pendente, e nao tem data.
+  #
+  # Ou seja: o motivo NAO caducou, o que caducou foi a frase. O que faltava era
+  # condicao de saida honesta, e dispensa redatada sem condicao e dispensa
+  # permanente com prazo.
+  #
+  # A NOVA CONDICAO DE SAIDA E UM FATO, e e o mesmo fato que a verificacao mede:
+  # existir `signingConfig` de release lendo keystore proprio (ou Play App
+  # Signing configurado) E a impressao digital SHA-256 correspondente entrar em
+  # `assetlinks.json`. Quando isso acontecer, `verificar_borda_local.py` fica
+  # verde sozinho e esta entrada sai por ter virado redundante -- que e o unico
+  # jeito honesto de uma dispensa cair. `verificar_dispensas.py` so entende
+  # `vence_em`, entao a condicao vive no `motivo`, de proposito e nao num campo
+  # novo: campo que o portao nao le e dispensa inerte com outro nome, que e o
+  # defeito que o SonarCloud ja teve em 18/09.
+  #
+  # POR QUE APAGAR ESTA ENTRADA SERIA PIOR, e isto foi medido no codigo:
+  # `verificar_borda_local.py:255` casa `/.well-known/assetlinks.json` com o
+  # portao `apk-assinado`, e `dispensa_vencida()` na linha 234 REPROVA quando
+  # NAO ACHA a entrada. Apagar nao devolve um portao: derruba
+  # `verificar-borda-local`, que esta dentro de `make verificar`, que esta dentro
+  # de `make fechar-integracao` -- hoje o unico portao que existe, para as tres
+  # sessoes deste repositorio -- por causa de uma decisao do cliente que ninguem
+  # aqui pode tomar.
+  #
+  # A DATA E A UNICA PARTE ARBITRARIA, E EU A DECLARO ASSIM: ela nao sai de
+  # medicao nenhuma. 31/10/2026 e escolha, e ela tem dois argumentos. Primeiro,
+  # 29/09 era AMANHA: manter derrubaria `make fechar-integracao` das tres
+  # sessoes no dia 29, por falta de uma decisao que nao e delas. Segundo, e a
+  # mesma data da entrada `ios`, e as duas dependem de insumo do cliente sem
+  # previsao -- revisao mensal no mesmo dia em vez de duas datas para divergirem.
+  # Encurtar isso e decisao de quem coordena, nao minha.
+  #
+  # O QUE ESTA ENTRADA NAO DISPENSA, e vale dizer porque o nome engana:
+  # `verificar_borda_local.py` a consulta para tratar `assetlinks.json` VAZIO
+  # como aviso em vez de falha. Isso e DEEP LINK (BICHUS-94, 136 e 38), nao e
+  # loja, e continua valendo como trabalho futuro: a impressao digital depende do
+  # keystore, e o keystore depende da decisao acima.
   #
   # AS CHAVES CITADAS ABAIXO ESTAO NA NUMERACAO DE HOJE. Ate 22/09/2026 elas
   # diziam `BICHU-15` e `BICHU-14`, que sao pre-migracao: hoje `BICHUS-15` e
@@ -112,16 +152,17 @@ dispensas:
   #
   # ENQUANTO ISSO NAO ACONTECER, a lista segue vazia de proposito e o estado e
   # ruidoso, nao silencioso: `verificar_borda_local.py` acusa a lista vazia a
-  # cada execucao e REPROVA assim que a dispensa `apk-assinado` vencer (29/09).
+  # cada execucao e REPROVA assim que a dispensa `apk-assinado` vencer
+  # (31/10/2026, redatada em 28/09 -- ver o cabecalho desta entrada).
   # Conferido em 22/09 contra `https://tag.bichu.app`: com a dispensa valendo
   # sai `[aviso]` e APROVADO; com `vence_em` recuado para 21/09 sai REPROVADO
   # com codigo de saida 1, nomeando o insumo que falta. Nao ha `TODO` nenhum
   # segurando isso, e e de proposito: a troca da digital no dia da publicacao
   # nao pode depender de alguem lembrar.
   - portao: apk-assinado
-    motivo: "decisao do cliente em 22/09/2026: o app nao vai para loja por ora, entao nao ha build de release para assinar. CAI QUANDO houver decisao de submeter o app a uma loja; ate la o keystore (BICHUS-106) segue pendente e o assetlinks.json segue sem impressao digital"
+    motivo: "MEDIDO em 28/09/2026: build.gradle.kts:45 ainda usa signingConfigs.getByName(debug) com o TODO do template do Flutter, nao existe keystore de release, e sha256_cert_fingerprints de infra/caddy/well-known/assetlinks.json esta VAZIO -- o link da plaquinha abre o navegador, nao o app. A decisao entre keystore proprio e Play App Signing e do cliente, esta pendente e nao tem data (BICHUS-106). CAI QUANDO existir signingConfig de release lendo keystore proprio ou Play App Signing configurado E a impressao digital SHA-256 correspondente entrar em assetlinks.json, momento em que verificar_borda_local.py fica verde sozinho e esta entrada sai por redundancia. A data e escolha declarada, nao medicao: ver o cabecalho"
     responsavel: cliente
-    vence_em: 2026-09-29
+    vence_em: 2026-10-31
 
   # REESCRITA EM 23/09/2026. O texto anterior descrevia um mundo que deixou de
   # existir: ele dizia "o app nao vai para loja por ora" e punha como condicao
@@ -185,34 +226,46 @@ dispensas:
     responsavel: cliente
     vence_em: 2026-10-31
 
-  # A correcao do `logout` (BICHUS-81, commit aca2d33) acrescentou `requestBody`
-  # OBRIGATORIO a `POST /v1/auth/logout`, e para o `oasdiff` isso e quebra de
-  # contrato: `request-body-added-required`. Medido, nao suposto -- o comando da
-  # esteira sai com 1 e acusa exatamente essa mudanca, e so ela.
+  # A DISPENSA `oasdiff-logout-corpo-obrigatorio` SAIU EM 28/09/2026, E NAO FOI
+  # REDATADA. Ela venceria hoje, e o motivo escrito nela CADUCOU pelo unico
+  # desfecho que ela mesma previa.
   #
-  # A quebra e o ponto. Enquanto o corpo era opcional, quem seguisse o contrato
-  # ao pe da letra saia sem revogar nada e recebia 204: sucesso indistinguivel
-  # do nada. Recusar alto e o remedio.
+  # O texto dela dizia: "ela vence junto com a janela do PR: depois do merge em
+  # `development` a base da comparacao ja tem o corpo obrigatorio e o portao
+  # fica quieto sozinho". MEDIDO em 28/09, e nao suposto:
   #
-  # A operacao NAO e versionada, e a decisao e do coordenador: nao existe
-  # cliente publicado. Nao ha keystore, nao ha app em loja, e as listas de
-  # associacao do deep link estao vazias. Versionar criaria uma v2 para uma base
-  # de zero instalacoes, e a v1 passaria a carregar para sempre o comportamento
-  # que esta correcao existe para tirar de circulacao.
+  #   git merge-base --is-ancestor aca2d33 origin/development  ->  0
   #
-  # A dispensa e ESTREITA e nomeia a mudanca: `verificar_quebras_de_contrato.py`
-  # so a aplica ao par regra+operacao escrito em `mudanca`. Qualquer outra
-  # quebra reprova o passo, inclusive outra quebra nesta mesma operacao.
+  # O commit da BICHUS-81 E ancestral de `origin/development` (908ae84), e
+  # `api/openapi.yaml` na base ja carrega `requestBody: required: true` em
+  # `POST /v1/auth/logout` (linhas 630-631). O passo `compatibilidade contra
+  # main` compara contra `origin/${{ github.base_ref }}`, quer dizer, contra uma
+  # base que JA TEM o corpo obrigatorio: a regra `request-body-added-required`
+  # nao tem mais como acusar essa operacao. A dispensa passou a dispensar uma
+  # quebra que nao existe.
   #
-  # Ela vence junto com a janela do PR: depois do merge em `development` a base
-  # da comparacao ja tem o corpo obrigatorio e o portao fica quieto sozinho.
-  # Se a data chegar antes do merge, `rapidos` reprova por dispensa vencida e
-  # alguem decide de novo -- que e exatamente o comportamento desejado.
-  - portao: oasdiff-logout-corpo-obrigatorio
-    mudanca: "request-body-added-required logout"
-    motivo: "logout passou a exigir refresh_token no corpo (BICHUS-81): quebra deliberada, e nao ha cliente publicado para versionar a operacao"
-    responsavel: squad
-    vence_em: 2026-09-28
+  # O EFEITO DE DEIXA-LA DE PE ERA SO UM, E ELE ERA CARO: a partir de 29/09 ela
+  # reprovaria `verificar_dispensas.py` por prazo vencido -- e esse portao esta
+  # dentro de `make verificar`, que esta dentro de `make fechar-integracao`, que
+  # e hoje o UNICO portao que existe, para as tres sessoes deste repositorio. O
+  # unico portao vivo ficaria vermelho por causa de uma excecao a uma quebra que
+  # deixou de ser quebra.
+  #
+  # O QUE FICOU SEM PORTAO: nada que esta entrada segurasse. Ela era uma EXCECAO,
+  # e apagar excecao devolve rigor, nao tira. `verificar_quebras_de_contrato.py`
+  # volta a reprovar qualquer `request-body-added-required logout` que apareca --
+  # o que e o comportamento correto, porque uma segunda quebra na mesma operacao
+  # seria uma decisao nova.
+  #
+  # DITO EM VOZ ALTA, e nao e consequencia deste commit: o portao de quebra de
+  # contrato inteiro esta dormente. Ele roda so em `pull_request`, depende do
+  # `docker run tufin/oasdiff` e a esteira nao executa desde que o cliente
+  # decidiu nao contratar o GitHub Actions. Nao existe alvo local de `oasdiff` no
+  # `Makefile`, e trazer um exige imagem Docker de terceiro puxada da rede, que
+  # nao e decisao de quem opera a esteira. As ISCAS do juizo
+  # (`verificar_quebras_de_contrato.py --autoteste`, 0,02 s) passaram a rodar em
+  # `make verificar` neste mesmo commit: elas nao substituem a comparacao, e
+  # garantem que o juizo continua enxergando no dia em que ela voltar.
 
   # A DISPENSA `documento-secao7` SAIU EM 23/09/2026, E NAO FOI RENOVADA.
   #

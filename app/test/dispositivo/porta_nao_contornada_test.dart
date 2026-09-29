@@ -669,8 +669,36 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// indice temporario que este portao usa, sobre a arvore de trabalho.
 /// Anterior: `883961325403f0e22fe845c4442014e93ff1e479`.
 ///
-// Remedida na integracao backoffice-v1 (acesso + rede-admin).
-const String _arvoreDasTelas = '54312e72ad5c8622555a4614c15189ab559f9622';
+/// DESTRAVADO pelas tres ligacoes que faltavam no app (o aviso ao tutor pela
+/// plaquinha, o ouvinte de push e o dreno da fila offline). Duas telas mudaram,
+/// e **nenhuma das duas contorna a porta `CameraEGaleria`** -- que e o que o
+/// criterio 10 da BICHUS-161 cobra:
+///
+/// - `telas/escanear/tela_do_pet_da_tag.dart` ganhou o botao `Avisar o tutor`.
+///   Ele chama `TagsApi.avisarOTutor`, uma rota do contrato. Nenhum plugin de
+///   aparelho, nenhum canal de plataforma: o portao ESTRUTURAL abaixo continua
+///   valendo sobre este arquivo e continua verde, e e ele que pega o contorno de
+///   verdade.
+/// - `telas/casca_com_abas.dart` ganhou a faixa do aviso que chegou. Ela le um
+///   `ChangeNotifier` do escopo; o `firebase_messaging` fica atras da porta
+///   `MensagensDePush`, em `lib/dispositivo/`, que e exatamente onde o portao
+///   estrutural manda que ele fique.
+///
+/// A foto continua entrando pela porta: nenhuma tela do assistente de cadastro
+/// (`app/lib/telas/pet/`) mudou nesta rodada.
+///
+/// Troca de 28/09, correcao da paginacao das listagens (sem chave de issue no
+/// acionamento): `telas/perto/lista_do_diretorio.dart` e
+/// `telas/loja/vitrine_da_loja.dart` passaram a acumular as paginas e a pedir a
+/// seguinte pelo `RodapeDaPaginacao`. Nada a ver com camera: nenhuma das duas
+/// toca em foto, e as telas do assistente de cadastro (`app/lib/telas/pet/`)
+/// seguem intocadas.
+///
+/// Remedida na mescla de `origin/development` (`b3360aa`) na
+/// `integracao/backoffice-v1`, 28/09/2026: a arvore mesclada junta as telas da
+/// Rede (rede-admin) com a paginacao acima, e nao e nenhuma das duas. Medido
+/// com o indice temporario deste portao sobre a arvore mesclada.
+const String _arvoreDasTelas = '863560db7d710bd0fc0091892731a6f7bb16eb2b';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
