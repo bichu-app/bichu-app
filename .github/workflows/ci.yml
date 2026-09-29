@@ -67,6 +67,20 @@ jobs:
         with:
           fetch-depth: 0
 
+      # `node_modules` PRECISA existir neste job, e a razao e um portao so:
+      # `verificar-carimbo-de-migracao.mjs` importa `node-pg-migrate` (utils/
+      # comparators e fileNameUtils) para carimbar migracao pela MESMA regra que
+      # a ferramenta usa, igual ao `verificar-marcador-de-migracao.mjs` do job
+      # `contrato`. Sem as deps, ele morre com ERR_MODULE_NOT_FOUND e derruba o
+      # job inteiro -- foi o que aconteceu no run 36500685268. Os outros portoes
+      # Node daqui usam so builtins; este nao. `cache: npm` mantem o job rapido.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
       - name: dispensas datadas
         run: python3 infra/verificacao/verificar_dispensas.py
 
