@@ -722,6 +722,9 @@ services:
         # o argumento em todo servico que constroi, e `admin/Dockerfile` reprova
         # o build sem ele.
         BUILD_COMMIT: ${BUILD_COMMIT:-}
+        # D41. A chave de SITE do reCAPTCHA, publica, que o Vite poe no pacote
+        # do `/entrar`. Vem do `.env` do host; vazia, o login do painel recusa.
+        VITE_CAPTCHA_SITE_KEY: ${VITE_CAPTCHA_SITE_KEY:-}
     # MEDIDO em 23/09/2026, imagem com o pacote pre-comprimido no build:
     #
     #   repouso                                   14 a 17 MiB

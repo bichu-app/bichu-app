@@ -395,13 +395,33 @@ O `compose.yaml` é o artefato, e é o **mesmo** dos dois destinos. O que muda �
 o arquivo de ambiente — é isso que torna a portabilidade do critério 12 um fato
 verificável em vez de uma frase.
 
+**Antes do `scp`, limpe na VM os três diretórios que o código apaga, e não só
+acrescenta.** `scp --recurse` copia por cima e nunca remove: um arquivo que saiu
+do repositório continua em `~/bichu/src`, e o `tsc` do build o compila; uma
+migração renumerada (a de 28/09 trocou `20260923000001/6/7/9` por
+`20260928000001` a `20260928000005`) continua em `~/bichu/migrations` com o nome
+antigo, e o migrador a aplica de novo ou morre no `checkOrder`. `admin/` pelo
+mesmo motivo. O `rm` é só destes três, e nunca do `~/bichu` inteiro: o `.env`
+do host mora lá e não tem cópia em lugar nenhum.
+
 ```bash
+gcloud compute ssh bichu-hml --project=bichu-app-508914 \
+  --zone=southamerica-east1-a --tunnel-through-iap \
+  --command 'cd ~/bichu && rm -rf -- ./src ./migrations ./admin && ls'
+
 gcloud compute scp --project=bichu-app-508914 --zone=southamerica-east1-a \
   --tunnel-through-iap --recurse \
   ./compose.yaml ./Dockerfile ./Makefile ./migrations ./infra ./api \
   ./package.json ./package-lock.json ./tsconfig.json ./tsconfig.build.json ./src \
+  ./admin \
   bichu-hml:~/bichu/
 ```
+
+`./admin` entrou em 28/09 com o backoffice (ADR-0027): sem ele o
+`docker compose build admin-web` reconstrói o painel que já estava na VM, ou
+reprova no `package.json` ausente. O `admin/node_modules` e o `admin/dist`
+locais não precisam ir (o build faz `npm ci` e gera o pacote dentro da imagem);
+se estiverem na árvore, apague-os antes ou aceite o tempo de cópia.
 
 **As cinco últimas entradas dessa lista são uma correção de 22/09, e vale dizer
 o que a falta delas fazia.** Até aqui a lista copiava a receita do build e não o
@@ -715,10 +735,14 @@ HTTP-01, e o Caddy só tenta emitir para nome que esteja num bloco. Nome no DNS
 sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
 `http://` para diagnosticar.
 
-1. Com o repositório atualizado no host, no `.env`:
+1. Com os arquivos atualizados no host pelo passo 7 (limpeza e `scp`, que
+   levam `admin/`), no `.env`:
 
    ```bash
    ADMIN_HOSTS=https://admin.bichu.app
+   # A chave de SITE do reCAPTCHA Enterprise, publica, e build arg do admin-web
+   # (sem ela o login do painel recusa). O mesmo valor de CAPTCHA_SITE_KEY.
+   VITE_CAPTCHA_SITE_KEY=<chave de site do reCAPTCHA>
    # ADMIN_CSP_UPLOAD=<host público de UploadIntent.url>  -- quando decidido;
    # vazio, o envio de imagem pelo painel fica bloqueado pela CSP
    ```
@@ -726,8 +750,18 @@ sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
 2. Construir e recriar **só** os dois serviços. Recriar a borda derruba as
    conexões abertas por alguns segundos, em todos os hosts: faça fora de uso.
 
+   **A VM não tem Git** (passo 8): `git rev-parse` lá devolve vazio. O commit
+   sai **da máquina local**, de onde os arquivos saíram, e vai na linha:
+
    ```bash
-   BUILD_COMMIT=$(git rev-parse HEAD) docker compose build edge admin-web
+   COMMIT=$(git rev-parse HEAD)     # AQUI, no repositorio local. Nao na VM.
+   echo "$COMMIT"
+   ```
+
+   Na VM, com esse valor:
+
+   ```bash
+   BUILD_COMMIT="$COMMIT" docker compose build edge admin-web
    docker compose up -d --no-deps admin-web edge
    docker compose run --rm --no-deps --entrypoint caddy edge list-modules --skip-standard
    # esperado: um único módulo não-padrão, http.handlers.rate_limit
@@ -769,7 +803,8 @@ com o commit dela, é o que torna o retorno um comando só:
 ```bash
 docker image tag bichu-admin-web:local bichu-admin-web:anterior   # ponto de retorno
 docker run --rm --entrypoint cat bichu-admin-web:anterior /etc/bichu/commit; echo
-git pull --ff-only && BUILD_COMMIT=$(git rev-parse HEAD) docker compose build admin-web
+# local: COMMIT=$(git rev-parse HEAD), limpeza de admin/ e scp do passo 7
+BUILD_COMMIT="$COMMIT" docker compose build admin-web
 docker compose up -d --no-deps admin-web
 docker run --rm --entrypoint cat bichu-admin-web:local /etc/bichu/commit; echo   # o commit novo
 ```
@@ -786,8 +821,10 @@ docker compose up -d --no-deps --force-recreate admin-web
 docker run --rm --entrypoint cat bichu-admin-web:local /etc/bichu/commit; echo   # = o commit anterior
 ```
 
-Se o problema for da borda (Caddyfile), o retorno é `git checkout <commit
-anterior> -- infra/caddy/Caddyfile` e recriar o `edge`. Retirar o backoffice do
+Se o problema for da borda (Caddyfile), o retorno é, **na máquina local**,
+`git show <commit anterior>:infra/caddy/Caddyfile > Caddyfile.anterior`, o
+`scp` desse arquivo para `~/bichu/infra/caddy/Caddyfile` na VM,
+e recriar o `edge`: a VM não tem Git para fazer o `checkout` lá. Retirar o backoffice do
 ar inteiro sem tocar nos outros hosts: `ADMIN_HOSTS=http://admin.localhost` no
 `.env` e recriar o `edge` (o nome some da borda; o registro DNS pode ficar).
 

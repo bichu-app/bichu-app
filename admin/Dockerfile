@@ -34,6 +34,14 @@
 FROM node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5 AS build
 WORKDIR /admin
 ARG SAIDA=dist
+# A chave de SITE do reCAPTCHA Enterprise (D41), que o documento `/entrar` usa
+# para colher o token. Ela e PUBLICA por natureza (vai no HTML de qualquer
+# pagina que usa o reCAPTCHA) e entra no pacote pelo Vite, que le `VITE_*` do
+# ambiente do `npm run build`: ARG basta, porque todo ARG do estagio e variavel
+# de ambiente no RUN. Sem ela, o build passa e o login recusa com "captcha
+# indisponivel" (a API tambem recusa sem token: nao ha modo que aprove sem
+# avaliar). Nunca a chave de API do projeto: essa e segredo e fica so na API.
+ARG VITE_CAPTCHA_SITE_KEY=
 # Manifesto primeiro, fonte depois: mexer num componente nao invalida a camada
 # do `npm ci`, que e a mais cara do build.
 #
