@@ -9950,9 +9950,9 @@ export interface operations {
                 /**
                  * @description Sem ele, **publico e privado**: o painel ve todo encontro. O esquema
                  *     e inline, e nao `NetworkEventVisibility`, de proposito: aquele tem
-                 *     `default: public` (o padrao de quem CRIA), e o validador aplica
-                 *     default de parametro, o que tirava o encontro privado da lista do
-                 *     painel quando o filtro nao vinha (QA, 28/09).
+                 *     `default: public` (o padrao de quem CRIA), e num filtro esse
+                 *     default vira "so publicos" para o cliente gerado do contrato, que
+                 *     tirava o encontro privado da lista do painel (QA, 28/09).
                  */
                 visibility?: "public" | "private";
                 city?: string;
