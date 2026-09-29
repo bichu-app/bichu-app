@@ -1,0 +1,16 @@
+# ISCA de verificar_borda.py (D33). PRECISA REPROVAR POR NAO TER O QUE CONFERIR.
+# Sem bloco administrativo, a regra "so existe no host administrativo" nao tem
+# onde ser conferida. Aprovar aqui seria passar verde por nao olhar.
+{
+	admin off
+}
+
+{$PUBLIC_BASE_URL}{$HOSTS_EXTRA_APP} {
+	handle /v1/admin* {
+		respond "nao encontrado" 404
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+}

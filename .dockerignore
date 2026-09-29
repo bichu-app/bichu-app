@@ -29,6 +29,10 @@ design
 # Aplicativo Flutter: outro artefato, outra esteira.
 app
 
+# O backoffice: outra imagem, com contexto proprio (`admin/`). Fora do contexto
+# da API para que dependencia e build da SPA nao invalidem o cache desta imagem.
+admin
+
 # Testes de acessibilidade rodam no navegador, fora desta imagem.
 test
 

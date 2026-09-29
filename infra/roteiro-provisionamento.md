@@ -697,6 +697,119 @@ curl -sI https://bichu.app/.well-known/apple-app-site-association \
 
 ---
 
+### Passo 11.1 — `admin.bichu.app`, o backoffice (ADR-0027)
+
+> **Em qual máquina.** Pelo ADR-0029, homologação e produção ficam em VMs
+> separadas: `admin.bichu.app` aponta para `bichu-prod`, e homologação ganha o
+> seu host próprio (sugestão: `admin-hml.bichu.app`, com `ADMIN_HOSTS` da
+> `bichu-hml` apontando para ele). Em 23/09 `bichu-prod` **não existe**
+> (`gcloud compute instances list` lista só `bichu-hml`); os passos abaixo valem
+> igual nas duas, trocando o nome.
+
+O backoffice é o container `admin-web`, atrás da mesma borda, na mesma origem
+que `/v1/admin/*`. A borda passou a ser imagem própria (plugin de taxa, emenda 2
+do ADR-0016), então este passo **constrói** a borda no host, e não só a recria.
+
+**Ordem que não se inverte: configuração, depois DNS.** O certificado sai por
+HTTP-01, e o Caddy só tenta emitir para nome que esteja num bloco. Nome no DNS
+sem bloco é falha de handshake em domínio `.app` pré-carregado em HSTS, sem
+`http://` para diagnosticar.
+
+1. Com o repositório atualizado no host, no `.env`:
+
+   ```bash
+   ADMIN_HOSTS=https://admin.bichu.app
+   # ADMIN_CSP_UPLOAD=<host público de UploadIntent.url>  -- quando decidido;
+   # vazio, o envio de imagem pelo painel fica bloqueado pela CSP
+   ```
+
+2. Construir e recriar **só** os dois serviços. Recriar a borda derruba as
+   conexões abertas por alguns segundos, em todos os hosts: faça fora de uso.
+
+   ```bash
+   BUILD_COMMIT=$(git rev-parse HEAD) docker compose build edge admin-web
+   docker compose up -d --no-deps admin-web edge
+   docker compose run --rm --no-deps --entrypoint caddy edge list-modules --skip-standard
+   # esperado: um único módulo não-padrão, http.handlers.rate_limit
+   ```
+
+   A partir daqui, e **antes do DNS**, `/v1/admin*` já responde 404 da borda
+   nos hosts do app (D33):
+
+   ```bash
+   curl -sS -o /dev/null -w '%{http_code} %{content_type}\n' https://hml.bichu.app/v1/admin/ping
+   # 404 text/plain -- com application/problem+json quem respondeu foi a API
+   ```
+
+3. O registro, **em nuvem cinza** (sem proxy): o teto de taxa é por IP de quem
+   conecta na borda, e com proxy todo mundo teria o IP da Cloudflare. A zona
+   `bichu.app` está na Cloudflare (`aurora`/`wesley.ns.cloudflare.com`).
+
+   ```bash
+   # O token de DNS esta no Secret Manager (`CLOUDFLARE_DNS_TOKEN`), lido para
+   # a variavel sem passar por tela nem historico. IP_PROD = o do `bichu-prod-ip`.
+   CF_API_TOKEN=$(gcloud secrets versions access latest --secret=CLOUDFLARE_DNS_TOKEN --project=bichu-app-508914)
+   IP_PROD=$(gcloud compute addresses describe bichu-prod-ip --region=southamerica-east1 --project=bichu-app-508914 --format='value(address)')
+   ZONA=$(curl -sS "https://api.cloudflare.com/client/v4/zones?name=bichu.app" \
+     -H "Authorization: Bearer $CF_API_TOKEN" | jq -r '.result[0].id')
+   curl -sS -X POST "https://api.cloudflare.com/client/v4/zones/$ZONA/dns_records" \
+     -H "Authorization: Bearer $CF_API_TOKEN" -H "Content-Type: application/json" \
+     --data "{\"type\":\"A\",\"name\":\"admin\",\"content\":\"$IP_PROD\",\"ttl\":300,\"proxied\":false,\"comment\":\"backoffice admin-web (ADR-0027)\"}" \
+     | jq '{success, errors, id: .result.id, proxied: .result.proxied}'
+   ```
+
+   Só o `A`. Sem `AAAA` (a VM não tem IPv6, e `AAAA` órfão leva o cliente IPv6
+   para lugar nenhum) e sem mexer em nenhum outro registro.
+
+**Implantação de versão nova do backoffice** (depois da primeira): o
+`admin-web` não tem banco, não tem segredo e não tem estado, então implantar é
+reconstruir a imagem e recriar só ele. Guardar a imagem que está no ar ANTES,
+com o commit dela, é o que torna o retorno um comando só:
+
+```bash
+docker image tag bichu-admin-web:local bichu-admin-web:anterior   # ponto de retorno
+docker run --rm --entrypoint cat bichu-admin-web:anterior /etc/bichu/commit; echo
+git pull --ff-only && BUILD_COMMIT=$(git rev-parse HEAD) docker compose build admin-web
+docker compose up -d --no-deps admin-web
+docker run --rm --entrypoint cat bichu-admin-web:local /etc/bichu/commit; echo   # o commit novo
+```
+
+A borda só é reconstruída quando `infra/caddy/Dockerfile` muda; mudança só no
+Caddyfile é `docker compose up -d --no-deps --force-recreate edge`, que derruba
+as conexões de todos os hosts por alguns segundos.
+
+**Retorno (rollback)**, em segundos e sem rede:
+
+```bash
+docker image tag bichu-admin-web:anterior bichu-admin-web:local
+docker compose up -d --no-deps --force-recreate admin-web
+docker run --rm --entrypoint cat bichu-admin-web:local /etc/bichu/commit; echo   # = o commit anterior
+```
+
+Se o problema for da borda (Caddyfile), o retorno é `git checkout <commit
+anterior> -- infra/caddy/Caddyfile` e recriar o `edge`. Retirar o backoffice do
+ar inteiro sem tocar nos outros hosts: `ADMIN_HOSTS=http://admin.localhost` no
+`.env` e recriar o `edge` (o nome some da borda; o registro DNS pode ficar).
+
+O retorno é testado em homologação antes da primeira implantação de produção:
+implantar um commit, voltar, e conferir o commit servido pelos dois comandos
+`cat /etc/bichu/commit` acima.
+
+**Verificação:**
+
+```bash
+dig +short admin.bichu.app @1.1.1.1          # = IP de bichu-prod, e só ele
+dig +short AAAA admin.bichu.app @1.1.1.1     # vazio
+docker compose logs edge | grep -i 'admin.bichu.app' | grep -i 'certificate obtained'
+curl -sSI https://admin.bichu.app/ | grep -iE '^(HTTP|strict-transport|content-security|x-robots|cache-control)'
+# 200, HSTS, CSP sem unsafe-* e sem google, X-Robots-Tag noindex, no-store
+curl -sSI https://admin.bichu.app/v1/health | head -1        # 404: o host admin não é a API inteira
+for i in $(seq 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST https://admin.bichu.app/v1/admin/auth/login; done; echo
+# os dez primeiros NÃO são 429; o 11º é 429 (espere 1 min antes de repetir)
+```
+
+---
+
 ## Parte C — O que precisa existir antes de a máquina receber o primeiro dado
 
 ### Passo 12 — `pg_dump` diário guardado FORA do host (critério 10 de BICHUS-13)

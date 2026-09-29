@@ -454,8 +454,22 @@ verificar-contrato-publico: ## BICHUS-55: portao de contrato publico, iscas prim
 	npm run build
 	sh infra/verificacao/verificar-contrato-publico.sh api/openapi.yaml
 
-verificar-borda: ## ADR-0016: x-edge-limits, prefixo e rota de /.well-known, por leitura
+verificar-borda: ## ADR-0016: x-edge-limits, prefixo, rota de /.well-known e `/v1/admin*` so no host admin, por leitura
 	python3 infra/verificacao/verificar_borda.py
+
+# O BACKOFFICE (`admin/`, ADR-0027). Duas metades, pelo mesmo motivo das outras
+# do repositorio: o autoteste da sonda roda em `make verificar` porque nao usa
+# docker nem rede e leva menos de um segundo; a verificacao inteira (imagem,
+# iscas de build, pilha ISOLADA e a sonda pela borda) sobe containers e fica
+# fora de `verificar`, como `verificar-subida-da-api`. E o MESMO script do job
+# `admin` da esteira. Nao toca a pilha `bichu` de quem esta desenvolvendo: o
+# projeto e outro, e nenhuma porta e publicada.
+verificar-backoffice-autoteste: ## as iscas da sonda do backoffice e do orcamento do painel reprovam (nao usa docker)
+	node infra/verificacao/verificar-backoffice-na-borda.mjs --autoteste
+	node infra/verificacao/verificar-orcamento-do-admin.mjs --autoteste
+
+verificar-backoffice: commit-de-build ## ADR-0027: imagem do admin-web, iscas de build, pilha isolada e sonda D33/D34/D41/D48 (~35 s)
+	bash infra/verificacao/verificar-backoffice.sh
 
 verificar-borda-local: ## a borda de pe responde o que o contrato promete, pela porta publicada
 	python3 infra/verificacao/verificar_borda_local.py $${PUBLIC_BASE_URL:-http://localhost:$(PORTA)} .
@@ -615,7 +629,7 @@ verificar-boot-do-alvo-prod: ## BICHUS-213: o alvo `prod` constroi e morre no ge
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-destinos verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-destinos verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs
@@ -824,11 +838,11 @@ restore: ## restaura o dump mais recente de ./backup
 	 echo "restaurando $$ultimo"; \
 	 set -o pipefail; gunzip -c "$$ultimo" | $(COMPOSE) exec -T db psql -U $${POSTGRES_USER:-bichu} -d $${POSTGRES_DB:-bichu}
 
-pin-digests: ## reresolve os digests das imagens do compose e da base do Dockerfile
+pin-digests: ## reresolve os digests das imagens do compose e de todo Dockerfile (API, admin/, borda)
 	@# Sem `pipefail`, `grep` que nao acha nada sai 1, o `sort` sai 0 e o
 	@# `while` nao executa: o alvo termina VERDE tendo conferido ZERO
 	@# referencias, que e o estado em que ele mais precisava falar.
-	@set -o pipefail; grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' compose.yaml Dockerfile | sort -u | while read -r ref; do \
+	@set -o pipefail; grep -hoE '(quay\.io/)?[a-z0-9./-]+:[A-Za-z0-9._-]+@sha256:[0-9a-f]{64}' $(wildcard compose.yaml Dockerfile */Dockerfile infra/*/Dockerfile) | sort -u | while read -r ref; do \
 	  tag=$${ref%@*}; \
 	  novo=$$(docker buildx imagetools inspect "$$tag" --format '{{.Manifest.Digest}}' 2>/dev/null); \
 	  if [ -n "$$novo" ]; then echo "$$tag -> $$novo"; else echo "$$tag -> NAO RESOLVEU"; fi; \

@@ -1,0 +1,57 @@
+# ISCA de verificar_borda.py (ADR-0016 emenda 2). PRECISA REPROVAR.
+# O bloco administrativo esta certo, e o bloco da APLICACAO ganhou um
+# `rate_limit`. A emenda 2 abriu excecao so para o host administrativo: nos hosts
+# do app o teto mora no servico (item 4), e um 429 da borda no aviso do achador
+# violaria o invariante nº 1 do contrato.
+{
+	admin off
+}
+
+{$PUBLIC_BASE_URL}{$HOSTS_EXTRA_APP} {
+	rate_limit {
+		zone app {
+			match {
+				path /v1/*
+			}
+			key {remote_host}
+			events 600
+			window 1m
+		}
+	}
+
+	handle /v1/admin* {
+		respond "nao encontrado" 404
+	}
+
+	handle /v1/* {
+		reverse_proxy api:3000
+	}
+}
+
+{$ADMIN_HOSTS:http://admin.localhost} {
+	rate_limit {
+		zone admin_login {
+			match {
+				method POST
+				path /v1/admin/auth/login
+			}
+			key {remote_host}
+			events 10
+			window 1m
+		}
+		zone admin_api {
+			match {
+				path /v1/admin/*
+			}
+			key {remote_host}
+			events 600
+			window 1m
+		}
+	}
+
+	handle /v1/admin/* {
+		request_header -X-Internal-*
+		request_header X-Internal-Surface admin
+		reverse_proxy api:3000
+	}
+}

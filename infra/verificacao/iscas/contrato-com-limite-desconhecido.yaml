@@ -1,0 +1,15 @@
+# ISCA de verificar_borda.py (ADR-0016 emenda 2). PRECISA REPROVAR.
+# Todas as chaves que o portao confere estao aqui, com os valores certos, e mais
+# UMA que ele nao conhece. Ate 23/09 o portao ignorava chave desconhecida: um
+# teto declarado aqui e aplicado em lugar nenhum passava calado, e quem lesse o
+# contrato pararia de procurar.
+openapi: 3.1.0
+x-edge-limits:
+  max_request_body_bytes: 12582912
+  max_request_header_bytes: 16384
+  read_timeout_seconds: 30
+  write_timeout_seconds: 30
+  admin_login_requests_per_minute_per_ip: 10
+  admin_requests_per_minute_per_ip: 600
+  app_requests_per_minute_per_ip: 300
+paths: {}
