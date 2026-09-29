@@ -14,7 +14,9 @@ import { assertSafeBoot, ehHostLocal, recusaDoCaptchaDeDesenvolvimento } from '.
 
 const ORIGINAL = { ...process.env };
 const LIGA = { CAPTCHA_DESENVOLVIMENTO_LOCAL: 'aprovar-token-de-desenvolvimento' };
-const LOCAL = { PUBLIC_BASE_URL: 'http://localhost:3000', ADMIN_ORIGIN: 'http://admin.localhost' };
+// Hosts de teste que o portao de portabilidade aceita: `*.localhost`, `*.test`,
+// loopback IPv6 e dominios reservados (`.invalid`), nunca um host de verdade.
+const LOCAL = { PUBLIC_BASE_URL: 'http://app.localhost:3000', ADMIN_ORIGIN: 'http://admin.localhost' };
 
 afterEach(() => {
   process.env = { ...ORIGINAL };
@@ -40,10 +42,10 @@ void describe('recusa de subida com o captcha de desenvolvimento fora da pilha l
     assert.match(erro.message, /NODE_ENV=production/);
   });
 
-  void it('ISCA: num host que nao e local a API nao sobe (hml, apex, admin)', () => {
+  void it('ISCA: num host que nao e local a API nao sobe (hosts reservados que nao sao locais)', () => {
     for (const hospedado of [
-      { PUBLIC_BASE_URL: 'https://hml.bichu.app' },
-      { ADMIN_ORIGIN: 'https://admin.bichu.app' },
+      { PUBLIC_BASE_URL: 'https://hml.exemplo.invalid' },
+      { ADMIN_ORIGIN: 'https://admin.exemplo.invalid' },
       { PUBLIC_BASE_URL: 'http://34.95.10.10' },
     ]) {
       const erro = subir({ ...LIGA, ...LOCAL, ENVIRONMENT: 'dev', ...hospedado });
@@ -69,16 +71,16 @@ void describe('recusa de subida com o captcha de desenvolvimento fora da pilha l
   });
 
   void it('sem a variavel, nada muda: nenhuma recusa nova', () => {
-    assert.equal(recusaDoCaptchaDeDesenvolvimento({ PUBLIC_BASE_URL: 'https://bichu.app', NODE_ENV: 'production' }), undefined);
+    assert.equal(recusaDoCaptchaDeDesenvolvimento({ PUBLIC_BASE_URL: 'https://exemplo.invalid', NODE_ENV: 'production' }), undefined);
   });
 
   void it('host local e comparado pelo hostname, e nao por texto', () => {
-    assert.equal(ehHostLocal('http://localhost:3300'), true);
+    assert.equal(ehHostLocal('http://app.localhost:3300'), true);
     assert.equal(ehHostLocal('http://admin.localhost'), true);
     assert.equal(ehHostLocal('http://painel.exemplo.test'), true);
-    assert.equal(ehHostLocal('http://127.0.0.1:3000'), true);
-    assert.equal(ehHostLocal('https://localhost.bichu.app'), false);
-    assert.equal(ehHostLocal('https://bichu.app/localhost'), false);
+    assert.equal(ehHostLocal('http://[::1]:3000'), true);
+    assert.equal(ehHostLocal('https://app.localhost.exemplo.invalid'), false);
+    assert.equal(ehHostLocal('https://exemplo.invalid/localhost'), false);
     assert.equal(ehHostLocal('nao e url'), false);
   });
 });
