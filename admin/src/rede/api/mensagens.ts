@@ -34,6 +34,8 @@ export function mensagemDaFalha(falha: Falha, acao: string): string {
       const conhecido = falha.erros.map((e) => CODIGOS[e.code]).find(Boolean);
       return conhecido ?? `Não conseguimos ${acao}. Confira os campos e tente de novo.`;
     }
+    case 'sem-versao':
+      return 'Não conseguimos confirmar qual versão deste encontro você está vendo, e nada foi gravado. Os dados foram atualizados; confira e tente de novo.';
     case 'versao':
       return 'Alguém alterou este encontro antes de você. Os dados foram atualizados; confira e tente de novo.';
     case 'limite':

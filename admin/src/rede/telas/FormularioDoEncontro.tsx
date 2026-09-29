@@ -18,7 +18,7 @@ import { SairSemSalvar } from '../../componentes/SairSemSalvar.tsx';
 import { guardarRascunho, retomarRascunho } from '../../sessao/rascunho.ts';
 import { useSessao } from '../../sessao/ProvedorDeSessao.tsx';
 import { mensagemDaFalha } from '../api/mensagens.ts';
-import type { Falha } from '../api/redeApi.ts';
+import { precisaReler, type Falha } from '../api/redeApi.ts';
 import { DialogoComMotivoESenha, type ResultadoDaAcao } from '../componentes/DialogoComMotivoESenha.tsx';
 import {
   corpoDaMudanca,
@@ -194,7 +194,7 @@ export default function FormularioDoEncontro() {
       mostrarErros();
       return;
     }
-    if (r.tipo === 'versao') setVersao((n) => n + 1);
+    if (precisaReler(r)) setVersao((n) => n + 1);
     setFalha(mensagemDaFalha(r, acao));
   }
 
@@ -259,7 +259,7 @@ export default function FormularioDoEncontro() {
       const r = await passo();
       if (!r.ok) {
         const parcial = i > 0 ? ' Uma parte das alterações já foi salva; a página foi atualizada.' : '';
-        if (i > 0 || r.falha.tipo === 'versao') setVersao((n) => n + 1);
+        if (i > 0 || precisaReler(r.falha)) setVersao((n) => n + 1);
         return { ok: false, mensagem: mensagemDaFalha(r.falha, 'salvar a mudança') + parcial };
       }
       slug = r.dados.slug;

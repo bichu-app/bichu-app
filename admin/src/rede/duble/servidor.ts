@@ -51,7 +51,8 @@ export interface OpcoesDoDuble {
   tetoDeLinhasDaFila?: number;
 }
 
-const PROBLEMA = 'https://dominio-a-definir.com.br/problems/';
+// Sem host: o duble nao e nenhum ambiente, e o cliente decide pelo slug depois da ultima `/`.
+const PROBLEMA = 'urn:bichu:problems/';
 
 function json(status: number, corpo: unknown, extra: Record<string, string> = {}): Response {
   return new Response(corpo === undefined ? null : JSON.stringify(corpo), {
@@ -107,6 +108,11 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     }
     tokens.delete(t); // uso unico
     return null;
+  }
+
+  /** Como o servidor: faltar `If-Match` responde 428 antes de sessao e reautenticacao. */
+  function exigirIfMatch(req: Requisicao): Response | null {
+    return req.cabecalhos['if-match'] ? null : problema(428, 'precondition-required', 'Falta a versao');
   }
 
   function exigirVersao(req: Requisicao, e: Encontro): Response | null {
@@ -284,6 +290,8 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       }
 
       if (!sub && req.metodo === 'DELETE') {
+        const semVersao = exigirIfMatch(req);
+        if (semVersao) return semVersao;
         const r = exigirReauth(req, 'network_event_removal');
         if (r) return r;
         const v = exigirVersao(req, e);
@@ -294,6 +302,8 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       }
 
       if (sub === 'relocation' && req.metodo === 'POST') {
+        const semVersao = exigirIfMatch(req);
+        if (semVersao) return semVersao;
         const r = exigirReauth(req, 'network_event_relocation');
         if (r) return r;
         const v = exigirVersao(req, e);
@@ -309,6 +319,8 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       }
 
       if (sub === 'access' && req.metodo === 'POST') {
+        const semVersao = exigirIfMatch(req);
+        if (semVersao) return semVersao;
         const r = exigirReauth(req, 'network_event_access_change');
         if (r) return r;
         const v = exigirVersao(req, e);
@@ -331,6 +343,8 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       }
 
       if (sub === 'cancellation' && req.metodo === 'POST') {
+        const semVersao = exigirIfMatch(req);
+        if (semVersao) return semVersao;
         const r = exigirReauth(req, 'network_event_cancellation');
         if (r) return r;
         const v = exigirVersao(req, e);

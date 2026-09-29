@@ -2,6 +2,7 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 
+import { hostsExternos } from './config/hosts-externos.ts';
 import { PROXY_PADRAO, urlDaApi } from './config/url-da-api.ts';
 
 export default defineConfig(({ mode }) => {
@@ -24,6 +25,7 @@ export default defineConfig(({ mode }) => {
     plugins: [react()],
     define: {
       'import.meta.env.VITE_API_BASE_URL': JSON.stringify(baseDaApi),
+      ...Object.fromEntries(Object.entries(hostsExternos(env)).map(([k, v]) => [`import.meta.env.${k}`, JSON.stringify(v)])),
     },
     server: { proxy },
     preview: { proxy },

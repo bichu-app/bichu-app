@@ -13,6 +13,7 @@ import { Icone } from '../../componentes/Icone.tsx';
 import { useAvisoDaNavegacao, useListaPaginada, useParametrosDaLista } from '../../componentes/lista.ts';
 import { MenuDeAcoes, type ItemDoMenu } from '../../componentes/MenuDeAcoes.tsx';
 import { mensagemDaFalha } from '../api/mensagens.ts';
+import { precisaReler } from '../api/redeApi.ts';
 import { DialogoComMotivoESenha, type ResultadoDaAcao } from '../componentes/DialogoComMotivoESenha.tsx';
 import { SeloDoEncontro } from '../componentes/SeloDoEncontro.tsx';
 import { dataCurta, faixaDeHorario } from '../dominio/horario.ts';
@@ -73,7 +74,7 @@ export default function ListaDeEncontros() {
       mostrar('ok', textosDoCancelamento(e).sucesso);
       return { ok: true };
     }
-    if (r.falha.tipo === 'versao') recarregar();
+    if (precisaReler(r.falha)) recarregar();
     return { ok: false, mensagem: mensagemDaFalha(r.falha, 'cancelar o encontro') };
   }
 
@@ -84,7 +85,7 @@ export default function ListaDeEncontros() {
       mostrar('ok', 'Encontro removido. Ele saiu da Rede do app.');
       return { ok: true };
     }
-    if (r.falha.tipo === 'versao') recarregar();
+    if (precisaReler(r.falha)) recarregar();
     return { ok: false, mensagem: mensagemDaFalha(r.falha, 'remover o encontro') };
   }
 

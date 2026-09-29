@@ -32,6 +32,7 @@ export type Falha =
   | { tipo: 'proibido' }
   | { tipo: 'nao-encontrado' }
   | { tipo: 'versao' }
+  | { tipo: 'sem-versao' }
   | { tipo: 'limite'; esperaSegundos: number | null }
   | { tipo: 'endereco-ocupado' }
   | { tipo: 'encontro-fechado' }
@@ -62,8 +63,13 @@ export function falhaDaResposta(resposta: Response, corpo: unknown): Falha {
       // `event-not-open`: o encontro foi cancelado, removido ou terminou, e a fila dele fechou.
       return slug === 'event-not-open' ? { tipo: 'encontro-fechado' } : { tipo: 'endereco-ocupado' };
     case 412:
-    case 428:
       return { tipo: 'versao' };
+    // `precondition-required`: a escrita saiu sem `If-Match`. O servidor responde
+    // isto ANTES de conferir a sessao e a reautenticacao, entao chega aqui mesmo
+    // numa operacao com senha. Nao e conflito com outra pessoa: e a tela que nao
+    // tinha a versao, e o caminho e reler o recurso.
+    case 428:
+      return { tipo: 'sem-versao' };
     case 429: {
       const s = Number(resposta.headers.get('Retry-After'));
       return { tipo: 'limite', esperaSegundos: Number.isFinite(s) && s > 0 ? s : null };
@@ -239,4 +245,9 @@ export function reautenticarPeloCliente(cliente: ClienteDaApi): Reautenticar {
       return { ok: false, motivo: 'falha' };
     }
   };
+}
+
+/** 412 e 428 pedem o mesmo remedio: reler o recurso antes de tentar de novo. */
+export function precisaReler(falha: Falha): boolean {
+  return falha.tipo === 'versao' || falha.tipo === 'sem-versao';
 }

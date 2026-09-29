@@ -147,6 +147,23 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
     expect(await screen.findByText('Encontro cancelado. O app mostra o aviso de cancelado até o fim do dia 28/09/2026.')).toBeInTheDocument();
   });
 
+  it('nenhuma escrita protegida por If-Match sai sem ele (o servidor responderia 428)', async () => {
+    const { duble, usuario } = montar('/rede');
+    await screen.findByText('4 encontros');
+    await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
+    await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar encontro' }));
+    const dialogo = screen.getByRole('alertdialog');
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Obra na praça.');
+    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
+    await screen.findByText(/^Encontro cancelado\./);
+    const protegidas = duble.registro.filter(
+      (r) => (r.metodo === 'PATCH' || r.metodo === 'DELETE' || r.metodo === 'POST') && /\/admin\/network\/events\/[^/]+(\/(relocation|cancellation|access))?$/.test(r.caminho),
+    );
+    expect(protegidas.length).toBeGreaterThan(0);
+    expect(protegidas.filter((r) => !r.cabecalhos['if-match'])).toEqual([]);
+  });
+
   it('o foco fica preso no diálogo e Esc devolve o foco ao menu', async () => {
     const { usuario } = montar('/rede');
     await screen.findByText('4 encontros');

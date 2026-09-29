@@ -3,6 +3,8 @@
  * acao `admin_login` (a mesma que o servidor confere). Carregado so no
  * documento `/entrar/`.
  */
+import { configuracao } from '../config.ts';
+
 export const ACAO_DO_CAPTCHA = 'admin_login';
 
 interface GrecaptchaEnterprise {
@@ -33,7 +35,7 @@ let carregamento: Promise<GrecaptchaEnterprise> | undefined;
 function carregarScript(chave: string): Promise<GrecaptchaEnterprise> {
   carregamento ??= new Promise<GrecaptchaEnterprise>((resolver, rejeitar) => {
     const script = document.createElement('script');
-    script.src = `https://www.google.com/recaptcha/enterprise.js?render=${encodeURIComponent(chave)}`;
+    script.src = `${configuracao.urlDoScriptDoCaptcha}?render=${encodeURIComponent(chave)}`;
     script.async = true;
     script.onload = () => {
       const g = window.grecaptcha?.enterprise;

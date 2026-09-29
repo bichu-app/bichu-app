@@ -14,11 +14,12 @@ import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 
+import { configuracao } from '../../config.ts';
 import type { Ponto } from '../dominio/tipos.ts';
 import estilos from './SeletorDePonto.module.css';
 
-export const URL_DOS_TILES = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const ATRIBUICAO = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+export const URL_DOS_TILES = configuracao.urlDosTiles;
+const ATRIBUICAO = `&copy; <a href="${configuracao.urlDaAtribuicaoDoMapa}">OpenStreetMap</a>`;
 /** Os limites de `NetworkEventPoint` no contrato. */
 const LIMITES = L.latLngBounds([-34, -74], [6, -32]);
 /** Sem ponto, o mapa abre no centro de Sao Paulo, onde a v1 opera. */

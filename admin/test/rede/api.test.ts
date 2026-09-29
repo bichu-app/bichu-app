@@ -119,3 +119,26 @@ describe('mensagens de falha (UX 30, B16 e B19)', async () => {
     expect(mensagemDaFalha({ tipo: 'endereco-ocupado' }, 'salvar')).toBe('Já existe um encontro com um título parecido. Mude o título e tente de novo.');
   });
 });
+
+describe('428 precondition-required (If-Match faltando)', () => {
+  it('vem antes da reautenticação, e o painel trata como "reler", com texto próprio', async () => {
+    const duble = criarDuble();
+    const cliente = criarClienteDaApi({ fetch: duble.fetch });
+    const api = criarApiDaRede({ cliente, fetch: duble.fetch });
+    // Sem token de reautenticacao e sem If-Match: o servidor responde 428, e nao 401.
+    const r = await api.remover('', 'encontro-de-caes-no-parque', '');
+    expect(!r.ok && r.falha).toEqual({ tipo: 'sem-versao' });
+    const { precisaReler } = await import('../../src/rede/api/redeApi.ts');
+    const { mensagemDaFalha } = await import('../../src/rede/api/mensagens.ts');
+    if (r.ok) throw new Error('deveria falhar');
+    expect(precisaReler(r.falha)).toBe(true);
+    expect(mensagemDaFalha(r.falha, 'remover')).toMatch(/^Não conseguimos confirmar qual versão deste encontro você está vendo, e nada foi gravado\./);
+    expect(mensagemDaFalha(r.falha, 'remover')).not.toMatch(/Alguém alterou/);
+  });
+
+  it('toda escrita que o contrato protege com If-Match sai com ele, nas telas (isca do 428)', async () => {
+    const { falhaDaResposta } = await import('../../src/rede/api/redeApi.ts');
+    expect(falhaDaResposta(new Response(null, { status: 428 }), { type: 'x/precondition-required' })).toEqual({ tipo: 'sem-versao' });
+    expect(falhaDaResposta(new Response(null, { status: 412 }), { type: 'x/precondition-failed' })).toEqual({ tipo: 'versao' });
+  });
+});

@@ -8,7 +8,7 @@ export type ClienteDaApi = Client<paths>;
 export type Esquemas = components['schemas'];
 
 export interface OpcoesDoCliente {
-  /** URL base com o prefixo de versao, por exemplo `https://api.bichu.app/v1`. */
+  /** URL base com o prefixo de versao: `/v1` (mesma origem) ou uma URL absoluta, so em desenvolvimento. */
   baseUrl?: string;
   sessao?: EstrategiaDeSessao;
   /** Injetavel para teste. */
