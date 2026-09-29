@@ -70,6 +70,31 @@ describe('1 · Login', () => {
     expect(new Set(telas).size).toBe(1);
   });
 
+  it('D61 a D63: sem "Esqueci minha senha" e sem estado de senha vazada ou conta bloqueada', async () => {
+    // A senha do painel so e definida pelo comando conta-admin, no servidor. Senha
+    // vazada, conta bloqueada ou desativada recebem o mesmo 401 generico (D44): a
+    // tela nao tem link de recuperacao nem texto que diga qual caso aconteceu.
+    const casos: Resposta[] = [
+      problema(401, 'invalid-credentials'),
+      problema(403, 'password-reset-required'),
+      problema(423, 'account-locked'),
+    ];
+    for (const caso of casos) {
+      const { container, servidor, unmount } = montar(caso);
+      const semRecuperacao = () => {
+        expect(screen.queryByRole('link', { name: /esqueci|redefinir|recuperar/i })).toBeNull();
+        expect(screen.queryByRole('button', { name: /esqueci|redefinir|recuperar/i })).toBeNull();
+        expect(container.textContent ?? '').not.toMatch(/esqueci|redefin|recuper|vazad|bloquead|desativad/i);
+      };
+      semRecuperacao();
+      preencherEEntrar('alguem@exemplo.com.br', 'senha-que-nao-confere');
+      await screen.findByText(MENSAGEM_UNICA);
+      semRecuperacao();
+      expect(servidor.requisicoes.some((r) => r.caminho.includes('password-reset'))).toBe(false);
+      unmount();
+    }
+  });
+
   it('1.4: muitas tentativas diz a espera por extenso e desabilita Entrar ate o prazo', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
