@@ -13,7 +13,7 @@ import {
   type EstadoDoFormulario,
 } from '../../src/rede/dominio/formulario.ts';
 import { campoDoInstante, dataCurta, faixaDeHorario, instanteDoCampo, mesPorExtenso } from '../../src/rede/dominio/horario.ts';
-import { acoesDoEncontro, consultaDaLista, seloDoEncontro, textoDaContagem, textoSemResultado } from '../../src/rede/dominio/lista.ts';
+import { acoesDoEncontro, consultaDaLista, seloDoEncontro, textosDoCancelamento, textoDaContagem, textoSemResultado } from '../../src/rede/dominio/lista.ts';
 import { achadosNasObservacoes } from '../../src/rede/dominio/observacoes.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../../src/rede/dominio/valor.ts';
 import { encontroDeExemplo } from '../../src/rede/duble/massa.ts';
@@ -254,6 +254,21 @@ describe('foto com upload_id nulo (conta apagada)', () => {
     const f = formularioDoEncontro(comOrfa);
     f.fotos = [...f.fotos].reverse();
     expect(planoDeEdicao(comOrfa, f).patch).toEqual({ images: [{ upload_id: '00000000-0000-4000-8000-000000000002', alt_text: 'Lago do parque' }] });
+  });
+});
+
+describe('bug 5: prazo do cancelado no app', () => {
+  it('com fim: até o horário de fim, no fuso do encontro', () => {
+    expect(textosDoCancelamento({ starts_at: '2026-10-11T12:00:00Z', ends_at: '2026-10-11T14:00:00Z', time_zone: 'America/Sao_Paulo' }).sucesso).toBe(
+      'Encontro cancelado. O app mostra o aviso de cancelado até o horário de fim, às 11:00 de 11/10/2026.',
+    );
+  });
+  it('sem fim: até o fim do dia do início no fuso do encontro, e não no dia UTC', () => {
+    // 01:30 UTC de 12/10 ainda e 11/10 em Sao Paulo.
+    const t = textosDoCancelamento({ starts_at: '2026-10-12T01:30:00Z', ends_at: null, time_zone: 'America/Sao_Paulo' });
+    expect(t.corpo).toMatch(/^O encontro não tem horário de fim, então continua no app, marcado como cancelado, até o fim do dia 11\/10\/2026\. /);
+    expect(t.sucesso).toBe('Encontro cancelado. O app mostra o aviso de cancelado até o fim do dia 11/10/2026.');
+    expect(t.corpo).not.toMatch(/horário previsto de fim/);
   });
 });
 

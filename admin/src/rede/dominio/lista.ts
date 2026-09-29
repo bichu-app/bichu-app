@@ -3,6 +3,7 @@
  * parametros de `listAdminNetworkEvents`, o selo de cada linha e os textos de
  * contagem e de sem resultado (UX 29.4 e 29.5).
  */
+import { dataEHora, hora } from './horario.ts';
 import type { Encontro, FiltrosDaLista, OrdemDaLista } from './tipos.ts';
 
 export type Filtro = 'todos' | 'agendados' | 'agora' | 'encerrados' | 'cancelados';
@@ -84,5 +85,25 @@ export function acoesDoEncontro(e: Pick<Encontro, 'publication_status' | 'timing
     pedidos: vivo && e.visibility === 'private',
     cancelar: e.publication_status === 'published' && e.timing !== 'ended',
     remover: vivo,
+  };
+}
+
+/**
+ * Ate quando o encontro cancelado continua no app (decisao do cliente de 23/09
+ * e contrato): ate o fim previsto; sem fim declarado, ate 23:59:59 do dia do
+ * inicio, no fuso do encontro. O dialogo e o sucesso dizem o prazo certo de cada
+ * caso, em vez de "ate o horario previsto de fim" para quem nao tem fim.
+ */
+export function textosDoCancelamento(e: Pick<Encontro, 'starts_at' | 'ends_at' | 'time_zone'>): { corpo: string; sucesso: string } {
+  const fuso = e.time_zone;
+  const ate = e.ends_at
+    ? `até o horário de fim, às ${hora(e.ends_at, fuso)} de ${dataEHora(e.ends_at, fuso).slice(0, 10)}`
+    : `até o fim do dia ${dataEHora(e.starts_at, fuso).slice(0, 10)}`;
+  const abertura = e.ends_at
+    ? `O encontro continua no app, marcado como cancelado, ${ate}.`
+    : `O encontro não tem horário de fim, então continua no app, marcado como cancelado, ${ate}.`;
+  return {
+    corpo: `${abertura} Não dá para desfazer: se ele for acontecer em outra data, crie um encontro novo. Todos os administradores recebem aviso.`,
+    sucesso: `Encontro cancelado. O app mostra o aviso de cancelado ${ate}.`,
   };
 }

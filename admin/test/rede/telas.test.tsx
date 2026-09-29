@@ -103,6 +103,7 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
     await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar encontro' }));
     const dialogo = screen.getByRole('alertdialog', { name: 'Cancelar “Encontro de cães no parque”?' });
+    expect(within(dialogo).getByText(/^O encontro continua no app, marcado como cancelado, até o horário de fim, às 11:00 de 11\/10\/2026\./)).toBeInTheDocument();
     expect(within(dialogo).getByRole('button', { name: 'Voltar' })).toBeInTheDocument();
 
     await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
@@ -121,13 +122,29 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
 
     await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
     await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
-    expect(await screen.findByText('Encontro cancelado. O app mostra o aviso de cancelado até o horário previsto de fim.')).toBeInTheDocument();
+    expect(await screen.findByText('Encontro cancelado. O app mostra o aviso de cancelado até o horário de fim, às 11:00 de 11/10/2026.')).toBeInTheDocument();
     expect(screen.queryByRole('alertdialog')).toBeNull();
     const [cancelamento] = escritas(duble, 'POST', /cancellation$/);
     expect(cancelamento?.corpo).toEqual({ note: 'A praça vai estar interditada para obra.' });
     expect(cancelamento?.cabecalhos['if-match']).toBe('"1"');
     expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
     expect(screen.getAllByText('Cancelado', { selector: '.selo' })).toHaveLength(1);
+  });
+
+  it('bug 5: encontro sem fim fica no app até o fim do dia, e o diálogo diz isso', async () => {
+    const { usuario } = montar('/rede');
+    await screen.findByText('4 encontros');
+    await usuario.click(screen.getByRole('button', { name: 'Mais ações para Caminhada de fim de tarde' }));
+    await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar encontro' }));
+    const dialogo = screen.getByRole('alertdialog', { name: 'Cancelar “Caminhada de fim de tarde”?' });
+    expect(
+      within(dialogo).getByText(/^O encontro não tem horário de fim, então continua no app, marcado como cancelado, até o fim do dia 28\/09\/2026\./),
+    ).toBeInTheDocument();
+    expect(within(dialogo).queryByText(/horário previsto de fim/)).toBeNull();
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Chuva forte.');
+    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
+    expect(await screen.findByText('Encontro cancelado. O app mostra o aviso de cancelado até o fim do dia 28/09/2026.')).toBeInTheDocument();
   });
 
   it('o foco fica preso no diálogo e Esc devolve o foco ao menu', async () => {

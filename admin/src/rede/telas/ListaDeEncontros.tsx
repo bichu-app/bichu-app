@@ -16,7 +16,7 @@ import { mensagemDaFalha } from '../api/mensagens.ts';
 import { DialogoComMotivoESenha, type ResultadoDaAcao } from '../componentes/DialogoComMotivoESenha.tsx';
 import { SeloDoEncontro } from '../componentes/SeloDoEncontro.tsx';
 import { dataCurta, faixaDeHorario } from '../dominio/horario.ts';
-import { acoesDoEncontro, consultaDaLista, ehFiltro, ehOrdem, FILTROS, textoDaContagem, textoSemResultado, type Filtro } from '../dominio/lista.ts';
+import { acoesDoEncontro, consultaDaLista, textosDoCancelamento, ehFiltro, ehOrdem, FILTROS, textoDaContagem, textoSemResultado, type Filtro } from '../dominio/lista.ts';
 import { ORDENS } from '../dominio/rotulos.ts';
 import type { Encontro, OrdemDaLista } from '../dominio/tipos.ts';
 import { valorComoOAppMostra } from '../dominio/valor.ts';
@@ -70,7 +70,7 @@ export default function ListaDeEncontros() {
     const r = await rede.cancelar(token, e.slug, etagDe(e), motivo);
     if (r.ok) {
       substituir((x) => x.slug === e.slug, r.dados);
-      mostrar('ok', 'Encontro cancelado. O app mostra o aviso de cancelado até o horário previsto de fim.');
+      mostrar('ok', textosDoCancelamento(e).sucesso);
       return { ok: true };
     }
     if (r.falha.tipo === 'versao') recarregar();
@@ -129,9 +129,7 @@ export default function ListaDeEncontros() {
       {cancelar && (
         <DialogoComMotivoESenha
           titulo={`Cancelar “${cancelar.title}”?`}
-          corpo={[
-            'O encontro continua no app, marcado como cancelado, até o horário previsto de fim. Não dá para desfazer: se ele for acontecer em outra data, crie um encontro novo. Todos os administradores recebem aviso.',
-          ]}
+          corpo={[textosDoCancelamento(cancelar).corpo]}
           rotuloDoMotivo="Motivo"
           ajudaDoMotivo="Só a equipe vê. Não aparece no app."
           rotuloDaAcao="Cancelar encontro"
