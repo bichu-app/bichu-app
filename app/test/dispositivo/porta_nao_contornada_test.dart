@@ -601,7 +601,32 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// rolar no menor gabarito e mede a requisicao do outro lado. Medido pelo
 /// indice temporario que este portao usa, sobre a arvore de trabalho.
 /// Anterior: `883961325403f0e22fe845c4442014e93ff1e479`.
-const String _arvoreDasTelas = 'cad6c7b5c278308c0c7dca45029eb98e7b1c4f9e';
+///
+/// DESTRAVADO pelas tres ligacoes que faltavam no app (o aviso ao tutor pela
+/// plaquinha, o ouvinte de push e o dreno da fila offline). Duas telas mudaram,
+/// e **nenhuma das duas contorna a porta `CameraEGaleria`** -- que e o que o
+/// criterio 10 da BICHUS-161 cobra:
+///
+/// - `telas/escanear/tela_do_pet_da_tag.dart` ganhou o botao `Avisar o tutor`.
+///   Ele chama `TagsApi.avisarOTutor`, uma rota do contrato. Nenhum plugin de
+///   aparelho, nenhum canal de plataforma: o portao ESTRUTURAL abaixo continua
+///   valendo sobre este arquivo e continua verde, e e ele que pega o contorno de
+///   verdade.
+/// - `telas/casca_com_abas.dart` ganhou a faixa do aviso que chegou. Ela le um
+///   `ChangeNotifier` do escopo; o `firebase_messaging` fica atras da porta
+///   `MensagensDePush`, em `lib/dispositivo/`, que e exatamente onde o portao
+///   estrutural manda que ele fique.
+///
+/// A foto continua entrando pela porta: nenhuma tela do assistente de cadastro
+/// (`app/lib/telas/pet/`) mudou nesta rodada.
+///
+/// Troca de 28/09, correcao da paginacao das listagens (sem chave de issue no
+/// acionamento): `telas/perto/lista_do_diretorio.dart` e
+/// `telas/loja/vitrine_da_loja.dart` passaram a acumular as paginas e a pedir a
+/// seguinte pelo `RodapeDaPaginacao`. Nada a ver com camera: nenhuma das duas
+/// toca em foto, e as telas do assistente de cadastro (`app/lib/telas/pet/`)
+/// seguem intocadas.
+const String _arvoreDasTelas = 'cfba3eb42ecc9c32b91a500e7748fb50463a7b92';
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

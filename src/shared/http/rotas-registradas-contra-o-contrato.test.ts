@@ -39,6 +39,8 @@ import * as pets from '../../modules/pets/adapters/http/pet-routes.js';
 import * as referencia from '../../modules/pets/adapters/http/reference-data-routes.js';
 import * as midia from '../../modules/media/adapters/http/media-routes.js';
 import * as casos from '../../modules/lostfound/adapters/http/lost-case-routes.js';
+import * as casoPublico from '../../modules/lostfound/adapters/http/leitura-publica-do-caso-routes.js';
+import * as perfilPublico from '../../modules/pets/adapters/http/perfil-publico-routes.js';
 import * as achados from '../../modules/found/adapters/http/found-report-routes.js';
 import * as tags from '../../modules/tags/adapters/http/tag-routes.js';
 import * as conversas from '../../modules/messaging/adapters/http/conversation-routes.js';
@@ -58,6 +60,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   referencia,
   midia,
   casos,
+  // BICHUS-76 e BICHUS-45: as leituras publicas que o site consome.
+  casoPublico,
+  perfilPublico,
   // BICHUS-35. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   achados,

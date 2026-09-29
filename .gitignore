@@ -80,6 +80,11 @@ coverage/
 *.tsbuildinfo
 .npm/
 .pnpm-store/
+# A saida de `npm ci` redirecionada a arquivo. Entrou rastreada em 8c59bfe por
+# acidente e foi removida aqui. Ancorado na raiz DE PROPOSITO, e nao `*.log`:
+# `infra/verificacao/iscas/` versiona onze `.log` que SAO massa de isca, e a
+# regra generica esconderia a proxima isca em silencio.
+/npm-ci.log
 
 # Flutter e Android
 app/.dart_tool/

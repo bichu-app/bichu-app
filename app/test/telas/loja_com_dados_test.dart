@@ -13,6 +13,7 @@
 import 'package:bichu/api/modelos_loja.dart';
 import 'package:bichu/telas/loja/vitrine_da_loja.dart';
 import 'package:bichu/widgets/barra_de_listagem.dart';
+import 'package:bichu/widgets/rodape_da_paginacao.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -78,6 +79,75 @@ Map<String, dynamic> paginaDoContrato(
     'effective_sort': ordemEfetiva,
     'applied_filters': filtros,
   };
+}
+
+/// Vinte e cinco itens distintos, com titulo e `slug` numerados.
+///
+/// **Vinte e cinco, e nao cinco.** Um caso com cinco itens cabe inteiro na
+/// primeira pagina e fica verde com a paginacao quebrada -- foi o que
+/// aconteceu: a tela foi entregue com massa de dez e doze itens e o defeito
+/// passou. O teto do contrato e `limit: 20`.
+List<Map<String, dynamic>> vinteECincoItens() {
+  return <Map<String, dynamic>>[
+    for (var i = 1; i <= 25; i++)
+      itemDoContrato(slug: 'item-$i', title: 'Item $i'),
+  ];
+}
+
+/// A rede que **pagina de verdade**: recorta a massa por `page` e `limit`, do
+/// jeito que o contrato manda, e registra cada URL pedida.
+///
+/// Ela nao devolve um corpo fixo. Um duble que responde a mesma pagina para
+/// qualquer `page` deixaria passar o defeito que estes casos existem para
+/// pegar: a tela pode nunca pedir a pagina 2 e o teste nao perceberia.
+Future<http.Response> Function(http.Request) redeQuePaginaAVitrine(
+  List<Map<String, dynamic>> massa, {
+  required List<Uri> urls,
+  List<Map<String, dynamic>> Function(Map<String, String> pedido)? recorte,
+  Map<String, String> Function(Map<String, String> pedido)? filtrosAplicados,
+}) {
+  return (req) async {
+    if (req.url.path != '/v1/store/items' || req.method != 'GET') {
+      return problema('not-found', 404);
+    }
+    urls.add(req.url);
+    final pedido = req.url.queryParameters;
+    final pagina = int.parse(pedido['page'] ?? '1');
+    final limite = int.parse(pedido['limit'] ?? '20');
+    final visivel = recorte == null ? massa : recorte(pedido);
+    final inicio = (pagina - 1) * limite;
+    final fatia = inicio >= visivel.length
+        ? const <Map<String, dynamic>>[]
+        : visivel.sublist(
+            inicio,
+            inicio + limite > visivel.length ? visivel.length : inicio + limite,
+          );
+    return json200(
+      paginaDoContrato(
+        fatia,
+        total: visivel.length,
+        pagina: pagina,
+        limite: limite,
+        filtros: filtrosAplicados?.call(pedido) ??
+            const <String, String>{'scope': 'all'},
+      ),
+    );
+  };
+}
+
+/// Rola ate o rodape e toca em `Carregar mais`.
+Future<void> tocarEmCarregarMais(WidgetTester tester) async {
+  final botao = find.text(RodapeDaPaginacao.rotuloDeCarregarMais);
+  expect(
+    botao,
+    findsOneWidget,
+    reason: 'REPROVA: nao ha `Carregar mais` na tela, e os itens depois do '
+        '20o sao inalcancaveis.',
+  );
+  await tester.ensureVisible(botao);
+  await tester.pumpAndSettle();
+  await tester.tap(botao);
+  await tester.pumpAndSettle();
 }
 
 /// A rede que atende a vitrine e **404 em qualquer outra rota**.
@@ -550,5 +620,144 @@ void main() {
       find.textContaining('O Bichu não é o vendedor'),
       findsOneWidget,
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // ISCA — o 21o item e alcancavel, e trocar o recorte volta para a pagina 1
+  // -------------------------------------------------------------------------
+  group('ISCA — a paginacao avanca de verdade', () {
+    // DESLIGAR PARA VER REPROVAR, caso do 21o item: em
+    // `lib/telas/loja/vitrine_da_loja.dart`, em `_corpo`, troque o
+    // `RodapeDaPaginacao` por `const SizedBox.shrink()` -- e o estado em que
+    // esta tela foi entregue. Ou troque `_itens.addAll(pagina.itens)` em
+    // `_carregarMais` por `_itens..clear()..addAll(pagina.itens)`: a pagina 2
+    // volta a SUBSTITUIR a 1 e `Item 1` desaparece.
+    //
+    // DESLIGAR PARA VER REPROVAR, caso do recorte: no mesmo arquivo, em
+    // `_carregar`, troque
+    // `_recorte.pagina == 1 ? _recorte : _recorte.com(pagina: 1)` por
+    // `_recorte`, e apague o `pagina: 1` do `_trocarRecorte` de
+    // `_controleDeFiltro`.
+    testWidgets(
+        'o 21o item e alcancavel: `Carregar mais` pede a pagina 2 e ACRESCENTA',
+        (tester) async {
+      final urls = <Uri>[];
+      await abrirLoja(
+        tester,
+        rede: redeQuePaginaAVitrine(vinteECincoItens(), urls: urls),
+      );
+
+      expect(titulosNaTela(tester), hasLength(20));
+      expect(find.text('Item 21'), findsNothing);
+      expect(urls.single.queryParameters['page'], '1');
+      expect(
+        find.text(RodapeDaPaginacao.rotuloDeCarregarMais),
+        findsOneWidget,
+        reason: 'REPROVA: 25 itens no servidor, 20 na tela, e nenhum caminho '
+            'para os outros 5.',
+      );
+
+      await tocarEmCarregarMais(tester);
+
+      expect(
+        urls.last.queryParameters['page'],
+        '2',
+        reason: 'REPROVA: a tela nao pediu a pagina seguinte.',
+      );
+      expect(urls.last.queryParameters['limit'], '20');
+      expect(titulosNaTela(tester), hasLength(25));
+      expect(
+        find.text('Item 21'),
+        findsOneWidget,
+        reason: 'REPROVA: a pagina 2 chegou e o 21o item continua fora da '
+            'tela.',
+      );
+      expect(
+        find.text('Item 1'),
+        findsOneWidget,
+        reason: 'REPROVA: a pagina 2 SUBSTITUIU a pagina 1 em vez de '
+            'continua-la.',
+      );
+      expect(find.text(RodapeDaPaginacao.rotuloDeCarregarMais), findsNothing);
+      expect(
+        find.text('Você viu todos os 25 produtos da vitrine.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('trocar o filtro VOLTA para a pagina 1', (tester) async {
+      final urls = <Uri>[];
+      await abrirLoja(
+        tester,
+        rede: redeQuePaginaAVitrine(
+          vinteECincoItens(),
+          urls: urls,
+          // Com `category` sobram tres itens. Pedidos na pagina 2, eles
+          // devolvem fatia vazia e a tela diz que nada casa com o recorte --
+          // com tres produtos existindo.
+          recorte: (pedido) => pedido['category'] == null
+              ? vinteECincoItens()
+              : vinteECincoItens().take(3).toList(),
+          filtrosAplicados: (pedido) => pedido['category'] == null
+              ? const <String, String>{'scope': 'all'}
+              : <String, String>{'category': pedido['category']!},
+        ),
+      );
+
+      await tocarEmCarregarMais(tester);
+      expect(urls.last.queryParameters['page'], '2');
+
+      await tester.ensureVisible(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.tune));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Saúde'));
+      await tester.pumpAndSettle();
+
+      expect(urls.last.queryParameters['category'], 'health');
+      expect(
+        urls.last.queryParameters['page'],
+        '1',
+        reason: 'REPROVA: o filtro foi aplicado mantendo a pagina 2. A fatia '
+            'volta vazia e a vitrine diz que nada casa com o recorte, com '
+            'tres produtos existindo.',
+      );
+      expect(titulosNaTela(tester), hasLength(3));
+      expect(find.text(VitrineDaLoja.tituloDoVazioFiltrado), findsNothing);
+    });
+
+    testWidgets('buscar depois de `Carregar mais` VOLTA para a pagina 1',
+        (tester) async {
+      final urls = <Uri>[];
+      await abrirLoja(
+        tester,
+        rede: redeQuePaginaAVitrine(
+          vinteECincoItens(),
+          urls: urls,
+          recorte: (pedido) => pedido['q'] == null
+              ? vinteECincoItens()
+              : vinteECincoItens().take(2).toList(),
+        ),
+      );
+
+      await tocarEmCarregarMais(tester);
+      expect(urls.last.queryParameters['page'], '2');
+
+      final campo = find.byType(TextField);
+      await tester.ensureVisible(campo);
+      await tester.pumpAndSettle();
+      await tester.enterText(campo, 'bola');
+      await tester.pumpAndSettle();
+
+      expect(urls.last.queryParameters['q'], 'bola');
+      expect(
+        urls.last.queryParameters['page'],
+        '1',
+        reason: 'REPROVA: a busca foi pedida na pagina 2. O termo tem dois '
+            'resultados, a pagina 2 deles e vazia, e a tela diz que a busca '
+            'nao achou nada.',
+      );
+      expect(titulosNaTela(tester), hasLength(2));
+    });
   });
 }

@@ -399,7 +399,31 @@ verificável em vez de uma frase.
 gcloud compute scp --project=bichu-app-508914 --zone=southamerica-east1-a \
   --tunnel-through-iap --recurse \
   ./compose.yaml ./Dockerfile ./Makefile ./migrations ./infra ./api \
+  ./package.json ./package-lock.json ./tsconfig.json ./tsconfig.build.json ./src \
   bichu-hml:~/bichu/
+```
+
+**As cinco últimas entradas dessa lista são uma correção de 22/09, e vale dizer
+o que a falta delas fazia.** Até aqui a lista copiava a receita do build e não o
+que ele constrói: `compose.yaml`, `Dockerfile` e `Makefile` viajavam, e
+`package.json`, `package-lock.json`, `tsconfig.json`, `tsconfig.build.json` e
+`src/` ficavam. O `docker build` do passo 8 então reconstruía, com toda a
+aparência de sucesso, **o código que já estava na máquina** — em 22/09, o
+`~/bichu/src` da VM era de 19/09. O sintoma é o pior possível: a esteira fica
+verde, a imagem sobe, a sonda responde, e a alteração simplesmente não está lá.
+É a forma exata de "as alterações não entraram", e ela não acusa em lugar
+nenhum. Copiar o código-fonte é o que torna o build do passo 8 um build do que
+foi pedido.
+
+**Verificação, e ela é de uma linha:** o que chegou na VM é tão novo quanto o
+que saiu daqui.
+
+```bash
+gcloud compute ssh bichu-hml --project=bichu-app-508914 \
+  --zone=southamerica-east1-a --tunnel-through-iap \
+  --command 'find ~/bichu/src ~/bichu/package.json -newermt "-1 hour" | head -1'
+# precisa imprimir ALGUMA coisa. Vazio significa que o scp nao trouxe codigo
+# e que o passo 8 vai reconstruir o que ja estava la.
 ```
 
 No host, o `.env` de homologação a partir do `.env.example`, com as diferenças
@@ -453,12 +477,37 @@ docker compose run --rm --no-deps -e TAG_CODE_KEY= api node dist/bin/api.js
 
 Esta é a linha que a ordem de 16.1 protege, e a razão de o roteiro existir.
 
+**Antes de subir, o commit — e ele precisa vir escrito na linha de comando.**
+`~/bichu` na VM **não é um repositório Git**: o `scp` do passo 7 copia arquivos,
+não histórico, e não existe `.git` lá. O `Makefile` preenche `BUILD_COMMIT` com
+`git rev-parse --verify HEAD 2>/dev/null`, que fora de um repositório devolve
+**vazio, sem erro**. O `Dockerfile` reprova o build vazio (BICHUS-210), então
+isso não passa em silêncio no build; mas qualquer caminho que contorne o
+`Makefile` produz o estado que a sonda mostra hoje: `/v1/health` respondendo
+`commit: null`, que é a pergunta "essa correção já está no ar?" ficando sem
+resposta justamente quando ela é feita.
+
+Pegue o valor **nesta máquina**, onde o repositório existe, e leve-o na linha:
+
+```bash
+COMMIT=$(git rev-parse HEAD)     # AQUI, no repositorio. Nao na VM.
+echo "$COMMIT"
+```
+
 Na VM, com o `PUBLIC_BASE_URL` apontando para o **IP**, e não para o domínio:
 
 ```bash
+BUILD_COMMIT="$COMMIT" docker compose build
+BUILD_COMMIT="$COMMIT" \
 PUBLIC_BASE_URL="http://$IP" MEDIA_PUBLIC_BASE_URL="http://$IP:3001" \
   docker compose up -d --wait
 ```
+
+`BUILD_COMMIT` entra nas **duas** linhas de propósito. Ele é argumento de build
+e não variável de runtime (a correção de 22/09 no `compose.yaml`, seção
+`environment` do `api`), e o `up` reconstrói o que estiver desatualizado: sem
+ele na segunda linha, um `up` que decida reconstruir cai no `${BUILD_COMMIT:-}`
+vazio e o `Dockerfile` reprova no meio da subida.
 
 **`TAG_BASE_URL` e `WEB_BASE_URL` NÃO entram nesta linha, e isso é deliberado.**
 Testar a pilha por IP é legítimo; codificar um IP dentro de um QR não é — o
@@ -490,7 +539,22 @@ test "$esperado" = "$aplicadas" || echo "REPROVA: $esperado em disco, $aplicadas
 
 # 3. a borda responde o que o contrato promete, PELA PORTA PUBLICADA
 python3 infra/verificacao/verificar_borda_local.py "http://$IP" .
+
+# 4. o artefato NO AR e o commit que voce pediu -- nao um qualquer, e nao nulo
+node infra/verificacao/verificar-commit-no-health.mjs "http://$IP" "$COMMIT"
 ```
+
+A quarta é a que fecha o buraco do passo 7, e ela não custa nada porque já
+existe: `verificar-commit-no-health.mjs` (BICHUS-210) reprova `null`, `''` e
+rótulo móvel (`latest`, `HEAD`, `unknown`), e **compara o commit que a sonda
+reporta com o commit passado como segundo argumento**, dizendo os dois valores
+quando diferem. Sem o segundo argumento ela só confere que há um valor, e é
+exatamente a metade que deixa passar o artefato velho: uma imagem construída de
+um `src/` de três dias atrás reporta um commit perfeitamente bem-formado.
+
+Passe sempre o `$COMMIT`. A verificação também tem alvo no `Makefile`
+(`make verificar-commit-de-build`) e roda as próprias iscas antes de consultar a
+rede: se ela perder a capacidade de reprovar, falha em vez de aprovar.
 
 A terceira é a que pega a família de defeito que nenhuma leitura de arquivo
 pega: **a regra escrita e não valendo**. Foi exatamente o que houve em 17/09 —
