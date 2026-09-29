@@ -63,14 +63,18 @@ export type AuditAction =
   // Autorização
   | 'authz.denied'
   /**
-   * BICHUS-260 (ADR-0027 D51). Papel concedido ou revogado pelo comando
-   * `src/bin/conceder-papel.ts`, e so por ele. Ator `system`: quem executa e o
+   * ADR-0027 item 20.3 (D51). A conta do painel criada, com senha redefinida,
+   * desativada, reativada ou com as sessoes encerradas pelo comando
+   * `src/bin/conta-admin.ts`, e so por ele. Ator `system`: quem executa e o
    * comando no servidor, e quem digitou vai em `metadata.operator`. Fora de
    * `ACOES_ADMINISTRATIVAS` de proposito: aquela lista espelha o `x-audit` do
-   * contrato HTTP, e conceder papel nao e operacao HTTP.
+   * contrato HTTP, e nada disto e operacao HTTP (D61).
    */
-  | 'authz.role_granted'
-  | 'authz.role_revoked'
+  | 'admin.account.created'
+  | 'admin.account.password_reset'
+  | 'admin.account.disabled'
+  | 'admin.account.enabled'
+  | 'admin.account.sessions_closed'
   | 'profile.updated'
   // Cadastro do pet
   | 'pet.created'

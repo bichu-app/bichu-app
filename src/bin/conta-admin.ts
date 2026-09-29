@@ -1,34 +1,45 @@
 /**
- * Concede e revoga papel administrativo (BICHUS-260; ADR-0027 D42, D43, D51).
+ * Contas do painel administrativo (ADR-0027 item 20.3; D43, D51, D61, D63).
+ * Substitui o `conceder-papel`: o painel tem cadastro proprio
+ * (`admin_accounts`), e nao papel em `user_roles`.
  *
- *   docker compose run --rm -it api node dist/bin/conceder-papel.js --email <e-mail>
- *   docker compose run --rm -it api node dist/bin/conceder-papel.js --email <e-mail> --criar-conta
- *   docker compose run --rm -it api node dist/bin/conceder-papel.js --email <e-mail> --revogar
+ *   docker compose run --rm -it api node dist/bin/conta-admin.js criar --email <e-mail> --nome <nome>
+ *   docker compose run --rm -it api node dist/bin/conta-admin.js redefinir-senha --email <e-mail>
+ *   docker compose run --rm -it api node dist/bin/conta-admin.js desativar --email <e-mail>
+ *   docker compose run --rm -it api node dist/bin/conta-admin.js reativar --email <e-mail>
+ *   docker compose run --rm -it api node dist/bin/conta-admin.js encerrar-sessoes --email <e-mail>
+ *   docker compose run --rm -it api node dist/bin/conta-admin.js listar
  *
  * O roteiro de uso esta em `infra/roteiro-provisionamento.md`, "Conta
- * administrativa".
+ * administrativa". **A senha e digitada pelo cliente no terminal**: nenhum
+ * roteiro de agente roda `criar`, `redefinir-senha` ou `reativar`.
  *
  * ## A ordem das recusas
  *
- * 1. argumentos (senha por argumento, papel fora da lista, `tutor`): sem
- *    terminal, sem segredo, sem banco;
+ * 1. argumentos (senha por argumento, subcomando desconhecido): sem terminal,
+ *    sem segredo, sem banco;
  * 2. terminal: sem ele, recusa antes de perguntar qualquer coisa;
  * 3. so entao segredos, configuracao e conexao.
  *
- * Assim a isca de "senha por argumento" e a de "papel fora da lista" nao
- * dependem de banco nenhum para reprovar, e o teste delas roda sem pilha.
+ * ## D63 mora aqui, e nao em `admin-access`
+ *
+ * A conferencia "a senha nova e a mesma da conta do app com o mesmo e-mail?" e
+ * a unica leitura do mundo do app no caminho do painel. Ela e composta neste
+ * arquivo, pelas portas de `identity` (o repositorio da credencial local e a
+ * verificacao de senha), para que o modulo `admin-access` continue sem citar
+ * nenhuma tabela do app (P21).
  *
  * ## O que sai no erro inesperado
  *
  * Nome, codigo e mensagem do erro, e nunca o objeto inteiro. O `detail` de uma
  * violacao de restricao do Postgres traz a linha que falhou ("Failing row
- * contains ..."), e a linha de `local_credentials` carrega o hash.
+ * contains ..."), e a linha de `admin_accounts` carrega o hash.
  */
 import { resolverSegredos } from '../shared/config/segredos.js';
 import { loadAppConfig } from '../shared/config/app-config.js';
 import { optionalEnv } from '../shared/config/env.js';
 import { criarSecretProvider } from '../shared/adapters/external/env-var-secret-provider.js';
-import { createDb } from '../shared/db/pool.js';
+import { createDb, type Db } from '../shared/db/pool.js';
 import { criarIdGenerator } from '../shared/id/uuidv7.js';
 import { systemClock } from '../shared/time/clock.js';
 import {
@@ -41,19 +52,25 @@ import {
 } from '../shared/tty/ler-senha-sem-eco.js';
 import { criarTrilhaTransacional } from '../modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarListaDeSenhasVazadasPorFaixa } from '../modules/identity/adapters/external/lista-de-senhas-vazadas-por-faixa.js';
-import { criarRepositorioDePapeis } from '../modules/identity/adapters/persistence/kysely-repositorio-de-papeis.js';
-import { executarPedidoDePapel, type Interacao } from '../modules/identity/application/conceder-papel.js';
+import { criarMailer } from '../modules/identity/adapters/external/smtp-mailer.js';
+import { criarIdentityRepository } from '../modules/identity/adapters/persistence/kysely-identity-repository.js';
+import { gerarHashDeSenha, verificarSenha } from '../modules/identity/ports/senha.js';
+import { criarComandoDeContas } from '../modules/admin-access/adapters/persistence/kysely-comando-de-contas.js';
+import {
+  executarComandoContaAdmin,
+  type ConferenciaComContaDoApp,
+  type Interacao,
+} from '../modules/admin-access/application/comando-conta-admin.js';
 import {
   AJUDA,
   interpretarArgumentos,
   SAIDA,
   type CodigoDeSaida,
-} from '../modules/identity/domain/concessao-de-papel.js';
-import { gerarHashDeSenha } from '../modules/identity/domain/password.js';
+} from '../modules/admin-access/domain/comando-conta-admin.js';
 
 const SEM_TERMINAL =
   'recusado: sem terminal. O comando pergunta e confirma pelo terminal, e a senha so entra por ele, ' +
-  'sem eco. Rode com `docker compose run --rm -it api node dist/bin/conceder-papel.js ...` ' +
+  'sem eco. Rode com `docker compose run --rm -it api node dist/bin/conta-admin.js ...` ' +
   '(o -it e o que da o terminal).';
 
 function interacaoDoTerminal(entrada: EntradaDeTerminal): Interacao {
@@ -64,6 +81,25 @@ function interacaoDoTerminal(entrada: EntradaDeTerminal): Interacao {
     },
     perguntar: (rotulo) => lerLinhaComEco(entrada, saida, rotulo),
     perguntarSenha: (rotulo) => lerSenhaSemEco(entrada, saida, rotulo),
+  };
+}
+
+/**
+ * D63, composto aqui: a credencial local da conta do app com o mesmo e-mail,
+ * conferida com a mesma funcao do login. Sem conta do app, ou conta so com
+ * provedor externo, nao ha o que conferir.
+ */
+export function conferenciaComContaDoApp(
+  db: Db,
+  ids: ReturnType<typeof criarIdGenerator>,
+): ConferenciaComContaDoApp {
+  const identidade = criarIdentityRepository(db, ids);
+  return {
+    async mesmaSenhaDaContaDoApp(email, senha) {
+      const credencial = await identidade.buscarCredencialLocalPorEmail(email);
+      if (credencial === undefined) return false;
+      return verificarSenha(senha, credencial.passwordPhc);
+    },
   };
 }
 
@@ -94,13 +130,15 @@ export async function main(argumentos: readonly string[], entrada: EntradaDeTerm
   const banco = createDb(config.databaseUrl);
   try {
     const ids = criarIdGenerator(() => systemClock.now());
-    return await executarPedidoDePapel(interpretado.pedido, {
-      repositorio: criarRepositorioDePapeis({
+    return await executarComandoContaAdmin(interpretado.pedido, {
+      contas: criarComandoDeContas({
         db: banco.db,
         ids,
         trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
       }),
       senhasVazadas: criarListaDeSenhasVazadasPorFaixa(),
+      contaDoApp: conferenciaComContaDoApp(banco.db, ids),
+      avisos: criarMailer(config.mail),
       interacao: interacaoDoTerminal(entrada),
       clock: systemClock,
       gerarHash: gerarHashDeSenha,

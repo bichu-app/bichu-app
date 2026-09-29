@@ -8,7 +8,7 @@
  * `Buffer` alocado uma vez, os pedacos que o terminal entrega sao zerados assim
  * que copiados, e o que sai e um `Buffer` do tamanho exato que quem chama zera
  * com `fill(0)` quando termina. Nao e garantia absoluta (o hash precisa da
- * senha como string, ver `conceder-papel.ts`), e reduz a senha em memoria ao
+ * senha como string, ver `comando-conta-admin.ts`), e reduz a senha em memoria ao
  * minimo que a derivacao exige.
  *
  * ## Por que o modo cru

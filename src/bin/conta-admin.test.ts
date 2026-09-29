@@ -13,11 +13,11 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 
-import { SAIDA } from '../modules/identity/domain/concessao-de-papel.js';
-import { descreverErro } from './conceder-papel.js';
+import { SAIDA } from '../modules/admin-access/domain/comando-conta-admin.js';
+import { descreverErro } from './conta-admin.js';
 
-const COMANDO = fileURLToPath(new URL('./conceder-papel.js', import.meta.url));
-const SENTINELA = 'SENTINELA-processo-5a2c';
+const COMANDO = fileURLToPath(new URL('./conta-admin.js', import.meta.url));
+const SENTINELA = 'SENTINELA-processo-3b8e';
 
 function rodar(argumentos: string[], entrada = '') {
   const ambiente: NodeJS.ProcessEnv = { ...process.env };
@@ -32,11 +32,11 @@ function rodar(argumentos: string[], entrada = '') {
   return { codigo: resultado.status, saida: `${resultado.stdout}${resultado.stderr}` };
 }
 
-void describe('conceder-papel como processo, sem terminal e sem banco', () => {
+void describe('conta-admin como processo, sem terminal e sem banco', () => {
   void it('isca: senha por argumento sai 2 e a saida nao contem a senha', () => {
     for (const argumentos of [
-      ['--email', 'operacao@exemplo.com.br', '--senha', SENTINELA],
-      ['--email', 'operacao@exemplo.com.br', `--password=${SENTINELA}`],
+      ['criar', '--email', 'operacao@exemplo.com.br', '--nome', 'Operacao', '--senha', SENTINELA],
+      ['redefinir-senha', '--email', 'operacao@exemplo.com.br', `--password=${SENTINELA}`],
     ]) {
       const { codigo, saida } = rodar(argumentos);
       assert.equal(codigo, SAIDA.USO, saida);
@@ -46,32 +46,29 @@ void describe('conceder-papel como processo, sem terminal e sem banco', () => {
   });
 
   void it('isca: sem terminal (stdin redirecionado) sai 2 antes de perguntar, e nao le a senha do pipe', () => {
-    const { codigo, saida } = rodar(
-      ['--email', 'operacao@exemplo.com.br', '--criar-conta', '--operador', 'teste'],
-      `sim\n${SENTINELA}\n${SENTINELA}\n`,
-    );
-    assert.equal(codigo, SAIDA.USO, saida);
-    assert.match(saida, /sem terminal/);
-    assert.doesNotMatch(saida, /Senha da conta/);
-    assert.ok(!saida.includes(SENTINELA));
+    for (const sub of ['criar', 'redefinir-senha', 'reativar']) {
+      const argumentos = [sub, '--email', 'operacao@exemplo.com.br', '--operador', 'teste'];
+      if (sub === 'criar') argumentos.push('--nome', 'Operacao');
+      const { codigo, saida } = rodar(argumentos, `sim\n${SENTINELA}\n${SENTINELA}\n`);
+      assert.equal(codigo, SAIDA.USO, saida);
+      assert.match(saida, /sem terminal/);
+      assert.doesNotMatch(saida, /Senha da conta/);
+      assert.ok(!saida.includes(SENTINELA));
+    }
   });
 
-  void it('isca: papel fora da lista sai 2 sem banco', () => {
-    const { codigo, saida } = rodar(['--email', 'operacao@exemplo.com.br', '--papel', 'superuser']);
+  void it('subcomando desconhecido sai 2 sem banco, e o conceder-papel antigo nao existe mais', () => {
+    const { codigo, saida } = rodar(['conceder', '--email', 'operacao@exemplo.com.br']);
     assert.equal(codigo, SAIDA.USO, saida);
-    assert.match(saida, /papel fora da lista/);
+    assert.match(saida, /subcomando desconhecido/);
   });
 
-  void it('revogar tutor sai 2 sem banco', () => {
-    const { codigo, saida } = rodar(['--email', 'operacao@exemplo.com.br', '--revogar', '--papel', 'tutor']);
-    assert.equal(codigo, SAIDA.USO, saida);
-    assert.match(saida, /tutor nao se revoga/);
-  });
-
-  void it('--ajuda sai 0 e cita a D51', () => {
+  void it('--ajuda sai 0 e lista os seis subcomandos', () => {
     const { codigo, saida } = rodar(['--ajuda']);
     assert.equal(codigo, SAIDA.OK, saida);
-    assert.match(saida, /D51/);
+    for (const sub of ['criar', 'redefinir-senha', 'desativar', 'reativar', 'encerrar-sessoes', 'listar']) {
+      assert.match(saida, new RegExp(`conta-admin\\.js ${sub}`));
+    }
   });
 });
 

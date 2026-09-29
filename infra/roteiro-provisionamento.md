@@ -824,85 +824,91 @@ silêncio.
 
 ---
 
-### Passo 14 — Conta administrativa do backoffice (BICHUS-260, ADR-0027 D42, D43, D51)
+### Passo 14 — Conta administrativa do backoffice (ADR-0027 item 20.3; D43, D51, D61, D63)
 
-Papel administrativo **não se concede por tela** (D51): um papel que se concede
-pelo painel é a primeira coisa que um invasor com a senha de um administrador
-usaria. Ele se concede por um comando no servidor, que só quem entra na máquina
-roda, e que grava cada concessão e revogação em `audit.events` com
-`actor_kind = 'system'` e o nome de quem rodou em `metadata.operator`.
+O painel tem **cadastro próprio** (`admin_accounts`), separado das contas do app
+(item 20): uma conta do app nunca entra no painel, e uma do painel nunca entra
+no app. Conta do painel **não se cria nem se redefine por tela** (D51, D61): é
+um comando no servidor, que só quem entra na máquina roda, e que grava cada
+escrita em `audit.events` com `actor_kind = 'system'` e o nome de quem rodou em
+`metadata.operator`, na mesma transação.
 
-**A senha é do cliente.** Quem digita a senha de uma conta administrativa é a
-pessoa que vai usá-la, no terminal, na hora. Ela é pedida **duas vezes, sem
-eco**, e nunca entra por argumento, variável de ambiente ou arquivo: o comando
-recusa `--senha`, `--password`, `-p` e afins pelo **nome**, sem repetir o valor,
-e recusa rodar sem terminal. Se alguém digitou a senha como argumento, ela
-ficou no histórico do shell: escolha outra.
+**A senha é do cliente, e só dele.** Quem digita a senha de uma conta do painel
+é a pessoa que vai usá-la, no terminal, na hora. **Nenhum agente gera, grava,
+lê ou digita essa senha, e nenhum roteiro de agente roda `criar`,
+`redefinir-senha` ou `reativar`.** A senha é pedida **duas vezes, sem eco**, e
+nunca entra por argumento, variável de ambiente ou arquivo: o comando recusa
+`--senha`, `--password`, `-p` e afins pelo **nome**, sem repetir o valor, e
+recusa rodar sem terminal. Se alguém digitou a senha como argumento, ela ficou
+no histórico do shell: escolha outra.
 
 O `-it` é obrigatório. Sem ele não há terminal, e o comando sai com código 2
 antes de perguntar qualquer coisa.
 
 ```bash
-# 1. conta NOVA e dedicada (o caso normal): cria a conta so com o papel admin.
-#    Pede uma confirmacao ("sim") e a senha duas vezes.
-docker compose run --rm -it api node dist/bin/conceder-papel.js \
-  --email operacao@exemplo.com.br --criar-conta --operador "Nome de quem roda"
+# criar a conta do painel (pede "sim" e a senha duas vezes)
+docker compose run --rm -it api node dist/bin/conta-admin.js criar \
+  --email operacao@exemplo.com.br --nome "Nome que aparece no painel" --operador "Nome de quem roda"
 
-# 2. conceder admin a uma conta que JA existe (nao troca a senha dela).
-#    Sem --operador, o comando pergunta o nome.
-docker compose run --rm -it api node dist/bin/conceder-papel.js --email <e-mail>
+# redefinir a senha: encerra todas as sessoes e remove o bloqueio (dez falhas ou "nao fui eu")
+docker compose run --rm -it api node dist/bin/conta-admin.js redefinir-senha --email <e-mail>
 
-# 3. revogar admin (revoga tambem as sessoes abertas do painel)
-docker compose run --rm -it api node dist/bin/conceder-papel.js --email <e-mail> --revogar
+# desativar (a conta nao se apaga; as sessoes caem na hora)
+docker compose run --rm -it api node dist/bin/conta-admin.js desativar --email <e-mail>
+
+# reativar: volta a ativa COM senha nova, digitada no mesmo passo
+docker compose run --rm -it api node dist/bin/conta-admin.js reativar --email <e-mail>
+
+# encerrar todas as sessoes sem mexer na senha
+docker compose run --rm -it api node dist/bin/conta-admin.js encerrar-sessoes --email <e-mail>
+
+# listar: e-mail, nome, estado, bloqueio e ultimo login (nunca o hash)
+docker compose run --rm -it api node dist/bin/conta-admin.js listar
 
 # ajuda
-docker compose run --rm api node dist/bin/conceder-papel.js --ajuda
+docker compose run --rm api node dist/bin/conta-admin.js --ajuda
 ```
 
-**Leia o aviso de D42 que o comando mostra antes de confirmar.** Conta com
-papel `admin` é **dedicada**: ela deixa de entrar pelo app (login e renovação
-recusados com o mesmo 401 de senha errada), e conceder o papel derruba as
-sessões móveis dela na hora. Quem é administrador e tutor usa **duas contas**.
-Conceder `admin` à conta pessoal de um tutor tira dele o acesso aos próprios
-pets pelo app, e o comando avisa quando a conta tem papel `tutor`. Por isso o
-caminho normal é o 1, com um e-mail que só serve ao painel.
-
-A senha de conta administrativa segue D43: **mínimo de 15 caracteres**, sem
-regra de composição, recusada se parecer com o e-mail, e **conferida contra a
-base pública de senhas vazadas**. A consulta manda para fora só os 5 primeiros
+A senha de conta do painel segue D43: **mínimo de 15 caracteres, máximo de 256**,
+sem regra de composição, recusada se parecer com o e-mail, e **conferida contra
+a base pública de senhas vazadas**. A consulta manda para fora só os 5 primeiros
 caracteres hexadecimais do SHA-1 da senha (k-anonimato), e exige saída HTTPS do
 container da `api` para `api.pwnedpasswords.com`. **Sem essa saída, a senha é
-recusada e nada é criado**: aprovar senha que ninguém conseguiu conferir seria
-um portão verde que não verificou nada. Só o hash vai para o banco, no mesmo
-esquema do login (PBKDF2-SHA512 em PHC).
+recusada e nada é gravado.** Pela D63, ela também é recusada se for **a mesma
+senha da conta do app com o mesmo e-mail**: quem descobrir uma não pode ganhar a
+outra. Só o hash vai para o banco, no mesmo esquema do login (PBKDF2-SHA512 em
+PHC).
 
-A conta criada nasce **sem e-mail verificado**: quem roda o comando declara o
-endereço, e declarar não prova a caixa de entrada.
+**Recuperação de senha (item 20.4):** não existe link por e-mail. Quem esqueceu
+a senha, foi bloqueado por dez falhas em 24 horas, ou clicou "não fui eu", pede
+ao responsável, que roda `redefinir-senha`, e a pessoa digita a senha nova.
+
+`criar`, `redefinir-senha`, `desativar` e `reativar` **avisam por e-mail todos os
+administradores ativos**, e `criar` avisa também o dono do endereço novo. Falha
+de envio não desfaz a escrita: o comando diz no terminal quem não recebeu. É o
+que faz uma conta criada por quem tomou a máquina aparecer na caixa de alguém.
 
 Códigos de saída, para quem roda por roteiro:
 
 | Código | Significado |
 |---|---|
-| 0 | feito, ou nada a fazer (a conta já tinha, ou já não tinha, o papel) |
+| 0 | feito, ou nada a fazer (a conta já estava desativada, ou já ativa) |
 | 1 | erro inesperado (a mensagem traz nome e código do erro, nunca a linha do banco) |
-| 2 | uso: argumento inválido, senha por argumento, papel fora da lista, revogar `tutor`, sem terminal |
-| 3 | o e-mail não tem conta ativa; **nenhuma conta é criada** (use `--criar-conta`) |
-| 4 | senha recusada: curta, vazada, as duas digitações diferentes, ou base de vazadas inalcançável |
+| 2 | uso: subcomando ou opção inválida, senha por argumento, sem terminal |
+| 3 | não há conta administrativa com esse e-mail; **nada é criado** |
+| 4 | senha recusada: curta, longa, vazada, igual à do app, digitações diferentes, ou base de vazadas inalcançável |
 | 5 | cancelado: a confirmação não foi `sim`, ou Ctrl-C |
-| 6 | conflito: conta suspensa, ou `--criar-conta` para e-mail que já tem conta |
-
-Só `admin` é aceito em `--papel` na v1; `tutor` não se revoga por aqui.
+| 6 | conflito: `criar` para e-mail que já tem conta do painel |
 
 **Verificação:** a trilha registra quem, quando e o quê, e **nunca** a senha.
 
 ```bash
 docker compose exec -T db psql -U bichu -d bichu -c "
-  select occurred_at, action, actor_kind, metadata->>'operator' as operador,
-         before, after
+  select occurred_at, action, actor_kind, metadata->>'operator' as operador, before, after
     from audit.events
-   where action in ('authz.role_granted', 'authz.role_revoked', 'auth.account_created')
+   where action like 'admin.account.%'
    order by occurred_at desc limit 10"
-# esperado: actor_kind = system, operador preenchido, e after com o papel
+# esperado: actor_kind = system, operador preenchido, resource_kind = admin_account
 ```
 
 ---
