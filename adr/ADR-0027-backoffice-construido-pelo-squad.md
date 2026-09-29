@@ -1464,6 +1464,23 @@ branches mesclam a acesso e fazem a sua.
 | 6 | loja | `catalog_upload_intents`, autor `AdminAccountId` | `escrita-administrativa-da-loja` verde; `media_id` de `upload_intents` (foto de pet) na escrita do item → `400`; envio vencido é varrido nas duas tabelas; a trilha do item tem `actor_kind = 'admin'` |
 | 7 | rede-admin | FKs de autor e decisor, quinto escopo pela 000006, sem 000010 | `rede-p19-privado` e `rede-ponto-e-visibilidade` verdes; `network_event_access_change` exigido na troca de visibilidade de encontro publicado; `portao-colunas-que-nao-saem` reprova com `created_by_admin_id` projetado; evento `community` com `created_by_admin_id` → violação de `CHECK` |
 
+**Desvios da execução (integração de 28/09, aceitos pelo cliente):**
+
+- **Fatia 5, `desativar`:** o comando revoga as sessões da conta na mesma
+  transação e empurra a barreira, então a próxima chamada de uma sessão que
+  existia responde **`401 token-expired`** (sessão encerrada), e não `403`. O
+  `403` da guarda continua valendo para a sessão que sobrevivesse por fora do
+  comando (conta desativada com sessão viva), e o teste de integração
+  `conta-admin.test.ts` cobre os dois casos.
+- **Fatia 7, `created_by_admin_id`:** a coluna existe, com a FK para
+  `admin_accounts`, os dois `CHECK` de origem e a marca "NUNCA sai do
+  servidor", mas **nenhum código de `src/` a grava**: o portão
+  `portao-colunas-que-nao-saem` recusa o nome em código de servidor, e abrir
+  exceção nele não foi autorizado. Quem criou o encontro do painel fica na
+  trilha (`admin.network_event.created`, `actor_admin_id`). As duas colunas
+  entraram numa migração própria, `20260928000005`, porque a FK para
+  `admin_accounts` não pode nascer na migração da `Rede`, que roda antes.
+
 #### 20.8 Coordenação
 
 A 000006 altera duas tabelas que nasceram na `development` (`user_roles` e
