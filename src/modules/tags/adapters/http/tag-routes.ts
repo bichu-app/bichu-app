@@ -322,7 +322,7 @@ function comoPetTag(tag: TagDoTutor): Record<string, unknown> {
  *   `bucket_key` não sai em resposta nenhuma e o resumo tornaria impossível
  *   responder qual pet bateu no teto de plaquinhas.
  */
-function resolvedoresDaTag(deps: DependenciasDasRotasDeTag): {
+export function resolvedoresDaTag(deps: DependenciasDasRotasDeTag): {
   code: ResolvedorDeDimensao;
   finder_identity: ResolvedorDeDimensao;
 } {
