@@ -152,6 +152,19 @@ const LISTAS_FECHADAS: Readonly<Record<string, ListaFechada>> = {
     // bloqueio ele não exerce.
     valores: ['tutor', 'finder', 'system'],
   },
+  // BICHUS-41. A fila de denúncia nomeia os lados pelo papel, como
+  // `conversations.blocked_by_role`: o achador pode não ter conta. `system` não
+  // entra, porque o sistema não denuncia ninguém.
+  'public.conversation_reports.conversation_reports_reporter_role_conhecido': {
+    coluna: 'reporter_role',
+    valores: ['tutor', 'finder'],
+  },
+  // BICHUS-41. O `enum` de `reason` de `reportFinderConversation`, e
+  // `MotivoDaDenuncia` em `src/modules/messaging/ports/conversation-repository.ts`.
+  'public.conversation_reports.conversation_reports_reason_conhecido': {
+    coluna: 'reason',
+    valores: ['extortion', 'harassment', 'spam', 'impersonation', 'other'],
+  },
   'public.entity_verifications.entity_verifications_decision_check': {
     coluna: 'decision',
     valores: ['pending', 'approved', 'rejected'],
@@ -812,6 +825,19 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // ser ligada. O CHECK é o que impede a intenção de foto de achado sem achado.
   'public.upload_intents.upload_intents_foto_de_achado_tem_aviso':
     "CHECK (((kind <> 'found_report_photo'::text) OR (found_report_id IS NOT NULL)))",
+  // BICHUS-41. O achador sem conta envia foto, e não tem `users.id`. Só
+  // `finder_photo` nasce sem dono; as outras duas espécies continuam exigindo.
+  'public.upload_intents.upload_intents_dono_salvo_achador_sem_conta':
+    "CHECK (((user_id IS NOT NULL) OR (kind = 'finder_photo'::text)))",
+  // BICHUS-41. A foto do achador sem conta sempre pertence a um aviso (o teto de
+  // três por aviso precisa do que contar) e sempre tem a referência opaca que
+  // ele devolve em `PATCH /v1/finder/found-report`.
+  'public.upload_intents.upload_intents_foto_do_achador_tem_aviso_e_ref':
+    "CHECK (((kind <> 'finder_photo'::text) OR ((found_report_id IS NOT NULL) AND (upload_ref IS NOT NULL))))",
+  // BICHUS-41. `FinderUploadIntent.upload_ref`: 128 bits em base64url, 22
+  // caracteres, o mesmo padrão que o contrato declara.
+  'public.upload_intents.upload_intents_upload_ref_formato':
+    "CHECK (((upload_ref IS NULL) OR (upload_ref ~ '^[A-Za-z0-9_-]{22}$'::text)))",
   'public.users.users_phone_e164_formato':
     "CHECK (((phone_e164 IS NULL) OR (phone_e164 ~ '^\\+55[0-9]{10,11}$'::text)))",
 };

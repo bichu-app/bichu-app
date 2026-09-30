@@ -329,3 +329,48 @@ dispensas:
     motivo: "area_label nulo quando o caso so tem coordenada (BICHUS-21 criterio 5); sem geocodificacao no MVP nao ha bairro para devolver"
     responsavel: squad
     vence_em: 2026-10-15
+
+  # BICHUS-41, 23/09/2026. Quatro quebras que o `oasdiff` acusa e que CORRIGEM
+  # o contrato em vez de tirar de alguem um uso que funcionava. Medido com
+  # tufin/oasdiff:v1.32.1 contra origin/development: sao exatamente estas, e
+  # nenhuma outra deste PR.
+  #
+  # 1. `notes` de `createStrayFoundReport` caiu de 1000 para 500. O achado
+  #    avulso grava em `found_reports.notes` (INSERT em
+  #    `kysely-found-report-repository.ts`), e o banco recusa acima de 500:
+  #    `found_reports_notes_tamanho CHECK (char_length(notes) <= 500)`,
+  #    `migrations/20260917000007_tags-e-avisos-do-achador.sql:210`. O 23514
+  #    nao e `AppError` nem erro do Fastify, entao `traduzir` em
+  #    `src/shared/http/server.ts` o entrega como 500 `internal`. Quem mandava
+  #    de 501 a 1000 ja recebia 500; agora recebe 400 com o campo nomeado.
+  #
+  # 2. `location` de `enrichFinderFoundReport` passou a `GeoPoint` (lat/lon
+  #    obrigatorios juntos e faixa do territorio; tres regras do oasdiff, uma
+  #    entrada cada). Em origin/development a operacao esta declarada e NAO
+  #    esta implementada: `src/bin/api.ts` nao a registra, e todo pedido
+  #    respondia 404. O app (`app/lib`) nao a chama. Nao ha uso que funcionava.
+  #    O corpo da rota COM conta (`enrichFoundReport`, que o app usa) ficou
+  #    como estava, em `FoundReportEnrichment`.
+  #
+  # Vencem no fim do desenvolvimento: depois do merge a base passa a carregar
+  # o contrato novo, a quebra deixa de aparecer e a entrada deve sair.
+  - portao: oasdiff-notas-do-achado-no-teto-do-banco
+    mudanca: "request-property-max-length-decreased createStrayFoundReport"
+    motivo: "notes 1000 -> 500, o teto de found_reports.notes (CHECK found_reports_notes_tamanho, migracao 20260917000007:210); acima de 500 o banco ja recusava com 23514, que saia como 500 internal"
+    responsavel: squad
+    vence_em: 2026-09-30
+  - portao: oasdiff-local-do-achador-obrigatorio
+    mudanca: "request-property-became-required enrichFinderFoundReport"
+    motivo: "location do achador sem conta passou a GeoPoint (BICHUS-41); a operacao nao estava implementada em development (404 para todo pedido) e o app nao a chama"
+    responsavel: squad
+    vence_em: 2026-09-30
+  - portao: oasdiff-local-do-achador-maximo
+    mudanca: "request-property-max-set enrichFinderFoundReport"
+    motivo: "faixa do territorio em location do achador sem conta (GeoPoint, BICHUS-41); operacao sem implementacao em development"
+    responsavel: squad
+    vence_em: 2026-09-30
+  - portao: oasdiff-local-do-achador-minimo
+    mudanca: "request-property-min-set enrichFinderFoundReport"
+    motivo: "faixa do territorio em location do achador sem conta (GeoPoint, BICHUS-41); operacao sem implementacao em development"
+    responsavel: squad
+    vence_em: 2026-09-30

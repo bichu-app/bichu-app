@@ -23,16 +23,20 @@
 import { sql } from 'kysely';
 
 import type { Db } from '../../../../shared/db/pool.js';
+import { JANELA_DE_AGRUPAMENTO_EM_MS } from '../../../tags/ports/tag-repository.js';
 import type { Papel } from '../../domain/conversa-mediada.js';
 import type { MotivoDeRetencao } from '../../domain/retencao-para-revisao.js';
 import type {
   AberturaPorAviso,
+  ConversaDoAchador,
   ConversaDoChamador,
   ConversationRepository,
   MensagemGravada,
   MotivoDeEncerramento,
+  NovaDenuncia,
   NovaMensagem,
   Pagina,
+  PaginaDoAchador,
 } from '../../ports/conversation-repository.js';
 import type {
   CaseId,
@@ -300,6 +304,152 @@ export function construtorDaRetencao(
     .where('held_for_review_at', 'is', null);
 }
 
+// ===========================================================================
+// O achador sem conta (BICHUS-41)
+// ===========================================================================
+
+/**
+ * O id da conversa do token, como SUBCONSULTA, e nunca como valor que a
+ * aplicação leu antes.
+ *
+ * É o equivalente, para quem não tem conta, do
+ * `(tutor_user_id = :chamador OR finder_user_id = :chamador)` do lado com conta:
+ * o resumo do token entra em toda consulta que responde ao achador, inclusive a
+ * de mensagens, que não confia em a conversa ter sido lida antes.
+ *
+ * ## Por que dois caminhos até a conversa
+ *
+ * O aviso agrupado (segundo escaneamento do mesmo achador em 6 h,
+ * `JANELA_DE_AGRUPAMENTO_EM_MS`) ganha token próprio e **não** ganha conversa:
+ * `ConversationService.abrirPorAviso` anexa o escaneamento à conversa do aviso
+ * anterior, porque o tutor não pode ver duas linhas para a mesma pessoa. Sem o
+ * segundo caminho, o `conversation_url` desse aviso abriria uma conversa que
+ * não existe.
+ *
+ * O segundo caminho repete o critério do agrupamento, e só ele: mesma tag, mesma
+ * identidade derivada (nunca nula), aviso anterior dentro da janela. Entre os
+ * dois, o próprio ganha, e entre anteriores ganha o mais recente, que é o que
+ * `avisoRecenteDoMesmoAchador` escolheu na hora de agrupar.
+ */
+function idDaConversaDoToken(resumo: Uint8Array) {
+  const janelaEmSegundos = JANELA_DE_AGRUPAMENTO_EM_MS / 1000;
+  return sql<string>`(
+    SELECT c.id
+      FROM found_reports proprio
+      JOIN found_reports origem
+        ON origem.id = proprio.id
+        OR (proprio.finder_identity_hash IS NOT NULL
+            AND origem.tag_id = proprio.tag_id
+            AND origem.finder_identity_hash = proprio.finder_identity_hash
+            AND origem.created_at <= proprio.created_at
+            AND origem.created_at >= proprio.created_at - make_interval(secs => ${janelaEmSegundos}))
+      JOIN conversations c ON c.found_report_id = origem.id
+     WHERE proprio.finder_token_hash = ${Buffer.from(resumo)}
+       AND proprio.origin = 'tag_scan'
+     ORDER BY (origem.id = proprio.id) DESC, origem.created_at DESC
+     LIMIT 1
+  )`;
+}
+
+interface LinhaDaConversaDoAchador {
+  id: string;
+  pet_display_name: string;
+  closed_at: Date | null;
+  blocked_at: Date | null;
+  tutor_display_name: string | null;
+  finder_display_name: string | null;
+  finder_token_hash: Buffer | null;
+  finder_token_expires_at: Date | null;
+  case_status: string | null;
+  case_closed_at: Date | null;
+}
+
+/**
+ * A leitura da conversa pelo token. Exportado para a bancada que lê o SQL.
+ *
+ * `proprio` é o aviso DONO do token, e é de lá que saem o resumo gravado e a
+ * validade: no aviso agrupado, a conversa é a do anterior, e o token é o dele.
+ */
+export function construtorDaLeituraDoAchador(db: Db, resumo: Uint8Array) {
+  return db
+    .selectFrom('conversations')
+    .innerJoin('pets', 'pets.id', 'conversations.pet_id')
+    .innerJoin('users as tutor', 'tutor.id', 'conversations.tutor_user_id')
+    .innerJoin('found_reports', 'found_reports.id', 'conversations.found_report_id')
+    .innerJoin('found_reports as proprio', (juncao) =>
+      juncao.on('proprio.finder_token_hash', '=', Buffer.from(resumo)),
+    )
+    .leftJoin('lost_cases', 'lost_cases.id', 'conversations.case_id')
+    .leftJoin('users as achador', 'achador.id', 'conversations.finder_user_id')
+    .select([
+      'conversations.id',
+      'pets.name as pet_display_name',
+      'conversations.closed_at',
+      'conversations.blocked_at',
+      'tutor.display_name as tutor_display_name',
+      sql<string | null>`coalesce("found_reports"."finder_display_name", "achador"."display_name")`.as(
+        'finder_display_name',
+      ),
+      'proprio.finder_token_hash',
+      'proprio.finder_token_expires_at',
+      'lost_cases.status as case_status',
+      'lost_cases.closed_at as case_closed_at',
+    ])
+    .where('conversations.id', '=', idDaConversaDoToken(resumo));
+}
+
+/** As mensagens pelo token, na ordem da conversa, pela posição. */
+export function construtorDasMensagensDoAchador(
+  db: Db,
+  resumo: Uint8Array,
+  pagina: PaginaDoAchador,
+) {
+  return db
+    .selectFrom('conversation_messages')
+    .select(['id', 'sender_role', 'body', 'redactions', 'photo_object_key', 'created_at'])
+    .where('conversation_id', '=', idDaConversaDoToken(resumo))
+    .orderBy('created_at', 'asc')
+    .orderBy('id', 'asc')
+    .offset(pagina.deslocamento)
+    .limit(pagina.limit);
+}
+
+/**
+ * O bloqueio pelo achador. `blocked_at IS NULL` no `WHERE`: o primeiro bloqueio
+ * é o que vale, e repetir não reescreve quem bloqueou nem quando.
+ */
+export function construtorDoBloqueioDoAchador(db: Db, resumo: Uint8Array, agora: Instant) {
+  return db
+    .updateTable('conversations')
+    .set({ blocked_at: new Date(agora), blocked_by_role: 'finder' })
+    .where('id', '=', idDaConversaDoToken(resumo))
+    .where('blocked_at', 'is', null);
+}
+
+function comoConversaDoAchador(linha: LinhaDaConversaDoAchador): ConversaDoAchador | undefined {
+  // A junção com `proprio` é por igualdade do resumo, então as duas colunas só
+  // chegam nulas se o aviso não tiver token: o achado avulso, que não tem
+  // conversa por token. Sem elas não há o que comparar nem prazo a conferir.
+  if (linha.finder_token_hash === null || linha.finder_token_expires_at === null) return undefined;
+  return {
+    id: linha.id as ConversationId,
+    petDisplayName: linha.pet_display_name,
+    encerradaEm: linha.closed_at,
+    bloqueadaEm: linha.blocked_at,
+    nomeDoTutor: linha.tutor_display_name,
+    nomeDoAchador: linha.finder_display_name,
+    resumoDoToken: new Uint8Array(linha.finder_token_hash),
+    tokenExpiraEm: linha.finder_token_expires_at,
+    caso:
+      linha.case_status === null
+        ? null
+        : {
+            aberto: linha.case_status === 'open',
+            encerradoEm: linha.case_closed_at,
+          },
+  };
+}
+
 export function criarConversationRepository(db: Db): ConversationRepository {
   return {
     /**
@@ -383,6 +533,39 @@ export function criarConversationRepository(db: Db): ConversationRepository {
 
     async reterParaRevisao(conversa, motivo, agora): Promise<void> {
       await construtorDaRetencao(db, conversa, motivo, agora).execute();
+    },
+
+    async buscarPeloTokenDoAchador(resumo): Promise<ConversaDoAchador | undefined> {
+      const linha = await construtorDaLeituraDoAchador(db, resumo).executeTakeFirst();
+      return linha === undefined ? undefined : comoConversaDoAchador(linha);
+    },
+
+    async mensagensPeloTokenDoAchador(resumo, pagina): Promise<readonly MensagemGravada[]> {
+      const linhas = await construtorDasMensagensDoAchador(db, resumo, pagina).execute();
+      return (linhas as unknown as LinhaDaMensagem[]).map(comoMensagem);
+    },
+
+    async bloquearPeloAchador(resumo, agora): Promise<void> {
+      await construtorDoBloqueioDoAchador(db, resumo, agora).execute();
+    },
+
+    /**
+     * `ON CONFLICT` sobre o índice parcial de denúncia aberta: a repetição do
+     * mesmo lado soma ao item de fila que já existe, em vez de abrir outro.
+     * O índice decide, e não um `SELECT` antes do `INSERT`.
+     */
+    async registrarDenuncia(denuncia: NovaDenuncia): Promise<void> {
+      const quando = new Date(denuncia.agora);
+      await sql`
+        INSERT INTO conversation_reports
+          (id, conversation_id, reporter_role, reason, detail, created_at, last_reported_at)
+        VALUES
+          (${denuncia.id}, ${denuncia.conversationId}, ${denuncia.papel}, ${denuncia.motivo},
+           ${denuncia.detalhe}, ${quando}, ${quando})
+        ON CONFLICT (conversation_id, reporter_role) WHERE resolved_at IS NULL
+        DO UPDATE SET repeat_count = conversation_reports.repeat_count + 1,
+                      last_reported_at = EXCLUDED.last_reported_at
+      `.execute(db);
     },
   };
 }

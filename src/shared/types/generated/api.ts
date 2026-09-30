@@ -1040,7 +1040,9 @@ export interface paths {
          *     campos. Data e hora sao do servidor; o codigo ja veio no caminho.
          *
          *     Detalhes (onde, foto, recado, contato) chegam depois, por
-         *     `PATCH /found-reports/{foundReportId}` com o `finder_token`.
+         *     `PATCH /v1/finder/found-report` (`enrichFinderFoundReport`), com o
+         *     `finder_token` em `Authorization: Bearer` e sem id no caminho. A foto
+         *     vem antes, por `POST /v1/media/finder-photo-intents`.
          *
          *     `Idempotency-Key` e **obrigatorio**: a pagina publica reenvia o pedido
          *     por fila do service worker quando a rede cai, e o tutor nao pode
@@ -1177,7 +1179,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A conversa do achador, resolvida pelo token */
+        /**
+         * A conversa do achador, resolvida pelo token
+         * @description Enquanto o link vale (caso aberto, ou ate 30 dias do aviso, ou ate 30
+         *     dias depois do encerramento), a leitura e **200**, inclusive com o caso
+         *     encerrado: `status: closed` diz que a conversa nao aceita mais
+         *     mensagem, e o que o tutor escreveu antes continua legivel. Depois disso,
+         *     **410** com corpo fixo.
+         *
+         *     **Nenhuma das duas respostas conta o desfecho do caso.** Ate 23/09/2026
+         *     este documento prometia "o desfecho, porque quem ajudou merece saber que
+         *     deu certo". A promessa saiu pela regra de `lost-case-closed`: o link e
+         *     um bearer, pode ter sido repassado, e um texto que diz "voltou para
+         *     casa" em um caso e outra coisa nos demais conta, por exclusao, o que
+         *     aconteceu com o animal de outra pessoa. Quem decide contar e o tutor,
+         *     na conversa, antes de encerrar.
+         */
         get: operations["getFinderConversation"];
         put?: never;
         post?: never;
@@ -3724,11 +3741,17 @@ export interface components {
         FoundReportEnrichment: {
             message?: string;
             /**
-             * @description O `upload_ref` devolvido por
-             *     `POST /v1/finder/found-report/photo-upload-intent`. Opaco de
-             *     proposito: este corpo vem de quem nao tem conta (SEC-001).
+             * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+             *     (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+             *     vem de quem nao tem conta (SEC-001).
              */
             photo_upload_ref?: string;
+            /**
+             * @description Sem faixa e sem obrigatoriedade, como estava antes de 23/09/2026.
+             *     A versao do achador sem conta (`FinderFoundReportEnrichment`) usa
+             *     `GeoPoint`; se o app tambem deve passar a `GeoPoint` e decisao
+             *     pendente do app, porque mudar aqui quebra quem ja envia.
+             */
             location?: {
                 /** Format: double */
                 lat?: number;
@@ -3736,6 +3759,33 @@ export interface components {
                 lon?: number;
                 accuracy_m?: number;
             };
+            /**
+             * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
+             *     para avisar a resposta do tutor e o desfecho do caso.
+             */
+            finder_contact?: {
+                display_name?: string;
+                /** Format: email */
+                email?: string;
+            };
+        };
+        /**
+         * @description O corpo de `enrichFinderFoundReport`, do achador sem conta. Mesmos
+         *     campos de `FoundReportEnrichment`, com uma diferenca: `location` e
+         *     `GeoPoint`, com a faixa do territorio e `lat`/`lon` obrigatorios
+         *     juntos. Existe separado porque `FoundReportEnrichment` e tambem o corpo
+         *     de `enrichFoundReport`, que o app ja usa, e apertar la quebraria esse
+         *     consumidor (13 quebras no `oasdiff` do commit 19ee222).
+         */
+        FinderFoundReportEnrichment: {
+            message?: string;
+            /**
+             * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+             *     (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+             *     vem de quem nao tem conta (SEC-001).
+             */
+            photo_upload_ref?: string;
+            location?: components["schemas"]["GeoPoint"];
             /**
              * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
              *     para avisar a resposta do tutor e o desfecho do caso.
@@ -3783,6 +3833,11 @@ export interface components {
              *     **continua exigindo confirmacao humana do tutor**.
              */
             share_token?: string;
+            /**
+             * @description 500, o mesmo teto de `found_reports.notes` no banco
+             *     (`found_reports_notes_tamanho`). O contrato dizia 1000, e o texto
+             *     entre 501 e 1000 passava pela validacao e morria no banco como 500.
+             */
             notes?: string;
             /** Format: uuid */
             photo_upload_id?: string;
@@ -5641,6 +5696,47 @@ export interface components {
          *     achado avulso, e o cruzamento por atributos faz o resto.
          */
         LostCaseClosed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O token do achador esta ausente, malformado ou nao corresponde a aviso
+         *     nenhum. Os tres casos tem **o mesmo corpo**: distinguir "malformado" de
+         *     "nao existe" diria a quem tenta que chegou perto. `type` e sempre
+         *     `finder-link-invalid`.
+         *
+         *     E 401, e nao 403, pelo mesmo criterio de `getPublicLostCase`: credencial
+         *     que nao autentica e 401, e 403 fica para quem se autenticou e nao tem
+         *     permissao, que aqui nao existe (o token tem escopo de uma conversa so).
+         *     Nao e `unauthenticated` porque aquele tipo manda entrar, e quem abriu
+         *     este link nao tem conta. Sai com `WWW-Authenticate: Bearer`.
+         */
+        FinderLinkInvalid: {
+            headers: {
+                /** @description Sempre `Bearer`. */
+                "WWW-Authenticate"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O token do achador existiu e **venceu**: passou dos 30 dias do aviso com
+         *     o caso ja encerrado, ou dos 30 dias depois do encerramento. `type` e
+         *     `conversation-closed`, e o corpo e **fixo**: nao traz o desfecho do caso
+         *     em campo nenhum, nem no `detail`. Ver a descricao de
+         *     `getFinderConversation`.
+         *
+         *     Vale igual para as seis operacoes do achador. Bloquear, denunciar,
+         *     enviar foto ou recado por um link vencido recebe a mesma resposta que
+         *     ler a conversa: responder 401 ali diria que o link nunca valeu.
+         */
+        FinderAccessEnded: {
             headers: {
                 [name: string]: unknown;
             };
@@ -7756,7 +7852,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FoundReportEnrichment"];
+                "application/json": components["schemas"]["FinderFoundReportEnrichment"];
             };
         };
         responses: {
@@ -7769,16 +7865,10 @@ export interface operations {
                     "application/json": components["schemas"]["FinderFoundReportView"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /** @description Caso ja encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     createFinderPhotoUploadIntent: {
@@ -7805,8 +7895,11 @@ export interface operations {
                     "application/json": components["schemas"]["FinderUploadIntent"];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
             415: components["responses"]["UnsupportedMedia"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getFinderConversation: {
@@ -7830,19 +7923,9 @@ export interface operations {
                     "application/json": components["schemas"]["FinderConversation"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /**
-             * @description Caso encerrado. A resposta traz o desfecho, porque quem ajudou
-             *     merece saber que deu certo.
-             */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     postFinderMessage: {
@@ -7872,8 +7955,12 @@ export interface operations {
                     "application/json": components["schemas"]["FinderMessage"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /** @description Conversa encerrada ou bloqueada. */
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            /**
+             * @description Conversa encerrada ou bloqueada, ou acesso do link vencido. Corpo
+             *     fixo, sem desfecho do caso (ver `FinderAccessEnded`).
+             */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -7901,7 +7988,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            403: components["responses"]["Forbidden"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     reportFinderConversation: {
@@ -7922,7 +8010,9 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
-            403: components["responses"]["Forbidden"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     previewLostCaseReach: {

@@ -18,6 +18,17 @@
  */
 import type { Instant, PetId, TagCodeCanonical, TagId, UserId } from '../../../shared/types/brands.js';
 
+/**
+ * Janela do agrupamento: dois avisos do mesmo achador para a mesma tag em 6 h
+ * são uma conversa só.
+ *
+ * Mora na porta, e não no serviço, porque `messaging` precisa do MESMO número
+ * para achar a conversa de um aviso agrupado a partir do token dele (BICHUS-41).
+ * Duas cópias do 6 divergiriam em silêncio: o aviso seria agrupado por uma e o
+ * token resolvido pela outra, e o achador perderia a própria conversa.
+ */
+export const JANELA_DE_AGRUPAMENTO_EM_MS = 6 * 3600 * 1000;
+
 export type StatusDaTag = 'active' | 'revoked';
 
 export type MotivoDeRevogacao =

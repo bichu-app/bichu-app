@@ -317,3 +317,21 @@ export function chaveDoOriginalDeCatalogo(aleatorio: Uint8Array): ObjectKey {
   exigirAleatorioForte('do original de catalogo', aleatorio);
   return comoObjectKey(`catalog/original/${Buffer.from(aleatorio).toString('base64url')}`);
 }
+
+/**
+ * A chave da foto de quem avisou SEM CONTA (BICHUS-41).
+ *
+ * `found-reports/sem-conta/original/{128 bits}`: a mesma forma de
+ * `chaveDaFotoDoAchado`, com o segmento do aviso trocado por um rótulo fixo.
+ * O motivo é que a chave SAI para o achador: a política de envio assinada
+ * carrega `key` nos campos do formulário, e o envio por `PUT` a carrega no
+ * caminho da URL. Com o id do aviso ali, o achador sem conta receberia um
+ * UUIDv7 interno, que é o que o SEC-001 proíbe. O vínculo com o aviso fica em
+ * `upload_intents.found_report_id`, do lado de dentro.
+ */
+export function chaveDaFotoDoAchadorSemConta(aleatorio: Uint8Array): ObjectKey {
+  exigirAleatorioForte('da foto do achador sem conta', aleatorio);
+  return comoObjectKey(
+    `found-reports/sem-conta/original/${Buffer.from(aleatorio).toString('base64url')}`,
+  );
+}

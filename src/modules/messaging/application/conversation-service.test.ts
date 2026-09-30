@@ -100,6 +100,13 @@ function bancada(estado: Estado = {}) {
       retencoes.push({ conversa: alvo, motivo });
       return Promise.resolve();
     },
+    // O lado do achador sem conta tem bancada própria
+    // (`conversa-do-achador.test.ts`). Aqui ele não é exercido, e chamá-lo é
+    // defeito de fiação que precisa aparecer, e não um `undefined` silencioso.
+    buscarPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+    mensagensPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+    bloquearPeloAchador: () => Promise.reject(new Error('fora desta bancada')),
+    registrarDenuncia: () => Promise.reject(new Error('fora desta bancada')),
   };
 
   let sequencia = 0;

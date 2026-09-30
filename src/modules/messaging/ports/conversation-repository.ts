@@ -13,6 +13,7 @@
  * mesmo ADR fecha nas tags.
  */
 import type { TrechoRedigido } from '../../../shared/redaction/redigir.js';
+import type { CasoDaConversa } from '../domain/acesso-do-achador.js';
 import type { Papel } from '../domain/conversa-mediada.js';
 import type { MotivoDeRetencao } from '../domain/retencao-para-revisao.js';
 import type {
@@ -84,6 +85,49 @@ export interface NovaMensagem {
   /** Já redigido pelo serviço. A porta não redige, e não é lugar de redigir. */
   readonly body: string;
   readonly redactions: readonly TrechoRedigido[];
+}
+
+/**
+ * A conversa como o achador SEM CONTA a lê, resolvida pelo token (BICHUS-41).
+ *
+ * `id` está aqui para o serviço gravar a mensagem na conversa certa, e **não
+ * sai**: `FinderConversation` não tem `id` nem `case_id` (SEC-001), e a rota
+ * monta a resposta campo a campo sem ele.
+ */
+export interface ConversaDoAchador {
+  readonly id: ConversationId;
+  readonly petDisplayName: string;
+  readonly encerradaEm: Date | null;
+  readonly bloqueadaEm: Date | null;
+  readonly nomeDoTutor: string | null;
+  readonly nomeDoAchador: string | null;
+  /**
+   * O resumo GRAVADO do token do aviso. O serviço o compara com o resumo do
+   * token apresentado em tempo constante: a igualdade do índice já achou a
+   * linha, e a comparação é a segunda chave, que não depende de o banco ter
+   * comparado do jeito que se espera.
+   */
+  readonly resumoDoToken: Uint8Array;
+  readonly tokenExpiraEm: Date;
+  readonly caso: CasoDaConversa | null;
+}
+
+/** Janela de leitura do achador: posição, e não id (ver `acesso-do-achador.ts`). */
+export interface PaginaDoAchador {
+  readonly limit: number;
+  readonly deslocamento: number;
+}
+
+export type MotivoDaDenuncia = 'extortion' | 'harassment' | 'spam' | 'impersonation' | 'other';
+
+export interface NovaDenuncia {
+  readonly id: string;
+  readonly conversationId: ConversationId;
+  /** Quem denuncia. O alvo é o outro papel. */
+  readonly papel: Exclude<Papel, 'system'>;
+  readonly motivo: MotivoDaDenuncia;
+  readonly detalhe: string | null;
+  readonly agora: Instant;
 }
 
 /** Janela de leitura. `limit` já veio limitado pelo teto do contrato. */
@@ -165,4 +209,30 @@ export interface ConversationRepository {
     motivo: MotivoDeRetencao,
     agora: Instant,
   ): Promise<void>;
+
+  // -------------------------------------------------------------------------
+  // O achador sem conta (BICHUS-41). O "chamador" é o RESUMO do token, e ele
+  // entra no `WHERE` de toda consulta, pela mesma razão do chamador com conta.
+  // -------------------------------------------------------------------------
+
+  /**
+   * A conversa do aviso cujo token tem este resumo, ou a do aviso ao qual ele
+   * foi agrupado. `undefined` quando o token não é de aviso nenhum.
+   */
+  buscarPeloTokenDoAchador(resumo: Uint8Array): Promise<ConversaDoAchador | undefined>;
+
+  /** As mensagens, com o resumo do token no `WHERE` da própria consulta. */
+  mensagensPeloTokenDoAchador(
+    resumo: Uint8Array,
+    pagina: PaginaDoAchador,
+  ): Promise<readonly MensagemGravada[]>;
+
+  /** O achador bloqueia o tutor. Só o primeiro bloqueio conta. */
+  bloquearPeloAchador(resumo: Uint8Array, agora: Instant): Promise<void>;
+
+  /**
+   * Põe a denúncia na fila, ou soma à que o mesmo lado já tem aberta nesta
+   * conversa (`accept_and_deduplicate`).
+   */
+  registrarDenuncia(denuncia: NovaDenuncia): Promise<void>;
 }

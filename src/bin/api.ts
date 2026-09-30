@@ -86,6 +86,10 @@ import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.j
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
 import { ConversationService } from '../modules/messaging/application/conversation-service.js';
 import { registrarRotasDeConversas } from '../modules/messaging/adapters/http/conversation-routes.js';
+import { ConversaDoAchadorService } from '../modules/messaging/application/conversa-do-achador.js';
+import { registrarRotasDoAchador } from '../modules/messaging/adapters/http/finder-conversation-routes.js';
+import { AvisoDoAchadorService } from '../modules/found/application/aviso-do-achador.js';
+import { registrarRotasDoAvisoDoAchador } from '../modules/found/adapters/http/finder-found-report-routes.js';
 import { criarTransferRepository } from '../modules/transfers/adapters/persistence/kysely-transfer-repository.js';
 import { PetTransferService } from '../modules/transfers/application/pet-transfer-service.js';
 import { registrarRotasDeTransferencia } from '../modules/transfers/adapters/http/transfer-routes.js';
@@ -391,6 +395,15 @@ export async function main(): Promise<void> {
     trilha,
   });
 
+  // BICHUS-41. A mesma conversa, pela porta de quem avisou sem conta: o token
+  // do aviso e o endereco, e as rotas nao tem id no caminho (SEC-001).
+  const conversaDoAchador = new ConversaDoAchadorService({
+    repositorio: criarConversationRepository(db),
+    ids,
+    clock: systemClock,
+    trilha,
+  });
+
   const tags = criarTagService({
     repositorio: criarTagRepository(db),
     cifra: criarSecretCipher(config.tagCodeKey),
@@ -654,6 +667,20 @@ export async function main(): Promise<void> {
     clock: systemClock,
   };
 
+  // BICHUS-41. "Contar mais" e a foto de quem avisou sem conta. A validade do
+  // token e perguntada a conversa, que e onde a regra do "caso aberto mais 30
+  // dias" mora: `found` so enxerga a porta de um metodo de `conversaDoAchador`.
+  const avisoDoAchador = new AvisoDoAchadorService({
+    repositorio: criarFoundReportRepository(db),
+    conversa: conversaDoAchador,
+    armazenamento: criarObjectStorage(config.objectStorage),
+    ids,
+    clock: systemClock,
+    // `WEB_BASE_URL`: `/c/{token}` e pagina do site, como o `conversation_url`
+    // que o aviso ja devolve em `createFoundReportFromTag`.
+    baseDaWeb: config.webBaseUrl,
+  });
+
   const dependenciasDasRotasDeTag = {
     tags,
     // A porta é de `tags` e quem a liga ao serviço de identidade é esta linha: é
@@ -774,6 +801,13 @@ export async function main(): Promise<void> {
       idempotencia: criarIdempotencia(db),
       clock: systemClock,
     });
+    registrarRotasDoAchador(escopo, {
+      conversas: conversaDoAchador,
+      contrato,
+      idempotencia: criarIdempotencia(db),
+      clock: systemClock,
+    });
+    registrarRotasDoAvisoDoAchador(escopo, { avisos: avisoDoAchador, contrato });
     // ADR-0027. O prefixo `/v1/admin`, com a guarda instalada UMA vez no
     // escopo. Sem `ADMIN_ORIGIN` ele nao e registrado e responde 404, que era o
     // estado ate aqui: nenhum ambiente serve a superficie administrativa sem

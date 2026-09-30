@@ -103,6 +103,18 @@ export const DIMENSOES_CONHECIDAS = [
    * brasileiras faria um teto por IP pegar vizinho inocente e errar quem raspa.
    */
   'q',
+  /**
+   * BICHUS-41. O token do achador sem conta, que é a única identidade dele. O
+   * balde recebe o HMAC do token e nunca o token: `bucket_key` é lida por quem
+   * opera o banco, e o token em claro ali abriria a conversa de alguém.
+   */
+  'finder_token',
+  /**
+   * BICHUS-41. O alvo da denúncia, que é o par (conversa, papel denunciado). Só
+   * aparece em entrada `distinct_identities`, que esta porta não aplica e o
+   * inventário da subida lista; o resolvedor existe para a declaração ter dono.
+   */
+  'report_target',
 ] as const;
 
 /**

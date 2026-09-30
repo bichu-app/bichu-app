@@ -165,6 +165,12 @@ function repositorio(cenario: Cenario): FoundReportRepository {
       gravadas.push(...sugestoes);
       return Promise.resolve(sugestoes.length);
     },
+    // O achador sem conta tem bancada própria (`finder-found-report-routes.test.ts`).
+    avisoPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+    enriquecerPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+    intencaoDeFotoDoAchadorPelaReferencia: () => Promise.reject(new Error('fora desta bancada')),
+    contarIntencoesDeFotoPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
+    registrarIntencaoDeFotoDoAchadorSemConta: () => Promise.reject(new Error('fora desta bancada')),
   };
 }
 
@@ -285,7 +291,39 @@ const CORPO_MINIMO = {
   area: { city: 'São Paulo', neighborhood: 'Pinheiros' },
 };
 
+/** `StrayFoundReportInput.notes.maxLength`, lido do contrato e não escrito aqui. */
+function tetoDoRecadoNoContrato(): number {
+  const spec = carregarContrato('api/openapi.yaml').spec as {
+    components?: { schemas?: Record<string, { properties?: Record<string, { maxLength?: unknown }> }> };
+  };
+  const teto = spec.components?.schemas?.['StrayFoundReportInput']?.properties?.['notes']?.maxLength;
+  assert.equal(typeof teto, 'number', 'o contrato não declara `maxLength` em StrayFoundReportInput.notes');
+  return teto as number;
+}
+
 void describe('as rotas existem e respondem o que o contrato declara', () => {
+  void it('`notes` no teto do contrato passa, e um caractere a mais é 400 antes do banco', async () => {
+    // O contrato dizia 1000 e o banco (`found_reports_notes_tamanho`) aceita
+    // 500: o texto entre os dois passava pela borda e morria no INSERT como 500.
+    const teto = tetoDoRecadoNoContrato();
+    const app = servidor();
+    const noTeto = await pedir(app, {
+      metodo: 'POST',
+      url: '/found-reports',
+      corpo: { ...CORPO_MINIMO, notes: 'a'.repeat(teto) },
+    });
+    const acima = await pedir(app, {
+      metodo: 'POST',
+      url: '/found-reports',
+      corpo: { ...CORPO_MINIMO, notes: 'a'.repeat(teto + 1) },
+    });
+    await app.close();
+    assert.equal(teto, 500, 'o teto do contrato deixou de ser o do banco (500)');
+    assert.equal(noTeto.status, 201);
+    assert.equal(acima.status, 400);
+    assert.equal(tipoDe(acima.corpo), 'validation-failed');
+  });
+
   void it('o registro responde 201 com os campos de `FoundReport`', async () => {
     const app = servidor();
     const { status, corpo } = await pedir(app, {

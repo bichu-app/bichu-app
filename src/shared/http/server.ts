@@ -137,6 +137,9 @@ export function responderProblema(
     request.id,
     ocultarCodigoDaTagNaUrl(request.url),
   );
+  for (const [nome, valor] of Object.entries(erro.cabecalhos ?? {})) {
+    void reply.header(nome, valor);
+  }
   if (erro.retryAfterSeconds !== undefined) {
     // A RFC 9110 exige `Retry-After` no 429, e o cliente offline precisa dele
     // para decidir quando reenviar a fila em vez de martelar.

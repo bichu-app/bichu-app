@@ -23,6 +23,7 @@
  */
 export {
   chaveDaFotoDoAchado,
+  chaveDaFotoDoAchadorSemConta,
   chaveDoOriginal,
   ehTipoAceito,
   TIPOS_ACEITOS,

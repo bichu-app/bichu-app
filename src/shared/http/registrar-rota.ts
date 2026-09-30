@@ -150,6 +150,7 @@ export const TIPOS_DE_TENTATIVA_INVALIDA: ReadonlySet<ProblemType> = new Set<Pro
   'tag-code-malformed',
   'tag-code-not-found',
   'verification-token-expired',
+  'finder-link-invalid',
 ]);
 
 /** As dimensões que aparecem na tupla `rateLimit` da rota, como união literal. */

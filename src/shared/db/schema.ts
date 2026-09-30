@@ -480,7 +480,12 @@ export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event';
 
 export interface UploadIntentsTable {
   id: string;
-  user_id: string;
+  /**
+   * Quem pediu. Nulo **só** em `finder_photo`: o achador sem conta não tem
+   * `users.id` (BICHUS-41). O CHECK `upload_intents_dono_salvo_achador_sem_conta`
+   * cobra isso no banco.
+   */
+  user_id: string | null;
   /** Nulo para o achador sem pet: o vínculo dele é com o aviso. */
   pet_id: string | null;
   /**
@@ -498,6 +503,11 @@ export interface UploadIntentsTable {
   expires_at: Date;
   confirmed_at: Date | null;
   created_at: CriadoEm;
+  /**
+   * Referência opaca devolvida ao achador sem conta (128 bits, base64url). O
+   * `id` é UUIDv7 e não sai para ele (SEC-001). Nula nas outras espécies.
+   */
+  upload_ref: string | null;
 }
 
 /**
@@ -753,6 +763,25 @@ export interface ConversationsTable {
   /** Invisível aos dois lados de propósito. Ver a migração. */
   held_for_review_at: Date | null;
   held_reason: MotivoDeRetencao | null;
+}
+
+/**
+ * BICHUS-41. A fila de denúncia da conversa mediada.
+ *
+ * O alvo é o OUTRO papel da conversa, e não um usuário: o achador pode não ter
+ * conta. Um item aberto por (conversa, lado); a denúncia repetida soma em
+ * `repeat_count` (`accept_and_deduplicate` do contrato).
+ */
+export interface ConversationReportsTable {
+  id: string;
+  conversation_id: string;
+  reporter_role: 'tutor' | 'finder';
+  reason: 'extortion' | 'harassment' | 'spam' | 'impersonation' | 'other';
+  detail: string | null;
+  repeat_count: Generated<number>;
+  created_at: Generated<Date>;
+  last_reported_at: Generated<Date>;
+  resolved_at: Date | null;
 }
 
 /** BICHUS-43. A mensagem, com o texto **já redigido**. */
@@ -1230,6 +1259,7 @@ export interface Database {
   lost_cases: LostCasesTable;
   conversations: ConversationsTable;
   conversation_messages: ConversationMessagesTable;
+  conversation_reports: ConversationReportsTable;
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;
   entity_verifications: EntityVerificationsTable;
