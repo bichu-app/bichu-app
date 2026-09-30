@@ -5,7 +5,7 @@
  * objeto, e um contêiner esconderia justamente a fiação que precisa ser óbvia na
  * revisão de segurança.
  */
-import type { Instant } from '../../../shared/types/brands.js';
+import type { Instant, UserId } from '../../../shared/types/brands.js';
 import type { Mailer } from '../ports/mailer.js';
 import type { AbsoluteUrl } from '../../../shared/types/brands.js';
 import type { AuditLog } from '../../audit/ports/audit-log.js';
@@ -46,6 +46,28 @@ export interface DependenciasDeIdentidade {
    */
   readonly avisarTitular: (aviso: AvisoAoTitular) => Promise<void>;
   readonly mailer: Mailer;
+  /**
+   * Apaga TODOS os aparelhos da conta do cadastro de push, e devolve quantos
+   * saíram. Chamada por `derrubarTodasAsSessoes`, no terceiro passo.
+   *
+   * **Função estreita e não a porta inteira, e isso é a fronteira do ADR-0008
+   * em forma de assinatura.** O cadastro de aparelho vive em `notifications`, e
+   * `identity` não importa nada de lá. O que atravessa é este tipo, declarado
+   * aqui, e a ligação acontece na composição (`src/bin/api.ts`) delegando a
+   * `RegistroDeAparelhosService`. É o mesmo arranjo que `worker.ts` já usa para
+   * `revogarPorTokenRecusado`.
+   *
+   * **Obrigatória, e não opcional.** Um campo opcional deixaria a composição
+   * que esquecer dele revogar sessão sem remover push, em silêncio, que é
+   * literalmente o defeito SEC-019 voltando pela porta da fiação.
+   *
+   * A falha PROPAGA: quem chamar responde erro. É o certo, porque os dois
+   * passos anteriores já estão duráveis, repetir é idempotente, e o estado
+   * residual ("sessão morta, push vivo") é o de hoje, agora visível em vez de
+   * silencioso. O que não pode acontecer é ela falhar dentro de um `catch` mudo
+   * e a resposta continuar sendo sucesso.
+   */
+  readonly removerPushDaConta: (dono: UserId) => Promise<number>;
   /**
    * Registra o que aconteceu fora do processo.
    *

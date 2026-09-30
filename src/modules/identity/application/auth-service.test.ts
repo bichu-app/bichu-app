@@ -380,6 +380,12 @@ function montar(opcoes: {
   };
 
   const servico = criarAuthService({
+    // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
+    // não é sobre isso, então a função é contada e não observada. O caso que
+    // PROVA a remoção, lendo a linha de `user_devices` depois, é
+    // `sair-de-todos-os-aparelhos.test.ts` e
+    // `tests/integration/sair-de-todos-pelo-http.test.ts`.
+    removerPushDaConta: () => Promise.resolve(0),
     repositorio: repo,
     assinador,
     trilha,

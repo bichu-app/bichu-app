@@ -80,7 +80,13 @@ import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { expurgarContasExcluidas } from '../../src/modules/identity/application/expurgar-contas-excluidas.js';
 import { PRAZO_DE_EXPURGO_EM_MS } from '../../src/modules/identity/application/auth-service.js';
 import type { AuditEvent, AuditLog } from '../../src/modules/audit/ports/audit-log.js';
-import type { Instant, UserId } from '../../src/shared/types/brands.js';
+import type { Instant, ObjectKey, UserId } from '../../src/shared/types/brands.js';
+import { comoObjectKey } from '../../src/modules/media/domain/chave-de-objeto.js';
+import { loadAppConfig } from '../../src/shared/config/app-config.js';
+import { criarObjectStorage } from '../../src/modules/media/adapters/external/s3-object-storage.js';
+import { criarMediaRepository } from '../../src/modules/media/adapters/persistence/kysely-media-repository.js';
+import { criarApagadorDeObjetosDaConta } from '../../src/modules/media/application/apagar-objetos-da-conta.js';
+import type { Classe, ObjectStorage } from '../../src/modules/media/ports/object-storage.js';
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
 
@@ -105,6 +111,23 @@ let cliente: Client;
 let banco: DbHandle;
 let db: Db;
 let repo: ReturnType<typeof criarIdentityRepository>;
+
+/**
+ * O apagador de objeto que estes casos usam, e o que ele DELIBERADAMENTE não
+ * prova.
+ *
+ * Os casos deste bloco medem a travessia de dezoito tabelas e o `DELETE` que
+ * cascateia por elas. Eles não medem apagamento de arquivo, e essa foi a leitura
+ * errada que sustentou o SEC-020 por meses: **o verde deste arquivo provava
+ * apagamento de BANCO e era lido como apagamento de DADO PESSOAL.** Nenhum byte
+ * de foto jamais subiu em teste nesta pilha.
+ *
+ * Este nome existe para que a confusão não seja possível de novo. Quem o lê numa
+ * chamada sabe, na hora, que aquele caso não diz nada sobre o balde. Quem quer
+ * o apagamento físico tem o bloco `SEC-020`, no fim deste arquivo, e ele
+ * **reprova com o motivo** enquanto a pilha não tiver armazenamento.
+ */
+const SO_O_BANCO = (): Promise<number> => Promise.resolve(0);
 
 /** Trilha que só anota. O que o banco faz é o que este arquivo mede. */
 function trilhaQueAnota(): AuditLog & { eventos: AuditEvent[] } {
@@ -330,6 +353,7 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
           repositorio: repo,
           trilha,
           clock: { now: () => DEPOIS_DO_PRAZO },
+          apagarObjetosDaConta: SO_O_BANCO,
         });
       } catch (erro) {
         assert.fail(
@@ -391,6 +415,7 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
         repositorio: repo,
         trilha: trilhaQueAnota(),
         clock: { now: () => DEPOIS_DO_PRAZO },
+        apagarObjetosDaConta: SO_O_BANCO,
       });
 
       const { rows } = await cliente.query<{ dona: string; caso: string; pet: string }>(
@@ -414,6 +439,7 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
         repositorio: repo,
         trilha: trilhaQueAnota(),
         clock: { now: () => DEPOIS_DO_PRAZO },
+        apagarObjetosDaConta: SO_O_BANCO,
       });
 
       // Este caso AFIRMA o comportamento de hoje em vez de exigir outro, e é de
@@ -443,6 +469,7 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
         trilha: trilhaQueAnota(),
         // Um dia depois do pedido, e não 31.
         clock: { now: () => (AGORA + 24 * 60 * 60 * 1000) as Instant },
+        apagarObjetosDaConta: SO_O_BANCO,
       });
 
       // Sem este caso, a implementação mais simples que passa no caso principal
@@ -463,6 +490,7 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
         repositorio: repo,
         trilha: trilhaQueAnota(),
         clock: { now: () => DEPOIS_DO_PRAZO },
+        apagarObjetosDaConta: SO_O_BANCO,
       });
 
       // A cláusula é `deleted_at IS NOT NULL AND deleted_at <= $1`. Tirar a
@@ -485,6 +513,7 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
         repositorio: repo,
         trilha,
         clock: { now: () => DEPOIS_DO_PRAZO },
+        apagarObjetosDaConta: SO_O_BANCO,
       });
 
       const evento = trilha.eventos.find((e) => e.action === 'privacy.account_purged');
@@ -503,6 +532,226 @@ void describe('exclusão de conta pelo caminho do produto (BICHUS-215)', () => {
           [],
         ),
         '0',
+      );
+    });
+  });
+});
+
+/**
+ * ===========================================================================
+ * SEC-020 — O EXPURGO APAGA O ARQUIVO, E NÃO SÓ A LINHA
+ * ===========================================================================
+ *
+ * ## Este bloco REPROVA hoje, e a reprovação é a entrega
+ *
+ * A pilha de integração não tem armazenamento de objeto. `compose.integracao.yaml`
+ * sobe `db`, `mail`, `migracao`, `testes` e `api`, e zero ocorrências de `minio`,
+ * `localstack`, `s3mock` ou `fake-gcs`. É deliberado e está escrito em
+ * `infra/integracao/gerar-env-de-integracao.mjs`, com `OBJECT_STORAGE_ENDPOINT`
+ * apontando de propósito para um host que não resolve.
+ *
+ * **O caso não se pula sozinho, e essa é a decisão inteira.** Um `skip` aqui
+ * reproduziria exatamente o defeito que estamos consertando, um nível acima:
+ * verde por ausência, lido como verde por verificação. Verificação que não
+ * consegue verificar reprova, nunca aprova.
+ *
+ * Enquanto o armazenamento não existir nesta pilha, a mensagem da reprovação
+ * diz **o motivo** — "não há armazenamento de objeto nesta pilha, logo o
+ * apagamento físico não foi verificado" — e não "esperava 0, recebeu 1". Quem
+ * ler a falha daqui a seis meses precisa entender o risco, não o número.
+ *
+ * ## O que ele passa a provar quando o armazenamento chegar
+ *
+ * Nada muda aqui. O caso põe TRÊS objetos de verdade (o original privado, e as
+ * derivadas `card` e `thumb` no balde público), cria as linhas que apontam para
+ * eles, exclui a conta, roda o expurgo e exige que `head()` responda ausência
+ * nos três. Três e não um porque é a derivada PÚBLICA que vira o problema de
+ * cache, e um caso que só olhasse o original deixaria justamente ela para trás.
+ *
+ * ## O que este bloco NÃO pode prometer, e precisa estar escrito
+ *
+ * As derivadas públicas são servidas com `max-age=31536000, immutable`, que é um
+ * ano, e o ADR-0014 decidiu que não existe operação de invalidação neste
+ * desenho. Apagar tira o objeto da origem; quem já tem a URL exata e uma cópia
+ * em cache continua alcançando a imagem por até 12 meses. **Nenhuma asserção
+ * deste arquivo prova o contrário, e nenhuma mensagem daqui pode dizer que o
+ * dado foi "apagado completamente".**
+ */
+void describe('SEC-020: a conta expurgada não deixa foto no armazenamento', () => {
+  const CONTA_COM_FOTO = '0192f3a1-7c2b-7e3d-9a10-215000000201' as UserId;
+  const PET_COM_FOTO = '0192f3a1-7c2b-7e3d-9a10-215000000202';
+  const INTENCAO_DA_FOTO = '0192f3a1-7c2b-7e3d-9a10-215000000203';
+  const FOTO_PRONTA = '0192f3a1-7c2b-7e3d-9a10-215000000204';
+
+  /**
+   * As três chaves, com o prefixo que o domínio produz.
+   *
+   * Escritas à mão e não geradas: o que este caso mede é o apagamento, e uma
+   * chave aleatória por execução deixaria lixo com nome diferente a cada
+   * rodada, num balde que ninguém varre.
+   */
+  // Pela PORTA (`comoObjectKey`) e não por `as ObjectKey`: a marca por `as` não
+  // confere nada, e a chave daqui vai para o `pathname` da URL do objeto, onde
+  // um `..` lê de fora do balde (BICHUS-134). Um caso que criasse a marca falsa
+  // estaria exercitando um caminho que a aplicação não tem.
+  const ORIGINAL = comoObjectKey('pets/expurgo-sec-020/original/AAAAAAAAAAAAAAAAAAAAAA');
+  const CARD = comoObjectKey('card/AAAAAAAAAAAAAAAAAAAAAB.webp');
+  const THUMB = comoObjectKey('thumb/AAAAAAAAAAAAAAAAAAAAAC.webp');
+
+  const OS_TRES: readonly { classe: Classe; chave: ObjectKey; rotulo: string }[] = [
+    { classe: 'privado', chave: ORIGINAL, rotulo: 'o original, no balde privado' },
+    { classe: 'publico', chave: CARD, rotulo: 'a derivada `card`, no balde PÚBLICO' },
+    { classe: 'publico', chave: THUMB, rotulo: 'a derivada `thumb`, no balde PÚBLICO' },
+  ];
+
+  /** Um WebP mínimo. O conteúdo não importa; o que importa é existir bytes. */
+  const BYTES = Buffer.from('RIFF\0\0\0\0WEBPVP8 ', 'latin1');
+
+  function armazenamento(): ObjectStorage {
+    return criarObjectStorage(loadAppConfig().objectStorage);
+  }
+
+  /**
+   * A reprovação com MOTIVO, para o dia em que a pilha não tem armazenamento.
+   *
+   * Ela não é um `skip` disfarçado: o caso reprova, a suíte fica vermelha, e o
+   * texto diz o que não foi verificado e por quê.
+   */
+  function reprovarSemArmazenamento(erro: unknown): never {
+    assert.fail(
+      'NÃO HÁ ARMAZENAMENTO DE OBJETO NESTA PILHA, LOGO O APAGAMENTO FÍSICO NÃO FOI ' +
+        'VERIFICADO.\n\n' +
+        'A pilha de integração sobe `db`, `mail`, `migracao`, `testes` e `api`, e nenhum ' +
+        'serviço de objeto (`infra/integracao/compose.integracao.yaml`). ' +
+        '`OBJECT_STORAGE_ENDPOINT` aponta de propósito para um host que não resolve ' +
+        '(`infra/integracao/gerar-env-de-integracao.mjs`).\n\n' +
+        'ESTE CASO NÃO SE PULA SOZINHO, e a decisão está no §19 de docs/04-seguranca.md: ' +
+        'um `skip` aqui reproduziria o defeito que ele existe para consertar, um nível ' +
+        'acima — verde por ausência, lido como verde por verificação. Enquanto ele estiver ' +
+        'vermelho, o que se sabe é que a conta some do BANCO; o que NÃO se sabe é se a ' +
+        'foto do animal sai do balde. É o direito de eliminação da LGPD (art. 18, VI) sem ' +
+        'prova.\n\n' +
+        'O que destrava: um serviço de objeto na pilha de integração (BICHUS-245). Não ' +
+        'construa um segundo.\n\n' +
+        `Erro do armazenamento: ${erro instanceof Error ? erro.message : String(erro)}`,
+    );
+  }
+
+  async function porOsTresObjetos(): Promise<void> {
+    const balde = armazenamento();
+    try {
+      for (const objeto of OS_TRES) {
+        await balde.put(objeto.classe, objeto.chave, BYTES, 'image/webp');
+      }
+    } catch (erro) {
+      reprovarSemArmazenamento(erro);
+    }
+  }
+
+  async function comMassaDeFoto(corpo: () => Promise<void>): Promise<void> {
+    try {
+      await cliente.query(
+        `insert into users (id, email) values ($1, 'foto@expurgo.test')`,
+        [CONTA_COM_FOTO],
+      );
+      await cliente.query(
+        `insert into pets (id, owner_user_id, name, species_code, size_code)
+         values ($1, $2, 'Pipoca', 'cat', 'P')`,
+        [PET_COM_FOTO, CONTA_COM_FOTO],
+      );
+      await cliente.query(
+        `insert into upload_intents
+           (id, user_id, pet_id, kind, object_key, declared_type, max_bytes, expires_at,
+            confirmed_at)
+         values ($1, $2, $3, 'pet_photo', $4, 'image/jpeg', 1000000,
+                 now() + interval '1 hour', now())`,
+        [INTENCAO_DA_FOTO, CONTA_COM_FOTO, PET_COM_FOTO, ORIGINAL],
+      );
+      // A foto PRONTA, com as duas derivadas. É o estado em que os três objetos
+      // existem, e é o único que mede os três baldes.
+      await cliente.query(
+        `insert into pet_photos
+           (id, pet_id, upload_intent_id, status, original_key, thumb_key, card_key,
+            is_primary, created_at, processed_at)
+         values ($1, $2, $3, 'ready', $4, $5, $6, true, now(), now())`,
+        [FOTO_PRONTA, PET_COM_FOTO, INTENCAO_DA_FOTO, ORIGINAL, THUMB, CARD],
+      );
+      await corpo();
+    } finally {
+      await cliente.query('delete from users where id = $1', [CONTA_COM_FOTO]);
+    }
+  }
+
+  void it('os TRÊS objetos somem do balde quando a conta é expurgada', async () => {
+    await porOsTresObjetos();
+
+    await comMassaDeFoto(async () => {
+      await repo.registrarPedidoDeExclusao(CONTA_COM_FOTO, AGORA);
+
+      const balde = armazenamento();
+      const resultado = await expurgarContasExcluidas({
+        repositorio: repo,
+        trilha: trilhaQueAnota(),
+        clock: { now: () => DEPOIS_DO_PRAZO },
+        // O CAMINHO REAL, e não o `SO_O_BANCO` dos casos acima. É esta linha
+        // que separa este bloco daquele: aqui o armazenamento é o de verdade.
+        apagarObjetosDaConta: criarApagadorDeObjetosDaConta({
+          repositorio: criarMediaRepository(db),
+          armazenamento: balde,
+        }),
+      });
+
+      assert.equal(
+        resultado.falhas,
+        0,
+        'o expurgo contou falha. Na ordem certa (objeto primeiro, linha depois) isso ' +
+          'significa que o apagamento do arquivo estourou e a conta NÃO foi apagada do ' +
+          'banco — que é o desfecho autocurável e correto, mas ainda é uma conta que ' +
+          'passou do prazo de 30 dias com a foto no balde.',
+      );
+
+      for (const objeto of OS_TRES) {
+        const cabecalho = await balde.head(objeto.classe, objeto.chave).catch(reprovarSemArmazenamento);
+        assert.equal(
+          cabecalho,
+          null,
+          `${objeto.rotulo} CONTINUA no armazenamento depois do expurgo da conta. A linha ` +
+            'do banco sumiu e levou junto o único ponteiro que existia para o arquivo: ' +
+            'ninguém sabe mais que ele existe nem de quem era, e só uma varredura do balde ' +
+            'inteiro o encontraria. É o SEC-020, e é o direito de eliminação da LGPD ' +
+            '(art. 18, VI) não sendo cumprido.',
+        );
+      }
+    });
+  });
+
+  void it('a trilha conta os objetos que saíram, junto das linhas', async () => {
+    await porOsTresObjetos();
+
+    await comMassaDeFoto(async () => {
+      await repo.registrarPedidoDeExclusao(CONTA_COM_FOTO, AGORA);
+      const trilha = trilhaQueAnota();
+
+      await expurgarContasExcluidas({
+        repositorio: repo,
+        trilha,
+        clock: { now: () => DEPOIS_DO_PRAZO },
+        apagarObjetosDaConta: criarApagadorDeObjetosDaConta({
+          repositorio: criarMediaRepository(db),
+          armazenamento: armazenamento(),
+        }),
+      });
+
+      const evento = trilha.eventos.find((e) => e.action === 'privacy.account_purged');
+      assert.ok(evento !== undefined, 'o expurgo não gravou `privacy.account_purged`');
+      // Sem `objects_deleted`, o evento conta linhas e é lido como se contasse
+      // dado pessoal — que é a leitura que sustentou o SEC-020 por meses.
+      assert.equal(
+        evento.metadata?.['objects_deleted'],
+        3,
+        'a trilha não registrou os três objetos (original, `card` e `thumb`). Quem auditar ' +
+          'o cumprimento do art. 18, VI vai encontrar a contagem de LINHAS e concluir, ' +
+          'errado, que o arquivo saiu junto.',
       );
     });
   });

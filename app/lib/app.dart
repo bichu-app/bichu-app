@@ -424,6 +424,30 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
         // `test/sessao/registro_do_aviso_de_cadastro_test.dart`.
         _avisoDeCadastro.limpar,
       ],
+      // O RE-REGISTRO DO APARELHO DEPOIS DE TODO LOGIN (SEC-019), e ele e o que
+      // paga o preco da correcao do servidor.
+      //
+      // Qualquer revogacao em massa -- sair de todos, troca de senha,
+      // redefinicao, "nao fui eu" -- passou a apagar a linha de `user_devices`
+      // de TODOS os aparelhos da conta, inclusive o de quem pediu, porque o
+      // servidor nao tem como saber qual linha e o telefone que esta pedindo.
+      // Sem esta entrada, a pessoa entra de novo, ve o app funcionando e fica
+      // sem alerta de pet perdido por tempo indeterminado: `reconciliar` so age
+      // quando a permissao do SISTEMA muda, e sair de todos nao muda nenhuma.
+      //
+      // Ela mora aqui, e nao no `onPressed` de `tela_entrar.dart`, pelo mesmo
+      // motivo de `limpezasAoSair`: sao quatro caminhos de login hoje e nada
+      // garante que o quinto lembre.
+      //
+      // O QUE **NAO** ENTRA EM `limpezasAoSair`, e a ausencia e deliberada: o
+      // vigia zerando o que sabia no LOGOUT. Aquela lista e do que e da CONTA
+      // -- dado e credencial de uma pessoa, que nao podem vazar para a proxima
+      // que entrar neste aparelho --, e `_ultimoConhecido` e do APARELHO: e a
+      // permissao de notificacao do sistema operacional, o mesmo argumento que
+      // mantem `OportunidadesDeAviso` fora dela. Zerar no logout tambem seria
+      // redundante, porque `esquecerEReconciliar` zera no login seguinte, que
+      // e o unico momento em que ha sessao para registrar o aparelho.
+      aoEntrar: <AoEntrar>[_vigiaDeAviso.esquecerEReconciliar],
     );
     _roteador = criarRoteador(_sessao);
     _arrancar();

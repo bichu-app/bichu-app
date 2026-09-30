@@ -47,6 +47,7 @@ import { criarImagensDeCatalogoDoWorker } from '../modules/media/adapters/persis
 import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../modules/media/ports/imagem-de-catalogo.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
 import { expurgarContasExcluidas } from '../modules/identity/application/expurgar-contas-excluidas.js';
+import { criarApagadorDeObjetosDaConta } from '../modules/media/application/apagar-objetos-da-conta.js';
 import { criarIdentityRepository } from '../modules/identity/adapters/persistence/kysely-identity-repository.js';
 import { criarLocalizacaoDeReferenciaRepository } from '../modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 import { criarRegistroDeAparelhos } from '../modules/notifications/adapters/persistence/kysely-registro-de-aparelhos.js';
@@ -593,11 +594,26 @@ export async function main(): Promise<void> {
     },
   });
 
+  // SEC-020: QUEM APAGA OS ARQUIVOS, e ele é injetado no expurgo em vez de
+  // importado por ele. `identity` não conhece `media` (ADR-0008), e o que
+  // atravessa é uma função de uma linha declarada do lado de identidade.
+  //
+  // As dependências são as MESMAS de `dependenciasDaFoto`, acima: o repositório
+  // de mídia e o armazenamento que o worker já constrói para processar foto.
+  // Uma segunda instância de `ObjectStorage` aqui seria uma segunda leitura da
+  // configuração de balde, e a divergência só apareceria no dia em que uma
+  // apontasse para o lugar errado.
+  const apagarObjetosDaConta = criarApagadorDeObjetosDaConta({
+    repositorio: dependenciasDaFoto.repositorio,
+    armazenamento: dependenciasDaFoto.armazenamento,
+  });
+
   const rodarExpurgoDeContas = async (): Promise<void> => {
     const r = await expurgarContasExcluidas({
       repositorio: contas,
       trilha: trilhaDoExpurgo,
       clock: systemClock,
+      apagarObjetosDaConta,
     });
     // Silêncio quando não há nada, pelo mesmo motivo das outras varreduras. A
     // exceção é a falha: ela fala SEMPRE, mesmo com zero expurgadas, porque uma

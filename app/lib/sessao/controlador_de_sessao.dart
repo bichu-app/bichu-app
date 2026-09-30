@@ -89,6 +89,27 @@ typedef ObservadorDeSaida = void Function(AvisoDeSaida aviso);
 /// no mesmo aparelho nao pode expor os pets da conta anterior.
 typedef LimpezaAoSair = Future<void> Function();
 
+/// Algo que precisa acontecer **depois de todo login bem-sucedido**.
+///
+/// Existe por um motivo so, e ele e o SEC-019. Desde 23/09 o servidor apaga o
+/// cadastro de push de TODOS os aparelhos da conta em qualquer revogacao em
+/// massa -- sair de todos, troca de senha, redefinicao, "nao fui eu", exclusao
+/// de conta -- inclusive o aparelho de quem pediu. Ele nao consegue poupar um:
+/// nao ha vinculo entre a linha de `user_devices` e a familia de refresh, e um
+/// parametro de "nao apague este" seria preenchido por quem esta com o telefone
+/// roubado.
+///
+/// Quem repoe o registro e o app, e tem de ser **em [abrir]**, nao no
+/// `onPressed` da tela de entrar. Sao quatro caminhos de login hoje (entrar,
+/// criar conta, e os dois de volta pela guarda de intencao) e nenhuma garantia
+/// de que o quinto lembre. E a mesma licao de [LimpezaAoSair], do outro lado da
+/// sessao: limpeza que mora no botao so acontece pelo caminho do botao.
+///
+/// **A falha de uma nao derruba o login.** Entrar na conta nao pode depender de
+/// um registro de push, e quem esta sem rede no momento do login precisa entrar
+/// assim mesmo.
+typedef AoEntrar = Future<void> Function();
+
 /// O registro padrao, usado quando ninguem injeta outro.
 ///
 /// A escolha do canal e por severidade, e nao por gosto:
@@ -148,6 +169,7 @@ class ControladorDeSessao extends ChangeNotifier {
     required DepositoDeSessao deposito,
     GuardaDeAcao? guardaDeAcao,
     List<LimpezaAoSair> limpezasAoSair = const <LimpezaAoSair>[],
+    List<AoEntrar> aoEntrar = const <AoEntrar>[],
     ObservadorDeSaida observadorDeSaida = registrarSaidaNoCanalPadrao,
     // ignore: prefer_initializing_formals
   })  : _auth = auth,
@@ -157,6 +179,8 @@ class ControladorDeSessao extends ChangeNotifier {
         _guardaDeAcao = guardaDeAcao,
         // ignore: prefer_initializing_formals
         _limpezasAoSair = limpezasAoSair,
+        // ignore: prefer_initializing_formals
+        _aoEntrar = aoEntrar,
         // ignore: prefer_initializing_formals
         _observadorDeSaida = observadorDeSaida;
 
@@ -169,6 +193,9 @@ class ControladorDeSessao extends ChangeNotifier {
 
   /// Tudo o mais que o app guardou localmente desta conta. Ver [LimpezaAoSair].
   final List<LimpezaAoSair> _limpezasAoSair;
+
+  /// O que refaz o registro do aparelho depois do login. Ver [AoEntrar].
+  final List<AoEntrar> _aoEntrar;
 
   final ObservadorDeSaida _observadorDeSaida;
 
@@ -197,10 +224,34 @@ class ControladorDeSessao extends ChangeNotifier {
     }
   }
 
-  /// Guarda a sessao recem-aberta e avisa as telas.
+  /// Guarda a sessao recem-aberta, avisa as telas e refaz o que o login repoe.
+  ///
+  /// A ORDEM E O PONTO: [_aoEntrar] roda **depois** de `_mudar`, nunca antes.
+  /// O registro do aparelho e uma chamada `bearerAuth`, e ela pergunta o token
+  /// ao controlador -- com a sessao ainda nao publicada, ela sairia sem
+  /// `Authorization` e o servidor responderia 401 ao registro que o SEC-019
+  /// existe para garantir. O sintoma seria invisivel: nenhuma tela muda, nenhum
+  /// erro aparece, e a pessoa fica fora da base de alerta.
   Future<void> abrir(Sessao sessao) async {
     await _deposito.gravar(sessao);
     _mudar(EstadoDaSessao.logado, sessao);
+    await _reporOQueOLoginRepoe();
+  }
+
+  /// O que precisa acontecer de novo a cada login. Ver [AoEntrar].
+  ///
+  /// Cada uma e isolada pelo mesmo motivo das limpezas de saida: uma que falhe
+  /// nao pode impedir as outras, e nenhuma pode derrubar o login. Entrar na
+  /// conta sem rede continua funcionando; o que nao acontece e o registro, e a
+  /// retomada seguinte com permissao diferente tenta de novo.
+  Future<void> _reporOQueOLoginRepoe() async {
+    for (final passo in _aoEntrar) {
+      try {
+        await passo();
+      } on Object catch (erro) {
+        debugPrint('Bichu/sessao: um passo de pos-login falhou ($erro).');
+      }
+    }
   }
 
   /// Sai da conta **neste aparelho**.
