@@ -146,18 +146,23 @@ async function criarConta(): Promise<UserId> {
 async function darLocalizacao(
   dono: UserId,
   ponto: { lat: number; lon: number },
-  opcoes: { vencida?: boolean } = {},
+  opcoes: { vencida?: boolean; familia?: string } = {},
 ): Promise<void> {
+  const { familia } = opcoes;
   const capturada = new Date(Number(AGORA) - 60_000);
   // Vencida = `expires_at` no passado. É a coluna que a consulta compara, e a
   // BICHUS-92 a gravou justamente para que mudar a janela não reescreva o
   // passado.
   const expira = new Date(Number(AGORA) + (opcoes.vencida === true ? -1000 : 86_400_000));
   await cliente.query(
+    // SEC-021: `session_family_id` é a sessão de aparelho, e é NOT NULL desde a
+    // migração 20260923000001. Um valor sorteado por chamada é o que permite a
+    // mesma pessoa aparecer com DOIS aparelhos quando o caso precisa disso.
     `INSERT INTO user_reference_locations
-       (user_id, reference_point, precision_m, source, captured_at, expires_at)
-     VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 100, 'map_pin', $4, $5)`,
-    [dono, ponto.lon, ponto.lat, capturada, expira],
+       (user_id, session_family_id, reference_point, precision_m, source,
+        captured_at, expires_at)
+     VALUES ($1, $6, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 100, 'map_pin', $4, $5)`,
+    [dono, ponto.lon, ponto.lat, capturada, expira, familia ?? randomUUID()],
   );
 }
 
@@ -339,6 +344,56 @@ void describe('critério 3: o raio de 5 km é medido sobre o elipsoide', () => {
     const perto = await vizinhoEm(aNorteDoCentro(500));
 
     assert.deepEqual(await contasAlcancadas(tutor), [perto, meio, longe]);
+  });
+});
+
+void describe('SEC-021: dois aparelhos da mesma pessoa, um destinatário só', () => {
+  void it('duas regiões dentro do raio NÃO devolvem a pessoa duas vezes', async () => {
+    const tutor = await criarConta();
+    const vizinha = await criarConta();
+    await darAparelho(vizinha);
+    // A MESMA pessoa em dois aparelhos, os dois dentro do raio de 5 km: o
+    // tablet a 1 km e o celular a 4 km. É o estado que a decisão do cliente de
+    // 23/09 tornou possível.
+    await darLocalizacao(vizinha, aNorteDoCentro(1000), { familia: randomUUID() });
+    await darLocalizacao(vizinha, aNorteDoCentro(4000), { familia: randomUUID() });
+
+    const r = await alcance.alcancaveis(consulta(tutor));
+    assert.ok(r !== null);
+
+    const quantasVezes = r.destinatarios.filter((d) => d.usuario === vizinha).length;
+    // ISCA: tire `GROUP BY url.user_id` de `construtorDoAlcance` e este caso
+    // reprova com 2. O estrago não é cosmético: a pessoa receberia o MESMO
+    // alerta duas vezes, gastaria dois dos três lugares do teto de fadiga de
+    // 24 h e ocuparia dois dos 500 lugares do teto de destinatários — tirando
+    // outro tutor do alerta.
+    assert.equal(
+      quantasVezes,
+      1,
+      `a pessoa apareceu ${quantasVezes} vezes na lista de destinatários. Com a ` +
+        'localização por aparelho, cada aparelho dentro do raio é uma linha, e sem ' +
+        'agrupamento cada linha vira um destinatário.',
+    );
+  });
+
+  void it('a região do OUTRO aparelho basta: perto do trabalho, longe de casa', async () => {
+    const tutor = await criarConta();
+    const vizinha = await criarConta();
+    await darAparelho(vizinha);
+    // Casa longe (9 km, fora do raio), trabalho perto (2 km, dentro). Antes da
+    // SEC-021 a pessoa só tinha a ÚLTIMA localização informada; agora tem as
+    // duas, e é alcançada pela que está perto.
+    await darLocalizacao(vizinha, aNorteDoCentro(9000), { familia: randomUUID() });
+    await darLocalizacao(vizinha, aNorteDoCentro(2000), { familia: randomUUID() });
+
+    const alcancados = await contasAlcancadas(tutor);
+
+    assert.ok(
+      alcancados.includes(vizinha),
+      'a pessoa ficou de fora do alerta mesmo tendo um aparelho a 2 km do caso. É o ' +
+        'ganho que a decisão do cliente de 23/09 pediu: ser alcançável por caso aberto ' +
+        'perto de qualquer um dos lugares em que ela está.',
+    );
   });
 });
 

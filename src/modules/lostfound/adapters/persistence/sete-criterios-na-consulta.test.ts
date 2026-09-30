@@ -296,10 +296,35 @@ void describe('os sete critérios do ADR-0006 estão na consulta de alcance', ()
   void it('9. a ordem é por distância crescente, porque o corte é por ela', () => {
     assert.match(
       normalizado(),
-      /order by st_distance\(\s*url\.reference_point,.*?\) asc/i,
-      'a ordenação por distância sumiu. Com o teto de 500 e sem ordem, quem fica de ' +
-        'fora passa a ser sorteado pelo plano do banco em vez de ser quem está mais ' +
-        'longe — e quem tem chance de ver o animal na rua é quem está perto.',
+      // SEC-021: `MIN(...)` em volta desde 23/09, e ele é parte do critério e
+      // não ruído de sintaxe. Agrupada por pessoa, uma conta tem tantas
+      // distâncias quantos aparelhos, e a que ordena precisa ser a do aparelho
+      // MAIS PRÓXIMO — qualquer outra poria quem tem um aparelho ao lado do
+      // caso atrás de quem tem um a quatro quilômetros. Trocar `min` por `max`
+      // reprova aqui.
+      /order by min\(st_distance\(\s*url\.reference_point,.*?\)\) asc/i,
+      'a ordenação por distância sumiu, ou deixou de ser pela MENOR das distâncias ' +
+        'da pessoa. Com o teto de 500 e sem ordem, quem fica de fora passa a ser ' +
+        'sorteado pelo plano do banco em vez de ser quem está mais longe — e quem tem ' +
+        'chance de ver o animal na rua é quem está perto.',
+    );
+  });
+
+  void it('SEC-021: a consulta agrupa por pessoa, e por isso não a devolve duas vezes', () => {
+    // ISCA: tire `GROUP BY url.user_id` de `construtorDoAlcance` e este caso
+    // reprova. Desde 23/09 a localização é DO APARELHO, então uma pessoa com
+    // tablet em casa e celular no trabalho tem DUAS linhas em
+    // `user_reference_locations`. Sem o agrupamento, as duas dentro do raio
+    // devolvem a mesma pessoa duas vezes, e nada a jusante é conjunto: o alerta
+    // sai em duplicata, gasta dois dos três lugares do teto de fadiga de 24 h e
+    // ocupa dois dos 500 lugares do teto de destinatários, tirando outro tutor
+    // do alerta.
+    assert.match(
+      normalizado(),
+      /group by url\.user_id/i,
+      'a consulta deixou de agrupar por pessoa. Com a localização por aparelho, isso ' +
+        'faz quem tem dois aparelhos perto do caso receber o MESMO alerta duas vezes ' +
+        'e consumir o dobro do teto de destinatários.',
     );
   });
 

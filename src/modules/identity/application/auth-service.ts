@@ -37,6 +37,7 @@ import {
   JANELA_DE_REAUTENTICACAO_EM_SEGUNDOS,
 } from '../domain/reautenticacao.js';
 
+import { comoFamiliaDeSessao } from '../ports/localizacao-de-referencia-repository.js';
 import type { ContextoDaRequisicao, DependenciasDeIdentidade } from './dependencies.js';
 import { projetarSessao, type ParDeTokens, type SessionView } from './session-view.js';
 import type { Mensagem } from '../ports/mailer.js';
@@ -71,6 +72,20 @@ export interface EntradaDeLogin {
 export interface Autenticado {
   readonly conta: Conta;
   readonly jti: string;
+  /**
+   * A família de refresh que emitiu este token de acesso — o `sid` do ADR-0002,
+   * emenda 1, seção 2.
+   *
+   * **Opcional porque é opcional no token**, e não porque seja dispensável: a
+   * emenda acrescentou o campo a tokens que já circulavam sem ele, e o
+   * verificador aceita os dois de propósito. Quem precisa da sessão de aparelho
+   * decide o que fazer com a ausência; quem não precisa não muda nada.
+   *
+   * Até a SEC-021 ele era lido pelo verificador e descartado aqui. Ele deixou
+   * de ser descartado porque a localização de referência passou a ser do
+   * aparelho, e o aparelho é esta família.
+   */
+  readonly sid?: string | undefined;
 }
 
 function comoTokenHash(valor: string): TokenHash {
@@ -962,6 +977,37 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
       const familia = armazenado.familyId;
       await deps.repositorio.revogarFamilia(familia, 'logout', agora);
 
+      // O SEGUNDO PASSO, E ELE É A SEC-021.
+      //
+      // ADR-0010, tabela de retenção, linha "Localização de referência do
+      // usuário": ela é "apagada ao sair da conta **e** ao excluir a conta". A
+      // segunda metade está cumprida desde 22/09 pelo gatilho da migração
+      // 20260922000006; esta é a primeira, e ela não existia porque não era
+      // exprimível: `sair()` é por aparelho e a localização era por pessoa, de
+      // modo que apagá-la aqui tiraria do alerta quem continua logado no outro
+      // aparelho. O cliente desfez a ambiguidade em 23/09 ("a localização
+      // deveria ser por aparelho"), a migração 20260923000001 trocou a chave
+      // primária pelo par `(user_id, session_family_id)`, e só por isso este
+      // `DELETE` tem um alcance certo para ter.
+      //
+      // A FAMÍLIA VEM DO REFRESH APRESENTADO, e não do `sid` do token de
+      // acesso. As duas respondem a mesma coisa, e esta é melhor por um motivo
+      // estreito: ela já foi conferida contra o dono três linhas acima
+      // (`armazenado.userId !== autenticado.conta.id`), enquanto o `sid` é
+      // opcional no token e viria a faltar justamente no aparelho antigo, que é
+      // quem mais precisa que o logout apague de verdade.
+      //
+      // ELE VEM DEPOIS DA REVOGAÇÃO, e a ordem não é estilo: revogar a família
+      // é o que faz o aparelho parar de renovar, e é a metade sensível ao
+      // tempo. A falha aqui PROPAGA, de propósito — o passo anterior já está
+      // durável, repetir a operação inteira é idempotente, e o estado residual
+      // ("sessão morta, localização viva") é exatamente o estado de hoje, agora
+      // visível como erro em vez de silencioso.
+      const localizacoesApagadas = await deps.apagarLocalizacaoDaSessao(
+        autenticado.conta.id,
+        comoFamiliaDeSessao(familia),
+      );
+
       await deps.trilha.record({
         actorKind: 'user',
         actorUserId: autenticado.conta.id,
@@ -970,6 +1016,15 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         action: 'auth.logout',
         resourceKind: 'refresh_family',
         resourceId: familia,
+        // `locations_removed` é 0 ou 1, e os dois valores dizem coisas
+        // diferentes: 0 é "este aparelho não tinha localização gravada", 1 é
+        // "tinha e saiu". Sem o campo, os dois casos são o mesmo silêncio, e
+        // "o apagamento rodou?" volta a não ter resposta em lugar nenhum — que
+        // é a pergunta que a SEC-021 existe para poder responder. A FAMÍLIA em
+        // si já está em `resourceId`, que é onde ela pertence; a COORDENADA
+        // não entra aqui, pelo mesmo motivo de sempre (a trilha sobrevive à
+        // exclusão da conta).
+        metadata: { locations_removed: localizacoesApagadas },
       });
     },
 
@@ -993,7 +1048,15 @@ export function criarAuthService(deps: DependenciasDeIdentidade) {
         throw problemas.sessaoExpirada();
       }
 
-      return { conta, jti: resultado.claims.jti };
+      return {
+        conta,
+        jti: resultado.claims.jti,
+        // O `sid` chega aqui como o verificador o leu: presente quando o token
+        // o traz, ausente quando não. Nenhum valor é inventado na falta —
+        // família inventada seria uma sessão de aparelho que não existe, e a
+        // linha gravada sob ela nunca seria apagada por logout nenhum.
+        ...(typeof resultado.claims.sid === 'string' ? { sid: resultado.claims.sid } : {}),
+      };
     },
 
     /**

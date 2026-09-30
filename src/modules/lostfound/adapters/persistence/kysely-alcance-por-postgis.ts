@@ -58,6 +58,37 @@
  * alguém apagar um critério daqui, que é o atalho que esconde o que se foi
  * conferir.
  *
+ * ## SEC-021: UMA PESSOA, UMA LINHA, MESMO COM DOIS APARELHOS
+ *
+ * Desde 23/09 a localização de referência é **do aparelho** e não da pessoa
+ * (decisão do cliente; migração `20260923000001` troca a chave primária de
+ * `user_reference_locations` pelo par `(user_id, session_family_id)`). Quem usa
+ * tablet em casa e celular no trabalho passa a ter DUAS linhas, com duas
+ * regiões, e passa a ser alcançável por caso aberto perto de qualquer uma —
+ * que é o ganho pedido.
+ *
+ * `GROUP BY url.user_id` existe por causa disso, e o que ele impede é
+ * concreto. Sem ele, as duas linhas dentro do raio devolveriam a pessoa duas
+ * vezes, e nada aqui é um conjunto: `destinatarios` viraria uma lista com a
+ * mesma pessoa repetida, o disparo mandaria o MESMO alerta em duplicata,
+ * gastaria dois dos três lugares do teto de fadiga de 24 h, ocuparia dois dos
+ * 500 lugares do teto de destinatários (tirando outro tutor do alerta) e faria
+ * `reachable_tutors` contar aparelhos enquanto o nome promete tutores.
+ *
+ * `MIN(ST_Distance(...))` na ordenação, e não `ST_Distance` solto: agrupada, a
+ * pessoa tem tantas distâncias quantos aparelhos, e a que a ordena precisa ser
+ * a do aparelho MAIS PRÓXIMO. Qualquer outra escolha poria quem tem um
+ * aparelho ao lado do caso atrás de quem tem um a quatro quilômetros.
+ *
+ * **O que este agrupamento NÃO resolve, e precisa estar dito:** `device_ids`
+ * continua sendo TODOS os aparelhos alcançáveis da conta, e não o aparelho cuja
+ * região casou. O aviso de um caso aberto perto do trabalho chega também no
+ * tablet que está em casa. Rotear por aparelho exigiria ligar a linha de
+ * `user_devices` à família de refresh, e `user_devices` não tem essa coluna —
+ * a identidade de um aparelho ali é o `push_token`, que é nulo de forma
+ * legítima. Enquanto ela não existir, o comportamento é MAIS alcance do que
+ * antes, nunca menos, e a decisão de estreitá-lo é de produto.
+ *
  * ## A ordem é por distância, e a distância é descartada
  *
  * `ST_Distance` ordena e não sai: não vira coluna da resposta, não vira linha
@@ -175,10 +206,11 @@ export function construtorDoAlcance(consulta: ConsultaDeAlcance) {
                 AND ar.notified_at > ${inicioDaJanelaDeFadiga}
            ) < ${TETO_DE_FADIGA}
        AND u.deleted_at IS NULL
-     ORDER BY ST_Distance(
+     GROUP BY url.user_id
+     ORDER BY MIN(ST_Distance(
                 url.reference_point,
                 ST_SetSRID(ST_MakePoint(${lon}, ${lat}), 4326)::geography
-              ) ASC,
+              )) ASC,
               url.user_id ASC
      LIMIT ${LIMITE_DA_CONSULTA}
   `;

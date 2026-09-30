@@ -305,6 +305,9 @@ function montar(
     // `sair-de-todos-os-aparelhos.test.ts` e
     // `tests/integration/sair-de-todos-pelo-http.test.ts`.
     removerPushDaConta: () => Promise.resolve(0),
+    // SEC-021: quem não está medindo o apagamento do logout devolve 0, que é a
+    // resposta honesta de "não havia localização gravada".
+    apagarLocalizacaoDaSessao: () => Promise.resolve(0),
     repositorio: repo,
     assinador,
     trilha,

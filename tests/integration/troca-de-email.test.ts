@@ -91,6 +91,7 @@ import type {
   VerificadorDeReautenticacao,
 } from '../../src/shared/http/registrar-rota.js';
 import type { ReauthScope, RouteDefinition } from '../../src/shared/http/route-definition.js';
+import { criarLocalizacaoDeReferenciaRepository } from '../../src/modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -336,6 +337,11 @@ before(async () => {
     // `sair-de-todos-os-aparelhos.test.ts` e
     // `tests/integration/sair-de-todos-pelo-http.test.ts`.
     removerPushDaConta: () => Promise.resolve(0),
+    // SEC-021: o repositório REAL, e não um dublê. Estes casos têm banco de pé,
+    // e um dublê aqui faria o apagamento do logout parecer exercitado sem nunca
+    // tocar a tabela.
+    apagarLocalizacaoDaSessao: (dono, familia) =>
+      criarLocalizacaoDeReferenciaRepository(db).apagar(dono, familia),
     repositorio,
     assinador,
     trilha,

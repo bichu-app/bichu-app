@@ -641,8 +641,21 @@ export interface LostCasesTable {
  * O raciocínio inteiro está no cabeçalho da migração.
  */
 export interface UserReferenceLocationsTable {
-  /** PK **e** FK. É isto que torna histórico inexprimível (critério 5). */
+  /** Metade da PK, e FK para `users`. A outra metade é `session_family_id`. */
   user_id: string;
+  /**
+   * SEC-021: a família de refresh que informou esta localização — o mesmo valor
+   * que vai no `sid` do token de acesso (ADR-0002, emenda 1).
+   *
+   * É a outra metade da chave primária, e é ela que torna a localização **do
+   * aparelho** e não da pessoa (decisão do cliente em 23/09/2026). Histórico
+   * continua inexprimível: o par é único, então cada sessão de aparelho tem uma
+   * linha, sempre a última.
+   *
+   * Não é chave estrangeira porque não existe tabela de famílias: uma família é
+   * o conjunto de linhas de `refresh_tokens` com o mesmo `family_id`.
+   */
+  session_family_id: string;
   /**
    * `geography(Point,4326)`, já quantizado. `never` nos três sentidos de
    * propósito: é o tipo que impede a coluna de ser selecionada crua ou inserida

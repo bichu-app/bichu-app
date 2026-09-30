@@ -69,6 +69,15 @@
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import { randomUUID } from 'node:crypto';
+
+/**
+ * SEC-021: a sessão de aparelho destes casos.
+ *
+ * A localização de referência é do aparelho desde 23/09/2026, e `Perto` fala de
+ * uma pessoa com um aparelho só: a família fixa mantém cada caso medindo a
+ * distância, que é o que ele foi escrito para medir.
+ */
+const APARELHO_UNICO = '018f3a2b-0000-7000-8000-00000000dd01';
 import pg from 'pg';
 
 import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
@@ -190,14 +199,25 @@ async function darLocalizacao(
   validaAte: number,
 ): Promise<void> {
   await cliente.query(
+    // SEC-021: a localização é do aparelho desde 23/09. Estes casos falam de uma
+    // pessoa com um aparelho só, então a família é fixa e o `ON CONFLICT` passa
+    // a mirar o PAR — que é a chave primária de agora.
     `INSERT INTO user_reference_locations
-       (user_id, reference_point, precision_m, source, captured_at, expires_at)
-     VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 100, 'map_pin', $4, $5)
-     ON CONFLICT (user_id) DO UPDATE
+       (user_id, session_family_id, reference_point, precision_m, source,
+        captured_at, expires_at)
+     VALUES ($1, $6, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 100, 'map_pin', $4, $5)
+     ON CONFLICT (user_id, session_family_id) DO UPDATE
        SET reference_point = EXCLUDED.reference_point,
            captured_at = EXCLUDED.captured_at,
            expires_at = EXCLUDED.expires_at`,
-    [dono, ponto.lon, ponto.lat, new Date(validaAte - 30 * DIA), new Date(validaAte)],
+    [
+      dono,
+      ponto.lon,
+      ponto.lat,
+      new Date(validaAte - 30 * DIA),
+      new Date(validaAte),
+      APARELHO_UNICO,
+    ],
   );
 }
 
