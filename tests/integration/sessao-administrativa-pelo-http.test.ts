@@ -55,6 +55,7 @@ import {
 import type { TrilhaTransacional } from '../../src/modules/audit/ports/audit-log.js';
 import { criarTokenSigner } from '../../src/modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../../src/modules/identity/adapters/persistence/kysely-identity-repository.js';
+import { criarLocalizacaoDeReferenciaRepository } from '../../src/modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 import { criarSessaoAdministrativaRepository } from '../../src/modules/admin-access/adapters/persistence/kysely-sessao-administrativa-repository.js';
 import { criarRepositorioDeContasAdministrativas } from '../../src/modules/admin-access/adapters/persistence/kysely-contas-administrativas.js';
 import {
@@ -165,6 +166,16 @@ async function subir(trilhaQuebrada: boolean): Promise<Servidor> {
   });
 
   const auth = criarAuthService({
+    // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
+    // e sobre a SESSAO ADMINISTRATIVA, entao a funcao e contada e nao
+    // observada. Quem PROVA a remocao, lendo `user_devices` depois, e
+    // `tests/integration/sair-de-todos-pelo-http.test.ts`.
+    removerPushDaConta: () => Promise.resolve(0),
+    // SEC-021: o repositorio REAL, e nao um duble. Esta bancada tem banco de
+    // pe, e um duble aqui faria o apagamento do logout parecer exercitado sem
+    // nunca tocar a tabela.
+    apagarLocalizacaoDaSessao: (dono, familia) =>
+      criarLocalizacaoDeReferenciaRepository(db).apagar(dono, familia),
     repositorio, assinador, trilha, ids, clock: systemClock, janelas: config.session,
     hmacDeIp: (ip) => hmacDeEnderecoIp(ip, config.ipHmacKey), mailer,
     registrarOcorrencia: () => {}, baseDaWeb: config.webBaseUrl,

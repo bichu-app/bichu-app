@@ -116,6 +116,54 @@ const OPERACOES_ADMINISTRATIVAS_AINDA_SEM_ROTA: readonly string[] = [
   // administrativa nova no contrato sem rota entra aqui, no mesmo commit.
 ];
 
+/**
+ * As operacoes que a BORDA serve, e nao a aplicacao. Nao sao divida: elas
+ * respondem 200 em producao, por arquivo estatico no Caddy
+ * (`infra/caddy/Caddyfile`, blocos `handle /.well-known/...`, servindo
+ * `infra/caddy/well-known/`). Nao existe `defineRoute` para elas porque nao
+ * deve existir: o alcance do deep link nao pode depender de a API estar de pe.
+ *
+ * A lista e EXATA nos dois sentidos, como a de baixo.
+ */
+const OPERACOES_SERVIDAS_PELA_BORDA: readonly string[] = [
+  'wellKnownAssetLinks',
+  'wellKnownAppleAppSiteAssociation',
+];
+
+/**
+ * As operacoes que o contrato declara e que NAO TEM CODIGO NENHUM.
+ *
+ * Esta lista e o inventario de uma divida, e nao uma dispensa: cada linha e uma
+ * operacao que o contrato promete a quatro clientes (app, backoffice, site e
+ * quem le a spec) e que responde 404. Ela existe porque o caso de baixo passou
+ * a cobrir TODAS as rotas, e nao so as de `/admin/` -- antes disso, declaracao
+ * sem codigo fora de `/admin/` passava calada, e foi assim que as seis rotas do
+ * achador (BICHUS-41) ficaram no contrato sem handler.
+ *
+ * MEDIDA em 30/09/2026, depois da mescla do lote: eram 13 operacoes sem rota,
+ * duas delas servidas pela borda (a lista acima), sobrando estas 11.
+ *
+ * A lista e EXATA nos dois sentidos, e e ela que torna o caso verificavel:
+ * operacao nova no contrato sem rota e fora daqui REPROVA; operacao daqui que
+ * ganhou rota e continua listada reprova tambem. Quem implementa uma delas tira
+ * a linha no mesmo commit. Quem quer a linha fora sem implementar precisa
+ * tirar a operacao DO CONTRATO -- que e decisao do cliente, e nao de quem
+ * mexe neste arquivo.
+ */
+const OPERACOES_AINDA_SEM_ROTA: readonly string[] = [
+  'requestDataExport',
+  'updatePetPublicProfile',
+  'revokePetTag',
+  'updateLostCase',
+  'resendLostCaseAlert',
+  'listLostCaseCandidates',
+  'reopenLostCase',
+  'snoozeLostCaseReminder',
+  'blockConversation',
+  'reportConversation',
+  'listPublicLostPets',
+];
+
 function ehRota(valor: unknown): valor is RouteDefinition {
   if (typeof valor !== 'object' || valor === null) return false;
   const candidato = valor as Record<string, unknown>;
@@ -586,6 +634,46 @@ void describe('rotas declaradas no código contra api/openapi.yaml', () => {
     assert.deepEqual(semRotaNemLista, [], 'operacao administrativa do contrato sem rota e fora da lista de pendentes');
     assert.deepEqual(listadasComRota, [], 'operacao listada como pendente ja tem rota: tire-a da lista');
     assert.deepEqual(listadasForaDoContrato, [], 'operacao listada como pendente que o contrato nao declara');
+  });
+
+  void it('TODA operacao do contrato tem rota, exceto as servidas pela borda e as listadas como sem codigo', () => {
+    // A CEGUEIRA QUE ESTE CASO FECHA
+    //
+    // O caso de cima confere o mesmo, mas so sob `/admin/`. Fora daquele
+    // prefixo, uma operacao podia ser declarada no contrato SEM UMA LINHA DE
+    // CODIGO e a suite inteira continuava verde -- que e a forma classica de um
+    // portao aprovar por ausencia. Nao e hipotese: as seis operacoes do achador
+    // (BICHUS-41) atravessaram dias assim, declaradas e respondendo 404, e
+    // `api/openapi.yaml` e contrato UNICO de backend, app, backoffice e site.
+    //
+    // As duas listas acima sao exatas nos dois sentidos, entao este caso reprova
+    // nos tres jeitos de errar: declarar sem implementar e sem registrar aqui;
+    // implementar e esquecer de tirar da lista; e listar o que o contrato nao
+    // declara (por exemplo depois de a operacao ser removida do contrato).
+    const contrato = carregarContrato(CAMINHO_DA_SPEC);
+    const comRota = new Set(rotasDeclaradas().map((rota) => rota.operationId));
+    const doContrato = [...contrato.operacoes.values()].map((operacao) => operacao.operationId);
+
+    assert.ok(doContrato.length > 0, 'nenhuma operacao lida do contrato: a leitura deixou de casar');
+
+    const conhecidas = [...OPERACOES_SERVIDAS_PELA_BORDA, ...OPERACOES_AINDA_SEM_ROTA];
+    const semRotaNemLista = doContrato.filter((id) => !comRota.has(id) && !conhecidas.includes(id));
+    const listadasComRota = conhecidas.filter((id) => comRota.has(id));
+    const listadasForaDoContrato = conhecidas.filter((id) => !doContrato.includes(id));
+
+    assert.deepEqual(
+      semRotaNemLista,
+      [],
+      'operacao do contrato SEM CODIGO e fora das duas listas deste arquivo: ou implemente a ' +
+        'rota, ou tire a operacao do contrato (decisao do cliente), ou registre a divida em ' +
+        '`OPERACOES_AINDA_SEM_ROTA` com o motivo',
+    );
+    assert.deepEqual(listadasComRota, [], 'operacao listada como sem codigo ja tem rota: tire-a da lista');
+    assert.deepEqual(
+      listadasForaDoContrato,
+      [],
+      'operacao listada aqui que o contrato nao declara mais: tire-a da lista',
+    );
   });
 
   void it('a lista de módulos acima cobre TODAS as `defineRoute` de src/', () => {
