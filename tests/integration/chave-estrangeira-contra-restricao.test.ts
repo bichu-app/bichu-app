@@ -2069,6 +2069,19 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
    */
   const TENTATIVAS = 5;
 
+  /**
+   * Os codigos com que o Postgres diz "duas transacoes se atrapalharam, tente de
+   * novo", e nenhum outro.
+   *
+   * `55P03` entrou junto com o `lock_timeout` de {@link montarERodar}: sem o teto,
+   * a fila parada nao produzia codigo nenhum, so demora; com ele, o mesmo desfecho
+   * passa a ter nome e a ser repetivel.
+   */
+  const DISPUTA_DE_TRAVA = new Set([
+    '40P01', // deadlock detected
+    '55P03', // lock not available -- o teto de `lock_timeout` estourou
+  ]);
+
   async function comConversa(corpo: () => Promise<void>): Promise<void> {
     // ========================================================================
     // POR QUE ISTO TEM CADEADO EXPLÍCITO **E** REPETIÇÃO
@@ -2118,7 +2131,8 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
     //    Postgres indica. Como tudo aqui termina em `ROLLBACK`, repetir parte do
     //    mesmo estado.
     //
-    // A repetição NÃO afrouxa a isca: só `40P01` é repetido. Falha de asserção
+    // A repetição NÃO afrouxa a isca: só `40P01` e `55P03` são repetidos, e os dois
+    // são disputa de trava e não resultado de medição. Falha de asserção
     // sobe na primeira vez, e `23503`, `23514` ou qualquer outro código do
     // Postgres também — que é o que a isca existe para ver.
     for (let tentativa = 1; ; tentativa += 1) {
@@ -2126,7 +2140,7 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
         await montarERodar(corpo);
         return;
       } catch (erro) {
-        if (codigoDoErro(erro) !== '40P01' || tentativa >= TENTATIVAS) throw erro;
+        if (!DISPUTA_DE_TRAVA.has(codigoDoErro(erro)) || tentativa >= TENTATIVAS) throw erro;
       }
     }
   }
@@ -2134,6 +2148,17 @@ void describe('a isca da quinta forma: com o SET NULL de volta, o portão precis
   async function montarERodar(corpo: () => Promise<void>): Promise<void> {
     await cliente.query('BEGIN');
     try {
+      // O pedido de `ACCESS EXCLUSIVE` abaixo pode nao achar ciclo nenhum e mesmo
+      // assim custar caro: enquanto ele espera na fila, ele bloqueia ate quem so
+      // queria ler as duas tabelas. Esse desfecho nao e impasse, ninguem morre,
+      // `40P01` nunca sai e a repeticao abaixo nunca dispararia. Dois segundos e
+      // folga larga para travar duas tabelas de dezenas de linhas; estourar vira
+      // `55P03`, que e uma das voltas de `comConversa`.
+      //
+      // `SET LOCAL` e nao `SET`: ele so vale porque ja estamos dentro do `BEGIN`
+      // acima, e volta sozinho no `ROLLBACK`. Fora de bloco de transacao o
+      // Postgres recusa com aviso e segue com o valor de antes.
+      await cliente.query("SET LOCAL lock_timeout = '2s'");
       await cliente.query('lock table conversation_messages, users in access exclusive mode');
       await cliente.query(
         `insert into users (id, email) values
