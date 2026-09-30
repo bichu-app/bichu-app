@@ -46,6 +46,22 @@
  * | `nulls last` na ordenacao por distancia | 1 |
  * | `ST_MakePoint(lon, lat)` invertido no `seed` | 2 |
  *
+ * As iscas da BUSCA, provadas do mesmo jeito em 22/09. A troca so acontece se
+ * o trecho casar exatamente uma vez e se o arquivo mudar no disco; o placar da
+ * base e `367 casos, 360 passaram, 7 falharam`, e os 7 sao de `troca-de-email`
+ * e nao desta historia.
+ *
+ * | o que foi desligado | `fail` alem dos 7 da base |
+ * |---|---|
+ * | `where('status', '=', 'published')` em `construtorDaListagem` | 3, uma delas `BUSCA NAO ENXERGA RASCUNHO, OCULTO NEM REMOVIDO` |
+ * | `unaccent` dentro de `texto_para_busca` | 2: a busca sem acento e o plano com mil linhas |
+ * | o `replace` dos curingas em `padrao_de_busca` | 1: `%` e `_` deixam de ser literais |
+ * | o indice GIN trocado por um B-tree de `slug` | 2: as duas provas de plano |
+ *
+ * A linha do `unaccent` merece nota, porque ela nao era esperada e e o proprio
+ * assunto do caso do indice: mexer na funcao muda a expressao dos DOIS lados,
+ * e o plano por indice some junto. Normalizacao e indice sao uma coisa so.
+ *
  * ## O que sobrevive a execucao
  *
  * Nada. As contas e as entradas criadas sao apagadas no `after`.
@@ -514,6 +530,211 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
       'ISCA: sem a limpeza da massa anterior, a segunda semeadura duplicaria ' +
         '-- ou estouraria na unicidade do slug, que e o mesmo defeito acusando mais cedo.',
     );
+  });
+
+  // =========================================================================
+  // A BUSCA POR NOME (`q`)
+  // =========================================================================
+  //
+  // Nada disto existe fora do Postgres. A normalizacao de acento e caixa e uma
+  // funcao do banco, o escape dos curingas e outra, e o indice que torna a
+  // busca viavel e um GIN de trigrama -- um dobre em memoria aprovaria os tres
+  // com qualquer implementacao, inclusive com nenhuma.
+
+  void it('acha sem acento e sem caixa: `veterinaria` acha `Veterinária`', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    await criarEntrada({
+      titular,
+      slug: `ac-${randomUUID().slice(0, 8)}`,
+      nome: 'Clínica Veterinária Santa Bárbara',
+      bairro,
+    });
+
+    for (const termo of ['veterinaria', 'VETERINÁRIA', 'Veterinaria', 'bárbara', 'barbara']) {
+      const pagina = await repo.listarPublicados(recorte(titular, { neighborhood: bairro, q: termo }));
+      assert.equal(
+        pagina.total,
+        1,
+        `ISCA: o termo '${termo}' nao achou. Sem \`texto_para_busca\` nos DOIS ` +
+          'lados da comparacao, quem digita sem acento -- que e como se digita ' +
+          'no celular -- nao acha nada e conclui que o diretorio esta vazio.',
+      );
+    }
+  });
+
+  void it('BUSCA NAO ENXERGA RASCUNHO, OCULTO NEM REMOVIDO', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    // O MESMO nome nos quatro estados. E esta a forma do vazamento: quem busca
+    // por um nome especifico ja sabe o nome, e so quer saber se ele existe.
+    const nome = `Petshop Sigiloso ${randomUUID().slice(0, 8)}`;
+    await criarEntrada({ titular, slug: `bp-${randomUUID().slice(0, 8)}`, nome, bairro, status: 'published' });
+    await criarEntrada({ titular, slug: `bd-${randomUUID().slice(0, 8)}`, nome, bairro, status: 'draft' });
+    await criarEntrada({ titular, slug: `bh-${randomUUID().slice(0, 8)}`, nome, bairro, status: 'hidden' });
+    await criarEntrada({ titular, slug: `br-${randomUUID().slice(0, 8)}`, nome, bairro, status: 'removed' });
+
+    const pagina = await repo.listarPublicados(recorte(titular, { q: nome }));
+
+    assert.equal(
+      pagina.total,
+      1,
+      'ISCA: se a busca deixar de casar sobre o mesmo `where status = ' +
+        "'published'`, as quatro saem -- e a resposta vira um oraculo de " +
+        'existencia: "este cadastro existe, so nao esta publicado". Um rascunho ' +
+        'e um cadastro que ninguem terminou; um oculto e alguem que PEDIU para ' +
+        'sair da vitrine.',
+    );
+    assert.ok(pagina.itens[0]?.slug.startsWith('bp-'));
+  });
+
+  void it('`%` e `_` do termo sao literais, e nao curingas', async () => {
+    const titular = await criarConta();
+    const bairro = `bairro-${randomUUID().slice(0, 8)}`;
+    await criarEntrada({ titular, slug: `cu-${randomUUID().slice(0, 8)}`, nome: 'Abcdef Pet', bairro });
+
+    const comSublinhado = await repo.listarPublicados(
+      recorte(titular, { neighborhood: bairro, q: 'a_cdef' }),
+    );
+    assert.equal(
+      comSublinhado.total,
+      0,
+      'ISCA: sem o escape, `_` casa qualquer caractere e `a_cdef` acha `Abcdef`.',
+    );
+
+    const comPorcento = await repo.listarPublicados(
+      recorte(titular, { neighborhood: bairro, q: 'a%f' }),
+    );
+    assert.equal(
+      comPorcento.total,
+      0,
+      'ISCA: sem o escape, `%` casa qualquer coisa. O caso extremo e `q=%` ' +
+        'sozinho, que devolve a tabela inteira com uma varredura completa -- e ' +
+        'sem nenhum caractere suspeito na URL.',
+    );
+
+    const literal = await repo.listarPublicados(recorte(titular, { neighborhood: bairro, q: 'bcdef' }));
+    assert.equal(literal.total, 1, 'o termo sem curinga continua achando');
+  });
+
+  void it('`q` casa SO no nome: nem em `about`, nem no bairro', async () => {
+    const titular = await criarConta();
+    const marca = `zzz${randomUUID().slice(0, 8)}`;
+    const bairro = `bairro-${marca}`;
+    const entrada = await criarEntrada({
+      titular,
+      slug: `so-${randomUUID().slice(0, 8)}`,
+      nome: 'Alfa Pet',
+      bairro,
+    });
+    await cliente.query('UPDATE professionals SET about = $1 WHERE id = $2', [
+      `Atendimento ${marca} 24 horas`,
+      entrada,
+    ]);
+
+    const pagina = await repo.listarPublicados(recorte(titular, { neighborhood: bairro, q: marca }));
+    assert.equal(
+      pagina.total,
+      0,
+      'a decisao e de produto e esta no contrato: todo campo do cartao alem do ' +
+        'nome ja tem controle proprio no topo da tela. Casar tambem neles poria ' +
+        'dois controles disputando o mesmo trabalho e deixaria `applied_filters` ' +
+        'sem como explicar por que a linha entrou.',
+    );
+
+    const porNome = await repo.listarPublicados(recorte(titular, { neighborhood: bairro, q: 'alfa' }));
+    assert.equal(porNome.total, 1);
+  });
+
+  void it('o indice GIN de trigrama e USADO pela busca', async () => {
+    // Com poucas linhas o planejador escolhe varredura sequencial por ser mais
+    // barata, e isso nao diz nada sobre o indice. Desligar a sequencial forca a
+    // pergunta que interessa: "existe um plano por indice para este LIKE?".
+    // Mesmo desenho da prova do GIST em `localizacao-de-referencia.test.ts`.
+    //
+    // DUAS COISAS AQUI FORAM APRENDIDAS MEDINDO, EM 22/09, E CADA UMA FEZ ESTE
+    // CASO APONTAR PARA O INDICE ERRADO ANTES DE ESTAR ASSIM:
+    //
+    // 1. **So com `enable_seqscan = off`** o plano que saiu foi `Index Scan
+    //    using professionals_publicados_por_atividade` com o `LIKE` no
+    //    `Filter` -- percorrer OUTRO indice inteiro e filtrar linha a linha, que
+    //    e a varredura completa com outro nome. Numa tabela de dezenas de
+    //    linhas isso custa menos que o custo fixo de partida do GIN. Por isso o
+    //    percurso de indice tambem e desligado: sobram os planos por mapa de
+    //    bits.
+    // 2. **Com `status = 'published'` na consulta**, o plano virou
+    //    `Bitmap Index Scan on professionals_publicados_por_atividade` -- o
+    //    indice PARCIAL de publicados atende aquela igualdade sozinho e o
+    //    `LIKE` volta para o `Filter`. Por isso esta consulta traz so o
+    //    predicado da busca: a pergunta deste caso e "existe plano por indice
+    //    para ESTE `LIKE`", e nenhum outro indice tem como responde-la.
+    //
+    // A consulta completa, com o `status` junto, e a do caso seguinte, que e
+    // onde ela precisa mesmo ser respondida.
+    await cliente.query('BEGIN');
+    try {
+      await cliente.query('SET LOCAL enable_seqscan = off');
+      await cliente.query('SET LOCAL enable_indexscan = off');
+      const r = await cliente.query<Record<string, string>>(
+        `EXPLAIN SELECT slug FROM professionals
+          WHERE texto_para_busca(display_name) LIKE padrao_de_busca($1)`,
+        ['veterinaria'],
+      );
+      const plano = r.rows.map((linha) => Object.values(linha).join(' ')).join('\n');
+      assert.match(
+        plano,
+        /professionals_busca_por_nome/,
+        'ISCA: o predicado precisa ser a MESMA expressao do indice, caractere a ' +
+          'caractere. Normalizar em TypeScript e comparar com a coluna crua ' +
+          `deixa a busca CORRETA e lenta, sem erro nenhum. Plano:\n${plano}`,
+      );
+    } finally {
+      await cliente.query('ROLLBACK');
+    }
+  });
+
+  void it('com mil entradas o planejador escolhe o indice SOZINHO', async () => {
+    // O caso acima prova que o plano por indice existe. Este prova que ele e o
+    // escolhido quando a tabela cresce -- que e a pergunta de producao, e a
+    // unica que responde "o que acontece quando o diretorio tiver mil linhas".
+    //
+    // Tudo dentro de uma transacao revertida: mil linhas nao sobrevivem a este
+    // caso, e o `ANALYZE` de dentro dela tambem nao.
+    await cliente.query('BEGIN');
+    try {
+      // `source = 'import'` com `claim_status = 'unclaimed'` e o UNICO par que o
+      // CHECK `professionals_aceite_antes_do_perfil` admite sem titular, e e o
+      // que esta massa precisa: mil perfis com mil contas seria semear a tabela
+      // de usuarios para medir um plano de consulta.
+      await cliente.query(
+        `INSERT INTO professionals (id, kind, display_name, city, state, neighborhood,
+                                    source, claim_status, verification_level, slug, status, published_at)
+         SELECT gen_random_uuid(), 'vet', 'Clinica Massa ' || n, 'São Paulo', 'SP', 'Centro',
+                'import', 'unclaimed', 'none', 'massa-' || n, 'published', now()
+           FROM generate_series(1, 1000) AS n`,
+      );
+      await cliente.query('ANALYZE professionals');
+      const r = await cliente.query<Record<string, string>>(
+        `EXPLAIN SELECT slug FROM professionals
+          WHERE status = 'published'
+            AND texto_para_busca(display_name) LIKE padrao_de_busca($1)`,
+        ['massa 777'],
+      );
+      const plano = r.rows.map((linha) => Object.values(linha).join(' ')).join('\n');
+      assert.match(
+        plano,
+        /professionals_busca_por_nome/,
+        'ISCA: sem o indice, esta consulta e uma varredura completa POR ' +
+          `REQUISICAO. Plano com mil linhas:\n${plano}`,
+      );
+      assert.doesNotMatch(
+        plano,
+        /Seq Scan on professionals/,
+        `o planejador voltou a varrer a tabela inteira. Plano:\n${plano}`,
+      );
+    } finally {
+      await cliente.query('ROLLBACK');
+    }
   });
 
   void it('nenhuma coluna de vinculo atravessa o repositorio', async () => {

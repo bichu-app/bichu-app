@@ -8345,6 +8345,32 @@ export interface operations {
         parameters: {
             query?: {
                 /**
+                 * @description **Busca parcial pelo NOME da entrada**, tolerante a acento e a
+                 *     caixa: `veterinaria` acha `Veterinária`.
+                 *
+                 *     **So o nome, e a escolha e de produto.** Todo outro campo que o
+                 *     cartao mostra ja tem controle proprio no topo da mesma tela --
+                 *     `city`, `state`, `neighborhood`, `kind` e `verification_level`.
+                 *     Fazer `q` casar tambem neles poria dois controles disputando o
+                 *     mesmo trabalho e deixaria `applied_filters` ambiguo: a tela nao
+                 *     teria como escrever por que uma linha entrou. `about` e o candidato
+                 *     conhecido para uma segunda fase, e ele custa um indice proprio
+                 *     sobre texto bem maior.
+                 *
+                 *     **`minLength: 3` nao e gosto.** O indice que atende esta busca e
+                 *     GIN de trigrama, e um padrao com menos de tres caracteres nao
+                 *     produz trigrama nenhum: a consulta deixa de usar o indice e volta a
+                 *     varrer a tabela inteira. O piso e o ponto em que o indice deixa de
+                 *     existir. **A tela nao deve enviar `q` antes do terceiro caractere**,
+                 *     sob pena de levar 400 no que a pessoa le como o app quebrado.
+                 *
+                 *     Casa somente sobre `status = 'published'`, como todo o resto da
+                 *     operacao. Quem busca por um nome especifico esta testando se ele
+                 *     existe, entao um rascunho ou um oculto que aparecesse aqui seria
+                 *     resposta a uma pergunta que ninguem tem direito de fazer.
+                 */
+                q?: string;
+                /**
                  * @description **Opcional**, e aqui esta proposta e o contrato divergem de
                  *     proposito. A busca de perdidos comeca com alguem digitando onde
                  *     perdeu; `Perto` e uma aba que abre sozinha, e exigir cidade a

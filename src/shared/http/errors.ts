@@ -530,11 +530,11 @@ export const problemas = {
    * motivo diferente.
    *
    * **"Deste aparelho" nomeia uma dimensão que este construtor não conhece.**
-   * O mesmo 429 sai de onze dimensões declaradas em `x-rate-limit`
+   * O mesmo 429 sai de doze dimensões declaradas em `x-rate-limit`
    * (`DIMENSOES_CONHECIDAS`, em `aplicacao-de-teto.ts`): `ip`, `ip_24`,
    * `origin`, `account`, `email`, `code`, `pet`, `token_family`,
-   * `finder_identity`, `conversation_participant` e `found_report`. Duas são de
-   * rede e nenhuma é de aparelho. No balde de IP o texto era pior do que
+   * `finder_identity`, `conversation_participant`, `found_report` e `q`. Duas
+   * são de rede e nenhuma é de aparelho. No balde de IP o texto era pior do que
    * impreciso: sob CGNAT de operadora, ou atrás do NAT de um escritório, o
    * balde é compartilhado por gente que não tem relação nenhuma entre si, e a
    * frase acusava quem estava fazendo o primeiro pedido do dia.
@@ -546,7 +546,7 @@ export const problemas = {
    * ## O que o texto NÃO diz, e por quê
    *
    * Ele não diz "desta rede", que seria verdadeiro em `ip` e `ip_24` e falso
-   * nas outras nove. E não diria só por isso: **a dimensão do balde é
+   * nas outras dez. E não diria só por isso: **a dimensão do balde é
    * informação operacional**, e este corpo é alcançável sem credencial nenhuma
    * (login, leitura de tag, webhook). Dizer por onde a contagem acontece diz a
    * quem está sondando o que rotacionar — laço de proxy para `ip`, faixas

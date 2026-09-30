@@ -4,7 +4,7 @@
  * Até 22/09/2026 ela mentia duas vezes, e cada mentira tem uma isca aqui:
  *
  * 1. *"Recebemos muitos pedidos **deste aparelho**"* — o balde nunca foi de
- *    aparelho. São onze dimensões, e num balde de IP (CGNAT de operadora, NAT de
+ *    aparelho. São doze dimensões, e num balde de IP (CGNAT de operadora, NAT de
  *    escritório) a frase acusava quem estava fazendo o primeiro pedido do dia.
  * 2. *"Tente de novo **em instantes**"* — a janela é fixa, e o `Retry-After` da
  *    mesma resposta já trazia o número certo.
@@ -42,7 +42,7 @@ const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
  *
  * `aparelho` e `dispositivo` são a mentira antiga. `rede`, `IP`, `wi-fi` e
  * `conexão` são a troca fácil e errada: seriam verdade em `ip` e `ip_24`, falso
- * nas outras nove dimensões, e em qualquer uma delas diriam a quem está sondando
+ * nas outras dez dimensões, e em qualquer uma delas diriam a quem está sondando
  * o teto o que rotacionar para contorná-lo.
  */
 const AFIRMA_A_DIMENSAO =

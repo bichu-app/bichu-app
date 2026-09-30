@@ -22,6 +22,13 @@
  * | `rateLimit` removido da rota (tem efeito) | **nao compila** |
  * | dimensao `account` declarada sem resolvedor | **nao compila** |
  * | `app.get` direto, fora de `registrarRota` | o portao de registro reprova |
+ *
+ * A isca da BUSCA, provada do mesmo jeito em 22/09: o resolvedor de `q` em
+ * `aplicacao-de-teto.ts` passou a devolver o TERMO no lugar de
+ * `MARCA_DE_BUSCA`, a suite rodou e saiu `1549 casos, 1548 passaram, 1
+ * falharam` -- a falha foi `a 61a busca e recusada com 429 AINDA QUE cada
+ * termo seja diferente`, e so ela. E a diferenca entre um teto que pega
+ * enumeracao e um que so pega quem repete a mesma busca.
  */
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
@@ -246,13 +253,113 @@ void describe('o teto da rota', () => {
     );
   });
 
-  void it('o teto declarado e por conta, e nao por IP', () => {
+  void it('os tetos declarados sao por conta, e nenhum e por IP', () => {
     // No Brasil o CGNAT das operadoras poe muita gente atras de poucos
     // enderecos: teto por `ip` numa rota autenticada pegaria vizinhos inocentes
     // e erraria quem raspa.
+    //
+    // O conjunto esta escrito POR EXTENSO, e nao derivado da rota: derivar
+    // compararia a rota com ela mesma e ficaria verde com qualquer teto.
     assert.deepEqual(
-      rotaDoDiretorio.rateLimit?.map((entrada) => entrada.dimension),
-      [['account']],
+      rotaDoDiretorio.rateLimit?.map((entrada) => ({
+        dimension: entrada.dimension,
+        limit: entrada.limit,
+        window: entrada.window,
+        onExceed: entrada.onExceed,
+      })),
+      [
+        { dimension: ['account'], limit: 120, window: '1h', onExceed: 'deny_429' },
+        { dimension: ['account', 'q'], limit: 60, window: '1h', onExceed: 'deny_429' },
+      ],
     );
+  });
+});
+
+/**
+ * O teto da BUSCA, que e a parte que decide se ele serve para alguma coisa.
+ *
+ * A pergunta nao e "a rota tem um teto de busca": e "o teto conta a coisa
+ * certa". Um teto por (conta, TERMO) passaria em qualquer caso que repetisse a
+ * mesma busca, e seria inutil contra o unico uso que preocupa -- enumerar o
+ * diretorio, que e variar o termo a cada chamada.
+ *
+ * Por isso os casos abaixo usam um termo DIFERENTE em cada requisicao.
+ */
+void describe('o teto da busca', () => {
+  /** `busca-001`, `busca-002`... Termo distinto a cada chamada, de proposito. */
+  function termo(n: number): string {
+    return `busca-${String(n).padStart(3, '0')}`;
+  }
+
+  void it('a 61a busca e recusada com 429 AINDA QUE cada termo seja diferente', async () => {
+    const contador = criarContadorEmMemoria(() => AGORA);
+    const app = servidor({ contador });
+    for (let i = 1; i <= 60; i += 1) {
+      const ok = await pedir(app, { url: `/directory/entries?q=${termo(i)}` });
+      assert.equal(ok.status, 200, `a busca ${String(i)} deveria passar`);
+    }
+    const recusada = await pedir(app, { url: `/directory/entries?q=${termo(61)}` });
+    assert.equal(
+      recusada.status,
+      429,
+      'ISCA: se o resolvedor de `q` devolvesse o TERMO em vez da marca de ' +
+        'presenca, cada uma destas 61 chamadas abriria um balde proprio com um ' +
+        'uso, e nenhuma seria recusada. E esse o caminho de quem mapeia o ' +
+        'diretorio inteiro: ele varia o termo por definicao.',
+    );
+  });
+
+  void it('com o contador desligado a 61a busca passa -- e e isso que prova que o caso mede LIMITE', async () => {
+    const app = servidor({ contador: criarContadorDesligado() });
+    for (let i = 1; i <= 60; i += 1) await pedir(app, { url: `/directory/entries?q=${termo(i)}` });
+    assert.equal(
+      (await pedir(app, { url: `/directory/entries?q=${termo(61)}` })).status,
+      200,
+      'o mesmo caminho com o mecanismo desligado precisa deixar passar. Sem este ' +
+        'controle, o caso acima mediria a capacidade de contar ate 61.',
+    );
+  });
+
+  void it('chamada SEM `q` nao gasta o teto da busca', async () => {
+    const contador = criarContadorEmMemoria(() => AGORA);
+    const app = servidor({ contador });
+    // 59 chamadas sem busca: elas contam no teto de 120 da rota e nao podem
+    // contar no de 60 da busca.
+    for (let i = 0; i < 59; i += 1) {
+      assert.equal((await pedir(app)).status, 200);
+    }
+    for (let i = 1; i <= 60; i += 1) {
+      assert.equal(
+        (await pedir(app, { url: `/directory/entries?q=${termo(i)}` })).status,
+        200,
+        `ISCA: a busca ${String(i)} levou 429. Se a entrada [account, q] contasse ` +
+          'tambem a chamada sem `q`, o balde ja chegaria com 59 usos e a segunda ' +
+          'busca seria recusada -- quem so abre a aba e rola a lista pagaria o ' +
+          'teto da busca sem nunca ter buscado.',
+      );
+    }
+  });
+});
+
+void describe('o parametro `q` chega ao recorte e volta para a tela', () => {
+  void it('o termo atravessa a borda aparado, e o recorte o recebe', async () => {
+    recortesVistos.length = 0;
+    await pedir(servidor(), { url: '/directory/entries?q=%20Veterin%C3%A1ria%20' });
+    assert.equal(recortesVistos.at(-1)?.q, ' Veterinária ');
+  });
+
+  void it('`q` volta em applied_filters COMO FOI DIGITADO, com acento e caixa', async () => {
+    const resposta = await pedir(servidor(), { url: '/directory/entries?q=Veterin%C3%A1ria' });
+    assert.deepEqual(
+      resposta.corpo['applied_filters'],
+      { q: 'Veterinária' },
+      'a tela escreve "resultados para <termo>" com o que a pessoa digitou. ' +
+        'Devolver a forma normalizada faria ela nao reconhecer o proprio texto.',
+    );
+  });
+
+  void it('sem `q`, applied_filters continua dizendo scope: all', async () => {
+    const resposta = await pedir(servidor());
+    assert.deepEqual(resposta.corpo['applied_filters'], { scope: 'all' });
   });
 });

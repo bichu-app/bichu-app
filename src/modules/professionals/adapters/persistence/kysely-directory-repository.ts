@@ -14,6 +14,21 @@
  * combinado: `publicado-na-clausula-where.test.ts` compila o SQL desta funcao,
  * le o predicado e carrega a isca que precisa reprovar.
  *
+ * ## A busca por texto entra pela MESMA consulta, e nao por um caminho proprio
+ *
+ * `q` e mais um predicado de `construtorDaListagem`, junto de
+ * `status = 'published'`. Nao ha consulta separada de busca, e a ausencia e
+ * decisao: uma segunda consulta e um segundo lugar para esquecer o filtro de
+ * publicacao, e busca e o caminho em que esquecer custa mais caro -- quem
+ * digita um nome especifico ja sabe o nome e so quer saber se ele existe.
+ *
+ * A normalizacao de acento e caixa mora no BANCO (`texto_para_busca`, migracao
+ * 20260922000009) porque o indice GIN de trigrama e construido sobre aquela
+ * expressao: o predicado precisa ser identico a ela, caractere a caractere, ou
+ * o planejador nao casa os dois e o indice deixa de ser usado sem que nada
+ * acuse. Uma normalizacao em TypeScript seria a segunda definicao, e ela
+ * divergiria ficando so lenta.
+ *
  * ## O nivel de verificacao sai das VERIFICACOES, nao da coluna
  *
  * `professionals.verification_level` e cache derivado, e cache diverge. Quem
@@ -145,6 +160,28 @@ function comoEntrada(l: LinhaDaEntrada): EntradaDoDiretorio {
 /** O recorte, com `status = 'published'` dentro da consulta. */
 export function construtorDaListagem(db: DbExecutor, recorte: RecorteDoDiretorio) {
   let consulta = db.selectFrom('professionals').where('status', '=', 'published');
+
+  // A BUSCA POR TEXTO CASA SOBRE O MESMO `where`, e isso e o ponto.
+  //
+  // Ela nao e um segundo caminho de leitura: e mais um predicado na consulta
+  // que ja carrega `status = 'published'`. Quem busca por um nome especifico
+  // esta testando se ele existe, entao um rascunho que aparecesse numa busca
+  // responderia uma pergunta que ninguem tem direito de fazer -- e essa e a
+  // forma mais provavel de vazamento desta rota, porque o resultado tem UMA
+  // linha e o nome ja estava na cabeca de quem perguntou.
+  //
+  // `texto_para_busca` e `padrao_de_busca` sao do banco (migracao
+  // 20260922000009) e nao ha equivalente em TypeScript de proposito: o lado
+  // esquerdo desta comparacao precisa ser a MESMA expressao do indice GIN,
+  // caractere a caractere, ou o planejador nao casa os dois. `padrao_de_busca`
+  // tambem neutraliza `%`, `_` e `\` do termo, sem o que `q=%` devolve a
+  // tabela inteira numa varredura completa.
+  const busca = recorte.q?.trim();
+  if (busca !== undefined && busca !== '') {
+    consulta = consulta.where(
+      sql<boolean>`texto_para_busca(professionals.display_name) LIKE padrao_de_busca(${busca})`,
+    );
+  }
 
   const cidade = recorte.city?.trim();
   if (cidade !== undefined && cidade !== '') {
