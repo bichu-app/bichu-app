@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -119,6 +121,17 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
   bool _visivel = false;
   bool _cargaAgendada = false;
 
+  /// O campo de busca por nome (`q`, desde 30/09).
+  final TextEditingController _busca = TextEditingController();
+
+  /// O adiamento entre a tecla e a chamada.
+  ///
+  /// **Nao e enfeite.** `q` tem teto proprio por CONTA no servidor, e uma
+  /// chamada por tecla gastaria o teto de quem digita depressa e devolveria
+  /// 429 no meio da palavra. Adiar tambem evita desenhar o resultado de um
+  /// prefixo que a pessoa ja abandonou.
+  Timer? _adiamentoDaBusca;
+
   /// Recarrega quando a tela volta a aparecer, pelo mesmo mecanismo de
   /// `Perfil` > `Meus pets`: `TickerMode` responde as duas maneiras de esta
   /// tela sumir da vista (trocar de aba, e ser coberta por uma rota opaca do
@@ -201,6 +214,13 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
     }
   }
 
+  @override
+  void dispose() {
+    _adiamentoDaBusca?.cancel();
+    _busca.dispose();
+    super.dispose();
+  }
+
   void _trocarRecorte(RecorteDoDiretorio novo) {
     setState(() => _recorte = novo);
     _carregar();
@@ -263,11 +283,44 @@ class _ListaDoDiretorioState extends State<ListaDoDiretorio> {
         if (pagina != null)
           BarraDeListagem(
             total: pagina.total,
+            busca: _controleDeBusca(),
             filtro: _controleDeFiltro(),
             ordenacao: _controleDeOrdenacao(pagina),
           ),
         ..._corpo(),
       ],
+    );
+  }
+
+  /// A busca por NOME, servida pelo servidor (`q`).
+  ///
+  /// `AlcanceDaBusca.servidor` e uma AFIRMACAO conferida: o portao de
+  /// `app/test/telas/perto_com_dados_test.dart` le `api/openapi.yaml` e reprova
+  /// se o campo existir sem `q` na rota, ou se a rota aceitar `q` e a tela
+  /// declarar `paginaCarregada`.
+  ///
+  /// O piso de tres caracteres NAO esta aqui: ele mora em
+  /// `RecorteDoDiretorio.termoQueVai`, com o motivo do indice de trigrama ao
+  /// lado. Aqui o termo entra no recorte sempre, e quem decide se ele vira
+  /// parametro e o recorte -- assim apagar o campo volta para a lista inteira
+  /// em vez de congelar o ultimo resultado.
+  ControleDeBusca _controleDeBusca() {
+    return ControleDeBusca(
+      controlador: _busca,
+      alcance: AlcanceDaBusca.servidor,
+      exemplo: 'Nome do profissional',
+      aoMudar: (termo) {
+        _adiamentoDaBusca?.cancel();
+        _adiamentoDaBusca = Timer(const Duration(milliseconds: 350), () {
+          if (!mounted) return;
+          final limpo = termo.trim();
+          _trocarRecorte(
+            limpo.isEmpty
+                ? _recorte.com(limparTermo: true, pagina: 1)
+                : _recorte.com(termo: limpo, pagina: 1),
+          );
+        });
+      },
     );
   }
 

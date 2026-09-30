@@ -157,9 +157,13 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/admin-access/ports/repositorio-de-contas-administrativas.ts', SO_TIPO],
   ['src/modules/admin-access/ports/sessao-administrativa-repository.ts', SO_TIPO],
   ['src/modules/found/ports/found-report-repository.ts', SO_TIPO],
+  // BICHUS-41. Chegou com a conversa do achador sem conta. Conferida pelo
+  // MESMO criterio das outras, e MEDIDA e nao deduzida: nao declara `const`,
+  // `function`, `class` nem `enum` -- so `type` e `interface` --, e o
+  // compilado em `dist/` e `export {};` e nada mais.
+  ['src/modules/found/ports/conversa-do-achador.ts', SO_TIPO],
   ['src/modules/identity/application/dependencies.ts', SO_TIPO],
   ['src/modules/identity/ports/identity-repository.ts', SO_TIPO],
-  ['src/modules/identity/ports/localizacao-de-referencia-repository.ts', SO_TIPO],
   ['src/modules/identity/ports/mailer.ts', SO_TIPO],
   ['src/modules/identity/ports/token-signer.ts', SO_TIPO],
   ['src/modules/lostfound/ports/alcance-do-alerta.ts', SO_TIPO],
@@ -193,7 +197,6 @@ const AUSENCIAS_ACEITAS = new Map([
   ['src/modules/store/ports/store-repository.ts', SO_TIPO],
   ['src/modules/tags/ports/autenticador.ts', SO_TIPO],
   ['src/modules/tags/ports/rasterizador-de-qr.ts', SO_TIPO],
-  ['src/modules/tags/ports/tag-repository.ts', SO_TIPO],
   ['src/modules/transfers/ports/transfer-repository.ts', SO_TIPO],
   ['src/shared/db/schema.ts', SO_TIPO],
   ['src/shared/ports/id-generator.ts', SO_TIPO],

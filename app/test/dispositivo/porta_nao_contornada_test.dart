@@ -856,7 +856,20 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `write-tree`), e conferido por `ls-tree`. Anteriores:
 /// `6d8d8235940c99a9ea5dbd5532aab678c49e4f0e` (`development`) e
 /// `67a10122bd57d7231e13ebfc68d6615e94ef8e6d` (`integracao/backoffice-v1`).
-const String _arvoreDasTelas = '5af94a5a286fc5e78b296fdd458b9a6058563fbe'; // mescla 29/09 development x integracao/backoffice-v1 (BICHUS-251 + BICHUS-278)
+///
+/// DESTRAVADO EM 30/09 (lote de 30/09, BICHUS-278). UM arquivo muda:
+/// `perto/lista_do_diretorio.dart`. A busca por nome no diretorio entrou no
+/// contrato (`q` em `listDirectoryEntries`, `minLength: 3`), e o portao de
+/// `app/test/telas/perto_com_dados_test.dart` cobra os DOIS sentidos: sem `q`
+/// na rota o campo nao pode existir; com `q` na rota o campo passa a ser
+/// obrigatorio. A tela montou `ControleDeBusca` com
+/// `alcance: AlcanceDaBusca.servidor` no `BarraDeListagem` que ela ja
+/// desenhava -- componente que ja existia, nenhum widget novo, nenhuma pasta
+/// nova. Nao encosta na porta `CameraEGaleria` e nao ganhou importe de plugin
+/// de aparelho: quem cobra isso e o portao ESTRUTURAL abaixo, que continua
+/// valendo e continua verde. Anterior:
+/// `5af94a5a286fc5e78b296fdd458b9a6058563fbe`.
+const String _arvoreDasTelas = '4437eda0b406f11aa15e28ac582f9013382d335f'; // BICHUS-278, 30/09: `perto/lista_do_diretorio.dart` ligou o campo de busca (`q`)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

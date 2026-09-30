@@ -16,18 +16,19 @@ import 'modelos_diretorio.dart';
 /// em URL vai para log de acesso, para o historico do aparelho e para o
 /// cabecalho `Referer`. Nenhum parametro desta classe carrega ponto.
 ///
-/// ## Busca por texto: **nao existe nesta rota, hoje**
+/// ## Busca por texto: **existe desde 30/09**
 ///
-/// O parametro `q` **nao entrou** no contrato, e o motivo esta escrito la: `q`
-/// nao esta em `DIMENSOES_CONHECIDAS` de
-/// `src/shared/http/aplicacao-de-teto.ts`, e dimensao de teto nova e decisao
-/// de politica. Esta classe **nao inventa** o parametro e **nao filtra em
-/// memoria para parecer que busca**: filtrar as 20 entradas da pagina
-/// carregada e uma busca que funciona com 10 registros e mente com 200.
+/// `q` entrou no contrato de `listDirectoryEntries` com `minLength: 3`, teto
+/// proprio e indice GIN de trigrama do lado do servidor. Esta classe o repassa
+/// por [RecorteDoDiretorio.query], e continua **nao filtrando em memoria**:
+/// filtrar as 20 entradas da pagina carregada e uma busca que funciona com 10
+/// registros e mente com 200. O alcance declarado na tela e
+/// `AlcanceDaBusca.servidor` porque e o alcance REAL.
 ///
-/// Quando `q` entrar no contrato, o lugar de liga-lo e aqui, e o portao de
-/// `app/test/telas/perto_com_dados_test.dart` **reprova** enquanto o campo da
-/// tela e o parametro da rota estiverem fora de sincronia, nos dois sentidos.
+/// O portao de `app/test/telas/perto_com_dados_test.dart` cobra os dois
+/// sentidos: sem `q` no contrato o campo nao pode existir na tela, e com `q`
+/// no contrato o campo passa a ser obrigatorio.
+///
 class DiretorioApi {
   const DiretorioApi(this._api);
 

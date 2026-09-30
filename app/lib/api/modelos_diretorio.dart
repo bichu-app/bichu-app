@@ -234,7 +234,13 @@ class EntradaDoDiretorio {
   }
 }
 
-/// `#/paths/~1directory~1entries/get/parameters/5/schema` do contrato.
+/// `#/paths/~1directory~1entries/get/parameters/6/schema` do contrato.
+///
+/// ERA `parameters/5` ate 30/09. A busca por nome no diretorio inseriu `q`
+/// como PRIMEIRO parametro e deslocou todos os indices: o 5 passou a ser
+/// `verification_level`, e o portao de conformidade reprovou nomeando os tres
+/// valores dele (`none`, `contact_verified`, `document_verified`) como valores
+/// que o app nao desenha. Foi exatamente o que o paragrafo abaixo previu.
 ///
 /// O ponteiro passa pelo INDICE do parametro porque `sort` do diretorio nao
 /// tem espelho em `components/schemas` -- diferente de `OrdemDaLoja`, que
@@ -342,12 +348,30 @@ class PaginaDoDiretorio {
 /// O recorte pedido pela tela. Todos os campos sao opcionais no contrato.
 class RecorteDoDiretorio {
   const RecorteDoDiretorio({
+    this.termo,
     this.atividade,
     this.nivelMinimo,
     this.ordem = OrdemDoDiretorio.distancia,
     this.pagina = 1,
     this.limite = 20,
   });
+
+  /// O termo da busca por NOME, ou nulo.
+  ///
+  /// **So vai para a rota com tres caracteres ou mais**, e o piso e do
+  /// contrato (`minLength: 3` em `q`): o indice que atende esta busca e GIN de
+  /// trigrama, e padrao menor que tres nao produz trigrama nenhum. Abaixo do
+  /// piso o campo fica preenchido na tela e o parametro NAO sai -- mandar
+  /// voltaria 400, e engolir o 400 desenharia "nada encontrado" para quem
+  /// apenas ainda nao acabou de digitar.
+  final String? termo;
+
+  /// O termo como ele vai para a rota, ou nulo quando ele nao vai.
+  String? get termoQueVai {
+    final limpo = termo?.trim();
+    if (limpo == null || limpo.length < 3) return null;
+    return limpo;
+  }
 
   final AtividadeDoDiretorio? atividade;
 
@@ -368,14 +392,17 @@ class RecorteDoDiretorio {
       (nivelMinimo == null || nivelMinimo == NivelDeVerificacao.nenhum ? 0 : 1);
 
   RecorteDoDiretorio com({
+    String? termo,
     AtividadeDoDiretorio? atividade,
     NivelDeVerificacao? nivelMinimo,
     OrdemDoDiretorio? ordem,
     int? pagina,
     bool limparAtividade = false,
     bool limparNivel = false,
+    bool limparTermo = false,
   }) {
     return RecorteDoDiretorio(
+      termo: limparTermo ? null : (termo ?? this.termo),
       atividade: limparAtividade ? null : (atividade ?? this.atividade),
       nivelMinimo: limparNivel ? null : (nivelMinimo ?? this.nivelMinimo),
       ordem: ordem ?? this.ordem,
@@ -385,6 +412,9 @@ class RecorteDoDiretorio {
   }
 
   Map<String, String> get query => <String, String>{
+        // `q` primeiro, na mesma ordem do contrato. Sai pelo `termoQueVai`, e
+        // nao pelo `termo`: o piso de tres caracteres mora num lugar so.
+        'q': ?termoQueVai,
         if (atividade != null) 'kind': atividade!.codigo,
         if (nivelMinimo != null && nivelMinimo != NivelDeVerificacao.nenhum)
           'verification_level': nivelMinimo!.codigo,
