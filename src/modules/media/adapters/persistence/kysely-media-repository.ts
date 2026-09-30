@@ -415,7 +415,35 @@ export function criarMediaRepository(db: Db): MediaRepository {
      * tem `thumb` nem `card`.
      */
     async chavesDaConta(dono: UserId): Promise<readonly ObjetoDaConta[]> {
-      const objetos: ObjetoDaConta[] = [];
+      // SEM REPETICAO, e a razao e a CONTAGEM, nao o custo do `delete`.
+      //
+      // As consultas abaixo chegam ao mesmo objeto por caminhos diferentes, e
+      // isso nao e excecao: e o estado NORMAL de uma foto pronta. A intencao de
+      // envio confirmada continua em `upload_intents` com `object_key` = o
+      // original, e `pet_photos.original_key` e o MESMO objeto. Sem juntar, uma
+      // foto pronta devolve quatro entradas para tres arquivos.
+      //
+      // O `delete` da porta trata 404 como sucesso, entao repetir nao quebrava
+      // nada -- o que quebrava era o numero. `objects_deleted` vai para
+      // `privacy.account_purged`, e quem audita o art. 18, VI le aquele numero
+      // como "arquivos que sairam". Inflado, ele afirma mais do que aconteceu,
+      // que e o mesmo defeito de leitura que o SEC-020 existe para corrigir --
+      // so trocado de sinal. MEDIDO: o caso "a trilha conta os objetos que
+      // sairam, junto das linhas" de `tests/integration/expurgo-de-conta-conclui.test.ts`
+      // recebia 4 e esperava 3.
+      //
+      // A chave da juncao e o PAR (classe, chave): o mesmo nome em balde
+      // privado e em balde publico sao dois arquivos, e os dois tem de sair.
+      const vistos = new Set<string>();
+      const todos: ObjetoDaConta[] = [];
+      const objetos = {
+        push(objeto: ObjetoDaConta): void {
+          const identidade = `${objeto.classe}|${String(objeto.chave)}`;
+          if (vistos.has(identidade)) return;
+          vistos.add(identidade);
+          todos.push(objeto);
+        },
+      };
 
       const intencoes = await db
         .selectFrom('upload_intents')
@@ -461,7 +489,7 @@ export function criarMediaRepository(db: Db): MediaRepository {
         objetos.push({ classe: 'privado', chave: comoObjectKey(linha.photo_object_key) });
       }
 
-      return objetos;
+      return todos;
     },
 
     async descartarIntencao(id: string): Promise<void> {

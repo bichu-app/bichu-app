@@ -233,9 +233,16 @@ before(async () => {
   // sentinela: se o privado entrasse, entraria primeiro.
   for (const id of Object.values(CONTAS)) {
     await cliente.query(
-      `INSERT INTO user_reference_locations (user_id, reference_point, precision_m, source, captured_at, expires_at)
-       VALUES ($1, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 100, 'map_pin', now(), now() + interval '1 day')`,
-      [id, LON, LAT],
+      // `session_family_id` entrou com o SEC-021: a localizacao de referencia
+      // passou a ser DO APARELHO, e a coluna e NOT NULL e parte da chave
+      // primaria `(user_id, session_family_id)`. Um aparelho por conta e o que
+      // esta bancada precisa -- ela mede visibilidade de encontro privado, e
+      // nao alcance por aparelho.
+      `INSERT INTO user_reference_locations
+         (user_id, session_family_id, reference_point, precision_m, source,
+          captured_at, expires_at)
+       VALUES ($1, $4, ST_SetSRID(ST_MakePoint($2, $3), 4326)::geography, 100, 'map_pin', now(), now() + interval '1 day')`,
+      [id, LON, LAT, randomUUID()],
     );
   }
 
