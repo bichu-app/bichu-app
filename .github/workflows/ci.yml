@@ -623,6 +623,15 @@ jobs:
       - name: a divergencia entre destinos esta declarada em lista fechada
         run: node dist/tools/comparar-destinos.js
 
+      # ADR-0027 item 18: a matriz tela -> contrato
+      # (`api/rastreabilidade-backoffice-rede.yaml`) concorda com
+      # `api/openapi.yaml`. A isca permanente
+      # (`src/tools/iscas/rastreabilidade-deve-reprovar.yaml`) roda ANTES da
+      # matriz real, dentro do proprio portao: se ela deixar de reprovar pelos
+      # quatro motivos, o passo cai dizendo que o portao cegou.
+      - name: a matriz de rastreabilidade concorda com o contrato
+        run: node dist/tools/portao-rastreabilidade.js
+
       - name: compatibilidade contra main
         if: github.event_name == 'pull_request'
         run: |
