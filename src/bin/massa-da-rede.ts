@@ -121,7 +121,7 @@ export interface EncontroSemeado {
  */
 export interface CamposSemeados {
   readonly visibility?: 'public' | 'private';
-  readonly admission?: { readonly centavos: number; readonly unidade: 'per_dog' | 'per_person' | 'per_pair' } | null;
+  readonly admission?: { readonly centavos: number; readonly unidade: 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people' } | null;
   readonly portes?: readonly ('P' | 'M' | 'G' | 'GG')[];
   readonly idade?: 'any' | 'from_4_months' | 'from_1_year' | 'up_to_1_year';
   readonly vacinacao?: boolean;
@@ -133,7 +133,7 @@ export interface CamposSemeados {
 
 export interface CamposResolvidos {
   readonly visibility: 'public' | 'private';
-  readonly admission: { readonly centavos: number; readonly unidade: 'per_dog' | 'per_person' | 'per_pair' } | null;
+  readonly admission: { readonly centavos: number; readonly unidade: 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people' } | null;
   readonly portes: readonly string[];
   readonly idade: string;
   readonly vacinacao: boolean;

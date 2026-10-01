@@ -30,7 +30,7 @@ import type { Instant } from '../../../shared/types/brands.js';
 
 export type PublicacaoAdministrativa = 'published' | 'cancelled' | 'removed';
 export type Visibilidade = 'public' | 'private';
-export type UnidadeDoValor = 'per_dog' | 'per_person' | 'per_pair';
+export type UnidadeDoValor = 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
 export type TempoDoEncontro = 'upcoming' | 'happening' | 'ended';
 export type DecisaoDoPedido = 'pending' | 'approved' | 'declined';
 export type EstadoDaImagem = 'processing' | 'ready' | 'rejected';
@@ -87,6 +87,10 @@ export interface EncontroAdministrativo {
   readonly observacoes: string | null;
   /** Endereco por extenso (01/10/2026). O painel o ve; o app, so em `location`. */
   readonly endereco: string | null;
+  /** Link de ingresso (ADR-0027 item 22). Publico. */
+  readonly linkDeIngresso: string | null;
+  /** O handle do Instagram, puro. Publico. */
+  readonly instagram: string | null;
   readonly publicacao: PublicacaoAdministrativa;
   readonly publishedAt: Date | null;
   readonly cancelledAt: Date | null;
@@ -318,6 +322,94 @@ export function errosDoEndereco(campo: string, valor: string): ProblemFieldError
 }
 
 // ---------------------------------------------------------------------------
+// Links do encontro (ADR-0027 item 22): a excecao explicita ao D59
+// ---------------------------------------------------------------------------
+//
+// So estes dois campos aceitam link. As observacoes continuam recusando
+// (`errosDasObservacoes`), e nada aqui as toca.
+
+/** Host que nao e endereco publico na internet: loopback, rede local, nome sem ponto. */
+const HOST_LOCAL = /(?:^|\.)(?:localhost|local|localdomain|internal|intranet|lan|home|home\.arpa|corp|test|invalid|example)$/;
+/** IPv4 literal, inclusive com zero a esquerda; o IPv6 literal chega entre colchetes. */
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+
+export const TETO_DO_LINK_DE_INGRESSO = 500;
+
+/**
+ * O link de ingresso: `https`, ate 500, sem usuario e senha, sem IP literal e
+ * sem host local. `javascript:`, `data:` e `http:` caem no esquema.
+ */
+export function errosDoLinkDeIngresso(campo: string, valor: string): ProblemFieldError[] {
+  const recusa = (code: string, message: string): ProblemFieldError[] => [{ field: campo, code, message }];
+  if (CONTROLE_BIDIRECIONAL.test(valor)) return recusa('bidi_control', 'O texto tem um caractere de controle de direção.');
+  const texto = valor.trim();
+  if (texto.length === 0 || texto.length > TETO_DO_LINK_DE_INGRESSO) {
+    return recusa('length', `De 1 a ${String(TETO_DO_LINK_DE_INGRESSO)} caracteres.`);
+  }
+  // Espaco ou caractere de controle (abaixo de U+0020, e U+007F).
+  if ([...texto].some((c) => /\s/u.test(c) || c.charCodeAt(0) < 0x20 || c.charCodeAt(0) === 0x7f)) {
+    return recusa('ticket_url_invalid', 'O link não pode ter espaço.');
+  }
+  let url: URL;
+  try {
+    url = new URL(texto);
+  } catch {
+    return recusa('ticket_url_invalid', 'Isso não é um link.');
+  }
+  // O texto cru tambem precisa comecar por `https://`: `HTTPS://` ou `https:/x`
+  // o URL aceita e normaliza, e o banco confere o texto guardado.
+  if (url.protocol !== 'https:' || !texto.startsWith('https://')) {
+    return recusa('ticket_url_not_https', 'O link precisa começar com https://.');
+  }
+  if (url.username !== '' || url.password !== '' || /^https:\/\/[^/?#]*@/.test(texto)) {
+    return recusa('ticket_url_has_credentials', 'O link não pode ter usuário e senha.');
+  }
+  const host = url.hostname.toLowerCase();
+  if (host.startsWith('[') || IPV4.test(host) || /^\d+$/.test(host) || /^0x/i.test(host)) {
+    return recusa('ticket_url_ip_literal', 'Use o endereço do site, e não um número de IP.');
+  }
+  if (!host.includes('.') || HOST_LOCAL.test(host)) {
+    return recusa('ticket_url_local_host', 'O link precisa ser de um site público.');
+  }
+  return [];
+}
+
+/**
+ * O @ do Instagram, NUM PONTO SO: aceita `usuario`, `@usuario` ou a URL do
+ * perfil em `instagram.com` (com ou sem `www.`/`m.`, `http`/`https`, barra
+ * final e consulta), e devolve o handle puro em minusculas -- ou `null`, quando
+ * nao da para tirar um handle valido. Padrao do Instagram: 1 a 30 de letras,
+ * digitos, ponto e sublinhado.
+ */
+export function handleDoInstagram(valor: string): string | null {
+  let texto = valor.trim();
+  const daUrl = /^(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/([^/?#]+)\/?(?:[?#].*)?$/i.exec(texto);
+  if (daUrl !== null) texto = daUrl[1] ?? '';
+  if (texto.startsWith('@')) texto = texto.slice(1);
+  return /^[A-Za-z0-9._]{1,30}$/.test(texto) ? texto.toLowerCase() : null;
+}
+
+export function errosDoInstagram(campo: string, valor: string): ProblemFieldError[] {
+  if (CONTROLE_BIDIRECIONAL.test(valor)) {
+    return [{ field: campo, code: 'bidi_control', message: 'O texto tem um caractere de controle de direção.' }];
+  }
+  return handleDoInstagram(valor) === null
+    ? [
+        {
+          field: campo,
+          code: 'instagram_handle_invalid',
+          message: 'Use o @ do Instagram: até 30 letras, números, ponto ou sublinhado.',
+        },
+      ]
+    : [];
+}
+
+/** A URL publica do perfil, montada na saida a partir do handle guardado. */
+export function urlDoInstagram(handle: string | null): string | null {
+  return handle === null ? null : `https://www.instagram.com/${handle}/`;
+}
+
+// ---------------------------------------------------------------------------
 // Tempo e fuso
 // ---------------------------------------------------------------------------
 
@@ -533,6 +625,9 @@ export interface EncontroAdministrativoProjetado {
   readonly bring_items: readonly string[];
   readonly notes: string | null;
   readonly street_address: string | null;
+  readonly ticket_url: string | null;
+  readonly instagram_handle: string | null;
+  readonly instagram_url: string | null;
   readonly pending_request_count: number;
   readonly publication_status: PublicacaoAdministrativa;
   readonly timing: TempoDoEncontro;
@@ -594,6 +689,9 @@ export function projetarEncontroAdministrativo(
     bring_items: [...e.paraLevar],
     notes: e.observacoes,
     street_address: e.endereco,
+    ticket_url: e.linkDeIngresso,
+    instagram_handle: e.instagram,
+    instagram_url: urlDoInstagram(e.instagram),
     pending_request_count: e.visibilidade === 'private' ? e.pedidosPendentes : 0,
     publication_status: e.publicacao,
     timing: tempoDoEncontro(e, agora),
@@ -687,6 +785,8 @@ export function retratoDoEncontro(e: EncontroAdministrativo): Record<string, unk
     bring_items: [...e.paraLevar],
     notes: e.observacoes,
     street_address: e.endereco,
+    ticket_url: e.linkDeIngresso,
+    instagram_handle: e.instagram,
     publication_status: e.publicacao,
     cancellation_note: e.cancellationNote,
     images: e.imagens.map((i) => ({ upload_id: i.uploadId, alt_text: i.altText })),

@@ -37,6 +37,9 @@ import {
   entradaDoCorpo,
   errosDasObservacoes,
   errosDoEndereco,
+  errosDoInstagram,
+  errosDoLinkDeIngresso,
+  handleDoInstagram,
   errosDeTexto,
   errosDoHorario,
   FUSO_PADRAO,
@@ -130,6 +133,8 @@ export interface CorpoDeEncontro {
   readonly bring_items?: readonly string[];
   readonly notes?: string;
   readonly street_address?: string;
+  readonly ticket_url?: string;
+  readonly instagram_handle?: string;
 }
 
 export interface PatchDeEncontro {
@@ -144,6 +149,8 @@ export interface PatchDeEncontro {
   readonly amenities?: readonly string[];
   readonly bring_items?: readonly string[];
   readonly notes?: string | null;
+  readonly ticket_url?: string | null;
+  readonly instagram_handle?: string | null;
 }
 
 export interface CorpoDeMudancaDeLugar {
@@ -286,7 +293,15 @@ function descreverLugar(lugar: Lugar): string {
 
 function descreverEntrada(e: EncontroAdministrativo['entrada']): string {
   if (e.tipo === 'free') return 'gratuito';
-  const unidade: Record<UnidadeDoValor, string> = { per_dog: 'por cão', per_person: 'por pessoa', per_pair: 'por dupla' };
+  // `per_dog` e legado (aposentadoria registrada no ADR-0027 item 22): o
+  // painel o mostra como "por pet" e nao o oferece mais.
+  const unidade: Record<UnidadeDoValor, string> = {
+    per_dog: 'por pet',
+    per_pet: 'por pet',
+    per_person: 'por humano',
+    per_pair: 'por dupla (1 humano + 1 pet)',
+    per_two_people: 'por dupla de humanos (2 humanos)',
+  };
   return `R$ ${(e.centavos / 100).toFixed(2).replace('.', ',')} ${unidade[e.unidade]}`;
 }
 
@@ -390,6 +405,8 @@ export class RedeAdministrativa {
       ...errosDosPortes(corpo.accepted_sizes),
       ...(corpo.notes === undefined ? [] : errosDasObservacoes('notes', corpo.notes)),
       ...(corpo.street_address === undefined ? [] : errosDoEndereco('street_address', corpo.street_address)),
+      ...(corpo.ticket_url === undefined ? [] : errosDoLinkDeIngresso('ticket_url', corpo.ticket_url)),
+      ...(corpo.instagram_handle === undefined ? [] : errosDoInstagram('instagram_handle', corpo.instagram_handle)),
       ...('erros' in entrada ? entrada.erros : []),
     ];
     if (visibilidade === 'private' && corpo.slug !== undefined) {
@@ -420,6 +437,8 @@ export class RedeAdministrativa {
           areaCercada: corpo.fenced_off_leash_area ?? false,
           observacoes: corpo.notes === undefined ? null : corpo.notes.trim(),
           endereco: corpo.street_address === undefined ? null : corpo.street_address.trim(),
+          linkDeIngresso: corpo.ticket_url === undefined ? null : corpo.ticket_url.trim(),
+          instagram: corpo.instagram_handle === undefined ? null : handleDoInstagram(corpo.instagram_handle),
           agora,
         });
       if (visibilidade === 'private') {
@@ -498,6 +517,12 @@ export class RedeAdministrativa {
       ...errosDaGaleria(patch.images),
       ...errosDosPortes(patch.accepted_sizes),
       ...(patch.notes === undefined || patch.notes === null ? [] : errosDasObservacoes('notes', patch.notes)),
+      ...(patch.ticket_url === undefined || patch.ticket_url === null
+        ? []
+        : errosDoLinkDeIngresso('ticket_url', patch.ticket_url)),
+      ...(patch.instagram_handle === undefined || patch.instagram_handle === null
+        ? []
+        : errosDoInstagram('instagram_handle', patch.instagram_handle)),
     ];
     if (erros.length > 0) throw problemas.validacao(erros);
 
@@ -516,6 +541,12 @@ export class RedeAdministrativa {
         ...(patch.vaccination_required === undefined ? {} : { vacinacaoExigida: patch.vaccination_required }),
         ...(patch.fenced_off_leash_area === undefined ? {} : { areaCercada: patch.fenced_off_leash_area }),
         ...(patch.notes === undefined ? {} : { observacoes: patch.notes === null ? null : patch.notes.trim() }),
+        ...(patch.ticket_url === undefined
+          ? {}
+          : { linkDeIngresso: patch.ticket_url === null ? null : patch.ticket_url.trim() }),
+        ...(patch.instagram_handle === undefined
+          ? {}
+          : { instagram: patch.instagram_handle === null ? null : handleDoInstagram(patch.instagram_handle) }),
       };
       // O UPDATE vem primeiro, mesmo quando so as listas mudam: e ele que
       // confere a versao lida e a incrementa.
@@ -538,6 +569,21 @@ export class RedeAdministrativa {
       return { antes: atual, depois: completo };
     });
 
+    // Link e @ sao o que leva quem le o app para fora dele: mudar um dos dois
+    // avisa todos os administradores com o antes e o depois, como as
+    // observacoes (D60). Uma sessao tomada que troca o link de ingresso por um
+    // golpe nao passa calada.
+    if (antes.linkDeIngresso !== depois.linkDeIngresso || antes.instagram !== depois.instagram) {
+      await this.avisarAdministradores(autor, `Links alterados: ${depois.title}`, [
+        'O link de ingresso ou o Instagram de um encontro da Rede foi alterado.',
+        `Encontro: ${depois.title}`,
+        `Link de ingresso antes: ${antes.linkDeIngresso ?? '(sem link)'}`,
+        `Link de ingresso depois: ${depois.linkDeIngresso ?? '(sem link)'}`,
+        `Instagram antes: ${antes.instagram === null ? '(sem Instagram)' : `@${antes.instagram}`}`,
+        `Instagram depois: ${depois.instagram === null ? '(sem Instagram)' : `@${depois.instagram}`}`,
+        'Se você não reconhece esta mudança, avise o responsável pelo painel.',
+      ]);
+    }
     if (antes.observacoes !== depois.observacoes) {
       await this.avisarAdministradores(autor, `Observações alteradas: ${depois.title}`, [
         'As observações de um encontro da Rede foram alteradas (D60).',

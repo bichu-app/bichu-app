@@ -84,6 +84,8 @@ const ENCONTRO: EncontroDaRede = {
   paraLevar: [],
   observacoes: null,
   endereco: null,
+  linkDeIngresso: null,
+  instagram: null,
   imagens: [],
 };
 

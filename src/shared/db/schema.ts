@@ -1151,6 +1151,10 @@ export interface NetworkEventsTable {
   fenced_off_leash_area: Generated<boolean>;
   /** Endereco por extenso (01/10/2026). Sai so em `getNetworkEventLocation`, com conta. */
   street_address: ColumnType<string | null, string | null | undefined, string | null>;
+  /** Link de ingresso, https (ADR-0027 item 22). Publico. */
+  ticket_url: ColumnType<string | null, string | null | undefined, string | null>;
+  /** O @ do Instagram, sem @ e em minusculas. Publico. */
+  instagram_handle: ColumnType<string | null, string | null | undefined, string | null>;
   notes: string | null;
   origin: Generated<OrigemDoEncontro>;
   publication_status: PublicacaoDoEncontro;
@@ -1167,7 +1171,7 @@ export type OrigemDoPontoDoEncontro = 'map_pin';
 
 export type VisibilidadeDoEncontro = 'public' | 'private';
 export type EntradaDoEncontro = 'free' | 'paid';
-export type UnidadeDoValor = 'per_dog' | 'per_person' | 'per_pair';
+export type UnidadeDoValor = 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
 export type IdadeDosCaes = 'any' | 'from_4_months' | 'from_1_year' | 'up_to_1_year';
 export type ItemParaLevar =
   | 'water'

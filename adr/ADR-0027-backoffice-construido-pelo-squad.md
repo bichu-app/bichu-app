@@ -10,6 +10,9 @@ apêndice A foram reescritos no lugar para ficarem coerentes com ele.
 **Emenda de 01/10 (item 21):** endereço por extenso no encontro, só em resposta
 autenticada, sem geocodificação; o mapa sai do painel, e `geo` e a rota de mover
 ficam só por compatibilidade.
+**Emenda de 01/10 (item 22):** unidade do preço com pet, humano, dupla e dupla de
+humanos (aditiva; `per_dog` se aposenta depois); link de ingresso e Instagram
+públicos, exceção explícita ao D59 só nesses dois campos.
 **Data:** 2026-09-23 (emendas de 2026-09-28 e 2026-10-01)
 **Supera:** a credencial de serviço (`adminAuth`, `X-Service-Credential`) do
 ADR-0026, seções 2.2 e 2.3; a BICHUS-189 (catálogo em arquivo versionado)
@@ -1543,6 +1546,45 @@ muda, e o que fica por compatibilidade.
    continuam, com o comentário de coluna dizendo isso, e `location` continua
    devolvendo `point` (nulo para quem não tem ponto). A rota de mover continua
    viva, agora também para o endereço.
+
+### 22. Unidade do preço mais clara, e o encontro ganha link de ingresso e Instagram (decisões do cliente, 01/10)
+
+Literal: "em um evento, tem que saber se o preço é por pet, por humano, por
+dupla (humano + pet) ou (dois humanos), é isso que precisa ficar mais claro" e
+"pode criar o link".
+
+1. **Unidade do preço, mudança aditiva.** O painel passa a oferecer `per_pet`
+   (por pet), `per_person` (por humano), `per_pair` (dupla, 1 humano + 1 pet)
+   e `per_two_people` (dupla de humanos). O encontro continua com **um** preço
+   e uma unidade: a lista diz a que o valor se refere, e não pede vários preços
+   por encontro. Se um dia o cliente quiser "R$ 30 por humano e R$ 15 por pet"
+   no mesmo encontro, é outra decisão: o modelo de hoje não comporta, e muda
+   para uma tabela de preços.
+2. **`per_dog` fica válido, e se aposenta depois.** Nenhuma linha foi
+   renomeada: o encontro que tem `per_dog` responde como respondia, e o painel
+   o mostra como "por pet" sem oferecê-lo. **Aposentadoria:** quando nenhum
+   encontro publicado e futuro tiver `per_dog` e o app em uso tratar `per_pet`,
+   uma migração troca `per_dog` por `per_pet` e tira o valor do `CHECK` e do
+   enum, com dispensa datada no oasdiff. O app atual (`UnidadeDoPreco.porCodigo`
+   em `app/lib/api/modelos_rede.dart`) devolve nulo para unidade desconhecida e
+   mostra só o valor; toda versão do app que lê `unit` já é assim (o campo
+   nasceu tolerante em 7c332f5).
+3. **Link de ingresso e Instagram: revertida a decisão de 23/09** ("não há
+   coluna de instrução nem de link"). Duas colunas opcionais:
+   - `ticket_url`: `https` obrigatório, até 500, sem usuário e senha, sem IP
+     literal e sem host local;
+   - `instagram_handle`: só o usuário, guardado sem `@` e em minúsculas, 1 a 30
+     de letras, dígitos, ponto e sublinhado. O servidor aceita `usuario`,
+     `@usuario` ou a URL do perfil em `instagram.com`, e normaliza num ponto só
+     (`handleDoInstagram`). A URL sai montada na resposta (`instagram_url`).
+4. **Públicos.** Os dois saem na agenda, no detalhe e nos detalhes do privado,
+   porque servem para comprar e tirar dúvida. O teaser do privado continua com
+   as cinco propriedades (P19).
+5. **Exceção explícita ao D59, só nesses dois campos.** As observações
+   continuam recusando link, e-mail, perfil e telefone, sem mudança.
+6. **Mudar o link ou o Instagram avisa todos os administradores** com o antes e
+   o depois, como as observações (D60): é o campo que leva quem usa o app para
+   fora dele, e uma sessão tomada que o troque por golpe não passa calada.
 
 ## Alternativas consideradas
 

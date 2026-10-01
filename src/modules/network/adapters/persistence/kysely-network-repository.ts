@@ -103,11 +103,13 @@ interface LinhaDoEncontro {
   admission_kind: 'free' | 'paid';
   admission_amount: number | null;
   admission_currency: 'BRL' | null;
-  admission_unit: 'per_dog' | 'per_person' | 'per_pair' | null;
+  admission_unit: 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people' | null;
   dog_age: string;
   vaccination_required: boolean;
   fenced_off_leash_area: boolean;
   street_address: string | null;
+  ticket_url: string | null;
+  instagram_handle: string | null;
   notes: string | null;
   local_date: string;
   accepted_sizes: string[];
@@ -144,6 +146,8 @@ function colunasDoEncontro() {
     'e.fenced_off_leash_area as fenced_off_leash_area',
     'e.notes as notes',
     'e.street_address as street_address',
+    'e.ticket_url as ticket_url',
+    'e.instagram_handle as instagram_handle',
     // A data local no fuso do PROPRIO encontro, pelo catalogo do banco.
     sql<string>`to_char(e.starts_at AT TIME ZONE e.time_zone, 'YYYY-MM-DD')`.as('local_date'),
     sql<string[]>`array(
@@ -611,6 +615,8 @@ function comoEncontro(linha: LinhaDoEncontro, urlDeMidia: (chave: string) => str
     paraLevar: linha.bring_items,
     observacoes: linha.notes,
     endereco: linha.street_address,
+    linkDeIngresso: linha.ticket_url,
+    instagram: linha.instagram_handle,
     imagens: (linha.images ?? []).map((i) => ({ url: urlDeMidia(i.k), textoAlternativo: i.a })),
   };
 }

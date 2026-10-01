@@ -33,6 +33,7 @@
 
 import { comoIso } from '../../../shared/time/clock.js';
 import type { Instant } from '../../../shared/types/brands.js';
+import { urlDoInstagram } from './escrita-do-encontro.js';
 
 /**
  * Os rotulos que a tela escreve, **calculados no servidor**.
@@ -92,6 +93,10 @@ export interface EncontroDaRede {
    * `REGRA_DO_ENDERECO` -- hoje, nunca na leitura aberta.
    */
   readonly endereco: string | null;
+  /** Link de ingresso, https (ADR-0027 item 22). PUBLICO. */
+  readonly linkDeIngresso: string | null;
+  /** O handle do Instagram, puro. PUBLICO; a URL e montada na projecao. */
+  readonly instagram: string | null;
   /** Na ordem do painel; a primeira e a capa. */
   readonly imagens: readonly ImagemDoEncontro[];
 }
@@ -103,7 +108,7 @@ export type EntradaDoEncontro =
       readonly tipo: 'paid';
       readonly centavos: number;
       readonly moeda: 'BRL';
-      readonly unidade: 'per_dog' | 'per_person' | 'per_pair';
+      readonly unidade: 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
     };
 
 /** Uma imagem, com a URL ja composta a partir da chave publica. */
@@ -134,7 +139,7 @@ interface CamposDoEncontroProjetados {
     readonly price: {
       readonly amount: number;
       readonly currency: 'BRL';
-      readonly unit: 'per_dog' | 'per_person' | 'per_pair';
+      readonly unit: 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
     } | null;
   };
   readonly accepted_sizes: readonly string[];
@@ -144,6 +149,9 @@ interface CamposDoEncontroProjetados {
   readonly amenities: readonly string[];
   readonly bring_items: readonly string[];
   readonly notes: string | null;
+  readonly ticket_url: string | null;
+  readonly instagram_handle: string | null;
+  readonly instagram_url: string | null;
   /** So existe quando `REGRA_DO_ENDERECO` e `publico`. */
   readonly street_address?: string | null;
 }
@@ -334,6 +342,10 @@ function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEnc
     amenities: [...encontro.estrutura],
     bring_items: [...encontro.paraLevar],
     notes: encontro.observacoes,
+    // Publicos de proposito (ADR-0027 item 22): servem para comprar e tirar duvida.
+    ticket_url: encontro.linkDeIngresso,
+    instagram_handle: encontro.instagram,
+    instagram_url: urlDoInstagram(encontro.instagram),
     ...enderecoNaLeituraAberta(encontro.endereco),
   };
 }

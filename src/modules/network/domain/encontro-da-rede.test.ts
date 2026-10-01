@@ -74,6 +74,8 @@ function encontro(ajustes: Partial<EncontroDaRede> = {}): EncontroDaRede {
     paraLevar: [],
     observacoes: null,
     endereco: null,
+    linkDeIngresso: null,
+    instagram: null,
     imagens: [],
     ...ajustes,
   };
@@ -259,12 +261,15 @@ void describe('a projecao do encontro', () => {
       'ends_at',
       'fenced_off_leash_area',
       'images',
+      'instagram_handle',
+      'instagram_url',
       'notes',
       'place',
       'slug',
       'starts_at',
       'status',
       'summary',
+      'ticket_url',
       'time_zone',
       'title',
       'vaccination_required',
@@ -403,6 +408,29 @@ void describe('o endereco do encontro (01/10): so em location, com conta', () =>
   void it('a troca da regra e num ponto so: com `publico`, a leitura aberta passa a levar o endereco', () => {
     assert.deepEqual(enderecoNaLeituraAberta(ENDERECO, 'publico'), { street_address: ENDERECO });
     assert.deepEqual(enderecoNaLeituraAberta(ENDERECO, 'so_com_conta'), {});
+  });
+});
+
+void describe('links do encontro (01/10): publicos na agenda e no detalhe, fora do teaser', () => {
+  const comLinks = { linkDeIngresso: 'https://www.sympla.com.br/evento/1', instagram: 'bichu.app' };
+
+  void it('o publico e os detalhes do privado levam ticket_url, instagram_handle e instagram_url', () => {
+    const publico = projetarEncontro(encontro(comLinks), AGORA) as unknown as Record<string, unknown>;
+    assert.equal(publico['ticket_url'], 'https://www.sympla.com.br/evento/1');
+    assert.equal(publico['instagram_handle'], 'bichu.app');
+    assert.equal(publico['instagram_url'], 'https://www.instagram.com/bichu.app/');
+    const detalhes = projetarDetalhesPrivados(encontro({ ...comLinks, visibilidade: 'private' }), AGORA) as unknown as Record<string, unknown>;
+    assert.equal(detalhes['ticket_url'], 'https://www.sympla.com.br/evento/1');
+  });
+
+  void it('ISCA: o teaser do privado continua sem link (P19)', () => {
+    const bruto = JSON.stringify(projetarEncontro(encontro({ ...comLinks, visibilidade: 'private' }), AGORA));
+    assert.ok(!bruto.includes('sympla') && !bruto.includes('instagram'), bruto);
+  });
+
+  void it('sem link, os tres saem nulos', () => {
+    const publico = projetarEncontro(encontro(), AGORA) as unknown as Record<string, unknown>;
+    assert.deepEqual([publico['ticket_url'], publico['instagram_handle'], publico['instagram_url']], [null, null, null]);
   });
 });
 

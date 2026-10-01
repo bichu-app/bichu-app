@@ -547,6 +547,15 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // para caber.
   'public.network_events.network_events_uf_tem_duas_letras':
     "CHECK ((state ~ '^[A-Z]{2}$'::text))",
+  // Os links do encontro (ADR-0027 item 22, migracao 20261001000003). O banco
+  // confere so o esquema `https://` com host sem `@`, espaco nem barra, e o
+  // teto de 500; sem usuario e senha, sem IP literal e sem host local e do
+  // caso de uso, que analisa a URL.
+  'public.network_events.network_events_link_de_ingresso_https':
+    "CHECK (((ticket_url IS NULL) OR ((char_length(ticket_url) <= 500) AND (ticket_url ~ '^https://[^/?#@[:space:]]+'::text))))",
+  // O handle do Instagram como o servidor o guarda: sem `@`, minusculo, 1 a 30.
+  'public.network_events.network_events_instagram_forma':
+    "CHECK (((instagram_handle IS NULL) OR (instagram_handle ~ '^[a-z0-9._]{1,30}$'::text)))",
   // A FORMA do nome IANA, e so a forma. Que a zona EXISTA e conferido pelo
   // gatilho `network_events_fuso_existe`, e a divisao de trabalho e deliberada:
   // consultar `pg_timezone_names` nao e imutavel, e o Postgres recusa funcao
@@ -573,7 +582,7 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((admission_currency IS NULL) OR (admission_currency = 'BRL'::text)))",
   // A unidade do valor, lista fechada escrita com `IS NULL OR`, por isso aqui.
   'public.network_events.network_events_unidade_do_valor_conhecida':
-    "CHECK (((admission_unit IS NULL) OR (admission_unit = ANY (ARRAY['per_dog'::text, 'per_person'::text, 'per_pair'::text]))))",
+    "CHECK (((admission_unit IS NULL) OR (admission_unit = ANY (ARRAY['per_dog'::text, 'per_pet'::text, 'per_person'::text, 'per_pair'::text, 'per_two_people'::text]))))",
   // Gratuito nao tem valor; pago tem.
   'public.network_events.network_events_valor_so_quando_pago':
     "CHECK (((admission_kind = 'free'::text) = (admission_amount IS NULL)))",

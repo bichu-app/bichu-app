@@ -17,6 +17,10 @@ import {
   encontroAbertoParaDecisao,
   errosDasObservacoes,
   errosDoEndereco,
+  errosDoInstagram,
+  errosDoLinkDeIngresso,
+  handleDoInstagram,
+  urlDoInstagram,
   mesEmSaoPaulo,
   normalizarParaConferencia,
   semDatas,
@@ -293,5 +297,70 @@ void describe('o endereco do encontro (01/10): D59 nao recusa endereco legitimo'
       errosDasObservacoes('notes', 'Encontro na Rua Fradique Coutinho, 1234, CEP 05416-001').map((e) => e.code),
       ['contact_or_payment_detected'],
     );
+  });
+});
+
+void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so nestes dois campos', () => {
+  const link = (texto: string): string[] => errosDoLinkDeIngresso('ticket_url', texto).map((e) => e.code);
+
+  void it('link de ingresso https publico passa', () => {
+    for (const ok of [
+      'https://www.sympla.com.br/evento/encontro-de-caes/123456',
+      'https://ingresso.exemplo.com.br/e?id=9&utm=x',
+      '  https://forms.gle/AbC123  ',
+      `https://site.com.br/${'a'.repeat(470)}`,
+    ]) {
+      assert.deepEqual(link(ok), [], ok);
+    }
+  });
+
+  void it('ISCA: javascript:, data:, http:, IP literal, host local, usuario e senha e tamanho sao recusados', () => {
+    assert.deepEqual(link('javascript:alert(1)'), ['ticket_url_not_https']);
+    assert.deepEqual(link('data:text/html,<script>1</script>'), ['ticket_url_not_https']);
+    assert.deepEqual(link('http://www.sympla.com.br/evento'), ['ticket_url_not_https']);
+    assert.deepEqual(link('HTTPS://www.sympla.com.br/evento'), ['ticket_url_not_https']);
+    assert.deepEqual(link('https://192.168.0.10/ingresso'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://8.8.8.8/'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://[::1]/'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://2130706433/'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://0x7f000001/'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://localhost/ingresso'), ['ticket_url_local_host']);
+    assert.deepEqual(link('https://impressora.local/'), ['ticket_url_local_host']);
+    assert.deepEqual(link('https://intranet/'), ['ticket_url_local_host']);
+    assert.deepEqual(link('https://usuario:senha@sympla.com.br/'), ['ticket_url_has_credentials']);
+    assert.deepEqual(link('https://usuario@sympla.com.br/'), ['ticket_url_has_credentials']);
+    assert.deepEqual(link('https://sympla.com.br/ evento'), ['ticket_url_invalid']);
+    assert.deepEqual(link('nao e link'), ['ticket_url_invalid']);
+    assert.deepEqual(link(`https://site.com.br/${'a'.repeat(481)}`), ['length']);
+    assert.deepEqual(link('https://sympla.com.br/‮'), ['bidi_control']);
+  });
+
+  void it('Instagram: aceita usuario, @usuario e a URL do perfil, e guarda o handle puro em minusculas (um ponto so)', () => {
+    for (const [entrada, esperado] of [
+      ['encontro.dos_caes', 'encontro.dos_caes'],
+      ['@Encontro.Dos_Caes', 'encontro.dos_caes'],
+      ['  @bichu.app  ', 'bichu.app'],
+      ['https://www.instagram.com/Bichu.App/', 'bichu.app'],
+      ['instagram.com/bichu.app?igsh=abc', 'bichu.app'],
+      ['http://m.instagram.com/bichu_app', 'bichu_app'],
+      ['a'.repeat(30), 'a'.repeat(30)],
+    ] as const) {
+      assert.equal(handleDoInstagram(entrada), esperado, entrada);
+      assert.deepEqual(errosDoInstagram('instagram_handle', entrada), [], entrada);
+    }
+    assert.equal(urlDoInstagram('bichu.app'), 'https://www.instagram.com/bichu.app/');
+    assert.equal(urlDoInstagram(null), null);
+  });
+
+  void it('ISCA: @ invalido e recusado (vazio, 31, caractere fora do padrao, URL de outro site)', () => {
+    for (const ruim of ['@', '', 'a'.repeat(31), 'bichu-app', 'bichu app', '@@bichu', 'bichu!', 'https://www.facebook.com/bichu', 'https://instagram.com/']) {
+      assert.deepEqual(errosDoInstagram('instagram_handle', ruim).map((e) => e.code), ['instagram_handle_invalid'], ruim);
+    }
+  });
+
+  void it('ISCA: as observacoes continuam recusando link, inclusive o mesmo link que o ticket_url aceita', () => {
+    for (const texto of ['Ingressos em https://www.sympla.com.br/evento/1', 'Siga @encontro.dos_caes', 'compre em sympla.com.br']) {
+      assert.deepEqual(errosDasObservacoes('notes', texto).map((e) => e.code), ['contact_or_payment_detected'], texto);
+    }
   });
 });

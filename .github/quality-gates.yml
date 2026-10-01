@@ -411,3 +411,65 @@ dispensas:
     motivo: "summary do encontro 180 -> 200 a pedido do cliente (01/10); o CHECK do banco foi alargado sem tocar linha; o app le summary como String sem teto"
     responsavel: squad
     vence_em: 2026-10-15
+
+  # Unidade do preco, 01/10/2026 (ADR-0027 item 22). `per_pet` e
+  # `per_two_people` entram em `EventPriceUnit`, que sai em toda resposta com
+  # o encontro: o oasdiff acusa `response-property-enum-value-added` (ERR) uma
+  # vez por operacao, com os dois valores na mesma chave. Medido com
+  # tufin/oasdiff:v1.32.1: sao exatamente estas dez. A mudanca e ADITIVA
+  # (`per_dog` continua valido, nenhuma linha renomeada), e o app trata valor
+  # desconhecido: `UnidadeDoPreco.porCodigo` (app/lib/api/modelos_rede.dart)
+  # devolve nulo e o selo mostra so o valor -- toda versao do app que le `unit`
+  # e assim desde 7c332f5, quando o campo nasceu. As cinco do painel sao do
+  # backoffice, que passa a oferecer os valores novos.
+  # Vencem em 15/10/2026: depois do merge a base carrega o enum novo.
+  - portao: oasdiff-unidade-nova-list-network-events
+    mudanca: "response-property-enum-value-added listNetworkEvents"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-get-network-event
+    mudanca: "response-property-enum-value-added getNetworkEvent"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-get-network-event-private-details
+    mudanca: "response-property-enum-value-added getNetworkEventPrivateDetails"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-list-admin-network-events
+    mudanca: "response-property-enum-value-added listAdminNetworkEvents"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-get-admin-network-event
+    mudanca: "response-property-enum-value-added getAdminNetworkEvent"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-create-admin-network-event
+    mudanca: "response-property-enum-value-added createAdminNetworkEvent"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-update-admin-network-event
+    mudanca: "response-property-enum-value-added updateAdminNetworkEvent"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-relocate-admin-network-event
+    mudanca: "response-property-enum-value-added relocateAdminNetworkEvent"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-cancel-admin-network-event
+    mudanca: "response-property-enum-value-added cancelAdminNetworkEvent"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-unidade-nova-change-admin-network-event-access
+    mudanca: "response-property-enum-value-added changeAdminNetworkEventAccess"
+    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
+    responsavel: squad
+    vence_em: 2026-10-15
