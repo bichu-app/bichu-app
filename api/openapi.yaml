@@ -340,6 +340,7 @@ x-problem-types:
   - { slug: captcha-rejected,              status: 403, note: "ADR-0027 / D41: login administrativo sem X-Captcha-Token ou com nota abaixo de 0,5. So existe no login do backoffice; no login do tutor a ausencia do token nunca recusa (ADR-0020)" }
   - { slug: method-not-allowed,            status: 405, note: "ADR-0027 item 20.5: metodo que a rota administrativa nao aceita (o `GET` do \"nao fui eu\", que so existe por `POST`). Vem com `Allow`. So na superficie administrativa, e so com `X-Internal-Surface: admin`: sem ele a resposta continua 404 (D33)" }
   - { slug: weak-password,                 status: 422 }
+  - { slug: image-too-small,               status: 422, note: "a imagem de catalogo declarada no pedido de envio e menor que a dimensao minima do proposito (600 x 600 no encontro da Rede, 800 x 800 no produto da Loja). Separado de `validation-failed`: o corpo esta bem formado, e a saida e outra -- escolher outra imagem, nao corrigir o formulario. A dimensao real continua conferida pelo worker nos bytes" }
   - { slug: precondition-required,         status: 428, note: "ADR-0027: escrita sobre recurso existente do backoffice sem `If-Match`" }
   - { slug: rate-limited,                  status: 429 }
   - { slug: internal,                      status: 500 }
@@ -6311,7 +6312,7 @@ paths:
             schema: { $ref: '#/components/schemas/AdminCatalogImageIntentInput' }
             examples:
               capa:
-                value: { purpose: network_event, content_type: image/jpeg, byte_size: 834112 }
+                value: { purpose: network_event, content_type: image/jpeg, byte_size: 834112, width: 1200, height: 900 }
       responses:
         '201':
           description: Politica de envio, valida por 10 minutos.
@@ -6322,6 +6323,7 @@ paths:
         '401': { $ref: '#/components/responses/AdminUnauthorized' }
         '403': { $ref: '#/components/responses/AdminForbidden' }
         '415': { $ref: '#/components/responses/UnsupportedMedia' }
+        '422': { $ref: '#/components/responses/ImageTooSmall' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
 components:
@@ -6824,6 +6826,15 @@ components:
                   - field: species
                     code: enum
                     message: Valor precisa ser dog, cat ou other.
+    ImageTooSmall:
+      description: |
+        A imagem declarada e menor que a dimensao minima do proposito: 600 x
+        600 pixels no encontro da `Rede`, 800 x 800 no produto da `Loja`.
+        `errors[]` traz `width` e/ou `height` com `code: minimum`. Nada foi
+        assinado: escolha outra imagem.
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
     WeakPassword:
       description: |
         Senha fora da politica. `errors[].code` diz qual regra falhou, para que
@@ -8727,7 +8738,10 @@ components:
       properties:
         slug: { type: string }
         title: { type: string, maxLength: 120 }
-        summary: { type: string, maxLength: 180 }
+        summary:
+          type: string
+          maxLength: 200
+          description: A descricao do encontro, ate 200 caracteres (pedido do cliente de 01/10; antes, 180).
         place: { $ref: '#/components/schemas/NetworkEventPlace' }
         starts_at:
           type: string
@@ -9229,10 +9243,25 @@ components:
           maximum: 5242880
           description: |
             Ate 5 MiB, o numero que o painel mostra. Dimensao minima: 800 x 800
-            pixels para `store_item`, 1600 x 900 para `network_event`. A
-            dimensao so e conhecida depois do envio: o worker a confere nos
-            bytes e marca a imagem `rejected` com o motivo, e o painel mostra o
-            erro na miniatura.
+            pixels para `store_item`, 600 x 600 para `network_event` (pedido do
+            cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
+            DECLARADA, em `width`/`height` deste pedido, recusada aqui com
+            `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
+            faz nos bytes e que marca a imagem `rejected` com o motivo, porque
+            a declarada e do navegador e pode mentir.
+        width:
+          type: integer
+          minimum: 1
+          maximum: 20000
+          description: |
+            Largura em pixels, como o navegador a le do arquivo antes de
+            enviar. Opcional (o painel atual nao a manda); quando vem, abaixo
+            da minima do `purpose` recusa com `422` (`image-too-small`).
+        height:
+          type: integer
+          minimum: 1
+          maximum: 20000
+          description: Altura em pixels. Mesma regra de `width`.
 
     AdminStorePartnerInput:
       type: object
@@ -9501,7 +9530,14 @@ components:
             todo mundo, e um `slug` digitado como `caminhada-rua-das-flores`
             entregaria o lugar pelo identificador.
         title: { type: string, minLength: 2, maxLength: 120 }
-        summary: { type: string, minLength: 2, maxLength: 180 }
+        summary:
+          type: string
+          minLength: 2
+          maxLength: 200
+          description: |
+            A descricao do encontro ("Descricao" no painel), ate 200 caracteres.
+            O teto vale so na escrita: o `CHECK` do banco foi alargado de 180
+            para 200 sem tocar linha existente.
         place: { $ref: '#/components/schemas/AdminNetworkEventPlaceInput' }
         starts_at: { type: string, format: date-time }
         ends_at: { type: string, format: date-time }
@@ -9539,7 +9575,7 @@ components:
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
         title: { type: string, minLength: 2, maxLength: 120 }
-        summary: { type: string, minLength: 2, maxLength: 180 }
+        summary: { type: string, minLength: 2, maxLength: 200 }
         images: { $ref: '#/components/schemas/CatalogImagesInput' }
         accepted_sizes: { $ref: '#/components/schemas/NetworkEventAcceptedSizes' }
         dog_age: { $ref: '#/components/schemas/NetworkEventDogAge' }

@@ -374,3 +374,24 @@ dispensas:
     motivo: "faixa do territorio em location do achador sem conta (GeoPoint, BICHUS-41); operacao sem implementacao em development"
     responsavel: squad
     vence_em: 2026-09-30
+
+  # Ajustes do encontro da Rede, 01/10/2026 (pedido do cliente, item 1). A
+  # descricao do encontro (`summary`) passa de 180 para 200 caracteres, e o
+  # `maxLength` da RESPOSTA sobe junto: o servidor passa a devolver ate 200, e
+  # um contrato que dissesse 180 mentiria. Medido com tufin/oasdiff:v1.32.1:
+  # sao exatamente estas duas em nivel ERR (a de `listNearbyNetworkEvents` sai
+  # em WARN, pelo `allOf`). O consumidor que importa, o app
+  # (`app/lib/api/modelos_rede.dart`), le `summary` como `String` sem teto, e o
+  # painel ja manda pela escrita, que e request e nao quebra.
+  # Vencem em 15/10/2026: depois do merge a base carrega o contrato novo e a
+  # quebra deixa de aparecer; as entradas devem sair.
+  - portao: oasdiff-descricao-do-encontro-ate-200-na-agenda
+    mudanca: "response-property-max-length-increased listNetworkEvents"
+    motivo: "summary do encontro 180 -> 200 a pedido do cliente (01/10); o CHECK do banco foi alargado sem tocar linha; o app le summary como String sem teto"
+    responsavel: squad
+    vence_em: 2026-10-15
+  - portao: oasdiff-descricao-do-encontro-ate-200-no-detalhe
+    mudanca: "response-property-max-length-increased getNetworkEvent"
+    motivo: "summary do encontro 180 -> 200 a pedido do cliente (01/10); o CHECK do banco foi alargado sem tocar linha; o app le summary como String sem teto"
+    responsavel: squad
+    vence_em: 2026-10-15

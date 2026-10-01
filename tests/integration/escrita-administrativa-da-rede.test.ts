@@ -247,6 +247,21 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     await sql`update network_events set created_by_admin_id = null where id = ${id}::uuid`.execute(banco.db);
   });
 
+  void it('descricao (01/10): 200 caracteres chegam ao banco pela escrita; ISCA: 201 viola o CHECK alargado', async () => {
+    const duzentos = 'd'.repeat(200);
+    const criado = await criar({ summary: duzentos });
+    const id = await idDoEncontro(criado.recurso.slug);
+    const linha = await banco.db.selectFrom('network_events').select('summary').where('id', '=', id).executeTakeFirstOrThrow();
+    assert.equal(linha.summary, duzentos);
+    const demais = await sql`update network_events set summary = ${'d'.repeat(201)} where id = ${id}::uuid`
+      .execute(banco.db)
+      .catch((e: unknown) => e);
+    assert.equal((demais as { constraint?: string }).constraint, 'network_events_resumo_tem_tamanho');
+    // O caso de uso recusa antes do banco, com 400 e nao 23514.
+    const pelaEscrita = await criar({ summary: 'd'.repeat(201) }).catch((e: unknown) => e);
+    assert.equal(codigo(pelaEscrita), 'length');
+  });
+
   void it('ISCA: com a trilha falhando, o encontro NAO e gravado', async () => {
     const quebrada: TrilhaTransacional = { recordIn: () => Promise.reject(new Error('trilha fora do ar')) };
     const titulo = `Sem trilha ${sufixo()}`;

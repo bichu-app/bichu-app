@@ -460,6 +460,32 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.deepEqual(codigos(pago.corpo), ['admission_incomplete']);
   });
 
+  void it('descricao (01/10): 200 caracteres passam na criacao e na edicao; ISCA: 201 e recusada nas duas', async () => {
+    const duzentos = 'a'.repeat(200);
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, summary: duzentos } });
+    assert.equal(criado.status, 201, criado.bruto);
+    assert.equal(criado.corpo['summary'], duzentos);
+
+    const demais = await chamar(b, 'POST', '/admin/network/events', {
+      corpo: { ...PRACA, title: 'Outro encontro', summary: 'a'.repeat(201) },
+    });
+    assert.equal(demais.status, 400, demais.bruto);
+    assert.equal(tipo(demais.corpo), 'validation-failed');
+
+    const slug = String(criado.corpo['slug']);
+    const editado = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
+      corpo: { summary: 'b'.repeat(181) },
+      ifMatch: '"1"',
+    });
+    assert.equal(editado.status, 200, editado.bruto);
+    const recusado = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
+      corpo: { summary: 'b'.repeat(201) },
+      ifMatch: '"2"',
+    });
+    assert.equal(recusado.status, 400, recusado.bruto);
+    assert.equal((await chamar(b, 'GET', `/admin/network/events/${slug}`)).corpo['summary'], 'b'.repeat(181));
+  });
+
   void it('edicao sem If-Match: 428; com versao velha: 412, e nada muda', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
     const slug = String(criado.corpo['slug']);

@@ -76,6 +76,13 @@ import {
   type TransacaoDaRede,
 } from '../ports/rede-administrativa.js';
 
+/**
+ * A descricao do encontro (`summary`, "Descricao" no painel). Era 180, o mesmo
+ * numero de `store_items.summary`; passou a 200 a pedido do cliente (01/10). O
+ * `CHECK` do banco foi alargado na `20261001000001`; a Loja continua em 180.
+ */
+export const TETO_DA_DESCRICAO = 200;
+
 /** Quem escreve, para a trilha. Nunca o e-mail. */
 export interface Autor {
   /** `admin_accounts.id` (ADR-0027 item 20). Nunca um `UserId`. */
@@ -368,7 +375,7 @@ export class RedeAdministrativa {
     const entrada = entradaDoCorpo(corpo.admission);
     const erros: ProblemFieldError[] = [
       ...errosDeTexto('title', corpo.title, 2, 120),
-      ...errosDeTexto('summary', corpo.summary, 2, 180),
+      ...errosDeTexto('summary', corpo.summary, 2, TETO_DA_DESCRICAO),
       ...errosDoLugar(corpo.place),
       ...errosDoHorario(startsAt, endsAt, timeZone, agora),
       ...errosDaGaleria(corpo.images),
@@ -476,7 +483,7 @@ export class RedeAdministrativa {
     const agora = this.agora();
     const erros: ProblemFieldError[] = [
       ...(patch.title === undefined ? [] : errosDeTexto('title', patch.title, 2, 120)),
-      ...(patch.summary === undefined ? [] : errosDeTexto('summary', patch.summary, 2, 180)),
+      ...(patch.summary === undefined ? [] : errosDeTexto('summary', patch.summary, 2, TETO_DA_DESCRICAO)),
       ...errosDaGaleria(patch.images),
       ...errosDosPortes(patch.accepted_sizes),
       ...(patch.notes === undefined || patch.notes === null ? [] : errosDasObservacoes('notes', patch.notes)),

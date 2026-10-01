@@ -4681,6 +4681,7 @@ export interface components {
         NetworkEventPublic: {
             slug: string;
             title: string;
+            /** @description A descricao do encontro, ate 200 caracteres (pedido do cliente de 01/10; antes, 180). */
             summary: string;
             place: components["schemas"]["NetworkEventPlace"];
             /**
@@ -5056,12 +5057,22 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp";
             /**
              * @description Ate 5 MiB, o numero que o painel mostra. Dimensao minima: 800 x 800
-             *     pixels para `store_item`, 1600 x 900 para `network_event`. A
-             *     dimensao so e conhecida depois do envio: o worker a confere nos
-             *     bytes e marca a imagem `rejected` com o motivo, e o painel mostra o
-             *     erro na miniatura.
+             *     pixels para `store_item`, 600 x 600 para `network_event` (pedido do
+             *     cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
+             *     DECLARADA, em `width`/`height` deste pedido, recusada aqui com
+             *     `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
+             *     faz nos bytes e que marca a imagem `rejected` com o motivo, porque
+             *     a declarada e do navegador e pode mentir.
              */
             byte_size: number;
+            /**
+             * @description Largura em pixels, como o navegador a le do arquivo antes de
+             *     enviar. Opcional (o painel atual nao a manda); quando vem, abaixo
+             *     da minima do `purpose` recusa com `422` (`image-too-small`).
+             */
+            width?: number;
+            /** @description Altura em pixels. Mesma regra de `width`. */
+            height?: number;
         };
         AdminStorePartnerInput: {
             slug: components["schemas"]["Slug"];
@@ -5255,6 +5266,11 @@ export interface components {
              */
             slug?: components["schemas"]["Slug"];
             title: string;
+            /**
+             * @description A descricao do encontro ("Descricao" no painel), ate 200 caracteres.
+             *     O teto vale so na escrita: o `CHECK` do banco foi alargado de 180
+             *     para 200 sem tocar linha existente.
+             */
             summary: string;
             place: components["schemas"]["AdminNetworkEventPlaceInput"];
             /** Format: date-time */
@@ -5746,6 +5762,20 @@ export interface components {
         };
         /** @description Corpo ou parametro invalido. */
         ValidationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description A imagem declarada e menor que a dimensao minima do proposito: 600 x
+         *     600 pixels no encontro da `Rede`, 800 x 800 no produto da `Loja`.
+         *     `errors[]` traz `width` e/ou `height` com `code: minimum`. Nada foi
+         *     assinado: escolha outra imagem.
+         */
+        ImageTooSmall: {
             headers: {
                 [name: string]: unknown;
             };
@@ -10542,6 +10572,7 @@ export interface operations {
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
             429: components["responses"]["TooManyRequests"];
         };
     };

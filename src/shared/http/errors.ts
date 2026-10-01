@@ -112,6 +112,17 @@ export const problemas = {
       nextAction: 'sign_in',
     }),
 
+  /**
+   * 422. A dimensao DECLARADA no pedido de envio de imagem de catalogo e menor
+   * que a minima do proposito. Recusa antes de assinar; a dimensao real
+   * continua conferida pelo worker nos bytes.
+   */
+  imagemPequenaDemais: (minima: { largura: number; altura: number }, errors: readonly ProblemFieldError[]): AppError =>
+    new AppError('image-too-small', 'Essa imagem é pequena demais', {
+      detail: `A imagem precisa ter pelo menos ${String(minima.largura)} x ${String(minima.altura)} pixels. Escolha outra.`,
+      errors,
+    }),
+
   senhaFraca: (errors: readonly ProblemFieldError[]): AppError =>
     new AppError('weak-password', 'Escolha uma senha mais longa', {
       detail: 'A senha precisa de pelo menos 10 caracteres. Uma frase que só você lembra funciona bem.',
