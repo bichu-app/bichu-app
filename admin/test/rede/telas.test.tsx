@@ -335,6 +335,30 @@ describe('Rede: formulário novo', () => {
     expect(duble.encontros.get('k3Jx9QpL2mZt7VwR4cYb')?.admission.price?.unit).toBe('per_dog');
   });
 
+  it('links: o Instagram mostra o @ como vai aparecer, e os dois vão na criação', async () => {
+    const { duble, usuario } = montar('/rede/novo');
+    await preencherObrigatorios(usuario);
+    await usuario.type(screen.getByLabelText('Link do convite'), 'https://sympla.com.br/e/1');
+    await usuario.type(screen.getByLabelText('Instagram para dúvidas'), 'https://www.instagram.com/Org.Pet/');
+    expect(screen.getByText('Aparece no app como @org.pet.')).toBeInTheDocument();
+    expect(screen.getByText('Mudar um destes links avisa todos os administradores por e-mail.')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    const corpo = escritas(duble, 'POST', /\/admin\/network\/events$/).at(-1)?.corpo as { ticket_url?: string; instagram_handle?: string };
+    expect(corpo.ticket_url).toBe('https://sympla.com.br/e/1');
+    expect(corpo.instagram_handle).toBe('org.pet');
+  });
+
+  it('link do convite em http não sai do painel', async () => {
+    const { duble, usuario } = montar('/rede/novo');
+    await preencherObrigatorios(usuario);
+    await usuario.type(screen.getByLabelText('Link do convite'), 'http://sympla.com.br/e/1');
+    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
+    expect(screen.getByLabelText('Link do convite')).toHaveAccessibleDescription(/^O link precisa começar com https:\/\/\./);
+    expect(escritas(duble, 'POST', /\/admin\/network\/events$/)).toHaveLength(0);
+  });
+
   it('fim antes do início e campos vazios dão as mensagens aprovadas', async () => {
     const { duble, usuario } = montar('/rede/novo');
     await usuario.type(await screen.findByLabelText('Início *'), '2026-12-05T09:00');

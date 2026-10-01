@@ -40,6 +40,7 @@ import {
   type EstadoDoFormulario,
   type PlanoDeEdicao,
 } from '../dominio/formulario.ts';
+import { handleDoInstagram, LIMITE_DO_LINK_DO_CONVITE } from '../dominio/links.ts';
 import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES, UNIDADES_OFERECIDAS, unidadeComoAparece } from '../dominio/rotulos.ts';
 import type { Encontro, EscopoDeReautenticacao } from '../dominio/tipos.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
@@ -64,6 +65,8 @@ const ROTULO_DO_CAMPO: Partial<Record<Campo, string>> = {
   fim: 'Fim',
   local: 'Nome do lugar',
   endereco: 'Endereço',
+  linkDoConvite: 'Link do convite',
+  instagram: 'Instagram para dúvidas',
   bairro: 'Bairro',
   cidade: 'Cidade',
   valor: 'Valor em reais',
@@ -473,6 +476,23 @@ export default function FormularioDoEncontro() {
         </div>
       </fieldset>
 
+      <h2 className={`t-title ${estilos.secao ?? ''}`}>Links</h2>
+      <p className="t-body-sm c-sec">Mudar um destes links avisa todos os administradores por e-mail.</p>
+      <div className="row2">
+        <CampoDeTexto
+          id="enc-linkDoConvite"
+          rotulo="Link do convite"
+          tipo="url"
+          modoDeEntrada="url"
+          valor={f.linkDoConvite}
+          aoMudar={(v) => mudar('linkDoConvite', v)}
+          maximo={LIMITE_DO_LINK_DO_CONVITE}
+          ajuda="Onde as pessoas se inscrevem ou compram o ingresso. Começa com https://. Opcional."
+          erro={erroDe('linkDoConvite')}
+        />
+        <CampoDoInstagram valor={f.instagram} aoMudar={(v) => mudar('instagram', v)} erro={erroDe('instagram')} />
+      </div>
+
       <GrupoDeCaixas
         rotulo="O que levar"
         ajuda="Marque o que aparece no app."
@@ -662,6 +682,40 @@ function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v:
       )}
       <span className="help contador" id={`${id}-contador`}>
         {[...valor].length}/{LIMITE_DO_ENDERECO}
+      </span>
+    </div>
+  );
+}
+
+/** `instagram_handle`: aceita `@usuario`, `usuario` ou a URL do perfil, e mostra o @ como vai ficar. */
+function CampoDoInstagram({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
+  const id = 'enc-instagram';
+  const handle = valor.trim() ? handleDoInstagram(valor) : null;
+  return (
+    <div className={erro ? 'field err' : 'field'}>
+      <label htmlFor={id}>Instagram para dúvidas</label>
+      <input
+        id={id}
+        className="input"
+        autoComplete="off"
+        maxLength={60}
+        value={valor}
+        onChange={(e) => aoMudar(e.target.value)}
+        aria-invalid={erro ? true : undefined}
+        aria-describedby={`${id}-ajuda ${id}-como-fica`}
+      />
+      {erro ? (
+        <span className="help err" id={`${id}-ajuda`} aria-live="polite">
+          <Icone nome="error" tamanho="s20" />
+          {erro}
+        </span>
+      ) : (
+        <span className="help" id={`${id}-ajuda`}>
+          O @ de quem responde dúvidas sobre o encontro, ou o link do perfil. Opcional.
+        </span>
+      )}
+      <span className="help" id={`${id}-como-fica`} aria-live="polite">
+        {handle ? `Aparece no app como @${handle}.` : ''}
       </span>
     </div>
   );

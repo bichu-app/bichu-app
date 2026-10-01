@@ -277,6 +277,28 @@ describe('plano de edição (as três operações)', () => {
     expect(corpoDaMudanca(comEndereco, soHorario, planoDeEdicao(comEndereco, soHorario)).join(' ')).not.toMatch(/O endereço continua/);
   });
 
+  it('links: vão na criação e no PATCH (sem senha), com o @ normalizado; vazio tira', () => {
+    const corpo = montarCriacao({ ...preenchido(), linkDoConvite: ' https://sympla.com.br/e/1 ', instagram: 'https://www.instagram.com/Org.Pet/' });
+    expect(corpo.ticket_url).toBe('https://sympla.com.br/e/1');
+    expect(corpo.instagram_handle).toBe('org.pet');
+    expect(montarCriacao(preenchido())).not.toHaveProperty('ticket_url');
+    const comLinks = encontroDeExemplo({ ticket_url: 'https://sympla.com.br/e/1', instagram_handle: 'org.pet', instagram_url: 'https://www.instagram.com/org.pet/' });
+    const f = formularioDoEncontro(comLinks);
+    expect(f.instagram).toBe('@org.pet');
+    expect(planoDeEdicao(comLinks, f).patch).toBeNull();
+    // Escrever o mesmo perfil de outro jeito nao e mudanca.
+    expect(planoDeEdicao(comLinks, { ...f, instagram: 'instagram.com/ORG.PET' }).patch).toBeNull();
+    expect(planoDeEdicao(comLinks, { ...f, linkDoConvite: '', instagram: '@outra' }).patch).toEqual({ ticket_url: null, instagram_handle: 'outra' });
+    expect(planoDeEdicao(comLinks, { ...f, linkDoConvite: 'https://outro.com.br/x' }).mudanca).toBeNull();
+  });
+  it('links inválidos param no painel com o motivo', () => {
+    const erros = validar({ ...preenchido(), linkDoConvite: 'http://exemplo.com.br', instagram: '@com espaco' }, 'novo', AGORA);
+    expect(erros.map((e) => [e.campo, e.mensagem])).toEqual([
+      ['linkDoConvite', 'O link precisa começar com https://.'],
+      ['instagram', 'Use o @ do Instagram (até 30 letras, números, ponto ou sublinhado) ou o link do perfil.'],
+    ]);
+  });
+
   it('só o horário: o lugar não vai, e o ponto que existir continua', () => {
     const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00' };
     const plano = planoDeEdicao(original, f);
