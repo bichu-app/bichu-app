@@ -27,6 +27,8 @@ import type {
   UnidadeDoValor,
   Visibilidade,
 } from './tipos.ts';
+import { handleDoInstagram, MENSAGEM_DO_INSTAGRAM, MENSAGEM_DO_LINK, recusaDoLinkDoConvite } from './links.ts';
+import { unidadeComoAparece } from './rotulos.ts';
 import { centavosDoTexto, textoDosCentavos, valorComoOAppMostra } from './valor.ts';
 
 export const LIMITE_DE_FOTOS = 8;
@@ -96,6 +98,10 @@ export interface EstadoDoFormulario {
   local: string;
   /** Endereco por extenso (`place.street_address`, 01/10), opcional: 5 a 200 code points. */
   endereco: string;
+  /** `ticket_url`, opcional (ADR-0027 item 22). */
+  linkDoConvite: string;
+  /** `instagram_handle`, opcional: `@usuario`, `usuario` ou a URL do perfil. */
+  instagram: string;
   bairro: string;
   cidade: string;
   uf: string;
@@ -122,6 +128,8 @@ export function formularioVazio(): EstadoDoFormulario {
     fim: '',
     local: '',
     endereco: '',
+    linkDoConvite: '',
+    instagram: '',
     bairro: '',
     cidade: '',
     uf: 'SP',
@@ -129,7 +137,7 @@ export function formularioVazio(): EstadoDoFormulario {
     visibilidade: 'public',
     pago: false,
     valor: '',
-    unidade: 'per_dog',
+    unidade: 'per_pet',
     levar: [],
     observacoes: '',
     portes: ['P', 'M', 'G', 'GG'],
@@ -150,6 +158,8 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     fim: e.ends_at ? campoDoInstante(e.ends_at, fuso) : '',
     local: e.place.place_name,
     endereco: e.street_address ?? '',
+    linkDoConvite: e.ticket_url ?? '',
+    instagram: e.instagram_handle ? `@${e.instagram_handle}` : '',
     bairro: e.place.neighborhood,
     cidade: e.place.city,
     uf: e.place.state,
@@ -187,6 +197,8 @@ export type Campo =
   | 'fim'
   | 'local'
   | 'endereco'
+  | 'linkDoConvite'
+  | 'instagram'
   | 'bairro'
   | 'cidade'
   | 'valor'
@@ -254,6 +266,11 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
   if (f.endereco.trim() && !entre(f.endereco, 5, LIMITE_DO_ENDERECO)) {
     e('endereco', 'Endereço', 'Escreva o endereço com pelo menos 5 caracteres, ou deixe em branco.');
   }
+  if (f.linkDoConvite.trim()) {
+    const recusa = recusaDoLinkDoConvite(f.linkDoConvite);
+    if (recusa) e('linkDoConvite', 'Link do convite ou ingresso', MENSAGEM_DO_LINK[recusa]);
+  }
+  if (f.instagram.trim() && handleDoInstagram(f.instagram) === null) e('instagram', 'Instagram para dúvidas', MENSAGEM_DO_INSTAGRAM);
   if (!entre(f.bairro, 2, 60)) e('bairro', 'Bairro', 'Informe o bairro.');
   if (!entre(f.cidade, 2, 60)) e('cidade', 'Cidade', 'Informe a cidade.');
 
@@ -291,7 +308,7 @@ function acesso(f: EstadoDoFormulario): NonNullable<EncontroInput['admission']> 
   if (!f.pago) return { kind: 'free' };
   const amount = centavosDoTexto(f.valor);
   if (amount === null) throw new Error('valor invalido chegou a montagem; valide antes');
-  return { kind: 'paid', price: { amount, currency: 'BRL', unit: f.unidade } };
+  return { kind: 'paid', price: { amount, currency: 'BRL', unit: unidadeComoAparece(f.unidade) } };
 }
 
 /**
@@ -322,6 +339,8 @@ export function montarCriacao(f: EstadoDoFormulario): EncontroInput {
     bring_items: [...f.levar],
     ...(notas ? { notes: notas } : {}),
     ...(f.endereco.trim() ? { street_address: f.endereco.trim() } : {}),
+    ...(f.linkDoConvite.trim() ? { ticket_url: f.linkDoConvite.trim() } : {}),
+    ...(handleDoInstagram(f.instagram) ? { instagram_handle: handleDoInstagram(f.instagram) ?? '' } : {}),
   };
 }
 
@@ -355,6 +374,11 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
   if (!mesmoConjunto(f.levar, original.bring_items)) patch.bring_items = [...f.levar];
   const notas = f.observacoes.trim() || null;
   if (notas !== (original.notes ?? null)) patch.notes = notas;
+  // Links vao no PATCH, sem senha; o servidor avisa os administradores por e-mail.
+  const link = f.linkDoConvite.trim() || null;
+  if (link !== (original.ticket_url ?? null)) patch.ticket_url = link;
+  const handle = f.instagram.trim() ? handleDoInstagram(f.instagram) : null;
+  if (handle !== (original.instagram_handle ?? null)) patch.instagram_handle = handle;
   if (!mesmoConjunto(f.portes, original.accepted_sizes)) patch.accepted_sizes = [...f.portes];
   if (f.idade !== original.dog_age) patch.dog_age = f.idade;
   if (f.vacina !== original.vaccination_required) patch.vaccination_required = f.vacina;
@@ -400,7 +424,10 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
   const amountNovo = f.pago ? centavosDoTexto(f.valor) : null;
   const custoMudou =
     f.pago !== (original.admission.kind === 'paid') ||
-    (f.pago && (amountNovo !== precoAntigo?.amount || f.unidade !== precoAntigo?.unit));
+    // `per_dog` antigo e `per_pet` sao a mesma unidade para quem le: so muda se o
+    // valor ou a unidade mudarem de verdade, e entao vai `per_pet`, nunca `per_dog`.
+    (f.pago &&
+      (amountNovo !== precoAntigo?.amount || !precoAntigo || unidadeComoAparece(f.unidade) !== unidadeComoAparece(precoAntigo.unit)));
   if (custoMudou) acessoNovo.admission = acesso(f);
 
   const ordem: ParteDoLugar[] = ['data', 'horário', 'local'];
@@ -452,15 +479,24 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
     }
   }
   if (plano.acesso) {
-    const partes: string[] = [];
-    if (plano.acesso.visibility) partes.push(plano.acesso.visibility === 'private' ? 'agora é privado' : 'agora é público');
+    // O que muda no ENCONTRO ("agora e privado", "agora e pago") e o que muda no
+    // VALOR sao sujeitos diferentes: "O encontro o valor muda..." era o defeito (QA r5).
+    const doEncontro: string[] = [];
+    let novoValor: string | null = null;
+    if (plano.acesso.visibility) doEncontro.push(plano.acesso.visibility === 'private' ? 'agora é privado' : 'agora é público');
     const adm = plano.acesso.admission;
     if (adm) {
       const eraPago = original.admission.kind === 'paid';
-      if (adm.kind === 'paid' && adm.price && eraPago) partes.push(`o valor muda para ${valorComoOAppMostra(adm.price.amount, adm.price.unit)}`);
-      else partes.push(adm.kind === 'paid' ? 'agora é pago' : 'agora é gratuito');
+      if (adm.kind === 'paid' && adm.price && eraPago) novoValor = valorComoOAppMostra(adm.price.amount, adm.price.unit);
+      else doEncontro.push(adm.kind === 'paid' ? 'agora é pago' : 'agora é gratuito');
     }
-    frases.push(`O encontro ${listaEmPortugues(partes)}, e o app mostra isso na hora.`);
+    if (doEncontro.length && novoValor) {
+      frases.push(`O encontro ${listaEmPortugues(doEncontro)}, e o valor muda para ${novoValor}. O app mostra isso na hora.`);
+    } else if (novoValor) {
+      frases.push(`O valor do encontro muda para ${novoValor}, e o app mostra isso na hora.`);
+    } else {
+      frases.push(`O encontro ${listaEmPortugues(doEncontro)}, e o app mostra isso na hora.`);
+    }
     if (plano.acesso.visibility === 'private') frases.push('O link antigo do encontro para de funcionar.');
   }
   // UX 30, B3 e B11: o aviso aos administradores e uma frase so, no fim, e nao uma por mudanca.

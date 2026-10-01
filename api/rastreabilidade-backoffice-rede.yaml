@@ -360,9 +360,12 @@ telas:
           - req:vaccination_required
           - req:fenced_off_leash_area
           - req:amenities
-          - enum:EventPriceUnit.per_dog
+          - enum:EventPriceUnit.per_pet
           - enum:EventPriceUnit.per_person
           - enum:EventPriceUnit.per_pair
+          - enum:EventPriceUnit.per_two_people
+          - req:ticket_url
+          - req:instagram_handle
           - enum:PetSize.P
           - enum:PetSize.M
           - enum:PetSize.G
@@ -402,6 +405,8 @@ telas:
           - req:vaccination_required
           - req:fenced_off_leash_area
           - req:amenities
+          - req:ticket_url
+          - req:instagram_handle
           - header:If-Match
       - operationId: relocateAdminNetworkEvent
         situacao: contrato
@@ -585,8 +590,10 @@ correspondencias:
     um_para_um: true
     valores: { any: Qualquer idade, from_4_months: A partir de 4 meses, from_1_year: A partir de 1 ano, up_to_1_year: Até 1 ano }
   EventPriceUnit:
-    um_para_um: true
-    valores: { per_dog: por cão, per_person: por pessoa, per_pair: por dupla }
+    um_para_um: false
+    valores: { per_dog: por pet, per_pet: por pet, per_person: por humano, per_pair: por dupla (humano + pet), per_two_people: por dupla de humanos }
+    nota: "01/10: `per_dog` e legado (ainda valido, exibido como 'por pet', fora da lista do painel); por isso a correspondencia nao e 1 para 1. Aposentadoria no ADR-0027 item 22."
+
   NetworkEventBringItem:
     um_para_um: true
     valores: { water: Água, water_bowl: Pote de água, leash: Guia, poop_bags: Saquinho, treats: Petisco, towel: Toalha, vaccination_card: Carteira de vacinação, toy: Brinquedo }

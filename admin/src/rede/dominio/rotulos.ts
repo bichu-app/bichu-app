@@ -50,11 +50,26 @@ export const ESTRUTURAS: Record<Estrutura, string> = {
   parking_nearby: 'Estacionamento próximo',
 };
 
+/**
+ * A que o preco se refere, na frase que o painel e a previa escrevem (decisao
+ * do cliente de 01/10). `per_dog` e legado: o servidor ainda o devolve nos
+ * encontros antigos, e ele aparece como "por pet".
+ */
 export const UNIDADES: Record<UnidadeDoValor, string> = {
-  per_dog: 'por cão',
-  per_person: 'por pessoa',
-  per_pair: 'por dupla',
+  per_pet: 'por pet',
+  per_person: 'por humano',
+  per_pair: 'por dupla (1 humano + 1 pet)',
+  per_two_people: 'por dupla (2 humanos)',
+  per_dog: 'por pet',
 };
+
+/** O que o painel oferece. `per_dog` nao entra: so aparece, como "por pet", em encontro antigo. */
+export const UNIDADES_OFERECIDAS = ['per_pet', 'per_person', 'per_pair', 'per_two_people'] as const satisfies readonly UnidadeDoValor[];
+
+/** `per_dog` e `per_pet` sao a mesma coisa para quem le: compara pelo que a pessoa ve. */
+export function unidadeComoAparece(u: UnidadeDoValor): Exclude<UnidadeDoValor, 'per_dog'> {
+  return u === 'per_dog' ? 'per_pet' : u;
+}
 
 export const ORDENS: Record<OrdemDaLista, string> = {
   agenda: 'Data do encontro, próximos primeiro',

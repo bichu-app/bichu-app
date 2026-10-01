@@ -134,6 +134,7 @@ function bancada(): Bancada {
     },
     clock: { now: () => AGORA },
     urlDeMidia: (chave) => `https://midia.bichu.test/${chave}`,
+    baseDoPerfilDoInstagram: 'https://perfil.exemplo.test',
     registrarOcorrencia: () => undefined,
   });
   const contrato = carregarContrato(resolve(process.cwd(), 'api/openapi.yaml'));
@@ -543,6 +544,65 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     });
     assert.equal(tirado.status, 200, tirado.bruto);
     assert.equal(tirado.corpo['street_address'], null);
+  });
+
+  void it('links (01/10): criar com link e @ (ou URL do perfil); o painel le o handle puro e a URL montada', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', {
+      corpo: { ...PRACA, ticket_url: 'https://ingressos.exemplo.br/evento/1', instagram_handle: 'www.instagram.com/Encontro.Dos_Caes/' },
+    });
+    assert.equal(criado.status, 201, criado.bruto);
+    assert.equal(criado.corpo['ticket_url'], 'https://ingressos.exemplo.br/evento/1');
+    assert.equal(criado.corpo['instagram_handle'], 'encontro.dos_caes');
+    assert.equal(criado.corpo['instagram_url'], 'https://perfil.exemplo.test/encontro.dos_caes/');
+
+    for (const [corpo, codigo] of [
+      [{ ticket_url: 'javascript:alert(1)' }, null],
+      [{ ticket_url: 'http://ingressos.exemplo.br/evento/1' }, null],
+      [{ ticket_url: 'https://203.0.113.10/ingresso' }, 'ticket_url_ip_literal'],
+      [{ instagram_handle: '@bichu-app' }, 'instagram_handle_invalid'],
+      [{ notes: 'Ingressos em https://ingressos.exemplo.br/evento/1' }, 'contact_or_payment_detected'],
+    ] as const) {
+      const r = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, title: `Isca ${JSON.stringify(corpo).length}`, ...corpo } });
+      assert.equal(r.status, 400, `${JSON.stringify(corpo)}: ${r.bruto}`);
+      if (codigo !== null) assert.deepEqual(codigos(r.corpo), [codigo], JSON.stringify(corpo));
+    }
+  });
+
+  void it('links (01/10): trocar o link pelo PATCH avisa todos os administradores com o antes e o depois; null tira', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, ticket_url: 'https://ingressos.exemplo.br/evento/1' } });
+    const slug = String(criado.corpo['slug']);
+    const avisosAntes = b.avisos.length;
+    const trocado = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
+      corpo: { ticket_url: 'https://golpe.exemplo.br/pague', instagram_handle: '@bichu.app' },
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(trocado.status, 200, trocado.bruto);
+    assert.equal(b.avisos.length, avisosAntes + 1);
+    const aviso = b.avisos.at(-1)?.linhas.join('\n') ?? '';
+    assert.match(aviso, /Link de ingresso antes: https:\/\/ingressos\.exemplo\.br\/evento\/1/);
+    assert.match(aviso, /Link de ingresso depois: https:\/\/golpe\.exemplo\.br\/pague/);
+    assert.match(aviso, /Instagram depois: @bichu\.app/);
+
+    const tirado = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
+      corpo: { ticket_url: null, instagram_handle: null },
+      ifMatch: trocado.etag ?? '',
+    });
+    assert.equal(tirado.corpo['ticket_url'], null);
+    assert.equal(tirado.corpo['instagram_url'], null);
+  });
+
+  void it('unidade do preco (01/10): per_pet e per_two_people entram; per_dog legado continua aceito', async () => {
+    for (const unit of ['per_pet', 'per_person', 'per_pair', 'per_two_people', 'per_dog']) {
+      const r = await chamar(b, 'POST', '/admin/network/events', {
+        corpo: { ...PRACA, title: `Pago ${unit}`, admission: { kind: 'paid', price: { amount: 1500, currency: 'BRL', unit } } },
+      });
+      assert.equal(r.status, 201, `${unit}: ${r.bruto}`);
+      assert.deepEqual(r.corpo['admission'], { kind: 'paid', price: { amount: 1500, currency: 'BRL', unit } });
+    }
+    const desconhecida = await chamar(b, 'POST', '/admin/network/events', {
+      corpo: { ...PRACA, title: 'Pago x', admission: { kind: 'paid', price: { amount: 1500, currency: 'BRL', unit: 'per_cat' } } },
+    });
+    assert.equal(desconhecida.status, 400);
   });
 
   void it('edicao sem If-Match: 428; com versao velha: 412, e nada muda', async () => {

@@ -71,9 +71,14 @@ describe('valor', () => {
     }
   });
   it('escreve como o app', () => {
-    expect(valorComoOAppMostra(1500, 'per_dog')).toBe('R$ 15 por cão');
-    expect(valorComoOAppMostra(1550, 'per_pair')).toBe('R$ 15,50 por dupla');
-    expect(valorComoOAppMostra(125000, 'per_person')).toBe('R$ 1.250 por pessoa');
+    expect(valorComoOAppMostra(1500, 'per_pet')).toBe('R$ 15 por pet');
+    expect(valorComoOAppMostra(3000, 'per_pair')).toBe('R$ 30 por dupla (1 humano + 1 pet)');
+    expect(valorComoOAppMostra(3000, 'per_two_people')).toBe('R$ 30 por dupla (2 humanos)');
+    expect(valorComoOAppMostra(3000, 'per_person')).toBe('R$ 30 por humano');
+    // Legado: aparece como "por pet".
+    expect(valorComoOAppMostra(1500, 'per_dog')).toBe('R$ 15 por pet');
+    expect(valorComoOAppMostra(1550, 'per_pair')).toBe('R$ 15,50 por dupla (1 humano + 1 pet)');
+    expect(valorComoOAppMostra(125000, 'per_person')).toBe('R$ 1.250 por humano');
   });
 });
 
@@ -272,15 +277,60 @@ describe('plano de edição (as três operações)', () => {
     expect(corpoDaMudanca(comEndereco, soHorario, planoDeEdicao(comEndereco, soHorario)).join(' ')).not.toMatch(/O endereço continua/);
   });
 
+  it('links: vão na criação e no PATCH (sem senha), com o @ normalizado; vazio tira', () => {
+    const corpo = montarCriacao({ ...preenchido(), linkDoConvite: ' https://sympla.com.br/e/1 ', instagram: 'https://www.instagram.com/Org.Pet/' });
+    expect(corpo.ticket_url).toBe('https://sympla.com.br/e/1');
+    expect(corpo.instagram_handle).toBe('org.pet');
+    expect(montarCriacao(preenchido())).not.toHaveProperty('ticket_url');
+    const comLinks = encontroDeExemplo({ ticket_url: 'https://sympla.com.br/e/1', instagram_handle: 'org.pet', instagram_url: 'https://www.instagram.com/org.pet/' });
+    const f = formularioDoEncontro(comLinks);
+    expect(f.instagram).toBe('@org.pet');
+    expect(planoDeEdicao(comLinks, f).patch).toBeNull();
+    // Escrever o mesmo perfil de outro jeito nao e mudanca.
+    expect(planoDeEdicao(comLinks, { ...f, instagram: 'instagram.com/ORG.PET' }).patch).toBeNull();
+    expect(planoDeEdicao(comLinks, { ...f, linkDoConvite: '', instagram: '@outra' }).patch).toEqual({ ticket_url: null, instagram_handle: 'outra' });
+    expect(planoDeEdicao(comLinks, { ...f, linkDoConvite: 'https://outro.com.br/x' }).mudanca).toBeNull();
+  });
+  it('links inválidos param no painel com o motivo', () => {
+    const erros = validar({ ...preenchido(), linkDoConvite: 'http://exemplo.com.br', instagram: '@com espaco' }, 'novo', AGORA);
+    expect(erros.map((e) => [e.campo, e.mensagem])).toEqual([
+      ['linkDoConvite', 'O link precisa começar com https://.'],
+      ['instagram', 'Use o @ do Instagram (até 30 letras, números, ponto ou sublinhado) ou o link do perfil.'],
+    ]);
+  });
+
   it('só o horário: o lugar não vai, e o ponto que existir continua', () => {
     const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00' };
     const plano = planoDeEdicao(original, f);
     expect(plano.mudanca).not.toHaveProperty('place');
   });
+  it('per_dog antigo: salvar sem mexer não muda; mexer no valor manda per_pet, nunca per_dog', () => {
+    const antigo = encontroDeExemplo({ admission: { kind: 'paid', price: { amount: 3000, currency: 'BRL', unit: 'per_dog' } } });
+    const f = formularioDoEncontro(antigo);
+    expect(f.unidade).toBe('per_dog');
+    expect(planoDeEdicao(antigo, f).acesso).toBeNull();
+    // Escolher "por pet" de novo (o que ja aparecia) tambem nao e mudanca.
+    expect(planoDeEdicao(antigo, { ...f, unidade: 'per_pet' }).acesso).toBeNull();
+    expect(planoDeEdicao(antigo, { ...f, valor: '35' }).acesso).toEqual({ admission: { kind: 'paid', price: { amount: 3500, currency: 'BRL', unit: 'per_pet' } } });
+    expect(planoDeEdicao(antigo, { ...f, unidade: 'per_pair' }).acesso?.admission).toEqual({ kind: 'paid', price: { amount: 3000, currency: 'BRL', unit: 'per_pair' } });
+  });
+
+  it('ISCA: mudar só o valor diz "O valor do encontro muda para…" (QA r5)', () => {
+    const pago = encontroDeExemplo({ admission: { kind: 'paid', price: { amount: 1500, currency: 'BRL', unit: 'per_pet' } } });
+    const f = { ...formularioDoEncontro(pago), valor: '20' };
+    const corpo = corpoDaMudanca(pago, f, planoDeEdicao(pago, f));
+    expect(corpo[0]).toBe('O valor do encontro muda para R$ 20 por pet, e o app mostra isso na hora.');
+    expect(corpo.join(' ')).not.toMatch(/O encontro o valor/);
+    const privadoEValor = { ...f, visibilidade: 'private' as const };
+    expect(corpoDaMudanca(pago, privadoEValor, planoDeEdicao(pago, privadoEValor))[0]).toBe(
+      'O encontro agora é privado, e o valor muda para R$ 20 por pet. O app mostra isso na hora.',
+    );
+  });
+
   it('visibilidade e valor vão na mudança de acesso', () => {
-    const f = { ...formularioDoEncontro(original), visibilidade: 'private' as const, pago: true, valor: '20', unidade: 'per_dog' as const };
+    const f = { ...formularioDoEncontro(original), visibilidade: 'private' as const, pago: true, valor: '20', unidade: 'per_pet' as const };
     const plano = planoDeEdicao(original, f);
-    expect(plano.acesso).toEqual({ visibility: 'private', admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } } });
+    expect(plano.acesso).toEqual({ visibility: 'private', admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_pet' } } });
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de acesso?');
     expect(corpoDaMudanca(original, f, plano)).toEqual([
       'O encontro agora é privado e agora é pago, e o app mostra isso na hora.',
@@ -289,7 +339,7 @@ describe('plano de edição (as três operações)', () => {
     ]);
   });
   it('local e acesso juntos: o aviso aos administradores sai uma vez só, no fim (UX 30 B3, B11, B12)', () => {
-    const f = { ...formularioDoEncontro(original), bairro: 'Cambuci', pago: true, valor: '20', unidade: 'per_dog' as const };
+    const f = { ...formularioDoEncontro(original), bairro: 'Cambuci', pago: true, valor: '20', unidade: 'per_pet' as const };
     const plano = planoDeEdicao(original, f);
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local e de acesso?');
     expect(corpoDaMudanca(original, f, plano)).toEqual([

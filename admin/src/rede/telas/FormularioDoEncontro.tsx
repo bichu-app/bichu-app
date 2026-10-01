@@ -40,7 +40,8 @@ import {
   type EstadoDoFormulario,
   type PlanoDeEdicao,
 } from '../dominio/formulario.ts';
-import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES } from '../dominio/rotulos.ts';
+import { handleDoInstagram, LIMITE_DO_LINK_DO_CONVITE, MENSAGEM_DO_INSTAGRAM, MENSAGEM_DO_LINK, type CodigoDoLink } from '../dominio/links.ts';
+import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES, UNIDADES_OFERECIDAS, unidadeComoAparece } from '../dominio/rotulos.ts';
 import type { Encontro, EscopoDeReautenticacao } from '../dominio/tipos.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
 import estilos from '../rede.module.css';
@@ -64,6 +65,8 @@ const ROTULO_DO_CAMPO: Partial<Record<Campo, string>> = {
   fim: 'Fim',
   local: 'Nome do lugar',
   endereco: 'Endereço',
+  linkDoConvite: 'Link do convite ou ingresso',
+  instagram: 'Instagram para dúvidas',
   bairro: 'Bairro',
   cidade: 'Cidade',
   valor: 'Valor em reais',
@@ -82,6 +85,8 @@ const CAMPO_DO_SERVIDOR: Record<string, Campo> = {
   'place.city': 'cidade',
   notes: 'observacoes',
   street_address: 'endereco',
+  ticket_url: 'linkDoConvite',
+  instagram_handle: 'instagram',
   'admission.price': 'valor',
   'admission.price.amount': 'valor',
   accepted_sizes: 'portes',
@@ -98,7 +103,11 @@ function errosDoServidor(falha: Falha): ErroDeCampo[] {
     const mensagem =
       campo === 'endereco' && e.code === 'contact_or_payment_detected'
         ? 'Tire do endereço telefone, e-mail, link, perfil ou chave Pix. Rua, número e CEP podem ficar.'
-        : texto;
+        : campo === 'linkDoConvite'
+          ? (MENSAGEM_DO_LINK[e.code as CodigoDoLink] ?? MENSAGEM_DO_LINK.ticket_url_invalid)
+          : campo === 'instagram'
+            ? MENSAGEM_DO_INSTAGRAM
+            : texto;
     return [{ campo, rotulo: ROTULO_DO_CAMPO[campo] ?? campo, mensagem }];
   });
 }
@@ -324,7 +333,7 @@ export default function FormularioDoEncontro() {
   }
 
   const centavos = f.pago ? centavosDoTexto(f.valor) : null;
-  const previa = centavos ? valorComoOAppMostra(centavos, f.unidade) : `R$ 15 ${UNIDADES[f.unidade]}`;
+  const previa = centavos ? valorComoOAppMostra(centavos, f.unidade) : `R$ {valor} ${UNIDADES[f.unidade]}`;
   const nErros = erros.length;
 
   return (
@@ -453,10 +462,11 @@ export default function FormularioDoEncontro() {
                   <select
                     id="enc-unidade"
                     className={estilos.selecao}
-                    value={f.unidade}
+                    // `per_dog` de encontro antigo aparece como "por pet" e so muda se a pessoa mexer.
+                    value={unidadeComoAparece(f.unidade)}
                     onChange={(e) => mudar('unidade', e.target.value as EstadoDoFormulario['unidade'])}
                   >
-                    {chaves(UNIDADES).map((u) => (
+                    {UNIDADES_OFERECIDAS.map((u) => (
                       <option key={u} value={u}>
                         {UNIDADES[u]}
                       </option>
@@ -471,6 +481,23 @@ export default function FormularioDoEncontro() {
           )}
         </div>
       </fieldset>
+
+      <h2 className={`t-title ${estilos.secao ?? ''}`}>Links</h2>
+      <p className="t-body-sm c-sec">Os dois aparecem para todos no app. Mudar um deles avisa todos os administradores por e-mail, com o antes e o depois.</p>
+      <div className="row2">
+        <CampoDeTexto
+          id="enc-linkDoConvite"
+          rotulo="Link do convite ou ingresso"
+          tipo="url"
+          modoDeEntrada="url"
+          valor={f.linkDoConvite}
+          aoMudar={(v) => mudar('linkDoConvite', v)}
+          maximo={LIMITE_DO_LINK_DO_CONVITE}
+          ajuda="Onde as pessoas se inscrevem ou compram o ingresso. Começa com https://. Opcional."
+          erro={erroDe('linkDoConvite')}
+        />
+        <CampoDoInstagram valor={f.instagram} aoMudar={(v) => mudar('instagram', v)} erro={erroDe('instagram')} />
+      </div>
 
       <GrupoDeCaixas
         rotulo="O que levar"
@@ -661,6 +688,40 @@ function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v:
       )}
       <span className="help contador" id={`${id}-contador`}>
         {[...valor].length}/{LIMITE_DO_ENDERECO}
+      </span>
+    </div>
+  );
+}
+
+/** `instagram_handle`: aceita `@usuario`, `usuario` ou a URL do perfil, e mostra o @ como vai ficar. */
+function CampoDoInstagram({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
+  const id = 'enc-instagram';
+  const handle = valor.trim() ? handleDoInstagram(valor) : null;
+  return (
+    <div className={erro ? 'field err' : 'field'}>
+      <label htmlFor={id}>Instagram para dúvidas</label>
+      <input
+        id={id}
+        className="input"
+        autoComplete="off"
+        maxLength={60}
+        value={valor}
+        onChange={(e) => aoMudar(e.target.value)}
+        aria-invalid={erro ? true : undefined}
+        aria-describedby={`${id}-ajuda ${id}-como-fica`}
+      />
+      {erro ? (
+        <span className="help err" id={`${id}-ajuda`} aria-live="polite">
+          <Icone nome="error" tamanho="s20" />
+          {erro}
+        </span>
+      ) : (
+        <span className="help" id={`${id}-ajuda`}>
+          O @ de quem responde dúvidas sobre o encontro, ou o link do perfil. Opcional.
+        </span>
+      )}
+      <span className="help" id={`${id}-como-fica`} aria-live="polite">
+        {handle ? `Aparece no app como @${handle}.` : ''}
       </span>
     </div>
   );

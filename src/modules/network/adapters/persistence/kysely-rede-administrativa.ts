@@ -77,6 +77,8 @@ interface LinhaDoEncontro {
   fenced_off_leash_area: boolean;
   notes: string | null;
   street_address: string | null;
+  ticket_url: string | null;
+  instagram_handle: string | null;
   publication_status: PublicacaoAdministrativa | 'pending_review';
   published_at: Date | null;
   cancelled_at: Date | null;
@@ -110,7 +112,7 @@ const COLUNAS = sql`
   ST_Y(e.geo::geometry) AS lat, ST_X(e.geo::geometry) AS lon,
   e.starts_at, e.ends_at, e.time_zone, e.visibility,
   e.admission_kind, e.admission_amount, e.admission_unit,
-  e.dog_age, e.vaccination_required, e.fenced_off_leash_area, e.notes, e.street_address,
+  e.dog_age, e.vaccination_required, e.fenced_off_leash_area, e.notes, e.street_address, e.ticket_url, e.instagram_handle,
   e.publication_status, e.published_at, e.cancelled_at, e.cancellation_note,
   e.created_at, e.updated_at, e.version,
   array(SELECT s.size FROM network_event_sizes s JOIN ref_sizes r ON r.code = s.size
@@ -168,6 +170,8 @@ function comoEncontro(l: LinhaDoEncontro): EncontroAdministrativo {
     paraLevar: l.bring_items,
     observacoes: l.notes,
     endereco: l.street_address,
+    linkDeIngresso: l.ticket_url,
+    instagram: l.instagram_handle,
     // `pending_review` e so da comunidade e nao existe na v1; a leitura do
     // painel nao o enxerga (o `WHERE` abaixo o tira).
     publicacao: l.publication_status as PublicacaoAdministrativa,
@@ -331,6 +335,8 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
             fenced_off_leash_area: novo.areaCercada,
             notes: novo.observacoes,
             street_address: novo.endereco,
+            ticket_url: novo.linkDeIngresso,
+            instagram_handle: novo.instagram,
             origin: 'admin',
             // Criar e publicar (12.9): nao ha rascunho.
             publication_status: 'published',
@@ -379,6 +385,8 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
             ...(m.areaCercada === undefined ? {} : { fenced_off_leash_area: m.areaCercada }),
             ...(m.observacoes === undefined ? {} : { notes: m.observacoes }),
             ...(m.endereco === undefined ? {} : { street_address: m.endereco }),
+            ...(m.linkDeIngresso === undefined ? {} : { ticket_url: m.linkDeIngresso }),
+            ...(m.instagram === undefined ? {} : { instagram_handle: m.instagram }),
             ...(m.publicacao === undefined ? {} : { publication_status: m.publicacao }),
             ...(m.cancelledAt === undefined ? {} : { cancelled_at: m.cancelledAt }),
             ...(m.cancellationNote === undefined ? {} : { cancellation_note: m.cancellationNote }),

@@ -45,7 +45,8 @@ describe('Rede: lista', () => {
     const linha = screen.getByRole('link', { name: 'Socialização para filhotes' }).closest('tr');
     if (!linha) throw new Error('linha nao encontrada');
     expect(within(linha).getByText('Privado')).toBeInTheDocument();
-    expect(within(linha).getByText('· R$ 30 por cão')).toBeInTheDocument();
+    // Encontro antigo com per_dog: aparece como "por pet".
+    expect(within(linha).getByText('· R$ 30 por pet')).toBeInTheDocument();
     expect(within(linha).getByRole('link', { name: '3 pedidos pendentes' })).toHaveAttribute('href', '/rede/k3Jx9QpL2mZt7VwR4cYb/pedidos');
     expect(within(linha).getByText('Agendado')).toBeInTheDocument();
     expect(screen.getByText('Acontecendo agora', { selector: '.selo' })).toBeInTheDocument();
@@ -230,9 +231,14 @@ describe('Rede: formulário novo', () => {
     await preencherObrigatorios(usuario);
     await usuario.click(screen.getByRole('radio', { name: /^Privado/ }));
     await usuario.click(screen.getByRole('radio', { name: /^Pago/ }));
+    // UX 30.10 P6: sem valor digitado, a previa mostra um marcador, e nao um valor.
+    expect(screen.getByText('R$ {valor} por pet')).toBeInTheDocument();
     await usuario.type(screen.getByLabelText('Valor em reais *'), '15,50');
-    await usuario.selectOptions(screen.getByLabelText('Cobrado'), 'por dupla');
-    expect(screen.getByText('R$ 15,50 por dupla')).toBeInTheDocument();
+    const cobrado = screen.getByLabelText('Cobrado');
+    expect([...(cobrado as HTMLSelectElement).options].map((o) => o.text)).toEqual(['por pet', 'por humano', 'por dupla (1 humano + 1 pet)', 'por dupla (2 humanos)']);
+    await usuario.selectOptions(cobrado, 'por dupla (1 humano + 1 pet)');
+    // A previa diz a quem o preco se refere.
+    expect(screen.getByText('R$ 15,50 por dupla (1 humano + 1 pet)')).toBeInTheDocument();
     await usuario.click(screen.getByRole('checkbox', { name: 'Guia' }));
     expect(screen.getByRole('checkbox', { name: 'Saquinhos para cocô' })).toBeInTheDocument();
     await usuario.click(screen.getByRole('checkbox', { name: 'Gigante' }));
@@ -317,6 +323,63 @@ describe('Rede: formulário novo', () => {
       expect(screen.queryByText(/mapa/i)).toBeNull();
       document.body.innerHTML = '';
     }
+  });
+
+  it('encontro antigo com per_dog mostra "por pet" e salvar sem mexer não toca no preço', async () => {
+    const { duble, usuario } = montar('/rede/k3Jx9QpL2mZt7VwR4cYb');
+    expect(await screen.findByLabelText('Cobrado')).toHaveDisplayValue('por pet');
+    expect(screen.getByText('R$ 30 por pet')).toBeInTheDocument();
+    const titulo = screen.getByLabelText('Título *');
+    await usuario.type(titulo, '!');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
+    expect(escritas(duble, 'POST', /access$/)).toHaveLength(0);
+    expect(duble.encontros.get('k3Jx9QpL2mZt7VwR4cYb')?.admission.price?.unit).toBe('per_dog');
+  });
+
+  it('links: o Instagram mostra o @ como vai aparecer, e os dois vão na criação', async () => {
+    const { duble, usuario } = montar('/rede/novo');
+    await preencherObrigatorios(usuario);
+    await usuario.type(screen.getByLabelText('Link do convite ou ingresso'), 'https://sympla.com.br/e/1');
+    await usuario.type(screen.getByLabelText('Instagram para dúvidas'), 'https://www.instagram.com/Org.Pet/');
+    expect(screen.getByText('Aparece no app como @org.pet.')).toBeInTheDocument();
+    expect(screen.getByText('Os dois aparecem para todos no app. Mudar um deles avisa todos os administradores por e-mail, com o antes e o depois.')).toBeInTheDocument();
+    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    const corpo = escritas(duble, 'POST', /\/admin\/network\/events$/).at(-1)?.corpo as { ticket_url?: string; instagram_handle?: string };
+    expect(corpo.ticket_url).toBe('https://sympla.com.br/e/1');
+    expect(corpo.instagram_handle).toBe('org.pet');
+  });
+
+  it('recusas do servidor nos links aparecem no campo, com o texto de cada código', async () => {
+    const casos: Array<[string, string, string, string]> = [
+      ['ticket_url', 'ticket_url_local_host', 'Link do convite ou ingresso', 'O link precisa ser de um site público.'],
+      ['ticket_url', 'ticket_url_has_credentials', 'Link do convite ou ingresso', 'Tire o usuário e a senha do link.'],
+      ['ticket_url', 'ticket_url_ip_literal', 'Link do convite ou ingresso', 'Use o endereço do site, e não um número de IP.'],
+      ['instagram_handle', 'instagram_handle_invalid', 'Instagram para dúvidas', 'Use o @ do Instagram (até 30 letras, números, ponto ou sublinhado) ou o link do perfil.'],
+    ];
+    for (const [field, code, rotulo, texto] of casos) {
+      const duble = criarDuble({ recusaDeCampo: { field, code } });
+      const { usuario } = montar('/rede/encontro-de-caes-no-parque', duble);
+      await usuario.type(await screen.findByLabelText('Link do convite ou ingresso'), 'https://sympla.com.br/e/1');
+      await usuario.type(screen.getByLabelText('Instagram para dúvidas'), '@org.pet');
+      await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+      expect(await screen.findByText('Corrija 1 campo para salvar:')).toBeInTheDocument();
+      const campo = screen.getByLabelText(rotulo);
+      expect(campo).toHaveAttribute('aria-invalid', 'true');
+      expect(campo).toHaveAccessibleDescription(new RegExp(`^${texto.replace(/[.()@]/g, (c) => `\\${c}`)}`));
+      document.body.innerHTML = '';
+    }
+  });
+
+  it('link do convite em http não sai do painel', async () => {
+    const { duble, usuario } = montar('/rede/novo');
+    await preencherObrigatorios(usuario);
+    await usuario.type(screen.getByLabelText('Link do convite ou ingresso'), 'http://sympla.com.br/e/1');
+    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
+    expect(screen.getByLabelText('Link do convite ou ingresso')).toHaveAccessibleDescription(/^O link precisa começar com https:\/\/\./);
+    expect(escritas(duble, 'POST', /\/admin\/network\/events$/)).toHaveLength(0);
   });
 
   it('fim antes do início e campos vazios dão as mensagens aprovadas', async () => {

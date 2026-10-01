@@ -8645,9 +8645,45 @@ components:
     EventPriceUnit:
       type: string
       description: |
-        A que o valor se refere. Lista fechada por `CHECK`; o rotulo e do app.
-        `per_pair` e tutor e cao juntos.
-      enum: [per_dog, per_person, per_pair]
+        A que o valor se refere (decisao do cliente de 01/10/2026). Lista
+        fechada por `CHECK`; o rotulo e do cliente:
+
+        - `per_pet`: por pet;
+        - `per_person`: por humano;
+        - `per_pair`: dupla, 1 humano + 1 pet;
+        - `per_two_people`: dupla de humanos, 2 humanos;
+        - `per_dog`: **legado**, ainda valido e devolvido nos encontros que o
+          tem, exibido como "por pet". O painel nao o oferece mais, e a
+          aposentadoria esta no ADR-0027 item 22. Mudanca aditiva: nenhuma
+          linha foi renomeada.
+
+        O app trata valor desconhecido mostrando so o numero, sem unidade
+        (`UnidadeDoPreco.porCodigo` devolve nulo).
+      enum: [per_dog, per_pet, per_person, per_pair, per_two_people]
+
+    NetworkEventTicketUrl:
+      type: string
+      format: uri
+      maxLength: 500
+      pattern: '^https://'
+      description: |
+        O link de compra ou inscricao do encontro (ADR-0027 item 22). `https`
+        obrigatorio, ate 500, sem usuario e senha, sem IP literal e sem host
+        local (`localhost`, `.local`, nome sem ponto): recusados com `400`
+        (`code: ticket_url_not_https`, `ticket_url_has_credentials`,
+        `ticket_url_ip_literal`, `ticket_url_local_host`, `ticket_url_invalid`).
+        **Excecao explicita ao D59, so neste campo e em `instagram_handle`**:
+        as observacoes continuam recusando link.
+
+    NetworkEventInstagramHandleInput:
+      type: string
+      minLength: 1
+      maxLength: 60
+      description: |
+        O Instagram do encontro. Aceita `usuario`, `@usuario` ou a URL do perfil
+        em `instagram.com`; o servidor guarda so o handle, sem `@` e em
+        minusculas, e recusa com `400` (`code: instagram_handle_invalid`) o que
+        nao for 1 a 30 de letras, digitos, ponto e sublinhado.
 
     NetworkEventPrice:
       type: object
@@ -8666,7 +8702,16 @@ components:
       required: [kind, price]
       additionalProperties: false
       properties:
-        kind: { type: string, enum: [free, paid] }
+        kind:
+          type: string
+          enum: [free, paid]
+          description: |
+            **Valor novo aqui exige PRIMEIRO um APK tolerante.** O app publicado
+            lanca `FormatException` para `kind` desconhecido
+            (`EntradaDoEncontro.doJson`, `app/lib/api/modelos_rede.dart`), e o
+            encontro inteiro deixa de abrir. Ao contrario de `unit`, que o app
+            tolera, acrescentar um valor a esta lista quebra o app em uso
+            (ADR-0027 item 22).
         price:
           oneOf:
             - $ref: '#/components/schemas/NetworkEventPrice'
@@ -8754,7 +8799,7 @@ components:
 
     NetworkEventPublic:
       type: object
-      required: [slug, title, summary, place, starts_at, time_zone, status, visibility, admission, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, bring_items, images]
+      required: [slug, title, summary, place, starts_at, time_zone, status, visibility, admission, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, bring_items, images, ticket_url, instagram_handle, instagram_url]
       description: |
         O encontro **publico**: o cartao da agenda e o detalhe. **Nao ha
         nenhum campo com pessoas**, nao ha coordenada e nao ha UUID.
@@ -8798,6 +8843,19 @@ components:
           oneOf:
             - $ref: '#/components/schemas/NetworkEventNotes'
             - type: 'null'
+        ticket_url:
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventTicketUrl'
+            - type: 'null'
+          description: Publico (ADR-0027 item 22). Nulo quando nao ha.
+        instagram_handle:
+          type: [string, 'null']
+          pattern: '^[a-z0-9._]{1,30}$'
+          description: O handle, sem `@`. Publico. Nulo quando nao ha.
+        instagram_url:
+          type: [string, 'null']
+          format: uri
+          description: 'A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.'
 
     NetworkEventPrivateTeaser:
       type: object
@@ -8903,7 +8961,7 @@ components:
 
     NetworkEventPrivateDetails:
       type: object
-      required: [slug, title, summary, place, starts_at, time_zone, status, images, admission, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, bring_items]
+      required: [slug, title, summary, place, starts_at, time_zone, status, images, admission, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, bring_items, ticket_url, instagram_handle, instagram_url]
       description: |
         O conteudo oculto do encontro privado, so para conta aprovada. A mesma
         forma dos campos do encontro publico, sem `visibility`.
@@ -8929,6 +8987,19 @@ components:
           oneOf:
             - $ref: '#/components/schemas/NetworkEventNotes'
             - type: 'null'
+        ticket_url:
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventTicketUrl'
+            - type: 'null'
+          description: Publico (ADR-0027 item 22). Nulo quando nao ha.
+        instagram_handle:
+          type: [string, 'null']
+          pattern: '^[a-z0-9._]{1,30}$'
+          description: O handle, sem `@`. Publico. Nulo quando nao ha.
+        instagram_url:
+          type: [string, 'null']
+          format: uri
+          description: 'A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.'
 
     JoinRequestAppState:
       type: string
@@ -9596,6 +9667,8 @@ components:
         bring_items: { $ref: '#/components/schemas/NetworkEventBringItems' }
         notes: { $ref: '#/components/schemas/NetworkEventNotes' }
         street_address: { $ref: '#/components/schemas/AdminNetworkEventStreetAddress' }
+        ticket_url: { $ref: '#/components/schemas/NetworkEventTicketUrl' }
+        instagram_handle: { $ref: '#/components/schemas/NetworkEventInstagramHandleInput' }
 
     AdminNetworkEventStreetAddress:
       type: string
@@ -9635,6 +9708,16 @@ components:
         notes:
           oneOf:
             - $ref: '#/components/schemas/NetworkEventNotes'
+            - type: 'null'
+        ticket_url:
+          description: '`null` tira o link.'
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventTicketUrl'
+            - type: 'null'
+        instagram_handle:
+          description: '`null` tira o Instagram.'
+          oneOf:
+            - $ref: '#/components/schemas/NetworkEventInstagramHandleInput'
             - type: 'null'
 
     AdminNetworkEventRelocation:
@@ -9695,7 +9778,7 @@ components:
       description: |
         O encontro como o painel o ve. **Sem autor**: `created_by_user_id` nunca
         e projetado (ADR-0025 secao 3, ADR-0027 item 10).
-      required: [slug, title, summary, place, starts_at, time_zone, images, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, origin, visibility, admission, bring_items, notes, street_address, pending_request_count, publication_status, timing, published_at, created_at, updated_at, version]
+      required: [slug, title, summary, place, starts_at, time_zone, images, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, origin, visibility, admission, bring_items, notes, street_address, ticket_url, instagram_handle, instagram_url, pending_request_count, publication_status, timing, published_at, created_at, updated_at, version]
       properties:
         slug: { type: string }
         title: { type: string }
@@ -9728,6 +9811,9 @@ components:
         street_address:
           type: [string, 'null']
           description: O endereco por extenso. Nulo nos encontros anteriores a 01/10/2026 e em quem nao o informou.
+        ticket_url: { type: [string, 'null'], format: uri }
+        instagram_handle: { type: [string, 'null'] }
+        instagram_url: { type: [string, 'null'], format: uri }
         pending_request_count:
           type: integer
           description: Pedidos pendentes na fila. Sempre 0 em encontro publico. So existe no painel.
@@ -9936,8 +10022,9 @@ components:
         Gratuito ou pago, e **pago e so o valor, informativo** (decisao do
         cliente, 23/09). Pago exige `price` (`400`, `code:
         admission_incomplete`); gratuito o recusa. **O Bichu nao cobra, nao tem
-        provedor de pagamento e nao guarda forma de pagar**: nem instrucao, nem
-        link.
+        provedor de pagamento e nao guarda forma de pagar.** O link de compra
+        do organizador, quando ha, vive em `ticket_url` (ADR-0027 item 22), e
+        nao aqui.
       required: [kind]
       additionalProperties: false
       properties:

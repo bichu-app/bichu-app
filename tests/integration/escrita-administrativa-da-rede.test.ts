@@ -368,6 +368,47 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     assert.equal((curto as { constraint?: string }).constraint, 'network_events_endereco_tem_tamanho');
   });
 
+  void it('links e unidade (01/10) contra o banco: gravam, saem na leitura publica, e o CHECK segura o resto', async () => {
+    const publica = criarNetworkRepository(banco.db, ids, (c) => c);
+    const criado = await criar({
+      ticket_url: 'https://ingressos.exemplo.br/evento/1',
+      instagram_handle: '@Encontro.Dos_Caes',
+      admission: { kind: 'paid', price: { amount: 3000, currency: 'BRL', unit: 'per_two_people' } },
+    });
+    const slug = criado.recurso.slug;
+    const linha = await banco.db
+      .selectFrom('network_events')
+      .select(['ticket_url', 'instagram_handle', 'admission_unit'])
+      .where('slug', '=', slug)
+      .executeTakeFirstOrThrow();
+    assert.deepEqual(linha, {
+      ticket_url: 'https://ingressos.exemplo.br/evento/1',
+      instagram_handle: 'encontro.dos_caes',
+      admission_unit: 'per_two_people',
+    });
+    const detalhe = await publica.buscarEncontro(slug);
+    assert.equal(detalhe?.linkDeIngresso, 'https://ingressos.exemplo.br/evento/1');
+    assert.equal(detalhe?.instagram, 'encontro.dos_caes');
+
+    // ISCA: o CHECK do banco recusa http, @ e maiuscula, mesmo por fora do caso de uso.
+    for (const [coluna, valor, restricao] of [
+      ['ticket_url', 'http://ingressos.exemplo.br/evento/1', 'network_events_link_de_ingresso_https'],
+      ['ticket_url', 'javascript:alert(1)', 'network_events_link_de_ingresso_https'],
+      ['ticket_url', 'HTTPS://ingressos.exemplo.br/evento/1', 'network_events_link_de_ingresso_https'],
+      ['ticket_url', 'https:/ingressos.exemplo.br/evento/1', 'network_events_link_de_ingresso_https'],
+      ['instagram_handle', '@bichu', 'network_events_instagram_forma'],
+      ['instagram_handle', 'Bichu', 'network_events_instagram_forma'],
+      ['admission_unit', 'per_cat', 'network_events_unidade_do_valor_conhecida'],
+    ] as const) {
+      const erro = await sql`update network_events set ${sql.ref(coluna)} = ${valor} where slug = ${slug}`
+        .execute(banco.db)
+        .catch((e: unknown) => e);
+      assert.equal((erro as { constraint?: string }).constraint, restricao, `${coluna}=${valor}`);
+    }
+    // `per_dog` legado continua valido no banco.
+    await sql`update network_events set admission_unit = 'per_dog' where slug = ${slug}`.execute(banco.db);
+  });
+
   void it('publico que vira privado ganha slug novo e o antigo some da leitura publica', async () => {
     const criado = await criar();
     const antigo = criado.recurso.slug;

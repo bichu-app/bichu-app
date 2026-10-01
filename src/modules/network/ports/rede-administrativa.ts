@@ -52,6 +52,8 @@ export interface NovoEncontro {
   readonly areaCercada: boolean;
   readonly observacoes: string | null;
   readonly endereco: string | null;
+  readonly linkDeIngresso: string | null;
+  readonly instagram: string | null;
   readonly agora: Instant;
 }
 
@@ -71,6 +73,8 @@ export interface MudancaDeEncontro {
   readonly areaCercada?: boolean;
   readonly observacoes?: string | null;
   readonly endereco?: string | null;
+  readonly linkDeIngresso?: string | null;
+  readonly instagram?: string | null;
   readonly publicacao?: PublicacaoAdministrativa;
   readonly cancelledAt?: Date;
   readonly cancellationNote?: string;

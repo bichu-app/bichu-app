@@ -17,6 +17,10 @@ import {
   encontroAbertoParaDecisao,
   errosDasObservacoes,
   errosDoEndereco,
+  errosDoInstagram,
+  errosDoLinkDeIngresso,
+  handleDoInstagram,
+  urlDoInstagram,
   mesEmSaoPaulo,
   normalizarParaConferencia,
   semDatas,
@@ -293,5 +297,91 @@ void describe('o endereco do encontro (01/10): D59 nao recusa endereco legitimo'
       errosDasObservacoes('notes', 'Encontro na Rua Fradique Coutinho, 1234, CEP 05416-001').map((e) => e.code),
       ['contact_or_payment_detected'],
     );
+  });
+});
+
+void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so nestes dois campos', () => {
+  // O esquema em constante: a URL do perfil e ENTRADA do analisador, e nao
+  // host de que o codigo dependa (o portao de portabilidade varre `src/`).
+  const HTTPS = 'https:' + '//';
+  const HTTP = 'http:' + '//';
+  const link = (texto: string): string[] => errosDoLinkDeIngresso('ticket_url', texto).map((e) => e.code);
+
+  void it('link de ingresso https publico passa', () => {
+    for (const ok of [
+      'https://ingressos.exemplo.br/evento/encontro-de-caes/123456',
+      'https://ingresso.exemplo.br/e?id=9&utm=x',
+      '  https://forms.gle/AbC123  ',
+      `https://site.exemplo.br/${'a'.repeat(467)}`,
+    ]) {
+      assert.deepEqual(link(ok), [], ok);
+    }
+  });
+
+  void it('ISCA: javascript:, data:, http:, IP literal, host local, usuario e senha e tamanho sao recusados', () => {
+    assert.deepEqual(link('javascript:alert(1)'), ['ticket_url_not_https']);
+    assert.deepEqual(link('data:text/html,<script>1</script>'), ['ticket_url_not_https']);
+    assert.deepEqual(link('http://ingressos.exemplo.br/evento'), ['ticket_url_not_https']);
+    assert.deepEqual(link('HTTPS://ingressos.exemplo.br/evento'), ['ticket_url_not_https']);
+    assert.deepEqual(link('https://203.0.113.10/ingresso'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://8.8.8.8/'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://[::1]/'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://2130706433/'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://0x7f000001/'), ['ticket_url_ip_literal']);
+    assert.deepEqual(link('https://app.localhost/ingresso'), ['ticket_url_local_host']);
+    assert.deepEqual(link('https://impressora.local/'), ['ticket_url_local_host']);
+    assert.deepEqual(link('https://intranet/'), ['ticket_url_local_host']);
+    assert.deepEqual(link('https://usuario:senha@ingressos.exemplo.br/'), ['ticket_url_has_credentials']);
+    assert.deepEqual(link('https://usuario@ingressos.exemplo.br/'), ['ticket_url_has_credentials']);
+    assert.deepEqual(link('https://ingressos.exemplo.br/ evento'), ['ticket_url_invalid']);
+    assert.deepEqual(link('nao e link'), ['ticket_url_invalid']);
+    assert.deepEqual(link(`https://site.exemplo.br/${'a'.repeat(478)}`), ['length']);
+    assert.deepEqual(link('https://ingressos.exemplo.br/‮'), ['bidi_control']);
+  });
+
+  void it('ISCA (QA r5): o ponto final do host nao escapa das regras de host local, sem ponto e IP', () => {
+    assert.deepEqual(link(`${HTTPS}localhost./`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}localhost../`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}x.local./`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}impressora.local./`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}intranet./`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}127.0.0.1./`), ['ticket_url_ip_literal']);
+    assert.deepEqual(link(`${HTTPS}203.0.113.10./`), ['ticket_url_ip_literal']);
+    // Coerente: o mesmo host publico, com ou sem ponto final, tem o mesmo destino.
+    assert.deepEqual(link(`${HTTPS}exemplo.com.br./ingresso`), []);
+    assert.deepEqual(link(`${HTTPS}exemplo.com.br/ingresso`), []);
+  });
+
+  void it('Instagram: aceita usuario, @usuario e a URL do perfil, e guarda o handle puro em minusculas (um ponto so)', () => {
+    for (const [entrada, esperado] of [
+      ['encontro.dos_caes', 'encontro.dos_caes'],
+      ['@Encontro.Dos_Caes', 'encontro.dos_caes'],
+      ['  @bichu.app  ', 'bichu.app'],
+      [`${HTTPS}www.instagram.com/Bichu.App/`, 'bichu.app'],
+      ['instagram.com/bichu.app?igsh=abc', 'bichu.app'],
+      [`${HTTP}m.instagram.com/bichu_app`, 'bichu_app'],
+      ['www.instagram.com/bichu_app/', 'bichu_app'],
+      ['a'.repeat(30), 'a'.repeat(30)],
+    ] as const) {
+      assert.equal(handleDoInstagram(entrada), esperado, entrada);
+      assert.deepEqual(errosDoInstagram('instagram_handle', entrada), [], entrada);
+    }
+    // A base vem da configuracao (`INSTAGRAM_PROFILE_BASE_URL`); aqui, um host de teste.
+    assert.equal(urlDoInstagram('bichu.app', 'https://perfil.exemplo.test'), 'https://perfil.exemplo.test/bichu.app/');
+    assert.equal(urlDoInstagram('bichu.app', 'https://perfil.exemplo.test/'), 'https://perfil.exemplo.test/bichu.app/');
+    assert.equal(urlDoInstagram(null, 'https://perfil.exemplo.test'), null);
+    assert.equal(urlDoInstagram('bichu.app', null), null);
+  });
+
+  void it('ISCA: @ invalido e recusado (vazio, 31, caractere fora do padrao, URL de outro site)', () => {
+    for (const ruim of ['@', '', 'a'.repeat(31), 'bichu-app', 'bichu app', '@@bichu', 'bichu!', `${HTTPS}www.facebook.com/bichu`, `${HTTPS}instagram.com/`]) {
+      assert.deepEqual(errosDoInstagram('instagram_handle', ruim).map((e) => e.code), ['instagram_handle_invalid'], ruim);
+    }
+  });
+
+  void it('ISCA: as observacoes continuam recusando link, inclusive o mesmo link que o ticket_url aceita', () => {
+    for (const texto of ['Ingressos em https://ingressos.exemplo.br/evento/1', 'Siga @encontro.dos_caes', 'compre em ingressos.exemplo.com.br']) {
+      assert.deepEqual(errosDasObservacoes('notes', texto).map((e) => e.code), ['contact_or_payment_detected'], texto);
+    }
   });
 });
