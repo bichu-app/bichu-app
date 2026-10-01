@@ -339,6 +339,19 @@ void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so 
     assert.deepEqual(link('https://ingressos.exemplo.br/‮'), ['bidi_control']);
   });
 
+  void it('ISCA (QA r5): o ponto final do host nao escapa das regras de host local, sem ponto e IP', () => {
+    assert.deepEqual(link(`${HTTPS}localhost./`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}localhost../`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}x.local./`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}impressora.local./`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}intranet./`), ['ticket_url_local_host']);
+    assert.deepEqual(link(`${HTTPS}127.0.0.1./`), ['ticket_url_ip_literal']);
+    assert.deepEqual(link(`${HTTPS}203.0.113.10./`), ['ticket_url_ip_literal']);
+    // Coerente: o mesmo host publico, com ou sem ponto final, tem o mesmo destino.
+    assert.deepEqual(link(`${HTTPS}exemplo.com.br./ingresso`), []);
+    assert.deepEqual(link(`${HTTPS}exemplo.com.br/ingresso`), []);
+  });
+
   void it('Instagram: aceita usuario, @usuario e a URL do perfil, e guarda o handle puro em minusculas (um ponto so)', () => {
     for (const [entrada, esperado] of [
       ['encontro.dos_caes', 'encontro.dos_caes'],

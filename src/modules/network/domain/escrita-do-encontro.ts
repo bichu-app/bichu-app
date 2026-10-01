@@ -364,7 +364,11 @@ export function errosDoLinkDeIngresso(campo: string, valor: string): ProblemFiel
   if (url.username !== '' || url.password !== '' || /^https:\/\/[^/?#]*@/.test(texto)) {
     return recusa('ticket_url_has_credentials', 'O link não pode ter usuário e senha.');
   }
-  const host = url.hostname.toLowerCase();
+  // O ponto final e o mesmo host em DNS (`localhost.` e `localhost`), e sem
+  // tira-lo antes ele escapa de toda regra abaixo (QA r5). Tirado uma vez,
+  // aqui, e todas as regras leem o mesmo nome.
+  const host = url.hostname.toLowerCase().replace(/\.+$/, '');
+  if (host === '') return recusa('ticket_url_invalid', 'Isso não é um link.');
   if (host.startsWith('[') || IPV4.test(host) || /^\d+$/.test(host) || /^0x/i.test(host)) {
     return recusa('ticket_url_ip_literal', 'Use o endereço do site, e não um número de IP.');
   }
