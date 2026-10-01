@@ -7,7 +7,7 @@
  * e custo, abrem o dialogo com motivo e senha, porque o contrato os separa em
  * operacoes com reautenticacao e aviso a todos os administradores.
  */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../../componentes/basicos.tsx';
@@ -345,15 +345,7 @@ export default function FormularioDoEncontro() {
       <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
 
       <CampoDeTexto id="enc-titulo" rotulo="Título *" valor={f.titulo} aoMudar={(v) => mudar('titulo', v)} maximo={120} erro={erroDe('titulo')} />
-      <CampoDeTexto
-        id="enc-resumo"
-        rotulo="Descrição *"
-        valor={f.resumo}
-        aoMudar={(v) => mudar('resumo', v)}
-        maximo={LIMITE_DO_RESUMO}
-        contador
-        erro={erroDe('resumo')}
-      />
+      <CampoDaDescricao valor={f.resumo} aoMudar={(v) => mudar('resumo', v)} erro={erroDe('resumo')} />
       <Galeria
         id="fotos"
         titulo="Fotos"
@@ -573,6 +565,51 @@ function CampoDeDataEHora({ id, rotulo, valor, aoMudar, erro }: { id: string; ro
           Horário de Brasília.
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * Descricao do encontro (`summary`, ate 200): area de varias linhas que cresce
+ * com o texto, com contador. `field-sizing: content` onde o navegador sabe; nos
+ * outros, a altura acompanha o `scrollHeight` a cada mudanca.
+ */
+function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
+  const id = 'enc-resumo';
+  const area = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${String(el.scrollHeight)}px`;
+  }, [valor]);
+  return (
+    <div className={erro ? 'field err' : 'field'}>
+      <label htmlFor={id}>Descrição *</label>
+      <textarea
+        ref={area}
+        id={id}
+        rows={3}
+        className={`input ${estilos.areaQueCresce ?? ''}`}
+        maxLength={LIMITE_DO_RESUMO}
+        value={valor}
+        onChange={(e) => aoMudar(e.target.value)}
+        aria-invalid={erro ? true : undefined}
+        aria-describedby={`${id}-ajuda ${id}-contador`}
+      />
+      {erro ? (
+        <span className="help err" id={`${id}-ajuda`} aria-live="polite">
+          <Icone nome="error" tamanho="s20" />
+          {erro}
+        </span>
+      ) : (
+        <span className="help" id={`${id}-ajuda`}>
+          Aparece no cartão e no topo da página do encontro.
+        </span>
+      )}
+      <span className="help contador" id={`${id}-contador`}>
+        {valor.length}/{LIMITE_DO_RESUMO}
+      </span>
     </div>
   );
 }

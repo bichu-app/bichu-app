@@ -32,7 +32,8 @@ import { centavosDoTexto, textoDosCentavos, valorComoOAppMostra } from './valor.
 
 export const LIMITE_DE_FOTOS = 8;
 export const LIMITE_DAS_OBSERVACOES = 500;
-export const LIMITE_DO_RESUMO = 180;
+/** `summary` do encontro: ate 200 (pedido do cliente de 01/10; antes, 180). */
+export const LIMITE_DO_RESUMO = 200;
 export const LIMITE_DO_MOTIVO = 280;
 
 /**

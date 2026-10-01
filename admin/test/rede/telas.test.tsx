@@ -264,6 +264,16 @@ describe('Rede: formulário novo', () => {
     });
   });
 
+  it('descrição: área de várias linhas, até 200, com contador', async () => {
+    const { usuario } = montar('/rede/novo');
+    const descricao = await screen.findByLabelText('Descrição *');
+    expect(descricao.tagName).toBe('TEXTAREA');
+    expect(descricao).toHaveAttribute('maxlength', '200');
+    await usuario.type(descricao, 'Primeira linha.{Enter}Segunda linha.');
+    expect(descricao).toHaveValue('Primeira linha.\nSegunda linha.');
+    expect(screen.getByText('30/200')).toBeInTheDocument();
+  });
+
   it('fim antes do início e campos vazios dão as mensagens aprovadas', async () => {
     const { duble, usuario } = montar('/rede/novo');
     await usuario.type(await screen.findByLabelText('Início *'), '2026-12-05T09:00');

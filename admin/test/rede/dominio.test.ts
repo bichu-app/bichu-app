@@ -123,6 +123,11 @@ describe('validação do formulário', () => {
       'Marque pelo menos um porte.',
     ]);
   });
+  it('descrição vai até 200 caracteres (pedido de 01/10)', () => {
+    expect(validar({ ...preenchido(), resumo: 'a'.repeat(200) }, 'novo', AGORA)).toEqual([]);
+    expect(validar({ ...preenchido(), resumo: 'a'.repeat(201) }, 'novo', AGORA).map((e) => e.campo)).toEqual(['resumo']);
+  });
+
   it('início no passado só reprova na criação', () => {
     const f = { ...preenchido(), inicio: '2026-09-01T09:00', fim: '' };
     expect(validar(f, 'novo', AGORA).map((e) => e.campo)).toEqual(['inicio']);
