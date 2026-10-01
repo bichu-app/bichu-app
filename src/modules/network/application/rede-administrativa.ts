@@ -195,6 +195,8 @@ export interface DependenciasDaRedeAdministrativa {
   readonly ids: IdGenerator;
   readonly clock: Clock;
   readonly urlDeMidia: (chave: string) => string;
+  /** `INSTAGRAM_PROFILE_BASE_URL`, da configuracao. Sem ela, `instagram_url` sai nula. */
+  readonly baseDoPerfilDoInstagram?: string | null;
   /** Log estruturado de ocorrencia: aviso que nao saiu, teto da fila estourado. */
   readonly registrarOcorrencia: (dados: Record<string, unknown>, mensagem: string) => void;
 }
@@ -338,7 +340,7 @@ export class RedeAdministrativa {
   }
 
   private escrito(e: EncontroAdministrativo): Escrito<EncontroAdministrativoProjetado> {
-    return { recurso: projetarEncontroAdministrativo(e, this.agora(), this.deps.urlDeMidia), etag: comoEtag(e.version) };
+    return { recurso: projetarEncontroAdministrativo(e, this.agora(), this.deps.urlDeMidia, this.deps.baseDoPerfilDoInstagram ?? null), etag: comoEtag(e.version) };
   }
 
   /** Depois do `COMMIT`. A falha fica no log, com a correlacao, e nao desfaz nada. */
@@ -368,7 +370,7 @@ export class RedeAdministrativa {
     const agora = this.agora();
     const pagina = await this.deps.repositorio.listarEncontros({ ...recorte, agora });
     return {
-      items: pagina.itens.map((e) => projetarEncontroAdministrativo(e, agora, this.deps.urlDeMidia)),
+      items: pagina.itens.map((e) => projetarEncontroAdministrativo(e, agora, this.deps.urlDeMidia, this.deps.baseDoPerfilDoInstagram ?? null)),
       page: recorte.page,
       limit: recorte.limit,
       total: pagina.total,

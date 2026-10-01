@@ -4773,7 +4773,7 @@ export interface components {
             instagram_handle: string | null;
             /**
              * Format: uri
-             * @description `https://www.instagram.com/<handle>/`, montada na saida. Nula sem handle.
+             * @description A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.
              */
             instagram_url: string | null;
         };
@@ -4877,7 +4877,7 @@ export interface components {
             instagram_handle: string | null;
             /**
              * Format: uri
-             * @description `https://www.instagram.com/<handle>/`, montada na saida. Nula sem handle.
+             * @description A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.
              */
             instagram_url: string | null;
         };

@@ -48,6 +48,7 @@ import { sql, type Expression, type SqlBool } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { comoData } from '../../../../shared/time/clock.js';
 import type { EncontroDaRede, PublicacaoVisivel } from '../../domain/encontro-da-rede.js';
+import { urlDoInstagram } from '../../domain/escrita-do-encontro.js';
 import type {
   DesfechoDaDesistencia,
   DesfechoDoPedido,
@@ -320,6 +321,8 @@ export class KyselyNetworkRepository implements NetworkRepository {
     private readonly ids: { uuidv7(): string },
     /** A URL publica da derivada. O banco guarda so a chave. */
     private readonly urlDeMidia: (chave: string) => string,
+    /** `INSTAGRAM_PROFILE_BASE_URL`, da configuracao. Sem ela, `instagram_url` sai nula. */
+    private readonly baseDoInstagram: string | null = null,
   ) {}
 
   async listarAgenda(recorte: RecorteDaAgenda): Promise<PaginaDaAgenda> {
@@ -341,7 +344,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .offset((recorte.page - 1) * recorte.limit)
       .execute()) as unknown as LinhaDoEncontro[];
 
-    return { itens: linhas.map((l) => comoEncontro(l, this.urlDeMidia)), total };
+    return { itens: linhas.map((l) => comoEncontro(l, this.urlDeMidia, this.baseDoInstagram)), total };
   }
 
   async listarPorDistancia(recorte: RecorteDaAgendaPorDistancia): Promise<PaginaPorDistancia> {
@@ -391,7 +394,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
 
     return {
       itens: linhas.map((linha) => ({
-        encontro: comoEncontro(linha, this.urlDeMidia),
+        encontro: comoEncontro(linha, this.urlDeMidia, this.baseDoInstagram),
         distanciaM: linha.distancia_m === null ? null : Number(linha.distancia_m),
       })),
       total,
@@ -404,7 +407,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .where('e.slug', '=', slug)
       .select(colunasDoEncontro())
       .executeTakeFirst()) as unknown as LinhaDoEncontro | undefined;
-    return linha === undefined ? undefined : comoEncontro(linha, this.urlDeMidia);
+    return linha === undefined ? undefined : comoEncontro(linha, this.urlDeMidia, this.baseDoInstagram);
   }
 
   async buscarLocalDoEncontro(slug: string, chamador: string): Promise<LocalDoEncontro | undefined> {
@@ -424,7 +427,7 @@ export class KyselyNetworkRepository implements NetworkRepository {
       .where(aprovado(chamador))
       .select(colunasDoEncontro())
       .executeTakeFirst()) as unknown as LinhaDoEncontro | undefined;
-    return linha === undefined ? undefined : comoEncontro(linha, this.urlDeMidia);
+    return linha === undefined ? undefined : comoEncontro(linha, this.urlDeMidia, this.baseDoInstagram);
   }
 
   async pedirParaParticipar(slug: string, chamador: string, agora: Instant): Promise<DesfechoDoPedido> {
@@ -581,7 +584,11 @@ function comoPedido(linha: LinhaDoPedido, urlDeMidia: (chave: string) => string)
 }
 
 /** A linha do banco na forma do dominio. */
-function comoEncontro(linha: LinhaDoEncontro, urlDeMidia: (chave: string) => string): EncontroDaRede {
+function comoEncontro(
+  linha: LinhaDoEncontro,
+  urlDeMidia: (chave: string) => string,
+  baseDoInstagram: string | null = null,
+): EncontroDaRede {
   return {
     slug: linha.slug,
     title: linha.title,
@@ -617,6 +624,7 @@ function comoEncontro(linha: LinhaDoEncontro, urlDeMidia: (chave: string) => str
     endereco: linha.street_address,
     linkDeIngresso: linha.ticket_url,
     instagram: linha.instagram_handle,
+    instagramUrl: urlDoInstagram(linha.instagram_handle, baseDoInstagram),
     imagens: (linha.images ?? []).map((i) => ({ url: urlDeMidia(i.k), textoAlternativo: i.a })),
   };
 }
@@ -625,6 +633,7 @@ export function criarNetworkRepository(
   db: Db,
   ids: { uuidv7(): string },
   urlDeMidia: (chave: string) => string,
+  baseDoInstagram: string | null = null,
 ): NetworkRepository {
-  return new KyselyNetworkRepository(db, ids, urlDeMidia);
+  return new KyselyNetworkRepository(db, ids, urlDeMidia, baseDoInstagram);
 }

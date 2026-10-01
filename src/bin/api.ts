@@ -352,6 +352,7 @@ export async function main(): Promise<void> {
     ids,
     clock: systemClock,
     urlDeMidia: (chave) => `${config.mediaPublicBaseUrl.replace(/\/$/, '')}/${chave}`,
+    baseDoPerfilDoInstagram: config.instagramProfileBaseUrl,
     registrarOcorrencia: (dados, mensagem) => app.log.error(dados, mensagem),
   });
 
@@ -785,7 +786,7 @@ export async function main(): Promise<void> {
     // transferencia -- o modulo recebe a funcao e continua sem conhecer o
     // servico de identidade.
     registrarRotasDaRede(escopo, {
-      rede: criarNetworkRepository(db, ids, urlDeMidia),
+      rede: criarNetworkRepository(db, ids, urlDeMidia, config.instagramProfileBaseUrl),
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },

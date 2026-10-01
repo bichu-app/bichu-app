@@ -288,6 +288,10 @@ services:
       WEB_BASE_URL: ${WEB_BASE_URL:-http://localhost:3000}
       API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
+      # A base do perfil do Instagram (ADR-0027 item 22): o servidor monta
+      # `instagram_url` do encontro com ela. Configuracao porque host literal
+      # em `src/` reprova no portao de portabilidade.
+      INSTAGRAM_PROFILE_BASE_URL: ${INSTAGRAM_PROFILE_BASE_URL:-https://www.instagram.com}
       # `BUILD_COMMIT` NAO ESTA MAIS AQUI, e a ausencia e a correcao.
       #
       # Ate 22/09 ele era declarado como variavel de RUNTIME, com padrao vazio.

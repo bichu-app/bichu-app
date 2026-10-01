@@ -76,6 +76,7 @@ function encontro(ajustes: Partial<EncontroDaRede> = {}): EncontroDaRede {
     endereco: null,
     linkDeIngresso: null,
     instagram: null,
+    instagramUrl: null,
     imagens: [],
     ...ajustes,
   };
@@ -412,20 +413,24 @@ void describe('o endereco do encontro (01/10): so em location, com conta', () =>
 });
 
 void describe('links do encontro (01/10): publicos na agenda e no detalhe, fora do teaser', () => {
-  const comLinks = { linkDeIngresso: 'https://www.sympla.com.br/evento/1', instagram: 'bichu.app' };
+  const comLinks = {
+    linkDeIngresso: 'https://ingressos.exemplo.br/evento/1',
+    instagram: 'bichu.app',
+    instagramUrl: 'https://perfil.exemplo.test/bichu.app/',
+  };
 
   void it('o publico e os detalhes do privado levam ticket_url, instagram_handle e instagram_url', () => {
     const publico = projetarEncontro(encontro(comLinks), AGORA) as unknown as Record<string, unknown>;
-    assert.equal(publico['ticket_url'], 'https://www.sympla.com.br/evento/1');
+    assert.equal(publico['ticket_url'], 'https://ingressos.exemplo.br/evento/1');
     assert.equal(publico['instagram_handle'], 'bichu.app');
-    assert.equal(publico['instagram_url'], 'https://www.instagram.com/bichu.app/');
+    assert.equal(publico['instagram_url'], 'https://perfil.exemplo.test/bichu.app/');
     const detalhes = projetarDetalhesPrivados(encontro({ ...comLinks, visibilidade: 'private' }), AGORA) as unknown as Record<string, unknown>;
-    assert.equal(detalhes['ticket_url'], 'https://www.sympla.com.br/evento/1');
+    assert.equal(detalhes['ticket_url'], 'https://ingressos.exemplo.br/evento/1');
   });
 
   void it('ISCA: o teaser do privado continua sem link (P19)', () => {
     const bruto = JSON.stringify(projetarEncontro(encontro({ ...comLinks, visibilidade: 'private' }), AGORA));
-    assert.ok(!bruto.includes('sympla') && !bruto.includes('instagram'), bruto);
+    assert.ok(!bruto.includes('exemplo') && !bruto.includes('instagram'), bruto);
   });
 
   void it('sem link, os tres saem nulos', () => {

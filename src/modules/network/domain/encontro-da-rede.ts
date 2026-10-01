@@ -33,7 +33,6 @@
 
 import { comoIso } from '../../../shared/time/clock.js';
 import type { Instant } from '../../../shared/types/brands.js';
-import { urlDoInstagram } from './escrita-do-encontro.js';
 
 /**
  * Os rotulos que a tela escreve, **calculados no servidor**.
@@ -97,6 +96,8 @@ export interface EncontroDaRede {
   readonly linkDeIngresso: string | null;
   /** O handle do Instagram, puro. PUBLICO; a URL e montada na projecao. */
   readonly instagram: string | null;
+  /** A URL do perfil, montada pelo repositorio com a base da configuracao. Nula sem handle ou sem base. */
+  readonly instagramUrl: string | null;
   /** Na ordem do painel; a primeira e a capa. */
   readonly imagens: readonly ImagemDoEncontro[];
 }
@@ -345,7 +346,7 @@ function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEnc
     // Publicos de proposito (ADR-0027 item 22): servem para comprar e tirar duvida.
     ticket_url: encontro.linkDeIngresso,
     instagram_handle: encontro.instagram,
-    instagram_url: urlDoInstagram(encontro.instagram),
+    instagram_url: encontro.instagramUrl,
     ...enderecoNaLeituraAberta(encontro.endereco),
   };
 }

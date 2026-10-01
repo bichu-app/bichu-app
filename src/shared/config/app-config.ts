@@ -99,6 +99,8 @@ export interface AppConfig {
   readonly adminOrigin: string | undefined;
   readonly apiBaseUrl: AbsoluteUrl;
   readonly mediaPublicBaseUrl: AbsoluteUrl;
+  /** `INSTAGRAM_PROFILE_BASE_URL`; nula quando nao configurada. */
+  readonly instagramProfileBaseUrl: AbsoluteUrl | null;
   readonly problemBaseUrl: AbsoluteUrl;
   readonly token: TokenConfig;
   readonly session: SessionConfig;
@@ -819,6 +821,14 @@ export function loadAppConfig(): AppConfig {
     adminOrigin: optionalEnv('ADMIN_ORIGIN'),
     apiBaseUrl: urlAbsoluta(requireEnv('API_BASE_URL')),
     mediaPublicBaseUrl: urlAbsoluta(requireEnv('MEDIA_PUBLIC_BASE_URL')),
+    // A base do perfil do Instagram, para montar `instagram_url` do encontro
+    // (ADR-0027 item 22). Configuracao, e nao literal em `src/`: o portao de
+    // portabilidade reprova host escrito no codigo. Opcional: o valor padrao
+    // vem do `compose.yaml`, e sem ele a URL sai nula e o handle continua.
+    instagramProfileBaseUrl: (() => {
+      const bruto = optionalEnv('INSTAGRAM_PROFILE_BASE_URL');
+      return bruto === undefined ? null : urlAbsoluta(bruto);
+    })(),
     // O contrato fixa `type` sob `<domínio>/problems/`. O domínio vem de
     // ambiente: hostname literal em `src/` é reprovado pelo portão de
     // portabilidade, e com razão — trocar o domínio precisa ser uma linha.

@@ -404,9 +404,15 @@ export function errosDoInstagram(campo: string, valor: string): ProblemFieldErro
     : [];
 }
 
-/** A URL publica do perfil, montada na saida a partir do handle guardado. */
-export function urlDoInstagram(handle: string | null): string | null {
-  return handle === null ? null : `https://www.instagram.com/${handle}/`;
+/**
+ * A URL publica do perfil, montada na saida a partir do handle guardado e da
+ * base do perfil, que e CONFIGURACAO (`INSTAGRAM_PROFILE_BASE_URL`): host
+ * literal em `src/` e o que o portao de portabilidade reprova. Sem base
+ * configurada, a URL sai nula e o handle continua saindo.
+ */
+export function urlDoInstagram(handle: string | null, base: string | null): string | null {
+  if (handle === null || base === null) return null;
+  return `${base.replace(/\/+$/, '')}/${handle}/`;
 }
 
 // ---------------------------------------------------------------------------
@@ -654,6 +660,8 @@ export function projetarEncontroAdministrativo(
   e: EncontroAdministrativo,
   agora: Instant,
   urlDeMidia: (chave: string) => string,
+  /** A base do perfil do Instagram, da configuracao. Nula, e `instagram_url` sai nula. */
+  baseDoInstagram: string | null = null,
 ): EncontroAdministrativoProjetado {
   return {
     slug: e.slug,
@@ -691,7 +699,7 @@ export function projetarEncontroAdministrativo(
     street_address: e.endereco,
     ticket_url: e.linkDeIngresso,
     instagram_handle: e.instagram,
-    instagram_url: urlDoInstagram(e.instagram),
+    instagram_url: urlDoInstagram(e.instagram, baseDoInstagram),
     pending_request_count: e.visibilidade === 'private' ? e.pedidosPendentes : 0,
     publication_status: e.publicacao,
     timing: tempoDoEncontro(e, agora),

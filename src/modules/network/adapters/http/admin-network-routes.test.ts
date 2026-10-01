@@ -134,6 +134,7 @@ function bancada(): Bancada {
     },
     clock: { now: () => AGORA },
     urlDeMidia: (chave) => `https://midia.bichu.test/${chave}`,
+    baseDoPerfilDoInstagram: 'https://perfil.exemplo.test',
     registrarOcorrencia: () => undefined,
   });
   const contrato = carregarContrato(resolve(process.cwd(), 'api/openapi.yaml'));
@@ -547,19 +548,19 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
 
   void it('links (01/10): criar com link e @ (ou URL do perfil); o painel le o handle puro e a URL montada', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', {
-      corpo: { ...PRACA, ticket_url: 'https://www.sympla.com.br/evento/1', instagram_handle: 'https://www.instagram.com/Encontro.Dos_Caes/' },
+      corpo: { ...PRACA, ticket_url: 'https://ingressos.exemplo.br/evento/1', instagram_handle: 'www.instagram.com/Encontro.Dos_Caes/' },
     });
     assert.equal(criado.status, 201, criado.bruto);
-    assert.equal(criado.corpo['ticket_url'], 'https://www.sympla.com.br/evento/1');
+    assert.equal(criado.corpo['ticket_url'], 'https://ingressos.exemplo.br/evento/1');
     assert.equal(criado.corpo['instagram_handle'], 'encontro.dos_caes');
-    assert.equal(criado.corpo['instagram_url'], 'https://www.instagram.com/encontro.dos_caes/');
+    assert.equal(criado.corpo['instagram_url'], 'https://perfil.exemplo.test/encontro.dos_caes/');
 
     for (const [corpo, codigo] of [
       [{ ticket_url: 'javascript:alert(1)' }, null],
-      [{ ticket_url: 'http://www.sympla.com.br/evento/1' }, null],
-      [{ ticket_url: 'https://10.0.0.1/ingresso' }, 'ticket_url_ip_literal'],
+      [{ ticket_url: 'http://ingressos.exemplo.br/evento/1' }, null],
+      [{ ticket_url: 'https://203.0.113.10/ingresso' }, 'ticket_url_ip_literal'],
       [{ instagram_handle: '@bichu-app' }, 'instagram_handle_invalid'],
-      [{ notes: 'Ingressos em https://www.sympla.com.br/evento/1' }, 'contact_or_payment_detected'],
+      [{ notes: 'Ingressos em https://ingressos.exemplo.br/evento/1' }, 'contact_or_payment_detected'],
     ] as const) {
       const r = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, title: `Isca ${JSON.stringify(corpo).length}`, ...corpo } });
       assert.equal(r.status, 400, `${JSON.stringify(corpo)}: ${r.bruto}`);
@@ -568,18 +569,18 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
   });
 
   void it('links (01/10): trocar o link pelo PATCH avisa todos os administradores com o antes e o depois; null tira', async () => {
-    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, ticket_url: 'https://www.sympla.com.br/evento/1' } });
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, ticket_url: 'https://ingressos.exemplo.br/evento/1' } });
     const slug = String(criado.corpo['slug']);
     const avisosAntes = b.avisos.length;
     const trocado = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
-      corpo: { ticket_url: 'https://golpe.exemplo.com/pague', instagram_handle: '@bichu.app' },
+      corpo: { ticket_url: 'https://golpe.exemplo.br/pague', instagram_handle: '@bichu.app' },
       ifMatch: criado.etag ?? '',
     });
     assert.equal(trocado.status, 200, trocado.bruto);
     assert.equal(b.avisos.length, avisosAntes + 1);
     const aviso = b.avisos.at(-1)?.linhas.join('\n') ?? '';
-    assert.match(aviso, /Link de ingresso antes: https:\/\/www\.sympla\.com\.br\/evento\/1/);
-    assert.match(aviso, /Link de ingresso depois: https:\/\/golpe\.exemplo\.com\/pague/);
+    assert.match(aviso, /Link de ingresso antes: https:\/\/ingressos\.exemplo\.br\/evento\/1/);
+    assert.match(aviso, /Link de ingresso depois: https:\/\/golpe\.exemplo\.br\/pague/);
     assert.match(aviso, /Instagram depois: @bichu\.app/);
 
     const tirado = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
