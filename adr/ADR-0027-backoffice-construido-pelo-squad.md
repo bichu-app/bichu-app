@@ -7,7 +7,10 @@ decisões técnicas foram reconciliadas com a seção 22 de `docs/04-seguranca.m
 `admin_accounts`, sem ligação com `users`. Isso supera a conta dedicada em
 `users` + `user_roles` e a D42 na forma de 23/09; os itens 2, 5, 7, 8, 9, 10 e o
 apêndice A foram reescritos no lugar para ficarem coerentes com ele.
-**Data:** 2026-09-23 (emenda de 2026-09-28)
+**Emenda de 01/10 (item 21):** endereço por extenso no encontro, só em resposta
+autenticada, sem geocodificação; o mapa sai do painel, e `geo` e a rota de mover
+ficam só por compatibilidade.
+**Data:** 2026-09-23 (emendas de 2026-09-28 e 2026-10-01)
 **Supera:** a credencial de serviço (`adminAuth`, `X-Service-Credential`) do
 ADR-0026, seções 2.2 e 2.3; a BICHUS-189 (catálogo em arquivo versionado)
 **Emenda:** ADR-0023 (emenda 1), ADR-0016 (emenda 2), ADR-0010 (emenda 1),
@@ -1498,6 +1501,48 @@ entrar, e não é parte dela.
 **Recomendo (a).** Tira do ar o único risco sem mitigação do painel (quem toma
 a caixa de e-mail toma o painel) e não custa construção. **Custo de não
 decidir:** fica (a), que é o que este item desenha.
+
+### 21. Endereço por extenso no encontro, e o mapa sai do painel (decisão do cliente, 01/10)
+
+O cliente decidiu, literal: "no backoffice não precisa ter mapa, apenas o
+endereço. Não faz sentido gastar dinheiro com isso". Esta emenda registra o que
+muda, e o que fica por compatibilidade.
+
+1. **Endereço permitido.** `network_events.street_address` (texto, anulável,
+   5 a 200 code points depois de aparar; migração `20261001000002`). É
+   logradouro público, nunca residência: o item 13 continua valendo do mesmo
+   jeito, como regra de processo. Supera, só para o encontro, o "não há
+   logradouro, número nem CEP" do item 12 e do apêndice A.4.
+2. **Só autenticado.** No app, o endereço sai **só** em
+   `GET /v1/network/events/{slug}/location`, com `bearerAuth`, a mesma regra do
+   ponto (emenda 1 do ADR-0010), e nunca na agenda, no detalhe público, no
+   teaser nem nos detalhes do privado. No privado, `location` já exige pedido
+   aprovado. A regra mora num ponto só (`REGRA_DO_ENDERECO` em
+   `src/modules/network/domain/encontro-da-rede.ts`), porque o cliente ainda
+   pode mudar a visibilidade. Trocá-la para pública exige, no mesmo commit, o
+   campo em `NetworkEventPublic` e `NetworkEventPrivateDetails` e uma emenda
+   aqui.
+3. **Sem geocodificação.** O ADR-0006 continua valendo: o servidor não
+   transforma endereço em coordenada nem o contrário. O app abre o endereço no
+   aplicativo de mapas do aparelho, por intent com o **texto**, sem custo para
+   o Bichu e sem geocodificação nossa.
+4. **Onde se escreve.** Na criação (`createAdminNetworkEvent`) e, num encontro
+   existente, **só** pela rota de mover (`relocateAdminNetworkEvent`), e não
+   pelo PATCH. Mudar onde o encontro acontece é T11, e a rota de mover tem as
+   três travas (reautenticação do escopo `network_event_relocation`, motivo e
+   aviso a todos os administradores com o endereço de antes e o de depois). Pôr
+   o endereço no PATCH abriria um caminho sem reautenticação para mudar o
+   lugar, e isso afrouxaria a proteção que o T11 pede.
+5. **D59 sem recusar endereço.** O detector das observações recusa endereço e
+   CEP de propósito, e por isso não se aplica inteiro aqui. No endereço fica
+   recusado o que nunca é endereço: link, e-mail, perfil `@usuario`, telefone
+   com DDD, chave PIX e dados de pagamento (`contact_or_payment_detected`), e o
+   controle bidirecional (`bidi_control`).
+6. **`geo` e a rota de mover ficam, só por compatibilidade.** O painel deixa de
+   usar o mapa e o `place.point`. Nenhuma coluna sai: `geo`/`geo_source`
+   continuam, com o comentário de coluna dizendo isso, e `location` continua
+   devolvendo `point` (nulo para quem não tem ponto). A rota de mover continua
+   viva, agora também para o endereço.
 
 ## Alternativas consideradas
 

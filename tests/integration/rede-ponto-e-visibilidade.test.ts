@@ -225,7 +225,7 @@ void describe('o ponto, so pelo `location`', () => {
   void it('o publicado sem ponto devolve `{ point: null }`, e nao 404', async () => {
     const local = await repo.buscarLocalDoEncontro(PUBLICADO_SEM_PONTO, QUALQUER_CONTA);
     assert.ok(local !== undefined, 'encontro visivel sem ponto nao e 404');
-    assert.deepEqual(projetarLocalizacao(local.ponto), { point: null });
+    assert.deepEqual(projetarLocalizacao(local.ponto, local.endereco), { point: null, street_address: null });
   });
 
   void it('o cancelado ainda visivel devolve o ponto: ele continua na agenda', async () => {

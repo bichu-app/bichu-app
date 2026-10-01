@@ -1149,6 +1149,8 @@ export interface NetworkEventsTable {
   dog_age: Generated<IdadeDosCaes>;
   vaccination_required: Generated<boolean>;
   fenced_off_leash_area: Generated<boolean>;
+  /** Endereco por extenso (01/10/2026). Sai so em `getNetworkEventLocation`, com conta. */
+  street_address: ColumnType<string | null, string | null | undefined, string | null>;
   notes: string | null;
   origin: Generated<OrigemDoEncontro>;
   publication_status: PublicacaoDoEncontro;

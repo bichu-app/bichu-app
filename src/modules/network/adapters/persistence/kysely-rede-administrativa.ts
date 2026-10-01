@@ -76,6 +76,7 @@ interface LinhaDoEncontro {
   vaccination_required: boolean;
   fenced_off_leash_area: boolean;
   notes: string | null;
+  street_address: string | null;
   publication_status: PublicacaoAdministrativa | 'pending_review';
   published_at: Date | null;
   cancelled_at: Date | null;
@@ -109,7 +110,7 @@ const COLUNAS = sql`
   ST_Y(e.geo::geometry) AS lat, ST_X(e.geo::geometry) AS lon,
   e.starts_at, e.ends_at, e.time_zone, e.visibility,
   e.admission_kind, e.admission_amount, e.admission_unit,
-  e.dog_age, e.vaccination_required, e.fenced_off_leash_area, e.notes,
+  e.dog_age, e.vaccination_required, e.fenced_off_leash_area, e.notes, e.street_address,
   e.publication_status, e.published_at, e.cancelled_at, e.cancellation_note,
   e.created_at, e.updated_at, e.version,
   array(SELECT s.size FROM network_event_sizes s JOIN ref_sizes r ON r.code = s.size
@@ -166,6 +167,7 @@ function comoEncontro(l: LinhaDoEncontro): EncontroAdministrativo {
     estrutura: l.amenities,
     paraLevar: l.bring_items,
     observacoes: l.notes,
+    endereco: l.street_address,
     // `pending_review` e so da comunidade e nao existe na v1; a leitura do
     // painel nao o enxerga (o `WHERE` abaixo o tira).
     publicacao: l.publication_status as PublicacaoAdministrativa,
@@ -328,6 +330,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
             vaccination_required: novo.vacinacaoExigida,
             fenced_off_leash_area: novo.areaCercada,
             notes: novo.observacoes,
+            street_address: novo.endereco,
             origin: 'admin',
             // Criar e publicar (12.9): nao ha rascunho.
             publication_status: 'published',
@@ -375,6 +378,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
             ...(m.vacinacaoExigida === undefined ? {} : { vaccination_required: m.vacinacaoExigida }),
             ...(m.areaCercada === undefined ? {} : { fenced_off_leash_area: m.areaCercada }),
             ...(m.observacoes === undefined ? {} : { notes: m.observacoes }),
+            ...(m.endereco === undefined ? {} : { street_address: m.endereco }),
             ...(m.publicacao === undefined ? {} : { publication_status: m.publicacao }),
             ...(m.cancelledAt === undefined ? {} : { cancelled_at: m.cancelledAt }),
             ...(m.cancellationNote === undefined ? {} : { cancellation_note: m.cancellationNote }),

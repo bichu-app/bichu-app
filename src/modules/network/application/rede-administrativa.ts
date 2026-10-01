@@ -36,6 +36,7 @@ import {
   encontroAbertoParaDecisao,
   entradaDoCorpo,
   errosDasObservacoes,
+  errosDoEndereco,
   errosDeTexto,
   errosDoHorario,
   FUSO_PADRAO,
@@ -128,6 +129,7 @@ export interface CorpoDeEncontro {
   readonly admission?: EntradaDoCorpo;
   readonly bring_items?: readonly string[];
   readonly notes?: string;
+  readonly street_address?: string;
 }
 
 export interface PatchDeEncontro {
@@ -146,6 +148,12 @@ export interface PatchDeEncontro {
 
 export interface CorpoDeMudancaDeLugar {
   readonly place?: LugarDoCorpo;
+  /**
+   * O endereco por extenso. Muda SO por aqui, e nao pelo PATCH: mudar onde o
+   * encontro acontece e T11, e esta rota exige reautenticacao, motivo e aviso a
+   * todos os administradores. `null` tira o endereco.
+   */
+  readonly street_address?: string | null;
   readonly starts_at?: string;
   readonly ends_at?: string | null;
   readonly time_zone?: string;
@@ -381,6 +389,7 @@ export class RedeAdministrativa {
       ...errosDaGaleria(corpo.images),
       ...errosDosPortes(corpo.accepted_sizes),
       ...(corpo.notes === undefined ? [] : errosDasObservacoes('notes', corpo.notes)),
+      ...(corpo.street_address === undefined ? [] : errosDoEndereco('street_address', corpo.street_address)),
       ...('erros' in entrada ? entrada.erros : []),
     ];
     if (visibilidade === 'private' && corpo.slug !== undefined) {
@@ -410,6 +419,7 @@ export class RedeAdministrativa {
           vacinacaoExigida: corpo.vaccination_required ?? true,
           areaCercada: corpo.fenced_off_leash_area ?? false,
           observacoes: corpo.notes === undefined ? null : corpo.notes.trim(),
+          endereco: corpo.street_address === undefined ? null : corpo.street_address.trim(),
           agora,
         });
       if (visibilidade === 'private') {
@@ -437,6 +447,7 @@ export class RedeAdministrativa {
       `Título: ${criado.title}`,
       `Visibilidade: ${criado.visibilidade === 'private' ? 'privado' : 'público'}`,
       `Lugar: ${descreverLugar(criado.lugar)}${criado.lugar.ponto === null ? '' : ' (com ponto no mapa)'}`,
+      `Endereço: ${criado.endereco ?? '(sem endereço)'}`,
       `Início: ${criado.startsAt.toISOString()} (${criado.timeZone})`,
       `Condição de acesso: ${descreverEntrada(criado.entrada)}`,
       'Se você não reconhece esta criação, avise o responsável pelo painel.',
@@ -553,14 +564,18 @@ export class RedeAdministrativa {
     const erros: ProblemFieldError[] = [
       ...errosDeTexto('reason', corpo.reason, 2, 280),
       ...(corpo.place === undefined ? [] : errosDoLugar(corpo.place)),
+      ...(corpo.street_address === undefined || corpo.street_address === null
+        ? []
+        : errosDoEndereco('street_address', corpo.street_address)),
     ];
     if (
       corpo.place === undefined &&
+      corpo.street_address === undefined &&
       corpo.starts_at === undefined &&
       corpo.ends_at === undefined &&
       corpo.time_zone === undefined
     ) {
-      erros.push({ field: 'place', code: 'nothing_to_relocate', message: 'Diga o que muda: lugar, horário ou fuso.' });
+      erros.push({ field: 'place', code: 'nothing_to_relocate', message: 'Diga o que muda: lugar, endereço, horário ou fuso.' });
     }
     if (erros.length > 0) throw problemas.validacao(erros);
 
@@ -579,6 +594,9 @@ export class RedeAdministrativa {
 
       const mudanca: MudancaDeEncontro = {
         ...(corpo.place === undefined ? {} : { lugar: lugarDoCorpo(corpo.place) }),
+        ...(corpo.street_address === undefined
+          ? {}
+          : { endereco: corpo.street_address === null ? null : corpo.street_address.trim() }),
         startsAt,
         endsAt,
         timeZone,
@@ -603,6 +621,8 @@ export class RedeAdministrativa {
       `Motivo informado: ${corpo.reason.trim()}`,
       `Lugar antes: ${descreverLugar(antes.lugar)}`,
       `Lugar depois: ${descreverLugar(depois.lugar)}`,
+      `Endereço antes: ${antes.endereco ?? '(sem endereço)'}`,
+      `Endereço depois: ${depois.endereco ?? '(sem endereço)'}`,
       `Ponto no mapa: ${pontoMudou(antes.lugar.ponto, depois.lugar.ponto) ? 'alterado' : 'sem mudança'}`,
       `Início antes: ${antes.startsAt.toISOString()} (${antes.timeZone})`,
       `Início depois: ${depois.startsAt.toISOString()} (${depois.timeZone})`,

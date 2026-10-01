@@ -346,6 +346,28 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     perto(await noApp(slug), -23.5513, -46.7139, 'noApp');
   });
 
+  void it('endereco (01/10) ponta a ponta: a criacao grava, location o devolve com conta, a leitura aberta nao', async () => {
+    const publica = criarNetworkRepository(banco.db, ids, (c) => c);
+    const ENDERECO = 'Rua Fradique Coutinho, 1234 - Pinheiros, 05416-001';
+    const criado = await criar({ street_address: ENDERECO });
+    const slug = criado.recurso.slug;
+    const linha = await banco.db.selectFrom('network_events').select(['street_address', 'geo_source']).where('slug', '=', slug).executeTakeFirstOrThrow();
+    assert.deepEqual(linha, { street_address: ENDERECO, geo_source: null });
+    assert.deepEqual(await publica.buscarLocalDoEncontro(slug, tutor), { ponto: null, endereco: ENDERECO });
+    // ISCA: o detalhe e a agenda, serializados como as rotas os projetam, nao levam o endereco.
+    const { projetarEncontro } = await import('../../src/modules/network/domain/encontro-da-rede.js');
+    const detalhe = await publica.buscarEncontro(slug);
+    assert.ok(detalhe !== undefined);
+    const bruto = JSON.stringify(projetarEncontro(detalhe, relogio.now()));
+    assert.ok(!bruto.includes('Fradique'), 'o endereco saiu no detalhe publico');
+    assert.ok(!bruto.includes('street_address'), 'a chave street_address saiu no detalhe publico');
+    // CHECK do banco: 4 code points apos btrim e recusado.
+    const curto = await sql`update network_events set street_address = ${'  R 1 '} where slug = ${slug}`
+      .execute(banco.db)
+      .catch((e: unknown) => e);
+    assert.equal((curto as { constraint?: string }).constraint, 'network_events_endereco_tem_tamanho');
+  });
+
   void it('publico que vira privado ganha slug novo e o antigo some da leitura publica', async () => {
     const criado = await criar();
     const antigo = criado.recurso.slug;

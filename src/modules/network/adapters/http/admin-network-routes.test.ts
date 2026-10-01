@@ -486,6 +486,65 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.equal((await chamar(b, 'GET', `/admin/network/events/${slug}`)).corpo['summary'], 'b'.repeat(181));
   });
 
+  void it('endereco (01/10): nasce na criacao, sem mapa; o painel o le; endereco com contato e recusado', async () => {
+    const ENDERECO = 'Rua Fradique Coutinho, 1234 - Pinheiros, 05416-001';
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, street_address: `  ${ENDERECO}  ` } });
+    assert.equal(criado.status, 201, criado.bruto);
+    assert.equal(criado.corpo['street_address'], ENDERECO);
+    assert.equal((criado.corpo['place'] as Record<string, unknown>)['point'], null);
+    assert.match(b.avisos.at(-1)?.linhas.join('\n') ?? '', /Fradique Coutinho/);
+
+    const semEndereco = await chamar(b, 'POST', '/admin/network/events', { corpo: { ...PRACA, title: 'Sem endereco' } });
+    assert.equal(semEndereco.corpo['street_address'], null);
+
+    const comTelefone = await chamar(b, 'POST', '/admin/network/events', {
+      corpo: { ...PRACA, title: 'Com telefone', street_address: 'Rua X, 10 - (11) 91234-5678' },
+    });
+    assert.equal(comTelefone.status, 400, comTelefone.bruto);
+    assert.deepEqual(codigos(comTelefone.corpo), ['contact_or_payment_detected']);
+  });
+
+  void it('ISCA T11 (01/10): o endereco NAO muda pelo PATCH, que nao pede reautenticacao; muda so por mover', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', {
+      corpo: { ...PRACA, street_address: 'Praca Benedito Calixto, s/n - Pinheiros' },
+    });
+    const slug = String(criado.corpo['slug']);
+    const pelaEdicao = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
+      corpo: { street_address: 'Rua Outra, 99 - Centro' },
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(pelaEdicao.status, 400, pelaEdicao.bruto);
+
+    const semJanela = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
+      corpo: { street_address: 'Rua Outra, 99 - Centro', reason: 'Mudou de praca.' },
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(semJanela.status, 401, semJanela.bruto);
+    assert.equal(
+      (await chamar(b, 'GET', `/admin/network/events/${slug}`)).corpo['street_address'],
+      'Praca Benedito Calixto, s/n - Pinheiros',
+    );
+
+    const movido = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
+      corpo: { street_address: 'Rua Outra, 99 - Centro', reason: 'Mudou de praca.' },
+      ifMatch: criado.etag ?? '',
+      reauth: 'janela-network_event_relocation',
+    });
+    assert.equal(movido.status, 200, movido.bruto);
+    assert.equal(movido.corpo['street_address'], 'Rua Outra, 99 - Centro');
+    const aviso = b.avisos.at(-1)?.linhas.join('\n') ?? '';
+    assert.match(aviso, /Endereço antes: Praca Benedito Calixto/);
+    assert.match(aviso, /Endereço depois: Rua Outra, 99/);
+
+    const tirado = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
+      corpo: { street_address: null, reason: 'Sem endereco fixo.' },
+      ifMatch: movido.etag ?? '',
+      reauth: 'janela-network_event_relocation',
+    });
+    assert.equal(tirado.status, 200, tirado.bruto);
+    assert.equal(tirado.corpo['street_address'], null);
+  });
+
   void it('edicao sem If-Match: 428; com versao velha: 412, e nada muda', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
     const slug = String(criado.corpo['slug']);

@@ -107,6 +107,7 @@ interface LinhaDoEncontro {
   dog_age: string;
   vaccination_required: boolean;
   fenced_off_leash_area: boolean;
+  street_address: string | null;
   notes: string | null;
   local_date: string;
   accepted_sizes: string[];
@@ -142,6 +143,7 @@ function colunasDoEncontro() {
     'e.vaccination_required as vaccination_required',
     'e.fenced_off_leash_area as fenced_off_leash_area',
     'e.notes as notes',
+    'e.street_address as street_address',
     // A data local no fuso do PROPRIO encontro, pelo catalogo do banco.
     sql<string>`to_char(e.starts_at AT TIME ZONE e.time_zone, 'YYYY-MM-DD')`.as('local_date'),
     sql<string[]>`array(
@@ -293,6 +295,7 @@ export function construtorDoLocal(db: DbExecutor, slug: string, chamador: string
     .select([
       sql<number | null>`ST_Y(e.geo::geometry)`.as('lat'),
       sql<number | null>`ST_X(e.geo::geometry)`.as('lon'),
+      'e.street_address as street_address',
     ]);
 }
 
@@ -402,11 +405,12 @@ export class KyselyNetworkRepository implements NetworkRepository {
 
   async buscarLocalDoEncontro(slug: string, chamador: string): Promise<LocalDoEncontro | undefined> {
     const linha = (await construtorDoLocal(this.db, slug, chamador).executeTakeFirst()) as
-      | { lat: number | null; lon: number | null }
+      | { lat: number | null; lon: number | null; street_address: string | null }
       | undefined;
     if (linha === undefined) return undefined;
-    if (linha.lat === null || linha.lon === null) return { ponto: null };
-    return { ponto: { lat: Number(linha.lat), lon: Number(linha.lon) } };
+    const endereco = linha.street_address;
+    if (linha.lat === null || linha.lon === null) return { ponto: null, endereco };
+    return { ponto: { lat: Number(linha.lat), lon: Number(linha.lon) }, endereco };
   }
 
   async buscarDetalhesPrivados(slug: string, chamador: string): Promise<EncontroDaRede | undefined> {
@@ -606,6 +610,7 @@ function comoEncontro(linha: LinhaDoEncontro, urlDeMidia: (chave: string) => str
     estrutura: linha.amenities,
     paraLevar: linha.bring_items,
     observacoes: linha.notes,
+    endereco: linha.street_address,
     imagens: (linha.images ?? []).map((i) => ({ url: urlDeMidia(i.k), textoAlternativo: i.a })),
   };
 }

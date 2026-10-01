@@ -3778,8 +3778,13 @@ paths:
       operationId: getNetworkEventLocation
       tags: [network]
       x-effects: []
-      summary: O ponto do encontro no mapa, so para quem tem conta
+      summary: O ponto e o endereco do encontro, so para quem tem conta
       description: |
+        **Endereco (01/10/2026):** `street_address` sai AQUI e em nenhuma
+        leitura sem conta, pela mesma regra do ponto (emenda 1 do ADR-0010,
+        emenda de 01/10 do ADR-0027). O app abre o texto no aplicativo de
+        mapas do aparelho, por intent; o Bichu nao geocodifica (ADR-0006).
+
         O ponto marcado no mapa pelo administrador (`geo_source = map_pin`,
         ADR-0006), para o aplicativo desenhar o encontro no mapa. E a emenda 1
         do ADR-0010, com escopo fechado: **ponto de evento publicado, em
@@ -5979,8 +5984,14 @@ paths:
         depois (D52), e linha na trilha (sem a coordenada bruta: a trilha grava
         `point_changed`).
 
-        Pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`. O
-        `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
+        **Compatibilidade (01/10/2026):** o painel deixou de usar o mapa, e o
+        `place.point` desta rota fica so por compatibilidade. A rota continua
+        sendo o UNICO caminho para mudar o lugar de um encontro existente,
+        inclusive o `street_address`: mudar onde e T11, e as tres travas
+        valem para o endereco como valem para o ponto.
+
+        Pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e
+        `time_zone`. O `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
         responde `400` (`code: event_not_published`).
       security:
         - adminSession: []
@@ -8963,17 +8974,26 @@ components:
 
     NetworkEventLocation:
       type: object
-      required: [point]
+      required: [point, street_address]
       additionalProperties: false
       description: |
         A resposta de `getNetworkEventLocation`. **So sai com conta** (emenda 1
         do ADR-0010). `point` nulo e o encontro sem ponto marcado: a tela mostra
-        os rotulos e nao mostra mapa.
+        os rotulos e nao mostra mapa. Desde 01/10/2026 o painel nao marca mais
+        ponto (o `point` fica so por compatibilidade) e escreve o endereco.
       properties:
         point:
           oneOf:
             - $ref: '#/components/schemas/NetworkEventPoint'
             - type: 'null'
+        street_address:
+          type: [string, 'null']
+          maxLength: 200
+          description: |
+            O endereco por extenso, como o painel o escreveu. Nulo quando nao
+            ha. O app o abre no aplicativo de mapas do aparelho, por intent com
+            o TEXTO; o Bichu nao geocodifica (ADR-0006). **Nunca** sai na
+            agenda nem no detalhe publico (emenda de 01/10 do ADR-0027).
 
     PublicLostPetPage:
       type: object
@@ -9481,8 +9501,10 @@ components:
       type: object
       description: |
         **Logradouro publico, nunca residencia** (ADR-0027 item 13). Os tres
-        rotulos sao obrigatorios; o ponto e opcional, como tolerancia (D.4).
-        Nao ha logradouro, numero nem CEP.
+        rotulos sao obrigatorios; o ponto e opcional, como tolerancia (D.4), e
+        desde 01/10/2026 fica so por compatibilidade: o painel nao usa mais
+        mapa. Logradouro, numero e CEP vivem em `street_address`, fora deste
+        objeto.
       required: [place_name, neighborhood, city, state]
       additionalProperties: false
       properties:
@@ -9561,14 +9583,29 @@ components:
         admission: { $ref: '#/components/schemas/AdminNetworkEventAdmissionInput' }
         bring_items: { $ref: '#/components/schemas/NetworkEventBringItems' }
         notes: { $ref: '#/components/schemas/NetworkEventNotes' }
+        street_address: { $ref: '#/components/schemas/AdminNetworkEventStreetAddress' }
+
+    AdminNetworkEventStreetAddress:
+      type: string
+      minLength: 5
+      maxLength: 200
+      description: |
+        O endereco por extenso do encontro (decisao do cliente de 01/10/2026),
+        de 5 a 200 caracteres contados em code points, aparado. Logradouro
+        publico, nunca residencia (ADR-0027 item 13). Endereco e CEP sao o
+        conteudo do campo e NAO sao recusados; link, e-mail, perfil
+        `@usuario`, telefone, chave PIX e dados de pagamento sao, com `400`
+        (`code: contact_or_payment_detected`), e controle bidirecional com
+        `code: bidi_control`. No app, sai SO em `getNetworkEventLocation`.
 
     AdminNetworkEventPatch:
       type: object
       additionalProperties: false
       minProperties: 1
       description: |
-        **Sem data, horario, fuso nem lugar**: mudar onde e quando e
-        `relocateAdminNetworkEvent`; sem visibilidade nem condicao de acesso:
+        **Sem data, horario, fuso nem lugar, e sem `street_address`**: mudar
+        onde e quando e `relocateAdminNetworkEvent`, que exige reautenticacao
+        (T11); sem visibilidade nem condicao de acesso:
         `changeAdminNetworkEventAccess`. `images` substitui a galeria inteira
         (a posicao 0 e a capa); `notes: null` tira as observacoes; as listas
         substituem o conjunto.
@@ -9593,9 +9630,14 @@ components:
       required: [reason]
       additionalProperties: false
       minProperties: 2
-      description: '`reason` e pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`.'
+      description: '`reason` e pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e `time_zone`.'
       properties:
         place: { $ref: '#/components/schemas/AdminNetworkEventPlaceInput' }
+        street_address:
+          description: O endereco novo; `null` tira o endereco.
+          oneOf:
+            - $ref: '#/components/schemas/AdminNetworkEventStreetAddress'
+            - type: 'null'
         starts_at: { type: string, format: date-time }
         ends_at: { type: [string, 'null'], format: date-time }
         time_zone: { $ref: '#/components/schemas/TimeZoneName' }
@@ -9641,7 +9683,7 @@ components:
       description: |
         O encontro como o painel o ve. **Sem autor**: `created_by_user_id` nunca
         e projetado (ADR-0025 secao 3, ADR-0027 item 10).
-      required: [slug, title, summary, place, starts_at, time_zone, images, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, origin, visibility, admission, bring_items, notes, pending_request_count, publication_status, timing, published_at, created_at, updated_at, version]
+      required: [slug, title, summary, place, starts_at, time_zone, images, accepted_sizes, dog_age, vaccination_required, fenced_off_leash_area, amenities, origin, visibility, admission, bring_items, notes, street_address, pending_request_count, publication_status, timing, published_at, created_at, updated_at, version]
       properties:
         slug: { type: string }
         title: { type: string }
@@ -9671,6 +9713,9 @@ components:
           type: array
           items: { $ref: '#/components/schemas/NetworkEventBringItem' }
         notes: { type: [string, 'null'] }
+        street_address:
+          type: [string, 'null']
+          description: O endereco por extenso. Nulo nos encontros anteriores a 01/10/2026 e em quem nao o informou.
         pending_request_count:
           type: integer
           description: Pedidos pendentes na fila. Sempre 0 em encontro publico. So existe no painel.

@@ -32,6 +32,8 @@ import {
   projetarDetalhesPrivados,
   projetarEncontro,
   projetarLocalizacao,
+  enderecoNaLeituraAberta,
+  REGRA_DO_ENDERECO,
   fimDoDiaLocal,
   statusDoEncontro,
   type EncontroDaRede,
@@ -71,6 +73,7 @@ function encontro(ajustes: Partial<EncontroDaRede> = {}): EncontroDaRede {
     estrutura: [],
     paraLevar: [],
     observacoes: null,
+    endereco: null,
     imagens: [],
     ...ajustes,
   };
@@ -324,11 +327,11 @@ void describe('a projecao do encontro', () => {
 void describe('a projecao do ponto (getNetworkEventLocation)', () => {
   void it('com ponto, devolve `{ point: { lat, lon } }` e mais nada', () => {
     const projetado = projetarLocalizacao({ lat: -23.5617, lon: -46.6823 });
-    assert.deepEqual(projetado, { point: { lat: -23.5617, lon: -46.6823 } });
+    assert.deepEqual(projetado, { point: { lat: -23.5617, lon: -46.6823 }, street_address: null });
   });
 
   void it('sem ponto marcado, `point` e nulo -- estado normal, e nao erro', () => {
-    assert.deepEqual(projetarLocalizacao(null), { point: null });
+    assert.deepEqual(projetarLocalizacao(null), { point: null, street_address: null });
   });
 
   void it('campo a campo: o que vier a mais no ponto nao atravessa', () => {
@@ -371,6 +374,37 @@ const SENTINELAS = [
   'towel',
   'shade',
 ];
+
+void describe('o endereco do encontro (01/10): so em location, com conta', () => {
+  const ENDERECO = 'Rua ISCA-ENDERECO, 1234 - Pinheiros, 05416-001';
+  const publico = encontro({ endereco: ENDERECO });
+  const privado = { ...privadoComSentinelas(), endereco: ENDERECO };
+
+  void it('a regra de hoje e `so_com_conta`', () => {
+    assert.equal(REGRA_DO_ENDERECO, 'so_com_conta');
+  });
+
+  void it('ISCA -- o endereco NAO sai na agenda, no detalhe publico, no teaser nem nos detalhes do privado', () => {
+    for (const [onde, corpo] of [
+      ['publico', projetarEncontro(publico, AGORA)],
+      ['teaser', projetarEncontro(privado, AGORA)],
+      ['detalhes do privado', projetarDetalhesPrivados(privado, AGORA)],
+    ] as const) {
+      const bruto = JSON.stringify(corpo);
+      assert.equal(bruto.includes('ISCA-ENDERECO'), false, `endereco em ${onde}`);
+      assert.equal(bruto.includes('street_address'), false, `chave street_address em ${onde}`);
+    }
+  });
+
+  void it('location leva o endereco junto do ponto, e com ponto nulo tambem', () => {
+    assert.deepEqual(projetarLocalizacao(null, ENDERECO), { point: null, street_address: ENDERECO });
+  });
+
+  void it('a troca da regra e num ponto so: com `publico`, a leitura aberta passa a levar o endereco', () => {
+    assert.deepEqual(enderecoNaLeituraAberta(ENDERECO, 'publico'), { street_address: ENDERECO });
+    assert.deepEqual(enderecoNaLeituraAberta(ENDERECO, 'so_com_conta'), {});
+  });
+});
 
 void describe('o encontro PRIVADO na leitura publica (ADR-0027 12.10)', () => {
   void it('sai como teaser, com EXATAMENTE cinco propriedades', () => {
