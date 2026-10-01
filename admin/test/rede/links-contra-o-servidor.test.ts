@@ -22,6 +22,11 @@ const LINKS = [
   'https://3232235521/x',
   'https://0x7f000001/x',
   'https://localhost/x',
+  'https://localhost./',
+  'https://x.local./',
+  'https://exemplo.com.br./ok',
+  'https://intranet./x',
+  'https://.../x',
   'https://intranet/x',
   'https://site.local/x',
   'https://exemplo.test/x',
@@ -63,5 +68,13 @@ describe('textos das recusas (UX 30.10)', () => {
   it('bidi e link incompleto dizem o que fazer', () => {
     expect(MENSAGEM_DO_LINK.bidi_control).toBe('O link tem caracteres invisíveis. Apague e digite de novo.');
     expect(MENSAGEM_DO_LINK.ticket_url_invalid).toBe('Confira o link: ele não pode ter espaço e precisa estar completo, com https:// e o endereço do site.');
+  });
+});
+
+describe('ISCA: ponto final no host nao escapa das regras (QA r5)', () => {
+  it('localhost. e x.local. sao host local; com ponto final, site publico continua valendo', () => {
+    expect(recusaDoLinkDoConvite('https://localhost./')).toBe('ticket_url_local_host');
+    expect(recusaDoLinkDoConvite('https://x.local./')).toBe('ticket_url_local_host');
+    expect(recusaDoLinkDoConvite('https://exemplo.com.br./ok')).toBeNull();
   });
 });

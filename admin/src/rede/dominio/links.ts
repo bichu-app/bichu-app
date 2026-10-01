@@ -36,7 +36,10 @@ export function recusaDoLinkDoConvite(valor: string): CodigoDoLink | null {
   }
   if (url.protocol !== 'https:' || !texto.startsWith('https://')) return 'ticket_url_not_https';
   if (url.username !== '' || url.password !== '' || /^https:\/\/[^/?#]*@/.test(texto)) return 'ticket_url_has_credentials';
-  const host = url.hostname.toLowerCase();
+  // O ponto final do host ("localhost.", "x.local.") e o mesmo host: sai antes
+  // de todas as regras, como no servidor (QA r5).
+  const host = url.hostname.toLowerCase().replace(/\.+$/, '');
+  if (host === '') return 'ticket_url_invalid';
   if (host.startsWith('[') || IPV4.test(host) || /^\d+$/.test(host) || /^0x/i.test(host)) return 'ticket_url_ip_literal';
   if (!host.includes('.') || HOST_LOCAL.test(host)) return 'ticket_url_local_host';
   return null;
