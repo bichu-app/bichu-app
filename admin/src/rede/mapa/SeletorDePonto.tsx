@@ -47,6 +47,7 @@ export interface PropsDoSeletor {
 export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: PropsDoSeletor) {
   const idDoStatus = useId();
   const idDaDica = useId();
+  const idDoErro = useId();
   const caixa = useRef<HTMLDivElement>(null);
   const mapa = useRef<L.Map | null>(null);
   const pino = useRef<L.Marker | null>(null);
@@ -208,7 +209,7 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
           role="application"
           aria-roledescription="mapa"
           aria-label="Mapa para marcar o ponto do encontro"
-          aria-describedby={`${idDaDica} ${idDoStatus}`}
+          aria-describedby={`${idDaDica}${mensagemDeErro ? ` ${idDoErro}` : ''} ${idDoStatus}`}
           aria-disabled={desabilitado || undefined}
           tabIndex={desabilitado ? -1 : 0}
           onKeyDown={aoTeclar}
@@ -219,11 +220,14 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
           Setas movem a mira. Enter marca o ponto. + aproxima e − afasta.
         </span>
       </div>
-      {mensagemDeErro ? (
-        <span className="help err" id={idDoStatus} aria-live="polite">
+      {/* Erro e ponto sao linhas separadas: um arraste recusado nao esconde o
+          ponto que continua valendo (QA 4). */}
+      {mensagemDeErro && (
+        <span className="help err" id={idDoErro} aria-live="polite">
           {mensagemDeErro}
         </span>
-      ) : ponto ? (
+      )}
+      {ponto ? (
         <div className={estilos.status} id={idDoStatus} aria-live="polite">
           <span className="t-body-sm c-sec">Ponto marcado: {textoDaCoordenada(ponto)}</span>
           {!desabilitado && (

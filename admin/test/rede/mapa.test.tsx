@@ -97,6 +97,31 @@ describe('seletor de ponto no mapa', () => {
     altura.mockRestore();
   });
 
+  it('arraste para fora do Brasil é recusado, e o ponto que vale continua à vista (QA 4)', async () => {
+    const largura = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(560);
+    const altura = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(320);
+    const aoMudar = vi.fn();
+    const { container } = render(<Controlado inicial={{ lat: -23.5731, lon: -46.6293 }} aoMudar={aoMudar} />);
+    const pino = container.querySelector('.leaflet-marker-icon');
+    if (!pino) throw new Error('pino nao desenhado');
+    const posicaoAntes = (pino as HTMLElement).style.transform;
+    // Cinco milhoes de pixels a leste no zoom 16: mais de 100 graus, no meio do oceano.
+    fireEvent.mouseDown(pino, { button: 0, which: 1, clientX: 280, clientY: 160 });
+    fireEvent.mouseMove(pino, { button: 0, which: 1, clientX: 330, clientY: 160 });
+    await new Promise((r) => setTimeout(r, 50));
+    fireEvent.mouseMove(pino, { button: 0, which: 1, clientX: 5_000_280, clientY: 160 });
+    fireEvent.mouseUp(pino, { button: 0, which: 1, clientX: 5_000_280, clientY: 160 });
+    expect(await screen.findByText('Marque um ponto dentro do Brasil.')).toBeInTheDocument();
+    expect(aoMudar).not.toHaveBeenCalled();
+    expect(screen.getByText('Ponto marcado: −23,5731, −46,6293')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mudar o ponto' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tirar o ponto' })).toBeInTheDocument();
+    expect((pino as HTMLElement).style.transform).toBe(posicaoAntes);
+    expect(screen.getByTestId('mapa')).toHaveAccessibleDescription(/Marque um ponto dentro do Brasil\. Ponto marcado: −23,5731, −46,6293/);
+    largura.mockRestore();
+    altura.mockRestore();
+  });
+
   it('desabilitado, o pino não arrasta', () => {
     const { container } = render(<SeletorDePonto ponto={{ lat: -23.5731, lon: -46.6293 }} aoMudar={vi.fn()} desabilitado />);
     expect(container.querySelector('.leaflet-marker-icon')).not.toHaveClass('leaflet-marker-draggable');
