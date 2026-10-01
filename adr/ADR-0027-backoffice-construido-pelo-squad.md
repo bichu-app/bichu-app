@@ -1585,6 +1585,14 @@ dupla (humano + pet) ou (dois humanos), é isso que precisa ficar mais claro" e
 6. **Mudar o link ou o Instagram avisa todos os administradores** com o antes e
    o depois, como as observações (D60): é o campo que leva quem usa o app para
    fora dele, e uma sessão tomada que o troque por golpe não passa calada.
+7. **`admission.kind` não aceita valor novo sem APK tolerante antes.**
+   Diferente de `unit`, o app publicado lança `FormatException` para `kind`
+   desconhecido (`EntradaDoEncontro.doJson` em `app/lib/api/modelos_rede.dart`),
+   e o encontro deixa de abrir. Qualquer valor além de `free` e `paid` (por
+   exemplo, para vários preços por encontro) exige primeiro uma versão do app
+   que trate o desconhecido, publicada e em uso; só depois o contrato e o banco
+   ganham o valor. O mesmo aviso está no schema `NetworkEventAdmission` do
+   contrato.
 
 ## Alternativas consideradas
 
