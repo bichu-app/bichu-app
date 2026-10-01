@@ -445,6 +445,11 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
     partes.push('Quem usa o app não é avisado da mudança.');
     frases.push(partes.join(' '));
     if (plano.mudanca.place?.point === null) frases.push('O mapa deixa de aparecer no app, porque mostrava o lugar anterior.');
+    // Mudou o lugar e nao mexeu no endereco salvo: o endereco antigo pode ter
+    // ficado para tras, e o dialogo pede para conferir antes da senha.
+    if (plano.mudanca.place && plano.mudanca.street_address === undefined && original.street_address) {
+      frases.push(`O endereço continua: ${original.street_address}. Se mudou, corrija antes de confirmar.`);
+    }
   }
   if (plano.acesso) {
     const partes: string[] = [];

@@ -422,6 +422,19 @@ describe('Rede: edição', () => {
     expect(screen.getByLabelText('Endereço')).toHaveAccessibleDescription(new RegExp(`^${texto.replace(/[.]/g, '\\.')}`));
   });
 
+  it('ISCA: o diálogo da mudança de lugar mostra o endereço que continua, antes da senha', async () => {
+    const duble = criarDuble({ encontros: [encontroDeExemplo({ street_address: 'Rua Muniz de Sousa, 1119' })], pedidos: [] });
+    const { usuario } = montar('/rede/encontro-de-caes-no-parque', duble);
+    const local = await screen.findByLabelText('Nome do lugar *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    const aviso = within(dialogo).getByText('O endereço continua: Rua Muniz de Sousa, 1119. Se mudou, corrija antes de confirmar.');
+    const senha = within(dialogo).getByLabelText('Sua senha');
+    expect(aviso.compareDocumentPosition(senha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('observação com telefone na edição também não sai (isca)', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
     const obs = await screen.findByLabelText('Observações');

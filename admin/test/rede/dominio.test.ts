@@ -256,6 +256,22 @@ describe('plano de edição (as três operações)', () => {
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local?');
   });
 
+  it('ISCA: mudou o lugar sem mexer no endereço salvo, o diálogo pede para conferir o endereço', () => {
+    const comEndereco = encontroDeExemplo({ street_address: 'Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP' });
+    const aviso = 'O endereço continua: Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP. Se mudou, corrija antes de confirmar.';
+    const soLugar = { ...formularioDoEncontro(comEndereco), local: 'Praça General Polidoro' };
+    expect(corpoDaMudanca(comEndereco, soLugar, planoDeEdicao(comEndereco, soLugar))).toContain(aviso);
+    // Mexeu no endereco junto: nao avisa.
+    const lugarEEndereco = { ...soLugar, endereco: 'Praça General Polidoro, s/n – Liberdade, São Paulo/SP' };
+    expect(corpoDaMudanca(comEndereco, lugarEEndereco, planoDeEdicao(comEndereco, lugarEEndereco)).join(' ')).not.toMatch(/O endereço continua/);
+    // Sem endereco salvo: nao avisa.
+    const semEndereco = { ...formularioDoEncontro(original), local: 'Praça General Polidoro' };
+    expect(corpoDaMudanca(original, semEndereco, planoDeEdicao(original, semEndereco)).join(' ')).not.toMatch(/O endereço continua/);
+    // So o horario: nao avisa.
+    const soHorario = { ...formularioDoEncontro(comEndereco), inicio: formularioDoEncontro(comEndereco).inicio.slice(0, 11) + '10:00' };
+    expect(corpoDaMudanca(comEndereco, soHorario, planoDeEdicao(comEndereco, soHorario)).join(' ')).not.toMatch(/O endereço continua/);
+  });
+
   it('só o horário: o lugar não vai, e o ponto que existir continua', () => {
     const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00' };
     const plano = planoDeEdicao(original, f);
