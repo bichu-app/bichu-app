@@ -42,7 +42,6 @@ import {
 import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES } from '../dominio/rotulos.ts';
 import type { Encontro, EscopoDeReautenticacao } from '../dominio/tipos.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
-import { SeletorDePonto } from '../mapa/SeletorDePonto.tsx';
 import estilos from '../rede.module.css';
 import { etagDe, useRede } from '../usarRede.ts';
 
@@ -370,12 +369,6 @@ export default function FormularioDoEncontro() {
             <CampoDeDataEHora id="enc-inicio" rotulo="Início *" valor={f.inicio} aoMudar={(v) => mudar('inicio', v)} erro={erroDe('inicio')} />
             <CampoDeDataEHora id="enc-fim" rotulo="Fim" valor={f.fim} aoMudar={(v) => mudar('fim', v)} erro={erroDe('fim')} />
           </div>
-          <div className="field">
-            <span className="lab">Ponto do encontro no mapa</span>
-            <span className="help">Clique no mapa onde o encontro acontece, ou arraste o pino para ajustar. Use um lugar público, como praça, parque ou rua. Nunca uma casa.</span>
-            <SeletorDePonto ponto={f.ponto} aoMudar={(p) => mudar('ponto', p)} desabilitado={travarLugarEAcesso} />
-            <span className="help">Recomendado. Sem ponto, o app não mostra o mapa nem a distância do encontro.</span>
-          </div>
           <CampoDeTexto
             id="enc-local"
             rotulo="Nome do lugar *"
@@ -533,8 +526,8 @@ export default function FormularioDoEncontro() {
 
 /** Com o encontro cancelado, lugar e acesso ficam como estavam: o plano nao os toca. */
 function lugarEAcessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
-  const { inicio, fim, ponto, local, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
-  return { inicio, fim, ponto, local, bairro, cidade, uf, visibilidade, pago, valor, unidade };
+  const { inicio, fim, local, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
+  return { inicio, fim, local, bairro, cidade, uf, visibilidade, pago, valor, unidade };
 }
 
 function VoltarParaARede() {

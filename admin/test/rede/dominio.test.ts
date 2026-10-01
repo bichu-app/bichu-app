@@ -110,8 +110,8 @@ describe('validação do formulário', () => {
   it('formulário completo não tem erro', () => {
     expect(validar(preenchido(), 'novo', AGORA)).toEqual([]);
   });
-  it('fim e ponto são opcionais (BO-8)', () => {
-    expect(validar({ ...preenchido(), fim: '', ponto: null }, 'novo', AGORA)).toEqual([]);
+  it('fim é opcional (BO-8)', () => {
+    expect(validar({ ...preenchido(), fim: '' }, 'novo', AGORA)).toEqual([]);
   });
   it('dá a mensagem aprovada para cada campo', () => {
     const erros = validar({ ...formularioVazio(), portes: [] }, 'novo', AGORA).map((e) => e.mensagem);
@@ -187,10 +187,10 @@ describe('montagem da criação', () => {
       bring_items: ['water', 'leash'],
     });
   });
-  it('pago leva centavos, BRL e unidade; ponto vai no lugar', () => {
-    const corpo = montarCriacao({ ...preenchido(), pago: true, valor: '15,50', unidade: 'per_pair', ponto: { lat: -23.5, lon: -46.6 } });
+  it('pago leva centavos, BRL e unidade; a criação não manda ponto (o backoffice não tem mapa)', () => {
+    const corpo = montarCriacao({ ...preenchido(), pago: true, valor: '15,50', unidade: 'per_pair' });
     expect(corpo.admission).toEqual({ kind: 'paid', price: { amount: 1550, currency: 'BRL', unit: 'per_pair' } });
-    expect(corpo.place.point).toEqual({ lat: -23.5, lon: -46.6 });
+    expect(corpo.place).not.toHaveProperty('point');
   });
 });
 
@@ -207,13 +207,19 @@ describe('plano de edição (as três operações)', () => {
     expect(plano.mudanca).toBeNull();
     expect(plano.acesso).toBeNull();
   });
-  it('horário e ponto vão na mudança, e o título do diálogo diz o que mudou', () => {
-    const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00', ponto: { lat: -23.56, lon: -46.64 } };
+  it('horário e lugar vão na mudança, e o ponto antigo sai, porque era do lugar anterior', () => {
+    const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00', local: 'Praça General Polidoro' };
     const plano = planoDeEdicao(original, f);
     expect(plano.patch).toBeNull();
     expect(plano.oQueMudou).toEqual(['horário', 'local']);
-    expect(plano.mudanca?.place?.point).toEqual({ lat: -23.56, lon: -46.64 });
+    expect(plano.mudanca?.place).toEqual({ place_name: 'Praça General Polidoro', neighborhood: 'Aclimação', city: 'São Paulo', state: 'SP', point: null });
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de horário e local?');
+    expect(corpoDaMudanca(original, f, plano)).toContain('O mapa do encontro sai do app, porque o ponto marcado era do lugar anterior.');
+  });
+  it('só o horário: o lugar não vai, e o ponto que existir continua', () => {
+    const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00' };
+    const plano = planoDeEdicao(original, f);
+    expect(plano.mudanca).not.toHaveProperty('place');
   });
   it('visibilidade e valor vão na mudança de acesso', () => {
     const f = { ...formularioDoEncontro(original), visibilidade: 'private' as const, pago: true, valor: '20', unidade: 'per_dog' as const };
@@ -227,11 +233,12 @@ describe('plano de edição (as três operações)', () => {
     ]);
   });
   it('local e acesso juntos: o aviso aos administradores sai uma vez só, no fim (UX 30 B3, B11, B12)', () => {
-    const f = { ...formularioDoEncontro(original), ponto: null, pago: true, valor: '20', unidade: 'per_dog' as const };
+    const f = { ...formularioDoEncontro(original), bairro: 'Cambuci', pago: true, valor: '20', unidade: 'per_dog' as const };
     const plano = planoDeEdicao(original, f);
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local e de acesso?');
     expect(corpoDaMudanca(original, f, plano)).toEqual([
-      'O app passa a mostrar o encontro sem mapa. Quem usa o app não é avisado da mudança.',
+      'O app passa a mostrar Parque da Aclimação, Cambuci. Quem usa o app não é avisado da mudança.',
+      'O mapa do encontro sai do app, porque o ponto marcado era do lugar anterior.',
       'O encontro agora é pago, e o app mostra isso na hora.',
       'Todos os administradores recebem um e-mail com o antes e o depois.',
     ]);

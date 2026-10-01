@@ -238,8 +238,6 @@ describe('Rede: formulário novo', () => {
     await usuario.click(screen.getByRole('checkbox', { name: 'Gigante' }));
     await usuario.click(screen.getByRole('checkbox', { name: 'Sombra' }));
     await usuario.type(screen.getByLabelText('Observações'), 'Ponto ao lado do coreto.');
-    screen.getByTestId('mapa').focus();
-    await usuario.keyboard('{Enter}');
     await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
 
     expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
@@ -248,7 +246,7 @@ describe('Rede: formulário novo', () => {
     expect(criacao?.corpo).toEqual({
       title: 'Encontro na praça',
       summary: 'Manhã para os cães do bairro.',
-      place: { place_name: 'Praça Benedito Calixto', neighborhood: 'Pinheiros', city: 'São Paulo', state: 'SP', point: { lat: -23.5505, lon: -46.6333 } },
+      place: { place_name: 'Praça Benedito Calixto', neighborhood: 'Pinheiros', city: 'São Paulo', state: 'SP' },
       starts_at: '2026-12-05T12:00:00.000Z',
       time_zone: 'America/Sao_Paulo',
       images: [],
@@ -283,6 +281,17 @@ describe('Rede: formulário novo', () => {
     await usuario.paste('🐶'.repeat(60));
     expect([...(descricao as HTMLTextAreaElement).value]).toHaveLength(200);
     expect(screen.getByText('200/200')).toBeInTheDocument();
+  });
+
+  it('o formulário não tem mapa (decisão do cliente de 01/10), na criação e na edição', async () => {
+    for (const rota of ['/rede/novo', '/rede/encontro-de-caes-no-parque']) {
+      montar(rota);
+      await screen.findByLabelText('Título *');
+      expect(screen.queryByRole('application')).toBeNull();
+      expect(document.querySelector('.leaflet-container')).toBeNull();
+      expect(screen.queryByText(/mapa/i)).toBeNull();
+      document.body.innerHTML = '';
+    }
   });
 
   it('fim antes do início e campos vazios dão as mensagens aprovadas', async () => {

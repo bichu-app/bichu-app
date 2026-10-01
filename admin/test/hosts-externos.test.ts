@@ -9,14 +9,17 @@ import { configuracao } from '../src/config.ts';
 
 describe('hosts externos do painel', () => {
   it('o bundle recebe os valores da configuracao, e nao de literal em src/', () => {
-    expect(configuracao.urlDosTiles).toBe(HOSTS_PADRAO.VITE_URL_DOS_TILES);
     expect(configuracao.urlDoScriptDoCaptcha).toBe(HOSTS_PADRAO.VITE_URL_DO_SCRIPT_DO_CAPTCHA);
-    expect(configuracao.urlDaAtribuicaoDoMapa).toBe(HOSTS_PADRAO.VITE_URL_DA_ATRIBUICAO_DO_MAPA);
   });
 
   it('aceita sobrescrita https e REPROVA http ou userinfo', () => {
-    expect(hostsExternos({ VITE_URL_DOS_TILES: 'https://tiles.exemplo.test/{z}/{x}/{y}.png' }).VITE_URL_DOS_TILES).toBe('https://tiles.exemplo.test/{z}/{x}/{y}.png');
-    expect(() => hostsExternos({ VITE_URL_DOS_TILES: 'http://tiles.exemplo.test/{z}/{x}/{y}.png' })).toThrow(/https/);
+    expect(hostsExternos({ VITE_URL_DO_SCRIPT_DO_CAPTCHA: 'https://captcha.exemplo.test/x.js' }).VITE_URL_DO_SCRIPT_DO_CAPTCHA).toBe('https://captcha.exemplo.test/x.js');
+    expect(() => hostsExternos({ VITE_URL_DO_SCRIPT_DO_CAPTCHA: 'http://captcha.exemplo.test/x.js' })).toThrow(/https/);
+  });
+
+  it('o mapa saiu do backoffice (decisao de 01/10): nenhum host de tiles na configuracao', () => {
+    expect(Object.keys(HOSTS_PADRAO)).toEqual(['VITE_URL_DO_SCRIPT_DO_CAPTCHA']);
+    expect(JSON.stringify(HOSTS_PADRAO)).not.toMatch(/openstreetmap/);
     expect(() => hostsExternos({ VITE_URL_DO_SCRIPT_DO_CAPTCHA: 'https://u:p@exemplo.test/x.js' })).toThrow(/usuario/);
   });
 });

@@ -499,8 +499,8 @@
 # Os hosts de fora, todos por NOME EXATO, sem curinga (ADR-0027 item 6):
 #   MEDIA_PUBLIC_BASE_URL       a origem de midia (`img-src`), do ambiente: a
 #                               capa de item e de evento e imagem NOSSA;
-#   https://tile.openstreetmap.org  os tiles do mapa (`img-src`), fixo: Leaflet
-#                               empacotado, tile carregado como imagem;
+#   (o mapa saiu do backoffice em 01/10, decisao do cliente: so endereco; o
+#   host dos tiles saiu do `img-src` junto)
 #   ADMIN_CSP_UPLOAD            o host de `UploadIntent.url` do ambiente
 #                               (`connect-src`), o destino do POST assinado.
 # `ADMIN_CSP_UPLOAD` e VAZIO POR PADRAO: hoje o endpoint do armazenamento e
@@ -538,7 +538,7 @@
 
 	# A CSP DO BACKOFFICE, em toda URL menos a pagina de login.
 	@backoffice_fora_do_login_{args[0]} not path /entrar /entrar/ /entrar/*
-	header @backoffice_fora_do_login_{args[0]} >Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: {$MEDIA_PUBLIC_BASE_URL} https://tile.openstreetmap.org; font-src 'self'; connect-src 'self' {$ADMIN_CSP_UPLOAD}; worker-src 'self' blob:; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
+	header @backoffice_fora_do_login_{args[0]} >Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' blob: data: {$MEDIA_PUBLIC_BASE_URL}; font-src 'self'; connect-src 'self' {$ADMIN_CSP_UPLOAD}; worker-src 'self' blob:; manifest-src 'self'; frame-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'; upgrade-insecure-requests"
 
 	# EXCECAO MARCADA: A PAGINA DE LOGIN (D41), E SO ELA.
 	# O login e um documento HTML proprio (`/entrar`) com reCAPTCHA v3, e so

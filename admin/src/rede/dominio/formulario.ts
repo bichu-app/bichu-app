@@ -23,7 +23,6 @@ import type {
   LugarInput,
   Mudanca,
   MudancaDeAcesso,
-  Ponto,
   Porte,
   UnidadeDoValor,
   Visibilidade,
@@ -92,7 +91,6 @@ export interface EstadoDoFormulario {
   resumo: string;
   inicio: string;
   fim: string;
-  ponto: Ponto | null;
   local: string;
   bairro: string;
   cidade: string;
@@ -118,7 +116,6 @@ export function formularioVazio(): EstadoDoFormulario {
     resumo: '',
     inicio: '',
     fim: '',
-    ponto: null,
     local: '',
     bairro: '',
     cidade: '',
@@ -146,7 +143,6 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     resumo: e.summary,
     inicio: campoDoInstante(e.starts_at, fuso),
     fim: e.ends_at ? campoDoInstante(e.ends_at, fuso) : '',
-    ponto: e.place.point ?? null,
     local: e.place.place_name,
     bairro: e.place.neighborhood,
     cidade: e.place.city,
@@ -278,7 +274,6 @@ function lugar(f: EstadoDoFormulario): LugarInput {
     neighborhood: f.bairro.trim(),
     city: f.cidade.trim(),
     state: f.uf,
-    ...(f.ponto ? { point: f.ponto } : {}),
   };
 }
 
@@ -371,17 +366,13 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
     if (f.fim.slice(11) !== fimAntigo.slice(11)) oQueMudou.add('horário');
   }
   const p = original.place;
-  const pontoIgual =
-    (f.ponto?.lat ?? null) === (p.point?.lat ?? null) && (f.ponto?.lon ?? null) === (p.point?.lon ?? null);
-  const lugarMudou =
-    f.local.trim() !== p.place_name ||
-    f.bairro.trim() !== p.neighborhood ||
-    f.cidade.trim() !== p.city ||
-    f.uf !== p.state ||
-    !pontoIgual;
+  const lugarMudou = f.local.trim() !== p.place_name || f.bairro.trim() !== p.neighborhood || f.cidade.trim() !== p.city || f.uf !== p.state;
   if (lugarMudou) {
-    // O lugar vai inteiro. Tirar o ponto e mandar `point: null`, que o contrato aceita.
-    mudanca.place = { ...lugar(f), ...(f.ponto ? {} : { point: null }) };
+    // O backoffice nao tem mapa (decisao do cliente de 01/10): o ponto nao se
+    // edita aqui. Mudando o lugar, o ponto antigo e de outro lugar e sai
+    // (`point: null`), para o app nao mostrar o mapa no endereco velho. Sem
+    // mudanca de lugar, nada vai, e o ponto que existir continua.
+    mudanca.place = { ...lugar(f), ...(p.point ? { point: null } : {}) };
     oQueMudou.add('local');
   }
 
@@ -427,14 +418,11 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
       const fim = f.fim ? instanteDoCampo(f.fim) : null;
       if (ini) dados.push(`${dataCurta(ini)}, ${faixaDeHorario(ini, fim)}`);
     }
-    if (plano.oQueMudou.includes('local')) {
-      const mesmoNome = f.local.trim() === original.place.place_name && f.bairro.trim() === original.place.neighborhood;
-      if (!mesmoNome) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
-      else dados.push(f.ponto ? 'o ponto novo no mapa' : 'o encontro sem mapa');
-    }
+    if (plano.oQueMudou.includes('local')) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
     frases.push(
       `O app passa a mostrar ${dados.join(', em ')}. Quem usa o app não é avisado da mudança.`,
     );
+    if (plano.mudanca.place?.point === null) frases.push('O mapa do encontro sai do app, porque o ponto marcado era do lugar anterior.');
   }
   if (plano.acesso) {
     const partes: string[] = [];
