@@ -59,7 +59,7 @@ export const UNIDADES: Record<UnidadeDoValor, string> = {
   per_pet: 'por pet',
   per_person: 'por humano',
   per_pair: 'por dupla (1 humano + 1 pet)',
-  per_two_people: 'por dupla de humanos',
+  per_two_people: 'por dupla (2 humanos)',
   per_dog: 'por pet',
 };
 

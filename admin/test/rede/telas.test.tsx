@@ -231,9 +231,11 @@ describe('Rede: formulário novo', () => {
     await preencherObrigatorios(usuario);
     await usuario.click(screen.getByRole('radio', { name: /^Privado/ }));
     await usuario.click(screen.getByRole('radio', { name: /^Pago/ }));
+    // UX 30.10 P6: sem valor digitado, a previa mostra um marcador, e nao um valor.
+    expect(screen.getByText('R$ {valor} por pet')).toBeInTheDocument();
     await usuario.type(screen.getByLabelText('Valor em reais *'), '15,50');
     const cobrado = screen.getByLabelText('Cobrado');
-    expect([...(cobrado as HTMLSelectElement).options].map((o) => o.text)).toEqual(['por pet', 'por humano', 'por dupla (1 humano + 1 pet)', 'por dupla de humanos']);
+    expect([...(cobrado as HTMLSelectElement).options].map((o) => o.text)).toEqual(['por pet', 'por humano', 'por dupla (1 humano + 1 pet)', 'por dupla (2 humanos)']);
     await usuario.selectOptions(cobrado, 'por dupla (1 humano + 1 pet)');
     // A previa diz a quem o preco se refere.
     expect(screen.getByText('R$ 15,50 por dupla (1 humano + 1 pet)')).toBeInTheDocument();
@@ -338,10 +340,10 @@ describe('Rede: formulário novo', () => {
   it('links: o Instagram mostra o @ como vai aparecer, e os dois vão na criação', async () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);
-    await usuario.type(screen.getByLabelText('Link do convite'), 'https://sympla.com.br/e/1');
+    await usuario.type(screen.getByLabelText('Link do convite ou ingresso'), 'https://sympla.com.br/e/1');
     await usuario.type(screen.getByLabelText('Instagram para dúvidas'), 'https://www.instagram.com/Org.Pet/');
     expect(screen.getByText('Aparece no app como @org.pet.')).toBeInTheDocument();
-    expect(screen.getByText('Mudar um destes links avisa todos os administradores por e-mail.')).toBeInTheDocument();
+    expect(screen.getByText('Os dois aparecem para todos no app. Mudar um deles avisa todos os administradores por e-mail, com o antes e o depois.')).toBeInTheDocument();
     await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
     expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
     const corpo = escritas(duble, 'POST', /\/admin\/network\/events$/).at(-1)?.corpo as { ticket_url?: string; instagram_handle?: string };
@@ -351,15 +353,15 @@ describe('Rede: formulário novo', () => {
 
   it('recusas do servidor nos links aparecem no campo, com o texto de cada código', async () => {
     const casos: Array<[string, string, string, string]> = [
-      ['ticket_url', 'ticket_url_local_host', 'Link do convite', 'O link precisa ser de um site público.'],
-      ['ticket_url', 'ticket_url_has_credentials', 'Link do convite', 'Tire o usuário e a senha do link.'],
-      ['ticket_url', 'ticket_url_ip_literal', 'Link do convite', 'Use o endereço do site, e não um número de IP.'],
+      ['ticket_url', 'ticket_url_local_host', 'Link do convite ou ingresso', 'O link precisa ser de um site público.'],
+      ['ticket_url', 'ticket_url_has_credentials', 'Link do convite ou ingresso', 'Tire o usuário e a senha do link.'],
+      ['ticket_url', 'ticket_url_ip_literal', 'Link do convite ou ingresso', 'Use o endereço do site, e não um número de IP.'],
       ['instagram_handle', 'instagram_handle_invalid', 'Instagram para dúvidas', 'Use o @ do Instagram (até 30 letras, números, ponto ou sublinhado) ou o link do perfil.'],
     ];
     for (const [field, code, rotulo, texto] of casos) {
       const duble = criarDuble({ recusaDeCampo: { field, code } });
       const { usuario } = montar('/rede/encontro-de-caes-no-parque', duble);
-      await usuario.type(await screen.findByLabelText('Link do convite'), 'https://sympla.com.br/e/1');
+      await usuario.type(await screen.findByLabelText('Link do convite ou ingresso'), 'https://sympla.com.br/e/1');
       await usuario.type(screen.getByLabelText('Instagram para dúvidas'), '@org.pet');
       await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
       expect(await screen.findByText('Corrija 1 campo para salvar:')).toBeInTheDocument();
@@ -373,10 +375,10 @@ describe('Rede: formulário novo', () => {
   it('link do convite em http não sai do painel', async () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);
-    await usuario.type(screen.getByLabelText('Link do convite'), 'http://sympla.com.br/e/1');
+    await usuario.type(screen.getByLabelText('Link do convite ou ingresso'), 'http://sympla.com.br/e/1');
     await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
     expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
-    expect(screen.getByLabelText('Link do convite')).toHaveAccessibleDescription(/^O link precisa começar com https:\/\/\./);
+    expect(screen.getByLabelText('Link do convite ou ingresso')).toHaveAccessibleDescription(/^O link precisa começar com https:\/\/\./);
     expect(escritas(duble, 'POST', /\/admin\/network\/events$/)).toHaveLength(0);
   });
 

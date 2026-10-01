@@ -73,7 +73,7 @@ describe('valor', () => {
   it('escreve como o app', () => {
     expect(valorComoOAppMostra(1500, 'per_pet')).toBe('R$ 15 por pet');
     expect(valorComoOAppMostra(3000, 'per_pair')).toBe('R$ 30 por dupla (1 humano + 1 pet)');
-    expect(valorComoOAppMostra(3000, 'per_two_people')).toBe('R$ 30 por dupla de humanos');
+    expect(valorComoOAppMostra(3000, 'per_two_people')).toBe('R$ 30 por dupla (2 humanos)');
     expect(valorComoOAppMostra(3000, 'per_person')).toBe('R$ 30 por humano');
     // Legado: aparece como "por pet".
     expect(valorComoOAppMostra(1500, 'per_dog')).toBe('R$ 15 por pet');

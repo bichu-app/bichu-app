@@ -268,7 +268,7 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
   }
   if (f.linkDoConvite.trim()) {
     const recusa = recusaDoLinkDoConvite(f.linkDoConvite);
-    if (recusa) e('linkDoConvite', 'Link do convite', MENSAGEM_DO_LINK[recusa]);
+    if (recusa) e('linkDoConvite', 'Link do convite ou ingresso', MENSAGEM_DO_LINK[recusa]);
   }
   if (f.instagram.trim() && handleDoInstagram(f.instagram) === null) e('instagram', 'Instagram para dúvidas', MENSAGEM_DO_INSTAGRAM);
   if (!entre(f.bairro, 2, 60)) e('bairro', 'Bairro', 'Informe o bairro.');

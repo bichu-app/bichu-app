@@ -65,7 +65,7 @@ const ROTULO_DO_CAMPO: Partial<Record<Campo, string>> = {
   fim: 'Fim',
   local: 'Nome do lugar',
   endereco: 'Endereço',
-  linkDoConvite: 'Link do convite',
+  linkDoConvite: 'Link do convite ou ingresso',
   instagram: 'Instagram para dúvidas',
   bairro: 'Bairro',
   cidade: 'Cidade',
@@ -333,7 +333,7 @@ export default function FormularioDoEncontro() {
   }
 
   const centavos = f.pago ? centavosDoTexto(f.valor) : null;
-  const previa = centavos ? valorComoOAppMostra(centavos, f.unidade) : `R$ 15 ${UNIDADES[f.unidade]}`;
+  const previa = centavos ? valorComoOAppMostra(centavos, f.unidade) : `R$ {valor} ${UNIDADES[f.unidade]}`;
   const nErros = erros.length;
 
   return (
@@ -483,11 +483,11 @@ export default function FormularioDoEncontro() {
       </fieldset>
 
       <h2 className={`t-title ${estilos.secao ?? ''}`}>Links</h2>
-      <p className="t-body-sm c-sec">Mudar um destes links avisa todos os administradores por e-mail.</p>
+      <p className="t-body-sm c-sec">Os dois aparecem para todos no app. Mudar um deles avisa todos os administradores por e-mail, com o antes e o depois.</p>
       <div className="row2">
         <CampoDeTexto
           id="enc-linkDoConvite"
-          rotulo="Link do convite"
+          rotulo="Link do convite ou ingresso"
           tipo="url"
           modoDeEntrada="url"
           valor={f.linkDoConvite}

@@ -5,7 +5,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { errosDoLinkDeIngresso, handleDoInstagram as handleDoServidor } from '../../../src/modules/network/domain/escrita-do-encontro.ts';
-import { handleDoInstagram, recusaDoLinkDoConvite } from '../../src/rede/dominio/links.ts';
+import { handleDoInstagram, MENSAGEM_DO_LINK, recusaDoLinkDoConvite } from '../../src/rede/dominio/links.ts';
 
 const LINKS = [
   'https://sympla.com.br/evento/encontro-123',
@@ -56,5 +56,12 @@ describe('link do convite: painel e servidor dão a mesma resposta', () => {
 describe('Instagram: painel e servidor normalizam igual', () => {
   it.each(INSTAGRAMS)('%s', (valor) => {
     expect(handleDoInstagram(valor)).toBe(handleDoServidor(valor));
+  });
+});
+
+describe('textos das recusas (UX 30.10)', () => {
+  it('bidi e link incompleto dizem o que fazer', () => {
+    expect(MENSAGEM_DO_LINK.bidi_control).toBe('O link tem caracteres invisíveis. Apague e digite de novo.');
+    expect(MENSAGEM_DO_LINK.ticket_url_invalid).toBe('Confira o link: ele não pode ter espaço e precisa estar completo, com https:// e o endereço do site.');
   });
 });

@@ -53,9 +53,11 @@ export function handleDoInstagram(valor: string): string | null {
 
 /** O texto de cada recusa, no campo. Vale para a conferencia do painel e para o `400` do servidor. */
 export const MENSAGEM_DO_LINK: Record<CodigoDoLink, string> = {
-  bidi_control: 'Tire do link os caracteres invisíveis de direção.',
+  bidi_control: 'O link tem caracteres invisíveis. Apague e digite de novo.',
   length: `Use até ${String(LIMITE_DO_LINK_DO_CONVITE)} caracteres no link.`,
-  ticket_url_invalid: 'Isso não é um link. Confira se não ficou espaço no meio.',
+  // UX 30.10 R3 trazia um exemplo de link completo; host literal em src/
+  // reprova o portao de portabilidade, entao o exemplo vira a descricao.
+  ticket_url_invalid: 'Confira o link: ele não pode ter espaço e precisa estar completo, com https:// e o endereço do site.',
   ticket_url_not_https: 'O link precisa começar com https://.',
   ticket_url_has_credentials: 'Tire o usuário e a senha do link.',
   ticket_url_ip_literal: 'Use o endereço do site, e não um número de IP.',
