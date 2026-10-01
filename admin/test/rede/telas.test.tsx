@@ -201,7 +201,7 @@ async function preencherObrigatorios(usuario: ReturnType<typeof userEvent.setup>
   await usuario.type(await screen.findByLabelText('Título *'), 'Encontro na praça');
   await usuario.type(screen.getByLabelText('Descrição *'), 'Manhã para os cães do bairro.');
   await usuario.type(screen.getByLabelText('Início *'), '2026-12-05T09:00');
-  await usuario.type(screen.getByLabelText('Nome do local *'), 'Praça Benedito Calixto');
+  await usuario.type(screen.getByLabelText('Nome do lugar *'), 'Praça Benedito Calixto');
   await usuario.type(screen.getByLabelText('Bairro *'), 'Pinheiros');
   await usuario.type(screen.getByLabelText('Cidade *'), 'São Paulo');
 }
@@ -302,7 +302,7 @@ describe('Rede: edição', () => {
 
   it('mudar o local pede motivo e senha e vai por relocation', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
-    const local = await screen.findByLabelText('Nome do local *');
+    const local = await screen.findByLabelText('Nome do lugar *');
     await usuario.clear(local);
     await usuario.type(local, 'Praça General Polidoro');
     await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
@@ -321,7 +321,7 @@ describe('Rede: edição', () => {
 
   it('bug 1: local e acesso juntos pedem a senha uma vez e gravam os dois', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
-    const local = await screen.findByLabelText('Nome do local *');
+    const local = await screen.findByLabelText('Nome do lugar *');
     await usuario.clear(local);
     await usuario.type(local, 'Praça General Polidoro');
     await usuario.click(screen.getByRole('radio', { name: /^Pago/ }));
@@ -380,7 +380,10 @@ describe('Rede: edição', () => {
   it('encontro cancelado trava data, local e acesso', async () => {
     const duble = criarDuble({ encontros: [encontroDeExemplo({ publication_status: 'cancelled' })], pedidos: [] });
     montar('/rede/encontro-de-caes-no-parque', duble);
-    expect(await screen.findByLabelText('Nome do local *')).toBeDisabled();
+    expect(await screen.findByLabelText('Nome do lugar *')).toBeDisabled();
+    expect(screen.getByLabelText('Nome do lugar *')).toHaveAccessibleDescription(
+      'Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Sem rua nem número.',
+    );
     expect(screen.getByRole('radio', { name: /^Privado/ })).toBeDisabled();
     expect(screen.getByLabelText('Título *')).toBeEnabled();
   });

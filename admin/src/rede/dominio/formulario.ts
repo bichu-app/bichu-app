@@ -232,7 +232,7 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
     else if (inicio && Date.parse(fim) <= Date.parse(inicio)) e('fim', 'Fim', 'O fim precisa ser depois do início.');
   }
 
-  if (!entre(f.local, 2, 80)) e('local', 'Nome do local', 'Informe o nome do local.');
+  if (!entre(f.local, 2, 80)) e('local', 'Nome do lugar', 'Informe o nome do lugar.');
   if (!entre(f.bairro, 2, 60)) e('bairro', 'Bairro', 'Informe o bairro.');
   if (!entre(f.cidade, 2, 60)) e('cidade', 'Cidade', 'Informe a cidade.');
 

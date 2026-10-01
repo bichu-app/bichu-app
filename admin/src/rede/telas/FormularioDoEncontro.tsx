@@ -61,7 +61,7 @@ const ROTULO_DO_CAMPO: Partial<Record<Campo, string>> = {
   fotos: 'Fotos',
   inicio: 'Início',
   fim: 'Fim',
-  local: 'Nome do local',
+  local: 'Nome do lugar',
   bairro: 'Bairro',
   cidade: 'Cidade',
   valor: 'Valor em reais',
@@ -377,11 +377,11 @@ export default function FormularioDoEncontro() {
           </div>
           <CampoDeTexto
             id="enc-local"
-            rotulo="Nome do local *"
+            rotulo="Nome do lugar *"
             valor={f.local}
             aoMudar={(v) => mudar('local', v)}
             maximo={80}
-            ajuda="Como aparece no app. Por exemplo: Praça Benedito Calixto."
+            ajuda="Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Sem rua nem número."
             erro={erroDe('local')}
           />
           <div className={estilos.row3}>

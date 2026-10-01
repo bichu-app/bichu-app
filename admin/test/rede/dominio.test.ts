@@ -117,7 +117,7 @@ describe('validação do formulário', () => {
       'Informe o título do encontro.',
       'Escreva uma descrição.',
       'Informe quando começa.',
-      'Informe o nome do local.',
+      'Informe o nome do lugar.',
       'Informe o bairro.',
       'Informe a cidade.',
       'Marque pelo menos um porte.',
