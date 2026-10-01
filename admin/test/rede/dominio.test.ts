@@ -246,6 +246,16 @@ describe('plano de edição (as três operações)', () => {
     expect(formularioDoEncontro(comEndereco).endereco).toBe('Rua Muniz de Sousa, 1119');
   });
 
+  it('lugar e endereço juntos viram uma mudança só (uma senha), e o PATCH nunca leva endereço', () => {
+    const f = { ...formularioDoEncontro(original), local: 'Praça General Polidoro', endereco: 'Rua Muniz de Sousa, 1119', titulo: 'Outro título' };
+    const plano = planoDeEdicao(original, f);
+    expect(plano.patch).toEqual({ title: 'Outro título' });
+    expect(plano.patch).not.toHaveProperty('street_address');
+    expect(plano.mudanca).toMatchObject({ place: { place_name: 'Praça General Polidoro' }, street_address: 'Rua Muniz de Sousa, 1119' });
+    expect(plano.acesso).toBeNull();
+    expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local?');
+  });
+
   it('só o horário: o lugar não vai, e o ponto que existir continua', () => {
     const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00' };
     const plano = planoDeEdicao(original, f);

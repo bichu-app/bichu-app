@@ -384,6 +384,25 @@ describe('Rede: edição', () => {
     expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
   });
 
+  it('editar lugar e endereço: uma senha, um relocation com os dois, e nenhum PATCH com endereço', async () => {
+    const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
+    const local = await screen.findByLabelText('Nome do lugar *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.type(screen.getByLabelText('Endereço'), 'Rua Muniz de Sousa, 1119');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque fechou.');
+    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
+    expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
+    expect(duble.registro.filter((r) => r.caminho.endsWith('/auth/reauth'))).toHaveLength(1);
+    const [mudanca] = escritas(duble, 'POST', /relocation$/);
+    expect(mudanca?.corpo).toMatchObject({ place: { place_name: 'Praça General Polidoro' }, street_address: 'Rua Muniz de Sousa, 1119', reason: 'O parque fechou.' });
+    expect(escritas(duble, 'PATCH', /events\/[^/]+$/).filter((r) => 'street_address' in ((r.corpo as object) ?? {}))).toEqual([]);
+    expect(duble.encontros.get('encontro-de-caes-no-parque')?.street_address).toBe('Rua Muniz de Sousa, 1119');
+  });
+
   it('observação com telefone na edição também não sai (isca)', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
     const obs = await screen.findByLabelText('Observações');
