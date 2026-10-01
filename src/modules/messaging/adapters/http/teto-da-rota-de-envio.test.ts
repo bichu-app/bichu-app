@@ -46,7 +46,12 @@ import {
   registrarRota,
   zerarInventario,
 } from '../../../../shared/http/registrar-rota.js';
-import { criarContadorDesligado, criarContadorEmMemoria } from '../../../../shared/http/rate-limit.js';
+import {
+  criarContadorDesligado,
+  criarContadorEmMemoria,
+  inicioDaJanela,
+  janelaEmSegundos,
+} from '../../../../shared/http/rate-limit.js';
 import { tetoDeTeste } from '../../../../shared/http/teto-de-teste.js';
 import {
   resolvedoresDoEnvio,
@@ -158,6 +163,7 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
   });
 
   /**
+<<<<<<< HEAD
    * O relógio parado em 00:00 UTC, que é quando o defeito aparecia.
    *
    * A rota declara DUAS entradas na mesma dimensão: 30/1h (`deny_429`) e
@@ -186,6 +192,45 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
         );
       }
       assert.equal((await enviar(app, CONVERSA)).statusCode, 429);
+    } finally {
+      await app.close();
+    }
+  });
+
+  /**
+   * O mesmo, no MEIO da hora da colisão, e com a premissa medida.
+   *
+   * O caso logo acima prende o relógio em 00:00:00.000 exato, que é a fronteira.
+   * Este prende às 00:30 — dentro da hora, longe de qualquer borda — para que um
+   * erro de arredondamento na fronteira não seja a única coisa que os dois
+   * exercem. O primeiro caso deste arquivo, que usa `Date.now()`, só via o
+   * defeito se a suíte por acaso rodasse naquela hora: foi por isso que ele
+   * reprovou duas vezes num dia e catorze vezes não no outro, e por isso a
+   * hipótese foi para carga da máquina.
+   *
+   * A asserção de premissa é o que falta ao caso acima: `inicioDaJanela` é
+   * `floor(t/janela)*janela` sobre a época, e se os inícios de `1h` e `24h`
+   * deixarem de coincidir no instante escolhido, os dois casos param de exercer
+   * o que existem para exercer e ninguém fica sabendo.
+   */
+  void it('00:30 UTC — a hora em que as duas entradas somavam no mesmo balde', async () => {
+    zerarInventario();
+    // Primeira hora do dia UTC: `inicioDaJanela(t, 1h) === inicioDaJanela(t, 24h)`.
+    const dentroDaColisao = Date.parse('2026-09-29T00:30:00Z');
+    assert.equal(
+      inicioDaJanela(dentroDaColisao, janelaEmSegundos('1h')).getTime(),
+      inicioDaJanela(dentroDaColisao, janelaEmSegundos('24h')).getTime(),
+      'a premissa deste caso caiu: os dois inícios de janela deixaram de coincidir',
+    );
+    const app = servidor(criarContadorEmMemoria(() => dentroDaColisao));
+    try {
+      for (let i = 0; i < TETO_POR_HORA; i += 1) {
+        const resposta = await enviar(app, CONVERSA);
+        assert.equal(resposta.statusCode, 201, `a ${String(i + 1)}ª foi recusada cedo demais`);
+      }
+      const estourou = await enviar(app, CONVERSA);
+      assert.equal(estourou.statusCode, 429, 'a 31ª passou: o teto parou de valer');
+      assert.equal(tipoDe(estourou.body), 'rate-limited');
     } finally {
       await app.close();
     }
