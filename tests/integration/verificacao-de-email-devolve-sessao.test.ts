@@ -85,6 +85,7 @@ import type { UserId } from '../../src/shared/types/brands.js';
 import { criarTrilhaDeAuditoria } from '../../src/modules/audit/adapters/persistence/kysely-audit-log.js';
 import { criarTokenSigner } from '../../src/modules/identity/adapters/external/rs256-token-signer.js';
 import { criarIdentityRepository } from '../../src/modules/identity/adapters/persistence/kysely-identity-repository.js';
+import { criarLocalizacaoDeReferenciaRepository } from '../../src/modules/identity/adapters/persistence/kysely-localizacao-de-referencia.js';
 import {
   criarVerificadorDeReautenticacao,
   registrarRotasDeIdentidade,
@@ -283,6 +284,22 @@ before(async () => {
   };
 
   const auth = criarAuthService({
+    // AS DUAS LINHAS ABAIXO SAO DA MESCLA, e nao deste caso. Este arquivo foi
+    // escrito em 29/09/2026, quando `DependenciasDeIdentidade` ainda nao exigia
+    // `removerPushDaConta` nem `apagarLocalizacaoDaSessao`; o tronco passou a
+    // exigir as duas depois, e o `git merge` nao tem como ver isso -- quem viu
+    // foi o `npm run typecheck` do fechamento. A fiacao copia a do vizinho mais
+    // proximo com a mesma bancada, `troca-de-email.test.ts`.
+    //
+    // SEC-019: `derrubarTodasAsSessoes` remove o cadastro de push. Esta bancada
+    // nao e sobre isso, entao a funcao e contada e nao observada; quem PROVA a
+    // remocao lendo `user_devices` depois e `sair-de-todos-pelo-http.test.ts`.
+    removerPushDaConta: () => Promise.resolve(0),
+    // SEC-021: o repositorio REAL, e nao um duble. Este caso tem banco de pe, e
+    // um duble aqui faria o apagamento do logout parecer exercitado sem nunca
+    // tocar a tabela.
+    apagarLocalizacaoDaSessao: (dono, familia) =>
+      criarLocalizacaoDeReferenciaRepository(db).apagar(dono, familia),
     repositorio,
     assinador,
     trilha,
