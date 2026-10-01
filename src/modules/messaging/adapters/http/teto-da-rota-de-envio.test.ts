@@ -163,7 +163,6 @@ void describe('critério 10 — 30 mensagens por hora por participante, com 429'
   });
 
   /**
-<<<<<<< HEAD
    * O relógio parado em 00:00 UTC, que é quando o defeito aparecia.
    *
    * A rota declara DUAS entradas na mesma dimensão: 30/1h (`deny_429`) e
