@@ -46,7 +46,7 @@ import estilos from '../rede.module.css';
 import { etagDe, useRede } from '../usarRede.ts';
 
 const AJUDA_DAS_FOTOS =
-  'JPG, PNG ou WebP, até 5 MB cada, com pelo menos 1600 × 900 pixels. A primeira é a capa: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover. Opcional.';
+  'JPG, PNG ou WebP, até 5 MB cada, com pelo menos 600 × 600 pixels. A primeira é a capa: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover. Opcional.';
 
 /** O id do elemento que recebe o foco pelo resumo de erros. */
 function idDoCampo(campo: Campo): string {
