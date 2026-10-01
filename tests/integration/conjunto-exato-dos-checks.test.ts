@@ -552,7 +552,7 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // teto de 500; sem usuario e senha, sem IP literal e sem host local e do
   // caso de uso, que analisa a URL.
   'public.network_events.network_events_link_de_ingresso_https':
-    "CHECK (((ticket_url IS NULL) OR ((char_length(ticket_url) <= 500) AND (ticket_url ~ '^https://[^/?#@[:space:]]+'::text))))",
+    "CHECK (((ticket_url IS NULL) OR ((char_length(ticket_url) <= 500) AND (ticket_url ~ '^https:[/]{2}[^/?#@[:space:]]+'::text))))",
   // O handle do Instagram como o servidor o guarda: sem `@`, minusculo, 1 a 30.
   'public.network_events.network_events_instagram_forma':
     "CHECK (((instagram_handle IS NULL) OR (instagram_handle ~ '^[a-z0-9._]{1,30}$'::text)))",

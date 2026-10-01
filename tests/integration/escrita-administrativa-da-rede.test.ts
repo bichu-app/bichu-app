@@ -394,6 +394,8 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     for (const [coluna, valor, restricao] of [
       ['ticket_url', 'http://ingressos.exemplo.br/evento/1', 'network_events_link_de_ingresso_https'],
       ['ticket_url', 'javascript:alert(1)', 'network_events_link_de_ingresso_https'],
+      ['ticket_url', 'HTTPS://ingressos.exemplo.br/evento/1', 'network_events_link_de_ingresso_https'],
+      ['ticket_url', 'https:/ingressos.exemplo.br/evento/1', 'network_events_link_de_ingresso_https'],
       ['instagram_handle', '@bichu', 'network_events_instagram_forma'],
       ['instagram_handle', 'Bichu', 'network_events_instagram_forma'],
       ['admission_unit', 'per_cat', 'network_events_unidade_do_valor_conhecida'],

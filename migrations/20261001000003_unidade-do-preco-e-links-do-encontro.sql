@@ -30,7 +30,7 @@ ALTER TABLE network_events
     CHECK (admission_unit IS NULL OR admission_unit IN ('per_dog', 'per_pet', 'per_person', 'per_pair', 'per_two_people')),
   ADD COLUMN ticket_url text
     CONSTRAINT network_events_link_de_ingresso_https
-    CHECK (ticket_url IS NULL OR (char_length(ticket_url) <= 500 AND ticket_url ~ '^https://[^/?#@[:space:]]+')),
+    CHECK (ticket_url IS NULL OR (char_length(ticket_url) <= 500 AND ticket_url ~ '^https:[/]{2}[^/?#@[:space:]]+')),
   ADD COLUMN instagram_handle text
     CONSTRAINT network_events_instagram_forma
     CHECK (instagram_handle IS NULL OR instagram_handle ~ '^[a-z0-9._]{1,30}$');
