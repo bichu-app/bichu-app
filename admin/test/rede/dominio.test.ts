@@ -226,6 +226,26 @@ describe('plano de edição (as três operações)', () => {
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de horário e local?');
     expect(corpoDaMudanca(original, f, plano)).toContain('O mapa do encontro sai do app, porque o ponto marcado era do lugar anterior.');
   });
+  it('endereço: vai na criação aparado, muda por relocation (com senha) e sem tirar o ponto', () => {
+    expect(montarCriacao({ ...preenchido(), endereco: '  Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP ' }).street_address).toBe(
+      'Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP',
+    );
+    expect(montarCriacao(preenchido())).not.toHaveProperty('street_address');
+    const f = { ...formularioDoEncontro(original), endereco: 'Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP' };
+    const plano = planoDeEdicao(original, f);
+    expect(plano.patch).toBeNull();
+    expect(plano.mudanca).toEqual({ street_address: 'Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP' });
+    expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local?');
+    expect(corpoDaMudanca(original, f, plano)[0]).toBe(
+      'O endereço passa a ser Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP. Quem usa o app não é avisado da mudança.',
+    );
+    const comEndereco = encontroDeExemplo({ street_address: 'Rua Muniz de Sousa, 1119' });
+    const tirar = { ...formularioDoEncontro(comEndereco), endereco: '' };
+    expect(planoDeEdicao(comEndereco, tirar).mudanca).toEqual({ street_address: null });
+    expect(corpoDaMudanca(comEndereco, tirar, planoDeEdicao(comEndereco, tirar))[0]).toBe('O endereço sai do app. Quem usa o app não é avisado da mudança.');
+    expect(formularioDoEncontro(comEndereco).endereco).toBe('Rua Muniz de Sousa, 1119');
+  });
+
   it('só o horário: o lugar não vai, e o ponto que existir continua', () => {
     const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00' };
     const plano = planoDeEdicao(original, f);

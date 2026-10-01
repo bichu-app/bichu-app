@@ -292,6 +292,21 @@ describe('Rede: formulário novo', () => {
     expect(screen.getByText('24/200')).toBeInTheDocument();
   });
 
+  it('endereço vai no corpo da criação, e a recusa de contato aparece no próprio campo', async () => {
+    const { duble, usuario } = montar('/rede/novo');
+    await preencherObrigatorios(usuario);
+    await usuario.type(screen.getByLabelText('Endereço'), 'Rua Mourato Coelho, 1200, fone (11) 98765-4321');
+    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
+    expect(screen.getByLabelText('Endereço')).toHaveAccessibleDescription(/^Tire do endereço telefone, e-mail, link, perfil ou chave Pix\. Rua, número e CEP podem ficar\./);
+    await usuario.clear(screen.getByLabelText('Endereço'));
+    await usuario.type(screen.getByLabelText('Endereço'), 'Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP');
+    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    const criacoes = escritas(duble, 'POST', /\/admin\/network\/events$/);
+    expect((criacoes.at(-1)?.corpo as { street_address?: string }).street_address).toBe('Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP');
+  });
+
   it('o formulário não tem mapa (decisão do cliente de 01/10), na criação e na edição', async () => {
     for (const rota of ['/rede/novo', '/rede/encontro-de-caes-no-parque']) {
       montar(rota);

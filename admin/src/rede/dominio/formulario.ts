@@ -149,8 +149,7 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     inicio: campoDoInstante(e.starts_at, fuso),
     fim: e.ends_at ? campoDoInstante(e.ends_at, fuso) : '',
     local: e.place.place_name,
-    // `place.street_address` ainda nao esta no contrato desta branch: entra com os tipos regerados.
-    endereco: '',
+    endereco: e.street_address ?? '',
     bairro: e.place.neighborhood,
     cidade: e.place.city,
     uf: e.place.state,
@@ -322,6 +321,7 @@ export function montarCriacao(f: EstadoDoFormulario): EncontroInput {
     admission: acesso(f),
     bring_items: [...f.levar],
     ...(notas ? { notes: notas } : {}),
+    ...(f.endereco.trim() ? { street_address: f.endereco.trim() } : {}),
   };
 }
 
@@ -386,6 +386,13 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
     mudanca.place = { ...lugar(f), ...(p.point ? { point: null } : {}) };
     oQueMudou.add('local');
   }
+  // O endereco muda por relocation, com senha e motivo (o PATCH nao o aceita).
+  // So o endereco nao tira o ponto: corrigir um numero nao muda o lugar.
+  const enderecoNovo = f.endereco.trim() || null;
+  if (enderecoNovo !== (original.street_address ?? null)) {
+    mudanca.street_address = enderecoNovo;
+    oQueMudou.add('local');
+  }
 
   const acessoNovo: Omit<MudancaDeAcesso, 'reason'> = {};
   if (f.visibilidade !== original.visibility) acessoNovo.visibility = f.visibilidade;
@@ -429,10 +436,14 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
       const fim = f.fim ? instanteDoCampo(f.fim) : null;
       if (ini) dados.push(`${dataCurta(ini)}, ${faixaDeHorario(ini, fim)}`);
     }
-    if (plano.oQueMudou.includes('local')) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
-    frases.push(
-      `O app passa a mostrar ${dados.join(', em ')}. Quem usa o app não é avisado da mudança.`,
-    );
+    if (plano.mudanca.place) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
+    const partes: string[] = [];
+    if (dados.length) partes.push(`O app passa a mostrar ${dados.join(', em ')}.`);
+    if (plano.mudanca.street_address !== undefined) {
+      partes.push(plano.mudanca.street_address ? `O endereço passa a ser ${plano.mudanca.street_address}.` : 'O endereço sai do app.');
+    }
+    partes.push('Quem usa o app não é avisado da mudança.');
+    frases.push(partes.join(' '));
     if (plano.mudanca.place?.point === null) frases.push('O mapa do encontro sai do app, porque o ponto marcado era do lugar anterior.');
   }
   if (plano.acesso) {

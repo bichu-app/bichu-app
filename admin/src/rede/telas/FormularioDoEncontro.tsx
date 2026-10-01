@@ -81,6 +81,7 @@ const CAMPO_DO_SERVIDOR: Record<string, Campo> = {
   'place.neighborhood': 'bairro',
   'place.city': 'cidade',
   notes: 'observacoes',
+  street_address: 'endereco',
   'admission.price': 'valor',
   'admission.price.amount': 'valor',
   accepted_sizes: 'portes',
@@ -92,7 +93,13 @@ function errosDoServidor(falha: Falha): ErroDeCampo[] {
   const texto = mensagemDaFalha(falha, 'salvar');
   return falha.erros.flatMap((e) => {
     const campo = CAMPO_DO_SERVIDOR[e.field];
-    return campo ? [{ campo, rotulo: ROTULO_DO_CAMPO[campo] ?? campo, mensagem: texto }] : [];
+    if (!campo) return [];
+    // A recusa de contato no endereco tem texto proprio: o das observacoes fala de "observacoes".
+    const mensagem =
+      campo === 'endereco' && e.code === 'contact_or_payment_detected'
+        ? 'Tire do endereço telefone, e-mail, link, perfil ou chave Pix. Rua, número e CEP podem ficar.'
+        : texto;
+    return [{ campo, rotulo: ROTULO_DO_CAMPO[campo] ?? campo, mensagem }];
   });
 }
 
@@ -531,8 +538,8 @@ export default function FormularioDoEncontro() {
 
 /** Com o encontro cancelado, lugar e acesso ficam como estavam: o plano nao os toca. */
 function lugarEAcessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
-  const { inicio, fim, local, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
-  return { inicio, fim, local, bairro, cidade, uf, visibilidade, pago, valor, unidade };
+  const { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
+  return { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade };
 }
 
 function VoltarParaARede() {

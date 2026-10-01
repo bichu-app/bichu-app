@@ -34,6 +34,7 @@ export function encontroDeExemplo(sobrescrever: Partial<Encontro> = {}): Encontr
     admission: { kind: 'free', price: null },
     bring_items: ['water', 'water_bowl', 'poop_bags', 'leash'],
     notes: 'Ponto de encontro ao lado do lago.',
+    street_address: null,
     pending_request_count: 0,
     publication_status: 'published',
     timing: 'upcoming',
