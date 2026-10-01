@@ -404,6 +404,24 @@ describe('Rede: edição', () => {
     expect(duble.encontros.get('encontro-de-caes-no-parque')?.street_address).toBe('Rua Muniz de Sousa, 1119');
   });
 
+  it('ISCA: endereço com contato recusado na mudança de lugar mostra o texto do endereço e marca o campo', async () => {
+    const { usuario } = montar('/rede/encontro-de-caes-no-parque');
+    const local = await screen.findByLabelText('Nome do lugar *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.type(screen.getByLabelText('Endereço'), 'Rua Muniz de Sousa, 1119, zap (11) 98765-4321');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque fechou.');
+    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
+    const texto = 'Tire do endereço telefone, e-mail, link, perfil ou chave Pix. Rua, número e CEP podem ficar.';
+    expect(await within(dialogo).findByText(texto)).toBeInTheDocument();
+    expect(within(dialogo).queryByText(/observações/)).toBeNull();
+    expect(screen.getByLabelText('Endereço')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Endereço')).toHaveAccessibleDescription(new RegExp(`^${texto.replace(/[.]/g, '\\.')}`));
+  });
+
   it('observação com telefone na edição também não sai (isca)', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
     const obs = await screen.findByLabelText('Observações');

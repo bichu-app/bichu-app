@@ -322,6 +322,8 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         if (e.publication_status !== 'published') return problema(400, 'validation-failed', 'Nao publicado', [{ field: 'slug', code: 'event_not_published' }]);
         const corpo = req.corpo as Mudanca;
         if (!corpo.reason) return problema(400, 'validation-failed', 'Falta o motivo', [{ field: 'reason', code: 'required' }]);
+        const recusaDoEnderecoNovo = recusaDeEndereco(corpo.street_address);
+        if (recusaDoEnderecoNovo) return recusaDoEnderecoNovo;
         return salvar(e, (x) => {
           if (corpo.place) x.place = { ...corpo.place, point: corpo.place.point ?? null };
           if (corpo.street_address !== undefined) x.street_address = corpo.street_address;

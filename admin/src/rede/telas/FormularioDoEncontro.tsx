@@ -269,6 +269,15 @@ export default function FormularioDoEncontro() {
       if (!r.ok) {
         const parcial = i > 0 ? ' Uma parte das alterações já foi salva; a página foi atualizada.' : '';
         if (i > 0 || precisaReler(r.falha)) setVersao((n) => n + 1);
+        // Recusa de campo (endereco com contato, por exemplo): o mesmo tratamento do
+        // salvar sem senha. O campo fica marcado atras do dialogo, e o dialogo diz o
+        // texto do campo, e nao o generico (que e o das observacoes).
+        const noCampo = errosDoServidor(r.falha);
+        if (noCampo.length) {
+          setTentou(true);
+          setDoServidor(noCampo);
+          return { ok: false, mensagem: noCampo.map((e) => e.mensagem).join(' ') + parcial };
+        }
         return { ok: false, mensagem: mensagemDaFalha(r.falha, 'salvar a mudança') + parcial };
       }
       slug = r.dados.slug;
