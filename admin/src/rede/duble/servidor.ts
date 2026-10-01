@@ -136,6 +136,14 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
     return null;
   }
 
+  /** Um recorte da regra do servidor (errosDoEndereco): link, e-mail ou telefone com DDD recusam; rua e CEP, nao. */
+  function recusaDeEndereco(endereco: unknown): Response | null {
+    if (typeof endereco === 'string' && /https?:\/\/|www\.|@|\(?\d{2}\)?\s?9?\d{4}-?\d{4}/.test(endereco)) {
+      return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'street_address', code: 'contact_or_payment_detected' }]);
+    }
+    return null;
+  }
+
   function galeria(imagens: EncontroInput['images']): Encontro['images'] {
     return (imagens ?? []).map((img, position) => ({
       source: 'uploaded',
@@ -227,6 +235,8 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         const corpo = req.corpo as EncontroInput;
         const recusa = recusaDeNotas(corpo.notes);
         if (recusa) return recusa;
+        const recusaDoEndereco = recusaDeEndereco(corpo.street_address);
+        if (recusaDoEndereco) return recusaDoEndereco;
         if (corpo.admission?.kind === 'paid' && !corpo.admission.price) {
           return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'admission.price', code: 'admission_incomplete' }]);
         }
@@ -254,6 +264,7 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
           admission: { kind: corpo.admission?.kind ?? 'free', price: corpo.admission?.price ?? null },
           bring_items: corpo.bring_items ?? [],
           notes: corpo.notes ?? null,
+          street_address: corpo.street_address ?? null,
           pending_request_count: 0,
           publication_status: 'published',
           timing: 'upcoming',
@@ -311,8 +322,11 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         if (e.publication_status !== 'published') return problema(400, 'validation-failed', 'Nao publicado', [{ field: 'slug', code: 'event_not_published' }]);
         const corpo = req.corpo as Mudanca;
         if (!corpo.reason) return problema(400, 'validation-failed', 'Falta o motivo', [{ field: 'reason', code: 'required' }]);
+        const recusaDoEnderecoNovo = recusaDeEndereco(corpo.street_address);
+        if (recusaDoEnderecoNovo) return recusaDoEnderecoNovo;
         return salvar(e, (x) => {
           if (corpo.place) x.place = { ...corpo.place, point: corpo.place.point ?? null };
+          if (corpo.street_address !== undefined) x.street_address = corpo.street_address;
           if (corpo.starts_at) x.starts_at = corpo.starts_at;
           if (corpo.ends_at !== undefined) x.ends_at = corpo.ends_at;
         });

@@ -7,7 +7,7 @@
  * e custo, abrem o dialogo com motivo e senha, porque o contrato os separa em
  * operacoes com reautenticacao e aviso a todos os administradores.
  */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../../componentes/basicos.tsx';
@@ -22,10 +22,12 @@ import { precisaReler, type Falha } from '../api/redeApi.ts';
 import { DialogoComMotivoESenha, type ResultadoDaAcao } from '../componentes/DialogoComMotivoESenha.tsx';
 import {
   corpoDaMudanca,
+  cortarEmCodePoints,
   formularioDoEncontro,
   formularioVazio,
   avisoDeFotosSemEnvio,
   LIMITE_DAS_OBSERVACOES,
+  LIMITE_DO_ENDERECO,
   MARCA_SEM_ENVIO,
   semEnvio,
   LIMITE_DO_RESUMO,
@@ -41,12 +43,11 @@ import {
 import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES } from '../dominio/rotulos.ts';
 import type { Encontro, EscopoDeReautenticacao } from '../dominio/tipos.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
-import { SeletorDePonto } from '../mapa/SeletorDePonto.tsx';
 import estilos from '../rede.module.css';
 import { etagDe, useRede } from '../usarRede.ts';
 
 const AJUDA_DAS_FOTOS =
-  'JPG, PNG ou WebP, até 5 MB cada, com pelo menos 1600 × 900 pixels. A primeira é a capa: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover. Opcional.';
+  'JPG, PNG ou WebP, até 5 MB cada, com pelo menos 600 × 600 pixels. A primeira é a capa: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover. Opcional.';
 
 /** O id do elemento que recebe o foco pelo resumo de erros. */
 function idDoCampo(campo: Campo): string {
@@ -61,7 +62,8 @@ const ROTULO_DO_CAMPO: Partial<Record<Campo, string>> = {
   fotos: 'Fotos',
   inicio: 'Início',
   fim: 'Fim',
-  local: 'Nome do local',
+  local: 'Nome do lugar',
+  endereco: 'Endereço',
   bairro: 'Bairro',
   cidade: 'Cidade',
   valor: 'Valor em reais',
@@ -79,6 +81,7 @@ const CAMPO_DO_SERVIDOR: Record<string, Campo> = {
   'place.neighborhood': 'bairro',
   'place.city': 'cidade',
   notes: 'observacoes',
+  street_address: 'endereco',
   'admission.price': 'valor',
   'admission.price.amount': 'valor',
   accepted_sizes: 'portes',
@@ -90,7 +93,13 @@ function errosDoServidor(falha: Falha): ErroDeCampo[] {
   const texto = mensagemDaFalha(falha, 'salvar');
   return falha.erros.flatMap((e) => {
     const campo = CAMPO_DO_SERVIDOR[e.field];
-    return campo ? [{ campo, rotulo: ROTULO_DO_CAMPO[campo] ?? campo, mensagem: texto }] : [];
+    if (!campo) return [];
+    // A recusa de contato no endereco tem texto proprio: o das observacoes fala de "observacoes".
+    const mensagem =
+      campo === 'endereco' && e.code === 'contact_or_payment_detected'
+        ? 'Tire do endereço telefone, e-mail, link, perfil ou chave Pix. Rua, número e CEP podem ficar.'
+        : texto;
+    return [{ campo, rotulo: ROTULO_DO_CAMPO[campo] ?? campo, mensagem }];
   });
 }
 
@@ -260,6 +269,15 @@ export default function FormularioDoEncontro() {
       if (!r.ok) {
         const parcial = i > 0 ? ' Uma parte das alterações já foi salva; a página foi atualizada.' : '';
         if (i > 0 || precisaReler(r.falha)) setVersao((n) => n + 1);
+        // Recusa de campo (endereco com contato, por exemplo): o mesmo tratamento do
+        // salvar sem senha. O campo fica marcado atras do dialogo, e o dialogo diz o
+        // texto do campo, e nao o generico (que e o das observacoes).
+        const noCampo = errosDoServidor(r.falha);
+        if (noCampo.length) {
+          setTentou(true);
+          setDoServidor(noCampo);
+          return { ok: false, mensagem: noCampo.map((e) => e.mensagem).join(' ') + parcial };
+        }
         return { ok: false, mensagem: mensagemDaFalha(r.falha, 'salvar a mudança') + parcial };
       }
       slug = r.dados.slug;
@@ -345,15 +363,7 @@ export default function FormularioDoEncontro() {
       <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
 
       <CampoDeTexto id="enc-titulo" rotulo="Título *" valor={f.titulo} aoMudar={(v) => mudar('titulo', v)} maximo={120} erro={erroDe('titulo')} />
-      <CampoDeTexto
-        id="enc-resumo"
-        rotulo="Descrição *"
-        valor={f.resumo}
-        aoMudar={(v) => mudar('resumo', v)}
-        maximo={LIMITE_DO_RESUMO}
-        contador
-        erro={erroDe('resumo')}
-      />
+      <CampoDaDescricao valor={f.resumo} aoMudar={(v) => mudar('resumo', v)} erro={erroDe('resumo')} />
       <Galeria
         id="fotos"
         titulo="Fotos"
@@ -377,21 +387,18 @@ export default function FormularioDoEncontro() {
             <CampoDeDataEHora id="enc-inicio" rotulo="Início *" valor={f.inicio} aoMudar={(v) => mudar('inicio', v)} erro={erroDe('inicio')} />
             <CampoDeDataEHora id="enc-fim" rotulo="Fim" valor={f.fim} aoMudar={(v) => mudar('fim', v)} erro={erroDe('fim')} />
           </div>
-          <div className="field">
-            <span className="lab">Ponto do encontro no mapa</span>
-            <span className="help">Clique no mapa onde o encontro acontece. Use um lugar público, como praça, parque ou rua. Nunca uma casa.</span>
-            <SeletorDePonto ponto={f.ponto} aoMudar={(p) => mudar('ponto', p)} desabilitado={travarLugarEAcesso} />
-            <span className="help">Recomendado. Sem ponto, o app não mostra o mapa nem a distância do encontro.</span>
+          <div className="row2">
+            <CampoDeTexto
+              id="enc-local"
+              rotulo="Nome do lugar *"
+              valor={f.local}
+              aoMudar={(v) => mudar('local', v)}
+              maximo={80}
+              ajuda="Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Rua e número vão em Endereço."
+              erro={erroDe('local')}
+            />
+            <CampoDoEndereco valor={f.endereco} aoMudar={(v) => mudar('endereco', v)} erro={erroDe('endereco')} />
           </div>
-          <CampoDeTexto
-            id="enc-local"
-            rotulo="Nome do local *"
-            valor={f.local}
-            aoMudar={(v) => mudar('local', v)}
-            maximo={80}
-            ajuda="Como aparece no app. Por exemplo: Praça Benedito Calixto."
-            erro={erroDe('local')}
-          />
           <div className={estilos.row3}>
             <CampoDeTexto id="enc-bairro" rotulo="Bairro *" valor={f.bairro} aoMudar={(v) => mudar('bairro', v)} maximo={60} erro={erroDe('bairro')} />
             <CampoDeTexto id="enc-cidade" rotulo="Cidade *" valor={f.cidade} aoMudar={(v) => mudar('cidade', v)} maximo={60} erro={erroDe('cidade')} />
@@ -540,8 +547,8 @@ export default function FormularioDoEncontro() {
 
 /** Com o encontro cancelado, lugar e acesso ficam como estavam: o plano nao os toca. */
 function lugarEAcessoDe(b: EstadoDoFormulario): Partial<EstadoDoFormulario> {
-  const { inicio, fim, ponto, local, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
-  return { inicio, fim, ponto, local, bairro, cidade, uf, visibilidade, pago, valor, unidade };
+  const { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade } = b;
+  return { inicio, fim, local, endereco, bairro, cidade, uf, visibilidade, pago, valor, unidade };
 }
 
 function VoltarParaARede() {
@@ -573,6 +580,88 @@ function CampoDeDataEHora({ id, rotulo, valor, aoMudar, erro }: { id: string; ro
           Horário de Brasília.
         </span>
       )}
+    </div>
+  );
+}
+
+/**
+ * Descricao do encontro (`summary`, ate 200): area de varias linhas que cresce
+ * com o texto, com contador. `field-sizing: content` onde o navegador sabe; nos
+ * outros, a altura acompanha o `scrollHeight` a cada mudanca.
+ */
+function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
+  const id = 'enc-resumo';
+  const area = useRef<HTMLTextAreaElement>(null);
+  useLayoutEffect(() => {
+    const el = area.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${String(el.scrollHeight)}px`;
+  }, [valor]);
+  return (
+    <div className={erro ? 'field err' : 'field'}>
+      <label htmlFor={id}>Descrição *</label>
+      <textarea
+        ref={area}
+        id={id}
+        rows={3}
+        className={`input ${estilos.areaQueCresce ?? ''}`}
+        // Sem `maxLength` nativo: ele conta unidades UTF-16 e pararia em 100
+        // emojis. O corte e o contador seguem o servidor (code points).
+        value={valor}
+        onChange={(e) => aoMudar(cortarEmCodePoints(e.target.value, LIMITE_DO_RESUMO))}
+        aria-invalid={erro ? true : undefined}
+        aria-describedby={`${id}-ajuda ${id}-contador`}
+      />
+      {erro ? (
+        <span className="help err" id={`${id}-ajuda`} aria-live="polite">
+          <Icone nome="error" tamanho="s20" />
+          {erro}
+        </span>
+      ) : (
+        <span className="help" id={`${id}-ajuda`}>
+          Aparece na lista de encontros do app e no topo da página do encontro.
+        </span>
+      )}
+      <span className="help contador" id={`${id}-contador`}>
+        {[...valor].length}/{LIMITE_DO_RESUMO}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Endereco por extenso (`place.street_address`), opcional. Sem `maxLength`
+ * nativo, que conta UTF-16: o corte e o contador sao em code points, como o
+ * servidor conta (`errosDoEndereco`, 5 a 200).
+ */
+function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
+  const id = 'enc-endereco';
+  return (
+    <div className={erro ? 'field err' : 'field'}>
+      <label htmlFor={id}>Endereço</label>
+      <input
+        id={id}
+        className="input"
+        autoComplete="off"
+        value={valor}
+        onChange={(e) => aoMudar(cortarEmCodePoints(e.target.value, LIMITE_DO_ENDERECO))}
+        aria-invalid={erro ? true : undefined}
+        aria-describedby={`${id}-ajuda ${id}-contador`}
+      />
+      {erro ? (
+        <span className="help err" id={`${id}-ajuda`} aria-live="polite">
+          <Icone nome="error" tamanho="s20" />
+          {erro}
+        </span>
+      ) : (
+        <span className="help" id={`${id}-ajuda`}>
+          Rua e número de um lugar público, nunca de uma casa. No app, só quem tem conta vê. Por exemplo: Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP. Opcional.
+        </span>
+      )}
+      <span className="help contador" id={`${id}-contador`}>
+        {[...valor].length}/{LIMITE_DO_ENDERECO}
+      </span>
     </div>
   );
 }

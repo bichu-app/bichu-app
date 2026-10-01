@@ -66,6 +66,8 @@ export interface PaginaDaAgenda {
 export interface LocalDoEncontro {
   /** Nulo quando o encontro nao tem ponto marcado, e a ausencia e estado normal. */
   readonly ponto: PontoDoEncontro | null;
+  /** O endereco por extenso, na mesma resposta autenticada do ponto. */
+  readonly endereco: string | null;
 }
 
 /** A agenda por distancia (`listNearbyNetworkEvents`). So encontros publicos. */

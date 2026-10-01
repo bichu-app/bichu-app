@@ -1916,8 +1916,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * O ponto do encontro no mapa, so para quem tem conta
-         * @description O ponto marcado no mapa pelo administrador (`geo_source = map_pin`,
+         * O ponto e o endereco do encontro, so para quem tem conta
+         * @description **Endereco (01/10/2026):** `street_address` sai AQUI e em nenhuma
+         *     leitura sem conta, pela mesma regra do ponto (emenda 1 do ADR-0010,
+         *     emenda de 01/10 do ADR-0027). O app abre o texto no aplicativo de
+         *     mapas do aparelho, por intent; o Bichu nao geocodifica (ADR-0006).
+         *
+         *     O ponto marcado no mapa pelo administrador (`geo_source = map_pin`,
          *     ADR-0006), para o aplicativo desenhar o encontro no mapa. E a emenda 1
          *     do ADR-0010, com escopo fechado: **ponto de evento publicado, em
          *     resposta autenticada**. Coordenada de pessoa, de pet, de caso e de
@@ -3038,8 +3043,14 @@ export interface paths {
          *     depois (D52), e linha na trilha (sem a coordenada bruta: a trilha grava
          *     `point_changed`).
          *
-         *     Pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`. O
-         *     `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
+         *     **Compatibilidade (01/10/2026):** o painel deixou de usar o mapa, e o
+         *     `place.point` desta rota fica so por compatibilidade. A rota continua
+         *     sendo o UNICO caminho para mudar o lugar de um encontro existente,
+         *     inclusive o `street_address`: mudar onde e T11, e as tres travas
+         *     valem para o endereco como valem para o ponto.
+         *
+         *     Pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e
+         *     `time_zone`. O `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
          *     responde `400` (`code: event_not_published`).
          */
         post: operations["relocateAdminNetworkEvent"];
@@ -4681,6 +4692,7 @@ export interface components {
         NetworkEventPublic: {
             slug: string;
             title: string;
+            /** @description A descricao do encontro, ate 200 caracteres (pedido do cliente de 01/10; antes, 180). */
             summary: string;
             place: components["schemas"]["NetworkEventPlace"];
             /**
@@ -4858,10 +4870,18 @@ export interface components {
         /**
          * @description A resposta de `getNetworkEventLocation`. **So sai com conta** (emenda 1
          *     do ADR-0010). `point` nulo e o encontro sem ponto marcado: a tela mostra
-         *     os rotulos e nao mostra mapa.
+         *     os rotulos e nao mostra mapa. Desde 01/10/2026 o painel nao marca mais
+         *     ponto (o `point` fica so por compatibilidade) e escreve o endereco.
          */
         NetworkEventLocation: {
             point: components["schemas"]["NetworkEventPoint"] | null;
+            /**
+             * @description O endereco por extenso, como o painel o escreveu. Nulo quando nao
+             *     ha. O app o abre no aplicativo de mapas do aparelho, por intent com
+             *     o TEXTO; o Bichu nao geocodifica (ADR-0006). **Nunca** sai na
+             *     agenda nem no detalhe publico (emenda de 01/10 do ADR-0027).
+             */
+            street_address: string | null;
         };
         PublicLostPetPage: {
             items: components["schemas"]["PublicLostPet"][];
@@ -5056,12 +5076,22 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp";
             /**
              * @description Ate 5 MiB, o numero que o painel mostra. Dimensao minima: 800 x 800
-             *     pixels para `store_item`, 1600 x 900 para `network_event`. A
-             *     dimensao so e conhecida depois do envio: o worker a confere nos
-             *     bytes e marca a imagem `rejected` com o motivo, e o painel mostra o
-             *     erro na miniatura.
+             *     pixels para `store_item`, 600 x 600 para `network_event` (pedido do
+             *     cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
+             *     DECLARADA, em `width`/`height` deste pedido, recusada aqui com
+             *     `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
+             *     faz nos bytes e que marca a imagem `rejected` com o motivo, porque
+             *     a declarada e do navegador e pode mentir.
              */
             byte_size: number;
+            /**
+             * @description Largura em pixels, como o navegador a le do arquivo antes de
+             *     enviar. Opcional (o painel atual nao a manda); quando vem, abaixo
+             *     da minima do `purpose` recusa com `422` (`image-too-small`).
+             */
+            width?: number;
+            /** @description Altura em pixels. Mesma regra de `width`. */
+            height?: number;
         };
         AdminStorePartnerInput: {
             slug: components["schemas"]["Slug"];
@@ -5222,8 +5252,10 @@ export interface components {
         };
         /**
          * @description **Logradouro publico, nunca residencia** (ADR-0027 item 13). Os tres
-         *     rotulos sao obrigatorios; o ponto e opcional, como tolerancia (D.4).
-         *     Nao ha logradouro, numero nem CEP.
+         *     rotulos sao obrigatorios; o ponto e opcional, como tolerancia (D.4), e
+         *     desde 01/10/2026 fica so por compatibilidade: o painel nao usa mais
+         *     mapa. Logradouro, numero e CEP vivem em `street_address`, fora deste
+         *     objeto.
          */
         AdminNetworkEventPlaceInput: {
             place_name: string;
@@ -5255,6 +5287,11 @@ export interface components {
              */
             slug?: components["schemas"]["Slug"];
             title: string;
+            /**
+             * @description A descricao do encontro ("Descricao" no painel), ate 200 caracteres.
+             *     O teto vale so na escrita: o `CHECK` do banco foi alargado de 180
+             *     para 200 sem tocar linha existente.
+             */
             summary: string;
             place: components["schemas"]["AdminNetworkEventPlaceInput"];
             /** Format: date-time */
@@ -5282,10 +5319,22 @@ export interface components {
             admission?: components["schemas"]["AdminNetworkEventAdmissionInput"];
             bring_items?: components["schemas"]["NetworkEventBringItems"];
             notes?: components["schemas"]["NetworkEventNotes"];
+            street_address?: components["schemas"]["AdminNetworkEventStreetAddress"];
         };
         /**
-         * @description **Sem data, horario, fuso nem lugar**: mudar onde e quando e
-         *     `relocateAdminNetworkEvent`; sem visibilidade nem condicao de acesso:
+         * @description O endereco por extenso do encontro (decisao do cliente de 01/10/2026),
+         *     de 5 a 200 caracteres contados em code points, aparado. Logradouro
+         *     publico, nunca residencia (ADR-0027 item 13). Endereco e CEP sao o
+         *     conteudo do campo e NAO sao recusados; link, e-mail, perfil
+         *     `@usuario`, telefone, chave PIX e dados de pagamento sao, com `400`
+         *     (`code: contact_or_payment_detected`), e controle bidirecional com
+         *     `code: bidi_control`. No app, sai SO em `getNetworkEventLocation`.
+         */
+        AdminNetworkEventStreetAddress: string;
+        /**
+         * @description **Sem data, horario, fuso nem lugar, e sem `street_address`**: mudar
+         *     onde e quando e `relocateAdminNetworkEvent`, que exige reautenticacao
+         *     (T11); sem visibilidade nem condicao de acesso:
          *     `changeAdminNetworkEventAccess`. `images` substitui a galeria inteira
          *     (a posicao 0 e a capa); `notes: null` tira as observacoes; as listas
          *     substituem o conjunto.
@@ -5303,9 +5352,11 @@ export interface components {
             bring_items?: components["schemas"]["NetworkEventBringItems"];
             notes?: components["schemas"]["NetworkEventNotes"] | null;
         };
-        /** @description `reason` e pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`. */
+        /** @description `reason` e pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e `time_zone`. */
         AdminNetworkEventRelocation: {
             place?: components["schemas"]["AdminNetworkEventPlaceInput"];
+            /** @description O endereco novo; `null` tira o endereco. */
+            street_address?: components["schemas"]["AdminNetworkEventStreetAddress"] | null;
             /** Format: date-time */
             starts_at?: string;
             /** Format: date-time */
@@ -5364,6 +5415,8 @@ export interface components {
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];
             notes: string | null;
+            /** @description O endereco por extenso. Nulo nos encontros anteriores a 01/10/2026 e em quem nao o informou. */
+            street_address: string | null;
             /** @description Pedidos pendentes na fila. Sempre 0 em encontro publico. So existe no painel. */
             pending_request_count: number;
             publication_status: components["schemas"]["AdminNetworkEventPublicationStatus"];
@@ -5746,6 +5799,20 @@ export interface components {
         };
         /** @description Corpo ou parametro invalido. */
         ValidationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description A imagem declarada e menor que a dimensao minima do proposito: 600 x
+         *     600 pixels no encontro da `Rede`, 800 x 800 no produto da `Loja`.
+         *     `errors[]` traz `width` e/ou `height` com `code: minimum`. Nada foi
+         *     assinado: escolha outra imagem.
+         */
+        ImageTooSmall: {
             headers: {
                 [name: string]: unknown;
             };
@@ -10554,6 +10621,7 @@ export interface operations {
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
             429: components["responses"]["TooManyRequests"];
         };
     };

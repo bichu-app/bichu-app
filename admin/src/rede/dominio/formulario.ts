@@ -23,7 +23,6 @@ import type {
   LugarInput,
   Mudanca,
   MudancaDeAcesso,
-  Ponto,
   Porte,
   UnidadeDoValor,
   Visibilidade,
@@ -32,7 +31,10 @@ import { centavosDoTexto, textoDosCentavos, valorComoOAppMostra } from './valor.
 
 export const LIMITE_DE_FOTOS = 8;
 export const LIMITE_DAS_OBSERVACOES = 500;
-export const LIMITE_DO_RESUMO = 180;
+/** `summary` do encontro: ate 200 (pedido do cliente de 01/10; antes, 180). */
+export const LIMITE_DO_RESUMO = 200;
+/** `place.street_address`: 5 a 200 code points, como o servidor (`errosDoEndereco`). */
+export const LIMITE_DO_ENDERECO = 200;
 export const LIMITE_DO_MOTIVO = 280;
 
 /**
@@ -91,8 +93,9 @@ export interface EstadoDoFormulario {
   resumo: string;
   inicio: string;
   fim: string;
-  ponto: Ponto | null;
   local: string;
+  /** Endereco por extenso (`place.street_address`, 01/10), opcional: 5 a 200 code points. */
+  endereco: string;
   bairro: string;
   cidade: string;
   uf: string;
@@ -117,8 +120,8 @@ export function formularioVazio(): EstadoDoFormulario {
     resumo: '',
     inicio: '',
     fim: '',
-    ponto: null,
     local: '',
+    endereco: '',
     bairro: '',
     cidade: '',
     uf: 'SP',
@@ -145,8 +148,8 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     resumo: e.summary,
     inicio: campoDoInstante(e.starts_at, fuso),
     fim: e.ends_at ? campoDoInstante(e.ends_at, fuso) : '',
-    ponto: e.place.point ?? null,
     local: e.place.place_name,
+    endereco: e.street_address ?? '',
     bairro: e.place.neighborhood,
     cidade: e.place.city,
     uf: e.place.state,
@@ -183,6 +186,7 @@ export type Campo =
   | 'inicio'
   | 'fim'
   | 'local'
+  | 'endereco'
   | 'bairro'
   | 'cidade'
   | 'valor'
@@ -199,8 +203,23 @@ export interface ErroDeCampo {
 
 export type Modo = 'novo' | 'editar';
 
+/**
+ * Tamanho como o servidor conta (`errosDeTexto`: `[...valor.trim()].length`) e
+ * como o banco guarda: code points, e nao unidades UTF-16. Um emoji conta 1, e
+ * um acento combinado (e + U+0301) conta 2, igual la.
+ */
+export function tamanhoComoOServidor(t: string): number {
+  return [...t.trim()].length;
+}
+
+/** O texto cortado em `max` code points, sem partir um par substituto ao meio. */
+export function cortarEmCodePoints(t: string, max: number): string {
+  const cp = [...t];
+  return cp.length <= max ? t : cp.slice(0, max).join('');
+}
+
 const entre = (t: string, min: number, max: number) => {
-  const n = t.trim().length;
+  const n = tamanhoComoOServidor(t);
   return n >= min && n <= max;
 };
 
@@ -231,7 +250,10 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
     else if (inicio && Date.parse(fim) <= Date.parse(inicio)) e('fim', 'Fim', 'O fim precisa ser depois do início.');
   }
 
-  if (!entre(f.local, 2, 80)) e('local', 'Nome do local', 'Informe o nome do local.');
+  if (!entre(f.local, 2, 80)) e('local', 'Nome do lugar', 'Informe o nome do lugar.');
+  if (f.endereco.trim() && !entre(f.endereco, 5, LIMITE_DO_ENDERECO)) {
+    e('endereco', 'Endereço', 'Escreva o endereço com pelo menos 5 caracteres, ou deixe em branco.');
+  }
   if (!entre(f.bairro, 2, 60)) e('bairro', 'Bairro', 'Informe o bairro.');
   if (!entre(f.cidade, 2, 60)) e('cidade', 'Cidade', 'Informe a cidade.');
 
@@ -262,7 +284,6 @@ function lugar(f: EstadoDoFormulario): LugarInput {
     neighborhood: f.bairro.trim(),
     city: f.cidade.trim(),
     state: f.uf,
-    ...(f.ponto ? { point: f.ponto } : {}),
   };
 }
 
@@ -300,6 +321,7 @@ export function montarCriacao(f: EstadoDoFormulario): EncontroInput {
     admission: acesso(f),
     bring_items: [...f.levar],
     ...(notas ? { notes: notas } : {}),
+    ...(f.endereco.trim() ? { street_address: f.endereco.trim() } : {}),
   };
 }
 
@@ -355,17 +377,20 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
     if (f.fim.slice(11) !== fimAntigo.slice(11)) oQueMudou.add('horário');
   }
   const p = original.place;
-  const pontoIgual =
-    (f.ponto?.lat ?? null) === (p.point?.lat ?? null) && (f.ponto?.lon ?? null) === (p.point?.lon ?? null);
-  const lugarMudou =
-    f.local.trim() !== p.place_name ||
-    f.bairro.trim() !== p.neighborhood ||
-    f.cidade.trim() !== p.city ||
-    f.uf !== p.state ||
-    !pontoIgual;
+  const lugarMudou = f.local.trim() !== p.place_name || f.bairro.trim() !== p.neighborhood || f.cidade.trim() !== p.city || f.uf !== p.state;
   if (lugarMudou) {
-    // O lugar vai inteiro. Tirar o ponto e mandar `point: null`, que o contrato aceita.
-    mudanca.place = { ...lugar(f), ...(f.ponto ? {} : { point: null }) };
+    // O backoffice nao tem mapa (decisao do cliente de 01/10): o ponto nao se
+    // edita aqui. Mudando o lugar, o ponto antigo e de outro lugar e sai
+    // (`point: null`), para o app nao mostrar o mapa no endereco velho. Sem
+    // mudanca de lugar, nada vai, e o ponto que existir continua.
+    mudanca.place = { ...lugar(f), ...(p.point ? { point: null } : {}) };
+    oQueMudou.add('local');
+  }
+  // O endereco muda por relocation, com senha e motivo (o PATCH nao o aceita).
+  // So o endereco nao tira o ponto: corrigir um numero nao muda o lugar.
+  const enderecoNovo = f.endereco.trim() || null;
+  if (enderecoNovo !== (original.street_address ?? null)) {
+    mudanca.street_address = enderecoNovo;
     oQueMudou.add('local');
   }
 
@@ -411,14 +436,20 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
       const fim = f.fim ? instanteDoCampo(f.fim) : null;
       if (ini) dados.push(`${dataCurta(ini)}, ${faixaDeHorario(ini, fim)}`);
     }
-    if (plano.oQueMudou.includes('local')) {
-      const mesmoNome = f.local.trim() === original.place.place_name && f.bairro.trim() === original.place.neighborhood;
-      if (!mesmoNome) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
-      else dados.push(f.ponto ? 'o ponto novo no mapa' : 'o encontro sem mapa');
+    if (plano.mudanca.place) dados.push(`${f.local.trim()}, ${f.bairro.trim()}`);
+    const partes: string[] = [];
+    if (dados.length) partes.push(`O app passa a mostrar ${dados.join(', em ')}.`);
+    if (plano.mudanca.street_address !== undefined) {
+      partes.push(plano.mudanca.street_address ? `O endereço passa a ser ${plano.mudanca.street_address}.` : 'O endereço deixa de aparecer no app.');
     }
-    frases.push(
-      `O app passa a mostrar ${dados.join(', em ')}. Quem usa o app não é avisado da mudança.`,
-    );
+    partes.push('Quem usa o app não é avisado da mudança.');
+    frases.push(partes.join(' '));
+    if (plano.mudanca.place?.point === null) frases.push('O mapa deixa de aparecer no app, porque mostrava o lugar anterior.');
+    // Mudou o lugar e nao mexeu no endereco salvo: o endereco antigo pode ter
+    // ficado para tras, e o dialogo pede para conferir antes da senha.
+    if (plano.mudanca.place && plano.mudanca.street_address === undefined && original.street_address) {
+      frases.push(`O endereço continua: ${original.street_address}. Se mudou, corrija antes de confirmar.`);
+    }
   }
   if (plano.acesso) {
     const partes: string[] = [];

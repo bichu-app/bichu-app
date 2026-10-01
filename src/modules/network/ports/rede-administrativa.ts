@@ -51,6 +51,7 @@ export interface NovoEncontro {
   readonly vacinacaoExigida: boolean;
   readonly areaCercada: boolean;
   readonly observacoes: string | null;
+  readonly endereco: string | null;
   readonly agora: Instant;
 }
 
@@ -69,6 +70,7 @@ export interface MudancaDeEncontro {
   readonly vacinacaoExigida?: boolean;
   readonly areaCercada?: boolean;
   readonly observacoes?: string | null;
+  readonly endereco?: string | null;
   readonly publicacao?: PublicacaoAdministrativa;
   readonly cancelledAt?: Date;
   readonly cancellationNote?: string;

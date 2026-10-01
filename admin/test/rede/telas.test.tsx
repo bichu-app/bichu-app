@@ -201,7 +201,7 @@ async function preencherObrigatorios(usuario: ReturnType<typeof userEvent.setup>
   await usuario.type(await screen.findByLabelText('Título *'), 'Encontro na praça');
   await usuario.type(screen.getByLabelText('Descrição *'), 'Manhã para os cães do bairro.');
   await usuario.type(screen.getByLabelText('Início *'), '2026-12-05T09:00');
-  await usuario.type(screen.getByLabelText('Nome do local *'), 'Praça Benedito Calixto');
+  await usuario.type(screen.getByLabelText('Nome do lugar *'), 'Praça Benedito Calixto');
   await usuario.type(screen.getByLabelText('Bairro *'), 'Pinheiros');
   await usuario.type(screen.getByLabelText('Cidade *'), 'São Paulo');
 }
@@ -238,8 +238,6 @@ describe('Rede: formulário novo', () => {
     await usuario.click(screen.getByRole('checkbox', { name: 'Gigante' }));
     await usuario.click(screen.getByRole('checkbox', { name: 'Sombra' }));
     await usuario.type(screen.getByLabelText('Observações'), 'Ponto ao lado do coreto.');
-    screen.getByTestId('mapa').focus();
-    await usuario.keyboard('{Enter}');
     await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
 
     expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
@@ -248,7 +246,7 @@ describe('Rede: formulário novo', () => {
     expect(criacao?.corpo).toEqual({
       title: 'Encontro na praça',
       summary: 'Manhã para os cães do bairro.',
-      place: { place_name: 'Praça Benedito Calixto', neighborhood: 'Pinheiros', city: 'São Paulo', state: 'SP', point: { lat: -23.5505, lon: -46.6333 } },
+      place: { place_name: 'Praça Benedito Calixto', neighborhood: 'Pinheiros', city: 'São Paulo', state: 'SP' },
       starts_at: '2026-12-05T12:00:00.000Z',
       time_zone: 'America/Sao_Paulo',
       images: [],
@@ -262,6 +260,63 @@ describe('Rede: formulário novo', () => {
       bring_items: ['leash'],
       notes: 'Ponto ao lado do coreto.',
     });
+  });
+
+  it('descrição: área de várias linhas, até 200, com contador', async () => {
+    const { usuario } = montar('/rede/novo');
+    const descricao = await screen.findByLabelText('Descrição *');
+    expect(descricao.tagName).toBe('TEXTAREA');
+    expect(descricao).toHaveAccessibleDescription(/^Aparece na lista de encontros do app e no topo da página do encontro\./);
+    await usuario.type(descricao, 'Primeira linha.{Enter}Segunda linha.');
+    expect(descricao).toHaveValue('Primeira linha.\nSegunda linha.');
+    expect(screen.getByText('30/200')).toBeInTheDocument();
+  });
+
+  it('ISCA: o contador da descrição conta 🐶 como 1 e deixa chegar a 200 emojis', async () => {
+    const { usuario } = montar('/rede/novo');
+    const descricao = await screen.findByLabelText('Descrição *');
+    expect(descricao).not.toHaveAttribute('maxlength');
+    await usuario.click(descricao);
+    await usuario.paste('🐶'.repeat(150));
+    expect(screen.getByText('150/200')).toBeInTheDocument();
+    await usuario.paste('🐶'.repeat(60));
+    expect([...(descricao as HTMLTextAreaElement).value]).toHaveLength(200);
+    expect(screen.getByText('200/200')).toBeInTheDocument();
+  });
+
+  it('endereço: opcional, ao lado do nome do lugar, com contador em code points', async () => {
+    const { usuario } = montar('/rede/novo');
+    const endereco = await screen.findByLabelText('Endereço');
+    expect(endereco).not.toHaveAttribute('maxlength');
+    expect(endereco).toHaveAccessibleDescription(/^Rua e número de um lugar público, nunca de uma casa\. No app, só quem tem conta vê\. Por exemplo: Rua Mourato Coelho, 1200 – Pinheiros, São Paulo\/SP\. Opcional\./);
+    await usuario.type(endereco, 'Rua Mourato Coelho, 1200');
+    expect(screen.getByText('24/200')).toBeInTheDocument();
+  });
+
+  it('endereço vai no corpo da criação, e a recusa de contato aparece no próprio campo', async () => {
+    const { duble, usuario } = montar('/rede/novo');
+    await preencherObrigatorios(usuario);
+    await usuario.type(screen.getByLabelText('Endereço'), 'Rua Mourato Coelho, 1200, fone (11) 98765-4321');
+    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    expect(await screen.findByText('Corrija 1 campo para publicar:')).toBeInTheDocument();
+    expect(screen.getByLabelText('Endereço')).toHaveAccessibleDescription(/^Tire do endereço telefone, e-mail, link, perfil ou chave Pix\. Rua, número e CEP podem ficar\./);
+    await usuario.clear(screen.getByLabelText('Endereço'));
+    await usuario.type(screen.getByLabelText('Endereço'), 'Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP');
+    await usuario.click(screen.getByRole('button', { name: 'Publicar encontro' }));
+    expect(await screen.findByText('Encontro publicado. Ele já aparece na Rede do app.')).toBeInTheDocument();
+    const criacoes = escritas(duble, 'POST', /\/admin\/network\/events$/);
+    expect((criacoes.at(-1)?.corpo as { street_address?: string }).street_address).toBe('Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP');
+  });
+
+  it('o formulário não tem mapa (decisão do cliente de 01/10), na criação e na edição', async () => {
+    for (const rota of ['/rede/novo', '/rede/encontro-de-caes-no-parque']) {
+      montar(rota);
+      await screen.findByLabelText('Título *');
+      expect(screen.queryByRole('application')).toBeNull();
+      expect(document.querySelector('.leaflet-container')).toBeNull();
+      expect(screen.queryByText(/mapa/i)).toBeNull();
+      document.body.innerHTML = '';
+    }
   });
 
   it('fim antes do início e campos vazios dão as mensagens aprovadas', async () => {
@@ -292,7 +347,7 @@ describe('Rede: edição', () => {
 
   it('mudar o local pede motivo e senha e vai por relocation', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
-    const local = await screen.findByLabelText('Nome do local *');
+    const local = await screen.findByLabelText('Nome do lugar *');
     await usuario.clear(local);
     await usuario.type(local, 'Praça General Polidoro');
     await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
@@ -311,7 +366,7 @@ describe('Rede: edição', () => {
 
   it('bug 1: local e acesso juntos pedem a senha uma vez e gravam os dois', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
-    const local = await screen.findByLabelText('Nome do local *');
+    const local = await screen.findByLabelText('Nome do lugar *');
     await usuario.clear(local);
     await usuario.type(local, 'Praça General Polidoro');
     await usuario.click(screen.getByRole('radio', { name: /^Pago/ }));
@@ -328,6 +383,56 @@ describe('Rede: edição', () => {
     expect(escritas(duble, 'POST', /relocation$/)).toHaveLength(1);
     expect(escritas(duble, 'POST', /access$/)).toHaveLength(1);
     expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
+  });
+
+  it('editar lugar e endereço: uma senha, um relocation com os dois, e nenhum PATCH com endereço', async () => {
+    const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
+    const local = await screen.findByLabelText('Nome do lugar *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.type(screen.getByLabelText('Endereço'), 'Rua Muniz de Sousa, 1119');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque fechou.');
+    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
+    expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
+    expect(duble.registro.filter((r) => r.caminho.endsWith('/auth/reauth'))).toHaveLength(1);
+    const [mudanca] = escritas(duble, 'POST', /relocation$/);
+    expect(mudanca?.corpo).toMatchObject({ place: { place_name: 'Praça General Polidoro' }, street_address: 'Rua Muniz de Sousa, 1119', reason: 'O parque fechou.' });
+    expect(escritas(duble, 'PATCH', /events\/[^/]+$/).filter((r) => 'street_address' in ((r.corpo as object) ?? {}))).toEqual([]);
+    expect(duble.encontros.get('encontro-de-caes-no-parque')?.street_address).toBe('Rua Muniz de Sousa, 1119');
+  });
+
+  it('ISCA: endereço com contato recusado na mudança de lugar mostra o texto do endereço e marca o campo', async () => {
+    const { usuario } = montar('/rede/encontro-de-caes-no-parque');
+    const local = await screen.findByLabelText('Nome do lugar *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.type(screen.getByLabelText('Endereço'), 'Rua Muniz de Sousa, 1119, zap (11) 98765-4321');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque fechou.');
+    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
+    const texto = 'Tire do endereço telefone, e-mail, link, perfil ou chave Pix. Rua, número e CEP podem ficar.';
+    expect(await within(dialogo).findByText(texto)).toBeInTheDocument();
+    expect(within(dialogo).queryByText(/observações/)).toBeNull();
+    expect(screen.getByLabelText('Endereço')).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByLabelText('Endereço')).toHaveAccessibleDescription(new RegExp(`^${texto.replace(/[.]/g, '\\.')}`));
+  });
+
+  it('ISCA: o diálogo da mudança de lugar mostra o endereço que continua, antes da senha', async () => {
+    const duble = criarDuble({ encontros: [encontroDeExemplo({ street_address: 'Rua Muniz de Sousa, 1119' })], pedidos: [] });
+    const { usuario } = montar('/rede/encontro-de-caes-no-parque', duble);
+    const local = await screen.findByLabelText('Nome do lugar *');
+    await usuario.clear(local);
+    await usuario.type(local, 'Praça General Polidoro');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
+    const aviso = within(dialogo).getByText('O endereço continua: Rua Muniz de Sousa, 1119. Se mudou, corrija antes de confirmar.');
+    const senha = within(dialogo).getByLabelText('Sua senha');
+    expect(aviso.compareDocumentPosition(senha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('observação com telefone na edição também não sai (isca)', async () => {
@@ -370,7 +475,10 @@ describe('Rede: edição', () => {
   it('encontro cancelado trava data, local e acesso', async () => {
     const duble = criarDuble({ encontros: [encontroDeExemplo({ publication_status: 'cancelled' })], pedidos: [] });
     montar('/rede/encontro-de-caes-no-parque', duble);
-    expect(await screen.findByLabelText('Nome do local *')).toBeDisabled();
+    expect(await screen.findByLabelText('Nome do lugar *')).toBeDisabled();
+    expect(screen.getByLabelText('Nome do lugar *')).toHaveAccessibleDescription(
+      'Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Rua e número vão em Endereço.',
+    );
     expect(screen.getByRole('radio', { name: /^Privado/ })).toBeDisabled();
     expect(screen.getByLabelText('Título *')).toBeEnabled();
   });

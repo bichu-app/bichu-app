@@ -247,6 +247,21 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     await sql`update network_events set created_by_admin_id = null where id = ${id}::uuid`.execute(banco.db);
   });
 
+  void it('descricao (01/10): 200 caracteres chegam ao banco pela escrita; ISCA: 201 viola o CHECK alargado', async () => {
+    const duzentos = 'd'.repeat(200);
+    const criado = await criar({ summary: duzentos });
+    const id = await idDoEncontro(criado.recurso.slug);
+    const linha = await banco.db.selectFrom('network_events').select('summary').where('id', '=', id).executeTakeFirstOrThrow();
+    assert.equal(linha.summary, duzentos);
+    const demais = await sql`update network_events set summary = ${'d'.repeat(201)} where id = ${id}::uuid`
+      .execute(banco.db)
+      .catch((e: unknown) => e);
+    assert.equal((demais as { constraint?: string }).constraint, 'network_events_resumo_tem_tamanho');
+    // O caso de uso recusa antes do banco, com 400 e nao 23514.
+    const pelaEscrita = await criar({ summary: 'd'.repeat(201) }).catch((e: unknown) => e);
+    assert.equal(codigo(pelaEscrita), 'length');
+  });
+
   void it('ISCA: com a trilha falhando, o encontro NAO e gravado', async () => {
     const quebrada: TrilhaTransacional = { recordIn: () => Promise.reject(new Error('trilha fora do ar')) };
     const titulo = `Sem trilha ${sufixo()}`;
@@ -275,6 +290,82 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     const evento = trilha.find((t) => t.action === 'admin.network_event.relocated');
     assert.equal((evento?.after as Record<string, unknown>)['point_changed'], true);
     assert.ok(!JSON.stringify(trilha).includes('-23.4'), 'a coordenada foi para a trilha');
+  });
+
+  void it('o pino ponta a ponta (01/10): criar, editar sem lugar, mover so o horario e mover o ponto; o app le em location', async () => {
+    const publica = criarNetworkRepository(banco.db, ids, (c) => c);
+    const noBanco = async (slug: string) => {
+      const l = await sql<{ lat: number | null; lon: number | null; geo_source: string | null }>`
+        select ST_Y(geo::geometry) as lat, ST_X(geo::geometry) as lon, geo_source
+          from network_events where slug = ${slug}`.execute(banco.db);
+      return l.rows[0];
+    };
+    const perto = (v: { lat: number | null; lon: number | null } | null | undefined, lat: number, lon: number, oque: string) => {
+      assert.ok(v !== null && v !== undefined, `${oque}: sem ponto`);
+      assert.ok(Math.abs((v.lat ?? NaN) - lat) < 1e-9 && Math.abs((v.lon ?? NaN) - lon) < 1e-9, `${oque}: ${JSON.stringify(v)}`);
+    };
+    const noApp = async (slug: string) => (await publica.buscarLocalDoEncontro(slug, tutor))?.ponto ?? null;
+
+    // 1. criar com ponto
+    const criado = await criar({ place: { ...corpo().place, point: { lat: -23.5586, lon: -46.6814 } } });
+    const slug = criado.recurso.slug;
+    const origem = async () => (await noBanco(slug))?.geo_source;
+    perto(await noBanco(slug), -23.5586, -46.6814, 'noBanco');
+    perto(await noApp(slug), -23.5586, -46.6814, 'noApp');
+
+    // 2. ISCA: editar tudo o que o PATCH aceita, sem lugar, nao zera o ponto
+    const editado = await r.alterarEncontro(autor, slug, criado.etag, {
+      title: 'Titulo novo do encontro',
+      summary: 'Descricao nova.',
+      notes: 'Levem agua.',
+      dog_age: 'from_1_year',
+      vaccination_required: false,
+      fenced_off_leash_area: true,
+      amenities: ['shade'],
+      bring_items: ['water'],
+      accepted_sizes: ['P', 'M'],
+    });
+    perto(editado.recurso.place.point, -23.5586, -46.6814, 'resposta do PATCH');
+    perto(await noBanco(slug), -23.5586, -46.6814, 'noBanco');
+
+    // 3. ISCA: mover so o horario, sem `place`, nao zera o ponto
+    const soHorario = await r.moverEncontro(autor, slug, editado.etag, {
+      starts_at: emDias(11, 12),
+      ends_at: emDias(11, 14),
+      reason: 'Chuva.',
+    });
+    perto(await noBanco(slug), -23.5586, -46.6814, 'noBanco');
+
+    // 4. mover o ponto
+    await r.moverEncontro(autor, slug, soHorario.etag, {
+      place: { ...corpo().place, point: { lat: -23.5513, lon: -46.7139 } },
+      reason: 'Arrastei o pino.',
+    });
+    perto(await noBanco(slug), -23.5513, -46.7139, 'noBanco');
+    assert.equal(await origem(), 'map_pin');
+    perto(await noApp(slug), -23.5513, -46.7139, 'noApp');
+  });
+
+  void it('endereco (01/10) ponta a ponta: a criacao grava, location o devolve com conta, a leitura aberta nao', async () => {
+    const publica = criarNetworkRepository(banco.db, ids, (c) => c);
+    const ENDERECO = 'Rua Fradique Coutinho, 1234 - Pinheiros, 05416-001';
+    const criado = await criar({ street_address: ENDERECO });
+    const slug = criado.recurso.slug;
+    const linha = await banco.db.selectFrom('network_events').select(['street_address', 'geo_source']).where('slug', '=', slug).executeTakeFirstOrThrow();
+    assert.deepEqual(linha, { street_address: ENDERECO, geo_source: null });
+    assert.deepEqual(await publica.buscarLocalDoEncontro(slug, tutor), { ponto: null, endereco: ENDERECO });
+    // ISCA: o detalhe e a agenda, serializados como as rotas os projetam, nao levam o endereco.
+    const { projetarEncontro } = await import('../../src/modules/network/domain/encontro-da-rede.js');
+    const detalhe = await publica.buscarEncontro(slug);
+    assert.ok(detalhe !== undefined);
+    const bruto = JSON.stringify(projetarEncontro(detalhe, relogio.now()));
+    assert.ok(!bruto.includes('Fradique'), 'o endereco saiu no detalhe publico');
+    assert.ok(!bruto.includes('street_address'), 'a chave street_address saiu no detalhe publico');
+    // CHECK do banco: 4 code points apos btrim e recusado.
+    const curto = await sql`update network_events set street_address = ${'  R 1 '} where slug = ${slug}`
+      .execute(banco.db)
+      .catch((e: unknown) => e);
+    assert.equal((curto as { constraint?: string }).constraint, 'network_events_endereco_tem_tamanho');
   });
 
   void it('publico que vira privado ganha slug novo e o antigo some da leitura publica', async () => {

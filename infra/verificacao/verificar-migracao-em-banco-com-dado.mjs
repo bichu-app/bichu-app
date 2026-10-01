@@ -50,10 +50,20 @@
  * `infra/migracao/massa/<nome-identico-ao-da-migracao>.sql`. O portao, na pilha
  * efemera deste worktree, para cada massa e na ordem de aplicacao:
  *
+ *   0. ZERA o banco (`down -v` e `up db`)               (cada massa e um banco)
  *   1. `migracao up <carimbo-da-anterior> --timestamp`  (para ANTES da migracao)
  *   2. aplica a massa por `psql`, com `ON_ERROR_STOP=1`
  *   3. `migracao up`                                    (segue ate a cabeca)
  *   4. aplica `<nome>.depois.sql`, se existir: as asserts do estado FINAL
+ *
+ * O PASSO 0 NASCEU DE UMA REPROVACAO DO QA (01/10/2026). Sem ele, a primeira
+ * massa levava o banco ate a cabeca no passo 3, e para a SEGUNDA o passo 1 era
+ * um `up` que nao fazia nada: a massa dela entrava no esquema da cabeca, DEPOIS
+ * da propria migracao, e a migracao nunca rodava sobre o dado dela. So a
+ * primeira massa era testada de verdade; as outras eram verdes por construcao.
+ * A ordem das acoes agora e uma funcao pura (`roteiro`), e o autoteste a roda
+ * contra um banco simulado com uma migracao que estraga o dado da segunda
+ * massa: tem de reprovar, e reprova so por causa do passo 0.
  *
  * O passo 4 e o que distingue este portao de "a migracao nao explodiu". Ele
  * afirma o que SOBROU no banco, e afirma por `RAISE EXCEPTION` dentro do SQL --
@@ -185,6 +195,65 @@ export function planejar({ migracoes, massas }) {
 }
 
 // ---------------------------------------------------------------------------
+// O ROTEIRO: a ordem das acoes, separada de quem as executa.
+// ---------------------------------------------------------------------------
+
+/**
+ * As acoes de cada passo, na ordem. Cada massa comeca num banco ZERADO: sem
+ * isso, a massa seguinte a primeira entraria num banco ja na cabeca, depois da
+ * propria migracao (ver o passo 0 no cabecalho).
+ *
+ * @param {ReturnType<typeof planejar>['passos']} passos
+ */
+export function roteiro(passos) {
+  return passos.flatMap((passo) => [
+    { tipo: 'zerar', passo },
+    { tipo: 'subir', ate: passo.carimboAnterior, passo },
+    { tipo: 'massa', arquivo: passo.massa, passo },
+    { tipo: 'subir', ate: null, passo },
+    ...(passo.assercao ? [{ tipo: 'conferir', arquivo: passo.assercao, passo }] : []),
+  ]);
+}
+
+/**
+ * Executa o roteiro com um executor que devolve `true` (ok) ou `false` (falhou)
+ * por acao. Para na primeira falha e devolve a acao que falhou, ou `null`.
+ */
+export function executarRoteiro(acoes, executor) {
+  for (const acao of acoes) {
+    if (!executor(acao)) return acao;
+  }
+  return null;
+}
+
+/**
+ * Um banco de mentira, so o bastante para provar o roteiro: migracoes sao
+ * funcoes sobre linhas, a massa acrescenta linhas, a assercao e um predicado.
+ */
+function bancoSimulado({ migracoes, massas, assercoes }) {
+  let aplicadas = new Set();
+  let linhas = [];
+  const ordem = Object.keys(migracoes).map(Number).sort((a, b) => a - b);
+  return (acao) => {
+    if (acao.tipo === 'zerar') {
+      aplicadas = new Set();
+      linhas = [];
+    } else if (acao.tipo === 'subir') {
+      for (const c of ordem) {
+        if (aplicadas.has(c) || (acao.ate !== null && c > acao.ate)) continue;
+        linhas = migracoes[c](linhas);
+        aplicadas.add(c);
+      }
+    } else if (acao.tipo === 'massa') {
+      linhas = [...linhas, ...massas[acao.arquivo]];
+    } else if (acao.tipo === 'conferir') {
+      return assercoes[acao.arquivo](linhas);
+    }
+    return true;
+  };
+}
+
+// ---------------------------------------------------------------------------
 // AS ISCAS. Cada uma tem de reprovar pela SUA regra, e nao so reprovar.
 // ---------------------------------------------------------------------------
 
@@ -269,11 +338,66 @@ export function autoteste() {
     console.log(`  caso que deve passar ok: ${DEVE_PASSAR.nome}`);
   }
 
+  // ISCA DO QA (01/10): uma migracao que estraga o dado da SEGUNDA massa tem
+  // de reprovar. A terceira migracao apaga as linhas `da-terceira`; a massa da
+  // terceira as insere e a assercao dela exige que continuem la. O roteiro
+  // antigo (sem `zerar`) passava aqui: a terceira migracao ja tinha rodado
+  // quando a massa dela entrava.
+  const cenario = (terceira) => {
+    const nomes = MIGRACOES_FALSAS;
+    const { passos: p } = planejar({
+      migracoes: nomes,
+      massas: ['20260101000002_segunda.sql', '20260101000003_terceira.sql', '20260101000003_terceira.depois.sql'],
+    });
+    const executor = bancoSimulado({
+      migracoes: {
+        20260101000001: (l) => l,
+        20260101000002: (l) => l,
+        20260101000003: terceira,
+      },
+      massas: {
+        '20260101000002_segunda.sql': ['da-segunda'],
+        '20260101000003_terceira.sql': ['da-terceira'],
+      },
+      assercoes: { '20260101000003_terceira.depois.sql': (l) => l.includes('da-terceira') },
+    });
+    return { passos: p, executor };
+  };
+  const ma = cenario((l) => l.filter((x) => x !== 'da-terceira'));
+  const falhaDaMa = executarRoteiro(roteiro(ma.passos), ma.executor);
+  if (falhaDaMa?.tipo !== 'conferir' || falhaDaMa.arquivo !== '20260101000003_terceira.depois.sql') {
+    falhou = true;
+    console.error('ISCA NAO REPROVOU: migracao que estraga o dado da SEGUNDA massa passou pelo roteiro.');
+    console.error(`  acao que falhou: ${JSON.stringify(falhaDaMa?.tipo ?? null)}`);
+  } else {
+    console.log('  isca ok: migracao que estraga o dado da segunda massa reprova na assercao dela');
+  }
+  // A mesma isca prova que o `zerar` e o que a pega: sem ele, ela passaria.
+  const semZerar = cenario((l) => l.filter((x) => x !== 'da-terceira'));
+  const falhaSemZerar = executarRoteiro(
+    roteiro(semZerar.passos).filter((a) => a.tipo !== 'zerar'),
+    semZerar.executor,
+  );
+  if (falhaSemZerar !== null) {
+    falhou = true;
+    console.error('O CENARIO DE CONTROLE MUDOU: sem `zerar` a isca deveria passar, e a prova acima nao vale mais.');
+  } else {
+    console.log('  controle ok: sem o passo `zerar`, a mesma migracao passaria (o defeito do QA)');
+  }
+  const boa = cenario((l) => l);
+  if (executarRoteiro(roteiro(boa.passos), boa.executor) !== null) {
+    falhou = true;
+    console.error('O CASO QUE DEVE PASSAR REPROVOU: migracao honesta com duas massas.');
+  } else {
+    console.log('  caso que deve passar ok: migracao honesta com duas massas');
+  }
+
   if (falhou) {
     console.error('\nREPROVADO: as iscas do portao de migracao com dado nao se comportaram.\n');
     process.exit(1);
   }
   console.log(`iscas do plano: ${String(ISCAS.length)} reprovaram pela regra delas, 1 passou.`);
+  console.log('iscas do roteiro: 1 reprovou, 1 controle e 1 caso honesto se comportaram.');
 }
 
 // ---------------------------------------------------------------------------
@@ -383,47 +507,64 @@ function exercitar() {
       { input: sql, stdio: ['pipe', 'inherit', 'inherit'] },
     );
 
-  for (const passo of passos) {
-    console.log(`\n--- ${passo.massa} ---`);
-    console.log(`  1. migra ate ${passo.anterior} (carimbo <= ${String(passo.carimboAnterior)})`);
-    const ate = compose(['run', '--rm', 'migracao', 'up', String(passo.carimboAnterior), '--timestamp']);
-    if (ate.status !== 0) reprovar(`a subida ate ${passo.anterior} reprovou`, ate.status);
-
-    console.log(`  2. aplica a massa`);
-    const inserir = psql(readFileSync(`${DIR_MASSAS}/${passo.massa}`, 'utf8'));
-    if (inserir.status !== 0) {
-      reprovar(
-        `a massa ${DIR_MASSAS}/${passo.massa} nao entrou no esquema de ${passo.anterior}. ` +
-          `Lembre que o esquema visivel para ela e o do carimbo ANTERIOR, e nao o da cabeca`,
-        inserir.status,
-      );
+  /** Uma acao do roteiro contra a pilha de verdade. Reprovar sai do processo. */
+  const executor = (acao) => {
+    const { passo } = acao;
+    if (acao.tipo === 'zerar') {
+      console.log(`\n--- ${passo.massa} ---`);
+      console.log('  0. zera o banco: cada massa entra no ponto da migracao DELA');
+      compose(['down', '-v', '--remove-orphans', '--timeout', '5'], { stdio: 'ignore' });
+      const banco = compose(['up', '-d', '--wait', 'db']);
+      if (banco.status !== 0) reprovar('o banco efemero nao voltou saudavel depois de zerado', banco.status);
+      return true;
     }
-
-    console.log(`  3. migra ${passo.migracao} e o que vem depois, SOBRE a massa`);
-    const resto = compose(['run', '--rm', 'migracao', 'up']);
-    if (resto.status !== 0) {
-      reprovar(
-        `a migracao reprovou contra banco COM DADO, e este e exatamente o defeito que este ` +
-          `portao existe para pegar. Em banco vazio ela passa -- a prova em banco vazio nao ` +
-          `vale para esta classe`,
-        resto.status,
-      );
+    if (acao.tipo === 'subir' && acao.ate !== null) {
+      console.log(`  1. migra ate ${passo.anterior} (carimbo <= ${String(acao.ate)})`);
+      const ate = compose(['run', '--rm', 'migracao', 'up', String(acao.ate), '--timestamp']);
+      if (ate.status !== 0) reprovar(`a subida ate ${passo.anterior} reprovou`, ate.status);
+      return true;
     }
-
-    if (passo.assercao) {
-      console.log(`  4. confere o estado final (${passo.assercao})`);
-      const conferir = psql(readFileSync(`${DIR_MASSAS}/${passo.assercao}`, 'utf8'));
-      if (conferir.status !== 0) {
+    if (acao.tipo === 'massa') {
+      console.log(`  2. aplica a massa`);
+      const inserir = psql(readFileSync(`${DIR_MASSAS}/${acao.arquivo}`, 'utf8'));
+      if (inserir.status !== 0) {
         reprovar(
-          `a migracao aplicou sem erro, mas o estado final nao e o que ${passo.assercao} afirma. ` +
-            `Isto e pior que a explosao: o banco ficou errado em silencio`,
-          conferir.status,
+          `a massa ${DIR_MASSAS}/${acao.arquivo} nao entrou no esquema de ${passo.anterior}. ` +
+            `Lembre que o esquema visivel para ela e o do carimbo ANTERIOR, e nao o da cabeca`,
+          inserir.status,
         );
       }
-    } else {
-      console.log(`  4. (sem ${passo.massa.slice(0, -4)}${SUFIXO_DE_ASSERCAO}: so a ausencia de erro foi provada)`);
+      return true;
     }
-  }
+    if (acao.tipo === 'subir') {
+      console.log(`  3. migra ${passo.migracao} e o que vem depois, SOBRE a massa`);
+      const resto = compose(['run', '--rm', 'migracao', 'up']);
+      if (resto.status !== 0) {
+        reprovar(
+          `a migracao reprovou contra banco COM DADO, e este e exatamente o defeito que este ` +
+            `portao existe para pegar. Em banco vazio ela passa -- a prova em banco vazio nao ` +
+            `vale para esta classe`,
+          resto.status,
+        );
+      }
+      if (!passo.assercao) {
+        console.log(`  4. (sem ${passo.massa.slice(0, -4)}${SUFIXO_DE_ASSERCAO}: so a ausencia de erro foi provada)`);
+      }
+      return true;
+    }
+    console.log(`  4. confere o estado final (${acao.arquivo})`);
+    const conferir = psql(readFileSync(`${DIR_MASSAS}/${acao.arquivo}`, 'utf8'));
+    if (conferir.status !== 0) {
+      reprovar(
+        `a migracao aplicou sem erro, mas o estado final nao e o que ${acao.arquivo} afirma. ` +
+          `Isto e pior que a explosao: o banco ficou errado em silencio`,
+        conferir.status,
+      );
+    }
+    return true;
+  };
+
+  executarRoteiro(roteiro(passos), executor);
 
   derrubar();
   console.log(

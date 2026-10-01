@@ -345,7 +345,7 @@ export function registrarRotasDaRede(
     const local = await deps.rede.buscarLocalDoEncontro(eventSlug, chamador);
     // Invisivel, inexistente e privado sem aprovacao: o mesmo 404.
     if (local === undefined) throw problemas.naoEncontrado();
-    return reply.header('Cache-Control', SEM_CACHE).send(projetarLocalizacao(local.ponto));
+    return reply.header('Cache-Control', SEM_CACHE).send(projetarLocalizacao(local.ponto, local.endereco));
   });
 
   registrarRota(

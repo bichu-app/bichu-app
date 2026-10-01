@@ -85,6 +85,8 @@ export interface EncontroAdministrativo {
   readonly estrutura: readonly string[];
   readonly paraLevar: readonly string[];
   readonly observacoes: string | null;
+  /** Endereco por extenso (01/10/2026). O painel o ve; o app, so em `location`. */
+  readonly endereco: string | null;
   readonly publicacao: PublicacaoAdministrativa;
   readonly publishedAt: Date | null;
   readonly cancelledAt: Date | null;
@@ -267,6 +269,48 @@ export function errosDasObservacoes(campo: string, valor: string): ProblemFieldE
         field: campo,
         code: 'contact_or_payment_detected',
         message: 'As observações não podem ter telefone, e-mail, link, perfil, endereço, CEP, chave PIX nem dados de pagamento.',
+      },
+    ];
+  }
+  return [];
+}
+
+/**
+ * Telefone com DDD, nas formas em que se escreve: `(11) 91234-5678`,
+ * `+55 11 91234 5678`, `11 3456-7890` e os 10 ou 11 digitos colados. O CEP
+ * (`05416-001` ou `05416001`, 8 digitos) e o numero da casa ao lado dele
+ * (`12 05416001`) nao casam: sem separador no meio do par de quatro, so 10 ou
+ * 11 digitos colados contam.
+ */
+const TELEFONE_COM_DDD =
+  /(?<!\d)(?:(?:\+?55[\s.-]?)?\(\d{2}\)[\s.-]?9?\d{4}[\s.-]?\d{4}|\+?55[\s.-]?\d{2}[\s.-]?9?\d{4}[\s.-]?\d{4}|\d{2}[\s.-]?9?\d{4}[\s.-]\d{4}|\d{10,11})(?!\d)/;
+/** E-mail, na forma `base`. */
+const EMAIL = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+/;
+/** Link: esquema, `www.` ou dominio COLADO (`loja.com.br`). Abreviacao com espaco (`Av. Brasil`) nao casa. */
+const LINK = new RegExp(`https?:\\/\\/|\\bwww\\.|(?:^|[^a-z0-9@])[a-z0-9][a-z0-9-]*\\.(?:${TLD})(?:\\.[a-z]{2})?(?![a-z0-9.])`);
+
+/**
+ * O endereco por extenso do encontro (decisao do cliente de 01/10/2026): 5 a
+ * 200 code points, aparado, sem controle bidirecional.
+ *
+ * **O detector de D59 das observacoes NAO se aplica inteiro aqui**, e isso e
+ * de proposito: ele recusa endereco, CEP e numero de casa, que sao o conteudo
+ * deste campo. Do D59 fica o que nunca e endereco -- link, e-mail, perfil
+ * `@usuario`, telefone com DDD, chave PIX e dados de pagamento --, para o campo
+ * nao virar a porta lateral do canal de contato que as observacoes fecham.
+ */
+export function errosDoEndereco(campo: string, valor: string): ProblemFieldError[] {
+  const tamanho = errosDeTexto(campo, valor, 5, 200);
+  if (tamanho.length > 0) return tamanho;
+  const { base, letras } = normalizarParaConferencia(valor.normalize('NFKC'));
+  const contato = LINK.test(base) || EMAIL.test(base) || ARROBA.test(base) || TELEFONE_COM_DDD.test(base);
+  const pagamento = PAGAMENTO_POR_PALAVRA.test(letras) || PAGAMENTO_POR_NUMERO.some((padrao) => padrao.test(base));
+  if (contato || pagamento) {
+    return [
+      {
+        field: campo,
+        code: 'contact_or_payment_detected',
+        message: 'O endereço não pode ter telefone, e-mail, link, perfil, chave PIX nem dados de pagamento.',
       },
     ];
   }
@@ -488,6 +532,7 @@ export interface EncontroAdministrativoProjetado {
   };
   readonly bring_items: readonly string[];
   readonly notes: string | null;
+  readonly street_address: string | null;
   readonly pending_request_count: number;
   readonly publication_status: PublicacaoAdministrativa;
   readonly timing: TempoDoEncontro;
@@ -548,6 +593,7 @@ export function projetarEncontroAdministrativo(
     admission: projetarAdmissao(e.entrada),
     bring_items: [...e.paraLevar],
     notes: e.observacoes,
+    street_address: e.endereco,
     pending_request_count: e.visibilidade === 'private' ? e.pedidosPendentes : 0,
     publication_status: e.publicacao,
     timing: tempoDoEncontro(e, agora),
@@ -640,6 +686,7 @@ export function retratoDoEncontro(e: EncontroAdministrativo): Record<string, unk
     amenities: [...e.estrutura],
     bring_items: [...e.paraLevar],
     notes: e.observacoes,
+    street_address: e.endereco,
     publication_status: e.publicacao,
     cancellation_note: e.cancellationNote,
     images: e.imagens.map((i) => ({ upload_id: i.uploadId, alt_text: i.altText })),

@@ -16,6 +16,7 @@ import {
   entradaDoCorpo,
   encontroAbertoParaDecisao,
   errosDasObservacoes,
+  errosDoEndereco,
   mesEmSaoPaulo,
   normalizarParaConferencia,
   semDatas,
@@ -234,5 +235,63 @@ void describe('miudezas', () => {
     assert.equal(pontoMudou(null, null), false);
     assert.equal(pontoMudou(null, { lat: 1, lon: 1 }), true);
     assert.equal(pontoMudou({ lat: 1, lon: 1 }, { lat: 1, lon: 1 }), false);
+  });
+});
+
+void describe('o endereco do encontro (01/10): D59 nao recusa endereco legitimo', () => {
+  const codigos = (texto: string): string[] => errosDoEndereco('street_address', texto).map((e) => e.code);
+
+  void it('ISCA: endereco de verdade passa, com numero, CEP, km, s/n e abreviacao', () => {
+    for (const endereco of [
+      'Rua Fradique Coutinho, 1234 - Pinheiros, São Paulo - SP, 05416-001',
+      'Av. Paulista, 1578 - Bela Vista',
+      'Praça Benedito Calixto, s/n',
+      'Rodovia Raposo Tavares, km 14,5',
+      'Av. Prof. Fonseca Rodrigues, 2001, portão 2 (Parque Villa-Lobos)',
+      'Rua 25 de Março, 1000',
+      'Estrada do Campo Limpo, 3400, CEP 05777001',
+      'Rua Augusta, 12 05416001',
+      'Al. Santos, 2233 - Jd. Paulista',
+      'Av. Brasil, 500 - Jardim América',
+      'Praça Charles Miller, s/nº - Pacaembu',
+      'R. Tv. Santa Rita, 45',
+      'Trav. Pq. Ibirapuera, Portão 3, Av. Pedro Álvares Cabral',
+    ]) {
+      assert.deepEqual(codigos(endereco), [], endereco);
+    }
+  });
+
+  void it('ISCA: telefone, e-mail, link, perfil, PIX e conta bancaria sao recusados', () => {
+    for (const texto of [
+      'Rua X, 10 - chama no (11) 91234-5678',
+      'Rua X, 10 - 11 91234-5678',
+      'Rua X, 10 - 11912345678',
+      'Rua X, 10 - +55 11 912345678',
+      'Rua X, 10, contato@exemplo.com.br',
+      'Rua X, 10, veja www.loja.com',
+      'Rua X, 10, loja.com.br/encontro',
+      'Rua X, 10, https://maps.exemplo/abc',
+      'Rua X, 10 - siga @encontrodoscaes',
+      'Rua X, 10 - pix 123.456.789-09',
+      'Rua X, 10, P 1 X na entrada',
+      'Rua X, 10 - ag 1234 cc 56789-0',
+    ]) {
+      assert.deepEqual(codigos(texto), ['contact_or_payment_detected'], texto);
+    }
+  });
+
+  void it('tamanho em code points, aparado: 5 a 200; controle bidirecional recusado', () => {
+    assert.deepEqual(codigos('  R 1  '), ['length']);
+    assert.deepEqual(codigos('Rua 1'), []);
+    assert.deepEqual(codigos(`Rua ${'🐶'.repeat(196)}`), []);
+    assert.deepEqual(codigos(`Rua ${'🐶'.repeat(197)}`), ['length']);
+    assert.deepEqual(codigos('Rua X\u202e, 10'), ['bidi_control']);
+  });
+
+  void it('controle: as observacoes continuam recusando endereco e CEP (o D59 delas nao afrouxou)', () => {
+    assert.deepEqual(
+      errosDasObservacoes('notes', 'Encontro na Rua Fradique Coutinho, 1234, CEP 05416-001').map((e) => e.code),
+      ['contact_or_payment_detected'],
+    );
   });
 });

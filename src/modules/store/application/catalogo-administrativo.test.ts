@@ -288,6 +288,71 @@ void describe('escrita administrativa da Loja', () => {
     assert.equal(m.estado().trilha[0]?.resourceKind, 'upload_intent');
   });
 
+  void describe('dimensao declarada no pedido de envio (01/10)', () => {
+    void it('ISCA: encontro abaixo de 600 x 600 e 422 image-too-small, com os dois campos, sem intencao nem trilha', async () => {
+      const erro = await m.catalogo
+        .autorizarEnvioDeCatalogo(AUTOR, {
+          purpose: 'network_event',
+          content_type: 'image/jpeg',
+          byte_size: 5000,
+          width: 599,
+          height: 300,
+        })
+        .catch((e: unknown) => e);
+      assert.equal(tipo(erro), 'image-too-small');
+      assert.ok(erro instanceof AppError);
+      assert.equal(erro.status, 422);
+      assert.deepEqual(
+        (erro.errors ?? []).map((e) => e.field),
+        ['width', 'height'],
+      );
+      assert.deepEqual(codigos(erro), ['minimum', 'minimum']);
+      assert.equal(m.estado().intencoes.length, 0);
+      assert.equal(m.estado().trilha.length, 0);
+    });
+
+    void it('ISCA: o minimo e por proposito -- 700 x 700 serve ao encontro e nao ao produto (800 x 800)', async () => {
+      const encontro = await m.catalogo.autorizarEnvioDeCatalogo(AUTOR, {
+        purpose: 'network_event',
+        content_type: 'image/jpeg',
+        byte_size: 5000,
+        width: 700,
+        height: 700,
+      });
+      assert.equal(typeof encontro.uploadId, 'string');
+      const produto = await m.catalogo
+        .autorizarEnvioDeCatalogo(AUTOR, {
+          purpose: 'store_item',
+          content_type: 'image/jpeg',
+          byte_size: 5000,
+          width: 700,
+          height: 700,
+        })
+        .catch((e: unknown) => e);
+      assert.equal(tipo(produto), 'image-too-small');
+    });
+
+    void it('sem dimensao declarada o pedido passa: quem decide e o worker, nos bytes', async () => {
+      await m.catalogo.autorizarEnvioDeCatalogo(AUTOR, {
+        purpose: 'network_event',
+        content_type: 'image/png',
+        byte_size: 5000,
+      });
+      assert.equal(m.estado().intencoes.length, 1);
+    });
+
+    void it('a trilha grava a dimensao declarada quando ela vem', async () => {
+      await m.catalogo.autorizarEnvioDeCatalogo(AUTOR, {
+        purpose: 'network_event',
+        content_type: 'image/png',
+        byte_size: 5000,
+        width: 1200,
+        height: 900,
+      });
+      assert.match(JSON.stringify(m.estado().trilha[0]), /"width":1200,"height":900/);
+    });
+  });
+
   void describe('especie, tags e galeria (ADR-0027 item 16)', () => {
     const FOTO_DE_PET = '0192a3b4-0000-7000-8000-00000000f0f0';
     const CAPA_DE_ENCONTRO = '0192a3b4-0000-7000-8000-00000000c0c0';

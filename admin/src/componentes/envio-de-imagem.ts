@@ -1,4 +1,5 @@
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
+import { tipoDoProblema } from '../api/problema.ts';
 
 /**
  * Envio de imagem de catalogo (ADR-0007, `createAdminCatalogImageIntent`): o
@@ -13,10 +14,30 @@ export const MAXIMO_DE_IMAGENS = 8;
 
 export type Proposito = Esquemas['AdminCatalogImageIntentInput']['purpose'];
 
-const DIMENSAO_MINIMA: Record<Proposito, { largura: number; altura: number }> = {
+/** As minimas do contrato (`AdminCatalogImageIntentInput`): 800 x 800 na Loja, 600 x 600 no encontro (01/10). */
+export const DIMENSAO_MINIMA: Record<Proposito, { largura: number; altura: number }> = {
   store_item: { largura: 800, altura: 800 },
-  network_event: { largura: 1600, altura: 900 },
+  network_event: { largura: 600, altura: 600 },
 };
+
+function textoDaMinima(proposito: Proposito, dimensao?: { width: number; height: number }): string {
+  const m = DIMENSAO_MINIMA[proposito];
+  const base = `A imagem precisa ter pelo menos ${String(m.largura)} × ${String(m.altura)} pixels.`;
+  return dimensao ? `${base} Esta tem ${String(dimensao.width)} × ${String(dimensao.height)}. Escolha outra imagem.` : `${base} Escolha outra imagem.`;
+}
+
+/** Largura e altura como o navegador as le do arquivo; `undefined` quando ele nao sabe ler. */
+export async function lerDimensao(arquivo: Blob): Promise<{ width: number; height: number } | undefined> {
+  if (typeof globalThis.createImageBitmap !== 'function') return undefined;
+  try {
+    const bitmap = await globalThis.createImageBitmap(arquivo);
+    const { width, height } = bitmap;
+    bitmap.close();
+    return { width, height };
+  } catch {
+    return undefined;
+  }
+}
 
 function megabytes(bytes: number): string {
   return (bytes / 1_048_576).toLocaleString('pt-BR', { maximumFractionDigits: 1, minimumFractionDigits: 1 });
@@ -34,19 +55,10 @@ export function conferirArquivo(arquivo: { type: string; size: number }): string
  * a autoridade e o worker, que marca `rejected` com o motivo.
  */
 export async function conferirDimensao(arquivo: Blob, proposito: Proposito): Promise<string | undefined> {
-  if (typeof globalThis.createImageBitmap !== 'function') return undefined;
-  try {
-    const bitmap = await globalThis.createImageBitmap(arquivo);
-    const { width, height } = bitmap;
-    bitmap.close();
-    const minimo = DIMENSAO_MINIMA[proposito];
-    if (width < minimo.largura || height < minimo.altura) {
-      return `A imagem precisa ter pelo menos ${minimo.largura} × ${minimo.altura} pixels. Esta tem ${width} × ${height}.`;
-    }
-  } catch {
-    return undefined;
-  }
-  return undefined;
+  const d = await lerDimensao(arquivo);
+  if (!d) return undefined;
+  const minimo = DIMENSAO_MINIMA[proposito];
+  return d.width < minimo.largura || d.height < minimo.altura ? textoDaMinima(proposito, d) : undefined;
 }
 
 export class FalhaDeEnvio extends Error {
@@ -92,11 +104,15 @@ export async function enviarImagem(
   proposito: Proposito,
   aoProgredir: (porcentagem: number) => void,
 ): Promise<string> {
-  const { data, response } = await api.POST('/admin/media/catalog-image-intents', {
-    body: { purpose: proposito, content_type: arquivo.type as TipoAceito, byte_size: arquivo.size },
+  // A dimensao DECLARADA vai no pedido, e o servidor recusa com 422 antes de
+  // assinar (01/10). A REAL o worker confere nos bytes depois.
+  const dimensao = await lerDimensao(arquivo);
+  const { data, error, response } = await api.POST('/admin/media/catalog-image-intents', {
+    body: { purpose: proposito, content_type: arquivo.type as TipoAceito, byte_size: arquivo.size, ...(dimensao ?? {}) },
   });
   if (!data) {
     if (response.status === 415) throw new FalhaDeEnvio('Use JPG, PNG ou WebP.');
+    if (response.status === 422 && tipoDoProblema(error) === 'image-too-small') throw new FalhaDeEnvio(textoDaMinima(proposito, dimensao));
     throw new FalhaDeEnvio('A imagem não foi enviada.');
   }
   await enviarBytes(data, arquivo, aoProgredir);

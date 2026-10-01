@@ -1040,7 +1040,9 @@ export interface paths {
          *     campos. Data e hora sao do servidor; o codigo ja veio no caminho.
          *
          *     Detalhes (onde, foto, recado, contato) chegam depois, por
-         *     `PATCH /found-reports/{foundReportId}` com o `finder_token`.
+         *     `PATCH /v1/finder/found-report` (`enrichFinderFoundReport`), com o
+         *     `finder_token` em `Authorization: Bearer` e sem id no caminho. A foto
+         *     vem antes, por `POST /v1/media/finder-photo-intents`.
          *
          *     `Idempotency-Key` e **obrigatorio**: a pagina publica reenvia o pedido
          *     por fila do service worker quando a rede cai, e o tutor nao pode
@@ -1177,7 +1179,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A conversa do achador, resolvida pelo token */
+        /**
+         * A conversa do achador, resolvida pelo token
+         * @description Enquanto o link vale (caso aberto, ou ate 30 dias do aviso, ou ate 30
+         *     dias depois do encerramento), a leitura e **200**, inclusive com o caso
+         *     encerrado: `status: closed` diz que a conversa nao aceita mais
+         *     mensagem, e o que o tutor escreveu antes continua legivel. Depois disso,
+         *     **410** com corpo fixo.
+         *
+         *     **Nenhuma das duas respostas conta o desfecho do caso.** Ate 23/09/2026
+         *     este documento prometia "o desfecho, porque quem ajudou merece saber que
+         *     deu certo". A promessa saiu pela regra de `lost-case-closed`: o link e
+         *     um bearer, pode ter sido repassado, e um texto que diz "voltou para
+         *     casa" em um caso e outra coisa nos demais conta, por exclusao, o que
+         *     aconteceu com o animal de outra pessoa. Quem decide contar e o tutor,
+         *     na conversa, antes de encerrar.
+         */
         get: operations["getFinderConversation"];
         put?: never;
         post?: never;
@@ -1899,8 +1916,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * O ponto do encontro no mapa, so para quem tem conta
-         * @description O ponto marcado no mapa pelo administrador (`geo_source = map_pin`,
+         * O ponto e o endereco do encontro, so para quem tem conta
+         * @description **Endereco (01/10/2026):** `street_address` sai AQUI e em nenhuma
+         *     leitura sem conta, pela mesma regra do ponto (emenda 1 do ADR-0010,
+         *     emenda de 01/10 do ADR-0027). O app abre o texto no aplicativo de
+         *     mapas do aparelho, por intent; o Bichu nao geocodifica (ADR-0006).
+         *
+         *     O ponto marcado no mapa pelo administrador (`geo_source = map_pin`,
          *     ADR-0006), para o aplicativo desenhar o encontro no mapa. E a emenda 1
          *     do ADR-0010, com escopo fechado: **ponto de evento publicado, em
          *     resposta autenticada**. Coordenada de pessoa, de pet, de caso e de
@@ -2115,6 +2137,17 @@ export interface paths {
          *
          *     Devolve a mesma projecao publica da listagem: foto, sinais, **bairro** e
          *     data. Nunca contato, endereco, ponto exato nem UUID interno.
+         *
+         *     **A autenticacao e opcional e decide um campo so**, `can_report_sighting`,
+         *     que e falso para o tutor do caso. Sem `Authorization`, a leitura e a
+         *     anonima. **Com `Authorization` presente e invalido, a resposta e 401**,
+         *     e nao a leitura anonima: rebaixar em silencio esconderia do app que a
+         *     sessao acabou, e o toque seguinte em "vi este pet" falharia sem
+         *     explicacao. E a mesma regra de `GET /tags/{code}`.
+         *
+         *     A resposta varia com quem chama, e por isso sai com
+         *     `Cache-Control: no-store`: um cache compartilhado que guardasse a versao
+         *     do tutor serviria `can_report_sighting: false` ao vizinho.
          */
         get: operations["getPublicLostCase"];
         put?: never;
@@ -2145,8 +2178,16 @@ export interface paths {
          *     ganhar campo sem que o cartaz caiba em uma folha, e o dia em que os dois
          *     forem o mesmo recurso, um dos dois vai piorar.
          *
-         *     Nunca traz contato, endereco, ponto exato nem UUID interno — a mesma
+         *     Nunca traz contato, endereco, ponto exato nem UUID interno, a mesma
          *     regra da projecao publica.
+         *
+         *     **Sem autenticacao.** O papel colado no poste e igual para todo mundo, e
+         *     a resposta nao pode variar com quem pede. Ate 23/09/2026 esta operacao
+         *     declarava autenticacao opcional sem que o token decidisse coisa alguma;
+         *     o servidor ignora `Authorization` aqui, e por isso nao ha 401.
+         *
+         *     **Nao ha 429.** O unico teto e `serve_cache`, que responde do cache e
+         *     nao recusa, como em `getFinderConversation`.
          */
         get: operations["getLostCasePoster"];
         put?: never;
@@ -3002,8 +3043,14 @@ export interface paths {
          *     depois (D52), e linha na trilha (sem a coordenada bruta: a trilha grava
          *     `point_changed`).
          *
-         *     Pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`. O
-         *     `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
+         *     **Compatibilidade (01/10/2026):** o painel deixou de usar o mapa, e o
+         *     `place.point` desta rota fica so por compatibilidade. A rota continua
+         *     sendo o UNICO caminho para mudar o lugar de um encontro existente,
+         *     inclusive o `street_address`: mudar onde e T11, e as tres travas
+         *     valem para o endereco como valem para o ponto.
+         *
+         *     Pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e
+         *     `time_zone`. O `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
          *     responde `400` (`code: event_not_published`).
          */
         post: operations["relocateAdminNetworkEvent"];
@@ -3705,11 +3752,17 @@ export interface components {
         FoundReportEnrichment: {
             message?: string;
             /**
-             * @description O `upload_ref` devolvido por
-             *     `POST /v1/finder/found-report/photo-upload-intent`. Opaco de
-             *     proposito: este corpo vem de quem nao tem conta (SEC-001).
+             * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+             *     (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+             *     vem de quem nao tem conta (SEC-001).
              */
             photo_upload_ref?: string;
+            /**
+             * @description Sem faixa e sem obrigatoriedade, como estava antes de 23/09/2026.
+             *     A versao do achador sem conta (`FinderFoundReportEnrichment`) usa
+             *     `GeoPoint`; se o app tambem deve passar a `GeoPoint` e decisao
+             *     pendente do app, porque mudar aqui quebra quem ja envia.
+             */
             location?: {
                 /** Format: double */
                 lat?: number;
@@ -3717,6 +3770,33 @@ export interface components {
                 lon?: number;
                 accuracy_m?: number;
             };
+            /**
+             * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
+             *     para avisar a resposta do tutor e o desfecho do caso.
+             */
+            finder_contact?: {
+                display_name?: string;
+                /** Format: email */
+                email?: string;
+            };
+        };
+        /**
+         * @description O corpo de `enrichFinderFoundReport`, do achador sem conta. Mesmos
+         *     campos de `FoundReportEnrichment`, com uma diferenca: `location` e
+         *     `GeoPoint`, com a faixa do territorio e `lat`/`lon` obrigatorios
+         *     juntos. Existe separado porque `FoundReportEnrichment` e tambem o corpo
+         *     de `enrichFoundReport`, que o app ja usa, e apertar la quebraria esse
+         *     consumidor (13 quebras no `oasdiff` do commit 19ee222).
+         */
+        FinderFoundReportEnrichment: {
+            message?: string;
+            /**
+             * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+             *     (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+             *     vem de quem nao tem conta (SEC-001).
+             */
+            photo_upload_ref?: string;
+            location?: components["schemas"]["GeoPoint"];
             /**
              * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
              *     para avisar a resposta do tutor e o desfecho do caso.
@@ -3764,6 +3844,11 @@ export interface components {
              *     **continua exigindo confirmacao humana do tutor**.
              */
             share_token?: string;
+            /**
+             * @description 500, o mesmo teto de `found_reports.notes` no banco
+             *     (`found_reports_notes_tamanho`). O contrato dizia 1000, e o texto
+             *     entre 501 e 1000 passava pela validacao e morria no banco como 500.
+             */
             notes?: string;
             /** Format: uuid */
             photo_upload_id?: string;
@@ -4131,10 +4216,26 @@ export interface components {
             breed_label?: string | null;
             size: components["schemas"]["PetSize"];
             primary_color?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description **Quando o animal foi visto pela ultima vez**, como o tutor informou
+             *     (`lost_cases.last_seen_at`), e nao quando o caso foi aberto. Quem
+             *     abre o caso no dia seguinte ao sumico precisa que a pagina diga "desde
+             *     ontem", e e esse o numero que orienta quem esta procurando. O nome do
+             *     campo fica, porque e o que a tela mostra ("perdido desde").
+             */
             lost_since: string;
-            /** @description Bairro e cidade. Este e o nivel maximo de precisao publica. */
-            area_label: string;
+            /**
+             * @description Bairro e cidade. Este e o nivel maximo de precisao publica.
+             *
+             *     **Nulo quando o caso foi aberto so com coordenada** (BICHUS-21
+             *     criterio 5). A coordenada nunca sai e nao ha geocodificacao no MVP,
+             *     entao nao ha rotulo verdadeiro para dar. O texto que a tela mostra
+             *     nesse caso ("Regiao nao informada") e do cliente: rotulo fixo dentro
+             *     de um campo de dado e indistinguivel de um bairro com esse nome. E a
+             *     mesma regra de `LostCaseReachPreview.area_label`.
+             */
+            area_label: string | null;
             /** Format: uri */
             photo_url?: string | null;
             /** Format: uri */
@@ -4153,30 +4254,40 @@ export interface components {
             size: components["schemas"]["PetSize"];
             primary_color?: string | null;
             distinctive_marks?: string | null;
-            /** Format: date-time */
+            /**
+             * Format: date-time
+             * @description Quando o animal foi visto pela ultima vez (`lost_cases.last_seen_at`),
+             *     e nao quando o caso foi aberto. Mesmo significado de
+             *     `PublicLostPet.lost_since`.
+             */
             lost_since: string;
-            /** @description Bairro e cidade. Nivel maximo de precisao publica. */
-            area_label: string;
+            /**
+             * @description Bairro e cidade. Nivel maximo de precisao publica. Nulo quando o caso
+             *     so tem coordenada, pela mesma regra de `PublicLostPet.area_label`.
+             */
+            area_label: string | null;
             /**
              * Format: uri
-             * @description Derivada em resolucao de **impressao**, maior que a da listagem. Um
-             *     cartaz e visto a dois metros de distancia; a miniatura da lista
+             * @description A derivada `card` da foto principal, **1024 px de largura**. Em meia
+             *     folha A4 (cerca de 17 cm) isso da uns 150 dpi, o bastante para um
+             *     cartaz lido a dois metros. Nunca a `thumb` (160 px): a miniatura
              *     impressa vira uma mancha, e o cartaz deixa de servir para a unica
-             *     coisa que ele faz.
+             *     coisa que ele faz. Nao ha derivada so para impressao, e ela so se
+             *     paga se a medida de 150 dpi se mostrar insuficiente no papel.
              */
             photo_url?: string | null;
             /**
-             * @description Texto livre curto do tutor, se houver. Passa pela mesma redacao de
-             *     contato das mensagens: telefone ou e-mail escritos aqui sao
-             *     retirados, porque o cartaz e publico e um numero em poste e a porta
-             *     do golpe do falso achador.
-             */
-            reward_note?: string | null;
-            /**
              * Format: uri
-             * @description O endereco curto que vira o QR do papel. E por ele que quem viu o
-             *     animal chega ao canal mediado, sem telefone e sem endereco no
-             *     cartaz.
+             * @description O endereco que o QR do papel codifica: a pagina do caso,
+             *     `{WEB_BASE_URL}/p/{shareToken}`, o mesmo valor de
+             *     `PublicLostCase.share_url`. E por ele que quem viu o animal chega ao
+             *     canal mediado, sem telefone e sem endereco no cartaz.
+             *
+             *     **Nao ha encurtador**, e o contrato nao promete um. "Curto" quer
+             *     dizer apenas que e o endereco mais curto que leva ao caso; o nome
+             *     fica porque renomear agora nao muda o que o QR carrega. Um encurtador proprio seria
+             *     mais um servico e mais um dominio para manter, e um de terceiro
+             *     colocaria outra empresa entre o cartaz e o caso.
              */
             short_url: string;
         };
@@ -4203,9 +4314,16 @@ export interface components {
             /** @description O mesmo cartao de manejo da pagina do achador. */
             care_notes?: string | null;
             /**
-             * @description Falso para o proprio tutor. Verdadeiro para qualquer outra conta:
-             *     e o botao "vi este pet", que cria o achado ja vinculado pelo
-             *     `share_token`.
+             * @description Falso **so** para o proprio tutor. Verdadeiro para qualquer outra
+             *     conta **e para quem chama sem conta**: e o botao "vi este pet", e
+             *     ele existe para quem viu o animal, tenha conta ou nao.
+             *
+             *     O toque leva a `POST /found-reports` (`createStrayFoundReport`)
+             *     com o `share_token` do caso, que vincula o achado direto a ele.
+             *     Aquela operacao exige conta, entao para o anonimo o toque passa
+             *     antes pela entrada: **a conta e pedida no toque, nao na leitura**.
+             *     Esconder o botao de quem nao entrou esconderia justamente de
+             *     quem chegou pelo cartaz.
              */
             can_report_sighting?: boolean;
             /** Format: uri */
@@ -4574,6 +4692,7 @@ export interface components {
         NetworkEventPublic: {
             slug: string;
             title: string;
+            /** @description A descricao do encontro, ate 200 caracteres (pedido do cliente de 01/10; antes, 180). */
             summary: string;
             place: components["schemas"]["NetworkEventPlace"];
             /**
@@ -4751,10 +4870,18 @@ export interface components {
         /**
          * @description A resposta de `getNetworkEventLocation`. **So sai com conta** (emenda 1
          *     do ADR-0010). `point` nulo e o encontro sem ponto marcado: a tela mostra
-         *     os rotulos e nao mostra mapa.
+         *     os rotulos e nao mostra mapa. Desde 01/10/2026 o painel nao marca mais
+         *     ponto (o `point` fica so por compatibilidade) e escreve o endereco.
          */
         NetworkEventLocation: {
             point: components["schemas"]["NetworkEventPoint"] | null;
+            /**
+             * @description O endereco por extenso, como o painel o escreveu. Nulo quando nao
+             *     ha. O app o abre no aplicativo de mapas do aparelho, por intent com
+             *     o TEXTO; o Bichu nao geocodifica (ADR-0006). **Nunca** sai na
+             *     agenda nem no detalhe publico (emenda de 01/10 do ADR-0027).
+             */
+            street_address: string | null;
         };
         PublicLostPetPage: {
             items: components["schemas"]["PublicLostPet"][];
@@ -4949,12 +5076,22 @@ export interface components {
             content_type: "image/jpeg" | "image/png" | "image/webp";
             /**
              * @description Ate 5 MiB, o numero que o painel mostra. Dimensao minima: 800 x 800
-             *     pixels para `store_item`, 1600 x 900 para `network_event`. A
-             *     dimensao so e conhecida depois do envio: o worker a confere nos
-             *     bytes e marca a imagem `rejected` com o motivo, e o painel mostra o
-             *     erro na miniatura.
+             *     pixels para `store_item`, 600 x 600 para `network_event` (pedido do
+             *     cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
+             *     DECLARADA, em `width`/`height` deste pedido, recusada aqui com
+             *     `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
+             *     faz nos bytes e que marca a imagem `rejected` com o motivo, porque
+             *     a declarada e do navegador e pode mentir.
              */
             byte_size: number;
+            /**
+             * @description Largura em pixels, como o navegador a le do arquivo antes de
+             *     enviar. Opcional (o painel atual nao a manda); quando vem, abaixo
+             *     da minima do `purpose` recusa com `422` (`image-too-small`).
+             */
+            width?: number;
+            /** @description Altura em pixels. Mesma regra de `width`. */
+            height?: number;
         };
         AdminStorePartnerInput: {
             slug: components["schemas"]["Slug"];
@@ -5115,8 +5252,10 @@ export interface components {
         };
         /**
          * @description **Logradouro publico, nunca residencia** (ADR-0027 item 13). Os tres
-         *     rotulos sao obrigatorios; o ponto e opcional, como tolerancia (D.4).
-         *     Nao ha logradouro, numero nem CEP.
+         *     rotulos sao obrigatorios; o ponto e opcional, como tolerancia (D.4), e
+         *     desde 01/10/2026 fica so por compatibilidade: o painel nao usa mais
+         *     mapa. Logradouro, numero e CEP vivem em `street_address`, fora deste
+         *     objeto.
          */
         AdminNetworkEventPlaceInput: {
             place_name: string;
@@ -5148,6 +5287,11 @@ export interface components {
              */
             slug?: components["schemas"]["Slug"];
             title: string;
+            /**
+             * @description A descricao do encontro ("Descricao" no painel), ate 200 caracteres.
+             *     O teto vale so na escrita: o `CHECK` do banco foi alargado de 180
+             *     para 200 sem tocar linha existente.
+             */
             summary: string;
             place: components["schemas"]["AdminNetworkEventPlaceInput"];
             /** Format: date-time */
@@ -5175,10 +5319,22 @@ export interface components {
             admission?: components["schemas"]["AdminNetworkEventAdmissionInput"];
             bring_items?: components["schemas"]["NetworkEventBringItems"];
             notes?: components["schemas"]["NetworkEventNotes"];
+            street_address?: components["schemas"]["AdminNetworkEventStreetAddress"];
         };
         /**
-         * @description **Sem data, horario, fuso nem lugar**: mudar onde e quando e
-         *     `relocateAdminNetworkEvent`; sem visibilidade nem condicao de acesso:
+         * @description O endereco por extenso do encontro (decisao do cliente de 01/10/2026),
+         *     de 5 a 200 caracteres contados em code points, aparado. Logradouro
+         *     publico, nunca residencia (ADR-0027 item 13). Endereco e CEP sao o
+         *     conteudo do campo e NAO sao recusados; link, e-mail, perfil
+         *     `@usuario`, telefone, chave PIX e dados de pagamento sao, com `400`
+         *     (`code: contact_or_payment_detected`), e controle bidirecional com
+         *     `code: bidi_control`. No app, sai SO em `getNetworkEventLocation`.
+         */
+        AdminNetworkEventStreetAddress: string;
+        /**
+         * @description **Sem data, horario, fuso nem lugar, e sem `street_address`**: mudar
+         *     onde e quando e `relocateAdminNetworkEvent`, que exige reautenticacao
+         *     (T11); sem visibilidade nem condicao de acesso:
          *     `changeAdminNetworkEventAccess`. `images` substitui a galeria inteira
          *     (a posicao 0 e a capa); `notes: null` tira as observacoes; as listas
          *     substituem o conjunto.
@@ -5196,9 +5352,11 @@ export interface components {
             bring_items?: components["schemas"]["NetworkEventBringItems"];
             notes?: components["schemas"]["NetworkEventNotes"] | null;
         };
-        /** @description `reason` e pelo menos um de `place`, `starts_at`, `ends_at` e `time_zone`. */
+        /** @description `reason` e pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e `time_zone`. */
         AdminNetworkEventRelocation: {
             place?: components["schemas"]["AdminNetworkEventPlaceInput"];
+            /** @description O endereco novo; `null` tira o endereco. */
+            street_address?: components["schemas"]["AdminNetworkEventStreetAddress"] | null;
             /** Format: date-time */
             starts_at?: string;
             /** Format: date-time */
@@ -5257,6 +5415,8 @@ export interface components {
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];
             notes: string | null;
+            /** @description O endereco por extenso. Nulo nos encontros anteriores a 01/10/2026 e em quem nao o informou. */
+            street_address: string | null;
             /** @description Pedidos pendentes na fila. Sempre 0 em encontro publico. So existe no painel. */
             pending_request_count: number;
             publication_status: components["schemas"]["AdminNetworkEventPublicationStatus"];
@@ -5575,8 +5735,84 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description O link publico do caso nao leva mais a caso aberto. `type` e sempre
+         *     `lost-case-closed`, e cobre, **com o mesmo corpo**: caso encerrado; pet
+         *     excluido, falecido ou arquivado; e token desconhecido. A superficie
+         *     publica nao distingue o motivo, porque distinguir contaria a um estranho
+         *     o que aconteceu com o animal de outra pessoa, ou se aquele token um dia
+         *     existiu. Nao e 404 pela mesma razao da tag revogada (ADR-0004): link
+         *     impresso num cartaz nao pode terminar numa pagina sem saida.
+         *
+         *     `next_action: register_stray_found_report` e a saida: quem chegou por um
+         *     cartaz antigo e esta vendo um animal parecido ainda consegue registrar o
+         *     achado avulso, e o cruzamento por atributos faz o resto.
+         */
+        LostCaseClosed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O token do achador esta ausente, malformado ou nao corresponde a aviso
+         *     nenhum. Os tres casos tem **o mesmo corpo**: distinguir "malformado" de
+         *     "nao existe" diria a quem tenta que chegou perto. `type` e sempre
+         *     `finder-link-invalid`.
+         *
+         *     E 401, e nao 403, pelo mesmo criterio de `getPublicLostCase`: credencial
+         *     que nao autentica e 401, e 403 fica para quem se autenticou e nao tem
+         *     permissao, que aqui nao existe (o token tem escopo de uma conversa so).
+         *     Nao e `unauthenticated` porque aquele tipo manda entrar, e quem abriu
+         *     este link nao tem conta. Sai com `WWW-Authenticate: Bearer`.
+         */
+        FinderLinkInvalid: {
+            headers: {
+                /** @description Sempre `Bearer`. */
+                "WWW-Authenticate"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O token do achador existiu e **venceu**: passou dos 30 dias do aviso com
+         *     o caso ja encerrado, ou dos 30 dias depois do encerramento. `type` e
+         *     `conversation-closed`, e o corpo e **fixo**: nao traz o desfecho do caso
+         *     em campo nenhum, nem no `detail`. Ver a descricao de
+         *     `getFinderConversation`.
+         *
+         *     Vale igual para as seis operacoes do achador. Bloquear, denunciar,
+         *     enviar foto ou recado por um link vencido recebe a mesma resposta que
+         *     ler a conversa: responder 401 ali diria que o link nunca valeu.
+         */
+        FinderAccessEnded: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Corpo ou parametro invalido. */
         ValidationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description A imagem declarada e menor que a dimensao minima do proposito: 600 x
+         *     600 pixels no encontro da `Rede`, 800 x 800 no produto da `Loja`.
+         *     `errors[]` traz `width` e/ou `height` com `code: minimum`. Nada foi
+         *     assinado: escolha outra imagem.
+         */
+        ImageTooSmall: {
             headers: {
                 [name: string]: unknown;
             };
@@ -7683,7 +7919,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FoundReportEnrichment"];
+                "application/json": components["schemas"]["FinderFoundReportEnrichment"];
             };
         };
         responses: {
@@ -7696,16 +7932,10 @@ export interface operations {
                     "application/json": components["schemas"]["FinderFoundReportView"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /** @description Caso ja encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     createFinderPhotoUploadIntent: {
@@ -7732,8 +7962,11 @@ export interface operations {
                     "application/json": components["schemas"]["FinderUploadIntent"];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
             415: components["responses"]["UnsupportedMedia"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getFinderConversation: {
@@ -7757,19 +7990,9 @@ export interface operations {
                     "application/json": components["schemas"]["FinderConversation"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /**
-             * @description Caso encerrado. A resposta traz o desfecho, porque quem ajudou
-             *     merece saber que deu certo.
-             */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     postFinderMessage: {
@@ -7799,8 +8022,12 @@ export interface operations {
                     "application/json": components["schemas"]["FinderMessage"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /** @description Conversa encerrada ou bloqueada. */
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            /**
+             * @description Conversa encerrada ou bloqueada, ou acesso do link vencido. Corpo
+             *     fixo, sem desfecho do caso (ver `FinderAccessEnded`).
+             */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -7828,7 +8055,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            403: components["responses"]["Forbidden"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     reportFinderConversation: {
@@ -7849,7 +8077,9 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
-            403: components["responses"]["Forbidden"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     previewLostCaseReach: {
@@ -8271,6 +8501,32 @@ export interface operations {
     listDirectoryEntries: {
         parameters: {
             query?: {
+                /**
+                 * @description **Busca parcial pelo NOME da entrada**, tolerante a acento e a
+                 *     caixa: `veterinaria` acha `Veterinária`.
+                 *
+                 *     **So o nome, e a escolha e de produto.** Todo outro campo que o
+                 *     cartao mostra ja tem controle proprio no topo da mesma tela --
+                 *     `city`, `state`, `neighborhood`, `kind` e `verification_level`.
+                 *     Fazer `q` casar tambem neles poria dois controles disputando o
+                 *     mesmo trabalho e deixaria `applied_filters` ambiguo: a tela nao
+                 *     teria como escrever por que uma linha entrou. `about` e o candidato
+                 *     conhecido para uma segunda fase, e ele custa um indice proprio
+                 *     sobre texto bem maior.
+                 *
+                 *     **`minLength: 3` nao e gosto.** O indice que atende esta busca e
+                 *     GIN de trigrama, e um padrao com menos de tres caracteres nao
+                 *     produz trigrama nenhum: a consulta deixa de usar o indice e volta a
+                 *     varrer a tabela inteira. O piso e o ponto em que o indice deixa de
+                 *     existir. **A tela nao deve enviar `q` antes do terceiro caractere**,
+                 *     sob pena de levar 400 no que a pessoa le como o app quebrado.
+                 *
+                 *     Casa somente sobre `status = 'published'`, como todo o resto da
+                 *     operacao. Quem busca por um nome especifico esta testando se ele
+                 *     existe, entao um rascunho ou um oculto que aparecesse aqui seria
+                 *     resposta a uma pergunta que ninguem tem direito de fazer.
+                 */
+                q?: string;
                 /**
                  * @description **Opcional**, e aqui esta proposta e o contrato divergem de
                  *     proposito. A busca de perdidos comeca com alguem digitando onde
@@ -8810,7 +9066,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getPublicLostCase: {
@@ -8825,7 +9083,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Caso. */
+            /** @description Caso aberto. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -8834,15 +9092,10 @@ export interface operations {
                     "application/json": components["schemas"]["PublicLostCase"];
                 };
             };
-            /** @description Caso encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            410: components["responses"]["LostCaseClosed"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getLostCasePoster: {
@@ -8866,15 +9119,8 @@ export interface operations {
                     "application/json": components["schemas"]["LostCasePoster"];
                 };
             };
-            /** @description Caso encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            410: components["responses"]["LostCaseClosed"];
         };
     };
     checkPasswordResetToken: {
@@ -10363,6 +10609,7 @@ export interface operations {
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
             429: components["responses"]["TooManyRequests"];
         };
     };

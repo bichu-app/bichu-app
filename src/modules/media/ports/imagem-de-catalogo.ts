@@ -31,13 +31,35 @@ export const TETO_DE_BYTES_DO_CATALOGO = 5 * 1024 * 1024;
 
 /**
  * A dimensao minima por proposito (`AdminCatalogImageIntentInput.byte_size`).
- * So e conhecida depois do envio: o worker a confere nos bytes e recusa com o
- * motivo, e o painel mostra o erro na miniatura.
+ * Conferida duas vezes: a DECLARADA no pedido de envio (`width`/`height`,
+ * opcionais), recusada com `422 image-too-small` antes de assinar; e a REAL,
+ * que o worker confere nos bytes e recusa com o motivo, porque a declarada vem
+ * do navegador e pode mentir.
+ *
+ * O encontro era 1600 x 900 e passou a 600 x 600 a pedido do cliente (01/10):
+ * a foto que o organizador tem costuma ser de celular, quadrada ou retrato.
  */
 export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: number; altura: number }>> = {
   store_item: { largura: 800, altura: 800 },
-  network_event: { largura: 1600, altura: 900 },
+  network_event: { largura: 600, altura: 600 },
 };
+
+/**
+ * Os campos da dimensao declarada que ficam abaixo da minima do proposito.
+ * Lista vazia e "passa", inclusive quando nada foi declarado: a declaracao e
+ * opcional e o worker continua sendo quem decide nos bytes.
+ */
+export function dimensaoDeclaradaAbaixoDaMinima(
+  purpose: PropositoDaImagem,
+  largura: number | undefined,
+  altura: number | undefined,
+): readonly ('width' | 'height')[] {
+  const minima = DIMENSAO_MINIMA[purpose];
+  const campos: ('width' | 'height')[] = [];
+  if (largura !== undefined && largura < minima.largura) campos.push('width');
+  if (altura !== undefined && altura < minima.altura) campos.push('height');
+  return campos;
+}
 
 /**
  * Dez minutos, o numero do ADR-0027 item 10. A foto do pet tem cinco porque sai

@@ -83,6 +83,7 @@ const ENCONTRO: EncontroDaRede = {
   estrutura: [],
   paraLevar: [],
   observacoes: null,
+  endereco: null,
   imagens: [],
 };
 
@@ -119,7 +120,7 @@ function repositorio(cenario: Cenario): NetworkRepository {
       Promise.resolve('encontro' in cenario ? cenario.encontro : ENCONTRO),
     buscarLocalDoEncontro: (slug): Promise<LocalDoEncontro | undefined> => {
       locaisPedidos.push(slug);
-      return Promise.resolve('local' in cenario ? cenario.local : { ponto: PONTO });
+      return Promise.resolve('local' in cenario ? cenario.local : { ponto: PONTO, endereco: 'Praça Benedito Calixto, s/n - Pinheiros' });
     },
     listarPorDistancia: (): Promise<PaginaPorDistancia> =>
       Promise.resolve({
@@ -359,19 +360,19 @@ void describe('getNetworkEventLocation: o ponto, so com conta', () => {
     assert.equal(resposta.status, 401);
   });
 
-  void it('com conta, devolve `{ point: { lat, lon } }`, e o corpo tem so isso', async () => {
+  void it('com conta, devolve `{ point, street_address }`, e o corpo tem so isso', async () => {
     const resposta = await pedir(servidor(), { url: URL_DO_LOCAL, como: QUEM_CHAMA });
     assert.equal(resposta.status, 200);
-    assert.deepEqual(resposta.corpo, { point: PONTO });
+    assert.deepEqual(resposta.corpo, { point: PONTO, street_address: 'Praça Benedito Calixto, s/n - Pinheiros' });
   });
 
   void it('com conta e sem ponto marcado, `point` e nulo', async () => {
-    const resposta = await pedir(servidor({ local: { ponto: null } }), {
+    const resposta = await pedir(servidor({ local: { ponto: null, endereco: null } }), {
       url: URL_DO_LOCAL,
       como: QUEM_CHAMA,
     });
     assert.equal(resposta.status, 200);
-    assert.deepEqual(resposta.corpo, { point: null });
+    assert.deepEqual(resposta.corpo, { point: null, street_address: null });
   });
 
   void it('encontro invisivel ou inexistente: 404 com o mesmo corpo do detalhe, e nunca 403', async () => {

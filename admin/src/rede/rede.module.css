@@ -262,3 +262,13 @@
   background: var(--bichu-cor-surface-sunken);
   color: var(--bichu-cor-text-secondary);
 }
+
+/* Descricao do encontro: varias linhas, cresce com o texto (sem barra de rolagem). */
+.areaQueCresce {
+  min-height: 5.5rem;
+  height: auto;
+  padding: var(--bichu-space-3) var(--bichu-space-4);
+  resize: none;
+  overflow: hidden;
+  field-sizing: content;
+}

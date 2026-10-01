@@ -40,12 +40,13 @@ export const STATUS_DO_PROBLEMA = {
   'captcha-rejected':               403, // ADR-0027 / D41: login administrativo sem X-Captcha-Token ou com nota abaixo de 0,5. So existe no login do backoffice; no login do tutor a ausencia do token nunca recusa (ADR-0020)
   'method-not-allowed':             405, // ADR-0027 item 20.5: metodo que a rota administrativa nao aceita (o `GET` do "nao fui eu", que so existe por `POST`). Vem com `Allow`. So na superficie administrativa, e so com `X-Internal-Surface: admin`: sem ele a resposta continua 404 (D33)
   'weak-password':                  422,
+  'image-too-small':                422, // a imagem de catalogo declarada no pedido de envio e menor que a dimensao minima do proposito (600 x 600 no encontro da Rede, 800 x 800 no produto da Loja). Separado de `validation-failed`: o corpo esta bem formado, e a saida e outra -- escolher outra imagem, nao corrigir o formulario. A dimensao real continua conferida pelo worker nos bytes
   'precondition-required':          428, // ADR-0027: escrita sobre recurso existente do backoffice sem `If-Match`
   'rate-limited':                   429,
   'internal':                       500,
 } as const;
 
-/** União fechada dos 35 tipos declarados no contrato. */
+/** União fechada dos 36 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

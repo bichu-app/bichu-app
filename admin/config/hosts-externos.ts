@@ -9,10 +9,6 @@
  * pelo nome exato: trocar aqui pede trocar la.
  */
 export const HOSTS_PADRAO = {
-  /** Tiles do mapa (ADR-0027 item 6), com `{z}`, `{x}` e `{y}`. */
-  VITE_URL_DOS_TILES: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-  /** Atribuicao que a politica de uso do OpenStreetMap exige visivel. */
-  VITE_URL_DA_ATRIBUICAO_DO_MAPA: 'https://www.openstreetmap.org/copyright',
   /** Script do reCAPTCHA Enterprise (D41), so no documento `/entrar/`. */
   VITE_URL_DO_SCRIPT_DO_CAPTCHA: 'https://www.google.com/recaptcha/enterprise.js',
 } as const;
@@ -24,7 +20,7 @@ export function hostsExternos(env: Partial<Record<string, string>>): Record<Chav
   const saida = {} as Record<ChaveDeHost, string>;
   for (const chave of Object.keys(HOSTS_PADRAO) as ChaveDeHost[]) {
     const valor = env[chave]?.trim() || HOSTS_PADRAO[chave];
-    const url = new URL(valor.replace(/\{[xyz]\}/g, '0'));
+    const url = new URL(valor);
     if (url.protocol !== 'https:' || url.username || url.password) {
       throw new Error(`${chave} precisa ser https: sem usuario nem senha: "${valor}"`);
     }

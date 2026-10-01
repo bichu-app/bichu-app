@@ -1,8 +1,8 @@
 /**
  * O processamento da imagem de catalogo, sem armazenamento nem banco.
  *
- * Iscas: a dimensao minima por proposito (800 x 800 no produto, 1600 x 900 no
- * encontro) recusa com o numero no motivo; HEIC e recusado mesmo passando na
+ * Iscas: a dimensao minima por proposito (800 x 800 no produto, 600 x 600 no
+ * encontro desde 01/10; antes 1600 x 900) recusa com o numero no motivo; HEIC e recusado mesmo passando na
  * inspecao da foto do pet; objeto que nunca chegou e recusa final; e `ready`
  * so depois de a derivada estar no bucket publico.
  */
@@ -81,11 +81,29 @@ void describe('processamento da imagem de catalogo', () => {
     assert.equal((await processarImagemDeCatalogo(certa.deps, { catalog_image_id: 'c2' })).tipo, 'pronta');
   });
 
-  void it('ISCA: encontro com 1600 x 899 e recusado; o mesmo arquivo serve ao produto', async () => {
-    const capa = bancada({ purpose: 'network_event', dimensoes: dim(1600, 899) });
-    assert.equal((await processarImagemDeCatalogo(capa.deps, { catalog_image_id: 'c3' })).tipo, 'recusada');
-    const produto = bancada({ purpose: 'store_item', dimensoes: dim(1600, 899) });
-    assert.equal((await processarImagemDeCatalogo(produto.deps, { catalog_image_id: 'c4' })).tipo, 'pronta');
+  void it('ISCA: encontro com 600 x 599 ou 599 x 600 e recusado, com o numero no motivo; 600 x 600 passa', async () => {
+    for (const [largura, altura] of [
+      [600, 599],
+      [599, 600],
+    ] as const) {
+      const capa = bancada({ purpose: 'network_event', dimensoes: dim(largura, altura) });
+      assert.equal((await processarImagemDeCatalogo(capa.deps, { catalog_image_id: 'c3' })).tipo, 'recusada');
+      assert.deepEqual(capa.eventos, ['recusada:A imagem precisa ter pelo menos 600 x 600 pixels.']);
+    }
+    const quadrada = bancada({ purpose: 'network_event', dimensoes: dim(600, 600) });
+    assert.equal((await processarImagemDeCatalogo(quadrada.deps, { catalog_image_id: 'c3b' })).tipo, 'pronta');
+  });
+
+  void it('ISCA: o minimo antigo do encontro (1600 x 900) nao volta -- retrato de celular 720 x 1280 passa', async () => {
+    const retrato = bancada({ purpose: 'network_event', dimensoes: dim(720, 1280) });
+    assert.equal((await processarImagemDeCatalogo(retrato.deps, { catalog_image_id: 'c4' })).tipo, 'pronta');
+  });
+
+  void it('ISCA: o mesmo 700 x 700 serve ao encontro e nao ao produto', async () => {
+    const capa = bancada({ purpose: 'network_event', dimensoes: dim(700, 700) });
+    assert.equal((await processarImagemDeCatalogo(capa.deps, { catalog_image_id: 'c4b' })).tipo, 'pronta');
+    const produto = bancada({ purpose: 'store_item', dimensoes: dim(700, 700) });
+    assert.equal((await processarImagemDeCatalogo(produto.deps, { catalog_image_id: 'c4c' })).tipo, 'recusada');
   });
 
   void it('HEIC e recusado; objeto que nunca chegou e recusa final', async () => {

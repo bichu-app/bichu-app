@@ -80,7 +80,7 @@ export async function processarImagemDeCatalogo(
   }
 
   // A dimensao minima por proposito, que so os bytes dizem (contrato,
-  // `AdminCatalogImageIntentInput.byte_size`): 800 x 800 no produto, 1600 x 900
+  // `AdminCatalogImageIntentInput.byte_size`): 800 x 800 no produto, 600 x 600
   // no encontro. Recusa final, com o numero no motivo, para a miniatura dizer.
   const minima = DIMENSAO_MINIMA[imagem.purpose];
   if (inspecao.largura < minima.largura || inspecao.altura < minima.altura) {

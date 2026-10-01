@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   corpoDaMudanca,
+  cortarEmCodePoints,
+  tamanhoComoOServidor,
   formularioDoEncontro,
   formularioVazio,
   avisoDeFotosSemEnvio,
@@ -108,8 +110,8 @@ describe('validação do formulário', () => {
   it('formulário completo não tem erro', () => {
     expect(validar(preenchido(), 'novo', AGORA)).toEqual([]);
   });
-  it('fim e ponto são opcionais (BO-8)', () => {
-    expect(validar({ ...preenchido(), fim: '', ponto: null }, 'novo', AGORA)).toEqual([]);
+  it('fim é opcional (BO-8)', () => {
+    expect(validar({ ...preenchido(), fim: '' }, 'novo', AGORA)).toEqual([]);
   });
   it('dá a mensagem aprovada para cada campo', () => {
     const erros = validar({ ...formularioVazio(), portes: [] }, 'novo', AGORA).map((e) => e.mensagem);
@@ -117,12 +119,40 @@ describe('validação do formulário', () => {
       'Informe o título do encontro.',
       'Escreva uma descrição.',
       'Informe quando começa.',
-      'Informe o nome do local.',
+      'Informe o nome do lugar.',
       'Informe o bairro.',
       'Informe a cidade.',
       'Marque pelo menos um porte.',
     ]);
   });
+  it('descrição vai até 200 caracteres (pedido de 01/10)', () => {
+    expect(validar({ ...preenchido(), resumo: 'a'.repeat(200) }, 'novo', AGORA)).toEqual([]);
+    expect(validar({ ...preenchido(), resumo: 'a'.repeat(201) }, 'novo', AGORA).map((e) => e.campo)).toEqual(['resumo']);
+  });
+
+  it('ISCA: o tamanho conta code points, como o servidor (🐶 conta 1; e + acento combinado conta 2)', async () => {
+    const { errosDeTexto } = await import('../../../src/modules/network/domain/escrita-do-encontro.ts');
+    const casos = ['🐶'.repeat(200), '🐶'.repeat(201), 'e\u0301'.repeat(100), 'e\u0301'.repeat(100) + 'x', '  ' + '🐶'.repeat(200) + '  '];
+    for (const resumo of casos) {
+      const servidor = errosDeTexto('summary', resumo, 2, 200).length === 0;
+      const painel = !validar({ ...preenchido(), resumo }, 'novo', AGORA).some((e) => e.campo === 'resumo');
+      expect(painel, `${[...resumo].length} code points: servidor ${servidor ? 'aceita' : 'recusa'}`).toBe(servidor);
+    }
+    expect(tamanhoComoOServidor('🐶')).toBe(1);
+    expect(tamanhoComoOServidor('e\u0301')).toBe(2);
+    expect(cortarEmCodePoints('🐶'.repeat(201), 200)).toBe('🐶'.repeat(200));
+  });
+
+  it('endereço é opcional; quando vem, de 5 a 200 code points, como o servidor', () => {
+    expect(validar({ ...preenchido(), endereco: '' }, 'novo', AGORA)).toEqual([]);
+    expect(validar({ ...preenchido(), endereco: 'Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP' }, 'novo', AGORA)).toEqual([]);
+    expect(validar({ ...preenchido(), endereco: 'Rua' }, 'novo', AGORA).map((e) => e.mensagem)).toEqual([
+      'Escreva o endereço com pelo menos 5 caracteres, ou deixe em branco.',
+    ]);
+    expect(validar({ ...preenchido(), endereco: '🐶'.repeat(200) }, 'novo', AGORA)).toEqual([]);
+    expect(validar({ ...preenchido(), endereco: '🐶'.repeat(201) }, 'novo', AGORA).map((e) => e.campo)).toEqual(['endereco']);
+  });
+
   it('início no passado só reprova na criação', () => {
     const f = { ...preenchido(), inicio: '2026-09-01T09:00', fim: '' };
     expect(validar(f, 'novo', AGORA).map((e) => e.campo)).toEqual(['inicio']);
@@ -167,10 +197,10 @@ describe('montagem da criação', () => {
       bring_items: ['water', 'leash'],
     });
   });
-  it('pago leva centavos, BRL e unidade; ponto vai no lugar', () => {
-    const corpo = montarCriacao({ ...preenchido(), pago: true, valor: '15,50', unidade: 'per_pair', ponto: { lat: -23.5, lon: -46.6 } });
+  it('pago leva centavos, BRL e unidade; a criação não manda ponto (o backoffice não tem mapa)', () => {
+    const corpo = montarCriacao({ ...preenchido(), pago: true, valor: '15,50', unidade: 'per_pair' });
     expect(corpo.admission).toEqual({ kind: 'paid', price: { amount: 1550, currency: 'BRL', unit: 'per_pair' } });
-    expect(corpo.place.point).toEqual({ lat: -23.5, lon: -46.6 });
+    expect(corpo.place).not.toHaveProperty('point');
   });
 });
 
@@ -187,13 +217,65 @@ describe('plano de edição (as três operações)', () => {
     expect(plano.mudanca).toBeNull();
     expect(plano.acesso).toBeNull();
   });
-  it('horário e ponto vão na mudança, e o título do diálogo diz o que mudou', () => {
-    const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00', ponto: { lat: -23.56, lon: -46.64 } };
+  it('horário e lugar vão na mudança, e o ponto antigo sai, porque era do lugar anterior', () => {
+    const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00', local: 'Praça General Polidoro' };
     const plano = planoDeEdicao(original, f);
     expect(plano.patch).toBeNull();
     expect(plano.oQueMudou).toEqual(['horário', 'local']);
-    expect(plano.mudanca?.place?.point).toEqual({ lat: -23.56, lon: -46.64 });
+    expect(plano.mudanca?.place).toEqual({ place_name: 'Praça General Polidoro', neighborhood: 'Aclimação', city: 'São Paulo', state: 'SP', point: null });
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de horário e local?');
+    expect(corpoDaMudanca(original, f, plano)).toContain('O mapa deixa de aparecer no app, porque mostrava o lugar anterior.');
+  });
+  it('endereço: vai na criação aparado, muda por relocation (com senha) e sem tirar o ponto', () => {
+    expect(montarCriacao({ ...preenchido(), endereco: '  Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP ' }).street_address).toBe(
+      'Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP',
+    );
+    expect(montarCriacao(preenchido())).not.toHaveProperty('street_address');
+    const f = { ...formularioDoEncontro(original), endereco: 'Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP' };
+    const plano = planoDeEdicao(original, f);
+    expect(plano.patch).toBeNull();
+    expect(plano.mudanca).toEqual({ street_address: 'Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP' });
+    expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local?');
+    expect(corpoDaMudanca(original, f, plano)[0]).toBe(
+      'O endereço passa a ser Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP. Quem usa o app não é avisado da mudança.',
+    );
+    const comEndereco = encontroDeExemplo({ street_address: 'Rua Muniz de Sousa, 1119' });
+    const tirar = { ...formularioDoEncontro(comEndereco), endereco: '' };
+    expect(planoDeEdicao(comEndereco, tirar).mudanca).toEqual({ street_address: null });
+    expect(corpoDaMudanca(comEndereco, tirar, planoDeEdicao(comEndereco, tirar))[0]).toBe('O endereço deixa de aparecer no app. Quem usa o app não é avisado da mudança.');
+    expect(formularioDoEncontro(comEndereco).endereco).toBe('Rua Muniz de Sousa, 1119');
+  });
+
+  it('lugar e endereço juntos viram uma mudança só (uma senha), e o PATCH nunca leva endereço', () => {
+    const f = { ...formularioDoEncontro(original), local: 'Praça General Polidoro', endereco: 'Rua Muniz de Sousa, 1119', titulo: 'Outro título' };
+    const plano = planoDeEdicao(original, f);
+    expect(plano.patch).toEqual({ title: 'Outro título' });
+    expect(plano.patch).not.toHaveProperty('street_address');
+    expect(plano.mudanca).toMatchObject({ place: { place_name: 'Praça General Polidoro' }, street_address: 'Rua Muniz de Sousa, 1119' });
+    expect(plano.acesso).toBeNull();
+    expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local?');
+  });
+
+  it('ISCA: mudou o lugar sem mexer no endereço salvo, o diálogo pede para conferir o endereço', () => {
+    const comEndereco = encontroDeExemplo({ street_address: 'Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP' });
+    const aviso = 'O endereço continua: Rua Muniz de Sousa, 1119 – Aclimação, São Paulo/SP. Se mudou, corrija antes de confirmar.';
+    const soLugar = { ...formularioDoEncontro(comEndereco), local: 'Praça General Polidoro' };
+    expect(corpoDaMudanca(comEndereco, soLugar, planoDeEdicao(comEndereco, soLugar))).toContain(aviso);
+    // Mexeu no endereco junto: nao avisa.
+    const lugarEEndereco = { ...soLugar, endereco: 'Praça General Polidoro, s/n – Liberdade, São Paulo/SP' };
+    expect(corpoDaMudanca(comEndereco, lugarEEndereco, planoDeEdicao(comEndereco, lugarEEndereco)).join(' ')).not.toMatch(/O endereço continua/);
+    // Sem endereco salvo: nao avisa.
+    const semEndereco = { ...formularioDoEncontro(original), local: 'Praça General Polidoro' };
+    expect(corpoDaMudanca(original, semEndereco, planoDeEdicao(original, semEndereco)).join(' ')).not.toMatch(/O endereço continua/);
+    // So o horario: nao avisa.
+    const soHorario = { ...formularioDoEncontro(comEndereco), inicio: formularioDoEncontro(comEndereco).inicio.slice(0, 11) + '10:00' };
+    expect(corpoDaMudanca(comEndereco, soHorario, planoDeEdicao(comEndereco, soHorario)).join(' ')).not.toMatch(/O endereço continua/);
+  });
+
+  it('só o horário: o lugar não vai, e o ponto que existir continua', () => {
+    const f = { ...formularioDoEncontro(original), inicio: formularioDoEncontro(original).inicio.slice(0, 11) + '10:00' };
+    const plano = planoDeEdicao(original, f);
+    expect(plano.mudanca).not.toHaveProperty('place');
   });
   it('visibilidade e valor vão na mudança de acesso', () => {
     const f = { ...formularioDoEncontro(original), visibilidade: 'private' as const, pago: true, valor: '20', unidade: 'per_dog' as const };
@@ -207,11 +289,12 @@ describe('plano de edição (as três operações)', () => {
     ]);
   });
   it('local e acesso juntos: o aviso aos administradores sai uma vez só, no fim (UX 30 B3, B11, B12)', () => {
-    const f = { ...formularioDoEncontro(original), ponto: null, pago: true, valor: '20', unidade: 'per_dog' as const };
+    const f = { ...formularioDoEncontro(original), bairro: 'Cambuci', pago: true, valor: '20', unidade: 'per_dog' as const };
     const plano = planoDeEdicao(original, f);
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local e de acesso?');
     expect(corpoDaMudanca(original, f, plano)).toEqual([
-      'O app passa a mostrar o encontro sem mapa. Quem usa o app não é avisado da mudança.',
+      'O app passa a mostrar Parque da Aclimação, Cambuci. Quem usa o app não é avisado da mudança.',
+      'O mapa deixa de aparecer no app, porque mostrava o lugar anterior.',
       'O encontro agora é pago, e o app mostra isso na hora.',
       'Todos os administradores recebem um e-mail com o antes e o depois.',
     ]);

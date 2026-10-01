@@ -108,6 +108,12 @@ export const rotaDeRemoverEncontro = defineRoute({
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
+/**
+ * Mover (T11). **Compatibilidade desde 01/10/2026:** o painel deixou de usar o
+ * mapa, e o `place.point` desta rota fica so para quem ainda o manda. A rota
+ * continua sendo o unico caminho para mudar o lugar de um encontro existente,
+ * inclusive o `street_address`, com reautenticacao, motivo e aviso.
+ */
 export const rotaDeMoverEncontro = defineRoute({
   operationId: 'relocateAdminNetworkEvent',
   method: 'post',

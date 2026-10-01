@@ -25,9 +25,11 @@ import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
 import type { AuditAction, AuditEvent } from '../../audit/ports/audit-log.js';
-import type {
-  PreparadorDeEnvioDeCatalogo,
-  PropositoDaImagem,
+import {
+  DIMENSAO_MINIMA,
+  dimensaoDeclaradaAbaixoDaMinima,
+  type PreparadorDeEnvioDeCatalogo,
+  type PropositoDaImagem,
 } from '../../media/ports/imagem-de-catalogo.js';
 import type { AutorizacaoDeEnvio } from '../../media/ports/object-storage.js';
 import {
@@ -152,6 +154,9 @@ export interface CorpoDeIntencao {
   readonly purpose: PropositoDaImagem;
   readonly content_type: string;
   readonly byte_size: number;
+  /** Declaradas pelo navegador, opcionais. Abaixo da minima recusa com 422. */
+  readonly width?: number;
+  readonly height?: number;
 }
 
 export interface Escrito<T> {
@@ -941,6 +946,20 @@ export class CatalogoAdministrativo {
    * enviado nao e alcancado por nada, e a politica morre em dez minutos.
    */
   async autorizarEnvioDeCatalogo(autor: Autor, corpo: CorpoDeIntencao): Promise<IntencaoAutorizada> {
+    // A dimensao declarada ANTES de assinar: recusar depois deixaria uma
+    // politica assinada valendo dez minutos para um arquivo que ja se sabe ruim.
+    const abaixo = dimensaoDeclaradaAbaixoDaMinima(corpo.purpose, corpo.width, corpo.height);
+    if (abaixo.length > 0) {
+      const minima = DIMENSAO_MINIMA[corpo.purpose];
+      throw problemas.imagemPequenaDemais(
+        minima,
+        abaixo.map((field) => ({
+          field,
+          code: 'minimum',
+          message: `Mínimo de ${String(field === 'width' ? minima.largura : minima.altura)} pixels.`,
+        })),
+      );
+    }
     const envio = await this.deps.envios.preparar(corpo.content_type, corpo.byte_size);
 
     await this.deps.repositorio.emTransacao(async (tx) => {
@@ -959,6 +978,8 @@ export class CatalogoAdministrativo {
             purpose: corpo.purpose,
             content_type: corpo.content_type,
             byte_size: corpo.byte_size,
+            ...(corpo.width === undefined ? {} : { width: corpo.width }),
+            ...(corpo.height === undefined ? {} : { height: corpo.height }),
           },
         }),
       );

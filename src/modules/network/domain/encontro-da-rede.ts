@@ -87,6 +87,11 @@ export interface EncontroDaRede {
   readonly estrutura: readonly string[];
   readonly paraLevar: readonly string[];
   readonly observacoes: string | null;
+  /**
+   * O endereco por extenso. Carregado aqui, mas so projetado conforme
+   * `REGRA_DO_ENDERECO` -- hoje, nunca na leitura aberta.
+   */
+  readonly endereco: string | null;
   /** Na ordem do painel; a primeira e a capa. */
   readonly imagens: readonly ImagemDoEncontro[];
 }
@@ -139,6 +144,8 @@ interface CamposDoEncontroProjetados {
   readonly amenities: readonly string[];
   readonly bring_items: readonly string[];
   readonly notes: string | null;
+  /** So existe quando `REGRA_DO_ENDERECO` e `publico`. */
+  readonly street_address?: string | null;
 }
 
 /** O encontro publico, como a leitura publica o declara (`NetworkEventPublic`). */
@@ -180,6 +187,34 @@ export interface PontoDoEncontro {
 /** A resposta de `getNetworkEventLocation`: o ponto, ou nulo quando nao ha. */
 export interface LocalizacaoProjetada {
   readonly point: { readonly lat: number; readonly lon: number } | null;
+  readonly street_address: string | null;
+}
+
+/**
+ * ONDE O ENDERECO DO ENCONTRO SAI -- A REGRA, NUM PONTO SO.
+ *
+ * Decisao do cliente de 01/10/2026 (emenda de 01/10 do ADR-0027): o endereco
+ * sai SO em `getNetworkEventLocation`, com conta, pela regra do ponto (emenda 1
+ * do ADR-0010). A visibilidade ainda pode mudar por decisao dele, entao ela
+ * mora aqui e em nenhum outro lugar:
+ *
+ * - `so_com_conta`: o endereco sai so em `location` (hoje);
+ * - `publico`: sai tambem na agenda, no detalhe publico e nos detalhes do
+ *   privado. Trocar para isto exige, no MESMO commit, acrescentar
+ *   `street_address` a `NetworkEventPublic` e `NetworkEventPrivateDetails` em
+ *   `api/openapi.yaml` -- o contrato manda -- e emendar o ADR-0027.
+ *
+ * `location` leva o endereco nas duas regras.
+ */
+export type RegraDoEndereco = 'so_com_conta' | 'publico';
+export const REGRA_DO_ENDERECO: RegraDoEndereco = 'so_com_conta';
+
+/** O endereco na leitura aberta (agenda, detalhe, detalhes do privado), conforme a regra. */
+export function enderecoNaLeituraAberta(
+  endereco: string | null,
+  regra: RegraDoEndereco = REGRA_DO_ENDERECO,
+): { readonly street_address?: string | null } {
+  return regra === 'publico' ? { street_address: endereco } : {};
 }
 
 /**
@@ -299,6 +334,7 @@ function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEnc
     amenities: [...encontro.estrutura],
     bring_items: [...encontro.paraLevar],
     notes: encontro.observacoes,
+    ...enderecoNaLeituraAberta(encontro.endereco),
   };
 }
 
@@ -369,6 +405,9 @@ export function encontroEncerrado(encontro: EncontroDaRede, agora: Instant): boo
  * e opcional (ADR-0027 12.2), e sem ele a tela mostra os rotulos e nao mostra
  * mapa.
  */
-export function projetarLocalizacao(ponto: PontoDoEncontro | null): LocalizacaoProjetada {
-  return { point: ponto === null ? null : { lat: ponto.lat, lon: ponto.lon } };
+export function projetarLocalizacao(
+  ponto: PontoDoEncontro | null,
+  endereco: string | null = null,
+): LocalizacaoProjetada {
+  return { point: ponto === null ? null : { lat: ponto.lat, lon: ponto.lon }, street_address: endereco };
 }
