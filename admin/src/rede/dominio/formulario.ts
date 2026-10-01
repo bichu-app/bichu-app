@@ -479,15 +479,24 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
     }
   }
   if (plano.acesso) {
-    const partes: string[] = [];
-    if (plano.acesso.visibility) partes.push(plano.acesso.visibility === 'private' ? 'agora é privado' : 'agora é público');
+    // O que muda no ENCONTRO ("agora e privado", "agora e pago") e o que muda no
+    // VALOR sao sujeitos diferentes: "O encontro o valor muda..." era o defeito (QA r5).
+    const doEncontro: string[] = [];
+    let novoValor: string | null = null;
+    if (plano.acesso.visibility) doEncontro.push(plano.acesso.visibility === 'private' ? 'agora é privado' : 'agora é público');
     const adm = plano.acesso.admission;
     if (adm) {
       const eraPago = original.admission.kind === 'paid';
-      if (adm.kind === 'paid' && adm.price && eraPago) partes.push(`o valor muda para ${valorComoOAppMostra(adm.price.amount, adm.price.unit)}`);
-      else partes.push(adm.kind === 'paid' ? 'agora é pago' : 'agora é gratuito');
+      if (adm.kind === 'paid' && adm.price && eraPago) novoValor = valorComoOAppMostra(adm.price.amount, adm.price.unit);
+      else doEncontro.push(adm.kind === 'paid' ? 'agora é pago' : 'agora é gratuito');
     }
-    frases.push(`O encontro ${listaEmPortugues(partes)}, e o app mostra isso na hora.`);
+    if (doEncontro.length && novoValor) {
+      frases.push(`O encontro ${listaEmPortugues(doEncontro)}, e o valor muda para ${novoValor}. O app mostra isso na hora.`);
+    } else if (novoValor) {
+      frases.push(`O valor do encontro muda para ${novoValor}, e o app mostra isso na hora.`);
+    } else {
+      frases.push(`O encontro ${listaEmPortugues(doEncontro)}, e o app mostra isso na hora.`);
+    }
     if (plano.acesso.visibility === 'private') frases.push('O link antigo do encontro para de funcionar.');
   }
   // UX 30, B3 e B11: o aviso aos administradores e uma frase so, no fim, e nao uma por mudanca.

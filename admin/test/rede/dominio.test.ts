@@ -315,6 +315,18 @@ describe('plano de edição (as três operações)', () => {
     expect(planoDeEdicao(antigo, { ...f, unidade: 'per_pair' }).acesso?.admission).toEqual({ kind: 'paid', price: { amount: 3000, currency: 'BRL', unit: 'per_pair' } });
   });
 
+  it('ISCA: mudar só o valor diz "O valor do encontro muda para…" (QA r5)', () => {
+    const pago = encontroDeExemplo({ admission: { kind: 'paid', price: { amount: 1500, currency: 'BRL', unit: 'per_pet' } } });
+    const f = { ...formularioDoEncontro(pago), valor: '20' };
+    const corpo = corpoDaMudanca(pago, f, planoDeEdicao(pago, f));
+    expect(corpo[0]).toBe('O valor do encontro muda para R$ 20 por pet, e o app mostra isso na hora.');
+    expect(corpo.join(' ')).not.toMatch(/O encontro o valor/);
+    const privadoEValor = { ...f, visibilidade: 'private' as const };
+    expect(corpoDaMudanca(pago, privadoEValor, planoDeEdicao(pago, privadoEValor))[0]).toBe(
+      'O encontro agora é privado, e o valor muda para R$ 20 por pet. O app mostra isso na hora.',
+    );
+  });
+
   it('visibilidade e valor vão na mudança de acesso', () => {
     const f = { ...formularioDoEncontro(original), visibilidade: 'private' as const, pago: true, valor: '20', unidade: 'per_pet' as const };
     const plano = planoDeEdicao(original, f);
