@@ -239,9 +239,25 @@ after(async () => {
     await banco.db.deleteFrom('catalog_upload_intents').where('admin_account_id', '=', autor.adminAccountId).execute();
     await banco.db.deleteFrom('store_tags').where('label', 'like', 'Tg %').execute();
     if (fotoDePet !== undefined) {
-      await banco.db.deleteFrom('upload_intents').where('id', '=', fotoDePet.intencao).execute();
-      await banco.db.deleteFrom('pets').where('id', '=', fotoDePet.pet).execute();
-      await banco.db.deleteFrom('users').where('id', '=', fotoDePet.tutor).execute();
+      // ORDEM FIXA DE CADEADOS, e nao repeticao. O `delete from users` cascateia
+      // para as filhas de `users` e toma o cadeado delas DEPOIS do de `users`
+      // (pai -> filha). Dois arquivos que rodam em paralelo tomam na ordem
+      // inversa (filha -> pai): `chave-estrangeira-contra-restricao` trava
+      // `conversation_messages, users` e `cadastros-separados` altera
+      // `user_roles` e depois insere em `users`. Era esse o ciclo do
+      // `deadlock detected` intermitente desta limpeza (40P01, tres vezes).
+      //
+      // Numa transacao, as duas filhas disputadas sao travadas PRIMEIRO, na
+      // ordem dos outros arquivos, e so depois `users`: quem segura uma filha
+      // nunca espera por quem segura `users`, entao nao ha ciclo -- no maximo
+      // uma espera curta pelo fim da transacao do outro. Erro de verdade sobe.
+      const dados = fotoDePet;
+      await banco.db.transaction().execute(async (trx) => {
+        await sql`lock table conversation_messages, user_roles in row exclusive mode`.execute(trx);
+        await trx.deleteFrom('upload_intents').where('id', '=', dados.intencao).execute();
+        await trx.deleteFrom('pets').where('id', '=', dados.pet).execute();
+        await trx.deleteFrom('users').where('id', '=', dados.tutor).execute();
+      });
     }
     await sql`delete from audit.events where actor_admin_id = ${autor.adminAccountId}::uuid`.execute(banco.db).catch(() => undefined);
     await banco.db.deleteFrom('admin_accounts').where('id', '=', autor.adminAccountId).execute();
