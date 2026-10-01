@@ -330,47 +330,63 @@ dispensas:
     responsavel: squad
     vence_em: 2026-10-15
 
-  # BICHUS-41, 23/09/2026. Quatro quebras que o `oasdiff` acusa e que CORRIGEM
-  # o contrato em vez de tirar de alguem um uso que funcionava. Medido com
-  # tufin/oasdiff:v1.32.1 contra origin/development: sao exatamente estas, e
-  # nenhuma outra deste PR.
+  # AS QUATRO DISPENSAS DA BICHUS-41 SAIRAM EM 01/10/2026, E NAO FORAM
+  # REDATADAS. Eram `oasdiff-notas-do-achado-no-teto-do-banco`,
+  # `oasdiff-local-do-achador-obrigatorio`, `-maximo` e `-minimo`. O motivo
+  # delas CADUCOU pelo unico desfecho que elas mesmas previam, escrito no
+  # comentario que estava aqui: "depois do merge a base passa a carregar o
+  # contrato novo, a quebra deixa de aparecer e a entrada deve sair".
   #
-  # 1. `notes` de `createStrayFoundReport` caiu de 1000 para 500. O achado
-  #    avulso grava em `found_reports.notes` (INSERT em
-  #    `kysely-found-report-repository.ts`), e o banco recusa acima de 500:
-  #    `found_reports_notes_tamanho CHECK (char_length(notes) <= 500)`,
-  #    `migrations/20260917000007_tags-e-avisos-do-achador.sql:210`. O 23514
-  #    nao e `AppError` nem erro do Fastify, entao `traduzir` em
-  #    `src/shared/http/server.ts` o entrega como 500 `internal`. Quem mandava
-  #    de 501 a 1000 ja recebia 500; agora recebe 400 com o campo nomeado.
+  # MEDIDO EM 01/10/2026, E NAO SUPOSTO:
   #
-  # 2. `location` de `enrichFinderFoundReport` passou a `GeoPoint` (lat/lon
-  #    obrigatorios juntos e faixa do territorio; tres regras do oasdiff, uma
-  #    entrada cada). Em origin/development a operacao esta declarada e NAO
-  #    esta implementada: `src/bin/api.ts` nao a registra, e todo pedido
-  #    respondia 404. O app (`app/lib`) nao a chama. Nao ha uso que funcionava.
-  #    O corpo da rota COM conta (`enrichFoundReport`, que o app usa) ficou
-  #    como estava, em `FoundReportEnrichment`.
+  #   git merge-base --is-ancestor 814a2fe origin/development  ->  0
   #
-  # Vencem no fim do desenvolvimento: depois do merge a base passa a carregar
-  # o contrato novo, a quebra deixa de aparecer e a entrada deve sair.
-  - portao: oasdiff-notas-do-achado-no-teto-do-banco
-    mudanca: "request-property-max-length-decreased createStrayFoundReport"
-    motivo: "notes 1000 -> 500, o teto de found_reports.notes (CHECK found_reports_notes_tamanho, migracao 20260917000007:210); acima de 500 o banco ja recusava com 23514, que saia como 500 internal"
-    responsavel: squad
-    vence_em: 2026-09-30
-  - portao: oasdiff-local-do-achador-obrigatorio
-    mudanca: "request-property-became-required enrichFinderFoundReport"
-    motivo: "location do achador sem conta passou a GeoPoint (BICHUS-41); a operacao nao estava implementada em development (404 para todo pedido) e o app nao a chama"
-    responsavel: squad
-    vence_em: 2026-09-30
-  - portao: oasdiff-local-do-achador-maximo
-    mudanca: "request-property-max-set enrichFinderFoundReport"
-    motivo: "faixa do territorio em location do achador sem conta (GeoPoint, BICHUS-41); operacao sem implementacao em development"
-    responsavel: squad
-    vence_em: 2026-09-30
-  - portao: oasdiff-local-do-achador-minimo
-    mudanca: "request-property-min-set enrichFinderFoundReport"
-    motivo: "faixa do territorio em location do achador sem conta (GeoPoint, BICHUS-41); operacao sem implementacao em development"
-    responsavel: squad
-    vence_em: 2026-09-30
+  # `814a2fe` (merge de `feat/BICHUS-41-conversa-do-achador`) E ancestral de
+  # `origin/development` (3d376f3), e a BASE ja carrega o contrato novo:
+  #
+  #   1. `api/openapi.yaml`, `StrayFoundReportInput.notes`: `maxLength: 500`.
+  #      Nao ha de onde decrescer, entao `request-property-max-length-decreased
+  #      createStrayFoundReport` nao tem mais como ser acusada.
+  #   2. `api/openapi.yaml`, `FinderFoundReportEnrichment.location`:
+  #      `$ref: GeoPoint`. As tres regras que sobravam
+  #      (`request-property-became-required`, `request-property-max-set` e
+  #      `request-property-min-set` em `enrichFinderFoundReport`) comparam
+  #      contra uma base que JA tem o `GeoPoint`.
+  #
+  # O passo `compatibilidade contra main` compara contra
+  # `origin/${{ github.base_ref }}` -- quer dizer, contra essa base. As quatro
+  # dispensas passaram a dispensar quebras que nao existem.
+  #
+  # O EFEITO DE DEIXA-LAS DE PE ERA SO UM, E ELE ERA CARO: a partir de 01/10
+  # elas reprovavam `verificar_dispensas.py` por prazo vencido -- e esse portao
+  # esta dentro de `make verificar`, que esta dentro de `make fechar-integracao`,
+  # que e hoje o UNICO portao que existe, para as TRES sessoes deste
+  # repositorio. O unico portao vivo ficava vermelho por causa de quatro
+  # excecoes a quebras que deixaram de ser quebras. Medido: exit 1, com as
+  # quatro marcadas `[VENCIDA]`.
+  #
+  # REDATAR SERIA PIOR QUE APAGAR, e e por isso que a data nao foi tocada:
+  # renovar exigiria escrever um motivo afirmando que a quebra existe, e ela nao
+  # existe. Dispensa cuja razao deixou de valer e pior que dispensa nenhuma --
+  # ela continua escondendo um portao que ninguem mais olha, e com a aparencia
+  # de ter sido conferida. E o mesmo caminho da
+  # `oasdiff-logout-corpo-obrigatorio`, apagada em 28/09 pela mesma razao.
+  #
+  # O QUE FICOU SEM PORTAO: nada que estas entradas segurassem. Elas eram
+  # EXCECOES, e apagar excecao devolve rigor, nao tira.
+  # `verificar_quebras_de_contrato.py` volta a reprovar qualquer uma das quatro
+  # mudancas que apareca -- o que e o comportamento correto, porque uma segunda
+  # quebra na mesma operacao seria uma decisao nova.
+  #
+  # POR QUE APAGAR AQUI NAO E A ARMADILHA DO `apk-assinado`: `dispensa_vencida()`
+  # (`verificar_borda_local.py:227`, chamada em :292) consulta SO os portoes
+  # `apk-assinado` e `ios`, e reprova quando nao acha a entrada. Os quatro nomes
+  # acima nao eram consultados por ela nem por mais nada: conferido em 01/10,
+  # eles apareciam unicamente neste arquivo. Apagar nao derruba
+  # `verificar-borda-local`.
+  #
+  # DITO EM VOZ ALTA, e nao e consequencia deste commit: o portao de quebra de
+  # contrato inteiro segue dormente. Ele roda so em `pull_request`, depende do
+  # `docker run tufin/oasdiff` e a esteira nao executa desde que o cliente
+  # decidiu nao contratar o GitHub Actions. Nao existe alvo local de `oasdiff` no
+  # `Makefile`. O registro fica em `docs/07-devops.md` secao 5.3.
