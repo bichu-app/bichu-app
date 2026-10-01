@@ -292,6 +292,60 @@ void describe('a escrita administrativa da Rede, contra Postgres', () => {
     assert.ok(!JSON.stringify(trilha).includes('-23.4'), 'a coordenada foi para a trilha');
   });
 
+  void it('o pino ponta a ponta (01/10): criar, editar sem lugar, mover so o horario e mover o ponto; o app le em location', async () => {
+    const publica = criarNetworkRepository(banco.db, ids, (c) => c);
+    const noBanco = async (slug: string) => {
+      const l = await sql<{ lat: number | null; lon: number | null; geo_source: string | null }>`
+        select ST_Y(geo::geometry) as lat, ST_X(geo::geometry) as lon, geo_source
+          from network_events where slug = ${slug}`.execute(banco.db);
+      return l.rows[0];
+    };
+    const perto = (v: { lat: number | null; lon: number | null } | null | undefined, lat: number, lon: number, oque: string) => {
+      assert.ok(v !== null && v !== undefined, `${oque}: sem ponto`);
+      assert.ok(Math.abs((v.lat ?? NaN) - lat) < 1e-9 && Math.abs((v.lon ?? NaN) - lon) < 1e-9, `${oque}: ${JSON.stringify(v)}`);
+    };
+    const noApp = async (slug: string) => (await publica.buscarLocalDoEncontro(slug, tutor))?.ponto ?? null;
+
+    // 1. criar com ponto
+    const criado = await criar({ place: { ...corpo().place, point: { lat: -23.5586, lon: -46.6814 } } });
+    const slug = criado.recurso.slug;
+    const origem = async () => (await noBanco(slug))?.geo_source;
+    perto(await noBanco(slug), -23.5586, -46.6814, 'noBanco');
+    perto(await noApp(slug), -23.5586, -46.6814, 'noApp');
+
+    // 2. ISCA: editar tudo o que o PATCH aceita, sem lugar, nao zera o ponto
+    const editado = await r.alterarEncontro(autor, slug, criado.etag, {
+      title: 'Titulo novo do encontro',
+      summary: 'Descricao nova.',
+      notes: 'Levem agua.',
+      dog_age: 'from_1_year',
+      vaccination_required: false,
+      fenced_off_leash_area: true,
+      amenities: ['shade'],
+      bring_items: ['water'],
+      accepted_sizes: ['P', 'M'],
+    });
+    perto(editado.recurso.place.point, -23.5586, -46.6814, 'resposta do PATCH');
+    perto(await noBanco(slug), -23.5586, -46.6814, 'noBanco');
+
+    // 3. ISCA: mover so o horario, sem `place`, nao zera o ponto
+    const soHorario = await r.moverEncontro(autor, slug, editado.etag, {
+      starts_at: emDias(11, 12),
+      ends_at: emDias(11, 14),
+      reason: 'Chuva.',
+    });
+    perto(await noBanco(slug), -23.5586, -46.6814, 'noBanco');
+
+    // 4. mover o ponto
+    await r.moverEncontro(autor, slug, soHorario.etag, {
+      place: { ...corpo().place, point: { lat: -23.5513, lon: -46.7139 } },
+      reason: 'Arrastei o pino.',
+    });
+    perto(await noBanco(slug), -23.5513, -46.7139, 'noBanco');
+    assert.equal(await origem(), 'map_pin');
+    perto(await noApp(slug), -23.5513, -46.7139, 'noApp');
+  });
+
   void it('publico que vira privado ganha slug novo e o antigo some da leitura publica', async () => {
     const criado = await criar();
     const antigo = criado.recurso.slug;
