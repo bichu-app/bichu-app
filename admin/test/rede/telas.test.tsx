@@ -266,6 +266,7 @@ describe('Rede: formulário novo', () => {
     const { usuario } = montar('/rede/novo');
     const descricao = await screen.findByLabelText('Descrição *');
     expect(descricao.tagName).toBe('TEXTAREA');
+    expect(descricao).toHaveAccessibleDescription(/^Aparece na lista de encontros do app e no topo da página do encontro\./);
     await usuario.type(descricao, 'Primeira linha.{Enter}Segunda linha.');
     expect(descricao).toHaveValue('Primeira linha.\nSegunda linha.');
     expect(screen.getByText('30/200')).toBeInTheDocument();
@@ -287,7 +288,7 @@ describe('Rede: formulário novo', () => {
     const { usuario } = montar('/rede/novo');
     const endereco = await screen.findByLabelText('Endereço');
     expect(endereco).not.toHaveAttribute('maxlength');
-    expect(endereco).toHaveAccessibleDescription(/^Rua e número, para quem vai chegar lá\. Por exemplo: Rua Mourato Coelho, 1200 – Pinheiros, São Paulo\/SP\. Opcional\./);
+    expect(endereco).toHaveAccessibleDescription(/^Rua e número de um lugar público, nunca de uma casa\. No app, só quem tem conta vê\. Por exemplo: Rua Mourato Coelho, 1200 – Pinheiros, São Paulo\/SP\. Opcional\./);
     await usuario.type(endereco, 'Rua Mourato Coelho, 1200');
     expect(screen.getByText('24/200')).toBeInTheDocument();
   });
@@ -445,7 +446,7 @@ describe('Rede: edição', () => {
     montar('/rede/encontro-de-caes-no-parque', duble);
     expect(await screen.findByLabelText('Nome do lugar *')).toBeDisabled();
     expect(screen.getByLabelText('Nome do lugar *')).toHaveAccessibleDescription(
-      'Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Sem rua nem número.',
+      'Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Rua e número vão em Endereço.',
     );
     expect(screen.getByRole('radio', { name: /^Privado/ })).toBeDisabled();
     expect(screen.getByLabelText('Título *')).toBeEnabled();

@@ -440,11 +440,11 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
     const partes: string[] = [];
     if (dados.length) partes.push(`O app passa a mostrar ${dados.join(', em ')}.`);
     if (plano.mudanca.street_address !== undefined) {
-      partes.push(plano.mudanca.street_address ? `O endereço passa a ser ${plano.mudanca.street_address}.` : 'O endereço sai do app.');
+      partes.push(plano.mudanca.street_address ? `O endereço passa a ser ${plano.mudanca.street_address}.` : 'O endereço deixa de aparecer no app.');
     }
     partes.push('Quem usa o app não é avisado da mudança.');
     frases.push(partes.join(' '));
-    if (plano.mudanca.place?.point === null) frases.push('O mapa do encontro sai do app, porque o ponto marcado era do lugar anterior.');
+    if (plano.mudanca.place?.point === null) frases.push('O mapa deixa de aparecer no app, porque mostrava o lugar anterior.');
   }
   if (plano.acesso) {
     const partes: string[] = [];

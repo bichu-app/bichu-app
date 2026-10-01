@@ -385,7 +385,7 @@ export default function FormularioDoEncontro() {
               valor={f.local}
               aoMudar={(v) => mudar('local', v)}
               maximo={80}
-              ajuda="Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Sem rua nem número."
+              ajuda="Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Rua e número vão em Endereço."
               erro={erroDe('local')}
             />
             <CampoDoEndereco valor={f.endereco} aoMudar={(v) => mudar('endereco', v)} erro={erroDe('endereco')} />
@@ -611,7 +611,7 @@ function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
         </span>
       ) : (
         <span className="help" id={`${id}-ajuda`}>
-          Aparece no cartão e no topo da página do encontro.
+          Aparece na lista de encontros do app e no topo da página do encontro.
         </span>
       )}
       <span className="help contador" id={`${id}-contador`}>
@@ -647,7 +647,7 @@ function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v:
         </span>
       ) : (
         <span className="help" id={`${id}-ajuda`}>
-          Rua e número, para quem vai chegar lá. Por exemplo: Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP. Opcional.
+          Rua e número de um lugar público, nunca de uma casa. No app, só quem tem conta vê. Por exemplo: Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP. Opcional.
         </span>
       )}
       <span className="help contador" id={`${id}-contador`}>

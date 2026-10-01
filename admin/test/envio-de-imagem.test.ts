@@ -26,9 +26,9 @@ describe('dimensao minima por proposito', () => {
   it('700 x 700 passa no encontro e e recusada na Loja; 599 de altura e recusada no encontro', async () => {
     comDimensao(700, 700);
     expect(await conferirDimensao(arquivo(), 'network_event')).toBeUndefined();
-    expect(await conferirDimensao(arquivo(), 'store_item')).toBe('A imagem precisa ter pelo menos 800 × 800 pixels. Esta tem 700 × 700.');
+    expect(await conferirDimensao(arquivo(), 'store_item')).toBe('A imagem precisa ter pelo menos 800 × 800 pixels. Esta tem 700 × 700. Escolha outra imagem.');
     comDimensao(1200, 599);
-    expect(await conferirDimensao(arquivo(), 'network_event')).toBe('A imagem precisa ter pelo menos 600 × 600 pixels. Esta tem 1200 × 599.');
+    expect(await conferirDimensao(arquivo(), 'network_event')).toBe('A imagem precisa ter pelo menos 600 × 600 pixels. Esta tem 1200 × 599. Escolha outra imagem.');
   });
 });
 
@@ -53,6 +53,6 @@ describe('pedido da intencao', () => {
       'POST /admin/media/catalog-image-intents': problema(422, 'image-too-small', { errors: [{ field: 'width', code: 'minimum' }] }),
     });
     const envio = enviarImagem(criarClienteDaApi({ fetch: servidor.fetch }), arquivo(), 'network_event', () => undefined);
-    await expect(envio).rejects.toMatchObject({ mensagem: 'A imagem precisa ter pelo menos 600 × 600 pixels. Esta tem 500 × 500.' });
+    await expect(envio).rejects.toMatchObject({ mensagem: 'A imagem precisa ter pelo menos 600 × 600 pixels. Esta tem 500 × 500. Escolha outra imagem.' });
   });
 });

@@ -224,7 +224,7 @@ describe('plano de edição (as três operações)', () => {
     expect(plano.oQueMudou).toEqual(['horário', 'local']);
     expect(plano.mudanca?.place).toEqual({ place_name: 'Praça General Polidoro', neighborhood: 'Aclimação', city: 'São Paulo', state: 'SP', point: null });
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de horário e local?');
-    expect(corpoDaMudanca(original, f, plano)).toContain('O mapa do encontro sai do app, porque o ponto marcado era do lugar anterior.');
+    expect(corpoDaMudanca(original, f, plano)).toContain('O mapa deixa de aparecer no app, porque mostrava o lugar anterior.');
   });
   it('endereço: vai na criação aparado, muda por relocation (com senha) e sem tirar o ponto', () => {
     expect(montarCriacao({ ...preenchido(), endereco: '  Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP ' }).street_address).toBe(
@@ -242,7 +242,7 @@ describe('plano de edição (as três operações)', () => {
     const comEndereco = encontroDeExemplo({ street_address: 'Rua Muniz de Sousa, 1119' });
     const tirar = { ...formularioDoEncontro(comEndereco), endereco: '' };
     expect(planoDeEdicao(comEndereco, tirar).mudanca).toEqual({ street_address: null });
-    expect(corpoDaMudanca(comEndereco, tirar, planoDeEdicao(comEndereco, tirar))[0]).toBe('O endereço sai do app. Quem usa o app não é avisado da mudança.');
+    expect(corpoDaMudanca(comEndereco, tirar, planoDeEdicao(comEndereco, tirar))[0]).toBe('O endereço deixa de aparecer no app. Quem usa o app não é avisado da mudança.');
     expect(formularioDoEncontro(comEndereco).endereco).toBe('Rua Muniz de Sousa, 1119');
   });
 
@@ -278,7 +278,7 @@ describe('plano de edição (as três operações)', () => {
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local e de acesso?');
     expect(corpoDaMudanca(original, f, plano)).toEqual([
       'O app passa a mostrar Parque da Aclimação, Cambuci. Quem usa o app não é avisado da mudança.',
-      'O mapa do encontro sai do app, porque o ponto marcado era do lugar anterior.',
+      'O mapa deixa de aparecer no app, porque mostrava o lugar anterior.',
       'O encontro agora é pago, e o app mostra isso na hora.',
       'Todos os administradores recebem um e-mail com o antes e o depois.',
     ]);

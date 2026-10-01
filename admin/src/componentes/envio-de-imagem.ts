@@ -23,7 +23,7 @@ export const DIMENSAO_MINIMA: Record<Proposito, { largura: number; altura: numbe
 function textoDaMinima(proposito: Proposito, dimensao?: { width: number; height: number }): string {
   const m = DIMENSAO_MINIMA[proposito];
   const base = `A imagem precisa ter pelo menos ${String(m.largura)} × ${String(m.altura)} pixels.`;
-  return dimensao ? `${base} Esta tem ${String(dimensao.width)} × ${String(dimensao.height)}.` : `${base} Escolha outra imagem.`;
+  return dimensao ? `${base} Esta tem ${String(dimensao.width)} × ${String(dimensao.height)}. Escolha outra imagem.` : `${base} Escolha outra imagem.`;
 }
 
 /** Largura e altura como o navegador as le do arquivo; `undefined` quando ele nao sabe ler. */
