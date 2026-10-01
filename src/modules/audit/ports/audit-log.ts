@@ -53,6 +53,17 @@ export type AuditAction =
   | 'auth.password_reset_completed'
   | 'auth.email_verified'
   /**
+   * Nasceu uma sessao a partir do link do e-mail, e NAO de uma senha
+   * (`POST /v1/auth/email-verification/confirm`). O metadado diz qual dos dois
+   * propositos do token a abriu, `email_verify` ou `email_change`.
+   *
+   * E evento proprio, e nao `auth.login_succeeded`, porque a pergunta que a
+   * trilha responde numa tomada de conta e exatamente esta: quais sessoes
+   * desta conta nasceram sem que alguem apresentasse a senha. Um
+   * `login_succeeded` aqui apagaria a diferenca justamente onde ela importa.
+   */
+  | 'auth.session_opened_by_email_link'
+  /**
    * Pediram a troca do e-mail da conta (BICHUS-42). Fica na trilha mesmo
    * quando nenhum token é emitido — o pedido para um endereço que já tem dono
    * é indistinguível na resposta, e a trilha é o único lugar onde ele aparece.

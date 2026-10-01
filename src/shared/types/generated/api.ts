@@ -6428,8 +6428,20 @@ export interface operations {
         };
         responses: {
             /**
-             * @description E-mail verificado. Devolve a sessao quando a requisicao veio sem
-             *     token de acesso, para que a intencao pendente execute em seguida.
+             * @description E-mail verificado. **Devolve sempre a sessao**, nos dois propositos
+             *     do token (verificacao e troca de endereco), para que a intencao
+             *     pendente execute em seguida: quem abre o link esta na pagina
+             *     `/verificar-email`, que nao carrega token de acesso, e sem sessao
+             *     aqui a pessoa confirma o e-mail e precisa entrar de novo.
+             *
+             *     A redacao anterior dizia "devolve a sessao quando a requisicao veio
+             *     sem token de acesso", e a condicional nao tinha como valer: o 200
+             *     tem um corpo so. Ela sobreviveu ate 29/09/2026 com a implementacao
+             *     devolvendo `Me` em vez de `SessionResponse`, medido em homologacao.
+             *
+             *     A sessao nasce com `stay_signed_in` FALSO e nao conta como
+             *     autenticacao por senha para o teto absoluto de 180 dias: a prova
+             *     apresentada aqui e a posse da caixa de entrada.
              */
             200: {
                 headers: {

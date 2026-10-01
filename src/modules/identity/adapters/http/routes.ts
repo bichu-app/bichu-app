@@ -644,11 +644,15 @@ export function registrarRotasDeIdentidade(
     app,
     rotaDeConfirmacaoDeEmail,
     { schema: { body: corpoDe(deps.contrato, rotaDeConfirmacaoDeEmail.operationId) } },
+    // O 200 desta operação é `SessionResponse`, e não `Me`. Até 29/09/2026 o
+    // código devolvia o perfil: quem abria o link confirmava o e-mail e caía
+    // sem token, com a intenção pendente que a própria descrição do contrato
+    // promete executar em seguida morrendo ali. O argumento inteiro está no
+    // corpo de `confirmarVerificacaoDeEmail`.
     async (request: FastifyRequest, reply: FastifyReply) => {
       const { token } = request.body as { token: string };
-      const userId = await deps.auth.confirmarVerificacaoDeEmail(token, contextoDe(request));
-      const conta = await deps.auth.meuPerfil(userId);
-      return reply.status(200).send(comoRespostaDoPerfil(conta));
+      const sessao = await deps.auth.confirmarVerificacaoDeEmail(token, contextoDe(request));
+      return reply.status(200).send(sessao);
     },
   );
 
