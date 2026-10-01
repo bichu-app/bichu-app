@@ -371,7 +371,7 @@ export default function FormularioDoEncontro() {
           </div>
           <div className="field">
             <span className="lab">Ponto do encontro no mapa</span>
-            <span className="help">Clique no mapa onde o encontro acontece. Use um lugar público, como praça, parque ou rua. Nunca uma casa.</span>
+            <span className="help">Clique no mapa onde o encontro acontece, ou arraste o pino para ajustar. Use um lugar público, como praça, parque ou rua. Nunca uma casa.</span>
             <SeletorDePonto ponto={f.ponto} aoMudar={(p) => mudar('ponto', p)} desabilitado={travarLugarEAcesso} />
             <span className="help">Recomendado. Sem ponto, o app não mostra o mapa nem a distância do encontro.</span>
           </div>

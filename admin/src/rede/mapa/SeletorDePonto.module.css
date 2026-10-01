@@ -94,6 +94,11 @@
 
 .pino {
   color: var(--bichu-cor-primary);
+  cursor: grab;
+}
+
+.pino:active {
+  cursor: grabbing;
 }
 
 .pino svg {

@@ -50,6 +50,10 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
   const caixa = useRef<HTMLDivElement>(null);
   const mapa = useRef<L.Map | null>(null);
   const pino = useRef<L.Marker | null>(null);
+  const pontoAtual = useRef(ponto);
+  useEffect(() => {
+    pontoAtual.current = ponto;
+  });
   const movendo = useRef(false);
   const [falhou, setFalhou] = useState(false);
   const [tentativa, setTentativa] = useState(0);
@@ -60,14 +64,15 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
   });
   const pontoInicial = useRef(ponto);
 
-  const marcar = useCallback((lat: number, lon: number) => {
+  const marcar = useCallback((lat: number, lon: number): boolean => {
     if (!dentroDoBrasil(lat, lon)) {
       setForaDoBrasil(true);
-      return;
+      return false;
     }
     setForaDoBrasil(false);
     // Quatro casas decimais: cerca de 11 m, e o ponto e de praca, nao de porta.
     aoMudarRef.current({ lat: Number(lat.toFixed(5)), lon: Number(lon.toFixed(5)) });
+    return true;
   }, []);
 
   // Monta o mapa uma vez por tentativa (Tentar de novo recria so o mapa).
@@ -123,11 +128,25 @@ export function SeletorDePonto({ ponto, aoMudar, erro, desabilitado = false }: P
     }
     if (!pino.current) {
       const icone = L.divIcon({ className: estilos.pino ?? '', html: PINO, iconSize: [32, 32], iconAnchor: [16, 30] });
-      pino.current = L.marker([ponto.lat, ponto.lon], { icon: icone, keyboard: false, interactive: false }).addTo(m);
+      // Arrastavel (pedido de 01/10). `keyboard: false` deixa o pino fora da ordem
+      // de tabulacao: no teclado, quem marca e a mira do mapa (WCAG 2.1.1), e o
+      // arraste e atalho, nao requisito (WCAG 2.5.7).
+      const marcador = L.marker([ponto.lat, ponto.lon], { icon: icone, keyboard: false, draggable: true, autoPan: true }).addTo(m);
+      marcador.on('dragend', () => {
+        const ll = marcador.getLatLng();
+        if (!marcar(ll.lat, ll.lng)) {
+          // Fora do Brasil: o pino volta para o ponto que valia.
+          const atual = pontoAtual.current;
+          if (atual) marcador.setLatLng([atual.lat, atual.lon]);
+        }
+      });
+      pino.current = marcador;
     } else {
       pino.current.setLatLng([ponto.lat, ponto.lon]);
     }
-  }, [ponto, tentativa]);
+    if (desabilitado) pino.current.dragging?.disable();
+    else pino.current.dragging?.enable();
+  }, [ponto, tentativa, marcar, desabilitado]);
 
   useEffect(() => {
     const m = mapa.current;
