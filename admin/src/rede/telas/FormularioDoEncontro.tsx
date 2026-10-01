@@ -22,6 +22,7 @@ import { precisaReler, type Falha } from '../api/redeApi.ts';
 import { DialogoComMotivoESenha, type ResultadoDaAcao } from '../componentes/DialogoComMotivoESenha.tsx';
 import {
   corpoDaMudanca,
+  cortarEmCodePoints,
   formularioDoEncontro,
   formularioVazio,
   avisoDeFotosSemEnvio,
@@ -591,9 +592,10 @@ function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
         id={id}
         rows={3}
         className={`input ${estilos.areaQueCresce ?? ''}`}
-        maxLength={LIMITE_DO_RESUMO}
+        // Sem `maxLength` nativo: ele conta unidades UTF-16 e pararia em 100
+        // emojis. O corte e o contador seguem o servidor (code points).
         value={valor}
-        onChange={(e) => aoMudar(e.target.value)}
+        onChange={(e) => aoMudar(cortarEmCodePoints(e.target.value, LIMITE_DO_RESUMO))}
         aria-invalid={erro ? true : undefined}
         aria-describedby={`${id}-ajuda ${id}-contador`}
       />
@@ -608,7 +610,7 @@ function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
         </span>
       )}
       <span className="help contador" id={`${id}-contador`}>
-        {valor.length}/{LIMITE_DO_RESUMO}
+        {[...valor].length}/{LIMITE_DO_RESUMO}
       </span>
     </div>
   );

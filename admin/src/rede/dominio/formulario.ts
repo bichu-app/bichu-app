@@ -200,8 +200,23 @@ export interface ErroDeCampo {
 
 export type Modo = 'novo' | 'editar';
 
+/**
+ * Tamanho como o servidor conta (`errosDeTexto`: `[...valor.trim()].length`) e
+ * como o banco guarda: code points, e nao unidades UTF-16. Um emoji conta 1, e
+ * um acento combinado (e + U+0301) conta 2, igual la.
+ */
+export function tamanhoComoOServidor(t: string): number {
+  return [...t.trim()].length;
+}
+
+/** O texto cortado em `max` code points, sem partir um par substituto ao meio. */
+export function cortarEmCodePoints(t: string, max: number): string {
+  const cp = [...t];
+  return cp.length <= max ? t : cp.slice(0, max).join('');
+}
+
 const entre = (t: string, min: number, max: number) => {
-  const n = t.trim().length;
+  const n = tamanhoComoOServidor(t);
   return n >= min && n <= max;
 };
 

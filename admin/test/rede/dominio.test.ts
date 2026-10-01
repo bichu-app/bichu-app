@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import {
   corpoDaMudanca,
+  cortarEmCodePoints,
+  tamanhoComoOServidor,
   formularioDoEncontro,
   formularioVazio,
   avisoDeFotosSemEnvio,
@@ -126,6 +128,19 @@ describe('validação do formulário', () => {
   it('descrição vai até 200 caracteres (pedido de 01/10)', () => {
     expect(validar({ ...preenchido(), resumo: 'a'.repeat(200) }, 'novo', AGORA)).toEqual([]);
     expect(validar({ ...preenchido(), resumo: 'a'.repeat(201) }, 'novo', AGORA).map((e) => e.campo)).toEqual(['resumo']);
+  });
+
+  it('ISCA: o tamanho conta code points, como o servidor (🐶 conta 1; e + acento combinado conta 2)', async () => {
+    const { errosDeTexto } = await import('../../../src/modules/network/domain/escrita-do-encontro.ts');
+    const casos = ['🐶'.repeat(200), '🐶'.repeat(201), 'e\u0301'.repeat(100), 'e\u0301'.repeat(100) + 'x', '  ' + '🐶'.repeat(200) + '  '];
+    for (const resumo of casos) {
+      const servidor = errosDeTexto('summary', resumo, 2, 200).length === 0;
+      const painel = !validar({ ...preenchido(), resumo }, 'novo', AGORA).some((e) => e.campo === 'resumo');
+      expect(painel, `${[...resumo].length} code points: servidor ${servidor ? 'aceita' : 'recusa'}`).toBe(servidor);
+    }
+    expect(tamanhoComoOServidor('🐶')).toBe(1);
+    expect(tamanhoComoOServidor('e\u0301')).toBe(2);
+    expect(cortarEmCodePoints('🐶'.repeat(201), 200)).toBe('🐶'.repeat(200));
   });
 
   it('início no passado só reprova na criação', () => {

@@ -268,10 +268,21 @@ describe('Rede: formulário novo', () => {
     const { usuario } = montar('/rede/novo');
     const descricao = await screen.findByLabelText('Descrição *');
     expect(descricao.tagName).toBe('TEXTAREA');
-    expect(descricao).toHaveAttribute('maxlength', '200');
     await usuario.type(descricao, 'Primeira linha.{Enter}Segunda linha.');
     expect(descricao).toHaveValue('Primeira linha.\nSegunda linha.');
     expect(screen.getByText('30/200')).toBeInTheDocument();
+  });
+
+  it('ISCA: o contador da descrição conta 🐶 como 1 e deixa chegar a 200 emojis', async () => {
+    const { usuario } = montar('/rede/novo');
+    const descricao = await screen.findByLabelText('Descrição *');
+    expect(descricao).not.toHaveAttribute('maxlength');
+    await usuario.click(descricao);
+    await usuario.paste('🐶'.repeat(150));
+    expect(screen.getByText('150/200')).toBeInTheDocument();
+    await usuario.paste('🐶'.repeat(60));
+    expect([...(descricao as HTMLTextAreaElement).value]).toHaveLength(200);
+    expect(screen.getByText('200/200')).toBeInTheDocument();
   });
 
   it('fim antes do início e campos vazios dão as mensagens aprovadas', async () => {
