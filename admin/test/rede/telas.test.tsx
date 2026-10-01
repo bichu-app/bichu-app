@@ -283,6 +283,15 @@ describe('Rede: formulário novo', () => {
     expect(screen.getByText('200/200')).toBeInTheDocument();
   });
 
+  it('endereço: opcional, ao lado do nome do lugar, com contador em code points', async () => {
+    const { usuario } = montar('/rede/novo');
+    const endereco = await screen.findByLabelText('Endereço');
+    expect(endereco).not.toHaveAttribute('maxlength');
+    expect(endereco).toHaveAccessibleDescription(/^Rua e número, para quem vai chegar lá\. Por exemplo: Rua Mourato Coelho, 1200 – Pinheiros, São Paulo\/SP\. Opcional\./);
+    await usuario.type(endereco, 'Rua Mourato Coelho, 1200');
+    expect(screen.getByText('24/200')).toBeInTheDocument();
+  });
+
   it('o formulário não tem mapa (decisão do cliente de 01/10), na criação e na edição', async () => {
     for (const rota of ['/rede/novo', '/rede/encontro-de-caes-no-parque']) {
       montar(rota);

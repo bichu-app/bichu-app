@@ -143,6 +143,16 @@ describe('validação do formulário', () => {
     expect(cortarEmCodePoints('🐶'.repeat(201), 200)).toBe('🐶'.repeat(200));
   });
 
+  it('endereço é opcional; quando vem, de 5 a 200 code points, como o servidor', () => {
+    expect(validar({ ...preenchido(), endereco: '' }, 'novo', AGORA)).toEqual([]);
+    expect(validar({ ...preenchido(), endereco: 'Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP' }, 'novo', AGORA)).toEqual([]);
+    expect(validar({ ...preenchido(), endereco: 'Rua' }, 'novo', AGORA).map((e) => e.mensagem)).toEqual([
+      'Escreva o endereço com pelo menos 5 caracteres, ou deixe em branco.',
+    ]);
+    expect(validar({ ...preenchido(), endereco: '🐶'.repeat(200) }, 'novo', AGORA)).toEqual([]);
+    expect(validar({ ...preenchido(), endereco: '🐶'.repeat(201) }, 'novo', AGORA).map((e) => e.campo)).toEqual(['endereco']);
+  });
+
   it('início no passado só reprova na criação', () => {
     const f = { ...preenchido(), inicio: '2026-09-01T09:00', fim: '' };
     expect(validar(f, 'novo', AGORA).map((e) => e.campo)).toEqual(['inicio']);

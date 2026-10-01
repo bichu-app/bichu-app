@@ -27,6 +27,7 @@ import {
   formularioVazio,
   avisoDeFotosSemEnvio,
   LIMITE_DAS_OBSERVACOES,
+  LIMITE_DO_ENDERECO,
   MARCA_SEM_ENVIO,
   semEnvio,
   LIMITE_DO_RESUMO,
@@ -62,6 +63,7 @@ const ROTULO_DO_CAMPO: Partial<Record<Campo, string>> = {
   inicio: 'Início',
   fim: 'Fim',
   local: 'Nome do lugar',
+  endereco: 'Endereço',
   bairro: 'Bairro',
   cidade: 'Cidade',
   valor: 'Valor em reais',
@@ -369,15 +371,18 @@ export default function FormularioDoEncontro() {
             <CampoDeDataEHora id="enc-inicio" rotulo="Início *" valor={f.inicio} aoMudar={(v) => mudar('inicio', v)} erro={erroDe('inicio')} />
             <CampoDeDataEHora id="enc-fim" rotulo="Fim" valor={f.fim} aoMudar={(v) => mudar('fim', v)} erro={erroDe('fim')} />
           </div>
-          <CampoDeTexto
-            id="enc-local"
-            rotulo="Nome do lugar *"
-            valor={f.local}
-            aoMudar={(v) => mudar('local', v)}
-            maximo={80}
-            ajuda="Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Sem rua nem número."
-            erro={erroDe('local')}
-          />
+          <div className="row2">
+            <CampoDeTexto
+              id="enc-local"
+              rotulo="Nome do lugar *"
+              valor={f.local}
+              aoMudar={(v) => mudar('local', v)}
+              maximo={80}
+              ajuda="Como o lugar é conhecido, do jeito que aparece no app. Por exemplo: Praça Benedito Calixto ou Parque da Aclimação. Sem rua nem número."
+              erro={erroDe('local')}
+            />
+            <CampoDoEndereco valor={f.endereco} aoMudar={(v) => mudar('endereco', v)} erro={erroDe('endereco')} />
+          </div>
           <div className={estilos.row3}>
             <CampoDeTexto id="enc-bairro" rotulo="Bairro *" valor={f.bairro} aoMudar={(v) => mudar('bairro', v)} maximo={60} erro={erroDe('bairro')} />
             <CampoDeTexto id="enc-cidade" rotulo="Cidade *" valor={f.cidade} aoMudar={(v) => mudar('cidade', v)} maximo={60} erro={erroDe('cidade')} />
@@ -604,6 +609,42 @@ function CampoDaDescricao({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
       )}
       <span className="help contador" id={`${id}-contador`}>
         {[...valor].length}/{LIMITE_DO_RESUMO}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * Endereco por extenso (`place.street_address`), opcional. Sem `maxLength`
+ * nativo, que conta UTF-16: o corte e o contador sao em code points, como o
+ * servidor conta (`errosDoEndereco`, 5 a 200).
+ */
+function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
+  const id = 'enc-endereco';
+  return (
+    <div className={erro ? 'field err' : 'field'}>
+      <label htmlFor={id}>Endereço</label>
+      <input
+        id={id}
+        className="input"
+        autoComplete="off"
+        value={valor}
+        onChange={(e) => aoMudar(cortarEmCodePoints(e.target.value, LIMITE_DO_ENDERECO))}
+        aria-invalid={erro ? true : undefined}
+        aria-describedby={`${id}-ajuda ${id}-contador`}
+      />
+      {erro ? (
+        <span className="help err" id={`${id}-ajuda`} aria-live="polite">
+          <Icone nome="error" tamanho="s20" />
+          {erro}
+        </span>
+      ) : (
+        <span className="help" id={`${id}-ajuda`}>
+          Rua e número, para quem vai chegar lá. Por exemplo: Rua Mourato Coelho, 1200 – Pinheiros, São Paulo/SP. Opcional.
+        </span>
+      )}
+      <span className="help contador" id={`${id}-contador`}>
+        {[...valor].length}/{LIMITE_DO_ENDERECO}
       </span>
     </div>
   );

@@ -33,6 +33,8 @@ export const LIMITE_DE_FOTOS = 8;
 export const LIMITE_DAS_OBSERVACOES = 500;
 /** `summary` do encontro: ate 200 (pedido do cliente de 01/10; antes, 180). */
 export const LIMITE_DO_RESUMO = 200;
+/** `place.street_address`: 5 a 200 code points, como o servidor (`errosDoEndereco`). */
+export const LIMITE_DO_ENDERECO = 200;
 export const LIMITE_DO_MOTIVO = 280;
 
 /**
@@ -92,6 +94,8 @@ export interface EstadoDoFormulario {
   inicio: string;
   fim: string;
   local: string;
+  /** Endereco por extenso (`place.street_address`, 01/10), opcional: 5 a 200 code points. */
+  endereco: string;
   bairro: string;
   cidade: string;
   uf: string;
@@ -117,6 +121,7 @@ export function formularioVazio(): EstadoDoFormulario {
     inicio: '',
     fim: '',
     local: '',
+    endereco: '',
     bairro: '',
     cidade: '',
     uf: 'SP',
@@ -144,6 +149,8 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     inicio: campoDoInstante(e.starts_at, fuso),
     fim: e.ends_at ? campoDoInstante(e.ends_at, fuso) : '',
     local: e.place.place_name,
+    // `place.street_address` ainda nao esta no contrato desta branch: entra com os tipos regerados.
+    endereco: '',
     bairro: e.place.neighborhood,
     cidade: e.place.city,
     uf: e.place.state,
@@ -180,6 +187,7 @@ export type Campo =
   | 'inicio'
   | 'fim'
   | 'local'
+  | 'endereco'
   | 'bairro'
   | 'cidade'
   | 'valor'
@@ -244,6 +252,9 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
   }
 
   if (!entre(f.local, 2, 80)) e('local', 'Nome do lugar', 'Informe o nome do lugar.');
+  if (f.endereco.trim() && !entre(f.endereco, 5, LIMITE_DO_ENDERECO)) {
+    e('endereco', 'Endereço', 'Escreva o endereço com pelo menos 5 caracteres, ou deixe em branco.');
+  }
   if (!entre(f.bairro, 2, 60)) e('bairro', 'Bairro', 'Informe o bairro.');
   if (!entre(f.cidade, 2, 60)) e('cidade', 'Cidade', 'Informe a cidade.');
 
