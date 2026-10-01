@@ -71,9 +71,14 @@ describe('valor', () => {
     }
   });
   it('escreve como o app', () => {
-    expect(valorComoOAppMostra(1500, 'per_dog')).toBe('R$ 15 por cão');
-    expect(valorComoOAppMostra(1550, 'per_pair')).toBe('R$ 15,50 por dupla');
-    expect(valorComoOAppMostra(125000, 'per_person')).toBe('R$ 1.250 por pessoa');
+    expect(valorComoOAppMostra(1500, 'per_pet')).toBe('R$ 15 por pet');
+    expect(valorComoOAppMostra(3000, 'per_pair')).toBe('R$ 30 por dupla (1 humano + 1 pet)');
+    expect(valorComoOAppMostra(3000, 'per_two_people')).toBe('R$ 30 por dupla de humanos');
+    expect(valorComoOAppMostra(3000, 'per_person')).toBe('R$ 30 por humano');
+    // Legado: aparece como "por pet".
+    expect(valorComoOAppMostra(1500, 'per_dog')).toBe('R$ 15 por pet');
+    expect(valorComoOAppMostra(1550, 'per_pair')).toBe('R$ 15,50 por dupla (1 humano + 1 pet)');
+    expect(valorComoOAppMostra(125000, 'per_person')).toBe('R$ 1.250 por humano');
   });
 });
 
@@ -277,10 +282,21 @@ describe('plano de edição (as três operações)', () => {
     const plano = planoDeEdicao(original, f);
     expect(plano.mudanca).not.toHaveProperty('place');
   });
+  it('per_dog antigo: salvar sem mexer não muda; mexer no valor manda per_pet, nunca per_dog', () => {
+    const antigo = encontroDeExemplo({ admission: { kind: 'paid', price: { amount: 3000, currency: 'BRL', unit: 'per_dog' } } });
+    const f = formularioDoEncontro(antigo);
+    expect(f.unidade).toBe('per_dog');
+    expect(planoDeEdicao(antigo, f).acesso).toBeNull();
+    // Escolher "por pet" de novo (o que ja aparecia) tambem nao e mudanca.
+    expect(planoDeEdicao(antigo, { ...f, unidade: 'per_pet' }).acesso).toBeNull();
+    expect(planoDeEdicao(antigo, { ...f, valor: '35' }).acesso).toEqual({ admission: { kind: 'paid', price: { amount: 3500, currency: 'BRL', unit: 'per_pet' } } });
+    expect(planoDeEdicao(antigo, { ...f, unidade: 'per_pair' }).acesso?.admission).toEqual({ kind: 'paid', price: { amount: 3000, currency: 'BRL', unit: 'per_pair' } });
+  });
+
   it('visibilidade e valor vão na mudança de acesso', () => {
-    const f = { ...formularioDoEncontro(original), visibilidade: 'private' as const, pago: true, valor: '20', unidade: 'per_dog' as const };
+    const f = { ...formularioDoEncontro(original), visibilidade: 'private' as const, pago: true, valor: '20', unidade: 'per_pet' as const };
     const plano = planoDeEdicao(original, f);
-    expect(plano.acesso).toEqual({ visibility: 'private', admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } } });
+    expect(plano.acesso).toEqual({ visibility: 'private', admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_pet' } } });
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de acesso?');
     expect(corpoDaMudanca(original, f, plano)).toEqual([
       'O encontro agora é privado e agora é pago, e o app mostra isso na hora.',
@@ -289,7 +305,7 @@ describe('plano de edição (as três operações)', () => {
     ]);
   });
   it('local e acesso juntos: o aviso aos administradores sai uma vez só, no fim (UX 30 B3, B11, B12)', () => {
-    const f = { ...formularioDoEncontro(original), bairro: 'Cambuci', pago: true, valor: '20', unidade: 'per_dog' as const };
+    const f = { ...formularioDoEncontro(original), bairro: 'Cambuci', pago: true, valor: '20', unidade: 'per_pet' as const };
     const plano = planoDeEdicao(original, f);
     expect(tituloDaMudanca(plano)).toBe('Salvar a mudança de local e de acesso?');
     expect(corpoDaMudanca(original, f, plano)).toEqual([

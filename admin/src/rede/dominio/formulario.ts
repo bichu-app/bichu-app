@@ -27,6 +27,7 @@ import type {
   UnidadeDoValor,
   Visibilidade,
 } from './tipos.ts';
+import { unidadeComoAparece } from './rotulos.ts';
 import { centavosDoTexto, textoDosCentavos, valorComoOAppMostra } from './valor.ts';
 
 export const LIMITE_DE_FOTOS = 8;
@@ -129,7 +130,7 @@ export function formularioVazio(): EstadoDoFormulario {
     visibilidade: 'public',
     pago: false,
     valor: '',
-    unidade: 'per_dog',
+    unidade: 'per_pet',
     levar: [],
     observacoes: '',
     portes: ['P', 'M', 'G', 'GG'],
@@ -291,7 +292,7 @@ function acesso(f: EstadoDoFormulario): NonNullable<EncontroInput['admission']> 
   if (!f.pago) return { kind: 'free' };
   const amount = centavosDoTexto(f.valor);
   if (amount === null) throw new Error('valor invalido chegou a montagem; valide antes');
-  return { kind: 'paid', price: { amount, currency: 'BRL', unit: f.unidade } };
+  return { kind: 'paid', price: { amount, currency: 'BRL', unit: unidadeComoAparece(f.unidade) } };
 }
 
 /**
@@ -400,7 +401,10 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
   const amountNovo = f.pago ? centavosDoTexto(f.valor) : null;
   const custoMudou =
     f.pago !== (original.admission.kind === 'paid') ||
-    (f.pago && (amountNovo !== precoAntigo?.amount || f.unidade !== precoAntigo?.unit));
+    // `per_dog` antigo e `per_pet` sao a mesma unidade para quem le: so muda se o
+    // valor ou a unidade mudarem de verdade, e entao vai `per_pet`, nunca `per_dog`.
+    (f.pago &&
+      (amountNovo !== precoAntigo?.amount || !precoAntigo || unidadeComoAparece(f.unidade) !== unidadeComoAparece(precoAntigo.unit)));
   if (custoMudou) acessoNovo.admission = acesso(f);
 
   const ordem: ParteDoLugar[] = ['data', 'horário', 'local'];

@@ -72,7 +72,7 @@ describe('cliente da Rede contra o duble', () => {
     expect(duble.registro.at(-1)?.corpo).toMatchObject({ scopes: ['network_event_relocation', 'network_event_access_change'] });
     const movido = await api.mover(juntos.tokens.network_event_relocation ?? '', 'encontro-de-caes-no-parque', '"1"', { starts_at: '2026-10-11T13:00:00Z', reason: 'chuva' });
     expect(movido.ok).toBe(true);
-    const acesso = await api.mudarAcesso(juntos.tokens.network_event_access_change ?? '', 'encontro-de-caes-no-parque', '"2"', { admission: { kind: 'paid', price: { amount: 1000, currency: 'BRL', unit: 'per_dog' } }, reason: 'chuva' });
+    const acesso = await api.mudarAcesso(juntos.tokens.network_event_access_change ?? '', 'encontro-de-caes-no-parque', '"2"', { admission: { kind: 'paid', price: { amount: 1000, currency: 'BRL', unit: 'per_pet' } }, reason: 'chuva' });
     expect(acesso.ok).toBe(true);
 
     // O defeito que o bug 1 era: duas reautenticacoes seguidas; a segunda rotaciona a sessao.

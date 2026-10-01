@@ -40,7 +40,7 @@ import {
   type EstadoDoFormulario,
   type PlanoDeEdicao,
 } from '../dominio/formulario.ts';
-import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES } from '../dominio/rotulos.ts';
+import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES, UNIDADES_OFERECIDAS, unidadeComoAparece } from '../dominio/rotulos.ts';
 import type { Encontro, EscopoDeReautenticacao } from '../dominio/tipos.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
 import estilos from '../rede.module.css';
@@ -453,10 +453,11 @@ export default function FormularioDoEncontro() {
                   <select
                     id="enc-unidade"
                     className={estilos.selecao}
-                    value={f.unidade}
+                    // `per_dog` de encontro antigo aparece como "por pet" e so muda se a pessoa mexer.
+                    value={unidadeComoAparece(f.unidade)}
                     onChange={(e) => mudar('unidade', e.target.value as EstadoDoFormulario['unidade'])}
                   >
-                    {chaves(UNIDADES).map((u) => (
+                    {UNIDADES_OFERECIDAS.map((u) => (
                       <option key={u} value={u}>
                         {UNIDADES[u]}
                       </option>

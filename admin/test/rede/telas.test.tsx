@@ -45,7 +45,8 @@ describe('Rede: lista', () => {
     const linha = screen.getByRole('link', { name: 'Socialização para filhotes' }).closest('tr');
     if (!linha) throw new Error('linha nao encontrada');
     expect(within(linha).getByText('Privado')).toBeInTheDocument();
-    expect(within(linha).getByText('· R$ 30 por cão')).toBeInTheDocument();
+    // Encontro antigo com per_dog: aparece como "por pet".
+    expect(within(linha).getByText('· R$ 30 por pet')).toBeInTheDocument();
     expect(within(linha).getByRole('link', { name: '3 pedidos pendentes' })).toHaveAttribute('href', '/rede/k3Jx9QpL2mZt7VwR4cYb/pedidos');
     expect(within(linha).getByText('Agendado')).toBeInTheDocument();
     expect(screen.getByText('Acontecendo agora', { selector: '.selo' })).toBeInTheDocument();
@@ -231,8 +232,11 @@ describe('Rede: formulário novo', () => {
     await usuario.click(screen.getByRole('radio', { name: /^Privado/ }));
     await usuario.click(screen.getByRole('radio', { name: /^Pago/ }));
     await usuario.type(screen.getByLabelText('Valor em reais *'), '15,50');
-    await usuario.selectOptions(screen.getByLabelText('Cobrado'), 'por dupla');
-    expect(screen.getByText('R$ 15,50 por dupla')).toBeInTheDocument();
+    const cobrado = screen.getByLabelText('Cobrado');
+    expect([...(cobrado as HTMLSelectElement).options].map((o) => o.text)).toEqual(['por pet', 'por humano', 'por dupla (1 humano + 1 pet)', 'por dupla de humanos']);
+    await usuario.selectOptions(cobrado, 'por dupla (1 humano + 1 pet)');
+    // A previa diz a quem o preco se refere.
+    expect(screen.getByText('R$ 15,50 por dupla (1 humano + 1 pet)')).toBeInTheDocument();
     await usuario.click(screen.getByRole('checkbox', { name: 'Guia' }));
     expect(screen.getByRole('checkbox', { name: 'Saquinhos para cocô' })).toBeInTheDocument();
     await usuario.click(screen.getByRole('checkbox', { name: 'Gigante' }));
@@ -317,6 +321,18 @@ describe('Rede: formulário novo', () => {
       expect(screen.queryByText(/mapa/i)).toBeNull();
       document.body.innerHTML = '';
     }
+  });
+
+  it('encontro antigo com per_dog mostra "por pet" e salvar sem mexer não toca no preço', async () => {
+    const { duble, usuario } = montar('/rede/k3Jx9QpL2mZt7VwR4cYb');
+    expect(await screen.findByLabelText('Cobrado')).toHaveDisplayValue('por pet');
+    expect(screen.getByText('R$ 30 por pet')).toBeInTheDocument();
+    const titulo = screen.getByLabelText('Título *');
+    await usuario.type(titulo, '!');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
+    expect(escritas(duble, 'POST', /access$/)).toHaveLength(0);
+    expect(duble.encontros.get('k3Jx9QpL2mZt7VwR4cYb')?.admission.price?.unit).toBe('per_dog');
   });
 
   it('fim antes do início e campos vazios dão as mensagens aprovadas', async () => {
