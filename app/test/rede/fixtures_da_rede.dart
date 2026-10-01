@@ -45,6 +45,9 @@ Map<String, dynamic> encontroPublico({
   List<String> amenities = const <String>[],
   List<String> bringItems = const <String>[],
   String? notes,
+  String? ticketUrl,
+  String? instagramHandle,
+  String? instagramUrl,
 }) {
   return <String, dynamic>{
     'slug': slug,
@@ -71,6 +74,11 @@ Map<String, dynamic> encontroPublico({
     'amenities': amenities,
     'bring_items': bringItems,
     'notes': notes,
+    'ticket_url': ticketUrl,
+    'instagram_handle': instagramHandle,
+    // O servidor monta a URL com a base da configuracao; o teste a recebe
+    // pronta, como o app a recebe.
+    'instagram_url': instagramUrl,
   };
 }
 
@@ -177,9 +185,14 @@ Map<String, dynamic> pedido(String estado) => <String, dynamic>{
     };
 
 /// `NetworkEventLocation`.
-Map<String, dynamic> localizacao({double? lat = -23.5617, double? lon = -46.6823}) =>
+Map<String, dynamic> localizacao({
+  double? lat = -23.5617,
+  double? lon = -46.6823,
+  String? endereco,
+}) =>
     <String, dynamic>{
       'point': lat == null ? null : <String, dynamic>{'lat': lat, 'lon': lon},
+      'street_address': endereco,
     };
 
 /// Uma rede de teste da `Rede`, que registra toda chamada e responde por

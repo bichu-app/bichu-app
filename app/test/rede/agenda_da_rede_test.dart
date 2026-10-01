@@ -126,7 +126,9 @@ void main() {
       // aparelho de teste.
       expect(find.text('Sábado, 3 de outubro · Das 9h às 11h'), findsOneWidget);
       expect(find.text('Praça Benedito Calixto · Pinheiros'), findsOneWidget);
-      expect(find.text('R\$ 15 por cão'), findsOneWidget);
+      // A fixture manda `per_dog`, que e legado: aparece como "por pet", o
+      // mesmo texto do painel (01/10).
+      expect(find.text('R\$ 15 por pet'), findsOneWidget);
       // Sem selo "Público": o normal não tem selo (UX 28.7.2).
       expect(find.text('Público'), findsNothing);
     });
