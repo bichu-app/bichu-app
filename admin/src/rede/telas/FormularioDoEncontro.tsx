@@ -40,7 +40,7 @@ import {
   type EstadoDoFormulario,
   type PlanoDeEdicao,
 } from '../dominio/formulario.ts';
-import { handleDoInstagram, LIMITE_DO_LINK_DO_CONVITE } from '../dominio/links.ts';
+import { handleDoInstagram, LIMITE_DO_LINK_DO_CONVITE, MENSAGEM_DO_INSTAGRAM, MENSAGEM_DO_LINK, type CodigoDoLink } from '../dominio/links.ts';
 import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES, UNIDADES_OFERECIDAS, unidadeComoAparece } from '../dominio/rotulos.ts';
 import type { Encontro, EscopoDeReautenticacao } from '../dominio/tipos.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
@@ -85,6 +85,8 @@ const CAMPO_DO_SERVIDOR: Record<string, Campo> = {
   'place.city': 'cidade',
   notes: 'observacoes',
   street_address: 'endereco',
+  ticket_url: 'linkDoConvite',
+  instagram_handle: 'instagram',
   'admission.price': 'valor',
   'admission.price.amount': 'valor',
   accepted_sizes: 'portes',
@@ -101,7 +103,11 @@ function errosDoServidor(falha: Falha): ErroDeCampo[] {
     const mensagem =
       campo === 'endereco' && e.code === 'contact_or_payment_detected'
         ? 'Tire do endereço telefone, e-mail, link, perfil ou chave Pix. Rua, número e CEP podem ficar.'
-        : texto;
+        : campo === 'linkDoConvite'
+          ? (MENSAGEM_DO_LINK[e.code as CodigoDoLink] ?? MENSAGEM_DO_LINK.ticket_url_invalid)
+          : campo === 'instagram'
+            ? MENSAGEM_DO_INSTAGRAM
+            : texto;
     return [{ campo, rotulo: ROTULO_DO_CAMPO[campo] ?? campo, mensagem }];
   });
 }

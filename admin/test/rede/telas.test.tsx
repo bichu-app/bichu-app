@@ -349,6 +349,27 @@ describe('Rede: formulário novo', () => {
     expect(corpo.instagram_handle).toBe('org.pet');
   });
 
+  it('recusas do servidor nos links aparecem no campo, com o texto de cada código', async () => {
+    const casos: Array<[string, string, string, string]> = [
+      ['ticket_url', 'ticket_url_local_host', 'Link do convite', 'O link precisa ser de um site público.'],
+      ['ticket_url', 'ticket_url_has_credentials', 'Link do convite', 'Tire o usuário e a senha do link.'],
+      ['ticket_url', 'ticket_url_ip_literal', 'Link do convite', 'Use o endereço do site, e não um número de IP.'],
+      ['instagram_handle', 'instagram_handle_invalid', 'Instagram para dúvidas', 'Use o @ do Instagram (até 30 letras, números, ponto ou sublinhado) ou o link do perfil.'],
+    ];
+    for (const [field, code, rotulo, texto] of casos) {
+      const duble = criarDuble({ recusaDeCampo: { field, code } });
+      const { usuario } = montar('/rede/encontro-de-caes-no-parque', duble);
+      await usuario.type(await screen.findByLabelText('Link do convite'), 'https://sympla.com.br/e/1');
+      await usuario.type(screen.getByLabelText('Instagram para dúvidas'), '@org.pet');
+      await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+      expect(await screen.findByText('Corrija 1 campo para salvar:')).toBeInTheDocument();
+      const campo = screen.getByLabelText(rotulo);
+      expect(campo).toHaveAttribute('aria-invalid', 'true');
+      expect(campo).toHaveAccessibleDescription(new RegExp(`^${texto.replace(/[.()@]/g, (c) => `\\${c}`)}`));
+      document.body.innerHTML = '';
+    }
+  });
+
   it('link do convite em http não sai do painel', async () => {
     const { duble, usuario } = montar('/rede/novo');
     await preencherObrigatorios(usuario);

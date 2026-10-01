@@ -4652,7 +4652,15 @@ export interface components {
             unit: components["schemas"]["EventPriceUnit"];
         };
         NetworkEventAdmission: {
-            /** @enum {string} */
+            /**
+             * @description **Valor novo aqui exige PRIMEIRO um APK tolerante.** O app publicado
+             *     lanca `FormatException` para `kind` desconhecido
+             *     (`EntradaDoEncontro.doJson`, `app/lib/api/modelos_rede.dart`), e o
+             *     encontro inteiro deixa de abrir. Ao contrario de `unit`, que o app
+             *     tolera, acrescentar um valor a esta lista quebra o app em uso
+             *     (ADR-0027 item 22).
+             * @enum {string}
+             */
             kind: "free" | "paid";
             price: components["schemas"]["NetworkEventPrice"] | null;
         };

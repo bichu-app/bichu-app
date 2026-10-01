@@ -10,6 +10,7 @@
  *
  * Tudo o que chega fica em `registro`, para os testes (e as iscas) lerem.
  */
+import { handleDoInstagram, recusaDoLinkDoConvite } from '../dominio/links.ts';
 import { achadosNasObservacoes } from '../dominio/observacoes.ts';
 import type {
   Cancelamento,
@@ -47,6 +48,8 @@ export interface OpcoesDoDuble {
   atrasoMs?: number;
   /** Faz a proxima leitura da lista falhar com 500. */
   falharLista?: boolean;
+  /** Forca uma recusa 400 de campo na proxima criacao ou edicao (para exercitar o caminho do servidor). */
+  recusaDeCampo?: { field: string; code: string };
   /** Teto de linhas devolvidas da fila por hora (D56). O servidor usa 300. */
   tetoDeLinhasDaFila?: number;
 }
@@ -92,6 +95,7 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   let falharLista = !!opcoes.falharLista;
   let uploads = 100;
   let linhasDaFila = 0;
+  let recusaForcada = opcoes.recusaDeCampo ?? null;
 
   function recalcularPendentes() {
     for (const e of encontros.values()) {
@@ -140,6 +144,23 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   function recusaDeEndereco(endereco: unknown): Response | null {
     if (typeof endereco === 'string' && /https?:\/\/|www\.|@|\(?\d{2}\)?\s?9?\d{4}-?\d{4}/.test(endereco)) {
       return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'street_address', code: 'contact_or_payment_detected' }]);
+    }
+    return null;
+  }
+
+  /** Como o servidor: link e Instagram com a mesma regra do painel, mais a recusa forcada da opcao. */
+  function recusaDeLinks(corpo: { ticket_url?: string | null; instagram_handle?: string | null }): Response | null {
+    const forcada = recusaForcada;
+    if (forcada && forcada.field in corpo) {
+      recusaForcada = null;
+      return problema(400, 'validation-failed', 'Confira os campos', [forcada]);
+    }
+    if (typeof corpo.ticket_url === 'string') {
+      const code = recusaDoLinkDoConvite(corpo.ticket_url);
+      if (code) return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'ticket_url', code }]);
+    }
+    if (typeof corpo.instagram_handle === 'string' && !handleDoInstagram(corpo.instagram_handle)) {
+      return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'instagram_handle', code: 'instagram_handle_invalid' }]);
     }
     return null;
   }
@@ -235,6 +256,8 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         const corpo = req.corpo as EncontroInput;
         const recusa = recusaDeNotas(corpo.notes);
         if (recusa) return recusa;
+        const recusaDosLinks = recusaDeLinks(corpo);
+        if (recusaDosLinks) return recusaDosLinks;
         const recusaDoEndereco = recusaDeEndereco(corpo.street_address);
         if (recusaDoEndereco) return recusaDoEndereco;
         if (corpo.admission?.kind === 'paid' && !corpo.admission.price) {
@@ -265,8 +288,9 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
           bring_items: corpo.bring_items ?? [],
           notes: corpo.notes ?? null,
           street_address: corpo.street_address ?? null,
-          ticket_url: null,
-          instagram_handle: null,
+          ticket_url: corpo.ticket_url ?? null,
+          instagram_handle: corpo.instagram_handle ? handleDoInstagram(corpo.instagram_handle) : null,
+          // O painel nao le `instagram_url`; o duble nao monta URL (sem host literal em src/).
           instagram_url: null,
           pending_request_count: 0,
           publication_status: 'published',
@@ -294,11 +318,12 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         if (v) return v;
         if (e.publication_status === 'removed') return problema(400, 'validation-failed', 'Removido', [{ field: 'slug', code: 'event_removed' }]);
         const corpo = req.corpo as EncontroPatch;
-        const recusa = recusaDeNotas(corpo.notes);
+        const recusa = recusaDeNotas(corpo.notes) ?? recusaDeLinks(corpo);
         if (recusa) return recusa;
         return salvar(e, (x) => {
-          const { images, ...resto } = corpo;
+          const { images, instagram_handle, ...resto } = corpo;
           Object.assign(x, resto);
+          if (instagram_handle !== undefined) x.instagram_handle = instagram_handle ? handleDoInstagram(instagram_handle) : null;
           if (images) x.images = galeria(images);
         });
       }
