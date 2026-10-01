@@ -75,6 +75,8 @@ describe('sessao por cookie com anti-CSRF (ADR-0027 itens 2 e 3)', () => {
       </ProvedorDeSessao>,
     );
     await screen.findByText('Olá, Marina Rocha');
+    // O efeito que entrega a sessao roda depois do texto aparecer; sob carga, a espera explicita evita ler antes.
+    await waitFor(() => expect(sessaoAtual).toBeDefined());
     const r = await sessaoAtual!.reautenticar('uma frase longa de verdade', 'store_item_retirement');
     expect(r).toEqual({ ok: true, token: 'reauth-1' });
     fireEvent.click(screen.getByRole('button', { name: 'escrever' }));
@@ -83,24 +85,67 @@ describe('sessao por cookie com anti-CSRF (ADR-0027 itens 2 e 3)', () => {
     expect(servidor.requisicoes.at(-1)?.cabecalhos.get('X-CSRF-Token')).toBe('csrf-novo-0123456789abcdef0123456789abcd');
   });
 
-  it('senha errada na reautenticacao NAO derruba a sessao', async () => {
-    let sessaoAtual: ReturnType<typeof useSessao> | undefined;
+  /**
+   * Monta o provedor e devolve a sessao QUANDO ela existe (o efeito do
+   * `Escritor` resolve a promessa), em vez de ler uma variavel que, sob carga,
+   * ainda nao foi preenchida no momento em que o texto aparece.
+   *
+   * O `fetch` e vigiado na resposta da reautenticacao: o provedor le o corpo do
+   * 401 com `clone().json()` para decidir se derruba a sessao, e o teste espera
+   * essa leitura terminar antes de afirmar que nada aconteceu. Sem isso, "nao
+   * chamou navegarParaFora" podia ser so "ainda nao tinha chamado".
+   */
+  async function reautenticarCom(resposta: Resposta) {
     const navegarParaFora = vi.fn();
-    const servidor = criarServidorFalso({
-      'GET /admin/session': json(200, SESSAO),
-      'POST /admin/auth/reauth': problema(401, 'invalid-credentials'),
+    const servidor = criarServidorFalso({ 'GET /admin/session': json(200, SESSAO), 'POST /admin/auth/reauth': resposta });
+    const leiturasDoCorpo: Promise<unknown>[] = [];
+    const fetchVigiado = (async (entrada: RequestInfo | URL, init?: RequestInit) => {
+      const r = await servidor.fetch(entrada, init);
+      const url = entrada instanceof Request ? entrada.url : String(entrada);
+      if (url.endsWith('/admin/auth/reauth')) {
+        const clonar = r.clone.bind(r);
+        r.clone = () => {
+          const copia = clonar();
+          const ler = copia.json.bind(copia);
+          copia.json = () => {
+            const p = ler();
+            leiturasDoCorpo.push(p);
+            return p;
+          };
+          return copia;
+        };
+      }
+      return r;
+    }) as typeof globalThis.fetch;
+    let entregar: (s: ReturnType<typeof useSessao>) => void = () => undefined;
+    const sessao = new Promise<ReturnType<typeof useSessao>>((r) => {
+      entregar = r;
     });
     render(
-      <ProvedorDeSessao fetch={servidor.fetch} navegarParaFora={navegarParaFora}>
-        <Escritor aoMontar={(s) => {
-          sessaoAtual = s;
-        }} />
+      <ProvedorDeSessao fetch={fetchVigiado} navegarParaFora={navegarParaFora}>
+        <Escritor aoMontar={(s) => entregar(s)} />
       </ProvedorDeSessao>,
     );
-    await screen.findByText('Olá, Marina Rocha');
-    expect(await sessaoAtual!.reautenticar('errada', 'store_item_retirement')).toEqual({ ok: false, motivo: 'incorreta' });
-    await new Promise((r) => setTimeout(r, 20));
+    const resultado = await (await sessao).reautenticar('uma senha qualquer', 'store_item_retirement');
+    await waitFor(() => expect(leiturasDoCorpo.length).toBeGreaterThan(0));
+    await Promise.allSettled(leiturasDoCorpo);
+    // O `.then` que decide roda depois da leitura: uma volta de macrotarefa esvazia as microtarefas.
+    await new Promise((r) => setTimeout(r, 0));
+    return { resultado, navegarParaFora };
+  }
+
+  it('senha errada na reautenticacao NAO derruba a sessao', async () => {
+    const { resultado, navegarParaFora } = await reautenticarCom(problema(401, 'invalid-credentials'));
+    expect(resultado).toEqual({ ok: false, motivo: 'incorreta' });
     expect(navegarParaFora).not.toHaveBeenCalled();
+  });
+
+  it('controle da espera acima: a mesma rota com sessao vencida DERRUBA, depois da mesma espera', async () => {
+    // Se a espera do teste anterior nao bastasse para o provedor decidir, este
+    // reprovaria: e ele que impede o anterior de passar por pressa.
+    const { resultado, navegarParaFora } = await reautenticarCom(problema(401, 'token-expired'));
+    expect(resultado).toEqual({ ok: false, motivo: 'falha' });
+    expect(navegarParaFora).toHaveBeenCalledWith(expect.stringMatching(/^\/entrar\/\?motivo=expirada/));
   });
 
   it('sem sessao na primeira visita manda entrar, sem aviso de sessao terminada', async () => {
