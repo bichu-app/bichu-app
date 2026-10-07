@@ -232,7 +232,8 @@ void describe('miudezas', () => {
     assert.deepEqual(lerIfMatch(undefined), { tipo: 'ausente' });
     assert.deepEqual(lerIfMatch('"3"'), { tipo: 'numero', versao: 3 });
     assert.deepEqual(lerIfMatch('*'), { tipo: 'invalida' });
-    assert.deepEqual(lerIfMatch('W/"3"'), { tipo: 'invalida' });
+    // A borda enfraquece ou sufixa o ETag (07/10): continua sendo a versao 3.
+    assert.deepEqual(lerIfMatch('W/"3"'), { tipo: 'numero', versao: 3 });
   });
 
   void it('o ponto mudou compara valor, sem precisar da coordenada fora daqui', () => {

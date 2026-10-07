@@ -542,21 +542,9 @@ export function comoEtag(version: number): string {
   return `"${String(version)}"`;
 }
 
-export type VersaoLida =
-  | { readonly tipo: 'ausente' }
-  | { readonly tipo: 'numero'; readonly versao: number }
-  | { readonly tipo: 'invalida' };
-
-/** `ausente` vira 428; qualquer forma que nao seja `"<n>"` vira 412. */
-export function lerIfMatch(cabecalho: string | string[] | undefined): VersaoLida {
-  if (cabecalho === undefined) return { tipo: 'ausente' };
-  const valor = Array.isArray(cabecalho) ? cabecalho.join(',') : cabecalho;
-  if (valor.trim() === '') return { tipo: 'ausente' };
-  const casado = /^\s*"([1-9][0-9]{0,9})"\s*$/.exec(valor);
-  if (casado === null) return { tipo: 'invalida' };
-  const versao = Number(casado[1]);
-  return Number.isSafeInteger(versao) && versao <= 2_147_483_647 ? { tipo: 'numero', versao } : { tipo: 'invalida' };
-}
+// `lerIfMatch` e `VersaoLida` moram em `shared/http/if-match.ts`, num ponto so
+// para a Loja e a Rede: a borda sufixa o ETag (`"3-gzip"`) e as duas leem igual.
+export { lerIfMatch, type VersaoLida } from '../../../shared/http/if-match.js';
 
 // ---------------------------------------------------------------------------
 // Transicoes

@@ -205,7 +205,9 @@ void describe('ETag e If-Match', () => {
     assert.deepEqual(lerIfMatch(''), { tipo: 'ausente' });
     assert.deepEqual(lerIfMatch('"7"'), { tipo: 'numero', versao: 7 });
     assert.deepEqual(lerIfMatch(' "12" '), { tipo: 'numero', versao: 12 });
-    for (const lixo of ['*', 'W/"7"', '7', '"0"', '"-1"', '"99999999999"', '"7", "8"']) {
+    // `W/"7"` e `"7-gzip"` sao a versao 7 vinda pela borda (07/10, shared/http/if-match.ts).
+    assert.deepEqual(lerIfMatch('W/"7"'), { tipo: 'numero', versao: 7 });
+    for (const lixo of ['*', '7', '"0"', '"-1"', '"99999999999"', '"7", "8"']) {
       assert.deepEqual(lerIfMatch(lixo), { tipo: 'invalida' }, lixo);
     }
   });

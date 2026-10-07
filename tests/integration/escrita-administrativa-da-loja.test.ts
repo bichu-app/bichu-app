@@ -266,6 +266,26 @@ after(async () => {
 });
 
 void describe('a escrita administrativa da Loja, contra Postgres', () => {
+  void it('ISCA (hml 05/10): If-Match com o sufixo da borda passa; versao velha com sufixo continua 412', async () => {
+    const p = await novoParceiro();
+    const slug = `bo-e-${sufixo()}`;
+    const criado = await loja.criarItem(autor, {
+      slug,
+      partner_slug: p.slug,
+      title: 'Racao pela borda',
+      summary: 'Racao seca.',
+      category: 'food',
+      species: ['dog'],
+      target_url: `https://${p.host}/racao-borda`,
+    });
+    const sufixado = criado.etag.replace(/"$/, '-gzip"');
+    const editado = await loja.alterarItem(autor, slug, sufixado, { summary: 'Racao seca, pela borda.' });
+    const deNovo = await loja.alterarItem(autor, slug, editado.etag.replace(/"$/, '-zstd"'), { summary: 'De novo.' });
+    assert.notEqual(deNovo.etag, editado.etag);
+    const velha = await loja.alterarItem(autor, slug, sufixado, { summary: 'Nao deve gravar.' }).catch((e: unknown) => e);
+    assert.ok(velha instanceof AppError && velha.problemType === 'precondition-failed', String(velha));
+  });
+
   void it('ISCA: cada escrita grava UMA linha de trilha, pelo id interno, com a sessao', async () => {
     const p = await novoParceiro();
     const slug = `bo-i-${sufixo()}`;
