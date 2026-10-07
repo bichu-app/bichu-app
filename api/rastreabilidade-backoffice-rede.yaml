@@ -163,7 +163,7 @@ telas:
           - header:If-Match
       - operationId: retireAdminStoreItem
         situacao: contrato
-        nota: "item de menu Despublicar; exige senha (lacuna BO-3)"
+        nota: "item de menu Despublicar; sem senha desde 07/10 (ADR-0027 item 23)"
         usa:
           - header:If-Match
           - problem:reauthentication-required
@@ -179,7 +179,6 @@ telas:
         usa:
           - req:password
           - req:scope
-          - enum:AdminReauthScope.store_item_retirement
           - resp:reauth_token
           - resp:csrf_token
           - problem:invalid-credentials
@@ -306,21 +305,19 @@ telas:
           upd: atualizado
       - operationId: removeAdminNetworkEvent
         situacao: contrato
-        nota: "item de menu Excluir, com senha"
+        nota: "item de menu Excluir; sem senha desde 07/10 (ADR-0027 item 23)"
         usa:
           - header:If-Match
-          - enum:AdminReauthScope.network_event_removal
           - problem:reauthentication-required
       - operationId: cancelAdminNetworkEvent
         situacao: contrato
-        nota: "item de menu Cancelar, com motivo e senha (feat/backoffice-telas-rede, 73b78a4); o cancelado segue no app ate o fim previsto"
+        nota: "item de menu Cancelar, com motivo; sem senha desde 07/10 (ADR-0027 item 23); o cancelado segue no app ate o fim previsto"
         usa:
           - req:note
           - header:If-Match
           - resp:publication_status
           - resp:cancellation_note
           - enum:AdminNetworkEventPublicationStatus.cancelled
-          - enum:AdminReauthScope.network_event_cancellation
           - problem:reauthentication-required
 
   - tela: "4 · Rede: formulario"
@@ -410,7 +407,7 @@ telas:
           - header:If-Match
       - operationId: relocateAdminNetworkEvent
         situacao: contrato
-        nota: "dialogo 'Salvar a mudanca de local?', com senha"
+        nota: "dialogo 'Salvar a mudanca de local?'; sem senha desde 07/10 (ADR-0027 item 23)"
         usa:
           - req:place.point.lat
           - req:place.point.lon
@@ -419,10 +416,9 @@ telas:
           - req:ends_at
           - req:reason
           - header:If-Match
-          - enum:AdminReauthScope.network_event_relocation
       - operationId: changeAdminNetworkEventAccess
         situacao: contrato
-        nota: "dialogo 'Salvar a mudanca de acesso?', com senha"
+        nota: "dialogo 'Salvar a mudanca de acesso?'; sem senha desde 07/10 (ADR-0027 item 23)"
         usa:
           - req:visibility
           - req:admission.kind
@@ -430,7 +426,6 @@ telas:
           - req:admission.price.unit
           - req:reason
           - header:If-Match
-          - enum:AdminReauthScope.network_event_access_change
       - operationId: createAdminCatalogImageIntent
         situacao: contrato
         nota: "fotos: JPG, PNG ou WebP, ate 5 MB, minimo 1600 x 900; a primeira e a capa"
@@ -627,7 +622,7 @@ tela_sem_contrato:
     tela: "3 · Loja: lista e formulario"
     o_que: "Despublicar sem senha, e o texto 'volta a ser rascunho'"
     resolucao: tela
-    motivo: "retireAdminStoreItem exige reautenticacao (store_item_retirement), e o estado depois e `retired` (Retirado), nao `draft`"
+    motivo: "o estado depois e `retired` (Retirado), nao `draft`. A reautenticacao (store_item_retirement) saiu em 07/10 por decisao do cliente (ADR-0027 item 23): despublicar e sem senha"
   - id: BO-4
     tela: "3 · Loja: formulario"
     o_que: "pelo menos uma imagem obrigatoria"

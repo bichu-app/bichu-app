@@ -2647,7 +2647,12 @@ export interface paths {
         put?: never;
         /**
          * Confere a senha de novo e abre a janela de uma operacao sensivel
-         * @description Devolve um `reauth_token` de **5 minutos**, de **uso unico** e de
+         * @deprecated
+         * @description **OBSOLETA desde 07/10/2026.** Nenhuma escrita do painel exige mais
+         *     `X-Admin-Reauth-Token` (decisao do cliente, ADR-0027 item 23). A rota
+         *     continua respondendo, sem uso, e nao foi removida.
+         *
+         *     Devolve um `reauth_token` de **5 minutos**, de **uso unico** e de
          *     **um escopo**, que a operacao sensivel recebe em `X-Admin-Reauth-Token`
          *     (D40). O escopo exigido por operacao esta em `x-admin-reauth-scope`.
          *
@@ -2918,9 +2923,8 @@ export interface paths {
          * Retira o item da vitrine
          * @description O "excluir publicado" da `Loja` (D40). **Nada e apagado**: o item passa a
          *     `retired`, some do app, continua no painel e volta com
-         *     `publishAdminStoreItem`. Exige `X-Admin-Reauth-Token` do escopo
-         *     `store_item_retirement`: um roteiro com a senha roubada esvaziaria a
-         *     vitrine. Item em rascunho responde `400` (`code: not_published`).
+         *     `publishAdminStoreItem`. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Item em rascunho
+         *     responde `400` (`code: not_published`).
          */
         delete: operations["retireAdminStoreItem"];
         options?: never;
@@ -2996,8 +3000,7 @@ export interface paths {
         /**
          * Remove um encontro, sem volta
          * @description Estado terminal `removed`: some do app e do painel de leitura publica,
-         *     a linha continua no banco para a trilha. Exige
-         *     `X-Admin-Reauth-Token` do escopo `network_event_removal` (D40). Para
+         *     a linha continua no banco para a trilha. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Para
          *     desmarcar um encontro que as pessoas precisam saber que nao vai
          *     acontecer, a operacao certa e `cancelAdminNetworkEvent`.
          */
@@ -3008,8 +3011,8 @@ export interface paths {
          * Altera titulo, resumo, capa ou endereco publico de um encontro
          * @description **Data, horario, fuso e lugar nao mudam aqui**, porque todo encontro
          *     esta publicado desde a criacao: mudar onde e quando as pessoas levam
-         *     os caes e `relocateAdminNetworkEvent`, com reautenticacao e aviso a
-         *     todos os administradores. **Visibilidade e condicao de acesso
+         *     os caes e `relocateAdminNetworkEvent`, com aviso a todos os
+         *     administradores. **Visibilidade e condicao de acesso
          *     tambem nao**: sao `changeAdminNetworkEventAccess`, pelo mesmo motivo.
          *     O corpo nao tem esses campos. Encontro `removed` responde `400`
          *     (`code: event_removed`).
@@ -3036,17 +3039,17 @@ export interface paths {
         put?: never;
         /**
          * Muda data, horario ou lugar de um encontro publicado
-         * @description E a operacao que um invasor com a senha usaria para reunir caes num
-         *     lugar e horario escolhidos por ele (T11), e por isso ela tem as tres
-         *     travas: `X-Admin-Reauth-Token` do escopo `network_event_relocation`
-         *     (D40), aviso por e-mail a **todos** os administradores com o antes e o
-         *     depois (D52), e linha na trilha (sem a coordenada bruta: a trilha grava
-         *     `point_changed`).
+         * @description E a operacao que um invasor com a sessao usaria para reunir caes num
+         *     lugar e horario escolhidos por ele (T11). Ficam duas travas: aviso por
+         *     e-mail a **todos** os administradores com o antes e o depois (D52), e
+         *     linha na trilha (sem a coordenada bruta: a trilha grava
+         *     `point_changed`). Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. O risco de uma sessao
+         *     sequestrada mover o encontro sem senha foi aceito pelo cliente.
          *
          *     **Compatibilidade (01/10/2026):** o painel deixou de usar o mapa, e o
          *     `place.point` desta rota fica so por compatibilidade. A rota continua
          *     sendo o UNICO caminho para mudar o lugar de um encontro existente,
-         *     inclusive o `street_address`: mudar onde e T11, e as tres travas
+         *     inclusive o `street_address`: mudar onde e T11, e o aviso e a trilha
          *     valem para o endereco como valem para o ponto.
          *
          *     Pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e
@@ -3075,8 +3078,8 @@ export interface paths {
         /**
          * Cancela um encontro publicado
          * @description O encontro passa a `cancelled` e **continua visivel no app como
-         *     cancelado** ate o fim previsto (decisao do cliente, 23/09). Exige `X-Admin-Reauth-Token` do escopo
-         *     `network_event_cancellation` e avisa todos os administradores. Sem
+         *     cancelado** ate o fim previsto (decisao do cliente, 23/09). Avisa todos
+         *     os administradores. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Sem
          *     volta: um encontro cancelado que vai acontecer de novo e um encontro
          *     novo.
          */
@@ -3104,9 +3107,8 @@ export interface paths {
          * @description Trocar o valor de um encontro publicado muda o que as pessoas esperam
          *     pagar na porta, e tornar publico um encontro privado entrega o lugar a
          *     quem nao foi aprovado. Por isso as mesmas travas de
-         *     `relocateAdminNetworkEvent`: `X-Admin-Reauth-Token` do escopo
-         *     `network_event_access_change`, aviso a todos os administradores com o
-         *     antes e o depois, e trilha. Privado que vira publico deixa os pedidos
+         *     `relocateAdminNetworkEvent`: aviso a todos os administradores com o
+         *     antes e o depois, e trilha. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Privado que vira publico deixa os pedidos
          *     como estao, sem efeito, e mantem o `slug` gerado. Publico que vira
          *     privado passa a exigir pedido de todos e **ganha `slug` novo, gerado**:
          *     o antigo ja circulou e pode dizer o lugar, e ele passa a responder 404,
@@ -5994,7 +5996,10 @@ export interface components {
             };
         };
         /**
-         * @description Dois casos. Sem sessao valida: os mesmos tipos de `AdminUnauthorized`.
+         * @description **Sem uso desde 07/10/2026** (ADR-0027 item 23): nenhuma escrita do
+         *     painel pede reautenticacao. Mantida declarada, sem remover.
+         *
+         *     Dois casos. Sem sessao valida: os mesmos tipos de `AdminUnauthorized`.
          *     Sessao valida sem `X-Admin-Reauth-Token` do escopo da operacao, com
          *     token vencido, ja usado ou de outro escopo:
          *     `reauthentication-required`, e o painel pede a senha sem perder o que
@@ -10245,7 +10250,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
-            401: components["responses"]["AdminReauthRequired"];
+            401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
@@ -10381,7 +10386,7 @@ export interface operations {
                 content?: never;
             };
             400: components["responses"]["ValidationFailed"];
-            401: components["responses"]["AdminReauthRequired"];
+            401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
@@ -10468,7 +10473,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
-            401: components["responses"]["AdminReauthRequired"];
+            401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
@@ -10511,7 +10516,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
-            401: components["responses"]["AdminReauthRequired"];
+            401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];
@@ -10554,7 +10559,7 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
-            401: components["responses"]["AdminReauthRequired"];
+            401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             412: components["responses"]["PreconditionFailed"];

@@ -13,7 +13,10 @@ ficam só por compatibilidade.
 **Emenda de 01/10 (item 22):** unidade do preço com pet, humano, dupla e dupla de
 humanos (aditiva; `per_dog` se aposenta depois); link de ingresso e Instagram
 públicos, exceção explícita ao D59 só nesses dois campos.
-**Data:** 2026-09-23 (emendas de 2026-09-28 e 2026-10-01)
+**Emenda de 07/10 (item 23):** as escritas do painel deixam de pedir senha
+(reautenticação), por decisão do cliente, com o risco de sessão sequestrada
+aceito; a rota de reautenticação fica obsoleta, sem remover.
+**Data:** 2026-09-23 (emendas de 2026-09-28, 2026-10-01 e 2026-10-07)
 **Supera:** a credencial de serviço (`adminAuth`, `X-Service-Credential`) do
 ADR-0026, seções 2.2 e 2.3; a BICHUS-189 (catálogo em arquivo versionado)
 **Emenda:** ADR-0023 (emenda 1), ADR-0016 (emenda 2), ADR-0010 (emenda 1),
@@ -1593,6 +1596,30 @@ dupla (humano + pet) ou (dois humanos), é isso que precisa ficar mais claro" e
    que trate o desconhecido, publicada e em uso; só depois o contrato e o banco
    ganham o valor. O mesmo aviso está no schema `NetworkEventAdmission` do
    contrato.
+
+### 23. As escritas do painel deixam de pedir senha (decisão do cliente, 07/10)
+
+Literal: "remova a solicitação de senha ao alterar ou salvar os cadastros".
+
+1. **O que sai.** Nenhuma escrita da `Loja` nem da `Rede` exige mais
+   `X-Admin-Reauth-Token`: retirar item, remover, mover (`relocation`),
+   cancelar e mudar acesso do encontro passam só com a sessão. Supera a D40
+   nessas cinco operações e as "três travas" do T11 nos itens 12 e 21 e no
+   item 21.4, que viram duas.
+2. **O que fica.** Login, sessão opaca com teto de inatividade e absoluto,
+   CSRF e conferência de origem, papel por operação, `If-Match`/`ETag`, a
+   trilha em toda escrita e os e-mails a todos os administradores (D52, D60,
+   mudança de lugar e de link). Sem sessão, toda escrita continua `401`.
+3. **A rota de reautenticação fica, obsoleta.** `POST /v1/admin/auth/reauth`
+   (`reauthenticateAdmin`) continua respondendo e está marcada `deprecated` no
+   contrato, sem uso; o esquema `adminReauth`, o enum `AdminReauthScope` e a
+   resposta `AdminReauthRequired` ficam declarados. Remover é outra decisão.
+4. **Risco aceito pelo cliente.** Uma sessão sequestrada (cookie roubado num
+   computador destravado, por exemplo) pode alterar, retirar, cancelar,
+   remover ou mover cadastros **sem pedir senha**, inclusive mudar o lugar e a
+   hora de um encontro (T11). O que resta contra isso é detecção, não
+   prevenção: o e-mail a todos os administradores e a trilha. Sem MFA (item 9),
+   a senha na escrita era a única segunda barreira, e ela sai.
 
 ## Alternativas consideradas
 
