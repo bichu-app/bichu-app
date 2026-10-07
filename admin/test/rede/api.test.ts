@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { criarClienteDaApi } from '../../src/api/cliente.ts';
 import { criarApiDaRede, esperaPorExtenso } from '../../src/rede/api/redeApi.ts';
 import { criarDuble } from '../../src/rede/duble/servidor.ts';
+import { etagDe } from '../../src/rede/usarRede.ts';
 import { pedidosDeSenha } from './verificacoes.ts';
 
 function montar() {
@@ -21,12 +22,14 @@ describe('cliente da Rede contra o duble', () => {
     expect(consulta?.get('publication_status')).toBe('published');
   });
 
-  it('lê o ETag e o devolve em If-Match; versão velha vira falha de versão', async () => {
+  it('If-Match sai da versão do recurso; o ETag sufixado da borda vira falha de versão', async () => {
     const { api } = montar();
     const lido = await api.obter('encontro-de-caes-no-parque');
-    expect(lido.ok && lido.etag).toBe('"1"');
-    const ok = await api.atualizar('encontro-de-caes-no-parque', '"1"', { title: 'Outro título' });
-    expect(ok.ok && ok.etag).toBe('"2"');
+    expect(lido.ok && lido.etag).toBe('"1-zstd"');
+    const peloCabecalho = await api.atualizar('encontro-de-caes-no-parque', '"1-zstd"', { title: 'Outro título' });
+    expect(!peloCabecalho.ok && peloCabecalho.falha).toEqual({ tipo: 'versao' });
+    const ok = await api.atualizar('encontro-de-caes-no-parque', lido.ok ? etagDe(lido.dados) : '', { title: 'Outro título' });
+    expect(ok.ok && ok.dados.version).toBe(2);
     const velho = await api.atualizar('encontro-de-caes-no-parque', '"1"', { title: 'De novo' });
     expect(!velho.ok && velho.falha).toEqual({ tipo: 'versao' });
   });

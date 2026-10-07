@@ -65,7 +65,11 @@ export function criarServidorFalso(rotas: Record<string, Rota | Resposta>) {
       })?.[1];
     if (!rota) return new Response(JSON.stringify({ type: 'nao-declarada', status: 599 }), { status: 599 });
     const r = typeof rota === 'function' ? await rota(gravada) : rota;
-    const cabecalhos = { 'Content-Type': 'application/json', ...(r.cabecalhos ?? {}) };
+    const cabecalhos: Record<string, string> = { 'Content-Type': 'application/json', ...(r.cabecalhos ?? {}) };
+    // Como a borda de hml: o ETag sai comprimido e sufixado ("4" vira "4-zstd").
+    // Os testes conferem o If-Match pela versao pura; um painel que volte a
+    // devolver o cabecalho no If-Match reprova neles.
+    if (cabecalhos.ETag) cabecalhos.ETag = cabecalhos.ETag.replace(/^(W\/)?"([^"]*)"$/, '$1"$2-zstd"');
     return new Response(r.corpo === undefined ? null : JSON.stringify(r.corpo), { status: r.status, headers: cabecalhos });
   });
   return { fetch: fetch as unknown as typeof globalThis.fetch, requisicoes };

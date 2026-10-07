@@ -65,7 +65,15 @@ function problema(status: number, slug: string, title: string, errors?: Problema
   return json(status, { type: PROBLEMA + slug, title, status, ...(errors ? { errors } : {}) } satisfies Problema);
 }
 
-const etag = (e: Encontro) => `"${e.version}"`;
+/** A versao como o If-Match deve chegar. */
+const versao = (e: Encontro) => `"${String(e.version)}"`;
+/**
+ * O ETag como a borda de hml o entrega: comprimido e sufixado (`"3-zstd"`).
+ * O duble o emite assim e confere o If-Match contra a versao PURA, para que um
+ * painel que volte a devolver o cabecalho no If-Match reprove (412), como
+ * reprovava em hml antes de 07/10.
+ */
+const etag = (e: Encontro) => `"${String(e.version)}-zstd"`;
 
 function aleatorio(n: number): string {
   const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -110,7 +118,7 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   function exigirVersao(req: Requisicao, e: Encontro): Response | null {
     const v = req.cabecalhos['if-match'];
     if (!v) return problema(428, 'precondition-required', 'Falta a versao');
-    if (v !== etag(e)) return problema(412, 'precondition-failed', 'Alguem mudou este encontro');
+    if (v !== versao(e)) return problema(412, 'precondition-failed', 'Alguem mudou este encontro');
     return null;
   }
 
