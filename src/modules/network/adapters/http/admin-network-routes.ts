@@ -6,10 +6,11 @@
  *
  * Estas rotas so sobem dentro de `escoparRotasAdministrativas`: a guarda do
  * escopo confere superficie, cookie de sessao, `Origin`, `X-CSRF-Token` e o
- * papel de `adminRoles` antes de qualquer gancho daqui. `registrarRota`
- * instala o portao de `X-Admin-Reauth-Token` a partir de `adminReauthScope`
- * (mover, mudar acesso, cancelar, remover) e consome a janela antes do caso de
- * uso. **Nenhuma verificacao de papel mora aqui nem no caso de uso.**
+ * papel de `adminRoles` antes de qualquer gancho daqui. **Nenhuma escrita
+ * daqui pede reautenticacao** desde 07/10/2026 (decisao do cliente, ADR-0027
+ * item 23): mover, mudar acesso, cancelar e remover passam so com a sessao, e
+ * ficam o aviso a todos os administradores e a trilha. **Nenhuma verificacao
+ * de papel mora aqui nem no caso de uso.**
  *
  * ## A declaracao e a do contrato
  *
@@ -104,7 +105,6 @@ export const rotaDeRemoverEncontro = defineRoute({
   effects: ['irreversible_write'],
   adminRoles: ADMIN,
   audit: { action: 'admin.network_event.removed', resourceKind: 'network_event' },
-  adminReauthScope: 'network_event_removal',
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
@@ -112,7 +112,8 @@ export const rotaDeRemoverEncontro = defineRoute({
  * Mover (T11). **Compatibilidade desde 01/10/2026:** o painel deixou de usar o
  * mapa, e o `place.point` desta rota fica so para quem ainda o manda. A rota
  * continua sendo o unico caminho para mudar o lugar de um encontro existente,
- * inclusive o `street_address`, com reautenticacao, motivo e aviso.
+ * inclusive o `street_address`, com motivo e aviso (sem reautenticacao desde
+ * 07/10/2026, ADR-0027 item 23).
  */
 export const rotaDeMoverEncontro = defineRoute({
   operationId: 'relocateAdminNetworkEvent',
@@ -121,7 +122,6 @@ export const rotaDeMoverEncontro = defineRoute({
   effects: ['notifies'],
   adminRoles: ADMIN,
   audit: { action: 'admin.network_event.relocated', resourceKind: 'network_event' },
-  adminReauthScope: 'network_event_relocation',
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
@@ -132,7 +132,6 @@ export const rotaDeCancelarEncontro = defineRoute({
   effects: ['notifies'],
   adminRoles: ADMIN,
   audit: { action: 'admin.network_event.cancelled', resourceKind: 'network_event' },
-  adminReauthScope: 'network_event_cancellation',
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
@@ -143,7 +142,6 @@ export const rotaDeMudarAcesso = defineRoute({
   effects: ['notifies'],
   adminRoles: ADMIN,
   audit: { action: 'admin.network_event.access_changed', resourceKind: 'network_event' },
-  adminReauthScope: 'network_event_access_change',
   rateLimit: [BALDE_DE_ESCRITA],
 });
 

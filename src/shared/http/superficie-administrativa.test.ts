@@ -342,7 +342,7 @@ void describe('guarda do prefixo /v1/admin', () => {
     assert.deepEqual(quebrada.janelas, { consumidas: 1, devolvidas: 0 });
   });
 
-  void it('QA bug 4: toda operacao com x-admin-reauth-scope exige If-Match no contrato', () => {
+  void it('QA bug 4 / 07/10: nenhuma operacao do contrato pede reautenticacao, e a que voltar exige If-Match', () => {
     // A guarda responde 428 sem gastar a janela quando falta o If-Match, e so
     // pode fazer isso porque TODA operacao com reautenticacao e escrita
     // versionada. Operacao nova com escopo e sem If-Match reprova aqui.
@@ -366,7 +366,9 @@ void describe('guarda do prefixo /v1/admin', () => {
         }
       }
     }
-    assert.ok(conferidas >= 5, `so ${String(conferidas)} operacoes com reautenticacao no contrato`);
+    // Desde 07/10/2026 (ADR-0027 item 23) nenhuma escrita do painel pede
+    // reautenticacao. Se uma voltar, ela continua obrigada a ter If-Match.
+    assert.equal(conferidas, 0, 'uma operacao voltou a pedir reautenticacao sem nova decisao do cliente');
     assert.deepEqual(sem, []);
   });
 

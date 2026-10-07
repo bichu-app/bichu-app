@@ -9,8 +9,9 @@
  * escopo roda antes de qualquer gancho delas: `X-Internal-Surface` (404),
  * recusa de `Authorization` (401), sessao em cookie (401), `Origin` e
  * `X-CSRF-Token` em metodo nao seguro (403) e o papel de `adminRoles` (403).
- * `registrarRota` instala o portao de `X-Admin-Reauth-Token` a partir de
- * `adminReauthScope` e fecha o corpo antes do Ajv (campo desconhecido: 400).
+ * `registrarRota` fecha o corpo antes do Ajv (campo desconhecido: 400).
+ * Retirar o item nao pede mais reautenticacao desde 07/10/2026 (decisao do
+ * cliente, ADR-0027 item 23).
  * **Nenhuma verificacao de papel mora aqui nem no caso de uso** (item 7).
  *
  * ## A declaracao e a do contrato
@@ -189,7 +190,6 @@ export const rotaDeRetirarItem = defineRoute({
   effects: [],
   adminRoles: ADMIN,
   audit: { action: 'admin.store_item.retired', resourceKind: 'store_item' },
-  adminReauthScope: 'store_item_retirement',
   rateLimit: [BALDE_DE_ESCRITA],
 });
 

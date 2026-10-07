@@ -9,7 +9,7 @@
  *
  * - **tutor recebe recusa sem escrita**: conta sem papel `admin` leva 403 e o
  *   repositorio continua vazio, sem linha de trilha;
- * - **retirar sem reautenticacao e recusado**: 401 `reauthentication-required`,
+ * - **retirar passa so com a sessao** desde 07/10 (ADR-0027 item 23); sem sessao, 401,
  *   e o item continua publicado;
  * - **corpo com campo extra recebe 400**, e nada e gravado (o Ajv do Fastify o
  *   apagaria em silencio e responderia 201);
@@ -129,15 +129,15 @@ async function chamar(
   b: Bancada,
   metodo: Metodo,
   caminho: string,
-  opcoes: { corpo?: unknown; conta?: 'admin' | 'tutor'; ifMatch?: string; reauth?: string } = {},
+  opcoes: { corpo?: unknown; conta?: 'admin' | 'tutor' | 'nenhuma'; ifMatch?: string; reauth?: string } = {},
 ): Promise<{ status: number; corpo: Record<string, unknown>; etag: string | undefined }> {
   const conta = opcoes.conta ?? 'admin';
   const headers: Record<string, string> = {
     'x-internal-surface': 'admin',
-    cookie: `__Host-bichu_adm=cookie-${conta}`,
     origin: ORIGEM,
     'x-csrf-token': conta === 'admin' ? CSRF_ADMIN : CSRF_TUTOR,
   };
+  if (conta !== 'nenhuma') headers['cookie'] = `__Host-bichu_adm=cookie-${conta}`;
   if (opcoes.corpo !== undefined) headers['content-type'] = 'application/json';
   if (opcoes.ifMatch !== undefined) headers['if-match'] = opcoes.ifMatch;
   if (opcoes.reauth !== undefined) headers['x-admin-reauth-token'] = opcoes.reauth;
@@ -235,30 +235,26 @@ void describe('rotas da escrita administrativa da Loja, dentro da guarda', () =>
     assert.equal(b.estado().trilha.length, 0);
   });
 
-  void it('ISCA: retirar sem X-Admin-Reauth-Token e 401 reauthentication-required, e o item continua publicado', async () => {
+  void it('ISCA (07/10): retirar passa so com a sessao, sem senha; sem sessao continua 401 e o item fica publicado', async () => {
     await chamar(b, 'POST', '/admin/store/partners', { corpo: PARCEIRO });
     const i = await chamar(b, 'POST', '/admin/store/items', { corpo: ITEM });
     const pub = await chamar(b, 'PUT', `/admin/store/items/${ITEM.slug}/publication`, { ifMatch: i.etag ?? '' });
     const linhas = b.estado().trilha.length;
 
-    const sem = await chamar(b, 'DELETE', `/admin/store/items/${ITEM.slug}/publication`, { ifMatch: pub.etag ?? '' });
-    assert.equal(sem.status, 401);
-    assert.equal(tipo(sem.corpo), 'reauthentication-required');
-    const errada = await chamar(b, 'DELETE', `/admin/store/items/${ITEM.slug}/publication`, {
+    const semSessao = await chamar(b, 'DELETE', `/admin/store/items/${ITEM.slug}/publication`, {
       ifMatch: pub.etag ?? '',
-      reauth: 'janela-de-outro-escopo',
+      conta: 'nenhuma',
     });
-    assert.equal(errada.status, 401);
-    assert.equal([...b.estado().itens.values()][0]?.active, true, 'o item saiu da vitrine sem a senha');
+    assert.equal(semSessao.status, 401);
+    assert.notEqual(tipo(semSessao.corpo), 'reauthentication-required');
+    assert.equal([...b.estado().itens.values()][0]?.active, true, 'o item saiu da vitrine sem sessao');
     assert.equal(b.estado().trilha.length, linhas);
 
-    const com = await chamar(b, 'DELETE', `/admin/store/items/${ITEM.slug}/publication`, {
-      ifMatch: pub.etag ?? '',
-      reauth: 'janela-certa',
-    });
-    assert.equal(com.status, 200, JSON.stringify(com.corpo));
-    assert.equal(com.corpo['publication_state'], 'retired');
-    assert.deepEqual(b.janelas, ['store_item_retirement']);
+    const soComSessao = await chamar(b, 'DELETE', `/admin/store/items/${ITEM.slug}/publication`, { ifMatch: pub.etag ?? '' });
+    assert.equal(soComSessao.status, 200, JSON.stringify(soComSessao.corpo));
+    assert.equal(soComSessao.corpo['publication_state'], 'retired');
+    assert.deepEqual(b.janelas, [], 'retirar ainda consumiu janela de reautenticacao');
+    assert.equal(b.estado().trilha.length, linhas + 1);
   });
 
   void it('ISCA: corpo com campo extra recebe 400 unknown_field, e nada e gravado', async () => {

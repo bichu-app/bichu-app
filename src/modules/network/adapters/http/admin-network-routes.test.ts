@@ -153,15 +153,15 @@ async function chamar(
   b: Bancada,
   metodo: Metodo,
   caminho: string,
-  opcoes: { corpo?: unknown; conta?: 'admin' | 'tutor'; ifMatch?: string; reauth?: string } = {},
+  opcoes: { corpo?: unknown; conta?: 'admin' | 'tutor' | 'nenhuma'; ifMatch?: string; reauth?: string } = {},
 ): Promise<{ status: number; corpo: Record<string, unknown>; etag: string | undefined; bruto: string; cabecalhos: Record<string, unknown> }> {
   const conta = opcoes.conta ?? 'admin';
   const headers: Record<string, string> = {
     'x-internal-surface': 'admin',
-    cookie: `__Host-bichu_adm=cookie-${conta}`,
     origin: ORIGEM,
     'x-csrf-token': conta === 'admin' ? CSRF_ADMIN : CSRF_TUTOR,
   };
+  if (conta !== 'nenhuma') headers['cookie'] = `__Host-bichu_adm=cookie-${conta}`;
   if (opcoes.corpo !== undefined) headers['content-type'] = 'application/json';
   if (opcoes.ifMatch !== undefined) headers['if-match'] = opcoes.ifMatch;
   if (opcoes.reauth !== undefined) headers['x-admin-reauth-token'] = opcoes.reauth;
@@ -248,31 +248,26 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.equal(b.avisos.length, 0, 'o aviso saiu de uma escrita desfeita');
   });
 
-  void it('ISCA: cancelar, remover, mover e mudar acesso sem reautenticacao sao recusados com 401', async () => {
+  void it('ISCA (07/10): sem sessao, cancelar, remover, mover e mudar acesso continuam 401, e nada muda', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
     const slug = String(criado.corpo['slug']);
     const etag = criado.etag ?? '';
+    const semSessao = { conta: 'nenhuma' as const, ifMatch: etag };
     const tentativas = [
-      await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, { corpo: { note: 'Obra na praca.' }, ifMatch: etag }),
-      await chamar(b, 'DELETE', `/admin/network/events/${slug}`, { ifMatch: etag }),
+      await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, { corpo: { note: 'Obra na praca.' }, ...semSessao }),
+      await chamar(b, 'DELETE', `/admin/network/events/${slug}`, semSessao),
       await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
         corpo: { starts_at: '2026-10-11T12:00:00Z', ends_at: '2026-10-11T14:00:00Z', reason: 'Chuva no sabado.' },
-        ifMatch: etag,
+        ...semSessao,
       }),
       await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
         corpo: { visibility: 'private', reason: 'Passou a ser fechado.' },
-        ifMatch: etag,
-      }),
-      // A janela de OUTRO escopo nao abre esta operacao.
-      await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
-        corpo: { note: 'Obra na praca.' },
-        ifMatch: etag,
-        reauth: 'janela-network_event_removal',
+        ...semSessao,
       }),
     ];
     for (const t of tentativas) {
       assert.equal(t.status, 401, t.bruto);
-      assert.equal(tipo(t.corpo), 'reauthentication-required');
+      assert.notEqual(tipo(t.corpo), 'reauthentication-required');
     }
     const lido = await chamar(b, 'GET', `/admin/network/events/${slug}`);
     assert.equal(lido.corpo['publication_status'], 'published');
@@ -280,13 +275,34 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.created']);
   });
 
-  void it('com a janela certa: cancelar avisa e grava; remover e terminal e responde 204', async () => {
+  void it('ISCA (07/10): so com a sessao, mover e mudar acesso passam sem senha, avisam e gravam; nenhuma janela e consumida', async () => {
+    const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
+    const slug = String(criado.corpo['slug']);
+    const movido = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
+      corpo: { starts_at: '2026-10-11T12:00:00Z', ends_at: '2026-10-11T14:00:00Z', reason: 'Chuva no sabado.' },
+      ifMatch: criado.etag ?? '',
+    });
+    assert.equal(movido.status, 200, movido.bruto);
+    const acesso = await chamar(b, 'POST', `/admin/network/events/${slug}/access`, {
+      corpo: { visibility: 'private', reason: 'Passou a ser fechado.' },
+      ifMatch: movido.etag ?? '',
+    });
+    assert.equal(acesso.status, 200, acesso.bruto);
+    assert.deepEqual(b.janelas, [], 'alguma escrita ainda pediu janela de reautenticacao');
+    assert.deepEqual(acoesNaTrilha(b), [
+      'admin.network_event.created',
+      'admin.network_event.relocated',
+      'admin.network_event.access_changed',
+    ]);
+    assert.equal(b.avisos.length, 3);
+  });
+
+  void it('so com a sessao (07/10): cancelar avisa e grava; remover e terminal e responde 204', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
     const slug = String(criado.corpo['slug']);
     const cancelado = await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
       corpo: { note: 'A praca vai estar em obra.' },
       ifMatch: criado.etag ?? '',
-      reauth: 'janela-network_event_cancellation',
     });
     assert.equal(cancelado.status, 200, cancelado.bruto);
     assert.equal(cancelado.corpo['publication_status'], 'cancelled');
@@ -295,14 +311,12 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     const deNovo = await chamar(b, 'POST', `/admin/network/events/${slug}/cancellation`, {
       corpo: { note: 'Outra vez.' },
       ifMatch: cancelado.etag ?? '',
-      reauth: 'janela-network_event_cancellation',
     });
     assert.equal(deNovo.status, 400);
     assert.deepEqual(codigos(deNovo.corpo), ['event_not_published']);
 
     const removido = await chamar(b, 'DELETE', `/admin/network/events/${slug}`, {
       ifMatch: cancelado.etag ?? '',
-      reauth: 'janela-network_event_removal',
     });
     assert.equal(removido.status, 204, removido.bruto);
     const editar = await chamar(b, 'PATCH', `/admin/network/events/${slug}`, {
@@ -320,7 +334,7 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
   void it('removido some da lista por padrao e so volta com publication_status=removed', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', { corpo: PRACA });
     const slug = String(criado.corpo['slug']);
-    await chamar(b, 'DELETE', `/admin/network/events/${slug}`, { ifMatch: criado.etag ?? '', reauth: 'janela-network_event_removal' });
+    await chamar(b, 'DELETE', `/admin/network/events/${slug}`, { ifMatch: criado.etag ?? '' });
     const padrao = await chamar(b, 'GET', '/admin/network/events');
     assert.equal(padrao.status, 200, padrao.bruto);
     assert.equal(padrao.corpo['total'], 0);
@@ -372,7 +386,6 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
         reason: 'O parque fechou para reforma.',
       },
       ifMatch: criado.etag ?? '',
-      reauth: 'janela-network_event_relocation',
     });
     assert.equal(movido.status, 200, movido.bruto);
     const evento = b.estado().trilha.find((t) => t.action === 'admin.network_event.relocated');
@@ -409,7 +422,6 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     const mudado = await chamar(b, 'POST', `/admin/network/events/${antigo}/access`, {
       corpo: { visibility: 'private', admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } }, reason: 'Passou a ser fechado.' },
       ifMatch: criado.etag ?? '',
-      reauth: 'janela-network_event_access_change',
     });
     assert.equal(mudado.status, 200, mudado.bruto);
     assert.notEqual(mudado.corpo['slug'], antigo);
@@ -505,7 +517,7 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     assert.deepEqual(codigos(comTelefone.corpo), ['contact_or_payment_detected']);
   });
 
-  void it('ISCA T11 (01/10): o endereco NAO muda pelo PATCH, que nao pede reautenticacao; muda so por mover', async () => {
+  void it('ISCA T11 (01/10): o endereco NAO muda pelo PATCH; muda so por mover, com motivo e aviso (sem senha desde 07/10)', async () => {
     const criado = await chamar(b, 'POST', '/admin/network/events', {
       corpo: { ...PRACA, street_address: 'Praca Benedito Calixto, s/n - Pinheiros' },
     });
@@ -516,11 +528,6 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     });
     assert.equal(pelaEdicao.status, 400, pelaEdicao.bruto);
 
-    const semJanela = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
-      corpo: { street_address: 'Rua Outra, 99 - Centro', reason: 'Mudou de praca.' },
-      ifMatch: criado.etag ?? '',
-    });
-    assert.equal(semJanela.status, 401, semJanela.bruto);
     assert.equal(
       (await chamar(b, 'GET', `/admin/network/events/${slug}`)).corpo['street_address'],
       'Praca Benedito Calixto, s/n - Pinheiros',
@@ -529,7 +536,6 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     const movido = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
       corpo: { street_address: 'Rua Outra, 99 - Centro', reason: 'Mudou de praca.' },
       ifMatch: criado.etag ?? '',
-      reauth: 'janela-network_event_relocation',
     });
     assert.equal(movido.status, 200, movido.bruto);
     assert.equal(movido.corpo['street_address'], 'Rua Outra, 99 - Centro');
@@ -540,7 +546,6 @@ void describe('rotas da escrita administrativa da Rede, dentro da guarda', () =>
     const tirado = await chamar(b, 'POST', `/admin/network/events/${slug}/relocation`, {
       corpo: { street_address: null, reason: 'Sem endereco fixo.' },
       ifMatch: movido.etag ?? '',
-      reauth: 'janela-network_event_relocation',
     });
     assert.equal(tirado.status, 200, tirado.bruto);
     assert.equal(tirado.corpo['street_address'], null);

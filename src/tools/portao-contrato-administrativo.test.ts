@@ -76,19 +76,14 @@ void describe('portao do contrato administrativo', () => {
       alterar: (s) => void (operacao(s, '/me', 'get')['security'] = [{ bearerAuth: [], adminSession: [] }]),
     },
     {
+      // Desde 07/10 (ADR-0027 item 23) nenhuma operacao do contrato pede
+      // reautenticacao; a isca a poe de volta pela metade, so no `security`.
       nome: 'adminReauth sem x-admin-reauth-scope',
-      regra: /adminReauth e x-admin-reauth-scope precisam andar juntos/,
-      alterar: (s) => {
-        for (const item of Object.values(s.paths)) {
-          for (const op of Object.values(item)) {
-            if (typeof op === 'object' && op !== null && 'x-admin-reauth-scope' in op) {
-              delete op['x-admin-reauth-scope'];
-              return;
-            }
-          }
-        }
-        assert.fail('o contrato nao tem operacao com x-admin-reauth-scope para a isca');
-      },
+      regra: /retireAdminStoreItem: adminReauth e x-admin-reauth-scope precisam andar juntos/,
+      alterar: (s) =>
+        void (operacao(s, '/admin/store/items/{itemSlug}/publication', 'delete')['security'] = [
+          { adminSession: [], adminCsrf: [], adminReauth: [] },
+        ]),
     },
     {
       nome: 'GET administrativo com x-audit de verbo de escrita',
