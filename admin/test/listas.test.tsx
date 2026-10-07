@@ -168,6 +168,38 @@ describe('5 · Parceiros', () => {
   });
 });
 
+describe('ISCA: cada campo do parceiro entra no PATCH; sem mudança, "Nada mudou"', () => {
+  const rotas = () => ({
+    'GET /admin/store/partners/{partnerSlug}': json(200, parceiro(), { ETag: '"3"' }),
+    'PATCH /admin/store/partners/{partnerSlug}': json(200, parceiro()),
+    'GET /admin/store/partners': json(200, pagina([parceiro()])),
+  });
+  const casos: Array<[string, () => void, Record<string, unknown>]> = [
+    ['nome', () => fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Pet Center Aurora Lapa' } }), { name: 'Pet Center Aurora Lapa' }],
+    ['identificador', () => fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'aurora-lapa' } }), { slug: 'aurora-lapa' }],
+    ['site', () => fireEvent.change(screen.getByLabelText('Site do parceiro *'), { target: { value: 'aurora.com.br' } }), { host: 'aurora.com.br' }],
+    ['ordem', () => fireEvent.change(screen.getByLabelText('Ordem na Loja'), { target: { value: '5' } }), { sort_order: 5 }],
+    ['situação', () => fireEvent.click(screen.getByLabelText('Inativo')), { active: false }],
+  ];
+  it.each(casos)('%s', async (_nome, editar, esperado) => {
+    const { servidor } = montar('/loja/parceiros/pet-center-aurora', rotas());
+    await screen.findByLabelText('Nome *');
+    editar();
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    await waitFor(() => expect(servidor.requisicoes.some((r) => r.metodo === 'PATCH')).toBe(true));
+    expect(servidor.requisicoes.find((r) => r.metodo === 'PATCH')?.corpo).toMatchObject(esperado);
+  });
+
+  it('salvar sem mudar nada não envia e diz "Nada mudou", e não "Alterações salvas"', async () => {
+    const { servidor } = montar('/loja/parceiros/pet-center-aurora', rotas());
+    await screen.findByLabelText('Nome *');
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(await screen.findByText('Nada mudou. Altere algum campo antes de salvar.')).toBeInTheDocument();
+    expect(screen.queryByText('Alterações salvas.')).toBeNull();
+    expect(servidor.requisicoes.some((r) => r.metodo === 'PATCH')).toBe(false);
+  });
+});
+
 describe('6 · Tags', () => {
   it('conta ativas e inativas, desativa e renomeia pelo contrato', async () => {
     const ativas = [tag('adulto', { item_count: 3 }), tag('filhote')];

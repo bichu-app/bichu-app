@@ -138,6 +138,7 @@ export default function FormularioDoEncontro() {
   const [doServidor, setDoServidor] = useState<ErroDeCampo[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [falha, setFalha] = useState<string>();
+  const [nadaMudou, setNadaMudou] = useState(false);
   const [dialogo, setDialogo] = useState<DialogoPendente>();
   const [versao, setVersao] = useState(0);
   // A carga vale para uma chave (encontro e versao): chave nova e 'carregando' sem setState no efeito.
@@ -149,6 +150,7 @@ export default function FormularioDoEncontro() {
 
   const mudar = useCallback(<K extends keyof EstadoDoFormulario>(campo: K, valor: EstadoDoFormulario[K]) => {
     setF((atual) => ({ ...atual, [campo]: valor }));
+    setNadaMudou(false);
     setDoServidor((e) => e.filter((x) => x.campo !== campo));
   }, []);
 
@@ -236,7 +238,9 @@ export default function FormularioDoEncontro() {
     if (!encontro || !etag) return;
     const plano = planoDeEdicao(encontro, travarLugarEAcesso ? { ...f, ...lugarEAcessoDe(base) } : f);
     if (!plano.patch && !plano.mudanca && !plano.acesso) {
-      sair('Alterações salvas. O app já mostra os dados novos.');
+      // Nada a enviar: dizer "Alteracoes salvas" aqui era o defeito (a pessoa via
+      // sucesso e o servidor nao recebia nada).
+      setNadaMudou(true);
       return;
     }
     if (plano.mudanca || plano.acesso) {
@@ -362,6 +366,7 @@ export default function FormularioDoEncontro() {
         </Banner>
       )}
       {falha && <Banner tipo="erro">{falha}</Banner>}
+      {nadaMudou && !falha && <Banner tipo="info">Nada mudou. Altere algum campo antes de salvar.</Banner>}
       {nErros > 0 && (
         <ResumoDeErros
           referencia={resumo}

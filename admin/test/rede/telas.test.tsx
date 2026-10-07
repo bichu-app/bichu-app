@@ -4,7 +4,7 @@
  * verificacao sobre o registro do duble: nenhuma operacao sensivel sai sem a
  * senha de reautenticacao, e nenhuma observacao com telefone chega ao servidor.
  */
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -544,6 +544,54 @@ describe('Rede: edição', () => {
     );
     expect(screen.getByRole('radio', { name: /^Privado/ })).toBeDisabled();
     expect(screen.getByLabelText('Título *')).toBeEnabled();
+  });
+});
+
+describe('ISCA: cada campo editável do encontro sai para o servidor', () => {
+  type U = ReturnType<typeof userEvent.setup>;
+  const casos: Array<[string, (u: U) => Promise<void>, RegExp]> = [
+    ['título', async (u) => u.type(screen.getByLabelText('Título *'), '!'), /events\/[^/]+$/],
+    ['descrição', async (u) => u.type(screen.getByLabelText('Descrição *'), '!'), /events\/[^/]+$/],
+    ['descrição da foto', async (u) => u.type(screen.getByLabelText(/Descrição da imagem/), '!'), /events\/[^/]+$/],
+    ['o que levar', async (u) => u.click(screen.getByRole('checkbox', { name: 'Brinquedo' })), /events\/[^/]+$/],
+    ['observações', async (u) => u.type(screen.getByLabelText('Observações'), '!'), /events\/[^/]+$/],
+    ['portes', async (u) => u.click(screen.getByRole('checkbox', { name: 'Gigante' })), /events\/[^/]+$/],
+    ['idade', async (u) => u.click(screen.getByRole('radio', { name: 'Até 1 ano' })), /events\/[^/]+$/],
+    ['vacina', async (u) => u.click(screen.getAllByRole('radio', { name: 'Não' })[0] as HTMLElement), /events\/[^/]+$/],
+    ['estrutura', async (u) => u.click(screen.getByRole('checkbox', { name: 'Bancos' })), /events\/[^/]+$/],
+    ['link do convite', async (u) => u.type(screen.getByLabelText('Link do convite ou ingresso'), 'https://sympla.com.br/e/1'), /events\/[^/]+$/],
+    ['Instagram', async (u) => u.type(screen.getByLabelText('Instagram para dúvidas'), '@org.pet'), /events\/[^/]+$/],
+    ['horário de início', () => Promise.resolve(void fireEvent.change(screen.getByLabelText('Início *'), { target: { value: '2026-10-11T08:00' } })), /relocation$/],
+    ['fim', () => Promise.resolve(void fireEvent.change(screen.getByLabelText('Fim'), { target: { value: '2026-10-11T12:00' } })), /relocation$/],
+    ['nome do lugar', async (u) => u.type(screen.getByLabelText('Nome do lugar *'), '!'), /relocation$/],
+    ['endereço', async (u) => u.type(screen.getByLabelText('Endereço'), 'Rua Muniz de Sousa, 1119'), /relocation$/],
+    ['bairro', async (u) => u.type(screen.getByLabelText('Bairro *'), '!'), /relocation$/],
+    ['visibilidade', async (u) => u.click(screen.getByRole('radio', { name: /^Privado/ })), /access$/],
+    ['preço', async (u) => { await u.click(screen.getByRole('radio', { name: /^Pago/ })); await u.type(screen.getByLabelText('Valor em reais *'), '20'); }, /access$/],
+  ];
+  it.each(casos)('%s', async (_nome, editar, destino) => {
+    const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
+    await screen.findByLabelText('Título *');
+    await editar(usuario);
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    const dialogo = screen.queryByRole('alertdialog');
+    if (dialogo) {
+      await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Ajuste.');
+      const senha = within(dialogo).queryByLabelText('Sua senha');
+      if (senha) await usuario.type(senha, SENHA_DO_DUBLE);
+      await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
+    }
+    expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
+    expect(duble.registro.filter((r) => r.metodo !== 'GET' && destino.test(r.caminho)).length).toBeGreaterThan(0);
+  });
+
+  it('salvar sem mudar nada não envia e diz "Nada mudou"', async () => {
+    const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
+    await screen.findByLabelText('Título *');
+    await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
+    expect(await screen.findByText('Nada mudou. Altere algum campo antes de salvar.')).toBeInTheDocument();
+    expect(screen.queryByText(/Alterações salvas/)).toBeNull();
+    expect(duble.registro.filter((r) => r.metodo !== 'GET' && !r.caminho.endsWith('/session'))).toEqual([]);
   });
 });
 

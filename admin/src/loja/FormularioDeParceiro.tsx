@@ -57,7 +57,7 @@ export default function FormularioDeParceiro() {
   const [errosDoServidor, setErrosDoServidor] = useState<Partial<Record<Campo, string>>>({});
   const [tentou, setTentou] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [falha, setFalha] = useState<{ texto: string; recarregar?: boolean }>();
+  const [falha, setFalha] = useState<{ texto: string; recarregar?: boolean; informativo?: boolean }>();
   const [versao, setVersao] = useState(0);
   const resumo = useRef<HTMLDivElement>(null);
   const liberado = useRef(false);
@@ -139,7 +139,8 @@ export default function FormularioDeParceiro() {
         ...(ordem !== parceiro.sort_order ? { sort_order: ordem } : {}),
         ...(valores.ativo !== parceiro.active ? { active: valores.ativo } : {}),
       };
-      if (Object.keys(patch).length === 0) return voltar();
+      // Sem mudanca nada vai ao servidor, e a tela diz isso em vez de voltar calada.
+      if (Object.keys(patch).length === 0) return setFalha({ texto: 'Nada mudou. Altere algum campo antes de salvar.', informativo: true });
       const { data, error } = await api.PATCH('/admin/store/partners/{partnerSlug}', {
         params: { path: { partnerSlug: parceiro.slug }, header: { 'If-Match': etag } },
         body: patch,
@@ -208,7 +209,7 @@ export default function FormularioDeParceiro() {
         )}
         {falha && (
           <Banner
-            tipo="erro"
+            tipo={falha.informativo ? 'info' : 'erro'}
             acao={
               falha.recarregar ? (
                 <button type="button" className="btn ghost sm" onClick={() => setVersao((n) => n + 1)}>
