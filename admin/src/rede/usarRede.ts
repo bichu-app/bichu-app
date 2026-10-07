@@ -11,7 +11,12 @@ export function useRede() {
   return { rede, cliente };
 }
 
-/** O `If-Match` de um recurso lido: o ETag da resposta, ou a versao no formato dele. */
-export function etagDe(e: { version: number }, doCabecalho?: string | null): string {
-  return doCabecalho ?? `"${e.version}"`;
+/**
+ * O `If-Match` de um recurso: sempre montado do `version` dele, e nunca do
+ * cabecalho `ETag`. A borda comprime e sufixa o ETag (`"1-zstd"`, `"1-gzip"`),
+ * e devolver esse valor no If-Match dava 412 em toda escrita (o "nao salva" de
+ * hml, 07/10).
+ */
+export function etagDe(e: { version: number }): string {
+  return `"${String(e.version)}"`;
 }

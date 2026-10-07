@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
-import { errosDoProblema, tipoDoProblema } from '../api/problema.ts';
+import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { DialogoDeConfirmacao, type ResultadoDaAcaoConfirmada } from '../componentes/DialogoDeConfirmacao.tsx';
@@ -146,7 +146,8 @@ export default function FormularioDeProduto() {
         setItem(respostaDoItem.data);
         // Rascunho de antes do login volta com o ETag que a pessoa tinha lido: se
         // alguem salvou no meio, o If-Match antigo da 412 e nada se sobrescreve.
-        setEtag(rascunho?.etag ?? respostaDoItem.response.headers.get('ETag') ?? `"${respostaDoItem.data.version}"`);
+        // Do `version`, e nao do ETag: a borda o sufixa ("4-zstd") e o If-Match daria 412.
+        setEtag(rascunho?.etag ?? versaoComoEtag(respostaDoItem.data.version));
         doServidor = valoresDoItem(respostaDoItem.data);
       }
       setBase(doServidor);
@@ -246,7 +247,7 @@ export default function FormularioDeProduto() {
         const { data, error, response } = await api.POST('/admin/store/items', { body: corpoDeCriacao(valores) });
         if (!data) return tratarRecusa(error, response.status);
         atual = data;
-        versaoAtual = response.headers.get('ETag') ?? `"${data.version}"`;
+        versaoAtual = versaoComoEtag(data.version);
         if (acao === 'rascunho') return sair(AVISO.rascunho);
       } else if (atual && versaoAtual) {
         const { data, error, response } = await api.PATCH('/admin/store/items/{itemSlug}', {
@@ -255,7 +256,7 @@ export default function FormularioDeProduto() {
         });
         if (!data) return tratarRecusa(error, response.status);
         atual = data;
-        versaoAtual = response.headers.get('ETag') ?? `"${data.version}"`;
+        versaoAtual = versaoComoEtag(data.version);
         if (acao !== 'publicar') return sair(AVISO.salvo);
       }
       if (!atual || !versaoAtual) return;

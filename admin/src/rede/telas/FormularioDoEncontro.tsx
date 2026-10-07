@@ -166,7 +166,7 @@ export default function FormularioDoEncontro() {
       }
       const doEncontro = formularioDoEncontro(r.dados);
       setEncontro(r.dados);
-      setEtag(etagDe(r.dados, r.etag));
+      setEtag(etagDe(r.dados));
       setBase(doEncontro);
       setF(retomarRascunho<EstadoDoFormulario>(pathname) ?? doEncontro);
       setTentou(false);
@@ -290,7 +290,7 @@ export default function FormularioDoEncontro() {
         return { ok: false, mensagem: mensagemDaFalha(r.falha, 'salvar a mudança') + parcial };
       }
       slug = r.dados.slug;
-      versaoAtual = etagDe(r.dados, r.etag);
+      versaoAtual = etagDe(r.dados);
     }
     sair('Alterações salvas. O app já mostra os dados novos.');
     return { ok: true };

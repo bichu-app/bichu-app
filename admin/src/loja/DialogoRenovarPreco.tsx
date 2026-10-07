@@ -46,11 +46,12 @@ export function DialogoRenovarPreco({
     setFalha(undefined);
     setSalvando(true);
     try {
-      const { data, error, response } = await api.PATCH('/admin/store/items/{itemSlug}', {
+      const { data, error } = await api.PATCH('/admin/store/items/{itemSlug}', {
         params: { path: { itemSlug: item.slug }, header: { 'If-Match': etag ?? versaoComoEtag(item.version) } },
         body: { price: { amount, currency: 'BRL', checked_at: hojeCivil() } },
       });
-      if (data) aoRenovar(data, response.headers.get('ETag') ?? undefined);
+      // O If-Match seguinte sai do `version`, e nao do ETag que a borda sufixa.
+      if (data) aoRenovar(data, versaoComoEtag(data.version));
       else if (tipoDoProblema(error) === 'precondition-failed') aoConflito();
       else setFalha('Não conseguimos renovar a consulta. Tente de novo.');
     } catch {

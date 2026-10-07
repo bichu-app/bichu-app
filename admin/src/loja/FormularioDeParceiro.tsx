@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import type { Esquemas } from '../api/cliente.ts';
-import { errosDoProblema, tipoDoProblema } from '../api/problema.ts';
+import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
 import { Banner, CampoDeTexto, ResumoDeErros } from '../componentes/basicos.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
@@ -78,7 +78,8 @@ export default function FormularioDeParceiro() {
           return;
         }
         setParceiro(data);
-        setEtag(response.headers.get('ETag') ?? `"${data.version}"`);
+        // Do `version`, e nao do ETag: a borda o sufixa ("3-zstd") e o If-Match daria 412.
+        setEtag(versaoComoEtag(data.version));
         setBase(valoresDo(data));
         setValores(retomarRascunho<Valores>(pathname) ?? valoresDo(data));
         setCarga({ chave, fase: 'pronto' });

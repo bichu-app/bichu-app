@@ -117,8 +117,10 @@ describe('defeito 4: retirar com o formulario alterado pede confirmacao', () => 
   });
 });
 
-describe('defeito 5: renovar no formulario usa o ETag inteiro', () => {
-  it('If-Match leva o ETag como veio, sem derivar numero', async () => {
+// Revisto em 07/10: a borda sufixa o ETag ("4-zstd"), então o If-Match sai da
+// versão do recurso, nunca do cabeçalho.
+describe('defeito 5: renovar no formulario manda a versão do recurso', () => {
+  it('If-Match sai do version, não do ETag que a borda devolve', async () => {
     const vencido = item({ price_status: 'vencido', price: { amount: 7490, currency: 'BRL', checked_at: '2026-08-12', valid_until: '2026-09-11' } });
     const { servidor } = montar('/loja/racao-adulto-15kg', {
       'GET /admin/store/items/{itemSlug}': json(200, vencido, { ETag: 'W/"v-4-abc"' }),
@@ -128,7 +130,7 @@ describe('defeito 5: renovar no formulario usa o ETag inteiro', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Renovar consulta' }));
     fireEvent.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Renovar' }));
     await waitFor(() => expect(servidor.requisicoes.some((r) => r.metodo === 'PATCH')).toBe(true));
-    expect(servidor.requisicoes.find((r) => r.metodo === 'PATCH')?.cabecalhos.get('If-Match')).toBe('W/"v-4-abc"');
+    expect(servidor.requisicoes.find((r) => r.metodo === 'PATCH')?.cabecalhos.get('If-Match')).toBe(`"${String(vencido.version)}"`);
   });
 });
 
