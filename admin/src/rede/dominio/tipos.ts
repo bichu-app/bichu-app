@@ -28,8 +28,6 @@ export type ImagemInput = S['CatalogImageInput'];
 export type Pedido = S['AdminJoinRequest'];
 export type PaginaDePedidos = S['AdminJoinRequestPage'];
 export type EstadoDoPedido = S['AdminJoinRequestStatus'];
-export type EscopoDeReautenticacao = S['AdminReauthScope'];
-export type ConcessaoDeReautenticacao = S['AdminReauthGrant'];
 export type IntencaoDeEnvio = S['UploadIntent'];
 export type Problema = S['Problem'];
 

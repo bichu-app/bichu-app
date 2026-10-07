@@ -228,42 +228,24 @@ describe('casos que estavam sem teste', () => {
     expect(screen.getByRole('button', { name: 'sem grãos (inativa)' })).toBeDisabled();
   });
 
-  it('429 na reautenticacao: muitas tentativas e o botao fica inativo', async () => {
-    montar('/loja', { 'POST /admin/auth/reauth': problema(429, 'rate-limited', {}, { 'Retry-After': '900' }) });
-    fireEvent.click(await screen.findByRole('button', { name: 'Mais ações para Ração seca para cães adultos 15 kg' }));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Retirar' }));
-    const dialogo = screen.getByRole('alertdialog');
-    fireEvent.change(within(dialogo).getByLabelText('Sua senha'), { target: { value: 'uma frase longa de verdade' } });
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Retirar' }));
-    expect(await within(dialogo).findByText('Muitas tentativas. Tente de novo em 15 minutos.')).toBeInTheDocument();
-    expect(within(dialogo).getByRole('button', { name: 'Retirar' })).toBeDisabled();
-  });
-
   it('busca com 1 caractere nao vai ao servidor (o minimo do contrato e 2)', async () => {
     const { servidor } = montar('/loja?q=r');
     await screen.findByText('1 produto');
     expect(servidor.requisicoes.find((r) => r.caminho === '/admin/store/items')?.busca.has('q')).toBe(false);
   });
 
-  it('retirar recusado: 403 e janela de senha invalida mantem o dialogo aberto com o motivo', async () => {
-    let resposta: Resposta = problema(403, 'forbidden');
-    montar('/loja', {
-      'POST /admin/auth/reauth': json(200, { reauth_token: 'r', expires_in: 300, scope: 'store_item_retirement', tokens: [{ scope: 'store_item_retirement', reauth_token: 'r' }], csrf_token: 'csrf-novo-0123456789abcdef0123456789abcd' }),
-      'DELETE /admin/store/items/{itemSlug}/publication': () => resposta,
-    });
+  it('retirar recusado com 403 mantem o dialogo aberto com o motivo, sem pedir senha', async () => {
+    const { servidor } = montar('/loja', { 'DELETE /admin/store/items/{itemSlug}/publication': problema(403, 'forbidden') });
     fireEvent.click(await screen.findByRole('button', { name: 'Mais ações para Ração seca para cães adultos 15 kg' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Retirar' }));
     const dialogo = screen.getByRole('alertdialog');
-    fireEvent.change(within(dialogo).getByLabelText('Sua senha'), { target: { value: 'uma frase longa de verdade' } });
+    expect(within(dialogo).queryByLabelText('Sua senha')).toBeNull();
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Retirar' }));
     expect(await within(dialogo).findByText('Não conseguimos retirar o produto. Tente de novo.')).toBeInTheDocument();
-
-    resposta = problema(401, 'reauthentication-required');
-    fireEvent.change(within(dialogo).getByLabelText('Sua senha'), { target: { value: 'uma frase longa de verdade' } });
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Retirar' }));
-    expect(await within(dialogo).findByText('A confirmação com senha expirou. Digite a senha de novo e confirme.')).toBeInTheDocument();
     expect(screen.getByText('Publicado')).toBeInTheDocument();
+    expect(servidor.requisicoes.some((r) => r.caminho === '/admin/auth/reauth')).toBe(false);
   });
+
 });
 
 describe('imagem sem envio (upload_id nulo) na galeria da Loja', () => {

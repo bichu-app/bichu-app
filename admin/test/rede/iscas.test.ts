@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { Requisicao } from '../../src/rede/duble/servidor.ts';
-import { observacoesComContatoEnviadas, sensiveisSemReautenticacao } from './verificacoes.ts';
+import { observacoesComContatoEnviadas, pedidosDeSenha } from './verificacoes.ts';
 
 const req = (metodo: string, caminho: string, cabecalhos: Record<string, string> = {}, corpo?: unknown): Requisicao => ({
   metodo,
@@ -18,65 +18,20 @@ const req = (metodo: string, caminho: string, cabecalhos: Record<string, string>
 
 const REAUTH = (scope: string, password = 'uma senha') => req('POST', '/admin/auth/reauth', {}, { password, scope });
 
-describe('isca: cancelar e remover sem a senha de reautenticação', () => {
-  it('REPROVA cancelar sem X-Admin-Reauth-Token', () => {
-    const falhas = sensiveisSemReautenticacao([req('POST', '/admin/network/events/x/cancellation', { 'if-match': '"1"' }, { note: 'chuva' })]);
-    expect(falhas).toEqual(['POST /v1/admin/network/events/x/cancellation sem X-Admin-Reauth-Token']);
+describe('isca: nenhuma escrita pede senha (07/10)', () => {
+  it('REPROVA chamar a reautenticação', () => {
+    expect(pedidosDeSenha([REAUTH('network_event_cancellation')])).toHaveLength(1);
   });
 
-  it('REPROVA remover com um token que não veio de uma senha', () => {
-    const falhas = sensiveisSemReautenticacao([req('DELETE', '/admin/network/events/x', { 'x-admin-reauth-token': 'inventado' })]);
-    expect(falhas).toHaveLength(1);
+  it('REPROVA escrita com X-Admin-Reauth-Token', () => {
+    expect(pedidosDeSenha([req('DELETE', '/admin/network/events/x', { 'x-admin-reauth-token': 't', 'if-match': '"1"' })])).toHaveLength(1);
   });
 
-  it('REPROVA remover com a senha vazia na reautenticação', () => {
-    const falhas = sensiveisSemReautenticacao([
-      REAUTH('network_event_removal', ''),
-      req('DELETE', '/admin/network/events/x', { 'x-admin-reauth-token': 't' }),
-    ]);
-    expect(falhas).toHaveLength(1);
-  });
-
-  it('REPROVA reaproveitar a reautenticação de outro escopo, ou a mesma duas vezes', () => {
+  it('aprova cancelar e remover só com If-Match', () => {
     expect(
-      sensiveisSemReautenticacao([REAUTH('network_event_cancellation'), req('DELETE', '/admin/network/events/x', { 'x-admin-reauth-token': 't' })]),
-    ).toHaveLength(1);
-    expect(
-      sensiveisSemReautenticacao([
-        REAUTH('network_event_removal'),
-        req('DELETE', '/admin/network/events/x', { 'x-admin-reauth-token': 't' }),
-        req('DELETE', '/admin/network/events/y', { 'x-admin-reauth-token': 't' }),
-      ]),
-    ).toHaveLength(1);
-  });
-
-  it('REPROVA usar o token de uma reautenticação que outra, depois dela, já rotacionou', () => {
-    expect(
-      sensiveisSemReautenticacao([
-        REAUTH('network_event_relocation'),
-        REAUTH('network_event_access_change'),
-        req('POST', '/admin/network/events/x/relocation', { 'x-admin-reauth-token': 't' }),
-      ]),
-    ).toHaveLength(1);
-  });
-
-  it('aprova dois escopos numa reautenticação só (scopes)', () => {
-    expect(
-      sensiveisSemReautenticacao([
-        req('POST', '/admin/auth/reauth', {}, { password: 'uma senha', scopes: ['network_event_relocation', 'network_event_access_change'] }),
-        req('POST', '/admin/network/events/x/relocation', { 'x-admin-reauth-token': 't1' }),
-        req('POST', '/admin/network/events/x/access', { 'x-admin-reauth-token': 't2' }),
-      ]),
-    ).toEqual([]);
-  });
-
-  it('aprova o caminho certo', () => {
-    expect(
-      sensiveisSemReautenticacao([
-        REAUTH('network_event_cancellation'),
-        req('POST', '/admin/network/events/x/cancellation', { 'x-admin-reauth-token': 't' }),
-        REAUTH('network_event_removal'),
-        req('DELETE', '/admin/network/events/x', { 'x-admin-reauth-token': 't2' }),
+      pedidosDeSenha([
+        req('POST', '/admin/network/events/x/cancellation', { 'if-match': '"1"' }, { note: 'chuva' }),
+        req('DELETE', '/admin/network/events/x', { 'if-match': '"2"' }),
       ]),
     ).toEqual([]);
   });

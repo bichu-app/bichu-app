@@ -3,9 +3,10 @@
  *
  * Criar e publicar e uma operacao so (12.9). Na edicao, o que mudou decide o
  * caminho (`planoDeEdicao`): titulo, descricao, fotos, o que levar,
- * observacoes e detalhes vao sem senha; data, horario e lugar, e visibilidade
- * e custo, abrem o dialogo com motivo e senha, porque o contrato os separa em
- * operacoes com reautenticacao e aviso a todos os administradores.
+ * observacoes e detalhes vao direto; data, horario e lugar, e visibilidade
+ * e custo, abrem o dialogo com motivo, porque o contrato os separa em
+ * operacoes que exigem `reason` e avisam todos os administradores. Nenhuma
+ * pede senha desde 07/10 (ADR-0027 item 23).
  */
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
@@ -19,7 +20,7 @@ import { guardarRascunho, retomarRascunho } from '../../sessao/rascunho.ts';
 import { useSessao } from '../../sessao/ProvedorDeSessao.tsx';
 import { mensagemDaFalha } from '../api/mensagens.ts';
 import { precisaReler, type Falha } from '../api/redeApi.ts';
-import { DialogoComMotivoESenha, type ResultadoDaAcao } from '../componentes/DialogoComMotivoESenha.tsx';
+import { DialogoComMotivo, type ResultadoDaAcao } from '../componentes/DialogoComMotivo.tsx';
 import {
   corpoDaMudanca,
   cortarEmCodePoints,
@@ -42,7 +43,7 @@ import {
 } from '../dominio/formulario.ts';
 import { handleDoInstagram, LIMITE_DO_LINK_DO_CONVITE, MENSAGEM_DO_INSTAGRAM, MENSAGEM_DO_LINK, type CodigoDoLink } from '../dominio/links.ts';
 import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES, UNIDADES_OFERECIDAS, unidadeComoAparece } from '../dominio/rotulos.ts';
-import type { Encontro, EscopoDeReautenticacao } from '../dominio/tipos.ts';
+import type { Encontro } from '../dominio/tipos.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
 import estilos from '../rede.module.css';
 import { etagDe, useRede } from '../usarRede.ts';
@@ -118,7 +119,6 @@ function comparavel(f: EstadoDoFormulario): string {
 
 interface DialogoPendente {
   plano: PlanoDeEdicao;
-  escopos: EscopoDeReautenticacao[];
 }
 
 export default function FormularioDoEncontro() {
@@ -244,10 +244,8 @@ export default function FormularioDoEncontro() {
       return;
     }
     if (plano.mudanca || plano.acesso) {
-      const escopos: EscopoDeReautenticacao[] = [];
-      if (plano.mudanca) escopos.push('network_event_relocation');
-      if (plano.acesso) escopos.push('network_event_access_change');
-      setDialogo({ plano, escopos });
+      // Lugar, data e acesso pedem motivo (vai no e-mail aos administradores), e nao senha (07/10).
+      setDialogo({ plano });
       return;
     }
     setSalvando(true);
@@ -257,8 +255,8 @@ export default function FormularioDoEncontro() {
     else tratarFalha(r.falha, 'salvar as alterações');
   }
 
-  /** Patch sem senha primeiro; depois mudanca e acesso, cada um com o seu token, cada um com o ETag da resposta anterior. */
-  async function executarComSenha(plano: PlanoDeEdicao, tokens: Partial<Record<EscopoDeReautenticacao, string>>, motivo: string): Promise<ResultadoDaAcao> {
+  /** Patch primeiro; depois mudanca e acesso, cada um com a versao da resposta anterior. */
+  async function executarComMotivo(plano: PlanoDeEdicao, motivo: string): Promise<ResultadoDaAcao> {
     if (!encontro || !etag) return { ok: false, mensagem: 'Recarregue a página e tente de novo.' };
     let slug = encontro.slug;
     let versaoAtual = etag;
@@ -269,13 +267,11 @@ export default function FormularioDoEncontro() {
     }
     if (plano.mudanca) {
       const mudanca = plano.mudanca;
-      const token = tokens.network_event_relocation ?? '';
-      passos.push(() => rede.mover(token, slug, versaoAtual, { ...mudanca, reason: motivo }));
+      passos.push(() => rede.mover(slug, versaoAtual, { ...mudanca, reason: motivo }));
     }
     if (plano.acesso) {
       const acesso = plano.acesso;
-      const token = tokens.network_event_access_change ?? '';
-      passos.push(() => rede.mudarAcesso(token, slug, versaoAtual, { ...acesso, reason: motivo }));
+      passos.push(() => rede.mudarAcesso(slug, versaoAtual, { ...acesso, reason: motivo }));
     }
     for (const [i, passo] of passos.entries()) {
       const r = await passo();
@@ -283,7 +279,7 @@ export default function FormularioDoEncontro() {
         const parcial = i > 0 ? ' Uma parte das alterações já foi salva; a página foi atualizada.' : '';
         if (i > 0 || precisaReler(r.falha)) setVersao((n) => n + 1);
         // Recusa de campo (endereco com contato, por exemplo): o mesmo tratamento do
-        // salvar sem senha. O campo fica marcado atras do dialogo, e o dialogo diz o
+        // salvar direto. O campo fica marcado atras do dialogo, e o dialogo diz o
         // texto do campo, e nao o generico (que e o das observacoes).
         const noCampo = errosDoServidor(r.falha);
         if (noCampo.length) {
@@ -561,15 +557,14 @@ export default function FormularioDoEncontro() {
 
       <SairSemSalvar sujo={sujo && !salvando} liberado={liberado} />
       {dialogo && encontro && (
-        <DialogoComMotivoESenha
+        <DialogoComMotivo
           titulo={tituloDaMudanca(dialogo.plano)}
           corpo={corpoDaMudanca(encontro, f, dialogo.plano)}
           rotuloDoMotivo="Motivo"
           ajudaDoMotivo="Vai no e-mail que avisa os administradores. Não aparece no app."
           rotuloDaAcao="Salvar a mudança"
           perigo={false}
-          escopos={dialogo.escopos}
-          executar={(tokens, motivo) => executarComSenha(dialogo.plano, tokens, motivo)}
+          executar={(motivo) => executarComMotivo(dialogo.plano, motivo)}
           aoFechar={() => setDialogo(undefined)}
         />
       )}

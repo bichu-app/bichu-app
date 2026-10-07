@@ -1,24 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { criarClienteDaApi, type ClienteDaApi, type Esquemas } from '../api/cliente.ts';
-import { esperaPorExtenso, segundosDeEspera, tipoDoProblema } from '../api/problema.ts';
+import { tipoDoProblema } from '../api/problema.ts';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { urlDeEntrar, type MotivoDeEntrar } from './entrar-url.ts';
 import { lerPrazos, prazosDaResposta, renovarPorUso, type Prazos } from './prazos.ts';
 import { criarGuardaEmMemoria, saidaDoPainel, sessaoPorCookie, type GuardaDoTokenAntiCsrf } from './sessao.ts';
-
-type EscopoDeReautenticacao = Esquemas['AdminReauthScope'];
-
-export type ResultadoDaReautenticacao =
-  | { ok: true; token: string }
-  | { ok: false; motivo: 'incorreta' }
-  | { ok: false; motivo: 'tentativas'; espera: string; segundos: number }
-  | { ok: false; motivo: 'falha' };
-
-/** Uma senha, um ou dois escopos (`scopes`): um token por escopo, todos da mesma sessao rotacionada. */
-export type ResultadoDaReautenticacaoDeEscopos =
-  | { ok: true; tokens: Partial<Record<EscopoDeReautenticacao, string>> }
-  | Exclude<ResultadoDaReautenticacao, { ok: true }>;
 
 export interface ContextoDaSessao {
   api: ClienteDaApi;
@@ -27,14 +14,6 @@ export interface ContextoDaSessao {
   avisoDoTeto: boolean;
   sair: () => Promise<void>;
   sairDeTodas: () => Promise<void>;
-  /** D40: confere a senha e devolve o token de uso unico do escopo. A sessao rotaciona. */
-  reautenticar: (senha: string, escopo: EscopoDeReautenticacao) => Promise<ResultadoDaReautenticacao>;
-  /**
-   * D40 com `scopes`: UMA reautenticacao para as duas operacoes sensiveis gravadas
-   * juntas (lugar e acesso do encontro). Duas reautenticacoes seguidas nao servem:
-   * cada uma rotaciona a sessao, e o token da primeira fica preso a sessao revogada.
-   */
-  reautenticarEscopos: (senha: string, escopos: EscopoDeReautenticacao[]) => Promise<ResultadoDaReautenticacaoDeEscopos>;
   /**
    * Registra quem guarda o formulario quando a sessao cai (UX 29.2). Devolve a
    * funcao que tira o registro.
@@ -205,36 +184,6 @@ export function ProvedorDeSessao({
     else throw new Error(`logout-all respondeu ${response.status}`);
   }, [conexao, derrubar]);
 
-  const reautenticarEscopos = useCallback(
-    async (senha: string, escopos: EscopoDeReautenticacao[]): Promise<ResultadoDaReautenticacaoDeEscopos> => {
-      if (!conexao || escopos.length < 1 || escopos.length > 2) return { ok: false, motivo: 'falha' };
-      const { data, error, response } = await conexao.api.POST('/admin/auth/reauth', {
-        // Um escopo vai em `scope`; dois, em `scopes` (oneOf do contrato).
-        body: escopos.length === 1 && escopos[0] ? { password: senha, scope: escopos[0] } : { password: senha, scopes: escopos },
-      });
-      if (data) {
-        conexao.guarda.trocar(data.csrf_token);
-        return { ok: true, tokens: Object.fromEntries(data.tokens.map((t) => [t.scope, t.reauth_token])) };
-      }
-      if (response.status === 429) {
-        const retry = response.headers.get('Retry-After');
-        return { ok: false, motivo: 'tentativas', espera: esperaPorExtenso(retry), segundos: segundosDeEspera(retry) };
-      }
-      if (tipoDoProblema(error) === 'invalid-credentials') return { ok: false, motivo: 'incorreta' };
-      return { ok: false, motivo: 'falha' };
-    },
-    [conexao],
-  );
-
-  const reautenticar = useCallback(
-    async (senha: string, escopo: EscopoDeReautenticacao): Promise<ResultadoDaReautenticacao> => {
-      const r = await reautenticarEscopos(senha, [escopo]);
-      if (!r.ok) return r;
-      const token = r.tokens[escopo];
-      return token ? { ok: true, token } : { ok: false, motivo: 'falha' };
-    },
-    [reautenticarEscopos],
-  );
 
   const registrarRascunho = useCallback(
     (guardar: () => void) => {
@@ -249,8 +198,8 @@ export function ProvedorDeSessao({
   const avisoDoTeto = leitura?.avisarTeto ?? false;
   const api = conexao?.api;
   const valor = useMemo<ContextoDaSessao | undefined>(
-    () => (api && nome !== undefined ? { api, nome, avisoDoTeto, sair, sairDeTodas, reautenticar, reautenticarEscopos, registrarRascunho } : undefined),
-    [api, nome, avisoDoTeto, sair, sairDeTodas, reautenticar, reautenticarEscopos, registrarRascunho],
+    () => (api && nome !== undefined ? { api, nome, avisoDoTeto, sair, sairDeTodas, registrarRascunho } : undefined),
+    [api, nome, avisoDoTeto, sair, sairDeTodas, registrarRascunho],
   );
 
   if (!api || nome === undefined) return <p role="status">Carregando…</p>;

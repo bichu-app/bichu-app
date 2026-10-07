@@ -7,37 +7,17 @@
 import { achadosNasObservacoes } from '../../src/rede/dominio/observacoes.ts';
 import type { Requisicao } from '../../src/rede/duble/servidor.ts';
 
-const ESCOPO_DA_OPERACAO: Array<[RegExp, string, string]> = [
-  [/\/admin\/network\/events\/[^/]+$/, 'DELETE', 'network_event_removal'],
-  [/\/admin\/network\/events\/[^/]+\/cancellation$/, 'POST', 'network_event_cancellation'],
-  [/\/admin\/network\/events\/[^/]+\/relocation$/, 'POST', 'network_event_relocation'],
-  [/\/admin\/network\/events\/[^/]+\/access$/, 'POST', 'network_event_access_change'],
-];
-
 /**
- * Operacao sensivel sem senha: nao levou `X-Admin-Reauth-Token`, ou nao foi
- * precedida, desde a operacao sensivel anterior, de uma reautenticacao com
- * senha nao vazia no escopo dela.
+ * Pedido de senha que voltou (decisao do cliente de 07/10, ADR-0027 item 23):
+ * qualquer chamada a `/admin/auth/reauth` e qualquer escrita que leve
+ * `X-Admin-Reauth-Token` reprovam.
  */
-export function sensiveisSemReautenticacao(registro: readonly Requisicao[]): string[] {
-  const falhas: string[] = [];
-  let escoposDisponiveis: string[] = [];
-  for (const r of registro) {
-    if (r.metodo === 'POST' && r.caminho.endsWith('/admin/auth/reauth')) {
-      const corpo = r.corpo as { password?: string; scope?: string; scopes?: string[] } | undefined;
-      // Cada reautenticacao rotaciona a sessao: o que a anterior liberou deixa de valer.
-      escoposDisponiveis = [];
-      if (corpo?.password) escoposDisponiveis.push(...(corpo.scopes ?? (corpo.scope ? [corpo.scope] : [])));
-      continue;
-    }
-    const regra = ESCOPO_DA_OPERACAO.find(([re, metodo]) => r.metodo === metodo && re.test(r.caminho));
-    if (!regra) continue;
-    const [, , escopo] = regra;
-    if (!r.cabecalhos['x-admin-reauth-token']) falhas.push(`${r.metodo} ${r.caminho} sem X-Admin-Reauth-Token`);
-    else if (!escoposDisponiveis.includes(escopo)) falhas.push(`${r.metodo} ${r.caminho} sem reautenticacao com senha no escopo ${escopo}`);
-    escoposDisponiveis = escoposDisponiveis.filter((e) => e !== escopo);
-  }
-  return falhas;
+export function pedidosDeSenha(registro: readonly Requisicao[]): string[] {
+  return registro.flatMap((r) => {
+    if (r.caminho.endsWith('/admin/auth/reauth')) return [`${r.metodo} ${r.caminho}: reautenticacao`];
+    if (r.cabecalhos['x-admin-reauth-token']) return [`${r.metodo} ${r.caminho} com X-Admin-Reauth-Token`];
+    return [];
+  });
 }
 
 /** Criacao ou edicao que levou observacao com telefone (ou outro contato) ao servidor. */

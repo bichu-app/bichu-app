@@ -44,9 +44,6 @@ export function mensagemDaFalha(falha: Falha, acao: string): string {
       return 'Este encontro não existe mais.';
     case 'proibido':
       return 'Você não tem permissão para isto.';
-    case 'precisa-da-senha':
-    case 'senha-incorreta':
-      return 'Confirme sua senha de novo.';
     case 'sem-conexao':
       return 'Não conseguimos falar com o servidor. Confira a internet e tente de novo.';
     case 'encontro-fechado':

@@ -10,10 +10,10 @@ import { createMemoryRouter, Outlet, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { encontroDeExemplo } from '../../src/rede/duble/massa.ts';
-import { criarDuble, SENHA_DO_DUBLE, type Duble } from '../../src/rede/duble/servidor.ts';
+import { criarDuble, type Duble } from '../../src/rede/duble/servidor.ts';
 import { rotasDaRede } from '../../src/rede/rotas.tsx';
 import { ProvedorDeSessao } from '../../src/sessao/ProvedorDeSessao.tsx';
-import { observacoesComContatoEnviadas, sensiveisSemReautenticacao } from './verificacoes.ts';
+import { observacoesComContatoEnviadas, pedidosDeSenha } from './verificacoes.ts';
 
 function montar(rota: string, duble: Duble = criarDuble()) {
   const router = createMemoryRouter(
@@ -97,8 +97,8 @@ describe('Rede: lista', () => {
   });
 });
 
-describe('Rede: cancelar e remover pedem a senha (isca)', () => {
-  it('cancelar exige motivo e senha, recusa a senha errada e só então cancela', async () => {
+describe('Rede: cancelar e remover confirmam, sem senha (07/10)', () => {
+  it('cancelar exige motivo, confirma e cancela sem pedir senha', async () => {
     const { duble, usuario } = montar('/rede');
     await screen.findByText('4 encontros');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
@@ -111,24 +111,15 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
     expect(within(dialogo).getByText('Escreva o motivo.')).toBeInTheDocument();
     expect(escritas(duble, 'POST', /cancellation$/)).toHaveLength(0);
 
+    expect(within(dialogo).queryByLabelText('Sua senha')).toBeNull();
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'A praça vai estar interditada para obra.');
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
-    expect(within(dialogo).getByText('Digite sua senha para confirmar.', { selector: '.err' })).toBeInTheDocument();
-    expect(escritas(duble, 'POST', /cancellation$/)).toHaveLength(0);
-
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), 'errada');
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
-    expect(await within(dialogo).findByText('Senha incorreta.')).toBeInTheDocument();
-    expect(escritas(duble, 'POST', /cancellation$/)).toHaveLength(0);
-
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
     await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
     expect(await screen.findByText('Encontro cancelado. O app mostra o aviso de cancelado até o horário de fim, às 11:00 de 11/10/2026.')).toBeInTheDocument();
     expect(screen.queryByRole('alertdialog')).toBeNull();
     const [cancelamento] = escritas(duble, 'POST', /cancellation$/);
     expect(cancelamento?.corpo).toEqual({ note: 'A praça vai estar interditada para obra.' });
     expect(cancelamento?.cabecalhos['if-match']).toBe('"1"');
-    expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
+    expect(pedidosDeSenha(duble.registro)).toEqual([]);
     expect(screen.getAllByText('Cancelado', { selector: '.selo' })).toHaveLength(1);
   });
 
@@ -143,7 +134,6 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
     ).toBeInTheDocument();
     expect(within(dialogo).queryByText(/horário previsto de fim/)).toBeNull();
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Chuva forte.');
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
     await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
     expect(await screen.findByText('Encontro cancelado. O app mostra o aviso de cancelado até o fim do dia 28/09/2026.')).toBeInTheDocument();
   });
@@ -155,7 +145,6 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
     await usuario.click(screen.getByRole('menuitem', { name: 'Cancelar encontro' }));
     const dialogo = screen.getByRole('alertdialog');
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Obra na praça.');
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
     await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar encontro' }));
     await screen.findByText(/^Encontro cancelado\./);
     const protegidas = duble.registro.filter(
@@ -171,7 +160,8 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
     await usuario.click(screen.getByRole('menuitem', { name: 'Remover' }));
     const dialogo = screen.getByRole('alertdialog', { name: 'Remover “Encontro de cães no parque”?' });
-    expect(within(dialogo).getByLabelText('Sua senha')).toHaveFocus();
+    expect(within(dialogo).getByRole('button', { name: 'Cancelar' })).toHaveFocus();
+    expect(within(dialogo).queryByLabelText('Sua senha')).toBeNull();
     for (let i = 0; i < 8; i += 1) {
       await usuario.tab();
       expect(dialogo.contains(document.activeElement)).toBe(true);
@@ -181,20 +171,22 @@ describe('Rede: cancelar e remover pedem a senha (isca)', () => {
     expect(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' })).toHaveFocus();
   });
 
-  it('remover sem senha não envia nada; com senha, remove e a linha diz Removido', async () => {
+  it('remover confirma sem senha, e Cancelar não envia nada', async () => {
     const { duble, usuario } = montar('/rede');
     await screen.findByText('4 encontros');
     await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
     await usuario.click(screen.getByRole('menuitem', { name: 'Remover' }));
     const dialogo = screen.getByRole('alertdialog');
     expect(within(dialogo).getByText('O encontro sai do app, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar encontro.')).toBeInTheDocument();
-    await usuario.click(within(dialogo).getByRole('button', { name: 'Remover' }));
-    expect(within(dialogo).getByText('Digite sua senha para confirmar.', { selector: '.err' })).toBeInTheDocument();
+    expect(within(dialogo).queryByLabelText('Sua senha')).toBeNull();
+    await usuario.click(within(dialogo).getByRole('button', { name: 'Cancelar' }));
     expect(escritas(duble, 'DELETE', /events\/[^/]+$/)).toHaveLength(0);
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), `${SENHA_DO_DUBLE}{Enter}`);
+    await usuario.click(screen.getByRole('button', { name: 'Mais ações para Encontro de cães no parque' }));
+    await usuario.click(screen.getByRole('menuitem', { name: 'Remover' }));
+    await usuario.click(within(screen.getByRole('alertdialog')).getByRole('button', { name: 'Remover' }));
     expect(await screen.findByText('Encontro removido. Ele saiu da Rede do app.')).toBeInTheDocument();
     expect(escritas(duble, 'DELETE', /events\/[^/]+$/)).toHaveLength(1);
-    expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
+    expect(pedidosDeSenha(duble.registro)).toEqual([]);
   });
 });
 
@@ -408,7 +400,7 @@ describe('Rede: edição', () => {
     expect(duble.registro.some((r) => r.caminho.endsWith('/auth/reauth'))).toBe(false);
   });
 
-  it('mudar o local pede motivo e senha e vai por relocation', async () => {
+  it('mudar o local pede motivo, sem senha, e vai por relocation', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
     const local = await screen.findByLabelText('Nome do lugar *');
     await usuario.clear(local);
@@ -419,15 +411,14 @@ describe('Rede: edição', () => {
     expect(within(dialogo).getByText('Todos os administradores recebem um e-mail com o antes e o depois.')).toBeInTheDocument();
     expect(escritas(duble, 'POST', /relocation$/)).toHaveLength(0);
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque fechou para manutenção.');
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
     await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
     expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
     const [mudanca] = escritas(duble, 'POST', /relocation$/);
     expect(mudanca?.corpo).toMatchObject({ reason: 'O parque fechou para manutenção.', place: { place_name: 'Praça General Polidoro' } });
-    expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
+    expect(pedidosDeSenha(duble.registro)).toEqual([]);
   });
 
-  it('bug 1: local e acesso juntos pedem a senha uma vez e gravam os dois', async () => {
+  it('local e acesso juntos: um motivo, sem senha, e gravam os dois', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
     const local = await screen.findByLabelText('Nome do lugar *');
     await usuario.clear(local);
@@ -437,18 +428,14 @@ describe('Rede: edição', () => {
     await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local e de acesso?' });
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque passou a cobrar.');
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
     await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
     expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
-    const reauths = duble.registro.filter((r) => r.caminho.endsWith('/auth/reauth'));
-    expect(reauths).toHaveLength(1);
-    expect(reauths[0]?.corpo).toMatchObject({ scopes: ['network_event_relocation', 'network_event_access_change'] });
     expect(escritas(duble, 'POST', /relocation$/)).toHaveLength(1);
     expect(escritas(duble, 'POST', /access$/)).toHaveLength(1);
-    expect(sensiveisSemReautenticacao(duble.registro)).toEqual([]);
+    expect(pedidosDeSenha(duble.registro)).toEqual([]);
   });
 
-  it('editar lugar e endereço: uma senha, um relocation com os dois, e nenhum PATCH com endereço', async () => {
+  it('editar lugar e endereço: um relocation com os dois, e nenhum PATCH com endereço', async () => {
     const { duble, usuario } = montar('/rede/encontro-de-caes-no-parque');
     const local = await screen.findByLabelText('Nome do lugar *');
     await usuario.clear(local);
@@ -457,10 +444,9 @@ describe('Rede: edição', () => {
     await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque fechou.');
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
     await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
     expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();
-    expect(duble.registro.filter((r) => r.caminho.endsWith('/auth/reauth'))).toHaveLength(1);
+    expect(pedidosDeSenha(duble.registro)).toEqual([]);
     const [mudanca] = escritas(duble, 'POST', /relocation$/);
     expect(mudanca?.corpo).toMatchObject({ place: { place_name: 'Praça General Polidoro' }, street_address: 'Rua Muniz de Sousa, 1119', reason: 'O parque fechou.' });
     expect(escritas(duble, 'PATCH', /events\/[^/]+$/).filter((r) => 'street_address' in ((r.corpo as object) ?? {}))).toEqual([]);
@@ -476,7 +462,6 @@ describe('Rede: edição', () => {
     await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
     await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'O parque fechou.');
-    await usuario.type(within(dialogo).getByLabelText('Sua senha'), SENHA_DO_DUBLE);
     await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
     const texto = 'Tire do endereço telefone, e-mail, link, perfil ou chave Pix. Rua, número e CEP podem ficar.';
     expect(await within(dialogo).findByText(texto)).toBeInTheDocument();
@@ -485,7 +470,7 @@ describe('Rede: edição', () => {
     expect(screen.getByLabelText('Endereço')).toHaveAccessibleDescription(new RegExp(`^${texto.replace(/[.]/g, '\\.')}`));
   });
 
-  it('ISCA: o diálogo da mudança de lugar mostra o endereço que continua, antes da senha', async () => {
+  it('ISCA: o diálogo da mudança de lugar mostra o endereço que continua, antes do motivo', async () => {
     const duble = criarDuble({ encontros: [encontroDeExemplo({ street_address: 'Rua Muniz de Sousa, 1119' })], pedidos: [] });
     const { usuario } = montar('/rede/encontro-de-caes-no-parque', duble);
     const local = await screen.findByLabelText('Nome do lugar *');
@@ -494,8 +479,8 @@ describe('Rede: edição', () => {
     await usuario.click(screen.getByRole('button', { name: 'Salvar alterações' }));
     const dialogo = await screen.findByRole('alertdialog', { name: 'Salvar a mudança de local?' });
     const aviso = within(dialogo).getByText('O endereço continua: Rua Muniz de Sousa, 1119. Se mudou, corrija antes de confirmar.');
-    const senha = within(dialogo).getByLabelText('Sua senha');
-    expect(aviso.compareDocumentPosition(senha) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const motivo = within(dialogo).getByLabelText('Motivo *');
+    expect(aviso.compareDocumentPosition(motivo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it('observação com telefone na edição também não sai (isca)', async () => {
@@ -577,8 +562,7 @@ describe('ISCA: cada campo editável do encontro sai para o servidor', () => {
     const dialogo = screen.queryByRole('alertdialog');
     if (dialogo) {
       await usuario.type(within(dialogo).getByLabelText('Motivo *'), 'Ajuste.');
-      const senha = within(dialogo).queryByLabelText('Sua senha');
-      if (senha) await usuario.type(senha, SENHA_DO_DUBLE);
+      expect(within(dialogo).queryByLabelText('Sua senha')).toBeNull();
       await usuario.click(within(dialogo).getByRole('button', { name: 'Salvar a mudança' }));
     }
     expect(await screen.findByText('Alterações salvas. O app já mostra os dados novos.')).toBeInTheDocument();

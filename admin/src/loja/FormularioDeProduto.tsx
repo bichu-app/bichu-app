@@ -5,7 +5,7 @@ import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema } from '../api/problema.ts';
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
-import { DialogoComSenha, type ResultadoDaAcaoComSenha } from '../componentes/DialogoComSenha.tsx';
+import { DialogoDeConfirmacao, type ResultadoDaAcaoConfirmada } from '../componentes/DialogoDeConfirmacao.tsx';
 import { enviarImagem } from '../componentes/envio-de-imagem.ts';
 import { Galeria, type ImagemDaGaleria } from '../componentes/Galeria.tsx';
 import { Icone } from '../componentes/Icone.tsx';
@@ -310,19 +310,16 @@ export default function FormularioDeProduto() {
     setFalha({ texto: 'Não conseguimos salvar o produto. Confira os campos e tente de novo.' });
   }
 
-  async function executarRetirada(token: string): Promise<ResultadoDaAcaoComSenha> {
+  async function executarRetirada(): Promise<ResultadoDaAcaoConfirmada> {
     if (!item || !etag) return { ok: false, mensagem: FALHA_DE_REDE };
     const { data, error } = await api.DELETE('/admin/store/items/{itemSlug}/publication', {
       params: { path: { itemSlug: item.slug }, header: { 'If-Match': etag } },
-      headers: { 'X-Admin-Reauth-Token': token },
     });
     if (data) {
       sair(AVISO.retirado);
       return { ok: true };
     }
     if (tipoDoProblema(error) === 'precondition-failed') return { ok: false, mensagem: CONFLITO };
-    if (tipoDoProblema(error) === 'reauthentication-required')
-      return { ok: false, mensagem: 'A confirmação com senha expirou. Digite a senha de novo e confirme.' };
     return { ok: false, mensagem: 'Não conseguimos retirar o produto. Tente de novo.' };
   }
 
@@ -657,11 +654,10 @@ export default function FormularioDeProduto() {
         </Dialogo>
       )}
       {retirar && item && (
-        <DialogoComSenha
+        <DialogoDeConfirmacao
           titulo={`Retirar “${item.title}”?`}
           corpo="O produto sai da Loja do app. Ele continua aqui como Retirado e pode ser publicado de novo."
           rotuloDaAcao="Retirar"
-          escopo="store_item_retirement"
           executar={executarRetirada}
           aoFechar={() => setRetirar(false)}
         />

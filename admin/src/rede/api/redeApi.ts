@@ -3,17 +3,14 @@
  * devolve um `Resultado`: a tela decide pelo `tipo` da falha (RFC 9457,
  * `Problem.type`), nunca pelo texto do servidor.
  *
- * As operacoes sensiveis (D40) recebem o `X-Admin-Reauth-Token` pronto. Quem
- * o obtem e a sessao (`reautenticar`, que tambem troca o token anti-CSRF
- * rotacionado, D38): a Rede nao guarda credencial nenhuma. O token e de uso
- * unico, entao cada operacao sensivel pede uma reautenticacao propria.
+ * Nenhuma escrita pede senha desde 07/10 (decisao do cliente, ADR-0027 item
+ * 23): basta a sessao com `X-CSRF-Token` e o `If-Match`.
  */
 import type { ClienteDaApi } from '../../api/cliente.ts';
 import type {
   Encontro,
   EncontroInput,
   EncontroPatch,
-  EscopoDeReautenticacao,
   EstadoDoPedido,
   FiltrosDaLista,
   Mudanca,
@@ -26,8 +23,6 @@ import type {
 
 export type Falha =
   | { tipo: 'validacao'; erros: NonNullable<Problema['errors']> }
-  | { tipo: 'senha-incorreta' }
-  | { tipo: 'precisa-da-senha' }
   | { tipo: 'sessao' }
   | { tipo: 'proibido' }
   | { tipo: 'nao-encontrado' }
@@ -52,8 +47,6 @@ export function falhaDaResposta(resposta: Response, corpo: unknown): Falha {
     case 400:
       return { tipo: 'validacao', erros: (corpo as Problema | undefined)?.errors ?? [] };
     case 401:
-      if (slug === 'invalid-credentials') return { tipo: 'senha-incorreta' };
-      if (slug === 'reauthentication-required') return { tipo: 'precisa-da-senha' };
       return { tipo: 'sessao' };
     case 403:
       return { tipo: 'proibido' };
@@ -101,17 +94,6 @@ export interface OpcoesDaApiDaRede {
   fetch?: typeof globalThis.fetch;
 }
 
-/** A mesma forma de `reautenticarEscopos` da sessao do painel: uma senha, um ou dois escopos. */
-export type ResultadoDaReautenticacao =
-  | { ok: true; tokens: Partial<Record<EscopoDeReautenticacao, string>> }
-  | { ok: false; motivo: 'incorreta' }
-  | { ok: false; motivo: 'tentativas'; espera: string; segundos: number }
-  | { ok: false; motivo: 'falha' };
-
-export type Reautenticar = (senha: string, escopos: EscopoDeReautenticacao[]) => Promise<ResultadoDaReautenticacao>;
-
-const reauth = (token: string) => ({ 'X-Admin-Reauth-Token': token });
-
 export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalThis) }: OpcoesDaApiDaRede) {
   const evento = (slug: string) => ({ path: { eventSlug: slug } });
 
@@ -133,38 +115,34 @@ export function criarApiDaRede({ cliente, fetch = globalThis.fetch.bind(globalTh
         }),
       ),
 
-    mover: (token: string, slug: string, etag: string, corpo: Mudanca) =>
+    mover: (slug: string, etag: string, corpo: Mudanca) =>
       executar(() =>
         cliente.POST('/admin/network/events/{eventSlug}/relocation', {
           params: { ...evento(slug), header: { 'If-Match': etag } },
-          headers: reauth(token),
           body: corpo,
         }),
       ),
 
-    mudarAcesso: (token: string, slug: string, etag: string, corpo: MudancaDeAcesso) =>
+    mudarAcesso: (slug: string, etag: string, corpo: MudancaDeAcesso) =>
       executar(() =>
         cliente.POST('/admin/network/events/{eventSlug}/access', {
           params: { ...evento(slug), header: { 'If-Match': etag } },
-          headers: reauth(token),
           body: corpo,
         }),
       ),
 
-    cancelar: (token: string, slug: string, etag: string, motivo: string) =>
+    cancelar: (slug: string, etag: string, motivo: string) =>
       executar(() =>
         cliente.POST('/admin/network/events/{eventSlug}/cancellation', {
           params: { ...evento(slug), header: { 'If-Match': etag } },
-          headers: reauth(token),
           body: { note: motivo },
         }),
       ),
 
-    remover: (token: string, slug: string, etag: string) =>
+    remover: (slug: string, etag: string) =>
       executar(() =>
         cliente.DELETE('/admin/network/events/{eventSlug}', {
           params: { ...evento(slug), header: { 'If-Match': etag } },
-          headers: reauth(token),
         }),
       ),
 
@@ -221,30 +199,6 @@ export function esperaPorExtenso(segundos: number | null): string {
   }
   const m = Math.max(1, Math.round(segundos / 60));
   return m === 1 ? '1 minuto' : `${m} minutos`;
-}
-
-/**
- * Reautenticacao direta pelo cliente, para o duble e para os testes. No
- * painel montado, a Rede usa a `reautenticar` da sessao, que tambem guarda o
- * token anti-CSRF novo.
- */
-export function reautenticarPeloCliente(cliente: ClienteDaApi): Reautenticar {
-  return async (senha, escopos) => {
-    try {
-      const { data, error, response } = await cliente.POST('/admin/auth/reauth', {
-        body: escopos.length === 1 && escopos[0] ? { password: senha, scope: escopos[0] } : { password: senha, scopes: escopos },
-      });
-      if (data) return { ok: true, tokens: Object.fromEntries(data.tokens.map((t) => [t.scope, t.reauth_token])) };
-      if (response.status === 429) {
-        const s = Number(response.headers.get('Retry-After')) || null;
-        return { ok: false, motivo: 'tentativas', espera: esperaPorExtenso(s), segundos: s ?? 0 };
-      }
-      if (slugDoProblema(error) === 'invalid-credentials') return { ok: false, motivo: 'incorreta' };
-      return { ok: false, motivo: 'falha' };
-    } catch {
-      return { ok: false, motivo: 'falha' };
-    }
-  };
 }
 
 /** 412 e 428 pedem o mesmo remedio: reler o recurso antes de tentar de novo. */

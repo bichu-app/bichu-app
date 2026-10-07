@@ -1,15 +1,14 @@
 import { useMemo } from 'react';
 
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { criarApiDaRede, type Reautenticar } from './api/redeApi.ts';
+import { criarApiDaRede } from './api/redeApi.ts';
 
-/** As chamadas da Rede sobre o cliente e a reautenticacao da sessao do painel. */
+/** As chamadas da Rede sobre o cliente da sessao do painel. */
 export function useRede() {
   const sessao = useSessao();
   const cliente = sessao.api;
   const rede = useMemo(() => criarApiDaRede({ cliente }), [cliente]);
-  const reautenticar = useMemo<Reautenticar>(() => (senha, escopos) => sessao.reautenticarEscopos(senha, escopos), [sessao]);
-  return { rede, reautenticar, cliente };
+  return { rede, cliente };
 }
 
 /** O `If-Match` de um recurso lido: o ETag da resposta, ou a versao no formato dele. */

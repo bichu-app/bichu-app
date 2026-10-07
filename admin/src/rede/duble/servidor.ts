@@ -1,10 +1,10 @@
 /**
- * Duble das rotas `/v1/admin/network/*`, `/v1/admin/auth/reauth` e
+ * Duble das rotas `/v1/admin/network/*` e
  * `/v1/admin/media/catalog-image-intents`, escrito contra os tipos gerados do
  * contrato enquanto o servidor de verdade nao existe
  * (`feat/backoffice-rede-admin`). Ele e deliberadamente exigente onde o
- * contrato e: `If-Match` obrigatorio (428) e conferido (412), reautenticacao
- * de uso unico e de um escopo (401 `reauthentication-required`), recusa de
+ * contrato e: `If-Match` obrigatorio (428) e conferido (412), sem
+ * reautenticacao desde 07/10 (ADR-0027 item 23), recusa de
  * observacao com contato (400 `contact_or_payment_detected`) e as transicoes
  * da fila (aprovado nao volta a recusado).
  *
@@ -14,11 +14,9 @@ import { handleDoInstagram, recusaDoLinkDoConvite } from '../dominio/links.ts';
 import { achadosNasObservacoes } from '../dominio/observacoes.ts';
 import type {
   Cancelamento,
-  ConcessaoDeReautenticacao,
   Encontro,
   EncontroInput,
   EncontroPatch,
-  EscopoDeReautenticacao,
   Mudanca,
   MudancaDeAcesso,
   PaginaDeEncontros,
@@ -31,7 +29,6 @@ import type { components } from '../../api/generated/api.ts';
 type AdminSession = components['schemas']['AdminSession'];
 import { encontrosDeExemplo, pedidosDeExemplo } from './massa.ts';
 
-export const SENHA_DO_DUBLE = 'senha-do-duble-de-teste';
 
 export interface Requisicao {
   metodo: string;
@@ -90,7 +87,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   const pedidos: Pedido[] =
     opcoes.pedidos ??
     [...encontros.values()].filter((e) => e.visibility === 'private').flatMap((e) => pedidosDeExemplo(e));
-  const tokens = new Map<string, EscopoDeReautenticacao>();
   const registro: Requisicao[] = [];
   let falharLista = !!opcoes.falharLista;
   let uploads = 100;
@@ -105,16 +101,8 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   }
   recalcularPendentes();
 
-  function exigirReauth(req: Requisicao, escopo: EscopoDeReautenticacao): Response | null {
-    const t = req.cabecalhos['x-admin-reauth-token'];
-    if (!t || tokens.get(t) !== escopo) {
-      return problema(401, 'reauthentication-required', 'Confirme sua senha');
-    }
-    tokens.delete(t); // uso unico
-    return null;
-  }
 
-  /** Como o servidor: faltar `If-Match` responde 428 antes de sessao e reautenticacao. */
+  /** Como o servidor: faltar `If-Match` responde 428. */
   function exigirIfMatch(req: Requisicao): Response | null {
     return req.cabecalhos['if-match'] ? null : problema(428, 'precondition-required', 'Falta a versao');
   }
@@ -196,27 +184,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       return new Response(null, { status: 204 });
     }
 
-    if (area === 'auth' && recurso === 'reauth' && req.metodo === 'POST') {
-      const corpo = req.corpo as { password?: string; scope?: EscopoDeReautenticacao; scopes?: EscopoDeReautenticacao[] };
-      if (corpo.password !== SENHA_DO_DUBLE) return problema(401, 'invalid-credentials', 'Senha incorreta');
-      if (!!corpo.scope === !!corpo.scopes) return problema(400, 'validation-failed', 'scope ou scopes, nunca os dois');
-      const escopos = corpo.scopes ?? (corpo.scope ? [corpo.scope] : []);
-      if (escopos.length < 1 || escopos.length > 2 || new Set(escopos).size !== escopos.length) {
-        return problema(400, 'validation-failed', 'De um a dois escopos distintos');
-      }
-      // Como o servidor: a reautenticacao rotaciona a sessao, e os tokens da anterior deixam de valer.
-      tokens.clear();
-      const emitidos = escopos.map((scope) => ({ scope, reauth_token: aleatorio(32) }));
-      emitidos.forEach((t) => tokens.set(t.reauth_token, t.scope));
-      const [primeiro] = emitidos as [{ scope: EscopoDeReautenticacao; reauth_token: string }];
-      return json(200, {
-        reauth_token: primeiro.reauth_token,
-        expires_in: 300,
-        scope: primeiro.scope,
-        tokens: emitidos,
-        csrf_token: aleatorio(40),
-      } satisfies ConcessaoDeReautenticacao);
-    }
 
     if (area === 'media' && recurso === 'catalog-image-intents' && req.metodo === 'POST') {
       uploads += 1;
@@ -331,8 +298,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       if (!sub && req.metodo === 'DELETE') {
         const semVersao = exigirIfMatch(req);
         if (semVersao) return semVersao;
-        const r = exigirReauth(req, 'network_event_removal');
-        if (r) return r;
         const v = exigirVersao(req, e);
         if (v) return v;
         e.publication_status = 'removed';
@@ -343,8 +308,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       if (sub === 'relocation' && req.metodo === 'POST') {
         const semVersao = exigirIfMatch(req);
         if (semVersao) return semVersao;
-        const r = exigirReauth(req, 'network_event_relocation');
-        if (r) return r;
         const v = exigirVersao(req, e);
         if (v) return v;
         if (e.publication_status !== 'published') return problema(400, 'validation-failed', 'Nao publicado', [{ field: 'slug', code: 'event_not_published' }]);
@@ -363,8 +326,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       if (sub === 'access' && req.metodo === 'POST') {
         const semVersao = exigirIfMatch(req);
         if (semVersao) return semVersao;
-        const r = exigirReauth(req, 'network_event_access_change');
-        if (r) return r;
         const v = exigirVersao(req, e);
         if (v) return v;
         const corpo = req.corpo as MudancaDeAcesso;
@@ -387,8 +348,6 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       if (sub === 'cancellation' && req.metodo === 'POST') {
         const semVersao = exigirIfMatch(req);
         if (semVersao) return semVersao;
-        const r = exigirReauth(req, 'network_event_cancellation');
-        if (r) return r;
         const v = exigirVersao(req, e);
         if (v) return v;
         const corpo = req.corpo as Cancelamento;

@@ -142,28 +142,23 @@ describe('3 · Loja: formulario', () => {
     expect(chips[5]).toBeEnabled();
   });
 
-  it('editar produto publicado: If-Match do ETag, Salvar alteracoes e Retirar com senha', async () => {
+  it('editar produto publicado: If-Match e Retirar com confirmacao, sem senha', async () => {
     const { servidor } = montar('/loja/racao-adulto-15kg', {
       'GET /admin/store/items/{itemSlug}': json(200, item(), { ETag: '"4"' }),
       'PATCH /admin/store/items/{itemSlug}': json(200, item({ version: 5 }), { ETag: '"5"' }),
-      'POST /admin/auth/reauth': json(200, { reauth_token: 'r-1', expires_in: 300, scope: 'store_item_retirement', tokens: [{ scope: 'store_item_retirement', reauth_token: 'r-1' }], csrf_token: 'csrf-2-0123456789abcdef0123456789abcdef' }),
       'DELETE /admin/store/items/{itemSlug}/publication': json(200, item({ publication_state: 'retired' })),
     });
     expect(await screen.findByLabelText('Preço (R$)')).toHaveValue('189,90');
     fireEvent.click(screen.getByRole('button', { name: 'Retirar' }));
     const dialogo = screen.getByRole('alertdialog', { name: 'Retirar “Ração seca para cães adultos 15 kg”?' });
-    // Botao sempre habilitado; senha vazia vira erro no campo (UX 29.6).
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Retirar' }));
-    expect(within(dialogo).getByLabelText('Sua senha')).toHaveAccessibleDescription('Digite sua senha para confirmar.');
-    fireEvent.change(within(dialogo).getByLabelText('Sua senha'), { target: { value: 'uma frase longa de verdade' } });
+    expect(within(dialogo).queryByLabelText('Sua senha')).toBeNull();
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Retirar' }));
     expect(await screen.findByText('Produto retirado. Ele saiu da Loja do app.')).toBeInTheDocument();
-    const reauth = servidor.requisicoes.find((r) => r.caminho === '/admin/auth/reauth');
-    expect(reauth?.corpo).toEqual({ password: 'uma frase longa de verdade', scope: 'store_item_retirement' });
+    expect(servidor.requisicoes.some((r) => r.caminho === '/admin/auth/reauth')).toBe(false);
     const retirada = servidor.requisicoes.find((r) => r.metodo === 'DELETE');
-    expect(retirada?.cabecalhos.get('X-Admin-Reauth-Token')).toBe('r-1');
+    expect(retirada?.cabecalhos.get('X-Admin-Reauth-Token')).toBeNull();
     expect(retirada?.cabecalhos.get('If-Match')).toBe('"4"');
-    expect(retirada?.cabecalhos.get('X-CSRF-Token')).toBe('csrf-2-0123456789abcdef0123456789abcdef');
+    expect(retirada?.cabecalhos.get('X-CSRF-Token')).toBe(SESSAO.csrf_token);
   });
 });
 

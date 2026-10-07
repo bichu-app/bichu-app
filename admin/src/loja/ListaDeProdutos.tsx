@@ -5,7 +5,7 @@ import type { Esquemas } from '../api/cliente.ts';
 import { tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
 import { BarraDeListagem, rotuloDeLimpar } from '../componentes/BarraDeListagem.tsx';
 import { Banner, EstadoVazio, LinhasCarregando, Selo } from '../componentes/basicos.tsx';
-import { DialogoComSenha, type ResultadoDaAcaoComSenha } from '../componentes/DialogoComSenha.tsx';
+import { DialogoDeConfirmacao, type ResultadoDaAcaoConfirmada } from '../componentes/DialogoDeConfirmacao.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { useAvisoDaNavegacao, useListaPaginada, useParametrosDaLista } from '../componentes/lista.ts';
 import { MenuDeAcoes, type ItemDoMenu } from '../componentes/MenuDeAcoes.tsx';
@@ -133,10 +133,9 @@ export default function ListaDeProdutos() {
     }
   }
 
-  async function executarRetirada(item: Item, token: string): Promise<ResultadoDaAcaoComSenha> {
+  async function executarRetirada(item: Item): Promise<ResultadoDaAcaoConfirmada> {
     const { data, error } = await api.DELETE('/admin/store/items/{itemSlug}/publication', {
       params: { path: { itemSlug: item.slug }, header: { 'If-Match': versaoComoEtag(item.version) } },
-      headers: { 'X-Admin-Reauth-Token': token },
     });
     if (data) {
       substituir((i) => i.slug === item.slug, data);
@@ -147,8 +146,6 @@ export default function ListaDeProdutos() {
       recarregar();
       return { ok: false, mensagem: 'Alguém alterou este produto antes de você. A lista foi atualizada; confira e tente de novo.' };
     }
-    if (tipoDoProblema(error) === 'reauthentication-required')
-      return { ok: false, mensagem: 'A confirmação com senha expirou. Digite a senha de novo e confirme.' };
     return { ok: false, mensagem: 'Não conseguimos retirar o produto. Tente de novo.' };
   }
 
@@ -334,12 +331,11 @@ export default function ListaDeProdutos() {
         />
       )}
       {retirar && (
-        <DialogoComSenha
+        <DialogoDeConfirmacao
           titulo={`Retirar “${retirar.title}”?`}
           corpo="O produto sai da Loja do app. Ele continua aqui como Retirado e pode ser publicado de novo."
           rotuloDaAcao="Retirar"
-          escopo="store_item_retirement"
-          executar={(token) => executarRetirada(retirar, token)}
+          executar={() => executarRetirada(retirar)}
           aoFechar={() => setRetirar(undefined)}
         />
       )}

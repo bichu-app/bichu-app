@@ -8,13 +8,13 @@ import { Link, useNavigate } from 'react-router';
 
 import { BarraDeListagem } from '../../componentes/BarraDeListagem.tsx';
 import { Banner, EstadoVazio, LinhasCarregando } from '../../componentes/basicos.tsx';
-import { DialogoComSenha, type ResultadoDaAcaoComSenha } from '../../componentes/DialogoComSenha.tsx';
+import { DialogoDeConfirmacao, type ResultadoDaAcaoConfirmada } from '../../componentes/DialogoDeConfirmacao.tsx';
 import { Icone } from '../../componentes/Icone.tsx';
 import { useAvisoDaNavegacao, useListaPaginada, useParametrosDaLista } from '../../componentes/lista.ts';
 import { MenuDeAcoes, type ItemDoMenu } from '../../componentes/MenuDeAcoes.tsx';
 import { mensagemDaFalha } from '../api/mensagens.ts';
 import { precisaReler } from '../api/redeApi.ts';
-import { DialogoComMotivoESenha, type ResultadoDaAcao } from '../componentes/DialogoComMotivoESenha.tsx';
+import { DialogoComMotivo, type ResultadoDaAcao } from '../componentes/DialogoComMotivo.tsx';
 import { SeloDoEncontro } from '../componentes/SeloDoEncontro.tsx';
 import { dataCurta, faixaDeHorario } from '../dominio/horario.ts';
 import { acoesDoEncontro, consultaDaLista, textosDoCancelamento, ehFiltro, ehOrdem, FILTROS, textoDaContagem, textoSemResultado, type Filtro } from '../dominio/lista.ts';
@@ -66,9 +66,8 @@ export default function ListaDeEncontros() {
     setAvisoLocal({ tipo, texto });
   }
 
-  async function executarCancelamento(e: Encontro, token: string | undefined, motivo: string): Promise<ResultadoDaAcao> {
-    if (!token) return { ok: false, mensagem: 'Confirme sua senha de novo.' };
-    const r = await rede.cancelar(token, e.slug, etagDe(e), motivo);
+  async function executarCancelamento(e: Encontro, motivo: string): Promise<ResultadoDaAcao> {
+    const r = await rede.cancelar(e.slug, etagDe(e), motivo);
     if (r.ok) {
       substituir((x) => x.slug === e.slug, r.dados);
       mostrar('ok', textosDoCancelamento(e).sucesso);
@@ -78,8 +77,8 @@ export default function ListaDeEncontros() {
     return { ok: false, mensagem: mensagemDaFalha(r.falha, 'cancelar o encontro') };
   }
 
-  async function executarRemocao(e: Encontro, token: string): Promise<ResultadoDaAcaoComSenha> {
-    const r = await rede.remover(token, e.slug, etagDe(e));
+  async function executarRemocao(e: Encontro): Promise<ResultadoDaAcaoConfirmada> {
+    const r = await rede.remover(e.slug, etagDe(e));
     if (r.ok) {
       recarregar();
       mostrar('ok', 'Encontro removido. Ele saiu da Rede do app.');
@@ -128,7 +127,7 @@ export default function ListaDeEncontros() {
   const dialogos = (
     <>
       {cancelar && (
-        <DialogoComMotivoESenha
+        <DialogoComMotivo
           titulo={`Cancelar “${cancelar.title}”?`}
           corpo={[textosDoCancelamento(cancelar).corpo]}
           rotuloDoMotivo="Motivo"
@@ -136,18 +135,16 @@ export default function ListaDeEncontros() {
           rotuloDaAcao="Cancelar encontro"
           rotuloDeVoltar="Voltar"
           perigo
-          escopos={['network_event_cancellation']}
-          executar={(tokens, motivo) => executarCancelamento(cancelar, tokens.network_event_cancellation, motivo)}
+          executar={(motivo) => executarCancelamento(cancelar, motivo)}
           aoFechar={() => setCancelar(undefined)}
         />
       )}
       {remover && (
-        <DialogoComSenha
+        <DialogoDeConfirmacao
           titulo={`Remover “${remover.title}”?`}
           corpo="O encontro sai do app, e não dá para desfazer. Para avisar que ele não vai acontecer, use Cancelar encontro."
           rotuloDaAcao="Remover"
-          escopo="network_event_removal"
-          executar={(token) => executarRemocao(remover, token)}
+          executar={() => executarRemocao(remover)}
           aoFechar={() => setRemover(undefined)}
         />
       )}
