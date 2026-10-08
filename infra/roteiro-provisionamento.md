@@ -917,7 +917,6 @@ Substitui o 11.2 em hml: o envio vai direto ao gerenciado, e `midia-hml` não
    OBJECT_STORAGE_SIGNATURE_DIALECT=goog
    OBJECT_BUCKET_PRIVATE=bichu-hml-media-private
    OBJECT_BUCKET_PUBLIC=bichu-hml-media-public
-   MEDIA_UPSTREAM=https://storage.googleapis.com
    ADMIN_CSP_UPLOAD=https://storage.googleapis.com
    ```
 
@@ -926,7 +925,8 @@ Substitui o 11.2 em hml: o envio vai direto ao gerenciado, e `midia-hml` não
    o `objeto` não é recriado e segue com elas, e o script de migração as lê.
 3. Migração (copia, preserva chave; ensaio primeiro):
    `infra/ferramentas/migrar-objetos-para-o-gcs.sh` e depois `--aplicar`.
-4. Recriar `api`, `worker` e `edge`.
+4. Recriar `api`, `worker`, `edge` e subir o `midia` (o leitor da mídia pública:
+   a organização recusa `allUsers`, e a leitura vai autenticada).
 
 **Verificação:** `curl -sI https://img-hml.bichu.app/` → 404 (a raiz não
 lista); uma foto pelo painel e uma pelo app chegam a `ready`, e a derivada

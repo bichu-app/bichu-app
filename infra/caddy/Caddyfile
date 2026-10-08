@@ -444,28 +444,18 @@
 		Cross-Origin-Resource-Policy cross-origin
 	}
 
-	# O caminho publico e `/{chave}` (`urlDeMidia` monta MEDIA_PUBLIC_BASE_URL +
-	# chave, sem bucket), e o armazenamento serve por `/{bucket}/{chave}`. A
-	# reescrita acrescenta o bucket AQUI, so neste bloco de midia: a regra "a
-	# borda nao reescreve caminho" e do trafego de API (ADR-0016). Antes dela o
-	# bloco casava `/{bucket}/*` e a URL que a aplicacao gera caia no 404.
-	#
-	# `MEDIA_UPSTREAM` e o armazenamento: `http://objeto:9000` (MinIO, padrao) ou
-	# o endpoint do gerenciado (ADR-0007 Emenda 1). O `Host` vai como o do
-	# upstream: o gerenciado escolhe o servico pelo nome.
-	# A raiz fica de fora: `/` viraria `/{bucket}/`, que e LISTAGEM do bucket.
+	# A LEITURA passa pelo `midia` (src/bin/leitor-de-midia.ts), que le o bucket
+	# publico com a credencial do armazenamento (ADR-0007 Emenda 1, item 4): a
+	# politica da organizacao recusa leitura anonima em bucket, e a borda nao
+	# assina pedido. O caminho e `/{chave}`, como `urlDeMidia` o monta, sem
+	# reescrita. O leitor so aceita forma de derivada; a raiz fica de fora aqui
+	# tambem, como segunda camada contra listagem.
 	@leitura {
 		method GET HEAD
 		not path /
 	}
 	handle @leitura {
-		rewrite * /{$OBJECT_BUCKET_PUBLIC}{uri}
-		reverse_proxy {$MEDIA_UPSTREAM:http://objeto:9000} {
-			header_up Host {upstream_hostport}
-			header_down -X-Goog-*
-			header_down -X-Guploader-*
-			header_down -X-Amz-*
-		}
+		reverse_proxy midia:8080
 	}
 
 	handle {

@@ -43,6 +43,12 @@
 # pesado), api 63, web 35, worker 34 (sem foto; o pico dele e o da foto de
 # 50 MP, 313 MiB, ver o servico), edge 25, admin-web 14 MiB.
 #
+# 07/10, ADR-0007 Emenda 1: entra o `midia` (leitor da midia publica, 96) e a
+# soma vai a 1824 MB, ~224 de folga, ABAIXO do piso de 300. Onde o
+# armazenamento e o gerenciado, o `objeto` (256) deixa de ter uso depois da
+# migracao conferida, e a soma do que roda de fato volta a 1568; enquanto ele
+# seguir de pe, a conta e a de cima. Medir com `docker stats` no deploy.
+#
 # NO MERGE, ESTA LINHA NAO SE RESOLVE ESCOLHENDO UM LADO. Duas branches que
 # mexem em teto ou acrescentam servico produzem dois numeros certos para a
 # arvore de cada uma e um errado para a juncao. Quem integra SOMA os
@@ -463,6 +469,34 @@ services:
   # servico NUNCA sobe junto com a pilha. `make up`, `--profile dev up` e
   # `--profile qa up` nao o enxergam; `docker compose run ferramentas` liga o
   # perfil sozinho, que e o unico jeito de ele existir.
+  midia:
+    # O leitor da midia publica (ADR-0007 Emenda 1, item 4): a borda repassa
+    # `img-*` para ca, e ele le o bucket publico com a credencial do
+    # armazenamento. Mesma imagem da API, outro comando; sem porta publicada,
+    # e so a borda o alcanca.
+    image: bichu-app:${IMAGE_TAG:-local}
+    build:
+      context: .
+      target: ${BUILD_TARGET:-dev}
+      args:
+        BUILD_COMMIT: ${BUILD_COMMIT:-}
+    mem_limit: 96m
+    command: ["node", "dist/bin/leitor-de-midia.js"]
+    env_file: [.env]
+    read_only: true
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      objeto: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+
   ferramentas:
     # A MESMA imagem da api e do worker. O que muda e o teto e o fato de este
     # servico nao ficar de pe: o artefato conferido pela esteira continua sendo
@@ -685,8 +719,6 @@ services:
       # alcanca o armazenamento, e o bucket que ela expoe. Sem valor, o bloco
       # fica num nome de teste que nenhum DNS resolve.
       MEDIA_UPLOAD_HOSTS: ${MEDIA_UPLOAD_HOSTS:-http://midia.localhost}
-      # O armazenamento por tras da origem de midia publica (ADR-0007 Emenda 1).
-      MEDIA_UPSTREAM: ${MEDIA_UPSTREAM:-http://objeto:9000}
       OBJECT_BUCKET_PRIVATE: ${OBJECT_BUCKET_PRIVATE:-bichu-media-private}
       # O Caddyfile le `{$HOSTS_EXTRA_APP}` e `{$HOSTS_EXTRA_MIDIA}` desde a
       # BICHUS-146, para o apex entrar AO LADO de homologacao em vez de no
@@ -717,7 +749,7 @@ services:
       # unico valor aceitavel em host hospedado) ou `site` (desenvolvimento,
       # onde os quatro papeis dividem `localhost`). Ver o Caddyfile.
       BORDA_RESTO_DA_APP: ${BORDA_RESTO_DA_APP:-fechado}
-    depends_on: [api, objeto]
+    depends_on: [api, objeto, midia]
     restart: unless-stopped
 
   admin-web:

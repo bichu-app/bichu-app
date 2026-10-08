@@ -187,14 +187,16 @@ armazenamento de desenvolvimento e da esteira.
    `x-goog-*` e sem o campo de criptografia no servidor (lá ela é sempre
    ligada). Com `goog`, todo pedido sai nesse dialeto, com chave HMAC de uma
    conta de serviço. A regra de "nenhum SDK de provedor em `src/`" fica intacta.
-4. **Leitura pública pela origem de mídia, e não pelo bucket direto.** A borda
-   repassa `img-<amb>` ao bucket público (`MEDIA_UPSTREAM`). Fica o nosso
-   domínio na CSP (`img-src` sem o host genérico do provedor, que serve
-   qualquer bucket de qualquer um), o cabeçalho de cache é nosso, e trocar de
-   provedor ou pôr CDN é trocar uma variável. O custo de saída é o mesmo da
-   leitura direta; o tráfego bucket→VM na mesma região não é cobrado. O bucket
-   público é lido por `roles/storage.legacyObjectReader` de `allUsers`, que lê
-   objeto e **não lista**; a borda também recusa a raiz.
+4. **Leitura pública pela origem de mídia, autenticada.** A política da
+   organização recusa `allUsers` em bucket (412 em 07/10), então o bucket
+   público não é público: a borda repassa `img-<amb>` ao serviço `midia`
+   (`src/bin/leitor-de-midia.ts`, mesma imagem da API), que lê o bucket com a
+   credencial do armazenamento e só aceita chave com forma de derivada, só
+   GET/HEAD, nunca o bucket privado. Fica o nosso domínio na CSP (sem o host
+   genérico do provedor), o cache de um ano é nosso, e trocar de provedor ou
+   pôr CDN na frente é trocar o que está atrás do `midia`. A saída para a
+   internet custa o mesmo que a leitura direta; bucket→VM na mesma região não
+   é cobrado. Custo de memória: um processo Node a mais (teto 96 MB).
 5. **Envio direto ao gerenciado** (`OBJECT_STORAGE_PUBLIC_ENDPOINT` = o
    endpoint do provedor), com CORS no bucket privado só para a origem do
    painel. O host `midia-<amb>` da borda deixa de ser necessário onde o

@@ -29,7 +29,9 @@ case "${1:-}" in
 esac
 
 test -f .env || { echo "rode em ~/bichu: .env nao encontrado" >&2; exit 2; }
-ler() { grep -E "^$1=" .env | tail -1 | cut -d= -f2-; }
+# Variavel ja exportada no shell vence o `.env`: permite o ensaio e a copia
+# ANTES de trocar o `.env` do host, sem tocar nele.
+ler() { if [ -n "${!1:-}" ]; then printf '%s' "${!1}"; else { grep -E "^$1=" .env || true; } | tail -1 | cut -d= -f2-; fi; }
 
 origem_id=$(ler MIGRACAO_MINIO_ID)
 origem_segredo=$(ler MIGRACAO_MINIO_SEGREDO)
