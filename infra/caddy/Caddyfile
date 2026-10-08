@@ -454,6 +454,69 @@
 }
 
 # --------------------------------------------------------------------------
+# Origem de ENVIO ao armazenamento (07-devops 17.5)
+# --------------------------------------------------------------------------
+# O nome pelo qual o navegador e o app alcancam o armazenamento, e o mesmo de
+# `OBJECT_STORAGE_PUBLIC_ENDPOINT` na API: a autorizacao de envio e a leitura
+# assinada saem com ELE, e nao com `http://objeto:9000`, que nenhum cliente
+# resolve. Em hml, `MEDIA_UPLOAD_HOSTS=https://midia-hml.bichu.app`.
+#
+# HOST SEPARADO da origem de midia acima, e nao um caminho nela: aquela serve
+# so derivada publica com cache de um ano, e o invariante dela e nunca ver URL
+# assinada. Aqui e o contrario: so passa pedido ASSINADO, e nada fica em cache.
+#
+# So tres coisas chegam ao armazenamento, e o resto e 404 DA BORDA:
+#   1. POST na raiz do bucket privado: o envio por formulario, cuja politica
+#      (chave exata, tipo exato, teto de tamanho) e conferida PELO
+#      ARMAZENAMENTO -- a borda so encaminha.
+#   2. OPTIONS na raiz do bucket privado: a pre-verificacao do navegador. Quem
+#      responde o CORS e o armazenamento (`MINIO_API_CORS_ALLOW_ORIGIN`, so a
+#      origem do painel), e NAO esta borda: nenhum bloco deste arquivo emite
+#      `Access-Control-Allow-*` (D34).
+#   3. GET/HEAD de objeto do bucket privado COM `X-Amz-Signature`: a leitura
+#      assinada. Sem assinatura nao chega nem a ser perguntado.
+# Listagem de bucket, PUT, DELETE e o bucket publico nao tem caminho por aqui.
+#
+# O `Host` vai como o cliente o mandou (padrao do `reverse_proxy`), e precisa ir:
+# a leitura assinada assina `host`, e o armazenamento confere com o que recebe.
+{$MEDIA_UPLOAD_HOSTS:http://midia.localhost} {
+	header {
+		-Server
+		-Set-Cookie
+		Cache-Control "no-store"
+		X-Content-Type-Options nosniff
+	}
+
+	# O maior envio aceito pelo contrato e 10 MiB; o resto e envelope do formulario.
+	request_body {
+		max_size 12MiB
+	}
+
+	request_header -X-Internal-*
+
+	@envio {
+		method POST OPTIONS
+		path /{$OBJECT_BUCKET_PRIVATE} /{$OBJECT_BUCKET_PRIVATE}/
+	}
+	handle @envio {
+		reverse_proxy objeto:9000
+	}
+
+	@leitura_assinada {
+		method GET HEAD
+		path /{$OBJECT_BUCKET_PRIVATE}/*
+		query X-Amz-Signature=*
+	}
+	handle @leitura_assinada {
+		reverse_proxy objeto:9000
+	}
+
+	handle {
+		respond "nao encontrado" 404
+	}
+}
+
+# --------------------------------------------------------------------------
 # Origem do backoffice (`admin.bichu.app`)
 # --------------------------------------------------------------------------
 # Decisao do cliente de 23/09/2026: o backoffice e uma SPA estatica, num
@@ -503,11 +566,10 @@
 #   host dos tiles saiu do `img-src` junto)
 #   ADMIN_CSP_UPLOAD            o host de `UploadIntent.url` do ambiente
 #                               (`connect-src`), o destino do POST assinado.
-# `ADMIN_CSP_UPLOAD` e VAZIO POR PADRAO: hoje o endpoint do armazenamento e
-# `http://objeto:9000`, nome interno que navegador nenhum alcanca, e o host
-# publico do envio ainda nao esta escrito em lugar nenhum. Enquanto vazio, o
-# envio de imagem pelo painel fica bloqueado pela CSP, que e o lado certo de
-# errar.
+# `ADMIN_CSP_UPLOAD` e VAZIO POR PADRAO, e vazio o envio de imagem pelo painel
+# fica bloqueado pela CSP, que e o lado certo de errar. O valor e a origem de
+# `OBJECT_STORAGE_PUBLIC_ENDPOINT` (o bloco `{$MEDIA_UPLOAD_HOSTS}` acima); em
+# hml, `https://midia-hml.bichu.app`. Os tres andam juntos.
 #
 # Sem 'unsafe-inline' e sem 'unsafe-eval' em `script-src`, em nenhuma hipotese.
 # O `>` na frente do nome ADIA o cabecalho para a saida: o valor da borda vale

@@ -847,6 +847,57 @@ for i in $(seq 11); do curl -s -o /dev/null -w '%{http_code} ' -X POST https://a
 
 ---
 
+### Passo 11.2 — `midia-hml.bichu.app`, o envio de foto pelo navegador e pelo app (07-devops 17.5)
+
+Até aqui a autorização de envio e a leitura assinada saíam com
+`OBJECT_STORAGE_ENDPOINT=http://objeto:9000`, que nenhum cliente resolve: o
+painel tinha o envio bloqueado pela CSP, e o app nunca enviou uma foto em hml
+(`pet_photos` vazia, nenhuma chamada de mídia no log da `api` em 7 dias,
+medido em 07/10). Um host próprio resolve os dois, sem tocar na origem de
+mídia pública, cujo invariante é nunca ver URL assinada.
+
+**Ordem: configuração, depois DNS** (HTTP-01, como no 11.1).
+
+1. No `.env` do host, os três juntos:
+
+   ```bash
+   OBJECT_STORAGE_PUBLIC_ENDPOINT=https://midia-hml.bichu.app
+   MEDIA_UPLOAD_HOSTS=https://midia-hml.bichu.app
+   ADMIN_CSP_UPLOAD=https://midia-hml.bichu.app
+   ```
+
+   `ADMIN_ORIGIN` já está no `.env`, e o compose a repassa ao `objeto` como
+   `MINIO_API_CORS_ALLOW_ORIGIN`: só o painel passa na pré-verificação.
+
+2. Recriar `objeto` (CORS), `api` e `worker` (endereço público) e `edge` (bloco
+   novo). O `objeto` volta em segundos; a borda derruba conexões de todos os
+   hosts por alguns segundos.
+
+   ```bash
+   BUILD_COMMIT="$COMMIT" docker compose up -d --no-build --no-deps --wait objeto api worker edge
+   ```
+
+3. DNS (cliente): `A midia-hml` → `35.247.247.16`, TTL 300, **sem proxy**, sem `AAAA`.
+
+**Verificação:**
+
+```bash
+docker compose logs edge | grep -i 'midia-hml.bichu.app' | grep -i 'certificate obtained'
+curl -sS -o /dev/null -w '%{http_code}\n' https://midia-hml.bichu.app/bichu-media-private/x   # 404 da borda: sem assinatura
+curl -sS -o /dev/null -w '%{http_code}\n' https://midia-hml.bichu.app/bichu-media-public/x    # 404 da borda: bucket publico nao passa aqui
+curl -sSI -X OPTIONS https://midia-hml.bichu.app/bichu-media-private \
+  -H 'Origin: https://admin-hml.bichu.app' -H 'Access-Control-Request-Method: POST' \
+  | grep -i 'access-control-allow-origin'                                                   # = https://admin-hml.bichu.app
+curl -sSI -X OPTIONS https://midia-hml.bichu.app/bichu-media-private \
+  -H 'Origin: https://exemplo.com' -H 'Access-Control-Request-Method: POST' \
+  | grep -ci 'access-control-allow-origin'                                                  # 0
+```
+
+E de ponta a ponta: uma foto enviada pelo painel (encontro ou produto) e uma
+pelo app (pet) chegam a `catalog_images` / `pet_photos` com estado `ready`.
+
+---
+
 ## Parte C — O que precisa existir antes de a máquina receber o primeiro dado
 
 ### Passo 12 — `pg_dump` diário guardado FORA do host (critério 10 de BICHUS-13)

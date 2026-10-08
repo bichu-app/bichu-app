@@ -142,6 +142,11 @@ services:
       # isto vira o KMS do provedor, que e configuracao e nao codigo -- o
       # cabecalho que a aplicacao envia e o mesmo nos dois.
       MINIO_KMS_SECRET_KEY: ${OBJECT_STORAGE_KMS_KEY:?defina no .env}
+      # CORS do envio direto do painel (07-devops 17.5). E o ARMAZENAMENTO que
+      # responde a pre-verificacao, e nao a borda, que nao emite CORS (D34). O
+      # padrao do MinIO e `*`; aqui fica so a origem do painel. O app nao
+      # precisa: cliente nativo nao faz pre-verificacao.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${ADMIN_ORIGIN:-http://localhost:5173}
     volumes:
       - dados_objeto:/data
     healthcheck:
@@ -656,11 +661,11 @@ services:
       #   ADMIN_CSP_UPLOAD  o host de `UploadIntent.url` do ambiente, no
       #                     `connect-src` da CSP (ADR-0027 item 6). Nome exato.
       #
-      # ADMIN_CSP_UPLOAD e VAZIO por padrao: o endpoint do armazenamento hoje e
-      # `http://objeto:9000`, interno, e o host publico do envio nao esta
-      # decidido. Vazio, o envio de imagem pelo painel fica BLOQUEADO pela CSP,
-      # que e o lado certo de errar. O host dos tiles do mapa e fixo e esta no
-      # proprio Caddyfile.
+      # ADMIN_CSP_UPLOAD e VAZIO por padrao, e vazio o envio de imagem pelo
+      # painel fica BLOQUEADO pela CSP, que e o lado certo de errar. O valor e
+      # a origem de `OBJECT_STORAGE_PUBLIC_ENDPOINT`, servida pelo bloco
+      # `{$MEDIA_UPLOAD_HOSTS}` da borda (em hml, https://midia-hml.bichu.app).
+      # O host dos tiles do mapa e fixo e esta no proprio Caddyfile.
       #
       # ADMIN_HOSTS tem PADRAO AQUI, e nao vazio, pelo mesmo motivo do site:
       # vazio chega ao Caddy como variavel DEFINIDA, o padrao do Caddyfile nao
@@ -676,6 +681,11 @@ services:
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:3000}
       MEDIA_PUBLIC_BASE_URL: ${MEDIA_PUBLIC_BASE_URL:-http://localhost:3001}
       OBJECT_BUCKET_PUBLIC: ${OBJECT_BUCKET_PUBLIC:-bichu-media-public}
+      # A origem de envio (07-devops 17.5): o host publico pelo qual o cliente
+      # alcanca o armazenamento, e o bucket que ela expoe. Sem valor, o bloco
+      # fica num nome de teste que nenhum DNS resolve.
+      MEDIA_UPLOAD_HOSTS: ${MEDIA_UPLOAD_HOSTS:-http://midia.localhost}
+      OBJECT_BUCKET_PRIVATE: ${OBJECT_BUCKET_PRIVATE:-bichu-media-private}
       # O Caddyfile le `{$HOSTS_EXTRA_APP}` e `{$HOSTS_EXTRA_MIDIA}` desde a
       # BICHUS-146, para o apex entrar AO LADO de homologacao em vez de no
       # lugar dela. Sem a declaracao aqui as duas chegam vazias ao container,

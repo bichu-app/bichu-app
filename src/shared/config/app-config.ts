@@ -230,6 +230,18 @@ export interface MailConfig {
 export interface ObjectStorageConfig {
   /** Vazio significa o endpoint padrão do provedor, e é um valor legítimo. */
   readonly endpoint: string | undefined;
+  /**
+   * `OBJECT_STORAGE_PUBLIC_ENDPOINT`: o endereco pelo qual o NAVEGADOR e o app
+   * alcancam o armazenamento. Entra so nas duas URLs que saem para o cliente
+   * (a autorizacao de envio e a leitura assinada); o worker continua falando
+   * com `endpoint`, pela rede interna.
+   *
+   * Existe porque em hospedagem propria o `endpoint` e um nome interno
+   * (`http://objeto:9000`) que nenhum cliente resolve: a URL assinada saia com
+   * ele e todo envio de foto falhava antes de chegar a borda. Vazio, vale o
+   * `endpoint`, que e o caso do provedor gerenciado, onde os dois coincidem.
+   */
+  readonly publicEndpoint?: string | undefined;
   readonly region: string;
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
@@ -712,6 +724,7 @@ export function loadAppConfig(): AppConfig {
   // usuário real, e não na subida.
   const objectStorage: ObjectStorageConfig = {
     endpoint: optionalEnv('OBJECT_STORAGE_ENDPOINT'),
+    publicEndpoint: optionalEnv('OBJECT_STORAGE_PUBLIC_ENDPOINT'),
     // SEM padrão embutido. Região é obrigatória na assinatura V4 e o valor
     // varia por provedor; um padrão aqui seria marca de provedor em código, que
     // o ADR-0007 proíbe e o portão de portabilidade reprova — foi ele que pegou

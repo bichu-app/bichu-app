@@ -108,9 +108,12 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
    * subdomínio (`https://bucket.host/chave`). O contrato do ADR-0007 é que isso
    * seja **variável de ambiente**, e não um `if` por provedor espalhado no código.
    */
-  const baseDoBucket = (classe: Classe): URL => {
+  const baseDoBucket = (classe: Classe, paraOCliente = false): URL => {
     const bucket = bucketDa(classe);
-    const base = new URL(config.endpoint ?? `https://${SERVICO}.${config.region}.amazonaws.com`);
+    // Para o cliente, o endereco publico; para o worker, o interno. Ver
+    // `ObjectStorageConfig.publicEndpoint`.
+    const endpoint = paraOCliente ? (config.publicEndpoint ?? config.endpoint) : config.endpoint;
+    const base = new URL(endpoint ?? `https://${SERVICO}.${config.region}.amazonaws.com`);
     if (config.forcePathStyle) {
       base.pathname = `/${bucket}`;
       return base;
@@ -119,8 +122,8 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
     return base;
   };
 
-  const urlDoObjeto = (classe: Classe, chave: ObjectKey): URL => {
-    const base = baseDoBucket(classe);
+  const urlDoObjeto = (classe: Classe, chave: ObjectKey, paraOCliente = false): URL => {
+    const base = baseDoBucket(classe, paraOCliente);
     const url = new URL(base.toString());
     url.pathname = `${base.pathname.replace(/\/$/, '')}/${chave}`;
     return url;
@@ -238,7 +241,7 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
 
       return Promise.resolve({
         metodo: 'POST',
-        url: baseDoBucket(pedido.classe).toString() as AbsoluteUrl,
+        url: baseDoBucket(pedido.classe, true).toString() as AbsoluteUrl,
         campos: {
           key: pedido.chave,
           'Content-Type': pedido.contentType,
@@ -257,7 +260,9 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
     getSignedReadUrl(classe, chave, validadeEmSegundos): Promise<AbsoluteUrl> {
       const agora = new Date();
       const { longo, curto } = carimbos(agora);
-      const url = urlDoObjeto(classe, chave);
+      // Assinada com o host PUBLICO: a V4 da leitura assina `host`, e quem a
+      // apresenta e o cliente, pelo nome que ele alcanca.
+      const url = urlDoObjeto(classe, chave, true);
       const escopo = `${curto}/${config.region}/${SERVICO}/aws4_request`;
 
       url.searchParams.set('X-Amz-Algorithm', ALGORITMO);
