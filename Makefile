@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste
+.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -614,6 +614,20 @@ verificar-quebras-de-contrato-autoteste: ## as iscas do juizo de quebra de contr
 verificar-destinos: ## todo servico com `profiles:` declarado como ausente no destino hospedado, iscas dentro (0,07 s)
 	node dist/tools/comparar-destinos.js
 
+# O IRMAO DO COMPARADOR DE DESTINOS, e ele mede o que o outro nao olha.
+#
+# `verificar-destinos` cobra que todo servico com `profiles:` esteja DECLARADO
+# como ausente no hospedado. Ele nao pergunta se o compose RESOLVE nos dois
+# destinos -- e e ai que o desenho do armazenamento quebra calado: tirar um
+# `required: false` deixa o destino local intacto e faz o HOSPEDADO recusar
+# `up` inteiro, onde ninguem roda `make up` para descobrir.
+#
+# O juizo e o proprio `docker compose config`, que roda a mesma validacao do
+# `up`. Nao sobe container nenhum, e gera o `.env` falso de que precisa: ele roda
+# de worktree, e worktree novo nao tem `.env`.
+verificar-armazenamento-por-destino: ## ADR-0007 Emenda 1: o compose resolve nos DOIS destinos, MinIO so no local, iscas dentro
+	node infra/verificacao/verificar-armazenamento-por-destino.mjs
+
 # A OUTRA METADE DO JUIZO DA MORTE DO ALVO `prod`. O Makefile tinha so
 # `verificar-boot-do-alvo-prod-autoteste`: as iscas provam que o juizo ENXERGA, e
 # NADA aplicava o juizo ao alvo `prod` de verdade. Essa metade vivia na linha
@@ -633,7 +647,7 @@ verificar-boot-do-alvo-prod: ## BICHUS-213: o alvo `prod` constroi e morre no ge
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-rastreabilidade verificar-destinos verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-rastreabilidade verificar-destinos verificar-armazenamento-por-destino verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs

@@ -26,12 +26,15 @@
 # nucleo mata dentro daquele grupo, e o Postgres nem fica sabendo. O worker
 # morre, reinicia, e o trabalho volta para a tabela `jobs`.
 #
-# Soma dos limites DO QUE RODA DE FATO: 1728 MB, deixando ~320 MB para o
-# sistema operacional. Entram `db` 640, `objeto` 256, `api` 192, `worker` 448,
-# `edge` 64, `admin-web` 32 e `web` 96 (ADR-0028). Ficam fora `migracao` (256,
-# termina antes de `api` e `worker` subirem), `mail` (perfis dev/qa, nao sobe
-# no hospedado) e `ferramentas` (1 GB, perfil proprio, so sob `docker compose
-# run`: e o teto do `tsc`, e nao de runtime).
+# Soma dos limites DO QUE RODA DE FATO no destino hospedado: 1568 MB, deixando
+# ~408 MB para o sistema operacional. Entram `db` 640, `api` 192, `worker` 448,
+# `midia` 96, `edge` 64, `admin-web` 32 e `web` 96 (ADR-0028). Ficam fora
+# `migracao` (256, termina antes de `api` e `worker` subirem), `mail` (perfis
+# dev/qa, nao sobe no hospedado), `ferramentas` (1 GB, perfil proprio, so sob
+# `docker compose run`: e o teto do `tsc`, e nao de runtime) e, desde 08/10, o
+# `objeto` (256) e o `objeto_init`, que ganharam `profiles: [dev, qa]` -- ver o
+# paragrafo de 08/10 abaixo. NO DESTINO LOCAL o `objeto` entra na conta e a
+# soma volta a 1824.
 #
 # Juncao de 28/09 da `integracao/backoffice-v1`: 1664 + 32 do painel + 96 do
 # site dava 1792 e ~256 MB de folga, abaixo do piso de 300 (nucleo, systemd e
@@ -46,8 +49,15 @@
 # 07/10, ADR-0007 Emenda 1: entra o `midia` (leitor da midia publica, 96) e a
 # soma vai a 1824 MB, ~224 de folga, ABAIXO do piso de 300. Onde o
 # armazenamento e o gerenciado, o `objeto` (256) deixa de ter uso depois da
-# migracao conferida, e a soma do que roda de fato volta a 1568; enquanto ele
-# seguir de pe, a conta e a de cima. Medir com `docker stats` no deploy.
+# migracao conferida, e a soma do que roda de fato volta a 1568.
+#
+# 08/10: a migracao foi conferida (envio e leitura de ponta a ponta em hml,
+# contra `storage.googleapis.com`) e o `objeto` SAIU do destino hospedado, por
+# `profiles: [dev, qa]` -- o mesmo mecanismo do `mail`. A folga volta a ~408 MB,
+# acima do piso de 300. O servico NAO foi removido do arquivo: o destino local
+# usa MinIO de verdade, e quem dependia dele agora declara `required: false`.
+# O volume `dados_objeto` continua declarado e NAO deve ser apagado: ele e a
+# unica copia do que um dia esteve no MinIO. Medir com `docker stats` no deploy.
 #
 # NO MERGE, ESTA LINHA NAO SE RESOLVE ESCOLHENDO UM LADO. Duas branches que
 # mexem em teto ou acrescentam servico produzem dois numeros certos para a
@@ -162,6 +172,20 @@ services:
       retries: 20
       start_period: 15s
     restart: unless-stopped
+    # PERFIL dev/qa, pelo mesmo motivo do `mail`: este servico so sobe no
+    # destino LOCAL. Onde o armazenamento e o gerenciado (hml, ADR-0007 Emenda
+    # 1), `OBJECT_STORAGE_ENDPOINT` e `https://storage.googleapis.com` e NINGUEM
+    # aqui dentro fala com este container -- a `api`, o `worker` e o `midia`
+    # montam o cliente S3 do endereco da configuracao, nao deste nome.
+    #
+    # NAO REMOVA O SERVICO: o destino local depende dele de verdade, e a
+    # diferenca entre os destinos e de CONFIGURACAO, nao de arquivo. Quem
+    # depende dele declara `required: false`, que e o que deixa a `api`, o
+    # `worker`, o `midia` e o `edge` subirem onde ele nao existe.
+    #
+    # `verificar-destinos` cobra a contrapartida: todo servico com `profiles:`
+    # precisa estar em SERVICOS_AUSENTES_NO_HOSPEDADO com o motivo escrito.
+    profiles: [dev, qa]
 
   objeto_init:
     # Cria os dois buckets do ADR-0007 e aplica a politica. Idempotente: pode
@@ -215,6 +239,15 @@ services:
         mc anonymous set-json /tmp/publico.json "local/$$OBJECT_BUCKET_PUBLIC"
         echo "buckets prontos: privado sem acesso anonimo, publico so GetObject (sem listagem)"
     restart: "no"
+    # PERFIL dev/qa, junto com o `objeto`: ele so tem o que fazer onde existe um
+    # MinIO para criar bucket em. No destino hospedado os dois buckets ja
+    # existem no armazenamento gerenciado, criados no provisionamento e com IAM
+    # proprio (`objectUser` para a conta da aplicacao) -- e este `mc` nem
+    # alcancaria `http://objeto:9000`, que nao sobe lá. Ele nao virou
+    # verificacao do estado dos buckets de proposito: conferir o gerenciado
+    # exigiria uma credencial a mais nesta pilha, e o que prova que os buckets
+    # servem e o envio de ponta a ponta do roteiro de implantacao.
+    profiles: [dev, qa]
 
   migracao:
     # As migracoes rodam AQUI, num job proprio, e nao no boot da api.
@@ -323,7 +356,12 @@ services:
       # correta na mao. Ver o bloco "O COMMIT" no Dockerfile.
     depends_on:
       db: {condition: service_healthy}
-      objeto: {condition: service_healthy}
+      # `required: false` (e NAO a remocao da linha): onde o `objeto` sobe --
+      # destino local, perfil dev/qa -- esta dependencia continua valendo
+      # inteira, com espera pela sonda e ordem de subida. Onde ele nao sobe
+      # (hospedado, armazenamento gerenciado) o compose segue em vez de recusar
+      # `up` com "depends on undefined service".
+      objeto: {condition: service_healthy, required: false}
       # A api so comeca com o esquema aplicado. Sem isto ela sobe, responde a
       # sonda (que so faz `select 1`) e so quebra na primeira consulta a
       # `users` -- erro de tabela inexistente a dez minutos da subida, sem
@@ -334,7 +372,7 @@ services:
       # ve o `objeto_init` SAIR em vez de ficar de pe e devolve erro -- "exited
       # (0)" derrubando um `make up` em que tudo subiu certo. Declarar a
       # dependencia e o que diz ao compose que essa saida e o fim esperado.
-      objeto_init: {condition: service_completed_successfully}
+      objeto_init: {condition: service_completed_successfully, required: false}
     healthcheck:
       # A sonda e /v1/health, sob o prefixo de versao: /ready nao existe no
       # contrato e nunca existiu, entao a sonda antiga reprovava com 404 e o
@@ -402,14 +440,16 @@ services:
     env_file: [.env]
     depends_on:
       db: {condition: service_healthy}
-      objeto: {condition: service_healthy}
+      # `required: false`: vale onde o `objeto` sobe, nao recusa onde ele nao
+      # sobe. O porque esta escrito no `depends_on` da `api`.
+      objeto: {condition: service_healthy, required: false}
       migracao: {condition: service_completed_successfully}
       # Os buckets precisam existir antes de alguem tentar escrever neles. E
       # ha um efeito colateral que vale registrar: sem esta linha, `up --wait`
       # ve o `objeto_init` SAIR em vez de ficar de pe e devolve erro -- "exited
       # (0)" derrubando um `make up` em que tudo subiu certo. Declarar a
       # dependencia e o que diz ao compose que essa saida e o fim esperado.
-      objeto_init: {condition: service_completed_successfully}
+      objeto_init: {condition: service_completed_successfully, required: false}
     # O QUE ESTA SONDA PROVA, E O QUE ELA NAO PROVA.
     #
     # Prova: o processo esta vivo (ele e o PID 1 -- se morrer, o container
@@ -488,7 +528,9 @@ services:
     security_opt:
       - no-new-privileges:true
     depends_on:
-      objeto: {condition: service_healthy}
+      # `required: false`: vale onde o `objeto` sobe, nao recusa onde ele nao
+      # sobe. O porque esta escrito no `depends_on` da `api`.
+      objeto: {condition: service_healthy, required: false}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
@@ -539,9 +581,11 @@ services:
     # o caso da esteira) elas ja estao satisfeitas e nada sobe a mais.
     depends_on:
       db: {condition: service_healthy}
-      objeto: {condition: service_healthy}
+      # `required: false`: vale onde o `objeto` sobe, nao recusa onde ele nao
+      # sobe. O porque esta escrito no `depends_on` da `api`.
+      objeto: {condition: service_healthy, required: false}
       migracao: {condition: service_completed_successfully}
-      objeto_init: {condition: service_completed_successfully}
+      objeto_init: {condition: service_completed_successfully, required: false}
     # Nada por padrao. Este servico existe para `docker compose run --rm`, e um
     # comando util aqui seria um servico a mais de pe no dia em que alguem
     # esquecer o perfil.
@@ -749,7 +793,24 @@ services:
       # unico valor aceitavel em host hospedado) ou `site` (desenvolvimento,
       # onde os quatro papeis dividem `localhost`). Ver o Caddyfile.
       BORDA_RESTO_DA_APP: ${BORDA_RESTO_DA_APP:-fechado}
-    depends_on: [api, objeto, midia]
+    # FORMA LONGA, e nao mais `[api, objeto, midia]`: a lista curta nao tem onde
+    # dizer `required: false`, e sem isso a borda recusa subir no destino onde o
+    # `objeto` nao existe. `service_started` e exatamente o que a forma curta
+    # significava, entao api e midia continuam como estavam.
+    #
+    # Por que a borda falava com o `objeto`: o bloco `{$MEDIA_UPLOAD_HOSTS}`
+    # deste Caddyfile repassa POST/OPTIONS e leitura assinada para
+    # `objeto:9000`. Esse caminho e do destino LOCAL. Em hml o envio vai direto
+    # ao armazenamento gerenciado (`OBJECT_STORAGE_PUBLIC_ENDPOINT`), a borda
+    # nao fica no meio, e o bloco nao recebe pedido nenhum.
+    #
+    # A borda sobe sem o `objeto` resolver: `reverse_proxy objeto:9000` com
+    # nome simples e resolvido A CADA PEDIDO, e nao na leitura do arquivo --
+    # Caddy nao recusa a configuracao por um upstream que nao existe.
+    depends_on:
+      api: {condition: service_started}
+      midia: {condition: service_started}
+      objeto: {condition: service_started, required: false}
     restart: unless-stopped
 
   admin-web:

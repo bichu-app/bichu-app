@@ -469,7 +469,19 @@
 # O nome pelo qual o navegador e o app alcancam o armazenamento, e o mesmo de
 # `OBJECT_STORAGE_PUBLIC_ENDPOINT` na API: a autorizacao de envio e a leitura
 # assinada saem com ELE, e nao com `http://objeto:9000`, que nenhum cliente
-# resolve. Em hml, `MEDIA_UPLOAD_HOSTS=https://midia-hml.bichu.app`.
+# resolve.
+#
+# ESTE BLOCO E DO DESTINO LOCAL. Ele existe para quando o armazenamento e o
+# MinIO da propria pilha, que e o caso de `make up`. Onde o armazenamento e o
+# gerenciado (hml e producao, ADR-0007 Emenda 1), `OBJECT_STORAGE_PUBLIC_ENDPOINT`
+# e `https://storage.googleapis.com`, o cliente envia DIRETO para la, a borda nao
+# fica no meio e este bloco nao recebe pedido nenhum. Ate 07/10 hml tinha
+# `MEDIA_UPLOAD_HOSTS=https://midia-hml.bichu.app` e passava por aqui; nao passa
+# mais, e o `objeto` nem sobe la (`profiles: [dev, qa]` no compose).
+#
+# As duas linhas `reverse_proxy objeto:9000` FICAM: nome simples e resolvido a
+# cada pedido, e nao na leitura do arquivo, entao a borda sobe sem o `objeto`
+# existir. Apagar o bloco quebraria o envio no destino local.
 #
 # HOST SEPARADO da origem de midia acima, e nao um caminho nela: aquela serve
 # so derivada publica com cache de um ano, e o invariante dela e nunca ver URL

@@ -100,6 +100,24 @@ export const SERVICOS_AUSENTES_NO_HOSPEDADO: ReadonlyMap<string, string> = new M
       'nenhum dos dois destinos: isso é reputação de domínio, SPF, DKIM e DMARC',
   ],
   [
+    'objeto',
+    'armazenamento de objeto falando a API S3 (MinIO), e so o destino LOCAL precisa de um. ' +
+      'Em hml e em produção o armazenamento é o gerenciado (ADR-0007 Emenda 1): ' +
+      '`OBJECT_STORAGE_ENDPOINT` aponta para o PROVEDOR, e a `api`, o `worker` e o `midia` ' +
+      'montam o cliente S3 do endereço da CONFIGURAÇÃO — nenhum deles fala com este ' +
+      'container. Quem o declarava em `depends_on` passou a declarar `required: false`, que é o ' +
+      'que deixa os quatro subirem onde ele não existe. Ele vale 256 MB de uma VM de 1976: ' +
+      'mantê-lo de pé sem uso deixava a folga em ~224 MB, abaixo do piso de 300',
+  ],
+  [
+    'objeto_init',
+    'cria os dois buckets do ADR-0007 no MinIO e aplica a política anônima. Só tem o que fazer ' +
+      'onde existe MinIO: no destino hospedado os buckets já existem no armazenamento ' +
+      'gerenciado, criados no provisionamento e com IAM próprio, e este `mc` nem alcançaria ' +
+      '`http://objeto:9000`. Anda junto com o `objeto` e pelo mesmo motivo — perfil `dev`/`qa` ' +
+      'nos dois, então ou os dois sobem ou nenhum sobe',
+  ],
+  [
     'ferramentas',
     'serviço de ferramenta, e não de runtime: mesma imagem da `api` e do `worker`, teto ' +
       'próprio de 1 GB e nenhum comando útil por padrão. Ele existe para `docker compose run ' +
