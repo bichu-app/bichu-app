@@ -960,7 +960,7 @@ export class CatalogoAdministrativo {
         })),
       );
     }
-    const envio = await this.deps.envios.preparar(corpo.content_type, corpo.byte_size);
+    const envio = await this.deps.envios.preparar(corpo.content_type, corpo.byte_size, corpo.purpose);
 
     await this.deps.repositorio.emTransacao(async (tx) => {
       await tx.registrarIntencaoDeCatalogo({

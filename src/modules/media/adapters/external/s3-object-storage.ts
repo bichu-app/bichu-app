@@ -39,8 +39,57 @@ import { ehTipoAceito, ehTipoDeDerivada } from '../../domain/chave-de-objeto.js'
 import type { ObjectStorageConfig } from '../../../../shared/config/app-config.js';
 import type { AbsoluteUrl, ObjectKey } from '../../../../shared/types/brands.js';
 
+/**
+ * O DIALETO da assinatura V4 (ADR-0007 Emenda 1). O algoritmo e o mesmo nos
+ * dois -- HMAC-SHA256 sobre o pedido canonico, chave derivada por data, regiao
+ * e servico --, e o que muda e so nome: o prefixo dos campos e cabecalhos, o
+ * prefixo da chave derivada, o servico e o terminador do escopo.
+ *
+ * `amz` e o da API S3 (MinIO, e a interoperabilidade dos gerenciados para
+ * pedido comum e URL assinada). `goog` existe por causa de UMA operacao: o
+ * envio por formulario com politica. A documentacao do XML API do armazenamento
+ * gerenciado descreve esse formulario SO com `x-goog-algorithm`,
+ * `x-goog-credential`, `x-goog-date` e `x-goog-signature`, e nao aceita o
+ * campo de criptografia no servidor (la a criptografia em repouso e sempre
+ * ligada). Assinar o formulario no dialeto errado e 403 no primeiro envio.
+ */
+export type DialetoDeAssinatura = 'amz' | 'goog';
+
+interface Dialeto {
+  readonly algoritmo: string;
+  readonly prefixoDaChave: string;
+  readonly servico: string;
+  readonly terminador: string;
+  /** Prefixo dos cabecalhos e campos de formulario, minusculo. */
+  readonly campo: string;
+  /** Prefixo dos parametros da URL assinada. */
+  readonly parametro: string;
+  /** O formulario exige criptografia no servidor declarada? (so `amz`). */
+  readonly exigeCriptografiaNoFormulario: boolean;
+}
+
+const DIALETOS: Readonly<Record<DialetoDeAssinatura, Dialeto>> = {
+  amz: {
+    algoritmo: 'AWS4-HMAC-SHA256',
+    prefixoDaChave: 'AWS4',
+    servico: 's3',
+    terminador: 'aws4_request',
+    campo: 'x-amz-',
+    parametro: 'X-Amz-',
+    exigeCriptografiaNoFormulario: true,
+  },
+  goog: {
+    algoritmo: 'GOOG4-HMAC-SHA256',
+    prefixoDaChave: 'GOOG4',
+    servico: 'storage',
+    terminador: 'goog4_request',
+    campo: 'x-goog-',
+    parametro: 'X-Goog-',
+    exigeCriptografiaNoFormulario: false,
+  },
+};
+
 const SERVICO = 's3';
-const ALGORITMO = 'AWS4-HMAC-SHA256';
 
 /** `20260918T120000Z` e `20260918`, os dois formatos que a V4 exige. */
 function carimbos(agora: Date): { longo: string; curto: string } {
@@ -63,8 +112,8 @@ function sha256Hex(dado: Buffer | string): string {
  * que assina um pedido **não sirva** para outra data, outra região ou outro
  * serviço: uma assinatura vazada expira com o dia.
  */
-function chaveDeAssinatura(secret: string, dataCurta: string, regiao: string): Buffer {
-  return hmac(hmac(hmac(hmac(`AWS4${secret}`, dataCurta), regiao), SERVICO), 'aws4_request');
+function chaveDeAssinatura(d: Dialeto, secret: string, dataCurta: string, regiao: string): Buffer {
+  return hmac(hmac(hmac(hmac(`${d.prefixoDaChave}${secret}`, dataCurta), regiao), d.servico), d.terminador);
 }
 
 /**
@@ -77,6 +126,10 @@ function ehEstouroDePrazo(erro: unknown): boolean {
 }
 
 export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
+  const d = DIALETOS[config.dialetoDeAssinatura ?? 'amz'];
+  const ALGORITMO = d.algoritmo;
+  const escopoDe = (curto: string): string => `${curto}/${config.region}/${d.servico}/${d.terminador}`;
+  const chaveDe = (curto: string): Buffer => chaveDeAssinatura(d, config.secretAccessKey, curto, config.region);
   /**
    * Roda a chamada inteira — pedido E leitura da resposta — sob um prazo só.
    *
@@ -141,8 +194,8 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
 
     const cabecalhos: Record<string, string> = {
       host: url.host,
-      'x-amz-content-sha256': conteudoHash,
-      'x-amz-date': longo,
+      [`${d.campo}content-sha256`]: conteudoHash,
+      [`${d.campo}date`]: longo,
     };
     const nomes = Object.keys(cabecalhos).sort();
     const canonicos = nomes.map((n) => `${n}:${cabecalhos[n]!}\n`).join('');
@@ -157,9 +210,9 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
       conteudoHash,
     ].join('\n');
 
-    const escopo = `${curto}/${config.region}/${SERVICO}/aws4_request`;
+    const escopo = escopoDe(curto);
     const aAssinar = [ALGORITMO, longo, escopo, sha256Hex(pedidoCanonico)].join('\n');
-    const assinatura = createHmac('sha256', chaveDeAssinatura(config.secretAccessKey, curto, config.region))
+    const assinatura = createHmac('sha256', chaveDe(curto))
       .update(aAssinar, 'utf8')
       .digest('hex');
 
@@ -200,7 +253,10 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
       const agora = new Date();
       const { longo, curto } = carimbos(agora);
       const expiraEm = new Date(agora.getTime() + pedido.validadeEmSegundos * 1000);
-      const credencial = `${config.accessKeyId}/${curto}/${config.region}/${SERVICO}/aws4_request`;
+      const credencial = `${config.accessKeyId}/${escopoDe(curto)}`;
+      const criptografia = d.exigeCriptografiaNoFormulario
+        ? { [`${d.campo}server-side-encryption`]: 'AES256' }
+        : {};
 
       // A POLÍTICA É O CONTRATO COM O ARMAZENAMENTO, e cada condição abaixo é
       // uma coisa que o cliente NÃO consegue fazer com esta autorização.
@@ -227,15 +283,15 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
           // of policy conditions"), e a condição sem o campo faz o cliente ser
           // recusado por omitir. Foi assim que esta linha nasceu — o campo entrou
           // primeiro, a condição não, e o upload voltou 403.
-          { 'x-amz-server-side-encryption': 'AES256' },
-          { 'x-amz-algorithm': ALGORITMO },
-          { 'x-amz-credential': credencial },
-          { 'x-amz-date': longo },
+          ...(d.exigeCriptografiaNoFormulario ? [criptografia] : []),
+          { [`${d.campo}algorithm`]: ALGORITMO },
+          { [`${d.campo}credential`]: credencial },
+          { [`${d.campo}date`]: longo },
         ],
       };
 
       const politicaB64 = Buffer.from(JSON.stringify(politica)).toString('base64');
-      const assinatura = createHmac('sha256', chaveDeAssinatura(config.secretAccessKey, curto, config.region))
+      const assinatura = createHmac('sha256', chaveDe(curto))
         .update(politicaB64, 'utf8')
         .digest('hex');
 
@@ -245,12 +301,12 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
         campos: {
           key: pedido.chave,
           'Content-Type': pedido.contentType,
-          'x-amz-algorithm': ALGORITMO,
-          'x-amz-credential': credencial,
-          'x-amz-date': longo,
-          'x-amz-server-side-encryption': 'AES256',
+          [`${d.campo}algorithm`]: ALGORITMO,
+          [`${d.campo}credential`]: credencial,
+          [`${d.campo}date`]: longo,
+          ...criptografia,
           policy: politicaB64,
-          'x-amz-signature': assinatura,
+          [`${d.campo}signature`]: assinatura,
         },
         expiraEm,
         maxBytes: pedido.maxBytes,
@@ -263,13 +319,13 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
       // Assinada com o host PUBLICO: a V4 da leitura assina `host`, e quem a
       // apresenta e o cliente, pelo nome que ele alcanca.
       const url = urlDoObjeto(classe, chave, true);
-      const escopo = `${curto}/${config.region}/${SERVICO}/aws4_request`;
+      const escopo = escopoDe(curto);
 
-      url.searchParams.set('X-Amz-Algorithm', ALGORITMO);
-      url.searchParams.set('X-Amz-Credential', `${config.accessKeyId}/${escopo}`);
-      url.searchParams.set('X-Amz-Date', longo);
-      url.searchParams.set('X-Amz-Expires', String(validadeEmSegundos));
-      url.searchParams.set('X-Amz-SignedHeaders', 'host');
+      url.searchParams.set(`${d.parametro}Algorithm`, ALGORITMO);
+      url.searchParams.set(`${d.parametro}Credential`, `${config.accessKeyId}/${escopo}`);
+      url.searchParams.set(`${d.parametro}Date`, longo);
+      url.searchParams.set(`${d.parametro}Expires`, String(validadeEmSegundos));
+      url.searchParams.set(`${d.parametro}SignedHeaders`, 'host');
       url.searchParams.sort();
 
       const pedidoCanonico = [
@@ -282,10 +338,10 @@ export function criarObjectStorage(config: ObjectStorageConfig): ObjectStorage {
       ].join('\n');
 
       const aAssinar = [ALGORITMO, longo, escopo, sha256Hex(pedidoCanonico)].join('\n');
-      const assinatura = createHmac('sha256', chaveDeAssinatura(config.secretAccessKey, curto, config.region))
+      const assinatura = createHmac('sha256', chaveDe(curto))
         .update(aAssinar, 'utf8')
         .digest('hex');
-      url.searchParams.set('X-Amz-Signature', assinatura);
+      url.searchParams.set(`${d.parametro}Signature`, assinatura);
 
       return Promise.resolve(url.toString() as AbsoluteUrl);
     },

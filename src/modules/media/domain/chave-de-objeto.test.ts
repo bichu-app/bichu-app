@@ -25,9 +25,12 @@ const FOTO = '01a0b480-0000-7000-8000-000000000001';
 void describe('chave da derivada pública', () => {
   void it('NÃO carrega pet_id, foto_id nem user_id', () => {
     const chave = chaveDaDerivada('card', new Uint8Array(16).fill(7), 'webp');
-    for (const interno of [PET, FOTO, 'pets/']) {
+    // A CATEGORIA e publica de proposito (ADR-0007 Emenda 1): `pets/card/...`.
+    // O que nao pode vazar e o DONO: nenhum identificador depois dela.
+    for (const interno of [PET, FOTO, `pets/${PET}`]) {
       assert.ok(!chave.includes(interno), `a chave pública vazou "${interno}": ${chave}`);
     }
+    assert.match(chave, /^pets\/card\/[A-Za-z0-9_-]+\.webp$/);
   });
 
   void it('não é adivinhável: dois sorteios dão chaves diferentes', () => {
@@ -44,7 +47,7 @@ void describe('chave da derivada pública', () => {
     // estrutura da chave, e é para estar ali. (Primeira versão deste teste
     // reprovava por causa dela, e o defeito era do teste.)
     const chave = chaveDaDerivada('thumb', new Uint8Array(16).fill(251), 'webp');
-    const sorteada = chave.slice(chave.indexOf('/') + 1);
+    const sorteada = chave.slice(chave.lastIndexOf('/') + 1);
     assert.ok(!/[+=]/.test(sorteada), sorteada);
     assert.ok(!sorteada.includes('/'), sorteada);
   });
@@ -69,9 +72,9 @@ void describe('chave da derivada pública', () => {
     // passaria no caso acima e pararia o processamento de toda foto.
     for (const variante of ['card', 'thumb'] as const) {
       const chave = chaveDaDerivada(variante, new Uint8Array(16).fill(5), 'webp');
-      assert.ok(chave.startsWith(`${variante}/`), chave);
+      assert.ok(chave.startsWith(`pets/${variante}/`), chave);
       // 16 bytes em base64url são 22 caracteres: a mesma conta do original.
-      assert.equal(chave.slice(`${variante}/`.length, chave.indexOf('.')).length, 22);
+      assert.equal(chave.slice(`pets/${variante}/`.length, chave.indexOf(".")).length, 22);
     }
   });
 });
@@ -142,7 +145,8 @@ function chaveOuNada(variante: 'thumb' | 'card', extensao: string): string | nul
  * o armazenamento resolve para `publico/`.
  */
 function prefixoEfetivo(chave: string): string {
-  return posix.normalize(chave).split('/')[0] ?? '';
+  // Categoria e variante (ADR-0007 Emenda 1): `pets/card`.
+  return posix.normalize(chave).split('/').slice(0, 2).join('/');
 }
 
 const EXTENSOES_HOSTIS = [
@@ -165,7 +169,7 @@ void describe('extensão da derivada', () => {
     for (const hostil of EXTENSOES_HOSTIS) {
       const chave = chaveOuNada('card', hostil);
       assert.ok(
-        chave === null || prefixoEfetivo(chave) === 'card',
+        chave === null || prefixoEfetivo(chave) === 'pets/card',
         `a chave escapou do prefixo da variante: ${String(chave)}`,
       );
       assert.equal(chave, null, `saneou em silêncio em vez de recusar: ${String(chave)}`);
@@ -184,10 +188,10 @@ void describe('extensão da derivada', () => {
     // passaria nos casos acima e quebraria o processamento inteiro em silêncio.
     for (const boa of ['webp', 'jpg', 'jpeg']) {
       const chave = chaveDaDerivada('card', ALEATORIO, boa);
-      assert.equal(prefixoEfetivo(chave), 'card', chave);
+      assert.equal(prefixoEfetivo(chave), 'pets/card', chave);
       assert.ok(chave.endsWith(`.${boa}`), chave);
     }
-    assert.equal(prefixoEfetivo(chaveDaDerivada('thumb', ALEATORIO, 'webp')), 'thumb');
+    assert.equal(prefixoEfetivo(chaveDaDerivada('thumb', ALEATORIO, 'webp')), 'pets/thumb');
   });
 });
 
@@ -349,7 +353,7 @@ void describe('comoObjectKey — a marca que agora exige forma', () => {
 
     // Contrapeso: as duas continuam gerando com entrada boa. Sem ele, uma
     // geração que lançasse sempre passaria nas três afirmações acima.
-    assert.ok(String(chaveDaDerivada('card', ALEATORIO, 'webp')).startsWith('card/'));
+    assert.ok(String(chaveDaDerivada('card', ALEATORIO, 'webp')).startsWith('pets/card/'));
     assert.ok(String(chaveDoOriginal(PET, ALEATORIO)).startsWith(`pets/${PET}/original/`));
   });
 

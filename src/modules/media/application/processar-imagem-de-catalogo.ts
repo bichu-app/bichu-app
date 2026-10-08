@@ -20,7 +20,11 @@
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import { chaveDaDerivada } from '../domain/chave-de-objeto.js';
 import type { ImageProcessor, MotivoDeRecusa } from '../ports/image-processor.js';
-import { DIMENSAO_MINIMA, type ImagensDeCatalogoDoWorker } from '../ports/imagem-de-catalogo.js';
+import {
+  CATEGORIA_DO_PROPOSITO,
+  DIMENSAO_MINIMA,
+  type ImagensDeCatalogoDoWorker,
+} from '../ports/imagem-de-catalogo.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 
 const LARGURA_DA_DERIVADA = 1024;
@@ -92,7 +96,7 @@ export async function processarImagemDeCatalogo(
   }
 
   const derivada = await deps.processador.derivar(original, LARGURA_DA_DERIVADA);
-  const chave = chaveDaDerivada('card', deps.ids.random128(), derivada.extensao);
+  const chave = chaveDaDerivada('card', deps.ids.random128(), derivada.extensao, CATEGORIA_DO_PROPOSITO[imagem.purpose]);
   await deps.armazenamento.put('publico', chave, derivada.bytes, derivada.contentType);
   await deps.imagens.marcarPronta(imagem.id, chave);
   return { tipo: 'pronta', imagemId: imagem.id };

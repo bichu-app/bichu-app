@@ -84,8 +84,8 @@ export async function processarFoto(
 
   // As chaves carregam 128 bits de CSPRNG e NÃO carregam `pet_id` (ADR-0010
   // item 6): elas viajam em cartaz impresso e em mensagem de grupo.
-  const chaveDoCard = chaveDaDerivada('card', deps.ids.random128(), card.extensao);
-  const chaveDoThumb = chaveDaDerivada('thumb', deps.ids.random128(), thumb.extensao);
+  const chaveDoCard = chaveDaDerivada('card', deps.ids.random128(), card.extensao, 'pets');
+  const chaveDoThumb = chaveDaDerivada('thumb', deps.ids.random128(), thumb.extensao, 'pets');
 
   // As duas subiram ANTES de marcar `ready`. Na ordem inversa existiria uma
   // janela em que a rota pública serviria o endereço de um objeto que ainda

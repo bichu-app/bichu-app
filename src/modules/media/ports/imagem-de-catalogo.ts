@@ -14,11 +14,18 @@
  * `purpose` e o que amarra o envio ao destino (T9): a escrita do item so aceita
  * `store_item`, e a do encontro so aceitara `network_event`.
  */
+import type { CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { Instant, ObjectKey } from '../../../shared/types/brands.js';
 import type { AutorizacaoDeEnvio } from './object-storage.js';
 
 export type PropositoDaImagem = 'store_item' | 'network_event';
+
+/** O prefixo do armazenamento de cada proposito (ADR-0007 Emenda 1). */
+export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, CategoriaDeCatalogo>> = {
+  store_item: 'products',
+  network_event: 'events',
+};
 
 /**
  * JPEG, PNG e WebP. **SVG nunca** (D50), e HEIC tambem nao: a origem e um
@@ -78,7 +85,7 @@ export interface EnvioPreparado {
 
 export interface PreparadorDeEnvioDeCatalogo {
   /** Recusa com 415 o tipo fora da lista, por IGUALDADE (SVG inclusive). */
-  preparar(contentType: string, byteSize: number): Promise<EnvioPreparado>;
+  preparar(contentType: string, byteSize: number, proposito: PropositoDaImagem): Promise<EnvioPreparado>;
 }
 
 export interface NovaIntencaoDeCatalogo {

@@ -156,3 +156,53 @@ pela própria foto do achador do MVP. Gatilho que já nasceu disparado não é
 gatilho: é dívida sem condição de pagamento. O gatilho válido passa a ser
 **qualquer retenção de arquivo original enviado por quem não está
 autenticado**, ou o primeiro relato de conteúdo ilícito, o que vier antes.
+
+---
+
+## Emenda 1 (2026-10-07): o armazenamento sai do MinIO da VM para o gerenciado, por categoria
+
+**Decisão do cliente, de 07/10:** as imagens sobem para o armazenamento
+gerenciado do projeto, separadas por categoria, com o custo aceito. Vale para
+hml agora e para prod com o mesmo desenho. O MinIO continua sendo o
+armazenamento de desenvolvimento e da esteira.
+
+1. **Um par de buckets por ambiente**, na região do projeto:
+   `bichu-<amb>-media-private` (originais; prevenção de acesso público imposta)
+   e `bichu-<amb>-media-public` (só derivadas). Um par basta: a separação por
+   categoria é de PREFIXO, e o que muda de regra entre categorias (público ou
+   privado) já é a fronteira entre os dois buckets. Bucket por categoria
+   multiplicaria CORS, papéis e regras sem separar nada que o prefixo não separe.
+2. **Prefixos por categoria**, primeiro segmento de toda chave nova:
+   `pets/`, `found-reports/`, `products/`, `events/`; `site/` e `partners/`
+   reservados (o site empacota as imagens no container; parceiro não tem
+   imagem). Derivada pública: `{categoria}/{thumb|card}/{128 bits}.{ext}`,
+   sem identificador de dono, como antes. **Encontro tem um prefixo só**: a capa
+   é `position = 0` da galeria e reordenar troca a capa; prefixo por papel
+   obrigaria mover objeto a cada reordenação. As formas antigas
+   (`catalog/original/`, `thumb/`, `card/`) continuam aceitas na LEITURA.
+3. **A porta continua S3, sem SDK.** O adaptador ganha um dialeto de
+   assinatura (`OBJECT_STORAGE_SIGNATURE_DIALECT=amz|goog`). A V4 é o mesmo
+   algoritmo; o envio por formulário com política, que é o caminho do
+   navegador e do app, está documentado no XML API do gerenciado só com campos
+   `x-goog-*` e sem o campo de criptografia no servidor (lá ela é sempre
+   ligada). Com `goog`, todo pedido sai nesse dialeto, com chave HMAC de uma
+   conta de serviço. A regra de "nenhum SDK de provedor em `src/`" fica intacta.
+4. **Leitura pública pela origem de mídia, e não pelo bucket direto.** A borda
+   repassa `img-<amb>` ao bucket público (`MEDIA_UPSTREAM`). Fica o nosso
+   domínio na CSP (`img-src` sem o host genérico do provedor, que serve
+   qualquer bucket de qualquer um), o cabeçalho de cache é nosso, e trocar de
+   provedor ou pôr CDN é trocar uma variável. O custo de saída é o mesmo da
+   leitura direta; o tráfego bucket→VM na mesma região não é cobrado. O bucket
+   público é lido por `roles/storage.legacyObjectReader` de `allUsers`, que lê
+   objeto e **não lista**; a borda também recusa a raiz.
+5. **Envio direto ao gerenciado** (`OBJECT_STORAGE_PUBLIC_ENDPOINT` = o
+   endpoint do provedor), com CORS no bucket privado só para a origem do
+   painel. O host `midia-<amb>` da borda deixa de ser necessário onde o
+   armazenamento é o gerenciado, e continua valendo para o MinIO.
+6. **Ciclo de vida:** a varredura de envios vencidos continua sendo do worker,
+   porque só ele sabe o que foi confirmado; regra por idade apagaria original
+   confirmado, que mora no mesmo prefixo. O bucket só ganha a regra inócua de
+   envio incompleto (1 dia).
+7. **Credencial:** HMAC da conta de serviço da VM, criada pelo cliente e
+   escrita direto no `.env` do host (hml) ou no gerenciador de segredos
+   (prod, ADR-0022), sem passar por agente. Papéis por bucket, nunca no projeto.

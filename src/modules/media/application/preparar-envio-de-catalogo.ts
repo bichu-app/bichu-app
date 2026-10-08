@@ -21,6 +21,7 @@ import { problemas } from '../../../shared/http/errors.js';
 import type { IdGenerator } from '../../../shared/ports/index.js';
 import { chaveDoOriginalDeCatalogo } from '../domain/chave-de-objeto.js';
 import {
+  CATEGORIA_DO_PROPOSITO,
   TETO_DE_BYTES_DO_CATALOGO,
   TIPOS_DE_IMAGEM_DE_CATALOGO,
   VALIDADE_DA_INTENCAO_DE_CATALOGO_EM_SEGUNDOS,
@@ -33,7 +34,7 @@ export function criarPreparadorDeEnvioDeCatalogo(deps: {
   readonly ids: IdGenerator;
 }): PreparadorDeEnvioDeCatalogo {
   return {
-    async preparar(contentType, byteSize) {
+    async preparar(contentType, byteSize, proposito) {
       if (!(TIPOS_DE_IMAGEM_DE_CATALOGO as readonly string[]).includes(contentType)) {
         throw problemas.tipoDeMidiaNaoAceito();
       }
@@ -41,7 +42,7 @@ export function criarPreparadorDeEnvioDeCatalogo(deps: {
         throw problemas.validacao([{ field: 'byte_size', code: 'maximum' }]);
       }
       const uploadId = deps.ids.uuidv7();
-      const chave = chaveDoOriginalDeCatalogo(deps.ids.random128());
+      const chave = chaveDoOriginalDeCatalogo(deps.ids.random128(), CATEGORIA_DO_PROPOSITO[proposito]);
       const autorizacao = await deps.armazenamento.createUploadIntent({
         classe: 'privado',
         chave,

@@ -45,7 +45,7 @@ void describe('preparar envio de imagem de catalogo', () => {
   void it('ISCA: SVG e tipo fora da lista sao recusados sem pedir assinatura', async () => {
     const { preparador, pedidos } = montar();
     for (const tipo of ['image/svg+xml', 'image/gif', 'text/html']) {
-      const erro = await preparador.preparar(tipo, 1000).catch((e: unknown) => e);
+      const erro = await preparador.preparar(tipo, 1000, 'store_item').catch((e: unknown) => e);
       assert.ok(erro instanceof AppError, tipo);
       assert.equal(erro.problemType, 'unsupported-media-type');
     }
@@ -55,7 +55,7 @@ void describe('preparar envio de imagem de catalogo', () => {
   void it('tamanho fora de 1..5 MiB e recusado', async () => {
     const { preparador } = montar();
     for (const tamanho of [0, -1, 1.5, TETO_DE_BYTES_DO_CATALOGO + 1]) {
-      const erro = await preparador.preparar('image/jpeg', tamanho).catch((e: unknown) => e);
+      const erro = await preparador.preparar('image/jpeg', tamanho, 'store_item').catch((e: unknown) => e);
       assert.ok(erro instanceof AppError, String(tamanho));
       assert.equal(erro.status, 400);
     }
@@ -63,7 +63,7 @@ void describe('preparar envio de imagem de catalogo', () => {
 
   void it('pede a politica no bucket privado, com o teto e a chave do catalogo', async () => {
     const { preparador, pedidos } = montar();
-    const envio = await preparador.preparar('image/webp', 2048);
+    const envio = await preparador.preparar('image/webp', 2048, 'store_item');
     assert.equal(envio.uploadId, '0192a3b4-0000-7000-8000-000000000001');
     assert.equal(envio.maxBytes, TETO_DE_BYTES_DO_CATALOGO);
     assert.equal(pedidos[0]?.classe, 'privado');

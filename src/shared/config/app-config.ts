@@ -227,6 +227,17 @@ export interface MailConfig {
  * Trocar MinIO por S3, GCS, R2 ou Spaces é mexer nestas variáveis e no DNS de
  * mídia — nenhuma linha de código.
  */
+/** Recusa valor desconhecido na subida: um dialeto errado so apareceria como 403 no primeiro envio. */
+function dialetoDeAssinaturaEnv(): 'amz' | 'goog' {
+  const valor = optionalEnv('OBJECT_STORAGE_SIGNATURE_DIALECT') ?? 'amz';
+  if (valor !== 'amz' && valor !== 'goog') {
+    throw new Error(
+      `OBJECT_STORAGE_SIGNATURE_DIALECT invalido: ${JSON.stringify(valor)}. Use amz ou goog.`,
+    );
+  }
+  return valor;
+}
+
 export interface ObjectStorageConfig {
   /** Vazio significa o endpoint padrão do provedor, e é um valor legítimo. */
   readonly endpoint: string | undefined;
@@ -242,6 +253,12 @@ export interface ObjectStorageConfig {
    * `endpoint`, que e o caso do provedor gerenciado, onde os dois coincidem.
    */
   readonly publicEndpoint?: string | undefined;
+  /**
+   * `OBJECT_STORAGE_SIGNATURE_DIALECT`: `amz` (padrao; API S3, MinIO) ou `goog`
+   * (o XML API do armazenamento gerenciado com chave HMAC). Ver
+   * `DialetoDeAssinatura` no adaptador e a Emenda 1 do ADR-0007.
+   */
+  readonly dialetoDeAssinatura?: 'amz' | 'goog';
   readonly region: string;
   readonly accessKeyId: string;
   readonly secretAccessKey: string;
@@ -725,6 +742,7 @@ export function loadAppConfig(): AppConfig {
   const objectStorage: ObjectStorageConfig = {
     endpoint: optionalEnv('OBJECT_STORAGE_ENDPOINT'),
     publicEndpoint: optionalEnv('OBJECT_STORAGE_PUBLIC_ENDPOINT'),
+    dialetoDeAssinatura: dialetoDeAssinaturaEnv(),
     // SEM padrão embutido. Região é obrigatória na assinatura V4 e o valor
     // varia por provedor; um padrão aqui seria marca de provedor em código, que
     // o ADR-0007 proíbe e o portão de portabilidade reprova — foi ele que pegou

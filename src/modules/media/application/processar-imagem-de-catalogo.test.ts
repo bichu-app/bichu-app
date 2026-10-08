@@ -117,7 +117,7 @@ void describe('processamento da imagem de catalogo', () => {
     const b = bancada({ purpose: 'store_item', dimensoes: dim(1200, 1200) });
     await processarImagemDeCatalogo(b.deps, { catalog_image_id: 'c7' });
     assert.equal(b.eventos.length, 2);
-    assert.match(b.eventos[0] ?? '', /^put:card\//);
+    assert.match(b.eventos[0] ?? '', /^put:products\/card\//);
     assert.equal(b.eventos[1], `pronta:${(b.eventos[0] ?? '').slice(4)}`);
   });
 });

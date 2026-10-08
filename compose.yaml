@@ -685,6 +685,8 @@ services:
       # alcanca o armazenamento, e o bucket que ela expoe. Sem valor, o bloco
       # fica num nome de teste que nenhum DNS resolve.
       MEDIA_UPLOAD_HOSTS: ${MEDIA_UPLOAD_HOSTS:-http://midia.localhost}
+      # O armazenamento por tras da origem de midia publica (ADR-0007 Emenda 1).
+      MEDIA_UPSTREAM: ${MEDIA_UPSTREAM:-http://objeto:9000}
       OBJECT_BUCKET_PRIVATE: ${OBJECT_BUCKET_PRIVATE:-bichu-media-private}
       # O Caddyfile le `{$HOSTS_EXTRA_APP}` e `{$HOSTS_EXTRA_MIDIA}` desde a
       # BICHUS-146, para o apex entrar AO LADO de homologacao em vez de no

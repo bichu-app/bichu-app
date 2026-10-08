@@ -88,6 +88,36 @@ export function ehTipoDeDerivada(tipo: string): tipo is TipoDeDerivada {
 const LIMITE_DA_CHAVE = 1024;
 
 /**
+ * As CATEGORIAS do armazenamento (ADR-0007 Emenda 1): o primeiro segmento de
+ * toda chave nova, nos dois buckets. E o que separa, no console e nas regras
+ * de bucket, foto de pet, foto de achado, imagem de produto e imagem de
+ * encontro.
+ *
+ * Encontro tem UM prefixo so, e nao um para capa e outro para galeria: a capa
+ * e `position = 0` da galeria (`network_event_images`), e reordenar troca a
+ * capa. Prefixo por papel obrigaria mover objeto a cada reordenacao.
+ *
+ * `site/` e `partners/` ficam reservados: o site empacota as imagens dele no
+ * container, e parceiro nao tem imagem. Nenhum codigo escreve neles hoje.
+ */
+export const CATEGORIAS_DE_CATALOGO = ['products', 'events'] as const;
+export type CategoriaDeCatalogo = (typeof CATEGORIAS_DE_CATALOGO)[number];
+/** As categorias que tem derivada PUBLICA. Achado nao tem: a foto dele nunca e publica. */
+export const CATEGORIAS_PUBLICAS = ['pets', ...CATEGORIAS_DE_CATALOGO] as const;
+export type CategoriaPublica = (typeof CATEGORIAS_PUBLICAS)[number];
+
+function ehCategoriaDeCatalogo(valor: string | undefined): valor is CategoriaDeCatalogo {
+  return (CATEGORIAS_DE_CATALOGO as readonly (string | undefined)[]).includes(valor);
+}
+function ehCategoriaPublica(valor: string | undefined): valor is CategoriaPublica {
+  return (CATEGORIAS_PUBLICAS as readonly (string | undefined)[]).includes(valor);
+}
+function ehNomeDeDerivada(nome: string): boolean {
+  const ponto = nome.lastIndexOf('.');
+  return ponto > 0 && ponto < nome.length - 1;
+}
+
+/**
  * O conjunto de caracteres: os de base64url, mais a barra que separa segmentos e
  * o ponto da extensão. Nada além disso.
  *
@@ -204,6 +234,26 @@ export function comoObjectKey(valor: string): ObjectKey {
   // pessoa. O prefixo proprio e o que deixa uma politica de bucket, um ciclo de
   // vida e o CORS do envio pelo navegador (ADR-0027 item 4: "so no prefixo do
   // catalogo") valerem para ela e para nada mais.
+  // A forma por categoria (ADR-0007 Emenda 1): `products/original/{128 bits}`
+  // e `events/original/{128 bits}`.
+  if (segmentos.length === 3 && ehCategoriaDeCatalogo(segmentos[0]) && segmentos[1] === 'original') {
+    return valor as ObjectKey;
+  }
+
+  // A derivada publica por categoria: `{pets|products|events}/{thumb|card}/{nome}.{ext}`.
+  if (
+    segmentos.length === 3 &&
+    ehCategoriaPublica(segmentos[0]) &&
+    (segmentos[1] === 'thumb' || segmentos[1] === 'card') &&
+    ehNomeDeDerivada(segmentos[2] ?? '')
+  ) {
+    return valor as ObjectKey;
+  }
+
+  // LEGADO, so leitura: `catalog/original/...`, `thumb/...` e `card/...` sao as
+  // formas de antes da Emenda 1. Nenhum codigo as escreve mais; continuam
+  // aceitas porque o banco guarda chave, e uma linha antiga precisa continuar
+  // resolvendo depois da copia dos objetos, que preserva a chave.
   if (segmentos.length === 3 && segmentos[0] === 'catalog' && segmentos[1] === 'original') {
     return valor as ObjectKey;
   }
@@ -262,6 +312,7 @@ export function chaveDaDerivada(
   variante: 'thumb' | 'card',
   aleatorio: Uint8Array,
   extensao: string,
+  categoria: CategoriaPublica = 'pets',
 ): ObjectKey {
   // A extensão vem do adaptador de imagem e é INTERPOLADA NO CAMINHO uma linha
   // abaixo. `webp/../../../publico/card/x.webp` não é extensão mal formatada: é
@@ -283,7 +334,7 @@ export function chaveDaDerivada(
   // campo hostil; as duas recusam, e nenhuma saneia.
   exigirAleatorioForte('da derivada pública', aleatorio);
   const nome = Buffer.from(aleatorio).toString('base64url');
-  return comoObjectKey(`${variante}/${nome}.${extensao}`);
+  return comoObjectKey(`${categoria}/${variante}/${nome}.${extensao}`);
 }
 
 /**
@@ -313,9 +364,12 @@ export function chaveDaFotoDoAchado(foundReportId: string, aleatorio: Uint8Array
  * Mesmo piso de 128 bits das outras: o navegador do administrador envia direto
  * para esta chave, e ela nao pode ser adivinhavel por quem conhece o formato.
  */
-export function chaveDoOriginalDeCatalogo(aleatorio: Uint8Array): ObjectKey {
+export function chaveDoOriginalDeCatalogo(
+  aleatorio: Uint8Array,
+  categoria: CategoriaDeCatalogo = 'products',
+): ObjectKey {
   exigirAleatorioForte('do original de catalogo', aleatorio);
-  return comoObjectKey(`catalog/original/${Buffer.from(aleatorio).toString('base64url')}`);
+  return comoObjectKey(`${categoria}/original/${Buffer.from(aleatorio).toString('base64url')}`);
 }
 
 /**

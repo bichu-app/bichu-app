@@ -898,6 +898,42 @@ pelo app (pet) chegam a `catalog_images` / `pet_photos` com estado `ready`.
 
 ---
 
+### Passo 11.3 — Imagens no armazenamento gerenciado (ADR-0007 Emenda 1)
+
+Substitui o 11.2 em hml: o envio vai direto ao gerenciado, e `midia-hml` não
+é criado. Buckets, CORS e ciclo de vida já existem (criados em 07/10):
+`bichu-hml-media-private` (prevenção de acesso público imposta, CORS só para
+`https://admin-hml.bichu.app`) e `bichu-hml-media-public`.
+
+1. **Cliente** (IAM e HMAC; o segredo vai do `gcloud` direto para o `.env` da
+   VM, sem tela e sem agente): ver o bloco no relatório de 07/10 ou
+   `docs/07-devops.md`.
+2. No `.env` do host (o HMAC já escrito pelo passo 1):
+
+   ```bash
+   OBJECT_STORAGE_ENDPOINT=https://storage.googleapis.com
+   OBJECT_STORAGE_PUBLIC_ENDPOINT=https://storage.googleapis.com
+   OBJECT_STORAGE_REGION=southamerica-east1
+   OBJECT_STORAGE_SIGNATURE_DIALECT=goog
+   OBJECT_BUCKET_PRIVATE=bichu-hml-media-private
+   OBJECT_BUCKET_PUBLIC=bichu-hml-media-public
+   MEDIA_UPSTREAM=https://storage.googleapis.com
+   ADMIN_CSP_UPLOAD=https://storage.googleapis.com
+   ```
+
+   `OBJECT_STORAGE_ACCESS_KEY_ID`/`SECRET` passam a ser o HMAC. ANTES de
+   trocá-las, copie as antigas para `MIGRACAO_MINIO_ID`/`MIGRACAO_MINIO_SEGREDO`:
+   o `objeto` não é recriado e segue com elas, e o script de migração as lê.
+3. Migração (copia, preserva chave; ensaio primeiro):
+   `infra/ferramentas/migrar-objetos-para-o-gcs.sh` e depois `--aplicar`.
+4. Recriar `api`, `worker` e `edge`.
+
+**Verificação:** `curl -sI https://img-hml.bichu.app/` → 404 (a raiz não
+lista); uma foto pelo painel e uma pelo app chegam a `ready`, e a derivada
+abre em `https://img-hml.bichu.app/{categoria}/card/...`.
+
+---
+
 ## Parte C — O que precisa existir antes de a máquina receber o primeiro dado
 
 ### Passo 12 — `pg_dump` diário guardado FORA do host (critério 10 de BICHUS-13)
