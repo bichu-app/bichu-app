@@ -160,6 +160,10 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
   bool _detalhesFalharam = false;
 
   PontoNoBloco _ponto = const SoEndereco();
+
+  /// `street_address`, que vem da mesma chamada do ponto e exige conta. Nulo
+  /// sem conta, no cancelado e no encontro que nao tem endereco escrito.
+  String? _endereco;
   bool _enviandoPedido = false;
 
   final ScrollController _rolagem = ScrollController();
@@ -307,7 +311,10 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
 
   Future<void> _carregarPonto() async {
     if (!_deveBuscarPonto) {
-      setState(() => _ponto = const SoEndereco());
+      setState(() {
+        _ponto = const SoEndereco();
+        _endereco = null;
+      });
       return;
     }
     setState(() => _ponto = const PontoCarregando());
@@ -315,24 +322,32 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
       final local = await _rede.localizacao(widget.slug);
       if (!mounted) return;
       final ponto = local.ponto;
-      setState(
-        () => _ponto = ponto == null ? const SoEndereco() : PontoConhecido(ponto),
-      );
+      setState(() {
+        _ponto = ponto == null ? const SoEndereco() : PontoConhecido(ponto);
+        _endereco = local.endereco;
+      });
     } on FalhaDaApi catch (falha) {
       if (!mounted) return;
       // 404 aqui e "sem ponto para esta conta", com o mesmo corpo de "nao
       // existe": o bloco fica so com o endereco, sem acusar nada.
-      setState(
-        () => _ponto = falha.problem.status == 404
+      setState(() {
+        _ponto = falha.problem.status == 404
             ? const SoEndereco()
-            : const PontoComFalha(),
-      );
+            : const PontoComFalha();
+        _endereco = null;
+      });
     } on FalhaDeChamada {
       if (!mounted) return;
-      setState(() => _ponto = const PontoComFalha());
+      setState(() {
+        _ponto = const PontoComFalha();
+        _endereco = null;
+      });
     } on FormatException {
       if (!mounted) return;
-      setState(() => _ponto = const PontoComFalha());
+      setState(() {
+        _ponto = const PontoComFalha();
+        _endereco = null;
+      });
     }
   }
 
@@ -734,6 +749,7 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         LocalDoEncontro(
           lugar: conteudo.lugar,
           ponto: cancelado ? const SoEndereco() : _ponto,
+          enderecoPorExtenso: cancelado ? null : _endereco,
           distanciaEmMetros: distancia,
           aoTentarDeNovo: _carregarPonto,
         ),
@@ -743,6 +759,20 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         'Sobre o encontro',
         Text(conteudo.resumo, style: textos.bodyLarge),
       );
+      // Links publicos: nao dependem de conta, e so aparecem os que vieram.
+      // Sem nenhum dos dois, a secao inteira nao existe -- nada de moldura
+      // vazia (pedido do cliente de 01/10).
+      if (!cancelado &&
+          (conteudo.urlDoConvite != null || conteudo.urlDoInstagram != null)) {
+        secao(
+          Icons.link_outlined,
+          'Links',
+          _Links(
+            convite: conteudo.urlDoConvite,
+            instagram: conteudo.urlDoInstagram,
+          ),
+        );
+      }
       if (!cancelado && conteudo.imagens.length > 1) {
         secao(
           Icons.photo_library_outlined,
@@ -1488,6 +1518,74 @@ class _EsqueletoDoEncontro extends StatelessWidget {
             color: cores.surfaceSunken,
             borderRadius: BorderRadius.circular(BichuRaio.lg),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Os links publicos do encontro: uma linha por link, e so os que vieram.
+///
+/// **Sem moldura vazia**: a secao nao e montada quando os dois sao nulos, e
+/// aqui cada linha depende do seu link. Abrem no navegador do aparelho.
+class _Links extends StatelessWidget {
+  const _Links({required this.convite, required this.instagram});
+
+  final Uri? convite;
+  final Uri? instagram;
+
+  static const String rotuloDoConvite = 'Comprar convite';
+  static const String rotuloDoInstagram = 'Instagram';
+  static const String falhaAoAbrir = 'Não conseguimos abrir o link.';
+
+  static Future<void> _abrir(BuildContext context, Uri link) async {
+    final mensageiro = ScaffoldMessenger.maybeOf(context);
+    final abriu = await SaidaDoApp.atual.abrirLink(link);
+    if (!abriu) {
+      mensageiro?.showSnackBar(const SnackBar(content: Text(falhaAoAbrir)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final c = convite;
+    final i = instagram;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        if (c != null) _LinhaDeLink(rotulo: rotuloDoConvite, link: c),
+        if (c != null && i != null) const SizedBox(height: BichuEspaco.e2),
+        if (i != null) _LinhaDeLink(rotulo: rotuloDoInstagram, link: i),
+      ],
+    );
+  }
+}
+
+class _LinhaDeLink extends StatelessWidget {
+  const _LinhaDeLink({required this.rotulo, required this.link});
+
+  final String rotulo;
+  final Uri link;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: rotulo,
+      onTap: () => _Links._abrir(context, link),
+      excludeSemantics: true,
+      child: OutlinedButton(
+        onPressed: () => _Links._abrir(context, link),
+        style: OutlinedButton.styleFrom(
+          minimumSize: const Size.fromHeight(BichuAlvoDeToque.critico),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: <Widget>[
+            Flexible(child: Text(rotulo)),
+            const SizedBox(width: BichuEspaco.e2),
+            const Icon(Icons.open_in_new, size: BichuEspaco.e5),
+          ],
         ),
       ),
     );

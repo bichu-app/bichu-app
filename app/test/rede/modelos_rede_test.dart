@@ -104,18 +104,30 @@ void main() {
   group('apresentacao', () {
     test('valor: numero e unidade em formato fixo', () {
       expect(
+        const PrecoDoEncontro(centavos: 1500, unidade: UnidadeDoPreco.porPet).rotulo,
+        'R\$ 15 por pet',
+      );
+      // Legado: `per_dog` escreve a mesma frase que `per_pet`.
+      expect(
         const PrecoDoEncontro(centavos: 1500, unidade: UnidadeDoPreco.porCao).rotulo,
-        'R\$ 15 por cão',
+        'R\$ 15 por pet',
       );
       expect(
         const PrecoDoEncontro(centavos: 1250, unidade: UnidadeDoPreco.porPessoa)
             .rotulo,
-        'R\$ 12,50 por pessoa',
+        'R\$ 12,50 por humano',
       );
       expect(
         const PrecoDoEncontro(centavos: 150000, unidade: UnidadeDoPreco.porDupla)
             .rotulo,
-        'R\$ 1.500 por dupla',
+        'R\$ 1.500 por dupla (1 humano + 1 pet)',
+      );
+      expect(
+        const PrecoDoEncontro(
+          centavos: 2000,
+          unidade: UnidadeDoPreco.porDuasPessoas,
+        ).rotulo,
+        'R\$ 20 por dupla (2 humanos)',
       );
       expect(const PrecoDoEncontro(centavos: 900, unidade: null).rotulo, 'R\$ 9');
     });
@@ -146,6 +158,57 @@ void main() {
     });
   });
 
+  group('tolerancia a valor que este build nao conhece', () {
+    // ISCA. O app novo vai rodar contra um servidor mais novo que ele: quando
+    // o contrato ganhar uma unidade de preco (como ganhou `per_pet` e
+    // `per_two_people` em 01/10), o aparelho de quem nao atualizou recebe um
+    // `unit` que o binario nao tem no enum.
+    //
+    // A tolerancia e `UnidadeDoPreco.porCodigo` devolver NULO em vez de
+    // estourar, e `PrecoDoEncontro.rotulo` escrever so o valor. Trocar aquele
+    // laco por um `firstWhere` sem `orElse` reprova ESTE caso -- e nao o teste
+    // de apresentacao acima, que monta `unidade: null` no construtor e nunca
+    // passa pelo JSON.
+    test('tolera unidade de preco que este build nao conhece', () {
+      final entrada = EntradaDoEncontro.doJson(<String, dynamic>{
+        'kind': 'paid',
+        'price': <String, dynamic>{
+          'amount': 1500,
+          'currency': 'BRL',
+          'unit': 'per_flock_of_geese',
+        },
+      });
+
+      expect(entrada.preco, isNotNull);
+      // O valor sobrevive; a unidade desconhecida vira nulo.
+      expect(entrada.preco!.centavos, 1500);
+      expect(entrada.preco!.unidade, isNull);
+      // E o selo diz o que sabe, sem inventar unidade.
+      expect(entrada.rotuloDoSelo, 'R\$ 15');
+    });
+
+    test('o encontro inteiro nao se perde por uma unidade desconhecida', () {
+      // Pelo fio de verdade: `jsonDecode` e o que o cliente da API faz.
+      final encontro = EncontroPublico.doJson(
+        jsonDecode(
+          jsonEncode(
+            encontroPublico(
+              admissionKind: 'paid',
+              price: <String, dynamic>{
+                'amount': 2500,
+                'currency': 'BRL',
+                'unit': 'per_flock_of_geese',
+              },
+            ),
+          ),
+        ) as Map<String, dynamic>,
+      );
+
+      expect(encontro.entrada.preco!.unidade, isNull);
+      expect(encontro.entrada.rotuloDoSelo, 'R\$ 25');
+    });
+  });
+
   group('rotulos da matriz de rastreabilidade (correspondencias, um para um)', () {
     // Copiados de `api/rastreabilidade-backoffice-rede.yaml`, na branch do
     // backoffice (`feat/backoffice-rede-admin`), e escritos aqui por extenso.
@@ -164,9 +227,14 @@ void main() {
       expect(<String, String>{
         for (final u in UnidadeDoPreco.values) u.codigo: u.rotulo,
       }, <String, String>{
-        'per_dog': 'por cão',
-        'per_person': 'por pessoa',
-        'per_pair': 'por dupla',
+        // `per_dog` e legado e aparece como "por pet", igual a `per_pet`: a
+        // correspondencia deixou de ser um para um em 01/10. Os textos sao,
+        // palavra por palavra, os de `admin/src/rede/dominio/rotulos.ts`.
+        'per_dog': 'por pet',
+        'per_pet': 'por pet',
+        'per_person': 'por humano',
+        'per_pair': 'por dupla (1 humano + 1 pet)',
+        'per_two_people': 'por dupla (2 humanos)',
       });
     });
 

@@ -869,7 +869,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// de aparelho: quem cobra isso e o portao ESTRUTURAL abaixo, que continua
 /// valendo e continua verde. Anterior:
 /// `5af94a5a286fc5e78b296fdd458b9a6058563fbe`.
-const String _arvoreDasTelas = '4437eda0b406f11aa15e28ac582f9013382d335f'; // BICHUS-278, 30/09: `perto/lista_do_diretorio.dart` ligou o campo de busca (`q`)
+const String _arvoreDasTelas = '878dd2fa0cce8bb9d906e4391d1add202aeafb95'; // BICHUS-278, 01/10: `rede/local_do_encontro.dart` mostra o endereco e o botao `Abrir no mapa` (texto, sem geocodificar), e `rede/encontro_da_rede.dart` ganha a secao `Links` (convite e Instagram) -- camera nao entra nisso, a porta `CameraEGaleria` nao foi tocada
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

@@ -113,12 +113,21 @@ class LocalDoEncontro extends StatefulWidget {
     required this.ponto,
     required this.aoTentarDeNovo,
     super.key,
+    this.enderecoPorExtenso,
     this.distanciaEmMetros,
     this.prazoDaImagem = const Duration(seconds: 15),
   });
 
   final LugarDoEncontro lugar;
   final PontoNoBloco ponto;
+
+  /// `street_address`, de `getNetworkEventLocation`. **Nulo sem conta**, e
+  /// nulo tambem quando o encontro nao tem endereco escrito: nos dois casos a
+  /// linha e o botao nao aparecem, e a tela nao promete o que nao vai mostrar.
+  ///
+  /// Nao tem par sem conta: a chamada que o traz exige conta (emenda de 01/10
+  /// do ADR-0027), e a tela fica com os rotulos do lugar.
+  final String? enderecoPorExtenso;
 
   /// Refaz a pergunta a `/location` quando ELA falhou.
   final VoidCallback aoTentarDeNovo;
@@ -134,6 +143,10 @@ class LocalDoEncontro extends StatefulWidget {
   static const String nomeDeTentar = 'Tentar carregar o mapa de novo';
   static const String rotuloDoBotao = 'Abrir no app de mapas';
   static const String falhaAoAbrir = 'Não conseguimos abrir o app de mapas.';
+
+  /// O botao do endereco por extenso. **Quem resolve o texto e o app de mapas
+  /// do aparelho** (ADR-0006: o Bichu nao geocodifica).
+  static const String rotuloDoMapa = 'Abrir no mapa';
 
   /// A chave da area do mapa, para as iscas acharem a area sem depender de
   /// texto (a area nao tem texto de proposito).
@@ -277,6 +290,18 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
     }
   }
 
+  Future<void> _abrirEndereco() async {
+    final endereco = widget.enderecoPorExtenso;
+    if (endereco == null) return;
+    final abriu =
+        await SaidaDoApp.atual.abrirEnderecoNoAppDeMapas(endereco: endereco);
+    if (!abriu && mounted) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+        const SnackBar(content: Text(LocalDoEncontro.falhaAoAbrir)),
+      );
+    }
+  }
+
   void _tentarDeNovo() {
     _focarBotaoQuandoPronto = true;
     if (widget.ponto is PontoComFalha) {
@@ -293,7 +318,11 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
     final cores = BichuColors.of(context).cores;
     final ponto = widget.ponto;
     final temArea = ponto is! SoEndereco;
-    final temBotao = ponto is PontoConhecido;
+    final endereco = widget.enderecoPorExtenso;
+    // **Um botao, nunca dois.** Com endereco escrito, ele e o caminho: e o que
+    // o painel passou a preencher em 01/10. O botao do ponto fica para o
+    // encontro antigo, que tem ponto marcado e nao tem endereco.
+    final temBotao = endereco == null && ponto is PontoConhecido;
 
     return Container(
       width: double.infinity,
@@ -307,7 +336,40 @@ class _LocalDoEncontroState extends State<LocalDoEncontro> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           if (temArea) _area(context),
-          _Endereco(lugar: widget.lugar, distanciaEmMetros: widget.distanciaEmMetros),
+          _Endereco(
+            lugar: widget.lugar,
+            distanciaEmMetros: widget.distanciaEmMetros,
+            enderecoPorExtenso: endereco,
+          ),
+          if (endereco != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                BichuEspaco.e4,
+                0,
+                BichuEspaco.e4,
+                BichuEspaco.e4,
+              ),
+              child: Semantics(
+                button: true,
+                label: '${LocalDoEncontro.rotuloDoMapa}: $endereco',
+                onTap: _abrirEndereco,
+                excludeSemantics: true,
+                child: OutlinedButton(
+                  onPressed: _abrirEndereco,
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(BichuAlvoDeToque.critico),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: <Widget>[
+                      Flexible(child: Text(LocalDoEncontro.rotuloDoMapa)),
+                      SizedBox(width: BichuEspaco.e2),
+                      Icon(Icons.open_in_new, size: BichuEspaco.e5),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           if (temBotao)
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -502,18 +564,25 @@ class _Tile {
 
 /// O endereco: um no semantico so, selecionavel em todas as variantes.
 class _Endereco extends StatelessWidget {
-  const _Endereco({required this.lugar, required this.distanciaEmMetros});
+  const _Endereco({
+    required this.lugar,
+    required this.distanciaEmMetros,
+    required this.enderecoPorExtenso,
+  });
 
   final LugarDoEncontro lugar;
   final int? distanciaEmMetros;
+  final String? enderecoPorExtenso;
 
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
     final textos = Theme.of(context).textTheme;
     final d = distanciaEmMetros;
+    final endereco = enderecoPorExtenso;
     final falado = <String>[
       lugar.nomeDoLugar,
+      ?endereco,
       lugar.bairro,
       lugar.cidade,
       lugar.uf,
@@ -541,6 +610,15 @@ class _Endereco extends StatelessWidget {
                       style: textos.labelLarge?.copyWith(color: cores.textPrimary),
                     ),
                     const SizedBox(height: BichuEspaco.e1),
+                    if (endereco != null) ...<Widget>[
+                      Text(
+                        endereco,
+                        style: textos.bodySmall?.copyWith(
+                          color: cores.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: BichuEspaco.e1),
+                    ],
                     Text(
                       lugar.bairroECidade,
                       style: textos.bodySmall?.copyWith(color: cores.textSecondary),

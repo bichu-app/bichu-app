@@ -28,6 +28,12 @@ class SaidaDeTeste extends SaidaDoApp {
   final List<({double lat, double lon, String nome})> mapas =
       <({double lat, double lon, String nome})>[];
   final List<EventoDeCalendario> calendario = <EventoDeCalendario>[];
+
+  /// O que foi para o app de mapas como TEXTO (endereco por extenso).
+  final List<String> enderecos = <String>[];
+
+  /// O que foi para o navegador do aparelho (convite, Instagram).
+  final List<Uri> links = <Uri>[];
   bool abre = true;
 
   @override
@@ -37,6 +43,18 @@ class SaidaDeTeste extends SaidaDoApp {
     required String nomeDoLugar,
   }) async {
     mapas.add((lat: lat, lon: lon, nome: nomeDoLugar));
+    return abre;
+  }
+
+  @override
+  Future<bool> abrirEnderecoNoAppDeMapas({required String endereco}) async {
+    enderecos.add(endereco);
+    return abre;
+  }
+
+  @override
+  Future<bool> abrirLink(Uri link) async {
+    links.add(link);
     return abre;
   }
 
@@ -205,6 +223,112 @@ void main() {
       expect(saida.mapas, hasLength(1));
       expect(saida.mapas.single.lat, -23.5617);
       expect(saida.mapas.single.nome, 'Praça Benedito Calixto');
+    });
+
+    testWidgets('com conta e endereço: a linha do endereço, e Abrir no mapa manda o TEXTO',
+        (tester) async {
+      const endereco = 'R. Teodoro Sampaio, 1020 - Pinheiros, São Paulo - SP';
+      final rede = redeDoEncontro(
+        encontro: encontroPublico(),
+        mais: <String, http.Response Function(http.Request)>{
+          'GET /v1/network/events/$slugPublico/location':
+              sempre(localizacao(lat: null, endereco: endereco)),
+        },
+      );
+      await abrirEncontro(tester, rede: rede, titulo: tituloPublico);
+
+      await rolarAte(tester, find.text(LocalDoEncontro.rotuloDoMapa));
+      expect(find.text(endereco), findsOneWidget);
+
+      await tester.tap(find.text(LocalDoEncontro.rotuloDoMapa));
+      await tester.pumpAndSettle();
+      // O TEXTO vai para o app de mapas: nenhuma coordenada, porque nao
+      // geocodificamos (ADR-0006).
+      expect(saida.enderecos, <String>[endereco]);
+      expect(saida.mapas, isEmpty);
+    });
+
+    testWidgets('ISCA -- com endereço E ponto há um botão só, o do endereço',
+        (tester) async {
+      const endereco = 'R. Teodoro Sampaio, 1020 - Pinheiros, São Paulo - SP';
+      final rede = redeDoEncontro(
+        encontro: encontroPublico(),
+        mais: <String, http.Response Function(http.Request)>{
+          'GET /v1/network/events/$slugPublico/location':
+              sempre(localizacao(endereco: endereco)),
+        },
+      );
+      await abrirEncontro(tester, rede: rede, titulo: tituloPublico);
+
+      await rolarAte(tester, find.text(LocalDoEncontro.rotuloDoMapa));
+      expect(find.text(LocalDoEncontro.rotuloDoMapa), findsOneWidget);
+      expect(find.text(LocalDoEncontro.rotuloDoBotao), findsNothing);
+    });
+
+    testWidgets('ISCA -- sem conta não há endereço nem Abrir no mapa',
+        (tester) async {
+      final rede = redeDoEncontro(
+        encontro: encontroPublico(),
+        mais: <String, http.Response Function(http.Request)>{
+          'GET /v1/network/events/$slugPublico/location': sempre(
+            localizacao(endereco: 'R. Teodoro Sampaio, 1020'),
+          ),
+        },
+      );
+      await abrirEncontro(
+        tester,
+        rede: rede,
+        titulo: tituloPublico,
+        logado: false,
+      );
+
+      // Nao prometemos o que nao vai aparecer: nem o endereco, nem o botao.
+      expect(find.text(LocalDoEncontro.rotuloDoMapa), findsNothing);
+      expect(textoDaTela(tester), isNot(contains('Teodoro Sampaio')));
+    });
+
+    testWidgets('links: convite e Instagram abrem no navegador, sem conta',
+        (tester) async {
+      final rede = redeDoEncontro(
+        encontro: encontroPublico(
+          ticketUrl: 'https://ingresso.exemplo.test/oktoberpet',
+          instagramHandle: 'bichu.app',
+          instagramUrl: 'https://www.instagram.com/bichu.app',
+        ),
+      );
+      await abrirEncontro(
+        tester,
+        rede: rede,
+        titulo: tituloPublico,
+        logado: false,
+      );
+
+      await rolarAte(tester, find.text('Comprar convite'));
+      await tester.tap(find.text('Comprar convite'));
+      await tester.pumpAndSettle();
+      await rolarAte(tester, find.text('Instagram'));
+      await tester.tap(find.text('Instagram'));
+      await tester.pumpAndSettle();
+
+      expect(saida.links, <Uri>[
+        Uri.parse('https://ingresso.exemplo.test/oktoberpet'),
+        Uri.parse('https://www.instagram.com/bichu.app'),
+      ]);
+    });
+
+    testWidgets('ISCA -- sem links não há seção Links (nem moldura vazia)',
+        (tester) async {
+      final rede = redeDoEncontro(encontro: encontroPublico());
+      await abrirEncontro(
+        tester,
+        rede: rede,
+        titulo: tituloPublico,
+        logado: false,
+      );
+
+      expect(find.text('Links'), findsNothing);
+      expect(find.text('Comprar convite'), findsNothing);
+      expect(find.text('Instagram'), findsNothing);
     });
 
     testWidgets('/location com falha: o erro do mapa e Tentar de novo refaz só ela',
@@ -517,7 +641,8 @@ void main() {
         find.text('Você pode participar. O local e os detalhes estão abaixo.'),
         findsOneWidget,
       );
-      expect(find.text('R\$ 30 por cão'), findsOneWidget);
+      // `per_dog` legado, exibido como "por pet".
+      expect(find.text('R\$ 30 por pet'), findsOneWidget);
       await rolarAte(tester, find.text('ISCA-LUGAR Parque Villa-Lobos'));
       expect(find.text('ISCA-LUGAR Parque Villa-Lobos'), findsOneWidget);
       expect(textoDaTela(tester), isNot(contains('da sua região')));

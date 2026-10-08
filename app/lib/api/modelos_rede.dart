@@ -171,12 +171,20 @@ enum TipoDeEntrada {
 
 /// `#/components/schemas/EventPriceUnit` do contrato.
 ///
-/// Os rotulos sao os da matriz de rastreabilidade (`correspondencias`), um
-/// para um.
+/// **A correspondencia nao e um para um** (01/10): `per_dog` e `per_pet` sao a
+/// mesma coisa para quem le, e os dois aparecem como `por pet`. `per_dog` e
+/// legado -- o servidor ainda o devolve nos encontros antigos e o painel nao o
+/// oferece mais, por isso ele continua aqui. Aposentadoria no ADR-0027 item 22.
+///
+/// Os rotulos sao, palavra por palavra, os do painel
+/// (`admin/src/rede/dominio/rotulos.ts`, `UNIDADES`): o valor que a pessoa ve
+/// no backoffice e o que ela ve no aparelho, e nao ha duas verdades.
 enum UnidadeDoPreco {
-  porCao('per_dog', 'por cão'),
-  porPessoa('per_person', 'por pessoa'),
-  porDupla('per_pair', 'por dupla');
+  porPet('per_pet', 'por pet'),
+  porPessoa('per_person', 'por humano'),
+  porDupla('per_pair', 'por dupla (1 humano + 1 pet)'),
+  porDuasPessoas('per_two_people', 'por dupla (2 humanos)'),
+  porCao('per_dog', 'por pet');
 
   const UnidadeDoPreco(this.codigo, this.rotulo);
 
@@ -654,7 +662,7 @@ class LugarDoEncontro {
 
 /// `#/components/schemas/NetworkEventPrice` do contrato.
 ///
-/// Informativo: o Bichu nao cobra. O selo e `R$ 15 por cão`, montado de
+/// Informativo: o Bichu nao cobra. O selo e `R$ 15 por pet`, montado de
 /// numero e unidade, sempre no mesmo formato (UX 28.7.2).
 class PrecoDoEncontro {
   const PrecoDoEncontro({required this.centavos, required this.unidade});
@@ -662,8 +670,10 @@ class PrecoDoEncontro {
   final int centavos;
   final UnidadeDoPreco? unidade;
 
-  /// `R$ 15 por cão`, `R$ 12,50 por pessoa`. Sem unidade conhecida, so o
-  /// valor: inventar a unidade seria afirmar o que o servidor nao disse.
+  /// `R$ 15 por pet`, `R$ 12,50 por humano`. **Sem unidade conhecida, so o
+  /// valor**: inventar a unidade seria afirmar o que o servidor nao disse, e e
+  /// o que mantem o app de pe quando o contrato ganha uma unidade nova sem ele
+  /// (isca `tolera unidade de preco que este build nao conhece`).
   String get rotulo {
     final reais = centavos ~/ 100;
     final resto = centavos % 100;
@@ -780,6 +790,15 @@ abstract class ConteudoDoEncontro {
   List<ItemParaLevar> get oQueLevar;
   String? get observacoes;
 
+  /// `ticket_url`: onde se compra o convite. Publico (ADR-0027 item 22). Nulo
+  /// quando nao ha, e a tela entao nao desenha a moldura.
+  Uri? get urlDoConvite;
+
+  /// `instagram_url`, montada pelo servidor com a base da configuracao e o
+  /// handle. Nula sem handle **ou sem base configurada no ambiente**
+  /// (`INSTAGRAM_PROFILE_BASE_URL`): nos dois casos a tela nao desenha nada.
+  Uri? get urlDoInstagram;
+
   DiaDoEncontro get dia => DiaDoEncontro(horario.inicioNaParede);
 
   /// O texto alternativo da capa: o da imagem de posicao 0.
@@ -808,6 +827,18 @@ List<EstruturaDoLocal> _estrutura(Object? bruto) {
     for (final item in bruto)
       if (EstruturaDoLocal.porCodigo(item) case final EstruturaDoLocal e) e,
   ];
+}
+
+/// Um link publico do encontro (`ticket_url`, `instagram_url`).
+///
+/// Nulo e estado normal: o encontro pode nao ter link. Devolve nulo tambem
+/// para o que nao da URL absoluta, em vez de levar a pessoa a um link quebrado
+/// -- o servidor ja recusa na escrita, e aqui a tela so nao desenha.
+Uri? _link(Object? bruto) {
+  if (bruto is! String || bruto.trim().isEmpty) return null;
+  final u = Uri.tryParse(bruto.trim());
+  if (u == null || !u.hasScheme || !u.isAbsolute) return null;
+  return u;
 }
 
 List<ItemParaLevar> _levar(Object? bruto) {
@@ -860,6 +891,8 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
     required this.estrutura,
     required this.oQueLevar,
     required this.observacoes,
+    required this.urlDoConvite,
+    required this.urlDoInstagram,
   });
 
   @override
@@ -894,6 +927,10 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
   final List<ItemParaLevar> oQueLevar;
   @override
   final String? observacoes;
+  @override
+  final Uri? urlDoConvite;
+  @override
+  final Uri? urlDoInstagram;
 
   @override
   VisibilidadeDoEncontro get visibilidade => VisibilidadeDoEncontro.publico;
@@ -944,6 +981,8 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
       estrutura: _estrutura(json['amenities']),
       oQueLevar: _levar(json['bring_items']),
       observacoes: notas is String && notas.trim().isNotEmpty ? notas : null,
+      urlDoConvite: _link(json['ticket_url']),
+      urlDoInstagram: _link(json['instagram_url']),
     );
   }
 }
@@ -1015,6 +1054,8 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
     required this.estrutura,
     required this.oQueLevar,
     required this.observacoes,
+    required this.urlDoConvite,
+    required this.urlDoInstagram,
   });
 
   @override
@@ -1049,6 +1090,10 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
   final List<ItemParaLevar> oQueLevar;
   @override
   final String? observacoes;
+  @override
+  final Uri? urlDoConvite;
+  @override
+  final Uri? urlDoInstagram;
 
   @override
   DiaDoEncontro get dia => DiaDoEncontro(horario.inicioNaParede);
@@ -1096,6 +1141,8 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
       estrutura: _estrutura(json['amenities']),
       oQueLevar: _levar(json['bring_items']),
       observacoes: notas is String && notas.trim().isNotEmpty ? notas : null,
+      urlDoConvite: _link(json['ticket_url']),
+      urlDoInstagram: _link(json['instagram_url']),
     );
   }
 }
@@ -1163,12 +1210,26 @@ class PontoDoEncontro {
 /// **So existe com conta** (`getNetworkEventLocation`). `point` nulo e o
 /// encontro sem ponto marcado, que e estado normal.
 class LocalizacaoDoEncontro {
-  const LocalizacaoDoEncontro({required this.ponto});
+  const LocalizacaoDoEncontro({required this.ponto, required this.endereco});
 
   final PontoDoEncontro? ponto;
 
+  /// `street_address`: o endereco por extenso, como o painel o escreveu.
+  ///
+  /// **So sai aqui, e so com conta** (emenda de 01/10 do ADR-0027): nem a
+  /// agenda nem o detalhe publico o carregam. Nulo quando nao ha, que e estado
+  /// normal -- o app abre este TEXTO no aplicativo de mapas do aparelho e nao
+  /// geocodifica nada (ADR-0006).
+  final String? endereco;
+
   static LocalizacaoDoEncontro doJson(Map<String, dynamic> json) {
-    return LocalizacaoDoEncontro(ponto: PontoDoEncontro.doJson(json['point']));
+    final endereco = json['street_address'];
+    return LocalizacaoDoEncontro(
+      ponto: PontoDoEncontro.doJson(json['point']),
+      endereco: endereco is String && endereco.trim().isNotEmpty
+          ? endereco.trim()
+          : null,
+    );
   }
 }
 
