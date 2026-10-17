@@ -183,17 +183,41 @@ export const TETO_DA_URL = 2048;
  * Confere a URL de destino de um item contra o host do parceiro (D47 e ADR-0027
  * item 14).
  *
- * **O host e o do parceiro, exatamente.** O banco guarda so o CAMINHO do
- * destino (`store_items.target_path`, migracao `20260922000009`) e compoe o
- * endereco na leitura com `store_partners.host`, entao um subdominio
- * (`www.lojadobairro.com.br` para o parceiro `lojadobairro.com.br`) nao tem onde
- * ser guardado: aceita-lo aqui seria gravar outro endereco que o enviado.
- * `lojadobairro.com.br.golpe.io` e `falsalojadobairro.com.br` continuam
- * recusados pelo mesmo motivo.
+ * ## O host e o do parceiro OU UM SUBDOMINIO DELE, e a diferenca custou caro
  *
- * **Sem `?` e sem `#`**: o `CHECK` do caminho os recusa, porque parametro em
- * link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185). A
- * recusa e daqui, com `400`, para nao chegar ao banco como erro de restricao.
+ * Ate 17/10/2026 esta funcao exigia o host **exato**, e isso derrubava
+ * `www.cobasi.com.br` para o parceiro `cobasi.com.br` -- ou seja, derrubava a
+ * forma como a maioria das lojas publica os proprios links. O cliente ficou
+ * bloqueado cadastrando um produto legitimo por causa disto.
+ *
+ * O vinculo com o parceiro **continua sendo a protecao**, e nao foi relaxado
+ * para "qualquer host": o que mudou e que `loja.`, `www.` e `produtos.` do
+ * MESMO dominio passam a casar.
+ *
+ * **A comparacao e por sufixo COM FRONTEIRA DE ROTULO, e nunca `endsWith`
+ * cru**, porque `endsWith` cru e a armadilha inteira deste problema:
+ * `malcobasi.com.br` termina em `cobasi.com.br` e **nao pode passar**. A regra
+ * esta em [ehDoParceiro]: ou o host e igual ao do parceiro, ou ele termina em
+ * `'.' + hostDoParceiro`. O ponto obrigatorio e o que separa um subdominio de
+ * um dominio que so compartilha as ultimas letras, e e por isso que a
+ * concatenacao do ponto acontece ali e nao na chamada.
+ *
+ * ## Query e fragmento PASSAM, e a proibicao anterior era o instrumento errado
+ *
+ * `?idsku=1197673` e o numero do produto no catalogo do parceiro, nao rastreio
+ * de pessoa. A consequencia 3 da BICHUS-185 continua valendo e continua tendo
+ * dono: ela e sobre o que o APLICATIVO acrescenta na saida, garantido na tela
+ * (`loja_abre_no_navegador_test.dart` reprova parametro acrescentado). O que o
+ * parceiro ja publicou na propria URL nunca foi o risco.
+ *
+ * ## CADA RECUSA DIZ O MOTIVO REAL, e isso nao e cosmetico
+ *
+ * Todas as recusas devolviam `invalid_url`, e o painel traduzia `invalid_url`
+ * para "O link precisa comecar com https://". O cliente leu essa frase sobre um
+ * link que comecava com `https://`, e passou a achar que o link dele estava
+ * errado. **Mensagem generica nao e so feia: ela manda a pessoa consertar a
+ * coisa errada.** Agora cada motivo tem `code` proprio, e o painel tem como
+ * dizer a verdade.
  *
  * Devolve os erros de campo, e nao lanca: quem chama junta com os outros erros
  * do corpo e responde um 400 so.
@@ -204,38 +228,47 @@ export function errosDoDestino(
   hostDoParceiro: string,
 ): ProblemFieldError[] {
   if (targetUrl.length > TETO_DA_URL) {
-    return [{ field: campo, code: 'invalid_url', message: `Até ${String(TETO_DA_URL)} caracteres.` }];
+    return [
+      {
+        field: campo,
+        code: 'url_too_long',
+        message: `O link passa de ${String(TETO_DA_URL)} caracteres.`,
+      },
+    ];
   }
   let url: URL;
   try {
     url = new URL(targetUrl);
   } catch {
-    return [{ field: campo, code: 'invalid_url', message: 'Não é um endereço válido.' }];
+    return [{ field: campo, code: 'invalid_url', message: 'Esse texto não é um endereço válido.' }];
   }
   if (url.protocol !== 'https:') {
-    return [{ field: campo, code: 'invalid_url', message: 'Só endereços https.' }];
+    return [{ field: campo, code: 'url_not_https', message: 'O link precisa começar com https://.' }];
   }
   if (url.username !== '' || url.password !== '') {
-    return [{ field: campo, code: 'invalid_url', message: 'Endereço com usuário ou senha não é aceito.' }];
-  }
-  if (ehIpLiteral(url.hostname)) {
-    return [{ field: campo, code: 'invalid_url', message: 'O endereço precisa ter nome, não número de IP.' }];
-  }
-  if (url.search !== '' || url.hash !== '' || targetUrl.includes('?') || targetUrl.includes('#')) {
     return [
       {
         field: campo,
-        code: 'invalid_url',
-        message: 'Sem parâmetros (?) nem âncora (#) no endereço.',
+        code: 'url_has_credentials',
+        message: 'O link tem usuário e senha embutidos. Use o endereço sem eles.',
       },
     ];
   }
-  if (url.hostname.toLowerCase() !== hostDoParceiro.toLowerCase()) {
+  if (ehIpLiteral(url.hostname)) {
+    return [
+      {
+        field: campo,
+        code: 'url_ip_literal',
+        message: 'O link aponta para um número de IP. Use o endereço com nome.',
+      },
+    ];
+  }
+  if (!ehDoParceiro(url.hostname, hostDoParceiro)) {
     return [
       {
         field: campo,
         code: 'host_mismatch',
-        message: `O destino precisa estar em ${hostDoParceiro}.`,
+        message: `O link precisa ser do site do parceiro (${hostDoParceiro}).`,
       },
     ];
   }
@@ -243,12 +276,55 @@ export function errosDoDestino(
 }
 
 /**
+ * O host do destino pertence ao parceiro: e ele mesmo, ou um subdominio dele.
+ *
+ * **O ponto na concatenacao e a regra inteira.** `'malcobasi.com.br'` termina
+ * em `'cobasi.com.br'`, e so nao termina em `'.cobasi.com.br'`. Sem o ponto
+ * esta funcao aprovaria qualquer dominio que alguem registrasse terminando com
+ * o nome do parceiro, que e o jeito mais barato de fazer um link nosso levar
+ * para fora -- e o jeito que ninguem percebe lendo o codigo com pressa.
+ *
+ * Exportada porque `escrita-da-vitrine.test.ts` a exercita direto: a fronteira
+ * de rotulo merece casos proprios, e nao so o reflexo deles em `errosDoDestino`.
+ */
+export function ehDoParceiro(hostname: string, hostDoParceiro: string): boolean {
+  const host = hostname.toLowerCase();
+  const alvo = hostDoParceiro.toLowerCase();
+  return host === alvo || host.endsWith(`.${alvo}`);
+}
+
+/**
+ * O host a GUARDAR, ou `null` quando ele e o do proprio parceiro.
+ *
+ * Nulo no caso comum e deliberado (ver a migracao
+ * `20261017000001_link-do-produto-com-query-e-subdominio`): e o que faz trocar
+ * o dominio de um parceiro continuar sendo o `UPDATE` de uma coluna so. So o
+ * item que mora num subdominio carrega o proprio host.
+ *
+ * Pressupoe uma URL que `errosDoDestino` ja aprovou.
+ */
+export function hostDoDestino(targetUrl: string, hostDoParceiro: string): string | null {
+  const host = new URL(targetUrl).hostname.toLowerCase();
+  return host === hostDoParceiro.toLowerCase() ? null : host;
+}
+
+/**
  * O caminho que o banco guarda, a partir de uma URL que `errosDoDestino` ja
- * aprovou. O host sai porque e o do parceiro, e o esquema porque e sempre
- * `https` na composicao (`enderecoNoParceiro`).
+ * aprovou. O host sai porque ele vai para `target_host` (ou e o do proprio
+ * parceiro), e o esquema porque e sempre `https` na composicao
+ * (`enderecoNoParceiro`).
+ *
+ * **`search` e `hash` ENTRAM**, e ate 17/10/2026 nao entravam: `pathname`
+ * sozinho transformava `/racao-granplus-.../p?idsku=1197673` em
+ * `/racao-granplus-.../p`, que no site da Cobasi e outra pagina. O defeito
+ * seria SILENCIOSO -- o item gravaria, a vitrine mostraria, e a pessoa cairia
+ * na pagina errada --, e e por isso que a recusa de `?` na escrita escondia
+ * este aqui: enquanto a URL com query era rejeitada na porta, ninguem
+ * descobria que o truncamento existia logo atras dela.
  */
 export function caminhoDoDestino(targetUrl: string): string {
-  return new URL(targetUrl).pathname;
+  const url = new URL(targetUrl);
+  return `${url.pathname}${url.search}${url.hash}`;
 }
 
 /**

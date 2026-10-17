@@ -5848,8 +5848,9 @@ paths:
       summary: Cria um item em rascunho
       description: |
         **O item nasce em rascunho** e nao aparece no app ate
-        `publishAdminStoreItem`. `target_url` precisa terminar no host do
-        parceiro (`400`, `code: host_mismatch`). O preco e objeto unico ou
+        `publishAdminStoreItem`. `target_url` precisa estar no host do
+        parceiro ou num subdominio dele (`400`, `code: host_mismatch`), com
+        query e fragmento permitidos. O preco e objeto unico ou
         ausente: "preco sem data" nao cabe no corpo. `checked_at` no futuro e
         recusado. As imagens, ate 8, sao envios de
         `createAdminCatalogImageIntent` com `purpose: store_item`, na ordem em
@@ -9757,9 +9758,11 @@ components:
       maxLength: 2048
       pattern: '^https://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[^\s]*)?$'
       description: |
-        So `https:`, sem `userinfo`, ate 2048 caracteres (D47). Host que seja
-        IP literal e recusado pelo servidor com `400`, porque a expressao nao
-        tem como separar `10.0.0.1` de um nome.
+        So `https:`, sem `userinfo`, ate 2048 caracteres (D47). Query e
+        fragmento SAO aceitos: loja de verdade identifica SKU e variacao por
+        parametro (`/p?idsku=1197673`), e a expressao os admite em `[^\s]*`.
+        Host que seja IP literal e recusado pelo servidor com `400`, porque a
+        expressao nao tem como separar `10.0.0.1` de um nome.
 
     AdminCatalogImage:
       type: object
@@ -9951,9 +9954,27 @@ components:
           allOf:
             - $ref: '#/components/schemas/HttpsUrl'
           description: |
-            Precisa estar no host EXATO do parceiro (`400`, `code: host_mismatch`),
-            sem `?` nem `#` (`400`, `code: invalid_url`): o banco guarda so o caminho.
+            Precisa estar no host do parceiro **ou num subdominio dele**
+            (`www.cobasi.com.br` para o parceiro `cobasi.com.br`); qualquer
+            outro host e `400`, `code: host_mismatch`. A comparacao e por
+            sufixo COM FRONTEIRA DE ROTULO: `malcobasi.com.br` NAO e
+            subdominio de `cobasi.com.br` e e recusado.
+
+            **Query e fragmento sao aceitos** (`/p?idsku=1197673`): o banco
+            guarda o caminho com os dois. Ate 17/10/2026 eles eram recusados, e
+            a recusa bloqueava link legitimo de loja sem proteger o que dizia
+            proteger -- o aplicativo abre `target_url` como o servidor a
+            mandou, sem acrescentar parametro, e e la que a consequencia 3 da
+            BICHUS-185 e garantida.
+
             Nenhum identificador de pessoa, em codificacao nenhuma.
+
+            Cada recusa tem `code` PROPRIO, e isso e requisito: `url_not_https`,
+            `url_has_credentials`, `url_ip_literal`, `url_too_long`,
+            `host_mismatch` e `invalid_url` (texto que nao e endereco). Um
+            `code` generico para todas fez o painel dizer "precisa comecar com
+            https://" sobre um link que comecava com `https://`, e o cliente
+            passou a procurar o defeito no proprio link.
         price:
           allOf:
             - $ref: '#/components/schemas/AdminPriceInput'

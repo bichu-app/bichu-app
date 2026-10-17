@@ -37,9 +37,10 @@ import type { CategoriaDaVitrine, EspecieDoItem } from '../../domain/item-da-vit
 import {
   DIAS_DE_VALIDADE_DO_PRECO,
   enderecoNoParceiro,
+  hostDoDestinoDoItem,
   ordenarEspecies,
 } from '../../domain/item-da-vitrine.js';
-import { caminhoDoDestino, somarDias } from '../../domain/escrita-da-vitrine.js';
+import { caminhoDoDestino, hostDoDestino, somarDias } from '../../domain/escrita-da-vitrine.js';
 import {
   SlugOcupado,
   type CatalogoAdministrativoRepository,
@@ -163,6 +164,7 @@ interface LinhaDoItem {
   summary: string;
   category: CategoriaDaVitrine;
   target_path: string;
+  target_host: string | null;
   image_path: string | null;
   price_amount: number | null;
   price_currency: string | null;
@@ -249,7 +251,12 @@ function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo
     title: l.title,
     summary: l.summary,
     category: l.category,
-    targetUrl: enderecoNoParceiro(l.partner_host, l.target_path),
+    // A MESMA resolucao da leitura publica: o painel precisa mostrar o link
+    // com `www.` quando foi `www.` que a pessoa cadastrou.
+    targetUrl: enderecoNoParceiro(
+      hostDoDestinoDoItem(l.partner_host, l.target_host),
+      l.target_path,
+    ),
     imageUrl: l.image_path === null ? null : enderecoNoParceiro(l.partner_host, l.image_path),
     priceAmount: l.price_amount === null ? null : Number(l.price_amount),
     priceCurrency: l.price_currency,
@@ -277,6 +284,7 @@ function consultaDeItens(db: DbExecutor) {
       'i.summary as summary',
       'i.category as category',
       'i.target_path as target_path',
+      'i.target_host as target_host',
       'i.image_path as image_path',
       'i.price_amount as price_amount',
       'i.price_currency as price_currency',
@@ -503,6 +511,8 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             category: novo.category,
             image_path: null,
             target_path: caminhoDoDestino(novo.targetUrl),
+            // Nulo quando o host e o do proprio parceiro, que e o caso comum.
+            target_host: hostDoDestino(novo.targetUrl, novo.partnerHost),
             price_amount: novo.preco?.amount ?? null,
             price_currency: novo.preco?.currency ?? null,
             price_checked_at: novo.preco === null ? null : sql<Date>`${novo.preco.checkedAt}::date`,
@@ -532,7 +542,17 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             ...(mudanca.title === undefined ? {} : { title: mudanca.title }),
             ...(mudanca.summary === undefined ? {} : { summary: mudanca.summary }),
             ...(mudanca.category === undefined ? {} : { category: mudanca.category }),
-            ...(mudanca.targetUrl === undefined ? {} : { target_path: caminhoDoDestino(mudanca.targetUrl) }),
+            // Os dois andam JUNTOS: gravar o caminho novo com o host antigo
+            // levaria a pessoa para o caminho novo no dominio errado.
+            ...(mudanca.destino === undefined
+              ? {}
+              : {
+                  target_path: caminhoDoDestino(mudanca.destino.targetUrl),
+                  target_host: hostDoDestino(
+                    mudanca.destino.targetUrl,
+                    mudanca.destino.partnerHost,
+                  ),
+                }),
             ...(mudanca.preco === undefined
               ? {}
               : mudanca.preco === null

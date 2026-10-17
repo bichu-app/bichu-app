@@ -86,10 +86,72 @@ describe('formulario de produto', () => {
     expect(validarProduto({ ...validos, consultadoEm: '2026-09-29' }, hoje)['f-data']).toBe('A data da consulta não pode ser depois de hoje.');
     expect(validarProduto({ ...validos, link: 'http://petcenteraurora.com.br/x' }, hoje)['f-link']).toBe('O link precisa começar com https://.');
     expect(validarProduto({ ...validos, link: 'https://outraloja.com.br/x' }, hoje)['f-link']).toBe(
-      'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br).',
+      'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br) ou de um subdomínio dele, como www.petcenteraurora.com.br.',
     );
     // Host parecido nao e o do parceiro.
     expect(validarProduto({ ...validos, link: 'https://falsopetcenteraurora.com.br/x' }, hoje)['f-link']).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // 17/10: o link que bloqueou o cliente, e a fronteira de rotulo
+  // -------------------------------------------------------------------------
+
+  it('o link do cliente passa no painel, com www e com parametro', () => {
+    const cobasi = { hostDoParceiro: 'cobasi.com.br', hoje: '2026-10-17' };
+    const doCliente =
+      'https://www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673';
+    expect(validarProduto({ ...validos, link: doCliente }, cobasi)['f-link']).toBeUndefined();
+    expect(corpoDeCriacao({ ...validos, link: doCliente }).target_url).toBe(doCliente);
+  });
+
+  it('subdominio passa e host que so termina igual e recusado', () => {
+    const cobasi = { hostDoParceiro: 'cobasi.com.br', hoje: '2026-10-17' };
+    for (const link of [
+      'https://cobasi.com.br/p',
+      'https://www.cobasi.com.br/p',
+      'https://loja.cobasi.com.br/p',
+      'https://cobasi.com.br/p?idsku=1',
+      'https://cobasi.com.br/p#ficha',
+    ]) {
+      expect(validarProduto({ ...validos, link }, cobasi)['f-link']).toBeUndefined();
+    }
+    // ISCA -- em `linkEDoParceiro`, troque `.endsWith(`.${alvo}`)` por
+    // `.endsWith(alvo)`: estes tres passam a ser aceitos e o caso reprova.
+    for (const link of [
+      'https://malcobasi.com.br/p',
+      'https://falsacobasi.com.br/p',
+      'https://cobasi.com.br.golpe.io/p',
+    ]) {
+      expect(validarProduto({ ...validos, link }, cobasi)['f-link']).toBeDefined();
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // A MENSAGEM QUE MENTIA
+  // -------------------------------------------------------------------------
+  //
+  // Todas as recusas do destino chegavam como `invalid_url` e viravam
+  // "O link precisa comecar com https://" -- inclusive sobre um link que
+  // comecava com `https://`. O cliente leu, acreditou, e foi procurar o
+  // defeito no proprio link.
+  //
+  // ISCA -- em `formulario-do-produto.ts`, apague o bloco `MENSAGEM_DO_LINK`
+  // de `mensagemDoCodigo`. Todos os casos abaixo caem na frase padrao e o
+  // teste reprova.
+  it('cada recusa do servidor no link diz o motivo real', () => {
+    const texto = (code: string): string | undefined =>
+      errosDoServidor([{ field: 'target_url', code }]).erros['f-link'];
+
+    expect(texto('url_not_https')).toBe('O link precisa começar com https://.');
+    expect(texto('url_has_credentials')).toBe('Tire o usuário e a senha do endereço antes de salvar.');
+    expect(texto('url_ip_literal')).toBe('O link aponta para um número de IP. Use o endereço com o nome do site.');
+    expect(texto('url_too_long')).toBe('O link é longo demais. Use o endereço direto do produto.');
+    expect(texto('invalid_url')).toBe('Esse texto não é um endereço de site.');
+
+    // E nenhuma delas, fora a de esquema, pode falar de `https://`.
+    for (const code of ['url_has_credentials', 'url_ip_literal', 'url_too_long', 'invalid_url', 'host_mismatch']) {
+      expect(texto(code)).not.toContain('https://');
+    }
   });
 
   it('traduz o validation-failed do servidor pelo codigo, nunca pelo texto', () => {
@@ -104,7 +166,7 @@ describe('formulario de produto', () => {
       ),
     ).toEqual({
       erros: {
-        'f-link': 'O link precisa ser do site do parceiro escolhido.',
+        'f-link': 'O link precisa ser do site do parceiro escolhido, ou de um subdomínio dele.',
         'f-data': 'A data da consulta não pode ser depois de hoje.',
         'f-tags': 'Uma das tags mudou de nome desde que você abriu este formulário. Desmarque a tag indicada, escolha de novo e salve.',
       },
@@ -121,7 +183,7 @@ describe('formulario de produto', () => {
       ),
     ).toEqual({
       erros: {
-        'f-link': 'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br).',
+        'f-link': 'O link precisa ser do site do parceiro escolhido (petcenteraurora.com.br) ou de um subdomínio dele, como www.petcenteraurora.com.br.',
         'f-tags': 'A tag “sem grãos” foi desativada. Desmarque-a para salvar, ou reative-a em Tags.',
       },
       tagsRecusadas: ['sem-graos'],

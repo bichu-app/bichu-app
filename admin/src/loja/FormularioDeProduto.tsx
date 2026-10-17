@@ -567,7 +567,7 @@ export default function FormularioDeProduto() {
         tipo="url"
         maximo={2048}
         erro={erro('f-link')}
-        ajuda="Começa com https:// e precisa ser do site do parceiro escolhido."
+        ajuda="Começa com https:// e precisa ser do site do parceiro escolhido, ou de um subdomínio dele (www., loja.). Pode ter parâmetros, como ?idsku=1197673."
       />
 
       <fieldset className="bloco">

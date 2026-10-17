@@ -521,6 +521,7 @@ export class CatalogoAdministrativo {
           id: this.deps.ids.uuidv7(),
           slug,
           partnerId: parceiro.id,
+          partnerHost: parceiro.host,
           title: corpo.title.trim(),
           summary: corpo.summary.trim(),
           category: corpo.category,
@@ -595,7 +596,19 @@ export class CatalogoAdministrativo {
         ...(patch.title === undefined ? {} : { title: patch.title.trim() }),
         ...(patch.summary === undefined ? {} : { summary: patch.summary.trim() }),
         ...(patch.category === undefined ? {} : { category: patch.category }),
-        ...(patch.target_url === undefined ? {} : { targetUrl: patch.target_url }),
+        // O destino volta ao adaptador quando muda ELE **ou o parceiro**, e os
+        // dois casos mandam `partnerHost` junto: e com ele que o adaptador
+        // decide se `target_host` fica nulo. Trocar o parceiro sem remandar o
+        // destino deixaria `target_host` apontando para o dominio do parceiro
+        // anterior, e o link sairia no site de quem nao vende mais o item.
+        ...(patch.target_url === undefined && partnerId === undefined
+          ? {}
+          : {
+              destino: {
+                targetUrl: patch.target_url ?? atual.targetUrl,
+                partnerHost: hostDoParceiro,
+              },
+            }),
         ...(patch.price === undefined
           ? {}
           : { preco: patch.price === null ? null : precoDoCorpo(patch.price) }),

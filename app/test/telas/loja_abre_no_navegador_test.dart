@@ -137,21 +137,35 @@ void main() {
     });
 
     // Consequencia 3 da BICHUS-185, medida no que FOI PARA A PORTA e nao no
-    // modelo: nenhum parametro e acrescentado no caminho.
+    // modelo: o app nao ACRESCENTA nada.
+    //
+    // **O esperado e a igualdade com o que o servidor mandou, e nao
+    // "sem query".** Query e fragmento sao do parceiro e passaram a ser
+    // aceitos em 17/10 -- um `expect(queryParameters, isEmpty)` aqui mediria a
+    // regra antiga e reprovaria o link de verdade do cliente.
     //
     // ISCA -- em `_BotaoDeSaida._sair`, troque por
     //     SaidaDoApp.atual.abrirLink(destino.replace(queryParameters: {'u': 'tutor@exemplo.com'}))
     // Este caso reprova.
-    testWidgets('ISCA -- nenhum identificador de pessoa entra na URL', (tester) async {
-      await _tocarEConfirmar(
-        tester,
-        targetUrl: 'https://cobasi.com.br/bola-pop-borracha',
-      );
+    testWidgets('ISCA -- o app nao acrescenta nada a URL', (tester) async {
+      const doServidor =
+          'https://www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673';
+      await _tocarEConfirmar(tester, targetUrl: doServidor);
 
       final saiu = saida.links.single;
-      expect(saiu.queryParameters, isEmpty);
-      expect(saiu.fragment, isEmpty);
+      expect(saiu.toString(), doServidor);
       expect(saiu.userInfo, isEmpty);
+    });
+
+    // O link EXATO que bloqueou o cliente em 17/10. Esta aqui com a URL por
+    // extenso, e nao montada por helper: e o caso concreto que se quer ver
+    // verde, e um helper esconderia justamente o `?idsku=` que era o problema.
+    testWidgets('o link do cliente abre', (tester) async {
+      const doCliente =
+          'https://www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673';
+      await _tocarEConfirmar(tester, targetUrl: doCliente);
+
+      expect(saida.links.single.toString(), doCliente);
     });
   });
 
@@ -175,6 +189,20 @@ void main() {
       test('ISCA -- `$recusado` nao vira destino', () {
         final item = ItemDaLoja.doJson(itemDoContrato(targetUrl: recusado));
         expect(item.destinoExterno, isNull);
+      });
+    }
+
+    // Query e fragmento PASSAM. Ate 17/10 o servidor os recusava na escrita e o
+    // app nunca via um; agora ve, e recusar aqui faria o link gravado nao abrir.
+    for (final aceito in <String>[
+      'https://www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673',
+      'https://cobasi.com.br/bola-pop?cor=azul&tamanho=g',
+      'https://cobasi.com.br/bola-pop#descricao',
+      'https://loja.cobasi.com.br/bola-pop',
+    ]) {
+      test('`$aceito` vira destino', () {
+        final item = ItemDaLoja.doJson(itemDoContrato(targetUrl: aceito));
+        expect(item.destinoExterno?.toString(), aceito);
       });
     }
 

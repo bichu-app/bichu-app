@@ -113,6 +113,24 @@ export function enderecoNoParceiro(host: string, caminho: string): string {
   return `https://${host}${caminho}`;
 }
 
+/**
+ * O host a usar na composicao: o do item quando ele mora num SUBDOMINIO do
+ * parceiro, e o do parceiro no caso comum.
+ *
+ * `store_items.target_host` e nulo quando o host e o do proprio parceiro
+ * (migracao `20261017000001`), e e esse nulo que faz trocar o dominio de um
+ * parceiro continuar sendo o `UPDATE` de uma coluna so. Esta funcao e o unico
+ * lugar que resolve o nulo, para a leitura publica e a do painel nao
+ * resolverem diferente -- que e exatamente como `www.` apareceria numa tela e
+ * nao na outra.
+ */
+export function hostDoDestinoDoItem(
+  hostDoParceiro: string,
+  hostDoItem: string | null,
+): string {
+  return hostDoItem ?? hostDoParceiro;
+}
+
 /** O item como o repositorio o entrega. Sem `active`, sem UUID -- nao ha um. */
 export interface ItemDaVitrine {
   readonly slug: string;
