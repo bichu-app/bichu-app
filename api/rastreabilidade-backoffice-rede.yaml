@@ -362,7 +362,7 @@ telas:
           - enum:EventPriceUnit.per_pair
           - enum:EventPriceUnit.per_two_people
           - req:ticket_url
-          - req:instagram_handle
+          - req:instagram_url
           - enum:PetSize.P
           - enum:PetSize.M
           - enum:PetSize.G
@@ -403,7 +403,7 @@ telas:
           - req:fenced_off_leash_area
           - req:amenities
           - req:ticket_url
-          - req:instagram_handle
+          - req:instagram_url
           - header:If-Match
       - operationId: relocateAdminNetworkEvent
         situacao: contrato
