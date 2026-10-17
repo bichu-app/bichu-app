@@ -319,7 +319,9 @@ describe('3 · Loja: capa, ordem, descrição e rascunho (17/10/2026)', () => {
     const descricao = await screen.findByLabelText('Descrição *');
     expect(descricao.tagName).toBe('TEXTAREA');
     expect(Number(descricao.getAttribute('rows'))).toBeGreaterThanOrEqual(4);
-    expect(descricao).toHaveAttribute('maxlength', '180');
+    // 3000 desde 17/10/2026 (decisao do cliente), o mesmo numero do contrato e
+    // do CHECK do banco. Em 180 o painel travaria o cliente com o resto solto.
+    expect(descricao).toHaveAttribute('maxlength', '3000');
 
     fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Ração com parágrafos' } });
     fireEvent.change(descricao, { target: { value: 'Primeira linha.\nSegunda linha.' } });

@@ -820,12 +820,20 @@ void _oTextoAlternativoEAQuebraDeLinha() {
   });
 
   group('a descrição do produto na tela', () {
-    // O campo do painel virou área de texto em 17/10/2026, e a quebra de linha
-    // passou a chegar aqui. O cartão desenha com `Text` SEM `maxLines` e SEM
-    // `overflow`, então a quebra aparece e nada é truncado -- é isto que este
-    // caso fixa, porque um `maxLines: 2` acrescentado depois faria o
-    // administrador escrever em parágrafos e ver um bloco cortado.
-    testWidgets('a quebra de linha da descrição é preservada e nada é truncado', (tester) async {
+    // 500 caracteres no cartão, com botão para o resto (decisão do cliente de
+    // 17/10/2026). O teto do campo subiu para 3000 no mesmo dia, e sem corte o
+    // cartão empurraria a vitrine inteira para baixo.
+    String longo(int n) {
+      // Palavras de 4 letras + espaço: 5 caracteres por palavra, então o corte
+      // tem sempre um espaço por perto e nada depende de sorte.
+      final b = StringBuffer();
+      while (b.length < n) {
+        b.write('abcd ');
+      }
+      return b.toString().substring(0, n).trimRight();
+    }
+
+    testWidgets('a quebra de linha é preservada, e descrição curta não ganha botão', (tester) async {
       await abrirLoja(
         tester,
         rede: redeDaVitrine(
@@ -838,8 +846,72 @@ void _oTextoAlternativoEAQuebraDeLinha() {
         (t) => (t.data ?? '').contains('Primeira linha.'),
       );
       expect(desenhado.data, 'Primeira linha.\nSegunda linha.');
-      expect(desenhado.maxLines, isNull, 'sem maxLines: parágrafo nenhum é cortado');
-      expect(desenhado.overflow, isNull);
+      expect(find.text('Ler mais'), findsNothing, reason: 'botão que não esconde nada não deve existir');
+    });
+
+    test('exatamente 500 caracteres cabem inteiros, e 501 não', () {
+      final com500 = ItemDaLoja.doJson(itemDoContrato(summary: longo(500)));
+      expect(com500.resumo.length, 500);
+      expect(com500.resumoCabeNoCartao, isTrue);
+      expect(com500.trechoDoResumo, com500.resumo, reason: 'sem corte e sem reticências');
+
+      final com501 = ItemDaLoja.doJson(itemDoContrato(summary: longo(501)));
+      expect(com501.resumoCabeNoCartao, isFalse);
+      expect(com501.trechoDoResumo.endsWith('…'), isTrue);
+    });
+
+    test('o corte é no último espaço, nunca no meio da palavra', () {
+      final item = ItemDaLoja.doJson(itemDoContrato(summary: longo(3000)));
+      final trecho = item.trechoDoResumo;
+      expect(trecho.length, lessThanOrEqualTo(ItemDaLoja.tetoDoResumoNoCartao + 1));
+      // Sem as reticências, o trecho termina numa palavra completa: o caractere
+      // seguinte no texto original é espaço (ou o trecho é o texto inteiro).
+      final semReticencias = trecho.substring(0, trecho.length - 1);
+      expect(item.resumo[semReticencias.length], ' ');
+      expect(semReticencias.endsWith('abcd'), isTrue, reason: 'palavra inteira, não "abc"');
+    });
+
+    test('texto sem espaço nenhum ainda devolve 500 caracteres, e não 250', () {
+      final grudado = 'a' * 3000;
+      final item = ItemDaLoja.doJson(itemDoContrato(summary: grudado));
+      expect(item.trechoDoResumo.length, ItemDaLoja.tetoDoResumoNoCartao + 1, reason: '500 + reticências');
+    });
+
+    testWidgets('descrição de 3000: o cartão mostra o trecho, "Ler mais" expande e "Ler menos" recolhe', (tester) async {
+      final inteiro = longo(3000);
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(paginaDoContrato(<Map<String, dynamic>>[itemDoContrato(summary: inteiro)])),
+      );
+      final item = ItemDaLoja.doJson(itemDoContrato(summary: inteiro));
+
+      // Colapsado: o TRECHO é o dado do `Text`. Não há `semanticsLabel`
+      // mentindo, e o leitor de tela não ouve 3000 caracteres num cartão.
+      expect(find.text(item.trechoDoResumo), findsOneWidget);
+      expect(find.text(inteiro), findsNothing);
+
+      await tester.tap(find.text('Ler mais'));
+      await tester.pumpAndSettle();
+      expect(find.text(inteiro), findsOneWidget, reason: 'o texto inteiro aparece NO LUGAR, sem tela nova');
+      expect(find.text('Ler mais'), findsNothing);
+
+      // Recolhe: é uma lista, e cartão expandido empurra a vitrine para baixo.
+      await tester.tap(find.text('Ler menos'));
+      await tester.pumpAndSettle();
+      expect(find.text(item.trechoDoResumo), findsOneWidget);
+    });
+
+    testWidgets('o botão diz de qual produto ele é, para o leitor de tela', (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[
+            itemDoContrato(title: 'Bola Pop', summary: longo(3000)),
+          ]),
+        ),
+      );
+      // "Ler mais, botão" repetido numa lista de doze cartões não diz nada.
+      expect(find.bySemanticsLabel('Ler mais da descrição de Bola Pop'), findsOneWidget);
     });
   });
 }

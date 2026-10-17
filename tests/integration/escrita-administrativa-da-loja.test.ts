@@ -794,4 +794,30 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
     const detalhe = await detalhePublico(slug);
     assert.equal(detalhe.corpo['summary'], comParagrafo, 'nenhuma camada trocou o \\n por espaco');
   });
+
+  void it('A DESCRICAO DE 3000 atravessa o banco; 3001 bate no CHECK novo', async () => {
+    const parceiro = await novoParceiro();
+    const slug = `bo-i-${sufixo()}`;
+    const criado = await loja.criarItem(autor, {
+      slug,
+      partner_slug: parceiro.slug,
+      title: 'Racao com descricao longa',
+      summary: 'a'.repeat(3000),
+      category: 'food',
+      species: ['dog'],
+      target_url: `https://${parceiro.host}/racao`,
+    });
+    assert.equal(criado.recurso.summary?.length, 3000, 'o teto virou 3000 em 17/10/2026 (era 180)');
+    await loja.publicarItem(autor, slug, criado.etag);
+    const detalhe = await detalhePublico(slug);
+    assert.equal((detalhe.corpo['summary'] as string).length, 3000, 'a leitura publica devolve os 3000');
+
+    // O caso de uso ja recusa 3001 (`length`); isto aqui e a rede embaixo dele,
+    // pelo caminho que ninguem previu.
+    const id = await idDoItem(slug);
+    await assert.rejects(
+      () => sql`update store_items set summary = ${'a'.repeat(3001)} where id = ${id}::uuid`.execute(banco.db),
+      /store_items_resumo_tem_tamanho/,
+    );
+  });
 });

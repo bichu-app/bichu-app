@@ -22,6 +22,20 @@
 --   carona deixaria a capa do encontro sem nome acessivel sem ninguem ter
 --   pedido.
 --
+-- - **A descricao ate 3000 caracteres** (`store_items.summary`): o `CHECK` de
+--   tamanho passa de `BETWEEN 2 AND 180` para `BETWEEN 2 AND 3000` (decisao do
+--   cliente de 17/10/2026, depois de o campo virar area de texto). Alargar nao
+--   pode falhar por dado: toda linha que existe cabia em 180, e 180 < 3000.
+--
+--   Este e o UNICO dos tres itens que reescreve um `CHECK`, e por isso ele
+--   troca a definicao que `tests/integration/conjunto-exato-dos-checks.test.ts`
+--   nao fixa (`store_items_resumo_tem_tamanho` esta na lista dos CINCO que
+--   aquele arquivo deliberadamente NAO declara, por nao mencionarem literal de
+--   texto -- ver o cabecalho dele). Nada a atualizar la.
+--
+--   **Nao mexe em `network_events.summary`**, que tem teto proprio de 200
+--   desde a `20261001000001`: o pedido foi sobre o produto.
+--
 -- - **Rascunho incompleto** (`store_items`): saem os `NOT NULL` de
 --   `partner_id`, `summary`, `category` e `target_path`. `title` e `slug`
 --   FICAM `NOT NULL`: eles sao o minimo para o registro existir e para a
@@ -71,6 +85,16 @@ ALTER TABLE store_item_images
 COMMENT ON COLUMN store_item_images.alt_text IS
   'Texto alternativo, OPCIONAL desde 17/10/2026 (pedido do cliente): quando vem, de 2 a 150 caracteres; quando e nulo, quem desenha cai no titulo do item. Em network_event_images ele continua obrigatorio.';
 
+-- A descricao ate 3000 caracteres. `DROP` e `ADD` em vez de um `ALTER
+-- CONSTRAINT`, que o Postgres nao tem para `CHECK`. Validado, e nao
+-- `NOT VALID`: nenhuma linha pode violar um teto MAIOR que o anterior.
+ALTER TABLE store_items
+  DROP CONSTRAINT store_items_resumo_tem_tamanho;
+
+ALTER TABLE store_items
+  ADD CONSTRAINT store_items_resumo_tem_tamanho
+    CHECK (summary IS NULL OR char_length(btrim(summary)) BETWEEN 2 AND 3000);
+
 ALTER TABLE store_items
   ALTER COLUMN partner_id  DROP NOT NULL,
   ALTER COLUMN summary     DROP NOT NULL,
@@ -95,7 +119,7 @@ COMMENT ON CONSTRAINT store_items_publicado_esta_completo ON store_items IS
 COMMENT ON COLUMN store_items.partner_id IS
   'Aponta para store_partners.id, nunca para o slug. Anulavel desde 17/10/2026 para o rascunho caber; exigido na publicacao.';
 COMMENT ON COLUMN store_items.summary IS
-  'A "Descricao" do painel, de 2 a 180 caracteres, hoje numa area de texto de varias linhas (a quebra de linha conta no teto). Anulavel desde 17/10/2026 para o rascunho caber; exigida na publicacao.';
+  'A "Descricao" do painel, de 2 a 3000 caracteres (era 180; alargado em 17/10/2026 a pedido do cliente, depois de o campo virar area de texto), com quebra de linha contando no teto. Anulavel desde 17/10/2026 para o rascunho caber; exigida na publicacao.';
 COMMENT ON COLUMN store_items.category IS
   'A categoria da vitrine. Anulavel desde 17/10/2026 para o rascunho caber; exigida na publicacao.';
 COMMENT ON COLUMN store_items.target_path IS
@@ -117,6 +141,20 @@ DELETE FROM store_items
     OR summary IS NULL
     OR category IS NULL
     OR target_path IS NULL;
+
+-- O teto antigo de volta. A descricao longa que o teto novo permitiu nao cabe
+-- em 180: ela e CORTADA, e nao a linha apagada -- perder o produto inteiro por
+-- causa do tamanho de um texto seria pior que perder o fim do texto.
+UPDATE store_items
+   SET summary = left(btrim(summary), 180)
+ WHERE char_length(btrim(summary)) > 180;
+
+ALTER TABLE store_items
+  DROP CONSTRAINT store_items_resumo_tem_tamanho;
+
+ALTER TABLE store_items
+  ADD CONSTRAINT store_items_resumo_tem_tamanho
+    CHECK (char_length(btrim(summary)) BETWEEN 2 AND 180);
 
 ALTER TABLE store_items
   ALTER COLUMN partner_id  SET NOT NULL,

@@ -136,10 +136,42 @@ class ItemDaLoja {
 
   final EstadoDoPreco estadoDoPreco;
 
+  /// Quantos caracteres do resumo o cartao da vitrine mostra antes de pedir
+  /// para expandir (decisao do cliente de 17/10/2026).
+  ///
+  /// O teto do campo e 3000; desenhar 3000 num cartao de lista empurra a
+  /// vitrine inteira para baixo, e e por isso que existe o corte.
+  static const int tetoDoResumoNoCartao = 500;
+
+  /// O resumo cabe no cartao sem corte?
+  ///
+  /// Quem desenha usa isto para **nao desenhar o botao de expandir** quando
+  /// nao ha nada escondido: botao que nao faz nada e pior que nenhum botao.
+  bool get resumoCabeNoCartao => resumo.length <= tetoDoResumoNoCartao;
+
+  /// Os primeiros [tetoDoResumoNoCartao] caracteres, **cortados no ultimo
+  /// espaco**, com reticencias.
+  ///
+  /// Corte por palavra, e nao por caractere cru: `substring(0, 500)` parte a
+  /// palavra no meio, e isso as vezes muda o sentido do que sobrou. Quando nao
+  /// ha espaco nenhum na segunda metade do trecho (texto sem espaco, ou uma
+  /// palavra longuissima), o corte volta a ser no caractere: devolver 250
+  /// caracteres seria pior que uma palavra partida.
+  ///
+  /// **A quebra de linha e preservada**: nada aqui troca `\n` por espaco. A
+  /// area de texto do painel existe para a pessoa escrever em paragrafos.
+  String get trechoDoResumo {
+    if (resumoCabeNoCartao) return resumo;
+    final bruto = resumo.substring(0, tetoDoResumoNoCartao);
+    final espaco = bruto.lastIndexOf(RegExp(r'\s'));
+    final fim = espaco > tetoDoResumoNoCartao ~/ 2 ? espaco : tetoDoResumoNoCartao;
+    return '${resumo.substring(0, fim).trimRight()}…';
+  }
+
   /// O nome acessivel da imagem do item, que **nunca e vazio**.
   ///
-  /// O texto que o administrador escreveu, quando ele escreveu; `Foto de
-  /// <titulo>` quando nao escreveu. Nunca nulo e nunca `''`: imagem com
+  /// O texto que o administrador escreveu, quando ele escreveu;
+  /// `Foto de {titulo}` quando nao escreveu. Nunca nulo e nunca `''`: imagem com
   /// `semanticLabel` vazio e imagem que o leitor de tela ANUNCIA SEM DIZER
   /// NADA, que e pior que a reserva generica.
   ///

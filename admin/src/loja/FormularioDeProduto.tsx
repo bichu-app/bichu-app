@@ -26,6 +26,7 @@ import {
   fraseDaFalta,
   ORDEM_DOS_CAMPOS,
   ROTULO_DO_CAMPO,
+  TETO_DA_DESCRICAO,
   validarProduto,
   valoresDoItem,
   VALORES_VAZIOS,
@@ -442,10 +443,10 @@ export default function FormularioDeProduto() {
         rotulo="Descrição *"
         valor={valores.resumo}
         aoMudar={(v) => mudar('resumo', v)}
-        maximo={180}
+        maximo={TETO_DA_DESCRICAO}
         linhas={5}
         contador
-        ajuda="Uma ou duas frases sobre o produto. Pode escrever em parágrafos: a quebra de linha aparece no app e conta nos 180 caracteres."
+        ajuda="Pode escrever em parágrafos: a quebra de linha aparece no app. No cartão da Loja aparecem os 500 primeiros caracteres, com um botão para ler o resto."
         erro={erro('f-desc')}
       />
 

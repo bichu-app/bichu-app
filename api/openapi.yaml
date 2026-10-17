@@ -8830,11 +8830,16 @@ components:
         summary:
           type: string
           description: |
-            A descricao do produto, texto puro. **Pode ter quebra de linha**
-            desde 17/10/2026, quando o campo do painel virou area de texto
-            (pedido do cliente): o teto de 180 caracteres continua, e a quebra
-            conta como caractere. Quem desenha preserva a quebra; nada aqui
-            garante uma linha so.
+            A descricao do produto, texto puro. **Pode ter quebra de linha** e
+            **chega a 3000 caracteres** desde 17/10/2026, quando o campo do
+            painel virou area de texto e o cliente alargou o teto (era 180). A
+            quebra conta como caractere.
+
+            **Quem desenha precisa decidir o corte.** O cartao da vitrine do
+            app mostra os 500 primeiros caracteres, no ultimo espaco antes do
+            corte, com um botao para expandir no lugar; a quebra de linha e
+            preservada nos dois estados. Nada aqui garante uma linha so, nem um
+            tamanho que caiba num cartao.
         category: { $ref: '#/components/schemas/StoreCategory' }
         image_url:
           type: string
@@ -9999,13 +10004,26 @@ components:
         summary:
           type: string
           minLength: 2
-          maxLength: 180
+          maxLength: 3000
           description: |
             A "Descricao" do painel, que desde 17/10/2026 e uma area de texto
             de varias linhas (pedido do cliente). Texto puro, renderizado como
-            texto no app (D47); **a quebra de linha e aceita e conta no teto de
-            180**. Nenhuma marcacao: o app desenha com `Text`, e `**` apareceria
+            texto no app (D47); **a quebra de linha e aceita e conta no teto**.
+            Nenhuma marcacao: o app desenha com `Text`, e `**` apareceria
             literal.
+
+            **O teto era 180 e passou a 3000 em 17/10/2026** (decisao do
+            cliente, no mesmo dia em que o campo virou area de texto). O
+            `CHECK store_items_resumo_tem_tamanho` acompanha
+            (`20261017000002`). **`network_events.summary` NAO acompanhou**: o
+            encontro da `Rede` tem teto proprio de 200 desde 01/10, e o pedido
+            foi sobre o produto.
+
+            O cartao da vitrine do app mostra **os 500 primeiros caracteres**,
+            cortados no ultimo espaco, com um botao para expandir no lugar
+            (decisao do cliente de 17/10/2026). Nao ha tela de detalhe de
+            produto: o cartao expandido e o unico lugar onde o texto inteiro
+            aparece.
         category: { $ref: '#/components/schemas/StoreCategory' }
         target_url:
           allOf:
@@ -10044,7 +10062,7 @@ components:
             - $ref: '#/components/schemas/Slug'
             - type: 'null'
         title: { type: string, minLength: 2, maxLength: 120 }
-        summary: { type: [string, 'null'], minLength: 2, maxLength: 180 }
+        summary: { type: [string, 'null'], minLength: 2, maxLength: 3000 }
         category:
           oneOf:
             - $ref: '#/components/schemas/StoreCategory'

@@ -48,6 +48,7 @@ import {
   conferirRotulo,
   slugDoItem,
   sufixoCurto,
+  TETO_DA_DESCRICAO_DO_ITEM,
   TETO_DE_IMAGENS_POR_ITEM,
   TETO_DE_TAGS_ATIVAS,
   TETO_DE_TAGS_POR_ITEM,
@@ -540,7 +541,7 @@ export class CatalogoAdministrativo {
     // caractere e erro de digitacao, nao rascunho.
     const erros = [
       ...errosDeTexto('title', corpo.title, 2, 120),
-      ...(corpo.summary === undefined ? [] : errosDeTexto('summary', corpo.summary, 2, 180)),
+      ...(corpo.summary === undefined ? [] : errosDeTexto('summary', corpo.summary, 2, TETO_DA_DESCRICAO_DO_ITEM)),
       ...errosDoPreco(corpo.price, agora),
       ...errosDaGaleriaEDaEspecie(corpo),
     ];
@@ -608,7 +609,7 @@ export class CatalogoAdministrativo {
       // `null` LIMPA (rascunho), e limpar nao tem tamanho a conferir.
       ...(patch.summary === undefined || patch.summary === null
         ? []
-        : errosDeTexto('summary', patch.summary, 2, 180)),
+        : errosDeTexto('summary', patch.summary, 2, TETO_DA_DESCRICAO_DO_ITEM)),
       ...errosDoPreco(patch.price, agora),
       ...errosDaGaleriaEDaEspecie(patch),
     ];

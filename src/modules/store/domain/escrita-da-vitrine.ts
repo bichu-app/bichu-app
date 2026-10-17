@@ -539,6 +539,22 @@ export const TETO_DE_TAGS_ATIVAS = 40;
 /** Ate 8 imagens por item; `position` de 0 a 7. */
 export const TETO_DE_IMAGENS_POR_ITEM = 8;
 
+/**
+ * O teto da "Descricao" do produto (`store_items.summary`), em caracteres.
+ *
+ * **3000 desde 17/10/2026**, decisao do cliente no mesmo dia em que o campo
+ * virou area de texto. Era 180, o numero que a `20260922000023` escolheu para
+ * "manter uma linha" -- e manter uma linha deixou de ser o objetivo.
+ *
+ * Esta constante nao e a autoridade: o `CHECK` da `20261017000002` e o
+ * `maxLength` do contrato tambem dizem 3000, e os tres precisam dizer o mesmo
+ * numero. Ela existe para que o caso de uso nao carregue um literal solto, que
+ * e o que faz um dos tres ficar atras dos outros.
+ *
+ * **`network_events.summary` tem teto PROPRIO (200)** e nao usa esta.
+ */
+export const TETO_DA_DESCRICAO_DO_ITEM = 3000;
+
 /** Mesmo formato de `Slug` no contrato e de `store_tags_slug_formato` no banco. */
 const FORMATO_DE_SLUG = /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/;
 

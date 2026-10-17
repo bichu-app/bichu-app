@@ -820,15 +820,32 @@ void describe('escrita administrativa da Loja', () => {
       assert.deepEqual(codigos(erro), ['length']);
     });
 
-    void it('a descricao aceita quebra de linha, e ela conta no teto de 180', async () => {
+    void it('a descricao aceita quebra de linha, e ela volta igual na leitura', async () => {
       const comParagrafo = 'Primeira linha.\nSegunda linha.';
       const criado = await m.catalogo.criarItem(AUTOR, { title: 'Com paragrafos', summary: comParagrafo });
       assert.equal(criado.recurso.summary, comParagrafo, 'o \\n sobrevive a escrita e volta na leitura');
+    });
 
-      const longo = await m.catalogo
-        .criarItem(AUTOR, { title: 'Longo', summary: `${'a'.repeat(179)}\nb` })
+    void it('A DESCRICAO VAI ATE 3000: 3000 passa, 3001 e 400, e a quebra conta no teto', async () => {
+      const com3000 = await m.catalogo.criarItem(AUTOR, { title: 'Descricao cheia', summary: 'a'.repeat(3000) });
+      assert.equal(com3000.recurso.summary?.length, 3000);
+
+      const com3001 = await m.catalogo
+        .criarItem(AUTOR, { title: 'Um a mais', summary: 'a'.repeat(3001) })
         .catch((e: unknown) => e);
-      assert.deepEqual(codigos(longo), ['length'], 'a quebra ocupa um caractere dos 180');
+      assert.deepEqual(codigos(com3001), ['length']);
+
+      // 2999 letras + uma quebra = 3000 exatos.
+      const noLimite = await m.catalogo.criarItem(AUTOR, {
+        title: 'No limite com quebra',
+        summary: `${'a'.repeat(2999)}\n`,
+      });
+      assert.equal(noLimite.recurso.summary?.length, 3000);
+
+      const passou = await m.catalogo
+        .criarItem(AUTOR, { title: 'Passou pela quebra', summary: `${'a'.repeat(3000)}\nb` })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(passou), ['length'], 'a quebra ocupa um caractere do teto');
     });
   });
 });

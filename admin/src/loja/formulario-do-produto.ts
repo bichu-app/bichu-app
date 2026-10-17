@@ -76,6 +76,14 @@ export type ErrosDoProduto = Partial<Record<CampoDoProduto, string>>;
 
 const MENSAGEM_DO_PRECO = 'Informe o preço em reais, por exemplo 89,90.';
 
+/**
+ * O teto da "Descricao" do produto. **3000 desde 17/10/2026** (decisao do
+ * cliente), e o MESMO numero do `maxLength` do contrato e do `CHECK` do banco.
+ * O `maxLength` do campo da tela ja impede passar disso; isto aqui existe para
+ * a tela nao carregar o numero solto em dois lugares.
+ */
+export const TETO_DA_DESCRICAO = 3000;
+
 export function hostDoLink(link: string): string | undefined {
   try {
     return new URL(link).hostname.toLowerCase();
