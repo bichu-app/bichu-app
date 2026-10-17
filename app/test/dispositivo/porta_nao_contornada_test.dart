@@ -869,7 +869,21 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// de aparelho: quem cobra isso e o portao ESTRUTURAL abaixo, que continua
 /// valendo e continua verde. Anterior:
 /// `5af94a5a286fc5e78b296fdd458b9a6058563fbe`.
-const String _arvoreDasTelas = '878dd2fa0cce8bb9d906e4391d1add202aeafb95'; // BICHUS-278, 01/10: `rede/local_do_encontro.dart` mostra o endereco e o botao `Abrir no mapa` (texto, sem geocodificar), e `rede/encontro_da_rede.dart` ganha a secao `Links` (convite e Instagram) -- camera nao entra nisso, a porta `CameraEGaleria` nao foi tocada
+///
+/// DESTRAVADO EM 17/10 (BICHUS-278, o link do produto da `Loja`). UM arquivo
+/// muda: `loja/vitrine_da_loja.dart`. A saida do cartao passou a chamar
+/// `SaidaDoApp.atual.abrirLink` no lugar de `launchUrl` direto -- a mesma porta
+/// que `rede/encontro_da_rede.dart` ja usa para o link do convite --, e a tela
+/// com isso **perdeu** o importe de `package:url_launcher/`. Esta trava anda na
+/// direcao que o portao ESTRUTURAL abaixo quer, e nao contra ele: uma tela a
+/// menos falando com plugin de aparelho. Camera nao entra nisso, e a porta
+/// `CameraEGaleria` nao foi tocada. Anterior:
+/// `878dd2fa0cce8bb9d906e4391d1add202aeafb95`.
+///
+/// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
+/// nesta branch: a trava de 01/10 abaixo continua sendo a razao de eles
+/// estarem como estao.
+const String _arvoreDasTelas = 'fffa4cb0cced92dac6108ad97cc649adf65e997a'; // BICHUS-278, 17/10: `loja/vitrine_da_loja.dart` troca `launchUrl` direto pela porta `SaidaDoApp.abrirLink` (ver a nota acima)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
