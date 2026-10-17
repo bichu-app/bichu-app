@@ -123,6 +123,27 @@ export type AuditAction =
   | 'conversation.reported'
   | 'conversation.blocked'
   | 'moderation.decided'
+  /**
+   * ADR-0025 emenda 3. Uma conta do app criou, editou ou cancelou um encontro
+   * da `Rede`.
+   *
+   * **E aqui que a autoria vive de verdade**: a coluna `created_by_*` de
+   * `network_events` leva a marca "nunca sai do servidor" e e carimbada na
+   * mesma transacao por `network_events_gravar_autoria`, mas e esta linha que
+   * sobrevive a exclusao da conta e responde "quem criou este encontro, e quem
+   * mexeu nele" numa resposta a abuso.
+   *
+   * `submitted` manteve o nome da fatia em que o encontro nascia em revisao, e
+   * o nome continua verdadeiro: alguem submeteu um encontro. Desde 17/10/2026
+   * ele nasce publicado, sem fila.
+   *
+   * `updated` grava os NOMES dos campos alterados, nunca o conteudo: texto
+   * livre de pessoa na trilha sobrevive a exclusao da conta de proposito, e
+   * nao e isso que a trilha existe para responder.
+   */
+  | 'network_event.submitted'
+  | 'network_event.updated'
+  | 'network_event.cancelled'
   | 'privacy.account_deletion_requested'
   /**
    * BICHUS-215. O expurgo definitivo de 30 dias concluiu e a linha de `users`

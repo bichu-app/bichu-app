@@ -24,7 +24,12 @@
  */
 import { sql, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
-import type { EstruturaDoLocal, IdadeDosCaes, ItemParaLevar } from '../../../../shared/db/schema.js';
+import type {
+  EstruturaDoLocal,
+  IdadeDosCaes,
+  ItemParaLevar,
+  OrigemDoEncontro,
+} from '../../../../shared/db/schema.js';
 import type { ContagemNaTrilha, TrilhaTransacional } from '../../../audit/ports/audit-log.js';
 import type { RegistroDeImagemDeCatalogo } from '../../../media/ports/imagem-de-catalogo.js';
 import type {
@@ -79,7 +84,8 @@ interface LinhaDoEncontro {
   street_address: string | null;
   ticket_url: string | null;
   instagram_handle: string | null;
-  publication_status: PublicacaoAdministrativa | 'pending_review';
+  publication_status: PublicacaoAdministrativa;
+  origin: OrigemDoEncontro;
   published_at: Date | null;
   cancelled_at: Date | null;
   cancellation_note: string | null;
@@ -113,7 +119,7 @@ const COLUNAS = sql`
   e.starts_at, e.ends_at, e.time_zone, e.visibility,
   e.admission_kind, e.admission_amount, e.admission_unit,
   e.dog_age, e.vaccination_required, e.fenced_off_leash_area, e.notes, e.street_address, e.ticket_url, e.instagram_handle,
-  e.publication_status, e.published_at, e.cancelled_at, e.cancellation_note,
+  e.publication_status, e.origin, e.published_at, e.cancelled_at, e.cancellation_note,
   e.created_at, e.updated_at, e.version,
   array(SELECT s.size FROM network_event_sizes s JOIN ref_sizes r ON r.code = s.size
          WHERE s.event_id = e.id ORDER BY r.sort_order) AS accepted_sizes,
@@ -172,9 +178,8 @@ function comoEncontro(l: LinhaDoEncontro): EncontroAdministrativo {
     endereco: l.street_address,
     linkDeIngresso: l.ticket_url,
     instagram: l.instagram_handle,
-    // `pending_review` e so da comunidade e nao existe na v1; a leitura do
-    // painel nao o enxerga (o `WHERE` abaixo o tira).
-    publicacao: l.publication_status as PublicacaoAdministrativa,
+    publicacao: l.publication_status,
+    origem: l.origin,
     publishedAt: l.published_at,
     cancelledAt: l.cancelled_at,
     cancellationNote: l.cancellation_note,
@@ -349,6 +354,13 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
           })
           .execute(),
       );
+      // A AUTORIA DO PAINEL, que ficou tres semanas sem nunca ser gravada: o
+      // nome da coluna e reprovado em `src/` pelo portao de colunas que nao
+      // saem, entao o carimbo passa pela funcao da migracao `20261001000004`,
+      // na mesma transacao do `INSERT`. A trilha continua gravando o ator; esta
+      // linha faz a coluna e o `CHECK` da `20260928000005` deixarem de guardar
+      // um valor que ninguem escrevia.
+      await sql`SELECT network_events_gravar_autoria(${novo.id}::uuid, NULL, ${novo.autorDoPainel}::uuid)`.execute(trx);
       if (novo.lugar.ponto !== null) await gravarPonto(trx, novo.id, novo.lugar.ponto);
     },
 

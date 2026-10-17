@@ -156,6 +156,8 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
             endsAt: novo.endsAt,
             timeZone: novo.timeZone,
             visibilidade: novo.visibilidade,
+            // O painel cria so `admin`; `community` nasce pela porta publica.
+            origem: 'admin',
             entrada: novo.entrada,
             portes: [],
             idadeDosCaes: novo.idadeDosCaes,

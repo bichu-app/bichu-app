@@ -53,6 +53,42 @@ export async function registrarIntencaoDeCatalogo(
     .execute();
 }
 
+/**
+ * A intencao de envio da CAPA do encontro, com autor de `users` (ADR-0025
+ * emenda 3).
+ *
+ * Funcao separada de `registrarIntencaoDeCatalogo`, e nao um parametro
+ * opcional: as duas gravam autores de tabelas diferentes, e um objeto com os
+ * dois campos opcionais deixaria passar o envio sem autor nenhum -- que o
+ * `CHECK catalog_upload_intents_um_autor` recusaria no banco, mas so depois de
+ * a politica ja estar assinada.
+ */
+export async function registrarIntencaoDeCapaDaComunidade(
+  db: DbExecutor,
+  nova: {
+    readonly id: string;
+    readonly userId: string;
+    readonly objectKey: string;
+    readonly declaredType: string;
+    readonly maxBytes: number;
+    readonly expiresAt: Date;
+  },
+): Promise<void> {
+  await db
+    .insertInto('catalog_upload_intents')
+    .values({
+      id: nova.id,
+      admin_account_id: null,
+      user_id: nova.userId,
+      purpose: 'network_event',
+      object_key: nova.objectKey,
+      declared_type: nova.declaredType,
+      max_bytes: nova.maxBytes,
+      expires_at: nova.expiresAt,
+    })
+    .execute();
+}
+
 const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**

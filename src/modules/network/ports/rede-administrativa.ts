@@ -38,6 +38,15 @@ export class SlugDoEncontroOcupado extends Error {
 
 export interface NovoEncontro {
   readonly id: string;
+  /**
+   * Quem criou, para a coluna de autoria do painel.
+   *
+   * **Nao e o nome da coluna de proposito**: ele e reprovado em `src/` pelo
+   * portao de colunas que nao saem, e o carimbo passa pela funcao
+   * `network_events_gravar_autoria` da migracao `20261001000004`, na mesma
+   * transacao do `INSERT`. Antes disso a coluna existia e nunca era escrita.
+   */
+  readonly autorDoPainel: AdminAccountId;
   readonly slug: string;
   readonly title: string;
   readonly summary: string;

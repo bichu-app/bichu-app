@@ -1764,6 +1764,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/media/network-event-cover-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto da capa do encontro
+         * @description O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+         *     prefixo `events/` que a superficie administrativa ja usa; a derivada
+         *     publica e criada pelo worker, e e ela que sai em `cover_image_url`.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+         *     contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+         *     tem.
+         *
+         *     **O envio e da CONTA**, e nao do painel: `createNetworkEvent` so
+         *     confirma `upload_id` cuja intencao e da propria conta que esta criando o
+         *     encontro (a conferencia esta na clausula `WHERE`), e `upload_id` de
+         *     outra pessoa, de outro proposito ou vencido e recusado com `400`
+         *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+         *
+         *     Dimensao minima 600 x 600, a mesma do painel: `width`/`height` sao
+         *     opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
+         *     **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+         *     dez minutos e o varredor a recolhe; o encontro sem capa e estado normal
+         *     (`cover_image_url` nulo, e o app mostra o banner da marca).
+         */
+        post: operations["createNetworkEventCoverUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/events": {
         parameters: {
             query?: never;
@@ -1825,7 +1867,67 @@ export interface paths {
          */
         get: operations["listNetworkEvents"];
         put?: never;
-        post?: never;
+        /**
+         * Criar um encontro da Rede
+         * @description A comunidade cria encontro, e ele **ja aparece em publico** (decisao do
+         *     cliente de 17/10/2026, ADR-0025 emenda 3): nasce `published`, com
+         *     `origin: community`, e a resposta e o proprio encontro, na forma de
+         *     `getNetworkEvent`. **Nao ha fila de revisao e nao ha decisao de
+         *     painel.**
+         *
+         *     ## Quem pode criar, que e a unica regua
+         *
+         *     **Canal de contato verificado**, a MESMA regua de abrir caso de pet
+         *     perdido: sem ele, `409 contact-channel-unverified` com
+         *     `next_action: verify_email`. Na pratica isso e **e-mail confirmado**,
+         *     porque nao existe operacao que verifique telefone.
+         *
+         *     **Teto de 3 encontros ATIVOS por conta** (ainda nao encerrados):
+         *     `409 community-event-limit-reached`. Encontro que terminou sai da conta
+         *     sozinho. Sem revisao humana, este teto e o teto de chamada desta
+         *     operacao sao a unica contencao de volume, e por isso os dois existem.
+         *
+         *     ## O que esta operacao NAO aceita, e por que
+         *
+         *     Sem `visibility` (todo encontro da comunidade e publico: o privado tem
+         *     fila de pedidos, que e trabalho de moderacao do painel), sem
+         *     `admission` (o Bichu nao cobra, e valor escrito por terceiro vira
+         *     moderacao de dinheiro), sem `slug` (derivado do titulo, como no item da
+         *     `Loja`), sem `point` e sem `street_address` (ADR-0006: nao ha mapa nem
+         *     busca de endereco, e nao ha geocodificacao em nenhum ponto deste
+         *     caminho) e sem `ticket_url` nem `instagram_handle` (link em texto de
+         *     terceiro e o vetor que D59 fecha).
+         *
+         *     **A capa entra**, por `cover_image.upload_id`, e o envio dos bytes e
+         *     autorizado antes por `createNetworkEventCoverUploadIntent`. A imagem de
+         *     capa e **publica** (decisao do cliente de 17/10/2026): o
+         *     `cover_image_url` sai na agenda, sem conta, assim que o processamento
+         *     terminar -- antes dele, nulo.
+         *
+         *     ## O que o servidor confere no texto, porque ninguem mais confere
+         *
+         *     Sem revisao humana, estas conferencias sao a unica protecao, e por isso
+         *     elas sao mais duras aqui que na escrita do painel:
+         *
+         *     - **`place.place_name` recusa endereco embutido**, com
+         *       `code: address_in_place_name`: CEP, numero de porta depois de
+         *       separador (`, 200`, `- 200`, `nº 200`), `s/n`, marcador de
+         *       quilometro, sequencia de quatro digitos ou mais, palavra de
+         *       logradouro junto de numero que nao e parte do nome dela, e
+         *       complemento residencial (`bloco 2`, `apto 51`, `condominio`).
+         *       Palavra de logradouro sozinha ("Avenida Paulista") e numero que e
+         *       parte do nome ("Rua 25 de Marco", "Praca 14 de Janeiro", "Quadra 302
+         *       Norte") **passam**. O motivo e medido: `place_name` sai na agenda
+         *       publica, sem conta, e o endereco escrito dentro dele contorna a
+         *       protecao de `street_address`, que sai so em
+         *       `getNetworkEventLocation`.
+         *     - **`title`, `summary`, `notes` e `cover_image.alt_text` recusam
+         *       contato e pagamento** (D59), com `code: contact_or_payment_detected`:
+         *       telefone, e-mail, link, encurtador, perfil `@usuario`, chave PIX e
+         *       dados bancarios. E a mesma conferencia que as observacoes do painel
+         *       ja aplicam, aqui estendida a todo texto que a pessoa escreve.
+         */
+        post: operations["createNetworkEvent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1866,7 +1968,52 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Editar o proprio encontro
+         * @description **Quem criou o encontro administra aquele encontro** (decisao do cliente
+         *     de 17/10/2026, ADR-0025 emenda 3). Esta operacao edita **somente**
+         *     encontro de `origin: community` criado pela propria conta.
+         *
+         *     **Encontro de outra pessoa NAO EXISTE para quem pede** (ADR-0021): a
+         *     condicao de autoria mora na clausula `WHERE` da mesma leitura que
+         *     carrega o encontro, e a resposta e **404**, identica a de `slug` que
+         *     nunca existiu. Nunca 403, nunca corpo diferente. Encontro do painel
+         *     (`origin: admin`) tambem responde 404 aqui -- ele se edita pelo painel.
+         *
+         *     `If-Match` e obrigatorio, com a versao da ultima leitura: ausente, 428;
+         *     diferente da atual, 412, e nada e gravado. O leitor tolera o `W/` e o
+         *     sufixo de codificacao que a borda acrescenta (`"1-zstd"`).
+         *
+         *     ## O que o autor NAO muda, e por que
+         *
+         *     `visibility` e `admission` (encontro privado tem fila de pedidos e valor
+         *     e moderacao de dinheiro: as duas sao decisao de administracao, e seguem
+         *     so em `changeAdminNetworkEventAccess`), `slug` (ele ja circulou),
+         *     `street_address` e `point` (ADR-0006, e o endereco e campo do painel),
+         *     `ticket_url` e `instagram_handle` (link em texto de terceiro),
+         *     `publication_status` (cancelar tem operacao propria) e `origin`.
+         *
+         *     **Data, horario, fuso e lugar ENTRAM aqui**, e isso e a unica diferenca
+         *     deliberada em relacao ao `PATCH` do painel, que os manda para
+         *     `relocateAdminNetworkEvent`: aquela operacao existe pela cerimonia de
+         *     T11 (motivo e aviso a todos os administradores), que nao se aplica a
+         *     quem esta corrigindo o proprio encontro. Sem eles, consertar a hora
+         *     errada exigiria cancelar e criar de novo, gastando o teto de 3.
+         *
+         *     ## As conferencias de texto valem IGUAL aqui
+         *
+         *     `place_name` recusa endereco embutido e `title`, `summary`, `notes` e
+         *     `cover_image.alt_text` recusam contato e pagamento (D59), com os mesmos
+         *     codigos de `createNetworkEvent`. Sem isso a pessoa criaria limpo e
+         *     editaria metendo o endereco, e a protecao seria decorativa.
+         *
+         *     **Encontro que ja terminou nao se edita** (`400`, `code: event_ended`):
+         *     editar o passado reescreve o que aconteceu, e o encerrado nao volta a
+         *     aparecer na agenda. O encontro que **ja comecou** e que ainda nao
+         *     terminou continua editavel, porque e justamente ali que o aviso de
+         *     ultima hora importa.
+         */
+        patch: operations["updateNetworkEvent"];
         trace?: never;
     };
     "/network/events/nearby": {
@@ -2036,6 +2183,44 @@ export interface paths {
          *     pendente e lavaria a recusa. A resposta e a mesma nos dois casos.
          */
         delete: operations["withdrawNetworkEventJoinRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar o proprio encontro
+         * @description **Cancelar nao e apagar**, e o desenho e o mesmo do cancelamento do
+         *     painel (`cancelAdminNetworkEvent`): `publication_status` vira
+         *     `cancelled`, o instante fica gravado, e **o encontro continua visivel no
+         *     app como cancelado ate o fim previsto** -- quem ia precisa descobrir que
+         *     nao vai mais acontecer, e um encontro que desaparece nao conta isso. A
+         *     `note` e o motivo, e ela fica **so na trilha**: o app nao mostra motivo
+         *     de cancelamento (nem o do painel), porque e texto livre.
+         *
+         *     Vale **somente** para encontro de `origin: community` da propria conta,
+         *     e encontro de outra pessoa ou do painel responde **404** (ADR-0021), o
+         *     mesmo 404 de `slug` inexistente.
+         *
+         *     So encontro `published` se cancela (`400`,
+         *     `code: event_not_published`), e so o que **ainda nao terminou**
+         *     (`400`, `code: event_ended`): cancelar o que ja aconteceu nao muda nada
+         *     para ninguem. Cancelar de novo cai no primeiro caso.
+         *
+         *     `If-Match` obrigatorio, como na edicao. O encontro cancelado **sai do
+         *     teto de 3 ativos** da conta.
+         */
+        post: operations["cancelNetworkEvent"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -4903,6 +5088,121 @@ export interface components {
             /** Format: date-time */
             requested_at: string;
         };
+        /**
+         * @description O lugar como a comunidade o descreve: **tres rotulos, e nada mais**.
+         *
+         *     **Sem `point` e sem `street_address`**, e nenhum dos dois e
+         *     esquecimento: o ADR-0006 nao tem mapa nem busca de endereco nesta
+         *     superficie, e nao ha geocodificacao em nenhum ponto deste caminho; o
+         *     endereco por extenso e campo do painel e sai so em
+         *     `getNetworkEventLocation`. **Logradouro publico, nunca residencia**
+         *     (ADR-0027 item 13).
+         */
+        CommunityNetworkEventPlaceInput: {
+            /**
+             * @description O NOME do lugar, como as pessoas o chamam. O servidor recusa
+             *     endereco embutido com `code: address_in_place_name` -- ver a
+             *     descricao de `createNetworkEvent`.
+             */
+            place_name: string;
+            neighborhood: string;
+            city: string;
+            state: string;
+        };
+        /**
+         * @description O encontro proposto pela comunidade. **E um subconjunto deliberado de
+         *     `AdminNetworkEventInput`**, e o que falta esta explicado na descricao de
+         *     `createNetworkEvent`: visibilidade, condicao de acesso, `slug`, ponto,
+         *     endereco, links e imagens nao entram.
+         */
+        CommunityNetworkEventInput: {
+            title: string;
+            summary: string;
+            place: components["schemas"]["CommunityNetworkEventPlaceInput"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string;
+            /** @default America/Sao_Paulo */
+            time_zone: components["schemas"]["TimeZoneName"];
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            /** @default true */
+            vaccination_required: boolean;
+            /** @default false */
+            fenced_off_leash_area: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"];
+            cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"];
+        };
+        /**
+         * @description O pedido de autorizacao de envio da capa. **Sem `purpose`**, ao
+         *     contrario de `AdminCatalogImageIntentInput`: esta operacao existe para
+         *     um proposito so (`network_event`), e deixar o cliente escolhe-lo seria
+         *     deixa-lo pedir uma autorizacao de imagem de produto por uma rota do app.
+         */
+        NetworkEventCoverIntentInput: {
+            /**
+             * @description SVG nunca (D50), e por IGUALDADE, nunca por prefixo. HEIC fica de
+             *     fora porque a derivada de catalogo e processada pelo mesmo caminho
+             *     do painel, que nao o aceita -- e por isso este enum NAO e o de
+             *     `UploadIntentInput`, que e da foto de pet.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            byte_size: number;
+            /** @description Opcional, como o navegador a le. Abaixo de 600 responde 422 antes de assinar. */
+            width?: number;
+            height?: number;
+        };
+        /**
+         * @description A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. O
+         *     `alt_text` e **obrigatorio** em toda posicao, igual a galeria do painel:
+         *     a imagem sem texto alternativo e a imagem que nao existe para quem usa
+         *     leitor de tela.
+         */
+        CommunityNetworkEventCoverInput: {
+            /** Format: uuid */
+            upload_id: string;
+            alt_text: string;
+        };
+        /**
+         * @description O que o AUTOR muda no proprio encontro. Campo ausente nao muda; as
+         *     listas substituem o conjunto; `notes: null` tira as observacoes e
+         *     `cover_image: null` tira a capa.
+         *
+         *     **Nao tem** `visibility`, `admission`, `slug`, `street_address`,
+         *     `point`, `ticket_url`, `instagram_handle`, `publication_status` nem
+         *     `origin` -- ver a descricao de `updateNetworkEvent`.
+         */
+        CommunityNetworkEventPatch: {
+            title?: string;
+            summary?: string;
+            place?: components["schemas"]["CommunityNetworkEventPlaceInput"];
+            /** Format: date-time */
+            starts_at?: string;
+            /** @description `null` tira o fim previsto. */
+            ends_at?: string | null;
+            time_zone?: components["schemas"]["TimeZoneName"];
+            /** @description `null` tira a capa. */
+            cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"] | null;
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required?: boolean;
+            fenced_off_leash_area?: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"] | null;
+        };
+        CommunityNetworkEventCancellation: {
+            /**
+             * @description O motivo, **so para a trilha**. Nao sai no app, pela mesma regra do
+             *     cancelamento do painel: e texto livre, e o cliente nao decidiu
+             *     mostrar motivo de cancelamento.
+             */
+            note: string;
+        };
         MyNetworkEventJoinRequestPage: {
             items: components["schemas"]["MyNetworkEventJoinRequest"][];
             page: number;
@@ -5438,10 +5738,16 @@ export interface components {
             note: string;
         };
         /**
-         * @description `published` desde a criacao (nao ha rascunho, ADR-0027 12.9);
-         *     `cancelled` continua visivel no app como cancelado; `removed` e
-         *     terminal. `pending_review` existe no banco para o encontro criado pela
-         *     comunidade, que nao existe na v1, e por isso nao aparece aqui.
+         * @description `published` desde a criacao, **tanto pelo painel quanto pela
+         *     comunidade** (nao ha rascunho, ADR-0027 12.9, e nao ha revisao,
+         *     ADR-0025 emenda 3); `cancelled` continua visivel no app como cancelado;
+         *     `removed` e terminal.
+         *
+         *     **`pending_review` nao existe mais**: ele era o estado da fila de
+         *     moderacao do encontro da comunidade, e a decisao do cliente de
+         *     17/10/2026 trocou a fila pela publicacao direta de quem tem canal de
+         *     contato verificado. A migracao `20261001000005` tirou o valor do
+         *     `CHECK` do banco, com o `CHECK` que o amarrava a origem.
          * @enum {string}
          */
         AdminNetworkEventPublicationStatus: "published" | "cancelled" | "removed";
@@ -5473,8 +5779,16 @@ export interface components {
             vaccination_required: boolean;
             fenced_off_leash_area: boolean;
             amenities: components["schemas"]["NetworkEventAmenity"][];
-            /** @enum {string} */
-            origin: "admin";
+            /**
+             * @description Quem criou: `admin` (o painel) ou `community` (proposto por uma
+             *     conta do app, ADR-0025 emenda 3). **Nao e o autor** --
+             *     `created_by_user_id` e `created_by_admin_id` nunca saem do
+             *     servidor, nem aqui (ADR-0027 apendice A.4). Isto e so a origem, e
+             *     e o que faz a fila de moderacao distinguir o que ela esta
+             *     revisando.
+             * @enum {string}
+             */
+            origin: "admin" | "community";
             visibility: components["schemas"]["NetworkEventVisibility"];
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];
@@ -8776,6 +9090,35 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    createNetworkEventCoverUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkEventCoverIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listNetworkEvents: {
         parameters: {
             query?: {
@@ -8844,6 +9187,49 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    createNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description O encontro criado, na mesma forma de `getNetworkEvent`.
+             *     `cover_image_url` sai nulo enquanto a derivada publica nao existe.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description Sem canal de contato verificado (`contact-channel-unverified`) ou
+             *     teto de encontros ativos atingido
+             *     (`community-event-limit-reached`).
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     getNetworkEvent: {
         parameters: {
             query?: never;
@@ -8867,6 +9253,48 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventPatch"];
+            };
+        };
+        responses: {
+            /** @description O encontro depois da edicao, na forma de `getNetworkEvent`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -9059,6 +9487,48 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    cancelNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventCancellation"];
+            };
+        };
+        responses: {
+            /** @description O encontro cancelado, na forma de `getNetworkEvent`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
             429: components["responses"]["TooManyRequests"];
         };
     };

@@ -26,6 +26,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
+import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
 import { comoIso } from '../../../../shared/time/clock.js';
 import {
   distanciaArredondada,
@@ -42,7 +43,14 @@ import type {
   PedidoDaConta,
   RecorteNoTempo,
 } from '../../ports/network-repository.js';
+import type { Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
+import type { EncontroDaComunidade } from '../../application/encontro-da-comunidade.js';
+import type {
+  CorpoDoCancelamentoDaComunidade,
+  CorpoDoEncontroDaComunidade,
+  PatchDoEncontroDaComunidade,
+} from '../../domain/encontro-da-comunidade.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 
 /** Os tetos sao os do contrato, COPIADOS de la. Um teto e uma dimensao por rota. */
@@ -122,6 +130,49 @@ export const rotaDosMeusPedidos = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * As tres escritas da comunidade (ADR-0025 emenda 3).
+ *
+ * `irreversible_write` nas tres: criar PUBLICA na hora (nao ha revisao que
+ * desfaca), editar grava versao nova e cancelar e um estado que nao volta. Com
+ * efeito nao vazio, `defineRoute` torna a ausencia de `rateLimit` erro de
+ * compilacao (ADR-0016).
+ *
+ * Os tetos sao por `account`, e nao por `ip`: as tres exigem conta, entao
+ * `account` existe e e exato, e o CGNAT das operadoras brasileiras faria um
+ * teto por IP pegar vizinho inocente. **O teto de criar e o mais apertado**
+ * (5/24h) porque, sem revisao humana, ele e o teto de 3 ativos sao a unica
+ * contencao de volume; editar e mais folgado porque corrigir um texto e comum e
+ * nao publica nada novo.
+ *
+ * O teto de 3 encontros ativos NAO esta aqui: ele conta LINHAS, e a porta de
+ * teto conta requisicoes (a mesma limitacao de D56). Quem o aplica e o caso de
+ * uso.
+ */
+export const rotaDaCriacaoDeEncontro = defineRoute({
+  operationId: 'createNetworkEvent',
+  method: 'post',
+  path: '/network/events',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 5, window: '24h', onExceed: 'deny_429' }],
+});
+
+export const rotaDaEdicaoDoEncontro = defineRoute({
+  operationId: 'updateNetworkEvent',
+  method: 'patch',
+  path: '/network/events/:eventSlug',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+export const rotaDoCancelamentoDoEncontro = defineRoute({
+  operationId: 'cancelNetworkEvent',
+  method: 'post',
+  path: '/network/events/:eventSlug/cancellation',
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 30, window: '1h', onExceed: 'deny_429' }],
+});
+
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 const RECORTE_PADRAO: RecorteNoTempo = 'upcoming';
@@ -143,6 +194,21 @@ export interface DependenciasDasRotasDaRede {
   readonly rede: NetworkRepository;
   readonly autenticador: Autenticador;
   readonly clock: Clock;
+  /** As escritas da comunidade: criar, editar o proprio e cancelar o proprio. */
+  readonly escritas: EncontroDaComunidade;
+  /** De onde sai o esquema do corpo: a declaracao e a do contrato. */
+  readonly contrato: Contrato;
+}
+
+function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
+  const schema = contrato.requestBodySchema(operationId);
+  if (schema === undefined) {
+    throw new Error(
+      `Operação ${operationId} não declara corpo de requisição em application/json ` +
+        'no contrato, mas a rota espera um. Corrija a especificação, não o código.',
+    );
+  }
+  return schema;
 }
 
 interface QueryDaAgenda {
@@ -230,6 +296,14 @@ async function contaDoTeto(
   }
 }
 
+/** Quem escreve, para o caso de uso e para a trilha. O IP vai EM CLARO: a porta da trilha o transforma em HMAC (SEC-010). */
+async function contextoDoAutor(
+  request: FastifyRequest,
+  deps: DependenciasDasRotasDaRede,
+): Promise<{ userId: UserId; correlationId: string; ip: string | undefined }> {
+  return { userId: await chamadorAutenticado(request, deps), correlationId: request.id, ip: request.ip };
+}
+
 /** O pedido no vocabulario do app. Os mesmos campos para pendente e recusado. */
 function projetarPedido(pedido: PedidoDaConta, agora: Instant) {
   return {
@@ -254,6 +328,100 @@ export function registrarRotasDaRede(
   deps: DependenciasDasRotasDaRede,
 ): void {
   const porConta = { resolvedores: { account: (request: FastifyRequest) => contaDoTeto(request, deps) } };
+
+  /**
+   * Criar. **201 com o proprio encontro**, na mesma forma de `getNetworkEvent`:
+   * ele existe e ja esta em publico, e o app desenha a tela com o que recebeu
+   * em vez de pedir de novo.
+   *
+   * ## O guarda de corpo fechado NAO e opcional nestas tres rotas
+   *
+   * O Fastify monta o Ajv com `removeAdditional: true`: `additionalProperties:
+   * false` no contrato **apaga** o campo desconhecido em silencio em vez de
+   * recusar (ver `corpo-fechado.ts`, medido em 23/09). Aqui isso seria mentir
+   * sobre o que foi gravado em cada campo que estas operacoes NAO aceitam: quem
+   * mandasse `visibility: private` receberia 201 e um encontro PUBLICO, e quem
+   * mandasse `street_address` acreditaria ter dado o endereco.
+   * `registrarRota` instala o guarda sozinho so na superficie administrativa,
+   * entao aqui ele entra a mao.
+   */
+  const corpoDaCriacao = corpoDe(deps.contrato, rotaDaCriacaoDeEncontro.operationId);
+  registrarRota(
+    app,
+    rotaDaCriacaoDeEncontro,
+    {
+      schema: { body: corpoDaCriacao },
+      resolvedores: porConta.resolvedores,
+      preValidation: [recusarCampoDesconhecido(corpoDaCriacao, rotaDaCriacaoDeEncontro.operationId)],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const escrito = await deps.escritas.criar(
+        await contextoDoAutor(request, deps),
+        request.body as CorpoDoEncontroDaComunidade,
+      );
+      return reply
+        .status(201)
+        .header('ETag', escrito.etag)
+        .header('Cache-Control', SEM_CACHE)
+        .send(escrito.recurso);
+    },
+  );
+
+  /**
+   * Editar o proprio. **O 404 de encontro alheio vem da clausula `WHERE`**
+   * (ADR-0021): esta borda nao sabe de quem e o encontro, e nao tem `if` que
+   * decida isso.
+   */
+  const corpoDaEdicao = corpoDe(deps.contrato, rotaDaEdicaoDoEncontro.operationId);
+  registrarRota(
+    app,
+    rotaDaEdicaoDoEncontro,
+    {
+      schema: { body: corpoDaEdicao },
+      resolvedores: porConta.resolvedores,
+      preValidation: [recusarCampoDesconhecido(corpoDaEdicao, rotaDaEdicaoDoEncontro.operationId)],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
+      const escrito = await deps.escritas.editar(
+        await contextoDoAutor(request, deps),
+        eventSlug,
+        request.headers['if-match'],
+        request.body as PatchDoEncontroDaComunidade,
+      );
+      return reply
+        .header('ETag', escrito.etag)
+        .header('Cache-Control', SEM_CACHE)
+        .send(escrito.recurso);
+    },
+  );
+
+  /** Cancelar o proprio. Cancelar nao apaga: ver o caso de uso. */
+  const corpoDoCancelamento = corpoDe(deps.contrato, rotaDoCancelamentoDoEncontro.operationId);
+  registrarRota(
+    app,
+    rotaDoCancelamentoDoEncontro,
+    {
+      schema: { body: corpoDoCancelamento },
+      resolvedores: porConta.resolvedores,
+      preValidation: [
+        recusarCampoDesconhecido(corpoDoCancelamento, rotaDoCancelamentoDoEncontro.operationId),
+      ],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const { eventSlug } = (request.params ?? {}) as CaminhoDoEncontro;
+      const escrito = await deps.escritas.cancelar(
+        await contextoDoAutor(request, deps),
+        eventSlug,
+        request.headers['if-match'],
+        request.body as CorpoDoCancelamentoDaComunidade,
+      );
+      return reply
+        .header('ETag', escrito.etag)
+        .header('Cache-Control', SEM_CACHE)
+        .send(escrito.recurso);
+    },
+  );
 
   registrarRota(app, rotaDaAgenda, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as QueryDaAgenda;

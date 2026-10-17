@@ -704,6 +704,24 @@ contrato_sem_tela:
     onde: "ADR-0027 12.11 (BICHUS-251)"
     resolucao: "tela: resolvido quando a tela existir"
     nota: "o app ganha o gesto de desistir do pedido, com texto a aprovar pela UX"
+  # ADR-0025 emenda 3 (17/10/2026): o backend do encontro criado pela
+  # comunidade. Ele PUBLICA DIRETO -- nao ha fila de moderacao, e por isso nao
+  # ha operacao de painel aqui. As telas do app sao do despacho seguinte, e por
+  # isso as quatro operacoes entram aqui e nao em `telas`.
+  - operationId: createNetworkEvent
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "a tela de criar encontro no app (com capa) e o despacho seguinte; o backend nasce antes de proposito, para a tela nao nascer contra um contrato inventado"
+  - operationId: updateNetworkEvent
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "quem criou administra o proprio encontro (decisao do cliente de 17/10); a tela de editar e do mesmo despacho da de criar"
+  - operationId: cancelNetworkEvent
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "cancelar o proprio encontro, com a nota que fica so na trilha; mesma tela da edicao"
+  - operationId: createNetworkEventCoverUploadIntent
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "a autorizacao de envio da capa; o app reusa o envio direto que ja tem para foto de pet"
+  - campo: "AdminNetworkEvent.origin=community"
+    nota: "a lista do painel ainda nao distingue o encontro da comunidade do encontro do painel; o campo sai na resposta desde 17/10"
   - campo: "AdminStorePartner.sort_order, AdminStoreItem.sort_order"
     nota: "a ordem de curadoria nao e editavel em tela"
   - campo: "listAdminStoreItems query:publication_state=retired"

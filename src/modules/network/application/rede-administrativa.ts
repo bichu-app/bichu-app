@@ -425,6 +425,10 @@ export class RedeAdministrativa {
       const inserir = (slug: string) =>
         tx.inserirEncontro({
           id,
+          // A autoria do painel, carimbada na mesma transacao pela funcao da
+          // migracao `20261001000004`. Era o furo: a coluna existia desde
+          // 28/09 e nenhuma escrita a preenchia.
+          autorDoPainel: autor.adminAccountId,
           slug,
           title: corpo.title.trim(),
           summary: corpo.summary.trim(),
@@ -497,6 +501,7 @@ export class RedeAdministrativa {
     }
     throw slugOcupado();
   }
+
 
   // --------------------------------------------------------------- editar
 

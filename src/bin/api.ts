@@ -120,6 +120,8 @@ import { CatalogoAdministrativo } from '../modules/store/application/catalogo-ad
 import { criarCatalogoAdministrativoRepository } from '../modules/store/adapters/persistence/kysely-catalogo-administrativo.js';
 import { registroDeImagemDeCatalogo } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarPreparadorDeEnvioDeCatalogo } from '../modules/media/application/preparar-envio-de-catalogo.js';
+import { CapaDeEncontroDaComunidade } from '../modules/media/application/capa-de-encontro-da-comunidade.js';
+import { registrarIntencaoDeCapaDaComunidade } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
 import { criarVerificadorDeCaptcha } from '../modules/admin-access/adapters/external/recaptcha-enterprise.js';
 import {
   captchaDeDesenvolvimentoLigado,
@@ -128,6 +130,7 @@ import {
 import { criarListaDeSenhasVazadasPorFaixa } from '../modules/identity/adapters/external/lista-de-senhas-vazadas-por-faixa.js';
 import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
+import { EncontroDaComunidade } from '../modules/network/application/encontro-da-comunidade.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -565,6 +568,18 @@ export async function main(): Promise<void> {
   };
 
   const dependenciasDasRotasDeMidia = {
+    // ADR-0025 emenda 3: a capa do encontro da comunidade. O MESMO preparador
+    // do painel (prefixo `events/`, `purpose = network_event`), com o autor em
+    // `users` em vez de `admin_accounts`.
+    capasDeEncontro: new CapaDeEncontroDaComunidade({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      registrarIntencao: registrarIntencaoDeCapaDaComunidade,
+      db,
+      ids,
+    }),
     midia: new MediaService({
       repositorio: repositorioDeMidia,
       // O ÚNICO lugar do sistema que instancia algo que sabe o que é S3.
@@ -785,12 +800,29 @@ export async function main(): Promise<void> {
     // conta e as que exigem uma. O autenticador e o mesmo do diretorio e o da
     // transferencia -- o modulo recebe a funcao e continua sem conhecer o
     // servico de identidade.
+    // ADR-0025 emenda 3: a MESMA porta serve as leituras e as tres escritas da
+    // comunidade (criar, editar o proprio, cancelar o proprio), e o caso de uso
+    // recebe essa porta mais a trilha do app (`trilha`, transacao propria) -- e
+    // nao a transacional do painel.
+    const redeDaComunidade = criarNetworkRepository(
+      db,
+      ids,
+      urlDeMidia,
+      config.instagramProfileBaseUrl,
+    );
     registrarRotasDaRede(escopo, {
-      rede: criarNetworkRepository(db, ids, urlDeMidia, config.instagramProfileBaseUrl),
+      rede: redeDaComunidade,
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       clock: systemClock,
+      escritas: new EncontroDaComunidade({
+        rede: redeDaComunidade,
+        trilha,
+        ids,
+        clock: systemClock,
+      }),
+      contrato,
     });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     // BICHUS-45. O perfil publico por `/@{slug}`, sem conta.
