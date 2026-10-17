@@ -41,6 +41,7 @@ class BichuField extends StatelessWidget {
     this.formatadores,
     this.linhas = 1,
     this.exemplo,
+    this.aoPerderFoco,
   });
 
   final String rotulo;
@@ -86,6 +87,17 @@ class BichuField extends StatelessWidget {
   /// vermelha, mancha branca no peito, rabo curto").
   final String? exemplo;
 
+  /// Chamado quando o foco **sai** do campo.
+  ///
+  /// Existe para a conferencia ao sair do campo, que e o momento em que o
+  /// e-mail pode ser conferido sem interromper quem ainda esta digitando: a
+  /// cada tecla, `leandro@g` seria erro durante toda a digitacao.
+  ///
+  /// A fiacao fica **aqui**, e nao em cada tela: o `Focus` em volta do campo
+  /// nao pede foco nem entra na travessia, entao ele observa a perda de foco
+  /// da subarvore sem mudar a ordem de tabulacao nem o alvo de toque.
+  final VoidCallback? aoPerderFoco;
+
   @override
   Widget build(BuildContext context) {
     final cores = BichuColors.of(context).cores;
@@ -107,39 +119,42 @@ class BichuField extends StatelessWidget {
           ),
           const SizedBox(height: BichuEspaco.e2),
         ],
-        TextField(
-          controller: controlador,
-          focusNode: foco,
-          enabled: habilitado,
-          maxLength: limite,
-          inputFormatters: formatadores,
-          maxLines: obscurecer ? 1 : linhas,
-          minLines: obscurecer ? 1 : linhas,
-          keyboardType: tipoDeTeclado,
-          autofillHints: autofill,
-          obscureText: obscurecer,
-          // Colar habilitado no campo de senha: bloquear colar empurra a
-          // pessoa para uma senha que ela consegue digitar, que e pior.
-          enableInteractiveSelection: true,
-          autocorrect: correcaoAutomatica,
-          textCapitalization: capitalizacao,
-          textInputAction: acaoDeTeclado,
-          onSubmitted: aoEnviar,
-          onChanged: aoMudar,
-          style: textos.bodyLarge?.copyWith(color: cores.textPrimary),
-          decoration: InputDecoration(
-            suffixIcon: sufixo,
-            errorText: temErro ? erro : null,
-            hintText: exemplo,
-            // O rotulo ja esta acima. Repeti-lo aqui produziria dois rotulos
-            // para o leitor de tela.
-            labelText: null,
-            // O contador do M3 e desenhado dentro da decoracao; o do produto e
-            // uma linha propria abaixo, alinhada a direita, porque a
-            // especificacao a escreve assim ("Contador: 0/280") e porque o
-            // contador do M3 some quando ha `errorText`, que e justamente
-            // quando a pessoa precisa dele.
-            counterText: '',
+        _comAvisoDePerdaDeFoco(
+          aoPerderFoco: aoPerderFoco,
+          filho: TextField(
+            controller: controlador,
+            focusNode: foco,
+            enabled: habilitado,
+            maxLength: limite,
+            inputFormatters: formatadores,
+            maxLines: obscurecer ? 1 : linhas,
+            minLines: obscurecer ? 1 : linhas,
+            keyboardType: tipoDeTeclado,
+            autofillHints: autofill,
+            obscureText: obscurecer,
+            // Colar habilitado no campo de senha: bloquear colar empurra a
+            // pessoa para uma senha que ela consegue digitar, que e pior.
+            enableInteractiveSelection: true,
+            autocorrect: correcaoAutomatica,
+            textCapitalization: capitalizacao,
+            textInputAction: acaoDeTeclado,
+            onSubmitted: aoEnviar,
+            onChanged: aoMudar,
+            style: textos.bodyLarge?.copyWith(color: cores.textPrimary),
+            decoration: InputDecoration(
+              suffixIcon: sufixo,
+              errorText: temErro ? erro : null,
+              hintText: exemplo,
+              // O rotulo ja esta acima. Repeti-lo aqui produziria dois rotulos
+              // para o leitor de tela.
+              labelText: null,
+              // O contador do M3 e desenhado dentro da decoracao; o do produto e
+              // uma linha propria abaixo, alinhada a direita, porque a
+              // especificacao a escreve assim ("Contador: 0/280") e porque o
+              // contador do M3 some quando ha `errorText`, que e justamente
+              // quando a pessoa precisa dele.
+              counterText: '',
+            ),
           ),
         ),
         if (limite != null) ...<Widget>[
@@ -167,6 +182,26 @@ class BichuField extends StatelessWidget {
       ],
     );
   }
+}
+
+/// Envolve o campo num `Focus` que so observa, quando ha quem observar.
+///
+/// Sem [aoPerderFoco] nao ha no nenhum a mais na arvore: um `Focus` inutil em
+/// todo campo do produto mudaria a travessia de teclado de telas que nao
+/// pediram nada.
+Widget _comAvisoDePerdaDeFoco({
+  required Widget filho,
+  VoidCallback? aoPerderFoco,
+}) {
+  if (aoPerderFoco == null) return filho;
+  return Focus(
+    canRequestFocus: false,
+    skipTraversal: true,
+    onFocusChange: (tem) {
+      if (!tem) aoPerderFoco();
+    },
+    child: filho,
+  );
 }
 
 /// O olho que revela a senha, com o estado anunciado.

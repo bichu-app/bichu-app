@@ -1,3 +1,4 @@
+import { CENTAVOS_MAXIMO, CENTAVOS_MINIMO, centavosDosDigitos, reaisDeCentavos } from '../formato/dinheiro.ts';
 import type { Esquemas } from '../api/cliente.ts';
 
 /**
@@ -36,9 +37,14 @@ export function eEspecie(v: string): v is Especie {
 
 // ---------------------------------------------------------------- preco
 
-/** Centavos, inteiro (`AdminPriceInput.amount`): de 1 a 100.000.000. */
-export const PRECO_MINIMO = 1;
-export const PRECO_MAXIMO = 100_000_000;
+/**
+ * Centavos, inteiro (`AdminPriceInput.amount`): de 1 a 100.000.000.
+ *
+ * A faixa e a mesma da Rede, e mora em `formato/dinheiro.ts`. Estes dois nomes
+ * continuam exportados porque a Loja ja os importa.
+ */
+export const PRECO_MINIMO = CENTAVOS_MINIMO;
+export const PRECO_MAXIMO = CENTAVOS_MAXIMO;
 
 /**
  * "89,90" -> 8990. Aceita o jeito brasileiro de escrever (virgula decimal,
@@ -53,22 +59,26 @@ export function precoEmCentavos(texto: string): number | undefined {
   if (/^\d+\.\d{1,2}$/.test(t)) t = t.replace('.', ',');
   if (!/^(\d{1,3}(\.\d{3})+|\d+)(,\d{1,2})?$/.test(t)) return undefined;
   const [inteiros = '', decimais = ''] = t.replace(/\./g, '').split(',');
-  const centavos = Number.parseInt(inteiros, 10) * 100 + Number.parseInt(decimais.padEnd(2, '0') || '0', 10);
-  if (!Number.isSafeInteger(centavos) || centavos < PRECO_MINIMO || centavos > PRECO_MAXIMO) return undefined;
-  return centavos;
+  // A gramatica aceita acima continua sendo desta funcao; a ARITMETICA e de
+  // `formato/dinheiro.ts`, para nao existirem duas contas de centavos no
+  // painel. A faixa e a mesma, entao `null` de la e `undefined` aqui.
+  return centavosDosDigitos(inteiros, decimais) ?? undefined;
 }
 
-/** 18990 -> "189,90", o que vai de volta no campo. */
+/**
+ * 18990 -> "189,90", o que vai de volta no campo.
+ *
+ * Com ponto de milhar, porque e o mesmo texto que a mascara do campo produz:
+ * 100000000 -> "1.000.000,00". Antes esta funcao nao punha o ponto e o campo
+ * abria com `1000000,00` ate a primeira tecla.
+ */
 export function centavosParaCampo(centavos: number): string {
-  const inteiros = Math.trunc(centavos / 100);
-  const resto = String(centavos % 100).padStart(2, '0');
-  return `${inteiros},${resto}`;
+  return reaisDeCentavos(centavos);
 }
 
 /** 18990 -> "R$ 189,90", como a tabela mostra. */
 export function centavosParaTexto(centavos: number): string {
-  const inteiros = Math.trunc(centavos / 100).toLocaleString('pt-BR');
-  return `R$ ${inteiros},${String(centavos % 100).padStart(2, '0')}`;
+  return `R$ ${reaisDeCentavos(centavos)}`;
 }
 
 // ---------------------------------------------------------------- datas

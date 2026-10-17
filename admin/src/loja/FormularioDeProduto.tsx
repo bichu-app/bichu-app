@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import type { ClienteDaApi, Esquemas } from '../api/cliente.ts';
 import { errosDoProblema, tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../componentes/basicos.tsx';
+import { CampoDeValorEmReais } from '../componentes/campos.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { DialogoDeConfirmacao, type ResultadoDaAcaoConfirmada } from '../componentes/DialogoDeConfirmacao.tsx';
 import { enviarImagem } from '../componentes/envio-de-imagem.ts';
@@ -585,7 +586,9 @@ export default function FormularioDeProduto() {
           </Banner>
         )}
         <div className="row2">
-          <CampoDeTexto dataCy="produto-preco" id="f-preco" rotulo="Preço (R$)" valor={valores.preco} aoMudar={(v) => mudar('preco', v)} modoDeEntrada="decimal" erro={erro('f-preco')} />
+          {/* O valor guardado continua sendo texto; `precoEmCentavos` e quem
+              o transforma em `price.amount`, em centavos inteiros. */}
+          <CampoDeValorEmReais dataCy="produto-preco" id="f-preco" rotulo="Preço (R$)" valor={valores.preco} aoMudar={(v) => mudar('preco', v)} erro={erro('f-preco')} />
           <CampoDeTexto dataCy="produto-consultado-em" id="f-data" rotulo="Consultado em" valor={valores.consultadoEm} aoMudar={(v) => mudar('consultadoEm', v)} tipo="date" erro={erro('f-data')} />
         </div>
         <button type="button" className="btn ghost sm voltar" data-cy="produto-consultei-hoje" onClick={() => mudar('consultadoEm', hojeCivil())}>

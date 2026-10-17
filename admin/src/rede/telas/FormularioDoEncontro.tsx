@@ -12,6 +12,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 
 import { Banner, CampoDeTexto, ErroDoCampo, ResumoDeErros } from '../../componentes/basicos.tsx';
+import { CampoDeValorEmReais } from '../../componentes/campos.tsx';
 import { enviarImagem } from '../../componentes/envio-de-imagem.ts';
 import { Galeria } from '../../componentes/Galeria.tsx';
 import { Icone } from '../../componentes/Icone.tsx';
@@ -449,12 +450,15 @@ export default function FormularioDoEncontro() {
           {f.pago && (
             <div className={estilos.blocoInterno}>
               <div className="row2">
-                <CampoDeTexto
+                {/* O valor guardado continua sendo texto; `centavosDoTexto` e
+                    quem o transforma em `admission.price.amount`, em centavos
+                    inteiros. O teto de 12 e `1.000.000,00`, o maximo do
+                    contrato ja mascarado. */}
+                <CampoDeValorEmReais
                   id="enc-valor"
                   rotulo="Valor em reais *"
                   valor={f.valor}
                   aoMudar={(v) => mudar('valor', v)}
-                  modoDeEntrada="decimal"
                   maximo={12}
                   erro={erroDe('valor')}
                 />

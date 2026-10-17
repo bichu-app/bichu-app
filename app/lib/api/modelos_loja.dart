@@ -16,6 +16,14 @@
 /// exatamente a razao de a regra morar no servidor.
 library;
 
+// `formatarReais` mora em `formato/dinheiro.dart`, que e o unico lugar do
+// app que faz a conta de centavos para texto. Reexportado aqui porque as
+// telas e `app/test/telas/loja_com_dados_test.dart` ja o importam deste
+// arquivo, e trocar o caminho de import nao e o assunto desta mudanca.
+import '../formato/dinheiro.dart';
+
+export '../formato/dinheiro.dart' show formatarReais, reaisEmTexto;
+
 /// `#/components/schemas/StoreCategory` do contrato.
 enum CategoriaDaLoja {
   alimento('food', 'Alimentação'),
@@ -207,33 +215,6 @@ class ItemDaLoja {
       estadoDoPreco: EstadoDoPreco.porCodigo(json['price_status'] as String?),
     );
   }
-}
-
-/// Centavos para `R$ 1.249,90`.
-///
-/// **Virgula decimal e ponto de milhar**, que e a ordem inversa da inglesa.
-/// Trocar os dois e o defeito que passa despercebido em valores pequenos e
-/// vira outro numero em valores grandes: `R$ 1,249.90` e mil vezes menos para
-/// quem le rapido.
-///
-/// Os centavos sao sempre **dois digitos**: `R$ 100,00`, e nunca `R$ 100,0`
-/// nem `R$ 100`. Um valor redondo sem os dois zeros parece truncado.
-///
-/// Divisao INTEIRA, sem passar por `double` em momento nenhum.
-String formatarReais(int centavos) {
-  final negativo = centavos < 0;
-  final absoluto = centavos.abs();
-  final reais = absoluto ~/ 100;
-  final resto = absoluto % 100;
-  final buffer = StringBuffer();
-  final digitos = reais.toString();
-  for (var i = 0; i < digitos.length; i++) {
-    // O ponto de milhar entra a cada tres digitos contados **da direita**.
-    if (i > 0 && (digitos.length - i) % 3 == 0) buffer.write('.');
-    buffer.write(digitos[i]);
-  }
-  final centavosEmTexto = resto.toString().padLeft(2, '0');
-  return '${negativo ? '-' : ''}R\$ $buffer,$centavosEmTexto';
 }
 
 /// `2026-03-14` para `14/03`.

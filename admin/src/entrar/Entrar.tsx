@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { criarClienteDaApi } from '../api/cliente.ts';
 import { esperaPorExtenso, segundosDeEspera, tipoDoProblema } from '../api/problema.ts';
-import { Banner, CampoDeSenha, CampoDeTexto } from '../componentes/basicos.tsx';
+import { Banner, CampoDeSenha } from '../componentes/basicos.tsx';
+import { CampoDeEmail } from '../componentes/campos.tsx';
+import { emailParaEnvio } from '../formato/email.ts';
 import { LogoHorizontal } from '../componentes/Icone.tsx';
 import { lerMotivo, voltaSegura } from '../sessao/entrar-url.ts';
 import { CaptchaIndisponivel, type ObterTokenDoCaptcha } from './captcha.ts';
@@ -50,6 +52,10 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
   const [aviso, setAviso] = useState<Aviso | undefined>(AVISO_DO_MOTIVO[lerMotivo(parametros.get('motivo')) ?? '']);
   const [bloqueadoAte, setBloqueadoAte] = useState<number>();
   const [errosDosCampos, setErrosDosCampos] = useState<{ email?: string; senha?: string }>({});
+  // Erro de FORMA do endereco, local: aparece ao sair do campo e sai sozinho
+  // quando o endereco volta a ser plausivel. Separado de `errosDosCampos`
+  // porque o erro do servidor sabe mais e tem de ganhar a frente.
+  const [emailMalEscrito, setEmailMalEscrito] = useState(false);
   const campoDaSenha = useRef<HTMLInputElement>(null);
   const campoDoEmail = useRef<HTMLInputElement>(null);
 
@@ -63,7 +69,7 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
   async function entrar() {
     if (entrando || bloqueadoAte !== undefined) return;
     const erros: { email?: string; senha?: string } = {};
-    if (email.trim() === '') erros.email = 'Informe o e-mail.';
+    if (emailParaEnvio(email) === '') erros.email = 'Informe o e-mail.';
     if (senha === '') erros.senha = 'Informe a senha.';
     setErrosDosCampos(erros);
     if (erros.email) return campoDoEmail.current?.focus();
@@ -81,7 +87,10 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
       }
       const { data, error, response } = await api.POST('/admin/auth/login', {
         params: { header: { 'X-Captcha-Token': token } },
-        body: { email: email.trim(), password: senha },
+        // `emailParaEnvio` apara espaco e **nao** abaixa a caixa: quem
+        // normaliza e `normalizarEmail` no servidor, e duas normalizacoes do
+        // mesmo endereco divergem sem ninguem ver.
+        body: { email: emailParaEnvio(email), password: senha },
       });
       if (data) {
         // Recarga completa: o painel busca a sessao (e o token anti-CSRF) sozinho.
@@ -142,16 +151,17 @@ export function Entrar({ obterToken, busca, navegarParaFora, fetch }: PropsDoEnt
         </h1>
         {/* Os avisos sao anunciados: erro e role=alert, o resto role=status. */}
         {banner}
-        <CampoDeTexto
+        <CampoDeEmail
           id="l-email"
           dataCy="entrar-email"
           rotulo="E-mail"
-          tipo="email"
           autoComplete="username"
           valor={email}
           aoMudar={setEmail}
           somenteLeitura={entrando}
           erro={errosDosCampos.email}
+          erroDeForma={emailMalEscrito}
+          aoMudarErroDeForma={setEmailMalEscrito}
           referencia={campoDoEmail}
         />
         <CampoDeSenha
