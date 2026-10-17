@@ -147,6 +147,16 @@ export interface NovoItem {
   readonly id: string;
   readonly slug: string;
   readonly partnerId: string;
+  /**
+   * O host do parceiro, para o adaptador decidir se `target_host` fica nulo.
+   *
+   * Vem junto do `partnerId` e nao e relido do banco pelo adaptador: quem
+   * validou o destino (`errosDoDestino`) ja leu o parceiro, e uma segunda
+   * leitura abriria a janela em que o host muda entre a validacao e a gravacao
+   * -- o item gravaria `target_host` nulo contra um dominio que nao e mais o
+   * que foi conferido.
+   */
+  readonly partnerHost: string;
   readonly title: string;
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
@@ -162,7 +172,14 @@ export interface MudancaDeItem {
   readonly title?: string;
   readonly summary?: string;
   readonly category?: CategoriaDaVitrine;
-  readonly targetUrl?: string;
+  /**
+   * O destino novo. **Os dois campos andam juntos de proposito**: o adaptador
+   * grava `target_path` e `target_host` a partir dos dois, e um sem o outro
+   * gravaria o caminho novo sob o dominio antigo -- o link levaria a pessoa
+   * para o caminho certo no site errado. Dois campos opcionais soltos deixavam
+   * essa combinacao ser escrita sem erro de compilacao; um campo so nao deixa.
+   */
+  readonly destino?: { readonly targetUrl: string; readonly partnerHost: string };
   /** `null` tira o preco. Ausente nao mexe. */
   readonly preco?: Preco | null;
   readonly sortOrder?: number;

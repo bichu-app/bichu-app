@@ -29,6 +29,7 @@ import { sql } from 'kysely';
 import type { Db } from '../../../../shared/db/pool.js';
 import {
   enderecoNoParceiro,
+  hostDoDestinoDoItem,
   ordenarEspecies,
   type CategoriaDaVitrine,
   type ImagemDaVitrine,
@@ -53,6 +54,7 @@ interface LinhaDoItem {
   category: CategoriaDaVitrine;
   image_path: string | null;
   target_path: string;
+  target_host: string | null;
   partner_slug: string;
   partner_name: string;
   partner_host: string;
@@ -163,6 +165,7 @@ const COLUNAS_DO_ITEM = [
   'i.category as category',
   'i.image_path as image_path',
   'i.target_path as target_path',
+  'i.target_host as target_host',
   'p.slug as partner_slug',
   'p.name as partner_name',
   'p.host as partner_host',
@@ -253,7 +256,13 @@ export class KyselyStoreRepository implements StoreRepository {
         principal !== undefined ? principal.altText : externa === null ? null : linha.title,
       species: ordenarEspecies(extra.especies.get(linha.id) ?? []),
       tags: extra.tags.get(linha.id) ?? [],
-      targetUrl: enderecoNoParceiro(linha.partner_host, linha.target_path),
+      // O host do ITEM quando ele mora num subdominio do parceiro
+      // (`www.cobasi.com.br`), e o do parceiro no caso comum. A imagem acima
+      // continua no host do parceiro: ela e da massa, nao do destino.
+      targetUrl: enderecoNoParceiro(
+        hostDoDestinoDoItem(linha.partner_host, linha.target_host),
+        linha.target_path,
+      ),
       partnerSlug: linha.partner_slug,
       partnerName: linha.partner_name,
       partnerHost: linha.partner_host,

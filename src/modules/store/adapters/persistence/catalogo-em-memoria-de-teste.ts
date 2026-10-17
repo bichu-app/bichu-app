@@ -19,6 +19,7 @@ import type {
 } from '../../../media/ports/imagem-de-catalogo.js';
 import {
   caminhoDoDestino,
+  hostDoDestino,
   type ImagemDoItem,
   type ItemAdministrativo,
   type ParceiroAdministrativo,
@@ -26,6 +27,7 @@ import {
 } from '../../domain/escrita-da-vitrine.js';
 import {
   enderecoNoParceiro,
+  hostDoDestinoDoItem,
   ordenarEspecies,
   type EspecieDoItem,
 } from '../../domain/item-da-vitrine.js';
@@ -109,8 +111,16 @@ function montarItem(e: Estado, id: string): ItemAdministrativo {
     title: guardado.title,
     summary: guardado.summary,
     category: guardado.category,
-    // Como o banco: guarda o caminho e compoe com o host ATUAL do parceiro.
-    targetUrl: enderecoNoParceiro(parceiro.host, caminhoDoDestino(guardado.targetUrl)),
+    // Como o banco: guarda o CAMINHO (com query e fragmento) e o host so
+    // quando ele e um subdominio do parceiro; compoe os dois na leitura. O
+    // duble refaz a conta em vez de devolver `guardado.targetUrl` inteira,
+    // porque e o truncamento do caminho que ele precisa reproduzir -- um duble
+    // que devolvesse a URL original passaria verde sobre o defeito que a
+    // gravacao teria.
+    targetUrl: enderecoNoParceiro(
+      hostDoDestinoDoItem(parceiro.host, hostDoDestino(guardado.targetUrl, parceiro.host)),
+      caminhoDoDestino(guardado.targetUrl),
+    ),
     imageUrl: guardado.imageUrl,
     priceAmount: guardado.priceAmount,
     priceCurrency: guardado.priceCurrency,
@@ -261,7 +271,7 @@ export function repositorioEmMemoria(
             ...(m.title === undefined ? {} : { title: m.title }),
             ...(m.summary === undefined ? {} : { summary: m.summary }),
             ...(m.category === undefined ? {} : { category: m.category }),
-            ...(m.targetUrl === undefined ? {} : { targetUrl: m.targetUrl }),
+            ...(m.destino === undefined ? {} : { targetUrl: m.destino.targetUrl }),
             ...(m.preco === undefined
               ? {}
               : m.preco === null

@@ -84,7 +84,18 @@ export function hostDoLink(link: string): string | undefined {
   }
 }
 
-/** O link termina no host do parceiro (`host_mismatch` no servidor). */
+/**
+ * O link e do parceiro: o host dele, ou um SUBDOMINIO dele (`host_mismatch` no
+ * servidor).
+ *
+ * **A comparacao e por sufixo COM FRONTEIRA DE ROTULO, e o ponto na
+ * concatenacao e a regra inteira.** `'malcobasi.com.br'` termina em
+ * `'cobasi.com.br'` e **nao** termina em `'.cobasi.com.br'`: sem o ponto, esta
+ * funcao aprovaria qualquer dominio registrado terminando com o nome do
+ * parceiro. E a mesma regra de `ehDoParceiro` no servidor, escrita do mesmo
+ * jeito de proposito -- as duas divergirem faria o painel aceitar o que o
+ * servidor recusa, que e o defeito que acabou de custar o tempo do cliente.
+ */
 export function linkEDoParceiro(link: string, hostDoParceiro: string): boolean {
   const host = hostDoLink(link);
   if (!host) return false;
@@ -237,7 +248,9 @@ const CAMPO_DO_SERVIDOR: [RegExp, CampoDoProduto][] = [
 
 /** UX 30.4 L1: com o site do parceiro carregado, a frase o mostra entre parenteses. */
 export function mensagemDoHost(host: string | undefined): string {
-  return host ? `O link precisa ser do site do parceiro escolhido (${host}).` : 'O link precisa ser do site do parceiro escolhido.';
+  return host
+    ? `O link precisa ser do site do parceiro escolhido (${host}) ou de um subdomínio dele, como www.${host}.`
+    : 'O link precisa ser do site do parceiro escolhido, ou de um subdomínio dele.';
 }
 
 export interface ContextoDoServidor {
@@ -284,8 +297,34 @@ export function errosDoServidor(erros: { field: string; code: string }[], contex
   return { erros: e, tagsRecusadas };
 }
 
+/**
+ * O texto de cada recusa do servidor no campo do link.
+ *
+ * **Existe porque a ausencia dele bloqueou o cliente.** Todas as recusas do
+ * destino chegavam como `invalid_url`, caiam em `MENSAGEM_PADRAO['f-link']` e a
+ * tela dizia "O link precisa comecar com https://" -- inclusive para um link
+ * que comecava com `https://` e so tinha `?idsku=` no fim. Ele leu a frase,
+ * acreditou nela, e passou a procurar o defeito no proprio link.
+ *
+ * Uma linha curta por motivo, e o motivo REAL. Os `code` sao os de
+ * `escrita-da-vitrine.ts`; um `code` novo que apareca aqui sem entrada cai no
+ * texto padrao, que e a frase generica -- entao acrescentar `code` no servidor
+ * e acrescentar linha aqui, no mesmo commit.
+ */
+const MENSAGEM_DO_LINK: Record<string, string> = {
+  url_not_https: 'O link precisa começar com https://.',
+  url_has_credentials: 'Tire o usuário e a senha do endereço antes de salvar.',
+  url_ip_literal: 'O link aponta para um número de IP. Use o endereço com o nome do site.',
+  url_too_long: 'O link é longo demais. Use o endereço direto do produto.',
+  invalid_url: 'Esse texto não é um endereço de site.',
+};
+
 function mensagemDoCodigo(erro: { field: string; code: string }, campo: CampoDoProduto, contexto: ContextoDoServidor): string {
   if (erro.code === 'host_mismatch') return mensagemDoHost(contexto.hostDoParceiro);
+  if (campo === 'f-link') {
+    const doLink = MENSAGEM_DO_LINK[erro.code];
+    if (doLink !== undefined) return doLink;
+  }
   if (erro.code === 'unknown_tag')
     return 'Uma das tags mudou de nome desde que você abriu este formulário. Desmarque a tag indicada, escolha de novo e salve.';
   if (erro.code === 'inactive_tag') {

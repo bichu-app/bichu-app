@@ -17,7 +17,9 @@ import {
   dataDeConsultaNoFuturo,
   caminhoDoDestino,
   errosDeTexto,
+  ehDoParceiro,
   errosDoDestino,
+  hostDoDestino,
   estadoDePublicacao,
   lerIfMatch,
   projetarItemAdministrativo,
@@ -138,52 +140,176 @@ void describe('o preco no painel', () => {
   });
 });
 
-void describe('o destino esta no host do parceiro, e o banco guarda so o caminho', () => {
+void describe('o destino e do parceiro: o host dele ou um subdominio dele', () => {
   const HOST = 'lojadobairro.test';
   const codigos = (url: string): string[] => errosDoDestino('target_url', url, HOST).map((e) => e.code);
+  const texto = (url: string): string[] =>
+    errosDoDestino('target_url', url, HOST).map((e) => e.message ?? '');
+
+  // -------------------------------------------------------------------------
+  // O CASO QUE BLOQUEOU O CLIENTE, por extenso
+  // -------------------------------------------------------------------------
+  //
+  // 17/10/2026: ele tentou cadastrar um produto da Cobasi e a tela disse que o
+  // link "precisa comecar com https://" sobre um link que comecava com
+  // `https://`. Eram DUAS recusas somadas (query e `www.`) escondidas atras de
+  // UMA mensagem errada. O link esta aqui inteiro, e nao montado por helper:
+  // um helper esconderia justamente as duas partes que eram o problema.
+  void it('o link do cliente passa', () => {
+    const doCliente =
+      'https://www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673';
+    assert.deepEqual(errosDoDestino('target_url', doCliente, 'cobasi.com.br'), []);
+    assert.equal(
+      caminhoDoDestino(doCliente),
+      '/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673',
+    );
+    assert.equal(hostDoDestino(doCliente, 'cobasi.com.br'), 'www.cobasi.com.br');
+  });
 
   void it('o host exato passa, sem diferenca de caixa', () => {
     assert.deepEqual(codigos('https://lojadobairro.test/x'), []);
     assert.deepEqual(codigos('https://LojaDoBairro.TEST/x'), []);
   });
 
-  void it('subdominio e recusado: o banco guarda o caminho e compoe com o host do parceiro', () => {
-    assert.deepEqual(codigos('https://www.lojadobairro.test/x'), ['host_mismatch']);
-  });
+  // -------------------------------------------------------------------------
+  // A FRONTEIRA DE ROTULO: o ponto e a regra inteira
+  // -------------------------------------------------------------------------
 
-  void it('ISCA: host que so termina com o TEXTO do parceiro e recusado', () => {
-    assert.deepEqual(codigos('https://falsalojadobairro.test/x'), ['host_mismatch']);
-    assert.deepEqual(codigos('https://lojadobairro.test.golpe.invalid/x'), ['host_mismatch']);
-    assert.deepEqual(codigos('https://outraloja.test/x'), ['host_mismatch']);
-  });
-
-  void it('ISCA: parametro e ancora sao recusados, antes de o CHECK do caminho recusar como 500', () => {
-    assert.deepEqual(codigos('https://lojadobairro.test/x?email=a@b.test'), ['invalid_url']);
-    assert.deepEqual(codigos('https://lojadobairro.test/x#y'), ['invalid_url']);
-    assert.deepEqual(codigos('https://lojadobairro.test/x?'), ['invalid_url']);
-  });
-
-  void it('D47: http, javascript, data, userinfo e IP literal sao recusados', () => {
+  void it('subdominio do parceiro passa', () => {
     for (const url of [
-      'http://lojadobairro.test/x',
-      'javascript:alert(1)',
-      'data:text/html,oi',
-      'https://u@lojadobairro.test/x',
-      'https://u:s@lojadobairro.test/x',
-      'https://203.0.113.5/x',
-      'https://[::1]/x',
-      `https://lojadobairro.test/${'a'.repeat(2048)}`,
-      'nao e url',
+      'https://www.lojadobairro.test/x',
+      'https://loja.lojadobairro.test/x',
+      'https://produtos.lojadobairro.test/x',
+      'https://a.b.lojadobairro.test/x',
     ]) {
-      assert.deepEqual(codigos(url), ['invalid_url'], url);
+      assert.deepEqual(codigos(url), [], url);
     }
   });
 
-  void it('o caminho guardado casa com o CHECK de store_items.target_path', () => {
-    const check = /^\/[^\s?#]*$/;
-    for (const url of ['https://lojadobairro.test', 'https://lojadobairro.test/a b/c', 'https://lojadobairro.test/r/ração']) {
+  // ISCA -- em `ehDoParceiro`, troque `host.endsWith(`.${alvo}`)` por
+  // `host.endsWith(alvo)`. Este caso reprova, e ele e a razao de a funcao
+  // existir separada: `endsWith` cru deixa `malcobasi.com.br` passar por
+  // `cobasi.com.br`, e e o jeito mais barato de fazer um link nosso levar para
+  // fora sem ninguem notar lendo o codigo.
+  void it('ISCA: host que so TERMINA com o texto do parceiro e recusado', () => {
+    for (const url of [
+      'https://falsalojadobairro.test/x',
+      'https://mallojadobairro.test/x',
+      'https://xlojadobairro.test/x',
+      'https://lojadobairro.test.golpe.invalid/x',
+      'https://outraloja.test/x',
+      'https://lojadobairro.testes/x',
+    ]) {
+      assert.deepEqual(codigos(url), ['host_mismatch'], url);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // QUERY E FRAGMENTO PASSAM, e chegam inteiros ao caminho guardado
+  // -------------------------------------------------------------------------
+
+  void it('parametro e ancora passam', () => {
+    for (const url of [
+      'https://lojadobairro.test/x?idsku=1197673',
+      'https://lojadobairro.test/x?cor=azul&tamanho=g',
+      'https://lojadobairro.test/x#descricao',
+      'https://lojadobairro.test/x?a=1#b',
+      'https://lojadobairro.test/x?',
+    ]) {
       assert.deepEqual(codigos(url), [], url);
-      assert.ok(check.test(caminhoDoDestino(url)), caminhoDoDestino(url));
+    }
+  });
+
+  // ISCA -- em `caminhoDoDestino`, volte a devolver so `url.pathname`. Este
+  // caso reprova. Sem ele o defeito seria SILENCIOSO: o item gravaria, a
+  // vitrine mostraria, e a pessoa cairia numa pagina que nao e a do produto.
+  void it('ISCA: o caminho guardado leva query e fragmento junto', () => {
+    assert.equal(caminhoDoDestino('https://lojadobairro.test/p?idsku=9'), '/p?idsku=9');
+    assert.equal(caminhoDoDestino('https://lojadobairro.test/p#ficha'), '/p#ficha');
+    assert.equal(caminhoDoDestino('https://lojadobairro.test/p?a=1#b'), '/p?a=1#b');
+  });
+
+  // -------------------------------------------------------------------------
+  // O QUE CONTINUA RECUSADO, e agora cada um diz o PROPRIO motivo
+  // -------------------------------------------------------------------------
+
+  void it('D47: http, javascript, data, userinfo e IP literal continuam recusados', () => {
+    assert.deepEqual(codigos('http://lojadobairro.test/x'), ['url_not_https']);
+    assert.deepEqual(codigos('javascript:alert(1)'), ['url_not_https']);
+    assert.deepEqual(codigos('data:text/html,oi'), ['url_not_https']);
+    assert.deepEqual(codigos('https://u@lojadobairro.test/x'), ['url_has_credentials']);
+    assert.deepEqual(codigos('https://u:s@lojadobairro.test/x'), ['url_has_credentials']);
+    assert.deepEqual(codigos('https://203.0.113.5/x'), ['url_ip_literal']);
+    assert.deepEqual(codigos('https://[::1]/x'), ['url_ip_literal']);
+    assert.deepEqual(codigos(`https://lojadobairro.test/${'a'.repeat(2048)}`), ['url_too_long']);
+    assert.deepEqual(codigos('nao e url'), ['invalid_url']);
+  });
+
+  // ISCA -- em `errosDoDestino`, volte a devolver `invalid_url` com a mesma
+  // mensagem para todas as recusas. Este caso reprova.
+  //
+  // Ele mede a MENSAGEM, e nao so o `code`, porque foi a mensagem que mentiu
+  // para o cliente: "precisa comecar com https://" para um link que comecava
+  // com `https://`. Nenhuma recusa que nao seja de esquema pode dizer isso.
+  void it('ISCA: cada recusa diz o proprio motivo, e so a de esquema fala de https', () => {
+    const sobreHttps = (url: string): boolean => texto(url).some((m) => m.includes('https://'));
+
+    assert.ok(sobreHttps('http://lojadobairro.test/x'));
+
+    for (const url of [
+      'https://www.outraloja.test/x',
+      'https://u:s@lojadobairro.test/x',
+      'https://203.0.113.5/x',
+      `https://lojadobairro.test/${'a'.repeat(2048)}`,
+      'nao e url',
+    ]) {
+      assert.equal(sobreHttps(url), false, `a recusa de ${url} nao pode falar de https://`);
+      assert.equal(texto(url).length, 1, url);
+      assert.ok((texto(url)[0] ?? '').length > 0, url);
+    }
+  });
+
+  // -------------------------------------------------------------------------
+  // `target_host`: nulo no caso comum, preenchido no subdominio
+  // -------------------------------------------------------------------------
+
+  void it('o host guardado e nulo quando e o do proprio parceiro', () => {
+    assert.equal(hostDoDestino('https://lojadobairro.test/x', HOST), null);
+    assert.equal(hostDoDestino('https://LojaDoBairro.TEST/x', HOST), null);
+  });
+
+  void it('o host guardado e o do subdominio, em minusculas', () => {
+    assert.equal(hostDoDestino('https://www.lojadobairro.test/x', HOST), 'www.lojadobairro.test');
+    assert.equal(hostDoDestino('https://WWW.LojaDoBairro.TEST/x', HOST), 'www.lojadobairro.test');
+  });
+
+  void it('a fronteira de rotulo de ehDoParceiro, direto', () => {
+    assert.equal(ehDoParceiro('lojadobairro.test', HOST), true);
+    assert.equal(ehDoParceiro('www.lojadobairro.test', HOST), true);
+    assert.equal(ehDoParceiro('mallojadobairro.test', HOST), false);
+    assert.equal(ehDoParceiro('lojadobairro.test.golpe.invalid', HOST), false);
+  });
+
+  // -------------------------------------------------------------------------
+  // O caminho guardado continua cabendo no CHECK do banco
+  // -------------------------------------------------------------------------
+
+  // O CHECK de `store_items.target_path` depois da migracao
+  // `20261017000001`: comeca em `/`, sem espaco em branco, com `?` e `#`
+  // permitidos. Copiado dela de proposito -- se os dois divergirem, a escrita
+  // passa aqui e morre no banco como 500.
+  void it('o caminho guardado casa com o CHECK de store_items.target_path', () => {
+    const check = /^\/\S*$/;
+    for (const url of [
+      'https://lojadobairro.test',
+      'https://lojadobairro.test/a b/c',
+      'https://lojadobairro.test/r/ração',
+      'https://lojadobairro.test/p?idsku=1197673',
+      'https://lojadobairro.test/p?q=a b',
+      'https://lojadobairro.test/p#ficha tecnica',
+    ]) {
+      assert.deepEqual(codigos(url), [], url);
+      assert.ok(check.test(caminhoDoDestino(url)), `${url} -> ${caminhoDoDestino(url)}`);
     }
     assert.equal(caminhoDoDestino('https://lojadobairro.test/racao/sache'), '/racao/sache');
   });
