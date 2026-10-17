@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { CATEGORIAS, centavosParaCampo, centavosParaTexto, ESPECIES, precoEmCentavos, slugSugerido } from '../src/loja/dominio.ts';
+import { conferirRotulo as conferirRotuloDaTag, mensagemDeErroDaTag } from '../src/loja/DialogoCriarTag.tsx';
 import { corpoDeAlteracao, corpoDeCriacao, errosDoServidor, validarProduto, VALORES_VAZIOS } from '../src/loja/formulario-do-produto.ts';
 
 describe('preco de referencia em centavos (AdminPriceInput.amount)', () => {
@@ -156,5 +157,46 @@ describe('galeria no corpo da alteracao', () => {
     expect(corpo({ ...base, imagens: [...base.imagens].reverse() }, base).images).toEqual([
       { upload_id: '00000000-0000-4000-8000-000000000002', alt_text: 'Verso' },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// O rotulo da tag no painel (o cliente travado em `N&D`, 17/10/2026)
+// ---------------------------------------------------------------------------
+// A conferencia da tela e conveniencia de UX: a autoridade e o servidor
+// (`conferirRotulo` em `escrita-da-vitrine.ts`). O que estes casos provam e que
+// a tela NAO recusa antes o que o servidor aceita -- era ela que barrava `N&D`
+// sem nem chamar a API.
+describe('rotulo de tag no painel', () => {
+  it.each([['N&D'], ['Pro Plan'], ["Hill's"], ['Hill\u2019s'], ['Royal Canin'], ['Farmina N&D Ocean'], ['3 Cora\u00e7\u00f5es'], ['Omega 3 + 6'], ['3 Corac\u0327o\u0303es']])(
+    'aceita o nome de marca %s',
+    (rotulo) => {
+      expect(conferirRotuloDaTag(rotulo)).toBeUndefined();
+    },
+  );
+
+  it.each([['bit.ly/x'], ['loja.com.br'], ['a@b.io'], ['x/y'], ['promo!']])('ISCA: continua recusando %s', (rotulo) => {
+    expect(conferirRotuloDaTag(rotulo)).toBe('Use s\u00f3 letras, n\u00fameros, espa\u00e7o e os sinais & - \u2019 +.');
+  });
+
+  it('recusa vazio, so espaco e acima de 24', () => {
+    expect(conferirRotuloDaTag('')).toBe('Use de 2 a 24 caracteres.');
+    expect(conferirRotuloDaTag('   ')).toBe('Use de 2 a 24 caracteres.');
+    expect(conferirRotuloDaTag('a'.repeat(25))).toBe('Use de 2 a 24 caracteres.');
+    expect(conferirRotuloDaTag('a'.repeat(24))).toBeUndefined();
+  });
+
+  it('caractere invisivel tem mensagem propria, e ela nao diz "especial"', () => {
+    const recusa = conferirRotuloDaTag('Ra\u200bcao');
+    expect(recusa).toBe('Este nome tem caractere invis\u00edvel. Apague o campo e digite o nome de novo.');
+    expect(recusa).not.toMatch(/especia/i);
+    expect(conferirRotuloDaTag('Ra\u202ecao')).toBe(recusa);
+  });
+
+  it('o codigo do servidor vira a mensagem certa na tela', () => {
+    expect(mensagemDeErroDaTag('validation-failed', ['tag_invisible_char'])).toMatch(/invis\u00edvel/);
+    expect(mensagemDeErroDaTag('validation-failed', ['tag_charset'])).toMatch(/& - \u2019 \+/);
+    expect(mensagemDeErroDaTag('validation-failed', ['tag_slug_invalid'])).toMatch(/endere\u00e7o v\u00e1lido/);
+    expect(mensagemDeErroDaTag('validation-failed', [])).toBe('Use de 2 a 24 caracteres.');
   });
 });

@@ -5890,17 +5890,37 @@ export interface components {
         };
         AdminStoreTagInput: {
             /**
-             * @description Como o app mostra. Letras, digitos, espaco e hifen, e nada mais
-             *     (conferido no servidor, `code: tag_charset`). O servidor apara as
-             *     pontas e junta espacos repetidos. O `slug` e derivado: sem acento,
-             *     minusculo, espaco vira hifen. **Dois rotulos que dao o mesmo `slug`
-             *     sao a mesma tag** (`Racao` e `racao` e `Ração`): o segundo e recusado
-             *     com `409 slug-taken`.
+             * @description Como o app mostra. Letras (com acento e cedilha), digitos, espaco e
+             *     a pontuacao de nome de marca -- `&`, hifen, apostrofo (reto ou
+             *     curvo) e `+` --, e nada mais (conferido no servidor, `code:
+             *     tag_charset`). `N&D`, `Hill's` e `Farmina N&D Ocean` sao rotulos
+             *     validos. **`.` e `/` NAO entram**: num rotulo que a Loja publica
+             *     eles sao o que deixa escrever `bit.ly/x` ou `loja.com.br`, e o
+             *     alfabeto e o que fecha essa porta aqui (D59 vale no modulo da Rede,
+             *     nao neste).
+             *
+             *     Caractere invisivel ou de controle -- controle, marca de direcao
+             *     bidirecional, espaco de largura zero -- e recusado em separado, com
+             *     `code: tag_invisible_char`: e o que permite um nome que PARECE uma
+             *     coisa e e outra. Nao e o mesmo erro que o alfabeto.
+             *
+             *     O servidor apara as pontas e junta espacos repetidos. O `slug` e
+             *     derivado: sem acento, minusculo, espaco, `&` e `+` viram hifen, e o
+             *     apostrofo sai (`N&D` -> `n-d`, `Hill's` -> `hills`). Entao o `&`
+             *     nunca chega ao `slug`, e o filtro `tag` continua recebendo so
+             *     `[a-z0-9-]`. O `slug` derivado precisa caber em `Slug` (3 a 30): o
+             *     rotulo de um ou dois caracteres (`N`, `Pé`) e recusado com `code:
+             *     tag_slug_invalid`. **Dois rotulos que dao o mesmo `slug` sao a mesma
+             *     tag** (`Racao` e `racao` e `Ração`): o segundo e recusado com
+             *     `409 slug-taken`.
              */
             label: string;
         };
         AdminStoreTagPatch: {
-            /** @description Trocar o rotulo troca o `slug` junto, e o novo nao pode colidir. */
+            /**
+             * @description Trocar o rotulo troca o `slug` junto, e o novo nao pode colidir. O
+             *     mesmo alfabeto de `AdminStoreTagInput.label`.
+             */
             label?: string;
             active?: boolean;
         };

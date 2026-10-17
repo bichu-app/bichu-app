@@ -119,4 +119,24 @@ export function slugSugerido(nome: string): string {
 
 export const PADRAO_DO_SLUG = /^[a-z0-9](?:[a-z0-9-]{1,28}[a-z0-9])$/;
 export const PADRAO_DO_HOST = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/;
-export const PADRAO_DO_ROTULO_DE_TAG = /^[\p{L}\p{N} -]+$/u;
+/**
+ * O alfabeto do rotulo de tag, igual ao do servidor
+ * (`conferirRotulo` em `escrita-da-vitrine.ts`): letra (com acento e cedilha,
+ * em NFC ou NFD, por isso `\p{M}`), digito, espaco, e a pontuacao de nome de
+ * marca -- `&`, hifen, apostrofo reto ou curvo, e `+`. `N&D`, `Hill's` e
+ * `Farmina N&D Ocean` passam.
+ *
+ * `.` e `/` ficam de fora nos dois lados: com eles, `bit.ly/x` seria um rotulo
+ * valido num texto que a Loja publica. A autoridade continua sendo o servidor;
+ * isto aqui e conveniencia de UX.
+ */
+export const PADRAO_DO_ROTULO_DE_TAG = /^[\p{L}\p{M}\p{N} &'\u2019+-]+$/u;
+
+/**
+ * Caractere invisivel ou de controle -- controle, marca de direcao
+ * bidirecional, espaco de largura zero, BOM. Recusado em separado, e com
+ * mensagem propria: nao e "caractere especial", e o que permite um nome que
+ * parece uma coisa e e outra.
+ */
+export const PADRAO_INVISIVEL =
+  /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF]/u;
