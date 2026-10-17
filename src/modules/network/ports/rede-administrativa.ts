@@ -38,6 +38,15 @@ export class SlugDoEncontroOcupado extends Error {
 
 export interface NovoEncontro {
   readonly id: string;
+  /**
+   * Quem criou, para a coluna de autoria do painel.
+   *
+   * **Nao e o nome da coluna de proposito**: ele e reprovado em `src/` pelo
+   * portao de colunas que nao saem, e o carimbo passa pela funcao
+   * `network_events_gravar_autoria` da migracao `20261001000004`, na mesma
+   * transacao do `INSERT`. Antes disso a coluna existia e nunca era escrita.
+   */
+  readonly autorDoPainel: AdminAccountId;
   readonly slug: string;
   readonly title: string;
   readonly summary: string;
@@ -76,6 +85,12 @@ export interface MudancaDeEncontro {
   readonly linkDeIngresso?: string | null;
   readonly instagram?: string | null;
   readonly publicacao?: PublicacaoAdministrativa;
+  /**
+   * So a aprovacao da revisao o preenche fora da criacao: sem ele, a passagem
+   * de `pending_review` para `published` cairia no
+   * `CHECK network_events_visivel_foi_publicado`.
+   */
+  readonly publishedAt?: Date;
   readonly cancelledAt?: Date;
   readonly cancellationNote?: string;
 }
@@ -111,8 +126,20 @@ export interface Pagina<T> {
 }
 
 export interface TransacaoDaRede {
-  /** Com `FOR UPDATE`: a escrita segura a linha ate o `COMMIT`. */
+  /**
+   * Com `FOR UPDATE`: a escrita segura a linha ate o `COMMIT`.
+   *
+   * **Nao enxerga `pending_review`**: alterar, mover, cancelar e remover
+   * respondem 404 sobre encontro em revisao. Quem o enxerga e
+   * `encontroEmRevisaoPorSlug`, e so ele.
+   */
   encontroPorSlug(slug: string): Promise<EncontroAdministrativo | null>;
+  /**
+   * O encontro EM REVISAO, com `FOR UPDATE` (ADR-0025 emenda 3). `null` para o
+   * que nao existe e para o que esta em qualquer outro estado -- os dois sao o
+   * mesmo 404, pela mesma razao de sempre.
+   */
+  encontroEmRevisaoPorSlug(slug: string): Promise<EncontroAdministrativo | null>;
   recarregarEncontro(id: string): Promise<EncontroAdministrativo>;
   existeSlug(slug: string): Promise<boolean>;
   /** Lanca `SlugDoEncontroOcupado`. */

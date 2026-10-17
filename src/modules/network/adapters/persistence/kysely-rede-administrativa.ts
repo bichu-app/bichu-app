@@ -24,7 +24,12 @@
  */
 import { sql, type SqlBool } from 'kysely';
 import type { Db, DbExecutor, DbTransaction } from '../../../../shared/db/pool.js';
-import type { EstruturaDoLocal, IdadeDosCaes, ItemParaLevar } from '../../../../shared/db/schema.js';
+import type {
+  EstruturaDoLocal,
+  IdadeDosCaes,
+  ItemParaLevar,
+  OrigemDoEncontro,
+} from '../../../../shared/db/schema.js';
 import type { ContagemNaTrilha, TrilhaTransacional } from '../../../audit/ports/audit-log.js';
 import type { RegistroDeImagemDeCatalogo } from '../../../media/ports/imagem-de-catalogo.js';
 import type {
@@ -79,7 +84,8 @@ interface LinhaDoEncontro {
   street_address: string | null;
   ticket_url: string | null;
   instagram_handle: string | null;
-  publication_status: PublicacaoAdministrativa | 'pending_review';
+  publication_status: PublicacaoAdministrativa;
+  origin: OrigemDoEncontro;
   published_at: Date | null;
   cancelled_at: Date | null;
   cancellation_note: string | null;
@@ -113,7 +119,7 @@ const COLUNAS = sql`
   e.starts_at, e.ends_at, e.time_zone, e.visibility,
   e.admission_kind, e.admission_amount, e.admission_unit,
   e.dog_age, e.vaccination_required, e.fenced_off_leash_area, e.notes, e.street_address, e.ticket_url, e.instagram_handle,
-  e.publication_status, e.published_at, e.cancelled_at, e.cancellation_note,
+  e.publication_status, e.origin, e.published_at, e.cancelled_at, e.cancellation_note,
   e.created_at, e.updated_at, e.version,
   array(SELECT s.size FROM network_event_sizes s JOIN ref_sizes r ON r.code = s.size
          WHERE s.event_id = e.id ORDER BY r.sort_order) AS accepted_sizes,
@@ -172,9 +178,11 @@ function comoEncontro(l: LinhaDoEncontro): EncontroAdministrativo {
     endereco: l.street_address,
     linkDeIngresso: l.ticket_url,
     instagram: l.instagram_handle,
-    // `pending_review` e so da comunidade e nao existe na v1; a leitura do
-    // painel nao o enxerga (o `WHERE` abaixo o tira).
-    publicacao: l.publication_status as PublicacaoAdministrativa,
+    // `pending_review` e so da comunidade (ADR-0025 emenda 3). `DO_PAINEL` o
+    // tira de toda escrita; quem o enxerga e o filtro da listagem e a leitura
+    // da revisao.
+    publicacao: l.publication_status,
+    origem: l.origin,
     publishedAt: l.published_at,
     cancelledAt: l.cancelled_at,
     cancellationNote: l.cancellation_note,
@@ -186,7 +194,17 @@ function comoEncontro(l: LinhaDoEncontro): EncontroAdministrativo {
   };
 }
 
+/**
+ * O conjunto que a ESCRITA administrativa alcanca. **`pending_review` ficou
+ * fora de proposito** (ADR-0025 emenda 3): alterar, mover, cancelar e remover
+ * um encontro que nunca foi publicado nao tem significado, e cancelar cairia no
+ * `CHECK network_events_visivel_foi_publicado`, que exige `published_at`. A
+ * unica escrita que enxerga a revisao e `reviewAdminNetworkEvent`, por
+ * `lerEncontroEmRevisao`.
+ */
 const DO_PAINEL = sql<SqlBool>`e.publication_status IN ('published', 'cancelled', 'removed')`;
+
+const EM_REVISAO = sql<SqlBool>`e.publication_status = 'pending_review'`;
 
 async function lerEncontro(
   db: DbExecutor,
@@ -197,6 +215,19 @@ async function lerEncontro(
     SELECT ${COLUNAS} FROM network_events e
      WHERE ${DO_PAINEL} AND ${onde}
      ${travar ? sql`FOR UPDATE OF e` : sql``}`.execute(db);
+  const linha = r.rows[0];
+  return linha === undefined ? null : comoEncontro(linha);
+}
+
+/** O encontro em revisao, para a decisao da moderacao. Sempre com `FOR UPDATE`. */
+async function lerEncontroEmRevisao(
+  db: DbExecutor,
+  slug: string,
+): Promise<EncontroAdministrativo | null> {
+  const r = await sql<LinhaDoEncontro>`
+    SELECT ${COLUNAS} FROM network_events e
+     WHERE ${EM_REVISAO} AND e.slug = ${slug}
+     FOR UPDATE OF e`.execute(db);
   const linha = r.rows[0];
   return linha === undefined ? null : comoEncontro(linha);
 }
@@ -296,6 +327,8 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
   return {
     encontroPorSlug: (slug) => lerEncontro(trx, sql<SqlBool>`e.slug = ${slug}`, true),
 
+    encontroEmRevisaoPorSlug: (slug) => lerEncontroEmRevisao(trx, slug),
+
     async recarregarEncontro(id) {
       const e = await lerEncontro(trx, sql<SqlBool>`e.id = ${id}::uuid`, false);
       if (e === null) throw new Error(`encontro ${id} sumiu dentro da propria transacao`);
@@ -349,6 +382,13 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
           })
           .execute(),
       );
+      // A AUTORIA DO PAINEL, que ficou tres semanas sem nunca ser gravada: o
+      // nome da coluna e reprovado em `src/` pelo portao de colunas que nao
+      // saem, entao o carimbo passa pela funcao da migracao `20261001000004`,
+      // na mesma transacao do `INSERT`. A trilha continua gravando o ator; esta
+      // linha faz a coluna e o `CHECK` da `20260928000005` deixarem de guardar
+      // um valor que ninguem escrevia.
+      await sql`SELECT network_events_gravar_autoria(${novo.id}::uuid, NULL, ${novo.autorDoPainel}::uuid)`.execute(trx);
       if (novo.lugar.ponto !== null) await gravarPonto(trx, novo.id, novo.lugar.ponto);
     },
 
@@ -388,6 +428,10 @@ function transacao(trx: DbTransaction, deps: DependenciasDaRedeAdministrativaEmP
             ...(m.linkDeIngresso === undefined ? {} : { ticket_url: m.linkDeIngresso }),
             ...(m.instagram === undefined ? {} : { instagram_handle: m.instagram }),
             ...(m.publicacao === undefined ? {} : { publication_status: m.publicacao }),
+            // A aprovacao e o unico caminho que preenche `published_at` fora
+            // da criacao, e sem ele o `CHECK network_events_visivel_foi_publicado`
+            // recusaria a passagem de `pending_review` para `published`.
+            ...(m.publishedAt === undefined ? {} : { published_at: m.publishedAt }),
             ...(m.cancelledAt === undefined ? {} : { cancelled_at: m.cancelledAt }),
             ...(m.cancellationNote === undefined ? {} : { cancellation_note: m.cancellationNote }),
             updated_at: new Date(agora),
@@ -531,7 +575,12 @@ export function criarRedeAdministrativaRepository(
 
     async listarEncontros(recorte: RecorteDoPainel): Promise<Pagina<EncontroAdministrativo>> {
       const agora = new Date(recorte.agora);
-      const condicoes = [DO_PAINEL];
+      // **`DO_PAINEL` NAO entra aqui**, e a ausencia e deliberada: a condicao
+      // de `publication_status` logo abaixo esta SEMPRE presente e ja fecha o
+      // conjunto. Com `DO_PAINEL` somado, o filtro `pending_review` devolveria
+      // a lista vazia -- a fila de moderacao ficaria invisivel e pareceria
+      // vazia em vez de inalcancavel (ADR-0025 emenda 3).
+      const condicoes: ReturnType<typeof sql<SqlBool>>[] = [];
       const termo = recorte.q?.trim();
       if (termo !== undefined && termo !== '') {
         const padrao = `%${escaparCuringas(termo)}%`;

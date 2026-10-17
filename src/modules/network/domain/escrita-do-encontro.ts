@@ -22,13 +22,24 @@
  */
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
+import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
 // ---------------------------------------------------------------------------
 // Tipos
 // ---------------------------------------------------------------------------
 
-export type PublicacaoAdministrativa = 'published' | 'cancelled' | 'removed';
+/**
+ * O estado de publicacao como o painel o ve.
+ *
+ * `pending_review` entrou com a emenda 3 do ADR-0025: e o estado do encontro
+ * proposto pela comunidade, e **so `reviewAdminNetworkEvent` o enxerga**.
+ * Alterar, mover, cancelar e remover continuam respondendo 404 sobre ele, e
+ * isso e deliberado -- cancelar algo que nunca foi publicado nao tem
+ * significado, e o `CHECK network_events_visivel_foi_publicado` reprovaria o
+ * `UPDATE`.
+ */
+export type PublicacaoAdministrativa = 'pending_review' | 'published' | 'cancelled' | 'removed';
 export type Visibilidade = 'public' | 'private';
 export type UnidadeDoValor = 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
 export type TempoDoEncontro = 'upcoming' | 'happening' | 'ended';
@@ -77,6 +88,8 @@ export interface EncontroAdministrativo {
   readonly endsAt: Date | null;
   readonly timeZone: string;
   readonly visibilidade: Visibilidade;
+  /** `admin` ou `community` (ADR-0025 emenda 3). **Nao e o autor.** */
+  readonly origem: OrigemDoEncontro;
   readonly entrada: Entrada;
   readonly portes: readonly string[];
   readonly idadeDosCaes: string;
@@ -614,7 +627,7 @@ export interface EncontroAdministrativoProjetado {
   readonly vaccination_required: boolean;
   readonly fenced_off_leash_area: boolean;
   readonly amenities: readonly string[];
-  readonly origin: 'admin';
+  readonly origin: OrigemDoEncontro;
   readonly visibility: Visibilidade;
   readonly admission: {
     readonly kind: 'free' | 'paid';
@@ -683,7 +696,7 @@ export function projetarEncontroAdministrativo(
     vaccination_required: e.vacinacaoExigida,
     fenced_off_leash_area: e.areaCercada,
     amenities: [...e.estrutura],
-    origin: 'admin',
+    origin: e.origem,
     visibility: e.visibilidade,
     admission: projetarAdmissao(e.entrada),
     bring_items: [...e.paraLevar],
@@ -788,6 +801,7 @@ export function retratoDoEncontro(e: EncontroAdministrativo): Record<string, unk
     ticket_url: e.linkDeIngresso,
     instagram_handle: e.instagram,
     publication_status: e.publicacao,
+    origin: e.origem,
     cancellation_note: e.cancellationNote,
     images: e.imagens.map((i) => ({ upload_id: i.uploadId, alt_text: i.altText })),
   };

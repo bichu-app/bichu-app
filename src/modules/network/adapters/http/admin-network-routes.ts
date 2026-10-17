@@ -32,6 +32,7 @@ import type {
   CorpoDeEncontro,
   CorpoDeMudancaDeAcesso,
   CorpoDeMudancaDeLugar,
+  CorpoDeRevisao,
   PatchDeEncontro,
   RedeAdministrativa,
 } from '../../application/rede-administrativa.js';
@@ -142,6 +143,26 @@ export const rotaDeMudarAcesso = defineRoute({
   effects: ['notifies'],
   adminRoles: ADMIN,
   audit: { action: 'admin.network_event.access_changed', resourceKind: 'network_event' },
+  rateLimit: [BALDE_DE_ESCRITA],
+});
+
+/**
+ * A moderacao do encontro proposto pela comunidade (ADR-0025 emenda 3).
+ *
+ * **Sem reautenticacao**, como as outras escritas da Rede desde 07/10/2026
+ * (ADR-0027 item 23): basta a sessao, o CSRF e o `If-Match`. `notifies` porque
+ * a decisao avisa todos os administradores, pelo mesmo caminho de criar.
+ *
+ * Uma rota para as duas decisoes, com `decision` no corpo: as duas leem a mesma
+ * linha, exigem a mesma versao e gravam a mesma acao de trilha.
+ */
+export const rotaDeRevisarEncontro = defineRoute({
+  operationId: 'reviewAdminNetworkEvent',
+  method: 'post',
+  path: '/admin/network/events/:eventSlug/review',
+  effects: ['notifies'],
+  adminRoles: ADMIN,
+  audit: { action: 'admin.network_event.reviewed', resourceKind: 'network_event' },
   rateLimit: [BALDE_DE_ESCRITA],
 });
 
@@ -343,6 +364,21 @@ export function registrarRotasDaRedeAdministrativa(
         request.body as CorpoDeMudancaDeAcesso,
       );
       return reply.header('ETag', mudado.etag).send(mudado.recurso);
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeRevisarEncontro,
+    { schema: { body: corpoDe(contrato, rotaDeRevisarEncontro.operationId) }, resolvedores },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const revisado = await rede.revisarEncontro(
+        atorAdministrativoDe(request),
+        parametro(request, 'eventSlug'),
+        ifMatch(request),
+        request.body as CorpoDeRevisao,
+      );
+      return reply.header('ETag', revisado.etag).send(revisado.recurso);
     },
   );
 

@@ -171,6 +171,16 @@ export interface CorpoDeCancelamento {
   readonly note: string;
 }
 
+/**
+ * A decisao da moderacao (`AdminNetworkEventReview`). `reason` e obrigatorio em
+ * `decline` e recusado em `approve`: recusar sem dizer por que deixa o autor
+ * sem saida, e aprovar com motivo e campo sem leitor.
+ */
+export interface CorpoDeRevisao {
+  readonly decision: 'approve' | 'decline';
+  readonly reason?: string;
+}
+
 export interface CorpoDeMudancaDeAcesso {
   readonly visibility?: Visibilidade;
   readonly admission?: EntradaDoCorpo;
@@ -425,6 +435,10 @@ export class RedeAdministrativa {
       const inserir = (slug: string) =>
         tx.inserirEncontro({
           id,
+          // A autoria do painel, carimbada na mesma transacao pela funcao da
+          // migracao `20261001000004`. Era o furo: a coluna existia desde
+          // 28/09 e nenhuma escrita a preenchia.
+          autorDoPainel: autor.adminAccountId,
           slug,
           title: corpo.title.trim(),
           summary: corpo.summary.trim(),
@@ -496,6 +510,96 @@ export class RedeAdministrativa {
       }
     }
     throw slugOcupado();
+  }
+
+
+  // -------------------------------------------------------------- revisar
+
+  /**
+   * A decisao da moderacao sobre o encontro proposto pela comunidade
+   * (ADR-0025 emenda 3).
+   *
+   * **E a unica escrita que le `pending_review`**, por
+   * `encontroEmRevisaoPorSlug`: tudo que nao esta em revisao -- inclusive o
+   * encontro que existe e ja foi publicado -- responde 404, o mesmo 404 do que
+   * nao existe (ADR-0021). Aprovar duas vezes nao e um caminho: a segunda
+   * chamada nao acha mais a linha em revisao.
+   *
+   * `approve` preenche `published_at`, e e **so a partir dai** que as leituras
+   * publicas enxergam o encontro -- o predicado delas e
+   * `publication_status IN ('published', 'cancelled')`, na clausula `WHERE`.
+   *
+   * `decline` leva a `removed`, que e terminal, e o `reason` fica na trilha e
+   * no aviso. **O cliente ainda nao decidiu o que acontece com o recusado**
+   * (apagar, deixar o autor reeditar, devolver para rascunho): `removed` e o
+   * minimo defensavel porque ele existe no `CHECK`, nao e visivel, e tira o
+   * encontro do teto de revisao da conta sem apagar o que foi proposto.
+   */
+  async revisarEncontro(
+    autor: Autor,
+    slug: string,
+    ifMatch: string | string[] | undefined,
+    corpo: CorpoDeRevisao,
+  ): Promise<Escrito<EncontroAdministrativoProjetado>> {
+    const versao = versaoExigida(ifMatch);
+    const agora = this.agora();
+    const erros: ProblemFieldError[] = [];
+    if (corpo.decision === 'decline' && corpo.reason === undefined) {
+      erros.push({
+        field: 'reason',
+        code: 'reason_required',
+        message: 'Diga por que o encontro foi recusado.',
+      });
+    }
+    if (corpo.decision === 'approve' && corpo.reason !== undefined) {
+      erros.push({
+        field: 'reason',
+        code: 'reason_on_approval',
+        message: 'A aprovação não leva motivo.',
+      });
+    }
+    if (corpo.reason !== undefined) erros.push(...errosDeTexto('reason', corpo.reason, 2, 280));
+    if (erros.length > 0) throw problemas.validacao(erros);
+
+    const aprovado = corpo.decision === 'approve';
+    const decidido = await this.deps.repositorio.emTransacao(async (tx) => {
+      const antes = await tx.encontroEmRevisaoPorSlug(slug);
+      // Nao existe, ja foi decidido, ou nunca esteve em revisao: um 404 so.
+      if (antes === null) throw problemas.naoEncontrado();
+      const mudou = await tx.atualizarEncontro(
+        antes.id,
+        versao,
+        aprovado
+          ? { publicacao: 'published', publishedAt: comoDataDoRelogio(agora) }
+          : { publicacao: 'removed' },
+        agora,
+      );
+      if (!mudou) throw versaoMudou();
+      const depois = await tx.recarregarEncontro(antes.id);
+      await tx.registrarNaTrilha(
+        this.evento(autor, 'admin.network_event.reviewed', 'network_event', antes.id, {
+          ...diferenca(retratoDoEncontro(antes), retratoDoEncontro(depois)),
+          // A decisao e o motivo moram no metadado, e e por isso que uma acao
+          // de trilha responde pelas duas metades da operacao.
+          extra: { decision: corpo.decision, ...(corpo.reason === undefined ? {} : { reason: corpo.reason.trim() }) },
+        }),
+      );
+      return depois;
+    });
+
+    await this.avisarAdministradores(
+      autor,
+      `Encontro da comunidade ${aprovado ? 'aprovado' : 'recusado'}: ${decidido.title}`,
+      [
+        `Um encontro proposto pela comunidade foi ${aprovado ? 'aprovado e publicado' : 'recusado'}.`,
+        `Título: ${decidido.title}`,
+        `Lugar: ${descreverLugar(decidido.lugar)}`,
+        `Início: ${decidido.startsAt.toISOString()} (${decidido.timeZone})`,
+        ...(corpo.reason === undefined ? [] : [`Motivo: ${corpo.reason.trim()}`]),
+        'Se você não reconhece esta decisão, avise o responsável pelo painel.',
+      ],
+    );
+    return this.escrito(decidido);
   }
 
   // --------------------------------------------------------------- editar

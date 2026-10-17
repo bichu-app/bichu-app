@@ -57,6 +57,8 @@ import { criarContadorDesligado } from '../../src/shared/http/rate-limit.js';
 import { vigiarParametrosDasRotas } from '../../src/shared/http/validacao-de-parametros.js';
 import { problemas } from '../../src/shared/http/errors.js';
 import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
+import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
+import { CriacaoDeEncontroPelaComunidade } from '../../src/modules/network/application/criar-encontro-da-comunidade.js';
 import { criarNetworkRepository } from '../../src/modules/network/adapters/persistence/kysely-network-repository.js';
 import { registrarRotasDaRede } from '../../src/modules/network/adapters/http/network-routes.js';
 import { systemClock } from '../../src/shared/time/clock.js';
@@ -295,8 +297,13 @@ before(async () => {
   const FORMA_DE_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
   void app.register(
     (escopo, _opcoes, pronto) => {
+      const rede = criarNetworkRepository(
+        banco.db,
+        { uuidv7: () => randomUUID() },
+        (chave) => `https://midia.exemplo.invalid/${chave}`,
+      );
       registrarRotasDaRede(escopo, {
-        rede: criarNetworkRepository(banco.db, { uuidv7: () => randomUUID() }, (chave) => `https://midia.exemplo.invalid/${chave}`),
+        rede,
         autenticador: {
           autenticar: (token: string) =>
             FORMA_DE_UUID.test(token)
@@ -304,6 +311,17 @@ before(async () => {
               : Promise.reject(problemas.naoAutenticado()),
         },
         clock: systemClock,
+        // Este arquivo mede o P19 das LEITURAS; a proposta de encontro tem
+        // arquivo proprio. O caso de uso entra porque a rota existe no mesmo
+        // registrador, e `vigiarParametrosDasRotas` confere a declaracao de
+        // todas elas contra o contrato.
+        propostas: new CriacaoDeEncontroPelaComunidade({
+          rede,
+          trilha: { record: () => Promise.resolve() },
+          ids: criarIdGenerator(() => Date.now()),
+          clock: systemClock,
+        }),
+        contrato,
       });
       pronto();
     },

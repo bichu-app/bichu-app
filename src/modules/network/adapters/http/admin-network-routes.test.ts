@@ -755,3 +755,133 @@ void describe('a fila de pedidos (D53 a D56)', () => {
     assert.equal(r.status, 404);
   });
 });
+
+// ---------------------------------------------------------------------------
+// A moderacao do encontro da comunidade (ADR-0025 emenda 3)
+// ---------------------------------------------------------------------------
+//
+// ## As iscas desta secao
+//
+// | o que se desliga em producao | reprova |
+// |---|---|
+// | `encontroEmRevisaoPorSlug` virando `encontroPorSlug` | o caso do publicado |
+// | `pending_review` entrando em `DO_PAINEL` | o caso do PATCH/cancelamento |
+// | `publishedAt` saindo da aprovacao | o caso do `published_at` |
+// | `reason` deixando de ser exigido em `decline` | o caso do motivo |
+// | a trilha sem `decision` no metadado | o caso do metadado |
+// | `If-Match` deixando de ser exigido | o caso do 428 |
+
+void describe('revisar encontro da comunidade: aprovar, recusar, e o que nao se alcanca', () => {
+  let b: Bancada;
+  const SLUG_EM_REVISAO = 'encontro-da-comunidade';
+
+  beforeEach(() => {
+    b = bancada();
+    b.semear((e) => {
+      const id = '0192a3b4-0000-7000-8000-0000000000f1';
+      e.encontros.set(id, {
+        id,
+        slug: SLUG_EM_REVISAO,
+        title: 'Encontro no parque',
+        summary: 'Proposto por uma conta do app.',
+        lugar: { placeName: 'Parque da Cidade', neighborhood: 'Centro', city: 'Sao Paulo', state: 'SP', ponto: null },
+        startsAt: comoData((AGORA + 48 * 3_600_000) as Instant),
+        endsAt: null,
+        timeZone: 'America/Sao_Paulo',
+        visibilidade: 'public',
+        origem: 'community',
+        entrada: { tipo: 'free' },
+        portes: ['P', 'M', 'G', 'GG'],
+        idadeDosCaes: 'any',
+        vacinacaoExigida: true,
+        areaCercada: false,
+        estrutura: [],
+        paraLevar: [],
+        observacoes: null,
+        endereco: null,
+        linkDeIngresso: null,
+        instagram: null,
+        publicacao: 'pending_review',
+        publishedAt: null,
+        cancelledAt: null,
+        cancellationNote: null,
+        createdAt: comoData(AGORA),
+        updatedAt: comoData(AGORA),
+        version: 1,
+      });
+    });
+  });
+
+  const revisar = (corpo: unknown, ifMatch = '"1"') =>
+    chamar(b, 'POST', `/admin/network/events/${SLUG_EM_REVISAO}/review`, { corpo, ifMatch });
+
+  void it('ISCA: aprovar publica, preenche `published_at` e mantem `origin: community`', async () => {
+    const r = await revisar({ decision: 'approve' });
+    assert.equal(r.status, 200, r.bruto);
+    assert.equal(r.corpo['publication_status'], 'published');
+    assert.equal(r.corpo['origin'], 'community');
+    assert.equal(typeof r.corpo['published_at'], 'string');
+    assert.equal(r.etag, '"2"');
+  });
+
+  void it('ISCA: recusar leva a `removed` e exige motivo', async () => {
+    const sem = await revisar({ decision: 'decline' });
+    assert.equal(sem.status, 400);
+    assert.deepEqual(codigos(sem.corpo), ['reason_required']);
+
+    const com = await revisar({ decision: 'decline', reason: 'O local informado e uma residencia.' });
+    assert.equal(com.status, 200, com.bruto);
+    assert.equal(com.corpo['publication_status'], 'removed');
+  });
+
+  void it('aprovar com motivo e recusado: campo sem leitor', async () => {
+    const r = await revisar({ decision: 'approve', reason: 'nao vai a lugar nenhum' });
+    assert.equal(r.status, 400);
+    assert.deepEqual(codigos(r.corpo), ['reason_on_approval']);
+  });
+
+  void it('ISCA: a trilha grava `reviewed` com a decisao no metadado', async () => {
+    await revisar({ decision: 'approve' });
+    assert.deepEqual(acoesNaTrilha(b), ['admin.network_event.reviewed']);
+    const evento = b.estado().trilha.at(-1);
+    assert.equal((evento?.metadata ?? {})['decision'], 'approve');
+  });
+
+  void it('ISCA: sem `If-Match`, 428; com versao velha, 412, e nada e gravado', async () => {
+    const sem = await chamar(b, 'POST', `/admin/network/events/${SLUG_EM_REVISAO}/review`, {
+      corpo: { decision: 'approve' },
+    });
+    assert.equal(sem.status, 428);
+    const velha = await revisar({ decision: 'approve' }, '"9"');
+    assert.equal(velha.status, 412);
+    assert.deepEqual(acoesNaTrilha(b), []);
+  });
+
+  void it('ISCA: o encontro EM REVISAO nao se altera, nao se move, nao se cancela e nao se remove', async () => {
+    for (const [metodo, caminho, corpo] of [
+      ['PATCH', '', { title: 'Outro titulo' }],
+      ['POST', '/relocation', { reason: 'mudou', starts_at: '2026-11-01T12:00:00Z' }],
+      ['POST', '/cancellation', { note: 'nao vai acontecer' }],
+      ['DELETE', '', undefined],
+    ] as const) {
+      const r = await chamar(b, metodo, `/admin/network/events/${SLUG_EM_REVISAO}${caminho}`, {
+        ifMatch: '"1"',
+        ...(corpo === undefined ? {} : { corpo }),
+      });
+      assert.equal(r.status, 404, `${metodo} ${caminho}: ${r.bruto}`);
+    }
+  });
+
+  void it('ISCA: encontro que NAO esta em revisao responde 404 na revisao', async () => {
+    b.semear((e) => {
+      for (const [id, g] of e.encontros) e.encontros.set(id, { ...g, publicacao: 'published' });
+    });
+    const r = await revisar({ decision: 'approve' });
+    assert.equal(r.status, 404);
+  });
+
+  void it('aprovar duas vezes: a segunda nao acha mais a linha em revisao', async () => {
+    assert.equal((await revisar({ decision: 'approve' })).status, 200);
+    assert.equal((await revisar({ decision: 'approve' }, '"2"')).status, 404);
+  });
+});

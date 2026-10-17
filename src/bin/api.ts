@@ -128,6 +128,7 @@ import {
 import { criarListaDeSenhasVazadasPorFaixa } from '../modules/identity/adapters/external/lista-de-senhas-vazadas-por-faixa.js';
 import { registrarRotasDaRede } from '../modules/network/adapters/http/network-routes.js';
 import { criarNetworkRepository } from '../modules/network/adapters/persistence/kysely-network-repository.js';
+import { CriacaoDeEncontroPelaComunidade } from '../modules/network/application/criar-encontro-da-comunidade.js';
 
 const PREFIXO_DA_API = '/v1';
 
@@ -785,12 +786,28 @@ export async function main(): Promise<void> {
     // conta e as que exigem uma. O autenticador e o mesmo do diretorio e o da
     // transferencia -- o modulo recebe a funcao e continua sem conhecer o
     // servico de identidade.
+    // ADR-0025 emenda 3: a MESMA porta serve as leituras e a proposta de
+    // encontro pela comunidade, e o caso de uso recebe essa porta mais a trilha
+    // do app (`trilha`, transacao propria) -- e nao a transacional do painel.
+    const redeDaComunidade = criarNetworkRepository(
+      db,
+      ids,
+      urlDeMidia,
+      config.instagramProfileBaseUrl,
+    );
     registrarRotasDaRede(escopo, {
-      rede: criarNetworkRepository(db, ids, urlDeMidia, config.instagramProfileBaseUrl),
+      rede: redeDaComunidade,
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
       clock: systemClock,
+      propostas: new CriacaoDeEncontroPelaComunidade({
+        rede: redeDaComunidade,
+        trilha,
+        ids,
+        clock: systemClock,
+      }),
+      contrato,
     });
     registrarRotasDePets(escopo, dependenciasDasRotasDePet);
     // BICHUS-45. O perfil publico por `/@{slug}`, sem conta.

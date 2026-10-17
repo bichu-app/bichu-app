@@ -38,12 +38,14 @@ import {
 } from '../../../../shared/http/rate-limit.js';
 import type { RateLimitStore } from '../../../../shared/ports/rate-limit-store.js';
 import type { RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
-import type { Clock } from '../../../../shared/ports/index.js';
+import type { Clock, IdGenerator } from '../../../../shared/ports/index.js';
 import type { AbsoluteUrl, Instant, UserId } from '../../../../shared/types/brands.js';
 import type { EncontroDaRede } from '../../domain/encontro-da-rede.js';
 import type {
   DesfechoDaDesistencia,
   DesfechoDoPedido,
+  EncontroProposto,
+  EstadoDaContaParaCriar,
   LocalDoEncontro,
   NetworkRepository,
   PaginaDaAgenda,
@@ -53,6 +55,11 @@ import type {
   RecorteDaAgenda,
 } from '../../ports/network-repository.js';
 import { ordemPadraoDe, registrarRotasDaRede, rotaDaAgenda, rotaDoLocal } from './network-routes.js';
+import { CriacaoDeEncontroPelaComunidade } from '../../application/criar-encontro-da-comunidade.js';
+import type { NovoEncontroDaComunidade } from '../../domain/encontro-da-comunidade.js';
+import type { AuditEvent } from '../../../audit/ports/audit-log.js';
+import { carregarContrato } from '../../../../shared/http/contract.js';
+import { resolve } from 'node:path';
 
 const BASE_DE_PROBLEMA = 'https://api.bichu.test/problems' as AbsoluteUrl;
 const QUEM_CHAMA = '018f3a2b-0000-7000-8000-0000000000aa' as UserId;
@@ -101,6 +108,7 @@ const PRIVADO: EncontroDaRede = {
 
 interface Cenario {
   readonly contador?: RateLimitStore;
+  readonly estadoDaConta?: EstadoDaContaParaCriar;
   /** `undefined` e o encontro que nao existe OU nao e visivel -- o mesmo caso. */
   readonly encontro?: EncontroDaRede | undefined;
   readonly local?: LocalDoEncontro | undefined;
@@ -112,6 +120,18 @@ interface Cenario {
 
 const recortesVistos: RecorteDaAgenda[] = [];
 const locaisPedidos: string[] = [];
+const propostasGravadas: NovoEncontroDaComunidade[] = [];
+const trilhaDeTeste: AuditEvent[] = [];
+
+/** `IdGenerator` so com o que esta rota usa; o resto nao e chamado aqui. */
+const idsDeTeste = {
+  uuidv7: () => '018f3a2b-0000-7000-8000-0000000000ee',
+  opaqueToken: () => {
+    throw new Error('nao usado');
+  },
+  random128: () => new Uint8Array(16),
+  tagEntropy: () => new Uint8Array(10),
+} as unknown as IdGenerator;
 
 function repositorio(cenario: Cenario): NetworkRepository {
   return {
@@ -149,6 +169,14 @@ function repositorio(cenario: Cenario): NetworkRepository {
         itens: [{ decisao: 'declined', pedidoEm: AGORA as Instant, encontro: PRIVADO }],
         total: 1,
       }),
+    estadoParaCriarEncontro: (): Promise<EstadoDaContaParaCriar> =>
+      Promise.resolve(
+        cenario.estadoDaConta ?? { temCanalVerificado: true, encontrosEmRevisao: 0 },
+      ),
+    criarEncontroDaComunidade: (novo): Promise<EncontroProposto> => {
+      propostasGravadas.push(novo);
+      return Promise.resolve({ slug: 'encontro-na-praca', submittedAt: AGORA as Instant });
+    },
   };
 }
 
@@ -164,7 +192,27 @@ function servidor(
     bodyLimitBytes: 1_048_576,
   });
   const clock: Clock = { now: () => AGORA as ReturnType<Clock['now']> };
-  registrarRotasDaRede(app, { rede: repositorio(cenario), autenticador: { autenticar }, clock });
+  const rede = repositorio(cenario);
+  registrarRotasDaRede(app, {
+    rede,
+    autenticador: { autenticar },
+    clock,
+    propostas: new CriacaoDeEncontroPelaComunidade({
+      rede,
+      trilha: {
+        record: (evento) => {
+          trilhaDeTeste.push(evento);
+          return Promise.resolve();
+        },
+      },
+      ids: idsDeTeste,
+      clock,
+    }),
+    // O ESQUEMA DO CORPO E O DO CONTRATO DE VERDADE, e nao um objeto inline:
+    // e esse carregamento que faz o teste reprovar quando a operacao sai da
+    // especificacao ou muda de forma la.
+    contrato: carregarContrato(resolve(process.cwd(), 'api/openapi.yaml')),
+  });
   return app;
 }
 
@@ -177,13 +225,19 @@ interface Resposta {
 
 async function pedir(
   app: RegistradorDeRotas,
-  opcoes: { url?: string; como?: UserId | null; metodo?: 'GET' | 'POST' | 'DELETE' } = {},
+  opcoes: {
+    url?: string;
+    como?: UserId | null;
+    metodo?: 'GET' | 'POST' | 'DELETE';
+    corpo?: Record<string, unknown>;
+  } = {},
 ): Promise<Resposta> {
   const como = opcoes.como === undefined ? null : opcoes.como;
   const resposta = await app.inject({
     method: opcoes.metodo ?? 'GET',
     url: opcoes.url ?? '/network/events',
     ...(como === null ? {} : { headers: { authorization: `Bearer ${como}` } }),
+    ...(opcoes.corpo === undefined ? {} : { payload: opcoes.corpo }),
   });
   return {
     status: resposta.statusCode,
@@ -559,5 +613,148 @@ void describe('a regra do default de ordem, isolada', () => {
     assert.equal(ordemPadraoDe('upcoming'), 'proximos');
     assert.equal(ordemPadraoDe('all'), 'proximos');
     assert.equal(ordemPadraoDe('past'), 'recentes');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A proposta de encontro pela comunidade (ADR-0025 emenda 3)
+// ---------------------------------------------------------------------------
+//
+// ## As iscas desta secao, e o que cada uma reprova quando desligada
+//
+// | o que se desliga em producao | reprova |
+// |---|---|
+// | `atingiuTetoDeRevisao` sempre `false` | o caso do teto |
+// | `bloqueiosParaCriarEncontro` devolvendo `[]` | o caso do canal |
+// | a ordem invertida (canal antes do teto) | o caso da ORDEM |
+// | `publication_status` nascendo `published` | o caso do estado inicial |
+// | `errosDoNomeDoLugar` virando `errosDeTexto` | o caso do `place_name` |
+// | `origin` nascendo `admin` | o caso da autoria |
+// | o `201` virando `200` | o primeiro caso |
+// | `chamadorAutenticado` saindo do manipulador | o caso do 401 |
+
+const CORPO_VALIDO = {
+  title: 'Encontro na praça',
+  summary: 'Um domingo de manhã com os cães do bairro.',
+  place: { place_name: 'Praça Benedito Calixto', neighborhood: 'Pinheiros', city: 'São Paulo', state: 'SP' },
+  starts_at: new Date(AGORA + UMA_HORA * 24).toISOString(),
+};
+
+function propor(cenario: Cenario = {}, corpo: Record<string, unknown> = CORPO_VALIDO) {
+  return pedir(servidor(cenario), { metodo: 'POST', corpo, como: QUEM_CHAMA });
+}
+
+void describe('propor encontro: quem pode, quantos, e em que estado ele nasce', () => {
+  void it('com canal verificado e fila vazia, responde 201 com o recibo em revisao', async () => {
+    propostasGravadas.length = 0;
+    const resposta = await propor();
+    assert.equal(resposta.status, 201);
+    assert.equal(resposta.corpo['review_state'], 'pending_review');
+    assert.equal(resposta.corpo['slug'], 'encontro-na-praca');
+    // Nenhum UUID interno na saida publica (ADR-0010 item 6).
+    assert.equal(resposta.bruto.includes('018f3a2b'), false);
+    // E nenhuma coordenada, nem endereco: nao ha mapa neste caminho (ADR-0006).
+    assert.equal(/"lat"|"lon"|street_address/.test(resposta.bruto), false);
+  });
+
+  void it('ISCA: o encontro nasce com AUTOR e sem ponto, e o repositorio recebe isso', async () => {
+    propostasGravadas.length = 0;
+    await propor();
+    const gravado = propostasGravadas.at(-1);
+    assert.ok(gravado !== undefined);
+    assert.equal(gravado.autor, QUEM_CHAMA);
+    assert.equal(gravado.lugar.ponto, null);
+    assert.equal(gravado.entrada.tipo, 'free');
+  });
+
+  void it('ISCA: a trilha grava `network_event.submitted` com o ator, e nao o e-mail', async () => {
+    trilhaDeTeste.length = 0;
+    await propor();
+    const evento = trilhaDeTeste.at(-1);
+    assert.ok(evento !== undefined);
+    assert.equal(evento.action, 'network_event.submitted');
+    assert.equal(evento.actorKind, 'user');
+    assert.equal(evento.actorUserId, QUEM_CHAMA);
+    assert.equal((evento.after ?? {})['publication_status'], 'pending_review');
+    assert.equal((evento.after ?? {})['origin'], 'community');
+  });
+
+  void it('sem conta nenhuma, responde 401 ANTES de qualquer consulta', async () => {
+    const resposta = await pedir(servidor(), { metodo: 'POST', corpo: CORPO_VALIDO, como: null });
+    assert.equal(resposta.status, 401);
+  });
+
+  void it('ISCA: sem canal de contato verificado, 409 `contact-channel-unverified`', async () => {
+    const resposta = await propor({
+      estadoDaConta: { temCanalVerificado: false, encontrosEmRevisao: 0 },
+    });
+    assert.equal(resposta.status, 409);
+    assert.equal(
+      resposta.corpo['type'],
+      `${BASE_DE_PROBLEMA}/contact-channel-unverified`,
+    );
+    // O `next_action` e o que salva a tela: sem ele a pessoa le "confirme seu
+    // e-mail" sem um caminho para fazer isso agora.
+    assert.equal(resposta.corpo['next_action'], 'verify_email');
+  });
+
+  void it('ISCA: com tres encontros em revisao, 409 `pending-event-limit-reached`', async () => {
+    const resposta = await propor({
+      estadoDaConta: { temCanalVerificado: true, encontrosEmRevisao: 3 },
+    });
+    assert.equal(resposta.status, 409);
+    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/pending-event-limit-reached`);
+  });
+
+  void it('ISCA: a ORDEM -- o teto vem ANTES do canal, e nao o contrario', async () => {
+    // Quem esta nos dois casos precisa receber o teto: mandar a pessoa
+    // confirmar o e-mail para ela descobrir depois que a fila esta cheia e uma
+    // ida a caixa de entrada a toa. Inverter os dois `if` em producao faz este
+    // caso reprovar, e so ele.
+    const resposta = await propor({
+      estadoDaConta: { temCanalVerificado: false, encontrosEmRevisao: 3 },
+    });
+    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/pending-event-limit-reached`);
+  });
+
+  void it('ISCA: `place_name` com endereco embutido e recusado com 400 e o campo', async () => {
+    const resposta = await propor({}, {
+      ...CORPO_VALIDO,
+      place: { ...CORPO_VALIDO.place, place_name: 'Praça do Bairro - Avenida Brasil, 200' },
+    });
+    assert.equal(resposta.status, 400);
+    const erros = resposta.corpo['errors'] as { field: string; code: string }[];
+    assert.equal(erros.length, 1);
+    assert.equal(erros[0]?.field, 'place.place_name');
+    assert.equal(erros[0]?.code, 'address_in_place_name');
+  });
+
+  void it('ISCA: o corpo e FECHADO pelo contrato -- visibilidade e preco nao entram', async () => {
+    for (const extra of [
+      { visibility: 'private' },
+      { admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } } },
+      { slug: 'endereco-escolhido' },
+      { street_address: 'Avenida Brasil, 200' },
+      { ticket_url: 'https://exemplo.test/ingresso' },
+      { images: [{ upload_id: 'x', alt_text: 'y' }] },
+    ]) {
+      const resposta = await propor({}, { ...CORPO_VALIDO, ...extra });
+      assert.equal(resposta.status, 400, JSON.stringify(extra));
+    }
+  });
+
+  void it('encontro que ja teria terminado e recusado com `event_in_past`', async () => {
+    const resposta = await propor({}, {
+      ...CORPO_VALIDO,
+      starts_at: new Date(AGORA - UMA_HORA).toISOString(),
+    });
+    assert.equal(resposta.status, 400);
+    const erros = resposta.corpo['errors'] as { code: string }[];
+    assert.equal(erros.some((e) => e.code === 'event_in_past'), true);
+  });
+
+  void it('a resposta e `no-store`: ela e de conta, e nao de vitrine', async () => {
+    const resposta = await propor();
+    assert.equal(resposta.cache, 'private, no-store');
   });
 });

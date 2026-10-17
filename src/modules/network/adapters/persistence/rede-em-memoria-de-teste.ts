@@ -135,7 +135,13 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
       const tx: TransacaoDaRede = {
         encontroPorSlug: (slug) => {
           const g = porSlug(r, slug);
-          return Promise.resolve(g === null ? null : montar(r, g));
+          // O dobre imita o `DO_PAINEL` do Kysely: a escrita administrativa
+          // nao enxerga o encontro em revisao.
+          return Promise.resolve(g === null || g.publicacao === 'pending_review' ? null : montar(r, g));
+        },
+        encontroEmRevisaoPorSlug: (slug) => {
+          const g = porSlug(r, slug);
+          return Promise.resolve(g === null || g.publicacao !== 'pending_review' ? null : montar(r, g));
         },
         recarregarEncontro: (id) => {
           const g = r.encontros.get(id);
@@ -156,6 +162,8 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
             endsAt: novo.endsAt,
             timeZone: novo.timeZone,
             visibilidade: novo.visibilidade,
+            // O painel cria so `admin`; `community` nasce pela porta publica.
+            origem: 'admin',
             entrada: novo.entrada,
             portes: [],
             idadeDosCaes: novo.idadeDosCaes,
@@ -202,6 +210,7 @@ export function repositorioDaRedeEmMemoria(opcoes: { trilhaFalha?: () => boolean
             ...(m.linkDeIngresso === undefined ? {} : { linkDeIngresso: m.linkDeIngresso }),
             ...(m.instagram === undefined ? {} : { instagram: m.instagram }),
             ...(m.publicacao === undefined ? {} : { publicacao: m.publicacao }),
+            ...(m.publishedAt === undefined ? {} : { publishedAt: m.publishedAt }),
             ...(m.cancelledAt === undefined ? {} : { cancelledAt: m.cancelledAt }),
             ...(m.cancellationNote === undefined ? {} : { cancellationNote: m.cancellationNote }),
             updatedAt: comoData(quando),

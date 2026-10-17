@@ -1,10 +1,15 @@
 /**
  * A porta da secao `Rede`.
  *
- * Tres leituras, e sao exatamente as tres do contrato: a agenda, o encontro e o
- * ponto do encontro. **Nao ha escrita aqui.** A escrita de evento nasce no
- * backoffice, em `/v1/admin/network/*` (ADR-0027), com porta propria. Porta que
- * declara o que ainda nao existe vira metodo vazio em todo dobre de teste.
+ * As leituras do contrato -- a agenda, o encontro, o ponto, o conteudo do
+ * privado e os pedidos -- e **uma escrita, a da emenda 3 do ADR-0025**: a
+ * proposta de encontro pela comunidade (`createNetworkEvent`).
+ *
+ * Essa escrita e a unica aqui, e ela nao e a escrita administrativa: alterar,
+ * mover, cancelar, remover e **decidir a revisao** continuam em
+ * `/v1/admin/network/*` (ADR-0027), com porta propria. O que esta porta sabe
+ * fazer e criar em `pending_review`, que e um estado que nenhuma das leituras
+ * daqui enxerga.
  *
  * Check-in e galeria sairam desta versao por decisao do cliente (ADR-0027
  * 12.4). O desenho anterior esta na branch `guarda/rede-checkin-galeria`.
@@ -14,6 +19,7 @@
  * `WHERE` de cada consulta, nunca num `if` de quem chama (ADR-0021).
  */
 import type { EncontroDaRede, PontoDoEncontro } from '../domain/encontro-da-rede.js';
+import type { NovoEncontroDaComunidade } from '../domain/encontro-da-comunidade.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
 /**
@@ -121,6 +127,18 @@ export interface PaginaDosMeusPedidos {
   readonly total: number;
 }
 
+/**
+ * O estado da conta para propor encontro, numa consulta so.
+ *
+ * **A autorizacao e a verificacao moram na clausula `WHERE`** (ADR-0021): o
+ * `EXISTS` do canal verificado e a contagem dos encontros em revisao sao do
+ * CHAMADOR, e nao de uma conta que um `if` depois escolhe.
+ */
+export interface EstadoDaContaParaCriar {
+  readonly temCanalVerificado: boolean;
+  readonly encontrosEmRevisao: number;
+}
+
 export interface NetworkRepository {
   listarAgenda(recorte: RecorteDaAgenda): Promise<PaginaDaAgenda>;
   listarPorDistancia(recorte: RecorteDaAgendaPorDistancia): Promise<PaginaPorDistancia>;
@@ -142,4 +160,33 @@ export interface NetworkRepository {
   lerMeuPedido(slug: string, chamador: string): Promise<PedidoDaConta | undefined>;
   desistirDoPedido(slug: string, chamador: string, agora: Instant): Promise<DesfechoDaDesistencia>;
   listarMeusPedidos(recorte: RecorteDosMeusPedidos): Promise<PaginaDosMeusPedidos>;
+
+  /** O estado da conta para propor encontro (canal verificado e teto). */
+  estadoParaCriarEncontro(chamador: string): Promise<EstadoDaContaParaCriar>;
+
+  /**
+   * Grava a proposta em `pending_review`, com `origin = 'community'` e a
+   * autoria carimbada **na mesma transacao**, e devolve o `slug` que vingou.
+   *
+   * A autoria vai para `created_by_*` pela funcao
+   * `network_events_gravar_autoria` da migracao `20261001000004`, e nao por um
+   * `INSERT` com o nome da coluna: o portao `portao-colunas-que-nao-saem`
+   * reprova esse nome em `src/`, e foi por isso que a coluna irma do painel
+   * ficou tres semanas sem nunca ser gravada. A trilha
+   * (`network_event.submitted`) e do caso de uso, pelo caminho do app
+   * (`AuditLog.record`, transacao propria).
+   *
+   * O `slug` e derivado do titulo e pode colidir: quem implementa tenta o
+   * derivado, depois o derivado com sufixo curto, e a colisao persistente sobe
+   * como `SlugDoEncontroOcupado`. A borda nao escolhe `slug` nenhum -- a
+   * comunidade nao manda `slug`, pelo mesmo motivo pelo qual o encontro privado
+   * do painel nao aceita um.
+   */
+  criarEncontroDaComunidade(novo: NovoEncontroDaComunidade): Promise<EncontroProposto>;
+}
+
+/** O que a criacao devolve: o `slug` que vingou e o instante gravado. */
+export interface EncontroProposto {
+  readonly slug: string;
+  readonly submittedAt: Instant;
 }

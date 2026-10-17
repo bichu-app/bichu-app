@@ -26,6 +26,7 @@ import { defineRoute } from '../../../../shared/http/route-definition.js';
 import { registrarRota, type RegistradorDeRotas } from '../../../../shared/http/registrar-rota.js';
 import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js';
 import { problemas } from '../../../../shared/http/errors.js';
+import { recusarCampoDesconhecido } from '../../../../shared/http/corpo-fechado.js';
 import { comoIso } from '../../../../shared/time/clock.js';
 import {
   distanciaArredondada,
@@ -42,7 +43,10 @@ import type {
   PedidoDaConta,
   RecorteNoTempo,
 } from '../../ports/network-repository.js';
+import type { Contrato } from '../../../../shared/http/contract.js';
 import type { Clock } from '../../../../shared/ports/index.js';
+import type { CriacaoDeEncontroPelaComunidade } from '../../application/criar-encontro-da-comunidade.js';
+import type { CorpoDoEncontroDaComunidade } from '../../domain/encontro-da-comunidade.js';
 import type { Instant, UserId } from '../../../../shared/types/brands.js';
 
 /** Os tetos sao os do contrato, COPIADOS de la. Um teto e uma dimensao por rota. */
@@ -122,6 +126,28 @@ export const rotaDosMeusPedidos = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 300, window: '1h', onExceed: 'deny_429' }],
 });
 
+/**
+ * A proposta de encontro pela comunidade (ADR-0025 emenda 3).
+ *
+ * `human_work` e verdade e precisa estar declarado: a proposta nasce
+ * `pending_review` e **cria trabalho de revisao humana no painel**. Com efeito
+ * nao vazio, `defineRoute` torna a ausencia de `rateLimit` erro de compilacao
+ * (ADR-0016).
+ *
+ * Cinco por dia por conta, e nao por `ip`: a rota exige conta, entao `account`
+ * existe e e exato, e o CGNAT das operadoras brasileiras faria um teto por IP
+ * pegar vizinho inocente. **Este teto nao e o teto de 3 em revisao**: ele conta
+ * CHAMADAS e a porta de teto nao sabe contar linhas (a mesma limitacao de D56).
+ * Quem conta encontros em revisao e o caso de uso.
+ */
+export const rotaDaPropostaDeEncontro = defineRoute({
+  operationId: 'createNetworkEvent',
+  method: 'post',
+  path: '/network/events',
+  effects: ['human_work'],
+  rateLimit: [{ dimension: ['account'], limit: 5, window: '24h', onExceed: 'deny_429' }],
+});
+
 const PAGINA_INICIAL = 1;
 const TAMANHO_PADRAO = 20;
 const RECORTE_PADRAO: RecorteNoTempo = 'upcoming';
@@ -143,6 +169,21 @@ export interface DependenciasDasRotasDaRede {
   readonly rede: NetworkRepository;
   readonly autenticador: Autenticador;
   readonly clock: Clock;
+  /** O caso de uso da proposta de encontro (ADR-0025 emenda 3). */
+  readonly propostas: CriacaoDeEncontroPelaComunidade;
+  /** De onde sai o esquema do corpo: a declaracao e a do contrato. */
+  readonly contrato: Contrato;
+}
+
+function corpoDe(contrato: Contrato, operationId: string): Record<string, unknown> {
+  const schema = contrato.requestBodySchema(operationId);
+  if (schema === undefined) {
+    throw new Error(
+      `Operação ${operationId} não declara corpo de requisição em application/json ` +
+        'no contrato, mas a rota espera um. Corrija a especificação, não o código.',
+    );
+  }
+  return schema;
 }
 
 interface QueryDaAgenda {
@@ -254,6 +295,43 @@ export function registrarRotasDaRede(
   deps: DependenciasDasRotasDaRede,
 ): void {
   const porConta = { resolvedores: { account: (request: FastifyRequest) => contaDoTeto(request, deps) } };
+
+  /**
+   * A proposta. **201 e nao 200**, e o corpo e o recibo: o encontro existe, e
+   * nenhuma leitura publica o enxerga ainda. O `Cache-Control` e o mesmo
+   * `no-store` das outras respostas de conta.
+   *
+   * ## O guarda de corpo fechado NAO e opcional aqui
+   *
+   * O Fastify monta o Ajv com `removeAdditional: true`: `additionalProperties:
+   * false` no contrato **apaga** o campo desconhecido em silencio em vez de
+   * recusar (ver `corpo-fechado.ts`, medido em 23/09). Nesta operacao isso
+   * seria mentir sobre o que foi gravado em cada um dos campos que ela NAO
+   * aceita: quem mandasse `visibility: private` receberia 201 e um encontro
+   * PUBLICO, e quem mandasse `street_address` acreditaria ter dado o endereco.
+   * `registrarRota` instala o guarda sozinho so na superficie administrativa,
+   * entao aqui ele entra a mao.
+   */
+  const corpoDaProposta = corpoDe(deps.contrato, rotaDaPropostaDeEncontro.operationId);
+  registrarRota(
+    app,
+    rotaDaPropostaDeEncontro,
+    {
+      schema: { body: corpoDaProposta },
+      resolvedores: porConta.resolvedores,
+      preValidation: [
+        recusarCampoDesconhecido(corpoDaProposta, rotaDaPropostaDeEncontro.operationId),
+      ],
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const envio = await deps.propostas.propor(
+        { userId: chamador, correlationId: request.id, ip: request.ip },
+        request.body as CorpoDoEncontroDaComunidade,
+      );
+      return reply.status(201).header('Cache-Control', SEM_CACHE).send(envio);
+    },
+  );
 
   registrarRota(app, rotaDaAgenda, {}, async (request: FastifyRequest, reply: FastifyReply) => {
     const query = (request.query ?? {}) as QueryDaAgenda;

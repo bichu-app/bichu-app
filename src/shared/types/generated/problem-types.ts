@@ -19,6 +19,7 @@ export const STATUS_DO_PROBLEMA = {
   'slug-taken':                     409,
   'event-not-open':                 409, // o pedido de participacao nao pode ser decidido porque o encontro foi cancelado, removido ou ja terminou (BICHUS-292). Separado de `validation-failed`/`request_not_pending`: ali o problema e o PEDIDO; aqui e o ENCONTRO, e nenhuma decisao sobre esse pedido vai valer
   'pet-already-lost':               409, // este pet ja tem caso aberto. O banco impoe (indice unico parcial), e o tipo existe para a tela dizer 'voce ja marcou' em vez de 'erro'
+  'pending-event-limit-reached':    409, // teto de 3 encontros EM REVISAO por conta (ADR-0025 emenda 3). O mesmo numero de `open-case-limit-reached`, e de proposito: as duas perguntas sao a mesma -- quantas acoes de peso uma conta mantem em aberto -- e dois numeros para ela obrigariam a defender os dois. Encontro aprovado ou recusado sai da conta na hora da decisao, entao a saida e esperar a revisao, e nao apagar nada
   'open-case-limit-reached':        409, // teto de 3 casos ABERTOS SIMULTANEOS por conta (BICHUS-21 criterio 8). Separado de `pet-already-lost`: um diz 'este pet ja esta perdido' e o outro 'voce ja tem tres animais perdidos'. A saida e diferente -- no primeiro a pessoa abre o caso que ja existe, no segundo ela precisa encerrar um. Alem de produto, e privacidade: a lista publica mostra bairro e data, e sem teto uma conta entregaria uma SERIE de pontos no tempo e no espaco da mesma pessoa
   'pet-limit-reached':              409, // teto de pets DA CONTA
   'tag-limit-reached':              409, // teto de tags ativas DO PET (ADR-0004). Separado de `pet-limit-reached` porque sao dois tetos diferentes: um app que decida por `type` tratava o teto de plaquinhas como limite de pets da conta, e oferecia a saida errada
@@ -46,7 +47,7 @@ export const STATUS_DO_PROBLEMA = {
   'internal':                       500,
 } as const;
 
-/** União fechada dos 36 tipos declarados no contrato. */
+/** União fechada dos 37 tipos declarados no contrato. */
 export type ProblemType = keyof typeof STATUS_DO_PROBLEMA;
 
 /** O status é consequência do tipo, nunca um argumento de quem chama. */

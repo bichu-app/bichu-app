@@ -397,6 +397,39 @@ export const problemas = {
     }),
 
   /**
+   * 409. Nenhum canal de contato verificado, na proposta de encontro da `Rede`
+   * (ADR-0025 emenda 3).
+   *
+   * **O tipo é o MESMO de abrir caso de pet perdido**, e isso é a decisão: a
+   * régua é uma só no produto, e um segundo tipo para a mesma pergunta faria o
+   * app decidir por dois `type` onde há um conceito. O que muda é o texto, e
+   * ele precisa mudar: "confirme seu e-mail para avisar a vizinhança" numa tela
+   * de criar encontro manda a pessoa para o lugar errado.
+   *
+   * **Na prática isso é e-mail**, porque nenhuma operação verifica telefone —
+   * nada em `src/` grava `phone_verified_at`. O `next_action` é o mesmo por
+   * isso.
+   */
+  canalDeContatoNaoVerificadoParaEncontro: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail para propor um encontro', {
+      detail: 'Um encontro sem quem responda por ele não vai ao ar. Confirme seu e-mail e tente de novo.',
+      nextAction: 'verify_email',
+    }),
+
+  /**
+   * 409. A conta já tem três encontros esperando revisão (ADR-0025 emenda 3).
+   *
+   * Separado de `open-case-limit-reached` porque a **saída é diferente**: lá a
+   * pessoa encerra um caso que é dela; aqui ela não tem o que fazer além de
+   * esperar a revisão — e o texto precisa dizer isso, em vez de mandá-la
+   * procurar um botão que não existe.
+   */
+  tetoDeEncontrosEmRevisao: (): AppError =>
+    new AppError('pending-event-limit-reached', 'Você já tem três encontros em revisão', {
+      detail: 'A gente revisa um por um. Assim que esses saírem da fila, você pode propor outro.',
+    }),
+
+  /**
    * 410. Token de uso único expirado, já usado ou que nunca existiu.
    *
    * **Os três casos são a mesma resposta, e isso é a regra.** Distinguir

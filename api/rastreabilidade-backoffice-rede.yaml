@@ -704,6 +704,17 @@ contrato_sem_tela:
     onde: "ADR-0027 12.11 (BICHUS-251)"
     resolucao: "tela: resolvido quando a tela existir"
     nota: "o app ganha o gesto de desistir do pedido, com texto a aprovar pela UX"
+  # ADR-0025 emenda 3 (17/10/2026): o backend da proposta de encontro pela
+  # comunidade e da moderacao dela. As DUAS telas sao de outros despachos, e por
+  # isso as operacoes entram aqui e nao em `telas`.
+  - operationId: reviewAdminNetworkEvent
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "a fila de revisao do painel (listar `publication_status=pending_review`, aprovar e recusar) e da sessao Backoffice; aqui esta so o lado do servidor"
+  - operationId: createNetworkEvent
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "a tela de propor encontro no app (com foto) e o despacho seguinte; o backend nasce antes de proposito, para a tela nao nascer contra um contrato inventado"
+  - campo: "AdminNetworkEventPublicationStatus pending_review"
+    nota: "o chip 'Em revisao' da lista do painel nasce com a tela da fila de moderacao"
   - campo: "AdminStorePartner.sort_order, AdminStoreItem.sort_order"
     nota: "a ordem de curadoria nao e editavel em tela"
   - campo: "listAdminStoreItems query:publication_state=retired"

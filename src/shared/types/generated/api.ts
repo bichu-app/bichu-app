@@ -1825,7 +1825,53 @@ export interface paths {
          */
         get: operations["listNetworkEvents"];
         put?: never;
-        post?: never;
+        /**
+         * Propor um encontro da Rede
+         * @description A comunidade propoe um encontro, e ele **nasce em revisao**
+         *     (`review_state: pending_review`). **Nenhuma leitura publica o enxerga
+         *     antes de aprovado**: o predicado de visibilidade das leituras da `Rede`
+         *     e `publication_status IN ('published', 'cancelled')`, na clausula
+         *     `WHERE`, e o `CHECK network_events_revisao_so_da_comunidade` garante que
+         *     so a origem `community` pode estar em `pending_review`. Pedir o `slug`
+         *     devolvido aqui responde **404** ate a revisao aprovar, e isso nao e
+         *     defeito.
+         *
+         *     ## Quem pode criar (ADR-0025 emenda 3)
+         *
+         *     **Canal de contato verificado**, a MESMA regua de abrir caso de pet
+         *     perdido: sem ele, `409 contact-channel-unverified` com
+         *     `next_action: verify_email`. Na pratica isso e **e-mail confirmado**,
+         *     porque nao existe operacao que verifique telefone.
+         *
+         *     **Teto de 3 encontros em revisao por conta**:
+         *     `409 pending-event-limit-reached`. Encontro aprovado ou recusado sai da
+         *     conta na hora da decisao.
+         *
+         *     ## O que esta operacao NAO aceita, e por que
+         *
+         *     Sem `visibility` (todo encontro proposto e publico: o privado tem fila
+         *     de pedidos, que e trabalho de moderacao do painel), sem `admission` (o
+         *     Bichu nao cobra, e valor escrito por terceiro vira moderacao de
+         *     dinheiro), sem `slug` (derivado do titulo, como no item da `Loja`), sem
+         *     `point` e sem `street_address` (ADR-0006: nao ha mapa nem busca de
+         *     endereco, e nao ha geocodificacao em nenhum ponto deste caminho), sem
+         *     `ticket_url` nem `instagram_handle` (link em texto de terceiro e o vetor
+         *     que D59 fecha) e sem `images` (o envio de imagem passa hoje pela
+         *     superficie administrativa).
+         *
+         *     ## `place_name` nao aceita endereco embutido
+         *
+         *     `400 validation-failed` com `code: address_in_place_name` para CEP,
+         *     numero de porta depois de separador (`, 200`, `- 200`, `nº 200`),
+         *     palavra de logradouro junto de numero ("Av. Brasil 1578") e complemento
+         *     residencial ("bloco 2", "apto 51"). Palavra de logradouro sozinha
+         *     ("Avenida Paulista") e numero que e parte do nome ("Praca 14 de
+         *     Janeiro", "Quadra 302 Norte") PASSAM. O motivo e medido: `place_name`
+         *     sai na agenda publica, sem conta, e o endereco escrito dentro dele
+         *     contorna a protecao de `street_address`, que sai so em
+         *     `getNetworkEventLocation`.
+         */
+        post: operations["createNetworkEvent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3115,6 +3161,50 @@ export interface paths {
          *     sem redirecionamento.
          */
         post: operations["changeAdminNetworkEventAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/events/{eventSlug}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprovar ou recusar um encontro proposto pela comunidade
+         * @description A moderacao do encontro da comunidade (ADR-0025 emenda 3). **E a unica
+         *     operacao que enxerga `publication_status: pending_review`**: alterar,
+         *     mover, cancelar e remover continuam respondendo 404 sobre encontro em
+         *     revisao, porque um encontro que ainda nao foi publicado nao tem o que
+         *     mover nem o que cancelar.
+         *
+         *     - `decision: approve` publica o encontro: `publication_status` vira
+         *       `published`, `published_at` recebe o instante da aprovacao, e **e so
+         *       a partir dai que as leituras publicas o enxergam**. O autor recebe o
+         *       aviso.
+         *     - `decision: decline` encerra a proposta em `removed`, que e terminal.
+         *       O `reason` vai **so para a trilha e para o aviso ao autor**, nunca
+         *       para leitura publica. O autor recebe o aviso, e o encontro sai do
+         *       teto de encontros em revisao da conta dele.
+         *
+         *     **Uma operacao e nao duas**, com a decisao no corpo: as duas metades
+         *     leem a mesma linha, exigem a mesma versao (`If-Match`) e gravam a mesma
+         *     acao de trilha com a decisao no metadado. Duas rotas duplicariam a
+         *     leitura e a precondicao para separar um `CASE` de duas linhas.
+         *
+         *     `If-Match` e obrigatorio: ausente, 428; diferente da versao atual, 412,
+         *     e nada e gravado. Encontro que nao esta em revisao responde 404.
+         */
+        post: operations["reviewAdminNetworkEvent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4903,6 +4993,71 @@ export interface components {
             /** Format: date-time */
             requested_at: string;
         };
+        /**
+         * @description O lugar como a comunidade o descreve: **tres rotulos, e nada mais**.
+         *
+         *     **Sem `point` e sem `street_address`**, e nenhum dos dois e
+         *     esquecimento: o ADR-0006 nao tem mapa nem busca de endereco nesta
+         *     superficie, e nao ha geocodificacao em nenhum ponto deste caminho; o
+         *     endereco por extenso e campo do painel e sai so em
+         *     `getNetworkEventLocation`. **Logradouro publico, nunca residencia**
+         *     (ADR-0027 item 13).
+         */
+        CommunityNetworkEventPlaceInput: {
+            /**
+             * @description O NOME do lugar, como as pessoas o chamam. O servidor recusa
+             *     endereco embutido com `code: address_in_place_name` -- ver a
+             *     descricao de `createNetworkEvent`.
+             */
+            place_name: string;
+            neighborhood: string;
+            city: string;
+            state: string;
+        };
+        /**
+         * @description O encontro proposto pela comunidade. **E um subconjunto deliberado de
+         *     `AdminNetworkEventInput`**, e o que falta esta explicado na descricao de
+         *     `createNetworkEvent`: visibilidade, condicao de acesso, `slug`, ponto,
+         *     endereco, links e imagens nao entram.
+         */
+        CommunityNetworkEventInput: {
+            title: string;
+            summary: string;
+            place: components["schemas"]["CommunityNetworkEventPlaceInput"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string;
+            /** @default America/Sao_Paulo */
+            time_zone: components["schemas"]["TimeZoneName"];
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            /** @default true */
+            vaccination_required: boolean;
+            /** @default false */
+            fenced_off_leash_area: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"];
+        };
+        /**
+         * @description O recibo da proposta. **Sem UUID** (ADR-0010 item 6): a unica chave que
+         *     sai e o `slug`, e por ele a tela pergunta pelo encontro **depois** de a
+         *     revisao aprovar -- antes disso `getNetworkEvent` responde 404, e isso
+         *     nao e defeito. Sem coordenada e sem endereco, porque nenhum dos dois
+         *     entrou.
+         */
+        NetworkEventSubmission: {
+            slug: string;
+            title: string;
+            /** Format: date-time */
+            starts_at: string;
+            time_zone: string;
+            /** @enum {string} */
+            review_state: "pending_review";
+            /** Format: date-time */
+            submitted_at: string;
+        };
         MyNetworkEventJoinRequestPage: {
             items: components["schemas"]["MyNetworkEventJoinRequest"][];
             page: number;
@@ -5438,13 +5593,34 @@ export interface components {
             note: string;
         };
         /**
-         * @description `published` desde a criacao (nao ha rascunho, ADR-0027 12.9);
-         *     `cancelled` continua visivel no app como cancelado; `removed` e
-         *     terminal. `pending_review` existe no banco para o encontro criado pela
-         *     comunidade, que nao existe na v1, e por isso nao aparece aqui.
+         * @description A decisao da moderacao. `reason` e obrigatorio em `decline` e recusado
+         *     em `approve`: recusar sem dizer por que deixa o autor sem saida, e
+         *     aprovar com motivo e campo sem leitor.
+         */
+        AdminNetworkEventReview: {
+            /** @enum {string} */
+            decision: "approve" | "decline";
+            /**
+             * @description So em `decline`. Vai para a trilha e para o aviso ao autor, e
+             *     **nunca** para leitura publica.
+             */
+            reason?: string;
+        };
+        /**
+         * @description `published` desde a criacao quando quem cria e o painel (nao ha
+         *     rascunho, ADR-0027 12.9); `cancelled` continua visivel no app como
+         *     cancelado; `removed` e terminal.
+         *
+         *     **`pending_review` entrou com a emenda 3 do ADR-0025** (17/10/2026): e
+         *     o estado em que nasce o encontro proposto pela comunidade
+         *     (`createNetworkEvent`), e **so a origem `community` pode estar nele**
+         *     (`CHECK network_events_revisao_so_da_comunidade`). Ele **nunca** e
+         *     visivel no app, e no painel ele aparece so quando pedido pelo filtro
+         *     `publication_status=pending_review` -- que e como a fila de moderacao e
+         *     lida. A unica escrita que o enxerga e `reviewAdminNetworkEvent`.
          * @enum {string}
          */
-        AdminNetworkEventPublicationStatus: "published" | "cancelled" | "removed";
+        AdminNetworkEventPublicationStatus: "pending_review" | "published" | "cancelled" | "removed";
         /**
          * @description Calculado no servidor pelo relogio dele (ADR-0025 item 6). Mesmos
          *     valores de `NetworkEventStatus` da leitura da `Rede`, sem `cancelled`,
@@ -5473,8 +5649,16 @@ export interface components {
             vaccination_required: boolean;
             fenced_off_leash_area: boolean;
             amenities: components["schemas"]["NetworkEventAmenity"][];
-            /** @enum {string} */
-            origin: "admin";
+            /**
+             * @description Quem criou: `admin` (o painel) ou `community` (proposto por uma
+             *     conta do app, ADR-0025 emenda 3). **Nao e o autor** --
+             *     `created_by_user_id` e `created_by_admin_id` nunca saem do
+             *     servidor, nem aqui (ADR-0027 apendice A.4). Isto e so a origem, e
+             *     e o que faz a fila de moderacao distinguir o que ela esta
+             *     revisando.
+             * @enum {string}
+             */
+            origin: "admin" | "community";
             visibility: components["schemas"]["NetworkEventVisibility"];
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];
@@ -8834,6 +9018,46 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    createNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventInput"];
+            };
+        };
+        responses: {
+            /** @description O encontro foi proposto e esta em revisao. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventSubmission"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description Sem canal de contato verificado (`contact-channel-unverified`) ou
+             *     teto de encontros em revisao atingido
+             *     (`pending-event-limit-reached`).
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     getNetworkEvent: {
         parameters: {
             query?: never;
@@ -10275,7 +10499,12 @@ export interface operations {
             query?: {
                 /** @description Busca em titulo, resumo e nome do lugar, no servidor. */
                 q?: string;
-                /** @description Sem ele, `published` e `cancelled`. `removed` so aparece quando pedido aqui. */
+                /**
+                 * @description Sem ele, `published` e `cancelled`. `removed` e `pending_review` so
+                 *     aparecem quando pedidos aqui, e `publication_status=pending_review`
+                 *     e como a **fila de moderacao** do encontro da comunidade e lida
+                 *     (ADR-0025 emenda 3).
+                 */
                 publication_status?: components["schemas"]["AdminNetworkEventPublicationStatus"];
                 timing?: components["schemas"]["AdminNetworkEventTiming"];
                 /**
@@ -10561,6 +10790,49 @@ export interface operations {
         };
         responses: {
             /** @description Condicao de acesso alterada. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reviewAdminNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminNetworkEventReview"];
+            };
+        };
+        responses: {
+            /** @description A decisao foi gravada. */
             200: {
                 headers: {
                     ETag: components["headers"]["ETag"];
