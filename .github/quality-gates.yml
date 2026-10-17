@@ -297,38 +297,126 @@ dispensas:
   # pede que o texto do paragrafo 7 pare de afirmar que tem portao. Esse texto
   # vive fora do repositorio. O registro fica em `docs/07-devops.md` secao 5.3.
 
-  # BICHUS (PR #6, leituras publicas do site), 28/09/2026. Tres quebras que o
-  # `oasdiff` acusa contra `development` e que sao DESENHO da feature, nao
-  # regressao. Medido com tufin/oasdiff:v1.32.1: sao exatamente estas tres em
-  # nivel ERR (a quarta, `area_label` nulo em getPublicLostCase, sai em nivel
-  # WARN e o portao nao a reprova).
+  # AS QUINZE DISPENSAS DATADAS DE 15/10/2026 SAIRAM EM 17/10/2026, E NAO FORAM
+  # REDATADAS. Elas moravam em tres blocos deste arquivo, e saem juntas porque
+  # caducaram pelo mesmo desfecho, no mesmo dia. Eram:
   #
-  # 1. `getLostCasePoster` perdeu `bearerAuth`: o cartaz virou publico. O papel
-  #    colado no poste e igual para todo mundo e a resposta nao pode variar com
-  #    quem pede (ADR-0017). Autenticacao opcional que nao decidia campo nenhum
-  #    saiu.
-  # 2 e 3. `area_label` passou a nullable em `/poster` e na listagem publica: o
-  #    caso pode ser aberto so com coordenada (BICHUS-21 criterio 5), e sem
-  #    geocodificacao no MVP nao ha bairro para devolver. Nulo e o valor
-  #    verdadeiro; o rotulo fixo fica com o cliente.
+  #   PR #6, leituras publicas do site (o bloco que estava aqui, 28/09):
+  #     `oasdiff-cartaz-publico-sem-auth`
+  #     `oasdiff-rotulo-de-area-nulo-no-cartaz`
+  #     `oasdiff-rotulo-de-area-nulo-na-listagem`
+  #   Ajustes do encontro da Rede (01/10, pedido do cliente item 1):
+  #     `oasdiff-descricao-do-encontro-ate-200-na-agenda`
+  #     `oasdiff-descricao-do-encontro-ate-200-no-detalhe`
+  #   Unidade do preco (01/10, ADR-0027 item 22), uma por operacao:
+  #     `oasdiff-unidade-nova-list-network-events`
+  #     `oasdiff-unidade-nova-get-network-event`
+  #     `oasdiff-unidade-nova-get-network-event-private-details`
+  #     `oasdiff-unidade-nova-list-admin-network-events`
+  #     `oasdiff-unidade-nova-get-admin-network-event`
+  #     `oasdiff-unidade-nova-create-admin-network-event`
+  #     `oasdiff-unidade-nova-update-admin-network-event`
+  #     `oasdiff-unidade-nova-relocate-admin-network-event`
+  #     `oasdiff-unidade-nova-cancel-admin-network-event`
+  #     `oasdiff-unidade-nova-change-admin-network-event-access`
   #
-  # Vencem em 15/10/2026: depois do merge a base passa a carregar o contrato
-  # novo, a quebra deixa de aparecer e as entradas devem sair.
-  - portao: oasdiff-cartaz-publico-sem-auth
-    mudanca: "api-security-removed getLostCasePoster"
-    motivo: "o cartaz do pet perdido virou publico (ADR-0017): o papel colado no poste e igual para todos e a resposta nao pode variar com quem pede; a autenticacao opcional nao decidia campo nenhum"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-rotulo-de-area-nulo-no-cartaz
-    mudanca: "response-property-became-nullable getLostCasePoster"
-    motivo: "area_label nulo quando o caso so tem coordenada (BICHUS-21 criterio 5); sem geocodificacao no MVP nao ha bairro para devolver"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-rotulo-de-area-nulo-na-listagem
-    mudanca: "response-property-became-nullable listPublicLostPets"
-    motivo: "area_label nulo quando o caso so tem coordenada (BICHUS-21 criterio 5); sem geocodificacao no MVP nao ha bairro para devolver"
-    responsavel: squad
-    vence_em: 2026-10-15
+  # O motivo das quinze CADUCOU pelo unico desfecho que elas mesmas previam,
+  # escrito nos tres comentarios que estavam aqui: "depois do merge a base passa
+  # a carregar o contrato novo, a quebra deixa de aparecer e as entradas devem
+  # sair".
+  #
+  # MEDIDO EM 17/10/2026, E NAO SUPOSTO. O passo `compatibilidade contra main`
+  # (`.github/workflows/ci.yml` por volta da linha 654) compara
+  # `origin/${{ github.base_ref }}:api/openapi.yaml` com o contrato da ponta. Os
+  # dois lados sao O MESMO BLOB:
+  #
+  #   git rev-parse origin/development:api/openapi.yaml  ->  45152fc
+  #
+  # Nao e "quebra pequena" nem "quebra aceitavel": e diff NENHUM. E as quatro
+  # condicoes que as quinze cobriam estao na base, conferidas uma por uma no
+  # arquivo e nao deduzidas do merge:
+  #
+  #   1. `api/openapi.yaml:4597` -- `getLostCasePoster` (4574) com
+  #      `security: []`. `bearerAuth` nao esta la para ser removido de novo,
+  #      entao `api-security-removed getLostCasePoster` nao tem como ser acusada.
+  #   2. `api/openapi.yaml:8597` -- `PublicLostPet.area_label` (schema em 8571)
+  #      com `nullable: true`, que e o que `listPublicLostPets` devolve via
+  #      `PublicLostPetPage.items` (9663).
+  #   3. `api/openapi.yaml:8634` -- `LostCasePoster.area_label` (schema em 8612)
+  #      com `nullable: true`. As duas tiram o chao de
+  #      `response-property-became-nullable`.
+  #   4. `api/openapi.yaml:9220` -- `NetworkEventPublic.summary` (schema em 9209)
+  #      com `maxLength: 200`. Nao ha de onde crescer, entao
+  #      `response-property-max-length-increased` nao tem mais o que acusar em
+  #      `listNetworkEvents` (via `NetworkEventPage` -> `NetworkEventSummary`,
+  #      9341) nem em `getNetworkEvent` (9321). Os dois `maxLength: 180` que
+  #      sobraram no arquivo (10067 e 10114) sao de `AdminStoreItemInput` e
+  #      `AdminStoreItemPatch` -- item da Loja, nao encontro da Rede, e nada a
+  #      ver com estas entradas.
+  #   5. `api/openapi.yaml:9052` -- `EventPriceUnit` ja e
+  #      `[per_dog, per_pet, per_person, per_pair, per_two_people]`. O enum e UM,
+  #      e as dez operacoes chegam nele pelos dois unicos `$ref` que existem:
+  #      `NetworkEventPrice.unit` (9088) nas tres leituras publicas e
+  #      `AdminEventPrice.unit` (10680) nas sete do painel. Os valores novos ja
+  #      estao la, entao `response-property-enum-value-added` nao acusa nenhuma
+  #      das dez.
+  #
+  # E ELAS ERAM PRE-EXISTENTES, nao resto de lote recente: `.github/quality-
+  # gates.yml` e BYTE A BYTE o mesmo em `722039f` e em `499b23e`
+  # (`git diff 722039f 499b23e -- .github/quality-gates.yml` sai vazio), e
+  # `722039f` e ancestral de `origin/development`.
+  #
+  # O EFEITO DE DEIXA-LAS DE PE ERA SO UM, E ELE ERA CARO: desde 16/10 elas
+  # reprovavam `verificar_dispensas.py` por prazo vencido -- e esse portao esta
+  # dentro de `make verificar`, que esta dentro de `make fechar-integracao`, que
+  # e hoje o UNICO portao que existe, para as TRES sessoes deste repositorio.
+  # Medido em 17/10 antes de apagar: exit 1, com as quinze marcadas `[VENCIDA]`
+  # e as outras sete com prazo (`apk-assinado` e `ios` 14d, as cinco de 21/10
+  # 4d). O unico portao vivo ficava vermelho por causa de quinze excecoes a
+  # quebras que deixaram de ser quebras.
+  #
+  # REDATAR SERIA PIOR QUE APAGAR, e e por isso que a data nao foi tocada:
+  # renovar exigiria escrever um motivo afirmando que a quebra existe, e ela nao
+  # existe. Dispensa cuja razao deixou de valer e pior que dispensa nenhuma --
+  # ela continua escondendo um portao que ninguem mais olha, e com a aparencia
+  # de ter sido conferida. E o mesmo caminho da `oasdiff-logout-corpo-
+  # obrigatorio` (28/09) e das quatro da BICHUS-41 (01/10), apagadas pela mesma
+  # razao.
+  #
+  # O QUE FICOU SEM PORTAO: nada que estas entradas segurassem. Elas eram
+  # EXCECOES, e apagar excecao devolve rigor, nao tira. CONFERIDO, e nao
+  # afirmado: as quinze mudancas foram forjadas em nivel ERR num arquivo de
+  # entrada e passadas a `verificar_quebras_de_contrato.py`. Com o registro de
+  # antes, exit 0 e as quinze impressas como `ACEITA por dispensa datada`; com o
+  # registro deste commit, exit 1, `REPROVADO: 15 quebra(s) sem dispensa`, cada
+  # uma nomeada em `::error::quebra de contrato SEM dispensa`. O juizo passou a
+  # cobrar o que antes dispensava.
+  #
+  # POR QUE APAGAR AQUI NAO E A ARMADILHA DO `apk-assinado`: `dispensa_vencida()`
+  # (`verificar_borda_local.py:227`, chamada em :292) reprova quando NAO acha a
+  # entrada, e a lista `casos` que ela consulta (:271-278) continua com DOIS
+  # portoes e so dois, `apk-assinado` e `ios` -- reconferido no codigo em 17/10,
+  # e nao herdado do comentario de 01/10. Os quinze nomes acima nao eram
+  # consultados por ela nem por mais nada: `git grep` sobre os arquivos
+  # rastreados de `499b23e` acha cada um dos quinze SO neste arquivo. Apagar nao
+  # derruba `verificar-borda-local`.
+  #
+  # E NAO ATRAPALHA ENTREGA ALHEIA, que era a outra forma de errar aqui. As duas
+  # branches prontas e nao mescladas (`feat/loja-capa-ordem-e-descricao` 42020c8
+  # e `feat/mascaras-valor-telefone-email` d754a35) tem contrato DIFERENTE da
+  # base, e por isso foram conferidas: as cinco condicoes acima ja estao nas
+  # duas, entao um PR de qualquer uma delas compara base com ponta e nao tem
+  # como levantar nenhum dos quinze pares. Nenhuma das quinze protegia PR aberto.
+  #
+  # DITO EM VOZ ALTA, e nao e consequencia deste commit: o portao de quebra de
+  # contrato inteiro segue dormente. Ele roda so em `pull_request`, depende do
+  # `docker run tufin/oasdiff:v1.32.1` e a esteira nao executa desde que o
+  # cliente decidiu nao contratar o GitHub Actions. Nao existe alvo local de
+  # `oasdiff` no `Makefile`. O `oasdiff` NAO FOI EXECUTADO para este commit --
+  # exigiria imagem de terceiro puxada da rede, e nao foi medido; o que foi
+  # medido e a identidade do blob nos dois lados da comparacao, que para estas
+  # quinze e mais forte: arquivos iguais nao produzem quebra nenhuma. O registro
+  # fica em `docs/07-devops.md` secao 5.3.
 
   # AS QUATRO DISPENSAS DA BICHUS-41 SAIRAM EM 01/10/2026, E NAO FORAM
   # REDATADAS. Eram `oasdiff-notas-do-achado-no-teto-do-banco`,
@@ -390,89 +478,6 @@ dispensas:
   # `docker run tufin/oasdiff` e a esteira nao executa desde que o cliente
   # decidiu nao contratar o GitHub Actions. Nao existe alvo local de `oasdiff` no
   # `Makefile`. O registro fica em `docs/07-devops.md` secao 5.3.
-
-  # Ajustes do encontro da Rede, 01/10/2026 (pedido do cliente, item 1). A
-  # descricao do encontro (`summary`) passa de 180 para 200 caracteres, e o
-  # `maxLength` da RESPOSTA sobe junto: o servidor passa a devolver ate 200, e
-  # um contrato que dissesse 180 mentiria. Medido com tufin/oasdiff:v1.32.1:
-  # sao exatamente estas duas em nivel ERR (a de `listNearbyNetworkEvents` sai
-  # em WARN, pelo `allOf`). O consumidor que importa, o app
-  # (`app/lib/api/modelos_rede.dart`), le `summary` como `String` sem teto, e o
-  # painel ja manda pela escrita, que e request e nao quebra.
-  # Vencem em 15/10/2026: depois do merge a base carrega o contrato novo e a
-  # quebra deixa de aparecer; as entradas devem sair.
-  - portao: oasdiff-descricao-do-encontro-ate-200-na-agenda
-    mudanca: "response-property-max-length-increased listNetworkEvents"
-    motivo: "summary do encontro 180 -> 200 a pedido do cliente (01/10); o CHECK do banco foi alargado sem tocar linha; o app le summary como String sem teto"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-descricao-do-encontro-ate-200-no-detalhe
-    mudanca: "response-property-max-length-increased getNetworkEvent"
-    motivo: "summary do encontro 180 -> 200 a pedido do cliente (01/10); o CHECK do banco foi alargado sem tocar linha; o app le summary como String sem teto"
-    responsavel: squad
-    vence_em: 2026-10-15
-
-  # Unidade do preco, 01/10/2026 (ADR-0027 item 22). `per_pet` e
-  # `per_two_people` entram em `EventPriceUnit`, que sai em toda resposta com
-  # o encontro: o oasdiff acusa `response-property-enum-value-added` (ERR) uma
-  # vez por operacao, com os dois valores na mesma chave. Medido com
-  # tufin/oasdiff:v1.32.1: sao exatamente estas dez. A mudanca e ADITIVA
-  # (`per_dog` continua valido, nenhuma linha renomeada), e o app trata valor
-  # desconhecido: `UnidadeDoPreco.porCodigo` (app/lib/api/modelos_rede.dart)
-  # devolve nulo e o selo mostra so o valor -- toda versao do app que le `unit`
-  # e assim desde 7c332f5, quando o campo nasceu. As cinco do painel sao do
-  # backoffice, que passa a oferecer os valores novos.
-  # Vencem em 15/10/2026: depois do merge a base carrega o enum novo.
-  - portao: oasdiff-unidade-nova-list-network-events
-    mudanca: "response-property-enum-value-added listNetworkEvents"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-get-network-event
-    mudanca: "response-property-enum-value-added getNetworkEvent"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-get-network-event-private-details
-    mudanca: "response-property-enum-value-added getNetworkEventPrivateDetails"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-list-admin-network-events
-    mudanca: "response-property-enum-value-added listAdminNetworkEvents"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-get-admin-network-event
-    mudanca: "response-property-enum-value-added getAdminNetworkEvent"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-create-admin-network-event
-    mudanca: "response-property-enum-value-added createAdminNetworkEvent"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-update-admin-network-event
-    mudanca: "response-property-enum-value-added updateAdminNetworkEvent"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-relocate-admin-network-event
-    mudanca: "response-property-enum-value-added relocateAdminNetworkEvent"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-cancel-admin-network-event
-    mudanca: "response-property-enum-value-added cancelAdminNetworkEvent"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
-  - portao: oasdiff-unidade-nova-change-admin-network-event-access
-    mudanca: "response-property-enum-value-added changeAdminNetworkEventAccess"
-    motivo: "EventPriceUnit ganha per_pet e per_two_people (aditivo, ADR-0027 item 22); o app mostra so o valor para unidade desconhecida (UnidadeDoPreco.porCodigo devolve nulo)"
-    responsavel: squad
-    vence_em: 2026-10-15
 
   # ---------------------------------------------------------------------
   # RESTAURADO NA EMENDA DE 07/10: estas cinco chegaram em c4b3945
