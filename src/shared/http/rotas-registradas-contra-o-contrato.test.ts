@@ -141,7 +141,9 @@ const OPERACOES_SERVIDAS_PELA_BORDA: readonly string[] = [
  * achador (BICHUS-41) ficaram no contrato sem handler.
  *
  * MEDIDA em 30/09/2026, depois da mescla do lote: eram 13 operacoes sem rota,
- * duas delas servidas pela borda (a lista acima), sobrando estas 11.
+ * duas delas servidas pela borda (a lista acima), sobrando 11. Cinco delas
+ * ganharam rota depois (as tres do caso de perdido e as duas da conversa do lado
+ * com conta), e a divida esta em SEIS.
  *
  * A lista e EXATA nos dois sentidos, e e ela que torna o caso verificavel:
  * operacao nova no contrato sem rota e fora daqui REPROVA; operacao daqui que
@@ -154,13 +156,14 @@ const OPERACOES_AINDA_SEM_ROTA: readonly string[] = [
   'requestDataExport',
   'updatePetPublicProfile',
   'revokePetTag',
-  'updateLostCase',
-  'resendLostCaseAlert',
-  'listLostCaseCandidates',
+  // `updateLostCase`, `resendLostCaseAlert`, `listLostCaseCandidates`,
+  // `blockConversation` e `reportConversation` SAIRAM desta lista: as cinco
+  // ganharam rota no commit que furou o laco central do produto (o tutor podia
+  // DECIDIR sobre um candidato que nao tinha como ver, e so o achador tinha
+  // bloqueio e denuncia). Quem implementa uma linha daqui tira a linha no mesmo
+  // commit, e e esta lista exata nos dois sentidos que cobra o contrario.
   'reopenLostCase',
   'snoozeLostCaseReminder',
-  'blockConversation',
-  'reportConversation',
   'listPublicLostPets',
 ];
 

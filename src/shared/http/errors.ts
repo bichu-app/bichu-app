@@ -581,9 +581,9 @@ export const problemas = {
    * motivo diferente.
    *
    * **"Deste aparelho" nomeia uma dimensão que este construtor não conhece.**
-   * O mesmo 429 sai de quatorze dimensões declaradas em `x-rate-limit`
+   * O mesmo 429 sai de quinze dimensões declaradas em `x-rate-limit`
    * (`DIMENSOES_CONHECIDAS`, em `aplicacao-de-teto.ts`): `ip`, `ip_24`,
-   * `origin`, `account`, `email`, `code`, `pet`, `token_family`,
+   * `origin`, `account`, `email`, `code`, `pet`, `case`, `token_family`,
    * `finder_identity`, `conversation_participant`, `found_report`, `q`,
    * `finder_token` e `report_target`. Duas
    * são de rede e nenhuma é de aparelho. No balde de IP o texto era pior do que

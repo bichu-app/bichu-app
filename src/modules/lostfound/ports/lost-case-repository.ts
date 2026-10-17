@@ -81,6 +81,37 @@ export interface CasoGravado {
   readonly closureNote: string | null;
 }
 
+/**
+ * O que o tutor corrige depois de abrir o caso: **onde** e **quando** o pet foi
+ * visto pela última vez (`PATCH /v1/lost-cases/{caseId}`).
+ *
+ * O contrato reusa `LostCaseInput` no corpo do `PATCH`, e com isso `last_seen_at`
+ * é obrigatório e o `anyOf` exige ponto **ou** área. Então o *onde* e o *quando*
+ * são sempre SUBSTITUÍDOS por inteiro, e não mesclados: quem corrige de um ponto
+ * no mapa para "só o bairro" está dizendo que o ponto anterior estava errado, e
+ * mantê-lo gravado faria o alerta continuar centrado onde o pet não estava.
+ *
+ * `descricao` e `listaPublica` são `undefined` quando o corpo não os traz, e aí
+ * a coluna **não é tocada**. O contrato não detalha a semântica do `PATCH` para
+ * os dois campos opcionais; apagar um texto que o tutor escreveu porque ele
+ * mandou só a data nova é perda silenciosa, e a escolha oposta (zerar) não tem
+ * nada no documento que a sustente.
+ */
+export interface AtualizacaoDoCaso {
+  readonly caso: CaseId;
+  readonly dono: UserId;
+  readonly lastSeenAt: Instant;
+  readonly lat: number | undefined;
+  readonly lon: number | undefined;
+  readonly city: string | undefined;
+  readonly neighborhood: string | undefined;
+  readonly state: string | undefined;
+  /** Ausente, a coluna não é tocada. */
+  readonly description: string | undefined;
+  /** Ausente, a coluna não é tocada. */
+  readonly shareToPublicList: boolean | undefined;
+}
+
 export interface LostCaseRepository extends DecisorDeCandidatos {
   /**
    * Tudo que decide a abertura, numa consulta só.
@@ -117,6 +148,17 @@ export interface LostCaseRepository extends DecisorDeCandidatos {
 
   /** `null` quando não existe **ou** não é do chamador. São a mesma resposta. */
   buscarDoTutor(caso: CaseId, dono: UserId): Promise<CasoGravado | null>;
+
+  /**
+   * Corrige onde e quando o pet foi visto. `null` com o MESMO significado de
+   * `encerrar`: o caso não existe, não é do chamador, **ou não está aberto**.
+   *
+   * `status = 'open'` entra no `WHERE` e não num `if` antes, pela razão de
+   * sempre — e aqui ele tem um motivo de produto próprio: corrigir o "visto
+   * pela última vez" de um caso encerrado mexeria no dado que a métrica de
+   * reencontro já contabilizou, e no cartaz que ninguém mais vai imprimir.
+   */
+  atualizarOndeEQuando(entrada: AtualizacaoDoCaso): Promise<CasoGravado | null>;
 
   /** `null` com o mesmo significado. Só encerra caso **aberto**. */
   encerrar(entrada: {
@@ -155,14 +197,28 @@ export interface AchadoDoCandidato {
 }
 
 /**
- * O candidato depois de decidido.
+ * `MatchCandidate.status` do contrato: os três, e não os dois da decisão.
+ *
+ * `suggested` existe aqui e **não** existe em `DecisaoDoCandidato` de propósito.
+ * São perguntas diferentes: a listagem precisa dizer em que estado a linha está,
+ * e a decisão precisa impedir que alguém volte para `suggested` — *"rejeitado
+ * não volta"*, seção 4.10 de `docs/03-arquitetura.md`. Um tipo só para as duas
+ * teria aberto a porta de desfazer uma rejeição.
+ */
+export type StatusDoCandidato = DecisaoDoCandidato | 'suggested';
+
+/**
+ * O candidato como a listagem e a decisão o leem.
  *
  * `petId` e `relatorUserId` não vão para a resposta: eles existem porque
  * **confirmar abre a conversa mediada** com quem registrou o achado, e a
  * abertura precisa dos dois. O pet vem do CASO que casou, porque o aviso avulso
  * não tem `pet_id`; o relator vem de `found_reports.reporter_user_id`.
+ *
+ * `caseId` também não sai: ver `comoRespostaDoCandidato` na rota, e o item 7 do
+ * ADR-0010.
  */
-export interface CandidatoDecidido {
+export interface CandidatoDoCaso {
   readonly id: string;
   readonly caseId: CaseId;
   readonly foundReportId: FoundReportId;
@@ -174,9 +230,35 @@ export interface CandidatoDecidido {
   readonly distanciaEmMetros: number | null;
   readonly linkOrigin: 'attribute_match' | 'share_token';
   readonly versaoDaEstrategia: string;
-  readonly status: DecisaoDoCandidato;
+  readonly status: StatusDoCandidato;
   readonly criadoEm: Date;
   readonly achado: AchadoDoCandidato;
+}
+
+/**
+ * O MESMO candidato, depois de decidido, com o estado estreitado.
+ *
+ * O estreitamento não é enfeite de tipo: o `WHERE` da escrita da decisão exige
+ * `status = 'suggested'` e grava `confirmed` ou `rejected`, então a linha que
+ * volta dali nunca está em `suggested`. Quem lê este tipo pode decidir sobre a
+ * conversa sem um terceiro caminho que não acontece.
+ */
+export interface CandidatoDecidido extends Omit<CandidatoDoCaso, 'status'> {
+  readonly status: DecisaoDoCandidato;
+}
+
+/**
+ * A janela da listagem de candidatos.
+ *
+ * `depoisDe` é o par (score, id) da última linha entregue, e o `id` não é
+ * enfeite: o `score` repete muito — dois achados que bateram nos mesmos
+ * atributos têm o mesmo número —, e um cursor só de `score` faria a página
+ * seguinte repetir ou pular candidatos. Num caso de pet perdido, o candidato
+ * pulado é o que era o pet.
+ */
+export interface PaginaDeCandidatos {
+  readonly limit: number;
+  readonly depoisDe: { readonly score: number; readonly id: string } | undefined;
 }
 
 export interface DecisaoSobreCandidato {
@@ -205,6 +287,30 @@ export interface DecisaoSobreCandidato {
  */
 export interface DecisorDeCandidatos {
   decidirCandidato(entrada: DecisaoSobreCandidato): Promise<CandidatoDecidido | null>;
+
+  /**
+   * As correspondências JÁ CALCULADAS deste caso, para o tutor ver.
+   *
+   * **Esta operação não cruza nada.** O cruzamento é um job na fila, disparado
+   * quando um achado é criado e quando um caso é aberto, e grava em
+   * `match_candidates` (seção 4.10 de `docs/03-arquitetura.md`). Aqui só se lê e
+   * se ordena — e é por isso que a rota declara `x-effects: []`.
+   *
+   * `dono` é obrigatório pelo mesmo motivo de todo o arquivo: `match_candidates`
+   * não tem coluna de dono, e o dono do candidato é o dono do CASO. O predicado
+   * `lost_cases.owner_user_id = :dono` entra na junção da própria consulta, com
+   * a correlação `lost_cases.id = match_candidates.case_id` — sem a correlação o
+   * mesmo SQL passaria a perguntar "esta conta tem algum caso?", que é a
+   * armadilha do produto cartesiano.
+   *
+   * Lista vazia é um estado legítimo e frequente, e não erro: a maior parte dos
+   * casos não tem correspondência nenhuma no primeiro dia.
+   */
+  candidatosDoCaso(
+    caso: CaseId,
+    dono: UserId,
+    pagina: PaginaDeCandidatos,
+  ): Promise<readonly CandidatoDoCaso[]>;
 
   /**
    * O candidato JÁ DECIDIDO deste tutor, para o reenvio da fila offline.

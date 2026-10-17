@@ -33,17 +33,28 @@ import {
   type CentroDoAlcance,
   type EstadoDoAlcance,
 } from '../domain/previa-do-alcance.js';
-import { contagemDe, estadoInicialDoDisparo } from '../domain/disparo-do-alerta.js';
+import {
+  contagemDe,
+  estadoInicialDoDisparo,
+  podeDispararDeNovo,
+  JANELA_DE_24H_EM_MS,
+} from '../domain/disparo-do-alerta.js';
+import {
+  codificarCursorDeCandidato,
+  type PosicaoDoCandidato,
+} from '../domain/paginacao-de-candidatos.js';
 import type { AlcanceCalculado, AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
 import type { DisparoGravado, RegistroDeDisparos } from '../ports/registro-de-disparos.js';
 import type { JobQueue } from '../../../shared/ports/index.js';
 import type {
   CanalDoReencontro,
   CandidatoDecidido,
+  CandidatoDoCaso,
   CasoGravado,
   DecisaoDoCandidato,
   DesfechoDoCaso,
   LostCaseRepository,
+  PaginaDeCandidatos,
 } from '../ports/lost-case-repository.js';
 import type {
   CaseId,
@@ -165,6 +176,19 @@ export interface EntradaDoCaso {
   readonly state?: string | undefined;
   readonly description?: string | undefined;
   readonly shareToPublicList?: boolean | undefined;
+}
+
+/**
+ * A página de candidatos como ela sai do serviço.
+ *
+ * `nextCursor` é `null` quando a página veio curta: página cheia **pode** ter
+ * continuação, página curta é o fim da lista. É a mesma regra das outras duas
+ * coleções do produto, e ela erra para o lado seguro — um cursor a mais custa
+ * uma requisição que volta vazia; um cursor de menos esconde candidatos.
+ */
+export interface PaginaDeCandidatosDoCaso {
+  readonly items: readonly CandidatoDoCaso[];
+  readonly nextCursor: string | null;
 }
 
 export interface ContextoDoChamador {
@@ -377,6 +401,138 @@ export class LostCaseService {
     return { caso: achado, alerta: await this.deps.disparos.ultimoDoCaso(achado.id) };
   }
 
+  /**
+   * `GET /v1/lost-cases/{caseId}/candidates`.
+   *
+   * **O buraco que esta operação fecha**: a esteira já calculava e gravava as
+   * correspondências, e a rota de *decidir* já estava no ar — o tutor podia
+   * dizer "é o meu pet" sobre algo que ele não tinha como ver. A lista é a tela
+   * que torna a decisão humana possível, e sem ela a decisão era humana só no
+   * nome.
+   *
+   * **Duas consultas, e a ordem entre elas é a regra.** A primeira é
+   * `buscarDoTutor`, com o dono no `WHERE`, e ela é o que transforma caso alheio
+   * em 404 (ADR-0021): sem ela, caso de outro tutor responderia `items: []`,
+   * indistinguível de "ainda não há correspondência" — e `200` numa URL com o
+   * `caseId` de outra pessoa afirma, para quem souber ler, que aquele caso
+   * existe. A segunda carrega o dono **de novo**, na junção, e a repetição é
+   * deliberada: a autorização não pode depender de alguém ter lembrado de fazer
+   * a primeira leitura.
+   *
+   * **Nada é cruzado aqui.** `x-effects: []` é verdade: o cruzamento é um job na
+   * fila (seção 4.10 de `docs/03-arquitetura.md`), e esta operação lê linhas já
+   * gravadas. Se algum dia ela passar a calcular, vira `expensive_query` e ganha
+   * teto — mas então a mudança é de desenho, e o marcador acompanha.
+   */
+  async candidatos(
+    caso: CaseId,
+    chamador: ContextoDoChamador,
+    pagina: PaginaDeCandidatos,
+  ): Promise<PaginaDeCandidatosDoCaso> {
+    const doTutor = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
+    if (doTutor === null) throw problemas.naoEncontrado();
+
+    const items = await this.deps.repositorio.candidatosDoCaso(caso, chamador.userId, pagina);
+    return { items, nextCursor: proximoDosCandidatos(items, pagina.limit) };
+  }
+
+  /**
+   * `PATCH /v1/lost-cases/{caseId}` — o tutor corrige onde e quando.
+   *
+   * **Não dispara alerta**, e a ausência é o contrato: a operação declara
+   * `x-effects: []`. Quem quer avisar a vizinhança de novo usa
+   * `POST /lost-cases/{caseId}/alerts`, que tem o teto de um por dia. Fundir as
+   * duas faria cada correção de digitação na data acordar os vizinhos outra vez
+   * — e a correção de digitação é o uso mais comum desta rota.
+   *
+   * `null` do repositório cobre três coisas e todas viram 404: o caso não
+   * existe, não é do chamador, ou não está aberto.
+   */
+  async atualizar(
+    caso: CaseId,
+    entrada: EntradaDoCaso,
+    chamador: ContextoDoChamador,
+  ): Promise<CasoComAlerta> {
+    const atualizado = await this.deps.repositorio.atualizarOndeEQuando({
+      caso,
+      dono: chamador.userId,
+      lastSeenAt: entrada.lastSeenAt,
+      lat: entrada.lat,
+      lon: entrada.lon,
+      city: entrada.city,
+      neighborhood: entrada.neighborhood,
+      state: entrada.state,
+      description: entrada.description,
+      shareToPublicList: entrada.shareToPublicList,
+    });
+    if (atualizado === null) throw problemas.naoEncontrado();
+
+    await this.deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: chamador.userId,
+      actorIp: chamador.ip,
+      correlationId: chamador.correlationId,
+      action: 'lost_case.updated',
+      resourceKind: 'lost_case',
+      resourceId: atualizado.id,
+      // SEM coordenada no metadado, como na abertura: a trilha não guarda
+      // coordenada bruta (docs/04-seguranca.md 9). `has_location` responde o que
+      // importa numa investigação — passou a haver raio, ou deixou de haver.
+      metadata: { has_location: atualizado.hasLocation },
+    });
+
+    return { caso: atualizado, alerta: await this.deps.disparos.ultimoDoCaso(atualizado.id) };
+  }
+
+  /**
+   * `POST /v1/lost-cases/{caseId}/alerts` — reenvia o alerta à vizinhança.
+   *
+   * **A máquina de disparo é a MESMA da abertura**, e isso é o ponto: o reenvio
+   * chama `pedirOAlerta`, que grava a linha de `alert_dispatches` e enfileira
+   * `alert.dispatch`. Uma segunda máquina aqui teria duas respostas para "quem
+   * recebe o alerta deste caso", e a do reenvio seria a que ninguém revisita.
+   *
+   * **O teto de um por dia é conferido DUAS vezes, de propósito.** A borda conta
+   * requisições na dimensão `case` (`x-rate-limit` do contrato); esta camada
+   * pergunta ao banco quando o último alerta **saiu**, por
+   * `ultimoEnvioDoCaso` + `podeDispararDeNovo` — que é o critério 7 do ADR-0006,
+   * o mesmo predicado que o worker já respeita. As duas não são redundantes:
+   * o contador da borda é por processo e por janela de contagem, e um disparo
+   * que ficou enfileirado sem nunca sair não gastou o direito de ninguém. A
+   * verdade sobre "este caso já avisou hoje" está em `dispatched_at`.
+   *
+   * Caso inexistente, alheio ou **encerrado** respondem 404 — caso encerrado não
+   * alerta ninguém: o animal voltou, ou a busca acabou.
+   */
+  async reenviarAlerta(caso: CaseId, chamador: ContextoDoChamador): Promise<DisparoGravado> {
+    const doTutor = await this.deps.repositorio.buscarDoTutor(caso, chamador.userId);
+    if (doTutor === null || doTutor.status !== 'open') throw problemas.naoEncontrado();
+
+    const agora = this.deps.clock.now();
+    const ultimoEnvio = await this.deps.disparos.ultimoEnvioDoCaso(caso);
+    if (!podeDispararDeNovo(ultimoEnvio, agora)) {
+      // O prazo que falta, em segundos, e não um número fixo: o 429 carrega
+      // `Retry-After`, e um valor inventado faria o app agendar um reenvio que
+      // já nasce recusado. `ultimoEnvio` não é nulo aqui — `podeDispararDeNovo`
+      // devolve `true` para nulo —, e o `?? 0` existe só para o compilador.
+      const faltam = JANELA_DE_24H_EM_MS - (Number(agora) - Number(ultimoEnvio ?? 0));
+      throw problemas.limiteDeChamadas(Math.max(1, Math.ceil(faltam / 1000)));
+    }
+
+    await this.deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: chamador.userId,
+      actorIp: chamador.ip,
+      correlationId: chamador.correlationId,
+      action: 'lost_case.alert_resent',
+      resourceKind: 'lost_case',
+      resourceId: doTutor.id,
+      metadata: { has_location: doTutor.hasLocation },
+    });
+
+    return this.pedirOAlerta(doTutor);
+  }
+
   async encerrar(
     caso: CaseId,
     desfecho: DesfechoDoCaso,
@@ -562,4 +718,23 @@ export class LostCaseService {
       return null;
     }
   }
+}
+
+/**
+ * O cursor da próxima página de candidatos, ou `null`.
+ *
+ * Página curta é o fim da lista. A posição sai do **último item entregue**, e
+ * não de um contador de deslocamento: candidato decidido não sai da tabela, mas
+ * um `score` recalculado por uma versão nova da estratégia muda a ordem — e um
+ * `OFFSET` guardado no cliente passaria a apontar para outro lugar da lista.
+ */
+function proximoDosCandidatos(
+  items: readonly CandidatoDoCaso[],
+  limite: number,
+): string | null {
+  if (items.length < limite) return null;
+  const ultimo = items[items.length - 1];
+  if (ultimo === undefined) return null;
+  const posicao: PosicaoDoCandidato = { score: ultimo.score, id: ultimo.id };
+  return codificarCursorDeCandidato(posicao);
 }

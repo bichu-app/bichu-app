@@ -88,4 +88,63 @@ class CasosApi {
     );
     return CasoDePerdido.doJson(json);
   }
+
+  /// `GET /lost-cases/{caseId}/candidates` (`listLostCaseCandidates`).
+  ///
+  /// **A leitura que faltava para a decisao fazer sentido.** A rota de decidir
+  /// ja existia: sem esta, o tutor podia dizer "e o meu pet" sobre algo que ele
+  /// nao tinha como ver.
+  ///
+  /// `limit` e `cursor` entram so quando ha o que mandar. O cursor e **opaco**:
+  /// vem de [PaginaDeCandidatos.proximoCursor] e volta como veio -- o app nao o
+  /// interpreta, e nao monta ordem propria. Quem ordena e o servidor, por
+  /// `score`, que nao vai para a tela (criterio 2 da BICHUS-86).
+  ///
+  /// Nao trata falha: lista vazia e "ainda nao apareceu ninguem", e falha de
+  /// rede e "nao consegui perguntar". A tela tem texto diferente para cada uma,
+  /// e um `catch` que devolvesse pagina vazia apagaria a distincao.
+  Future<PaginaDeCandidatos> candidatos(
+    String caseId, {
+    String? cursor,
+    int? limite,
+  }) async {
+    final json = await _api.get(
+      '/lost-cases/$caseId/candidates',
+      query: <String, String>{
+        if (cursor != null && cursor.isNotEmpty) 'cursor': cursor,
+        if (limite != null) 'limit': limite.toString(),
+      },
+    );
+    return PaginaDeCandidatos.doJson(json);
+  }
+
+  /// `PATCH /lost-cases/{caseId}` (`updateLostCase`).
+  ///
+  /// O corpo e `LostCaseInput`, o MESMO da abertura: [corpoDeAbertura] o monta,
+  /// e reusa-lo nao e economia -- dois montadores dariam duas respostas para
+  /// "o que e onde e quando", e a correcao sairia diferente da abertura.
+  ///
+  /// **Corrigir NAO reenvia o alerta.** Quem quer avisar a vizinhanca de novo
+  /// chama [reenviarAlerta], que tem teto de um por dia.
+  Future<CasoDePerdido> corrigirOndeEQuando({
+    required String caseId,
+    required Map<String, dynamic> corpo,
+  }) async {
+    final json = await _api.patch('/lost-cases/$caseId', corpo: corpo);
+    return CasoDePerdido.doJson(json);
+  }
+
+  /// `POST /lost-cases/{caseId}/alerts` (`resendLostCaseAlert`).
+  ///
+  /// **Um por caso a cada 24 h**, e o servidor recusa o segundo com 429 e
+  /// `Retry-After`. A tela diz quanto falta; ela nao esconde o botao, porque
+  /// esconder faria a pessoa achar que o reenvio nao existe.
+  ///
+  /// Devolve `AlertDispatch`: `queued` quando ha raio, `no_location` quando o
+  /// caso nao tem coordenada. A API enfileira e o worker envia (ADR-0001), e e
+  /// por isso que a resposta e 202 e nao promete que o alerta saiu.
+  Future<DisparoDoAlerta> reenviarAlerta(String caseId) async {
+    final json = await _api.post('/lost-cases/$caseId/alerts');
+    return DisparoDoAlerta.doJson(json);
+  }
 }

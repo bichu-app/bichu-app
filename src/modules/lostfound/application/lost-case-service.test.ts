@@ -44,6 +44,7 @@ import type { AberturaDeConversaPorCorrespondencia } from './lost-case-service.j
 import type { AlcanceDoAlerta } from '../ports/alcance-do-alerta.js';
 import type { DisparoGravado, RegistroDeDisparos } from '../ports/registro-de-disparos.js';
 import type { CentroDoAlcance } from '../domain/previa-do-alcance.js';
+import { decodificarCursorDeCandidato } from '../domain/paginacao-de-candidatos.js';
 import type {
   CaseId,
   FoundReportId,
@@ -103,6 +104,16 @@ interface EstadoDoRepositorio {
     readonly status: 'suggested' | DecisaoDoCandidato;
     readonly decididoPor?: UserId;
   };
+  /**
+   * Quando o último alerta deste caso **saiu**, para o critério 7 do ADR-0006
+   * (um disparo por caso a cada 24 h).
+   *
+   * `undefined` é "nunca saiu", e é o padrão: um caso recém-aberto tem um
+   * disparo `queued` e nenhum `dispatched_at`. O estado existe separado dos
+   * disparos abertos de propósito — é essa a distinção que a porta faz, e um
+   * disparo que ficou enfileirado e nunca saiu não gastou o direito de ninguém.
+   */
+  ultimoEnvio?: Instant;
 }
 
 interface Registro {
@@ -282,6 +293,42 @@ function repositorioDeMemoria(estado: EstadoDoRepositorio): {
       return Promise.resolve(candidatoGravado(entrada.decisao));
     },
 
+    /**
+     * `PATCH` com o mesmo `WHERE` do `UPDATE` de verdade: `id`, `dono` e
+     * `status = 'open'`. As três recusas saem como o MESMO `null`.
+     */
+    atualizarOndeEQuando: (entrada) => {
+      if (guardado === undefined || guardado.gravado.id !== entrada.caso) {
+        return Promise.resolve(null);
+      }
+      if (guardado.dono !== entrada.dono || guardado.gravado.status !== 'open') {
+        return Promise.resolve(null);
+      }
+      const atualizado: CasoGravado = {
+        ...guardado.gravado,
+        lastSeenAt: comoData(entrada.lastSeenAt),
+        hasLocation: entrada.lat !== undefined && entrada.lon !== undefined,
+        areaLabel: entrada.city ?? null,
+        description:
+          entrada.description === undefined
+            ? guardado.gravado.description
+            : entrada.description,
+        shareToPublicList: entrada.shareToPublicList ?? guardado.gravado.shareToPublicList,
+      };
+      guardado = { dono: guardado.dono, gravado: atualizado };
+      return Promise.resolve(atualizado);
+    },
+
+    /**
+     * A listagem com o dono na junção, como o SQL a carrega: candidato de caso
+     * de outro tutor não chega a esta camada para ser descartado por um `if`.
+     */
+    candidatosDoCaso: (caso, dono) => {
+      const c = estado.candidato;
+      if (c === undefined || caso !== CASO || c.dono !== dono) return Promise.resolve([]);
+      return Promise.resolve([{ ...candidatoGravado('confirmed'), status: c.status }]);
+    },
+
     candidatoDecididoDoTutor: (caso, candidato, dono) => {
       const c = estado.candidato;
       if (c === undefined || caso !== CASO || candidato !== CANDIDATO) {
@@ -355,7 +402,7 @@ function servico(estado: EstadoDoRepositorio = {}): {
     },
     ultimoDoCaso: (caso) =>
       Promise.resolve(registro.disparosAbertos.find((d) => d.caso === caso) ?? null),
-    ultimoEnvioDoCaso: () => Promise.resolve(null),
+    ultimoEnvioDoCaso: () => Promise.resolve(estado.ultimoEnvio ?? null),
     contextoDoCaso: () => Promise.resolve(null),
     concluir: () => Promise.resolve(),
   };
@@ -1191,5 +1238,309 @@ void describe('a decisão do candidato', () => {
     // que se cobra aqui é que eles CHEGUEM, para que a borda tenha o que omitir.
     assert.equal(decidido.petId, PET);
     assert.equal(decidido.relatorUserId, RELATOR);
+  });
+});
+
+// ===========================================================================
+// O laço central: ver os candidatos, corrigir o caso, reenviar o alerta
+// ===========================================================================
+
+/** O contexto do dono, o mesmo molde das suítes de cima. */
+const contextoDoTutor = chamador(DONO);
+
+void describe('listLostCaseCandidates: o tutor VÊ o que ele podia decidir', () => {
+  void it('o dono lê as correspondências do caso dele, inclusive as ainda sugeridas', async () => {
+    // Este é o buraco que a operação fecha: a esteira já gravava, e a rota de
+    // DECIDIR já estava no ar. Sem esta leitura, o tutor podia dizer "é o meu
+    // pet" sobre algo que ele não tinha como ver.
+    const { casos } = servico({
+      caso: { dono: DONO, gravado: casoAberto() },
+      candidato: { dono: DONO, status: 'suggested' },
+    });
+
+    const pagina = await casos.candidatos(CASO, contextoDoTutor, { limit: 20, depoisDe: undefined });
+
+    assert.equal(pagina.items.length, 1);
+    assert.equal(pagina.items[0]?.status, 'suggested');
+    assert.equal(pagina.items[0]?.id, CANDIDATO);
+  });
+
+  void it('caso de OUTRO tutor responde 404, e não uma lista vazia', async () => {
+    // Lista vazia com 200 numa URL que carrega o `caseId` de outra pessoa
+    // afirma, para quem souber ler, que aquele caso existe. O ADR-0021 fecha
+    // exatamente este oráculo, e por isso a leitura vinculada vem ANTES.
+    const { casos } = servico({
+      caso: { dono: DONO, gravado: casoAberto() },
+      candidato: { dono: DONO, status: 'suggested' },
+    });
+
+    const erro = await capturar(() =>
+      casos.candidatos(CASO, chamador(OUTRO_TUTOR), { limit: 20, depoisDe: undefined }),
+    );
+
+    assert.equal(erro.problemType, 'not-found');
+    assert.notEqual(erro.status, 403);
+  });
+
+  void it('caso de outro tutor é a MESMA resposta de caso inexistente', async () => {
+    const alheio = await capturar(async () => {
+      const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+      return casos.candidatos(CASO, chamador(OUTRO_TUTOR), { limit: 20, depoisDe: undefined });
+    });
+    const inexistente = await capturar(async () => {
+      const { casos } = servico();
+      return casos.candidatos(CASO, chamador(OUTRO_TUTOR), { limit: 20, depoisDe: undefined });
+    });
+
+    assert.equal(alheio.problemType, inexistente.problemType);
+    assert.equal(alheio.title, inexistente.title);
+    assert.equal(alheio.detail, inexistente.detail);
+  });
+
+  void it('lista vazia do PRÓPRIO caso é 200 com `items: []`, e não erro', async () => {
+    // É o estado mais frequente do produto: a maior parte dos casos não tem
+    // correspondência nenhuma no primeiro dia. Tratá-lo como erro faria a tela
+    // dizer "não foi possível" onde a verdade é "ainda não apareceu ninguém".
+    const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    const pagina = await casos.candidatos(CASO, contextoDoTutor, { limit: 20, depoisDe: undefined });
+
+    assert.deepEqual(pagina.items, []);
+    assert.equal(pagina.nextCursor, null);
+  });
+
+  void it('página CURTA não devolve cursor: página curta é o fim da lista', async () => {
+    const { casos } = servico({
+      caso: { dono: DONO, gravado: casoAberto() },
+      candidato: { dono: DONO, status: 'suggested' },
+    });
+
+    const pagina = await casos.candidatos(CASO, contextoDoTutor, { limit: 20, depoisDe: undefined });
+
+    assert.equal(pagina.items.length, 1);
+    assert.equal(pagina.nextCursor, null);
+  });
+
+  void it('página CHEIA devolve cursor, e ele carrega a posição do último item', async () => {
+    const { casos } = servico({
+      caso: { dono: DONO, gravado: casoAberto() },
+      candidato: { dono: DONO, status: 'suggested' },
+    });
+
+    // `limit: 1` com um item é página cheia: pode haver continuação.
+    const pagina = await casos.candidatos(CASO, contextoDoTutor, { limit: 1, depoisDe: undefined });
+
+    assert.notEqual(pagina.nextCursor, null);
+    const posicao = decodificarCursorDeCandidato(pagina.nextCursor ?? undefined);
+    assert.equal(posicao?.id, CANDIDATO);
+    assert.equal(posicao?.score, pagina.items[0]?.score);
+  });
+
+  void it('a leitura NÃO conta nada e NÃO enfileira nada: `x-effects` é vazio de verdade', async () => {
+    // O cruzamento é um job na fila. Se esta operação começasse a calcular, ela
+    // viraria `expensive_query` e ganharia teto — mas então a mudança é de
+    // desenho, e este caso é o que obriga o marcador a acompanhar.
+    const { casos, registro } = servico({
+      caso: { dono: DONO, gravado: casoAberto() },
+      candidato: { dono: DONO, status: 'suggested' },
+    });
+
+    await casos.candidatos(CASO, contextoDoTutor, { limit: 20, depoisDe: undefined });
+
+    assert.deepEqual(registro.enfileirados, []);
+    assert.deepEqual(registro.contou, []);
+    assert.deepEqual(registro.disparosAbertos, []);
+  });
+});
+
+void describe('updateLostCase: o tutor corrige onde e quando', () => {
+  void it('a correção grava a data nova e o novo onde', async () => {
+    const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    const { caso } = await casos.atualizar(
+      CASO,
+      { lastSeenAt: ONTEM, lat: -23.6, lon: -46.7, city: 'Santo André' },
+      contextoDoTutor,
+    );
+
+    assert.equal(caso.lastSeenAt.getTime(), Number(ONTEM));
+    assert.equal(caso.hasLocation, true);
+    assert.equal(caso.areaLabel, 'Santo André');
+  });
+
+  void it('corrigir de PONTO para SÓ ÁREA apaga o ponto: `has_location` vira falso', async () => {
+    // Quem troca o ponto no mapa por "só o bairro" está dizendo que o ponto
+    // estava errado. Um `COALESCE` o manteria gravado, e o alerta seguiria
+    // centrado onde o pet não estava — com a tela dizendo o contrário.
+    const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    const { caso } = await casos.atualizar(
+      CASO,
+      { lastSeenAt: ONTEM, city: 'São Paulo', neighborhood: 'Vila Madalena' },
+      contextoDoTutor,
+    );
+
+    assert.equal(caso.hasLocation, false);
+  });
+
+  void it('NÃO dispara alerta: o reenvio é outra operação, com teto próprio', async () => {
+    // Fundir as duas faria cada correção de digitação na data acordar os
+    // vizinhos outra vez — e a correção de digitação é o uso mais comum desta
+    // rota. O contrato declara `x-effects: []`, e este caso é o que o sustenta.
+    const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    await casos.atualizar(CASO, entradaPadrao(), contextoDoTutor);
+
+    assert.deepEqual(registro.enfileirados, []);
+    assert.deepEqual(registro.disparosAbertos, []);
+  });
+
+  void it('caso de OUTRO tutor responde 404, e nunca 403', async () => {
+    const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    const erro = await capturar(() =>
+      casos.atualizar(CASO, entradaPadrao(), chamador(OUTRO_TUTOR)),
+    );
+
+    assert.equal(erro.problemType, 'not-found');
+    assert.notEqual(erro.status, 403);
+  });
+
+  void it('caso ENCERRADO não se corrige: 404, o mesmo `null` do encerramento', async () => {
+    // Mexer no "visto pela última vez" de um caso encerrado alteraria o dado
+    // que a métrica de reencontro já contabilizou.
+    const { casos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+    await casos.encerrar(CASO, 'reunited', 'tag_scan', undefined, contextoDoTutor);
+
+    const erro = await capturar(() => casos.atualizar(CASO, entradaPadrao(), contextoDoTutor));
+
+    assert.equal(erro.problemType, 'not-found');
+  });
+
+  void it('a trilha registra a correção SEM coordenada no metadado', async () => {
+    const { casos, eventos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    await casos.atualizar(
+      CASO,
+      { lastSeenAt: ONTEM, lat: -23.5678901, lon: -46.6789012, city: 'São Paulo' },
+      contextoDoTutor,
+    );
+
+    const evento = eventos.find((e) => e.action === 'lost_case.updated');
+    assert.ok(evento !== undefined, 'a correção precisa aparecer na trilha');
+    assert.equal(evento.actorUserId, DONO);
+    // A trilha não guarda coordenada bruta (docs/04-seguranca.md 9).
+    assert.doesNotMatch(JSON.stringify(evento.metadata), COORDENADA);
+    assert.equal((evento.metadata as { has_location?: boolean }).has_location, true);
+  });
+});
+
+void describe('resendLostCaseAlert: reusa a máquina de disparo, uma vez por dia', () => {
+  void it('o reenvio grava o disparo e ENFILEIRA, pela mesma máquina da abertura', async () => {
+    // Uma segunda máquina aqui teria duas respostas para "quem recebe o alerta
+    // deste caso", e a do reenvio seria a que ninguém revisita.
+    const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    const disparo = await casos.reenviarAlerta(CASO, contextoDoTutor);
+
+    assert.equal(disparo.estado, 'queued');
+    assert.equal(registro.disparosAbertos.length, 1);
+    assert.deepEqual(registro.enfileirados, [{ kind: 'alert.dispatch', payload: { caseId: CASO } }]);
+  });
+
+  void it('caso SEM coordenada nasce `no_location` e NÃO é enfileirado', async () => {
+    // Critério 14 da BICHUS-18: isso não é falha de envio e não gera
+    // retentativa. Enfileirar para depois descobrir que não há centro produziria
+    // uma tentativa fracassada onde não havia o que tentar.
+    const { casos, registro } = servico({
+      caso: { dono: DONO, gravado: { ...casoAberto(), hasLocation: false } },
+    });
+
+    const disparo = await casos.reenviarAlerta(CASO, contextoDoTutor);
+
+    assert.equal(disparo.estado, 'no_location');
+    assert.deepEqual(registro.enfileirados, []);
+  });
+
+  void it('o segundo reenvio dentro de 24 h recebe 429 com prazo, e não um alerta', async () => {
+    // O teto é do CASO (critério 7 do ADR-0006), e a verdade sobre "já avisou
+    // hoje" está em `dispatched_at` — não em `requested_at`.
+    const umaHoraAtras = (Number(AGORA) - 60 * 60 * 1000) as Instant;
+    const { casos, registro } = servico({
+      caso: { dono: DONO, gravado: casoAberto() },
+      ultimoEnvio: umaHoraAtras,
+    });
+
+    const erro = await capturar(() => casos.reenviarAlerta(CASO, contextoDoTutor));
+
+    assert.equal(erro.problemType, 'rate-limited');
+    assert.equal(erro.status, 429);
+    // O prazo é o que FALTA, e não um número fixo: o app agenda o reenvio por
+    // ele, e um valor inventado agendaria algo que já nasce recusado.
+    assert.ok(
+      (erro.retryAfterSeconds ?? 0) > 22 * 3600 && (erro.retryAfterSeconds ?? 0) <= 23 * 3600,
+      `esperava ~23 h de prazo e veio ${String(erro.retryAfterSeconds)}`,
+    );
+    assert.deepEqual(registro.enfileirados, []);
+  });
+
+  void it('um disparo que ficou ENFILEIRADO e nunca saiu não gasta o direito de ninguém', async () => {
+    // `ultimoEnvio` ausente com um disparo aberto: é o caso de um `queued` de
+    // ontem que nunca virou push. Se a leitura fosse do último disparo qualquer,
+    // ele bloquearia o alerta de hoje sem nunca ter avisado uma só pessoa.
+    const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    await casos.reenviarAlerta(CASO, contextoDoTutor);
+    const segundo = await casos.reenviarAlerta(CASO, contextoDoTutor);
+
+    assert.equal(segundo.estado, 'queued');
+    assert.equal(registro.enfileirados.length, 2);
+  });
+
+  void it('caso de OUTRO tutor responde 404, e nunca 403', async () => {
+    const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    const erro = await capturar(() => casos.reenviarAlerta(CASO, chamador(OUTRO_TUTOR)));
+
+    assert.equal(erro.problemType, 'not-found');
+    assert.notEqual(erro.status, 403);
+    assert.deepEqual(registro.enfileirados, []);
+  });
+
+  void it('caso ENCERRADO não alerta ninguém: 404, e nada é enfileirado', async () => {
+    const { casos, registro } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+    await casos.encerrar(CASO, 'reunited', 'tag_scan', undefined, contextoDoTutor);
+
+    const erro = await capturar(() => casos.reenviarAlerta(CASO, contextoDoTutor));
+
+    assert.equal(erro.problemType, 'not-found');
+    assert.deepEqual(registro.enfileirados, []);
+  });
+
+  void it('o reenvio recusado não deixa rastro na trilha', async () => {
+    const umaHoraAtras = (Number(AGORA) - 60 * 60 * 1000) as Instant;
+    const { casos, eventos } = servico({
+      caso: { dono: DONO, gravado: casoAberto() },
+      ultimoEnvio: umaHoraAtras,
+    });
+
+    await capturar(() => casos.reenviarAlerta(CASO, contextoDoTutor));
+
+    assert.equal(eventos.filter((e) => e.action === 'lost_case.alert_resent').length, 0);
+  });
+
+  void it('a trilha do reenvio tem autor humano, e é SEPARADA do disparo do worker', async () => {
+    // `lost_case.alert_dispatched` é do worker e diz que o alerta SAIU.
+    // Juntá-las tornaria impossível responder quantas vezes um tutor pediu e
+    // quantas de fato saíram.
+    const { casos, eventos } = servico({ caso: { dono: DONO, gravado: casoAberto() } });
+
+    await casos.reenviarAlerta(CASO, contextoDoTutor);
+
+    const evento = eventos.find((e) => e.action === 'lost_case.alert_resent');
+    assert.ok(evento !== undefined, 'o reenvio precisa aparecer na trilha');
+    assert.equal(evento.actorKind, 'user');
+    assert.equal(evento.actorUserId, DONO);
+    assert.doesNotMatch(JSON.stringify(evento.metadata), COORDENADA);
   });
 });

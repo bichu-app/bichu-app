@@ -201,6 +201,33 @@ export interface ConversationRepository {
   contarCasosDistintosDaConta(conta: UserId, desde: Instant): Promise<number>;
 
   /**
+   * O chamador COM CONTA bloqueia a outra parte (BICHUS-40).
+   *
+   * **A assimetria que isto fecha**: `bloquearPeloAchador` já existia e estava no
+   * ar, e o lado autenticado não tinha nada — um tutor sendo extorquido no canal
+   * mediado não tinha saída. A coluna (`blocked_at`, `blocked_by_role`) já
+   * existia, e o envio já respeita o bloqueio: é só a escrita que faltava.
+   *
+   * `chamador` entra no `WHERE` da própria escrita, como em toda consulta deste
+   * arquivo. Conversa que não é dele não é bloqueada nem respondida: zero linhas,
+   * e o serviço já respondeu 404 antes (a leitura vinculada vem primeiro).
+   *
+   * **O papel NÃO vem por argumento.** Ele é derivado da mesma consulta, pelo
+   * lado em que o chamador está: recebê-lo de fora faria a escrita confiar em
+   * quem chama para dizer de que lado ele é, e `blocked_by_role` é o que diz à
+   * outra pessoa quem fechou a porta.
+   *
+   * Idempotente: `blocked_at IS NULL` no `WHERE` preserva quem bloqueou e
+   * quando. Repetir não é erro — `accept_and_deduplicate` no contrato —, e
+   * responder "já estava" contaria a quem bloqueia o que o outro lado fez.
+   */
+  bloquearPeloChamador(
+    conversa: ConversationId,
+    chamador: UserId,
+    agora: Instant,
+  ): Promise<void>;
+
+  /**
    * Marca a conversa para revisão humana. **Não notifica ninguém** (critérios
    * 10 e 11), e não muda o `status` que os dois lados leem.
    */

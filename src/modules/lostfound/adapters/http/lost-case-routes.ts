@@ -34,6 +34,10 @@ import type {
   PreviaDoCaso,
 } from '../../application/lost-case-service.js';
 import {
+  decodificarCursorDeCandidato,
+  limiteEfetivoDeCandidatos,
+} from '../../domain/paginacao-de-candidatos.js';
+import {
   centroDe,
   RAIO_DO_ALERTA_EM_METROS,
   type CentroDoAlcance,
@@ -42,11 +46,12 @@ import { rotuloDaArea } from '../../domain/abertura-do-caso.js';
 import { linksDoCaso } from '../../domain/projecao-publica-do-caso.js';
 import type { DisparoGravado } from '../../ports/registro-de-disparos.js';
 import type {
-  CandidatoDecidido,
+  CandidatoDoCaso,
   CasoGravado,
   DecisaoDoCandidato,
   DesfechoDoCaso,
   CanalDoReencontro,
+  PaginaDeCandidatos,
 } from '../../ports/lost-case-repository.js';
 import type { AbsoluteUrl, CaseId, Instant, PetId, UserId } from '../../../../shared/types/brands.js';
 
@@ -104,6 +109,69 @@ export const rotaDoCaso = defineRoute({
   method: 'get',
   path: '/lost-cases/:caseId',
   effects: [],
+});
+
+/**
+ * A correção de onde e quando (`updateLostCase`).
+ *
+ * **`effects` é vazio, e é o contrato que diz**: corrigir a data não avisa
+ * ninguém. O teto de 60/1h vem dele também, e não de uma escolha desta linha —
+ * com efeito vazio `defineRoute` torna `rateLimit` opcional, então ele está aqui
+ * porque o documento o declara.
+ *
+ * **Esta rota NÃO redispara o alerta.** O reenvio é `POST /alerts`, com teto de
+ * um por dia. Fundir as duas faria cada correção de digitação acordar os
+ * vizinhos outra vez.
+ */
+export const rotaDeAtualizacaoDoCaso = defineRoute({
+  operationId: 'updateLostCase',
+  method: 'patch',
+  path: '/lost-cases/:caseId',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 60, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * O reenvio do alerta (`resendLostCaseAlert`).
+ *
+ * **A dimensão do teto é `case`, e não `account`**, e a diferença é o produto:
+ * quem tem dois animais perdidos ao mesmo tempo precisa poder reenviar o aviso
+ * dos dois. Um teto por conta daria a ele um reenvio por dia no total, e o
+ * segundo animal ficaria sem o segundo aviso.
+ *
+ * `dimension: ['case']` estreou aqui, e é por isso que `case` entra em
+ * `DIMENSOES_CONHECIDAS` neste mesmo commit: aquela lista cresce quando uma rota
+ * que declara a dimensão passa a existir, e não quando o contrato passa a
+ * declará-la (ver o cabeçalho de `aplicacao-de-teto.ts`).
+ *
+ * O balde recebe o `caseId` em claro, pela mesma exceção declarada para
+ * `account` e `pet`: `rate_limit_counters.bucket_key` não sai em resposta
+ * nenhuma, e o resumo tornaria impossível responder qual caso bateu no teto
+ * numa investigação. O ADR-0010 proíbe UUID interno em **saída pública**.
+ */
+export const rotaDeReenvioDoAlerta = defineRoute({
+  operationId: 'resendLostCaseAlert',
+  method: 'post',
+  path: '/lost-cases/:caseId/alerts',
+  effects: ['notifies', 'expensive_query'],
+  rateLimit: [{ dimension: ['case'], limit: 1, window: '24h', onExceed: 'deny_429' }],
+});
+
+/**
+ * A lista de correspondências (`listLostCaseCandidates`).
+ *
+ * **`effects` vazio é verdade, e não economia**: o cruzamento é um job na fila, e
+ * esta operação lê `match_candidates`. O teto de 120/1h é o do contrato, e ele
+ * existe num `x-effects` vazio porque a regra é piso, não teto (§5): a tela que
+ * o tutor reabre a cada dois minutos enquanto espera é exatamente a que precisa
+ * de um teto generoso e existente.
+ */
+export const rotaDeCandidatosDoCaso = defineRoute({
+  operationId: 'listLostCaseCandidates',
+  method: 'get',
+  path: '/lost-cases/:caseId/candidates',
+  effects: [],
+  rateLimit: [{ dimension: ['account'], limit: 120, window: '1h', onExceed: 'deny_429' }],
 });
 
 export const rotaDeEncerramento = defineRoute({
@@ -230,6 +298,39 @@ function instanteDeVistoPorUltimo(bruto: unknown, agora: Instant): Instant {
     ]);
   }
   return ms as Instant;
+}
+
+/**
+ * O `caseId` do caminho, ou `undefined` quando ele não veio utilizável.
+ *
+ * `undefined` em vez de lançamento pelo mesmo motivo de `petIdDoCaminho`: ele é
+ * lido em dois lugares com significados diferentes — no resolvedor do teto, onde
+ * ausência significa "esta entrada é pulada", e no handler, onde ela vira 404.
+ * Lançar aqui recusaria a requisição de dentro de um gancho de teto.
+ *
+ * A FORMA já foi conferida contra `format: uuid` do contrato por
+ * `vigiarParametrosDasRotas`; o que sobra é o segmento ausente.
+ */
+function caseIdDoCaminho(request: FastifyRequest): CaseId | undefined {
+  const { caseId } = request.params as { caseId?: unknown };
+  if (typeof caseId !== 'string' || caseId === '') return undefined;
+  return caseId as CaseId;
+}
+
+/**
+ * A janela da lista de candidatos.
+ *
+ * `limiteEfetivoDeCandidatos` converte e prende entre 1 e 50 aqui também, e não
+ * só no schema do contrato: a rota não depende de o gancho de parâmetros estar
+ * instalado antes dela, que é o mesmo cuidado de `rotaDaConversaDoAchador`.
+ */
+function paginaDeCandidatosDaQuery(request: FastifyRequest): PaginaDeCandidatos {
+  const { cursor, limit } = request.query as { cursor?: string; limit?: number | string };
+  const posicao = decodificarCursorDeCandidato(cursor);
+  return {
+    limit: limiteEfetivoDeCandidatos(limit === undefined ? undefined : Number(limit)),
+    ...(posicao === undefined ? { depoisDe: undefined } : { depoisDe: posicao }),
+  };
 }
 
 /**
@@ -411,7 +512,7 @@ function comoRespostaDaPrevia(previa: PreviaDoCaso): Record<string, unknown> {
  * tentador, porque quem chama acabou de mandá-lo no caminho; devolvê-lo
  * começaria o agrupamento que o item 7 do ADR-0010 proíbe.
  */
-function comoRespostaDoCandidato(candidato: CandidatoDecidido): Record<string, unknown> {
+function comoRespostaDoCandidato(candidato: CandidatoDoCaso): Record<string, unknown> {
   return {
     id: candidato.id,
     found_report: {
@@ -538,6 +639,125 @@ export function registrarRotasDeCasos(
     const caso = await deps.casos.buscar(caseId as CaseId, chamador);
     return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
   });
+
+  /**
+   * `PATCH /v1/lost-cases/:caseId`.
+   *
+   * A conversão de data acontece AQUI, na borda, como na abertura: a camada de
+   * aplicação não constrói `Date`, e uma data malformada precisa virar
+   * `validation-failed` com o nome do campo antes de chegar ao serviço.
+   * `instanteDeVistoPorUltimo` é o MESMO da abertura — inclusive a recusa de
+   * data no futuro, que aqui é mais provável do que lá: corrigir a data é
+   * justamente onde o dedo escorrega para o mês que vem.
+   */
+  registrarRota(
+    app,
+    rotaDeAtualizacaoDoCaso,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeAtualizacaoDoCaso.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await donoAutenticado(request, deps);
+      const caseId = caseIdDoCaminho(request);
+      if (caseId === undefined) throw problemas.naoEncontrado();
+
+      const corpo = request.body as {
+        last_seen_at: string;
+        last_seen_location?: { lat: number; lon: number };
+        last_seen_area?: { city: string; neighborhood?: string; state?: string };
+        description?: string;
+        share_to_public_list?: boolean;
+      };
+
+      const caso = await deps.casos.atualizar(
+        caseId,
+        {
+          lastSeenAt: instanteDeVistoPorUltimo(corpo.last_seen_at, deps.clock.now()),
+          lat: corpo.last_seen_location?.lat,
+          lon: corpo.last_seen_location?.lon,
+          city: corpo.last_seen_area?.city,
+          neighborhood: corpo.last_seen_area?.neighborhood,
+          state: corpo.last_seen_area?.state,
+          description: corpo.description,
+          shareToPublicList: corpo.share_to_public_list,
+        },
+        chamador,
+      );
+      return reply.status(200).send(comoRespostaDoCaso(caso, deps.baseDaWeb));
+    },
+  );
+
+  /**
+   * `POST /v1/lost-cases/:caseId/alerts` — 202, e não 201.
+   *
+   * O contrato declara `202` com `AlertDispatch`, e ele está certo: **a API
+   * enfileira e o worker envia** (ADR-0001). Um 201 prometeria que o alerta
+   * saiu; o que saiu foi o pedido, e `reach_status: queued` é o que a tela
+   * precisa dizer.
+   *
+   * **Sem `Idempotency-Key`**, porque o contrato não o declara nesta operação — e
+   * ele não é necessário aqui: o teto de um por caso por dia já faz o reenvio em
+   * rajada da fila offline ser inofensivo, e a segunda chamada recebe 429 em vez
+   * de um segundo alerta.
+   */
+  registrarRota(
+    app,
+    rotaDeReenvioDoAlerta,
+    {
+      resolvedores: {
+        // O `caseId` em claro no balde: ver o cabeçalho de `rotaDeReenvioDoAlerta`.
+        case: (request) => caseIdDoCaminho(request),
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await donoAutenticado(request, deps);
+      const caseId = caseIdDoCaminho(request);
+      if (caseId === undefined) throw problemas.naoEncontrado();
+
+      const disparo = await deps.casos.reenviarAlerta(caseId, chamador);
+      // `comoRespostaDoAlerta` precisa do caso só para o par
+      // `queued`/`no_location` do caso antigo sem linha de disparo, e aqui a
+      // linha ACABOU de ser gravada. Montar a resposta a partir do disparo é o
+      // caminho sem o ramo de `alerta === null`, que não acontece neste fluxo.
+      return reply.status(202).send({
+        reach_status: disparo.estado,
+        recipients_total: disparo.destinatarios,
+        radius_m: disparo.raioEmMetros,
+        dispatched_at: disparo.enviadoEm === null ? null : disparo.enviadoEm.toISOString(),
+      });
+    },
+  );
+
+  /**
+   * `GET /v1/lost-cases/:caseId/candidates` — a lista que faltava.
+   *
+   * **`CandidatePage`, e os dois campos que ele declara.** `items` e
+   * `next_cursor`, montados campo a campo: um espalhamento publicaria `caseId`,
+   * `petId` e `relatorUserId`, que existem do lado de dentro porque confirmar
+   * abre a conversa — e o portão de contrato só procura o que SUMIU, então
+   * propriedade a mais passa por ele.
+   */
+  registrarRota(
+    app,
+    rotaDeCandidatosDoCaso,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await donoAutenticado(request, deps);
+      const caseId = caseIdDoCaminho(request);
+      if (caseId === undefined) throw problemas.naoEncontrado();
+
+      const pagina = await deps.casos.candidatos(
+        caseId,
+        chamador,
+        paginaDeCandidatosDaQuery(request),
+      );
+      return reply.status(200).send({
+        items: pagina.items.map(comoRespostaDoCandidato),
+        next_cursor: pagina.nextCursor,
+      });
+    },
+  );
 
   registrarRota(
     app,

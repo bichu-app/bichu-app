@@ -14,13 +14,16 @@
  * volta a existir e passa a depender de uma verificação de vínculo bem escrita.
  * Aqui ela não existe para ser verificada.
  *
- * ## O que ficou para a BICHUS-40 e para a BICHUS-41
+ * ## O bloqueio e a denúncia do lado COM CONTA
  *
- * `POST /conversations/{id}/block` e `/report` são da **BICHUS-40** e não são
- * registrados aqui. O modelo de dados já os comporta (`blocked_at` e
- * `blocked_by_role` na migração), e o envio já respeita o bloqueio: quando
- * aquelas rotas escreverem a coluna, a conversa passa a modo leitura sem este
- * arquivo mudar uma linha.
+ * `POST /conversations/{id}/block` e `/report` **são registrados aqui**, e com
+ * isso a assimetria de segurança fecha: o achador sem conta tinha as duas no ar
+ * e o lado autenticado não tinha nenhuma — um tutor sendo extorquido no canal
+ * mediado não tinha saída.
+ *
+ * Nada de desenho novo: a coluna (`blocked_at`, `blocked_by_role`) já existia, o
+ * envio já recusa conversa bloqueada, e o índice parcial de denúncia aberta por
+ * lado já deduplicava. O que faltava eram as duas escritas e estas duas rotas.
  *
  * As quatro rotas `/v1/finder/conversation/*` são da **BICHUS-41**, que está
  * travada por decisão do cliente sobre onde moram as páginas públicas. O que
@@ -50,7 +53,11 @@ import type {
   ConversaVisivel,
   ConversationService,
 } from '../../application/conversation-service.js';
-import type { MensagemGravada, Pagina } from '../../ports/conversation-repository.js';
+import type {
+  MensagemGravada,
+  MotivoDaDenuncia,
+  Pagina,
+} from '../../ports/conversation-repository.js';
 import { decodificarCursor, limiteEfetivo } from '../../domain/paginacao.js';
 import type { ConversationId, UserId } from '../../../../shared/types/brands.js';
 
@@ -97,6 +104,68 @@ export const rotaDeEnvioDeMensagem = defineRoute({
       limit: 3,
       window: '24h',
       onExceed: 'hold_for_review',
+    },
+  ],
+});
+
+/**
+ * O bloqueio (`blockConversation`).
+ *
+ * **`effects` é vazio e o teto existe**, e as duas coisas vêm do contrato: a
+ * regra de `x-effects` é piso, não teto (§5). Bloquear não notifica ninguém — a
+ * outra pessoa descobre quando tenta escrever —, e o teto de 20/24 h está lá
+ * para o caso degenerado, não para recusar.
+ *
+ * **`accept_and_deduplicate` NÃO recusa** (`aplicacao-de-teto.ts`: só `deny_429`
+ * recusa). É deliberado: bloquear é a ação que a pessoa executa com medo, e
+ * responder com texto sobre limite de chamadas a quem está se protegendo não
+ * protege nada. A idempotência verdadeira é do `WHERE` da escrita
+ * (`blocked_at IS NULL`), e não deste contador.
+ *
+ * A dimensão é `account` e não `conversation_participant`: quem bloqueia bloqueia
+ * uma vez por conversa, e um teto por participante nunca encostaria em nada.
+ */
+export const rotaDeBloqueioDaConversa = defineRoute({
+  operationId: 'blockConversation',
+  method: 'post',
+  path: '/conversations/:conversationId/block',
+  effects: [],
+  rateLimit: [
+    { dimension: ['account'], limit: 20, window: '24h', onExceed: 'accept_and_deduplicate' },
+  ],
+});
+
+/**
+ * A denúncia (`reportConversation`).
+ *
+ * **Os dois tetos são os do contrato, e nenhum dos dois recusa.**
+ *
+ * - `account 3/24h accept_and_deduplicate`: a denúncia carrega a conversa
+ *   inteira, então a quarta não acrescenta prova — mas RECUSAR é inaceitável.
+ *   Quem toca em Denunciar a cada mensagem está com medo. A deduplicação de
+ *   verdade acontece no banco, no índice parcial de denúncia aberta por lado.
+ * - `report_target` com `counts: distinct_identities`: é a dimensão que pega
+ *   denúncia em laço, que é o ataque do concorrente — muitos denunciantes contra
+ *   o mesmo alvo. `raise_queue_priority` eleva a prioridade na fila e **NUNCA
+ *   age sobre o alvo**. Esta porta não aplica `distinct_identities`, e a subida a
+ *   lista no inventário com o motivo; o resolvedor existe para a declaração ter
+ *   dono, como no lado do achador.
+ *
+ * `human_work` é verdade e precisa estar declarado: alguém vai ler isso.
+ */
+export const rotaDeDenunciaDaConversa = defineRoute({
+  operationId: 'reportConversation',
+  method: 'post',
+  path: '/conversations/:conversationId/report',
+  effects: ['human_work'],
+  rateLimit: [
+    { dimension: ['account'], limit: 3, window: '24h', onExceed: 'accept_and_deduplicate' },
+    {
+      dimension: ['report_target'],
+      counts: 'distinct_identities',
+      limit: 3,
+      window: '24h',
+      onExceed: 'raise_queue_priority',
     },
   ],
 });
@@ -330,6 +399,73 @@ export function registrarRotasDeConversas(
       );
 
       return reply.status(resposta.status).send(resposta.body);
+    },
+  );
+
+  /**
+   * `POST /v1/conversations/:conversationId/block` — 204, sem corpo.
+   *
+   * O contrato declara `204`, e ele está certo: não há nada de útil para
+   * devolver. Devolver a conversa em `blocked` convidaria a tela a decidir pelo
+   * corpo em vez de recarregar, e a próxima leitura já diz a verdade.
+   *
+   * **Sem corpo de requisição**, porque o contrato não declara nenhum: quem
+   * bloqueia bloqueia a outra parte, e não há segunda escolha a fazer.
+   */
+  registrarRota(
+    app,
+    rotaDeBloqueioDaConversa,
+    { resolvedores: { account: (request) => contaDoTeto(request, deps) } },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      await deps.conversas.bloquear(conversaDoCaminho(request), chamador);
+      return reply.status(204).send();
+    },
+  );
+
+  /**
+   * `POST /v1/conversations/:conversationId/report` — 202 `Accepted`.
+   *
+   * 202 e não 200 porque nada foi decidido: a denúncia entrou na fila de quem
+   * modera. O corpo é o `Accepted` do contrato (`status: accepted`), igual ao do
+   * lado do achador.
+   *
+   * O resolvedor de `report_target` engole a falha e devolve `undefined` pelo
+   * mesmo motivo do lado do achador: conversa que não é do chamador não conta
+   * ninguém no teto, e a recusa dela é o 404 do handler — não um 429 que
+   * esconderia o motivo verdadeiro.
+   */
+  registrarRota(
+    app,
+    rotaDeDenunciaDaConversa,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeDenunciaDaConversa.operationId) },
+      resolvedores: {
+        account: (request) => contaDoTeto(request, deps),
+        report_target: async (request) => {
+          const { conversationId } = request.params as { conversationId?: string };
+          if (typeof conversationId !== 'string' || conversationId === '') return undefined;
+          try {
+            return await deps.conversas.alvoDaDenuncia(
+              conversationId as ConversationId,
+              await chamadorAutenticado(request, deps),
+            );
+          } catch {
+            return undefined;
+          }
+        },
+      },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const chamador = await chamadorAutenticado(request, deps);
+      const corpo = request.body as { reason: MotivoDaDenuncia; detail?: string };
+      await deps.conversas.denunciar(
+        conversaDoCaminho(request),
+        corpo.reason,
+        corpo.detail,
+        chamador,
+      );
+      return reply.status(202).send({ status: 'accepted' });
     },
   );
 }

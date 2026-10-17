@@ -172,6 +172,7 @@ function bancada(cenario: Cenario = {}): Bancada {
       if (!eDoToken(resumo)) return Promise.resolve([]);
       return Promise.resolve(historico.slice(pagina.deslocamento, pagina.deslocamento + pagina.limit));
     },
+    bloquearPeloChamador: () => Promise.reject(new Error('esta bancada é só do achador sem conta')),
     bloquearPeloAchador: (resumo, agora) => {
       argumentos.push(resumo, agora);
       bloqueios.push(agora);

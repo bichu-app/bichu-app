@@ -95,8 +95,23 @@ export type AuditAction =
   | 'tag.issued'
   | 'tag.revoked'
   | 'lost_case.opened'
+  /**
+   * O tutor corrigiu ONDE e QUANDO o pet foi visto (`PATCH /v1/lost-cases/{id}`).
+   * O metadado carrega `has_location`, nunca a coordenada: a trilha não guarda
+   * coordenada bruta (docs/04-seguranca.md 9). Separada de `lost_case.opened`
+   * porque a pergunta de investigação é outra — "o alerta saiu para o lugar
+   * certo?" depende de saber se o lugar mudou depois do disparo.
+   */
+  | 'lost_case.updated'
   | 'lost_case.closed'
   | 'lost_case.alert_dispatched'
+  /**
+   * O tutor pediu o REENVIO do alerta (`POST /v1/lost-cases/{id}/alerts`).
+   * Separada de `lost_case.alert_dispatched`, que é do worker e diz que o alerta
+   * SAIU: esta diz que ele foi pedido, e é a única que tem autor humano. Juntá-las
+   * tornaria impossível responder quantas vezes um tutor pediu e quantas saíram.
+   */
+  | 'lost_case.alert_resent'
   | 'match.candidate_decided'
   /** BICHUS-43. A conversa nasceu de um aviso. Ator anônimo quando o achador não tem conta. */
   | 'conversation.opened'
