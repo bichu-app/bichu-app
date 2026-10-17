@@ -163,6 +163,9 @@ interface LinhaDoItem {
   title: string;
   summary: string;
   category: CategoriaDaVitrine;
+  category_label: string;
+  subcategory: string | null;
+  subcategory_label: string | null;
   target_path: string;
   target_host: string | null;
   image_path: string | null;
@@ -251,6 +254,11 @@ function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo
     title: l.title,
     summary: l.summary,
     category: l.category,
+    categoryLabel: l.category_label,
+    subcategory: l.subcategory,
+    // Mesma regra da leitura publica: sem subcategoria nao ha rotulo, e rotulo
+    // de linha inativa nao e inventado aqui.
+    subcategoryLabel: l.subcategory === null ? null : l.subcategory_label,
     // A MESMA resolucao da leitura publica: o painel precisa mostrar o link
     // com `www.` quando foi `www.` que a pessoa cadastrou.
     targetUrl: enderecoNoParceiro(
@@ -274,6 +282,16 @@ function consultaDeItens(db: DbExecutor) {
   return db
     .selectFrom('store_items as i')
     .innerJoin('store_partners as p', 'p.id', 'i.partner_id')
+    // Interna para a categoria (a chave estrangeira garante a linha), externa
+    // para a subcategoria (a coluna e opcional). As MESMAS juncoes da leitura
+    // publica, para "vencido" e "rotulo" nao quererem dizer coisas diferentes
+    // no app e no painel.
+    .innerJoin('store_categories as c', 'c.code', 'i.category')
+    .leftJoin('store_subcategories as sc', (juncao) =>
+      juncao
+        .onRef('sc.category_code', '=', 'i.category')
+        .onRef('sc.code', '=', 'i.subcategory'),
+    )
     .select([
       'i.id as id',
       'i.slug as slug',
@@ -283,6 +301,9 @@ function consultaDeItens(db: DbExecutor) {
       'i.title as title',
       'i.summary as summary',
       'i.category as category',
+      'c.label as category_label',
+      'i.subcategory as subcategory',
+      'sc.label as subcategory_label',
       'i.target_path as target_path',
       'i.target_host as target_host',
       'i.image_path as image_path',
@@ -385,6 +406,8 @@ export function construtorDaListagemDoPainel(db: DbExecutor, recorte: RecorteDeI
     );
   }
   if (recorte.category !== undefined) consulta = consulta.where('i.category', '=', recorte.category);
+  if (recorte.subcategory !== undefined)
+    consulta = consulta.where('i.subcategory', '=', recorte.subcategory);
   if (recorte.partnerSlug !== undefined) consulta = consulta.where('p.slug', '=', recorte.partnerSlug);
 
   if (recorte.species !== undefined) {
@@ -497,6 +520,38 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
 
     itemPorSlug: (slug) => itemPorSlug(trx, slug),
 
+    async conferirClassificacao(categoria, subcategoria) {
+      const categoriaAtiva =
+        (await trx
+          .selectFrom('store_categories')
+          .select('code')
+          .where('code', '=', categoria)
+          .where('active', '=', true)
+          .executeTakeFirst()) !== undefined;
+
+      // Sem subcategoria a conferir, nenhuma segunda consulta: perguntar por
+      // `null` traria a lista inteira para ser descartada.
+      if (subcategoria === null) {
+        return { categoriaAtiva, subcategoriaNaCategoria: false, subcategoriaEmAlgumaCategoria: false };
+      }
+
+      // Uma consulta pelo CODIGO, sem a categoria no filtro, e depois a
+      // comparacao aqui: e o que permite distinguir "e de outra categoria" de
+      // "nao existe", e sao duas mensagens diferentes na tela do painel.
+      const encontradas = await trx
+        .selectFrom('store_subcategories')
+        .select('category_code')
+        .where('code', '=', subcategoria)
+        .where('active', '=', true)
+        .execute();
+
+      return {
+        categoriaAtiva,
+        subcategoriaNaCategoria: encontradas.some((l) => l.category_code === categoria),
+        subcategoriaEmAlgumaCategoria: encontradas.length > 0,
+      };
+    },
+
     async inserirItem(novo: NovoItem) {
       const agora = new Date(novo.agora);
       await comSlugTraduzido<void>('store_item', INDICE_DO_ITEM)(async () => {
@@ -509,6 +564,7 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             title: novo.title,
             summary: novo.summary,
             category: novo.category,
+            subcategory: novo.subcategory,
             image_path: null,
             target_path: caminhoDoDestino(novo.targetUrl),
             // Nulo quando o host e o do proprio parceiro, que e o caso comum.
@@ -542,6 +598,10 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             ...(mudanca.title === undefined ? {} : { title: mudanca.title }),
             ...(mudanca.summary === undefined ? {} : { summary: mudanca.summary }),
             ...(mudanca.category === undefined ? {} : { category: mudanca.category }),
+            // `undefined` preserva, `null` apaga. O `in` e a unica forma de
+            // distinguir os dois numa propriedade opcional que admite nulo:
+            // `=== undefined` trataria `null` como "nao mexe".
+            ...('subcategory' in mudanca ? { subcategory: mudanca.subcategory ?? null } : {}),
             // Os dois andam JUNTOS: gravar o caminho novo com o host antigo
             // levaria a pessoa para o caminho novo no dominio errado.
             ...(mudanca.destino === undefined

@@ -1012,8 +1012,50 @@ export interface EntityVerificationsTable {
   created_at: CriadoEm;
 }
 
-/** Espelha `CategoriaDaVitrine` de `modules/store/domain/item-da-vitrine.ts`. */
-export type CategoriaDaVitrine = 'food' | 'toy' | 'hygiene' | 'accessory' | 'health' | 'bed';
+/**
+ * O codigo da categoria do produto. **Texto, e nao uniao de literais**, desde a
+ * `20261017000003`: a lista fechada mora em `store_categories` e quem a fecha e
+ * a chave estrangeira de `store_items.category`, nao mais um `CHECK`.
+ */
+export type CategoriaDaVitrine = string;
+
+/**
+ * O primeiro nivel da categoria do produto (migracao `20261017000003`).
+ *
+ * Forma copiada de `ref_species`/`ref_breeds`: codigo com formato, rotulo,
+ * ordem e `active`. Categoria retirada fica INATIVA, nunca apagada -- apagar
+ * arrastaria os itens pela chave estrangeira.
+ */
+export interface StoreCategoriesTable {
+  code: string;
+  label: string;
+  sort_order: number;
+  active: Generated<boolean>;
+}
+
+/**
+ * O segundo nivel. A chave primaria e o PAR `(category_code, code)`, e e esse
+ * par que `store_items (category, subcategory)` referencia: "a subcategoria
+ * pertence a categoria escolhida" e invariante de banco.
+ */
+export interface StoreSubcategoriesTable {
+  category_code: string;
+  code: string;
+  label: string;
+  sort_order: number;
+  active: Generated<boolean>;
+}
+
+/**
+ * Para que especies cada subcategoria foi LEVANTADA. A arvore de 17/10 e a de
+ * cachorro da petlove, entao toda linha e `dog`; gato, passaro, peixe e outros
+ * ficaram de fora e entram aqui por semente, sem migracao de forma.
+ */
+export interface StoreSubcategorySpeciesTable {
+  category_code: string;
+  code: string;
+  species_code: 'dog' | 'cat' | 'other';
+}
 
 /**
  * A versao corrente da vitrine da `Loja`. Mesma forma de `ref_data_versions`.
@@ -1060,6 +1102,14 @@ export interface StoreItemsTable {
   title: string;
   summary: string;
   category: CategoriaDaVitrine;
+  /**
+   * O segundo nivel, OPCIONAL. Nulo e estado normal.
+   *
+   * A chave estrangeira e composta com `category` e `MATCH SIMPLE`: nula aqui,
+   * a restricao nao e cobrada; preenchida, o par tem de existir em
+   * `store_subcategories`.
+   */
+  subcategory: string | null;
   /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
   image_path: string | null;
   /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
@@ -1331,6 +1381,9 @@ export interface Database {
   entity_verifications: EntityVerificationsTable;
   store_catalog_versions: StoreCatalogVersionsTable;
   store_partners: StorePartnersTable;
+  store_categories: StoreCategoriesTable;
+  store_subcategories: StoreSubcategoriesTable;
+  store_subcategory_species: StoreSubcategorySpeciesTable;
   store_items: StoreItemsTable;
   catalog_images: CatalogImagesTable;
   store_item_species: StoreItemSpeciesTable;

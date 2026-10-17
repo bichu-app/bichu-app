@@ -576,3 +576,139 @@ void describe('escrita administrativa da Loja', () => {
     });
   });
 });
+
+/**
+ * Os DOIS NIVEIS da categoria (decisao do cliente de 17/10/2026: "dois
+ * niveis, com subcategorias como a petlove").
+ *
+ * ## A isca que importa aqui
+ *
+ * A categoria deixou de ser `enum` do contrato. Antes, valor desconhecido
+ * morria no esquema de corpo, e o caso de uso nunca o via. Agora quem recusa e
+ * o caso de uso, lendo o vocabulario DENTRO da transacao -- e, se ele nao
+ * recusar, a chave estrangeira composta do banco recusa e o painel recebe erro
+ * de integridade onde esperava erro de campo.
+ *
+ * O caso que mais importa e o ultimo: **trocar a categoria sem mandar a
+ * subcategoria**. A gravada pertence a categoria antiga, e deixa-la para tras
+ * grava o par que o banco nao admite.
+ */
+void describe('categoria e subcategoria, os dois niveis', () => {
+  let m: ReturnType<typeof montar>;
+  beforeEach(async () => {
+    m = montar();
+    await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+  });
+
+  void it('cria sem subcategoria: estado valido, e o campo sai nulo', async () => {
+    const i = await m.catalogo.criarItem(AUTOR, ITEM);
+    assert.equal(i.recurso.category, 'food');
+    assert.equal(i.recurso.category_label, 'Rações');
+    assert.equal(i.recurso.subcategory, null);
+    assert.equal(i.recurso.subcategory_label, null);
+  });
+
+  void it('cria com subcategoria da categoria: os dois niveis gravados, com rotulo', async () => {
+    const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
+    assert.equal(i.recurso.subcategory, 'racao_seca');
+    assert.equal(i.recurso.subcategory_label, 'Ração seca');
+  });
+
+  void it('categoria fora do vocabulario: 400 `unknown_category`, e nada e gravado', async () => {
+    await assert.rejects(
+      () => m.catalogo.criarItem(AUTOR, { ...ITEM, category: 'areia' }),
+      (erro: unknown) => {
+        assert.equal(tipo(erro), 'validation-failed');
+        assert.deepEqual(codigos(erro), ['unknown_category']);
+        return true;
+      },
+    );
+    assert.equal(m.estado().itens.size, 0);
+  });
+
+  void it('subcategoria de OUTRA categoria: 400 `subcategory_not_in_category`', async () => {
+    await assert.rejects(
+      // `bifinhos` existe no vocabulario, e e de `treats`.
+      () => m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'bifinhos' }),
+      (erro: unknown) => {
+        assert.deepEqual(codigos(erro), ['subcategory_not_in_category']);
+        return true;
+      },
+    );
+    assert.equal(m.estado().itens.size, 0);
+  });
+
+  void it('subcategoria inexistente: 400 `unknown_subcategory`', async () => {
+    await assert.rejects(
+      () => m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'arranhador' }),
+      (erro: unknown) => {
+        assert.deepEqual(codigos(erro), ['unknown_subcategory']);
+        return true;
+      },
+    );
+  });
+
+  void it('alterar manda `null`: a subcategoria sai, e a categoria fica', async () => {
+    const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
+    const limpo = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, { subcategory: null });
+    assert.equal(limpo.recurso.subcategory, null);
+    assert.equal(limpo.recurso.category, 'food');
+  });
+
+  void it('alterar SEM mandar subcategoria preserva a gravada', async () => {
+    // Ausente nao e `null`: editar o titulo nao pode apagar a classificacao.
+    const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
+    const editado = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, {
+      title: 'Racao 10 kg',
+    });
+    assert.equal(editado.recurso.subcategory, 'racao_seca');
+  });
+
+  void it('ISCA: trocar a CATEGORIA sem mandar a subcategoria e 400, nao gravacao incoerente', async () => {
+    const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
+    await assert.rejects(
+      () => m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, { category: 'treats' }),
+      (erro: unknown) => {
+        assert.deepEqual(codigos(erro), ['subcategory_not_in_category']);
+        return true;
+      },
+    );
+    // Nada mudou: nem a categoria, nem a versao.
+    const atual = await m.catalogo.lerItem(ITEM.slug);
+    assert.equal(atual.recurso.category, 'food');
+    assert.equal(atual.recurso.subcategory, 'racao_seca');
+    assert.equal(atual.recurso.version, i.recurso.version);
+  });
+
+  void it('trocar categoria E subcategoria juntas, para um par coerente: passa', async () => {
+    const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
+    const trocado = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, {
+      category: 'treats',
+      subcategory: 'bifinhos',
+    });
+    assert.equal(trocado.recurso.category, 'treats');
+    assert.equal(trocado.recurso.subcategory, 'bifinhos');
+    assert.equal(trocado.recurso.subcategory_label, 'Bifinhos');
+  });
+
+  void it('trocar para categoria SEM arvore levantada, limpando a subcategoria: passa', async () => {
+    // `bed` nao tem subcategoria no recorte do dublê, e e assim que 11 das 14
+    // categorias ficam para gato, passaro, peixe e outros ate a arvore vir.
+    const i = await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
+    const trocado = await m.catalogo.alterarItem(AUTOR, ITEM.slug, i.etag, {
+      category: 'bed',
+      subcategory: null,
+    });
+    assert.equal(trocado.recurso.category, 'bed');
+    assert.equal(trocado.recurso.subcategory, null);
+  });
+
+  void it('o retrato da trilha carrega os dois niveis', async () => {
+    // A trilha e o que responde "o que mudou" depois. Sem a subcategoria nela,
+    // uma reclassificacao de segundo nivel seria uma escrita sem rastro.
+    await m.catalogo.criarItem(AUTOR, { ...ITEM, subcategory: 'racao_seca' });
+    const depois = m.estado().trilha.at(-1)?.after;
+    assert.equal(depois?.['category'], 'food');
+    assert.equal(depois?.['subcategory'], 'racao_seca');
+  });
+});

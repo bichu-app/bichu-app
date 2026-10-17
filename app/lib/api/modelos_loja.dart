@@ -16,26 +16,126 @@
 /// exatamente a razao de a regra morar no servidor.
 library;
 
-/// `#/components/schemas/StoreCategory` do contrato.
-enum CategoriaDaLoja {
-  alimento('food', 'Alimentação'),
-  brinquedo('toy', 'Brinquedo'),
-  higiene('hygiene', 'Higiene'),
-  acessorio('accessory', 'Acessório'),
-  saude('health', 'Saúde'),
-  cama('bed', 'Cama e conforto');
+/// Os rotulos que ESTE binario carrega para as seis categorias antigas.
+///
+/// ## Por que ele existe, e por que nao e a lista de categorias
+///
+/// Ate 17/10/2026 a categoria era um `enum` de seis valores no contrato, e
+/// este arquivo guardava os seis rotulos num `enum` Dart. O cliente decidiu
+/// dois niveis com subcategorias como a petlove: 14 categorias e 83
+/// subcategorias, e a lista virou DADO -- ela mora em `store_categories` e sai
+/// por `GET /v1/store/taxonomy`, com o rotulo de cada uma.
+///
+/// Este mapa sobrou como **rede de seguranca de uma versao so**: a resposta
+/// agora traz `category_label`, e e ele que a tela mostra. Quando o campo
+/// faltar -- servidor mais antigo que o aplicativo, que e o caso de um
+/// aparelho que atualizou antes do deploy --, o rotulo cai para cá, e so para
+/// os seis codigos que existiam antes. Codigo novo sem `category_label` nao
+/// ganha rotulo inventado: a tela simplesmente nao escreve a linha.
+///
+/// **Os rotulos aqui sao os ANTIGOS, de proposito.** `food` passou a se chamar
+/// "Rações" no vocabulario do servidor; este mapa continua dizendo
+/// "Alimentação" porque e o que este binario mostrava, e inventar o rotulo
+/// novo aqui faria a tela afirmar um vocabulario que ela nao leu.
+const Map<String, String> rotulosLegadosDaCategoria = <String, String>{
+  'food': 'Alimentação',
+  'toy': 'Brinquedo',
+  'hygiene': 'Higiene',
+  'accessory': 'Acessório',
+  'health': 'Saúde',
+  'bed': 'Cama e conforto',
+};
 
-  const CategoriaDaLoja(this.codigo, this.rotulo);
+/// Uma subcategoria do vocabulario (`StoreTaxonomySubcategory`).
+class SubcategoriaDaLoja {
+  const SubcategoriaDaLoja({required this.codigo, required this.rotulo});
 
   final String codigo;
   final String rotulo;
 
-  static CategoriaDaLoja? porCodigo(String? codigo) {
+  static SubcategoriaDaLoja? doJson(Object? bruto) {
+    if (bruto is! Map<String, dynamic>) return null;
+    final codigo = bruto['code'];
+    final rotulo = bruto['label'];
+    if (codigo is! String || rotulo is! String) return null;
+    return SubcategoriaDaLoja(codigo: codigo, rotulo: rotulo);
+  }
+}
+
+/// Uma categoria do vocabulario, com as subcategorias dela (`StoreTaxonomyCategory`).
+///
+/// A subcategoria chega DENTRO da categoria, como o contrato a aninha: duas
+/// listas irmas obrigariam esta tela a cruzar `category_code` por conta
+/// propria, e e justamente essa relacao que o `enum` nao sabia expressar.
+class CategoriaDaLoja {
+  const CategoriaDaLoja({
+    required this.codigo,
+    required this.rotulo,
+    required this.subcategorias,
+  });
+
+  final String codigo;
+  final String rotulo;
+
+  /// **Vazia e estado normal.** A arvore de 17/10 e a de CACHORRO; categoria
+  /// cuja arvore ainda nao foi levantada nao oferece segundo nivel.
+  final List<SubcategoriaDaLoja> subcategorias;
+
+  static CategoriaDaLoja? doJson(Object? bruto) {
+    if (bruto is! Map<String, dynamic>) return null;
+    final codigo = bruto['code'];
+    final rotulo = bruto['label'];
+    if (codigo is! String || rotulo is! String) return null;
+    final brutas = bruto['subcategories'];
+    return CategoriaDaLoja(
+      codigo: codigo,
+      rotulo: rotulo,
+      subcategorias: <SubcategoriaDaLoja>[
+        if (brutas is List)
+          for (final b in brutas)
+            if (SubcategoriaDaLoja.doJson(b) case final SubcategoriaDaLoja s) s,
+      ],
+    );
+  }
+}
+
+/// O vocabulario dos dois niveis (`GET /v1/store/taxonomy`).
+class TaxonomiaDaLoja {
+  const TaxonomiaDaLoja({required this.categorias});
+
+  static const TaxonomiaDaLoja vazia = TaxonomiaDaLoja(categorias: <CategoriaDaLoja>[]);
+
+  final List<CategoriaDaLoja> categorias;
+
+  CategoriaDaLoja? porCodigo(String? codigo) {
     if (codigo == null) return null;
-    for (final c in CategoriaDaLoja.values) {
+    for (final c in categorias) {
       if (c.codigo == codigo) return c;
     }
     return null;
+  }
+
+  /// As subcategorias da categoria escolhida, **e so dela**.
+  ///
+  /// Sem categoria escolhida a lista e vazia, e o grupo de filtro do segundo
+  /// nivel nao aparece: oferecer as 83 de uma vez devolveria a pessoa ao
+  /// problema que os dois niveis existem para resolver.
+  List<SubcategoriaDaLoja> subcategoriasDe(String? categoria) {
+    if (categoria == null) return <SubcategoriaDaLoja>[];
+    return porCodigo(categoria)?.subcategorias ?? <SubcategoriaDaLoja>[];
+  }
+
+  static TaxonomiaDaLoja doJson(Map<String, dynamic> json) {
+    final brutas = json['categories'];
+    if (brutas is! List) {
+      throw const FormatException('resposta da taxonomia sem `categories`');
+    }
+    return TaxonomiaDaLoja(
+      categorias: <CategoriaDaLoja>[
+        for (final b in brutas)
+          if (CategoriaDaLoja.doJson(b) case final CategoriaDaLoja c) c,
+      ],
+    );
   }
 }
 
@@ -102,6 +202,9 @@ class ItemDaLoja {
     required this.titulo,
     required this.resumo,
     required this.categoria,
+    required this.rotuloDaCategoria,
+    required this.subcategoria,
+    required this.rotuloDaSubcategoria,
     required this.urlDaImagem,
     required this.urlDeDestino,
     required this.parceiro,
@@ -113,7 +216,24 @@ class ItemDaLoja {
   final String slug;
   final String titulo;
   final String resumo;
-  final CategoriaDaLoja? categoria;
+  /// O CODIGO da categoria, como o servidor o mandou. Nulo so se a resposta
+  /// vier sem o campo.
+  final String? categoria;
+
+  /// O rotulo da categoria, **lido da resposta** (`category_label`).
+  ///
+  /// Nulo quando nem a resposta nem [rotulosLegadosDaCategoria] sabem dizer, e
+  /// nesse caso a linha de classificacao nao e desenhada. **A tela nunca mostra
+  /// o codigo cru**: `treats` na tela nao e um rotulo, e um codigo vazando
+  /// parece defeito.
+  final String? rotuloDaCategoria;
+
+  /// O codigo do segundo nivel. Nulo e estado normal: a subcategoria e opcional.
+  final String? subcategoria;
+
+  /// O rotulo do segundo nivel. Nulo junto com [subcategoria].
+  final String? rotuloDaSubcategoria;
+
   final String? urlDaImagem;
   final String urlDeDestino;
   final ParceiroDaLoja parceiro;
@@ -183,6 +303,20 @@ class ItemDaLoja {
     return '$valor · preço de referência, consultado em ${dataCurta(data)}';
   }
 
+  /// A linha de classificacao do cartao: "Rações · Ração seca".
+  ///
+  /// **Uma string so, e nao dois campos**, pela mesma razao de
+  /// [linhaDoPreco]: dois getters separados permitiriam que alguem desenhasse
+  /// so o segundo nivel, e "Ração seca" sozinho nao diz de que categoria e.
+  ///
+  /// Nula quando nao ha rotulo de categoria -- e a tela nao desenha a linha.
+  String? get linhaDaClassificacao {
+    final categoria = rotuloDaCategoria;
+    if (categoria == null) return null;
+    final sub = rotuloDaSubcategoria;
+    return sub == null ? categoria : '$categoria · $sub';
+  }
+
   static ItemDaLoja doJson(Map<String, dynamic> json) {
     final slug = json['slug'];
     final titulo = json['title'];
@@ -194,11 +328,26 @@ class ItemDaLoja {
     final preco = json['price_amount'];
     final data = json['price_checked_at'];
     final imagem = json['image_url'];
+    final codigo = json['category'] is String ? json['category'] as String : null;
+    final rotuloDaCategoria = json['category_label'];
+    final subcategoria = json['subcategory'];
+    final rotuloDaSubcategoria = json['subcategory_label'];
     return ItemDaLoja(
       slug: slug,
       titulo: titulo,
       resumo: resumo,
-      categoria: CategoriaDaLoja.porCodigo(json['category'] as String?),
+      categoria: codigo,
+      // O rotulo vem da RESPOSTA; o mapa deste binario e so a rede de
+      // seguranca para servidor que ainda nao manda `category_label`.
+      rotuloDaCategoria: rotuloDaCategoria is String
+          ? rotuloDaCategoria
+          : (codigo == null ? null : rotulosLegadosDaCategoria[codigo]),
+      subcategoria: subcategoria is String ? subcategoria : null,
+      // Rotulo de subcategoria sem o codigo dela nao e desenhado: seria um
+      // segundo nivel que a lista nao sabe filtrar de volta.
+      rotuloDaSubcategoria: subcategoria is String && rotuloDaSubcategoria is String
+          ? rotuloDaSubcategoria
+          : null,
       urlDaImagem: imagem is String ? imagem : null,
       urlDeDestino: destino,
       parceiro: ParceiroDaLoja.doJson(json['partner']),
@@ -324,13 +473,21 @@ class RecorteDaLoja {
   const RecorteDaLoja({
     this.termo,
     this.categoria,
+    this.subcategoria,
     this.ordem = OrdemDaLoja.curadoria,
     this.pagina = 1,
     this.limite = 20,
   });
 
   final String? termo;
-  final CategoriaDaLoja? categoria;
+
+  /// O CODIGO da categoria. Texto, e nao `enum`: o vocabulario e dado do
+  /// servidor desde 17/10.
+  final String? categoria;
+
+  /// O CODIGO da subcategoria. Sempre dentro da categoria escolhida -- trocar
+  /// a categoria limpa este campo, em [com].
+  final String? subcategoria;
   final OrdemDaLoja ordem;
   final int pagina;
   final int limite;
@@ -338,7 +495,10 @@ class RecorteDaLoja {
   /// Quantos GRUPOS de filtro estao ativos. A busca **nao** conta aqui: ela e
   /// um controle proprio, e a barra de listagem ja a considera por conta
   /// propria ao decidir se o recorte esta ativo.
-  int get quantidadeDeFiltros => categoria == null ? 0 : 1;
+  /// Quantos GRUPOS de filtro estao ativos. A subcategoria conta como grupo
+  /// proprio: ela e um recorte a mais, e a barra de listagem mostra o numero.
+  int get quantidadeDeFiltros =>
+      (categoria == null ? 0 : 1) + (subcategoria == null ? 0 : 1);
 
   /// A pessoa recortou a lista de alguma forma -- por filtro ou por busca.
   bool get temRecorte =>
@@ -346,7 +506,11 @@ class RecorteDaLoja {
 
   Map<String, String> get query => <String, String>{
         if (termo != null && termo!.trim().isNotEmpty) 'q': termo!.trim(),
-        if (categoria != null) 'category': categoria!.codigo,
+        // `?valor` e a entrada null-aware: a chave so entra quando o valor
+        // existe. E o `use_null_aware_elements` do analisador deste
+        // repositorio, e nao gosto.
+        'category': ?categoria,
+        'subcategory': ?subcategoria,
         'sort': ordem.codigo,
         'page': '$pagina',
         'limit': '$limite',
@@ -354,15 +518,34 @@ class RecorteDaLoja {
 
   RecorteDaLoja com({
     String? termo,
-    CategoriaDaLoja? categoria,
+    String? categoria,
+    String? subcategoria,
     OrdemDaLoja? ordem,
     int? pagina,
     bool limparTermo = false,
     bool limparCategoria = false,
+    bool limparSubcategoria = false,
   }) {
+    // **Trocar a categoria limpa a subcategoria, e limpar a categoria tambem.**
+    // A subcategoria antiga pertence a categoria antiga; mante-la produziria um
+    // recorte que nenhum item satisfaz, e a lista voltaria vazia sem a pessoa
+    // entender por que. A regra mora aqui, e nao na tela, para valer tambem
+    // quando o recorte for montado de outro lugar.
+    final categoriaNova = limparCategoria ? null : (categoria ?? this.categoria);
+    final trocouCategoria = categoriaNova != this.categoria;
+    final String? subcategoriaNova;
+    if (trocouCategoria) {
+      // So o que vier NESTA chamada: a guardada era da categoria anterior.
+      subcategoriaNova = subcategoria;
+    } else if (limparSubcategoria) {
+      subcategoriaNova = null;
+    } else {
+      subcategoriaNova = subcategoria ?? this.subcategoria;
+    }
     return RecorteDaLoja(
       termo: limparTermo ? null : (termo ?? this.termo),
-      categoria: limparCategoria ? null : (categoria ?? this.categoria),
+      categoria: categoriaNova,
+      subcategoria: subcategoriaNova,
       ordem: ordem ?? this.ordem,
       pagina: pagina ?? this.pagina,
       limite: limite,

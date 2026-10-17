@@ -3516,8 +3516,19 @@ paths:
           schema: { type: string, minLength: 2, maxLength: 80 }
         - name: category
           in: query
-          description: Filtra por categoria do produto.
+          description: |
+            Filtra pelo PRIMEIRO nivel. Categoria inexistente ou inativa
+            devolve a lista vazia, nao `400`: mesma regra de `tag`, para o
+            link antigo continuar abrindo.
           schema: { $ref: '#/components/schemas/StoreCategory' }
+        - name: subcategory
+          in: query
+          description: |
+            Filtra pelo SEGUNDO nivel. **Independe de `category`**: mandar so
+            `subcategory` e valido, e o par `(category, subcategory)` do item ja
+            garante a coerencia. Subcategoria inexistente, inativa ou de outra
+            categoria devolve lista vazia, nao `400`.
+          schema: { $ref: '#/components/schemas/StoreSubcategory' }
         - name: species
           in: query
           description: |
@@ -3578,6 +3589,51 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/StoreTagPage' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /store/taxonomy:
+    get:
+      operationId: getStoreTaxonomy
+      tags: [store]
+      x-effects: []
+      summary: As categorias e subcategorias da Loja
+      description: |
+        O vocabulario dos DOIS niveis da categoria do produto: o codigo e o
+        rotulo de cada categoria ativa, e as subcategorias ativas de cada uma,
+        na ordem em que as telas devem oferece-las.
+
+        **Existe porque categoria e subcategoria sao DADO, e nao `enum` do
+        contrato** (decisao do cliente de 17/10: "dois niveis, com
+        subcategorias como a petlove"). Com 14 categorias e 83 subcategorias,
+        um `enum` aqui faria cada ajuste de vocabulario ser mudanca de contrato
+        das quatro aplicacoes mais um APK novo, e nao teria onde expressar que
+        a subcategoria pertence a uma categoria.
+
+        **Mesma forma de `listStoreTags`, e nao de `getReferenceData`.** As duas
+        servem vocabulario fechado da Loja, com o mesmo teto por `ip` e sem
+        conta; `reference-data` e do modulo de pets, e lista fechada da Loja
+        servida por ele cruzaria a fronteira de modulo que
+        `src/architecture.rules.mjs` cobra.
+
+        Cacheavel por 24 h, com `ETag`: a lista so muda por migracao, entao o
+        revalidador barato existe de graca e o app deixa de rebaixar a mesma
+        carga a cada abertura da aba.
+      security: []
+      x-rate-limit:
+        - dimension: [ip]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+      responses:
+        '200':
+          description: O vocabulario dos dois niveis.
+          headers:
+            Cache-Control: { schema: { type: string }, example: 'public, max-age=86400' }
+            ETag: { schema: { type: string } }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StoreTaxonomy' }
+        '304': { description: O vocabulario nao mudou desde o `ETag` enviado. }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /store/items/{itemSlug}:
@@ -5828,6 +5884,10 @@ paths:
         - name: category
           in: query
           schema: { $ref: '#/components/schemas/StoreCategory' }
+        - name: subcategory
+          in: query
+          description: O segundo nivel. Independe de `category`, como na leitura publica.
+          schema: { $ref: '#/components/schemas/StoreSubcategory' }
         - name: partner
           in: query
           description: '`slug` do parceiro.'
@@ -8833,12 +8893,55 @@ components:
 
     StoreCategory:
       type: string
+      pattern: '^[a-z][a-z0-9_]{1,29}$'
+      minLength: 2
+      maxLength: 30
       description: |
-        A categoria do produto. Lista fechada, imposta por `CHECK` no banco e
-        nao por `enum` nativo do Postgres: acrescentar valor a um `enum` nativo
-        exige alterar o tipo com o produto no ar. Acrescentar valor aqui e
-        sempre tres arquivos no mesmo commit (ADR-0023 secao 3).
-      enum: [food, toy, hygiene, accessory, health, bed]
+        O **codigo** da categoria do produto, primeiro dos dois niveis
+        (decisao do cliente de 17/10: "dois niveis, com subcategorias como a
+        petlove").
+
+        **Deixou de ser `enum` em 17/10/2026, e a troca e deliberada.** A lista
+        continua FECHADA; o que mudou e quem a fecha: ela mora em
+        `store_categories` e sai por `GET /v1/store/taxonomy`, com o rotulo e
+        as subcategorias de cada uma. Mesma forma de `breed_code`, que tambem e
+        `string` aqui e tem a lista em `ref_breeds`, servida por
+        `GET /v1/public/reference-data`.
+
+        Com 14 categorias e 83 subcategorias, `enum` aqui faria cada ajuste de
+        vocabulario ser mudanca de contrato das QUATRO aplicacoes mais um APK
+        novo -- e nao teria onde expressar que a subcategoria pertence a uma
+        categoria, nem que a arvore varia por especie.
+
+        **Os seis codigos anteriores continuam validos e com o mesmo
+        significado de linha**: `food`, `toy`, `hygiene`, `accessory`, `health`
+        e `bed` sao os codigos canonicos de seis das 14 categorias. O APK
+        publicado filtra e le por eles, e nenhum item teve o codigo trocado. O
+        que mudou neles e o ROTULO (`food` agora se chama "Racoes", porque
+        existe `treats` ao lado), e rotulo e dado.
+
+        Codigo desconhecido ou inativo na escrita administrativa e `400`
+        (`code: unknown_category`); no filtro de leitura ele devolve lista
+        vazia, e nao erro, pela mesma razao de `tag`: o link antigo continua
+        abrindo.
+
+    StoreSubcategory:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{1,39}$'
+      minLength: 2
+      maxLength: 40
+      description: |
+        O **codigo** da subcategoria, segundo nivel. Unico DENTRO da categoria,
+        nao globalmente: quem identifica e o par `(category, subcategory)`, e e
+        esse par que `store_items` referencia por chave estrangeira composta --
+        "a subcategoria pertence a categoria escolhida" e invariante de banco, e
+        nao conferencia de aplicacao.
+
+        **Nunca `enum`**, pela razao do campo acima elevada ao quadrado: sao 83
+        valores hoje, so da arvore de cachorro, e as de gato, passaro, peixe e
+        outros ainda nao foram levantadas.
+
+        A lista sai por `GET /v1/store/taxonomy`, agrupada pela categoria.
 
     StorePartnerRef:
       type: object
@@ -8881,6 +8984,33 @@ components:
           type: string
           description: Uma linha. O teto de 180 caracteres e o que a mantem uma linha.
         category: { $ref: '#/components/schemas/StoreCategory' }
+        category_label:
+          type: string
+          description: |
+            O rotulo da categoria, **ja resolvido pelo servidor**. Acompanha o
+            codigo e nao o substitui: o codigo e o que o filtro manda de volta,
+            o rotulo e o que a tela escreve.
+
+            Vem na resposta em vez de a tela guardar o seu proprio mapa
+            `codigo -> rotulo` porque o vocabulario agora e DADO: um mapa em
+            codigo no aplicativo faria renomear "Alimentacao" para "Racoes"
+            exigir um APK. Mesma forma de `breed_label` no pet.
+
+            **Opcional ate a implementacao chegar a todos os clientes**: o APK
+            publicado antes de 17/10 nao le este campo e mostra o rotulo que
+            carrega em codigo.
+        subcategory:
+          oneOf:
+            - $ref: '#/components/schemas/StoreSubcategory'
+            - type: 'null'
+          description: |
+            O segundo nivel, **opcional**. Nulo e estado normal: produto sem
+            subcategoria continua valido, e exigi-la invalidaria todo cadastro
+            anterior. A tela nao preenche a linha quando falta.
+        subcategory_label:
+          type: string
+          nullable: true
+          description: O rotulo da subcategoria. Nulo junto com `subcategory`.
         image_url:
           type: string
           format: uri
@@ -10067,6 +10197,16 @@ components:
           maxLength: 180
           description: Uma linha. Texto puro, renderizado como texto no app (D47).
         category: { $ref: '#/components/schemas/StoreCategory' }
+        subcategory:
+          oneOf:
+            - $ref: '#/components/schemas/StoreSubcategory'
+            - type: 'null'
+          description: |
+            **Opcional.** Ausente ou nula cria produto sem segundo nivel, que e
+            estado valido. Quando vem, tem de ser uma subcategoria ATIVA **da
+            `category` enviada**: subcategoria de outra categoria e `400`,
+            `code: subcategory_not_in_category`, e codigo inexistente ou
+            inativo e `400`, `code: unknown_subcategory`.
         target_url:
           allOf:
             - $ref: '#/components/schemas/HttpsUrl'
@@ -10113,6 +10253,17 @@ components:
         title: { type: string, minLength: 2, maxLength: 120 }
         summary: { type: string, minLength: 2, maxLength: 180 }
         category: { $ref: '#/components/schemas/StoreCategory' }
+        subcategory:
+          oneOf:
+            - $ref: '#/components/schemas/StoreSubcategory'
+            - type: 'null'
+          description: |
+            `null` tira a subcategoria; ausente nao mexe nela. **Trocar
+            `category` sem mandar `subcategory` e `400`, `code:
+            subcategory_not_in_category`**, quando a subcategoria guardada nao
+            pertence a categoria nova: aceitar em silencio gravaria o par que a
+            chave estrangeira do banco recusa, e a recusa chegaria como erro de
+            banco em vez de erro de campo.
         target_url: { $ref: '#/components/schemas/HttpsUrl' }
         price:
           oneOf:
@@ -10132,6 +10283,18 @@ components:
         title: { type: string }
         summary: { type: string }
         category: { $ref: '#/components/schemas/StoreCategory' }
+        category_label:
+          type: string
+          description: O rotulo da categoria, resolvido pelo servidor. A tabela do painel o mostra.
+        subcategory:
+          oneOf:
+            - $ref: '#/components/schemas/StoreSubcategory'
+            - type: 'null'
+          description: O segundo nivel, opcional. Nulo e estado normal.
+        subcategory_label:
+          type: string
+          nullable: true
+          description: O rotulo da subcategoria. Nulo junto com `subcategory`.
         target_url: { type: string, format: uri }
         species:
           type: array
@@ -10632,6 +10795,53 @@ components:
           type: string
           format: uri
           description: A derivada publica, sempre pronta. Imagem em processamento ou recusada nunca aparece aqui.
+
+    StoreTaxonomy:
+      type: object
+      description: |
+        Os dois niveis juntos, aninhados: a subcategoria chega DENTRO da
+        categoria a que pertence. Duas listas irmas obrigariam a tela a cruzar
+        `category_code` por conta propria, e e justamente essa relacao que o
+        `enum` nao sabia expressar.
+      required: [categories]
+      properties:
+        categories:
+          type: array
+          items: { $ref: '#/components/schemas/StoreTaxonomyCategory' }
+          description: So as ATIVAS, em ordem de exibicao (`sort_order`, depois o codigo).
+
+    StoreTaxonomyCategory:
+      type: object
+      required: [code, label, subcategories]
+      properties:
+        code: { $ref: '#/components/schemas/StoreCategory' }
+        label: { type: string }
+        subcategories:
+          type: array
+          description: |
+            So as ATIVAS da categoria, em ordem. **Vazia e estado normal e
+            esperado**: a arvore de 17/10 e a de CACHORRO da petlove, e as de
+            gato, passaro, peixe e outros ainda nao foram levantadas. Uma
+            categoria sem subcategoria apenas nao oferece o segundo nivel.
+          items: { $ref: '#/components/schemas/StoreTaxonomySubcategory' }
+
+    StoreTaxonomySubcategory:
+      type: object
+      required: [code, label]
+      properties:
+        code: { $ref: '#/components/schemas/StoreSubcategory' }
+        label: { type: string }
+        species:
+          type: array
+          items: { $ref: '#/components/schemas/Species' }
+          description: |
+            As especies para as quais esta subcategoria foi LEVANTADA. Vazia
+            quer dizer "vale para todas", e nao "para nenhuma".
+
+            **Nenhuma tela filtra por isto ainda**, e a ausencia e deliberada:
+            o recorte pedido em 17/10 e "subcategoria filtrada pela categoria
+            escolhida". O campo existe para a arvore de gato ter onde chegar
+            sem mudanca de contrato.
 
     StoreItemDetail:
       allOf:

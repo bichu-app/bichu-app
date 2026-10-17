@@ -1754,6 +1754,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/store/taxonomy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * As categorias e subcategorias da Loja
+         * @description O vocabulario dos DOIS niveis da categoria do produto: o codigo e o
+         *     rotulo de cada categoria ativa, e as subcategorias ativas de cada uma,
+         *     na ordem em que as telas devem oferece-las.
+         *
+         *     **Existe porque categoria e subcategoria sao DADO, e nao `enum` do
+         *     contrato** (decisao do cliente de 17/10: "dois niveis, com
+         *     subcategorias como a petlove"). Com 14 categorias e 83 subcategorias,
+         *     um `enum` aqui faria cada ajuste de vocabulario ser mudanca de contrato
+         *     das quatro aplicacoes mais um APK novo, e nao teria onde expressar que
+         *     a subcategoria pertence a uma categoria.
+         *
+         *     **Mesma forma de `listStoreTags`, e nao de `getReferenceData`.** As duas
+         *     servem vocabulario fechado da Loja, com o mesmo teto por `ip` e sem
+         *     conta; `reference-data` e do modulo de pets, e lista fechada da Loja
+         *     servida por ele cruzaria a fronteira de modulo que
+         *     `src/architecture.rules.mjs` cobra.
+         *
+         *     Cacheavel por 24 h, com `ETag`: a lista so muda por migracao, entao o
+         *     revalidador barato existe de graca e o app deixa de rebaixar a mesma
+         *     carga a cada abertura da aba.
+         */
+        get: operations["getStoreTaxonomy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/store/items/{itemSlug}": {
         parameters: {
             query?: never;
@@ -4695,13 +4734,49 @@ export interface components {
             };
         };
         /**
-         * @description A categoria do produto. Lista fechada, imposta por `CHECK` no banco e
-         *     nao por `enum` nativo do Postgres: acrescentar valor a um `enum` nativo
-         *     exige alterar o tipo com o produto no ar. Acrescentar valor aqui e
-         *     sempre tres arquivos no mesmo commit (ADR-0023 secao 3).
-         * @enum {string}
+         * @description O **codigo** da categoria do produto, primeiro dos dois niveis
+         *     (decisao do cliente de 17/10: "dois niveis, com subcategorias como a
+         *     petlove").
+         *
+         *     **Deixou de ser `enum` em 17/10/2026, e a troca e deliberada.** A lista
+         *     continua FECHADA; o que mudou e quem a fecha: ela mora em
+         *     `store_categories` e sai por `GET /v1/store/taxonomy`, com o rotulo e
+         *     as subcategorias de cada uma. Mesma forma de `breed_code`, que tambem e
+         *     `string` aqui e tem a lista em `ref_breeds`, servida por
+         *     `GET /v1/public/reference-data`.
+         *
+         *     Com 14 categorias e 83 subcategorias, `enum` aqui faria cada ajuste de
+         *     vocabulario ser mudanca de contrato das QUATRO aplicacoes mais um APK
+         *     novo -- e nao teria onde expressar que a subcategoria pertence a uma
+         *     categoria, nem que a arvore varia por especie.
+         *
+         *     **Os seis codigos anteriores continuam validos e com o mesmo
+         *     significado de linha**: `food`, `toy`, `hygiene`, `accessory`, `health`
+         *     e `bed` sao os codigos canonicos de seis das 14 categorias. O APK
+         *     publicado filtra e le por eles, e nenhum item teve o codigo trocado. O
+         *     que mudou neles e o ROTULO (`food` agora se chama "Racoes", porque
+         *     existe `treats` ao lado), e rotulo e dado.
+         *
+         *     Codigo desconhecido ou inativo na escrita administrativa e `400`
+         *     (`code: unknown_category`); no filtro de leitura ele devolve lista
+         *     vazia, e nao erro, pela mesma razao de `tag`: o link antigo continua
+         *     abrindo.
          */
-        StoreCategory: "food" | "toy" | "hygiene" | "accessory" | "health" | "bed";
+        StoreCategory: string;
+        /**
+         * @description O **codigo** da subcategoria, segundo nivel. Unico DENTRO da categoria,
+         *     nao globalmente: quem identifica e o par `(category, subcategory)`, e e
+         *     esse par que `store_items` referencia por chave estrangeira composta --
+         *     "a subcategoria pertence a categoria escolhida" e invariante de banco, e
+         *     nao conferencia de aplicacao.
+         *
+         *     **Nunca `enum`**, pela razao do campo acima elevada ao quadrado: sao 83
+         *     valores hoje, so da arvore de cachorro, e as de gato, passaro, peixe e
+         *     outros ainda nao foram levantadas.
+         *
+         *     A lista sai por `GET /v1/store/taxonomy`, agrupada pela categoria.
+         */
+        StoreSubcategory: string;
         /**
          * @description O parceiro que vende o item. **Sem UUID**: `slug` e a unica chave do
          *     parceiro que sai daqui. A identidade interna (`store_partners.id`)
@@ -4735,6 +4810,29 @@ export interface components {
             /** @description Uma linha. O teto de 180 caracteres e o que a mantem uma linha. */
             summary: string;
             category: components["schemas"]["StoreCategory"];
+            /**
+             * @description O rotulo da categoria, **ja resolvido pelo servidor**. Acompanha o
+             *     codigo e nao o substitui: o codigo e o que o filtro manda de volta,
+             *     o rotulo e o que a tela escreve.
+             *
+             *     Vem na resposta em vez de a tela guardar o seu proprio mapa
+             *     `codigo -> rotulo` porque o vocabulario agora e DADO: um mapa em
+             *     codigo no aplicativo faria renomear "Alimentacao" para "Racoes"
+             *     exigir um APK. Mesma forma de `breed_label` no pet.
+             *
+             *     **Opcional ate a implementacao chegar a todos os clientes**: o APK
+             *     publicado antes de 17/10 nao le este campo e mostra o rotulo que
+             *     carrega em codigo.
+             */
+            category_label?: string;
+            /**
+             * @description O segundo nivel, **opcional**. Nulo e estado normal: produto sem
+             *     subcategoria continua valido, e exigi-la invalidaria todo cadastro
+             *     anterior. A tela nao preenche a linha quando falta.
+             */
+            subcategory?: components["schemas"]["StoreSubcategory"] | null;
+            /** @description O rotulo da subcategoria. Nulo junto com `subcategory`. */
+            subcategory_label?: string | null;
             /**
              * Format: uri
              * @description Sempre https. **A imagem principal** (a primeira de
@@ -5655,6 +5753,14 @@ export interface components {
             summary: string;
             category: components["schemas"]["StoreCategory"];
             /**
+             * @description **Opcional.** Ausente ou nula cria produto sem segundo nivel, que e
+             *     estado valido. Quando vem, tem de ser uma subcategoria ATIVA **da
+             *     `category` enviada**: subcategoria de outra categoria e `400`,
+             *     `code: subcategory_not_in_category`, e codigo inexistente ou
+             *     inativo e `400`, `code: unknown_subcategory`.
+             */
+            subcategory?: components["schemas"]["StoreSubcategory"] | null;
+            /**
              * @description Precisa estar no host do parceiro **ou num subdominio dele**
              *     (`www.cobasi.com.br` para o parceiro `cobasi.com.br`); qualquer
              *     outro host e `400`, `code: host_mismatch`. A comparacao e por
@@ -5695,6 +5801,15 @@ export interface components {
             title?: string;
             summary?: string;
             category?: components["schemas"]["StoreCategory"];
+            /**
+             * @description `null` tira a subcategoria; ausente nao mexe nela. **Trocar
+             *     `category` sem mandar `subcategory` e `400`, `code:
+             *     subcategory_not_in_category`**, quando a subcategoria guardada nao
+             *     pertence a categoria nova: aceitar em silencio gravaria o par que a
+             *     chave estrangeira do banco recusa, e a recusa chegaria como erro de
+             *     banco em vez de erro de campo.
+             */
+            subcategory?: components["schemas"]["StoreSubcategory"] | null;
             target_url?: components["schemas"]["HttpsUrl"];
             price?: components["schemas"]["AdminPriceInput"] | null;
             species?: components["schemas"]["StoreItemSpeciesSet"];
@@ -5708,6 +5823,12 @@ export interface components {
             title: string;
             summary: string;
             category: components["schemas"]["StoreCategory"];
+            /** @description O rotulo da categoria, resolvido pelo servidor. A tabela do painel o mostra. */
+            category_label?: string;
+            /** @description O segundo nivel, opcional. Nulo e estado normal. */
+            subcategory?: components["schemas"]["StoreSubcategory"] | null;
+            /** @description O rotulo da subcategoria. Nulo junto com `subcategory`. */
+            subcategory_label?: string | null;
             /** Format: uri */
             target_url: string;
             species: components["schemas"]["Species"][];
@@ -6087,6 +6208,41 @@ export interface components {
              * @description A derivada publica, sempre pronta. Imagem em processamento ou recusada nunca aparece aqui.
              */
             url: string;
+        };
+        /**
+         * @description Os dois niveis juntos, aninhados: a subcategoria chega DENTRO da
+         *     categoria a que pertence. Duas listas irmas obrigariam a tela a cruzar
+         *     `category_code` por conta propria, e e justamente essa relacao que o
+         *     `enum` nao sabia expressar.
+         */
+        StoreTaxonomy: {
+            /** @description So as ATIVAS, em ordem de exibicao (`sort_order`, depois o codigo). */
+            categories: components["schemas"]["StoreTaxonomyCategory"][];
+        };
+        StoreTaxonomyCategory: {
+            code: components["schemas"]["StoreCategory"];
+            label: string;
+            /**
+             * @description So as ATIVAS da categoria, em ordem. **Vazia e estado normal e
+             *     esperado**: a arvore de 17/10 e a de CACHORRO da petlove, e as de
+             *     gato, passaro, peixe e outros ainda nao foram levantadas. Uma
+             *     categoria sem subcategoria apenas nao oferece o segundo nivel.
+             */
+            subcategories: components["schemas"]["StoreTaxonomySubcategory"][];
+        };
+        StoreTaxonomySubcategory: {
+            code: components["schemas"]["StoreSubcategory"];
+            label: string;
+            /**
+             * @description As especies para as quais esta subcategoria foi LEVANTADA. Vazia
+             *     quer dizer "vale para todas", e nao "para nenhuma".
+             *
+             *     **Nenhuma tela filtra por isto ainda**, e a ausencia e deliberada:
+             *     o recorte pedido em 17/10 e "subcategoria filtrada pela categoria
+             *     escolhida". O campo existe para a arvore de gato ter onde chegar
+             *     sem mudanca de contrato.
+             */
+            species?: components["schemas"]["Species"][];
         };
         StoreItemDetail: components["schemas"]["StoreItemSummary"] & {
             /**
@@ -9150,8 +9306,19 @@ export interface operations {
                  *     200.
                  */
                 q?: string;
-                /** @description Filtra por categoria do produto. */
+                /**
+                 * @description Filtra pelo PRIMEIRO nivel. Categoria inexistente ou inativa
+                 *     devolve a lista vazia, nao `400`: mesma regra de `tag`, para o
+                 *     link antigo continuar abrindo.
+                 */
                 category?: components["schemas"]["StoreCategory"];
+                /**
+                 * @description Filtra pelo SEGUNDO nivel. **Independe de `category`**: mandar so
+                 *     `subcategory` e valido, e o par `(category, subcategory)` do item ja
+                 *     garante a coerencia. Subcategoria inexistente, inativa ou de outra
+                 *     categoria devolve lista vazia, nao `400`.
+                 */
+                subcategory?: components["schemas"]["StoreSubcategory"];
                 /**
                  * @description Itens que servem a esta especie, entre outras (ADR-0027 item 16).
                  *     Declarado antes do codigo; o app so oferece o filtro depois de a
@@ -9211,6 +9378,37 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["StoreTagPage"];
                 };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getStoreTaxonomy: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O vocabulario dos dois niveis. */
+            200: {
+                headers: {
+                    /** @example public, max-age=86400 */
+                    "Cache-Control"?: string;
+                    ETag?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreTaxonomy"];
+                };
+            };
+            /** @description O vocabulario nao mudou desde o `ETag` enviado. */
+            304: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             429: components["responses"]["TooManyRequests"];
         };
@@ -10687,6 +10885,8 @@ export interface operations {
                 /** @description Busca em titulo e resumo, no servidor. */
                 q?: string;
                 category?: components["schemas"]["StoreCategory"];
+                /** @description O segundo nivel. Independe de `category`, como na leitura publica. */
+                subcategory?: components["schemas"]["StoreSubcategory"];
                 /** @description `slug` do parceiro. */
                 partner?: components["schemas"]["Slug"];
                 publication_state?: components["schemas"]["AdminStoreItemPublicationState"];

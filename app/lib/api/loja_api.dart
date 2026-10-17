@@ -44,4 +44,28 @@ class LojaApi {
     );
     return PaginaDaLoja.doJson(json);
   }
+
+  /// `GET /v1/store/taxonomy` (`getStoreTaxonomy`) — o vocabulario dos DOIS
+  /// niveis da categoria.
+  ///
+  /// ## Por que o filtro precisa de uma chamada propria
+  ///
+  /// Ate 17/10/2026 a categoria era um `enum` de seis valores no contrato, e o
+  /// grupo de filtro saia de um `enum` Dart deste pacote -- a lista vinha no
+  /// binario. O cliente decidiu dois niveis com subcategorias como a petlove:
+  /// 14 categorias e 83 subcategorias, e a lista virou DADO. Um `enum` com 83
+  /// valores faria acrescentar "Areia e granulado" exigir um APK novo.
+  ///
+  /// **Nao exige conta**, como a vitrine: e a lista fechada de uma secao
+  /// navegavel deslogado. E e cacheavel por 24 h no servidor -- a resposta so
+  /// muda por migracao.
+  ///
+  /// **Nao trata falha**, pela mesma razao de [listar]: quem chama precisa
+  /// distinguir "nao ha vocabulario" de "nao consegui perguntar". Na vitrine a
+  /// falha daqui tem consequencia pequena e declarada -- o grupo de filtro de
+  /// categoria nao aparece, e a lista carrega do mesmo jeito.
+  Future<TaxonomiaDaLoja> taxonomia() async {
+    final json = await _api.get('/store/taxonomy', exigeToken: false);
+    return TaxonomiaDaLoja.doJson(json);
+  }
 }

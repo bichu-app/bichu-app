@@ -47,6 +47,7 @@ import { registroDeImagemDeCatalogo } from '../../src/modules/media/adapters/per
 import type { PreparadorDeEnvioDeCatalogo } from '../../src/modules/media/ports/imagem-de-catalogo.js';
 import { criarCatalogoAdministrativoRepository } from '../../src/modules/store/adapters/persistence/kysely-catalogo-administrativo.js';
 import { criarStoreRepository } from '../../src/modules/store/adapters/persistence/kysely-store-repository.js';
+import { criarTaxonomiaDaVitrineRepository } from '../../src/modules/store/adapters/persistence/kysely-taxonomia-da-vitrine.js';
 import { registrarRotasDaVitrine } from '../../src/modules/store/adapters/http/store-routes.js';
 import {
   CatalogoAdministrativo,
@@ -214,6 +215,7 @@ before(async () => {
   await escoparRotas(app, '/v1', (escopo) => {
     registrarRotasDaVitrine(escopo, {
       vitrine: criarStoreRepository(banco.db, (chave) => `https://midia.exemplo.invalid/${chave}`),
+      taxonomia: criarTaxonomiaDaVitrineRepository(banco.db),
       clock: relogio,
     });
   });

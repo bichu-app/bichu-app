@@ -35,6 +35,7 @@ import {
   diasDeCalendario,
   estadoDoPreco,
   type CategoriaDaVitrine,
+  type SubcategoriaDaVitrine,
   type EspecieDoItem,
   type EstadoDoPreco,
 } from './item-da-vitrine.js';
@@ -102,6 +103,12 @@ export interface ItemAdministrativo {
   readonly title: string;
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
+  /** O rotulo da categoria, lido de `store_categories` na mesma consulta. */
+  readonly categoryLabel: string;
+  /** O segundo nivel, OPCIONAL. Nulo e estado normal. */
+  readonly subcategory: SubcategoriaDaVitrine | null;
+  /** O rotulo da subcategoria. Nulo junto com `subcategory`. */
+  readonly subcategoryLabel: string | null;
   readonly targetUrl: string;
   /**
    * URL do parceiro, so em dado da massa. O painel nunca a escreve (ADR-0027
@@ -222,6 +229,82 @@ export const TETO_DA_URL = 2048;
  * Devolve os erros de campo, e nao lanca: quem chama junta com os outros erros
  * do corpo e responde um 400 so.
  */
+/**
+ * O que o vocabulario de categorias respondeu sobre uma classificacao, lido
+ * pela transacao e entregue a esta funcao.
+ *
+ * E uma estrutura, e nao tres booleanos soltos nos parametros, porque os tres
+ * so fazem sentido juntos: "a subcategoria existe em outra categoria" nao quer
+ * dizer nada sem "ela nao existe nesta".
+ */
+export interface ClassificacaoDoVocabulario {
+  readonly categoriaAtiva: boolean;
+  /** A subcategoria existe e esta ativa DENTRO da categoria conferida. */
+  readonly subcategoriaNaCategoria: boolean;
+  /** A subcategoria existe e esta ativa em ALGUMA categoria -- talvez outra. */
+  readonly subcategoriaEmAlgumaCategoria: boolean;
+}
+
+/**
+ * Os erros de campo da classificacao em dois niveis (decisao do cliente de
+ * 17/10: "dois niveis, com subcategorias como a petlove").
+ *
+ * ## Por que esta conferencia precisa existir na aplicacao
+ *
+ * Ate 17/10 a categoria era `enum` no contrato, e quem recusava valor
+ * desconhecido era o esquema de corpo instalado a partir dele -- esta camada
+ * nunca precisou conferir. Agora o vocabulario e DADO (`store_categories`), o
+ * contrato declara `string` com formato, e sem esta funcao a unica recusa
+ * restante seria a chave estrangeira do banco: o painel receberia erro de
+ * integridade em vez de erro de CAMPO, e a tela nao teria onde pintar a
+ * mensagem.
+ *
+ * A chave estrangeira continua la, e continua sendo a trava final. Esta funcao
+ * nao a substitui -- ela traduz a mesma regra para a linguagem do formulario.
+ *
+ * ## Tres recusas, e elas sao tres
+ *
+ * - `unknown_category`: categoria inexistente ou inativa.
+ * - `subcategory_not_in_category`: a subcategoria existe no vocabulario, mas
+ *   em OUTRA categoria. E o caso de trocar a categoria de um item e deixar a
+ *   subcategoria antiga para tras, e a mensagem precisa dizer isso -- "nao
+ *   existe" faria a pessoa procurar um erro de digitacao que nao esta la.
+ * - `unknown_subcategory`: nao existe em nenhuma, ou esta inativa.
+ *
+ * Devolve os erros de campo, e nao lanca: quem chama junta com os outros erros
+ * do corpo e responde um 400 so, como `errosDoDestino` ja faz.
+ */
+export function errosDaClassificacao(
+  categoria: CategoriaDaVitrine,
+  subcategoria: SubcategoriaDaVitrine | null,
+  achado: ClassificacaoDoVocabulario,
+): ProblemFieldError[] {
+  const erros: ProblemFieldError[] = [];
+  if (!achado.categoriaAtiva) {
+    erros.push({
+      field: 'category',
+      code: 'unknown_category',
+      message: 'Essa categoria não está no vocabulário da Loja.',
+    });
+  }
+  if (subcategoria !== null && !achado.subcategoriaNaCategoria) {
+    erros.push(
+      achado.subcategoriaEmAlgumaCategoria
+        ? {
+            field: 'subcategory',
+            code: 'subcategory_not_in_category',
+            message: 'Essa subcategoria é de outra categoria. Escolha uma da categoria selecionada.',
+          }
+        : {
+            field: 'subcategory',
+            code: 'unknown_subcategory',
+            message: 'Essa subcategoria não está no vocabulário da Loja.',
+          },
+    );
+  }
+  return erros;
+}
+
 export function errosDoDestino(
   campo: string,
   targetUrl: string,
@@ -420,6 +503,9 @@ export interface ItemAdministrativoProjetado {
   readonly title: string;
   readonly summary: string;
   readonly category: CategoriaDaVitrine;
+  readonly category_label: string;
+  readonly subcategory: SubcategoriaDaVitrine | null;
+  readonly subcategory_label: string | null;
   readonly target_url: string;
   readonly species: readonly EspecieDoItem[];
   readonly tags: readonly TagDoItem[];
@@ -477,6 +563,9 @@ export function projetarItemAdministrativo(
     title: item.title,
     summary: item.summary,
     category: item.category,
+    category_label: item.categoryLabel,
+    subcategory: item.subcategory,
+    subcategory_label: item.subcategoryLabel,
     target_url: item.targetUrl,
     species: [...item.species],
     tags: item.tags.map((t) => ({ slug: t.slug, label: t.label, active: t.active })),

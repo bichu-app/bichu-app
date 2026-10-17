@@ -1,6 +1,38 @@
 import { describe, expect, it } from 'vitest';
 
-import { CATEGORIAS, centavosParaCampo, centavosParaTexto, ESPECIES, precoEmCentavos, slugSugerido } from '../src/loja/dominio.ts';
+import {
+  categoriaDoVocabulario,
+  centavosParaCampo,
+  centavosParaTexto,
+  eCategoria,
+  eSubcategoriaDaCategoria,
+  ESPECIES,
+  precoEmCentavos,
+  slugSugerido,
+  subcategoriasDaCategoria,
+  type Taxonomia,
+} from '../src/loja/dominio.ts';
+
+/**
+ * Um recorte do vocabulario como `GET /v1/store/taxonomy` o entrega. Duas
+ * categorias bastam: o que estes casos exercitam e a RELACAO entre os niveis,
+ * e nao o tamanho da arvore (a arvore inteira e conferida na integracao,
+ * contra a semente da `20261017000003`).
+ */
+const TAXONOMIA: Taxonomia = {
+  categories: [
+    {
+      code: 'food',
+      label: 'Rações',
+      subcategories: [
+        { code: 'racao_seca', label: 'Ração seca', species: ['dog'] },
+        { code: 'racao_umida', label: 'Ração úmida', species: ['dog'] },
+      ],
+    },
+    { code: 'treats', label: 'Petiscos e ossos', subcategories: [{ code: 'bifinhos', label: 'Bifinhos', species: ['dog'] }] },
+    { code: 'bed', label: 'Camas e casinhas', subcategories: [] },
+  ],
+};
 import { conferirRotulo as conferirRotuloDaTag, mensagemDeErroDaTag } from '../src/loja/DialogoCriarTag.tsx';
 import { corpoDeAlteracao, corpoDeCriacao, errosDoServidor, validarProduto, VALORES_VAZIOS } from '../src/loja/formulario-do-produto.ts';
 
@@ -38,10 +70,48 @@ describe('preco de referencia em centavos (AdminPriceInput.amount)', () => {
 });
 
 describe('rotulos do contrato', () => {
-  it('categoria e especie usam os seis e os tres codigos do contrato, com os rotulos do app', () => {
-    expect(Object.keys(CATEGORIAS)).toEqual(['food', 'toy', 'hygiene', 'accessory', 'health', 'bed']);
-    expect(Object.values(CATEGORIAS)).toEqual(['Alimentação', 'Brinquedo', 'Higiene', 'Acessório', 'Saúde', 'Cama e conforto']);
+  it('a especie continua com os tres codigos do contrato e os rotulos do app', () => {
     expect(ESPECIES).toEqual({ dog: 'Cão', cat: 'Gato', other: 'Outros animais' });
+  });
+});
+
+/**
+ * O vocabulario de categoria deixou de ser mapa fixo do painel em 17/10/2026
+ * (dois niveis, decisao do cliente). O que estes casos guardam nao e a LISTA --
+ * ela e dado do servidor -- e sim a RELACAO entre os dois niveis, que e a unica
+ * coisa que o painel ainda decide sozinho.
+ */
+describe('vocabulario dos dois niveis', () => {
+  it('a categoria vale quando esta no vocabulario carregado, e nunca sem vocabulario', () => {
+    expect(eCategoria(TAXONOMIA, 'food')).toBe(true);
+    expect(eCategoria(TAXONOMIA, 'areia')).toBe(false);
+    expect(eCategoria(TAXONOMIA, '')).toBe(false);
+    // Sem vocabulario nada e categoria: o select nao tem opcao, e aprovar um
+    // codigo aqui faria o painel mandar categoria que ele nao sabe existir.
+    expect(eCategoria(undefined, 'food')).toBe(false);
+  });
+
+  it('a subcategoria oferecida e so a da categoria escolhida', () => {
+    expect(subcategoriasDaCategoria(TAXONOMIA, 'food').map((s) => s.code)).toEqual(['racao_seca', 'racao_umida']);
+    expect(subcategoriasDaCategoria(TAXONOMIA, 'treats').map((s) => s.code)).toEqual(['bifinhos']);
+    // Categoria sem arvore levantada: lista vazia, e o select fica
+    // desabilitado com a frase que diz qual dos tres estados e.
+    expect(subcategoriasDaCategoria(TAXONOMIA, 'bed')).toEqual([]);
+    // Sem categoria escolhida NAO sao todas as 83: sao nenhuma.
+    expect(subcategoriasDaCategoria(TAXONOMIA, '')).toEqual([]);
+  });
+
+  it('subcategoria de outra categoria nao vale para a categoria escolhida', () => {
+    expect(eSubcategoriaDaCategoria(TAXONOMIA, 'food', 'racao_seca')).toBe(true);
+    // `bifinhos` existe no vocabulario, e e de `treats`. E este o caso que o
+    // servidor recusa com `subcategory_not_in_category`.
+    expect(eSubcategoriaDaCategoria(TAXONOMIA, 'food', 'bifinhos')).toBe(false);
+    expect(eSubcategoriaDaCategoria(TAXONOMIA, 'food', '')).toBe(false);
+  });
+
+  it('o rotulo da categoria sai do vocabulario, nunca de mapa do painel', () => {
+    expect(categoriaDoVocabulario(TAXONOMIA, 'food')?.label).toBe('Rações');
+    expect(categoriaDoVocabulario(TAXONOMIA, 'areia')).toBeUndefined();
   });
 
   it('identificador sugerido cabe no formato de Slug', () => {
