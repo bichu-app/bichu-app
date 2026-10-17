@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_loja.dart';
+import '../../dispositivo/saida_do_app.dart';
 import '../../escopo.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -38,11 +38,22 @@ import '../casca_com_abas.dart';
 /// controlamos. Ela **sabe antes de acontecer** e o destino e **nomeado**
 /// ("Abrir na Cobasi"), nunca generico (consequencia 1 da BICHUS-185).
 ///
-/// E abre em [LaunchMode.externalApplication], **nunca em webview embutida**:
-/// uma webview com a nossa moldura em volta faz o Bichu parecer o vendedor,
-/// mistura de quem e a responsabilidade e cria uma superficie em que a pessoa
-/// digita dado de pagamento dentro de uma janela que parece nossa. Com preco
-/// na tela isso pesa mais, nao menos.
+/// E abre no navegador do SISTEMA, **nunca em webview embutida**: uma webview
+/// com a nossa moldura em volta faz o Bichu parecer o vendedor, mistura de quem
+/// e a responsabilidade e cria uma superficie em que a pessoa digita dado de
+/// pagamento dentro de uma janela que parece nossa. Com preco na tela isso pesa
+/// mais, nao menos. O modo externo e escolhido por [SaidaDoApp.abrirLink], a
+/// mesma porta que a `Rede` usa para o link do convite -- a tela nao fala com o
+/// plugin de aparelho, e por isso a saida e testavel sem aparelho.
+///
+/// ## Tres estados de saida, e eles sao tres
+///
+/// 1. **Destino `https` utilizavel**: o botao existe, avisa e abre fora.
+/// 2. **Destino ausente ou de outro esquema** (`http`, `intent:`,
+///    `javascript:`, `tel:`): o botao **nao e desenhado**. Nao ha mensagem,
+///    porque nao ha o que a pessoa possa fazer a respeito -- e um produto mal
+///    cadastrado, e o lugar do conserto e o painel.
+/// 3. **O sistema nao abriu**: uma linha, e a lista continua onde estava.
 ///
 /// **Nenhum identificador de pessoa entra na URL de saida** (criterio 4). A
 /// tela abre `item.urlDeDestino` como o servidor a mandou, sem acrescentar um
@@ -82,6 +93,11 @@ class VitrineDaLoja extends StatefulWidget {
   /// o adjetivo. O valor não chega do servidor, e esta frase ocupa o lugar
   /// dele.
   static const String precoNaoConfirmado = 'Preço não confirmado, veja no site do parceiro';
+
+  /// Quando o aparelho nao abre o link. **Uma linha**, e e a mesma frase que a
+  /// `Rede` usa para o convite: duas redacoes para a mesma falha sao duas
+  /// frases para alguem traduzir diferente depois.
+  static const String falhaAoAbrirOLink = 'Não conseguimos abrir o link.';
 
   static const String rotuloDeAtualizar = 'Atualizar';
 
@@ -533,8 +549,13 @@ class CartaoDaLoja extends StatelessWidget {
               style: textos.bodySmall?.copyWith(color: cores.textSecondary),
             ),
           ],
-          const SizedBox(height: BichuEspaco.e3),
-          _BotaoDeSaida(item: item),
+          // O botao so existe com destino `https` utilizavel. Sem ele o cartao
+          // termina no preco: um produto mal cadastrado continua navegavel e
+          // nao ganha um botao que nao leva a lugar nenhum.
+          if (item.destinoExterno case final Uri destino) ...<Widget>[
+            const SizedBox(height: BichuEspaco.e3),
+            _BotaoDeSaida(item: item, destino: destino),
+          ],
         ],
       ),
     );
@@ -542,12 +563,27 @@ class CartaoDaLoja extends StatelessWidget {
 }
 
 /// O botao que leva para fora, com o aviso de saida antes.
+///
+/// Recebe a [destino] **ja conferida** por [ItemDaLoja.destinoExterno], e nao a
+/// `String` do item: um widget que recebesse o texto cru poderia ser construido
+/// com um destino que ninguem conferiu, e a conferencia voltaria a depender de
+/// quem chama lembrar dela. Aqui o tipo cobra.
 class _BotaoDeSaida extends StatelessWidget {
-  const _BotaoDeSaida({required this.item});
+  const _BotaoDeSaida({required this.item, required this.destino});
 
   final ItemDaLoja item;
 
+  /// `https` absoluto, com host. [CartaoDaLoja] nao desenha este widget sem um.
+  final Uri destino;
+
   Future<void> _sair(BuildContext context) async {
+    // O mensageiro e capturado ANTES de qualquer `await`: tanto o dialogo
+    // quanto a abertura do navegador dao ao sistema a chance de tirar esta
+    // tela da arvore (a pessoa troca de aba, o sistema recicla), e ler
+    // `context` depois de um `await` e o defeito que o
+    // `use_build_context_synchronously` existe para pegar.
+    final mensageiro = ScaffoldMessenger.maybeOf(context);
+
     final confirmou = await showDialog<bool>(
       context: context,
       builder: (contexto) => AlertDialog(
@@ -571,12 +607,18 @@ class _BotaoDeSaida extends StatelessWidget {
     );
     if (confirmou != true) return;
 
-    // **Navegador do SISTEMA, nunca webview embutida.** Uma webview com a
-    // nossa moldura em volta faz o Bichu parecer o vendedor. A URL vai como o
+    // **Navegador do SISTEMA, nunca webview embutida.** A porta escolhe
+    // `LaunchMode.externalApplication` num lugar so, e devolve `false` em vez
+    // de lancar quando o aparelho nao tem o que responder. A URL vai como o
     // servidor a mandou: nenhum parametro e acrescentado aqui.
-    await launchUrl(
-      Uri.parse(item.urlDeDestino),
-      mode: LaunchMode.externalApplication,
+    final abriu = await SaidaDoApp.atual.abrirLink(destino);
+    if (abriu) return;
+
+    // Nao abriu. Uma linha, e a vitrine fica onde estava: nao ha tela de erro,
+    // nao ha nova tentativa automatica e nao ha explicacao de por que o
+    // aparelho recusou -- a pessoa nao tem o que fazer com esse detalhe.
+    mensageiro?.showSnackBar(
+      const SnackBar(content: Text(VitrineDaLoja.falhaAoAbrirOLink)),
     );
   }
 

@@ -126,6 +126,40 @@ class ItemDaLoja {
 
   final EstadoDoPreco estadoDoPreco;
 
+  /// O destino do produto como `Uri`, **so quando ele e `https` absoluto**.
+  ///
+  /// Nulo e o que a tela usa para NAO desenhar o botao de saida: sem destino
+  /// utilizavel nao ha para onde levar a pessoa, e um botao que nao faz nada e
+  /// pior que botao ausente.
+  ///
+  /// ## Por que o esquema e conferido AQUI, e nao so no servidor
+  ///
+  /// `target_url` e dado CADASTRADO: ele entra pelo painel, e a escrita o
+  /// confere (`errosDoDestino`, em `escrita-da-vitrine.ts`: so `https`, sem
+  /// usuario e senha, sem IP literal, no host exato do parceiro). Mas o que
+  /// chega ao aparelho e uma `String` da resposta, e `launchUrl` abre o que o
+  /// sistema souber abrir -- `intent:`, `market:`, `tel:`, `javascript:`,
+  /// `file:`. Entregar a string crua ao sistema faria do cadastro de produto um
+  /// canal para disparar qualquer coisa no aparelho da pessoa, e a unica trava
+  /// seria a escrita de um ambiente que este binario nao controla.
+  ///
+  /// **`http` em claro tambem e recusado**, e nao e zelo: a vitrine leva a
+  /// pessoa para uma pagina de compra. Sugerir uma pagina sem TLS e sugerir que
+  /// ela digite dado de pagamento em canal aberto.
+  ///
+  /// Nao e defesa contra o servidor: e a recusa de ampliar o que um registro de
+  /// catalogo consegue fazer.
+  Uri? get destinoExterno {
+    final bruto = urlDeDestino.trim();
+    if (bruto.isEmpty) return null;
+    final u = Uri.tryParse(bruto);
+    if (u == null || !u.isAbsolute) return null;
+    if (u.scheme != 'https') return null;
+    // Sem host nao ha site: `https:///caminho` da `isAbsolute` verdadeiro.
+    if (u.host.isEmpty) return null;
+    return u;
+  }
+
   /// O preco formatado em portugues do Brasil, ou nulo.
   ///
   /// Nulo quando nao ha valor, e a tela **nao** desenha a linha. Nao existe
