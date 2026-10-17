@@ -3056,8 +3056,9 @@ export interface paths {
         /**
          * Cria um item em rascunho
          * @description **O item nasce em rascunho** e nao aparece no app ate
-         *     `publishAdminStoreItem`. `target_url` precisa terminar no host do
-         *     parceiro (`400`, `code: host_mismatch`). O preco e objeto unico ou
+         *     `publishAdminStoreItem`. `target_url` precisa estar no host do
+         *     parceiro ou num subdominio dele (`400`, `code: host_mismatch`), com
+         *     query e fragmento permitidos. O preco e objeto unico ou
          *     ausente: "preco sem data" nao cabe no corpo. `checked_at` no futuro e
          *     recusado. As imagens, ate 8, sao envios de
          *     `createAdminCatalogImageIntent` com `purpose: store_item`, na ordem em
@@ -5505,9 +5506,11 @@ export interface components {
         };
         /**
          * Format: uri
-         * @description So `https:`, sem `userinfo`, ate 2048 caracteres (D47). Host que seja
-         *     IP literal e recusado pelo servidor com `400`, porque a expressao nao
-         *     tem como separar `10.0.0.1` de um nome.
+         * @description So `https:`, sem `userinfo`, ate 2048 caracteres (D47). Query e
+         *     fragmento SAO aceitos: loja de verdade identifica SKU e variacao por
+         *     parametro (`/p?idsku=1197673`), e a expressao os admite em `[^\s]*`.
+         *     Host que seja IP literal e recusado pelo servidor com `400`, porque a
+         *     expressao nao tem como separar `10.0.0.1` de um nome.
          */
         HttpsUrl: string;
         /**
@@ -5652,9 +5655,27 @@ export interface components {
             summary: string;
             category: components["schemas"]["StoreCategory"];
             /**
-             * @description Precisa estar no host EXATO do parceiro (`400`, `code: host_mismatch`),
-             *     sem `?` nem `#` (`400`, `code: invalid_url`): o banco guarda so o caminho.
+             * @description Precisa estar no host do parceiro **ou num subdominio dele**
+             *     (`www.cobasi.com.br` para o parceiro `cobasi.com.br`); qualquer
+             *     outro host e `400`, `code: host_mismatch`. A comparacao e por
+             *     sufixo COM FRONTEIRA DE ROTULO: `malcobasi.com.br` NAO e
+             *     subdominio de `cobasi.com.br` e e recusado.
+             *
+             *     **Query e fragmento sao aceitos** (`/p?idsku=1197673`): o banco
+             *     guarda o caminho com os dois. Ate 17/10/2026 eles eram recusados, e
+             *     a recusa bloqueava link legitimo de loja sem proteger o que dizia
+             *     proteger -- o aplicativo abre `target_url` como o servidor a
+             *     mandou, sem acrescentar parametro, e e la que a consequencia 3 da
+             *     BICHUS-185 e garantida.
+             *
              *     Nenhum identificador de pessoa, em codificacao nenhuma.
+             *
+             *     Cada recusa tem `code` PROPRIO, e isso e requisito: `url_not_https`,
+             *     `url_has_credentials`, `url_ip_literal`, `url_too_long`,
+             *     `host_mismatch` e `invalid_url` (texto que nao e endereco). Um
+             *     `code` generico para todas fez o painel dizer "precisa comecar com
+             *     https://" sobre um link que comecava com `https://`, e o cliente
+             *     passou a procurar o defeito no proprio link.
              */
             target_url: components["schemas"]["HttpsUrl"];
             price?: components["schemas"]["AdminPriceInput"];
@@ -6002,17 +6023,37 @@ export interface components {
         };
         AdminStoreTagInput: {
             /**
-             * @description Como o app mostra. Letras, digitos, espaco e hifen, e nada mais
-             *     (conferido no servidor, `code: tag_charset`). O servidor apara as
-             *     pontas e junta espacos repetidos. O `slug` e derivado: sem acento,
-             *     minusculo, espaco vira hifen. **Dois rotulos que dao o mesmo `slug`
-             *     sao a mesma tag** (`Racao` e `racao` e `Ração`): o segundo e recusado
-             *     com `409 slug-taken`.
+             * @description Como o app mostra. Letras (com acento e cedilha), digitos, espaco e
+             *     a pontuacao de nome de marca -- `&`, hifen, apostrofo (reto ou
+             *     curvo) e `+` --, e nada mais (conferido no servidor, `code:
+             *     tag_charset`). `N&D`, `Hill's` e `Farmina N&D Ocean` sao rotulos
+             *     validos. **`.` e `/` NAO entram**: num rotulo que a Loja publica
+             *     eles sao o que deixa escrever `bit.ly/x` ou `loja.com.br`, e o
+             *     alfabeto e o que fecha essa porta aqui (D59 vale no modulo da Rede,
+             *     nao neste).
+             *
+             *     Caractere invisivel ou de controle -- controle, marca de direcao
+             *     bidirecional, espaco de largura zero -- e recusado em separado, com
+             *     `code: tag_invisible_char`: e o que permite um nome que PARECE uma
+             *     coisa e e outra. Nao e o mesmo erro que o alfabeto.
+             *
+             *     O servidor apara as pontas e junta espacos repetidos. O `slug` e
+             *     derivado: sem acento, minusculo, espaco, `&` e `+` viram hifen, e o
+             *     apostrofo sai (`N&D` -> `n-d`, `Hill's` -> `hills`). Entao o `&`
+             *     nunca chega ao `slug`, e o filtro `tag` continua recebendo so
+             *     `[a-z0-9-]`. O `slug` derivado precisa caber em `Slug` (3 a 30): o
+             *     rotulo de um ou dois caracteres (`N`, `Pé`) e recusado com `code:
+             *     tag_slug_invalid`. **Dois rotulos que dao o mesmo `slug` sao a mesma
+             *     tag** (`Racao` e `racao` e `Ração`): o segundo e recusado com
+             *     `409 slug-taken`.
              */
             label: string;
         };
         AdminStoreTagPatch: {
-            /** @description Trocar o rotulo troca o `slug` junto, e o novo nao pode colidir. */
+            /**
+             * @description Trocar o rotulo troca o `slug` junto, e o novo nao pode colidir. O
+             *     mesmo alfabeto de `AdminStoreTagInput.label`.
+             */
             label?: string;
             active?: boolean;
         };
