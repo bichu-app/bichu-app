@@ -2,7 +2,8 @@ import { useState } from 'react';
 
 import type { Esquemas } from '../api/cliente.ts';
 import { tipoDoProblema, versaoComoEtag } from '../api/problema.ts';
-import { Banner, CampoDeTexto } from '../componentes/basicos.tsx';
+import { Banner } from '../componentes/basicos.tsx';
+import { CampoDeValorEmReais } from '../componentes/campos.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
@@ -79,7 +80,7 @@ export function DialogoRenovarPreco({
           void renovar();
         }}
       >
-        <CampoDeTexto id="r-preco" rotulo="Preço (R$)" valor={preco} aoMudar={setPreco} erro={erro} modoDeEntrada="decimal" autoFoco />
+        <CampoDeValorEmReais id="r-preco" rotulo="Preço (R$)" valor={preco} aoMudar={setPreco} erro={erro} autoFoco />
         <div className="acoes">
           <button type="button" className="btn sec" onClick={aoFechar}>
             Cancelar

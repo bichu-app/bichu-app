@@ -6,6 +6,7 @@ import '../../acessibilidade/anunciar.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../escopo.dart';
+import '../../formato/email.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -88,15 +89,24 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
     });
   }
 
+  /// Conferencia ao sair do campo, com a mensagem curta de
+  /// `formato/email.dart`. Campo vazio nao erra aqui: quem tocou o campo e
+  /// desistiu nao levou erro. Vazio continua sendo erro no envio.
+  void _conferirOEmailAoSair() {
+    final erro = erraAoSairDoCampo(_email.text) ? erroAoSairDoEmail : null;
+    if (erro != _erroDoCampo) setState(() => _erroDoCampo = erro);
+  }
+
   Future<void> _enviarOLink() async {
     setState(() {
       _erroDoCampo = null;
       _faixa = null;
     });
 
-    final email = _email.text.trim();
-    final arroba = email.indexOf('@');
-    if (arroba <= 0 || email.indexOf('.', arroba) <= arroba + 1) {
+    // A condicao de plausibilidade e de `formato/email.dart`, e nao mais uma
+    // terceira copia escrita a mao aqui dentro.
+    final email = emailParaEnvio(_email.text);
+    if (!emailPlausivel(email)) {
       setState(() => _erroDoCampo = 'Digite o e-mail da sua conta.');
       return;
     }
@@ -230,8 +240,12 @@ class _TelaEsqueciMinhaSenhaState extends State<TelaEsqueciMinhaSenha> {
                   erro: _erroDoCampo,
                   tipoDeTeclado: TextInputType.emailAddress,
                   autofill: const <String>[AutofillHints.email],
+                  // Endereco nao tem correcao automatica nem maiuscula
+                  // automatica: as duas transformam o que a pessoa escreveu.
                   correcaoAutomatica: false,
+                  capitalizacao: TextCapitalization.none,
                   acaoDeTeclado: TextInputAction.done,
+                  aoPerderFoco: _conferirOEmailAoSair,
                   aoEnviar: (_) => _enviarOLink(),
                 ),
                 if (_faixa != null) ...<Widget>[

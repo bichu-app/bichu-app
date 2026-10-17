@@ -214,6 +214,9 @@ export function CampoDeTexto({
   autoFoco,
   referencia,
   dataCy,
+  aoSair,
+  semCorrecao,
+  comoFica,
 }: {
   id: string;
   rotulo: string;
@@ -225,15 +228,37 @@ export function CampoDeTexto({
   contador?: boolean;
   maximo?: number;
   tipo?: 'text' | 'email' | 'url' | 'date' | 'number';
-  modoDeEntrada?: 'decimal' | 'numeric' | 'url' | 'text';
+  modoDeEntrada?: 'decimal' | 'numeric' | 'url' | 'text' | 'email';
   autoComplete?: string;
   somenteLeitura?: boolean;
   autoFoco?: boolean;
   referencia?: React.Ref<HTMLInputElement>;
+  /**
+   * Conferencia **ao sair do campo**. O momento em que um e-mail pode ser
+   * conferido sem interromper quem ainda digita: a cada tecla, `leandro@g`
+   * seria erro durante toda a digitacao.
+   */
+  aoSair?: () => void;
+  /**
+   * Desliga correcao automatica, maiuscula automatica e corretor ortografico.
+   * Para endereco, identificador e codigo: as tres transformam o que a pessoa
+   * escreveu, e no celular a maiuscula automatica e a causa numero um de
+   * `Leandro@...` num campo de e-mail.
+   */
+  semCorrecao?: boolean;
+  /**
+   * Uma linha viva abaixo do campo com a forma final do que foi digitado
+   * ("Fica R$ 1.234,56."). Mesmo recurso que `CampoDoInstagram` ja usa para
+   * `@handle`, e e o que mostra o `R$` sem bota-lo dentro do valor.
+   */
+  comoFica?: string;
 }) {
   const idDaAjuda = `${id}-ajuda`;
   const idDoContador = `${id}-contador`;
-  const descritores = [erro || ajuda ? idDaAjuda : undefined, contador ? idDoContador : undefined].filter(Boolean).join(' ');
+  const idDoComoFica = `${id}-como-fica`;
+  const descritores = [erro || ajuda ? idDaAjuda : undefined, comoFica !== undefined ? idDoComoFica : undefined, contador ? idDoContador : undefined]
+    .filter(Boolean)
+    .join(' ');
   return (
     <div className={erro ? 'field err' : 'field'}>
       <label htmlFor={id}>{rotulo}</label>
@@ -245,9 +270,11 @@ export function CampoDeTexto({
         type={tipo}
         value={valor}
         onChange={(e) => aoMudar(e.target.value)}
+        {...(aoSair ? { onBlur: aoSair } : {})}
         {...(maximo ? { maxLength: maximo } : {})}
         {...(modoDeEntrada ? { inputMode: modoDeEntrada } : {})}
         {...(autoComplete ? { autoComplete } : {})}
+        {...(semCorrecao ? { autoCapitalize: 'none' as const, autoCorrect: 'off' as const, spellCheck: false } : {})}
         readOnly={somenteLeitura}
         aria-invalid={erro ? true : undefined}
         aria-describedby={descritores || undefined}
@@ -264,6 +291,11 @@ export function CampoDeTexto({
             {ajuda}
           </span>
         )
+      )}
+      {comoFica !== undefined && (
+        <span className="help" id={idDoComoFica} aria-live="polite">
+          {comoFica}
+        </span>
       )}
       {contador && maximo && (
         <span className="help contador" id={idDoContador}>

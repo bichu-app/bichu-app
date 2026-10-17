@@ -31,6 +31,8 @@ library;
 
 import 'dart:collection';
 
+import '../formato/dinheiro.dart';
+
 import 'modelos_pet.dart';
 
 // ---------------------------------------------------------------------------
@@ -675,23 +677,13 @@ class PrecoDoEncontro {
   /// o que mantem o app de pe quando o contrato ganha uma unidade nova sem ele
   /// (isca `tolera unidade de preco que este build nao conhece`).
   String get rotulo {
-    final reais = centavos ~/ 100;
-    final resto = centavos % 100;
-    final milhar = _comMilhar(reais);
-    final valor = resto == 0
-        ? 'R\$ $milhar'
-        : 'R\$ $milhar,${resto.toString().padLeft(2, '0')}';
+    // A conta de centavos para texto e de `formato/dinheiro.dart`, o unico
+    // lugar do app que a faz. `centavosRedondos: false` e o que mantem
+    // `R\$ 15 por pet` em vez de `R\$ 15,00 por pet`, que era o
+    // comportamento deste getter antes de a conta sair daqui.
+    final valor = reaisEmTexto(centavos, centavosRedondos: false);
     final u = unidade;
     return u == null ? valor : '$valor ${u.rotulo}';
-  }
-
-  static String _comMilhar(int n) {
-    final s = n.toString();
-    final partes = <String>[];
-    for (var i = s.length; i > 0; i -= 3) {
-      partes.insert(0, s.substring(i - 3 < 0 ? 0 : i - 3, i));
-    }
-    return partes.join('.');
   }
 
   static PrecoDoEncontro? doJson(Object? bruto) {

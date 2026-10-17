@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../escopo.dart';
+import '../../formato/email.dart';
 import '../../intencao/ir_para_o_destino.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -115,7 +116,7 @@ class _TelaEntrarState extends State<TelaEntrar> {
     String? erroDoEmail;
     if (email.isEmpty) {
       erroDoEmail = MensagensDeErro.digiteSeuEmail;
-    } else if (!_emailPlausivel(email)) {
+    } else if (!emailPlausivel(email)) {
       // Validacao tolerante (UX 13): recusa o obviamente errado, aceita o
       // incomum. Endereco real e mais estranho que a maioria das expressoes.
       erroDoEmail = MensagensDeErro.confiraOEmail;
@@ -135,10 +136,12 @@ class _TelaEntrarState extends State<TelaEntrar> {
     return false;
   }
 
-  static bool _emailPlausivel(String valor) {
-    final v = valor.trim();
-    final arroba = v.indexOf('@');
-    return arroba > 0 && v.indexOf('.', arroba) > arroba + 1;
+  /// Conferencia ao sair do campo, com a mensagem curta de
+  /// `formato/email.dart`. Campo vazio nao erra aqui: quem tocou o campo e
+  /// desistiu nao levou erro. Vazio continua sendo erro no envio.
+  void _conferirOEmailAoSair() {
+    final erro = erraAoSairDoCampo(_email.text) ? erroAoSairDoEmail : null;
+    if (erro != _erroDoEmail) setState(() => _erroDoEmail = erro);
   }
 
   Future<void> _entrar() async {
@@ -267,8 +270,12 @@ class _TelaEntrarState extends State<TelaEntrar> {
                 erro: _erroDoEmail,
                 tipoDeTeclado: TextInputType.emailAddress,
                 autofill: const <String>[AutofillHints.email],
+                // Endereco nao tem correcao automatica nem maiuscula
+                // automatica: as duas transformam o que a pessoa escreveu.
                 correcaoAutomatica: false,
+                capitalizacao: TextCapitalization.none,
                 acaoDeTeclado: TextInputAction.next,
+                aoPerderFoco: _conferirOEmailAoSair,
                 // Depois que o campo errou uma vez, revalidar enquanto digita,
                 // para o erro sumir assim que for corrigido (UX 13).
                 aoMudar: _erroDoEmail == null

@@ -9,6 +9,7 @@ import '../../api/mensagens_de_erro.dart';
 import '../../api/problem.dart';
 import '../../config/app_config.dart';
 import '../../escopo.dart';
+import '../../formato/email.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_colors.dart';
 import '../../theme/bichu_tokens.g.dart';
@@ -142,7 +143,7 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
 
     // Validacao no cliente e conveniencia; a autoridade fica no servidor.
     // Ela existe aqui so para a pessoa nao gastar uma ida a rede a toa.
-    if (!_emailPlausivel(_email.text)) {
+    if (!emailPlausivel(_email.text)) {
       setState(() => _erroDoEmail = 'Digite o e-mail da sua conta.');
       _focoDoEmail.requestFocus();
       _levarAte(_alvoDoEmail);
@@ -304,12 +305,18 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
     setState(() => _faixa = MensagensDeErro.de(falha));
   }
 
-  static bool _emailPlausivel(String valor) {
-    final v = valor.trim();
-    final arroba = v.indexOf('@');
-    // Validacao tolerante (UX 13): recusa o obviamente errado, aceita o
-    // incomum. Endereco real e mais estranho que a maioria das expressoes.
-    return arroba > 0 && v.indexOf('.', arroba) > arroba + 1;
+  /// Conferencia ao sair do campo: o erro aparece quando a pessoa termina de
+  /// escrever, e nao a cada tecla (`leandro@g` seria erro durante toda a
+  /// digitacao). Campo vazio nao erra aqui -- so no envio.
+  void _conferirOEmailAoSair() {
+    final erro = erraAoSairDoCampo(_email.text) ? erroAoSairDoEmail : null;
+    if (erro == _erroDoEmail) return;
+    // Nao apaga o erro que o servidor deu: `email-already-registered` nao e
+    // sobre a forma do endereco e continua valendo quando o foco sai.
+    if (erro == null && _erroDoEmail == MensagensDeErro.emailJaCadastrado) {
+      return;
+    }
+    setState(() => _erroDoEmail = erro);
   }
 
   @override
@@ -416,8 +423,12 @@ class _TelaCriarContaState extends State<TelaCriarConta> {
                 erro: _erroDoEmail,
                 tipoDeTeclado: TextInputType.emailAddress,
                 autofill: const <String>[AutofillHints.email],
+                // Endereco nao tem correcao automatica nem maiuscula
+                // automatica: as duas transformam o que a pessoa escreveu.
                 correcaoAutomatica: false,
+                capitalizacao: TextCapitalization.none,
                 acaoDeTeclado: TextInputAction.next,
+                aoPerderFoco: _conferirOEmailAoSair,
               ),
               if (_erroDoEmail == MensagensDeErro.emailJaCadastrado)
                 Align(
