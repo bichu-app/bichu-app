@@ -24,6 +24,7 @@ import {
   projetarParceiro,
   conferirRotulo,
   slugDaTag,
+  slugDoItem,
   somarDias,
   validoAte,
   type ItemAdministrativo,
@@ -319,5 +320,89 @@ void describe('o vocabulario de tags', () => {
   void it('rotulo que nao forma slug de 3 caracteres: tag_slug_invalid', () => {
     assert.deepEqual(conferirRotulo('label', 'Pé').erros.map((e) => e.code), ['tag_slug_invalid']);
     assert.deepEqual(conferirRotulo('label', 'Gatos').erros, []);
+  });
+
+  // -------------------------------------------------------------------------
+  // Pontuacao de nome de marca (o cliente travado em `N&D`, 17/10/2026)
+  // -------------------------------------------------------------------------
+
+  void it('O CASO: `N&D` e aceito, e o slug dele nao tem `&`', () => {
+    const conferido = conferirRotulo('label', 'N&D');
+    assert.deepEqual(conferido.erros, []);
+    assert.equal(conferido.rotulo, 'N&D');
+    assert.equal(conferido.slug, 'n-d');
+  });
+
+  void it('nome de marca real passa, e o slug fica em [a-z0-9-]', () => {
+    const esperado: [string, string][] = [
+      ['N&D', 'n-d'],
+      ['Pro Plan', 'pro-plan'],
+      ["Hill's", 'hills'],
+      ['Hill\u2019s', 'hills'],
+      ['Royal Canin', 'royal-canin'],
+      ['Farmina N&D Ocean', 'farmina-n-d-ocean'],
+      ['3 Cora\u00e7\u00f5es', '3-coracoes'],
+      ['Omega 3 + 6', 'omega-3-6'],
+    ];
+    for (const [rotulo, slug] of esperado) {
+      const conferido = conferirRotulo('label', rotulo);
+      assert.deepEqual(conferido.erros, [], rotulo);
+      assert.equal(conferido.slug, slug, rotulo);
+      // O que vai na query string do filtro publico (`tag`, esquema `Slug`).
+      assert.match(conferido.slug, /^[a-z0-9][a-z0-9-]{1,28}[a-z0-9]$/, rotulo);
+      assert.equal(encodeURIComponent(conferido.slug), conferido.slug, rotulo);
+    }
+  });
+
+  void it('acento em NFD (como o macOS entrega) passa igual ao NFC', () => {
+    const nfc = conferirRotulo('label', '3 Cora\u00e7\u00f5es');
+    const nfd = conferirRotulo('label', '3 Corac\u0327o\u0303es');
+    assert.deepEqual(nfd.erros, []);
+    assert.equal(nfd.slug, nfc.slug);
+  });
+
+  void it('ISCA: `.` e `/` continuam fora, entao link e dominio nao viram rotulo', () => {
+    // O alfabeto e o que fecha esta porta aqui: o detector de D59 mora em
+    // `modules/network/domain` e a fronteira de modulo nao o alcanca deste
+    // dominio. Se alguem liberar `.` ou `/`, este teste reprova primeiro.
+    for (const rotulo of ['bit.ly/x', 'loja.com.br', 'www.pet.io', 'a@b.io', 'x/y', 'promo!', 'R$ 50']) {
+      assert.deepEqual(conferirRotulo('label', rotulo).erros.map((e) => e.code), ['tag_charset'], rotulo);
+    }
+  });
+
+  void it('ISCA: caractere invisivel tem codigo proprio, e nao `tag_charset`', () => {
+    const invisiveis = [
+      ['largura zero', 'Ra\u200bcao'],
+      ['bidi (override)', 'Ra\u202ecao'],
+      ['bidi (marca)', 'Ra\u200fcao'],
+      ['juntor de largura zero', 'Ra\u200dcao'],
+      ['controle', 'Ra\u0001cao'],
+      ['BOM', 'Ra\ufeffcao'],
+    ] as const;
+    for (const [nome, rotulo] of invisiveis) {
+      assert.deepEqual(conferirRotulo('label', rotulo).erros.map((e) => e.code), ['tag_invisible_char'], nome);
+    }
+  });
+
+  void it('a mensagem do invisivel nao chama o caractere de "especial"', () => {
+    const [erro] = conferirRotulo('label', 'Ra\u200bcao').erros;
+    assert.ok(erro);
+    const mensagem = erro.message ?? '';
+    assert.doesNotMatch(mensagem, /especia/iu);
+    assert.match(mensagem, /invis\u00edvel/u);
+  });
+
+  void it('o piso continua existindo: vazio, so espaco e teto de 24', () => {
+    for (const rotulo of ['', '   ', '\t\n']) {
+      assert.deepEqual(conferirRotulo('label', rotulo).erros.map((e) => e.code), ['length'], JSON.stringify(rotulo));
+    }
+    assert.deepEqual(conferirRotulo('label', 'a'.repeat(25)).erros.map((e) => e.code), ['length']);
+    assert.deepEqual(conferirRotulo('label', 'a'.repeat(24)).erros, []);
+    // Teto medido depois de aparar e juntar espacos, como o `CHECK` do banco.
+    assert.deepEqual(conferirRotulo('label', `  ${'a'.repeat(24)}  `).erros, []);
+  });
+
+  void it('`&` e `+` nao sobram no slug do item, que usa a mesma derivacao', () => {
+    assert.equal(slugDoItem('Ra\u00e7\u00e3o N&D Ocean'), 'racao-n-d-ocean');
   });
 });

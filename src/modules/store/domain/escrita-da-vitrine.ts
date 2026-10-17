@@ -450,27 +450,86 @@ export function normalizarRotulo(rotulo: string): string {
  * espaco vira hifen, hifens repetidos viram um, e nenhum hifen nas pontas.
  * `Ração`, `racao` e `RACAO` dao `racao`, e e isso que faz o indice unico do
  * `slug` recusar a segunda grafia.
+ *
+ * **`&` e `+` viram hifen; o apostrofo sai.** Sem isso `N&D` daria o `slug`
+ * `n&d`, que `FORMATO_DE_SLUG` recusa, e o rotulo que o cliente precisa
+ * cadastrar morria na derivacao mesmo depois de passar no alfabeto. `N&D` da
+ * `n-d` (tres caracteres, cabe no formato), `Hill's` da `hills` e
+ * `Farmina N&D Ocean` da `farmina-n-d-ocean`. Como nenhum deles sobra no
+ * `slug`, o filtro publico (`GET /store/items?tag=`) continua recebendo so
+ * `[a-z0-9-]`: o `&` do rotulo nunca chega a uma query string.
  */
 export function slugDaTag(rotulo: string): string {
   return normalizarRotulo(rotulo)
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')
     .toLowerCase()
-    .replace(/ /g, '-')
+    .replace(/['\u2019]/g, '')
+    .replace(/[ &+]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '');
 }
 
 /**
- * Confere o rotulo e devolve o que gravar. Letras (com acento), digitos, espaco
- * e hifen, e nada mais (`code: tag_charset`): o conjunto nao comporta URL,
- * e-mail nem simbolo, e e parte do que contem o risco de conteudo publicado sem
- * revisao.
+ * O teto do rotulo de tag. Mantido em 24 de proposito: e o `maxLength` do
+ * contrato E o `CHECK store_tags_rotulo_tem_tamanho` do banco, e e o que o
+ * cartao da Loja comporta numa linha. Mexer nele e migracao mais contrato nas
+ * quatro aplicacoes, e nenhum nome de marca real precisa de mais (`Farmina N&D
+ * Ocean` tem 17).
+ */
+export const MAXIMO_DO_ROTULO_DE_TAG = 24;
+
+/**
+ * O piso do rotulo. **Nao e o que recusava `N&D`** (tres caracteres passavam no
+ * tamanho; o que recusava era o alfabeto e, depois dele, o `slug` `n&d`).
+ * Continua 2 porque e o piso do `CHECK` do banco: baixa-lo aqui sem migracao
+ * trocaria um 400 honesto por um 500.
+ */
+export const MINIMO_DO_ROTULO_DE_TAG = 2;
+
+/**
+ * Caractere invisivel ou de controle: controle C0/C1, formato (marca de direcao
+ * bidirecional, juntor de largura zero, BOM) e separador de linha e paragrafo.
  *
- * O `slug` derivado precisa caber no formato de `Slug` (3 a 30 caracteres).
- * Rotulo de dois caracteres cabe no contrato (`minLength: 2`) e da `slug` de
- * dois, que o formato recusa: `code: tag_slug_invalid`, e a divergencia vai
- * na entrega.
+ * **Isto nao e "caractere especial", e a recusa nao e de estetica.** Sao os
+ * caracteres que deixam escrever um nome que PARECE uma coisa e e outra -- a
+ * marca bidi reordena o que a pessoa le, o espaco de largura zero parte uma
+ * palavra sem aparecer. Num rotulo que a Loja publica, isso e confianca.
+ * Recusado antes do alfabeto, e com codigo proprio, para a tela poder dizer o
+ * que de fato aconteceu.
+ */
+const INVISIVEL_OU_DE_CONTROLE =
+  /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF]/u;
+
+/**
+ * O alfabeto do rotulo: letra (com acento e cedilha, em NFC ou em NFD, por isso
+ * `\p{M}`), digito, espaco, e a pontuacao que nome de marca usa -- `&`, hifen,
+ * apostrofo reto ou curvo, e `+`.
+ *
+ * **`.` e `/` ficam de fora, de proposito.** O alfabeto antigo (so letra,
+ * digito, espaco e hifen) era o que impedia link, dominio e e-mail num texto
+ * que a Loja publica sem revisao. `@` e `:` ja nao entram; com `.` e `/`
+ * dentro, `bit.ly/x` e `loja.com.br` voltariam a ser rotulos validos, e o
+ * detector de D59 (`temContatoOuPagamento`) vive em `modules/network/domain` --
+ * a fronteira de modulo nao deixa este dominio importa-lo, e escrever um
+ * segundo detector aqui seria manter dois. Nenhum dos nomes pedidos (`N&D`,
+ * `Pro Plan`, `Hill's`, `Royal Canin`, `Farmina N&D Ocean`, `3 Coracoes`)
+ * precisa de ponto nem de barra. Para libera-los, o caminho e mover o detector
+ * para `shared/` primeiro.
+ */
+const ALFABETO_DO_ROTULO = /^[\p{L}\p{M}\p{N} &'\u2019+-]+$/u;
+
+/**
+ * Confere o rotulo e devolve o que gravar, em quatro passos e nesta ordem:
+ * tamanho, caractere invisivel, alfabeto, e `slug` derivado.
+ *
+ * O `slug` derivado precisa caber no formato de `Slug` (3 a 30 caracteres), que
+ * e compartilhado com parceiro, item e encontro e e tambem o `CHECK` do banco.
+ * E ELE o piso de tres caracteres que o cliente sentiu: rotulo de um ou dois
+ * caracteres (`N`, `Pé`) continua recusado com `code: tag_slug_invalid`, porque
+ * um `slug` de um caractere quebraria o filtro publico (`tag` no contrato e
+ * `Slug`) alem do banco. Aceitar rotulo de um caractere visivel e migracao mais
+ * um `StoreTagSlug` novo no contrato; vai na entrega, nao aqui.
  */
 export function conferirRotulo(
   campo: string,
@@ -478,12 +537,41 @@ export function conferirRotulo(
 ): { readonly erros: ProblemFieldError[]; readonly rotulo: string; readonly slug: string } {
   const normalizado = normalizarRotulo(rotulo);
   const slug = slugDaTag(normalizado);
-  if (normalizado.length < 2 || normalizado.length > 24) {
-    return { erros: [{ field: campo, code: 'length', message: 'Entre 2 e 24 caracteres.' }], rotulo: normalizado, slug };
-  }
-  if (!/^[\p{L}\p{N} -]+$/u.test(normalizado)) {
+  if (normalizado.length < MINIMO_DO_ROTULO_DE_TAG || normalizado.length > MAXIMO_DO_ROTULO_DE_TAG) {
     return {
-      erros: [{ field: campo, code: 'tag_charset', message: 'Só letras, números, espaço e hífen.' }],
+      erros: [
+        {
+          field: campo,
+          code: 'length',
+          message: `Entre ${String(MINIMO_DO_ROTULO_DE_TAG)} e ${String(MAXIMO_DO_ROTULO_DE_TAG)} caracteres.`,
+        },
+      ],
+      rotulo: normalizado,
+      slug,
+    };
+  }
+  if (INVISIVEL_OU_DE_CONTROLE.test(normalizado)) {
+    return {
+      erros: [
+        {
+          field: campo,
+          code: 'tag_invisible_char',
+          message: 'Este nome tem caractere invisível. Apague o campo e digite o nome de novo.',
+        },
+      ],
+      rotulo: normalizado,
+      slug,
+    };
+  }
+  if (!ALFABETO_DO_ROTULO.test(normalizado)) {
+    return {
+      erros: [
+        {
+          field: campo,
+          code: 'tag_charset',
+          message: 'Só letras, números, espaço e os sinais & - ’ +.',
+        },
+      ],
       rotulo: normalizado,
       slug,
     };
@@ -494,7 +582,7 @@ export function conferirRotulo(
         {
           field: campo,
           code: 'tag_slug_invalid',
-          message: 'Este rótulo não forma um endereço válido. Use pelo menos três letras ou números.',
+          message: 'Este rótulo não forma um endereço válido. Use pelo menos três letras, números ou hífens.',
         },
       ],
       rotulo: normalizado,

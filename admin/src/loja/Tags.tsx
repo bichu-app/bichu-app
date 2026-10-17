@@ -8,7 +8,7 @@ import { Dialogo } from '../componentes/Dialogo.tsx';
 import { Icone } from '../componentes/Icone.tsx';
 import { useListaPaginada, useParametrosDaLista } from '../componentes/lista.ts';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { conferirRotulo, DialogoCriarTag, mensagemDeErroDaTag } from './DialogoCriarTag.tsx';
+import { ALFABETO_DA_TAG, conferirRotulo, DialogoCriarTag, mensagemDeErroDaTag } from './DialogoCriarTag.tsx';
 import { MAXIMO_DE_TAGS, MAXIMO_DE_TAGS_ATIVAS } from './dominio.ts';
 
 type Tag = Esquemas['AdminStoreTag'];
@@ -303,7 +303,7 @@ function DialogoRenomearTag({ tag, aoFechar, aoRenomear }: { tag: Tag; aoFechar:
           aoMudar={setRotulo}
           maximo={24}
           erro={erro}
-          ajuda="De 2 a 24 caracteres: letras, números, espaço e hífen."
+          ajuda={`De 2 a 24 caracteres: ${ALFABETO_DA_TAG}.`}
           autoFoco
         />
         <div className="acoes">

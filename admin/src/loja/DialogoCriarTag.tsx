@@ -5,23 +5,35 @@ import { errosDoProblema, tipoDoProblema } from '../api/problema.ts';
 import { Banner, CampoDeTexto } from '../componentes/basicos.tsx';
 import { Dialogo } from '../componentes/Dialogo.tsx';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
-import { MAXIMO_DE_TAGS_ATIVAS, PADRAO_DO_ROTULO_DE_TAG } from './dominio.ts';
+import { MAXIMO_DE_TAGS_ATIVAS, PADRAO_DO_ROTULO_DE_TAG, PADRAO_INVISIVEL } from './dominio.ts';
 
 type Tag = Esquemas['AdminStoreTag'];
+
+/** O texto do alfabeto, num ponto so: a ajuda do campo e a mensagem de recusa dizem a mesma coisa. */
+export const ALFABETO_DA_TAG = 'letras, números, espaço e os sinais & - ’ +';
+const RECUSA_DO_ALFABETO = `Use só ${ALFABETO_DA_TAG}.`;
+const RECUSA_DO_TAMANHO = 'Use de 2 a 24 caracteres.';
+/** Nao chamar de "caractere especial": `&` e apostrofo agora passam, invisivel nao. */
+const RECUSA_DO_INVISIVEL = 'Este nome tem caractere invisível. Apague o campo e digite o nome de novo.';
+/** O `slug` derivado precisa de três caracteres; `N&D` dá `n-d` e cabe, `N` e `Pé` não. */
+const RECUSA_DO_ENDERECO = 'Este nome não forma um endereço válido. Use pelo menos três letras, números ou hífens.';
 
 /** Mensagens da tag (secao 25.5.1, ATENCAO): o servidor decide, a tela so traduz o codigo. */
 export function mensagemDeErroDaTag(tipo: string | undefined, codigos: string[]): string {
   if (tipo === 'slug-taken') return 'Já existe uma tag com esse nome.';
   if (codigos.includes('tag_vocabulary_full')) return `Já há ${MAXIMO_DE_TAGS_ATIVAS} tags ativas, o limite.`;
-  if (codigos.includes('tag_charset')) return 'Use só letras, números, espaço e hífen.';
-  if (tipo === 'validation-failed') return 'Use de 2 a 24 caracteres.';
+  if (codigos.includes('tag_invisible_char')) return RECUSA_DO_INVISIVEL;
+  if (codigos.includes('tag_charset')) return RECUSA_DO_ALFABETO;
+  if (codigos.includes('tag_slug_invalid')) return RECUSA_DO_ENDERECO;
+  if (tipo === 'validation-failed') return RECUSA_DO_TAMANHO;
   return 'Não conseguimos salvar a tag. Tente de novo.';
 }
 
 export function conferirRotulo(rotulo: string): string | undefined {
   const t = rotulo.trim().replace(/\s+/g, ' ');
-  if (t.length < 2 || t.length > 24) return 'Use de 2 a 24 caracteres.';
-  if (!PADRAO_DO_ROTULO_DE_TAG.test(t)) return 'Use só letras, números, espaço e hífen.';
+  if (t.length < 2 || t.length > 24) return RECUSA_DO_TAMANHO;
+  if (PADRAO_INVISIVEL.test(t)) return RECUSA_DO_INVISIVEL;
+  if (!PADRAO_DO_ROTULO_DE_TAG.test(t)) return RECUSA_DO_ALFABETO;
   return undefined;
 }
 
@@ -84,7 +96,7 @@ export function DialogoCriarTag({ aoFechar, aoCriar }: { aoFechar: () => void; a
           aoMudar={setRotulo}
           maximo={24}
           erro={erro}
-          ajuda={`De 2 a 24 caracteres: letras, números, espaço e hífen. Até ${MAXIMO_DE_TAGS_ATIVAS} tags ativas.`}
+          ajuda={`De 2 a 24 caracteres: ${ALFABETO_DA_TAG}. Até ${MAXIMO_DE_TAGS_ATIVAS} tags ativas.`}
           autoFoco
         />
         <div className="acoes">
