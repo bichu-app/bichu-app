@@ -511,11 +511,12 @@ class CartaoDaLoja extends StatelessWidget {
                 height: 160,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                // Nome acessivel em portugues (criterio 11). A imagem do
-                // produto nao acrescenta informacao ao titulo que ja esta
-                // logo abaixo, e repetir os dois faz o leitor de tela dizer
-                // a mesma coisa duas vezes.
-                semanticLabel: 'Foto de ${item.titulo}',
+                // Nome acessivel em portugues (criterio 11): o texto que o
+                // administrador escreveu, e `Foto de <titulo>` quando ele nao
+                // escreveu. A escolha e de `ItemDaLoja.nomeDaImagem`, e nao
+                // daqui: ate 17/10/2026 esta linha montava a frase generica e
+                // o texto do painel nunca chegava a ninguem.
+                semanticLabel: item.nomeDaImagem,
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             ),
@@ -523,10 +524,7 @@ class CartaoDaLoja extends StatelessWidget {
           ],
           Text(item.titulo, style: textos.titleMedium),
           const SizedBox(height: BichuEspaco.e1),
-          Text(
-            item.resumo,
-            style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
-          ),
+          _ResumoDoProduto(item: item),
           const SizedBox(height: BichuEspaco.e2),
           Text(
             item.parceiro.nome,
@@ -558,6 +556,90 @@ class CartaoDaLoja extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// A descricao do produto no cartao: **os 500 primeiros caracteres, com um
+/// botao para ler o resto no lugar** (decisao do cliente de 17/10/2026).
+///
+/// ## Por que nao `maxLines` com reticencias
+///
+/// `maxLines` corta pelo que CABE na largura do aparelho, e nao pelo texto:
+/// o mesmo produto mostraria trechos diferentes em telas diferentes, e nao
+/// haveria como dizer "500 caracteres". O corte por caractere, no ultimo
+/// espaco, mora em `ItemDaLoja.trechoDoResumo` e e o mesmo em todo aparelho.
+///
+/// ## Recolhe, e isso e deliberado
+///
+/// A vitrine e uma LISTA. Um cartao expandido com 3000 caracteres empurra o
+/// resto da vitrine para baixo, e sem como recolher a pessoa teria de rolar de
+/// volta para seguir comparando produtos. Os rotulos sao de duas palavras:
+/// "Ler mais" e "Ler menos".
+///
+/// ## Leitor de tela
+///
+/// Colapsado, o `Text` recebe o TRECHO como dado -- nao ha `semanticsLabel`
+/// mentindo sobre o que esta na tela, e nao ha 3000 caracteres anunciados num
+/// cartao de lista. O botao diz de qual produto ele e (`semanticsLabel`),
+/// porque "Ler mais, botao" repetido numa lista de doze cartoes nao diz nada.
+/// Expandido, o texto inteiro vira dado do mesmo `Text` e e lido ali.
+///
+/// A altura do cartao muda ao expandir, e o `ListView` mantem o deslocamento:
+/// o conteudo ABAIXO desce, e o topo deste cartao fica onde estava. Nada aqui
+/// rola a lista por conta propria, que seria o jeito de perder a posicao de
+/// quem esta lendo.
+class _ResumoDoProduto extends StatefulWidget {
+  const _ResumoDoProduto({required this.item});
+
+  final ItemDaLoja item;
+
+  static const String lerMais = 'Ler mais';
+  static const String lerMenos = 'Ler menos';
+
+  @override
+  State<_ResumoDoProduto> createState() => _ResumoDoProdutoState();
+}
+
+class _ResumoDoProdutoState extends State<_ResumoDoProduto> {
+  bool _expandido = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final item = widget.item;
+    final cabeInteiro = item.resumoCabeNoCartao;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          // A quebra de linha vai no valor, nos dois estados: `Text` a desenha.
+          _expandido || cabeInteiro ? item.resumo : item.trechoDoResumo,
+          style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
+        ),
+        // Nada escondido, nada de botao.
+        if (!cabeInteiro) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e1),
+          TextButton(
+            onPressed: () => setState(() => _expandido = !_expandido),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(0, BichuEspaco.e12),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              alignment: Alignment.centerLeft,
+            ),
+            child: Text(
+              _expandido ? _ResumoDoProduto.lerMenos : _ResumoDoProduto.lerMais,
+              semanticsLabel: _expandido
+                  ? 'Ler menos da descrição de ${item.titulo}'
+                  : 'Ler mais da descrição de ${item.titulo}',
+              style: textos.labelLarge?.copyWith(color: cores.textPrimary),
+            ),
+          ),
+        ],
+      ],
     );
   }
 }

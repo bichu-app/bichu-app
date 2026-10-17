@@ -35,6 +35,7 @@ Map<String, dynamic> itemDoContrato({
   String summary = 'Bola de borracha atóxica que flutua.',
   String category = 'toy',
   String? imageUrl,
+  String? imageAltText,
   String targetUrl = 'https://cobasi.com.br/bola-pop-borracha',
   String partnerSlug = 'cobasi',
   String partnerName = 'Cobasi',
@@ -49,6 +50,7 @@ Map<String, dynamic> itemDoContrato({
     'summary': summary,
     'category': category,
     'image_url': imageUrl,
+    'image_alt_text': imageAltText,
     'target_url': targetUrl,
     'partner': <String, dynamic>{
       'slug': partnerSlug,
@@ -758,6 +760,174 @@ void main() {
             'nao achou nada.',
       );
       expect(titulosNaTela(tester), hasLength(2));
+    });
+  });
+
+  _oTextoAlternativoEAQuebraDeLinha();
+}
+
+// ---------------------------------------------------------------------------
+// O TEXTO ALTERNATIVO DA IMAGEM (pedido do cliente de 17/10/2026)
+// ---------------------------------------------------------------------------
+
+void _oTextoAlternativoEAQuebraDeLinha() {
+  group('o nome acessível da imagem do produto', () {
+    // ISCA -- em `modelos_loja.dart`, em `ItemDaLoja.nomeDaImagem`, troque o
+    // corpo por `return 'Foto de \$titulo';` (o que a tela fazia até
+    // 17/10/2026). Este caso reprova: o texto do administrador deixa de
+    // chegar.
+    test('ISCA -- com texto escrito pelo painel, é ELE que vale', () {
+      final item = ItemDaLoja.doJson(
+        itemDoContrato(
+          title: 'Bola Pop',
+          imageUrl: 'https://midia.bichu.test/a.webp',
+          imageAltText: 'Cão caramelo mordendo a bola azul',
+        ),
+      );
+      expect(item.nomeDaImagem, 'Cão caramelo mordendo a bola azul');
+    });
+
+    test('sem texto (o campo é opcional), cai no nome do produto', () {
+      final item = ItemDaLoja.doJson(
+        itemDoContrato(title: 'Bola Pop', imageUrl: 'https://midia.bichu.test/a.webp'),
+      );
+      expect(item.nomeDaImagem, 'Foto de Bola Pop');
+    });
+
+    test('texto só com espaços vale como ausente: nome acessível nunca é vazio', () {
+      final item = ItemDaLoja.doJson(
+        itemDoContrato(title: 'Bola Pop', imageAltText: '   '),
+      );
+      expect(item.nomeDaImagem, 'Foto de Bola Pop');
+      expect(item.nomeDaImagem.trim(), isNotEmpty);
+    });
+
+    testWidgets('a imagem do cartão usa o texto do painel no semanticLabel', (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[
+            itemDoContrato(
+              imageUrl: 'https://midia.bichu.test/a.webp',
+              imageAltText: 'Cão caramelo mordendo a bola azul',
+            ),
+          ]),
+        ),
+      );
+      final imagem = tester.widget<Image>(find.byType(Image).first);
+      expect(imagem.semanticLabel, 'Cão caramelo mordendo a bola azul');
+    });
+  });
+
+  group('a descrição do produto na tela', () {
+    // 500 caracteres no cartão, com botão para o resto (decisão do cliente de
+    // 17/10/2026). O teto do campo subiu para 3000 no mesmo dia, e sem corte o
+    // cartão empurraria a vitrine inteira para baixo.
+    String longo(int n) {
+      // Palavras de 4 letras + espaço: 5 caracteres por palavra, então o corte
+      // tem sempre um espaço por perto e nada depende de sorte.
+      final b = StringBuffer();
+      while (b.length < n) {
+        b.write('abcd ');
+      }
+      return b.toString().substring(0, n).trimRight();
+    }
+
+    testWidgets('a quebra de linha é preservada, e descrição curta não ganha botão', (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[
+            itemDoContrato(summary: 'Primeira linha.\nSegunda linha.'),
+          ]),
+        ),
+      );
+      final desenhado = tester.widgetList<Text>(find.byType(Text)).firstWhere(
+        (t) => (t.data ?? '').contains('Primeira linha.'),
+      );
+      expect(desenhado.data, 'Primeira linha.\nSegunda linha.');
+      expect(find.text('Ler mais'), findsNothing, reason: 'botão que não esconde nada não deve existir');
+    });
+
+    test('exatamente 500 caracteres cabem inteiros, e 501 não', () {
+      final com500 = ItemDaLoja.doJson(itemDoContrato(summary: longo(500)));
+      expect(com500.resumo.length, 500);
+      expect(com500.resumoCabeNoCartao, isTrue);
+      expect(com500.trechoDoResumo, com500.resumo, reason: 'sem corte e sem reticências');
+
+      final com501 = ItemDaLoja.doJson(itemDoContrato(summary: longo(501)));
+      expect(com501.resumoCabeNoCartao, isFalse);
+      expect(com501.trechoDoResumo.endsWith('…'), isTrue);
+    });
+
+    test('o corte é no último espaço, nunca no meio da palavra', () {
+      final item = ItemDaLoja.doJson(itemDoContrato(summary: longo(3000)));
+      final trecho = item.trechoDoResumo;
+      expect(trecho.length, lessThanOrEqualTo(ItemDaLoja.tetoDoResumoNoCartao + 1));
+      // Sem as reticências, o trecho termina numa palavra completa: o caractere
+      // seguinte no texto original é espaço (ou o trecho é o texto inteiro).
+      final semReticencias = trecho.substring(0, trecho.length - 1);
+      expect(item.resumo[semReticencias.length], ' ');
+      expect(semReticencias.endsWith('abcd'), isTrue, reason: 'palavra inteira, não "abc"');
+    });
+
+    test('texto sem espaço nenhum ainda devolve 500 caracteres, e não 250', () {
+      final grudado = 'a' * 3000;
+      final item = ItemDaLoja.doJson(itemDoContrato(summary: grudado));
+      expect(item.trechoDoResumo.length, ItemDaLoja.tetoDoResumoNoCartao + 1, reason: '500 + reticências');
+    });
+
+    testWidgets('descrição de 3000: o cartão mostra o trecho, "Ler mais" expande e "Ler menos" recolhe', (tester) async {
+      final inteiro = longo(3000);
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(paginaDoContrato(<Map<String, dynamic>>[itemDoContrato(summary: inteiro)])),
+      );
+      final item = ItemDaLoja.doJson(itemDoContrato(summary: inteiro));
+
+      // Colapsado: o TRECHO é o dado do `Text`. Não há `semanticsLabel`
+      // mentindo, e o leitor de tela não ouve 3000 caracteres num cartão.
+      expect(find.text(item.trechoDoResumo), findsOneWidget);
+      expect(find.text(inteiro), findsNothing);
+
+      await tester.tap(find.text('Ler mais'));
+      await tester.pumpAndSettle();
+      expect(find.text(inteiro), findsOneWidget, reason: 'o texto inteiro aparece NO LUGAR, sem tela nova');
+      expect(find.text('Ler mais'), findsNothing);
+
+      // Recolhe: é uma lista, e cartão expandido empurra a vitrine para baixo.
+      await tester.tap(find.text('Ler menos'));
+      await tester.pumpAndSettle();
+      expect(find.text(item.trechoDoResumo), findsOneWidget);
+    });
+
+    // ISCA -- em `modelos_loja.dart`, no enum `CategoriaDaLoja`, troque
+    // `acessorio('accessory', ...)` por `acessorio('accessorios', ...)`. Este
+    // caso reprova: o APK instalado deixa de reconhecer a categoria que o
+    // servidor manda, e `porCodigo` passa a devolver nulo.
+    test('ISCA -- pluralizar o rótulo NÃO mexe no código do contrato', () {
+      expect(CategoriaDaLoja.acessorio.codigo, 'accessory');
+      expect(CategoriaDaLoja.brinquedo.codigo, 'toy');
+      expect(CategoriaDaLoja.acessorio.rotulo, 'Acessórios');
+      expect(CategoriaDaLoja.brinquedo.rotulo, 'Brinquedos');
+      // O que o servidor manda continua resolvendo, que é o que o APK já
+      // instalado depende de continuar funcionando.
+      expect(CategoriaDaLoja.porCodigo('accessory'), CategoriaDaLoja.acessorio);
+      expect(CategoriaDaLoja.porCodigo('toy'), CategoriaDaLoja.brinquedo);
+      expect(CategoriaDaLoja.porCodigo('accessorios'), isNull);
+    });
+
+    testWidgets('o botão diz de qual produto ele é, para o leitor de tela', (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[
+            itemDoContrato(title: 'Bola Pop', summary: longo(3000)),
+          ]),
+        ),
+      );
+      // "Ler mais, botão" repetido numa lista de doze cartões não diz nada.
+      expect(find.bySemanticsLabel('Ler mais da descrição de Bola Pop'), findsOneWidget);
     });
   });
 }

@@ -65,12 +65,17 @@ export function DialogoRenovarPreco({
   return (
     <Dialogo titulo="Renovar a consulta de preço" aoFechar={salvando ? undefined : aoFechar} largo>
       <p className="t-body c-sec">
-        {item.title}, em {item.partner.name}. Confira o preço no site do parceiro hoje e confirme o valor.
+        {item.partner ? `${item.title}, em ${item.partner.name}.` : `${item.title}.`} Confira o preço no site do parceiro
+        hoje e confirme o valor.
       </p>
-      <a className="link t-label" href={item.target_url} target="_blank" rel="noopener noreferrer">
-        Abrir a página do produto no parceiro <Icone nome="open" tamanho="s16" />
-        <span className="sr">(abre em nova aba)</span>
-      </a>
+      {/* Rascunho sem parceiro nao tem destino (os dois andam juntos): sem link
+          para abrir, a linha some em vez de virar um `href` vazio. */}
+      {item.target_url && (
+        <a className="link t-label" href={item.target_url} target="_blank" rel="noopener noreferrer">
+          Abrir a página do produto no parceiro <Icone nome="open" tamanho="s16" />
+          <span className="sr">(abre em nova aba)</span>
+        </a>
+      )}
       {falha && <Banner tipo="erro">{falha}</Banner>}
       <form
         className="form"

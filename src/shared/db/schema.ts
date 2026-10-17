@@ -1055,15 +1055,25 @@ export interface StoreItemsTable {
   id: string;
   /** O endereco publico do item. Unico. */
   slug: string;
-  /** Aponta para `store_partners.id`, nunca para o `slug` dele. */
-  partner_id: string;
+  /**
+   * Aponta para `store_partners.id`, nunca para o `slug` dele. **Anulavel no
+   * rascunho** desde a `20261017000002`: a publicacao o exige, e o
+   * `CHECK store_items_publicado_esta_completo` e quem cobra.
+   */
+  partner_id: string | null;
+  /** O minimo para o registro existir. Continua `NOT NULL`. */
   title: string;
-  summary: string;
-  category: CategoriaDaVitrine;
+  /** Anulavel no rascunho (`20261017000002`). Exigida na publicacao. */
+  summary: string | null;
+  /** Anulavel no rascunho (`20261017000002`). Exigida na publicacao. */
+  category: CategoriaDaVitrine | null;
   /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
   image_path: string | null;
-  /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
-  target_path: string;
+  /**
+   * Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira.
+   * Anulavel no rascunho (`20261017000002`). Exigido na publicacao.
+   */
+  target_path: string | null;
   target_host: string | null;
   /** Centavos, inteiro. Nunca ponto flutuante. */
   price_amount: number | null;
@@ -1107,8 +1117,16 @@ export interface StoreItemTagsTable {
 export interface StoreItemImagesTable {
   item_id: string;
   image_id: string;
+  /** `0` e a capa. Ate `7`. */
   position: number;
-  alt_text: string;
+  /**
+   * **Opcional desde a `20261017000002`** (pedido do cliente de 17/10/2026).
+   * Quando vem, de 2 a 150 caracteres; nulo quer dizer que o painel nao
+   * escreveu, e quem desenha cai no titulo do item.
+   *
+   * Em `network_event_images` ele continua `NOT NULL`.
+   */
+  alt_text: string | null;
 }
 
 /** A imagem de catalogo (ADR-0027 A.3). Mesma forma de `pet_photos`. */

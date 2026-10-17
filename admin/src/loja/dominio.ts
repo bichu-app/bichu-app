@@ -3,15 +3,23 @@ import type { Esquemas } from '../api/cliente.ts';
 
 /**
  * Codigo do contrato -> rotulo da tela. Os rotulos sao os que o app ja mostra
- * (UX 29.10; `correspondencias` de api/rastreabilidade-backoffice-rede.yaml).
+ * (UX 29.10; `correspondencias` de api/rastreabilidade-backoffice-rede.yaml,
+ * que declara `app/lib/api/modelos_loja.dart` como a FONTE do rotulo e esta
+ * matriz como o registro 1 para 1 -- este mapa e a copia que o painel usa, e
+ * mudar o rotulo e mudar os tres juntos).
  * `satisfies Record<...>` faz o compilador reprovar se o contrato ganhar ou
  * perder um valor sem o rotulo acompanhar.
+ *
+ * **`toy` e `accessory` no PLURAL desde 17/10/2026** (pedido do cliente). Só o
+ * rótulo: os códigos do contrato continuam `toy` e `accessory`, porque trocar
+ * o código quebraria o APK que já está instalado -- valor desconhecido num
+ * enum estoura a tela e não há como atualizar o app à força.
  */
 export const CATEGORIAS = {
   food: 'Alimentação',
-  toy: 'Brinquedo',
+  toy: 'Brinquedos',
   hygiene: 'Higiene',
-  accessory: 'Acessório',
+  accessory: 'Acessórios',
   health: 'Saúde',
   bed: 'Cama e conforto',
 } as const satisfies Record<Esquemas['StoreCategory'], string>;

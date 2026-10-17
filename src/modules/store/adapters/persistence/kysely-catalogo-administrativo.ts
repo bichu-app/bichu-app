@@ -157,13 +157,17 @@ function consultaDeParceiros(db: DbExecutor) {
 interface LinhaDoItem {
   id: string;
   slug: string;
-  partner_slug: string;
-  partner_name: string;
-  partner_host: string;
+  // Nulos juntos, e so no rascunho: a juncao com `store_partners` e EXTERNA
+  // desde a `20261017000002`, porque `i.partner_id` passou a ser anulavel e uma
+  // juncao interna FARIA O RASCUNHO SEM PARCEIRO DESAPARECER DO PAINEL -- a
+  // pessoa salvaria o rascunho e nao o acharia mais na lista.
+  partner_slug: string | null;
+  partner_name: string | null;
+  partner_host: string | null;
   title: string;
-  summary: string;
-  category: CategoriaDaVitrine;
-  target_path: string;
+  summary: string | null;
+  category: CategoriaDaVitrine | null;
+  target_path: string | null;
   target_host: string | null;
   image_path: string | null;
   price_amount: number | null;
@@ -241,23 +245,33 @@ async function complementosDosItens(db: DbExecutor, ids: readonly string[]): Pro
 }
 
 function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo {
+  // Os quatro andam com o parceiro: sem host nao ha como compor endereco
+  // nenhum, nem do destino nem da imagem da massa. Uma funcao so para os dois
+  // porque a regra e a mesma, e nao coincidencia.
+  const host = l.partner_host;
+  const endereco = (caminho: string | null): string | null =>
+    host === null || caminho === null ? null : enderecoNoParceiro(host, caminho);
   return {
     species: ordenarEspecies(extra.especies.get(l.id) ?? []),
     tags: extra.tags.get(l.id) ?? [],
     imagens: extra.imagens.get(l.id) ?? [],
     id: l.id,
     slug: l.slug,
-    partner: { slug: l.partner_slug, name: l.partner_name, host: l.partner_host },
+    partner:
+      l.partner_slug === null || l.partner_name === null || host === null
+        ? null
+        : { slug: l.partner_slug, name: l.partner_name, host },
     title: l.title,
     summary: l.summary,
     category: l.category,
     // A MESMA resolucao da leitura publica: o painel precisa mostrar o link
-    // com `www.` quando foi `www.` que a pessoa cadastrou.
-    targetUrl: enderecoNoParceiro(
-      hostDoDestinoDoItem(l.partner_host, l.target_host),
-      l.target_path,
-    ),
-    imageUrl: l.image_path === null ? null : enderecoNoParceiro(l.partner_host, l.image_path),
+    // com `www.` quando foi `www.` que a pessoa cadastrou. Rascunho sem
+    // parceiro ou sem caminho nao tem endereco a compor.
+    targetUrl:
+      host === null || l.target_path === null
+        ? null
+        : enderecoNoParceiro(hostDoDestinoDoItem(host, l.target_host), l.target_path),
+    imageUrl: endereco(l.image_path),
     priceAmount: l.price_amount === null ? null : Number(l.price_amount),
     priceCurrency: l.price_currency,
     priceCheckedAt: comoDataSimples(l.price_checked_at),
@@ -273,7 +287,9 @@ function comoItem(l: LinhaDoItem, extra: ComplementosDoItem): ItemAdministrativo
 function consultaDeItens(db: DbExecutor) {
   return db
     .selectFrom('store_items as i')
-    .innerJoin('store_partners as p', 'p.id', 'i.partner_id')
+    // EXTERNA, e nao interna: ver a nota em `LinhaDoItem`. O rascunho sem
+    // parceiro tem de aparecer na lista do painel.
+    .leftJoin('store_partners as p', 'p.id', 'i.partner_id')
     .select([
       'i.id as id',
       'i.slug as slug',
@@ -510,9 +526,13 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             summary: novo.summary,
             category: novo.category,
             image_path: null,
-            target_path: caminhoDoDestino(novo.targetUrl),
-            // Nulo quando o host e o do proprio parceiro, que e o caso comum.
-            target_host: hostDoDestino(novo.targetUrl, novo.partnerHost),
+            target_path: novo.targetUrl === null ? null : caminhoDoDestino(novo.targetUrl),
+            // Nulo quando o host e o do proprio parceiro, que e o caso comum,
+            // e nulo tambem no rascunho sem destino ou sem parceiro.
+            target_host:
+              novo.targetUrl === null || novo.partnerHost === null
+                ? null
+                : hostDoDestino(novo.targetUrl, novo.partnerHost),
             price_amount: novo.preco?.amount ?? null,
             price_currency: novo.preco?.currency ?? null,
             price_checked_at: novo.preco === null ? null : sql<Date>`${novo.preco.checkedAt}::date`,
@@ -543,15 +563,19 @@ function transacao(trx: DbTransaction, deps: DependenciasDoCatalogoAdministrativ
             ...(mudanca.summary === undefined ? {} : { summary: mudanca.summary }),
             ...(mudanca.category === undefined ? {} : { category: mudanca.category }),
             // Os dois andam JUNTOS: gravar o caminho novo com o host antigo
-            // levaria a pessoa para o caminho novo no dominio errado.
+            // levaria a pessoa para o caminho novo no dominio errado. `null`
+            // nos dois e o destino LIMPO do rascunho.
             ...(mudanca.destino === undefined
               ? {}
               : {
-                  target_path: caminhoDoDestino(mudanca.destino.targetUrl),
-                  target_host: hostDoDestino(
-                    mudanca.destino.targetUrl,
-                    mudanca.destino.partnerHost,
-                  ),
+                  target_path:
+                    mudanca.destino.targetUrl === null
+                      ? null
+                      : caminhoDoDestino(mudanca.destino.targetUrl),
+                  target_host:
+                    mudanca.destino.targetUrl === null || mudanca.destino.partnerHost === null
+                      ? null
+                      : hostDoDestino(mudanca.destino.targetUrl, mudanca.destino.partnerHost),
                 }),
             ...(mudanca.preco === undefined
               ? {}

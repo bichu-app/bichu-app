@@ -40,7 +40,10 @@ describe('preco de referencia em centavos (AdminPriceInput.amount)', () => {
 describe('rotulos do contrato', () => {
   it('categoria e especie usam os seis e os tres codigos do contrato, com os rotulos do app', () => {
     expect(Object.keys(CATEGORIAS)).toEqual(['food', 'toy', 'hygiene', 'accessory', 'health', 'bed']);
-    expect(Object.values(CATEGORIAS)).toEqual(['Alimentação', 'Brinquedo', 'Higiene', 'Acessório', 'Saúde', 'Cama e conforto']);
+    // `toy` e `accessory` no PLURAL desde 17/10/2026 (pedido do cliente). O
+    // CÓDIGO não mudou -- a asserção acima continua em `toy`/`accessory` --,
+    // porque trocar o código quebraria o APK instalado.
+    expect(Object.values(CATEGORIAS)).toEqual(['Alimentação', 'Brinquedos', 'Higiene', 'Acessórios', 'Saúde', 'Cama e conforto']);
     expect(ESPECIES).toEqual({ dog: 'Cão', cat: 'Gato', other: 'Outros animais' });
   });
 

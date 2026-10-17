@@ -35,9 +35,11 @@ import type { AutorizacaoDeEnvio } from '../../media/ports/object-storage.js';
 import {
   comoEtag,
   dataDeConsultaNoFuturo,
+  errosDaFalta,
   errosDeTexto,
   errosDoDestino,
   estadoDePublicacao,
+  faltaParaPublicar,
   hojeUtc,
   lerIfMatch,
   projetarItemAdministrativo,
@@ -46,6 +48,7 @@ import {
   conferirRotulo,
   slugDoItem,
   sufixoCurto,
+  TETO_DA_DESCRICAO_DO_ITEM,
   TETO_DE_IMAGENS_POR_ITEM,
   TETO_DE_TAGS_ATIVAS,
   TETO_DE_TAGS_POR_ITEM,
@@ -106,25 +109,39 @@ export interface PatchDeParceiro {
   readonly active?: boolean;
 }
 
+/**
+ * O corpo de `createAdminStoreItem`. **So `title` e obrigatorio** desde
+ * 17/10/2026: o item nasce rascunho, e rascunho existe para guardar trabalho
+ * incompleto enquanto a pessoa busca o que falta (pedido do cliente). O que
+ * falta e cobrado na PUBLICACAO, campo por campo (`faltaParaPublicar`).
+ */
 export interface CorpoDeItem {
   /** Opcional: sem ele, o servidor deriva do titulo (`slugDoItem`). */
   readonly slug?: string;
-  readonly partner_slug: string;
+  readonly partner_slug?: string;
   readonly title: string;
-  readonly summary: string;
-  readonly category: CategoriaDaVitrine;
-  readonly target_url: string;
+  readonly summary?: string;
+  readonly category?: CategoriaDaVitrine;
+  readonly target_url?: string;
   readonly price?: PrecoDoCorpo;
-  readonly species: readonly EspecieDoItem[];
+  readonly species?: readonly EspecieDoItem[];
   readonly tag_slugs?: readonly string[];
   readonly images?: readonly ImagemDoCorpo[];
   readonly sort_order?: number;
 }
 
-/** `CatalogImageInput`: um envio e o texto alternativo dele. */
+/**
+ * `StoreCatalogImageInput`: um envio e, **se a pessoa escreveu**, o texto
+ * alternativo dele. O texto virou opcional na `Loja` em 17/10/2026; a `Rede`
+ * continua com `CatalogImageInput`, onde ele e obrigatorio.
+ *
+ * Ausente e "nao escreveu". **Vazio nao chega aqui**: o contrato recusa
+ * `alt_text: ""` (`minLength: 2`), e o painel omite o campo em vez de mandar
+ * texto vazio.
+ */
 export interface ImagemDoCorpo {
   readonly upload_id: string;
-  readonly alt_text: string;
+  readonly alt_text?: string;
 }
 
 export interface CorpoDeTag {
@@ -136,13 +153,14 @@ export interface PatchDeTag {
   readonly active?: boolean;
 }
 
+/** Ausente nao mexe; `null` LIMPA, no mesmo idioma que `price` ja usava. */
 export interface PatchDeItem {
   readonly slug?: string;
-  readonly partner_slug?: string;
+  readonly partner_slug?: string | null;
   readonly title?: string;
-  readonly summary?: string;
-  readonly category?: CategoriaDaVitrine;
-  readonly target_url?: string;
+  readonly summary?: string | null;
+  readonly category?: CategoriaDaVitrine | null;
+  readonly target_url?: string | null;
   readonly price?: PrecoDoCorpo | null;
   readonly species?: readonly EspecieDoItem[];
   readonly tag_slugs?: readonly string[];
@@ -242,7 +260,7 @@ function retratoDoParceiro(p: ParceiroAdministrativo): Record<string, unknown> {
 function retratoDoItem(i: ItemAdministrativo): Record<string, unknown> {
   return {
     slug: i.slug,
-    partner_slug: i.partner.slug,
+    partner_slug: i.partner?.slug ?? null,
     title: i.title,
     summary: i.summary,
     category: i.category,
@@ -255,11 +273,25 @@ function retratoDoItem(i: ItemAdministrativo): Record<string, unknown> {
     species: [...i.species],
     tag_slugs: i.tags.map((t) => t.slug),
     images: i.imagens.map((m) => ({ upload_id: m.uploadId, alt_text: m.altText })),
+    missing_to_publish: [...faltaParaPublicar(i)],
   };
 }
 
 function retratoDaTag(t: TagAdministrativa): Record<string, unknown> {
   return { slug: t.slug, label: t.label, active: t.active };
+}
+
+/**
+ * Destino sem parceiro. O banco guarda so o CAMINHO e compoe o endereco com o
+ * host do parceiro: sem parceiro nao ha contra o que conferir o link, nem como
+ * le-lo de volta depois.
+ */
+function destinoSemParceiro(): ProblemFieldError {
+  return {
+    field: 'target_url',
+    code: 'partner_required',
+    message: 'Escolha o parceiro antes de informar o link do produto.',
+  };
 }
 
 function tagDesconhecida(): AppError {
@@ -306,7 +338,12 @@ function errosDaGaleriaEDaEspecie(corpo: {
     if (new Set(corpo.images.map((i) => i.upload_id.toLowerCase())).size !== corpo.images.length) {
       erros.push({ field: 'images', code: 'duplicate_upload', message: 'A mesma imagem apareceu duas vezes.' });
     }
+    // So o que VEIO: o texto alternativo e opcional na `Loja` desde 17/10/2026,
+    // e ausente nao e texto curto. O contrato ja recusa `""` por `minLength`,
+    // entao o que chega aqui com o campo presente e texto de verdade -- e e
+    // sobre ele, aparado, que o tamanho e medido (como no banco).
     corpo.images.forEach((imagem, n) => {
+      if (imagem.alt_text === undefined) return;
       erros.push(...errosDeTexto(`images[${String(n)}].alt_text`, imagem.alt_text, 2, 150));
     });
   }
@@ -498,34 +535,46 @@ export class CatalogoAdministrativo {
    */
   async criarItem(autor: Autor, corpo: CorpoDeItem): Promise<Escrito<ItemAdministrativoProjetado>> {
     const agora = this.agora();
+    // A PRIMEIRA REGUA. So o que VEIO e conferido: o rascunho guarda trabalho
+    // incompleto, e o que falta e cobrado em `publicarItem`. O que continua
+    // valendo e a forma do que a pessoa JA escreveu -- descricao de um
+    // caractere e erro de digitacao, nao rascunho.
     const erros = [
       ...errosDeTexto('title', corpo.title, 2, 120),
-      ...errosDeTexto('summary', corpo.summary, 2, 180),
+      ...(corpo.summary === undefined ? [] : errosDeTexto('summary', corpo.summary, 2, TETO_DA_DESCRICAO_DO_ITEM)),
       ...errosDoPreco(corpo.price, agora),
       ...errosDaGaleriaEDaEspecie(corpo),
     ];
     if (erros.length > 0) throw problemas.validacao(erros);
 
     return this.deps.repositorio.emTransacao(async (tx) => {
-      const parceiro = await tx.parceiroPorSlug(corpo.partner_slug);
-      if (parceiro === null) {
-        throw problemas.validacao([
-          { field: 'partner_slug', code: 'unknown_partner', message: 'Parceiro não encontrado.' },
-        ]);
+      // Sem parceiro nao ha host, e sem host o destino nao tem contra o que ser
+      // conferido: as duas coisas andam juntas, no rascunho e na publicacao.
+      let parceiro: ParceiroAdministrativo | null = null;
+      if (corpo.partner_slug !== undefined) {
+        parceiro = await tx.parceiroPorSlug(corpo.partner_slug);
+        if (parceiro === null) {
+          throw problemas.validacao([
+            { field: 'partner_slug', code: 'unknown_partner', message: 'Parceiro não encontrado.' },
+          ]);
+        }
       }
-      const destino = errosDoDestino('target_url', corpo.target_url, parceiro.host);
-      if (destino.length > 0) throw problemas.validacao(destino);
+      if (corpo.target_url !== undefined) {
+        if (parceiro === null) throw problemas.validacao([destinoSemParceiro()]);
+        const destino = errosDoDestino('target_url', corpo.target_url, parceiro.host);
+        if (destino.length > 0) throw problemas.validacao(destino);
+      }
 
       const inserir = (slug: string) =>
         tx.inserirItem({
           id: this.deps.ids.uuidv7(),
           slug,
-          partnerId: parceiro.id,
-          partnerHost: parceiro.host,
+          partnerId: parceiro?.id ?? null,
+          partnerHost: parceiro?.host ?? null,
           title: corpo.title.trim(),
-          summary: corpo.summary.trim(),
-          category: corpo.category,
-          targetUrl: corpo.target_url,
+          summary: corpo.summary?.trim() ?? null,
+          category: corpo.category ?? null,
+          targetUrl: corpo.target_url ?? null,
           preco: corpo.price === undefined ? null : precoDoCorpo(corpo.price),
           sortOrder: corpo.sort_order ?? 0,
           agora,
@@ -558,7 +607,10 @@ export class CatalogoAdministrativo {
     const agora = this.agora();
     const erros = [
       ...(patch.title === undefined ? [] : errosDeTexto('title', patch.title, 2, 120)),
-      ...(patch.summary === undefined ? [] : errosDeTexto('summary', patch.summary, 2, 180)),
+      // `null` LIMPA (rascunho), e limpar nao tem tamanho a conferir.
+      ...(patch.summary === undefined || patch.summary === null
+        ? []
+        : errosDeTexto('summary', patch.summary, 2, TETO_DA_DESCRICAO_DO_ITEM)),
       ...errosDoPreco(patch.price, agora),
       ...errosDaGaleriaEDaEspecie(patch),
     ];
@@ -568,9 +620,15 @@ export class CatalogoAdministrativo {
       const atual = await tx.itemPorSlug(slug);
       if (atual === null) throw problemas.naoEncontrado();
 
-      let partnerId: string | undefined;
-      let hostDoParceiro = atual.partner.host;
-      if (patch.partner_slug !== undefined && patch.partner_slug !== atual.partner.slug) {
+      // `undefined` nao mexe, `null` limpa, texto troca. As tres respostas
+      // precisam ser distinguiveis, e por isso `partnerId` nao e um
+      // `string | undefined`.
+      let partnerId: string | null | undefined;
+      let hostDoParceiro = atual.partner?.host ?? null;
+      if (patch.partner_slug === null) {
+        partnerId = null;
+        hostDoParceiro = null;
+      } else if (patch.partner_slug !== undefined && patch.partner_slug !== atual.partner?.slug) {
         const parceiro = await tx.parceiroPorSlug(patch.partner_slug);
         if (parceiro === null) {
           throw problemas.validacao([
@@ -584,28 +642,46 @@ export class CatalogoAdministrativo {
       // O destino e reconferido quando muda ELE ou o parceiro: trocar o
       // parceiro de um item sem trocar o link deixaria o link apontando para o
       // site de outro parceiro.
-      if (patch.target_url !== undefined || partnerId !== undefined) {
+      //
+      // Tirar o parceiro TIRA o destino junto, e nao e cortesia: o banco guarda
+      // so o caminho e compoe o endereco com o host do parceiro, entao caminho
+      // sem parceiro e um destino que ninguem consegue ler de volta. A tela
+      // mostra os dois campos vazios, que e a verdade do rascunho.
+      const alvoDoDestino = patch.target_url === undefined ? atual.targetUrl : patch.target_url;
+      if (hostDoParceiro === null) {
+        if (patch.target_url !== undefined && patch.target_url !== null) {
+          throw problemas.validacao([destinoSemParceiro()]);
+        }
+      } else if (alvoDoDestino !== null && (patch.target_url !== undefined || partnerId !== undefined)) {
         const campo = patch.target_url === undefined ? 'partner_slug' : 'target_url';
-        const destino = errosDoDestino(campo, patch.target_url ?? atual.targetUrl, hostDoParceiro);
+        const destino = errosDoDestino(campo, alvoDoDestino, hostDoParceiro);
         if (destino.length > 0) throw problemas.validacao(destino);
       }
+      const destinoLimpoComOParceiro = partnerId === null && atual.targetUrl !== null;
 
       const mudanca: MudancaDeItem = {
         ...(patch.slug === undefined ? {} : { slug: patch.slug }),
         ...(partnerId === undefined ? {} : { partnerId }),
         ...(patch.title === undefined ? {} : { title: patch.title.trim() }),
-        ...(patch.summary === undefined ? {} : { summary: patch.summary.trim() }),
+        ...(patch.summary === undefined ? {} : { summary: patch.summary === null ? null : patch.summary.trim() }),
         ...(patch.category === undefined ? {} : { category: patch.category }),
         // O destino volta ao adaptador quando muda ELE **ou o parceiro**, e os
         // dois casos mandam `partnerHost` junto: e com ele que o adaptador
         // decide se `target_host` fica nulo. Trocar o parceiro sem remandar o
         // destino deixaria `target_host` apontando para o dominio do parceiro
         // anterior, e o link sairia no site de quem nao vende mais o item.
+        //
+        // Tirar o parceiro LIMPA o destino junto (`destinoLimpoComOParceiro`):
+        // caminho sem host e endereco que ninguem compoe de volta.
         ...(patch.target_url === undefined && partnerId === undefined
           ? {}
           : {
               destino: {
-                targetUrl: patch.target_url ?? atual.targetUrl,
+                targetUrl: destinoLimpoComOParceiro
+                  ? null
+                  : patch.target_url === undefined
+                    ? atual.targetUrl
+                    : patch.target_url,
                 partnerHost: hostDoParceiro,
               },
             }),
@@ -658,17 +734,19 @@ export class CatalogoAdministrativo {
       if (atual === null) throw problemas.naoEncontrado();
       const antes = estadoDePublicacao(atual);
       if (antes === 'published') return this.escritoDoItem(atual);
-      // Pelo menos uma especie e regra da criacao E da publicacao (A.2.1): o
-      // item da massa nasceu sem especie, e ele nao volta ao app sem uma.
-      if (atual.species.length === 0) {
-        throw problemas.validacao([
-          {
-            field: 'species',
-            code: 'species_required',
-            message: 'Diga a que espécie o produto serve antes de publicar.',
-          },
-        ]);
-      }
+
+      // **A SEGUNDA REGUA, E E AQUI QUE ELA MORA.** O rascunho exige so o
+      // titulo; a publicacao exige o conjunto, e responde `400` dizendo O QUE
+      // FALTA, um erro por campo, com o mesmo `field` que a tela usa. A conta e
+      // a MESMA de `missing_to_publish` na leitura: uma funcao so, para a tela
+      // nunca prometer uma publicacao que o servidor recusa.
+      //
+      // `species` sempre esteve aqui (A.2.1: o item da massa nasceu sem especie
+      // e nao volta ao app sem uma). O que mudou em 17/10/2026 e que as outras
+      // quatro passaram a acompanha-la, porque deixaram de ser cobradas na
+      // criacao.
+      const faltas = faltaParaPublicar(atual);
+      if (faltas.length > 0) throw problemas.validacao(errosDaFalta(faltas));
 
       const agora = this.agora();
       const alterado = await tx.atualizarItem(
@@ -780,9 +858,12 @@ export class CatalogoAdministrativo {
 
     if (corpo.images !== undefined) {
       const galeria: ImagemNaPosicao[] = [];
+      // `position` E O INDICE DA LISTA, e e so isso: a ordem que o painel
+      // mandou e a ordem que o banco grava, e a capa e a posicao 0. Nao ha
+      // sinalizador de capa em lugar nenhum (`20260928000003`).
       for (const [position, imagem] of corpo.images.entries()) {
         const imageId = await this.imagemDoEnvio(tx, itemId, imagem.upload_id, agora);
-        galeria.push({ imageId, position, altText: imagem.alt_text.trim() });
+        galeria.push({ imageId, position, altText: imagem.alt_text?.trim() ?? null });
       }
       await tx.substituirImagens(itemId, galeria);
     }

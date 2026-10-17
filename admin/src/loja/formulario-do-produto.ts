@@ -4,7 +4,7 @@
  * `validation-failed` do servidor para os campos da tela.
  */
 import type { Esquemas } from '../api/cliente.ts';
-import { descricaoValida, precisaDeDescricao, type ImagemDaGaleria } from '../componentes/Galeria.tsx';
+import { descricaoAceitavel, precisaDeDescricao, type ImagemDaGaleria } from '../componentes/Galeria.tsx';
 import { centavosParaCampo, hojeCivil, MAXIMO_DE_TAGS, precoEmCentavos, type Categoria, type Especie } from './dominio.ts';
 
 export interface ValoresDoProduto {
@@ -76,6 +76,14 @@ export type ErrosDoProduto = Partial<Record<CampoDoProduto, string>>;
 
 const MENSAGEM_DO_PRECO = 'Informe o preço em reais, por exemplo 89,90.';
 
+/**
+ * O teto da "Descricao" do produto. **3000 desde 17/10/2026** (decisao do
+ * cliente), e o MESMO numero do `maxLength` do contrato e do `CHECK` do banco.
+ * O `maxLength` do campo da tela ja impede passar disso; isto aqui existe para
+ * a tela nao carregar o numero solto em dois lugares.
+ */
+export const TETO_DA_DESCRICAO = 3000;
+
 export function hostDoLink(link: string): string | undefined {
   try {
     return new URL(link).hostname.toLowerCase();
@@ -103,22 +111,59 @@ export function linkEDoParceiro(link: string, hostDoParceiro: string): boolean {
   return host === alvo || host.endsWith(`.${alvo}`);
 }
 
+/**
+ * As DUAS REGUAS do formulario (pedido do cliente de 17/10/2026).
+ *
+ * - `rascunho`: so o nome. Rascunho existe para guardar trabalho incompleto
+ *   enquanto a pessoa busca o que falta, e cobrar o conjunto nele era o defeito
+ *   que o cliente bateu ("se é rascunho, não deveria ser obrigatório né").
+ * - `publicacao`: o conjunto inteiro, que e a mesma regua do servidor em
+ *   `publishAdminStoreItem`.
+ *
+ * O que vale nas DUAS: a forma do que a pessoa JA escreveu. Preco sem data,
+ * data no futuro, link que nao e do parceiro e imagem que falhou sao erro de
+ * digitacao, nao rascunho -- e gravar um deles perderia o trabalho em vez de
+ * guarda-lo.
+ */
+export type ReguaDoProduto = 'rascunho' | 'publicacao';
+
 export function validarProduto(
   v: ValoresDoProduto,
   contexto: { hostDoParceiro?: string | undefined; hoje?: string },
+  regua: ReguaDoProduto = 'publicacao',
 ): ErrosDoProduto {
   const e: ErrosDoProduto = {};
+  // O MINIMO DO RASCUNHO, e e so ele: sem nome nao ha o que reencontrar na
+  // lista depois.
   if (v.titulo.trim().length < 2) e['f-nome'] = 'Informe o nome do produto.';
-  if (v.resumo.trim().length < 2) e['f-desc'] = 'Escreva uma descrição.';
-  if (v.categoria === '') e['f-categoria'] = 'Escolha a categoria.';
-  if (v.especies.length === 0) e['f-especies'] = 'Marque pelo menos um animal.';
+
+  if (regua === 'publicacao') {
+    if (v.resumo.trim().length < 2) e['f-desc'] = 'Escreva uma descrição.';
+    if (v.categoria === '') e['f-categoria'] = 'Escolha a categoria.';
+    if (v.especies.length === 0) e['f-especies'] = 'Marque pelo menos um animal.';
+    if (v.parceiro === '') e['f-parceiro'] = 'Informe o parceiro ou a loja.';
+  } else {
+    // No rascunho a descricao pode estar vazia, mas uma letra so continua
+    // sendo recusada pelo contrato (`minLength: 2`): a tela diz isso em vez de
+    // deixar o 400 chegar sem endereco.
+    if (v.resumo.trim() !== '' && v.resumo.trim().length < 2) e['f-desc'] = 'Escreva ao menos duas letras, ou deixe vazio.';
+  }
   if (v.tags.length > MAXIMO_DE_TAGS) e['f-tags'] = `Escolha até ${MAXIMO_DE_TAGS} tags.`;
-  if (v.parceiro === '') e['f-parceiro'] = 'Informe o parceiro ou a loja.';
 
   const link = v.link.trim();
-  if (!/^https:\/\/[^\s/]+/i.test(link) || !hostDoLink(link)) e['f-link'] = 'O link precisa começar com https://.';
-  else if (contexto.hostDoParceiro && !linkEDoParceiro(link, contexto.hostDoParceiro))
+  // Link vazio: cobrado so na publicacao. Link ESCRITO: conferido sempre, nas
+  // duas reguas.
+  if (link === '') {
+    if (regua === 'publicacao') e['f-link'] = 'O link precisa começar com https://.';
+  } else if (!/^https:\/\/[^\s/]+/i.test(link) || !hostDoLink(link)) {
+    e['f-link'] = 'O link precisa começar com https://.';
+  } else if (v.parceiro === '') {
+    // O servidor recusa destino sem parceiro (`code: partner_required`): o banco
+    // guarda so o caminho e compoe o endereco com o host do parceiro.
+    e['f-link'] = 'Escolha o parceiro antes de informar o link.';
+  } else if (contexto.hostDoParceiro && !linkEDoParceiro(link, contexto.hostDoParceiro)) {
     e['f-link'] = mensagemDoHost(contexto.hostDoParceiro);
+  }
 
   const temPreco = v.preco.trim() !== '';
   const temData = v.consultadoEm.trim() !== '';
@@ -129,8 +174,37 @@ export function validarProduto(
 
   if (v.imagens.some((im) => im.estado === 'erro')) e.imagens = 'A imagem não foi enviada.';
   else if (v.imagens.some((im) => im.estado === 'enviando')) e.imagens = 'Espere o envio das imagens terminar.';
-  else if (v.imagens.some((im) => precisaDeDescricao(im) && !descricaoValida(im.alt))) e.imagens = 'Descreva a imagem.';
+  // `false`: a descricao da imagem e OPCIONAL na Loja desde 17/10/2026. O que
+  // sobra e a descricao escrita errada (uma letra), que o contrato recusa.
+  else if (v.imagens.some((im) => precisaDeDescricao(im) && !descricaoAceitavel(im.alt, false)))
+    e.imagens = 'Escreva ao menos duas letras na descrição da imagem, ou deixe o campo vazio.';
   return e;
+}
+
+/**
+ * O que falta para publicar, na ordem dos campos da tela. E a MESMA pergunta
+ * que `missing_to_publish` do servidor responde; aqui ela vale sobre o que esta
+ * na tela AGORA, para o botao de publicar poder dizer o que falta em vez de so
+ * ficar morto.
+ */
+export function faltaParaPublicar(v: ValoresDoProduto): string[] {
+  const faltas: string[] = [];
+  if (v.titulo.trim().length < 2) faltas.push(ROTULO_DO_CAMPO['f-nome']);
+  if (v.resumo.trim().length < 2) faltas.push(ROTULO_DO_CAMPO['f-desc']);
+  if (v.categoria === '') faltas.push(ROTULO_DO_CAMPO['f-categoria']);
+  if (v.especies.length === 0) faltas.push(ROTULO_DO_CAMPO['f-especies']);
+  if (v.parceiro === '') faltas.push(ROTULO_DO_CAMPO['f-parceiro']);
+  if (v.link.trim() === '') faltas.push(ROTULO_DO_CAMPO['f-link']);
+  return faltas;
+}
+
+/** A frase do que falta, em portugues: "Falta a Descrição." / "Faltam X e Y." */
+export function fraseDaFalta(faltas: readonly string[]): string | null {
+  if (faltas.length === 0) return null;
+  const nomes = faltas.map((f) => f.toLowerCase());
+  if (nomes.length === 1) return `Para publicar, falta preencher: ${nomes[0]}.`;
+  const ultimo = nomes[nomes.length - 1];
+  return `Para publicar, falta preencher: ${nomes.slice(0, -1).join(', ')} e ${ultimo}.`;
 }
 
 function preco(v: ValoresDoProduto): Esquemas['AdminPriceInput'] | undefined {
@@ -139,23 +213,47 @@ function preco(v: ValoresDoProduto): Esquemas['AdminPriceInput'] | undefined {
   return { amount, currency: 'BRL', checked_at: v.consultadoEm };
 }
 
-function imagensDoCorpo(v: ValoresDoProduto): Esquemas['CatalogImageInput'][] {
+/**
+ * A galeria como o corpo a manda: **a ordem da lista E a ordem das imagens**, e
+ * a primeira e a capa. O servidor grava `position` pelo indice
+ * (`aplicarEspecieTagsEImagens`), entao nao ha campo de posicao nem sinalizador
+ * de capa a mandar -- escolher a capa e por a imagem em primeiro lugar.
+ *
+ * `alt_text` e OMITIDO quando esta vazio, e nao mandado como `""`: o contrato
+ * pede 2 a 150 caracteres quando o campo vem (`minLength`), e ausente e o unico
+ * jeito de dizer "nao escrevi".
+ */
+function imagensDoCorpo(v: ValoresDoProduto): Esquemas['StoreCatalogImageInput'][] {
   return v.imagens
     .filter((im): im is ImagemDaGaleria & { uploadId: string } => typeof im.uploadId === 'string')
-    .map((im) => ({ upload_id: im.uploadId, alt_text: im.alt.trim() }));
+    .map((im) => {
+      const alt = im.alt.trim();
+      return { upload_id: im.uploadId, ...(alt === '' ? {} : { alt_text: alt }) };
+    });
 }
 
-/** `createAdminStoreItem`. Sem `slug`: o servidor deriva do titulo (BO-5). */
+/**
+ * `createAdminStoreItem`. Sem `slug`: o servidor deriva do titulo (BO-5).
+ *
+ * **O item nasce rascunho, e desde 17/10/2026 o rascunho aceita campo em
+ * branco**: o que esta vazio e OMITIDO do corpo, porque o contrato agora pede
+ * so `title`. Mandar `""` seria recusado por `minLength`, e mandar `null` nao
+ * cabe na criacao (`null` e o idioma de LIMPAR, que e do `PATCH`).
+ */
 export function corpoDeCriacao(v: ValoresDoProduto): Esquemas['AdminStoreItemInput'] {
   const p = preco(v);
+  const link = v.link.trim();
+  const resumo = v.resumo.trim();
   return {
-    partner_slug: v.parceiro,
     title: v.titulo.trim(),
-    summary: v.resumo.trim(),
-    category: v.categoria as Categoria,
-    species: v.especies,
+    ...(v.parceiro === '' ? {} : { partner_slug: v.parceiro }),
+    ...(resumo === '' ? {} : { summary: resumo }),
+    ...(v.categoria === '' ? {} : { category: v.categoria }),
+    ...(v.especies.length === 0 ? {} : { species: v.especies }),
     tag_slugs: v.tags,
-    target_url: v.link.trim(),
+    // Destino sem parceiro o servidor recusa (`partner_required`): sem host nao
+    // ha contra o que conferir o link. A tela ja barra isso em `validarProduto`.
+    ...(link === '' || v.parceiro === '' ? {} : { target_url: link }),
     images: imagensDoCorpo(v),
     // A ordem de curadoria nao e editavel em tela (matriz, `contrato_sem_tela`): o padrao do contrato.
     sort_order: 0,
@@ -190,14 +288,21 @@ const assinaturaDaGaleria = (v: Pick<ValoresDoProduto, 'imagens'>) => JSON.strin
  */
 export function corpoDeAlteracao(v: ValoresDoProduto, base?: Pick<ValoresDoProduto, 'imagens'>): Esquemas['AdminStoreItemPatch'] {
   const galeriaMudou = !base || assinaturaDaGaleria(v) !== assinaturaDaGaleria(base);
+  const link = v.link.trim();
+  const resumo = v.resumo.trim();
+  // `null` LIMPA, no mesmo idioma de `price`: campo que a pessoa esvaziou no
+  // rascunho tem de ficar vazio no servidor, e nao voltar ao valor antigo na
+  // proxima leitura. Tirar o parceiro tira o destino junto (o servidor faz o
+  // mesmo: o caminho sem host nao tem endereco).
+  const semParceiro = v.parceiro === '';
   return {
-    partner_slug: v.parceiro,
+    partner_slug: semParceiro ? null : v.parceiro,
     title: v.titulo.trim(),
-    summary: v.resumo.trim(),
-    category: v.categoria as Categoria,
+    summary: resumo === '' ? null : resumo,
+    category: v.categoria === '' ? null : v.categoria,
     species: v.especies,
     tag_slugs: v.tags,
-    target_url: v.link.trim(),
+    target_url: link === '' || semParceiro ? null : link,
     ...(galeriaMudou ? { images: imagensDoCorpo(v) } : {}),
     price: preco(v) ?? null,
   };
@@ -207,8 +312,10 @@ export function corpoDeAlteracao(v: ValoresDoProduto, base?: Pick<ValoresDoProdu
 export function valoresDoItem(item: Esquemas['AdminStoreItem']): ValoresDoProduto {
   return {
     titulo: item.title,
-    resumo: item.summary,
-    categoria: item.category,
+    // Os quatro nulos do rascunho viram campo vazio na tela: o formulario fala
+    // em `''`, o contrato em `null`, e a traducao mora aqui e so aqui.
+    resumo: item.summary ?? '',
+    categoria: item.category ?? '',
     especies: [...item.species],
     tags: item.tags.map((t) => t.slug),
     imagens: [...item.images]
@@ -221,13 +328,15 @@ export function valoresDoItem(item: Esquemas['AdminStoreItem']): ValoresDoProdut
       .map((im) => ({
         chave: im.upload_id ?? `sem-envio-${String(im.position)}`,
         ...(im.upload_id === null ? {} : { uploadId: im.upload_id }),
-        alt: im.alt_text,
+        // `alt_text` e anulavel desde que a descricao virou opcional
+        // (17/10/2026): na tela o campo vazio e a mesma coisa.
+        alt: im.alt_text ?? '',
         estado: im.status,
         motivo: im.rejection_reason ?? null,
         previa: im.url ?? null,
       })),
-    parceiro: item.partner.slug,
-    link: item.target_url,
+    parceiro: item.partner?.slug ?? '',
+    link: item.target_url ?? '',
     preco: item.price ? centavosParaCampo(item.price.amount) : '',
     consultadoEm: item.price ? item.price.checked_at : '',
   };

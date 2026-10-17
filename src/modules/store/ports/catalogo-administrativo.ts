@@ -103,8 +103,10 @@ export interface MudancaDeTag {
 /** Uma posicao da galeria, como a escrita a grava. */
 export interface ImagemNaPosicao {
   readonly imageId: string;
+  /** O indice na lista que o painel mandou. `0` e a capa. */
   readonly position: number;
-  readonly altText: string;
+  /** `null` quando o painel nao escreveu descricao (opcional desde 17/10/2026). */
+  readonly altText: string | null;
 }
 
 /** A tag referenciada por um item, pelo `slug`, resolvida para a identidade interna. */
@@ -143,10 +145,15 @@ export interface Preco {
   readonly checkedAt: string;
 }
 
+/**
+ * O item como nasce. **Nasce rascunho**, e desde 17/10/2026 o rascunho aceita
+ * as quatro coisas que a publicacao exige em branco: `null` aqui e "a pessoa
+ * ainda nao sabe", nao erro.
+ */
 export interface NovoItem {
   readonly id: string;
   readonly slug: string;
-  readonly partnerId: string;
+  readonly partnerId: string | null;
   /**
    * O host do parceiro, para o adaptador decidir se `target_host` fica nulo.
    *
@@ -155,31 +162,44 @@ export interface NovoItem {
    * leitura abriria a janela em que o host muda entre a validacao e a gravacao
    * -- o item gravaria `target_host` nulo contra um dominio que nao e mais o
    * que foi conferido.
+   *
+   * `null` e o rascunho SEM parceiro (`20261017000002`): sem host nao ha
+   * endereco a compor, e `target_host` fica nulo junto.
    */
-  readonly partnerHost: string;
+  readonly partnerHost: string | null;
+  /** O minimo do rascunho. */
   readonly title: string;
-  readonly summary: string;
-  readonly category: CategoriaDaVitrine;
-  readonly targetUrl: string;
+  readonly summary: string | null;
+  readonly category: CategoriaDaVitrine | null;
+  readonly targetUrl: string | null;
   readonly preco: Preco | null;
   readonly sortOrder: number;
   readonly agora: Instant;
 }
 
+/**
+ * Ausente nao mexe; `null` LIMPA, no mesmo idioma que `preco` ja usava. Limpar
+ * so cabe em rascunho: a publicacao recusa o conjunto incompleto, e o
+ * `CHECK store_items_publicado_esta_completo` recusa o resto.
+ */
 export interface MudancaDeItem {
   readonly slug?: string;
-  readonly partnerId?: string;
+  readonly partnerId?: string | null;
   readonly title?: string;
-  readonly summary?: string;
-  readonly category?: CategoriaDaVitrine;
+  readonly summary?: string | null;
+  readonly category?: CategoriaDaVitrine | null;
   /**
    * O destino novo. **Os dois campos andam juntos de proposito**: o adaptador
    * grava `target_path` e `target_host` a partir dos dois, e um sem o outro
    * gravaria o caminho novo sob o dominio antigo -- o link levaria a pessoa
    * para o caminho certo no site errado. Dois campos opcionais soltos deixavam
    * essa combinacao ser escrita sem erro de compilacao; um campo so nao deixa.
+   *
+   * `targetUrl: null` LIMPA o destino (so cabe em rascunho), e
+   * `partnerHost: null` e o item sem parceiro: os dois nulos gravam as duas
+   * colunas nulas, que e a verdade do rascunho.
    */
-  readonly destino?: { readonly targetUrl: string; readonly partnerHost: string };
+  readonly destino?: { readonly targetUrl: string | null; readonly partnerHost: string | null };
   /** `null` tira o preco. Ausente nao mexe. */
   readonly preco?: Preco | null;
   readonly sortOrder?: number;

@@ -46,7 +46,8 @@ import {
 
 /** O item como o dublê o guarda: as ligacoes ficam fora, como no banco. */
 type ItemGuardado = Omit<ItemAdministrativo, 'species' | 'tags' | 'imagens' | 'partner'> & {
-  readonly partnerId: string;
+  /** Nulo no rascunho sem parceiro, como a coluna desde a `20261017000002`. */
+  readonly partnerId: string | null;
 };
 
 interface ImagemGuardada {
@@ -103,7 +104,10 @@ export interface EnvioSemeado {
 function montarItem(e: Estado, id: string): ItemAdministrativo {
   const guardado = e.itens.get(id);
   if (guardado === undefined) throw new Error(`item ${id} inexistente no dublê`);
-  const parceiro = e.parceiros.get(guardado.partnerId);
+  // Rascunho sem parceiro e estado normal desde a `20261017000002`; o que
+  // continua sendo defeito do dublê é `partnerId` que aponta para parceiro
+  // inexistente.
+  const parceiro = guardado.partnerId === null ? null : e.parceiros.get(guardado.partnerId);
   if (parceiro === undefined) throw new Error('parceiro inexistente no dublê');
   return {
     id: guardado.id,
@@ -117,10 +121,15 @@ function montarItem(e: Estado, id: string): ItemAdministrativo {
     // porque e o truncamento do caminho que ele precisa reproduzir -- um duble
     // que devolvesse a URL original passaria verde sobre o defeito que a
     // gravacao teria.
-    targetUrl: enderecoNoParceiro(
-      hostDoDestinoDoItem(parceiro.host, hostDoDestino(guardado.targetUrl, parceiro.host)),
-      caminhoDoDestino(guardado.targetUrl),
-    ),
+    //
+    // Sem parceiro nao ha host, e o destino nao tem como ser lido de volta.
+    targetUrl:
+      parceiro === null || guardado.targetUrl === null
+        ? null
+        : enderecoNoParceiro(
+            hostDoDestinoDoItem(parceiro.host, hostDoDestino(guardado.targetUrl, parceiro.host)),
+            caminhoDoDestino(guardado.targetUrl),
+          ),
     imageUrl: guardado.imageUrl,
     priceAmount: guardado.priceAmount,
     priceCurrency: guardado.priceCurrency,
@@ -131,7 +140,7 @@ function montarItem(e: Estado, id: string): ItemAdministrativo {
     createdAt: guardado.createdAt,
     updatedAt: guardado.updatedAt,
     version: guardado.version,
-    partner: { slug: parceiro.slug, name: parceiro.name, host: parceiro.host },
+    partner: parceiro === null ? null : { slug: parceiro.slug, name: parceiro.name, host: parceiro.host },
     species: ordenarEspecies(e.especies.get(id) ?? []),
     tags: (e.tagsDoItem.get(id) ?? [])
       .map((tagId) => e.tags.get(tagId))

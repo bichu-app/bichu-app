@@ -94,17 +94,22 @@ void describe('o preco no painel', () => {
 
   void it('ISCA NEGATIVA: o mesmo item, pela projecao publica, sai SEM o valor', () => {
     const vencido = item({ priceCheckedAt: '2026-08-23' });
+    // A projecao publica so recebe item PUBLICADO, e publicado tem as quatro
+    // colunas do rascunho preenchidas (`store_items_publicado_esta_completo`).
+    // Os `??` abaixo sao do tipo, nao do caso: sem eles o teste nao compila
+    // desde que o rascunho passou a aceitar nulo.
+    assert.ok(vencido.partner !== null);
     const publico = projetarItem(
       {
         slug: vencido.slug,
         title: vencido.title,
-        summary: vencido.summary,
-        category: vencido.category,
+        summary: vencido.summary ?? '',
+        category: vencido.category ?? 'food',
         imageUrl: null,
         imageAltText: null,
         species: ['dog'],
         tags: [],
-        targetUrl: vencido.targetUrl,
+        targetUrl: vencido.targetUrl ?? '',
         partnerSlug: vencido.partner.slug,
         partnerName: vencido.partner.name,
         partnerHost: vencido.partner.host,

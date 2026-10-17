@@ -357,12 +357,18 @@ function LinhaDoProduto({ item, menu, aoRenovar }: { item: Item; menu: ItemDoMen
             <Link className="nome" to={`/loja/${item.slug}`} title={item.title}>
               {item.title}
             </Link>
-            <a className="sub t-body-sm" href={item.target_url} target="_blank" rel="noopener noreferrer" title="Abre a página do produto no parceiro, em nova aba">
-              {item.partner.name} <Icone nome="open" tamanho="s16" />
-              <span className="sr">(abre em nova aba)</span>
-            </a>
+            {/* Rascunho pode nao ter parceiro nem destino (17/10/2026): sem
+                eles a linha vira texto, e nao um link para lugar nenhum. */}
+            {item.partner && item.target_url ? (
+              <a className="sub t-body-sm" href={item.target_url} target="_blank" rel="noopener noreferrer" title="Abre a página do produto no parceiro, em nova aba">
+                {item.partner.name} <Icone nome="open" tamanho="s16" />
+                <span className="sr">(abre em nova aba)</span>
+              </a>
+            ) : (
+              <span className="sub t-body-sm c-sec">{item.partner ? item.partner.name : 'Sem parceiro'}</span>
+            )}
             <span className="t-caption c-sec">
-              {CATEGORIAS[item.category]} · {especies}
+              {item.category ? CATEGORIAS[item.category] : 'Sem categoria'} · {especies}
               {n > 1 ? ` · ${n} imagens` : ''}
             </span>
           </span>

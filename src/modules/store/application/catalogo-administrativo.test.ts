@@ -575,4 +575,277 @@ void describe('escrita administrativa da Loja', () => {
       assert.match(curto.recurso.slug, /^pe-[0-9a-z]{4}$/);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // A capa, a ordem das imagens e o texto alternativo opcional (17/10/2026)
+  // -------------------------------------------------------------------------
+
+  void describe('capa e ordem da galeria', () => {
+    async function tresEnvios(c: ReturnType<typeof montar>): Promise<[string, string, string]> {
+      const ids: string[] = [];
+      for (let n = 0; n < 3; n += 1) {
+        const r = await c.catalogo.autorizarEnvioDeCatalogo(AUTOR, {
+          purpose: 'store_item',
+          content_type: 'image/webp',
+          byte_size: 1000,
+        });
+        ids.push(r.uploadId);
+      }
+      return [ids[0] ?? '', ids[1] ?? '', ids[2] ?? ''];
+    }
+
+    void it('a ordem da lista E a ordem das imagens: position vem do indice, e a capa e a posicao 0', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const [a, b, c] = await tresEnvios(m);
+      const criado = await m.catalogo.criarItem(AUTOR, {
+        ...ITEM,
+        images: [
+          { upload_id: a, alt_text: 'Saco de racao de frente' },
+          { upload_id: b, alt_text: 'Tabela nutricional' },
+          { upload_id: c, alt_text: 'Detalhe do grao' },
+        ],
+      });
+      assert.deepEqual(
+        criado.recurso.images.map((i) => [i.position, i.alt_text]),
+        [
+          [0, 'Saco de racao de frente'],
+          [1, 'Tabela nutricional'],
+          [2, 'Detalhe do grao'],
+        ],
+      );
+    });
+
+    void it('ESCOLHER A CAPA E REORDENAR: a terceira em primeiro lugar vira position 0, sem coluna de capa', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const [a, b, c] = await tresEnvios(m);
+      const criado = await m.catalogo.criarItem(AUTOR, {
+        ...ITEM,
+        images: [
+          { upload_id: a, alt_text: 'Primeira' },
+          { upload_id: b, alt_text: 'Segunda' },
+          { upload_id: c, alt_text: 'Terceira' },
+        ],
+      });
+      // O painel manda a galeria inteira na ordem nova. E so isso que
+      // "escolher a capa" quer dizer: nao ha sinalizador a mandar.
+      const depois = await m.catalogo.alterarItem(AUTOR, ITEM.slug, criado.etag, {
+        images: [
+          { upload_id: c, alt_text: 'Terceira' },
+          { upload_id: a, alt_text: 'Primeira' },
+          { upload_id: b, alt_text: 'Segunda' },
+        ],
+      });
+      assert.deepEqual(
+        depois.recurso.images.map((i) => [i.position, i.alt_text]),
+        [
+          [0, 'Terceira'],
+          [1, 'Primeira'],
+          [2, 'Segunda'],
+        ],
+      );
+      assert.equal(depois.recurso.images[0]?.upload_id, c, 'a capa e a imagem que o painel pos em primeiro lugar');
+    });
+
+    void it('REMOVER A CAPA: a seguinte assume a posicao 0, e a ordem nao fica com buraco', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const [a, b, c] = await tresEnvios(m);
+      const criado = await m.catalogo.criarItem(AUTOR, {
+        ...ITEM,
+        images: [
+          { upload_id: a, alt_text: 'Capa' },
+          { upload_id: b, alt_text: 'Segunda' },
+          { upload_id: c, alt_text: 'Terceira' },
+        ],
+      });
+      // Remover e OMITIR da lista. A capa saiu.
+      const depois = await m.catalogo.alterarItem(AUTOR, ITEM.slug, criado.etag, {
+        images: [
+          { upload_id: b, alt_text: 'Segunda' },
+          { upload_id: c, alt_text: 'Terceira' },
+        ],
+      });
+      assert.deepEqual(
+        depois.recurso.images.map((i) => i.position),
+        [0, 1],
+        'as posicoes sao recontadas do zero: nenhum buraco onde a capa estava',
+      );
+      assert.equal(depois.recurso.images[0]?.upload_id, b, 'o produto NAO fica sem capa: a seguinte assume');
+    });
+
+    void it('REORDENAR com If-Match que a borda sufixou ("2-gzip") e aceito; a versao velha continua 412', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const [a, b] = await tresEnvios(m);
+      const criado = await m.catalogo.criarItem(AUTOR, {
+        ...ITEM,
+        images: [
+          { upload_id: a, alt_text: 'Primeira' },
+          { upload_id: b, alt_text: 'Segunda' },
+        ],
+      });
+      assert.equal(criado.etag, '"1"');
+      const trocado = [
+        { upload_id: b, alt_text: 'Segunda' },
+        { upload_id: a, alt_text: 'Primeira' },
+      ];
+      // O que a borda entrega ao painel quando comprime a resposta.
+      const comSufixo = await m.catalogo.alterarItem(AUTOR, ITEM.slug, 'W/"1-zstd"', { images: trocado });
+      assert.equal(trocado[0]?.upload_id, comSufixo.recurso.images[0]?.upload_id);
+      assert.equal(comSufixo.etag, '"2"');
+
+      // Versao velha COM sufixo continua sendo versao velha.
+      const erro = await m.catalogo
+        .alterarItem(AUTOR, ITEM.slug, '"1-gzip"', { images: trocado })
+        .catch((e: unknown) => e);
+      assert.equal(tipo(erro), 'precondition-failed');
+    });
+
+    void it('TEXTO ALTERNATIVO OPCIONAL: sem alt_text a imagem grava nulo; com uma letra, 400', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const [a, b] = await tresEnvios(m);
+      const criado = await m.catalogo.criarItem(AUTOR, {
+        ...ITEM,
+        images: [{ upload_id: a }, { upload_id: b, alt_text: 'Com descricao' }],
+      });
+      assert.deepEqual(
+        criado.recurso.images.map((i) => i.alt_text),
+        [null, 'Com descricao'],
+        'ausente grava nulo, e e isso que faz o app cair no nome do produto',
+      );
+
+      const erro = await m.catalogo
+        .alterarItem(AUTOR, ITEM.slug, criado.etag, { images: [{ upload_id: a, alt_text: 'a' }] })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(erro), ['length'], 'presente e curto continua erro de campo, nao rascunho');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // As duas reguas: rascunho minimo, publicacao completa (17/10/2026)
+  // -------------------------------------------------------------------------
+
+  void describe('rascunho incompleto e a regua da publicacao', () => {
+    void it('RASCUNHO SO COM O NOME: cria sem parceiro, descricao, categoria, especie nem link', async () => {
+      const criado = await m.catalogo.criarItem(AUTOR, { title: 'Produto que ainda estou pesquisando' });
+      assert.equal(criado.recurso.publication_state, 'draft');
+      assert.equal(criado.recurso.partner, null);
+      assert.equal(criado.recurso.summary, null);
+      assert.equal(criado.recurso.category, null);
+      assert.equal(criado.recurso.target_url, null);
+      assert.deepEqual(criado.recurso.species, []);
+      assert.match(criado.recurso.slug, /^produto-que-ainda-estou-p/);
+    });
+
+    void it('ISCA: AFROUXAR O RASCUNHO NAO AFROUXOU A PUBLICACAO -- 400 com um erro POR CAMPO que falta', async () => {
+      const criado = await m.catalogo.criarItem(AUTOR, { title: 'Produto que ainda estou pesquisando' });
+      const erro = await m.catalogo.publicarItem(AUTOR, criado.recurso.slug, criado.etag).catch((e: unknown) => e);
+      assert.equal(tipo(erro), 'validation-failed');
+      assert.ok(erro instanceof AppError);
+      assert.deepEqual(
+        (erro.errors ?? []).map((e) => [e.field, e.code]),
+        [
+          ['summary', 'summary_required'],
+          ['category', 'category_required'],
+          ['species', 'species_required'],
+          ['partner_slug', 'partner_required'],
+          ['target_url', 'target_url_required'],
+        ],
+        'a ordem e a dos campos da tela, e cada falta tem o seu proprio campo e codigo',
+      );
+      // E NADA foi publicado: o produto incompleto nao chega a vitrine do app.
+      const depois = await m.catalogo.lerItem(criado.recurso.slug);
+      assert.equal(depois.recurso.publication_state, 'draft');
+      assert.deepEqual(
+        m.estado().trilha.map((e) => e.action),
+        ['admin.store_item.created'],
+        'publicacao recusada nao deixa linha de trilha de publicacao',
+      );
+    });
+
+    void it('missing_to_publish diz o que falta em TODA leitura, e esvazia quando o rascunho fica completo', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const criado = await m.catalogo.criarItem(AUTOR, { title: 'Racao em pesquisa' });
+      assert.deepEqual(criado.recurso.missing_to_publish, [
+        'summary',
+        'category',
+        'species',
+        'partner_slug',
+        'target_url',
+      ]);
+
+      const completo = await m.catalogo.alterarItem(AUTOR, criado.recurso.slug, criado.etag, {
+        partner_slug: PARCEIRO.slug,
+        summary: ITEM.summary,
+        category: ITEM.category,
+        species: ITEM.species,
+        target_url: ITEM.target_url,
+      });
+      assert.deepEqual(completo.recurso.missing_to_publish, []);
+      const publicado = await m.catalogo.publicarItem(AUTOR, criado.recurso.slug, completo.etag);
+      assert.equal(publicado.recurso.publication_state, 'published');
+    });
+
+    void it('`null` LIMPA no rascunho, e tirar o parceiro tira o destino junto', async () => {
+      await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
+      const criado = await m.catalogo.criarItem(AUTOR, ITEM);
+      const limpo = await m.catalogo.alterarItem(AUTOR, ITEM.slug, criado.etag, {
+        summary: null,
+        category: null,
+        partner_slug: null,
+      });
+      assert.equal(limpo.recurso.summary, null);
+      assert.equal(limpo.recurso.category, null);
+      assert.equal(limpo.recurso.partner, null);
+      assert.equal(
+        limpo.recurso.target_url,
+        null,
+        'o banco guarda so o caminho: destino sem host do parceiro nao tem endereco',
+      );
+    });
+
+    void it('ISCA: destino sem parceiro e recusado (partner_required), na criacao e na alteracao', async () => {
+      const naCriacao = await m.catalogo
+        .criarItem(AUTOR, { title: 'Sem parceiro', target_url: 'https://lojadobairro.test/x' })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(naCriacao), ['partner_required']);
+
+      const rascunho = await m.catalogo.criarItem(AUTOR, { title: 'Ainda sem parceiro' });
+      const naAlteracao = await m.catalogo
+        .alterarItem(AUTOR, rascunho.recurso.slug, rascunho.etag, { target_url: 'https://lojadobairro.test/x' })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(naAlteracao), ['partner_required']);
+    });
+
+    void it('o que a pessoa JA escreveu continua conferido: descricao de uma letra e 400 no rascunho', async () => {
+      const erro = await m.catalogo.criarItem(AUTOR, { title: 'Produto', summary: 'a' }).catch((e: unknown) => e);
+      assert.deepEqual(codigos(erro), ['length']);
+    });
+
+    void it('a descricao aceita quebra de linha, e ela volta igual na leitura', async () => {
+      const comParagrafo = 'Primeira linha.\nSegunda linha.';
+      const criado = await m.catalogo.criarItem(AUTOR, { title: 'Com paragrafos', summary: comParagrafo });
+      assert.equal(criado.recurso.summary, comParagrafo, 'o \\n sobrevive a escrita e volta na leitura');
+    });
+
+    void it('A DESCRICAO VAI ATE 3000: 3000 passa, 3001 e 400, e a quebra conta no teto', async () => {
+      const com3000 = await m.catalogo.criarItem(AUTOR, { title: 'Descricao cheia', summary: 'a'.repeat(3000) });
+      assert.equal(com3000.recurso.summary?.length, 3000);
+
+      const com3001 = await m.catalogo
+        .criarItem(AUTOR, { title: 'Um a mais', summary: 'a'.repeat(3001) })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(com3001), ['length']);
+
+      // 2999 letras + uma quebra = 3000 exatos.
+      const noLimite = await m.catalogo.criarItem(AUTOR, {
+        title: 'No limite com quebra',
+        summary: `${'a'.repeat(2999)}\n`,
+      });
+      assert.equal(noLimite.recurso.summary?.length, 3000);
+
+      const passou = await m.catalogo
+        .criarItem(AUTOR, { title: 'Passou pela quebra', summary: `${'a'.repeat(3000)}\nb` })
+        .catch((e: unknown) => e);
+      assert.deepEqual(codigos(passou), ['length'], 'a quebra ocupa um caractere do teto');
+    });
+  });
 });

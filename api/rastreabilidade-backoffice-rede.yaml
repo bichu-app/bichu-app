@@ -569,12 +569,12 @@ correspondencias:
     um_para_um: true
     valores:
       food: Alimentação
-      toy: Brinquedo
+      toy: Brinquedos
       hygiene: Higiene
-      accessory: Acessório
+      accessory: Acessórios
       health: Saúde
       bed: Cama e conforto
-    nota: "conferido em 23/09: seis codigos, seis rotulos, nenhum sobrando. O backoffice (CATS/CAT_CODE) usa os mesmos seis."
+    nota: "conferido em 23/09: seis codigos, seis rotulos, nenhum sobrando. O backoffice (CATS/CAT_CODE) usa os mesmos seis. Em 17/10/2026, a pedido do cliente, `toy` e `accessory` foram para o PLURAL: so o rotulo mudou, os codigos do contrato continuam `toy` e `accessory` (trocar o codigo quebraria o APK instalado)."
   Species:
     um_para_um: true
     valores: { dog: Cão, cat: Gato, other: Outros animais }

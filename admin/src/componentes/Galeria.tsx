@@ -30,7 +30,14 @@ export function novaChave(): string {
   return `img-${Date.now().toString(36)}-${contador}`;
 }
 
-/** A descricao so e cobrada de imagem que chegou (secao 25.5.1). */
+/**
+ * A imagem ACEITA descricao (secao 25.5.1): a que falhou, a recusada e a que
+ * ainda esta subindo nao mostram o campo.
+ *
+ * Aceitar nao e o mesmo que EXIGIR. Quem exige e `descricaoObrigatoria` da
+ * galeria, que a `Rede` deixa ligada e a `Loja` desligou em 17/10/2026 a
+ * pedido do cliente.
+ */
 export function precisaDeDescricao(imagem: ImagemDaGaleria): boolean {
   return imagem.estado !== 'erro' && imagem.estado !== 'rejected' && imagem.estado !== 'enviando';
 }
@@ -38,6 +45,18 @@ export function precisaDeDescricao(imagem: ImagemDaGaleria): boolean {
 export function descricaoValida(alt: string): boolean {
   const t = alt.trim();
   return t.length >= 2 && t.length <= 150;
+}
+
+/**
+ * A descricao em branco e aceitavel? So onde ela e opcional -- e, mesmo ali,
+ * **uma letra nao e**: o contrato recusa `alt_text` de um caractere
+ * (`minLength: 2`), e deixar passar na tela trocaria um erro de campo por um
+ * `400` sem endereco. Vazio quer dizer "nao escrevi" e o campo e OMITIDO no
+ * corpo; `"a"` quer dizer "escrevi errado".
+ */
+export function descricaoAceitavel(alt: string, obrigatoria: boolean): boolean {
+  if (alt.trim() === '') return !obrigatoria;
+  return descricaoValida(alt);
 }
 
 export interface PropsDaGaleria {
@@ -51,6 +70,13 @@ export interface PropsDaGaleria {
   titulo?: string;
   principal?: string;
   ajuda?: string;
+  /**
+   * A descricao de cada imagem e obrigatoria? Padrao `true`, que e o que a
+   * `Rede` continua pedindo. A `Loja` passa `false` desde 17/10/2026 (pedido
+   * do cliente): o administrador salva a imagem sem escrever nada, e o app cai
+   * no nome do produto.
+   */
+  descricaoObrigatoria?: boolean;
   /** Marca curta numa imagem (ex.: a foto sem envio da Rede, UX 30.7), tambem lida no nome acessivel do item. */
   marca?: (imagem: ImagemDaGaleria) => string | undefined;
 }
@@ -71,6 +97,7 @@ export function Galeria({
   titulo = 'Imagens do produto',
   principal = 'Principal',
   ajuda = 'JPG, PNG ou WebP, até 5 MB cada, com pelo menos 800 × 800 pixels. A primeira é a principal: ela aparece na lista e no app. Arraste para reordenar, ou use os botões de mover.',
+  descricaoObrigatoria = true,
   marca,
 }: PropsDaGaleria) {
   const [anuncio, setAnuncio] = useState('');
@@ -195,7 +222,8 @@ export function Galeria({
       >
         {imagens.map((im, i) => {
           const podeMover = im.estado !== 'enviando' && im.estado !== 'erro';
-          const erroDeDescricao = mostrarErrosDeDescricao && precisaDeDescricao(im) && !descricaoValida(im.alt);
+          const erroDeDescricao =
+            mostrarErrosDeDescricao && precisaDeDescricao(im) && !descricaoAceitavel(im.alt, descricaoObrigatoria);
           const idDoAlt = `${id}-alt-${i}`;
           return (
             <li
@@ -264,7 +292,7 @@ export function Galeria({
               {precisaDeDescricao(im) && (
                 <div className={erroDeDescricao ? 'field tile-alt err' : 'field tile-alt'}>
                   <label className="t-caption" htmlFor={idDoAlt}>
-                    Descrição da imagem *
+                    {descricaoObrigatoria ? 'Descrição da imagem *' : 'Descrição da imagem (opcional)'}
                   </label>
                   <input
                     className="input"
@@ -278,7 +306,9 @@ export function Galeria({
                   {erroDeDescricao && (
                     <span className="help err" id={`${idDoAlt}-erro`}>
                       <Icone nome="error" tamanho="s20" />
-                      Descreva a imagem.
+                      {descricaoObrigatoria
+                        ? 'Descreva a imagem.'
+                        : 'Escreva pelo menos duas letras, ou deixe o campo vazio.'}
                     </span>
                   )}
                 </div>
@@ -383,7 +413,9 @@ export function Galeria({
         {ajuda}
       </span>
       <span className="help" id={`${id}-ajuda-alt`}>
-        Descrição da imagem: uma frase sobre o que aparece na foto. É lida para quem usa leitor de tela.
+        {descricaoObrigatoria
+          ? 'Descrição da imagem: uma frase sobre o que aparece na foto. É lida para quem usa leitor de tela.'
+          : 'Descrição da imagem: uma frase sobre o que aparece na foto. É lida para quem usa leitor de tela. Sem ela, o app lê o nome do produto.'}
       </span>
       {erro && (
         <span className="help err" id={idDoErro}>

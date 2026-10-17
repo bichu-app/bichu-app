@@ -644,4 +644,180 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
     const painel = await loja.lerItem(slug);
     assert.equal(painel.recurso.tags[0]?.active, false, 'o painel precisa ver a tag inativa ligada');
   });
+
+  // -------------------------------------------------------------------------
+  // Os pedidos do cliente de 17/10/2026, contra o banco de verdade
+  // -------------------------------------------------------------------------
+
+  void it('a ORDEM da galeria sobrevive: o banco grava position pelo indice, e a capa e a que o cartao usa', async () => {
+    const parceiro = await novoParceiro();
+    const [a, b, c] = [await envioDeItem(), await envioDeItem(), await envioDeItem()];
+    const slug = `bo-i-${sufixo()}`;
+    const criado = await loja.criarItem(autor, {
+      slug,
+      partner_slug: parceiro.slug,
+      title: 'Racao com galeria',
+      summary: 'Tres imagens, em ordem.',
+      category: 'food',
+      species: ['dog'],
+      target_url: `https://${parceiro.host}/racao`,
+      images: [
+        { upload_id: a, alt_text: 'Primeira' },
+        { upload_id: b, alt_text: 'Segunda' },
+        { upload_id: c, alt_text: 'Terceira' },
+      ],
+    });
+
+    // Reordenar: a terceira passa a ser a capa. A unicidade de `(item_id,
+    // position)` e DIFERIDA, e e por isso que o conjunto de escritas na mesma
+    // transacao nao colide no meio -- se ela fosse imediata, este caso
+    // reprovaria com `unique_violation`.
+    const depois = await loja.alterarItem(autor, slug, criado.etag, {
+      images: [
+        { upload_id: c, alt_text: 'Terceira' },
+        { upload_id: a, alt_text: 'Primeira' },
+        { upload_id: b, alt_text: 'Segunda' },
+      ],
+    });
+    assert.deepEqual(
+      depois.recurso.images.map((i) => [i.position, i.alt_text]),
+      [
+        [0, 'Terceira'],
+        [1, 'Primeira'],
+        [2, 'Segunda'],
+      ],
+    );
+
+    // As tres prontas, e o cartao publico passa a mostrar a capa.
+    await marcarPronta(a, 'card/imagem-capa-a.webp');
+    await marcarPronta(b, 'card/imagem-capa-b.webp');
+    await marcarPronta(c, 'card/imagem-capa-c.webp');
+    await loja.publicarItem(autor, slug, depois.etag);
+
+    const [publico] = await vitrinePublica(slug);
+    assert.equal(
+      publico?.image_alt_text,
+      'Terceira',
+      'a imagem do cartao da vitrine e a position 0, que e a capa que o painel escolheu',
+    );
+    const detalhe = await detalhePublico(slug);
+    assert.deepEqual(
+      (detalhe.corpo['images'] as { alt_text: string }[]).map((i) => i.alt_text),
+      ['Terceira', 'Primeira', 'Segunda'],
+      'a ORDEM tambem sai na leitura publica -- que hoje nenhuma tela do app chama',
+    );
+  });
+
+  void it('TEXTO ALTERNATIVO OPCIONAL: o banco aceita nulo, e a leitura publica o devolve nulo', async () => {
+    const parceiro = await novoParceiro();
+    const envio = await envioDeItem();
+    const slug = `bo-i-${sufixo()}`;
+    const criado = await loja.criarItem(autor, {
+      slug,
+      partner_slug: parceiro.slug,
+      title: 'Racao sem descricao de imagem',
+      summary: 'Uma imagem, sem texto alternativo.',
+      category: 'food',
+      species: ['dog'],
+      target_url: `https://${parceiro.host}/racao`,
+      images: [{ upload_id: envio }],
+    });
+    assert.equal(criado.recurso.images[0]?.alt_text, null);
+
+    await marcarPronta(envio, 'card/imagem-sem-alt.webp');
+    await loja.publicarItem(autor, slug, criado.etag);
+    const [publico] = await vitrinePublica(slug);
+    assert.equal(
+      publico?.image_alt_text,
+      null,
+      'nulo na resposta e o que faz o app cair no nome do produto (ItemDaLoja.nomeDaImagem)',
+    );
+  });
+
+  void it('RASCUNHO SO COM O NOME cabe no banco, e CONTINUA fora da vitrine publica', async () => {
+    const criado = await loja.criarItem(autor, { title: `Rascunho incompleto ${sufixo()}` });
+    const slug = criado.recurso.slug;
+    assert.equal(criado.recurso.publication_state, 'draft');
+
+    const linha = await banco.db
+      .selectFrom('store_items')
+      .select(['partner_id', 'summary', 'category', 'target_path'])
+      .where('slug', '=', slug)
+      .executeTakeFirstOrThrow();
+    assert.deepEqual(linha, { partner_id: null, summary: null, category: null, target_path: null });
+
+    assert.deepEqual(await vitrinePublica(slug), [], 'rascunho nao aparece em GET /v1/store/items');
+    assert.equal((await detalhePublico(slug)).status, 404, 'nem em GET /v1/store/items/{slug}');
+    // E continua visivel NO PAINEL: a juncao com o parceiro e externa, e por
+    // isso o rascunho sem parceiro nao desaparece da lista.
+    const noPainel = await loja.lerItem(slug);
+    assert.equal(noPainel.recurso.partner, null);
+    assert.deepEqual(noPainel.recurso.missing_to_publish, [
+      'summary',
+      'category',
+      'species',
+      'partner_slug',
+      'target_url',
+    ]);
+  });
+
+  void it('ISCA: o banco RECUSA publicar incompleto, mesmo que o caso de uso deixasse passar', async () => {
+    const criado = await loja.criarItem(autor, { title: `Rascunho incompleto ${sufixo()}` });
+    const id = await idDoItem(criado.recurso.slug);
+
+    // O caso de uso ja recusa (`*_required`); isto aqui e a rede embaixo dele.
+    // Um `UPDATE` direto, pelo caminho que ninguem previu, bate no
+    // `store_items_publicado_esta_completo`.
+    await assert.rejects(
+      () =>
+        sql`update store_items set active = true, published_at = now() where id = ${id}::uuid`.execute(banco.db),
+      /store_items_publicado_esta_completo/,
+      'sem este CHECK, produto incompleto entraria na vitrine do app por fora do caso de uso',
+    );
+  });
+
+  void it('a DESCRICAO com quebra de linha atravessa o banco e volta igual na leitura publica', async () => {
+    const parceiro = await novoParceiro();
+    const slug = `bo-i-${sufixo()}`;
+    const comParagrafo = 'Primeira linha.\nSegunda linha.';
+    const criado = await loja.criarItem(autor, {
+      slug,
+      partner_slug: parceiro.slug,
+      title: 'Racao com paragrafos',
+      summary: comParagrafo,
+      category: 'food',
+      species: ['dog'],
+      target_url: `https://${parceiro.host}/racao`,
+    });
+    assert.equal(criado.recurso.summary, comParagrafo);
+    await loja.publicarItem(autor, slug, criado.etag);
+    const detalhe = await detalhePublico(slug);
+    assert.equal(detalhe.corpo['summary'], comParagrafo, 'nenhuma camada trocou o \\n por espaco');
+  });
+
+  void it('A DESCRICAO DE 3000 atravessa o banco; 3001 bate no CHECK novo', async () => {
+    const parceiro = await novoParceiro();
+    const slug = `bo-i-${sufixo()}`;
+    const criado = await loja.criarItem(autor, {
+      slug,
+      partner_slug: parceiro.slug,
+      title: 'Racao com descricao longa',
+      summary: 'a'.repeat(3000),
+      category: 'food',
+      species: ['dog'],
+      target_url: `https://${parceiro.host}/racao`,
+    });
+    assert.equal(criado.recurso.summary?.length, 3000, 'o teto virou 3000 em 17/10/2026 (era 180)');
+    await loja.publicarItem(autor, slug, criado.etag);
+    const detalhe = await detalhePublico(slug);
+    assert.equal((detalhe.corpo['summary'] as string).length, 3000, 'a leitura publica devolve os 3000');
+
+    // O caso de uso ja recusa 3001 (`length`); isto aqui e a rede embaixo dele,
+    // pelo caminho que ninguem previu.
+    const id = await idDoItem(slug);
+    await assert.rejects(
+      () => sql`update store_items set summary = ${'a'.repeat(3001)} where id = ${id}::uuid`.execute(banco.db),
+      /store_items_resumo_tem_tamanho/,
+    );
+  });
 });

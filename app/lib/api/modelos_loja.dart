@@ -27,9 +27,9 @@ export '../formato/dinheiro.dart' show formatarReais, reaisEmTexto;
 /// `#/components/schemas/StoreCategory` do contrato.
 enum CategoriaDaLoja {
   alimento('food', 'Alimentação'),
-  brinquedo('toy', 'Brinquedo'),
+  brinquedo('toy', 'Brinquedos'),
   higiene('hygiene', 'Higiene'),
-  acessorio('accessory', 'Acessório'),
+  acessorio('accessory', 'Acessórios'),
   saude('health', 'Saúde'),
   cama('bed', 'Cama e conforto');
 
@@ -111,6 +111,7 @@ class ItemDaLoja {
     required this.resumo,
     required this.categoria,
     required this.urlDaImagem,
+    required this.textoDaImagem,
     required this.urlDeDestino,
     required this.parceiro,
     required this.precoEmCentavos,
@@ -123,6 +124,15 @@ class ItemDaLoja {
   final String resumo;
   final CategoriaDaLoja? categoria;
   final String? urlDaImagem;
+
+  /// O `image_alt_text` do servidor, **cru**: nulo quando o painel nao escreveu
+  /// descricao para a imagem (ela e opcional desde 17/10/2026).
+  ///
+  /// Quem desenha nao usa este campo direto, usa [nomeDaImagem]: ler o cru na
+  /// tela e o caminho para alguem esquecer a reserva e deixar a imagem sem nome
+  /// acessivel.
+  final String? textoDaImagem;
+
   final String urlDeDestino;
   final ParceiroDaLoja parceiro;
 
@@ -168,6 +178,55 @@ class ItemDaLoja {
     return u;
   }
 
+  /// Quantos caracteres do resumo o cartao da vitrine mostra antes de pedir
+  /// para expandir (decisao do cliente de 17/10/2026).
+  ///
+  /// O teto do campo e 3000; desenhar 3000 num cartao de lista empurra a
+  /// vitrine inteira para baixo, e e por isso que existe o corte.
+  static const int tetoDoResumoNoCartao = 500;
+
+  /// O resumo cabe no cartao sem corte?
+  ///
+  /// Quem desenha usa isto para **nao desenhar o botao de expandir** quando
+  /// nao ha nada escondido: botao que nao faz nada e pior que nenhum botao.
+  bool get resumoCabeNoCartao => resumo.length <= tetoDoResumoNoCartao;
+
+  /// Os primeiros [tetoDoResumoNoCartao] caracteres, **cortados no ultimo
+  /// espaco**, com reticencias.
+  ///
+  /// Corte por palavra, e nao por caractere cru: `substring(0, 500)` parte a
+  /// palavra no meio, e isso as vezes muda o sentido do que sobrou. Quando nao
+  /// ha espaco nenhum na segunda metade do trecho (texto sem espaco, ou uma
+  /// palavra longuissima), o corte volta a ser no caractere: devolver 250
+  /// caracteres seria pior que uma palavra partida.
+  ///
+  /// **A quebra de linha e preservada**: nada aqui troca `\n` por espaco. A
+  /// area de texto do painel existe para a pessoa escrever em paragrafos.
+  String get trechoDoResumo {
+    if (resumoCabeNoCartao) return resumo;
+    final bruto = resumo.substring(0, tetoDoResumoNoCartao);
+    final espaco = bruto.lastIndexOf(RegExp(r'\s'));
+    final fim = espaco > tetoDoResumoNoCartao ~/ 2 ? espaco : tetoDoResumoNoCartao;
+    return '${resumo.substring(0, fim).trimRight()}…';
+  }
+
+  /// O nome acessivel da imagem do item, que **nunca e vazio**.
+  ///
+  /// O texto que o administrador escreveu, quando ele escreveu;
+  /// `Foto de {titulo}` quando nao escreveu. Nunca nulo e nunca `''`: imagem com
+  /// `semanticLabel` vazio e imagem que o leitor de tela ANUNCIA SEM DIZER
+  /// NADA, que e pior que a reserva generica.
+  ///
+  /// Por que nao esta na tela: a reserva e regra do modelo, nao desenho. Ate
+  /// 17/10/2026 a tela montava `Foto de <titulo>` e IGNORAVA o texto do
+  /// painel -- o campo existia e nao chegava a ninguem. Com a reserva aqui, as
+  /// duas respostas saem do mesmo lugar e nenhuma tela pode esquecer uma delas.
+  String get nomeDaImagem {
+    final escrito = textoDaImagem?.trim();
+    if (escrito != null && escrito.isNotEmpty) return escrito;
+    return 'Foto de $titulo';
+  }
+
   /// O preco formatado em portugues do Brasil, ou nulo.
   ///
   /// Nulo quando nao ha valor, e a tela **nao** desenha a linha. Nao existe
@@ -202,12 +261,17 @@ class ItemDaLoja {
     final preco = json['price_amount'];
     final data = json['price_checked_at'];
     final imagem = json['image_url'];
+    // `image_alt_text` e anulavel no contrato, e desde 17/10/2026 o nulo e
+    // estado NORMAL (o painel pode gravar a imagem sem descricao). A reserva
+    // mora em `nomeDaImagem`.
+    final texto = json['image_alt_text'];
     return ItemDaLoja(
       slug: slug,
       titulo: titulo,
       resumo: resumo,
       categoria: CategoriaDaLoja.porCodigo(json['category'] as String?),
       urlDaImagem: imagem is String ? imagem : null,
+      textoDaImagem: texto is String ? texto : null,
       urlDeDestino: destino,
       parceiro: ParceiroDaLoja.doJson(json['partner']),
       precoEmCentavos: preco is int ? preco : null,
