@@ -52,10 +52,10 @@ import type { EncontroDaRede, PublicacaoVisivel } from '../../domain/encontro-da
 import { slugDoTitulo, sufixoCurto, urlDoInstagram } from '../../domain/escrita-do-encontro.js';
 import type { NovoEncontroDaComunidade } from '../../domain/encontro-da-comunidade.js';
 import { SlugDoEncontroOcupado } from '../../ports/rede-administrativa.js';
+import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../../../media/ports/imagem-de-catalogo.js';
 import type {
   DesfechoDaDesistencia,
   DesfechoDoPedido,
-  EncontroProposto,
   EstadoDaContaParaCriar,
   LocalDoEncontro,
   NetworkRepository,
@@ -66,6 +66,7 @@ import type {
   RecorteDaAgenda,
   RecorteDaAgendaPorDistancia,
   RecorteDosMeusPedidos,
+  TransacaoDaComunidade,
 } from '../../ports/network-repository.js';
 import type { Instant } from '../../../../shared/types/brands.js';
 
@@ -564,55 +565,86 @@ export class KyselyNetworkRepository implements NetworkRepository {
   // ------------------------------------------------------------- a escrita
 
   /**
-   * O estado da conta para propor encontro, numa consulta so.
+   * O estado da conta para criar encontro, numa consulta so.
    *
    * **A regua do canal verificado e COPIADA de `estadoParaAbertura`** de
    * `kysely-lost-case-repository.ts`, o mesmo `EXISTS` com o mesmo `OR`:
-   * e-mail OU telefone verificado, e preenchido-e-nao-verificado nao conta.
-   * Na pratica isso e e-mail, porque nada em `src/` grava
-   * `phone_verified_at` -- a coluna existe e so e zerada.
+   * e-mail OU telefone verificado, e preenchido-e-nao-verificado nao conta. Na
+   * pratica isso e e-mail, porque nada em `src/` grava `phone_verified_at` --
+   * a coluna existe e so e zerada.
    *
    * A contagem do teto esta na mesma consulta e nao num `SELECT` depois: as
    * duas respostas decidem a mesma requisicao, e a pessoa esta esperando na
-   * tela.
+   * tela. Ela passa pela funcao da migracao 20261001000005 pelo mesmo motivo do
+   * carimbo da autoria: precisa da coluna de autor na clausula WHERE, e o nome
+   * dela nao pode aparecer em src/.
    */
-  async estadoParaCriarEncontro(chamador: string): Promise<EstadoDaContaParaCriar> {
-    const linha = await sql<{ tem_canal: boolean; em_revisao: number }>`
+  async estadoParaCriarEncontro(chamador: string, agora: Instant): Promise<EstadoDaContaParaCriar> {
+    const quando = comoData(agora);
+    const linha = await sql<{ tem_canal: boolean; ativos: number }>`
       SELECT
         EXISTS (
           SELECT 1 FROM users u
            WHERE u.id = ${chamador}::uuid
              AND (u.email_verified_at IS NOT NULL OR u.phone_verified_at IS NOT NULL)
         ) AS tem_canal,
-        -- A contagem passa pela funcao da migracao 20261001000004 pelo mesmo
-        -- motivo do carimbo da autoria: ela precisa da coluna de autor na
-        -- clausula WHERE, e o nome dela nao pode aparecer em src/.
-        network_events_em_revisao_do_autor(${chamador}::uuid) AS em_revisao
+        network_events_ativos_do_autor(${chamador}::uuid, ${quando}::timestamptz) AS ativos
     `.execute(this.db);
     const r = linha.rows[0];
     return {
       temCanalVerificado: r?.tem_canal ?? false,
-      encontrosEmRevisao: Number(r?.em_revisao ?? 0),
+      encontrosAtivos: Number(r?.ativos ?? 0),
     };
   }
 
-  /**
-   * Grava a proposta. Tres coisas desta transacao nao sao detalhe:
-   *
-   * 1. **`origin = 'community'` e `publication_status = 'pending_review'` sao
-   *    literais**, e nao parametro: o estado inicial nao e escolha de quem
-   *    chama, e o `CHECK network_events_revisao_so_da_comunidade` reprovaria
-   *    qualquer outra combinacao.
-   * 2. **`published_at` fica nulo.** E ele que a aprovacao preenche, e e por
-   *    isso que o `CHECK network_events_visivel_foi_publicado` nao se opoe:
-   *    `pending_review` nao esta entre os estados visiveis.
-   * 3. **A autoria e carimbada pela funcao da migracao `20261001000004`**, na
-   *    mesma transacao do `INSERT`, e nao por uma coluna no `values`: o nome
-   *    das duas colunas de autoria e reprovado em `src/` pelo portao de saida.
-   */
-  async criarEncontroDaComunidade(novo: NovoEncontroDaComunidade): Promise<EncontroProposto> {
-    const quando = comoData(novo.agora);
-    return this.db.transaction().execute(async (trx) => {
+  emTransacao<T>(trabalho: (tx: TransacaoDaComunidade) => Promise<T>): Promise<T> {
+    return this.db.transaction().execute((trx) => trabalho(transacaoDaComunidade(trx, this.ids)));
+  }
+}
+
+/**
+ * A transacao das escritas da comunidade.
+ *
+ * Tres coisas aqui nao sao detalhe:
+ *
+ * 1. **`origin = 'community'` e `publication_status = 'published'` sao
+ *    literais**, e nao parametro: nem a origem nem o estado inicial sao escolha
+ *    de quem chama. O encontro da comunidade publica direto (ADR-0025 emenda 3).
+ * 2. **A autoria e carimbada pela funcao da migracao `20261001000004`**, na
+ *    mesma transacao do `INSERT`, e nao por uma coluna no `values`: o nome das
+ *    duas colunas de autoria e reprovado em `src/` pelo portao de saida.
+ * 3. **Toda leitura de escrita passa por `network_events_do_autor`**, que leva a
+ *    origem e a conta na clausula `WHERE`. Nao ha um `if` de autoria em lugar
+ *    nenhum deste arquivo.
+ */
+function transacaoDaComunidade(trx: DbTransaction, ids: { uuidv7(): string }): TransacaoDaComunidade {
+  return {
+    async encontroDoAutor(slug, chamador) {
+      const r = await sql<{
+        id: string;
+        version: number;
+        publication_status: 'published' | 'cancelled';
+        starts_at: Date;
+        ends_at: Date | null;
+      }>`
+        SELECT a.id, a.version, a.publication_status, a.starts_at, a.ends_at
+          FROM network_events_do_autor(${slug}, ${chamador}::uuid) a
+          JOIN network_events e ON e.id = a.id
+         FOR UPDATE OF e
+      `.execute(trx);
+      const linha = r.rows[0];
+      if (linha === undefined) return undefined;
+      return {
+        id: linha.id,
+        versao: Number(linha.version),
+        publicacao: linha.publication_status,
+        startsAt: linha.starts_at.getTime() as Instant,
+        endsAt: linha.ends_at === null ? null : (linha.ends_at.getTime() as Instant),
+      };
+    },
+
+    async inserirEncontro(novo) {
+      const quando = comoData(novo.agora);
       const slug = await inserirComSlugLivre(trx, novo, quando);
       await sql`SELECT network_events_gravar_autoria(${novo.id}::uuid, ${novo.autor}::uuid, NULL)`.execute(trx);
       if (novo.portes.length > 0) {
@@ -633,99 +665,169 @@ export class KyselyNetworkRepository implements NetworkRepository {
           .values(novo.paraLevar.map((item) => ({ event_id: novo.id, item: item as ItemParaLevar })))
           .execute();
       }
-      return { slug, submittedAt: novo.agora };
-    });
-  }
-}
-
-/**
- * O `slug` do encontro proposto: o derivado do titulo, depois o derivado com
- * sufixo curto, e dez tentativas no total.
- *
- * **O laco existe porque a comunidade nao manda `slug`** e dois encontros com o
- * mesmo titulo sao normais ("Encontro no Ibirapuera"). O conflito e capturado
- * pelo indice unico, e nao por um `SELECT` antes: um `SELECT` deixaria duas
- * propostas simultaneas passarem juntas.
- */
-async function inserirComSlugLivre(
-  trx: DbTransaction,
-  novo: NovoEncontroDaComunidade,
-  quando: Date,
-): Promise<string> {
-  const candidatos = [
-    slugDoTitulo(novo.title),
-    ...Array.from({ length: 9 }, () => slugDoTitulo(novo.title, sufixoCurto(randomBytes(3)))),
-  ].filter((s): s is string => s !== undefined);
-  let ultimo: unknown;
-  for (const slug of candidatos) {
-    try {
-      await inserirProposta(trx, novo, slug, quando);
       return slug;
-    } catch (erro) {
-      if (!ehSlugOcupado(erro)) throw erro;
-      ultimo = erro;
-    }
-  }
-  // Dez tentativas falhadas nao e colisao: e titulo que nao da `slug` nenhum
-  // (so pontuacao) ou sorte impossivel. As duas sobem como 409, que e o que o
-  // contrato declara para `slug` ocupado.
-  throw ultimo instanceof Error ? ultimo : new SlugDoEncontroOcupado();
-}
+    },
 
-/** `23505` com o indice do `slug`: o Postgres o nomeia na violacao. */
-function ehSlugOcupado(erro: unknown): boolean {
-  if (typeof erro !== 'object' || erro === null) return false;
-  const e = erro as { code?: unknown; constraint?: unknown };
-  return e.code === '23505' && e.constraint === 'network_events_slug_unico';
-}
+    async alterarEncontro(id, versaoLida, m, agora) {
+      // A VERSAO ESTA NA CLAUSULA `WHERE` do `UPDATE`, e nao num `SELECT`
+      // antes: duas edicoes simultaneas da mesma pessoa em dois aparelhos
+      // passariam as duas por um `SELECT`.
+      const r = await trx
+        .updateTable('network_events')
+        .set({
+          ...(m.title === undefined ? {} : { title: m.title }),
+          ...(m.summary === undefined ? {} : { summary: m.summary }),
+          ...(m.lugar === undefined
+            ? {}
+            : {
+                place_name: m.lugar.placeName,
+                neighborhood: m.lugar.neighborhood,
+                city: m.lugar.city,
+                state: m.lugar.state,
+              }),
+          ...(m.startsAt === undefined ? {} : { starts_at: m.startsAt }),
+          ...(m.endsAt === undefined ? {} : { ends_at: m.endsAt }),
+          ...(m.timeZone === undefined ? {} : { time_zone: m.timeZone }),
+          ...(m.idadeDosCaes === undefined ? {} : { dog_age: m.idadeDosCaes as IdadeDosCaes }),
+          ...(m.vacinacaoExigida === undefined ? {} : { vaccination_required: m.vacinacaoExigida }),
+          ...(m.areaCercada === undefined ? {} : { fenced_off_leash_area: m.areaCercada }),
+          ...(m.observacoes === undefined ? {} : { notes: m.observacoes }),
+          updated_at: comoData(agora),
+          version: versaoLida + 1,
+        })
+        .where('id', '=', id)
+        .where('version', '=', versaoLida)
+        .executeTakeFirst();
+      return Number(r.numUpdatedRows) === 0 ? null : versaoLida + 1;
+    },
 
-function inserirProposta(
-  trx: DbTransaction,
-  novo: NovoEncontroDaComunidade,
-  slug: string,
-  quando: Date,
-): Promise<unknown> {
-  return trx
-    .insertInto('network_events')
-    .values({
-      id: novo.id,
-      slug,
-      title: novo.title,
-      summary: novo.summary,
-      place_name: novo.lugar.placeName,
-      neighborhood: novo.lugar.neighborhood,
-      city: novo.lugar.city,
-      state: novo.lugar.state,
-      // Sem ponto e sem endereco: ADR-0006, e nao ha geocodificacao nenhuma
-      // neste caminho.
-      geo_source: null,
-      street_address: null,
-      starts_at: novo.startsAt,
-      ends_at: novo.endsAt,
-      time_zone: novo.timeZone,
-      // Todo encontro proposto e publico e gratuito (ver o contrato de
-      // `createNetworkEvent`).
-      visibility: 'public',
-      admission_kind: 'free',
-      admission_amount: null,
-      admission_currency: null,
-      admission_unit: null,
-      dog_age: novo.idadeDosCaes as IdadeDosCaes,
-      vaccination_required: novo.vacinacaoExigida,
-      fenced_off_leash_area: novo.areaCercada,
-      notes: novo.observacoes,
-      ticket_url: null,
-      instagram_handle: null,
-      origin: 'community',
-      publication_status: 'pending_review',
-      published_at: null,
-      cancelled_at: null,
-      cancellation_note: null,
-      created_at: quando,
-      updated_at: quando,
-      version: 1,
-    })
-    .execute();
+    async cancelarEncontro(id, versaoLida, nota, agora) {
+      // Cancelar NAO APAGA: o encontro continua visivel no app como cancelado
+      // ate o fim previsto, pela mesma regra do cancelamento do painel.
+      const r = await trx
+        .updateTable('network_events')
+        .set({
+          publication_status: 'cancelled',
+          cancelled_at: comoData(agora),
+          cancellation_note: nota,
+          updated_at: comoData(agora),
+          version: versaoLida + 1,
+        })
+        .where('id', '=', id)
+        .where('version', '=', versaoLida)
+        .executeTakeFirst();
+      return Number(r.numUpdatedRows) === 0 ? null : versaoLida + 1;
+    },
+
+    async substituirPortes(eventoId, portes) {
+      await trx.deleteFrom('network_event_sizes').where('event_id', '=', eventoId).execute();
+      if (portes.length > 0) {
+        await trx
+          .insertInto('network_event_sizes')
+          .values(portes.map((size) => ({ event_id: eventoId, size })))
+          .execute();
+      }
+    },
+
+    async substituirEstrutura(eventoId, estrutura) {
+      await trx.deleteFrom('network_event_amenities').where('event_id', '=', eventoId).execute();
+      if (estrutura.length > 0) {
+        await trx
+          .insertInto('network_event_amenities')
+          .values(estrutura.map((amenity) => ({ event_id: eventoId, amenity: amenity as EstruturaDoLocal })))
+          .execute();
+      }
+    },
+
+    async substituirParaLevar(eventoId, itens) {
+      await trx.deleteFrom('network_event_bring_items').where('event_id', '=', eventoId).execute();
+      if (itens.length > 0) {
+        await trx
+          .insertInto('network_event_bring_items')
+          .values(itens.map((item) => ({ event_id: eventoId, item: item as ItemParaLevar })))
+          .execute();
+      }
+    },
+
+    /**
+     * Confirma o envio da capa, na MESMA transacao da escrita do encontro
+     * (ADR-0027 item 10): uma imagem confirmada para um encontro que depois nao
+     * foi gravado ficaria `processing` para sempre.
+     *
+     * **A conta do chamador esta na clausula `WHERE`** (`u.user_id`), e e isso
+     * que impede confirmar o envio de outra pessoa: um `if` depois do `SELECT`
+     * responderia sobre envio alheio. `admin_account_id` nao casa aqui nunca --
+     * envio do painel nao vira capa de encontro da comunidade (T9).
+     */
+    async capaDoEnvio(entrada) {
+      const r = await sql<{
+        id: string;
+        expires_at: Date;
+        confirmed_at: Date | null;
+        catalog_image_id: string | null;
+        evento_da_imagem: string | null;
+      }>`
+        SELECT u.id, u.expires_at, u.confirmed_at, c.id AS catalog_image_id,
+               (SELECT i.event_id FROM network_event_images i WHERE i.image_id = c.id) AS evento_da_imagem
+          FROM catalog_upload_intents u
+          LEFT JOIN catalog_images c ON c.upload_intent_id = u.id
+         WHERE u.id = ${entrada.uploadId}::uuid
+           AND u.user_id = ${entrada.chamador}::uuid
+           AND u.purpose = 'network_event'
+         FOR UPDATE OF u
+      `.execute(trx);
+      const envio = r.rows[0];
+      if (envio === undefined) return undefined;
+      if (envio.confirmed_at !== null) {
+        // Ja confirmado: serve de novo SO para o mesmo encontro (reenviar o
+        // mesmo `upload_id` numa segunda edicao nao pode criar imagem nova).
+        if (envio.catalog_image_id === null) return undefined;
+        if (envio.evento_da_imagem !== null && envio.evento_da_imagem !== entrada.eventoId) return undefined;
+        return envio.catalog_image_id;
+      }
+      if (envio.expires_at.getTime() <= entrada.agora) return undefined;
+      const imagemId = ids.uuidv7();
+      await trx
+        .updateTable('catalog_upload_intents')
+        .set({ confirmed_at: comoData(entrada.agora) })
+        .where('id', '=', envio.id)
+        .where('confirmed_at', 'is', null)
+        .execute();
+      await trx
+        .insertInto('catalog_images')
+        .values({
+          id: imagemId,
+          upload_intent_id: envio.id,
+          purpose: 'network_event',
+          public_key: null,
+          rejection_reason: null,
+        })
+        .execute();
+      // Imagem sem trabalho ficaria `processing` para sempre; trabalho sem
+      // imagem falharia em laco. Os dois na mesma transacao.
+      await trx
+        .insertInto('jobs')
+        .values({
+          id: ids.uuidv7(),
+          kind: TRABALHO_DE_IMAGEM_DE_CATALOGO,
+          payload: JSON.stringify({ catalog_image_id: imagemId }),
+        })
+        .execute();
+      return imagemId;
+    },
+
+    async definirCapa(eventoId, capa) {
+      // A galeria do encontro da comunidade tem no maximo UMA imagem, a capa
+      // (`position = 0`): o painel tem oito, e a tela do app tem uma.
+      await trx.deleteFrom('network_event_images').where('event_id', '=', eventoId).execute();
+      if (capa !== null) {
+        await trx
+          .insertInto('network_event_images')
+          .values({ event_id: eventoId, image_id: capa.imagemId, position: 0, alt_text: capa.altText })
+          .execute();
+      }
+    },
+  };
 }
 
 /** O pedido NAO desistido da conta, num privado visivel. */
@@ -807,4 +909,97 @@ export function criarNetworkRepository(
   baseDoInstagram: string | null = null,
 ): NetworkRepository {
   return new KyselyNetworkRepository(db, ids, urlDeMidia, baseDoInstagram);
+}
+
+/**
+ * O `slug` do encontro da comunidade: o derivado do titulo, depois o derivado
+ * com sufixo curto, e dez tentativas no total.
+ *
+ * **O laco existe porque a comunidade nao manda `slug`** e dois encontros com o
+ * mesmo titulo sao normais ("Encontro no Ibirapuera"). O conflito e capturado
+ * pelo indice unico, e nao por um `SELECT` antes: um `SELECT` deixaria duas
+ * criacoes simultaneas passarem juntas.
+ */
+async function inserirComSlugLivre(
+  trx: DbTransaction,
+  novo: NovoEncontroDaComunidade,
+  quando: Date,
+): Promise<string> {
+  const candidatos = [
+    slugDoTitulo(novo.title),
+    ...Array.from({ length: 9 }, () => slugDoTitulo(novo.title, sufixoCurto(randomBytes(3)))),
+  ].filter((s): s is string => s !== undefined);
+  let ultimo: unknown;
+  for (const slug of candidatos) {
+    try {
+      await inserirLinhaDoEncontro(trx, novo, slug, quando);
+      return slug;
+    } catch (erro) {
+      if (!ehSlugOcupado(erro)) throw erro;
+      ultimo = erro;
+    }
+  }
+  // Dez tentativas falhadas nao e colisao: e titulo que nao da `slug` nenhum
+  // (so pontuacao) ou sorte impossivel. As duas sobem como 409, que e o que o
+  // contrato declara para `slug` ocupado.
+  throw ultimo instanceof Error ? ultimo : new SlugDoEncontroOcupado();
+}
+
+/** `23505` com o indice do `slug`: o Postgres o nomeia na violacao. */
+function ehSlugOcupado(erro: unknown): boolean {
+  if (typeof erro !== 'object' || erro === null) return false;
+  const e = erro as { code?: unknown; constraint?: unknown };
+  return e.code === '23505' && e.constraint === 'network_events_slug_unico';
+}
+
+function inserirLinhaDoEncontro(
+  trx: DbTransaction,
+  novo: NovoEncontroDaComunidade,
+  slug: string,
+  quando: Date,
+): Promise<unknown> {
+  return trx
+    .insertInto('network_events')
+    .values({
+      id: novo.id,
+      slug,
+      title: novo.title,
+      summary: novo.summary,
+      place_name: novo.lugar.placeName,
+      neighborhood: novo.lugar.neighborhood,
+      city: novo.lugar.city,
+      state: novo.lugar.state,
+      // Sem ponto e sem endereco: ADR-0006, e nao ha geocodificacao nenhuma
+      // neste caminho.
+      geo_source: null,
+      street_address: null,
+      starts_at: novo.startsAt,
+      ends_at: novo.endsAt,
+      time_zone: novo.timeZone,
+      // Todo encontro da comunidade e publico e gratuito (ver o contrato de
+      // `createNetworkEvent`).
+      visibility: 'public',
+      admission_kind: 'free',
+      admission_amount: null,
+      admission_currency: null,
+      admission_unit: null,
+      dog_age: novo.idadeDosCaes as IdadeDosCaes,
+      vaccination_required: novo.vacinacaoExigida,
+      fenced_off_leash_area: novo.areaCercada,
+      notes: novo.observacoes,
+      ticket_url: null,
+      instagram_handle: null,
+      origin: 'community',
+      // Publica direto (decisao do cliente de 17/10/2026): nao ha revisao, e
+      // `published_at` existe porque o `CHECK network_events_visivel_foi_publicado`
+      // exige instante em todo encontro visivel.
+      publication_status: 'published',
+      published_at: quando,
+      cancelled_at: null,
+      cancellation_note: null,
+      created_at: quando,
+      updated_at: quando,
+      version: 1,
+    })
+    .execute();
 }

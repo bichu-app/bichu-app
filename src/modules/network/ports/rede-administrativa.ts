@@ -85,12 +85,6 @@ export interface MudancaDeEncontro {
   readonly linkDeIngresso?: string | null;
   readonly instagram?: string | null;
   readonly publicacao?: PublicacaoAdministrativa;
-  /**
-   * So a aprovacao da revisao o preenche fora da criacao: sem ele, a passagem
-   * de `pending_review` para `published` cairia no
-   * `CHECK network_events_visivel_foi_publicado`.
-   */
-  readonly publishedAt?: Date;
   readonly cancelledAt?: Date;
   readonly cancellationNote?: string;
 }
@@ -126,20 +120,8 @@ export interface Pagina<T> {
 }
 
 export interface TransacaoDaRede {
-  /**
-   * Com `FOR UPDATE`: a escrita segura a linha ate o `COMMIT`.
-   *
-   * **Nao enxerga `pending_review`**: alterar, mover, cancelar e remover
-   * respondem 404 sobre encontro em revisao. Quem o enxerga e
-   * `encontroEmRevisaoPorSlug`, e so ele.
-   */
+  /** Com `FOR UPDATE`: a escrita segura a linha ate o `COMMIT`. */
   encontroPorSlug(slug: string): Promise<EncontroAdministrativo | null>;
-  /**
-   * O encontro EM REVISAO, com `FOR UPDATE` (ADR-0025 emenda 3). `null` para o
-   * que nao existe e para o que esta em qualquer outro estado -- os dois sao o
-   * mesmo 404, pela mesma razao de sempre.
-   */
-  encontroEmRevisaoPorSlug(slug: string): Promise<EncontroAdministrativo | null>;
   recarregarEncontro(id: string): Promise<EncontroAdministrativo>;
   existeSlug(slug: string): Promise<boolean>;
   /** Lanca `SlugDoEncontroOcupado`. */

@@ -58,7 +58,7 @@ import { vigiarParametrosDasRotas } from '../../src/shared/http/validacao-de-par
 import { problemas } from '../../src/shared/http/errors.js';
 import type { RegistradorDeRotas } from '../../src/shared/http/registrar-rota.js';
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
-import { CriacaoDeEncontroPelaComunidade } from '../../src/modules/network/application/criar-encontro-da-comunidade.js';
+import { EncontroDaComunidade } from '../../src/modules/network/application/encontro-da-comunidade.js';
 import { criarNetworkRepository } from '../../src/modules/network/adapters/persistence/kysely-network-repository.js';
 import { registrarRotasDaRede } from '../../src/modules/network/adapters/http/network-routes.js';
 import { systemClock } from '../../src/shared/time/clock.js';
@@ -311,11 +311,11 @@ before(async () => {
               : Promise.reject(problemas.naoAutenticado()),
         },
         clock: systemClock,
-        // Este arquivo mede o P19 das LEITURAS; a proposta de encontro tem
-        // arquivo proprio. O caso de uso entra porque a rota existe no mesmo
+        // Este arquivo mede o P19 das LEITURAS; as escritas da comunidade tem
+        // arquivo proprio. O caso de uso entra porque as rotas existem no mesmo
         // registrador, e `vigiarParametrosDasRotas` confere a declaracao de
         // todas elas contra o contrato.
-        propostas: new CriacaoDeEncontroPelaComunidade({
+        escritas: new EncontroDaComunidade({
           rede,
           trilha: { record: () => Promise.resolve() },
           ids: criarIdGenerator(() => Date.now()),

@@ -88,9 +88,21 @@ export interface PreparadorDeEnvioDeCatalogo {
   preparar(contentType: string, byteSize: number, proposito: PropositoDaImagem): Promise<EnvioPreparado>;
 }
 
+/** O que a rota devolve: o `upload_id` e a autorizacao assinada. */
+export interface AutorizacaoDeCapa {
+  readonly uploadId: string;
+  readonly autorizacao: AutorizacaoDeEnvio;
+}
+
 export interface NovaIntencaoDeCatalogo {
   readonly id: string;
-  /** `admin_accounts.id`: o envio de catalogo e do painel, nunca de `users`. */
+  /**
+   * `admin_accounts.id`: o envio do PAINEL.
+   *
+   * O envio da comunidade (a capa do encontro, ADR-0025 emenda 3) grava
+   * `user_id` em vez desta coluna, por `registrarIntencaoDeCapaDaComunidade`:
+   * o `CHECK catalog_upload_intents_um_autor` garante exatamente um autor.
+   */
   readonly adminAccountId: string;
   readonly purpose: PropositoDaImagem;
   readonly objectKey: ObjectKey;

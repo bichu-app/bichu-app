@@ -44,7 +44,7 @@ import type { EncontroDaRede } from '../../domain/encontro-da-rede.js';
 import type {
   DesfechoDaDesistencia,
   DesfechoDoPedido,
-  EncontroProposto,
+  EncontroDoAutor,
   EstadoDaContaParaCriar,
   LocalDoEncontro,
   NetworkRepository,
@@ -53,10 +53,14 @@ import type {
   PaginaPorDistancia,
   PedidoDaConta,
   RecorteDaAgenda,
+  TransacaoDaComunidade,
 } from '../../ports/network-repository.js';
 import { ordemPadraoDe, registrarRotasDaRede, rotaDaAgenda, rotaDoLocal } from './network-routes.js';
-import { CriacaoDeEncontroPelaComunidade } from '../../application/criar-encontro-da-comunidade.js';
-import type { NovoEncontroDaComunidade } from '../../domain/encontro-da-comunidade.js';
+import { EncontroDaComunidade } from '../../application/encontro-da-comunidade.js';
+import type {
+  MudancaDoEncontroDaComunidade,
+  NovoEncontroDaComunidade,
+} from '../../domain/encontro-da-comunidade.js';
 import type { AuditEvent } from '../../../audit/ports/audit-log.js';
 import { carregarContrato } from '../../../../shared/http/contract.js';
 import { resolve } from 'node:path';
@@ -109,6 +113,10 @@ const PRIVADO: EncontroDaRede = {
 interface Cenario {
   readonly contador?: RateLimitStore;
   readonly estadoDaConta?: EstadoDaContaParaCriar;
+  /** `undefined` e "nao e seu OU nao existe" -- o mesmo caso, de proposito. */
+  readonly meuEncontro?: EncontroDoAutor | undefined;
+  readonly versaoMudou?: boolean;
+  readonly capaNaoServe?: boolean;
   /** `undefined` e o encontro que nao existe OU nao e visivel -- o mesmo caso. */
   readonly encontro?: EncontroDaRede | undefined;
   readonly local?: LocalDoEncontro | undefined;
@@ -120,8 +128,25 @@ interface Cenario {
 
 const recortesVistos: RecorteDaAgenda[] = [];
 const locaisPedidos: string[] = [];
-const propostasGravadas: NovoEncontroDaComunidade[] = [];
+const gravados: NovoEncontroDaComunidade[] = [];
+const mudancas: MudancaDoEncontroDaComunidade[] = [];
+const cancelamentos: string[] = [];
+const capasPedidas: string[] = [];
+const capasDefinidas: (string | null)[] = [];
+const encontrosPedidos: string[] = [];
 const trilhaDeTeste: AuditEvent[] = [];
+
+/** Um `upload_id` com forma de UUID, que e o que o contrato exige. */
+const ENVIO = '018f3a2b-0000-7000-8000-0000000000c1';
+
+/** O encontro da propria conta, ainda no futuro. */
+const MEU_ENCONTRO: EncontroDoAutor = {
+  id: '018f3a2b-0000-7000-8000-0000000000ee',
+  versao: 1,
+  publicacao: 'published',
+  startsAt: (AGORA + UMA_HORA * 24) as Instant,
+  endsAt: (AGORA + UMA_HORA * 27) as Instant,
+};
 
 /** `IdGenerator` so com o que esta rota usa; o resto nao e chamado aqui. */
 const idsDeTeste = {
@@ -170,12 +195,48 @@ function repositorio(cenario: Cenario): NetworkRepository {
         total: 1,
       }),
     estadoParaCriarEncontro: (): Promise<EstadoDaContaParaCriar> =>
-      Promise.resolve(
-        cenario.estadoDaConta ?? { temCanalVerificado: true, encontrosEmRevisao: 0 },
-      ),
-    criarEncontroDaComunidade: (novo): Promise<EncontroProposto> => {
-      propostasGravadas.push(novo);
-      return Promise.resolve({ slug: 'encontro-na-praca', submittedAt: AGORA as Instant });
+      Promise.resolve(cenario.estadoDaConta ?? { temCanalVerificado: true, encontrosAtivos: 0 }),
+    emTransacao: <T>(trabalho: (tx: TransacaoDaComunidade) => Promise<T>): Promise<T> =>
+      trabalho(transacaoDeTeste(cenario)),
+  };
+}
+
+/**
+ * O dobre da transacao da comunidade.
+ *
+ * `encontroDoAutor` devolve `undefined` quando o cenario diz que o encontro
+ * **nao e desta conta** -- e e assim que o dobre imita a clausula `WHERE` do
+ * Kysely: a borda nao tem como saber a diferenca entre "nao existe" e "nao e
+ * seu", e e disso que o 404 do ADR-0021 depende.
+ */
+function transacaoDeTeste(cenario: Cenario): TransacaoDaComunidade {
+  return {
+    encontroDoAutor: (slug) => {
+      encontrosPedidos.push(slug);
+      return Promise.resolve('meuEncontro' in cenario ? cenario.meuEncontro : MEU_ENCONTRO);
+    },
+    inserirEncontro: (novo) => {
+      gravados.push(novo);
+      return Promise.resolve('encontro-na-praca');
+    },
+    alterarEncontro: (_id, versaoLida, mudanca) => {
+      mudancas.push(mudanca);
+      return Promise.resolve(cenario.versaoMudou === true ? null : versaoLida + 1);
+    },
+    cancelarEncontro: (_id, versaoLida, nota) => {
+      cancelamentos.push(nota);
+      return Promise.resolve(cenario.versaoMudou === true ? null : versaoLida + 1);
+    },
+    substituirPortes: () => Promise.resolve(),
+    substituirEstrutura: () => Promise.resolve(),
+    substituirParaLevar: () => Promise.resolve(),
+    capaDoEnvio: (entrada) => {
+      capasPedidas.push(entrada.uploadId);
+      return Promise.resolve(cenario.capaNaoServe === true ? undefined : 'imagem-da-capa');
+    },
+    definirCapa: (_id, capa) => {
+      capasDefinidas.push(capa === null ? null : capa.altText);
+      return Promise.resolve();
     },
   };
 }
@@ -197,7 +258,7 @@ function servidor(
     rede,
     autenticador: { autenticar },
     clock,
-    propostas: new CriacaoDeEncontroPelaComunidade({
+    escritas: new EncontroDaComunidade({
       rede,
       trilha: {
         record: (evento) => {
@@ -218,6 +279,7 @@ function servidor(
 
 interface Resposta {
   readonly status: number;
+  readonly etag: string | undefined;
   readonly cache: string | string[] | number | undefined;
   readonly corpo: Record<string, unknown>;
   readonly bruto: string;
@@ -228,19 +290,25 @@ async function pedir(
   opcoes: {
     url?: string;
     como?: UserId | null;
-    metodo?: 'GET' | 'POST' | 'DELETE';
+    metodo?: 'GET' | 'POST' | 'DELETE' | 'PATCH';
     corpo?: Record<string, unknown>;
+    ifMatch?: string;
   } = {},
 ): Promise<Resposta> {
   const como = opcoes.como === undefined ? null : opcoes.como;
   const resposta = await app.inject({
     method: opcoes.metodo ?? 'GET',
     url: opcoes.url ?? '/network/events',
-    ...(como === null ? {} : { headers: { authorization: `Bearer ${como}` } }),
+    headers: {
+      ...(como === null ? {} : { authorization: `Bearer ${como}` }),
+      ...(opcoes.ifMatch === undefined ? {} : { 'if-match': opcoes.ifMatch }),
+    },
     ...(opcoes.corpo === undefined ? {} : { payload: opcoes.corpo }),
   });
+  const etag = resposta.headers['etag'];
   return {
     status: resposta.statusCode,
+    etag: typeof etag === 'string' ? etag : undefined,
     cache: resposta.headers['cache-control'],
     corpo: resposta.body === '' ? {} : (JSON.parse(resposta.body) as Record<string, unknown>),
     bruto: resposta.body,
@@ -617,21 +685,27 @@ void describe('a regra do default de ordem, isolada', () => {
 });
 
 // ---------------------------------------------------------------------------
-// A proposta de encontro pela comunidade (ADR-0025 emenda 3)
+// As tres escritas da comunidade (ADR-0025 emenda 3)
 // ---------------------------------------------------------------------------
 //
 // ## As iscas desta secao, e o que cada uma reprova quando desligada
 //
 // | o que se desliga em producao | reprova |
 // |---|---|
-// | `atingiuTetoDeRevisao` sempre `false` | o caso do teto |
+// | `atingiuTetoDeEncontros` sempre `false` | o caso do teto |
 // | `bloqueiosParaCriarEncontro` devolvendo `[]` | o caso do canal |
 // | a ordem invertida (canal antes do teto) | o caso da ORDEM |
-// | `publication_status` nascendo `published` | o caso do estado inicial |
-// | `errosDoNomeDoLugar` virando `errosDeTexto` | o caso do `place_name` |
+// | `publication_status` nascendo em qualquer coisa que nao `published` | o caso do 201 |
+// | `errosDoNomeDoLugar` virando `errosDeTexto` | os dois casos de `place_name` |
+// | `temContatoOuPagamento` fora de `title`/`summary`/`alt_text` | o caso do D59 |
 // | `origin` nascendo `admin` | o caso da autoria |
-// | o `201` virando `200` | o primeiro caso |
-// | `chamadorAutenticado` saindo do manipulador | o caso do 401 |
+// | `encontroDoAutor` sem a conta na clausula `WHERE` | o caso do 404 alheio |
+// | o 404 de encontro alheio virando 403 | o mesmo caso |
+// | `versaoExigida` deixando de exigir | o caso do 428 |
+// | `lerIfMatch` trocado por uma regex sem sufixo | o caso do `"1-zstd"` |
+// | `meuEncontro` deixando de barrar encerrado | o caso do encerrado |
+// | `capaDoEnvio` sem a conta na clausula `WHERE` | o caso da capa alheia |
+// | `chamadorAutenticado` saindo de qualquer manipulador | o caso do 401 |
 
 const CORPO_VALIDO = {
   title: 'Encontro na praça',
@@ -640,121 +714,320 @@ const CORPO_VALIDO = {
   starts_at: new Date(AGORA + UMA_HORA * 24).toISOString(),
 };
 
-function propor(cenario: Cenario = {}, corpo: Record<string, unknown> = CORPO_VALIDO) {
+function criar(cenario: Cenario = {}, corpo: Record<string, unknown> = CORPO_VALIDO) {
   return pedir(servidor(cenario), { metodo: 'POST', corpo, como: QUEM_CHAMA });
 }
 
-void describe('propor encontro: quem pode, quantos, e em que estado ele nasce', () => {
-  void it('com canal verificado e fila vazia, responde 201 com o recibo em revisao', async () => {
-    propostasGravadas.length = 0;
-    const resposta = await propor();
+function editar(
+  cenario: Cenario = {},
+  corpo: Record<string, unknown> = { title: 'Encontro na praça, agora de tarde' },
+  ifMatch: string | null = '"1"',
+) {
+  return pedir(servidor(cenario), {
+    metodo: 'PATCH',
+    url: `/network/events/${SLUG}`,
+    corpo,
+    como: QUEM_CHAMA,
+    ...(ifMatch === null ? {} : { ifMatch }),
+  });
+}
+
+function cancelar(cenario: Cenario = {}, ifMatch: string | null = '"1"') {
+  return pedir(servidor(cenario), {
+    metodo: 'POST',
+    url: `/network/events/${SLUG}/cancellation`,
+    corpo: { note: 'Choveu demais e o parque fechou.' },
+    como: QUEM_CHAMA,
+    ...(ifMatch === null ? {} : { ifMatch }),
+  });
+}
+
+void describe('criar encontro: quem pode, quantos, e ele PUBLICA direto', () => {
+  void it('ISCA: com canal verificado e sem teto, 201 com o encontro ja publico', async () => {
+    gravados.length = 0;
+    const resposta = await criar();
     assert.equal(resposta.status, 201);
-    assert.equal(resposta.corpo['review_state'], 'pending_review');
-    assert.equal(resposta.corpo['slug'], 'encontro-na-praca');
-    // Nenhum UUID interno na saida publica (ADR-0010 item 6).
+    // A resposta e a leitura publica: o mesmo corpo de `getNetworkEvent`.
+    assert.equal(resposta.corpo['slug'], SLUG);
+    assert.equal(resposta.corpo['visibility'], 'public');
+    // Nenhum estado de revisao em lugar nenhum: a fila nao existe mais.
+    assert.equal(resposta.bruto.includes('pending_review'), false);
+    assert.equal(resposta.bruto.includes('review_state'), false);
+    // Nenhum UUID interno (ADR-0010 item 6) e nenhuma coordenada (ADR-0006).
     assert.equal(resposta.bruto.includes('018f3a2b'), false);
-    // E nenhuma coordenada, nem endereco: nao ha mapa neste caminho (ADR-0006).
     assert.equal(/"lat"|"lon"|street_address/.test(resposta.bruto), false);
+    assert.equal(resposta.cache, 'private, no-store');
   });
 
-  void it('ISCA: o encontro nasce com AUTOR e sem ponto, e o repositorio recebe isso', async () => {
-    propostasGravadas.length = 0;
-    await propor();
-    const gravado = propostasGravadas.at(-1);
+  void it('ISCA: o encontro nasce com AUTOR, sem ponto e gratuito', async () => {
+    gravados.length = 0;
+    await criar();
+    const gravado = gravados.at(-1);
     assert.ok(gravado !== undefined);
     assert.equal(gravado.autor, QUEM_CHAMA);
     assert.equal(gravado.lugar.ponto, null);
-    assert.equal(gravado.entrada.tipo, 'free');
   });
 
-  void it('ISCA: a trilha grava `network_event.submitted` com o ator, e nao o e-mail', async () => {
+  void it('ISCA: a trilha grava `network_event.submitted` com o ator e `origin: community`', async () => {
     trilhaDeTeste.length = 0;
-    await propor();
+    await criar();
     const evento = trilhaDeTeste.at(-1);
     assert.ok(evento !== undefined);
     assert.equal(evento.action, 'network_event.submitted');
     assert.equal(evento.actorKind, 'user');
     assert.equal(evento.actorUserId, QUEM_CHAMA);
-    assert.equal((evento.after ?? {})['publication_status'], 'pending_review');
     assert.equal((evento.after ?? {})['origin'], 'community');
+    assert.equal((evento.after ?? {})['publication_status'], 'published');
   });
 
-  void it('sem conta nenhuma, responde 401 ANTES de qualquer consulta', async () => {
+  void it('sem conta nenhuma, 401 antes de qualquer consulta', async () => {
     const resposta = await pedir(servidor(), { metodo: 'POST', corpo: CORPO_VALIDO, como: null });
     assert.equal(resposta.status, 401);
   });
 
   void it('ISCA: sem canal de contato verificado, 409 `contact-channel-unverified`', async () => {
-    const resposta = await propor({
-      estadoDaConta: { temCanalVerificado: false, encontrosEmRevisao: 0 },
-    });
+    const resposta = await criar({ estadoDaConta: { temCanalVerificado: false, encontrosAtivos: 0 } });
     assert.equal(resposta.status, 409);
-    assert.equal(
-      resposta.corpo['type'],
-      `${BASE_DE_PROBLEMA}/contact-channel-unverified`,
-    );
-    // O `next_action` e o que salva a tela: sem ele a pessoa le "confirme seu
-    // e-mail" sem um caminho para fazer isso agora.
+    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/contact-channel-unverified`);
     assert.equal(resposta.corpo['next_action'], 'verify_email');
   });
 
-  void it('ISCA: com tres encontros em revisao, 409 `pending-event-limit-reached`', async () => {
-    const resposta = await propor({
-      estadoDaConta: { temCanalVerificado: true, encontrosEmRevisao: 3 },
-    });
+  void it('ISCA: com tres encontros ativos, 409 `community-event-limit-reached`', async () => {
+    const resposta = await criar({ estadoDaConta: { temCanalVerificado: true, encontrosAtivos: 3 } });
     assert.equal(resposta.status, 409);
-    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/pending-event-limit-reached`);
+    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/community-event-limit-reached`);
   });
 
   void it('ISCA: a ORDEM -- o teto vem ANTES do canal, e nao o contrario', async () => {
-    // Quem esta nos dois casos precisa receber o teto: mandar a pessoa
-    // confirmar o e-mail para ela descobrir depois que a fila esta cheia e uma
-    // ida a caixa de entrada a toa. Inverter os dois `if` em producao faz este
-    // caso reprovar, e so ele.
-    const resposta = await propor({
-      estadoDaConta: { temCanalVerificado: false, encontrosEmRevisao: 3 },
-    });
-    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/pending-event-limit-reached`);
+    // Quem esta nos dois casos recebe o teto: mandar a pessoa confirmar o
+    // e-mail para ela descobrir depois que ja tem tres encontros e uma ida a
+    // caixa de entrada a toa. Inverter os dois `if` reprova so este caso.
+    const resposta = await criar({ estadoDaConta: { temCanalVerificado: false, encontrosAtivos: 3 } });
+    assert.equal(resposta.corpo['type'], `${BASE_DE_PROBLEMA}/community-event-limit-reached`);
   });
 
-  void it('ISCA: `place_name` com endereco embutido e recusado com 400 e o campo', async () => {
-    const resposta = await propor({}, {
-      ...CORPO_VALIDO,
-      place: { ...CORPO_VALIDO.place, place_name: 'Praça do Bairro - Avenida Brasil, 200' },
-    });
-    assert.equal(resposta.status, 400);
-    const erros = resposta.corpo['errors'] as { field: string; code: string }[];
-    assert.equal(erros.length, 1);
-    assert.equal(erros[0]?.field, 'place.place_name');
-    assert.equal(erros[0]?.code, 'address_in_place_name');
-  });
-
-  void it('ISCA: o corpo e FECHADO pelo contrato -- visibilidade e preco nao entram', async () => {
+  void it('ISCA: o corpo e FECHADO pelo contrato -- visibilidade, preco e endereco nao entram', async () => {
     for (const extra of [
       { visibility: 'private' },
       { admission: { kind: 'paid', price: { amount: 2000, currency: 'BRL', unit: 'per_dog' } } },
       { slug: 'endereco-escolhido' },
       { street_address: 'Avenida Brasil, 200' },
       { ticket_url: 'https://exemplo.test/ingresso' },
-      { images: [{ upload_id: 'x', alt_text: 'y' }] },
+      { publication_status: 'published' },
     ]) {
-      const resposta = await propor({}, { ...CORPO_VALIDO, ...extra });
+      const resposta = await criar({}, { ...CORPO_VALIDO, ...extra });
       assert.equal(resposta.status, 400, JSON.stringify(extra));
     }
   });
 
   void it('encontro que ja teria terminado e recusado com `event_in_past`', async () => {
-    const resposta = await propor({}, {
-      ...CORPO_VALIDO,
-      starts_at: new Date(AGORA - UMA_HORA).toISOString(),
-    });
+    const resposta = await criar({}, { ...CORPO_VALIDO, starts_at: new Date(AGORA - UMA_HORA).toISOString() });
     assert.equal(resposta.status, 400);
     const erros = resposta.corpo['errors'] as { code: string }[];
     assert.equal(erros.some((e) => e.code === 'event_in_past'), true);
   });
+});
 
-  void it('a resposta e `no-store`: ela e de conta, e nao de vitrine', async () => {
-    const resposta = await propor();
-    assert.equal(resposta.cache, 'private, no-store');
+void describe('o conteudo que ninguem mais olha: as duas conferencias sao a unica protecao', () => {
+  void it('ISCA: `place_name` com endereco embutido, 400 com o campo e o codigo', async () => {
+    for (const nome of [
+      'Praça do Bairro - Avenida Brasil, 200',
+      'Parque, CEP 01310-100',
+      'Av. Brasil 1578',
+      'Rodovia Raposo Tavares km 23',
+      'Praça da Matriz, s/n',
+      'Salão do bloco 2',
+    ]) {
+      const resposta = await criar({}, { ...CORPO_VALIDO, place: { ...CORPO_VALIDO.place, place_name: nome } });
+      assert.equal(resposta.status, 400, nome);
+      const erros = resposta.corpo['errors'] as { field: string; code: string }[];
+      assert.equal(erros[0]?.field, 'place.place_name', nome);
+      assert.equal(erros[0]?.code, 'address_in_place_name', nome);
+    }
+  });
+
+  void it('ISCA: nome de lugar legitimo PASSA, com logradouro e com numero no nome', async () => {
+    for (const nome of ['Avenida Paulista', 'Rua 25 de Março', 'Praça 14 de Janeiro', 'Quadra 302 Norte']) {
+      const resposta = await criar({}, { ...CORPO_VALIDO, place: { ...CORPO_VALIDO.place, place_name: nome } });
+      assert.equal(resposta.status, 201, `${nome}: ${resposta.bruto}`);
+    }
+  });
+
+  void it('ISCA: D59 vale no titulo, na descricao e no texto alternativo da capa', async () => {
+    const casos: [string, Record<string, unknown>][] = [
+      ['title', { ...CORPO_VALIDO, title: 'Encontro, chama no 11 98765-4321' }],
+      ['summary', { ...CORPO_VALIDO, summary: 'Inscrição em bit.ly/encontro, corre' }],
+      ['notes', { ...CORPO_VALIDO, notes: 'Pix do rateio: 123.456.789-09' }],
+      [
+        'cover_image.alt_text',
+        { ...CORPO_VALIDO, cover_image: { upload_id: ENVIO, alt_text: 'segue @meuperfil' } },
+      ],
+    ];
+    for (const [campo, corpo] of casos) {
+      const resposta = await criar({}, corpo);
+      assert.equal(resposta.status, 400, campo);
+      const erros = resposta.corpo['errors'] as { field: string; code: string }[];
+      assert.equal(erros.some((e) => e.field === campo && e.code === 'contact_or_payment_detected'), true, campo);
+    }
+  });
+});
+
+void describe('a capa, que e publica', () => {
+  void it('ISCA: a capa do corpo e confirmada e vai para a posicao 0', async () => {
+    capasPedidas.length = 0;
+    capasDefinidas.length = 0;
+    const resposta = await criar({}, {
+      ...CORPO_VALIDO,
+      cover_image: { upload_id: ENVIO, alt_text: 'Cães correndo na grama' },
+    });
+    assert.equal(resposta.status, 201, resposta.bruto);
+    assert.deepEqual(capasPedidas, [ENVIO]);
+    assert.deepEqual(capasDefinidas, ['Cães correndo na grama']);
+  });
+
+  void it('ISCA: envio que nao serve (de outra conta, vencido, de outro proposito) e UM 400 so', async () => {
+    const resposta = await criar({ capaNaoServe: true }, {
+      ...CORPO_VALIDO,
+      cover_image: { upload_id: ENVIO, alt_text: 'Cães correndo na grama' },
+    });
+    assert.equal(resposta.status, 400);
+    const erros = resposta.corpo['errors'] as { field: string; code: string }[];
+    assert.deepEqual(
+      erros.map((e) => [e.field, e.code]),
+      [['cover_image', 'upload_not_usable']],
+    );
+  });
+});
+
+void describe('o autor administra o proprio encontro: editar', () => {
+  void it('com If-Match certo, 200 com o encontro e o ETag da versao nova', async () => {
+    const resposta = await editar();
+    assert.equal(resposta.status, 200, resposta.bruto);
+    assert.equal(resposta.etag, '"2"');
+  });
+
+  void it('ISCA: encontro de OUTRA pessoa responde 404, nunca 403, e com o mesmo corpo', async () => {
+    const alheio = await editar({ meuEncontro: undefined });
+    assert.equal(alheio.status, 404);
+    const inexistente = await pedir(servidor({ meuEncontro: undefined }), {
+      metodo: 'PATCH',
+      url: '/network/events/nunca-existiu',
+      corpo: { title: 'Outro titulo' },
+      como: QUEM_CHAMA,
+      ifMatch: '"1"',
+    });
+    assert.equal(inexistente.status, 404);
+    // O corpo e identico: nada distingue "nao e seu" de "nao existe".
+    assert.equal(alheio.corpo['type'], inexistente.corpo['type']);
+    assert.equal(alheio.corpo['title'], inexistente.corpo['title']);
+  });
+
+  void it('ISCA: sem If-Match, 428; com versao velha, 412', async () => {
+    assert.equal((await editar({}, { title: 'Outro titulo' }, null)).status, 428);
+    assert.equal((await editar({ versaoMudou: true })).status, 412);
+  });
+
+  void it('ISCA: o ETag sufixado pela borda VALE (`"1-zstd"`, `W/"1"`)', async () => {
+    // O defeito de 05/10: o Caddy acrescenta o sufixo da codificacao e a
+    // escrita caia em 412 sem ninguem ter alterado nada.
+    for (const forma of ['"1-zstd"', '"1-gzip"', '"1-br"', 'W/"1"']) {
+      const resposta = await editar({}, { title: 'Encontro na praça, de tarde' }, forma);
+      assert.equal(resposta.status, 200, `${forma}: ${resposta.bruto}`);
+    }
+  });
+
+  void it('ISCA: `place_name` e D59 valem na EDICAO tambem', async () => {
+    const endereco = await editar({}, { place: { ...CORPO_VALIDO.place, place_name: 'Rua das Flores 12' } });
+    assert.equal(endereco.status, 400);
+    assert.equal((endereco.corpo['errors'] as { code: string }[])[0]?.code, 'address_in_place_name');
+    const contato = await editar({}, { summary: 'Agora é em exemplo.test/encontro' });
+    assert.equal(contato.status, 400);
+    assert.equal((contato.corpo['errors'] as { code: string }[])[0]?.code, 'contact_or_payment_detected');
+  });
+
+  void it('ISCA: o corpo da edicao e FECHADO -- o autor nao muda visibilidade nem preco', async () => {
+    for (const corpo of [
+      { visibility: 'private' },
+      { admission: { kind: 'free' } },
+      { slug: 'outro-endereco' },
+      { street_address: 'Avenida Brasil, 200' },
+      { publication_status: 'cancelled' },
+      { origin: 'admin' },
+    ]) {
+      const resposta = await editar({}, corpo);
+      assert.equal(resposta.status, 400, JSON.stringify(corpo));
+    }
+  });
+
+  void it('ISCA: encontro que JA TERMINOU nao se edita, e o que ja comecou se edita', async () => {
+    const encerrado = await editar({
+      meuEncontro: { ...MEU_ENCONTRO, startsAt: (AGORA - UMA_HORA * 3) as Instant, endsAt: (AGORA - UMA_HORA) as Instant },
+    });
+    assert.equal(encerrado.status, 400);
+    assert.equal((encerrado.corpo['errors'] as { code: string }[])[0]?.code, 'event_ended');
+
+    const acontecendo = await editar({
+      meuEncontro: { ...MEU_ENCONTRO, startsAt: (AGORA - UMA_HORA) as Instant, endsAt: (AGORA + UMA_HORA) as Instant },
+    });
+    assert.equal(acontecendo.status, 200, acontecendo.bruto);
+  });
+
+  void it('ISCA: a trilha da edicao grava os NOMES dos campos, nunca o conteudo', async () => {
+    trilhaDeTeste.length = 0;
+    await editar({}, { title: 'Encontro na praça, de tarde', notes: 'Levem água' });
+    const evento = trilhaDeTeste.at(-1);
+    assert.equal(evento?.action, 'network_event.updated');
+    assert.deepEqual((evento?.after ?? {})['fields'], ['notes', 'title']);
+    assert.equal(JSON.stringify(evento?.after).includes('Levem'), false);
+  });
+
+  void it('`cover_image: null` tira a capa', async () => {
+    capasDefinidas.length = 0;
+    const resposta = await editar({}, { cover_image: null });
+    assert.equal(resposta.status, 200, resposta.bruto);
+    assert.deepEqual(capasDefinidas, [null]);
+  });
+});
+
+void describe('o autor administra o proprio encontro: cancelar', () => {
+  void it('ISCA: cancelar grava a nota e NAO apaga', async () => {
+    cancelamentos.length = 0;
+    const resposta = await cancelar();
+    assert.equal(resposta.status, 200, resposta.bruto);
+    assert.deepEqual(cancelamentos, ['Choveu demais e o parque fechou.']);
+    assert.equal(resposta.etag, '"2"');
+  });
+
+  void it('ISCA: a nota do cancelamento NAO sai na resposta publica', async () => {
+    const resposta = await cancelar();
+    assert.equal(resposta.bruto.includes('Choveu'), false);
+  });
+
+  void it('encontro de outra pessoa: 404', async () => {
+    assert.equal((await cancelar({ meuEncontro: undefined })).status, 404);
+  });
+
+  void it('ISCA: encontro ja cancelado responde `event_not_published`', async () => {
+    const resposta = await cancelar({ meuEncontro: { ...MEU_ENCONTRO, publicacao: 'cancelled' } });
+    assert.equal(resposta.status, 400);
+    assert.equal((resposta.corpo['errors'] as { code: string }[])[0]?.code, 'event_not_published');
+  });
+
+  void it('encontro que ja terminou: `event_ended`, e nao ha o que cancelar', async () => {
+    const resposta = await cancelar({
+      meuEncontro: { ...MEU_ENCONTRO, startsAt: (AGORA - UMA_HORA * 3) as Instant, endsAt: (AGORA - UMA_HORA) as Instant },
+    });
+    assert.equal(resposta.status, 400);
+    assert.equal((resposta.corpo['errors'] as { code: string }[])[0]?.code, 'event_ended');
+  });
+
+  void it('sem If-Match, 428', async () => {
+    assert.equal((await cancelar({}, null)).status, 428);
+  });
+
+  void it('ISCA: a trilha grava `network_event.cancelled`', async () => {
+    trilhaDeTeste.length = 0;
+    await cancelar();
+    assert.equal(trilhaDeTeste.at(-1)?.action, 'network_event.cancelled');
   });
 });

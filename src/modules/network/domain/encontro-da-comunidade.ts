@@ -1,15 +1,24 @@
 /**
  * O encontro criado PELA COMUNIDADE (ADR-0025, emenda 3 de 17/10/2026).
  *
- * ## O que esta decidido aqui, e o que nao esta
+ * ## O que a decisao do cliente tirou, e o que ela poe no lugar
  *
- * O encontro da comunidade nasce `pending_review` e **nao aparece em nenhuma
- * leitura publica antes de aprovado**: isso nao e um `if` deste arquivo, e sim
- * o predicado `publication_status IN ('published', 'cancelled')` que as
- * leituras da `Rede` ja carregam na clausula `WHERE` (ADR-0021), mais o
- * `CHECK network_events_revisao_so_da_comunidade` da `20260928000001`. Este
- * arquivo decide **quem pode criar**, **quantos**, e **o que o texto do lugar
- * nao pode conter**.
+ * Nao ha fila de revisao. Palavras dele: *"porque teria evento recusado? o
+ * usuario validado pode criar eventos sem aprovacao. A imagem de capa do evento
+ * e publica"*. O encontro nasce `published`, aparece na agenda publica na hora,
+ * e **quem criou administra aquele encontro** -- edita e cancela o proprio.
+ *
+ * Isso muda o peso deste arquivo: **nada olha o conteudo antes de publicar**.
+ * As conferencias daqui deixaram de ser uma segunda rede atras da revisao
+ * humana e passaram a ser a unica. Duas delas em particular:
+ *
+ * - `errosDoNomeDoLugar` e a UNICA protecao contra o vazamento medido do
+ *   endereco pela agenda publica;
+ * - `temContatoOuPagamento` (D59, reusado de `escrita-do-encontro.ts`) passa a
+ *   valer em todo texto que a pessoa escreve, e nao so nas observacoes.
+ *
+ * **Nao ha moderacao automatica nem filtro de palavra**, e a ausencia e
+ * deliberada: o cliente nao pediu.
  *
  * ## A regua de quem pode criar e a MESMA de abrir caso de pet perdido
  *
@@ -23,29 +32,31 @@
  *
  * `TETO_DE_CASOS_ABERTOS_POR_CONTA` ja e 3 para a outra acao de peso do
  * produto, e o juizo e o mesmo: tres e mais do que uma pessoa organiza de
- * verdade ao mesmo tempo, e pouco o bastante para um teto de fila de moderacao
- * significar alguma coisa. Um numero novo aqui obrigaria a defender dois
- * numeros para a mesma pergunta.
+ * verdade ao mesmo tempo, e pouco o bastante para o teto significar alguma
+ * coisa. Um numero novo aqui obrigaria a defender dois numeros para a mesma
+ * pergunta.
  *
- * O teto conta o que esta **em revisao**, e nao o que foi criado: encontro
- * aprovado sai da conta na hora da aprovacao, e recusado tambem. Ele e o
- * segundo mecanismo, e nao o unico -- o primeiro e o teto de chamada por conta
- * declarado na rota (`x-rate-limit`, aplicado por `registrar-rota.ts`).
+ * O teto conta encontro **ativo** -- publicado e ainda nao encerrado. O que
+ * terminou sai da conta sozinho, e o cancelado sai na hora do cancelamento. Ele
+ * e o segundo mecanismo, e nao o unico: o primeiro e o teto de chamada por
+ * conta declarado na rota. **Sem revisao, os dois sao a unica contencao de
+ * volume**, e e por isso que os dois ficam.
  */
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import {
   errosDeTexto,
   normalizarParaConferencia,
-  type Entrada,
+  temContatoOuPagamento,
   type Lugar,
 } from './escrita-do-encontro.js';
 
 /**
- * Quantos encontros em revisao uma conta pode ter ao mesmo tempo. Ver o
- * cabecalho: e o mesmo 3 de `TETO_DE_CASOS_ABERTOS_POR_CONTA`.
+ * Quantos encontros ATIVOS (publicados e nao encerrados) uma conta pode ter ao
+ * mesmo tempo. Ver o cabecalho: e o mesmo 3 de
+ * `TETO_DE_CASOS_ABERTOS_POR_CONTA`.
  */
-export const TETO_DE_ENCONTROS_EM_REVISAO = 3;
+export const TETO_DE_ENCONTROS_ATIVOS = 3;
 
 /** O bloqueio, no vocabulario que a tela sabe explicar. */
 export type BloqueioParaCriarEncontro = 'contact_channel_unverified';
@@ -57,8 +68,8 @@ export type BloqueioParaCriarEncontro = 'contact_channel_unverified';
 export interface EstadoParaCriarEncontro {
   /** E-mail OU telefone verificado. Preenchido e nao verificado nao conta. */
   readonly temCanalVerificado: boolean;
-  /** Quantos encontros desta conta estao em `pending_review` agora. */
-  readonly encontrosEmRevisao: number;
+  /** Quantos encontros desta conta estao publicados e ainda nao terminaram. */
+  readonly encontrosAtivos: number;
 }
 
 export function bloqueiosParaCriarEncontro(
@@ -67,8 +78,8 @@ export function bloqueiosParaCriarEncontro(
   return estado.temCanalVerificado ? [] : ['contact_channel_unverified'];
 }
 
-export function atingiuTetoDeRevisao(estado: EstadoParaCriarEncontro): boolean {
-  return estado.encontrosEmRevisao >= TETO_DE_ENCONTROS_EM_REVISAO;
+export function atingiuTetoDeEncontros(estado: EstadoParaCriarEncontro): boolean {
+  return estado.encontrosAtivos >= TETO_DE_ENCONTROS_ATIVOS;
 }
 
 // ---------------------------------------------------------------------------
@@ -115,11 +126,32 @@ const QUILOMETRO = /\bkm\s*\.?\s*\d/;
  */
 const NUMERO_DE_PORTA = /(?:,\s*|\s-\s*|\bn\.?o?\.?\s*|\bnu?m?(?:ero)?\.?\s*|#\s*)\d{1,6}\b/;
 
+/**
+ * "Sem numero", nas formas em que se escreve. E marcador de ENDERECO -- quem
+ * escreve `s/n` esta preenchendo um campo de logradouro, nao nomeando um lugar.
+ * Entrou no endurecimento de 17/10/2026, com a publicacao direta.
+ *
+ * O separador (`/` ou `.`) e OBRIGATORIO, e o `(?![a-z])` fecha a palavra: sem
+ * os dois, "Praca S. Nicolau" seria recusada. O `o` opcional existe porque o
+ * `º` de `s/nº` vira `o` na normalizacao NFKC, antes desta conferencia.
+ */
+const SEM_NUMERO = /\bs\s*[/.]\s*n(?:o|\u00ba)?(?![a-z])|\bsem\s+numero\b/;
+
+/**
+ * Quatro digitos seguidos ou mais. Numero de porta no Brasil e quase sempre de
+ * quatro digitos, e nome de lugar com quatro digitos e raro ("Clube 2000" e o
+ * contraexemplo honesto). Entrou no endurecimento de 17/10/2026 **com o
+ * contraexemplo registrado**: a troca e recusar o raro para pegar o comum, e o
+ * texto da recusa diz o que fazer ("escreva so o nome do lugar").
+ */
+const NUMERO_LONGO = /(?<!\d)\d{4,}(?!\d)/;
+
 /** Complemento de endereco residencial. Nunca e nome de lugar publico. */
 const COMPLEMENTO = /\b(?:apto|apartamento|bloco|bl|casa|cs|fundos|sobrado|conjunto|cj|andar|sala)\b\s*\d|\bcond(?:ominio)?\b/;
 
 /**
- * O nome do lugar: 2 a 80, sem controle bidirecional, **e sem endereco dentro**.
+ * O nome do lugar: 2 a 80, sem controle bidirecional, **sem endereco dentro** e
+ * sem contato nem pagamento.
  *
  * ## O furo que esta funcao fecha, e ele foi medido
  *
@@ -128,17 +160,23 @@ const COMPLEMENTO = /\b(?:apto|apartamento|bloco|bl|casa|cs|fundos|sobrado|conju
  * `place_name` ("Nome do lugar - Avenida tal, 200"), e `place_name` sai na
  * agenda publica, sem conta. A protecao do endereco era decorativa nesses dois.
  *
- * Na criacao pela comunidade ela deixa de ser. O que e recusado, com `400`:
+ * **Desde 17/10/2026 esta funcao e a UNICA protecao**, porque o encontro da
+ * comunidade publica sem revisao humana. O que e recusado, com `400`
+ * (`code: address_in_place_name`):
  *
- * - **CEP**, sempre (`code: address_in_place_name`);
+ * - **CEP**, sempre;
  * - **numero de porta depois de separador** (`, 200`, `- 200`, `nº 200`);
+ * - **`s/n`** e "sem numero";
+ * - **quatro digitos seguidos ou mais**;
+ * - **marcador de quilometro de rodovia** ("Rodovia Raposo Tavares km 23");
  * - **palavra de logradouro junto de numero que nao e parte do nome dela**
  *   ("Av. Brasil 1578", "Rua das Flores 12");
- * - **marcador de quilometro de rodovia** ("Rodovia Raposo Tavares km 23"),
- *   sempre, porque ali o numero vem logo depois do marcador;
- * - **complemento residencial** ("bloco 2", "apto 51", "condominio");
- * - telefone, e-mail, link, perfil `@usuario`, chave PIX e dados de pagamento,
- *   pela mesma regra de D59 que `errosDoEndereco` ja aplica.
+ * - **complemento residencial** ("bloco 2", "apto 51", "condominio").
+ *
+ * E, com `code: contact_or_payment_detected`, o que D59 ja recusa em texto de
+ * usuario: telefone, e-mail, link, encurtador, perfil `@usuario`, chave PIX e
+ * dados bancarios. **A conferencia e a mesma funcao** que as observacoes usam,
+ * e nao uma copia.
  *
  * O que NAO e recusado, de proposito: palavra de logradouro sozinha, e numero
  * que e parte do nome. "Avenida Paulista", "Rua 25 de Marco", "Praca 14 de
@@ -156,6 +194,8 @@ export function errosDoNomeDoLugar(campo: string, valor: string): ProblemFieldEr
   const endereco =
     CEP.test(base) ||
     QUILOMETRO.test(base) ||
+    SEM_NUMERO.test(base) ||
+    NUMERO_LONGO.test(semNumeroDoNome) ||
     NUMERO_DE_PORTA.test(semNumeroDoNome) ||
     COMPLEMENTO.test(base) ||
     (comLogradouro && /\d/.test(semNumeroDoNome));
@@ -169,7 +209,35 @@ export function errosDoNomeDoLugar(campo: string, valor: string): ProblemFieldEr
       },
     ];
   }
-  return [];
+  return errosDeTextoDeUsuario(campo, valor, 2, 80);
+}
+
+/**
+ * Tamanho e **D59 juntos**, para todo texto que a comunidade escreve.
+ *
+ * Existe porque, sem revisao humana, a conferencia que era so das observacoes
+ * passa a valer no titulo, na descricao e no texto alternativo da capa: um link
+ * no titulo aparece na agenda publica exatamente como apareceria nas
+ * observacoes. A funcao do detector e **a de `escrita-do-encontro.ts`**, nao uma
+ * copia.
+ */
+export function errosDeTextoDeUsuario(
+  campo: string,
+  valor: string,
+  minimo: number,
+  maximo: number,
+): ProblemFieldError[] {
+  const tamanho = errosDeTexto(campo, valor, minimo, maximo);
+  if (tamanho.length > 0) return tamanho;
+  if (!temContatoOuPagamento(valor)) return [];
+  return [
+    {
+      field: campo,
+      code: 'contact_or_payment_detected',
+      message:
+        'Este texto não pode ter telefone, e-mail, link, perfil, chave PIX nem dados de pagamento.',
+    },
+  ];
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +259,12 @@ export interface LugarDaComunidade {
   readonly state: string;
 }
 
+/** A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. */
+export interface CapaDoCorpo {
+  readonly upload_id: string;
+  readonly alt_text: string;
+}
+
 /**
  * O corpo de `createNetworkEvent`, como o contrato o declara.
  *
@@ -198,10 +272,11 @@ export interface LugarDaComunidade {
  * tem fila de pedidos, que e trabalho de moderacao do painel), `admission` (o
  * Bichu nao cobra, e valor escrito por terceiro e pedido de moderacao de
  * dinheiro), `slug` (o servidor o deriva do titulo), `street_address` e
- * `point` (ADR-0006 e a privacidade do lugar), `ticket_url` e
- * `instagram_handle` (link em texto de terceiro e o vetor que D59 fecha) e
- * `images` (o envio de imagem hoje passa pela superficie administrativa; a
- * tela com foto e o despacho seguinte).
+ * `point` (ADR-0006 e a privacidade do lugar) e `ticket_url` e
+ * `instagram_handle` (link em texto de terceiro e o vetor que D59 fecha).
+ *
+ * **A capa entra** (`cover_image`), porque a imagem de capa e publica por
+ * decisao do cliente de 17/10/2026.
  */
 export interface CorpoDoEncontroDaComunidade {
   readonly title: string;
@@ -217,13 +292,42 @@ export interface CorpoDoEncontroDaComunidade {
   readonly amenities?: readonly string[];
   readonly bring_items?: readonly string[];
   readonly notes?: string;
+  readonly cover_image?: CapaDoCorpo;
 }
 
 /**
- * O que o repositorio grava. `origin` e `publication_status` nao sao opcao, e
- * **nao ha `slug`**: ele e derivado do titulo dentro da transacao, porque a
- * comunidade nao manda um e dois encontros com o mesmo titulo sao normais.
+ * O corpo de `updateNetworkEvent` (`CommunityNetworkEventPatch`). Campo ausente
+ * nao muda; `null` em `ends_at`, `notes` e `cover_image` tira o valor.
+ *
+ * **Data, horario, fuso e lugar entram aqui** -- a unica diferenca em relacao
+ * ao `PATCH` do painel, que os manda para `relocateAdminNetworkEvent`. Aquela
+ * operacao existe pela cerimonia de T11 (motivo e aviso a todos os
+ * administradores), que nao se aplica a quem corrige o proprio encontro; sem
+ * eles, consertar a hora errada exigiria cancelar e criar de novo, gastando o
+ * teto de 3.
  */
+export interface PatchDoEncontroDaComunidade {
+  readonly title?: string;
+  readonly summary?: string;
+  readonly place?: LugarDaComunidade;
+  readonly starts_at?: string;
+  readonly ends_at?: string | null;
+  readonly time_zone?: string;
+  readonly accepted_sizes?: readonly string[];
+  readonly dog_age?: string;
+  readonly vaccination_required?: boolean;
+  readonly fenced_off_leash_area?: boolean;
+  readonly amenities?: readonly string[];
+  readonly bring_items?: readonly string[];
+  readonly notes?: string | null;
+  readonly cover_image?: CapaDoCorpo | null;
+}
+
+export interface CorpoDoCancelamentoDaComunidade {
+  readonly note: string;
+}
+
+/** O que o repositorio grava na criacao. `origin` e o estado nao sao opcao. */
 export interface NovoEncontroDaComunidade {
   readonly id: string;
   readonly autor: string;
@@ -233,7 +337,6 @@ export interface NovoEncontroDaComunidade {
   readonly startsAt: Date;
   readonly endsAt: Date | null;
   readonly timeZone: string;
-  readonly entrada: Entrada;
   readonly idadeDosCaes: string;
   readonly vacinacaoExigida: boolean;
   readonly areaCercada: boolean;
@@ -241,23 +344,20 @@ export interface NovoEncontroDaComunidade {
   readonly portes: readonly string[];
   readonly estrutura: readonly string[];
   readonly paraLevar: readonly string[];
+  readonly capa: { readonly uploadId: string; readonly altText: string } | null;
   readonly agora: Instant;
 }
 
-/**
- * A resposta de `createNetworkEvent` (`NetworkEventSubmission`).
- *
- * **Sem UUID** (ADR-0010 item 6): a unica chave que sai e o `slug`. Sem
- * coordenada e sem endereco, porque nenhum dos dois entrou. O `slug` ja existe
- * na resposta porque e por ele que a tela vai perguntar pelo encontro depois
- * de a revisao aprovar -- antes disso a leitura publica responde 404, e e
- * assim que tem de ser.
- */
-export interface EnvioProjetado {
-  readonly slug: string;
-  readonly title: string;
-  readonly starts_at: string;
-  readonly time_zone: string;
-  readonly review_state: 'pending_review';
-  readonly submitted_at: string;
+/** O que a edicao grava. Campo ausente nao muda. */
+export interface MudancaDoEncontroDaComunidade {
+  readonly title?: string;
+  readonly summary?: string;
+  readonly lugar?: Lugar;
+  readonly startsAt?: Date;
+  readonly endsAt?: Date | null;
+  readonly timeZone?: string;
+  readonly idadeDosCaes?: string;
+  readonly vacinacaoExigida?: boolean;
+  readonly areaCercada?: boolean;
+  readonly observacoes?: string | null;
 }

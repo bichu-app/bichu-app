@@ -417,16 +417,20 @@ export const problemas = {
     }),
 
   /**
-   * 409. A conta já tem três encontros esperando revisão (ADR-0025 emenda 3).
+   * 409. A conta já tem três encontros ativos (ADR-0025 emenda 3).
    *
    * Separado de `open-case-limit-reached` porque a **saída é diferente**: lá a
-   * pessoa encerra um caso que é dela; aqui ela não tem o que fazer além de
-   * esperar a revisão — e o texto precisa dizer isso, em vez de mandá-la
-   * procurar um botão que não existe.
+   * pessoa encerra um caso que é dela; aqui ela cancela um encontro ou espera
+   * um acontecer — o encontro que termina sai da conta sozinho, e o texto
+   * precisa dizer isso.
+   *
+   * **Sem revisão humana, este teto e o teto de chamada da rota são a única
+   * contenção de volume** (decisão do cliente de 17/10/2026), e é por isso que
+   * os dois existem em vez de um.
    */
-  tetoDeEncontrosEmRevisao: (): AppError =>
-    new AppError('pending-event-limit-reached', 'Você já tem três encontros em revisão', {
-      detail: 'A gente revisa um por um. Assim que esses saírem da fila, você pode propor outro.',
+  tetoDeEncontrosDaComunidade: (): AppError =>
+    new AppError('community-event-limit-reached', 'Você já tem três encontros marcados', {
+      detail: 'Cancele um, ou espere um deles acontecer, para marcar outro.',
     }),
 
   /**

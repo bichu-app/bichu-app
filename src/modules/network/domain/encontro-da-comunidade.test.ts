@@ -13,10 +13,10 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
-  atingiuTetoDeRevisao,
+  atingiuTetoDeEncontros,
   bloqueiosParaCriarEncontro,
   errosDoNomeDoLugar,
-  TETO_DE_ENCONTROS_EM_REVISAO,
+  TETO_DE_ENCONTROS_ATIVOS,
 } from './encontro-da-comunidade.js';
 
 const codigos = (nome: string): string[] =>
@@ -42,6 +42,31 @@ void describe('place_name nao aceita endereco embutido', () => {
       'Garagem do apto 51',
     ]) {
       assert.deepEqual(codigos(nome), ['address_in_place_name'], nome);
+    }
+  });
+
+  void it('ISCA: o endurecimento de 17/10 -- s/n, quilometro e numero de quatro digitos', () => {
+    // Entraram quando a revisao humana saiu: esta funcao passou a ser a unica
+    // protecao do endereco na agenda publica.
+    for (const nome of [
+      'Praca da Matriz, s/n',
+      'Praca da Matriz s/nº',
+      'Campo sem numero',
+      'Rodovia dos Imigrantes km 12',
+      'Parque 1578',
+    ]) {
+      assert.deepEqual(codigos(nome), ['address_in_place_name'], nome);
+    }
+  });
+
+  void it('ISCA: D59 vale no nome do lugar -- telefone, link, perfil e PIX', () => {
+    for (const nome of [
+      'Praca do Bairro (11) 98765-4321',
+      'Parque bit.ly/encontro',
+      'Praca @meuperfil',
+      'Quiosque do pix',
+    ]) {
+      assert.deepEqual(codigos(nome), ['contact_or_payment_detected'], nome);
     }
   });
 
@@ -71,20 +96,23 @@ void describe('place_name nao aceita endereco embutido', () => {
 void describe('quem pode criar, e quantos', () => {
   void it('ISCA: sem canal verificado o bloqueio existe; com canal, nao', () => {
     assert.deepEqual(
-      bloqueiosParaCriarEncontro({ temCanalVerificado: false, encontrosEmRevisao: 0 }),
+      bloqueiosParaCriarEncontro({ temCanalVerificado: false, encontrosAtivos: 0 }),
       ['contact_channel_unverified'],
     );
     assert.deepEqual(
-      bloqueiosParaCriarEncontro({ temCanalVerificado: true, encontrosEmRevisao: 0 }),
+      bloqueiosParaCriarEncontro({ temCanalVerificado: true, encontrosAtivos: 0 }),
       [],
     );
   });
 
   void it('ISCA: o teto e 3, e ele e o mesmo numero de caso aberto por conta', () => {
-    assert.equal(TETO_DE_ENCONTROS_EM_REVISAO, 3);
-    const estado = (n: number) => ({ temCanalVerificado: true, encontrosEmRevisao: n });
-    assert.equal(atingiuTetoDeRevisao(estado(2)), false);
-    assert.equal(atingiuTetoDeRevisao(estado(3)), true);
-    assert.equal(atingiuTetoDeRevisao(estado(4)), true);
+    // Sem revisao humana (decisao do cliente de 17/10/2026), este teto e o de
+    // chamada da rota sao a UNICA contencao de volume: afrouxa-lo nao e so
+    // produto.
+    assert.equal(TETO_DE_ENCONTROS_ATIVOS, 3);
+    const estado = (n: number) => ({ temCanalVerificado: true, encontrosAtivos: n });
+    assert.equal(atingiuTetoDeEncontros(estado(2)), false);
+    assert.equal(atingiuTetoDeEncontros(estado(3)), true);
+    assert.equal(atingiuTetoDeEncontros(estado(4)), true);
   });
 });

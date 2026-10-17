@@ -514,10 +514,21 @@ export interface UploadIntentsTable {
  * A intencao de envio de imagem de catalogo, do painel (ADR-0027 A.3, item
  * 20.2). Separada de `upload_intents`, que e do app e aponta para `users`.
  */
+/**
+ * A intencao de envio de imagem de catalogo (Loja e Rede).
+ *
+ * **Exatamente UM dos dois autores**, e o `CHECK
+ * catalog_upload_intents_um_autor` impoe: `admin_account_id` quando o envio e
+ * do painel (ADR-0027 A.3), `user_id` quando e da comunidade (a capa do
+ * encontro, ADR-0025 emenda 3). Os dois nulos, ou os dois preenchidos, nao
+ * entram no banco.
+ */
 export interface CatalogUploadIntentsTable {
   id: string;
   /** `admin_accounts.id`. Sem `ON DELETE`: conta do painel desativa, nao se apaga. */
-  admin_account_id: string;
+  admin_account_id: string | null;
+  /** `users.id`, quando o envio e da comunidade. `ON DELETE CASCADE`: a intencao e descartavel. */
+  user_id: ColumnType<string | null, string | null | undefined, string | null>;
   purpose: PropositoDaImagemDeCatalogo;
   /** Chave no armazenamento privado. **Nunca** uma URL. */
   object_key: string;
@@ -1237,10 +1248,14 @@ export type OrigemDoEncontro = 'admin' | 'community';
 
 /**
  * O `CHECK` `network_events_publicacao_conhecida`. Visivel e `published` ou
- * `cancelled`; `pending_review` e so da comunidade e nunca e visivel;
- * `removed` e terminal.
+ * `cancelled`; `removed` e terminal.
+ *
+ * **`pending_review` saiu na `20261001000005`**: ele era o estado da fila de
+ * revisao do encontro da comunidade, e a decisao do cliente de 17/10/2026
+ * trocou a fila pela publicacao direta de quem tem canal de contato verificado
+ * (ADR-0025 emenda 3).
  */
-export type PublicacaoDoEncontro = 'pending_review' | 'published' | 'cancelled' | 'removed';
+export type PublicacaoDoEncontro = 'published' | 'cancelled' | 'removed';
 
 export interface Database {
   users: UsersTable;

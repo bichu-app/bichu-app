@@ -30,16 +30,12 @@ import type { Instant } from '../../../shared/types/brands.js';
 // ---------------------------------------------------------------------------
 
 /**
- * O estado de publicacao como o painel o ve.
- *
- * `pending_review` entrou com a emenda 3 do ADR-0025: e o estado do encontro
- * proposto pela comunidade, e **so `reviewAdminNetworkEvent` o enxerga**.
- * Alterar, mover, cancelar e remover continuam respondendo 404 sobre ele, e
- * isso e deliberado -- cancelar algo que nunca foi publicado nao tem
- * significado, e o `CHECK network_events_visivel_foi_publicado` reprovaria o
- * `UPDATE`.
+ * O estado de publicacao como o painel o ve. **Nao ha `pending_review`**: ele
+ * existiu por algumas horas em 17/10/2026, enquanto o encontro da comunidade
+ * tinha fila de revisao, e saiu com a decisao do cliente de publicar direto
+ * (ADR-0025 emenda 3). A migracao `20261001000005` o tirou do `CHECK`.
  */
-export type PublicacaoAdministrativa = 'pending_review' | 'published' | 'cancelled' | 'removed';
+export type PublicacaoAdministrativa = 'published' | 'cancelled' | 'removed';
 export type Visibilidade = 'public' | 'private';
 export type UnidadeDoValor = 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
 export type TempoDoEncontro = 'upcoming' | 'happening' | 'ended';
@@ -272,24 +268,42 @@ export function semDatas(texto: string): string {
 export function errosDasObservacoes(campo: string, valor: string): ProblemFieldError[] {
   const tamanho = errosDeTexto(campo, valor, 2, 500);
   if (tamanho.length > 0) return tamanho;
-  const { base, letras } = normalizarParaConferencia(semDatas(valor.normalize('NFKC')));
+  if (!temContatoOuPagamento(valor)) return [];
+  return [
+    {
+      field: campo,
+      code: 'contact_or_payment_detected',
+      message: 'As observações não podem ter telefone, e-mail, link, perfil, endereço, CEP, chave PIX nem dados de pagamento.',
+    },
+  ];
+}
+
+/**
+ * O DETECTOR de D59, sem tamanho e sem nome de campo.
+ *
+ * Extraido de `errosDasObservacoes` quando o encontro da comunidade passou a
+ * publicar direto (ADR-0025 emenda 3, 17/10/2026): sem revisao humana, a mesma
+ * conferencia precisa valer em TODO texto que a pessoa escreve -- titulo,
+ * descricao, observacoes e texto alternativo da capa --, e escrever um segundo
+ * detector ao lado deste seria manter dois.
+ *
+ * As duas camadas continuam as mesmas: o detector do canal mediado
+ * (`redigirCanalMediado`), usado aqui para RECUSAR e nao para redigir, e por
+ * cima `normalizarParaConferencia`, que desfaz as quebras que ele nao cobre
+ * (`p i x`, `P1X`, `Pïx`, `bit . ly`). A data de calendario e trocada por um
+ * marcador antes, senao "10.10.2026" passa por telefone.
+ */
+export function temContatoOuPagamento(valor: string): boolean {
+  const limpo = semDatas(valor.normalize('NFKC'));
+  const { base, letras } = normalizarParaConferencia(limpo);
   const contato =
-    redigirCanalMediado(semDatas(valor.normalize('NFKC'))).retirados.length > 0 ||
+    redigirCanalMediado(limpo).retirados.length > 0 ||
     DOMINIO.test(base) ||
     DOMINIO.test(letras) ||
     DOMINIO_COM_CAMINHO.test(base) ||
     ARROBA.test(base);
   const pagamento = PAGAMENTO_POR_PALAVRA.test(letras) || PAGAMENTO_POR_NUMERO.some((padrao) => padrao.test(base));
-  if (contato || pagamento) {
-    return [
-      {
-        field: campo,
-        code: 'contact_or_payment_detected',
-        message: 'As observações não podem ter telefone, e-mail, link, perfil, endereço, CEP, chave PIX nem dados de pagamento.',
-      },
-    ];
-  }
-  return [];
+  return contato || pagamento;
 }
 
 /**

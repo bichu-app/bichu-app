@@ -18,6 +18,10 @@ import { memoDaRequisicao } from '../../../../shared/http/memo-de-requisicao.js'
 import { problemas } from '../../../../shared/http/errors.js';
 import type { Contrato } from '../../../../shared/http/contract.js';
 import type { MediaService } from '../../application/media-service.js';
+import type {
+  CapaDeEncontroDaComunidade,
+  CorpoDaIntencaoDeCapa,
+} from '../../application/capa-de-encontro-da-comunidade.js';
 import type { FotoDoPet } from '../../ports/media-repository.js';
 import type { AbsoluteUrl, PetId, UserId } from '../../../../shared/types/brands.js';
 
@@ -27,6 +31,26 @@ export const rotaDeIntencaoDeFoto = defineRoute({
   path: '/media/pet-photo-intents',
   // Grava a intenção e assina uma autorização que não se desfaz dentro da
   // validade: revogar uma política de POST já entregue não é possível.
+  effects: ['irreversible_write'],
+  rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
+});
+
+/**
+ * A capa do encontro da comunidade (ADR-0025 emenda 3).
+ *
+ * Mora aqui, e nao no modulo `network`, pelo mesmo motivo que
+ * `createPetPhotoUploadIntent` nao mora em `pets`: o que esta rota faz e
+ * assinar envio, e quem sabe assinar e este modulo. A escrita que USA o
+ * `upload_id` e do encontro, e e la que a conta do chamador e conferida de
+ * novo, na clausula `WHERE`.
+ *
+ * O mesmo teto de 20/h da foto de pet: assinar e barato, mas cada assinatura e
+ * uma autorizacao de escrita que nao se desfaz dentro da validade.
+ */
+export const rotaDeIntencaoDeCapaDeEncontro = defineRoute({
+  operationId: 'createNetworkEventCoverUploadIntent',
+  method: 'post',
+  path: '/media/network-event-cover-intents',
   effects: ['irreversible_write'],
   rateLimit: [{ dimension: ['account'], limit: 20, window: '1h', onExceed: 'deny_429' }],
 });
@@ -53,6 +77,8 @@ export interface Autenticador {
 
 export interface DependenciasDasRotasDeMidia {
   readonly midia: MediaService;
+  /** ADR-0025 emenda 3: a autorizacao de envio da capa do encontro. */
+  readonly capasDeEncontro: CapaDeEncontroDaComunidade;
   readonly autenticador: Autenticador;
   readonly contrato: Contrato;
   /** Domínio de mídia, separado da origem da aplicação (ADR-0007). */
@@ -126,10 +152,55 @@ function comoRespostaDaFoto(foto: FotoDoPet, baseDeMidia: AbsoluteUrl): Record<s
   };
 }
 
+/**
+ * `UploadIntent`, do contrato. **Um dos dois, nunca os dois**: `POST` leva
+ * campos de formulario, `PUT` leva cabecalhos assinados. O cliente LE `method`
+ * em vez de presumir, e e isso que faz a troca de provedor nao virar mudanca de
+ * app publicado.
+ */
+function comoAutorizacao(
+  uploadId: string,
+  autorizacao: {
+    metodo: string;
+    url: string;
+    campos?: Record<string, string> | undefined;
+    cabecalhos?: Record<string, string> | undefined;
+    expiraEm: Date;
+    maxBytes: number;
+  },
+): Record<string, unknown> {
+  return {
+    upload_id: uploadId,
+    method: autorizacao.metodo,
+    url: autorizacao.url,
+    ...(autorizacao.campos === undefined ? {} : { fields: autorizacao.campos }),
+    ...(autorizacao.cabecalhos === undefined ? {} : { headers: autorizacao.cabecalhos }),
+    expires_at: autorizacao.expiraEm.toISOString(),
+    max_bytes: autorizacao.maxBytes,
+  };
+}
+
 export function registrarRotasDeMidia(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotasDeMidia,
 ): void {
+  registrarRota(
+    app,
+    rotaDeIntencaoDeCapaDeEncontro,
+    {
+      schema: { body: corpoDe(deps.contrato, rotaDeIntencaoDeCapaDeEncontro.operationId) },
+      resolvedores: { account: (request) => contaDoTeto(request, deps) },
+    },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const dono = await donoAutenticado(request, deps);
+      const { uploadId, autorizacao } = await deps.capasDeEncontro.autorizar(
+        dono,
+        request.body as CorpoDaIntencaoDeCapa,
+      );
+      return reply.status(201).send(comoAutorizacao(uploadId, autorizacao));
+    },
+  );
+
   registrarRota(
     app,
     rotaDeIntencaoDeFoto,
