@@ -870,20 +870,38 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// valendo e continua verde. Anterior:
 /// `5af94a5a286fc5e78b296fdd458b9a6058563fbe`.
 ///
-/// DESTRAVADO EM 17/10 (BICHUS-278, o link do produto da `Loja`). UM arquivo
-/// muda: `loja/vitrine_da_loja.dart`. A saida do cartao passou a chamar
-/// `SaidaDoApp.atual.abrirLink` no lugar de `launchUrl` direto -- a mesma porta
-/// que `rede/encontro_da_rede.dart` ja usa para o link do convite --, e a tela
-/// com isso **perdeu** o importe de `package:url_launcher/`. Esta trava anda na
-/// direcao que o portao ESTRUTURAL abaixo quer, e nao contra ele: uma tela a
-/// menos falando com plugin de aparelho. Camera nao entra nisso, e a porta
-/// `CameraEGaleria` nao foi tocada. Anterior:
-/// `878dd2fa0cce8bb9d906e4391d1add202aeafb95`.
+/// DESTRAVADO EM 17/10 (BICHUS-278, o lote da `Loja`: link do produto, capa e
+/// ordem das imagens, `Ler mais` no cartao, e a tela de detalhe). O valor
+/// abaixo e o da arvore MESCLADA, e nao o de nenhuma das branches: as duas
+/// destravaram por conta propria e nenhum dos dois valores sobrevive a uniao.
+/// Recalculado aqui, com o mesmo indice temporario que o portao usa.
+///
+/// O que muda em `app/lib/telas/`:
+///
+///   - `loja/vitrine_da_loja.dart`: a saida do cartao passou a chamar
+///     `SaidaDoApp.atual.abrirLink` no lugar de `launchUrl` direto -- a mesma
+///     porta que `rede/encontro_da_rede.dart` ja usa para o link do convite
+///     --, e a tela com isso **perdeu** o importe de `package:url_launcher/`.
+///     O cartao ganhou a imagem de capa, o `Ler mais` da descricao e o toque
+///     que leva ao detalhe, e `AvisoDoParceiroDaLoja` e `BotaoDeSaidaDaLoja`
+///     viraram publicos para a tela nova reusar em vez de reimplementar.
+///   - `loja/produto_da_loja.dart`: nasce, a tela de detalhe do produto. A
+///     galeria de ate oito imagens nao tinha onde aparecer.
+///
+/// Esta trava anda na direcao que o portao ESTRUTURAL abaixo quer, e nao
+/// contra ele: uma tela a menos falando com plugin de aparelho, e a tela nova
+/// desenha `Image.network` com a URL que o servidor mandou -- nenhum importe
+/// de plugin, nenhum canal de plataforma. **A camera nao entra nisso e a porta
+/// `CameraEGaleria` nao foi tocada.** Anteriores:
+/// `878dd2fa0cce8bb9d906e4391d1add202aeafb95` (01/10),
+/// `fffa4cb0cced92dac6108ad97cc649adf65e997a` (`feat/loja-link-externo`) e
+/// `a2ee078f99dbc688f22d69472aaef2f91a48c6b8`
+/// (`feat/loja-detalhe-do-produto`).
 ///
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
-/// nesta branch: a trava de 01/10 abaixo continua sendo a razao de eles
-/// estarem como estao.
-const String _arvoreDasTelas = 'fffa4cb0cced92dac6108ad97cc649adf65e997a'; // BICHUS-278, 17/10: `loja/vitrine_da_loja.dart` troca `launchUrl` direto pela porta `SaidaDoApp.abrirLink` (ver a nota acima)
+/// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
+/// como estao.
+const String _arvoreDasTelas = 'ee89095bf10661c42195741c819dabd1c9722054'; // BICHUS-278, 17/10: o lote da Loja -- `loja/produto_da_loja.dart` nasce e `loja/vitrine_da_loja.dart` ganha capa, `Ler mais`, o toque que leva ao detalhe e a saida pela porta `SaidaDoApp` (ver a nota acima)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
