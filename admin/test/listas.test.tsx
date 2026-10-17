@@ -139,16 +139,23 @@ describe('5 · Parceiros', () => {
     fireEvent.click(screen.getByRole('link', { name: 'Novo parceiro' }));
     fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Casa do Bicho Lapa' } });
     expect(screen.getByLabelText('Identificador *')).toHaveValue('casa-do-bicho-lapa');
-    fireEvent.change(screen.getByLabelText('Site do parceiro *'), { target: { value: 'https://casadobicholapa.com.br/' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
-    expect(await screen.findByLabelText('Site do parceiro *')).toHaveAccessibleDescription('Escreva só o endereço do site, sem https:// e sem barra.');
+    // **O SENTIDO DESTE CASO INVERTEU EM 17/10.** Ate entao o campo pedia o
+    // nome pelado e RECUSAVA a URL completa; o padrao do cliente e o oposto,
+    // e e o nome pelado que para agora.
     fireEvent.change(screen.getByLabelText('Site do parceiro *'), { target: { value: 'casadobicholapa.com.br' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
+    expect(await screen.findByLabelText('Site do parceiro *')).toHaveAccessibleDescription(
+      'Escreva o endereço completo. Por exemplo: https://petcenteraurora.com.br',
+    );
+    // A barra final e aceita e descartada: e o que o navegador mostra ao
+    // copiar um endereco, e recusa-la seria o rigor que travou o cliente hoje.
+    fireEvent.change(screen.getByLabelText('Site do parceiro *'), { target: { value: 'https://casadobicholapa.com.br/' } });
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar parceiro' }));
     await waitFor(() => expect(servidor.requisicoes.some((r) => r.metodo === 'POST')).toBe(true));
     expect(servidor.requisicoes.find((r) => r.metodo === 'POST')?.corpo).toEqual({
       slug: 'casa-do-bicho-lapa',
       name: 'Casa do Bicho Lapa',
-      host: 'casadobicholapa.com.br',
+      site_url: 'https://casadobicholapa.com.br/',
       sort_order: 0,
     });
   });
@@ -177,7 +184,7 @@ describe('ISCA: cada campo do parceiro entra no PATCH; sem mudança, "Nada mudou
   const casos: Array<[string, () => void, Record<string, unknown>]> = [
     ['nome', () => fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Pet Center Aurora Lapa' } }), { name: 'Pet Center Aurora Lapa' }],
     ['identificador', () => fireEvent.change(screen.getByLabelText('Identificador *'), { target: { value: 'aurora-lapa' } }), { slug: 'aurora-lapa' }],
-    ['site', () => fireEvent.change(screen.getByLabelText('Site do parceiro *'), { target: { value: 'aurora.com.br' } }), { host: 'aurora.com.br' }],
+    ['site', () => fireEvent.change(screen.getByLabelText('Site do parceiro *'), { target: { value: 'https://aurora.com.br' } }), { site_url: 'https://aurora.com.br' }],
     ['ordem', () => fireEvent.change(screen.getByLabelText('Ordem na Loja'), { target: { value: '5' } }), { sort_order: 5 }],
     ['situação', () => fireEvent.click(screen.getByLabelText('Inativo')), { active: false }],
   ];

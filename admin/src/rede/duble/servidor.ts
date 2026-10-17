@@ -10,7 +10,7 @@
  *
  * Tudo o que chega fica em `registro`, para os testes (e as iscas) lerem.
  */
-import { handleDoInstagram, recusaDoLinkDoConvite } from '../dominio/links.ts';
+import { handleDoInstagram, recusaDoInstagram, recusaDoLinkDoConvite } from '../dominio/links.ts';
 import { achadosNasObservacoes } from '../dominio/observacoes.ts';
 import type {
   Cancelamento,
@@ -145,7 +145,7 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
   }
 
   /** Como o servidor: link e Instagram com a mesma regra do painel, mais a recusa forcada da opcao. */
-  function recusaDeLinks(corpo: { ticket_url?: string | null; instagram_handle?: string | null }): Response | null {
+  function recusaDeLinks(corpo: { ticket_url?: string | null; instagram_url?: string | null }): Response | null {
     const forcada = recusaForcada;
     if (forcada && forcada.field in corpo) {
       recusaForcada = null;
@@ -155,8 +155,9 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
       const code = recusaDoLinkDoConvite(corpo.ticket_url);
       if (code) return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'ticket_url', code }]);
     }
-    if (typeof corpo.instagram_handle === 'string' && !handleDoInstagram(corpo.instagram_handle)) {
-      return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'instagram_handle', code: 'instagram_handle_invalid' }]);
+    if (typeof corpo.instagram_url === 'string') {
+      const code = recusaDoInstagram(corpo.instagram_url);
+      if (code) return problema(400, 'validation-failed', 'Confira os campos', [{ field: 'instagram_url', code }]);
     }
     return null;
   }
@@ -264,9 +265,11 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
           notes: corpo.notes ?? null,
           street_address: corpo.street_address ?? null,
           ticket_url: corpo.ticket_url ?? null,
-          instagram_handle: corpo.instagram_handle ? handleDoInstagram(corpo.instagram_handle) : null,
-          // O painel nao le `instagram_url`; o duble nao monta URL (sem host literal em src/).
-          instagram_url: null,
+          instagram_handle: corpo.instagram_url ? handleDoInstagram(corpo.instagram_url) : null,
+          // O duble nao MONTA URL (host literal em `src/` reprova o portao de
+          // portabilidade): ele devolve a que chegou. Basta para o formulario
+          // reabrir com endereco completo, que e o caminho que importa aqui.
+          instagram_url: corpo.instagram_url ?? null,
           pending_request_count: 0,
           publication_status: 'published',
           timing: 'upcoming',
@@ -296,9 +299,12 @@ export function criarDuble(opcoes: OpcoesDoDuble = {}) {
         const recusa = recusaDeNotas(corpo.notes) ?? recusaDeLinks(corpo);
         if (recusa) return recusa;
         return salvar(e, (x) => {
-          const { images, instagram_handle, ...resto } = corpo;
+          const { images, instagram_url, ...resto } = corpo;
           Object.assign(x, resto);
-          if (instagram_handle !== undefined) x.instagram_handle = instagram_handle ? handleDoInstagram(instagram_handle) : null;
+          if (instagram_url !== undefined) {
+            x.instagram_handle = instagram_url ? handleDoInstagram(instagram_url) : null;
+            x.instagram_url = instagram_url ?? null;
+          }
           if (images) x.images = galeria(images);
         });
       }

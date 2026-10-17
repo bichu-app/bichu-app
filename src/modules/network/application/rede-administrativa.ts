@@ -134,7 +134,8 @@ export interface CorpoDeEncontro {
   readonly notes?: string;
   readonly street_address?: string;
   readonly ticket_url?: string;
-  readonly instagram_handle?: string;
+  /** A URL COMPLETA do perfil (padrao de 17/10). A coluna continua guardando o handle. */
+  readonly instagram_url?: string;
 }
 
 export interface PatchDeEncontro {
@@ -150,7 +151,8 @@ export interface PatchDeEncontro {
   readonly bring_items?: readonly string[];
   readonly notes?: string | null;
   readonly ticket_url?: string | null;
-  readonly instagram_handle?: string | null;
+  /** A URL COMPLETA do perfil, ou `null` para tirar. */
+  readonly instagram_url?: string | null;
 }
 
 export interface CorpoDeMudancaDeLugar {
@@ -408,7 +410,7 @@ export class RedeAdministrativa {
       ...(corpo.notes === undefined ? [] : errosDasObservacoes('notes', corpo.notes)),
       ...(corpo.street_address === undefined ? [] : errosDoEndereco('street_address', corpo.street_address)),
       ...(corpo.ticket_url === undefined ? [] : errosDoLinkDeIngresso('ticket_url', corpo.ticket_url)),
-      ...(corpo.instagram_handle === undefined ? [] : errosDoInstagram('instagram_handle', corpo.instagram_handle)),
+      ...(corpo.instagram_url === undefined ? [] : errosDoInstagram('instagram_url', corpo.instagram_url)),
       ...('erros' in entrada ? entrada.erros : []),
     ];
     if (visibilidade === 'private' && corpo.slug !== undefined) {
@@ -444,7 +446,7 @@ export class RedeAdministrativa {
           observacoes: corpo.notes === undefined ? null : corpo.notes.trim(),
           endereco: corpo.street_address === undefined ? null : corpo.street_address.trim(),
           linkDeIngresso: corpo.ticket_url === undefined ? null : corpo.ticket_url.trim(),
-          instagram: corpo.instagram_handle === undefined ? null : handleDoInstagram(corpo.instagram_handle),
+          instagram: corpo.instagram_url === undefined ? null : handleDoInstagram(corpo.instagram_url),
           agora,
         });
       if (visibilidade === 'private') {
@@ -527,9 +529,9 @@ export class RedeAdministrativa {
       ...(patch.ticket_url === undefined || patch.ticket_url === null
         ? []
         : errosDoLinkDeIngresso('ticket_url', patch.ticket_url)),
-      ...(patch.instagram_handle === undefined || patch.instagram_handle === null
+      ...(patch.instagram_url === undefined || patch.instagram_url === null
         ? []
-        : errosDoInstagram('instagram_handle', patch.instagram_handle)),
+        : errosDoInstagram('instagram_url', patch.instagram_url)),
     ];
     if (erros.length > 0) throw problemas.validacao(erros);
 
@@ -551,9 +553,9 @@ export class RedeAdministrativa {
         ...(patch.ticket_url === undefined
           ? {}
           : { linkDeIngresso: patch.ticket_url === null ? null : patch.ticket_url.trim() }),
-        ...(patch.instagram_handle === undefined
+        ...(patch.instagram_url === undefined
           ? {}
-          : { instagram: patch.instagram_handle === null ? null : handleDoInstagram(patch.instagram_handle) }),
+          : { instagram: patch.instagram_url === null ? null : handleDoInstagram(patch.instagram_url) }),
       };
       // O UPDATE vem primeiro, mesmo quando so as listas mudam: e ele que
       // confere a versao lida e a incrementa.

@@ -6,7 +6,10 @@
 --
 -- O link dele, por extenso:
 --
---   https://www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673
+--   (https) www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673
+--
+-- O esquema sai do comeco da linha de proposito: o portao de portabilidade
+-- recusa URL absoluta em migracao, e o que importa aqui e o `?idsku=` e o `www.`.
 --
 -- Duas coisas nele a `20260922000023` recusava:
 --

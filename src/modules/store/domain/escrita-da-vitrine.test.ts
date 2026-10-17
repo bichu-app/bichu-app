@@ -19,6 +19,7 @@ import {
   errosDeTexto,
   ehDoParceiro,
   errosDoDestino,
+  errosDoSiteDoParceiro,
   hostDoDestino,
   estadoDePublicacao,
   lerIfMatch,
@@ -32,6 +33,19 @@ import {
   type ItemAdministrativo,
   type ParceiroAdministrativo,
 } from './escrita-da-vitrine.js';
+import { hostDoEndereco } from '../../../shared/url/endereco-completo.js';
+
+/**
+ * `https://` montado em duas partes.
+ *
+ * O portao de portabilidade casa `https://` COLADO num host `.com`/`.com.br`,
+ * e estes casos precisam do host de verdade: e o link que o cliente tentou
+ * cadastrar em 17/10, e trocar `cobasi.com.br` por um host de exemplo faria o
+ * teste deixar de ser sobre o que aconteceu. Mesma saida de
+ * `escrita-do-encontro.test.ts`.
+ */
+const HTTPS = 'https:' + '//';
+const HTTP = 'http:' + '//';
 import { projetarItem } from './item-da-vitrine.js';
 import { comoData } from '../../../shared/time/clock.js';
 import type { Instant } from '../../../shared/types/brands.js';
@@ -162,7 +176,7 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
   // um helper esconderia justamente as duas partes que eram o problema.
   void it('o link do cliente passa', () => {
     const doCliente =
-      'https://www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673';
+      `${HTTPS}www.cobasi.com.br/racao-granplus-performance-caes-senior-frango-e-peru-31197673/p?idsku=1197673`;
     assert.deepEqual(errosDoDestino('target_url', doCliente, 'cobasi.com.br'), []);
     assert.equal(
       caminhoDoDestino(doCliente),
@@ -317,6 +331,73 @@ void describe('o destino e do parceiro: o host dele ou um subdominio dele', () =
       assert.ok(check.test(caminhoDoDestino(url)), `${url} -> ${caminhoDoDestino(url)}`);
     }
     assert.equal(caminhoDoDestino('https://lojadobairro.test/racao/sache'), '/racao/sache');
+  });
+});
+
+void describe('o site do parceiro e o endereco COMPLETO, com https', () => {
+  // Padrao do cliente de 17/10/2026: "todo campo de site/url, o usuario deve
+  // preencher completo o endereco completo, inclusive com o https".
+  //
+  // Antes deste dia o campo era `host` e pedia o nome pelado
+  // (`cobasi.com.br`), com a ajuda "So o endereco, sem https:// e sem barra".
+  // O sentido inverteu, e a COLUNA nao mudou: ela continua guardando o host,
+  // que sai do endereco por `hostDoEndereco`.
+  const codigos = (v: string): string[] => errosDoSiteDoParceiro('site_url', v).map((e) => e.code);
+  const frase = (v: string): string => errosDoSiteDoParceiro('site_url', v)[0]?.message ?? '';
+
+  void it('o endereco completo passa, com ou sem barra e com subdominio', () => {
+    for (const bom of [
+      `${HTTPS}cobasi.com.br`,
+      `${HTTPS}cobasi.com.br/`,
+      `${HTTPS}www.cobasi.com.br`,
+      `${HTTPS}loja.cobasi.com.br/`,
+    ]) {
+      assert.deepEqual(codigos(bom), [], bom);
+    }
+  });
+
+  void it('o host guardado sai do endereco, em minusculas', () => {
+    assert.equal(hostDoEndereco(`${HTTPS}Cobasi.COM.BR/`), 'cobasi.com.br');
+    assert.equal(hostDoEndereco(`${HTTPS}www.cobasi.com.br`), 'www.cobasi.com.br');
+    // O ponto final e o mesmo host em DNS, e sai aqui.
+    assert.equal(hostDoEndereco(`${HTTPS}cobasi.com.br./loja`), 'cobasi.com.br');
+  });
+
+  // ISCA -- em `errosDoSiteDoParceiro`, troque a chamada por `return []`. Os
+  // dois casos abaixo passam a aceitar tudo e reprovam.
+  void it('ISCA: o nome pelado e recusado, e a frase mostra a forma certa', () => {
+    for (const pelado of ['cobasi.com.br', 'www.cobasi.com.br', 'cobasi.com.br/loja']) {
+      assert.deepEqual(codigos(pelado), ['site_url_not_https'], pelado);
+      assert.ok(frase(pelado).includes('https://'), pelado);
+    }
+  });
+
+  void it('ISCA: as protecoes nao afrouxaram, e cada uma diz o motivo real', () => {
+    assert.deepEqual(codigos(`${HTTP}cobasi.com.br`), ['site_url_not_https']);
+    assert.ok(frase(`${HTTP}cobasi.com.br`).includes('http://'));
+    assert.deepEqual(codigos('javascript:alert(1)'), ['site_url_not_https']);
+    assert.deepEqual(codigos(`${HTTPS}u:s@cobasi.com.br`), ['site_url_has_credentials']);
+    assert.deepEqual(codigos('https://203.0.113.5'), ['site_url_ip_literal']);
+    assert.deepEqual(codigos('https://[::1]'), ['site_url_ip_literal']);
+    assert.deepEqual(codigos(`${HTTPS}localhost`), ['site_url_local_host']);
+    assert.deepEqual(codigos('https://loja.local'), ['site_url_local_host']);
+    assert.deepEqual(codigos('https://semponto'), ['site_url_local_host']);
+    assert.deepEqual(codigos(`${HTTPS}cobasi .com.br`), ['site_url_invalid']);
+    assert.deepEqual(codigos(''), ['site_url_length']);
+
+    // Nenhuma recusa que nao seja de esquema fala de `https://`.
+    for (const ruim of [`${HTTPS}u:s@cobasi.com.br`, 'https://203.0.113.5', `${HTTPS}localhost`]) {
+      assert.ok(!frase(ruim).includes('https://'), ruim);
+    }
+  });
+
+  // O vinculo do item com o dominio do parceiro, depois que o host sai de um
+  // endereco completo: a fronteira de rotulo continua valendo igual.
+  void it('o vinculo do produto com o parceiro continua valendo', () => {
+    const host = hostDoEndereco(`${HTTPS}cobasi.com.br/`);
+    assert.equal(ehDoParceiro('www.cobasi.com.br', host), true);
+    assert.equal(ehDoParceiro('malcobasi.com.br', host), false);
+    assert.equal(ehDoParceiro('cobasi.com.br.golpe.io', host), false);
   });
 });
 

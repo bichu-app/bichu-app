@@ -45,7 +45,15 @@ export function recusaDoLinkDoConvite(valor: string): CodigoDoLink | null {
   return null;
 }
 
-/** `usuario`, `@usuario` ou a URL do perfil em instagram.com viram o handle puro, em minusculas; senao, `null`. */
+/**
+ * O handle a partir do valor do campo. Usada para a PREVIA ("Aparece no app
+ * como @x") e para ler o que ja esta gravado quando o formulario reabre.
+ *
+ * Continua aceitando o apelido cru de proposito: a coluna guarda handle, e o
+ * formulario o reabre por aqui. Quem recusa o apelido na ENTRADA e
+ * [recusaDoInstagram] -- endurecer a extracao junto quebraria a leitura do
+ * dado existente para resolver um problema que e da entrada.
+ */
 export function handleDoInstagram(valor: string): string | null {
   let texto = valor.trim();
   const daUrl = /^(?:https?:\/\/)?(?:www\.|m\.)?instagram\.com\/([^/?#]+)\/?(?:[?#].*)?$/i.exec(texto);
@@ -67,4 +75,19 @@ export const MENSAGEM_DO_LINK: Record<CodigoDoLink, string> = {
   ticket_url_local_host: 'O link precisa ser de um site público.',
 };
 
-export const MENSAGEM_DO_INSTAGRAM = 'Use o @ do Instagram (até 30 letras, números, ponto ou sublinhado) ou o link do perfil.';
+// As regras de ENDERECO COMPLETO (site do parceiro e URL do Instagram) moram em
+// `src/endereco/enderecos.ts`, e nao aqui: elas valem para a aplicacao inteira
+// desde o padrao do cliente de 17/10/2026, e a Loja precisa delas. Um modulo da
+// `rede/` importado de dentro da `loja/` seria a dependencia errada.
+export {
+  EXEMPLO_DO_INSTAGRAM,
+  hostDoSite,
+  LIMITE_DA_URL_DO_INSTAGRAM,
+  LIMITE_DO_SITE,
+  MENSAGEM_DO_INSTAGRAM,
+  MENSAGEM_DO_SITE,
+  recusaDoInstagram,
+  recusaDoSite,
+  type CodigoDoInstagram,
+  type CodigoDoSite,
+} from '../../endereco/enderecos.ts';

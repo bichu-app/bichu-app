@@ -11,6 +11,19 @@
 export const HOSTS_PADRAO = {
   /** Script do reCAPTCHA Enterprise (D41), so no documento `/entrar/`. */
   VITE_URL_DO_SCRIPT_DO_CAPTCHA: 'https://www.google.com/recaptcha/enterprise.js',
+  /**
+   * A base de um perfil do Instagram, usada **so como EXEMPLO** na ajuda e nas
+   * mensagens do campo de Instagram do encontro.
+   *
+   * Nada e carregado deste host pelo painel: ele nao entra na CSP, e esta aqui
+   * pela mesma razao que o do captcha -- host de terceiro nao e literal em
+   * `src/` (portao de portabilidade, docs/07-devops.md 3.9).
+   *
+   * O exemplo importa: desde 17/10/2026 o campo exige a URL completa do
+   * perfil, e quem digitava `@perfil` ate ontem precisa VER a forma nova, nao
+   * so ouvir que a antiga nao serve mais.
+   */
+  VITE_URL_DO_PERFIL_DO_INSTAGRAM: 'https://instagram.com/',
 } as const;
 
 export type ChaveDeHost = keyof typeof HOSTS_PADRAO;

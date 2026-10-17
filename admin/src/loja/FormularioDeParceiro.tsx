@@ -8,7 +8,14 @@ import { Icone } from '../componentes/Icone.tsx';
 import { SairSemSalvar } from '../componentes/SairSemSalvar.tsx';
 import { useSessao } from '../sessao/ProvedorDeSessao.tsx';
 import { guardarRascunho, retomarRascunho } from '../sessao/rascunho.ts';
-import { PADRAO_DO_HOST, PADRAO_DO_SLUG, slugSugerido } from './dominio.ts';
+import {
+  hostDoSite,
+  LIMITE_DO_SITE,
+  MENSAGEM_DO_SITE,
+  recusaDoSite,
+  type CodigoDoSite,
+} from '../endereco/enderecos.ts';
+import { PADRAO_DO_SLUG, slugSugerido } from './dominio.ts';
 
 type Parceiro = Esquemas['AdminStorePartner'];
 
@@ -16,7 +23,11 @@ interface Valores {
   nome: string;
   slug: string;
   slugEditado: boolean;
-  host: string;
+  /**
+   * O endereco COMPLETO do site, com `https://` (padrao do cliente de
+   * 17/10/2026). O servidor extrai o host, que e o que a coluna guarda.
+   */
+  site: string;
   ordem: string;
   ativo: boolean;
 }
@@ -25,21 +36,30 @@ type Campo = 'p-nome' | 'p-slug' | 'p-host' | 'p-ordem';
 const ROTULOS: Record<Campo, string> = { 'p-nome': 'Nome', 'p-slug': 'Identificador', 'p-host': 'Site do parceiro', 'p-ordem': 'Ordem na Loja' };
 const ORDEM: Campo[] = ['p-nome', 'p-slug', 'p-host', 'p-ordem'];
 
-const VAZIO: Valores = { nome: '', slug: '', slugEditado: false, host: '', ordem: '0', ativo: true };
+const VAZIO: Valores = { nome: '', slug: '', slugEditado: false, site: '', ordem: '0', ativo: true };
 
 export function validarParceiro(v: Valores): Partial<Record<Campo, string>> {
   const e: Partial<Record<Campo, string>> = {};
   const nome = v.nome.trim();
   if (nome.length < 2 || nome.length > 80) e['p-nome'] = 'Informe o nome do parceiro, de 2 a 80 caracteres.';
   if (!PADRAO_DO_SLUG.test(v.slug)) e['p-slug'] = 'Use de 3 a 30 letras minúsculas, números ou hífen, sem hífen no começo nem no fim.';
-  if (!PADRAO_DO_HOST.test(v.host.trim()) || v.host.trim().length > 253) e['p-host'] = 'Escreva só o endereço do site, sem https:// e sem barra.';
+  // Pelo CODIGO, com a mesma regra do servidor: "falta o https://", "tem
+  // usuario e senha" e "e um IP" sao recusas diferentes e pedem textos
+  // diferentes.
+  const recusaDoSite_ = recusaDoSite(v.site);
+  if (recusaDoSite_ !== null) e['p-host'] = MENSAGEM_DO_SITE[recusaDoSite_];
   const ordem = Number(v.ordem);
   if (v.ordem.trim() === '' || !Number.isInteger(ordem) || ordem < -32768 || ordem > 32767) e['p-ordem'] = 'Use um número inteiro, por exemplo 0 ou 10.';
   return e;
 }
 
 function valoresDo(p: Parceiro): Valores {
-  return { nome: p.name, slug: p.slug, slugEditado: true, host: p.host, ordem: String(p.sort_order), ativo: p.active };
+  // O servidor devolve o HOST (e a coluna guarda host). O campo mostra o
+  // endereco completo, e o `https://` vem daqui e nao de um palpite: o
+  // esquema de um parceiro ja gravado e sempre `https`, porque e o unico que
+  // a escrita aceitou. Isto NAO e completar em silencio o que a pessoa
+  // digitou -- e exibir o que ja foi validado.
+  return { nome: p.name, slug: p.slug, slugEditado: true, site: `https://${p.host}`, ordem: String(p.sort_order), ativo: p.active };
 }
 
 /** 5.3 a 5.5: novo parceiro, edicao e erros (secao 25.5.4). */
@@ -125,10 +145,10 @@ export default function FormularioDeParceiro() {
     setSalvando(true);
     try {
       const nome = valores.nome.trim();
-      const host = valores.host.trim();
+      const site = valores.site.trim();
       const ordem = Number(valores.ordem);
       if (!editando) {
-        const { data, error } = await api.POST('/admin/store/partners', { body: { slug: valores.slug, name: nome, host, sort_order: ordem } });
+        const { data, error } = await api.POST('/admin/store/partners', { body: { slug: valores.slug, name: nome, site_url: site, sort_order: ordem } });
         if (data) return voltar('Parceiro cadastrado. Ele já pode ser escolhido nos produtos.');
         return recusa(error);
       }
@@ -136,7 +156,9 @@ export default function FormularioDeParceiro() {
       const patch: Esquemas['AdminStorePartnerPatch'] = {
         ...(nome !== parceiro.name ? { name: nome } : {}),
         ...(valores.slug !== parceiro.slug ? { slug: valores.slug } : {}),
-        ...(host !== parceiro.host ? { host } : {}),
+        // Compara pelo HOST, que e o que o servidor guarda: so o esquema ou a
+        // barra final mudarem nao e mudanca de parceiro.
+        ...(hostDoSite(site) !== parceiro.host ? { site_url: site } : {}),
         ...(ordem !== parceiro.sort_order ? { sort_order: ordem } : {}),
         ...(valores.ativo !== parceiro.active ? { active: valores.ativo } : {}),
       };
@@ -163,7 +185,9 @@ export default function FormularioDeParceiro() {
     if (tipo === 'validation-failed') {
       const e: Partial<Record<Campo, string>> = {};
       for (const erro of errosDoProblema(error)) {
-        if (erro.field === 'host') e['p-host'] = 'Escreva só o endereço do site, sem https:// e sem barra.';
+        if (erro.field === 'site_url') {
+          e['p-host'] = MENSAGEM_DO_SITE[erro.code as CodigoDoSite] ?? MENSAGEM_DO_SITE.site_url_invalid;
+        }
         else if (erro.field === 'name') e['p-nome'] = 'Informe o nome do parceiro, de 2 a 80 caracteres.';
         else if (erro.field === 'slug') e['p-slug'] = 'Use de 3 a 30 letras minúsculas, números ou hífen, sem hífen no começo nem no fim.';
         else if (erro.field === 'sort_order') e['p-ordem'] = 'Use um número inteiro, por exemplo 0 ou 10.';
@@ -251,12 +275,12 @@ export default function FormularioDeParceiro() {
           id="p-host"
           dataCy="parceiro-site"
           rotulo="Site do parceiro *"
-          valor={valores.host}
-          aoMudar={(v) => mudar({ host: v.toLowerCase() })}
-          maximo={253}
+          valor={valores.site}
+          aoMudar={(v) => mudar({ site: v })}
+          maximo={LIMITE_DO_SITE}
           modoDeEntrada="url"
           erro={erros['p-host']}
-          ajuda="Só o endereço, sem https:// e sem barra. Por exemplo: petcenteraurora.com.br. Os links dos produtos precisam ser deste site."
+          ajuda="Endereço completo, com https://. Por exemplo: https://parceiro.exemplo.test. Os links dos produtos precisam ser deste site."
         />
         <CampoDeTexto
           id="p-ordem"

@@ -69,7 +69,9 @@ function codigos(erro: unknown): string[] {
   return (erro.errors ?? []).map((e) => e.code);
 }
 
-const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', host: 'lojadobairro.test' };
+// `site_url` e o campo do CORPO desde 17/10 (endereco completo); `host` continua
+// sendo o que a coluna guarda, e sai dele.
+const PARCEIRO = { slug: 'loja-do-bairro', name: 'Loja do Bairro', site_url: 'https://lojadobairro.test' };
 const ITEM = {
   slug: 'racao-adulto-10kg',
   partner_slug: 'loja-do-bairro',
@@ -224,7 +226,7 @@ void describe('escrita administrativa da Loja', () => {
 
     void it('trocar o parceiro sem trocar o link reconfere o link contra o parceiro novo', async () => {
       await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
-      await m.catalogo.criarParceiro(AUTOR, { slug: 'outra-loja', name: 'Outra', host: 'outraloja.test' });
+      await m.catalogo.criarParceiro(AUTOR, { slug: 'outra-loja', name: 'Outra', site_url: 'https://outraloja.test' });
       const i = await m.catalogo.criarItem(AUTOR, ITEM);
       const erro = await m.catalogo
         .alterarItem(AUTOR, ITEM.slug, i.etag, { partner_slug: 'outra-loja' })
@@ -235,7 +237,7 @@ void describe('escrita administrativa da Loja', () => {
     void it('trocar o host do parceiro leva os itens junto: o item guarda so o caminho', async () => {
       const p = await m.catalogo.criarParceiro(AUTOR, PARCEIRO);
       await m.catalogo.criarItem(AUTOR, ITEM);
-      await m.catalogo.alterarParceiro(AUTOR, PARCEIRO.slug, p.etag, { host: 'outraloja.test' });
+      await m.catalogo.alterarParceiro(AUTOR, PARCEIRO.slug, p.etag, { site_url: 'https://outraloja.test' });
       const lido = await m.catalogo.lerItem(ITEM.slug);
       assert.equal(lido.recurso.target_url, 'https://outraloja.test/racao-adulto-10kg');
     });

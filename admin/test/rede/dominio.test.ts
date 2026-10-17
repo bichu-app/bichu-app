@@ -277,26 +277,76 @@ describe('plano de edição (as três operações)', () => {
     expect(corpoDaMudanca(comEndereco, soHorario, planoDeEdicao(comEndereco, soHorario)).join(' ')).not.toMatch(/O endereço continua/);
   });
 
-  it('links: vão na criação e no PATCH (sem senha), com o @ normalizado; vazio tira', () => {
+  it('links: vão na criação e no PATCH (sem senha), como URL completa; vazio tira', () => {
     const corpo = montarCriacao({ ...preenchido(), linkDoConvite: ' https://sympla.com.br/e/1 ', instagram: 'https://www.instagram.com/Org.Pet/' });
     expect(corpo.ticket_url).toBe('https://sympla.com.br/e/1');
-    expect(corpo.instagram_handle).toBe('org.pet');
+    // Desde 17/10 o corpo leva a URL COMPLETA, como a pessoa digitou; quem
+    // extrai o handle e o servidor.
+    expect(corpo.instagram_url).toBe('https://www.instagram.com/Org.Pet/');
     expect(montarCriacao(preenchido())).not.toHaveProperty('ticket_url');
     const comLinks = encontroDeExemplo({ ticket_url: 'https://sympla.com.br/e/1', instagram_handle: 'org.pet', instagram_url: 'https://www.instagram.com/org.pet/' });
     const f = formularioDoEncontro(comLinks);
-    expect(f.instagram).toBe('@org.pet');
+    // O formulario reabre com a URL COMPLETA que o servidor devolveu, e nao
+    // com `@org.pet`: o campo passou a exigir endereco completo, e reabrir com
+    // o apelido deixaria todo encontro ja salvo invalido no proprio formulario.
+    expect(f.instagram).toBe('https://www.instagram.com/org.pet/');
     expect(planoDeEdicao(comLinks, f).patch).toBeNull();
-    // Escrever o mesmo perfil de outro jeito nao e mudanca.
-    expect(planoDeEdicao(comLinks, { ...f, instagram: 'instagram.com/ORG.PET' }).patch).toBeNull();
-    expect(planoDeEdicao(comLinks, { ...f, linkDoConvite: '', instagram: '@outra' }).patch).toEqual({ ticket_url: null, instagram_handle: 'outra' });
+    // Escrever o mesmo perfil de outro jeito nao e mudanca: a comparacao e por
+    // handle, e so o esquema/`www.`/barra mudarem nao avisa os administradores.
+    expect(planoDeEdicao(comLinks, { ...f, instagram: 'https://instagram.com/ORG.PET' }).patch).toBeNull();
+    expect(planoDeEdicao(comLinks, { ...f, linkDoConvite: '', instagram: 'https://instagram.com/outra' }).patch).toEqual({ ticket_url: null, instagram_url: 'https://instagram.com/outra' });
     expect(planoDeEdicao(comLinks, { ...f, linkDoConvite: 'https://outro.com.br/x' }).mudanca).toBeNull();
   });
   it('links inválidos param no painel com o motivo', () => {
     const erros = validar({ ...preenchido(), linkDoConvite: 'http://exemplo.com.br', instagram: '@com espaco' }, 'novo', AGORA);
     expect(erros.map((e) => [e.campo, e.mensagem])).toEqual([
       ['linkDoConvite', 'O link precisa começar com https://.'],
-      ['instagram', 'Use o @ do Instagram (até 30 letras, números, ponto ou sublinhado) ou o link do perfil.'],
+      ['instagram', 'Cole o endereço completo do perfil. Por exemplo: https://instagram.com/bichu.app'],
     ]);
+  });
+
+  // -------------------------------------------------------------------------
+  // 17/10: o padrao de endereco completo, no campo do Instagram
+  // -------------------------------------------------------------------------
+  //
+  // "mantenha o padrao, todo campo de site/url, o usuario deve preencher
+  // completo o endereco completo, inclusive com o https" -- cliente, 17/10.
+  //
+  // ISCA -- em `enderecos.ts`, em `recusaDoInstagram`, devolva `null` logo no
+  // comeco. Os casos de recusa abaixo passam a aceitar tudo e reprovam.
+  it('o Instagram exige a URL completa, e cada recusa diz o motivo', () => {
+    const msg = (instagram: string): string | undefined =>
+      validar({ ...preenchido(), instagram }, 'novo', AGORA).find((e) => e.campo === 'instagram')?.mensagem;
+
+    // Aceitos: as tres formas de URL completa do perfil.
+    for (const bom of [
+      'https://instagram.com/bichu.app',
+      'https://www.instagram.com/bichu.app',
+      'https://m.instagram.com/bichu.app/',
+    ]) {
+      expect(msg(bom)).toBeUndefined();
+    }
+
+    // O apelido cru era aceito ate 17/10 e agora e recusado, com a forma certa
+    // na frase: quem digitava `@bichu.app` precisa VER o que mudou.
+    expect(msg('@bichu.app')).toBe('Cole o endereço completo do perfil. Por exemplo: https://instagram.com/bichu.app');
+    expect(msg('bichu.app')).toBe('Cole o endereço completo do perfil. Por exemplo: https://instagram.com/bichu.app');
+    expect(msg('instagram.com/bichu.app')).toBe('Cole o endereço completo do perfil. Por exemplo: https://instagram.com/bichu.app');
+
+    // `http://` tem frase propria: a pessoa escreveu um esquema, so nao o certo.
+    expect(msg('http://instagram.com/bichu.app')).toBe('Troque http:// por https://.');
+
+    // E as protecoes que NAO podem ter afrouxado, cada uma com o motivo real.
+    expect(msg('https://facebook.com/bichu')).toBe('O endereço precisa ser de um perfil do instagram.com.');
+    expect(msg('https://u:s@instagram.com/bichu')).toBe('Tire o usuário e a senha do endereço.');
+    expect(msg('https://203.0.113.5/bichu')).toBe('Use o endereço do perfil, e não um número de IP.');
+    expect(msg('https://instagram.com/')).toBe('Falta o perfil no fim do endereço. Por exemplo: https://instagram.com/bichu.app');
+
+    // Nenhuma recusa que nao seja de esquema pode falar de `https://`: foi
+    // essa confusao que custou o tempo do cliente de manha.
+    for (const ruim of ['https://facebook.com/bichu', 'https://u:s@instagram.com/bichu', 'https://203.0.113.5/bichu']) {
+      expect(msg(ruim)).not.toContain('https://');
+    }
   });
 
   it('só o horário: o lugar não vai, e o ponto que existir continua', () => {

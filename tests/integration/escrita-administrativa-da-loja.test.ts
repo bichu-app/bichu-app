@@ -143,7 +143,7 @@ async function idDoParceiro(slug: string): Promise<string> {
 async function novoParceiro(): Promise<{ slug: string; host: string; etag: string }> {
   const slug = `bo-p-${sufixo()}`;
   const host = `${slug}.exemplo.com.br`;
-  const criado = await loja.criarParceiro(autor, { slug, name: `Parceiro ${slug}`, host });
+  const criado = await loja.criarParceiro(autor, { slug, name: `Parceiro ${slug}`, site_url: `https://${host}` });
   parceirosCriados.push(slug);
   return { slug, host, etag: criado.etag };
 }
@@ -330,7 +330,7 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
     };
     const slug = `bo-p-${sufixo()}`;
     await assert.rejects(
-      () => catalogo(quebrada).criarParceiro(autor, { slug, name: 'Sem trilha', host: 'semtrilha.com.br' }),
+      () => catalogo(quebrada).criarParceiro(autor, { slug, name: 'Sem trilha', site_url: 'https://semtrilha.com.br' }),
       /trilha fora do ar/,
     );
     const linha = await banco.db.selectFrom('store_partners').select('id').where('slug', '=', slug).executeTakeFirst();
@@ -355,7 +355,7 @@ void describe('a escrita administrativa da Loja, contra Postgres', () => {
   void it('slug ocupado vem do indice unico e vira 409', async () => {
     const p = await novoParceiro();
     const erro = await loja
-      .criarParceiro(autor, { slug: p.slug, name: 'Outro', host: 'outro.com.br' })
+      .criarParceiro(autor, { slug: p.slug, name: 'Outro', site_url: 'https://outro.com.br' })
       .catch((e: unknown) => e);
     assert.ok(erro instanceof AppError && erro.problemType === 'slug-taken', String(erro));
   });
