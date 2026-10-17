@@ -901,6 +901,22 @@ void _oTextoAlternativoEAQuebraDeLinha() {
       expect(find.text(item.trechoDoResumo), findsOneWidget);
     });
 
+    // ISCA -- em `modelos_loja.dart`, no enum `CategoriaDaLoja`, troque
+    // `acessorio('accessory', ...)` por `acessorio('accessorios', ...)`. Este
+    // caso reprova: o APK instalado deixa de reconhecer a categoria que o
+    // servidor manda, e `porCodigo` passa a devolver nulo.
+    test('ISCA -- pluralizar o rótulo NÃO mexe no código do contrato', () {
+      expect(CategoriaDaLoja.acessorio.codigo, 'accessory');
+      expect(CategoriaDaLoja.brinquedo.codigo, 'toy');
+      expect(CategoriaDaLoja.acessorio.rotulo, 'Acessórios');
+      expect(CategoriaDaLoja.brinquedo.rotulo, 'Brinquedos');
+      // O que o servidor manda continua resolvendo, que é o que o APK já
+      // instalado depende de continuar funcionando.
+      expect(CategoriaDaLoja.porCodigo('accessory'), CategoriaDaLoja.acessorio);
+      expect(CategoriaDaLoja.porCodigo('toy'), CategoriaDaLoja.brinquedo);
+      expect(CategoriaDaLoja.porCodigo('accessorios'), isNull);
+    });
+
     testWidgets('o botão diz de qual produto ele é, para o leitor de tela', (tester) async {
       await abrirLoja(
         tester,

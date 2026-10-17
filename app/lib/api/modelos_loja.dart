@@ -19,9 +19,9 @@ library;
 /// `#/components/schemas/StoreCategory` do contrato.
 enum CategoriaDaLoja {
   alimento('food', 'Alimentação'),
-  brinquedo('toy', 'Brinquedo'),
+  brinquedo('toy', 'Brinquedos'),
   higiene('hygiene', 'Higiene'),
-  acessorio('accessory', 'Acessório'),
+  acessorio('accessory', 'Acessórios'),
   saude('health', 'Saúde'),
   cama('bed', 'Cama e conforto');
 
