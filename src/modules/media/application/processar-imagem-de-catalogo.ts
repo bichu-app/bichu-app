@@ -11,8 +11,12 @@
  *    publico. Antes disso a leitura publica nao a enxerga, porque as consultas
  *    filtram `status = 'ready'`.
  *
- * Uma derivada so, a de 1024 px (`card`): a vitrine e a galeria do app usam o
- * mesmo tamanho, e uma miniatura que ninguem pede e um objeto pago a mais.
+ * As derivadas saem de `domain/derivadas.ts`, por proposito e pela medida da
+ * TELA. O encontro da comunidade ganhou tres (`thumb` 480 para a galeria de 144
+ * dp, `card` 1024 para o cartao da agenda, `banner` 1280 para a capa de borda a
+ * borda do detalhe): a galeria baixava 1024 px para desenhar 144 dp, que e
+ * cinco vezes o dado que ela pinta, e a capa do detalhe borrava com 1024. O
+ * produto da Loja continua com uma derivada e sem corte -- nao medi aquela tela.
  *
  * Recusa e final (culpa do arquivo); falha do armazenamento lanca e a fila
  * tenta de novo (culpa nossa).
@@ -23,17 +27,37 @@ import type { ImageProcessor, MotivoDeRecusa } from '../ports/image-processor.js
 import {
   CATEGORIA_DO_PROPOSITO,
   DIMENSAO_MINIMA,
+  type ChavesDaImagemDeCatalogo,
   type ImagensDeCatalogoDoWorker,
 } from '../ports/imagem-de-catalogo.js';
+import {
+  DERIVADAS_DO_ENCONTRO,
+  DERIVADAS_DO_PRODUTO,
+  TETO_DE_BYTES_DA_DERIVADA,
+  escadaDo,
+  type EspecificacaoDaDerivada,
+} from '../domain/derivadas.js';
+import type { ObjectKey } from '../../../shared/types/brands.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 
-const LARGURA_DA_DERIVADA = 1024;
+/**
+ * As derivadas por proposito, do PONTO UNICO (`domain/derivadas.ts`).
+ *
+ * O encontro ganha tres porque a mesma imagem e desenhada em tres tamanhos (ver
+ * `DERIVADAS_DO_ENCONTRO`); o produto da Loja fica com uma, e sem corte.
+ */
+const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaDerivada[]>> = {
+  network_event: DERIVADAS_DO_ENCONTRO,
+  store_item: DERIVADAS_DO_PRODUTO,
+};
 
 /** O texto que o painel mostra, por motivo. Nao e codigo de erro. */
 const TEXTO_DA_RECUSA: Record<MotivoDeRecusa, string> = {
   formato_nao_aceito: 'Esse arquivo não é uma imagem JPEG, PNG ou WebP.',
   imagem_grande_demais: 'Essa imagem é grande demais. Reduza e envie de novo.',
   imagem_ilegivel: 'Não conseguimos ler essa imagem. Ela pode ter chegado incompleta.',
+  imagem_animada: 'Essa imagem é uma animação. Envie uma imagem parada.',
+  formato_nao_decodificavel: 'Não conseguimos abrir esse arquivo. Envie em JPEG, PNG ou WebP.',
 };
 
 export interface DependenciasDaImagemDeCatalogo {
@@ -95,9 +119,50 @@ export async function processarImagemDeCatalogo(
     return { tipo: 'recusada', imagemId: imagem.id, motivo: 'imagem_pequena_demais' };
   }
 
-  const derivada = await deps.processador.derivar(original, LARGURA_DA_DERIVADA);
-  const chave = chaveDaDerivada('card', deps.ids.random128(), derivada.extensao, CATEGORIA_DO_PROPOSITO[imagem.purpose]);
-  await deps.armazenamento.put('publico', chave, derivada.bytes, derivada.contentType);
-  await deps.imagens.marcarPronta(imagem.id, chave);
+  // UMA POR VEZ. Cada `derivar` decodifica o original, e decodificar em
+  // paralelo e como este worker morreu antes (ver `sharp-image-processor.ts`).
+  const categoria = CATEGORIA_DO_PROPOSITO[imagem.purpose];
+  const chaves = new Map<string, ObjectKey>();
+  for (const especificacao of DERIVADAS_POR_PROPOSITO[imagem.purpose] ?? DERIVADAS_DO_PRODUTO) {
+    const derivada = await deps.processador.derivar(original, {
+      largura: especificacao.largura,
+      ...(especificacao.altura === undefined ? {} : { altura: especificacao.altura }),
+      escada: escadaDo(especificacao.porte),
+      tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA,
+    });
+    // Cabecalho que abriu e pixel que nao abre e culpa do arquivo: recusa
+    // final, e nao excecao com cinco retentativas.
+    if (typeof derivada === 'string') {
+      await deps.imagens.marcarRecusada(imagem.id, TEXTO_DA_RECUSA[derivada]);
+      return { tipo: 'recusada', imagemId: imagem.id, motivo: derivada };
+    }
+    const chave = chaveDaDerivada(
+      especificacao.variante,
+      deps.ids.random128(),
+      derivada.extensao,
+      categoria,
+    );
+    await deps.armazenamento.put('publico', chave, derivada.bytes, derivada.contentType);
+    chaves.set(especificacao.variante, chave);
+  }
+
+  const card = chaves.get('card');
+  // Falha ruidosa: a lista do proposito sempre declara `card`, e uma ausencia
+  // aqui e a lista editada sem o resto. Gravar `null` deixaria a imagem `ready`
+  // sem endereco, que e o estado que a tela nao sabe explicar.
+  if (card === undefined) {
+    throw new Error(
+      `As derivadas de ${imagem.purpose} precisam declarar \`card\`: ` +
+        'e ela que sai em `cover_image_url` e na vitrine.',
+    );
+  }
+  const thumb = chaves.get('thumb');
+  const banner = chaves.get('banner');
+  const prontas: ChavesDaImagemDeCatalogo = {
+    card,
+    ...(thumb === undefined ? {} : { thumb }),
+    ...(banner === undefined ? {} : { banner }),
+  };
+  await deps.imagens.marcarPronta(imagem.id, prontas);
   return { tipo: 'pronta', imagemId: imagem.id };
 }

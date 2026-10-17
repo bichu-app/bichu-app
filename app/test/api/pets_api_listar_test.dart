@@ -46,13 +46,15 @@ Map<String, dynamic> petDoContrato({
 Map<String, dynamic> fotoDoContrato({
   String status = 'ready',
   bool principal = true,
-  String? thumb = 'https://midia.bichu.app/t/abc.webp',
+  String? thumb = 'https://midia.bichu.app/pets/thumb/abc.jpeg',
   String? card,
+  String? motivo,
 }) {
   return <String, dynamic>{
     'id': 'f-1',
     'status': status,
     'is_primary': principal,
+    'rejection_reason': motivo,
     'thumb_url': thumb,
     'card_url': card,
   };
@@ -232,5 +234,108 @@ void main() {
           'faria a tela dizer "voce nao tem pet" por causa de uma resposta '
           'malformada.',
     );
+  });
+
+  group('o motivo da recusa, e a derivada `card`', () {
+    test('`rejection_reason` chega ao modelo', () async {
+      // Ele era gravado no banco desde a BICHUS-87 e NAO saia no contrato: a
+      // tela dizia "recusada" e a pessoa nao tinha como saber o que consertar.
+      final api = apiQueResponde(
+        (req) async => json200(<String, dynamic>{
+          'items': <Map<String, dynamic>>[
+            petDoContrato(
+              fotos: <Map<String, dynamic>>[
+                fotoDoContrato(
+                  status: 'rejected',
+                  thumb: null,
+                  motivo: 'Essa foto é pequena demais. Envie uma com pelo '
+                      'menos 600 x 600 pixels.',
+                ),
+              ],
+            ),
+          ],
+          'next_cursor': null,
+        }),
+      );
+      final pet = (await api.listarMeusPets()).single;
+      expect(pet.fotos.single.motivoDaRecusa, contains('600 x 600'));
+      expect(pet.motivoDaFotoRecusada, contains('600 x 600'));
+    });
+
+    test('ausente, o motivo e nulo e nada quebra', () async {
+      final api = apiQueResponde(
+        (req) async => json200(<String, dynamic>{
+          'items': <Map<String, dynamic>>[
+            petDoContrato(fotos: <Map<String, dynamic>>[fotoDoContrato()]),
+          ],
+          'next_cursor': null,
+        }),
+      );
+      final pet = (await api.listarMeusPets()).single;
+      expect(pet.fotos.single.motivoDaRecusa, isNull);
+      expect(pet.motivoDaFotoRecusada, isNull);
+    });
+
+    test('com uma foto BOA na tela, o motivo da recusa nao aparece', () async {
+      // Avisar sobre uma foto antiga recusada quando ja ha foto boa e barulho
+      // sobre algo que a pessoa resolveu enviando outra.
+      final api = apiQueResponde(
+        (req) async => json200(<String, dynamic>{
+          'items': <Map<String, dynamic>>[
+            petDoContrato(
+              fotos: <Map<String, dynamic>>[
+                fotoDoContrato(
+                  status: 'rejected',
+                  principal: false,
+                  thumb: null,
+                  motivo: 'Esse arquivo não é uma foto que a gente consiga abrir.',
+                ),
+                fotoDoContrato(),
+              ],
+            ),
+          ],
+          'next_cursor': null,
+        }),
+      );
+      final pet = (await api.listarMeusPets()).single;
+      expect(pet.motivoDaFotoRecusada, isNull);
+    });
+
+    test('a MOLDURA GRANDE pede a `card`, e a lista pede a `thumb`', () async {
+      // A moldura do detalhe desenha 160 dp (480 px a 3x) e a `thumb` tem 176
+      // px: pedir a miniatura ali a esticaria quase tres vezes. E a `card`
+      // existia sem ser desenhada por ninguem no app.
+      final api = apiQueResponde(
+        (req) async => json200(<String, dynamic>{
+          'items': <Map<String, dynamic>>[
+            petDoContrato(
+              fotos: <Map<String, dynamic>>[
+                fotoDoContrato(
+                  thumb: 'https://midia.bichu.app/pets/thumb/t.jpeg',
+                  card: 'https://midia.bichu.app/pets/card/c.jpeg',
+                ),
+              ],
+            ),
+          ],
+          'next_cursor': null,
+        }),
+      );
+      final foto = (await api.listarMeusPets()).single.fotos.single;
+      expect(foto.urlDeMiniatura, endsWith('/thumb/t.jpeg'));
+      expect(foto.urlDeCartao, endsWith('/card/c.jpeg'));
+    });
+
+    test('sem `card`, a moldura grande CAI na thumb em vez de ficar vazia', () async {
+      final api = apiQueResponde(
+        (req) async => json200(<String, dynamic>{
+          'items': <Map<String, dynamic>>[
+            petDoContrato(fotos: <Map<String, dynamic>>[fotoDoContrato()]),
+          ],
+          'next_cursor': null,
+        }),
+      );
+      final foto = (await api.listarMeusPets()).single.fotos.single;
+      expect(foto.urlDeCartao, endsWith('/thumb/abc.jpeg'));
+    });
   });
 }

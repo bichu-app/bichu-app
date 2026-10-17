@@ -146,6 +146,9 @@ function comoRespostaDaFoto(foto: FotoDoPet, baseDeMidia: AbsoluteUrl): Record<s
     id: foto.id,
     status: foto.status,
     is_primary: foto.isPrimary,
+    // O MOTIVO DA RECUSA, que era gravado e não saía. Sem ele a tela dizia
+    // "recusada" e a pessoa não tinha como saber o que consertar.
+    rejection_reason: foto.rejectionReason,
     thumb_url: url(foto.thumbKey),
     card_url: url(foto.cardKey),
     created_at: foto.createdAt.toISOString(),

@@ -66,6 +66,12 @@ export interface paths {
          *        link por e-mail que ja existe, e que a camada 1 torna alcancavel
          *        para a mesma pessoa. Nao ha operacao nova de entrada por link: o
          *        ADR-0020 diz por que ela foi recusada e qual gatilho a traz de volta.
+         *
+         *     **Contas do painel e do app sao cadastros separados** (ADR-0027 item
+         *     20, D42). Esta operacao so le as contas do app: a credencial de uma
+         *     conta do painel recebe aqui o mesmo 401 de qualquer e-mail sem conta,
+         *     porque para esta porta ela nao existe. O login do painel e
+         *     `openAdminSession`.
          */
         post: operations["login"];
         delete?: never;
@@ -268,6 +274,10 @@ export interface paths {
         /**
          * Define a nova senha pelo token
          * @description Revoga todas as sessoes ativas da conta.
+         *
+         *     So alcanca contas do app. A conta do painel e outro cadastro, e a senha
+         *     dela so e definida pelo comando `conta-admin` no servidor (ADR-0027
+         *     item 20.4, D61).
          */
         post: operations["confirmPasswordReset"];
         delete?: never;
@@ -1030,7 +1040,9 @@ export interface paths {
          *     campos. Data e hora sao do servidor; o codigo ja veio no caminho.
          *
          *     Detalhes (onde, foto, recado, contato) chegam depois, por
-         *     `PATCH /found-reports/{foundReportId}` com o `finder_token`.
+         *     `PATCH /v1/finder/found-report` (`enrichFinderFoundReport`), com o
+         *     `finder_token` em `Authorization: Bearer` e sem id no caminho. A foto
+         *     vem antes, por `POST /v1/media/finder-photo-intents`.
          *
          *     `Idempotency-Key` e **obrigatorio**: a pagina publica reenvia o pedido
          *     por fila do service worker quando a rede cai, e o tutor nao pode
@@ -1104,6 +1116,16 @@ export interface paths {
          * Credenciais de upload da foto do achador
          * @description A foto do achador **nunca** aparece em rota publica: ela e vista pelo
          *     tutor dentro da conversa mediada, e so.
+         *
+         *     Teto de 5 MiB, herdado de `UploadIntentInput` -- o teto unico de toda a
+         *     aplicacao. O servidor impunha 2 MiB aqui enquanto o contrato prometia
+         *     10 MiB e o app conferia 10 MiB: tres numeros para a mesma regra, e o
+         *     envio de 3 MiB era aceito pelo app, prometido pelo contrato e recusado
+         *     pelo servidor.
+         *
+         *     O original fica guardado no balde privado; o que a conversa mediada
+         *     serve e uma derivada **sem metadado nenhum** (o EXIF de foto de celular
+         *     carrega coordenada de GPS).
          */
         post: operations["createFoundReportPhotoUploadIntent"];
         delete?: never;
@@ -1147,11 +1169,23 @@ export interface paths {
          * @description A foto do achador **nunca** aparece em rota publica: ela e vista pelo
          *     tutor dentro da conversa mediada, e so.
          *
-         *     Limites proprios, mais estreitos que os do tutor (SEC-009), porque quem
-         *     envia nao tem identidade nenhuma: **2 MB por foto e no maximo 3 fotos por
-         *     aviso**, e o **arquivo original e apagado assim que a derivada e gerada**.
-         *     O original do achador nao e retido e nao e servido a ninguem, nem por URL
-         *     assinada, nem ao tutor.
+         *     **No maximo 3 fotos por aviso, para sempre** (SEC-009), e 5 MiB por
+         *     foto -- o teto unico de toda a aplicacao (cliente, 17/10/2026). O teto
+         *     desta rota era 2 MB no SEC-009, e a unificacao o afrouxa: o que continua
+         *     contendo volume aqui e o teto de tres fotos por aviso, que nao reabre.
+         *
+         *     O **original e guardado, inteiro, no balde privado**, e nao e servido a
+         *     ninguem -- nem por URL assinada, nem ao tutor. O que o tutor ve dentro
+         *     da conversa mediada e uma derivada **higienizada**: reescrita a partir
+         *     dos pixels, em JPEG, **sem metadado nenhum**. Isso importa aqui mais que
+         *     em qualquer outro caminho: foto de celular carrega coordenada de GPS no
+         *     EXIF, e num produto de pet perdido isso entregaria onde quem achou o
+         *     animal estava.
+         *
+         *     A descricao anterior prometia que "o arquivo original e apagado assim
+         *     que a derivada e gerada". Isso descrevia um worker que nunca existiu, e
+         *     apagar o original e precisamente o que nao se faz: e dele que sai
+         *     qualquer derivada futura, e um corte errado nao tem volta.
          */
         post: operations["createFinderPhotoUploadIntent"];
         delete?: never;
@@ -1167,7 +1201,22 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** A conversa do achador, resolvida pelo token */
+        /**
+         * A conversa do achador, resolvida pelo token
+         * @description Enquanto o link vale (caso aberto, ou ate 30 dias do aviso, ou ate 30
+         *     dias depois do encerramento), a leitura e **200**, inclusive com o caso
+         *     encerrado: `status: closed` diz que a conversa nao aceita mais
+         *     mensagem, e o que o tutor escreveu antes continua legivel. Depois disso,
+         *     **410** com corpo fixo.
+         *
+         *     **Nenhuma das duas respostas conta o desfecho do caso.** Ate 23/09/2026
+         *     este documento prometia "o desfecho, porque quem ajudou merece saber que
+         *     deu certo". A promessa saiu pela regra de `lost-case-closed`: o link e
+         *     um bearer, pode ter sido repassado, e um texto que diz "voltou para
+         *     casa" em um caso e outra coisa nos demais conta, por exclusao, o que
+         *     aconteceu com o animal de outra pessoa. Quem decide contar e o tutor,
+         *     na conversa, antes de encerrar.
+         */
         get: operations["getFinderConversation"];
         put?: never;
         post?: never;
@@ -1683,6 +1732,550 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/store/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * As tags que o filtro da Loja oferece
+         * @description As opcoes do grupo de filtro de tags do app: so tags **ativas** com
+         *     pelo menos um item publicado, em ordem alfabetica, ate 40. O filtro e
+         *     de lista fechada, sem campo digitavel (ADR-0027 item 16).
+         */
+        get: operations["listStoreTags"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/store/items/{itemSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["schemas"]["Slug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um item da vitrine, com todas as imagens
+         * @description O detalhe do item: o mesmo `StoreItemSummary` da lista, mais **todas as
+         *     imagens prontas**, na ordem do painel (ADR-0027 item 16). A lista
+         *     continua trazendo so a principal, em `image_url`, para nao pesar a
+         *     vitrine.
+         *
+         *     Publica, pela mesma razao de `listStoreItems`, e com as mesmas regras:
+         *     nenhum UUID sai, e o preco vencido **sai sem valor**, com
+         *     `price_status: vencido`. Item em rascunho, retirado, inexistente ou de
+         *     parceiro inativo responde **404 nos quatro casos**, com o mesmo corpo
+         *     (ADR-0021).
+         */
+        get: operations["getStoreItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/media/network-event-cover-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto da capa do encontro
+         * @description O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+         *     prefixo `events/` que a superficie administrativa ja usa; a derivada
+         *     publica e criada pelo worker, e e ela que sai em `cover_image_url`.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+         *     contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+         *     tem.
+         *
+         *     **O envio e da CONTA**, e nao do painel: `createNetworkEvent` so
+         *     confirma `upload_id` cuja intencao e da propria conta que esta criando o
+         *     encontro (a conferencia esta na clausula `WHERE`), e `upload_id` de
+         *     outra pessoa, de outro proposito ou vencido e recusado com `400`
+         *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+         *
+         *     Dimensao minima 600 x 600, a mesma do painel: `width`/`height` sao
+         *     opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
+         *     **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+         *     dez minutos e o varredor a recolhe; o encontro sem capa e estado normal
+         *     (`cover_image_url` nulo, e o app mostra o banner da marca).
+         */
+        post: operations["createNetworkEventCoverUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A agenda de encontros da Rede
+         * @description A secao `Rede`: os encontros que a comunidade marca em praca e parque.
+         *
+         *     **LEIA O ADR-0025 E A SECAO 12 DO ADR-0027 ANTES DE MEXER NESTA
+         *     OPERACAO.**
+         *
+         *     ## Nao ha pessoa nenhuma nesta resposta
+         *
+         *     Check-in e galeria sairam desta versao por decisao do cliente (ADR-0027
+         *     12.4). Quando voltarem, voltam pelas decisoes 1 a 3 do ADR-0025: a
+         *     presenca e da PESSOA e nunca do pet, sai como numero e nunca como lista,
+         *     e a foto nao tem autor na saida. O motivo e o item 7 do ADR-0010: uma
+         *     lista de presenca num encontro de bairro publica, de graca, que dois
+         *     animais sao do mesmo tutor.
+         *
+         *     ## Encontro privado sai como teaser, e nao entra em recorte oculto
+         *
+         *     O privado aparece com **so titulo, data local e estado**
+         *     (`NetworkEventPrivateTeaser`, ADR-0027 12.10). Ele casa `q` so pelo
+         *     titulo e **fica fora** de `city`, `admission` e `size`: aparecer num
+         *     recorte que so casa pelo valor oculto entregaria o valor (P19).
+         *
+         *     ## Nao ha coordenada nesta resposta, nem ordem por distancia
+         *
+         *     O encontro pode ter ponto marcado no mapa (ADR-0027 12.2), e **o ponto
+         *     nao sai aqui**: esta operacao e alcancavel sem conta. Ele sai so em
+         *     `getNetworkEventLocation`, com `bearerAuth` obrigatorio (emenda 1 do
+         *     ADR-0010). O lugar nesta resposta sao tres rotulos de texto --
+         *     `place_name`, `neighborhood`, `city`/`state` --, que e o teto de
+         *     precisao que o ADR-0010 permite em superficie publica.
+         *
+         *     **A ordem por distancia nao existe aqui.** Ela e
+         *     `listNearbyNetworkEvents`, com conta. O filtro de lugar e por `city`
+         *     digitada, como a listagem publica de perdidos.
+         *
+         *     ## A agenda nao mistura passado e futuro sem dizer qual e qual
+         *
+         *     `when` tem default `upcoming`: a lista abre com o que ainda vai
+         *     acontecer. `past` traz o que passou, `all` traz os dois e **nao e o
+         *     default**.
+         *
+         *     **`status` e calculado no SERVIDOR**, nunca no aplicativo. O encontro
+         *     CANCELADO continua na agenda ate o fim previsto, com `status`
+         *     `cancelled`; depois do fim, segue a regra do encerrado e sai `ended`
+         *     (ADR-0027 12.6, decisao do cliente de 23/09/2026).
+         *
+         *     ## NAO EXISTE OPERACAO DE ESCRITA DE EVENTO NESTA SECAO
+         *
+         *     A escrita e do backoffice, em `/admin/network/events` (ADR-0027), e nao
+         *     daqui.
+         */
+        get: operations["listNetworkEvents"];
+        put?: never;
+        /**
+         * Criar um encontro da Rede
+         * @description A comunidade cria encontro, e ele **ja aparece em publico** (decisao do
+         *     cliente de 17/10/2026, ADR-0025 emenda 3): nasce `published`, com
+         *     `origin: community`, e a resposta e o proprio encontro, na forma de
+         *     `getNetworkEvent`. **Nao ha fila de revisao e nao ha decisao de
+         *     painel.**
+         *
+         *     ## Quem pode criar, que e a unica regua
+         *
+         *     **Canal de contato verificado**, a MESMA regua de abrir caso de pet
+         *     perdido: sem ele, `409 contact-channel-unverified` com
+         *     `next_action: verify_email`. Na pratica isso e **e-mail confirmado**,
+         *     porque nao existe operacao que verifique telefone.
+         *
+         *     **Teto de 3 encontros ATIVOS por conta** (ainda nao encerrados):
+         *     `409 community-event-limit-reached`. Encontro que terminou sai da conta
+         *     sozinho. Sem revisao humana, este teto e o teto de chamada desta
+         *     operacao sao a unica contencao de volume, e por isso os dois existem.
+         *
+         *     ## O que esta operacao NAO aceita, e por que
+         *
+         *     Sem `visibility` (todo encontro da comunidade e publico: o privado tem
+         *     fila de pedidos, que e trabalho de moderacao do painel), sem
+         *     `admission` (o Bichu nao cobra, e valor escrito por terceiro vira
+         *     moderacao de dinheiro), sem `slug` (derivado do titulo, como no item da
+         *     `Loja`), sem `point` e sem `street_address` (ADR-0006: nao ha mapa nem
+         *     busca de endereco, e nao ha geocodificacao em nenhum ponto deste
+         *     caminho) e sem `ticket_url` nem `instagram_handle` (link em texto de
+         *     terceiro e o vetor que D59 fecha).
+         *
+         *     **A capa entra**, por `cover_image.upload_id`, e o envio dos bytes e
+         *     autorizado antes por `createNetworkEventCoverUploadIntent`. A imagem de
+         *     capa e **publica** (decisao do cliente de 17/10/2026): o
+         *     `cover_image_url` sai na agenda, sem conta, assim que o processamento
+         *     terminar -- antes dele, nulo.
+         *
+         *     ## O que o servidor confere no texto, porque ninguem mais confere
+         *
+         *     Sem revisao humana, estas conferencias sao a unica protecao, e por isso
+         *     elas sao mais duras aqui que na escrita do painel:
+         *
+         *     - **`place.place_name` recusa endereco embutido**, com
+         *       `code: address_in_place_name`: CEP, numero de porta depois de
+         *       separador (`, 200`, `- 200`, `nº 200`), `s/n`, marcador de
+         *       quilometro, sequencia de quatro digitos ou mais, palavra de
+         *       logradouro junto de numero que nao e parte do nome dela, e
+         *       complemento residencial (`bloco 2`, `apto 51`, `condominio`).
+         *       Palavra de logradouro sozinha ("Avenida Paulista") e numero que e
+         *       parte do nome ("Rua 25 de Marco", "Praca 14 de Janeiro", "Quadra 302
+         *       Norte") **passam**. O motivo e medido: `place_name` sai na agenda
+         *       publica, sem conta, e o endereco escrito dentro dele contorna a
+         *       protecao de `street_address`, que sai so em
+         *       `getNetworkEventLocation`.
+         *     - **`title`, `summary`, `notes` e `cover_image.alt_text` recusam
+         *       contato e pagamento** (D59), com `code: contact_or_payment_detected`:
+         *       telefone, e-mail, link, encurtador, perfil `@usuario`, chave PIX e
+         *       dados bancarios. E a mesma conferencia que as observacoes do painel
+         *       ja aplicam, aqui estendida a todo texto que a pessoa escreve.
+         */
+        post: operations["createNetworkEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Um encontro
+         * @description **Um corpo so, e esse corpo e o publico** (ADR-0021). A autenticacao e
+         *     opcional porque a `Rede` e navegavel deslogado, e o corpo e identico nos
+         *     dois casos: nada nesta resposta e derivado de quem chama.
+         *
+         *     **Sem coordenada.** Autenticacao opcional e, para o portao de contrato
+         *     publico, operacao publica (P5 de `04-seguranca.md`). O ponto do encontro
+         *     sai em `getNetworkEventLocation`, que exige conta (ADR-0027 12.5).
+         *
+         *     **Encontro privado sai como teaser** (`NetworkEventPrivateTeaser`: so
+         *     titulo, data local e estado) para qualquer chamador, inclusive o
+         *     aprovado: o conteudo dele sai em `getNetworkEventPrivateDetails`
+         *     (ADR-0027 12.10). A forma vem do evento, e nao de quem pergunta.
+         *
+         *     Encontro que nao existe, que espera revisao (`pending_review`) ou que
+         *     foi retirado (`removed`) responde **404 nos tres casos**, com o mesmo
+         *     corpo: distinguir contaria a um estranho que aquele `slug` existiu. O
+         *     encontro cancelado e visivel, com `status` `cancelled` ate o fim
+         *     previsto.
+         */
+        get: operations["getNetworkEvent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Editar o proprio encontro
+         * @description **Quem criou o encontro administra aquele encontro** (decisao do cliente
+         *     de 17/10/2026, ADR-0025 emenda 3). Esta operacao edita **somente**
+         *     encontro de `origin: community` criado pela propria conta.
+         *
+         *     **Encontro de outra pessoa NAO EXISTE para quem pede** (ADR-0021): a
+         *     condicao de autoria mora na clausula `WHERE` da mesma leitura que
+         *     carrega o encontro, e a resposta e **404**, identica a de `slug` que
+         *     nunca existiu. Nunca 403, nunca corpo diferente. Encontro do painel
+         *     (`origin: admin`) tambem responde 404 aqui -- ele se edita pelo painel.
+         *
+         *     `If-Match` e obrigatorio, com a versao da ultima leitura: ausente, 428;
+         *     diferente da atual, 412, e nada e gravado. O leitor tolera o `W/` e o
+         *     sufixo de codificacao que a borda acrescenta (`"1-zstd"`).
+         *
+         *     ## O que o autor NAO muda, e por que
+         *
+         *     `visibility` e `admission` (encontro privado tem fila de pedidos e valor
+         *     e moderacao de dinheiro: as duas sao decisao de administracao, e seguem
+         *     so em `changeAdminNetworkEventAccess`), `slug` (ele ja circulou),
+         *     `street_address` e `point` (ADR-0006, e o endereco e campo do painel),
+         *     `ticket_url` e `instagram_handle` (link em texto de terceiro),
+         *     `publication_status` (cancelar tem operacao propria) e `origin`.
+         *
+         *     **Data, horario, fuso e lugar ENTRAM aqui**, e isso e a unica diferenca
+         *     deliberada em relacao ao `PATCH` do painel, que os manda para
+         *     `relocateAdminNetworkEvent`: aquela operacao existe pela cerimonia de
+         *     T11 (motivo e aviso a todos os administradores), que nao se aplica a
+         *     quem esta corrigindo o proprio encontro. Sem eles, consertar a hora
+         *     errada exigiria cancelar e criar de novo, gastando o teto de 3.
+         *
+         *     ## As conferencias de texto valem IGUAL aqui
+         *
+         *     `place_name` recusa endereco embutido e `title`, `summary`, `notes` e
+         *     `cover_image.alt_text` recusam contato e pagamento (D59), com os mesmos
+         *     codigos de `createNetworkEvent`. Sem isso a pessoa criaria limpo e
+         *     editaria metendo o endereco, e a protecao seria decorativa.
+         *
+         *     **Encontro que ja terminou nao se edita** (`400`, `code: event_ended`):
+         *     editar o passado reescreve o que aconteceu, e o encerrado nao volta a
+         *     aparecer na agenda. O encontro que **ja comecou** e que ainda nao
+         *     terminou continua editavel, porque e justamente ali que o aviso de
+         *     ultima hora importa.
+         */
+        patch: operations["updateNetworkEvent"];
+        trace?: never;
+    };
+    "/network/events/nearby": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A agenda por distancia, pela regiao cadastrada de quem chama
+         * @description **So com conta, sem alternativa vazia** (ADR-0027 12.14): a ordem que
+         *     depende da regiao de quem chama e uma resposta que muda conforme o
+         *     chamador, que o ADR-0021 proibe na leitura publica.
+         *
+         *     **A posicao do tutor nao vai na requisicao.** A operacao usa a regiao de
+         *     referencia ja gravada (`user_reference_locations`, quantizada em 100 m),
+         *     como `Perto`. Nenhuma coordenada sai do aparelho a cada busca, e nada de
+         *     localizacao entra em URL.
+         *
+         *     **Encontro privado nao entra**, aprovado ou nao: a posicao dele numa
+         *     lista por distancia ja e localizacao. `distance_m` sai arredondada a
+         *     100 m so para encontro publico com ponto; encontro sem ponto vem no fim,
+         *     com distancia nula. Sem regiao cadastrada, a lista sai em ordem de data,
+         *     toda `distance_m` sai nula e `effective_sort` diz `proximos`.
+         *     `sort=proximos` pede a ordem de data mesmo com regiao, e a distancia
+         *     continua no cartao (APP-2 da matriz).
+         *
+         *     Aceita os filtros da leitura publica e `max_km` (2, 5 ou 10), que
+         *     exclui encontro sem ponto e so recorta com regiao cadastrada. **O
+         *     caminho `nearby` e reservado**: nenhum encontro pode ter esse `slug`.
+         */
+        get: operations["listNearbyNetworkEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}/location": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O ponto e o endereco do encontro, so para quem tem conta
+         * @description **Endereco (01/10/2026):** `street_address` sai AQUI e em nenhuma
+         *     leitura sem conta, pela mesma regra do ponto (emenda 1 do ADR-0010,
+         *     emenda de 01/10 do ADR-0027). O app abre o texto no aplicativo de
+         *     mapas do aparelho, por intent; o Bichu nao geocodifica (ADR-0006).
+         *
+         *     O ponto marcado no mapa pelo administrador (`geo_source = map_pin`,
+         *     ADR-0006), para o aplicativo desenhar o encontro no mapa. E a emenda 1
+         *     do ADR-0010, com escopo fechado: **ponto de evento publicado, em
+         *     resposta autenticada**. Coordenada de pessoa, de pet, de caso e de
+         *     achado continua proibida em qualquer superficie.
+         *
+         *     **So com conta, e sem alternativa vazia.** `listNetworkEvents` e
+         *     publica e `getNetworkEvent` tem autenticacao opcional; nenhuma das duas
+         *     pode carregar o ponto, porque o portao de contrato publico trata
+         *     autenticacao opcional como publica e o ADR-0021 proibe a resposta que
+         *     muda conforme o chamador (ADR-0027 12.5). Sem conta, a tela mostra os
+         *     rotulos do lugar e nao mostra mapa.
+         *
+         *     `point` e **nulo** quando o encontro nao tem ponto marcado: o ponto e
+         *     opcional (ADR-0027 12.2), e a ausencia e estado normal.
+         *
+         *     **Lugar publico, nunca residencia** (ADR-0027 secao 13): quem cria o
+         *     encontro e o administrador, o formulario do painel diz que o local e
+         *     logradouro publico, e criar, mover e cancelar avisam todos os
+         *     administradores. Nenhuma restricao de banco distingue uma praca de uma
+         *     casa, e este contrato nao afirma que distingue.
+         *
+         *     O encontro e visivel para esta operacao sob a mesma regra de
+         *     `getNetworkEvent` (publicado ou cancelado), com a autorizacao na
+         *     clausula `WHERE`: encontro que nao existe, que espera revisao ou que
+         *     foi retirado responde 404, com o mesmo corpo. **Encontro privado so
+         *     devolve o ponto para conta com pedido aprovado**; as outras recebem o
+         *     mesmo 404 (ADR-0027 12.11). O 401 vem antes de qualquer consulta: sem
+         *     conta nao se descobre nem se o `slug` existe.
+         *
+         *     Responde com `Cache-Control: private, no-store`.
+         */
+        get: operations["getNetworkEventLocation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}/private-details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O conteudo oculto do encontro privado, so para conta aprovada
+         * @description Lugar, horario, resumo, imagens, valor, portes, idade, regras,
+         *     estrutura, "o que levar" e observacoes do encontro **privado**, para a
+         *     conta com pedido **aprovado** (ADR-0027 12.11). A autorizacao e um
+         *     `EXISTS` sobre o pedido na clausula `WHERE`.
+         *
+         *     **404, com o mesmo corpo, nos tres casos**: o encontro nao e privado,
+         *     nao existe (ou nao e visivel), ou a conta nao tem pedido aprovado. Nao
+         *     ha corpo menor para quem nao foi aprovado: nao ha corpo nenhum.
+         *
+         *     Responde com `Cache-Control: private, no-store`.
+         */
+        get: operations["getNetworkEventPrivateDetails"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}/join-request": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O estado do pedido da propria conta
+         * @description O estado do pedido **da propria conta**, no vocabulario do app
+         *     (`JoinRequestAppState`, sem `declined`). Sem pedido, 404.
+         *
+         *     **A desistencia nao deixa rastro legivel.** O pendente desistido e
+         *     apagado (D54) e o recusado desistido e guardado so para nao lavar a
+         *     recusa; os dois respondem 404 aqui. Se o recusado desistido respondesse
+         *     `withdrawn` e o pendente desistido respondesse 404, a desistencia
+         *     separaria o recusado do pendente.
+         */
+        get: operations["getMyNetworkEventJoinRequest"];
+        put?: never;
+        /**
+         * Pedir para participar de um encontro privado
+         * @description Cria o pedido **da conta** (nunca do pet; sem corpo, sem texto livre) e
+         *     responde **200** com o estado que o app ve. Encontro publico, inexistente
+         *     ou nao visivel responde 404.
+         *
+         *     **Idempotente, e a recusa e invisivel** (ADR-0027 12.11): pedir de novo
+         *     nunca cria linha nova. Sobre pedido recusado, devolve `requested` e nao o
+         *     recoloca na fila. Nenhuma resposta difere entre recusado e pendente.
+         *     Encontro que ja terminou responde 400 (`code: event_ended`), para o
+         *     pendente e para o recusado igualmente.
+         */
+        post: operations["requestToJoinNetworkEvent"];
+        /**
+         * Desistir do pedido
+         * @description Desiste enquanto o app ve `requested`, e responde 200 com `withdrawn`.
+         *     Aprovado ou encontro encerrado respondem 400 (`code:
+         *     join_request_final`). Sem pedido (inclusive o ja desistido), 404.
+         *
+         *     Pedido **pendente** e apagado na hora (D54). Pedido **recusado** grava a
+         *     desistencia e continua recusado: apaga-lo faria o proximo pedido nascer
+         *     pendente e lavaria a recusa. A resposta e a mesma nos dois casos.
+         */
+        delete: operations["withdrawNetworkEventJoinRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar o proprio encontro
+         * @description **Cancelar nao e apagar**, e o desenho e o mesmo do cancelamento do
+         *     painel (`cancelAdminNetworkEvent`): `publication_status` vira
+         *     `cancelled`, o instante fica gravado, e **o encontro continua visivel no
+         *     app como cancelado ate o fim previsto** -- quem ia precisa descobrir que
+         *     nao vai mais acontecer, e um encontro que desaparece nao conta isso. A
+         *     `note` e o motivo, e ela fica **so na trilha**: o app nao mostra motivo
+         *     de cancelamento (nem o do painel), porque e texto livre.
+         *
+         *     Vale **somente** para encontro de `origin: community` da propria conta,
+         *     e encontro de outra pessoa ou do painel responde **404** (ADR-0021), o
+         *     mesmo 404 de `slug` inexistente.
+         *
+         *     So encontro `published` se cancela (`400`,
+         *     `code: event_not_published`), e so o que **ainda nao terminou**
+         *     (`400`, `code: event_ended`): cancelar o que ja aconteceu nao muda nada
+         *     para ninguem. Cancelar de novo cai no primeiro caso.
+         *
+         *     `If-Match` obrigatorio, como na edicao. O encontro cancelado **sai do
+         *     teto de 3 ativos** da conta.
+         */
+        post: operations["cancelNetworkEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/join-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Meus pedidos para participar
+         * @description Os encontros privados em que **a propria conta** pediu para participar,
+         *     cada um com o teaser e o `JoinRequestAppState`. Nao devolve conteudo
+         *     oculto nem para aprovado: o conteudo continua em `private-details`.
+         *
+         *     Aceita `q` (**so titulo**), `state` e `sort=proximos`. **Nao aceita
+         *     `admission` nem `size`**: filtrar por valor oculto entregaria o valor.
+         *     Pedidos desistidos nao aparecem, pela mesma razao de
+         *     `getMyNetworkEventJoinRequest`, e por isso `state=withdrawn` devolve a
+         *     lista vazia.
+         */
+        get: operations["listMyNetworkEventJoinRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/public/lost-pets": {
         parameters: {
             query?: never;
@@ -2129,6 +2722,733 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Abre a sessao administrativa
+         * @description O login do painel. **Nao e o login do app**: contas do painel e do app
+         *     sao cadastros separados (ADR-0027 item 20, D42). Esta operacao so le
+         *     as contas do painel, e a credencial de uma conta do app recebe aqui o
+         *     mesmo 401 de qualquer e-mail sem conta.
+         *
+         *     **Ordem, e ela importa:**
+         *
+         *     1. `X-Captcha-Token` e **obrigatorio** aqui, ao contrario do login do
+         *        tutor (ADR-0020). Ausente, ou com nota abaixo de 0,5: `403
+         *        captcha-rejected`. Sao poucas pessoas conhecidas, sem emergencia, e
+         *        a faixa cinzenta vai para o alerta (D41). A pagina que colhe o token
+         *        e o documento `/entrar`, isolado da origem da sessao.
+         *     2. Os tetos de `x-rate-limit` sao conferidos **antes** de derivar o hash
+         *        (D44).
+         *     3. E-mail sem conta do painel, senha errada, senha certa de conta
+         *        desativada ou bloqueada, e senha certa que aparece numa base de
+         *        senhas vazadas respondem **o mesmo 401, no mesmo tempo** (hash de
+         *        descarte, e a base consultada em toda tentativa): o login nao conta a
+         *        ninguem quem e administrador nem que a senha confere (D43, D44).
+         *     4. Senha vazada nao tem resposta propria: a recusa vai para a trilha e
+         *        **todos** os administradores recebem um e-mail dizendo que a conta
+         *        precisa de `conta-admin redefinir-senha`. Nao ha redefinicao por
+         *        link: a senha do painel so e definida pelo comando, no servidor
+         *        (item 20.4, D61).
+         *
+         *     **Sucesso:** `Set-Cookie: __Host-bichu_adm=...; Path=/; Secure;
+         *     HttpOnly; SameSite=Strict`, sem `Domain` e sem `Max-Age`. O corpo traz
+         *     o `csrf_token` e os dois prazos da sessao. Um e-mail vai para o dono da
+         *     conta a cada sessao aberta, com o link "nao fui eu" do proprio painel,
+         *     que chama `disavowAdminSessionAlert` (D46, D62).
+         */
+        post: operations["openAdminSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A sessao administrativa corrente
+         * @description O que o painel pede ao carregar e depois de um F5: quem esta na sessao,
+         *     os papeis, os prazos e o `csrf_token` (D39). O token anti-CSRF vem
+         *     **no corpo**, nunca em cookie, e o painel o guarda em memoria.
+         *
+         *     Sessao ausente, vencida por inatividade ou pelo teto, revogada, ou
+         *     anterior a `sessions_invalid_before`: `401`. O painel decide pelo
+         *     `type`: `unauthenticated` manda entrar; `token-expired` diz que a
+         *     sessao venceu e manda entrar. Conta desativada: `403` na proxima
+         *     requisicao, e todas as sessoes dela caem junto (D37, D38).
+         */
+        get: operations["getAdminSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Encerra esta sessao administrativa
+         * @description Revoga a sessao no servidor e responde com `Set-Cookie` que apaga o
+         *     cookie. Idempotente: sessao ja revogada responde 204.
+         */
+        post: operations["closeAdminSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/logout-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Encerra todas as sessoes da conta administrativa
+         * @description Empurra `admin_accounts.sessions_invalid_before`: toda sessao
+         *     administrativa da conta cai na proxima requisicao, em menos de um
+         *     segundo. A conta do painel e cadastro proprio (D42) e nao tem sessao do
+         *     app a perder.
+         */
+        post: operations["closeAllAdminSessions"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/reauth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confere a senha de novo e abre a janela de uma operacao sensivel
+         * @deprecated
+         * @description **OBSOLETA desde 07/10/2026.** Nenhuma escrita do painel exige mais
+         *     `X-Admin-Reauth-Token` (decisao do cliente, ADR-0027 item 23). A rota
+         *     continua respondendo, sem uso, e nao foi removida.
+         *
+         *     Devolve um `reauth_token` de **5 minutos**, de **uso unico** e de
+         *     **um escopo**, que a operacao sensivel recebe em `X-Admin-Reauth-Token`
+         *     (D40). O escopo exigido por operacao esta em `x-admin-reauth-scope`.
+         *
+         *     **Nao e o `POST /auth/reauth` do app**, e o cabecalho tem outro nome de
+         *     proposito: o token do app e preso ao `jti` do JWT movel, e a conta
+         *     administrativa nao tem JWT movel (D42). Mesmo nome com duas amarracoes
+         *     seria um token que vale num lugar e nao no outro sem que o nome diga.
+         *
+         *     **Rotaciona a sessao:** a resposta traz `Set-Cookie` com identificador
+         *     novo e um `csrf_token` novo; o anterior deixa de valer (D38). O teto
+         *     absoluto de 12 horas **nao** renasce.
+         *
+         *     **Dois escopos com uma senha so:** `scopes` com um ou dois escopos
+         *     distintos faz **uma** rotacao e devolve um token por escopo em
+         *     `tokens`, todos presos a sessao nova. Duas reautenticacoes seguidas
+         *     nao servem para isso: a segunda rotaciona a sessao, e o token da
+         *     primeira fica preso a uma sessao revogada. `scope` sozinho continua
+         *     valendo, e a resposta traz `reauth_token` e `scope` como antes.
+         */
+        post: operations["reauthenticateAdmin"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/auth/disavow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * "Nao fui eu": derruba as sessoes do painel e bloqueia a conta
+         * @description O aviso de sessao aberta (D46) leva o link
+         *     `<origem do painel>/nao-fui-eu#t=<token>` (a origem e `ADMIN_ORIGIN`,
+         *     em producao o host do painel). O token vai no
+         *     **fragmento**, que o navegador nao manda ao servidor nem poe em
+         *     `Referer`: nao chega a log de borda nenhum. A pagina o envia por esta
+         *     operacao, e **so por `POST`**: cliente de e-mail e antivirus de borda
+         *     pre-carregam link por `GET`, e `GET` aqui responde `405`.
+         *
+         *     Nao pede sessao, porque existe para quem pode ter perdido a sua (e a
+         *     segunda operacao sem sessao do prefixo, por lista fechada, junto com o
+         *     login). `Origin` exato continua exigido (D39, primeira camada); o token
+         *     de 256 bits substitui o `X-CSRF-Token`, que nao teria sessao a que se
+         *     ligar.
+         *
+         *     O efeito, numa transacao: revoga todas as sessoes da conta
+         *     (`disavowed`), empurra `admin_accounts.sessions_invalid_before`, grava o
+         *     bloqueio `disavowed`, grava a trilha, e so entao consome o token. Nao
+         *     troca a senha nem abre sessao: quem tem o link provou ter a caixa de
+         *     entrada, e nao ser o titular. O bloqueio so cai com
+         *     `conta-admin redefinir-senha`. Todos os administradores sao avisados.
+         *
+         *     Vencido (7 dias), ja usado e inexistente respondem o mesmo `410`.
+         */
+        post: operations["disavowAdminSessionAlert"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/store/partners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Parceiros da vitrine, inclusive os inativos
+         * @description A lista do painel, com `item_count` para o administrador ver quem tem itens antes de desativar.
+         */
+        get: operations["listAdminStorePartners"];
+        put?: never;
+        /**
+         * Cadastra um parceiro
+         * @description O parceiro nasce ativo. `host` e so o host, e e contra ele que o destino de cada item e conferido.
+         */
+        post: operations["createAdminStorePartner"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/store/partners/{partnerSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do parceiro. Nenhum UUID no caminho. */
+                partnerSlug: components["parameters"]["PartnerSlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um parceiro
+         * @description O parceiro em qualquer situacao, com o `ETag` para a proxima escrita.
+         */
+        get: operations["getAdminStorePartner"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Altera um parceiro
+         * @description `If-Match` obrigatorio: dois administradores editando o mesmo parceiro
+         *     nao se sobrescrevem em silencio. Trocar `host` leva os itens junto: o
+         *     item guarda so o caminho do destino, e o endereco e composto com o
+         *     host do parceiro na leitura. Trocar `slug` e permitido; o caminho muda, e a
+         *     resposta traz o novo.
+         */
+        patch: operations["updateAdminStorePartner"];
+        trace?: never;
+    };
+    "/admin/store/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * O vocabulario de tags da Loja
+         * @description Todas as tags, ativas e inativas, com quantos itens cada uma tem.
+         */
+        get: operations["listAdminStoreTags"];
+        put?: never;
+        /**
+         * Acrescenta uma tag ao vocabulario
+         * @description **Tag e vocabulario curado, nao texto livre do item** (ADR-0027 item
+         *     17). Ela nasce aqui, uma vez, com rotulo conferido, e o item so a
+         *     referencia pelo `slug`. Teto de **40 tags ativas**: acima disso, `400`
+         *     (`code: tag_vocabulary_full`), porque um filtro com duzentas opcoes nao
+         *     filtra.
+         */
+        post: operations["createAdminStoreTag"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/store/tags/{tagSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tagSlug: components["schemas"]["Slug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Renomeia, desativa ou reativa uma tag
+         * @description Nao ha exclusao. **Desativar tira a tag de toda a leitura publica**:
+         *     ela nao sai em `StoreItemSummary.tags`, nao aparece em
+         *     `listStoreTags` e o filtro `tag` com ela devolve lista vazia. **Por
+         *     dentro ela continua ligada aos itens**, e reativar a devolve a todos
+         *     eles sem o administrador refazer nada. O teto de 5 por item conta a tag
+         *     desativada (ver `StoreItemTagSlugs`), entao reativar nunca estoura o
+         *     teto. Renomear troca o `slug` junto.
+         */
+        patch: operations["updateAdminStoreTag"];
+        trace?: never;
+    };
+    "/admin/store/items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Itens da vitrine, em todos os estados
+         * @description A lista do painel, com rascunho, publicado e retirado. **O preco vem com
+         *     o valor mesmo vencido** (ver `AdminStoreItem`): a omissao do valor
+         *     vencido e regra da superficie publica (`listStoreItems`), e continua la.
+         */
+        get: operations["listAdminStoreItems"];
+        put?: never;
+        /**
+         * Cria um item em rascunho
+         * @description **O item nasce em rascunho** e nao aparece no app ate
+         *     `publishAdminStoreItem`. `target_url` precisa terminar no host do
+         *     parceiro (`400`, `code: host_mismatch`). O preco e objeto unico ou
+         *     ausente: "preco sem data" nao cabe no corpo. `checked_at` no futuro e
+         *     recusado. As imagens, ate 8, sao envios de
+         *     `createAdminCatalogImageIntent` com `purpose: store_item`, na ordem em
+         *     que o app as mostra; a primeira e a principal. Qualquer outro envio e
+         *     recusado com `400` (T9). **URL de imagem externa nao e aceita**
+         *     (ADR-0027 item 6). `species` e obrigatoria (pelo menos uma); `tag_slugs`
+         *     so aceita tag que ja existe no vocabulario (`createAdminStoreTag`),
+         *     ate 5 (ADR-0027 item 16).
+         */
+        post: operations["createAdminStoreItem"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/store/items/{itemSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["parameters"]["ItemSlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um item, com o preco mesmo vencido
+         * @description O item em qualquer estado. O preco vem com `amount` mesmo depois de
+         *     `valid_until`: quem reconfere precisa do numero antigo. A omissao do
+         *     valor vencido e regra de `listStoreItems`, a superficie publica.
+         */
+        get: operations["getAdminStoreItem"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Altera um item, em qualquer estado
+         * @description Editar nao publica nem retira: o estado so muda pelas operacoes de
+         *     `publication`. Renovar o preco e mandar `price` com `checked_at` novo;
+         *     `price: null` tira o preco. `species`, `tag_slugs` e `images`
+         *     **substituem o conjunto inteiro**: reordenar imagens e mandar a lista na
+         *     ordem nova, remover e omitir, e `images: []` tira todas.
+         */
+        patch: operations["updateAdminStoreItem"];
+        trace?: never;
+    };
+    "/admin/store/items/{itemSlug}/publication": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["parameters"]["ItemSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Publica o item na vitrine
+         * @description Rascunho ou retirado passa a publicado. Idempotente: item ja publicado
+         *     responde 200 sem nova linha de trilha. `published_at` grava a primeira
+         *     publicacao e nao e reescrito.
+         */
+        put: operations["publishAdminStoreItem"];
+        post?: never;
+        /**
+         * Retira o item da vitrine
+         * @description O "excluir publicado" da `Loja` (D40). **Nada e apagado**: o item passa a
+         *     `retired`, some do app, continua no painel e volta com
+         *     `publishAdminStoreItem`. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Item em rascunho
+         *     responde `400` (`code: not_published`).
+         */
+        delete: operations["retireAdminStoreItem"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Encontros da Rede, em todos os estados
+         * @description A lista do painel, com o estado temporal calculado no servidor.
+         *     **Removido nao aparece por padrao**: removido some da lista (a UX o
+         *     trata como apagado para quem opera), e so volta quando pedido pelo
+         *     filtro fechado `publication_status=removed`, que devolve so os
+         *     removidos. Sem filtro vem publicado e cancelado.
+         */
+        get: operations["listAdminNetworkEvents"];
+        put?: never;
+        /**
+         * Cria e publica um encontro
+         * @description **Criar e publicar** (ADR-0027 12.9): o encontro nao tem rascunho, e
+         *     nasce `published`, com `origin: admin`. Por isso esta operacao conta no
+         *     teto de publicacoes e **avisa todos os administradores** por e-mail com
+         *     o que foi criado (D52).
+         *
+         *     O lugar sao tres rotulos obrigatorios e um ponto **opcional**, marcado
+         *     no mapa (`geo_source = map_pin`, ADR-0006). O local e **logradouro
+         *     publico, nunca residencia**, e o formulario diz isso (ADR-0027 item
+         *     13). O ponto sai para o tutor autenticado em
+         *     `getNetworkEventLocation` (ADR-0010 emenda 1).
+         *
+         *     Recusas de regra, todas `400 validation-failed` com o campo: fim antes
+         *     do inicio; encontro que ja terminou (`code: event_in_past`); fuso que
+         *     nao existe; ponto fora dos limites do Brasil; encontro pago sem valor
+         *     (`code: admission_incomplete`); imagem sem texto alternativo.
+         *     **Nao ha limite de vagas** (decisao do cliente).
+         *
+         *     `visibility: private` faz o encontro aparecer no app **so com titulo
+         *     e data** ate a conta ter o pedido aprovado na fila
+         *     (`listAdminNetworkJoinRequests`). **O Bichu nao cobra**: o valor e so
+         *     informativo, numero mais unidade fechada (ADR-0027 item 17).
+         */
+        post: operations["createAdminNetworkEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/events/{eventSlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um encontro, em qualquer estado
+         * @description O encontro com o ponto do mapa, quando houver, e sem autor.
+         */
+        get: operations["getAdminNetworkEvent"];
+        put?: never;
+        post?: never;
+        /**
+         * Remove um encontro, sem volta
+         * @description Estado terminal `removed`: some do app e do painel de leitura publica,
+         *     a linha continua no banco para a trilha. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Para
+         *     desmarcar um encontro que as pessoas precisam saber que nao vai
+         *     acontecer, a operacao certa e `cancelAdminNetworkEvent`.
+         */
+        delete: operations["removeAdminNetworkEvent"];
+        options?: never;
+        head?: never;
+        /**
+         * Altera titulo, resumo, capa ou endereco publico de um encontro
+         * @description **Data, horario, fuso e lugar nao mudam aqui**, porque todo encontro
+         *     esta publicado desde a criacao: mudar onde e quando as pessoas levam
+         *     os caes e `relocateAdminNetworkEvent`, com aviso a todos os
+         *     administradores. **Visibilidade e condicao de acesso
+         *     tambem nao**: sao `changeAdminNetworkEventAccess`, pelo mesmo motivo.
+         *     O corpo nao tem esses campos. Encontro `removed` responde `400`
+         *     (`code: event_removed`).
+         *
+         *     **Mudar `notes` avisa todos os administradores** com o antes e o
+         *     depois (D60), sem reautenticacao: o detector de D59 ja tira o valor do
+         *     golpe, e o aviso cobre o resto. **Encontro privado nao troca de
+         *     `slug`** (`400`, `code: private_slug_is_generated`).
+         */
+        patch: operations["updateAdminNetworkEvent"];
+        trace?: never;
+    };
+    "/admin/network/events/{eventSlug}/relocation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Muda data, horario ou lugar de um encontro publicado
+         * @description E a operacao que um invasor com a sessao usaria para reunir caes num
+         *     lugar e horario escolhidos por ele (T11). Ficam duas travas: aviso por
+         *     e-mail a **todos** os administradores com o antes e o depois (D52), e
+         *     linha na trilha (sem a coordenada bruta: a trilha grava
+         *     `point_changed`). Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. O risco de uma sessao
+         *     sequestrada mover o encontro sem senha foi aceito pelo cliente.
+         *
+         *     **Compatibilidade (01/10/2026):** o painel deixou de usar o mapa, e o
+         *     `place.point` desta rota fica so por compatibilidade. A rota continua
+         *     sendo o UNICO caminho para mudar o lugar de um encontro existente,
+         *     inclusive o `street_address`: mudar onde e T11, e o aviso e a trilha
+         *     valem para o endereco como valem para o ponto.
+         *
+         *     Pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e
+         *     `time_zone`. O `reason` e obrigatorio e vai no aviso. Encontro cancelado ou removido
+         *     responde `400` (`code: event_not_published`).
+         */
+        post: operations["relocateAdminNetworkEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/events/{eventSlug}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancela um encontro publicado
+         * @description O encontro passa a `cancelled` e **continua visivel no app como
+         *     cancelado** ate o fim previsto (decisao do cliente, 23/09). Avisa todos
+         *     os administradores. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Sem
+         *     volta: um encontro cancelado que vai acontecer de novo e um encontro
+         *     novo.
+         */
+        post: operations["cancelAdminNetworkEvent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/events/{eventSlug}/access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Muda visibilidade, gratuidade ou valor de um encontro
+         * @description Trocar o valor de um encontro publicado muda o que as pessoas esperam
+         *     pagar na porta, e tornar publico um encontro privado entrega o lugar a
+         *     quem nao foi aprovado. Por isso as mesmas travas de
+         *     `relocateAdminNetworkEvent`: aviso a todos os administradores com o
+         *     antes e o depois, e trilha. Sem reautenticacao desde 07/10/2026 (decisao do cliente, ADR-0027 item 23): basta a sessao com CSRF e o `If-Match`. Privado que vira publico deixa os pedidos
+         *     como estao, sem efeito, e mantem o `slug` gerado. Publico que vira
+         *     privado passa a exigir pedido de todos e **ganha `slug` novo, gerado**:
+         *     o antigo ja circulou e pode dizer o lugar, e ele passa a responder 404,
+         *     sem redirecionamento.
+         */
+        post: operations["changeAdminNetworkEventAccess"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/join-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de pedidos para participar de encontros privados
+         * @description So existe no painel: nenhuma operacao do app lista pedidos ou aprovados
+         *     de ninguem, nem como contagem (ADR-0010 item 7). Sem filtro, vem a fila
+         *     de pendentes, do pedido mais antigo para o mais novo.
+         *
+         *     **E a unica leitura de pessoa do backoffice, coberta pelo RA-01 com
+         *     D53 a D57** (decisao do cliente, 23/09). Por isso tres coisas que as
+         *     outras leituras nao tem:
+         *
+         *     - **toda chamada grava na trilha** (D55), com os filtros e a
+         *       quantidade devolvida, nunca os nomes. E a unica operacao `GET`
+         *       administrativa com `x-audit`, e a excecao e deliberada;
+         *     - **teto por linhas devolvidas** (D56): 300 por hora por conta,
+         *       paginas de no maximo 50;
+         *     - **nenhum filtro por solicitante** e nenhum identificador estavel da
+         *       pessoa (D53): o painel nao monta "todos os encontros da Maria".
+         */
+        get: operations["listAdminNetworkJoinRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/join-requests/{requestRef}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["JoinRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprova o pedido, e o tutor passa a ver o encontro inteiro
+         * @description A partir de `pending` sem desistencia, **ou de `declined`** (o painel
+         *     pode reverter uma recusa; o tutor nunca soube dela, e a aprovacao
+         *     chega como a primeira noticia). Aprovado nao volta a recusado: o tutor
+         *     ja viu o lugar, e recusar depois seria uma segunda decisao que ele
+         *     sabe que existiu (`400`, `code: request_not_pending`, nos outros
+         *     casos). Encontro cancelado, removido ou que ja terminou responde `409`
+         *     (`event-not-open`). O tutor recebe push **so com
+         *     o titulo do encontro**, nunca lugar nem horario: o conteudo passa pelo
+         *     provedor de push e aparece na tela bloqueada (22.10.1). A partir daqui
+         *     `getNetworkEventPrivateDetails` e `getNetworkEventLocation` respondem
+         *     para a conta dele.
+         */
+        post: operations["approveAdminNetworkJoinRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/network/join-requests/{requestRef}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["JoinRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recusa o pedido, sem avisar o tutor
+         * @description So a partir de `pending` sem desistencia; aprovado nao volta a
+         *     recusado. Encontro cancelado, removido ou que ja terminou responde
+         *     `409` (`event-not-open`). **O tutor nao e avisado**, e
+         *     para ele o pedido continua "aguardando" ate o encontro passar (decisao
+         *     do cliente, 23/09): o app recebe `requested`, nunca `declined`. A
+         *     recusa e final e invisivel: pedir de novo devolve o mesmo `requested`
+         *     e nao recoloca o pedido na fila (ADR-0027 item 17 e 12.11). Sem motivo escrito: motivo e mensagem, e mensagem e v2.
+         */
+        post: operations["declineAdminNetworkJoinRequest"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/media/catalog-image-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede a politica de envio direto de uma imagem de catalogo
+         * @description ADR-0007 a letra, com `kind = catalog_image` e `purpose` gravados no
+         *     envio. O backend nunca recebe os bytes. JPEG, PNG e WebP; **SVG
+         *     recusado sempre** (`415`). A confirmacao e a escrita do item
+         *     (`images`) ou do encontro (`images`) com o mesmo
+         *     `purpose`; e ela que enfileira o processamento. A derivada publica so e
+         *     servida pronta.
+         */
+        post: operations["createAdminCatalogImageIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2469,21 +3789,75 @@ export interface components {
              * @enum {string}
              */
             status: "processing" | "ready" | "rejected";
+            /**
+             * @description O MOTIVO da recusa, em texto pronto para a tela, quando `status` e
+             *     `rejected`. Nulo em `processing` e em `ready`.
+             *
+             *     Ele e gravado desde a BICHUS-87 e **nao chegava a ninguem**: o
+             *     campo nao existia neste schema, entao a tela dizia "recusada" e a
+             *     pessoa nao tinha como saber se o problema era o formato, o tamanho,
+             *     a dimensao minima ou um arquivo truncado -- e portanto nao tinha
+             *     como consertar.
+             *
+             *     Nao e codigo de erro e nao e estavel: e texto para ler. Cliente que
+             *     precise ramificar por causa ramifica por `status`.
+             */
+            rejection_reason?: string | null;
             is_primary?: boolean;
-            /** Format: uri */
+            /**
+             * Format: uri
+             * @description Derivada de 176 x 194 px, cortada na proporcao da moldura (1 : 1,1),
+             *     para o cartao da lista, que desenha 56 x 61,6 dp. Pesa dezenas de
+             *     kB: o peso de uma TELA e a soma das derivadas que ela desenha, e a
+             *     lista desenha muitas.
+             */
             thumb_url?: string | null;
             /**
              * Format: uri
-             * @description Derivada de ate 1024 px, sem EXIF, servida pelo dominio de midia.
-             *     **E a unica derivada que a rota publica mostra.** O arquivo
-             *     original nunca sai do armazenamento privado.
+             * @description Derivada de 1024 x 1126 px, cortada na proporcao da moldura
+             *     (1 : 1,1), sem EXIF, em JPEG, servida pelo dominio de midia.
+             *
+             *     Ela e a imagem GRANDE do pet: o perfil do pet no app, a pagina
+             *     publica do caso e o cartaz impresso (`LostCasePoster.photo_url`)
+             *     usam esta mesma derivada. Teto de 500 KB, com alvo de 300 a 500 KB
+             *     (pedido do cliente de 17/10/2026), alcancado por escada de
+             *     qualidade -- a qualidade e escolhida medindo os bytes, e nao fixada.
+             *
+             *     **O arquivo original nunca sai do armazenamento privado**, e nenhuma
+             *     rota o serve: o leitor de midia publica aceita apenas chave com a
+             *     forma de derivada, e toda chave de original tem `original` no lugar
+             *     onde ela exige `thumb`, `card` ou `banner`.
              */
             card_url?: string | null;
             /** Format: date-time */
             created_at?: string;
         };
+        /**
+         * @description **O teto de 5 MiB vale para TODO envio de imagem da aplicacao** -- foto
+         *     de pet, foto de achado, capa de encontro e imagem de produto --, para
+         *     usuario e para administrador (decisao do cliente de 17/10/2026: "as
+         *     imagens devem conter no maximo 5mb ... em toda a aplicacao"). Antes
+         *     eram tres numeros: 10 MiB aqui, 2 MiB no servidor da foto de achado e
+         *     5 MiB no catalogo, com este schema emprestando o seu para a operacao do
+         *     achado por composicao.
+         *
+         *     O teto vai para a POLITICA ASSINADA, e e por isso que ele vale: o
+         *     backend nao recebe os bytes, e recusar depois seria recusar o que ja foi
+         *     gravado.
+         */
         UploadIntentInput: {
-            /** @enum {string} */
+            /**
+             * @description **A lista da ENTRADA, e ela nao e a do que guardamos.** O que
+             *     guardamos e servimos e sempre JPEG (`.jpeg`): o worker reescreve a
+             *     imagem a partir dos pixels. HEIC esta aqui porque e o que o iPhone
+             *     produz, e recusa-lo na entrada tiraria o produto da mao de metade
+             *     dos aparelhos.
+             *
+             *     O tipo declarado aqui e DIAGNOSTICO, nunca verdade: quem decide o
+             *     formato sao os bytes, por numero magico, no worker. SVG nunca entra
+             *     nesta lista -- e documento com script, nao imagem.
+             * @enum {string}
+             */
             content_type: "image/jpeg" | "image/png" | "image/heic" | "image/webp";
             byte_size: number;
         };
@@ -2641,11 +4015,17 @@ export interface components {
         FoundReportEnrichment: {
             message?: string;
             /**
-             * @description O `upload_ref` devolvido por
-             *     `POST /v1/finder/found-report/photo-upload-intent`. Opaco de
-             *     proposito: este corpo vem de quem nao tem conta (SEC-001).
+             * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+             *     (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+             *     vem de quem nao tem conta (SEC-001).
              */
             photo_upload_ref?: string;
+            /**
+             * @description Sem faixa e sem obrigatoriedade, como estava antes de 23/09/2026.
+             *     A versao do achador sem conta (`FinderFoundReportEnrichment`) usa
+             *     `GeoPoint`; se o app tambem deve passar a `GeoPoint` e decisao
+             *     pendente do app, porque mudar aqui quebra quem ja envia.
+             */
             location?: {
                 /** Format: double */
                 lat?: number;
@@ -2653,6 +4033,33 @@ export interface components {
                 lon?: number;
                 accuracy_m?: number;
             };
+            /**
+             * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
+             *     para avisar a resposta do tutor e o desfecho do caso.
+             */
+            finder_contact?: {
+                display_name?: string;
+                /** Format: email */
+                email?: string;
+            };
+        };
+        /**
+         * @description O corpo de `enrichFinderFoundReport`, do achador sem conta. Mesmos
+         *     campos de `FoundReportEnrichment`, com uma diferenca: `location` e
+         *     `GeoPoint`, com a faixa do territorio e `lat`/`lon` obrigatorios
+         *     juntos. Existe separado porque `FoundReportEnrichment` e tambem o corpo
+         *     de `enrichFoundReport`, que o app ja usa, e apertar la quebraria esse
+         *     consumidor (13 quebras no `oasdiff` do commit 19ee222).
+         */
+        FinderFoundReportEnrichment: {
+            message?: string;
+            /**
+             * @description O `upload_ref` devolvido por `POST /v1/media/finder-photo-intents`
+             *     (`createFinderPhotoUploadIntent`). Opaco de proposito: este corpo
+             *     vem de quem nao tem conta (SEC-001).
+             */
+            photo_upload_ref?: string;
+            location?: components["schemas"]["GeoPoint"];
             /**
              * @description Opcional e nunca exibido a ninguem alem do canal mediado. Usado so
              *     para avisar a resposta do tutor e o desfecho do caso.
@@ -2700,6 +4107,11 @@ export interface components {
              *     **continua exigindo confirmacao humana do tutor**.
              */
             share_token?: string;
+            /**
+             * @description 500, o mesmo teto de `found_reports.notes` no banco
+             *     (`found_reports_notes_tamanho`). O contrato dizia 1000, e o texto
+             *     entre 501 e 1000 passava pela validacao e morria no banco como 500.
+             */
             notes?: string;
             /** Format: uuid */
             photo_upload_id?: string;
@@ -3324,9 +4736,13 @@ export interface components {
             category: components["schemas"]["StoreCategory"];
             /**
              * Format: uri
-             * @description Sempre https. Nulo e estado normal, e o cartao sabe se desenhar sem imagem.
+             * @description Sempre https. **A imagem principal** (a primeira de
+             *     `StoreItemDetail.images`). Nulo e estado normal, e o cartao sabe se
+             *     desenhar sem imagem.
              */
             image_url?: string | null;
+            /** @description O texto alternativo da imagem principal. Opcional ate a implementacao (ADR-0027 item 16). */
+            image_alt_text?: string | null;
             /**
              * Format: uri
              * @description O destino no site do parceiro. **Nenhum identificador de pessoa
@@ -3337,6 +4753,14 @@ export interface components {
              */
             target_url: string;
             partner: components["schemas"]["StorePartnerRef"];
+            /**
+             * @description A que especies o produto serve (ADR-0027 item 16). Declarado em
+             *     23/09 antes do codigo: **opcional ate a implementacao**, e o app
+             *     trata ausencia como "nao informado", nunca como "serve a todas".
+             */
+            species?: components["schemas"]["Species"][];
+            /** @description So tags ativas. Opcional ate a implementacao, como `species`. */
+            tags?: components["schemas"]["StoreTagRef"][];
             /**
              * @description **Centavos, inteiro.** Ponto flutuante para dinheiro erra na soma e
              *     o erro aparece meses depois. Nulo quando nao ha preco **e tambem
@@ -3376,6 +4800,557 @@ export interface components {
             applied_filters?: {
                 [key: string]: string;
             };
+        };
+        /**
+         * @description O recorte no tempo da agenda, calculado no servidor e no fuso de cada
+         *     encontro. `all` existe e **nao e o default**. `today`, `weekend` e
+         *     `next_30_days` sao os sub-menus da agenda (ADR-0027 12.14).
+         * @default upcoming
+         * @enum {string}
+         */
+        NetworkEventWhen: "upcoming" | "past" | "all" | "today" | "weekend" | "next_30_days";
+        /**
+         * @description `proximos` e a data em ordem crescente; `recentes` e decrescente. **A
+         *     leitura publica nao ordena por distancia**: essa ordem e
+         *     `listNearbyNetworkEvents`, com conta.
+         * @enum {string}
+         */
+        NetworkEventSort: "proximos" | "recentes";
+        /**
+         * @description `distancia` usa a regiao cadastrada de quem chama; sem regiao, a ordem
+         *     efetiva e `proximos`, e `effective_sort` diz isso.
+         * @default distancia
+         * @enum {string}
+         */
+        NetworkEventNearbySort: "distancia" | "proximos";
+        /**
+         * @description **Calculado no servidor, sempre.** `cancelled` prevalece sobre o estado
+         *     temporal ate o fim previsto, para as pessoas confirmarem o
+         *     cancelamento: **com `ends_at`, ate o `ends_at`; sem `ends_at`, ate
+         *     23:59:59 do dia do encontro no `time_zone` dele** (decisoes do cliente
+         *     de 23/09 e 28/09/2026). Depois disso sai `ended`. No encontro
+         *     publicado sem `ends_at` nada muda: ele e `upcoming` ate comecar e
+         *     `ended` a partir dai (ADR-0025 item 6). O recorte `when=upcoming` segue a
+         *     mesma regra. Cliente que nao conhece um valor precisa trata-lo sem
+         *     quebrar.
+         * @enum {string}
+         */
+        NetworkEventStatus: "upcoming" | "happening" | "ended" | "cancelled";
+        /**
+         * @description `private`: para quem nao tem pedido aprovado, o app recebe so titulo e
+         *     data; o resto sai em operacao separada, so para conta aprovada
+         *     (ADR-0027 item 17 e 12.10 a 12.12).
+         * @default public
+         * @enum {string}
+         */
+        NetworkEventVisibility: "public" | "private";
+        /**
+         * @description O lugar, em rotulo e **nunca em coordenada**. `place_name` e o nome do
+         *     lugar publico como as pessoas o chamam, e nao logradouro, numero nem
+         *     CEP -- os tres sao endereco, e o ADR-0010 item 2 os proibe aqui.
+         *
+         *     **Nao ha campo de latitude, de longitude nem de distancia neste objeto,
+         *     em nenhuma precisao.** Ele sai em operacoes alcancaveis sem conta, e o
+         *     ponto do encontro so sai em `getNetworkEventLocation`, com conta
+         *     (ADR-0027 12.5). Acrescentar `lat` aqui faz o portao de contrato
+         *     publico reprovar, e a isca
+         *     `infra/verificacao/iscas/deve-reprovar-ponto-do-encontro-no-detalhe-publico.yaml`
+         *     existe para provar isso.
+         */
+        NetworkEventPlace: {
+            /** @example Praça Benedito Calixto */
+            place_name: string;
+            /** @example Pinheiros */
+            neighborhood: string;
+            /** @example São Paulo */
+            city: string;
+            /** @example SP */
+            state: string;
+        };
+        /**
+         * @description A que o valor se refere (decisao do cliente de 01/10/2026). Lista
+         *     fechada por `CHECK`; o rotulo e do cliente:
+         *
+         *     - `per_pet`: por pet;
+         *     - `per_person`: por humano;
+         *     - `per_pair`: dupla, 1 humano + 1 pet;
+         *     - `per_two_people`: dupla de humanos, 2 humanos;
+         *     - `per_dog`: **legado**, ainda valido e devolvido nos encontros que o
+         *       tem, exibido como "por pet". O painel nao o oferece mais, e a
+         *       aposentadoria esta no ADR-0027 item 22. Mudanca aditiva: nenhuma
+         *       linha foi renomeada.
+         *
+         *     O app trata valor desconhecido mostrando so o numero, sem unidade
+         *     (`UnidadeDoPreco.porCodigo` devolve nulo).
+         * @enum {string}
+         */
+        EventPriceUnit: "per_dog" | "per_pet" | "per_person" | "per_pair" | "per_two_people";
+        /**
+         * Format: uri
+         * @description O link de compra ou inscricao do encontro (ADR-0027 item 22). `https`
+         *     obrigatorio, ate 500, sem usuario e senha, sem IP literal e sem host
+         *     local (`localhost`, `.local`, nome sem ponto): recusados com `400`
+         *     (`code: ticket_url_not_https`, `ticket_url_has_credentials`,
+         *     `ticket_url_ip_literal`, `ticket_url_local_host`, `ticket_url_invalid`).
+         *     **Excecao explicita ao D59, so neste campo e em `instagram_handle`**:
+         *     as observacoes continuam recusando link.
+         */
+        NetworkEventTicketUrl: string;
+        /**
+         * @description O Instagram do encontro. Aceita `usuario`, `@usuario` ou a URL do perfil
+         *     em `instagram.com`; o servidor guarda so o handle, sem `@` e em
+         *     minusculas, e recusa com `400` (`code: instagram_handle_invalid`) o que
+         *     nao for 1 a 30 de letras, digitos, ponto e sublinhado.
+         */
+        NetworkEventInstagramHandleInput: string;
+        /**
+         * @description O valor que o organizador informa, **informativo**: o Bichu nao cobra e
+         *     nao guarda forma de pagar (decisao do cliente de 23/09).
+         */
+        NetworkEventPrice: {
+            /** @description Centavos. */
+            amount: number;
+            /** @enum {string} */
+            currency: "BRL";
+            unit: components["schemas"]["EventPriceUnit"];
+        };
+        NetworkEventAdmission: {
+            /**
+             * @description **Valor novo aqui exige PRIMEIRO um APK tolerante.** O app publicado
+             *     lanca `FormatException` para `kind` desconhecido
+             *     (`EntradaDoEncontro.doJson`, `app/lib/api/modelos_rede.dart`), e o
+             *     encontro inteiro deixa de abrir. Ao contrario de `unit`, que o app
+             *     tolera, acrescentar um valor a esta lista quebra o app em uso
+             *     (ADR-0027 item 22).
+             * @enum {string}
+             */
+            kind: "free" | "paid";
+            price: components["schemas"]["NetworkEventPrice"] | null;
+        };
+        /**
+         * @description Portes aceitos, um ou mais, com os valores de `PetSize` (`ref_sizes`),
+         *     os do cadastro de pet. O padrao e todos; o app escreve "Todos os
+         *     portes" quando os quatro estao marcados.
+         * @default [
+         *       "P",
+         *       "M",
+         *       "G",
+         *       "GG"
+         *     ]
+         */
+        NetworkEventAcceptedSizes: components["schemas"]["PetSize"][];
+        /**
+         * @description Idade dos caes, uma escolha. Lista fechada por `CHECK`.
+         * @default any
+         * @enum {string}
+         */
+        NetworkEventDogAge: "any" | "from_4_months" | "from_1_year" | "up_to_1_year";
+        /**
+         * @description Acessibilidade e estrutura do local. Lista fechada por `CHECK` em
+         *     `network_event_amenities`; acrescentar valor e tres arquivos no mesmo
+         *     commit (ADR-0023 secao 3).
+         * @enum {string}
+         */
+        NetworkEventAmenity: "level_ground_or_ramp" | "accessible_restroom" | "public_restroom_nearby" | "shade" | "benches" | "dog_water_fountain" | "parking_nearby";
+        NetworkEventAmenities: components["schemas"]["NetworkEventAmenity"][];
+        /**
+         * @description O que levar, na parte fechada: o que se repete em todo encontro, com
+         *     icone e texto do app. Lista fechada por `CHECK` em
+         *     `network_event_bring_items`; acrescentar valor e tres arquivos no mesmo
+         *     commit (ADR-0023 secao 3).
+         * @enum {string}
+         */
+        NetworkEventBringItem: "water" | "water_bowl" | "leash" | "poop_bags" | "treats" | "towel" | "vaccination_card" | "toy";
+        NetworkEventBringItems: components["schemas"]["NetworkEventBringItem"][];
+        /**
+         * @description Observacoes, so como complemento, ate 500 caracteres (o numero da
+         *     designer, e o mesmo em que o detector e medido). **Texto puro, sem
+         *     canal de contato nem de pagamento** (D59): telefone, e-mail, URL,
+         *     endereco, CEP e chave PIX sao **recusados** com `400` (`code:
+         *     contact_or_payment_detected`), pelo detector do canal mediado, com
+         *     normalizacao NFKC e remocao de largura zero. Caractere de controle
+         *     bidirecional (U+202A a U+202E, U+2066 a U+2069) e recusado em todo
+         *     texto administrativo (`code: bidi_control`). O app nao transforma nada
+         *     em link. Mudar as observacoes avisa todos os administradores (D60).
+         */
+        NetworkEventNotes: string;
+        /**
+         * @description Uma imagem da galeria do encontro. A primeira da lista e a capa.
+         *     `url` e `thumb_url` sao compostas na leitura a partir das chaves da
+         *     imagem: o banco nao guarda URL (`docs/07-devops.md` 3.6).
+         */
+        NetworkEventImage: {
+            /**
+             * Format: uri
+             * @description A derivada de 1024 x 576 px (16:9), para o cartao da agenda, que
+             *     desenha ~328 dp de largura.
+             */
+            url: string;
+            /**
+             * Format: uri
+             * @description A derivada de 480 x 360 px (4:3), para a GALERIA do detalhe, que
+             *     desenha 144 dp. **E ela que a galeria deve pedir**: com `url` a
+             *     galeria baixava 1024 px para pintar 432 px, cinco vezes o dado que
+             *     ela usa, e uma galeria de oito imagens pesava mais que o resto da
+             *     tela somado.
+             *
+             *     Nula na imagem gravada antes desta derivada existir, e na imagem de
+             *     produto da Loja (que tem uma derivada so). Quem recebe nulo cai em
+             *     `url`, que e o comportamento de antes.
+             */
+            thumb_url?: string | null;
+            alt_text: string;
+        };
+        /** @description Ate 8, na ordem do painel; a primeira e a capa. Vazia e estado normal. */
+        NetworkEventImages: components["schemas"]["NetworkEventImage"][];
+        /**
+         * @description O encontro **publico**: o cartao da agenda e o detalhe. **Nao ha
+         *     nenhum campo com pessoas**, nao ha coordenada e nao ha UUID.
+         */
+        NetworkEventPublic: {
+            slug: string;
+            title: string;
+            /** @description A descricao do encontro, ate 200 caracteres (pedido do cliente de 01/10; antes, 180). */
+            summary: string;
+            place: components["schemas"]["NetworkEventPlace"];
+            /**
+             * Format: date-time
+             * @description O instante absoluto. A hora de PAREDE sai de `time_zone`.
+             */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            /**
+             * @description O nome IANA da zona do evento. Sem ele a hora de parede sai errada.
+             * @example America/Sao_Paulo
+             */
+            time_zone: string;
+            status: components["schemas"]["NetworkEventStatus"];
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            visibility: "public";
+            /**
+             * Format: uri
+             * @description A `url` da imagem de posicao 0 (derivada de 1024 x 576), derivada na
+             *     leitura e nunca gravada no banco. **E a do CARTAO da agenda**, que
+             *     desenha ~328 dp. Nula sem imagem; o cartao sabe se desenhar sem ela.
+             */
+            cover_image_url?: string | null;
+            /**
+             * Format: uri
+             * @description A derivada de 1280 x 720 da imagem de posicao 0, para a capa de
+             *     borda a borda do DETALHE, que desenha 360 a 430 dp (1080 a 1290 px
+             *     a 3x) e borrava de leve com 1024.
+             *
+             *     Uma derivada separada e nao um `cover_image_url` maior: o cartao da
+             *     agenda usa a mesma imagem, e subir aquela derivada para 1280
+             *     engordaria **cada** cartao da listagem em metade do peso para ganhar
+             *     nitidez numa tela que desenha uma so.
+             *
+             *     Nula sem imagem e nula na imagem gravada antes desta derivada
+             *     existir; quem recebe nulo cai em `cover_image_url`.
+             */
+            cover_banner_url?: string | null;
+            images: components["schemas"]["NetworkEventImages"];
+            admission: components["schemas"]["NetworkEventAdmission"];
+            accepted_sizes: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required: boolean;
+            /** @description O local tem area cercada para caes soltos. Atributo do lugar, nao permissao. */
+            fenced_off_leash_area: boolean;
+            amenities: components["schemas"]["NetworkEventAmenities"];
+            bring_items: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"] | null;
+            /** @description Publico (ADR-0027 item 22). Nulo quando nao ha. */
+            ticket_url: components["schemas"]["NetworkEventTicketUrl"] | null;
+            /** @description O handle, sem `@`. Publico. Nulo quando nao ha. */
+            instagram_handle: string | null;
+            /**
+             * Format: uri
+             * @description A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.
+             */
+            instagram_url: string | null;
+        };
+        /**
+         * @description O encontro **privado**, para quem nao tem pedido aprovado: **so titulo e
+         *     data** (decisao do cliente, ADR-0027 12.10). **Lista permitida**: estas
+         *     cinco propriedades e nenhuma outra, e o portao P19
+         *     (`src/tools/portao-teaser-do-privado.ts`) reprova propriedade nova.
+         *
+         *     `local_date` e a data local no fuso do encontro, no lugar de
+         *     `starts_at`, `ends_at` e `time_zone`: o nome do fuso entregaria o
+         *     estado. Sem capa: a foto de um encontro costuma ser a foto do lugar. O
+         *     `slug` do privado e gerado pelo servidor, aleatorio, e nao diz o lugar.
+         */
+        NetworkEventPrivateTeaser: {
+            slug: string;
+            title: string;
+            /** Format: date */
+            local_date: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            visibility: "private";
+            status: components["schemas"]["NetworkEventStatus"];
+        };
+        /**
+         * @description O cartao da agenda: o encontro publico inteiro, ou o teaser do privado.
+         *     A forma vem da propriedade do **evento** (`visibility`), igual para
+         *     qualquer chamador, e nao de quem pergunta (ADR-0021).
+         */
+        NetworkEventSummary: components["schemas"]["NetworkEventPublic"] | components["schemas"]["NetworkEventPrivateTeaser"];
+        /**
+         * @description O encontro, na leitura do detalhe. Mesma regra do cartao: publico
+         *     inteiro, ou teaser do privado para todo mundo, inclusive o aprovado. O
+         *     conteudo do privado sai em `getNetworkEventPrivateDetails`.
+         */
+        NetworkEvent: components["schemas"]["NetworkEventPublic"] | components["schemas"]["NetworkEventPrivateTeaser"];
+        NetworkEventPage: {
+            items: components["schemas"]["NetworkEventSummary"][];
+            page: number;
+            limit: number;
+            total: number;
+            /** @description A ordem em que a lista de fato saiu. */
+            effective_sort: components["schemas"]["NetworkEventSort"];
+            /** @description O recorte de tempo que valeu. */
+            effective_when: components["schemas"]["NetworkEventWhen"];
+            /**
+             * @description O recorte que de fato valeu. Traz `scope: all` quando nada foi
+             *     recortado.
+             */
+            applied_filters: {
+                [key: string]: string;
+            };
+        };
+        /** @description O encontro publico com a distancia de quem chama. Privado nao entra nesta lista. */
+        NetworkEventNearby: components["schemas"]["NetworkEventPublic"] & {
+            /** @description Metros, arredondados a 100. Nula sem ponto ou sem regiao cadastrada. */
+            distance_m: number | null;
+        };
+        NetworkEventNearbyPage: {
+            items: components["schemas"]["NetworkEventNearby"][];
+            page: number;
+            limit: number;
+            total: number;
+            effective_sort: components["schemas"]["NetworkEventNearbySort"];
+            effective_when: components["schemas"]["NetworkEventWhen"];
+            applied_filters: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description O conteudo oculto do encontro privado, so para conta aprovada. A mesma
+         *     forma dos campos do encontro publico, sem `visibility`.
+         */
+        NetworkEventPrivateDetails: {
+            slug: string;
+            title: string;
+            summary: string;
+            place: components["schemas"]["NetworkEventPlace"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            time_zone: string;
+            status: components["schemas"]["NetworkEventStatus"];
+            /** Format: uri */
+            cover_image_url?: string | null;
+            /** Format: uri */
+            cover_banner_url?: string | null;
+            images: components["schemas"]["NetworkEventImages"];
+            admission: components["schemas"]["NetworkEventAdmission"];
+            accepted_sizes: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required: boolean;
+            fenced_off_leash_area: boolean;
+            amenities: components["schemas"]["NetworkEventAmenities"];
+            bring_items: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"] | null;
+            /** @description Publico (ADR-0027 item 22). Nulo quando nao ha. */
+            ticket_url: components["schemas"]["NetworkEventTicketUrl"] | null;
+            /** @description O handle, sem `@`. Publico. Nulo quando nao ha. */
+            instagram_handle: string | null;
+            /**
+             * Format: uri
+             * @description A URL do perfil, montada na saida com a base da configuracao (`INSTAGRAM_PROFILE_BASE_URL`) e o handle. Nula sem handle ou sem base configurada.
+             */
+            instagram_url: string | null;
+        };
+        /**
+         * @description O estado do pedido **que o tutor ve**. **Nao ha `declined`** (decisao do
+         *     cliente, ADR-0027 12.11): o recusado aparece como `requested` ate o
+         *     encontro passar e como `expired` depois, igual a um pendente que ninguem
+         *     decidiu. `requested` e nao `pending`, de proposito: `pending` e a decisao
+         *     guardada, e `requested` e o que o tutor sabe.
+         * @enum {string}
+         */
+        JoinRequestAppState: "requested" | "approved" | "withdrawn" | "expired";
+        NetworkEventJoinRequest: {
+            state: components["schemas"]["JoinRequestAppState"];
+            /** Format: date-time */
+            requested_at: string;
+        };
+        MyNetworkEventJoinRequest: {
+            event: components["schemas"]["NetworkEventPrivateTeaser"];
+            state: components["schemas"]["JoinRequestAppState"];
+            /** Format: date-time */
+            requested_at: string;
+        };
+        /**
+         * @description O lugar como a comunidade o descreve: **tres rotulos, e nada mais**.
+         *
+         *     **Sem `point` e sem `street_address`**, e nenhum dos dois e
+         *     esquecimento: o ADR-0006 nao tem mapa nem busca de endereco nesta
+         *     superficie, e nao ha geocodificacao em nenhum ponto deste caminho; o
+         *     endereco por extenso e campo do painel e sai so em
+         *     `getNetworkEventLocation`. **Logradouro publico, nunca residencia**
+         *     (ADR-0027 item 13).
+         */
+        CommunityNetworkEventPlaceInput: {
+            /**
+             * @description O NOME do lugar, como as pessoas o chamam. O servidor recusa
+             *     endereco embutido com `code: address_in_place_name` -- ver a
+             *     descricao de `createNetworkEvent`.
+             */
+            place_name: string;
+            neighborhood: string;
+            city: string;
+            state: string;
+        };
+        /**
+         * @description O encontro proposto pela comunidade. **E um subconjunto deliberado de
+         *     `AdminNetworkEventInput`**, e o que falta esta explicado na descricao de
+         *     `createNetworkEvent`: visibilidade, condicao de acesso, `slug`, ponto,
+         *     endereco, links e imagens nao entram.
+         */
+        CommunityNetworkEventInput: {
+            title: string;
+            summary: string;
+            place: components["schemas"]["CommunityNetworkEventPlaceInput"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string;
+            /** @default America/Sao_Paulo */
+            time_zone: components["schemas"]["TimeZoneName"];
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            /** @default true */
+            vaccination_required: boolean;
+            /** @default false */
+            fenced_off_leash_area: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"];
+            cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"];
+        };
+        /**
+         * @description O pedido de autorizacao de envio da capa. **Sem `purpose`**, ao
+         *     contrario de `AdminCatalogImageIntentInput`: esta operacao existe para
+         *     um proposito so (`network_event`), e deixar o cliente escolhe-lo seria
+         *     deixa-lo pedir uma autorizacao de imagem de produto por uma rota do app.
+         */
+        NetworkEventCoverIntentInput: {
+            /**
+             * @description SVG nunca (D50), e por IGUALDADE, nunca por prefixo. HEIC fica de
+             *     fora porque a derivada de catalogo e processada pelo mesmo caminho
+             *     do painel, que nao o aceita -- e por isso este enum NAO e o de
+             *     `UploadIntentInput`, que e da foto de pet.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            byte_size: number;
+            /** @description Opcional, como o navegador a le. Abaixo de 600 responde 422 antes de assinar. */
+            width?: number;
+            height?: number;
+        };
+        /**
+         * @description A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. O
+         *     `alt_text` e **obrigatorio** em toda posicao, igual a galeria do painel:
+         *     a imagem sem texto alternativo e a imagem que nao existe para quem usa
+         *     leitor de tela.
+         */
+        CommunityNetworkEventCoverInput: {
+            /** Format: uuid */
+            upload_id: string;
+            alt_text: string;
+        };
+        /**
+         * @description O que o AUTOR muda no proprio encontro. Campo ausente nao muda; as
+         *     listas substituem o conjunto; `notes: null` tira as observacoes e
+         *     `cover_image: null` tira a capa.
+         *
+         *     **Nao tem** `visibility`, `admission`, `slug`, `street_address`,
+         *     `point`, `ticket_url`, `instagram_handle`, `publication_status` nem
+         *     `origin` -- ver a descricao de `updateNetworkEvent`.
+         */
+        CommunityNetworkEventPatch: {
+            title?: string;
+            summary?: string;
+            place?: components["schemas"]["CommunityNetworkEventPlaceInput"];
+            /** Format: date-time */
+            starts_at?: string;
+            /** @description `null` tira o fim previsto. */
+            ends_at?: string | null;
+            time_zone?: components["schemas"]["TimeZoneName"];
+            /** @description `null` tira a capa. */
+            cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"] | null;
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required?: boolean;
+            fenced_off_leash_area?: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"] | null;
+        };
+        CommunityNetworkEventCancellation: {
+            /**
+             * @description O motivo, **so para a trilha**. Nao sai no app, pela mesma regra do
+             *     cancelamento do painel: e texto livre, e o cliente nao decidiu
+             *     mostrar motivo de cancelamento.
+             */
+            note: string;
+        };
+        MyNetworkEventJoinRequestPage: {
+            items: components["schemas"]["MyNetworkEventJoinRequest"][];
+            page: number;
+            limit: number;
+            total: number;
+            /** @enum {string} */
+            effective_sort: "proximos";
+            applied_filters: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description O ponto do encontro, marcado no mapa (`map_pin`, ADR-0006). Sem campo de
+         *     origem nem de precisao: a origem e sempre `map_pin`. Os limites sao os
+         *     de `GeoPoint` e os de `AdminMapPin`.
+         */
+        NetworkEventPoint: {
+            /** Format: double */
+            lat: number;
+            /** Format: double */
+            lon: number;
+        };
+        /**
+         * @description A resposta de `getNetworkEventLocation`. **So sai com conta** (emenda 1
+         *     do ADR-0010). `point` nulo e o encontro sem ponto marcado: a tela mostra
+         *     os rotulos e nao mostra mapa. Desde 01/10/2026 o painel nao marca mais
+         *     ponto (o `point` fica so por compatibilidade) e escreve o endereco.
+         */
+        NetworkEventLocation: {
+            point: components["schemas"]["NetworkEventPoint"] | null;
+            /**
+             * @description O endereco por extenso, como o painel o escreveu. Nulo quando nao
+             *     ha. O app o abre no aplicativo de mapas do aparelho, por intent com
+             *     o TEXTO; o Bichu nao geocodifica (ADR-0006). **Nunca** sai na
+             *     agenda nem no detalhe publico (emenda de 01/10 do ADR-0027).
+             */
+            street_address: string | null;
         };
         PublicLostPetPage: {
             items: components["schemas"]["PublicLostPet"][];
@@ -3448,6 +5423,742 @@ export interface components {
             effective_at?: string | null;
             /** Format: date-time */
             cancelled_at?: string | null;
+        };
+        /**
+         * @description Papel que abre sessao administrativa. Na v1 so `admin` (decisao do
+         *     cliente de 23/09). `moderator` existe em `user_roles` e entra aqui
+         *     quando a moderacao entrar, como valor novo, pelo caminho de lista
+         *     fechada do ADR-0023 secao 3.
+         * @enum {string}
+         */
+        AdminRole: "admin";
+        AdminLoginRequest: {
+            /** Format: email */
+            email: string;
+            /**
+             * @description Sem `minLength` de proposito: o login nao ensina a politica a quem
+             *     testa senha. O minimo de 15 da conta administrativa (D43) e cobrado
+             *     na definicao, pelo comando `conta-admin` no servidor (D61).
+             */
+            password: string;
+        };
+        AdminDisavowRequest: {
+            /** @description O valor do fragmento `#t=` do link, 256 bits em base64url sem preenchimento. */
+            token: string;
+        };
+        /**
+         * @description O que o painel guarda em memoria. **Sem e-mail, sem UUID, sem
+         *     telefone** (D51). `csrf_token` vai em `X-CSRF-Token` em todo metodo
+         *     nao seguro.
+         */
+        AdminSession: {
+            display_name: string;
+            roles: components["schemas"]["AdminRole"][];
+            csrf_token: string;
+            /**
+             * Format: date-time
+             * @description Quando a sessao vence se nada acontecer. Renova com o uso, ate o teto.
+             */
+            idle_expires_at: string;
+            /**
+             * Format: date-time
+             * @description O teto de 12 horas desde a senha. O uso nao o empurra.
+             */
+            absolute_expires_at: string;
+        };
+        /**
+         * @description As operacoes sensiveis do backoffice (D40). Um token de um escopo nao
+         *     abre operacao de outro. `network_event_access_change` e a troca de
+         *     visibilidade (publico/privado) de encontro publicado (ADR-0027 item 5).
+         * @enum {string}
+         */
+        AdminReauthScope: "store_item_retirement" | "network_event_relocation" | "network_event_cancellation" | "network_event_removal" | "network_event_access_change";
+        /**
+         * @description Um escopo (`scope`) ou uma lista de um ou dois escopos distintos
+         *     (`scopes`), nunca os dois. A lista existe para a tela que grava duas
+         *     operacoes sensiveis juntas (lugar e acesso do encontro): cada
+         *     reautenticacao rotaciona a sessao, e duas seguidas deixavam o token da
+         *     primeira preso a uma sessao ja revogada.
+         */
+        AdminReauthRequest: {
+            password: string;
+            scope?: components["schemas"]["AdminReauthScope"];
+            scopes?: components["schemas"]["AdminReauthScope"][];
+        } & (unknown | unknown);
+        AdminReauthGrant: {
+            /** @description O token do primeiro escopo pedido. Igual a `tokens[0].reauth_token`. */
+            reauth_token: string;
+            /** @example 300 */
+            expires_in: number;
+            scope: components["schemas"]["AdminReauthScope"];
+            /**
+             * @description Um token por escopo pedido, na ordem do pedido. Cada um e de uso
+             *     unico, vale so para o seu escopo e esta preso a sessao nova; todos
+             *     vencem juntos em `expires_in`.
+             */
+            tokens: {
+                scope: components["schemas"]["AdminReauthScope"];
+                reauth_token: string;
+            }[];
+            /** @description O token anti-CSRF novo. A sessao foi rotacionada, e o anterior deixou de valer. */
+            csrf_token: string;
+        };
+        /**
+         * Format: uri
+         * @description So `https:`, sem `userinfo`, ate 2048 caracteres (D47). Host que seja
+         *     IP literal e recusado pelo servidor com `400`, porque a expressao nao
+         *     tem como separar `10.0.0.1` de um nome.
+         */
+        HttpsUrl: string;
+        /**
+         * @description A imagem de um item ou de um encontro, como o painel a ve. `external`
+         *     so aparece em dado da massa (URL do parceiro); o painel nao escreve
+         *     URL externa.
+         */
+        AdminCatalogImage: {
+            /** @enum {string} */
+            source: "uploaded" | "external";
+            /**
+             * @description So `ready` e servido pelo app. `external` e sempre `ready`.
+             * @enum {string}
+             */
+            status: "processing" | "ready" | "rejected";
+            /**
+             * Format: uri
+             * @description A derivada publica, quando pronta.
+             */
+            url?: string | null;
+            rejection_reason?: string | null;
+        };
+        AdminCatalogImageIntentInput: {
+            /**
+             * @description Fica gravado no envio. A escrita que confirma o envio exige o mesmo
+             *     proposito, e recusa foto de pet, de achador ou de outro proposito
+             *     (T9).
+             * @enum {string}
+             */
+            purpose: "store_item" | "network_event";
+            /**
+             * @description SVG nunca. HEIC nao, porque a origem e um computador de mesa.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            /**
+             * @description Ate 5 MiB, o **teto unico de toda a aplicacao** (cliente,
+             *     17/10/2026), e o numero que o painel mostra em tela. Dimensao minima: 800 x 800
+             *     pixels para `store_item`, 600 x 600 para `network_event` (pedido do
+             *     cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
+             *     DECLARADA, em `width`/`height` deste pedido, recusada aqui com
+             *     `422` (`image-too-small`) antes de assinar; e a REAL, que o worker
+             *     faz nos bytes e que marca a imagem `rejected` com o motivo, porque
+             *     a declarada e do navegador e pode mentir.
+             */
+            byte_size: number;
+            /**
+             * @description Largura em pixels, como o navegador a le do arquivo antes de
+             *     enviar. Opcional (o painel atual nao a manda); quando vem, abaixo
+             *     da minima do `purpose` recusa com `422` (`image-too-small`).
+             */
+            width?: number;
+            /** @description Altura em pixels. Mesma regra de `width`. */
+            height?: number;
+        };
+        AdminStorePartnerInput: {
+            slug: components["schemas"]["Slug"];
+            name: string;
+            /** @description So o host, sem esquema, caminho nem consulta. Mesmo formato do `CHECK` de `store_partners.host`. */
+            host: string;
+            /** @default 0 */
+            sort_order: number;
+        };
+        AdminStorePartnerPatch: {
+            slug?: components["schemas"]["Slug"];
+            name?: string;
+            host?: string;
+            sort_order?: number;
+            /** @description Parceiro inativo tira todos os itens dele da vitrine publica, sem mudar o estado de cada item. */
+            active?: boolean;
+        };
+        AdminStorePartner: {
+            slug: string;
+            name: string;
+            host: string;
+            active: boolean;
+            sort_order: number;
+            /** @description Itens do parceiro em qualquer estado. */
+            item_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        AdminStorePartnerPage: {
+            items: components["schemas"]["AdminStorePartner"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
+        /**
+         * @description O preco de referencia, **inteiro ou ausente**: os tres campos andam
+         *     juntos, e "preco sem data" nao cabe neste corpo (o `CHECK`
+         *     `store_items_preco_anda_completo` diz o mesmo no banco).
+         */
+        AdminPriceInput: {
+            /** @description Centavos, inteiro. Nunca ponto flutuante. */
+            amount: number;
+            /** @enum {string} */
+            currency: "BRL";
+            /**
+             * Format: date
+             * @description A data em que uma PESSOA leu o numero na pagina do parceiro. Data
+             *     futura e recusada com `400`.
+             */
+            checked_at: string;
+        };
+        /**
+         * @description O preco como o painel o ve: **com o valor mesmo vencido**, para quem
+         *     reconfere comparar. `valid_until` e o ultimo dia em que o app mostra o
+         *     valor (`checked_at` + 30 dias, `DIAS_DE_VALIDADE_DO_PRECO`). Depois dele
+         *     o app recebe `price_amount` nulo e `price_status: vencido`
+         *     (`listStoreItems`); esta resposta continua trazendo `amount`.
+         */
+        AdminPrice: {
+            amount: number;
+            /** @enum {string} */
+            currency: "BRL";
+            /** Format: date */
+            checked_at: string;
+            /** Format: date */
+            valid_until: string;
+        };
+        /**
+         * @description Derivado no servidor: `draft` nunca foi publicado; `published` esta na
+         *     vitrine; `retired` foi publicado e esta fora. Ha rascunho no item e nao
+         *     ha no encontro (ADR-0027, itens 12.9 e 14).
+         * @enum {string}
+         */
+        AdminStoreItemPublicationState: "draft" | "published" | "retired";
+        AdminStoreItemInput: {
+            /**
+             * @description Opcional. Sem ele, o servidor deriva do titulo (sem acento,
+             *     minusculo, espaco vira hifen, com sufixo curto se ja existir). O
+             *     formulario do painel nao pede `slug` (matriz de rastreabilidade).
+             */
+            slug?: components["schemas"]["Slug"];
+            partner_slug: components["schemas"]["Slug"];
+            title: string;
+            /** @description Uma linha. Texto puro, renderizado como texto no app (D47). */
+            summary: string;
+            category: components["schemas"]["StoreCategory"];
+            /**
+             * @description Precisa estar no host EXATO do parceiro (`400`, `code: host_mismatch`),
+             *     sem `?` nem `#` (`400`, `code: invalid_url`): o banco guarda so o caminho.
+             *     Nenhum identificador de pessoa, em codificacao nenhuma.
+             */
+            target_url: components["schemas"]["HttpsUrl"];
+            price?: components["schemas"]["AdminPriceInput"];
+            species: components["schemas"]["StoreItemSpeciesSet"];
+            tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
+            images?: components["schemas"]["CatalogImagesInput"];
+            /** @default 0 */
+            sort_order: number;
+        };
+        /**
+         * @description Nao muda o estado de publicacao (isso e `publication`). `price: null`
+         *     tira o preco; `image_upload_id: null` tira a imagem.
+         */
+        AdminStoreItemPatch: {
+            slug?: components["schemas"]["Slug"];
+            partner_slug?: components["schemas"]["Slug"];
+            title?: string;
+            summary?: string;
+            category?: components["schemas"]["StoreCategory"];
+            target_url?: components["schemas"]["HttpsUrl"];
+            price?: components["schemas"]["AdminPriceInput"] | null;
+            species?: components["schemas"]["StoreItemSpeciesSet"];
+            tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
+            images?: components["schemas"]["CatalogImagesInput"];
+            sort_order?: number;
+        };
+        AdminStoreItem: {
+            slug: string;
+            partner: components["schemas"]["StorePartnerRef"];
+            title: string;
+            summary: string;
+            category: components["schemas"]["StoreCategory"];
+            /** Format: uri */
+            target_url: string;
+            species: components["schemas"]["Species"][];
+            tags: components["schemas"]["AdminStoreTagRef"][];
+            /** @description Na ordem do app. `position` 0 e a principal. Vazia e estado normal. */
+            images: components["schemas"]["AdminCatalogGalleryImage"][];
+            /** @description Nulo quando o item nao tem preco. **Presente mesmo vencido.** */
+            price?: components["schemas"]["AdminPrice"] | null;
+            price_status: components["schemas"]["StorePriceStatus"];
+            publication_state: components["schemas"]["AdminStoreItemPublicationState"];
+            /**
+             * Format: date-time
+             * @description A primeira publicacao. Nao e reescrita.
+             */
+            published_at?: string | null;
+            sort_order: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        AdminStoreItemPage: {
+            items: components["schemas"]["AdminStoreItem"][];
+            page: number;
+            limit: number;
+            total: number;
+            /** @enum {string} */
+            effective_sort: "curadoria" | "nome" | "atualizado" | "validade";
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description **Logradouro publico, nunca residencia** (ADR-0027 item 13). Os tres
+         *     rotulos sao obrigatorios; o ponto e opcional, como tolerancia (D.4), e
+         *     desde 01/10/2026 fica so por compatibilidade: o painel nao usa mais
+         *     mapa. Logradouro, numero e CEP vivem em `street_address`, fora deste
+         *     objeto.
+         */
+        AdminNetworkEventPlaceInput: {
+            place_name: string;
+            neighborhood: string;
+            city: string;
+            state: string;
+            point?: components["schemas"]["NetworkEventPoint"] | null;
+        };
+        AdminNetworkEventPlace: {
+            place_name: string;
+            neighborhood: string;
+            city: string;
+            state: string;
+            point: components["schemas"]["NetworkEventPoint"] | null;
+        };
+        /**
+         * @description Nome IANA da zona. Que a zona exista de verdade e conferido no servidor.
+         * @example America/Sao_Paulo
+         */
+        TimeZoneName: string;
+        AdminNetworkEventInput: {
+            /**
+             * @description Opcional no encontro **publico**: sem ele, o servidor deriva do
+             *     titulo, como no item da `Loja`. No **privado** ele e sempre gerado
+             *     pelo servidor, aleatorio, e mandar um e recusado com `400`
+             *     (`code: private_slug_is_generated`): o `slug` sai no teaser para
+             *     todo mundo, e um `slug` digitado como `caminhada-rua-das-flores`
+             *     entregaria o lugar pelo identificador.
+             */
+            slug?: components["schemas"]["Slug"];
+            title: string;
+            /**
+             * @description A descricao do encontro ("Descricao" no painel), ate 200 caracteres.
+             *     O teto vale so na escrita: o `CHECK` do banco foi alargado de 180
+             *     para 200 sem tocar linha existente.
+             */
+            summary: string;
+            place: components["schemas"]["AdminNetworkEventPlaceInput"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string;
+            /**
+             * @description Opcional, padrao `America/Sao_Paulo` (o painel diz "Horario de Brasilia").
+             * @default America/Sao_Paulo
+             */
+            time_zone: components["schemas"]["TimeZoneName"];
+            images?: components["schemas"]["CatalogImagesInput"];
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            /** @default true */
+            vaccination_required: boolean;
+            /**
+             * @description O local **tem area cercada para caes soltos**. E um atributo do
+             *     lugar, e nao uma permissao dada pelo Bichu (ADR-0027 item 17).
+             * @default false
+             */
+            fenced_off_leash_area: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            visibility?: components["schemas"]["NetworkEventVisibility"];
+            admission?: components["schemas"]["AdminNetworkEventAdmissionInput"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"];
+            street_address?: components["schemas"]["AdminNetworkEventStreetAddress"];
+            ticket_url?: components["schemas"]["NetworkEventTicketUrl"];
+            instagram_handle?: components["schemas"]["NetworkEventInstagramHandleInput"];
+        };
+        /**
+         * @description O endereco por extenso do encontro (decisao do cliente de 01/10/2026),
+         *     de 5 a 200 caracteres contados em code points, aparado. Logradouro
+         *     publico, nunca residencia (ADR-0027 item 13). Endereco e CEP sao o
+         *     conteudo do campo e NAO sao recusados; link, e-mail, perfil
+         *     `@usuario`, telefone, chave PIX e dados de pagamento sao, com `400`
+         *     (`code: contact_or_payment_detected`), e controle bidirecional com
+         *     `code: bidi_control`. No app, sai SO em `getNetworkEventLocation`.
+         */
+        AdminNetworkEventStreetAddress: string;
+        /**
+         * @description **Sem data, horario, fuso nem lugar, e sem `street_address`**: mudar
+         *     onde e quando e `relocateAdminNetworkEvent`, que exige reautenticacao
+         *     (T11); sem visibilidade nem condicao de acesso:
+         *     `changeAdminNetworkEventAccess`. `images` substitui a galeria inteira
+         *     (a posicao 0 e a capa); `notes: null` tira as observacoes; as listas
+         *     substituem o conjunto.
+         */
+        AdminNetworkEventPatch: {
+            slug?: components["schemas"]["Slug"];
+            title?: string;
+            summary?: string;
+            images?: components["schemas"]["CatalogImagesInput"];
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required?: boolean;
+            fenced_off_leash_area?: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"] | null;
+            /** @description `null` tira o link. */
+            ticket_url?: components["schemas"]["NetworkEventTicketUrl"] | null;
+            /** @description `null` tira o Instagram. */
+            instagram_handle?: components["schemas"]["NetworkEventInstagramHandleInput"] | null;
+        };
+        /** @description `reason` e pelo menos um de `place`, `street_address`, `starts_at`, `ends_at` e `time_zone`. */
+        AdminNetworkEventRelocation: {
+            place?: components["schemas"]["AdminNetworkEventPlaceInput"];
+            /** @description O endereco novo; `null` tira o endereco. */
+            street_address?: components["schemas"]["AdminNetworkEventStreetAddress"] | null;
+            /** Format: date-time */
+            starts_at?: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            time_zone?: components["schemas"]["TimeZoneName"];
+            /** @description Vai no aviso a todos os administradores. */
+            reason: string;
+        };
+        AdminNetworkEventCancellation: {
+            /**
+             * @description O motivo, **so para o painel e para a trilha**. Nao sai no app: e
+             *     texto livre do administrador, e o cliente nao decidiu mostrar
+             *     motivo (se um dia existir, a UX recomenda lista fechada).
+             */
+            note: string;
+        };
+        /**
+         * @description `published` desde a criacao, **tanto pelo painel quanto pela
+         *     comunidade** (nao ha rascunho, ADR-0027 12.9, e nao ha revisao,
+         *     ADR-0025 emenda 3); `cancelled` continua visivel no app como cancelado;
+         *     `removed` e terminal.
+         *
+         *     **`pending_review` nao existe mais**: ele era o estado da fila de
+         *     moderacao do encontro da comunidade, e a decisao do cliente de
+         *     17/10/2026 trocou a fila pela publicacao direta de quem tem canal de
+         *     contato verificado. A migracao `20261001000005` tirou o valor do
+         *     `CHECK` do banco, com o `CHECK` que o amarrava a origem.
+         * @enum {string}
+         */
+        AdminNetworkEventPublicationStatus: "published" | "cancelled" | "removed";
+        /**
+         * @description Calculado no servidor pelo relogio dele (ADR-0025 item 6). Mesmos
+         *     valores de `NetworkEventStatus` da leitura da `Rede`, sem `cancelled`,
+         *     que aqui e estado de publicacao.
+         * @enum {string}
+         */
+        AdminNetworkEventTiming: "upcoming" | "happening" | "ended";
+        /**
+         * @description O encontro como o painel o ve. **Sem autor**: `created_by_user_id` nunca
+         *     e projetado (ADR-0025 secao 3, ADR-0027 item 10).
+         */
+        AdminNetworkEvent: {
+            slug: string;
+            title: string;
+            summary: string;
+            place: components["schemas"]["AdminNetworkEventPlace"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string | null;
+            time_zone: string;
+            /** @description A galeria da equipe, em ordem. A posicao 0 e a capa. Vazia e estado normal (banner da marca no app). */
+            images: components["schemas"]["AdminCatalogGalleryImage"][];
+            accepted_sizes: components["schemas"]["PetSize"][];
+            dog_age: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required: boolean;
+            fenced_off_leash_area: boolean;
+            amenities: components["schemas"]["NetworkEventAmenity"][];
+            /**
+             * @description Quem criou: `admin` (o painel) ou `community` (proposto por uma
+             *     conta do app, ADR-0025 emenda 3). **Nao e o autor** --
+             *     `created_by_user_id` e `created_by_admin_id` nunca saem do
+             *     servidor, nem aqui (ADR-0027 apendice A.4). Isto e so a origem, e
+             *     e o que faz a fila de moderacao distinguir o que ela esta
+             *     revisando.
+             * @enum {string}
+             */
+            origin: "admin" | "community";
+            visibility: components["schemas"]["NetworkEventVisibility"];
+            admission: components["schemas"]["AdminNetworkEventAdmission"];
+            bring_items: components["schemas"]["NetworkEventBringItem"][];
+            notes: string | null;
+            /** @description O endereco por extenso. Nulo nos encontros anteriores a 01/10/2026 e em quem nao o informou. */
+            street_address: string | null;
+            /** Format: uri */
+            ticket_url: string | null;
+            instagram_handle: string | null;
+            /** Format: uri */
+            instagram_url: string | null;
+            /** @description Pedidos pendentes na fila. Sempre 0 em encontro publico. So existe no painel. */
+            pending_request_count: number;
+            publication_status: components["schemas"]["AdminNetworkEventPublicationStatus"];
+            timing: components["schemas"]["AdminNetworkEventTiming"];
+            /** Format: date-time */
+            published_at: string;
+            /** Format: date-time */
+            cancelled_at?: string | null;
+            cancellation_note?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        AdminNetworkEventPage: {
+            items: components["schemas"]["AdminNetworkEvent"][];
+            page: number;
+            limit: number;
+            total: number;
+            /** @enum {string} */
+            effective_sort: "agenda" | "atualizado";
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description A que especies o produto serve, uma ou mais. Os valores sao os de
+         *     `Species` (`ref_species`), os mesmos do cadastro de pet: e o que deixa o
+         *     app filtrar a vitrine pela especie dos pets do tutor sem traduzir uma
+         *     lista na outra. `other` e "outros pets", generico de proposito
+         *     (ADR-0027 item 16).
+         */
+        StoreItemSpeciesSet: components["schemas"]["Species"][];
+        /**
+         * @description Ate 5 tags do vocabulario curado (`createAdminStoreTag`). Tag que nao
+         *     existe e recusada com `400` (`code: unknown_tag`): tag nao nasce por
+         *     digitacao no formulario do item.
+         *
+         *     **O teto de 5 conta todas as tags ligadas, ativas e desativadas.** Tag
+         *     desativada continua ligada ao item por dentro e some da leitura publica;
+         *     contar so as ativas faria reativar uma tag empurrar um item para 6 em
+         *     silencio, ou obrigaria a reativacao a falhar. Assim, reativar sempre
+         *     funciona e o item nunca passa de 5. Ligar **de novo** uma tag
+         *     desativada e recusado (`400`, `code: inactive_tag`); manter na lista
+         *     uma desativada que ja estava ligada e permitido, e e o que preserva o
+         *     vinculo.
+         */
+        StoreItemTagSlugs: components["schemas"]["Slug"][];
+        /**
+         * @description Ate 8 imagens, **na ordem em que o app as mostra**. A primeira e a
+         *     principal (a da lista da `Loja`; a capa do encontro). Cada uma e um
+         *     envio de `createAdminCatalogImageIntent` com o `purpose` do recurso, e
+         *     **cada uma tem texto alternativo obrigatorio, ate 150 caracteres**, em
+         *     toda posicao: a obrigacao da principal acompanha a imagem que vira
+         *     principal numa reordenacao, sem regra a parte. A lista substitui a
+         *     anterior inteira: reordenar e mandar a ordem nova, remover e omitir,
+         *     `[]` tira todas. `upload_id` repetido e recusado com `400`
+         *     (ADR-0027 itens 16 e 17).
+         */
+        CatalogImagesInput: components["schemas"]["CatalogImageInput"][];
+        CatalogImageInput: {
+            /** Format: uuid */
+            upload_id: string;
+            alt_text: components["schemas"]["ImageAltText"];
+        };
+        /** @description O que a foto mostra, para quem usa leitor de tela. Texto puro. */
+        ImageAltText: string;
+        AdminCatalogGalleryImage: components["schemas"]["AdminCatalogImage"] & {
+            /**
+             * Format: uuid
+             * @description O identificador que o painel devolve em `images` para manter,
+             *     reordenar ou remover esta imagem. **Nulo** quando a conta que
+             *     enviou a imagem foi apagada: a imagem continua no produto ou no
+             *     encontro (`catalog_images.upload_intent_id` e `ON DELETE SET
+             *     NULL`), e o painel so a mantem reenviando a galeria sem ela ou
+             *     com uma imagem nova.
+             */
+            upload_id: string | null;
+            position: number;
+            alt_text: string;
+        };
+        AdminStoreTagRef: {
+            slug: string;
+            label: string;
+            /** @description Tag inativa continua ligada ao item, e some do app. */
+            active: boolean;
+        };
+        AdminStoreTagInput: {
+            /**
+             * @description Como o app mostra. Letras, digitos, espaco e hifen, e nada mais
+             *     (conferido no servidor, `code: tag_charset`). O servidor apara as
+             *     pontas e junta espacos repetidos. O `slug` e derivado: sem acento,
+             *     minusculo, espaco vira hifen. **Dois rotulos que dao o mesmo `slug`
+             *     sao a mesma tag** (`Racao` e `racao` e `Ração`): o segundo e recusado
+             *     com `409 slug-taken`.
+             */
+            label: string;
+        };
+        AdminStoreTagPatch: {
+            /** @description Trocar o rotulo troca o `slug` junto, e o novo nao pode colidir. */
+            label?: string;
+            active?: boolean;
+        };
+        AdminStoreTag: {
+            slug: string;
+            label: string;
+            active: boolean;
+            /** @description Itens ligados a tag */
+            item_count: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        AdminStoreTagPage: {
+            items: components["schemas"]["AdminStoreTag"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
+        StoreTagRef: {
+            slug: string;
+            label: string;
+        };
+        StoreItemImage: {
+            /** @description Texto alternativo. Item da massa com imagem externa traz o titulo do item. */
+            alt_text: string;
+            /**
+             * Format: uri
+             * @description A derivada publica, sempre pronta. Imagem em processamento ou recusada nunca aparece aqui.
+             */
+            url: string;
+        };
+        StoreItemDetail: components["schemas"]["StoreItemSummary"] & {
+            /**
+             * @description Todas as imagens prontas, na ordem do painel; a primeira e a
+             *     mesma de `image_url`. Vazia e estado normal.
+             */
+            images: components["schemas"]["StoreItemImage"][];
+        };
+        /**
+         * @description Gratuito ou pago, e **pago e so o valor, informativo** (decisao do
+         *     cliente, 23/09). Pago exige `price` (`400`, `code:
+         *     admission_incomplete`); gratuito o recusa. **O Bichu nao cobra, nao tem
+         *     provedor de pagamento e nao guarda forma de pagar.** O link de compra
+         *     do organizador, quando ha, vive em `ticket_url` (ADR-0027 item 22), e
+         *     nao aqui.
+         */
+        AdminNetworkEventAdmissionInput: {
+            /**
+             * @default free
+             * @enum {string}
+             */
+            kind: "free" | "paid";
+            price?: components["schemas"]["AdminEventPrice"] | null;
+        };
+        /**
+         * @description O valor que o organizador informa, informativo. Sem vencimento, porque
+         *     nao e preco de referencia de terceiro. Numero mais unidade de lista
+         *     fechada, para o app escrever sempre no mesmo formato ("R$ 15 por
+         *     cao"), sem texto livre.
+         */
+        AdminEventPrice: {
+            /** @description Centavos. */
+            amount: number;
+            /** @enum {string} */
+            currency: "BRL";
+            unit: components["schemas"]["EventPriceUnit"];
+        };
+        AdminNetworkEventAdmission: {
+            /** @enum {string} */
+            kind: "free" | "paid";
+            price: components["schemas"]["AdminEventPrice"] | null;
+        };
+        /** @description `reason` e pelo menos um de `visibility` e `admission`. `admission` substitui a condicao inteira. */
+        AdminNetworkEventAccessChange: {
+            visibility?: components["schemas"]["NetworkEventVisibility"];
+            admission?: components["schemas"]["AdminNetworkEventAdmissionInput"];
+            /** @description Vai no aviso a todos os administradores. */
+            reason: string;
+        };
+        /**
+         * @description A decisao, como o painel a ve. **O app nunca ve `declined`, e esta
+         *     regra nao e para ser "corrigida"**: para o tutor, o pedido recusado
+         *     aparece como **`requested`** (aguardando) ate o encontro passar, e
+         *     depois como `expired`, exatamente como um pedido que ninguem decidiu
+         *     (decisao do cliente, 23/09). O estado do app (`JoinRequestAppState`:
+         *     `requested`, `approved`, `withdrawn`, `expired`) e derivado na leitura e
+         *     nao tem `declined`. Desistencia nao e estado aqui, e `withdrawn_at`
+         *     (ADR-0027 item 17 e 12.11).
+         * @enum {string}
+         */
+        AdminJoinRequestStatus: "pending" | "approved" | "declined";
+        /**
+         * @description Um pedido para participar de encontro privado. **O pedido e da conta,
+         *     nunca do pet** (ADR-0010 item 7). Do solicitante sai **so** o nome de
+         *     exibicao, o mes em que a conta foi criada e se o e-mail foi
+         *     confirmado: sem e-mail, telefone, pets, UUID, identificador estavel nem
+         *     historico (D53). E a unica leitura de pessoa no backoffice v1, coberta
+         *     pelo RA-01 por decisao do cliente de 23/09 (ADR-0027 item 17). O pedido
+         *     some 30 dias depois do fim do encontro (D54).
+         */
+        AdminJoinRequest: {
+            /** @description Identificador opaco do pedido, 128 bits aleatorios. Nao e o UUID. */
+            ref: string;
+            event: {
+                slug: string;
+                title: string;
+                /** Format: date-time */
+                starts_at: string;
+                time_zone: string;
+            };
+            /** @description D53. Projecao minima fechada, e nada alem destes tres campos. */
+            requester: {
+                /**
+                 * @description O nome de exibicao que a pessoa escolheu, ou `null` quando a
+                 *     conta nao tem um. O rotulo do nulo e do painel ("Conta sem nome
+                 *     de exibicao"), e o servidor **nunca** preenche o nulo com o
+                 *     e-mail nem parte dele (D53).
+                 */
+                display_name: string | null;
+                /** @description Se a conta confirmou o e-mail. So o booleano, nunca o endereco nem a data. */
+                email_verified: boolean;
+                /** @description Ano e mes de criacao da conta, no horario de Brasilia (`America/Sao_Paulo`), e nada mais fino. */
+                member_since: string;
+            };
+            status: components["schemas"]["AdminJoinRequestStatus"];
+            /** Format: date-time */
+            requested_at: string;
+            /** Format: date-time */
+            decided_at?: string | null;
+            /**
+             * Format: date-time
+             * @description O tutor desistiu. Pedido desistido nao aparece na fila de pendentes e nao pode ser decidido.
+             */
+            withdrawn_at?: string | null;
+        };
+        AdminJoinRequestPage: {
+            items: components["schemas"]["AdminJoinRequest"][];
+            page: number;
+            limit: number;
+            total: number;
+        };
+        StoreTagPage: {
+            items: components["schemas"]["StoreTagRef"][];
         };
     };
     responses: {
@@ -3541,8 +6252,63 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description O token do achador esta ausente, malformado ou nao corresponde a aviso
+         *     nenhum. Os tres casos tem **o mesmo corpo**: distinguir "malformado" de
+         *     "nao existe" diria a quem tenta que chegou perto. `type` e sempre
+         *     `finder-link-invalid`.
+         *
+         *     E 401, e nao 403, pelo mesmo criterio de `getPublicLostCase`: credencial
+         *     que nao autentica e 401, e 403 fica para quem se autenticou e nao tem
+         *     permissao, que aqui nao existe (o token tem escopo de uma conversa so).
+         *     Nao e `unauthenticated` porque aquele tipo manda entrar, e quem abriu
+         *     este link nao tem conta. Sai com `WWW-Authenticate: Bearer`.
+         */
+        FinderLinkInvalid: {
+            headers: {
+                /** @description Sempre `Bearer`. */
+                "WWW-Authenticate"?: string;
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O token do achador existiu e **venceu**: passou dos 30 dias do aviso com
+         *     o caso ja encerrado, ou dos 30 dias depois do encerramento. `type` e
+         *     `conversation-closed`, e o corpo e **fixo**: nao traz o desfecho do caso
+         *     em campo nenhum, nem no `detail`. Ver a descricao de
+         *     `getFinderConversation`.
+         *
+         *     Vale igual para as seis operacoes do achador. Bloquear, denunciar,
+         *     enviar foto ou recado por um link vencido recebe a mesma resposta que
+         *     ler a conversa: responder 401 ali diria que o link nunca valeu.
+         */
+        FinderAccessEnded: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
         /** @description Corpo ou parametro invalido. */
         ValidationFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description A imagem declarada e menor que a dimensao minima do proposito: 600 x
+         *     600 pixels no encontro da `Rede`, 800 x 800 no produto da `Loja`.
+         *     `errors[]` traz `width` e/ou `height` com `code: minimum`. Nada foi
+         *     assinado: escolha outra imagem.
+         */
+        ImageTooSmall: {
             headers: {
                 [name: string]: unknown;
             };
@@ -3626,8 +6392,138 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description Sem sessao administrativa valida. `unauthenticated`: nao ha cookie, ou
+         *     ele nao corresponde a sessao nenhuma, ou veio `Authorization: Bearer`
+         *     no lugar dele (D36). `token-expired`: a sessao venceu por inatividade
+         *     ou pelo teto, foi revogada, ou e anterior a `sessions_invalid_before`.
+         */
+        AdminUnauthorized: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Sessao valida, e a requisicao recusada pela guarda: conta sem o papel
+         *     exigido em `x-admin-roles` ou desativada (D37, D38), ou, em metodo nao
+         *     seguro, `Origin` diferente da origem do painel (`ADMIN_ORIGIN`) ou
+         *     `X-CSRF-Token` ausente ou divergente (D39). A guarda decide antes de ler o recurso, entao o 403 nao diz nada
+         *     sobre ele.
+         */
+        AdminForbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description **Sem uso desde 07/10/2026** (ADR-0027 item 23): nenhuma escrita do
+         *     painel pede reautenticacao. Mantida declarada, sem remover.
+         *
+         *     Dois casos. Sem sessao valida: os mesmos tipos de `AdminUnauthorized`.
+         *     Sessao valida sem `X-Admin-Reauth-Token` do escopo da operacao, com
+         *     token vencido, ja usado ou de outro escopo:
+         *     `reauthentication-required`, e o painel pede a senha sem perder o que
+         *     estava na tela.
+         */
+        AdminReauthRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description O `slug` pedido ja e de outro recurso do mesmo tipo. */
+        SlugTaken: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description O encontro do pedido foi cancelado, removido ou ja terminou: nenhuma
+         *     decisao sobre o pedido vale mais, e o painel tira o pedido da fila.
+         */
+        EventNotOpen: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description `If-Match` nao corresponde a versao atual: outra pessoa salvou depois
+         *     da sua leitura. Nada foi gravado.
+         */
+        PreconditionFailed: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Escrita sobre recurso existente sem `If-Match`. Nada foi gravado. */
+        PreconditionRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
     parameters: {
+        /**
+         * @description Busca por texto no **titulo, no nome do lugar e no bairro**, no servidor.
+         *     **O encontro privado casa so pelo titulo**: casar pelo bairro entregaria
+         *     onde ele e (ADR-0027 12.14).
+         */
+        NetworkEventQuery: string;
+        /**
+         * @description A cidade DIGITADA, nunca coordenada (ADR-0006). **Exclui encontro
+         *     privado**: a cidade dele e oculta, e aparecer no recorte a entregaria.
+         */
+        NetworkEventCity: string;
+        /**
+         * @description O recorte no tempo, calculado no servidor e **no fuso de cada encontro**.
+         *     `upcoming` e o default. `today` e a data local de hoje no fuso do
+         *     encontro; `weekend` e o sabado e o domingo correntes (ou os proximos);
+         *     `next_30_days` e inicio entre agora e agora mais 30 dias.
+         */
+        NetworkEventWhenParam: components["schemas"]["NetworkEventWhen"];
+        /**
+         * @description **O default depende de `when`, e por isso `effective_sort` existe.** Com
+         *     `past`, o default e `recentes`; com os outros, `proximos`.
+         */
+        NetworkEventSortParam: components["schemas"]["NetworkEventSort"];
+        /**
+         * @description Gratuito ou pago. **Exclui encontro privado**: a condicao de acesso dele
+         *     e oculta, e aparecer no recorte "pago" a entregaria (ADR-0027 12.14).
+         */
+        NetworkEventAdmissionParam: "free" | "paid";
+        /**
+         * @description A visibilidade e visivel, entao filtra os dois. **Sem padrao**, de
+         *     proposito: o `default: public` de `NetworkEventVisibility` aplicado aqui
+         *     tiraria todo encontro privado da agenda sem ninguem ter pedido.
+         */
+        NetworkEventVisibilityParam: "public" | "private";
+        /**
+         * @description Encontros que aceitam aquele porte. **Exclui encontro privado**, pelo
+         *     mesmo motivo de `admission`.
+         */
+        NetworkEventSizeParam: components["schemas"]["PetSize"];
+        /** @description O endereco publico do encontro. */
+        NetworkEventSlugParam: string;
         PetId: string;
         PhotoId: string;
         TagId: string;
@@ -3719,9 +6615,32 @@ export interface components {
          *     pode receber o mesmo aviso varias vezes.
          */
         IdempotencyKeyRequired: string;
+        /** @description O endereco publico do parceiro. Nenhum UUID no caminho. */
+        PartnerSlug: components["schemas"]["Slug"];
+        /** @description O endereco publico do item. */
+        ItemSlug: components["schemas"]["Slug"];
+        /** @description O endereco publico do encontro. */
+        EventSlug: components["schemas"]["Slug"];
+        /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+        JoinRequestRef: string;
+        /**
+         * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+         *     existente do backoffice: dois administradores editando o mesmo recurso
+         *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+         *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+         */
+        IfMatch: string;
+        AdminPage: number;
+        AdminLimit: number;
     };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /**
+         * @description A versao do recurso (`version` no banco), entre aspas. Muda a cada
+         *     escrita. E o valor que a proxima escrita apresenta em `If-Match`.
+         */
+        ETag: string;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -5511,7 +8430,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["FoundReportEnrichment"];
+                "application/json": components["schemas"]["FinderFoundReportEnrichment"];
             };
         };
         responses: {
@@ -5524,16 +8443,10 @@ export interface operations {
                     "application/json": components["schemas"]["FinderFoundReportView"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /** @description Caso ja encerrado. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     createFinderPhotoUploadIntent: {
@@ -5545,9 +8458,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UploadIntentInput"] & {
-                    byte_size?: number;
-                };
+                "application/json": components["schemas"]["UploadIntentInput"];
             };
         };
         responses: {
@@ -5560,8 +8471,11 @@ export interface operations {
                     "application/json": components["schemas"]["FinderUploadIntent"];
                 };
             };
-            403: components["responses"]["Forbidden"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
             415: components["responses"]["UnsupportedMedia"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     getFinderConversation: {
@@ -5585,19 +8499,9 @@ export interface operations {
                     "application/json": components["schemas"]["FinderConversation"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /**
-             * @description Caso encerrado. A resposta traz o desfecho, porque quem ajudou
-             *     merece saber que deu certo.
-             */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["Problem"];
-                };
-            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     postFinderMessage: {
@@ -5627,8 +8531,12 @@ export interface operations {
                     "application/json": components["schemas"]["FinderMessage"];
                 };
             };
-            403: components["responses"]["Forbidden"];
-            /** @description Conversa encerrada ou bloqueada. */
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            /**
+             * @description Conversa encerrada ou bloqueada, ou acesso do link vencido. Corpo
+             *     fixo, sem desfecho do caso (ver `FinderAccessEnded`).
+             */
             410: {
                 headers: {
                     [name: string]: unknown;
@@ -5656,7 +8564,8 @@ export interface operations {
                 };
                 content?: never;
             };
-            403: components["responses"]["Forbidden"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     reportFinderConversation: {
@@ -5677,7 +8586,9 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
-            403: components["responses"]["Forbidden"];
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["FinderLinkInvalid"];
+            410: components["responses"]["FinderAccessEnded"];
         };
     };
     previewLostCaseReach: {
@@ -5789,7 +8700,9 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     resendLostCaseAlert: {
@@ -5812,7 +8725,9 @@ export interface operations {
                     "application/json": components["schemas"]["AlertDispatch"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -5839,7 +8754,9 @@ export interface operations {
                     "application/json": components["schemas"]["CandidatePage"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     decideLostCaseCandidate: {
@@ -6070,7 +8987,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     reportConversation: {
@@ -6093,12 +9012,40 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listDirectoryEntries: {
         parameters: {
             query?: {
+                /**
+                 * @description **Busca parcial pelo NOME da entrada**, tolerante a acento e a
+                 *     caixa: `veterinaria` acha `Veterinária`.
+                 *
+                 *     **So o nome, e a escolha e de produto.** Todo outro campo que o
+                 *     cartao mostra ja tem controle proprio no topo da mesma tela --
+                 *     `city`, `state`, `neighborhood`, `kind` e `verification_level`.
+                 *     Fazer `q` casar tambem neles poria dois controles disputando o
+                 *     mesmo trabalho e deixaria `applied_filters` ambiguo: a tela nao
+                 *     teria como escrever por que uma linha entrou. `about` e o candidato
+                 *     conhecido para uma segunda fase, e ele custa um indice proprio
+                 *     sobre texto bem maior.
+                 *
+                 *     **`minLength: 3` nao e gosto.** O indice que atende esta busca e
+                 *     GIN de trigrama, e um padrao com menos de tres caracteres nao
+                 *     produz trigrama nenhum: a consulta deixa de usar o indice e volta a
+                 *     varrer a tabela inteira. O piso e o ponto em que o indice deixa de
+                 *     existir. **A tela nao deve enviar `q` antes do terceiro caractere**,
+                 *     sob pena de levar 400 no que a pessoa le como o app quebrado.
+                 *
+                 *     Casa somente sobre `status = 'published'`, como todo o resto da
+                 *     operacao. Quem busca por um nome especifico esta testando se ele
+                 *     existe, entao um rascunho ou um oculto que aparecesse aqui seria
+                 *     resposta a uma pergunta que ninguem tem direito de fazer.
+                 */
+                q?: string;
                 /**
                  * @description **Opcional**, e aqui esta proposta e o contrato divergem de
                  *     proposito. A busca de perdidos comeca com alguem digitando onde
@@ -6165,6 +9112,14 @@ export interface operations {
                 /** @description Filtra por categoria do produto. */
                 category?: components["schemas"]["StoreCategory"];
                 /**
+                 * @description Itens que servem a esta especie, entre outras (ADR-0027 item 16).
+                 *     Declarado antes do codigo; o app so oferece o filtro depois de a
+                 *     implementacao existir.
+                 */
+                species?: components["schemas"]["Species"];
+                /** @description `slug` de uma tag ativa. Tag inexistente ou inativa devolve a lista vazia, nao 400: a tag some do vocabulario e o link antigo continua abrindo. */
+                tag?: components["schemas"]["Slug"];
+                /**
                  * @description `curadoria` e a ordem da vitrine, escolhida a mao, e e o default: a
                  *     Loja e uma lista curada e a primeira coisa que ela comunica e a
                  *     escolha. **Nao ha ordem por preco**, porque o preco e opcional e
@@ -6195,6 +9150,525 @@ export interface operations {
                 };
             };
             400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listStoreTags: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O vocabulario visivel. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreTagPage"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getStoreItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["schemas"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O item. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StoreItemDetail"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createNetworkEventCoverUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkEventCoverIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listNetworkEvents: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Busca por texto no **titulo, no nome do lugar e no bairro**, no servidor.
+                 *     **O encontro privado casa so pelo titulo**: casar pelo bairro entregaria
+                 *     onde ele e (ADR-0027 12.14).
+                 */
+                q?: components["parameters"]["NetworkEventQuery"];
+                /**
+                 * @description A cidade DIGITADA, nunca coordenada (ADR-0006). **Exclui encontro
+                 *     privado**: a cidade dele e oculta, e aparecer no recorte a entregaria.
+                 */
+                city?: components["parameters"]["NetworkEventCity"];
+                /**
+                 * @description O recorte no tempo, calculado no servidor e **no fuso de cada encontro**.
+                 *     `upcoming` e o default. `today` e a data local de hoje no fuso do
+                 *     encontro; `weekend` e o sabado e o domingo correntes (ou os proximos);
+                 *     `next_30_days` e inicio entre agora e agora mais 30 dias.
+                 */
+                when?: components["parameters"]["NetworkEventWhenParam"];
+                /**
+                 * @description **O default depende de `when`, e por isso `effective_sort` existe.** Com
+                 *     `past`, o default e `recentes`; com os outros, `proximos`.
+                 */
+                sort?: components["parameters"]["NetworkEventSortParam"];
+                /**
+                 * @description Gratuito ou pago. **Exclui encontro privado**: a condicao de acesso dele
+                 *     e oculta, e aparecer no recorte "pago" a entregaria (ADR-0027 12.14).
+                 */
+                admission?: components["parameters"]["NetworkEventAdmissionParam"];
+                /**
+                 * @description A visibilidade e visivel, entao filtra os dois. **Sem padrao**, de
+                 *     proposito: o `default: public` de `NetworkEventVisibility` aplicado aqui
+                 *     tiraria todo encontro privado da agenda sem ninguem ter pedido.
+                 */
+                visibility?: components["parameters"]["NetworkEventVisibilityParam"];
+                /**
+                 * @description Encontros que aceitam aquele porte. **Exclui encontro privado**, pelo
+                 *     mesmo motivo de `admission`.
+                 */
+                size?: components["parameters"]["NetworkEventSizeParam"];
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /**
+             * @description Pagina da agenda. `total` alimenta a linha de resumo da barra de
+             *     listagem e `applied_filters` alimenta a distincao entre "a Rede
+             *     ainda nao tem encontro" e "o seu recorte esvaziou a agenda".
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description O encontro criado, na mesma forma de `getNetworkEvent`.
+             *     `cover_image_url` sai nulo enquanto a derivada publica nao existe.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description Sem canal de contato verificado (`contact-channel-unverified`) ou
+             *     teto de encontros ativos atingido
+             *     (`community-event-limit-reached`).
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. UUID nao sai nesta secao. */
+                eventSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O encontro. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventPatch"];
+            };
+        };
+        responses: {
+            /** @description O encontro depois da edicao, na forma de `getNetworkEvent`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listNearbyNetworkEvents: {
+        parameters: {
+            query?: {
+                /**
+                 * @description Busca por texto no **titulo, no nome do lugar e no bairro**, no servidor.
+                 *     **O encontro privado casa so pelo titulo**: casar pelo bairro entregaria
+                 *     onde ele e (ADR-0027 12.14).
+                 */
+                q?: components["parameters"]["NetworkEventQuery"];
+                /**
+                 * @description A cidade DIGITADA, nunca coordenada (ADR-0006). **Exclui encontro
+                 *     privado**: a cidade dele e oculta, e aparecer no recorte a entregaria.
+                 */
+                city?: components["parameters"]["NetworkEventCity"];
+                /**
+                 * @description O recorte no tempo, calculado no servidor e **no fuso de cada encontro**.
+                 *     `upcoming` e o default. `today` e a data local de hoje no fuso do
+                 *     encontro; `weekend` e o sabado e o domingo correntes (ou os proximos);
+                 *     `next_30_days` e inicio entre agora e agora mais 30 dias.
+                 */
+                when?: components["parameters"]["NetworkEventWhenParam"];
+                /**
+                 * @description Gratuito ou pago. **Exclui encontro privado**: a condicao de acesso dele
+                 *     e oculta, e aparecer no recorte "pago" a entregaria (ADR-0027 12.14).
+                 */
+                admission?: components["parameters"]["NetworkEventAdmissionParam"];
+                /**
+                 * @description Encontros que aceitam aquele porte. **Exclui encontro privado**, pelo
+                 *     mesmo motivo de `admission`.
+                 */
+                size?: components["parameters"]["NetworkEventSizeParam"];
+                sort?: components["schemas"]["NetworkEventNearbySort"];
+                max_km?: 2 | 5 | 10;
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da agenda por distancia, so com encontros publicos. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventNearbyPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getNetworkEventLocation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O ponto do encontro, ou `point` nulo quando nao ha ponto marcado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventLocation"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getNetworkEventPrivateDetails: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O conteudo oculto do encontro. */
+            200: {
+                headers: {
+                    "Cache-Control"?: "private, no-store";
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPrivateDetails"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getMyNetworkEventJoinRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O estado do pedido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventJoinRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    requestToJoinNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O estado do pedido, no vocabulario do app. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventJoinRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    withdrawNetworkEventJoinRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A desistencia foi registrada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventJoinRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    cancelNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventCancellation"];
+            };
+        };
+        responses: {
+            /** @description O encontro cancelado, na forma de `getNetworkEvent`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listMyNetworkEventJoinRequests: {
+        parameters: {
+            query?: {
+                /** @description Busca so no titulo. */
+                q?: string;
+                state?: components["schemas"]["JoinRequestAppState"];
+                sort?: "proximos";
+                page?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina dos pedidos da conta. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyNetworkEventJoinRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -6739,6 +10213,1079 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    openAdminSession: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Token do reCAPTCHA v3 colhido em `/entrar`. Obrigatorio nesta operacao. */
+                "X-Captcha-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminLoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Sessao aberta. O cookie vai no `Set-Cookie`; o corpo traz o que o painel precisa guardar em memoria. */
+            200: {
+                headers: {
+                    /** @description `__Host-bichu_adm=<256 bits>; Path=/; Secure; HttpOnly; SameSite=Strict` */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSession"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            /**
+             * @description Credencial invalida. **Identica** para e-mail sem conta do painel
+             *     (inclusive o de uma conta do app), senha errada, conta desativada ou
+             *     bloqueada, e senha certa que esta numa base de vazadas.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Dois motivos, com o mesmo `type` para os dois: `captcha-rejected`
+             *     (tente de outra rede e fale com o responsavel), ou `Origin` que nao
+             *     e o do painel (`forbidden`). Senha vazada **nao** responde aqui: e
+             *     o 401 de cima, pelo motivo do passo 4.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessao valida. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminSession"];
+                };
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    closeAdminSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sessao encerrada. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    closeAllAdminSessions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Todas as sessoes da conta foram encerradas. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    reauthenticateAdmin: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminReauthRequest"];
+            };
+        };
+        responses: {
+            /** @description Janela aberta, e sessao rotacionada. */
+            200: {
+                headers: {
+                    /** @description O novo identificador da sessao, com os mesmos atributos do login. */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminReauthGrant"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            /**
+             * @description Tres tipos, e o painel trata dois deles de jeito diferente:
+             *     `invalid-credentials` e a senha errada (a pessoa continua na tela e
+             *     tenta de novo; o corpo e o mesmo do login recusado, e a tentativa vai
+             *     para a trilha como `admin.session.denied`); `unauthenticated` e
+             *     `token-expired` sao a sessao que nao existe ou venceu, e levam ao
+             *     login, como em `AdminUnauthorized`.
+             */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    disavowAdminSessionAlert: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDisavowRequest"];
+            };
+        };
+        responses: {
+            /** @description As sessoes da conta cairam e a conta ficou bloqueada ate a redefinicao. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            403: components["responses"]["AdminForbidden"];
+            410: components["responses"]["TokenExpired"];
+        };
+    };
+    listAdminStorePartners: {
+        parameters: {
+            query?: {
+                /** @description Busca por nome ou host, no servidor. */
+                q?: string;
+                /** @description Filtra por situacao. Sem o parametro, vem todos. */
+                active?: boolean;
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de parceiros, na ordem da vitrine. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStorePartnerPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    createAdminStorePartner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStorePartnerInput"];
+            };
+        };
+        responses: {
+            /** @description Parceiro criado, ativo. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStorePartner"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["SlugTaken"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminStorePartner: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do parceiro. Nenhum UUID no caminho. */
+                partnerSlug: components["parameters"]["PartnerSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O parceiro. O `ETag` e o que o `PATCH` apresenta em `If-Match`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStorePartner"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAdminStorePartner: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do parceiro. Nenhum UUID no caminho. */
+                partnerSlug: components["parameters"]["PartnerSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStorePartnerPatch"];
+            };
+        };
+        responses: {
+            /** @description Parceiro alterado. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStorePartner"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SlugTaken"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminStoreTags: {
+        parameters: {
+            query?: {
+                q?: string;
+                active?: boolean;
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina do vocabulario, em ordem alfabetica. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreTagPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    createAdminStoreTag: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStoreTagInput"];
+            };
+        };
+        responses: {
+            /** @description Tag criada, ativa. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreTag"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["SlugTaken"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateAdminStoreTag: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                tagSlug: components["schemas"]["Slug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStoreTagPatch"];
+            };
+        };
+        responses: {
+            /** @description Tag alterada. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreTag"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SlugTaken"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminStoreItems: {
+        parameters: {
+            query?: {
+                /** @description Busca em titulo e resumo, no servidor. */
+                q?: string;
+                category?: components["schemas"]["StoreCategory"];
+                /** @description `slug` do parceiro. */
+                partner?: components["schemas"]["Slug"];
+                publication_state?: components["schemas"]["AdminStoreItemPublicationState"];
+                /** @description Itens que servem a esta especie (entre outras). */
+                species?: components["schemas"]["Species"];
+                /** @description `slug` de uma tag do vocabulario, ativa ou nao. */
+                tag?: components["schemas"]["Slug"];
+                /** @description `vencido` e o filtro de quem reconfere precos. */
+                price_status?: components["schemas"]["StorePriceStatus"];
+                /** @description `curadoria` e a ordem da vitrine; `atualizado` poe o que mudou por ultimo primeiro; `validade` poe primeiro o preco que vence antes. */
+                sort?: "curadoria" | "nome" | "atualizado" | "validade";
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de itens. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreItemPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    createAdminStoreItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStoreItemInput"];
+            };
+        };
+        responses: {
+            /** @description Item criado em rascunho. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["SlugTaken"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminStoreItem: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["parameters"]["ItemSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O item. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAdminStoreItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["parameters"]["ItemSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminStoreItemPatch"];
+            };
+        };
+        responses: {
+            /** @description Item alterado. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SlugTaken"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    publishAdminStoreItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["parameters"]["ItemSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Item publicado. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    retireAdminStoreItem: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do item. */
+                itemSlug: components["parameters"]["ItemSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Item retirado. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminStoreItem"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminNetworkEvents: {
+        parameters: {
+            query?: {
+                /** @description Busca em titulo, resumo e nome do lugar, no servidor. */
+                q?: string;
+                /** @description Sem ele, `published` e `cancelled`. `removed` so aparece quando pedido aqui. */
+                publication_status?: components["schemas"]["AdminNetworkEventPublicationStatus"];
+                timing?: components["schemas"]["AdminNetworkEventTiming"];
+                /**
+                 * @description Sem ele, **publico e privado**: o painel ve todo encontro. O esquema
+                 *     e inline, e nao `NetworkEventVisibility`, de proposito: aquele tem
+                 *     `default: public` (o padrao de quem CRIA), e num filtro esse
+                 *     default vira "so publicos" para o cliente gerado do contrato, que
+                 *     tirava o encontro privado da lista do painel (QA, 28/09).
+                 */
+                visibility?: "public" | "private";
+                city?: string;
+                /** @description `agenda` e por inicio, do mais proximo; `atualizado` poe o que mudou por ultimo primeiro. */
+                sort?: "agenda" | "atualizado";
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de encontros. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEventPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    createAdminNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminNetworkEventInput"];
+            };
+        };
+        responses: {
+            /** @description Encontro criado e publicado. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["SlugTaken"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O encontro. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeAdminNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Encontro removido. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateAdminNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminNetworkEventPatch"];
+            };
+        };
+        responses: {
+            /** @description Encontro alterado. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SlugTaken"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    relocateAdminNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminNetworkEventRelocation"];
+            };
+        };
+        responses: {
+            /** @description Encontro movido. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    cancelAdminNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminNetworkEventCancellation"];
+            };
+        };
+        responses: {
+            /** @description Encontro cancelado. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    changeAdminNetworkEventAccess: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["EventSlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminNetworkEventAccessChange"];
+            };
+        };
+        responses: {
+            /** @description Condicao de acesso alterada. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminNetworkEvent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminNetworkJoinRequests: {
+        parameters: {
+            query?: {
+                status?: components["schemas"]["AdminJoinRequestStatus"];
+                /** @description `slug` do encontro. */
+                event?: components["schemas"]["Slug"];
+                page?: components["parameters"]["AdminPage"];
+                /** @description D56. Teto de 50 por pagina, e nao 100 como nas outras listas. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJoinRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    approveAdminNetworkJoinRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["JoinRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pedido aprovado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJoinRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["EventNotOpen"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    declineAdminNetworkJoinRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["JoinRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pedido recusado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminJoinRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["EventNotOpen"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createAdminCatalogImageIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCatalogImageIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Politica de envio, valida por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
 }

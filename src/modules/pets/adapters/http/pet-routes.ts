@@ -177,6 +177,7 @@ function comoRespostaDoPet(
       id: f.id,
       status: f.status,
       is_primary: f.isPrimary,
+      rejection_reason: f.rejectionReason,
       thumb_url: f.thumbUrl,
       card_url: f.cardUrl,
       created_at: f.createdAt.toISOString(),

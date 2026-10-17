@@ -29,6 +29,10 @@ void describe('chaveDeDerivadaPublica', () => {
       'pets/card/abc123.jpg',
       'products/card/abc123.jpeg',
       'events/thumb/abc123.webp',
+      // A variante `banner`, que entrou com a capa de borda a borda do
+      // detalhe do encontro (1280 px).
+      'events/banner/abc123.jpeg',
+      'pets/card/abc123.jpeg',
     ]) {
       void it(caminho, () => {
         assert.equal(chaveDeDerivadaPublica(caminho), caminho);
@@ -57,6 +61,19 @@ void describe('chaveDeDerivadaPublica', () => {
       ['barra no fim, que seria listagem de prefixo', 'pets/card/'],
       ['ponto no nome, que abriria caminho relativo', 'pets/card/.webp'],
       ['chave com identificador de pasta do minio', 'pets/card/.minio.sys.webp'],
+      // AS QUATRO FORMAS DE ORIGINAL, e o app nunca recebe nenhuma delas.
+      // Esta é a prova de que "o app nunca baixa o original" é estrutural e
+      // não feliz: toda chave de original tem `original` onde esta forma
+      // exige `thumb`, `card` ou `banner`.
+      ['original do pet, com o id no caminho', 'pets/1111/original/abc123'],
+      ['original do achado', 'found-reports/1111/original/abc123'],
+      ['original do achador sem conta', 'found-reports/sem-conta/original/abc123'],
+      ['original de produto', 'products/original/abc123'],
+      ['original de encontro', 'events/original/abc123'],
+      // A DERIVADA HIGIENIZADA DO ACHADO também não: ela é privada, vista
+      // dentro da conversa mediada e só (critério 9 da BICHUS-35).
+      ['derivada higienizada do achado', 'found-reports/1111/sanitized/abc123.jpeg'],
+      ['derivada higienizada do achador sem conta', 'found-reports/sem-conta/sanitized/abc.jpeg'],
       ['nome com caractere fora do conjunto', 'pets/card/abc 123.webp'],
       ['nome com porcento, que seria escape', 'pets/card/abc%2f123.webp'],
     ] as const) {

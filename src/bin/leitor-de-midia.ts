@@ -31,7 +31,23 @@ import { resolverSegredos } from '../shared/config/segredos.js';
 import type { ObjectKey } from '../shared/types/brands.js';
 
 const PORTA = Number(optionalEnv('LEITOR_DE_MIDIA_PORTA') ?? '8080');
-const FORMA_DE_DERIVADA = /^(?:(?:pets|products|events)\/)?(?:thumb|card)\/[A-Za-z0-9_-]+\.(?:webp|jpg|jpeg)$/;
+/**
+ * A FORMA DA DERIVADA PÚBLICA, e é esta linha que garante que o app nunca
+ * recebe o original.
+ *
+ * Nenhuma chave de original casa com ela, e a razão é estrutural e não feliz: o
+ * segundo segmento tem de ser `thumb`, `card` ou `banner`, e **toda** chave de
+ * original tem `original` nessa posição — `pets/{petId}/original/{nome}`,
+ * `found-reports/{id}/original/{nome}`, `{products|events}/original/{nome}`. A
+ * derivada higienizada do achado (`found-reports/{dono}/sanitized/{nome}.{ext}`)
+ * também não casa, e isso é o critério 9: ela é privada, vista dentro da
+ * conversa mediada e só.
+ *
+ * `banner` entrou com a capa de borda a borda do detalhe do encontro
+ * (1280 px): a mesma imagem é desenhada em três tamanhos, e uma derivada só
+ * servia mal aos três.
+ */
+const FORMA_DE_DERIVADA = /^(?:(?:pets|products|events)\/)?(?:thumb|card|banner)\/[A-Za-z0-9_-]+\.(?:webp|jpg|jpeg)$/;
 const TIPO_POR_EXTENSAO: Readonly<Record<string, string>> = {
   webp: 'image/webp',
   jpg: 'image/jpeg',

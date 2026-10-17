@@ -19,6 +19,33 @@
  * Os três existem porque cada um falha de um jeito diferente, e o critério 18 de
  * `BICHUS-87` pede os três nomeados.
  *
+ * ## HEIC: o cabeçalho abre, o pixel NÃO (medido em 17/10/2026)
+ *
+ * O cliente aprovou aceitar HEIC de iPhone e converter para JPEG aqui. A
+ * conversão está escrita e é a mesma de qualquer outra entrada — mas **esta
+ * instalação não decodifica HEIC**, e o número é este:
+ *
+ *   sharp 0.35.4, libvips 8.18.6
+ *   `sharp.format.heif.input` .............. buffer/file/stream: true
+ *   `metadata()` de um HEIC real ........... OK (heif, 800 × 600, pages 1)
+ *   `resize().jpeg().toBuffer()` ........... FALHA, "heif: Error while loading
+ *                                            plugin: Support for this
+ *                                            compression format is not
+ *                                            implemented"
+ *
+ * O pacote pré-compilado do `sharp` traz libheif **sem o decodificador HEVC**
+ * (é decisão de licenciamento do projeto, não configuração nossa), e o
+ * `Dockerfile` instala pelo mesmo `npm ci`, então o container se comporta
+ * igual. O que isso significa na prática: `inspecionar` aceitava o HEIC pelo
+ * cabeçalho e `derivar` LANÇAVA, a fila entendia "culpa nossa" e tentava cinco
+ * vezes. Agora sai `formato_nao_decodificavel`, que é recusa final com motivo
+ * na tela.
+ *
+ * Isso **não** quebra iPhone hoje: o app recodifica no aparelho antes de enviar
+ * (`CameraDoAparelho`, 1920 px e qualidade 80, sempre `image/jpeg`). Aceitar
+ * HEIC de verdade no servidor exige libvips compilado com libheif+HEVC, que é
+ * dependência nova — e dependência é decisão do cliente.
+ *
  * ## Por que `failOn: 'error'`
  *
  * O padrão do `sharp` tolera arquivo truncado e entrega o que conseguiu ler.
@@ -27,13 +54,16 @@
  * pela metade que ninguém sabe de onde veio.
  */
 import sharp from 'sharp';
+import type { OutputInfo } from 'sharp';
 import type {
   Derivada,
   DimensoesDaImagem,
   ImageProcessor,
   MotivoDeRecusa,
+  PedidoDeDerivada,
 } from '../../ports/image-processor.js';
 import { formatoRealDe } from '../../domain/numeros-magicos.js';
+import { FORMATO_DAS_DERIVADAS } from '../../domain/derivadas.js';
 
 /** Critério 18: acima disso é recusa final, e não retentativa. */
 const TETO_DE_MEGAPIXELS = 50;
@@ -72,6 +102,33 @@ const TETO_DE_PIXELS = TETO_DE_MEGAPIXELS * 1_000_000;
  */
 sharp.cache(false);
 
+/**
+ * A codificação de UM degrau da escada, a partir do pixel cru.
+ *
+ * Mora fora de `criarImageProcessor` porque é função do FORMATO configurado e
+ * não da instância, e porque é o único lugar que conhece a chamada de
+ * codificação de cada formato — o `switch` existe para que trocar
+ * `FORMATO_DAS_DERIVADAS` não precise de mais nenhuma edição aqui.
+ *
+ * `mozjpeg: true` não é enfeite: ele liga a otimização de tabela de Huffman e
+ * a quantização "trellis" do mozjpeg que o libvips embute, e tira de 10% a 15%
+ * dos bytes **na mesma qualidade**. Com JPEG em vez de WebP por pedido do
+ * cliente, é o que devolve parte do que o formato custa.
+ */
+async function codificar(
+  cru: Buffer,
+  entrada: { readonly raw: { width: number; height: number; channels: 1 | 2 | 3 | 4 } },
+  qualidade: number,
+): Promise<Buffer> {
+  const pipeline = sharp(cru, entrada);
+  switch (FORMATO_DAS_DERIVADAS.nome) {
+    case 'jpeg':
+      return pipeline.jpeg({ quality: qualidade, mozjpeg: true, progressive: false }).toBuffer();
+    case 'webp':
+      return pipeline.webp({ quality: qualidade, effort: 4 }).toBuffer();
+  }
+}
+
 export function criarImageProcessor(): ImageProcessor {
   return {
     async inspecionar(bytes: Buffer): Promise<DimensoesDaImagem | MotivoDeRecusa> {
@@ -102,6 +159,17 @@ export function criarImageProcessor(): ImageProcessor {
         const megapixels = (largura * altura) / 1_000_000;
         if (megapixels > TETO_DE_MEGAPIXELS) return 'imagem_grande_demais';
 
+        // ANIMAÇÃO, recusada aqui e não descoberta depois.
+        //
+        // `pages` é quantos quadros o contêiner tem. Um WebP animado tem o
+        // MESMO número mágico de um parado, então ele atravessa a conferência
+        // de bytes; e `sharp`, sem `animated: true`, pega só o primeiro quadro
+        // e não avisa. A pessoa enviava uma animação e via uma foto parada.
+        //
+        // Lido do cabeçalho, junto com largura e altura: nada é decodificado
+        // para descobrir isso.
+        if ((meta.pages ?? 1) > 1) return 'imagem_animada';
+
         return { formato, largura, altura, megapixels };
       } catch {
         // Inclui o próprio estouro de `limitInputPixels`, que o libvips lança.
@@ -109,25 +177,107 @@ export function criarImageProcessor(): ImageProcessor {
       }
     },
 
-    async derivar(bytes: Buffer, larguraMaxima: number): Promise<Derivada> {
-      const saida = await sharp(bytes, { limitInputPixels: TETO_DE_PIXELS, failOn: 'error' })
-        // `withoutEnlargement`: uma foto de 400 px não vira `card` de 1024
-        // esticado. Ampliar não acrescenta informação e triplica o arquivo.
-        .resize({ width: larguraMaxima, height: larguraMaxima, fit: 'inside', withoutEnlargement: true })
-        // **Nada de metadado sai daqui.** O `sharp` não copia metadado a menos
-        // que alguém chame `withMetadata()`, e ninguém chama: é uma ausência
-        // deliberada, e o teste de fixtures existe para que ela continue
-        // ausente depois de uma refatoração distraída.
-        .rotate() // aplica a orientação do EXIF nos PIXELS antes de descartá-lo
-        .webp({ quality: 82, effort: 4 })
-        .toBuffer({ resolveWithObject: true });
+    async derivar(bytes: Buffer, pedido: PedidoDeDerivada): Promise<Derivada | MotivoDeRecusa> {
+      // ## UMA decodificação por derivada, e a escada roda sobre PIXEL CRU
+      //
+      // A escada de qualidade mede os bytes e desce um degrau até caber, então
+      // ela codifica várias vezes. O jeito ingênuo — abrir `sharp(bytes)` a cada
+      // degrau — decodificaria o arquivo HOSTIL uma vez por degrau, até oito, e
+      // este worker já morreu por memória duas vezes (cache do libvips e
+      // reentrância; ver o cabeçalho deste arquivo).
+      //
+      // Então: corta e redimensiona UMA vez, guarda o resultado como pixel cru
+      // e **codifica a partir do cru** em cada degrau. A decodificação do
+      // arquivo de entrada acontece exatamente uma vez, e o cru é do tamanho da
+      // SAÍDA e não da entrada — 1280 × 720 × 3 dá 2,8 MiB, e uma miniatura de
+      // 176 px dá 100 KiB. Nenhum degrau aloca em função do arquivo que chegou.
+      //
+      // E é sequencial: um `await` por degrau, dentro de um laço. Não há
+      // `Promise.all` em nenhum lugar deste arquivo, e a ausência é a regra —
+      // decodificar em paralelo é o caminho pelo qual o worker morreu antes.
+      let cru: { data: Buffer; info: OutputInfo };
+      try {
+        const pipeline = sharp(bytes, { limitInputPixels: TETO_DE_PIXELS, failOn: 'error' })
+          // A ORIENTAÇÃO PRIMEIRO, e antes do corte: `.rotate()` sem argumento
+          // aplica o EXIF `Orientation` nos PIXELS. Sem ele, uma foto de
+          // celular tirada na vertical seria cortada deitada — o corte pegaria
+          // a faixa errada da imagem — e o metadado que diz "gire" é jogado
+          // fora uma linha abaixo. Vale para TODA entrada, HEIC de iPhone
+          // incluído: é a mesma chamada para os quatro formatos.
+          .rotate()
+          .resize(
+            pedido.altura === undefined
+              ? // Sem proporção pedida: reduz para caber na largura e preserva
+                // a proporção do arquivo. É o comportamento da imagem de
+                // produto da Loja, cuja tela eu não medi.
+                { width: pedido.largura, fit: 'inside', withoutEnlargement: true }
+              : {
+                  width: pedido.largura,
+                  height: pedido.altura,
+                  // `cover` é o CORTE que o cliente pediu: a imagem preenche a
+                  // moldura e o que sobra fora da proporção é descartado **da
+                  // derivada**. O arquivo guardado continua inteiro.
+                  fit: 'cover',
+                  // `attention` e não o centro: o libvips procura a região de
+                  // maior energia e corta em volta dela. Numa foto de cachorro
+                  // o centro geométrico costuma ser o corpo, e um corte
+                  // centrado em retrato decapita o animal — que é exatamente o
+                  // erro que não tem volta.
+                  position: sharp.strategy.attention,
+                  // Uma foto de 400 px não vira `card` de 1024 esticado:
+                  // ampliar não acrescenta informação e triplica o arquivo. O
+                  // `sharp` reduz o alvo preservando a proporção pedida.
+                  withoutEnlargement: true,
+                },
+          );
+
+        // JPEG não guarda canal alfa. Sem achatar, o que o libvips faz com o
+        // alfa descartado não é promessa de versão — e um PNG de fundo
+        // transparente sairia com o fundo preto.
+        const achatada = FORMATO_DAS_DERIVADAS.achataAlfa
+          ? pipeline.flatten({ background: { r: 255, g: 255, b: 255 } })
+          : pipeline;
+
+        // **Nada de metadado sai daqui.** `.raw()` entrega pixel e só pixel:
+        // não existe EXIF, XMP nem IPTC num buffer cru, então a ausência deixa
+        // de depender de ninguém lembrar de não chamar `withMetadata()`. É a
+        // forma mais forte da mesma garantia do critério 14 — e é ela que
+        // descarta a coordenada de GPS da foto de celular.
+        cru = await achatada.raw().toBuffer({ resolveWithObject: true });
+      } catch {
+        // Cabeçalho que abriu e pixel que não abre é culpa do ARQUIVO, e
+        // recusa final: tentar de novo não muda a resposta. É por aqui que o
+        // HEIC sem decodificador HEVC sai com motivo em vez de derrubar o
+        // trabalho cinco vezes.
+        return 'formato_nao_decodificavel';
+      }
+
+      const canais = cru.info.channels;
+      const entradaCrua = {
+        raw: { width: cru.info.width, height: cru.info.height, channels: canais },
+      } as const;
+
+      let ultima: { bytes: Buffer; qualidade: number } | null = null;
+      for (const qualidade of pedido.escada) {
+        const saida = await codificar(cru.data, entradaCrua, qualidade);
+        ultima = { bytes: saida, qualidade };
+        // PARA NO PRIMEIRO QUE CABE, e a escada vem do melhor degrau para o
+        // pior: o que sai é sempre a melhor qualidade que respeita o teto.
+        if (saida.length <= pedido.tetoDeBytes) break;
+      }
+      // A escada nunca é vazia (`derivadas.ts` as declara com oito e seis
+      // degraus), mas o tipo não garante isso e um `!` aqui seria uma promessa
+      // que ninguém cobra.
+      if (ultima === null) return 'imagem_ilegivel';
 
       return {
-        bytes: saida.data,
-        contentType: 'image/webp',
-        extensao: 'webp',
-        largura: saida.info.width,
-        altura: saida.info.height,
+        bytes: ultima.bytes,
+        contentType: FORMATO_DAS_DERIVADAS.contentType,
+        extensao: FORMATO_DAS_DERIVADAS.extensao,
+        largura: cru.info.width,
+        altura: cru.info.height,
+        qualidade: ultima.qualidade,
+        acimaDoTeto: ultima.bytes.length > pedido.tetoDeBytes,
       };
     },
   };

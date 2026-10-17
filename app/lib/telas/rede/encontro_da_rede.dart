@@ -620,7 +620,12 @@ class _TelaDoEncontroState extends State<TelaDoEncontro> {
         ImagemDoEncontroOuBanner(
           // Privado nao aprovado: banner, porque a foto costuma mostrar o
           // lugar (24.16). Aprovado, a capa volta.
-          url: conteudo?.urlDaCapa,
+          //
+          // `cover_banner_url` PRIMEIRO: esta capa e de borda a borda, 360 a
+          // 430 dp (1080 a 1290 px a 3x), e borrava de leve com a derivada de
+          // 1024 px que o cartao da agenda usa. Com a capa como reserva, o
+          // encontro gravado antes desta derivada existir continua desenhando.
+          url: conteudo?.urlDoBannerDaCapa ?? conteudo?.urlDaCapa,
           textoAlternativo: conteudo?.urlDaCapa == null
               ? null
               : conteudo?.textoAlternativoDaCapa,
@@ -1191,7 +1196,10 @@ class _Fotos extends StatelessWidget {
           child: SizedBox(
             width: _largura,
             child: Image.network(
-              imagens[i].url,
+              // A MINIATURA, e nao a capa de 1024 px. Esta galeria desenha
+              // 144 dp em 4:3 (432 px a 3x) e baixava 1024 px -- cinco vezes o
+              // dado que ela pinta, oito vezes numa galeria cheia.
+              imagens[i].urlParaGaleria,
               fit: BoxFit.cover,
               semanticLabel: imagens[i].textoAlternativo,
               errorBuilder: (_, _, _) => ColoredBox(color: cores.surfaceSunken),

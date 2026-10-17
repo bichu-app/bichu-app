@@ -508,6 +508,24 @@ export interface UploadIntentsTable {
    * `id` é UUIDv7 e não sai para ele (SEC-001). Nula nas outras espécies.
    */
   upload_ref: string | null;
+  /**
+   * O estado da HIGIENE da foto do achado (migração `20261001000006`).
+   *
+   * Lido só para `found_report_photo` e `finder_photo`: a foto de pet tem
+   * `pet_photos.status`, e o índice parcial da varredura exclui `pet_photo` de
+   * propósito. `ausente` é o objeto que nunca chegou, e é desfecho final.
+   */
+  sanitize_status: Generated<'pendente' | 'pronta' | 'recusada' | 'ausente'>;
+  /**
+   * Chave da derivada sem EXIF, no bucket **privado**. **Nunca** uma URL.
+   *
+   * Ela existe porque foto de celular carrega coordenada de GPS, e a foto do
+   * achado não passava por worker nenhum. O original continua guardado,
+   * inteiro: é dele que sai qualquer derivada futura.
+   */
+  sanitized_key: string | null;
+  sanitize_rejection_reason: string | null;
+  sanitized_at: Date | null;
 }
 
 /**
@@ -1101,8 +1119,21 @@ export interface CatalogImagesTable {
   upload_intent_id: string | null;
   purpose: PropositoDaImagemDeCatalogo;
   status: Generated<StatusDaFoto>;
-  /** Chave da derivada publica. Nula ate `ready`. */
+  /**
+   * Chave da derivada de 1024 px. Nula ate `ready`.
+   *
+   * **E a derivada que SEMPRE existe**: o cartao da agenda e a vitrine usam
+   * ela, e quem nao tem `thumb_key` ou `banner_key` cai nela.
+   */
   public_key: string | null;
+  /**
+   * Derivada de 480 px (4:3) para a galeria do encontro, que desenha 144 dp.
+   * Nula na imagem de produto: a vitrine da Loja nao foi medida, e cortar
+   * imagem de produto numa proporcao suposta decepa o rotulo da embalagem.
+   */
+  thumb_key: string | null;
+  /** Derivada de 1280 px (16:9) para a capa de borda a borda do detalhe. */
+  banner_key: string | null;
   rejection_reason: string | null;
   created_at: Generated<Date>;
 }

@@ -51,6 +51,7 @@ export const TRABALHO_DE_PROCESSAR_FOTO: JobKind = 'media.process_upload';
 interface LinhaDaFoto {
   id: string;
   status: StatusDaFoto;
+  rejection_reason: string | null;
   is_primary: boolean;
   original_key: string;
   thumb_key: string | null;
@@ -62,6 +63,7 @@ function comoFoto(l: LinhaDaFoto): FotoDoPet {
   return {
     id: l.id,
     status: l.status,
+    rejectionReason: l.rejection_reason,
     isPrimary: l.is_primary,
     originalKey: comoObjectKey(l.original_key),
     thumbKey: l.thumb_key === null ? null : comoObjectKey(l.thumb_key),
@@ -73,6 +75,7 @@ function comoFoto(l: LinhaDaFoto): FotoDoPet {
 const COLUNAS_DA_FOTO = [
   'pet_photos.id',
   'pet_photos.status',
+  'pet_photos.rejection_reason',
   'pet_photos.is_primary',
   'pet_photos.original_key',
   'pet_photos.thumb_key',
@@ -275,6 +278,7 @@ export function criarMediaRepository(db: Db): MediaRepository {
           .returning([
             'id',
             'status',
+            'rejection_reason',
             'is_primary',
             'original_key',
             'thumb_key',

@@ -742,10 +742,30 @@ class EntradaDoEncontro {
 
 /// `#/components/schemas/NetworkEventImage` do contrato.
 class ImagemDoEncontro {
-  const ImagemDoEncontro({required this.url, required this.textoAlternativo});
+  const ImagemDoEncontro({
+    required this.url,
+    required this.textoAlternativo,
+    this.urlDaMiniatura,
+  });
 
+  /// A derivada de 1024 x 576 (16:9), do cartao da agenda.
   final String url;
+
+  /// `thumb_url`: a derivada de 480 x 360 (4:3), **da galeria do detalhe**.
+  ///
+  /// Anulavel porque a imagem gravada antes desta derivada existir nao a tem.
+  /// Quem a usa cai em [url], que e o comportamento de antes.
+  final String? urlDaMiniatura;
+
   final String textoAlternativo;
+
+  /// O que a GALERIA pede: a miniatura, com a capa como reserva.
+  ///
+  /// A galeria desenha 144 dp em 4:3, que a 3x sao 432 px, e pedia a derivada
+  /// de 1024 px -- **cinco vezes o dado que ela pinta**, oito vezes numa
+  /// galeria cheia. O peso de uma tela e a soma das derivadas que ela desenha,
+  /// e nao o teto de cada arquivo.
+  String get urlParaGaleria => urlDaMiniatura ?? url;
 
   static List<ImagemDoEncontro> daLista(Object? bruto) {
     if (bruto is! List) return const <ImagemDoEncontro>[];
@@ -760,8 +780,13 @@ class ImagemDoEncontro {
     final json = bruto;
     final url = json['url'];
     final alt = json['alt_text'];
+    final miniatura = json['thumb_url'];
     if (url is! String || alt is! String) return null;
-    return ImagemDoEncontro(url: url, textoAlternativo: alt);
+    return ImagemDoEncontro(
+      url: url,
+      urlDaMiniatura: miniatura is String ? miniatura : null,
+      textoAlternativo: alt,
+    );
   }
 }
 
@@ -780,6 +805,18 @@ abstract class ConteudoDoEncontro {
   HorarioDoEncontro get horario;
   SituacaoDoEncontro? get situacao;
   String? get urlDaCapa;
+
+  /// `cover_banner_url`: a derivada de 1280 x 720 da capa, **do detalhe**.
+  ///
+  /// A capa do detalhe e de borda a borda (360 a 430 dp, ou 1080 a 1290 px a
+  /// 3x) e borrava de leve com a derivada de 1024. Uma derivada separada e nao
+  /// uma [urlDaCapa] maior: o cartao da agenda usa a mesma imagem, e subir
+  /// aquela derivada engordaria **cada** cartao da listagem para ganhar
+  /// nitidez numa tela que desenha uma so.
+  ///
+  /// Anulavel; quem a usa cai em [urlDaCapa], que e o comportamento de antes.
+  String? get urlDoBannerDaCapa;
+
   List<ImagemDoEncontro> get imagens;
   EntradaDoEncontro get entrada;
   Set<Porte> get portesAceitos;
@@ -882,6 +919,7 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
     required this.horario,
     required this.situacao,
     required this.urlDaCapa,
+    required this.urlDoBannerDaCapa,
     required this.imagens,
     required this.entrada,
     required this.portesAceitos,
@@ -909,6 +947,8 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
   final SituacaoDoEncontro? situacao;
   @override
   final String? urlDaCapa;
+  @override
+  final String? urlDoBannerDaCapa;
   @override
   final List<ImagemDoEncontro> imagens;
   @override
@@ -959,6 +999,7 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
     }
     final fim = json['ends_at'];
     final capa = json['cover_image_url'];
+    final bannerDaCapa = json['cover_banner_url'];
     final notas = json['notes'];
     return EncontroPublico(
       slug: slug,
@@ -972,6 +1013,7 @@ class EncontroPublico extends EncontroDaRede implements ConteudoDoEncontro {
       ),
       situacao: SituacaoDoEncontro.porCodigo(json['status']),
       urlDaCapa: capa is String ? capa : null,
+      urlDoBannerDaCapa: bannerDaCapa is String ? bannerDaCapa : null,
       imagens: ImagemDoEncontro.daLista(json['images']),
       entrada: EntradaDoEncontro.doJson(json['admission']),
       portesAceitos: _portes(json['accepted_sizes']),
@@ -1045,6 +1087,7 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
     required this.horario,
     required this.situacao,
     required this.urlDaCapa,
+    required this.urlDoBannerDaCapa,
     required this.imagens,
     required this.entrada,
     required this.portesAceitos,
@@ -1072,6 +1115,8 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
   final SituacaoDoEncontro? situacao;
   @override
   final String? urlDaCapa;
+  @override
+  final String? urlDoBannerDaCapa;
   @override
   final List<ImagemDoEncontro> imagens;
   @override
@@ -1119,6 +1164,7 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
     }
     final fim = json['ends_at'];
     final capa = json['cover_image_url'];
+    final bannerDaCapa = json['cover_banner_url'];
     final notas = json['notes'];
     return DetalhesDoPrivado(
       slug: slug,
@@ -1132,6 +1178,7 @@ class DetalhesDoPrivado implements ConteudoDoEncontro {
       ),
       situacao: SituacaoDoEncontro.porCodigo(json['status']),
       urlDaCapa: capa is String ? capa : null,
+      urlDoBannerDaCapa: bannerDaCapa is String ? bannerDaCapa : null,
       imagens: ImagemDoEncontro.daLista(json['images']),
       entrada: EntradaDoEncontro.doJson(json['admission']),
       portesAceitos: _portes(json['accepted_sizes']),

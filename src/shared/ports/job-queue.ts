@@ -22,6 +22,12 @@ export type JobKind =
   | 'media.process_upload'
   /** ADR-0027 item 10: a imagem de catalogo enviada pelo painel (item da Loja, encontro da Rede). */
   | 'media.process_catalog_image'
+  /**
+   * A higiene da foto do ACHADO: conferir os bytes e reescrever a imagem sem
+   * metadado nenhum, porque o EXIF de foto de celular carrega coordenada de
+   * GPS e aquele caminho nao passava por worker nenhum.
+   */
+  | 'media.sanitize_found_photo'
   | 'media.purge_expired'
   | 'email.send'
   | 'push.send'

@@ -25,20 +25,36 @@
  * novo não muda nada.
  */
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
+import type { ObjectKey } from '../../../shared/types/brands.js';
+import type { Derivada } from '../ports/image-processor.js';
 import { chaveDaDerivada } from '../domain/chave-de-objeto.js';
 import type { ImageProcessor, MotivoDeRecusa } from '../ports/image-processor.js';
+import {
+  DERIVADAS_DA_FOTO_DE_PET,
+  DIMENSAO_MINIMA_DA_FOTO_DE_PET,
+  TETO_DE_BYTES_DA_DERIVADA,
+  escadaDo,
+} from '../domain/derivadas.js';
 import type { MediaRepository } from '../ports/media-repository.js';
 import type { ObjectStorage } from '../ports/object-storage.js';
 
-/** Os dois tamanhos do ADR-0007. */
-const LARGURA_DO_THUMB = 160;
-const LARGURA_DO_CARD = 1024;
-
-/** O texto que vai para a tela, por motivo. Não é código de erro. */
-const TEXTO_DA_RECUSA: Record<MotivoDeRecusa, string> = {
+/**
+ * O texto que vai para a tela, por motivo. Não é código de erro.
+ *
+ * Ele existia e **não chegava a ninguém**: `pet_photos.rejection_reason` era
+ * gravado aqui e o contrato não tinha o campo, então a tela dizia "recusada"
+ * sem dizer por quê. O campo entrou em `PetPhoto` nesta entrega.
+ */
+const TEXTO_DA_RECUSA: Record<MotivoDeRecusa | 'imagem_pequena_demais', string> = {
   formato_nao_aceito: 'Esse arquivo não é uma foto que a gente consiga abrir.',
   imagem_grande_demais: 'Essa foto é grande demais. Escolha outra ou tire uma nova.',
   imagem_ilegivel: 'Não conseguimos ler essa foto. Ela pode ter chegado incompleta.',
+  imagem_animada: 'Essa foto é uma animação. Envie uma imagem parada.',
+  formato_nao_decodificavel: 'Não conseguimos abrir esse arquivo. Tente enviar em JPEG.',
+  imagem_pequena_demais:
+    `Essa foto é pequena demais. Envie uma com pelo menos ` +
+    `${String(DIMENSAO_MINIMA_DA_FOTO_DE_PET.largura)} x ` +
+    `${String(DIMENSAO_MINIMA_DA_FOTO_DE_PET.altura)} pixels.`,
 };
 
 export interface DependenciasDoProcessamento {
@@ -49,13 +65,31 @@ export interface DependenciasDoProcessamento {
   readonly clock: Clock;
 }
 
+/** O que cada derivada custou. Vai para o log do worker, nunca para resposta. */
+export interface RelatoDaDerivada {
+  readonly variante: string;
+  readonly largura: number;
+  readonly altura: number;
+  readonly bytes: number;
+  readonly qualidade: number;
+  readonly acimaDoTeto: boolean;
+}
+
 export interface CargaDoTrabalho {
   readonly photo_id: string;
 }
 
 export type ResultadoDoProcessamento =
-  | { readonly tipo: 'pronta'; readonly fotoId: string }
-  | { readonly tipo: 'recusada'; readonly fotoId: string; readonly motivo: MotivoDeRecusa }
+  | {
+      readonly tipo: 'pronta';
+      readonly fotoId: string;
+      readonly derivadas: readonly RelatoDaDerivada[];
+    }
+  | {
+      readonly tipo: 'recusada';
+      readonly fotoId: string;
+      readonly motivo: MotivoDeRecusa | 'imagem_pequena_demais';
+    }
   /** Já processada antes: o trabalho foi reentregue depois de um reinício. */
   | { readonly tipo: 'ignorada'; readonly fotoId: string };
 
@@ -79,26 +113,84 @@ export async function processarFoto(
     return { tipo: 'recusada', fotoId: foto.id, motivo: inspecao };
   }
 
-  const card = await deps.imagens.derivar(original, LARGURA_DO_CARD);
-  const thumb = await deps.imagens.derivar(original, LARGURA_DO_THUMB);
+  // A DIMENSÃO MÍNIMA, que não existia: uma foto de 100 x 100 virava cartaz
+  // impresso borrado, porque `withoutEnlargement` (com razão) não amplia. É
+  // recusa final, com o número no texto, e vem depois do teto de megapixels
+  // para que a foto grande demais continue recebendo o motivo dela.
+  if (
+    inspecao.largura < DIMENSAO_MINIMA_DA_FOTO_DE_PET.largura ||
+    inspecao.altura < DIMENSAO_MINIMA_DA_FOTO_DE_PET.altura
+  ) {
+    await deps.repositorio.marcarRecusada(
+      foto.id,
+      TEXTO_DA_RECUSA.imagem_pequena_demais,
+      deps.clock.now(),
+    );
+    return { tipo: 'recusada', fotoId: foto.id, motivo: 'imagem_pequena_demais' };
+  }
 
-  // As chaves carregam 128 bits de CSPRNG e NÃO carregam `pet_id` (ADR-0010
-  // item 6): elas viajam em cartaz impresso e em mensagem de grupo.
-  const chaveDoCard = chaveDaDerivada('card', deps.ids.random128(), card.extensao, 'pets');
-  const chaveDoThumb = chaveDaDerivada('thumb', deps.ids.random128(), thumb.extensao, 'pets');
+  // UMA POR VEZ, e o laço é sequencial de propósito: cada `derivar` decodifica
+  // o original, e decodificar em paralelo é como este worker morreu antes.
+  const geradas = new Map<string, { chave: ObjectKey; derivada: Derivada }>();
+  for (const especificacao of DERIVADAS_DA_FOTO_DE_PET) {
+    const derivada = await deps.imagens.derivar(original, {
+      largura: especificacao.largura,
+      ...(especificacao.altura === undefined ? {} : { altura: especificacao.altura }),
+      escada: escadaDo(especificacao.porte),
+      tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA,
+    });
+    // O decodificador desistiu depois de o cabeçalho ter aberto: culpa do
+    // arquivo, recusa final. Sem isto o trabalho lançava e a fila tentava cinco
+    // vezes a mesma foto que nunca vai abrir.
+    if (typeof derivada === 'string') {
+      await deps.repositorio.marcarRecusada(foto.id, TEXTO_DA_RECUSA[derivada], deps.clock.now());
+      return { tipo: 'recusada', fotoId: foto.id, motivo: derivada };
+    }
+    // As chaves carregam 128 bits de CSPRNG e NÃO carregam `pet_id` (ADR-0010
+    // item 6): elas viajam em cartaz impresso e em mensagem de grupo.
+    const chave = chaveDaDerivada(
+      especificacao.variante,
+      deps.ids.random128(),
+      derivada.extensao,
+      'pets',
+    );
+    // Sobe ANTES de marcar `ready`. Na ordem inversa existiria uma janela em
+    // que a rota pública serviria o endereço de um objeto que ainda não está lá.
+    await deps.armazenamento.put('publico', chave, derivada.bytes, derivada.contentType);
+    geradas.set(especificacao.variante, { chave, derivada });
+  }
 
-  // As duas subiram ANTES de marcar `ready`. Na ordem inversa existiria uma
-  // janela em que a rota pública serviria o endereço de um objeto que ainda
-  // não está lá.
-  await deps.armazenamento.put('publico', chaveDoCard, card.bytes, card.contentType);
-  await deps.armazenamento.put('publico', chaveDoThumb, thumb.bytes, thumb.contentType);
+  const card = geradas.get('card');
+  const thumb = geradas.get('thumb');
+  // Falha ruidosa: `DERIVADAS_DA_FOTO_DE_PET` declara as duas, e uma ausência
+  // aqui é a lista editada sem o resto. Gravar `null` em silêncio faria a foto
+  // ficar `ready` sem URL, que é o estado que o app não sabe explicar.
+  if (card === undefined || thumb === undefined) {
+    throw new Error(
+      'DERIVADAS_DA_FOTO_DE_PET precisa declarar `card` e `thumb`: a resposta da ' +
+        'foto publica as duas, e o cartaz impresso depende da `card`.',
+    );
+  }
 
   await deps.repositorio.marcarPronta({
     fotoId: foto.id,
-    thumbKey: chaveDoThumb,
-    cardKey: chaveDoCard,
+    thumbKey: thumb.chave,
+    cardKey: card.chave,
     agora: deps.clock.now(),
   });
 
-  return { tipo: 'pronta', fotoId: foto.id };
+  return {
+    tipo: 'pronta',
+    fotoId: foto.id,
+    // O que o log registra, e é o que se audita quando alguém perguntar se o
+    // teto do cliente está sendo respeitado de verdade.
+    derivadas: [...geradas].map(([variante, g]) => ({
+      variante,
+      largura: g.derivada.largura,
+      altura: g.derivada.altura,
+      bytes: g.derivada.bytes.length,
+      qualidade: g.derivada.qualidade,
+      acimaDoTeto: g.derivada.acimaDoTeto,
+    })),
+  };
 }

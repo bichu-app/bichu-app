@@ -608,6 +608,14 @@ class _BlocoDaFoto extends StatelessWidget {
           TextosDoAchado.fotoSoNaConversa,
           style: textos.bodyMedium?.copyWith(color: cores.textSecondary),
         ),
+        const SizedBox(height: BichuEspaco.e1),
+        // A orientacao de tamanho, uma linha, antes do envio (cliente,
+        // 17/10/2026). Ela e orientacao e nao recusa: quem recusa e a politica
+        // assinada, no balde, com o mesmo numero.
+        Text(
+          TextosDoAchado.orientacaoDaFoto,
+          style: textos.bodySmall?.copyWith(color: cores.textSecondary),
+        ),
         const SizedBox(height: BichuEspaco.e4),
         if (permissao == EstadoDaPermissao.negadaPermanentemente) ...<Widget>[
           FaixaDeAviso(

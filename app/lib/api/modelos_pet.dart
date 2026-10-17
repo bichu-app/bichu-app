@@ -236,6 +236,7 @@ class FotoDoPet {
     required this.principal,
     this.thumbUrl,
     this.cardUrl,
+    this.motivoDaRecusa,
   });
 
   final String id;
@@ -244,8 +245,22 @@ class FotoDoPet {
   final String? thumbUrl;
   final String? cardUrl;
 
+  /// `rejection_reason`: o MOTIVO da recusa, em texto pronto para a tela.
+  ///
+  /// Nulo fora de `rejected`. Ele passou a existir no contrato nesta entrega --
+  /// antes a tela dizia "recusada" e a pessoa nao tinha como saber se o
+  /// problema era o formato, o tamanho, a dimensao minima ou um arquivo
+  /// truncado, e portanto nao tinha como consertar.
+  ///
+  /// **Nao e codigo de erro**: nao se compara, nao se traduz e nao se ramifica
+  /// por ele. Quem precisa ramificar ramifica por [status].
+  final String? motivoDaRecusa;
+
   /// Da para pintar esta foto na moldura agora?
   bool get exibivel => status == StatusDaFoto.pronta && urlDeMiniatura != null;
+
+  /// A foto foi recusada, e ha um motivo para dizer?
+  bool get recusada => status == StatusDaFoto.recusada;
 
   /// A URL que o cartao da variante `lista` usa.
   ///
@@ -254,6 +269,19 @@ class FotoDoPet {
   /// pequena e trafego pago pelo tutor no 3G da rua.
   String? get urlDeMiniatura => thumbUrl ?? cardUrl;
 
+  /// A URL que a moldura GRANDE do detalhe usa (`foto/lg`, 160 x 176 dp).
+  ///
+  /// `card_url` primeiro, e e o inverso de [urlDeMiniatura] de proposito: a
+  /// `thumb` tem 176 px de largura e a moldura do detalhe desenha 160 dp, que
+  /// a 3x sao 480 px -- a miniatura esticada quase tres vezes. A `card` tem
+  /// 1024 px, cortada na mesma proporcao de 1 : 1,1 da moldura, e e a derivada
+  /// que o cartaz impresso e a pagina publica do caso tambem usam.
+  ///
+  /// Ela existia e **nao era desenhada por ninguem no app**: a lista pedia a
+  /// `thumb` e a tela de detalhe nao montava `Image` nenhuma -- a moldura
+  /// grande ficava no estado vazio mesmo com foto pronta.
+  String? get urlDeCartao => cardUrl ?? thumbUrl;
+
   factory FotoDoPet.doJson(Map<String, dynamic> json) {
     return FotoDoPet(
       id: json['id'] as String? ?? '',
@@ -261,6 +289,7 @@ class FotoDoPet {
       principal: json['is_primary'] as bool? ?? false,
       thumbUrl: json['thumb_url'] as String?,
       cardUrl: json['card_url'] as String?,
+      motivoDaRecusa: json['rejection_reason'] as String?,
     );
   }
 }
@@ -391,6 +420,21 @@ class Pet {
   /// segundos e a falha silenciosa que este projeto persegue.
   bool get temFotoEmProcessamento =>
       fotos.any((f) => f.status == StatusDaFoto.processando);
+
+  /// O motivo da primeira foto RECUSADA, quando nao ha nenhuma exibivel.
+  ///
+  /// A condicao "quando nao ha nenhuma exibivel" e a regra, e nao zelo: com uma
+  /// foto boa na tela, avisar que uma antiga foi recusada e barulho sobre algo
+  /// que a pessoa ja resolveu enviando outra. Sem nenhuma, o aviso e a unica
+  /// informacao que permite consertar.
+  String? get motivoDaFotoRecusada {
+    if (fotoDeCapa != null) return null;
+    for (final f in fotos) {
+      final motivo = f.motivoDaRecusa;
+      if (f.recusada && motivo != null && motivo.isNotEmpty) return motivo;
+    }
+    return null;
+  }
 
   /// Sem plaquinha vinculada.
   bool get semTag => tagsAtivas <= 0;

@@ -506,6 +506,8 @@ export async function main(): Promise<void> {
               id: f.id,
               status: f.status,
               isPrimary: f.isPrimary,
+              // O motivo da recusa, que era gravado e não chegava à tela.
+              rejectionReason: f.rejectionReason,
               // Nulas enquanto o worker não gerou as derivadas, e a ausência é
               // o valor honesto: a tela diz "enviando" em vez de mostrar um
               // espaço vazio que o tutor não sabe se é erro dele.

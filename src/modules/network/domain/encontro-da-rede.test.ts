@@ -295,8 +295,18 @@ void describe('a projecao do encontro', () => {
     const comImagem = projetarEncontro(
       encontro({
         imagens: [
-          { url: 'https://midia.exemplo.invalid/a.jpg', textoAlternativo: 'A roda na sombra' },
-          { url: 'https://midia.exemplo.invalid/b.jpg', textoAlternativo: 'O bebedouro' },
+          {
+            url: 'https://midia.exemplo.invalid/a.jpg',
+            urlDaMiniatura: 'https://midia.exemplo.invalid/a-thumb.jpg',
+            urlDoBanner: 'https://midia.exemplo.invalid/a-banner.jpg',
+            textoAlternativo: 'A roda na sombra',
+          },
+          {
+            url: 'https://midia.exemplo.invalid/b.jpg',
+            urlDaMiniatura: 'https://midia.exemplo.invalid/b-thumb.jpg',
+            urlDoBanner: 'https://midia.exemplo.invalid/b-banner.jpg',
+            textoAlternativo: 'O bebedouro',
+          },
         ],
       }),
       AGORA,
@@ -363,7 +373,14 @@ function privadoComSentinelas(): EncontroDaRede {
     estrutura: ['shade'],
     paraLevar: ['towel'],
     observacoes: 'ISCA-NOTA',
-    imagens: [{ url: 'https://midia.exemplo.invalid/ISCA-CHAVE.jpg', textoAlternativo: 'ISCA-ALT' }],
+    imagens: [
+      {
+        url: 'https://midia.exemplo.invalid/ISCA-CHAVE.jpg',
+        urlDaMiniatura: 'https://midia.exemplo.invalid/ISCA-CHAVE-thumb.jpg',
+        urlDoBanner: 'https://midia.exemplo.invalid/ISCA-CHAVE-banner.jpg',
+        textoAlternativo: 'ISCA-ALT',
+      },
+    ],
   });
 }
 

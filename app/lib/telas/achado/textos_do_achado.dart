@@ -12,6 +12,8 @@
 /// especifico**, que e outra afirmacao.
 library;
 
+import '../../dispositivo/camera_e_galeria.dart';
+
 abstract final class TextosDoAchado {
   /// O titulo da barra de topo.
   ///
@@ -49,6 +51,13 @@ abstract final class TextosDoAchado {
   static const String fotoSoNaConversa =
       'A foto não aparece em lista nenhuma. Ela é mostrada só ao tutor, '
       'dentro da conversa que o Bichu abre.';
+
+  /// A orientacao de tamanho, numa linha (cliente, 17/10/2026).
+  ///
+  /// Vem de `orientacaoDeTamanhoDaImagem` e nao e escrita aqui: o numero e o
+  /// mesmo teto que o contrato declara e que o balde impoe na politica
+  /// assinada.
+  static const String orientacaoDaFoto = orientacaoDeTamanhoDaImagem;
 
   static const String cameraNosAjustes =
       'A câmera está bloqueada para o Bichu. Dá para liberar nos ajustes do '

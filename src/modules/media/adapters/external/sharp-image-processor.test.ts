@@ -24,6 +24,13 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import sharp, { type Sharp } from 'sharp';
 import { criarImageProcessor } from './sharp-image-processor.js';
+import {
+  ESCADA_DA_FAIXA,
+  ESCADA_ENXUTA,
+  FORMATO_DAS_DERIVADAS,
+  TETO_DE_BYTES_DA_DERIVADA,
+} from '../../domain/derivadas.js';
+import type { Derivada, PedidoDeDerivada } from '../../ports/image-processor.js';
 
 const processador = criarImageProcessor();
 
@@ -100,6 +107,26 @@ async function conferirDerivadaLimpa(derivada: Buffer, marcas: readonly string[]
   }
 }
 
+
+/**
+ * A derivada, ou um erro de teste com o motivo.
+ *
+ * `derivar` passou a devolver `MotivoDeRecusa` no lugar de lançar quando o
+ * decodificador não abre os pixels (o caso do HEIC sem decodificador HEVC), e
+ * cada teste daqui espera uma derivada. Esta função é o lugar onde "veio motivo
+ * em vez de derivada" falha nomeando o motivo, em vez de quinze `as` espalhados.
+ */
+async function derivada(bytes: Buffer, pedido: PedidoDeDerivada): Promise<Derivada> {
+  const r = await processador.derivar(bytes, pedido);
+  if (typeof r === 'string') assert.fail(`esperava derivada e veio o motivo "${r}"`);
+  return r;
+}
+
+/** O pedido mais simples: largura, sem corte, escada e teto do ponto único. */
+function semCorte(largura: number): PedidoDeDerivada {
+  return { largura, escada: ESCADA_DA_FAIXA, tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA };
+}
+
 void describe('ISCA 1 — GPS em EXIF', () => {
   void it('a fixture REALMENTE tem EXIF, senão o teste não prova nada', async () => {
     const meta = await sharp(await comGpsEmExif()).metadata();
@@ -107,7 +134,7 @@ void describe('ISCA 1 — GPS em EXIF', () => {
   });
 
   void it('a derivada sai sem EXIF e sem a coordenada', async () => {
-    const d = await processador.derivar(await comGpsEmExif(), 1024);
+    const d = await derivada(await comGpsEmExif(), semCorte(1024));
     await conferirDerivadaLimpa(d.bytes, ['GPS', 'Bichu']);
   });
 });
@@ -121,7 +148,7 @@ void describe('ISCA 2 — GPS em XMP', () => {
   });
 
   void it('a derivada sai sem XMP e sem a coordenada', async () => {
-    const d = await processador.derivar(await comGpsEmXmp(), 1024);
+    const d = await derivada(await comGpsEmXmp(), semCorte(1024));
     await conferirDerivadaLimpa(d.bytes, ['GPSLatitude', 'xmpmeta', 'adobe:ns:meta']);
   });
 });
@@ -135,7 +162,7 @@ void describe('ISCA 3 — IPTC', () => {
   });
 
   void it('a derivada sai sem IPTC e sem o texto', async () => {
-    const d = await processador.derivar(await comIptc(), 1024);
+    const d = await derivada(await comIptc(), semCorte(1024));
     await conferirDerivadaLimpa(d.bytes, ['Vila Madalena', '8BIM', 'Photoshop 3.0']);
   });
 });
@@ -171,18 +198,136 @@ void describe('inspeção: o que os bytes dizem, e o teto de 50 megapixels', () 
 });
 
 void describe('derivação: tamanho e formato', () => {
-  void it('o card cabe em 1024 px e o thumb em 160 px', async () => {
+  void it('o card cabe em 1024 px e o thumb em 176 px', async () => {
     const original = await base(2000, 1500).jpeg().toBuffer();
-    const card = await processador.derivar(original, 1024);
-    const thumb = await processador.derivar(original, 160);
+    const card = await derivada(original, semCorte(1024));
+    const thumb = await derivada(original, semCorte(176));
     assert.equal(card.largura, 1024);
-    assert.equal(thumb.largura, 160);
-    assert.equal(card.contentType, 'image/webp');
+    assert.equal(thumb.largura, 176);
+    // O formato é o do PONTO ÚNICO, e a asserção lê de lá de propósito: o
+    // cliente pediu JPEG e pode voltar atrás, e um `'image/jpeg'` escrito aqui
+    // faria a troca de uma constante reprovar um teste que não fala de formato.
+    assert.equal(card.contentType, FORMATO_DAS_DERIVADAS.contentType);
+    assert.equal(card.extensao, FORMATO_DAS_DERIVADAS.extensao);
   });
 
   void it('NÃO amplia uma foto pequena: 400 px não vira 1024 esticado', async () => {
     const pequena = await base(400, 300).jpeg().toBuffer();
-    const card = await processador.derivar(pequena, 1024);
+    const card = await derivada(pequena, semCorte(1024));
     assert.equal(card.largura, 400, 'ampliar não acrescenta informação e triplica o arquivo');
+  });
+
+  void it('CORTA na proporção pedida quando o pedido traz altura', async () => {
+    // 2000 x 1500 é 4:3; o pedido é 1 : 1,1 (retrato), a proporção da moldura.
+    // Sem corte a saída sairia 4:3 e a moldura cortaria no cliente — que é o
+    // que o cliente pediu para deixarmos de fazer.
+    const original = await base(2000, 1500).jpeg().toBuffer();
+    const d = await derivada(original, {
+      largura: 1024,
+      altura: 1126,
+      escada: ESCADA_DA_FAIXA,
+      tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA,
+    });
+    assert.equal(d.largura, 1024);
+    assert.equal(d.altura, 1126);
+  });
+
+  void it('o original NÃO é tocado: derivar duas vezes dá o mesmo original', async () => {
+    // O corte é da derivada. Se `derivar` mutasse o buffer de entrada, a
+    // segunda chamada receberia a imagem já cortada — e seria assim que o
+    // cachorro perderia a cabeça sem ninguém ver.
+    const original = await base(2000, 1500).jpeg().toBuffer();
+    const copia = Buffer.from(original);
+    await derivada(original, { largura: 400, altura: 440, escada: ESCADA_ENXUTA, tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA });
+    assert.ok(original.equals(copia), 'derivar mutou os bytes do original');
+  });
+});
+
+void describe('a escada de qualidade, e o teto de 500 KB', () => {
+  void it('cabe no teto e registra o degrau em que parou', async () => {
+    const original = await base(3000, 2000).jpeg({ quality: 100 }).toBuffer();
+    const d = await derivada(original, {
+      largura: 1280,
+      altura: 720,
+      escada: ESCADA_DA_FAIXA,
+      tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA,
+    });
+    assert.ok(
+      d.bytes.length <= TETO_DE_BYTES_DA_DERIVADA,
+      `derivada de ${String(d.bytes.length)} bytes acima do teto de ${String(TETO_DE_BYTES_DA_DERIVADA)}`,
+    );
+    assert.ok(ESCADA_DA_FAIXA.includes(d.qualidade), 'a qualidade precisa ser um degrau da escada');
+    assert.equal(d.acimaDoTeto, false);
+  });
+
+  void it('PARA NO PRIMEIRO QUE CABE: a escada não desce além do necessário', async () => {
+    // Um teto folgado tem de sair no PRIMEIRO degrau. Uma implementação que
+    // percorresse a escada inteira entregaria a pior qualidade que cabe em vez
+    // da melhor, e o teste de bytes não veria diferença.
+    const original = await base(800, 600).jpeg().toBuffer();
+    const d = await derivada(original, {
+      largura: 320,
+      altura: 352,
+      escada: ESCADA_DA_FAIXA,
+      tetoDeBytes: TETO_DE_BYTES_DA_DERIVADA,
+    });
+    assert.equal(d.qualidade, ESCADA_DA_FAIXA[0]);
+  });
+
+  void it('com teto impossível, entrega o último degrau e ACUSA em vez de borrar mais', async () => {
+    const original = await base(2000, 1500).jpeg({ quality: 100 }).toBuffer();
+    const d = await derivada(original, {
+      largura: 1280,
+      altura: 720,
+      escada: ESCADA_DA_FAIXA,
+      tetoDeBytes: 1024,
+    });
+    assert.equal(d.qualidade, ESCADA_DA_FAIXA[ESCADA_DA_FAIXA.length - 1]);
+    assert.equal(d.acimaDoTeto, true, 'estourar o teto em silêncio é o que não pode acontecer');
+  });
+});
+
+void describe('WebP animado: recusa explícita, e não o primeiro quadro em silêncio', () => {
+  void it('RECUSA o WebP animado na inspeção', async () => {
+    // Um WebP de VÁRIOS QUADROS. O libvips representa animação como páginas
+    // empilhadas na vertical, e `pageHeight` diz onde cada quadro termina: uma
+    // tira de 64 x 192 com páginas de 64 são três quadros. É a forma de
+    // produzir um animado sem trazer binário de fixture para o repositório.
+    const animado = await sharp({
+      create: {
+        width: 64,
+        height: 64 * 3,
+        channels: 3,
+        background: { r: 10, g: 20, b: 30 },
+        pageHeight: 64,
+      },
+    })
+      .webp({ loop: 0 })
+      .toBuffer();
+
+    assert.equal(await processador.inspecionar(animado), 'imagem_animada');
+  });
+
+  void it('ACEITA o WebP parado: a recusa é da animação, não do formato', async () => {
+    const parado = await base(200, 150).webp().toBuffer();
+    const r = await processador.inspecionar(parado);
+    assert.equal(typeof r === 'string' ? r : r.formato, 'webp');
+  });
+});
+
+void describe('HEIC: o cabeçalho abre e o pixel não (medido nesta instalação)', () => {
+  void it('a derivação devolve MOTIVO em vez de lançar', async () => {
+    // Um HEIC de verdade não dá para gerar aqui — este `sharp` não codifica
+    // HEVC. O que este teste prova é o contrato: entrada que passa a inspeção
+    // e não decodifica sai como recusa FINAL, e não como exceção que a fila
+    // tenta cinco vezes. O `ftypheic` com corpo inválido é o caminho mais curto
+    // para esse estado.
+    const falso = Buffer.concat([
+      Buffer.from([0x00, 0x00, 0x00, 0x24]),
+      Buffer.from('ftypheic'),
+      Buffer.alloc(64),
+    ]);
+    const r = await processador.derivar(falso, semCorte(1024));
+    assert.equal(typeof r, 'string', 'precisa devolver motivo, nunca lançar');
   });
 });

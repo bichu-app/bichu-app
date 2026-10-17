@@ -470,6 +470,66 @@ void main() {
       expect(p.distanciaEmMetros, isNull);
     });
 
+    test('`thumb_url` da imagem e a URL que a GALERIA pede', () {
+      // A galeria desenha 144 dp em 4:3 (432 px a 3x) e pedia a derivada de
+      // 1024 px -- cinco vezes o dado que ela pinta. `urlParaGaleria` e o que
+      // a tela usa, e ela precisa preferir a miniatura.
+      final imagem = ImagemDoEncontro.doJson(<String, dynamic>{
+        'url': 'https://midia.invalid/events/card/a.jpeg',
+        'thumb_url': 'https://midia.invalid/events/thumb/a.jpeg',
+        'alt_text': 'A roda na sombra',
+      });
+      expect(imagem, isNotNull);
+      expect(imagem!.urlParaGaleria, endsWith('/thumb/a.jpeg'));
+    });
+
+    test('sem `thumb_url`, a galeria CAI na capa em vez de nao desenhar', () {
+      // A imagem gravada antes desta derivada existir nao tem miniatura, e uma
+      // galeria vazia seria pior que uma galeria com imagem grande.
+      final imagem = ImagemDoEncontro.doJson(<String, dynamic>{
+        'url': 'https://midia.invalid/events/card/a.jpeg',
+        'alt_text': 'A roda na sombra',
+      });
+      expect(imagem!.urlDaMiniatura, isNull);
+      expect(imagem.urlParaGaleria, endsWith('/card/a.jpeg'));
+    });
+
+    test('`thumb_url` de outro tipo vira nula, e nao quebra a leitura', () {
+      final imagem = ImagemDoEncontro.doJson(<String, dynamic>{
+        'url': 'https://midia.invalid/events/card/a.jpeg',
+        'thumb_url': 42,
+        'alt_text': 'A roda na sombra',
+      });
+      expect(imagem!.urlDaMiniatura, isNull);
+    });
+
+    test('`cover_banner_url` e a capa do DETALHE, separada da do cartao', () {
+      final encontro = EncontroPublico.doJson(<String, dynamic>{
+        ...encontroPublico(
+          images: <Map<String, dynamic>>[
+            <String, dynamic>{
+              'url': 'https://midia.invalid/events/card/a.jpeg',
+              'thumb_url': 'https://midia.invalid/events/thumb/a.jpeg',
+              'alt_text': 'A roda na sombra',
+            },
+          ],
+          coverBannerUrl: 'https://midia.invalid/events/banner/a.jpeg',
+        ),
+      });
+      expect(encontro.urlDaCapa, endsWith('/card/a.jpeg'));
+      expect(encontro.urlDoBannerDaCapa, endsWith('/banner/a.jpeg'));
+    });
+
+    test('sem `cover_banner_url`, o detalhe cai na capa de 1024', () {
+      final encontro = EncontroPublico.doJson(<String, dynamic>{
+        ...encontroPublico(),
+        'cover_image_url': 'https://midia.invalid/events/card/a.jpeg',
+        'cover_banner_url': null,
+      });
+      expect(encontro.urlDoBannerDaCapa, isNull);
+      expect(encontro.urlDaCapa, isNotNull);
+    });
+
     test('um TypeError de leitura sai da RedeApi como FormatException', () {
       // `place.state` como lista: o modelo confere `is String` e recusa;
       // `images` com mapa de tipos errados e descartado. O caminho que sobra

@@ -7,6 +7,7 @@
  * so depois de a derivada estar no bucket publico.
  */
 import assert from 'node:assert/strict';
+import { FORMATO_DAS_DERIVADAS } from '../domain/derivadas.js';
 import { describe, it } from 'node:test';
 
 import type { ObjectKey } from '../../../shared/types/brands.js';
@@ -30,8 +31,14 @@ function bancada(opcoes: {
         status: 'processing',
         originalKey: comoObjectKey('catalog/original/KioqKioqKioqKioqKioqKg'),
       }),
-    marcarPronta: (_id, chave) => {
-      eventos.push(`pronta:${chave}`);
+    marcarPronta: (_id, chaves) => {
+      // As tres variantes numa linha, na ordem em que a tela as usa. `thumb` e
+      // `banner` ausentes saem como `-`: e o que distingue "imagem de produto,
+      // uma derivada por decisao" de "imagem de encontro sem miniatura", que
+      // seria defeito.
+      eventos.push(
+        `pronta:${chaves.card}:${chaves.thumb ?? '-'}:${chaves.banner ?? '-'}`,
+      );
       return Promise.resolve();
     },
     marcarRecusada: (_id, motivo) => {
@@ -49,8 +56,16 @@ function bancada(opcoes: {
   } as unknown as ObjectStorage;
   const processador: ImageProcessor = {
     inspecionar: () => Promise.resolve(opcoes.dimensoes),
-    derivar: () =>
-      Promise.resolve({ bytes: Buffer.from('y'), contentType: 'image/webp', extensao: 'webp', largura: 1024, altura: 1024 }),
+    derivar: (_b, pedido) =>
+      Promise.resolve({
+        bytes: Buffer.from('y'),
+        contentType: FORMATO_DAS_DERIVADAS.contentType,
+        extensao: FORMATO_DAS_DERIVADAS.extensao,
+        largura: pedido.largura,
+        altura: pedido.altura ?? pedido.largura,
+        qualidade: pedido.escada[0] ?? 82,
+        acimaDoTeto: false,
+      }),
   };
   const ids = {
     uuidv7: () => 'id',

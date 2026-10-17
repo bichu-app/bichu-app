@@ -122,7 +122,14 @@ interface LinhaDoEncontro {
   accepted_sizes: string[];
   amenities: string[];
   bring_items: string[];
-  images: { k: string; a: string }[] | null;
+  /**
+   * `k` = `public_key` (1024), `t` = `thumb_key` (480), `b` = `banner_key`
+   * (1280), `a` = `alt_text`. Nomes de UMA letra porque este JSON e agregado
+   * por linha de encontro numa listagem: o nome da chave viaja uma vez por
+   * imagem por encontro, e `thumb_url` repetido oito vezes por cartao e peso
+   * de rede pago pelo tutor para transportar nome de campo.
+   */
+  images: { k: string; t: string | null; b: string | null; a: string }[] | null;
 }
 
 /**
@@ -168,8 +175,10 @@ function colunasDoEncontro() {
       SELECT b.item FROM network_event_bring_items b
        WHERE b.event_id = e.id
        ORDER BY array_position(${sql.val(ORDEM_DO_QUE_LEVAR)}::text[], b.item))`.as('bring_items'),
-    sql<{ k: string; a: string }[] | null>`(
-      SELECT json_agg(json_build_object('k', c.public_key, 'a', i.alt_text) ORDER BY i.position)
+    sql<{ k: string; t: string | null; b: string | null; a: string }[] | null>`(
+      SELECT json_agg(json_build_object(
+               'k', c.public_key, 't', c.thumb_key, 'b', c.banner_key, 'a', i.alt_text)
+             ORDER BY i.position)
         FROM network_event_images i JOIN catalog_images c ON c.id = i.image_id
        WHERE i.event_id = e.id AND c.status = 'ready' AND c.public_key IS NOT NULL)`.as('images'),
   ] as const;
@@ -898,7 +907,15 @@ function comoEncontro(
     linkDeIngresso: linha.ticket_url,
     instagram: linha.instagram_handle,
     instagramUrl: urlDoInstagram(linha.instagram_handle, baseDoInstagram),
-    imagens: (linha.images ?? []).map((i) => ({ url: urlDeMidia(i.k), textoAlternativo: i.a })),
+    imagens: (linha.images ?? []).map((i) => ({
+      url: urlDeMidia(i.k),
+      // Nulas na imagem gravada antes das derivadas existirem. `urlDeMidia`
+      // sobre `null` montaria o endereco de um objeto que ninguem gravou, que e
+      // uma promessa que o cliente descobre quebrada ao desenhar a tela.
+      urlDaMiniatura: i.t === null ? null : urlDeMidia(i.t),
+      urlDoBanner: i.b === null ? null : urlDeMidia(i.b),
+      textoAlternativo: i.a,
+    })),
   };
 }
 

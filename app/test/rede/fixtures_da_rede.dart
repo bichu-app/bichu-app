@@ -36,6 +36,11 @@ Map<String, dynamic> encontroPublico({
   String timeZone = 'America/Sao_Paulo',
   String status = 'upcoming',
   List<Map<String, dynamic>> images = const <Map<String, dynamic>>[],
+  /// `cover_banner_url`: a derivada de 1280 px da capa, do detalhe de borda a
+  /// borda. Separada de `images` porque ela nao e campo de
+  /// `NetworkEventImage` -- o servidor a monta a partir de
+  /// `catalog_images.banner_key` da imagem de posicao 0.
+  String? coverBannerUrl,
   String admissionKind = 'free',
   Map<String, dynamic>? price,
   List<String> acceptedSizes = const <String>['P', 'M', 'G', 'GG'],
@@ -65,6 +70,9 @@ Map<String, dynamic> encontroPublico({
     'status': status,
     'visibility': 'public',
     'cover_image_url': images.isEmpty ? null : images.first['url'],
+    // `cover_banner_url`: a derivada de 1280 px da capa, para o detalhe de
+    // borda a borda. Nula sem imagem, como no servidor.
+    'cover_banner_url': coverBannerUrl,
     'images': images,
     'admission': <String, dynamic>{'kind': admissionKind, 'price': price},
     'accepted_sizes': acceptedSizes,
