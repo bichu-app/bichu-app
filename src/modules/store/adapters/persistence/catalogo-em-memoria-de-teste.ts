@@ -44,7 +44,7 @@ import {
 
 /** O item como o dublê o guarda: as ligacoes ficam fora, como no banco. */
 type ItemGuardado = Omit<ItemAdministrativo, 'species' | 'tags' | 'imagens' | 'partner'> & {
-  /** Nulo no rascunho sem parceiro, como a coluna desde a `20261001000006`. */
+  /** Nulo no rascunho sem parceiro, como a coluna desde a `20261017000002`. */
   readonly partnerId: string | null;
 };
 
@@ -102,7 +102,7 @@ export interface EnvioSemeado {
 function montarItem(e: Estado, id: string): ItemAdministrativo {
   const guardado = e.itens.get(id);
   if (guardado === undefined) throw new Error(`item ${id} inexistente no dublê`);
-  // Rascunho sem parceiro e estado normal desde a `20261001000006`; o que
+  // Rascunho sem parceiro e estado normal desde a `20261017000002`; o que
   // continua sendo defeito do dublê é `partnerId` que aponta para parceiro
   // inexistente.
   const parceiro = guardado.partnerId === null ? null : e.parceiros.get(guardado.partnerId);

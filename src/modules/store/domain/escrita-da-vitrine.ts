@@ -106,7 +106,7 @@ export interface ItemAdministrativo {
   /**
    * **Nulo so no rascunho.** As quatro coisas que a publicacao exige --
    * parceiro, descricao, categoria e destino -- passaram a ser anulaveis na
-   * `20261001000006` para o rascunho poder guardar trabalho incompleto (pedido
+   * `20261017000002` para o rascunho poder guardar trabalho incompleto (pedido
    * do cliente de 17/10/2026). Quem decide se o conjunto esta completo e
    * `faltaParaPublicar`, e o `CHECK store_items_publicado_esta_completo` e a
    * rede embaixo dele.

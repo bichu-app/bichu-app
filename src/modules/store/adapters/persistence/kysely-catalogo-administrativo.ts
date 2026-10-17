@@ -157,7 +157,7 @@ interface LinhaDoItem {
   id: string;
   slug: string;
   // Nulos juntos, e so no rascunho: a juncao com `store_partners` e EXTERNA
-  // desde a `20261001000006`, porque `i.partner_id` passou a ser anulavel e uma
+  // desde a `20261017000002`, porque `i.partner_id` passou a ser anulavel e uma
   // juncao interna FARIA O RASCUNHO SEM PARCEIRO DESAPARECER DO PAINEL -- a
   // pessoa salvaria o rascunho e nao o acharia mais na lista.
   partner_slug: string | null;

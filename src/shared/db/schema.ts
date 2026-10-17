@@ -1039,21 +1039,21 @@ export interface StoreItemsTable {
   slug: string;
   /**
    * Aponta para `store_partners.id`, nunca para o `slug` dele. **Anulavel no
-   * rascunho** desde a `20261001000006`: a publicacao o exige, e o
+   * rascunho** desde a `20261017000002`: a publicacao o exige, e o
    * `CHECK store_items_publicado_esta_completo` e quem cobra.
    */
   partner_id: string | null;
   /** O minimo para o registro existir. Continua `NOT NULL`. */
   title: string;
-  /** Anulavel no rascunho (`20261001000006`). Exigida na publicacao. */
+  /** Anulavel no rascunho (`20261017000002`). Exigida na publicacao. */
   summary: string | null;
-  /** Anulavel no rascunho (`20261001000006`). Exigida na publicacao. */
+  /** Anulavel no rascunho (`20261017000002`). Exigida na publicacao. */
   category: CategoriaDaVitrine | null;
   /** Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira. */
   image_path: string | null;
   /**
    * Caminho no site do parceiro, com a barra inicial. Nunca a URL inteira.
-   * Anulavel no rascunho (`20261001000006`). Exigido na publicacao.
+   * Anulavel no rascunho (`20261017000002`). Exigido na publicacao.
    */
   target_path: string | null;
   /** Centavos, inteiro. Nunca ponto flutuante. */
@@ -1101,7 +1101,7 @@ export interface StoreItemImagesTable {
   /** `0` e a capa. Ate `7`. */
   position: number;
   /**
-   * **Opcional desde a `20261001000006`** (pedido do cliente de 17/10/2026).
+   * **Opcional desde a `20261017000002`** (pedido do cliente de 17/10/2026).
    * Quando vem, de 2 a 150 caracteres; nulo quer dizer que o painel nao
    * escreveu, e quem desenha cai no titulo do item.
    *
