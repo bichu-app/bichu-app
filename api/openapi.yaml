@@ -3804,7 +3804,7 @@ paths:
         moderacao de dinheiro), sem `slug` (derivado do titulo, como no item da
         `Loja`), sem `point` e sem `street_address` (ADR-0006: nao ha mapa nem
         busca de endereco, e nao ha geocodificacao em nenhum ponto deste
-        caminho) e sem `ticket_url` nem `instagram_handle` (link em texto de
+        caminho) e sem `ticket_url` nem `instagram_url` (link em texto de
         terceiro e o vetor que D59 fecha).
 
         **A capa entra**, por `cover_image.upload_id`, e o envio dos bytes e
@@ -3948,7 +3948,7 @@ paths:
         e moderacao de dinheiro: as duas sao decisao de administracao, e seguem
         so em `changeAdminNetworkEventAccess`), `slug` (ele ja circulou),
         `street_address` e `point` (ADR-0006, e o endereco e campo do painel),
-        `ticket_url` e `instagram_handle` (link em texto de terceiro),
+        `ticket_url` e `instagram_url` (link em texto de terceiro),
         `publication_status` (cancelar tem operacao propria) e `origin`.
 
         **Data, horario, fuso e lugar ENTRAM aqui**, e isso e a unica diferenca
@@ -9062,18 +9062,38 @@ components:
         local (`localhost`, `.local`, nome sem ponto): recusados com `400`
         (`code: ticket_url_not_https`, `ticket_url_has_credentials`,
         `ticket_url_ip_literal`, `ticket_url_local_host`, `ticket_url_invalid`).
-        **Excecao explicita ao D59, so neste campo e em `instagram_handle`**:
+        **Excecao explicita ao D59, so neste campo e em `instagram_url`**:
         as observacoes continuam recusando link.
 
-    NetworkEventInstagramHandleInput:
+    NetworkEventInstagramUrlInput:
       type: string
       minLength: 1
-      maxLength: 60
+      maxLength: 120
+      pattern: '^https://(?:www\.|m\.)?instagram\.com/[A-Za-z0-9._]{1,30}/?$'
       description: |
-        O Instagram do encontro. Aceita `usuario`, `@usuario` ou a URL do perfil
-        em `instagram.com`; o servidor guarda so o handle, sem `@` e em
-        minusculas, e recusa com `400` (`code: instagram_handle_invalid`) o que
-        nao for 1 a 30 de letras, digitos, ponto e sublinhado.
+        **A URL COMPLETA do perfil**, com `https://`. Substituiu
+        `instagram_handle` em 17/10/2026, pelo padrao do cliente: "todo campo de
+        site/url, o usuario deve preencher completo o endereco completo,
+        inclusive com o https".
+
+        `@usuario` e `usuario` **nao sao mais aceitos** (`400`,
+        `code: instagram_url_invalid`), e nada e completado em silencio: o
+        servidor nao acrescenta `a base do perfil do Instagram` ao que chegou.
+
+        Aceita `instagram.com`, `www.instagram.com` e `m.instagram.com`, com ou
+        sem barra final. Recusa, com `code` proprio para cada motivo:
+        `instagram_url_not_https` (sem `https://`, ou com `http://`),
+        `instagram_url_not_instagram` (outro dominio),
+        `instagram_url_has_credentials`, `instagram_url_ip_literal`,
+        `instagram_url_local_host`, `instagram_url_length`,
+        `instagram_url_invalid`.
+
+        **O ARMAZENAMENTO NAO MUDOU:** o servidor continua guardando o handle e
+        continua devolvendo `instagram_handle` e `instagram_url` na leitura,
+        esta ultima montada a partir de `INSTAGRAM_PROFILE_BASE_URL` -- a
+        configuracao segue em uso. Guardar o handle mantem a forma canonica:
+        `instagram.com/x`, `www.instagram.com/x` e `m.instagram.com/x/` sao o
+        mesmo perfil.
 
     NetworkEventPrice:
       type: object
@@ -9561,7 +9581,7 @@ components:
         `cover_image: null` tira a capa.
 
         **Nao tem** `visibility`, `admission`, `slug`, `street_address`,
-        `point`, `ticket_url`, `instagram_handle`, `publication_status` nem
+        `point`, `ticket_url`, `instagram_url`, `publication_status` nem
         `origin` -- ver a descricao de `updateNetworkEvent`.
       properties:
         title: { type: string, minLength: 2, maxLength: 120 }
@@ -9947,16 +9967,34 @@ components:
 
     AdminStorePartnerInput:
       type: object
-      required: [slug, name, host]
+      required: [slug, name, site_url]
       additionalProperties: false
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
         name: { type: string, minLength: 2, maxLength: 80 }
-        host:
-          type: string
-          maxLength: 253
-          pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
-          description: So o host, sem esquema, caminho nem consulta. Mesmo formato do `CHECK` de `store_partners.host`.
+        site_url:
+          allOf:
+            - $ref: '#/components/schemas/HttpsUrl'
+          maxLength: 261
+          description: |
+            **O endereco COMPLETO do site do parceiro**, com `https://`
+            (`https://parceiro.exemplo.test`). Substituiu `host` em 17/10/2026, pelo
+            padrao do cliente: todo campo de site recebe o endereco completo. O
+            nome pelado (`cobasi.com.br`) e recusado com `400`,
+            `code: site_url_not_https`, e nada e completado em silencio.
+
+            **A COLUNA CONTINUA GUARDANDO O HOST**, e o servidor o extrai
+            deste campo: a leitura compoe `https://<host><caminho>` e
+            `target_url` do item e conferido contra ele. Caminho no fim e
+            aceito e descartado (`https://parceiro.exemplo.test/` e
+            `https://parceiro.exemplo.test` dao o mesmo host).
+
+            **Escolher `https://www.parceiro.exemplo.test` em vez de
+            `https://parceiro.exemplo.test` muda o que os produtos aceitam**: os links
+            passam a ter de estar em `www.cobasi.com.br` ou abaixo dele.
+            Recusas com `code` proprio: `site_url_not_https`,
+            `site_url_has_credentials`, `site_url_ip_literal`,
+            `site_url_local_host`, `site_url_length`, `site_url_invalid`.
         sort_order: { type: integer, minimum: -32768, maximum: 32767, default: 0 }
 
     AdminStorePartnerPatch:
@@ -9966,10 +10004,11 @@ components:
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
         name: { type: string, minLength: 2, maxLength: 80 }
-        host:
-          type: string
-          maxLength: 253
-          pattern: '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'
+        site_url:
+          allOf:
+            - $ref: '#/components/schemas/HttpsUrl'
+          maxLength: 261
+          description: O endereco completo, com `https://`. Ver `AdminStorePartnerInput.site_url`.
         sort_order: { type: integer, minimum: -32768, maximum: 32767 }
         active:
           type: boolean
@@ -10265,7 +10304,7 @@ components:
         notes: { $ref: '#/components/schemas/NetworkEventNotes' }
         street_address: { $ref: '#/components/schemas/AdminNetworkEventStreetAddress' }
         ticket_url: { $ref: '#/components/schemas/NetworkEventTicketUrl' }
-        instagram_handle: { $ref: '#/components/schemas/NetworkEventInstagramHandleInput' }
+        instagram_url: { $ref: '#/components/schemas/NetworkEventInstagramUrlInput' }
 
     AdminNetworkEventStreetAddress:
       type: string
@@ -10311,10 +10350,10 @@ components:
           oneOf:
             - $ref: '#/components/schemas/NetworkEventTicketUrl'
             - type: 'null'
-        instagram_handle:
-          description: '`null` tira o Instagram.'
+        instagram_url:
+          description: '`null` tira o Instagram. A URL completa do perfil; ver `NetworkEventInstagramUrlInput`.'
           oneOf:
-            - $ref: '#/components/schemas/NetworkEventInstagramHandleInput'
+            - $ref: '#/components/schemas/NetworkEventInstagramUrlInput'
             - type: 'null'
 
     AdminNetworkEventRelocation:

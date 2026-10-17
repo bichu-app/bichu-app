@@ -54,7 +54,7 @@ describe('isca: X-CSRF-Token em toda escrita administrativa', () => {
     const servidor = criarServidorFalso({ 'POST /admin/store/partners': json(201, {}) });
     const isca: EstrategiaDeSessao = semSessao;
     const api = criarClienteDaApi({ fetch: servidor.fetch, sessao: isca });
-    await api.POST('/admin/store/partners', { body: { slug: 'loja-do-bairro', name: 'Loja do Bairro', host: 'lojadobairro.com.br', sort_order: 0 } });
+    await api.POST('/admin/store/partners', { body: { slug: 'loja-do-bairro', name: 'Loja do Bairro', site_url: 'https://lojadobairro.com.br', sort_order: 0 } });
     expect(escritasSemCsrf(servidor.requisicoes, SESSAO.csrf_token)).toHaveLength(1);
   });
 
@@ -70,7 +70,7 @@ describe('isca: X-CSRF-Token em toda escrita administrativa', () => {
         <>
           <button
             type="button"
-            onClick={() => void api.POST('/admin/store/partners', { body: { slug: 'loja-do-bairro', name: 'Loja do Bairro', host: 'lojadobairro.com.br', sort_order: 0 } })}
+            onClick={() => void api.POST('/admin/store/partners', { body: { slug: 'loja-do-bairro', name: 'Loja do Bairro', site_url: 'https://lojadobairro.com.br', sort_order: 0 } })}
           >
             parceiro
           </button>

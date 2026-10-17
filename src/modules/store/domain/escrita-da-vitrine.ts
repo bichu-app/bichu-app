@@ -28,6 +28,7 @@
  * o teste reprova se alguma copiar.
  */
 import { comoData } from '../../../shared/time/clock.js';
+import { errosDoEnderecoCompleto } from '../../../shared/url/endereco-completo.js';
 import type { Instant } from '../../../shared/types/brands.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import {
@@ -178,6 +179,46 @@ function ehIpLiteral(hostname: string): boolean {
 
 /** O teto do contrato para URL de entrada (D47). */
 export const TETO_DA_URL = 2048;
+
+/**
+ * O site do parceiro, **completo e com `https://`** (padrao do cliente de
+ * 17/10/2026).
+ *
+ * ## O campo mudou de forma, e a coluna NAO
+ *
+ * `store_partners.host` guarda o nome pelado (`cobasi.com.br`) e continua
+ * assim: a leitura compoe `https://<host><caminho>`, o `CHECK` da migracao
+ * `20260922000023` cobra o formato de host, e `ehDoParceiro` compara o destino
+ * do item contra ele. Trocar a COLUNA para guardar uma URL mexeria nas tres
+ * coisas sem o cliente ter pedido nenhuma delas.
+ *
+ * O que o cliente pediu foi sobre o que a PESSOA DIGITA. Entao a entrada passa
+ * a ser `site_url` (`https://parceiro.exemplo.test`), e o host sai dela por
+ * `hostDoEndereco`. **Nao ha completacao em silencio na direcao proibida**: o
+ * campo nao aceita `cobasi.com.br` e poe `https://` por baixo -- ele recusa e
+ * diz o que falta.
+ *
+ * ## O que isto muda para quem cadastra, e vale avisar
+ *
+ * Digitar `https://www.parceiro.exemplo.test` guarda o host `www.cobasi.com.br`, e
+ * dai em diante os links dos produtos precisam estar nele ou abaixo dele --
+ * `https://parceiro.exemplo.test/p`, sem o `www.`, passa a ser recusado para esse
+ * parceiro. Nao e defeito: e o parceiro declarando qual e o site dele. Mas e
+ * uma escolha que o formulario precisa deixar visivel, e por isso a ajuda do
+ * campo mostra o exemplo sem `www.`.
+ *
+ * ## Caminho no fim e aceito, e descartado
+ *
+ * `https://parceiro.exemplo.test/` e `https://parceiro.exemplo.test/loja` dao o mesmo host.
+ * Recusar a barra final seria recusar o que todo navegador mostra ao copiar um
+ * endereco, e e exatamente o tipo de rigor que bloqueou o cliente hoje de
+ * manha.
+ */
+export function errosDoSiteDoParceiro(campo: string, siteUrl: string): ProblemFieldError[] {
+  // `253` e o teto de um nome de dominio, e o do contrato para `host`. Com o
+  // `https://` na frente, o teto do campo e o do dominio mais o esquema.
+  return errosDoEnderecoCompleto(campo, siteUrl, { prefixo: 'site_url', teto: 253 + 'https://'.length });
+}
 
 /**
  * Confere a URL de destino de um item contra o host do parceiro (D47 e ADR-0027

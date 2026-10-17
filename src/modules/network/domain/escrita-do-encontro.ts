@@ -22,6 +22,10 @@
  */
 import { redigirCanalMediado } from '../../../shared/redaction/redigir.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
+import {
+  errosDoEnderecoCompleto,
+  hostDoEndereco,
+} from '../../../shared/url/endereco-completo.js';
 import type { OrigemDoEncontro } from '../../../shared/db/schema.js';
 import type { Instant } from '../../../shared/types/brands.js';
 
@@ -406,11 +410,26 @@ export function errosDoLinkDeIngresso(campo: string, valor: string): ProblemFiel
 }
 
 /**
- * O @ do Instagram, NUM PONTO SO: aceita `usuario`, `@usuario` ou a URL do
- * perfil em `instagram.com` (com ou sem `www.`/`m.`, `http`/`https`, barra
- * final e consulta), e devolve o handle puro em minusculas -- ou `null`, quando
- * nao da para tirar um handle valido. Padrao do Instagram: 1 a 30 de letras,
- * digitos, ponto e sublinhado.
+ * O handle a GUARDAR, a partir da URL completa do perfil.
+ *
+ * ## O que mudou em 17/10/2026, e por que
+ *
+ * Esta funcao **aceitava** `usuario`, `@usuario` ou a URL, e normalizava os
+ * tres. O cliente decidiu o padrao contrario para a aplicacao inteira: todo
+ * campo de site ou URL recebe o endereco completo, com `https://`. Quem valida
+ * isso agora e [errosDoInstagram]; esta funcao passou a ser so a EXTRACAO, e
+ * pressupoe um valor que aquela ja aprovou.
+ *
+ * **Ela continua aceitando o apelido cru**, e isso e deliberado: ela tambem le
+ * o que ja esta GRAVADO. A coluna guarda handle (`bichu.app`), e passa por
+ * aqui quando o painel reabre um encontro para edicao. Endurecer a extracao
+ * junto com a entrada quebraria a leitura do dado existente para resolver um
+ * problema que e da entrada.
+ *
+ * Aceita a URL do perfil em `instagram.com` (com ou sem `www.`/`m.`,
+ * `http`/`https`, barra final e consulta) e devolve o handle puro em
+ * minusculas -- ou `null`, quando nao da para tirar um handle valido. Padrao do
+ * Instagram: 1 a 30 de letras, digitos, ponto e sublinhado.
  */
 export function handleDoInstagram(valor: string): string | null {
   let texto = valor.trim();
@@ -420,27 +439,69 @@ export function handleDoInstagram(valor: string): string | null {
   return /^[A-Za-z0-9._]{1,30}$/.test(texto) ? texto.toLowerCase() : null;
 }
 
-export function errosDoInstagram(campo: string, valor: string): ProblemFieldError[] {
-  if (CONTROLE_BIDIRECIONAL.test(valor)) {
-    return [{ field: campo, code: 'bidi_control', message: 'O texto tem um caractere de controle de direção.' }];
-  }
-  return handleDoInstagram(valor) === null
-    ? [
-        {
-          field: campo,
-          code: 'instagram_handle_invalid',
-          message: 'Use o @ do Instagram: até 30 letras, números, ponto ou sublinhado.',
-        },
-      ]
-    : [];
-}
+/** O teto do campo: a base do perfil mais os 30 do handle, com folga. */
+export const TETO_DA_URL_DO_INSTAGRAM = 120;
 
 /**
- * A URL publica do perfil, montada na saida a partir do handle guardado e da
- * base do perfil, que e CONFIGURACAO (`INSTAGRAM_PROFILE_BASE_URL`): host
- * literal em `src/` e o que o portao de portabilidade reprova. Sem base
- * configurada, a URL sai nula e o handle continua saindo.
+ * A URL do perfil do Instagram, **completa e com `https://`** (padrao do
+ * cliente de 17/10/2026).
+ *
+ * ## O apelido cru passou a ser RECUSADO, e e a mudanca de desenho
+ *
+ * `@bichu.app` e `bichu.app` eram aceitos e viravam handle. Agora sao
+ * recusados, com uma linha que mostra a forma certa -- a pessoa nao precisa
+ * descobrir sozinha que o campo mudou. **Nao ha completacao em silencio**: o
+ * campo nao acrescenta a base do perfil ao que ela digitou.
+ *
+ * ## O que NAO mudou, e vale dizer
+ *
+ * - **O perfil continua tendo de ser do `instagram.com`.** O campo se chama
+ *   Instagram; aceitar outro dominio aqui faria dele um campo de link
+ *   qualquer, e a excecao ao D59 foi concedida a ESTE campo e nao a um campo
+ *   de link livre.
+ * - **A coluna continua guardando o handle**, e `instagram_url` continua sendo
+ *   montada por [urlDoInstagram] a partir de `INSTAGRAM_PROFILE_BASE_URL`. A
+ *   configuracao NAO virou morta. Guardar o handle mantem uma forma canonica:
+ *   `instagram.com/x`, `www.instagram.com/x` e `m.instagram.com/x/` sao o
+ *   mesmo perfil, e guardar o texto cru deixaria tres linhas dizendo a mesma
+ *   coisa de tres jeitos.
+ * - **Nenhum dado existente quebra**, e isto foi MEDIDO e nao suposto: em
+ *   17/10/2026 os 6 encontros de hml tinham `instagram_handle` nulo, entao
+ *   zero linha precisa de conversao e **nao ha migracao**. O que estivesse
+ *   gravado continuaria funcionando de qualquer forma: a coluna nao mudou de
+ *   formato, e so a ENTRADA ficou mais estrita.
  */
+export function errosDoInstagram(campo: string, valor: string): ProblemFieldError[] {
+  const erros = errosDoEnderecoCompleto(campo, valor, {
+    prefixo: 'instagram_url',
+    teto: TETO_DA_URL_DO_INSTAGRAM,
+  });
+  if (erros.length > 0) return erros;
+
+  // Passou nas regras gerais de endereco. Falta a regra que so este campo tem:
+  // ser um perfil do Instagram.
+  const host = hostDoEndereco(valor);
+  if (!/^(?:www\.|m\.)?instagram\.com$/.test(host)) {
+    return [
+      {
+        field: campo,
+        code: 'instagram_url_not_instagram',
+        message: 'O endereço precisa ser de um perfil do instagram.com.',
+      },
+    ];
+  }
+  if (handleDoInstagram(valor.trim()) === null) {
+    return [
+      {
+        field: campo,
+        code: 'instagram_url_invalid',
+        message: 'Falta o nome do perfil no fim do endereço.',
+      },
+    ];
+  }
+  return [];
+}
+
 export function urlDoInstagram(handle: string | null, base: string | null): string | null {
   if (handle === null || base === null) return null;
   return `${base.replace(/\/+$/, '')}/${handle}/`;

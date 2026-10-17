@@ -21,6 +21,7 @@
  * valor vai inteiro.
  */
 import { AppError, problemas } from '../../../shared/http/errors.js';
+import { hostDoEndereco } from '../../../shared/url/endereco-completo.js';
 import type { ProblemFieldError } from '../../../shared/http/problem.js';
 import type { Clock, IdGenerator } from '../../../shared/ports/index.js';
 import type { AdminAccountId, Instant } from '../../../shared/types/brands.js';
@@ -37,6 +38,7 @@ import {
   dataDeConsultaNoFuturo,
   errosDeTexto,
   errosDoDestino,
+  errosDoSiteDoParceiro,
   estadoDePublicacao,
   hojeUtc,
   lerIfMatch,
@@ -94,14 +96,23 @@ export interface PrecoDoCorpo {
 export interface CorpoDeParceiro {
   readonly slug: string;
   readonly name: string;
-  readonly host: string;
+  /**
+   * O endereco COMPLETO do site do parceiro, com `https://` (padrao do cliente
+   * de 17/10/2026). O host, que e o que a coluna guarda, sai dele.
+   *
+   * Substituiu `host`, que recebia o nome pelado (`cobasi.com.br`) e tinha no
+   * painel a ajuda "So o endereco, sem https:// e sem barra" -- o oposto
+   * exato do padrao novo.
+   */
+  readonly site_url: string;
   readonly sort_order?: number;
 }
 
 export interface PatchDeParceiro {
   readonly slug?: string;
   readonly name?: string;
-  readonly host?: string;
+  /** O endereco completo. Ver [CorpoDeParceiro.site_url]. */
+  readonly site_url?: string;
   readonly sort_order?: number;
   readonly active?: boolean;
 }
@@ -395,7 +406,10 @@ export class CatalogoAdministrativo {
   }
 
   async criarParceiro(autor: Autor, corpo: CorpoDeParceiro): Promise<Escrito<ParceiroProjetado>> {
-    const erros = errosDeTexto('name', corpo.name, 2, 80);
+    const erros = [
+      ...errosDeTexto('name', corpo.name, 2, 80),
+      ...errosDoSiteDoParceiro('site_url', corpo.site_url),
+    ];
     if (erros.length > 0) throw problemas.validacao(erros);
 
     return this.deps.repositorio.emTransacao(async (tx) => {
@@ -404,7 +418,7 @@ export class CatalogoAdministrativo {
           id: this.deps.ids.uuidv7(),
           slug: corpo.slug,
           name: corpo.name.trim(),
-          host: corpo.host,
+          host: hostDoEndereco(corpo.site_url),
           sortOrder: corpo.sort_order ?? 0,
           agora: this.agora(),
         }),
@@ -425,7 +439,10 @@ export class CatalogoAdministrativo {
     patch: PatchDeParceiro,
   ): Promise<Escrito<ParceiroProjetado>> {
     const versao = versaoExigida(ifMatch);
-    const erros = patch.name === undefined ? [] : errosDeTexto('name', patch.name, 2, 80);
+    const erros = [
+      ...(patch.name === undefined ? [] : errosDeTexto('name', patch.name, 2, 80)),
+      ...(patch.site_url === undefined ? [] : errosDoSiteDoParceiro('site_url', patch.site_url)),
+    ];
     if (erros.length > 0) throw problemas.validacao(erros);
 
     return this.deps.repositorio.emTransacao(async (tx) => {
@@ -440,7 +457,7 @@ export class CatalogoAdministrativo {
       const mudanca: MudancaDeParceiro = {
         ...(patch.slug === undefined ? {} : { slug: patch.slug }),
         ...(patch.name === undefined ? {} : { name: patch.name.trim() }),
-        ...(patch.host === undefined ? {} : { host: patch.host }),
+        ...(patch.site_url === undefined ? {} : { host: hostDoEndereco(patch.site_url) }),
         ...(patch.sort_order === undefined ? {} : { sortOrder: patch.sort_order }),
         ...(patch.active === undefined ? {} : { active: patch.active }),
       };

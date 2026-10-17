@@ -27,7 +27,7 @@ import type {
   UnidadeDoValor,
   Visibilidade,
 } from './tipos.ts';
-import { handleDoInstagram, MENSAGEM_DO_INSTAGRAM, MENSAGEM_DO_LINK, recusaDoLinkDoConvite } from './links.ts';
+import { handleDoInstagram, MENSAGEM_DO_INSTAGRAM, MENSAGEM_DO_LINK, recusaDoInstagram, recusaDoLinkDoConvite } from './links.ts';
 import { unidadeComoAparece } from './rotulos.ts';
 import { centavosDoTexto, textoDosCentavos, valorComoOAppMostra } from './valor.ts';
 
@@ -100,7 +100,7 @@ export interface EstadoDoFormulario {
   endereco: string;
   /** `ticket_url`, opcional (ADR-0027 item 22). */
   linkDoConvite: string;
-  /** `instagram_handle`, opcional: `@usuario`, `usuario` ou a URL do perfil. */
+  /** `instagram_url`, opcional: a URL COMPLETA do perfil, com `https://` (padrao de 17/10). */
   instagram: string;
   bairro: string;
   cidade: string;
@@ -159,7 +159,17 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
     local: e.place.place_name,
     endereco: e.street_address ?? '',
     linkDoConvite: e.ticket_url ?? '',
-    instagram: e.instagram_handle ? `@${e.instagram_handle}` : '',
+    // **A URL COMPLETA que o servidor devolve**, e nao `@handle`: desde 17/10 o
+    // campo exige endereco completo, e reabrir um encontro com `@x` deixaria
+    // todo evento ja salvo invalido no proprio formulario que o abriu.
+    //
+    // `instagram_url` sai nula quando `INSTAGRAM_PROFILE_BASE_URL` nao esta
+    // configurada no ambiente. Nesse caso cai no `@handle`, que o campo vai
+    // marcar como invalido -- e isso e melhor que as duas alternativas:
+    // montar a URL aqui seria o literal de host que o portao de
+    // portabilidade reprova, e deixar o campo vazio APAGARIA o Instagram do
+    // encontro no primeiro salvamento, sem ninguem perceber.
+    instagram: e.instagram_url ?? (e.instagram_handle ? `@${e.instagram_handle}` : ''),
     bairro: e.place.neighborhood,
     cidade: e.place.city,
     uf: e.place.state,
@@ -270,7 +280,14 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
     const recusa = recusaDoLinkDoConvite(f.linkDoConvite);
     if (recusa) e('linkDoConvite', 'Link do convite ou ingresso', MENSAGEM_DO_LINK[recusa]);
   }
-  if (f.instagram.trim() && handleDoInstagram(f.instagram) === null) e('instagram', 'Instagram para dúvidas', MENSAGEM_DO_INSTAGRAM);
+  // Pelo CODIGO, e nao por uma frase so: o apelido cru, um perfil de outra
+  // e `a base do perfil do Instagram` sao recusas diferentes e pedem textos
+  // diferentes. Uma frase para as tres e o defeito que custou o tempo do
+  // cliente em 17/10.
+  if (f.instagram.trim()) {
+    const recusa = recusaDoInstagram(f.instagram);
+    if (recusa !== null) e('instagram', 'Instagram para dúvidas', MENSAGEM_DO_INSTAGRAM[recusa]);
+  }
   if (!entre(f.bairro, 2, 60)) e('bairro', 'Bairro', 'Informe o bairro.');
   if (!entre(f.cidade, 2, 60)) e('cidade', 'Cidade', 'Informe a cidade.');
 
@@ -340,7 +357,10 @@ export function montarCriacao(f: EstadoDoFormulario): EncontroInput {
     ...(notas ? { notes: notas } : {}),
     ...(f.endereco.trim() ? { street_address: f.endereco.trim() } : {}),
     ...(f.linkDoConvite.trim() ? { ticket_url: f.linkDoConvite.trim() } : {}),
-    ...(handleDoInstagram(f.instagram) ? { instagram_handle: handleDoInstagram(f.instagram) ?? '' } : {}),
+    // A URL COMPLETA, como a pessoa digitou. O servidor extrai o handle; o
+    // painel nao o manda mais, senao o campo do contrato voltaria a receber
+    // apelido por um caminho que ninguem olha.
+    ...(f.instagram.trim() ? { instagram_url: f.instagram.trim() } : {}),
   };
 }
 
@@ -377,8 +397,14 @@ export function planoDeEdicao(original: Encontro, f: EstadoDoFormulario): PlanoD
   // Links vao no PATCH, sem senha; o servidor avisa os administradores por e-mail.
   const link = f.linkDoConvite.trim() || null;
   if (link !== (original.ticket_url ?? null)) patch.ticket_url = link;
+  // **A COMPARACAO e por handle, e o ENVIO e a URL.** Comparar as URLs faria
+  // o mesmo perfil com e sem `www.` parecer
+  // mudanca -- e cada "mudanca" de link avisa todos os administradores por
+  // e-mail. O handle e a forma canonica, e e o que a coluna guarda.
   const handle = f.instagram.trim() ? handleDoInstagram(f.instagram) : null;
-  if (handle !== (original.instagram_handle ?? null)) patch.instagram_handle = handle;
+  if (handle !== (original.instagram_handle ?? null)) {
+    patch.instagram_url = f.instagram.trim() || null;
+  }
   if (!mesmoConjunto(f.portes, original.accepted_sizes)) patch.accepted_sizes = [...f.portes];
   if (f.idade !== original.dog_age) patch.dog_age = f.idade;
   if (f.vacina !== original.vaccination_required) patch.vaccination_required = f.vacina;

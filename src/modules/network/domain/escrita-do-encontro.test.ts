@@ -353,7 +353,18 @@ void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so 
     assert.deepEqual(link(`${HTTPS}exemplo.com.br/ingresso`), []);
   });
 
-  void it('Instagram: aceita usuario, @usuario e a URL do perfil, e guarda o handle puro em minusculas (um ponto so)', () => {
+  // ---------------------------------------------------------------------
+  // 17/10/2026: o campo passou a exigir a URL COMPLETA do perfil
+  // ---------------------------------------------------------------------
+  //
+  // Padrao do cliente, por extenso: "todo campo de site/url, o usuario deve
+  // preencher completo o endereco completo, inclusive com o https".
+  //
+  // O que mudou e so a ENTRADA. `handleDoInstagram` continua lendo o apelido
+  // cru, porque ela tambem le o que esta GRAVADO -- a coluna guarda handle, e
+  // o painel a usa para reabrir o formulario.
+
+  void it('a extracao continua lendo o que esta gravado, inclusive apelido cru', () => {
     for (const [entrada, esperado] of [
       ['encontro.dos_caes', 'encontro.dos_caes'],
       ['@Encontro.Dos_Caes', 'encontro.dos_caes'],
@@ -365,18 +376,64 @@ void describe('links do encontro (01/10, ADR-0027 item 22): a excecao ao D59 so 
       ['a'.repeat(30), 'a'.repeat(30)],
     ] as const) {
       assert.equal(handleDoInstagram(entrada), esperado, entrada);
-      assert.deepEqual(errosDoInstagram('instagram_handle', entrada), [], entrada);
     }
-    // A base vem da configuracao (`INSTAGRAM_PROFILE_BASE_URL`); aqui, um host de teste.
+    // A base vem da configuracao (`INSTAGRAM_PROFILE_BASE_URL`); aqui, um host
+    // de teste. **Ela continua em uso**: a URL publica segue sendo montada a
+    // partir do handle guardado, e a variavel nao virou configuracao morta.
     assert.equal(urlDoInstagram('bichu.app', 'https://perfil.exemplo.test'), 'https://perfil.exemplo.test/bichu.app/');
     assert.equal(urlDoInstagram('bichu.app', 'https://perfil.exemplo.test/'), 'https://perfil.exemplo.test/bichu.app/');
     assert.equal(urlDoInstagram(null, 'https://perfil.exemplo.test'), null);
     assert.equal(urlDoInstagram('bichu.app', null), null);
   });
 
-  void it('ISCA: @ invalido e recusado (vazio, 31, caractere fora do padrao, URL de outro site)', () => {
-    for (const ruim of ['@', '', 'a'.repeat(31), 'bichu-app', 'bichu app', '@@bichu', 'bichu!', `${HTTPS}www.facebook.com/bichu`, `${HTTPS}instagram.com/`]) {
-      assert.deepEqual(errosDoInstagram('instagram_handle', ruim).map((e) => e.code), ['instagram_handle_invalid'], ruim);
+  void it('a ENTRADA exige a URL completa do perfil', () => {
+    for (const bom of [
+      `${HTTPS}instagram.com/bichu.app`,
+      `${HTTPS}www.instagram.com/Bichu.App/`,
+      `${HTTPS}m.instagram.com/bichu_app`,
+      `${HTTPS}instagram.com/${'a'.repeat(30)}`,
+    ]) {
+      assert.deepEqual(errosDoInstagram('instagram_url', bom), [], bom);
+    }
+  });
+
+  // ISCA -- em `errosDoInstagram`, volte a chamar so `handleDoInstagram` e a
+  // devolver `instagram_handle_invalid`. Os quatro apelidos abaixo voltam a
+  // ser aceitos e o caso reprova.
+  void it('ISCA: apelido cru e recusado, e a frase mostra a forma certa', () => {
+    for (const apelido of ['@bichu.app', 'bichu.app', 'instagram.com/bichu.app', 'www.instagram.com/bichu_app/']) {
+      const erros = errosDoInstagram('instagram_url', apelido);
+      assert.deepEqual(erros.map((e) => e.code), ['instagram_url_not_https'], apelido);
+      // A frase ENSINA o que falta, em vez de so recusar: ela diz "endereco
+      // completo, comecando com https://". **O EXEMPLO com o host fica no
+      // PAINEL**, montado de `VITE_URL_DO_PERFIL_DO_INSTAGRAM` -- host de
+      // terceiro literal em `src/` reprova o portao de portabilidade, e e o
+      // mesmo motivo pelo qual a mensagem do link do convite nao tem exemplo.
+      assert.ok((erros[0]?.message ?? '').includes('https://'), apelido);
+    }
+  });
+
+  void it('ISCA: `http://` tem frase propria, e as protecoes nao afrouxaram', () => {
+    const codigo = (v: string): string[] => errosDoInstagram('instagram_url', v).map((e) => e.code);
+    const frase = (v: string): string => errosDoInstagram('instagram_url', v)[0]?.message ?? '';
+
+    assert.deepEqual(codigo(`${HTTP}instagram.com/bichu.app`), ['instagram_url_not_https']);
+    assert.ok(frase(`${HTTP}instagram.com/bichu.app`).includes('http://'));
+
+    // Esquema que nao e web, dominio de outro site, credencial, IP e host
+    // local: tudo o que ja era recusado continua recusado.
+    assert.deepEqual(codigo('javascript:alert(1)'), ['instagram_url_not_https']);
+    assert.deepEqual(codigo(`${HTTPS}www.facebook.com/bichu`), ['instagram_url_not_instagram']);
+    assert.deepEqual(codigo(`${HTTPS}u:s@instagram.com/bichu`), ['instagram_url_has_credentials']);
+    assert.deepEqual(codigo(`${HTTPS}203.0.113.5/bichu`), ['instagram_url_ip_literal']);
+    assert.deepEqual(codigo(`${HTTPS}instagram.com/`), ['instagram_url_invalid']);
+    assert.deepEqual(codigo(`${HTTPS}instagram.com/${'a'.repeat(31)}`), ['instagram_url_invalid']);
+    assert.deepEqual(codigo(''), ['instagram_url_length']);
+
+    // E nenhuma recusa que nao seja de esquema fala de `https://`: foi essa
+    // confusao que custou o tempo do cliente em 17/10.
+    for (const ruim of [`${HTTPS}www.facebook.com/bichu`, `${HTTPS}u:s@instagram.com/bichu`, `${HTTPS}203.0.113.5/bichu`]) {
+      assert.ok(!frase(ruim).includes('https://'), ruim);
     }
   });
 

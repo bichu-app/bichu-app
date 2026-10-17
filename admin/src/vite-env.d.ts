@@ -11,6 +11,7 @@ interface ImportMetaEnv {
   readonly VITE_CAPTCHA_SITE_KEY?: string;
   /** Hosts de terceiros, de `config/hosts-externos.ts`, fixados no build. */
   readonly VITE_URL_DO_SCRIPT_DO_CAPTCHA: string;
+  readonly VITE_URL_DO_PERFIL_DO_INSTAGRAM: string;
 }
 
 interface ImportMeta {

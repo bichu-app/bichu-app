@@ -41,7 +41,16 @@ import {
   type EstadoDoFormulario,
   type PlanoDeEdicao,
 } from '../dominio/formulario.ts';
-import { handleDoInstagram, LIMITE_DO_LINK_DO_CONVITE, MENSAGEM_DO_INSTAGRAM, MENSAGEM_DO_LINK, type CodigoDoLink } from '../dominio/links.ts';
+import {
+  handleDoInstagram,
+  LIMITE_DA_URL_DO_INSTAGRAM,
+  LIMITE_DO_LINK_DO_CONVITE,
+  EXEMPLO_DO_INSTAGRAM,
+  MENSAGEM_DO_INSTAGRAM,
+  MENSAGEM_DO_LINK,
+  type CodigoDoInstagram,
+  type CodigoDoLink,
+} from '../dominio/links.ts';
 import { chaves, ESTRUTURAS, IDADES, ITENS_PARA_LEVAR, PORTES, UFS, UNIDADES, UNIDADES_OFERECIDAS, unidadeComoAparece } from '../dominio/rotulos.ts';
 import type { Encontro } from '../dominio/tipos.ts';
 import { centavosDoTexto, valorComoOAppMostra } from '../dominio/valor.ts';
@@ -107,7 +116,10 @@ function errosDoServidor(falha: Falha): ErroDeCampo[] {
         : campo === 'linkDoConvite'
           ? (MENSAGEM_DO_LINK[e.code as CodigoDoLink] ?? MENSAGEM_DO_LINK.ticket_url_invalid)
           : campo === 'instagram'
-            ? MENSAGEM_DO_INSTAGRAM
+            ? // Pelo `code`, como o link do convite: o servidor distingue
+              // "nao e https", "nao e do instagram.com" e "falta o perfil", e
+              // a tela nao pode juntar os tres numa frase so.
+              (MENSAGEM_DO_INSTAGRAM[e.code as CodigoDoInstagram] ?? MENSAGEM_DO_INSTAGRAM.instagram_url_invalid)
             : texto;
     return [{ campo, rotulo: ROTULO_DO_CAMPO[campo] ?? campo, mensagem }];
   });
@@ -693,7 +705,7 @@ function CampoDoEndereco({ valor, aoMudar, erro }: { valor: string; aoMudar: (v:
   );
 }
 
-/** `instagram_handle`: aceita `@usuario`, `usuario` ou a URL do perfil, e mostra o @ como vai ficar. */
+/** `instagram_url`: a URL COMPLETA do perfil (padrao de 17/10). Mostra o @ que vai ser guardado. */
 function CampoDoInstagram({ valor, aoMudar, erro }: { valor: string; aoMudar: (v: string) => void; erro?: string | undefined }) {
   const id = 'enc-instagram';
   const handle = valor.trim() ? handleDoInstagram(valor) : null;
@@ -704,7 +716,8 @@ function CampoDoInstagram({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
         id={id}
         className="input"
         autoComplete="off"
-        maxLength={60}
+        inputMode="url"
+        maxLength={LIMITE_DA_URL_DO_INSTAGRAM}
         value={valor}
         onChange={(e) => aoMudar(e.target.value)}
         aria-invalid={erro ? true : undefined}
@@ -717,7 +730,7 @@ function CampoDoInstagram({ valor, aoMudar, erro }: { valor: string; aoMudar: (v
         </span>
       ) : (
         <span className="help" id={`${id}-ajuda`}>
-          O @ de quem responde dúvidas sobre o encontro, ou o link do perfil. Opcional.
+          Endereço completo do perfil, com https://. Por exemplo: {EXEMPLO_DO_INSTAGRAM}
         </span>
       )}
       <span className="help" id={`${id}-como-fica`} aria-live="polite">
