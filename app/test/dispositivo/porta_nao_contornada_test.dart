@@ -869,7 +869,27 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// de aparelho: quem cobra isso e o portao ESTRUTURAL abaixo, que continua
 /// valendo e continua verde. Anterior:
 /// `5af94a5a286fc5e78b296fdd458b9a6058563fbe`.
-const String _arvoreDasTelas = '878dd2fa0cce8bb9d906e4391d1add202aeafb95'; // BICHUS-278, 01/10: `rede/local_do_encontro.dart` mostra o endereco e o botao `Abrir no mapa` (texto, sem geocodificar), e `rede/encontro_da_rede.dart` ganha a secao `Links` (convite e Instagram) -- camera nao entra nisso, a porta `CameraEGaleria` nao foi tocada
+/// DESTRAVADO EM 17/10 (BICHUS-278, a tela de detalhe do produto da `Loja`).
+///
+/// DOIS commits de `app/lib/telas/` entram neste valor, e o primeiro nao e
+/// meu: `42020c8` (a capa escolhivel, a ordem das imagens e o `Ler mais` do
+/// cartao) **ja deixava a trava vermelha** nesta branch -- o hash travado
+/// ainda era o de 01/10 quando eu parti dela. Nao destravei por cima do erro
+/// de ninguem: o valor abaixo e o da arvore com os dois lotes, e quem mesclar
+/// recalcula.
+///
+/// O que muda por minha causa: nasce `loja/produto_da_loja.dart` (a tela de
+/// detalhe) e `loja/vitrine_da_loja.dart` ganha o toque no cartao que leva a
+/// ela, mais dois widgets que viraram publicos para a tela nova reusar em vez
+/// de reimplementar (`AvisoDoParceiroDaLoja` e `BotaoDeSaidaDaLoja`).
+///
+/// **A camera nao entra nisso e a porta `CameraEGaleria` nao foi tocada.** A
+/// tela nova desenha `Image.network` com a URL que o servidor mandou, nao
+/// importa plugin de aparelho nenhum e nao abre canal de plataforma: quem
+/// cobra isso e o portao ESTRUTURAL abaixo, que nao depende desta constante e
+/// continua valendo. Anterior:
+/// `878dd2fa0cce8bb9d906e4391d1add202aeafb95`.
+const String _arvoreDasTelas = 'a2ee078f99dbc688f22d69472aaef2f91a48c6b8'; // BICHUS-278, 17/10: nasce `loja/produto_da_loja.dart`, a tela de detalhe do produto, e o cartao de `loja/vitrine_da_loja.dart` passa a levar a ela -- a galeria de ate 8 imagens nao tinha onde aparecer; inclui tambem `42020c8`, que ja deixava a trava vermelha nesta branch
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///
