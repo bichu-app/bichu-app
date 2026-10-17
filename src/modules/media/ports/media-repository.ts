@@ -28,6 +28,16 @@ export interface IntencaoDeEnvio {
 export interface FotoDoPet {
   readonly id: string;
   readonly status: StatusDaFoto;
+  /**
+   * O MOTIVO DA RECUSA, em texto, para a tela dizer por quê.
+   *
+   * Ele era gravado em `pet_photos.rejection_reason` desde a BICHUS-87 e **não
+   * chegava a ninguém**: o contrato não tinha o campo e a resposta não o
+   * enviava, então a tela dizia "recusada" e a pessoa não tinha como saber se o
+   * problema era o formato, o tamanho ou o arquivo truncado — e portanto não
+   * tinha como consertar. Nulo em `processing` e em `ready`.
+   */
+  readonly rejectionReason: string | null;
   readonly isPrimary: boolean;
   readonly originalKey: ObjectKey;
   readonly thumbKey: ObjectKey | null;

@@ -28,7 +28,7 @@ import { problemas } from '../../../shared/http/errors.js';
 import type { Clock, IdGenerator, JobQueue } from '../../../shared/ports/index.js';
 import type { FoundReportId, UserId } from '../../../shared/types/brands.js';
 import type { AutorizacaoDeEnvio, ObjectStorage } from '../../media/ports/object-storage.js';
-import { chaveDaFotoDoAchado, ehTipoAceito } from '../../media/ports/chaves-de-objeto.js';
+import { chaveDaFotoDoAchado, ehTipoAceito, TETO_DE_BYTES } from '../../media/ports/chaves-de-objeto.js';
 import {
   recusasDoRegistro,
   retencaoAPartirDe,
@@ -42,8 +42,27 @@ import type { Enriquecimento, FoundReportRepository, Pagina } from '../ports/fou
 /** SEC-009: três fotos no aviso do achador, para sempre. */
 export const TETO_DE_FOTOS_POR_ACHADO = 3;
 
-/** SEC-009: 2 MB por foto do achador, e não os 10 MB da foto de pet. */
-export const TETO_DE_BYTES_DA_FOTO_DO_ACHADO = 2 * 1024 * 1024;
+/**
+ * O teto do envio da foto do achador: **5 MB, o mesmo de todos os caminhos**.
+ *
+ * Eram 2 MiB aqui (SEC-009), 10 MiB na foto de pet e 5 MiB no catálogo — e o
+ * contrato herdava um quarto número, porque `createFoundReportPhotoUploadIntent`
+ * compõe `UploadIntentInput` sem sobrescrever `byte_size`, e o app conferia os
+ * 10 MiB do contrato. **Três números e uma herança para a mesma regra.**
+ *
+ * O cliente unificou em 17/10/2026: *"as imagens devem conter no maximo 5mb ...
+ * em toda a aplicação"*, para usuário e administrador. O número passou a ter um
+ * dono só (`media/domain/derivadas.ts`) e é reexportado por
+ * `media/ports/chaves-de-objeto.ts`.
+ *
+ * **DIVERGÊNCIA DECLARADA, e ela precisa de uma decisão:** o SEC-009 fixa 2 MB
+ * para a foto do achador justamente porque quem envia não tem identidade
+ * nenhuma, e 5 MB afrouxa isso em 2,5x. O teto de três fotos por aviso, para
+ * sempre, continua valendo e é o que limita o volume; mas quem decide o
+ * SEC-009 não sou eu, e a decisão do cliente foi "5 MB em toda a aplicação".
+ * Está relatado.
+ */
+export const TETO_DE_BYTES_DA_FOTO_DO_ACHADO = TETO_DE_BYTES;
 
 /** Cinco minutos para enviar. O mesmo número da foto de pet (BICHUS-87, critério 22). */
 const VALIDADE_DA_AUTORIZACAO_EM_SEGUNDOS = 300;

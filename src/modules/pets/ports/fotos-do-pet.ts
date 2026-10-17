@@ -22,6 +22,14 @@ export type StatusDaFoto = 'processing' | 'ready' | 'rejected';
 export interface FotoResumida {
   readonly id: string;
   readonly status: StatusDaFoto;
+  /**
+   * O motivo da recusa, em texto. Nulo fora de `rejected`.
+   *
+   * Entra nesta porta porque a ficha do pet é onde a pessoa VÊ a foto recusada:
+   * dizer "recusada" sem dizer por quê deixa a tela sem a única informação que
+   * permite consertar o problema.
+   */
+  readonly rejectionReason: string | null;
   readonly isPrimary: boolean;
   /** Nulas enquanto o worker não gerou as derivadas. Ausência é o valor honesto. */
   readonly thumbUrl: string | null;

@@ -8,11 +8,13 @@
  * direito na imagem de um cartaz.
  */
 import assert from 'node:assert/strict';
+import { TETO_DE_BYTES_DO_ENVIO } from './derivadas.js';
 import { describe, it } from 'node:test';
 import { posix } from 'node:path';
 import {
   TETO_DE_BYTES,
   chaveDaDerivada,
+  chaveDaFotoHigienizada,
   chaveDoOriginal,
   comoObjectKey,
   ehTipoAceito,
@@ -115,8 +117,15 @@ void describe('tipos aceitos', () => {
     assert.ok(!ehTipoAceito('image/gif'));
   });
 
-  void it('o teto é o do contrato', () => {
-    assert.equal(TETO_DE_BYTES, 10_485_760);
+  void it('o teto é o do contrato: 5 MiB, o MESMO em todos os caminhos', () => {
+    // Eram três números para a mesma regra: 10 MiB aqui, 2 MiB na foto do
+    // achado e 5 MiB no catálogo, com o contrato emprestando os 10 MiB para a
+    // operação do achado por composição. O cliente unificou em 5 MB em
+    // 17/10/2026, para usuário e administrador.
+    assert.equal(TETO_DE_BYTES, 5_242_880);
+    // E ele é o MESMO objeto que o ponto único declara, não uma cópia com o
+    // mesmo valor: é a cópia com o mesmo valor que diverge na próxima mudança.
+    assert.equal(TETO_DE_BYTES, TETO_DE_BYTES_DO_ENVIO);
   });
 });
 
@@ -370,5 +379,57 @@ void describe('comoObjectKey — a marca que agora exige forma', () => {
 
     // O outro extremo do mesmo `if`: vazio também não é chave.
     assert.throws(() => comoObjectKey(''), /recusada \(tamanho\)/);
+  });
+});
+
+
+/**
+ * As formas de chave que entraram nesta entrega, e o que cada uma protege.
+ */
+void describe('a variante `banner` e a derivada higienizada do achado', () => {
+  const ALEATORIO = new Uint8Array(16).fill(7);
+
+  void it('`banner` é uma variante de derivada pública como as outras duas', () => {
+    const chave = chaveDaDerivada('banner', ALEATORIO, 'jpeg', 'events');
+    assert.ok(chave.startsWith('events/banner/'));
+    assert.ok(chave.endsWith('.jpeg'));
+  });
+
+  void it('a variante fora da lista não monta chave nenhuma', () => {
+    // A variante é um SEGMENTO DO CAMINHO: valor livre ali é travessia.
+    assert.throws(() =>
+      // @ts-expect-error — é exatamente isto que a união fechada impede, e o
+      // teste existe para o dia em que alguém trocar o tipo por `string`.
+      chaveDaDerivada('../../publico', ALEATORIO, 'jpeg', 'events'),
+    );
+  });
+
+  void it('a higienizada do achado fica no MESMO prefixo do original', () => {
+    // O prefixo compartilhado é o que faz política de bucket, ciclo de vida e
+    // o expurgo dos 30 dias (ADR-0010) alcançarem as duas juntas.
+    const chave = chaveDaFotoHigienizada('1111-2222', ALEATORIO, 'jpeg');
+    assert.ok(chave.startsWith('found-reports/1111-2222/sanitized/'));
+  });
+
+  void it('a de quem não tem conta usa o rótulo, e nunca um UUID (SEC-001)', () => {
+    const chave = chaveDaFotoHigienizada('sem-conta', ALEATORIO, 'jpeg');
+    assert.equal(chave.startsWith('found-reports/sem-conta/sanitized/'), true);
+  });
+
+  void it('RECUSA extensão hostil, que viraria travessia no caminho', () => {
+    assert.throws(() => chaveDaFotoHigienizada('1111', ALEATORIO, '../../publico/card/x.jpeg'));
+  });
+
+  void it('RECUSA aleatório fraco: a chave é o que não se adivinha', () => {
+    assert.throws(() => chaveDaFotoHigienizada('1111', new Uint8Array(4), 'jpeg'));
+  });
+
+  void it('`comoObjectKey` aceita a forma higienizada, e só com 4 segmentos', () => {
+    assert.equal(
+      comoObjectKey('found-reports/1111/sanitized/abc.jpeg'),
+      'found-reports/1111/sanitized/abc.jpeg',
+    );
+    assert.throws(() => comoObjectKey('found-reports/sanitized/abc.jpeg'));
+    assert.throws(() => comoObjectKey('found-reports/1111/sanitized/sub/abc.jpeg'));
   });
 });

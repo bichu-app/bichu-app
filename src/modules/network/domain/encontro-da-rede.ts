@@ -112,9 +112,24 @@ export type EntradaDoEncontro =
       readonly unidade: 'per_dog' | 'per_pet' | 'per_person' | 'per_pair' | 'per_two_people';
     };
 
-/** Uma imagem, com a URL ja composta a partir da chave publica. */
+/**
+ * Uma imagem, com as URLs ja compostas a partir das chaves publicas.
+ *
+ * Tres derivadas e nao uma, porque a MESMA imagem e desenhada em tres tamanhos
+ * muito diferentes, e isso foi medido na tela: 144 dp na galeria do detalhe,
+ * ~328 dp no cartao da agenda e 360 a 430 dp de borda a borda na capa do
+ * detalhe. Com uma derivada so (1024 px), a galeria baixava cinco vezes o dado
+ * que pinta e a capa borrava de leve.
+ *
+ * `urlDaMiniatura` e `urlDoBanner` sao ANULAVEIS, e a ausencia e esperada: a
+ * imagem gravada antes destas derivadas existirem tem so a de 1024, e a imagem
+ * de produto da Loja tem so ela por decisao (aquela tela nao foi medida). Quem
+ * recebe nulo cai em `url`, que e o comportamento de antes.
+ */
 export interface ImagemDoEncontro {
   readonly url: string;
+  readonly urlDaMiniatura: string | null;
+  readonly urlDoBanner: string | null;
   readonly textoAlternativo: string;
 }
 
@@ -134,7 +149,12 @@ interface CamposDoEncontroProjetados {
   readonly time_zone: string;
   readonly status: StatusDoEncontro;
   readonly cover_image_url: string | null;
-  readonly images: readonly { readonly url: string; readonly alt_text: string }[];
+  readonly cover_banner_url: string | null;
+  readonly images: readonly {
+    readonly url: string;
+    readonly thumb_url: string | null;
+    readonly alt_text: string;
+  }[];
   readonly admission: {
     readonly kind: 'free' | 'paid';
     readonly price: {
@@ -305,8 +325,12 @@ export function statusDoEncontro(encontro: EncontroDaRede, agora: Instant): Stat
 function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEncontroProjetados {
   const imagens = encontro.imagens.map((imagem) => ({
     url: imagem.url,
+    thumb_url: imagem.urlDaMiniatura,
     alt_text: imagem.textoAlternativo,
   }));
+  // A capa e a imagem de posicao 0, nas duas derivadas: a de 1024 para o
+  // cartao da agenda e a de 1280 para a capa de borda a borda do detalhe.
+  const capa = encontro.imagens[0];
   return {
     slug: encontro.slug,
     title: encontro.title,
@@ -323,7 +347,8 @@ function camposProjetados(encontro: EncontroDaRede, agora: Instant): CamposDoEnc
     time_zone: encontro.timeZone,
     status: statusDoEncontro(encontro, agora),
     // Derivada da imagem de posicao 0, nunca gravada no banco.
-    cover_image_url: imagens[0]?.url ?? null,
+    cover_image_url: capa?.url ?? null,
+    cover_banner_url: capa?.urlDoBanner ?? null,
     images: imagens,
     admission:
       encontro.entrada.tipo === 'free'

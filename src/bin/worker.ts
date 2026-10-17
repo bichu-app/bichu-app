@@ -44,6 +44,15 @@ import {
   type CargaDaImagemDeCatalogo,
 } from '../modules/media/application/processar-imagem-de-catalogo.js';
 import { criarImagensDeCatalogoDoWorker } from '../modules/media/adapters/persistence/kysely-imagem-de-catalogo.js';
+import {
+  higienizarFotoDoAchado,
+  type CargaDaHigiene,
+} from '../modules/media/application/higienizar-foto-do-achado.js';
+import {
+  contarFotosDoAchadoPendentes,
+  criarFotosDoAchadoDoWorker,
+} from '../modules/media/adapters/persistence/kysely-fotos-do-achado.js';
+import { TRABALHO_DE_HIGIENE_DA_FOTO_DO_ACHADO } from '../modules/media/ports/fotos-do-achado.js';
 import { TRABALHO_DE_IMAGEM_DE_CATALOGO } from '../modules/media/ports/imagem-de-catalogo.js';
 import { varrerEnviosVencidos } from '../modules/media/application/varrer-envios-vencidos.js';
 import { expurgarContasExcluidas } from '../modules/identity/application/expurgar-contas-excluidas.js';
@@ -126,6 +135,17 @@ const INTERVALO_DO_EXPURGO_DE_LOCALIZACAO_EM_MILISSEGUNDOS = 6 * 60 * 60 * 1000;
  * estavam saudáveis.
  */
 const TRABALHOS_POR_PASSADA = 1;
+
+/**
+ * Quantas fotos de achado a varredura enfileira por passada.
+ *
+ * Enfileirar é um `INSERT` por linha, e não decodifica imagem nenhuma: o número
+ * é de volume de fila, não de memória. 20 a cada 15 minutos dá 80 por hora, que
+ * é bem mais que o teto de chamada daquelas rotas (3 fotos por aviso, para
+ * sempre) consegue produzir — e com teto, para que um reinício longo não
+ * enfileire a tabela inteira numa passada.
+ */
+const FOTOS_DE_ACHADO_POR_VARREDURA = 20;
 
 /**
  * QUANTO TEMPO DE `running` SEM SINAL DE VIDA É ÓRFÃO: cinco minutos.
@@ -295,6 +315,23 @@ export async function main(): Promise<void> {
     armazenamento: dependenciasDaFoto.armazenamento,
     processador: dependenciasDaFoto.imagens,
     ids,
+  };
+
+  /**
+   * A HIGIENE DA FOTO DO ACHADO, pelo MESMO processador e o MESMO armazenamento
+   * da foto de pet.
+   *
+   * Não há segundo worker de imagem neste sistema, e não pode haver: dois
+   * caminhos de processamento divergem, e o que diverge primeiro é sempre o que
+   * ninguém está olhando. O que entra aqui é o repositório — a foto do achado
+   * mora em `upload_intents`, e não em `pet_photos`.
+   */
+  const dependenciasDaHigieneDoAchado = {
+    fotos: criarFotosDoAchadoDoWorker(banco.db),
+    armazenamento: dependenciasDaFoto.armazenamento,
+    imagens: dependenciasDaFoto.imagens,
+    ids,
+    clock: systemClock,
   };
 
   // BICHUS-18. O DISPARO DO ALERTA DE 5 KM, montado aqui e em lugar nenhum
@@ -497,6 +534,18 @@ export async function main(): Promise<void> {
           continue;
         }
 
+        if (trabalho.kind === TRABALHO_DE_HIGIENE_DA_FOTO_DO_ACHADO) {
+          const higiene = await higienizarFotoDoAchado(
+            dependenciasDaHigieneDoAchado,
+            trabalho.payload as CargaDaHigiene,
+          );
+          await fila.complete(trabalho.id);
+          console.info(
+            JSON.stringify({ evento: `achado.foto_${higiene.tipo}`, envio: higiene.envioId }),
+          );
+          continue;
+        }
+
         if (trabalho.kind !== 'media.process_upload') {
           // Trabalho de um tipo que este worker ainda não sabe fazer. Falhar
           // com o motivo é melhor que ignorar em silêncio: ignorado, ele fica
@@ -507,7 +556,16 @@ export async function main(): Promise<void> {
 
         const resultado = await processarFoto(dependenciasDaFoto, trabalho.payload as CargaDoTrabalho);
         await fila.complete(trabalho.id);
-        console.info(JSON.stringify({ evento: `media.${resultado.tipo}`, foto: resultado.fotoId }));
+        console.info(
+          JSON.stringify({
+            evento: `media.${resultado.tipo}`,
+            foto: resultado.fotoId,
+            // O peso e o degrau de qualidade de cada derivada. É este número que
+            // responde "o teto de 500 KB do cliente está sendo respeitado?" sem
+            // ninguém precisar abrir o balde para medir.
+            ...(resultado.tipo === 'pronta' ? { derivadas: resultado.derivadas } : {}),
+          }),
+        );
       } catch (erro: unknown) {
         // Falha de VERDADE (armazenamento fora do ar, banco indisponível): a
         // fila adia e tenta de novo. Recusa de arquivo não passa por aqui —
@@ -545,6 +603,48 @@ export async function main(): Promise<void> {
       await fila.enqueue('case.transfer_consummate', { transferId: id });
       console.info(JSON.stringify({ evento: 'transfer.reenqueued', transferencia: id }));
     }
+  };
+
+  /**
+   * A VARREDURA DA HIGIENE, e é ela que liga o worker aos DOIS caminhos do
+   * achado sem rota nova nenhuma.
+   *
+   * Por que uma varredura e não um `enqueue` na confirmação, que é o desenho da
+   * foto de pet: **a foto do achado não tem confirmação**. No caminho de quem
+   * tem conta, `createFoundReportPhotoUploadIntent` assina a autorização e
+   * nenhuma operação do contrato confirma o envio; no caminho de quem não tem
+   * conta, a confirmação é a referência opaca em `PATCH /finder/found-report`,
+   * que é outro módulo e outra transação. Uma varredura cobre os dois, cobre o
+   * que JÁ ESTÁ no balde com EXIF, e não depende de um cliente que ainda não
+   * existe — "nenhum dos dois tem cliente hoje" é exatamente o motivo de a
+   * limpeza precisar valer para o envio que aparecer amanhã.
+   *
+   * Ela ENFILEIRA e não processa: um caminho de processamento só. O teto por
+   * passada é [FOTOS_DE_ACHADO_POR_VARREDURA] e não o `TRABALHOS_POR_PASSADA`
+   * da fila — enfileirar é um `INSERT` e não decodifica nada, então o número
+   * aqui é de volume de fila, e quem protege a memória continua sendo o laço da
+   * fila, que tira UM trabalho por passada.
+   */
+  const rodarVarreduraDeHigiene = async (): Promise<void> => {
+    const pendentes = await dependenciasDaHigieneDoAchado.fotos.pendentes(
+      FOTOS_DE_ACHADO_POR_VARREDURA,
+    );
+    for (const foto of pendentes) {
+      await fila.enqueue(TRABALHO_DE_HIGIENE_DA_FOTO_DO_ACHADO, {
+        upload_intent_id: foto.uploadIntentId,
+      });
+    }
+    if (pendentes.length === 0) return;
+    // A fila inteira no log, e não só esta passada: o número que interessa é
+    // "quantas fotos de achado ainda estão com EXIF no balde", e ele não cabe
+    // numa contagem limitada a 10.
+    console.info(
+      JSON.stringify({
+        evento: 'achado.higiene_enfileirada',
+        enfileiradas: pendentes.length,
+        pendentes_na_fila: await contarFotosDoAchadoPendentes(banco.db),
+      }),
+    );
   };
 
   const rodarVarredura = async (): Promise<void> => {
@@ -688,6 +788,14 @@ export async function main(): Promise<void> {
   }, INTERVALO_DO_EXPURGO_DE_LOCALIZACAO_EM_MILISSEGUNDOS);
   temporizadorDaLocalizacao.unref();
 
+  const temporizadorDaHigiene = setInterval(() => {
+    if (vida.estaEncerrando) return;
+    rodarVarreduraDeHigiene().catch((erro: unknown) => {
+      console.error(JSON.stringify({ evento: 'achado.higiene_sweep_failed', erro: String(erro) }));
+    });
+  }, INTERVALO_DA_VARREDURA_EM_MILISSEGUNDOS);
+  temporizadorDaHigiene.unref();
+
   const temporizadorDeTransferencias = setInterval(() => {
     if (vida.estaEncerrando) return;
     rodarVarreduraDeTransferencias().catch((erro: unknown) => {
@@ -758,6 +866,7 @@ export async function main(): Promise<void> {
   clearInterval(temporizadorDaFila);
   clearInterval(temporizadorDeOrfaos);
   clearInterval(temporizadorDaVarredura);
+  clearInterval(temporizadorDaHigiene);
   clearInterval(temporizadorDaLocalizacao);
   clearInterval(temporizadorDosPedidos);
   await banco.close();

@@ -30,7 +30,35 @@ export type MotivoDeRecusa =
   /** Acima de 50 megapixels DECODIFICADOS (critério 18). */
   | 'imagem_grande_demais'
   /** O cabeçalho não pôde ser lido: arquivo truncado ou corrompido. */
-  | 'imagem_ilegivel';
+  | 'imagem_ilegivel'
+  /**
+   * WebP (ou HEIF) com mais de um quadro: animação.
+   *
+   * RECUSA EXPLÍCITA, e esta é a escolha (BICHUS-87 não a tinha previsto). O
+   * número mágico de um WebP animado é o mesmo de um parado, então ele passava
+   * na conferência de bytes; e o `sharp`, sem `animated: true`, pega **só o
+   * primeiro quadro, em silêncio**. A pessoa enviava um WebP animado, via uma
+   * foto parada aparecer e não tinha como saber por quê.
+   *
+   * Recusar em vez de aceitar documentando que congela: GIF já é recusado pelo
+   * número mágico, e aceitar animação num formato e não no outro seria a mesma
+   * regra com duas respostas. Congelar em silêncio é o que não pode continuar.
+   */
+  | 'imagem_animada'
+  /**
+   * O cabeçalho foi lido, mas o DECODIFICADOR não abre os pixels.
+   *
+   * É o caso do HEIC nesta instalação: o `sharp` 0.35.4 / libvips 8.18.6 lê o
+   * cabeçalho do HEIC (`metadata()` devolve formato e dimensões) e falha na
+   * decodificação com "Support for this compression format is not implemented"
+   * — o libheif do pacote pré-compilado não traz o decodificador HEVC.
+   *
+   * Sem este motivo, esse arquivo virava EXCEÇÃO no worker, a fila entendia
+   * "culpa nossa", tentava cinco vezes e a foto ficava `processing` até a
+   * varredura de órfãos. Cabeçalho que abre e pixel que não abre é **culpa do
+   * arquivo**, e recusa final é o certo: tentar de novo não muda a resposta.
+   */
+  | 'formato_nao_decodificavel';
 
 /**
  * O resultado de `derivar`, e as DUAS exigências que o adaptador precisa cumprir.
@@ -40,6 +68,23 @@ export type MotivoDeRecusa =
  * saem daqui direto para um lugar onde `string` qualquer faz estrago. Hoje o
  * único adaptador devolve literais seguros — e é só isso que segura (BICHUS-133).
  */
+/**
+ * A geometria e a escada de uma derivada, como o caso de uso as pede.
+ *
+ * Os números vêm de `domain/derivadas.ts`, que é o ponto único — o adaptador
+ * não escolhe largura, proporção, qualidade nem teto, e é isso que mantém a
+ * decisão do cliente num lugar só.
+ */
+export interface PedidoDeDerivada {
+  readonly largura: number;
+  /** Presente = CORTA nesta proporção. Ausente = reduz sem cortar. */
+  readonly altura?: number;
+  /** A escada de qualidade, do melhor degrau para o pior. */
+  readonly escada: readonly number[];
+  /** O teto de bytes. O adaptador desce a escada até caber. */
+  readonly tetoDeBytes: number;
+}
+
 export interface Derivada {
   readonly bytes: Buffer;
   /**
@@ -69,6 +114,17 @@ export interface Derivada {
   readonly extensao: string;
   readonly largura: number;
   readonly altura: number;
+  /** O degrau da escada em que ela parou. Vai para o log, e é o que se audita. */
+  readonly qualidade: number;
+  /**
+   * `true` quando NEM o último degrau da escada caber no teto.
+   *
+   * A derivada sai de qualquer forma, no último degrau, e quem chama registra.
+   * A alternativa seria continuar borrando até caber, e aí ninguém descobre que
+   * o teto não é alcançável naquela proporção — o número real é mais útil que
+   * uma imagem feia entregue como se fosse o pedido.
+   */
+  readonly acimaDoTeto: boolean;
 }
 
 export interface ImageProcessor {
@@ -82,7 +138,11 @@ export interface ImageProcessor {
   inspecionar(bytes: Buffer): Promise<DimensoesDaImagem | MotivoDeRecusa>;
 
   /**
-   * Reescreve a imagem no tamanho pedido, **sem metadado nenhum**.
+   * Reescreve a imagem no tamanho pedido, **sem metadado nenhum**, cortando na
+   * proporção quando o pedido traz `altura`.
+   *
+   * Devolve `MotivoDeRecusa` em vez de lançar quando o decodificador não abre
+   * os pixels: é culpa do arquivo, e lançar fazia a fila tentar cinco vezes.
    *
    * "Sem metadado nenhum" e não "sem os campos conhecidos" — é o que o critério
    * 14 exige, e a diferença é a que importa: uma lista de campos a remover
@@ -93,5 +153,5 @@ export interface ImageProcessor {
    * que sai é um arquivo novo gerado a partir dos pixels, e não o original com
    * pedaços removidos.
    */
-  derivar(bytes: Buffer, larguraMaxima: number): Promise<Derivada>;
+  derivar(bytes: Buffer, pedido: PedidoDeDerivada): Promise<Derivada | MotivoDeRecusa>;
 }

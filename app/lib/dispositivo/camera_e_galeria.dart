@@ -160,14 +160,26 @@ class CameraNaoEmbarcada implements CameraEGaleria {
 // BICHUS-161 — a implementacao de producao
 // ---------------------------------------------------------------------------
 
-/// O teto de bytes que `POST /media/pet-photo-intents` aceita.
+/// O teto de bytes de **todo envio de imagem da aplicacao**: 5 MiB.
 ///
 /// **Nao e numero escolhido aqui:** e `UploadIntentInput.byte_size.maximum` do
-/// contrato (`api/openapi.yaml`), 10 MiB. O piso, `minimum: 1`, e o outro lado
-/// da mesma linha e tambem vale -- arquivo de zero byte e recusado pelo
-/// servidor, e deixar um subir e gastar uma ida e volta para receber
-/// `validation-failed`.
-const int tetoDeBytesDaFoto = 10485760;
+/// contrato (`api/openapi.yaml`). O piso, `minimum: 1`, e o outro lado da mesma
+/// linha e tambem vale -- arquivo de zero byte e recusado pelo servidor, e
+/// deixar um subir e gastar uma ida e volta para receber `validation-failed`.
+///
+/// Eram 10 MiB aqui e no contrato, 2 MiB no servidor da foto de achado e 5 MiB
+/// no catalogo: **tres numeros para a mesma regra**, e o envio de 3 MiB de uma
+/// foto de achado era aceito por este arquivo, prometido pelo contrato e
+/// recusado pelo servidor. O cliente unificou em 5 MB em 17/10/2026, para
+/// usuario e administrador, "em toda a aplicacao".
+const int tetoDeBytesDaFoto = 5242880;
+
+/// A ORIENTACAO que toda tela de envio de imagem mostra, antes do envio.
+///
+/// Uma linha, e e proposital: o cliente reprovou texto excessivo em tela. Ela e
+/// orientacao e nao recusa -- quem recusa e a politica assinada, no balde, com
+/// o mesmo numero.
+const String orientacaoDeTamanhoDaImagem = 'Envie uma imagem de até 5 MB.';
 
 /// A lista fechada de `UploadIntentInput.content_type`.
 ///

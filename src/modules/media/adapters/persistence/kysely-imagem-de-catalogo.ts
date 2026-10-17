@@ -19,6 +19,7 @@ import type { PropositoDaImagemDeCatalogo } from '../../../../shared/db/schema.j
 import type { ObjectKey } from '../../../../shared/types/brands.js';
 import {
   TRABALHO_DE_IMAGEM_DE_CATALOGO,
+  type ChavesDaImagemDeCatalogo,
   type ConfirmacaoDeCatalogo,
   type EnvioDeCatalogo,
   type ImagemParaProcessar,
@@ -187,15 +188,28 @@ export async function imagemDeCatalogoParaProcessar(
   };
 }
 
-/** `ready` so com a chave publica, e so a partir de `processing`: estado final nao volta. */
+/**
+ * `ready` so com as chaves, e so a partir de `processing`: estado final nao volta.
+ *
+ * `thumb_key` e `banner_key` sao gravadas no MESMO `UPDATE` de `public_key`, e
+ * nao em escritas separadas: a leitura publica filtra por `status = 'ready'`, e
+ * duas escritas abririam uma janela em que a imagem esta pronta com a capa e
+ * sem a miniatura. Ausentes (imagem de produto), elas entram `null` e o leitor
+ * cai na capa, que e o que ele faz hoje.
+ */
 export async function marcarImagemDeCatalogoPronta(
   db: DbExecutor,
   imagemId: string,
-  chavePublica: string,
+  chaves: ChavesDaImagemDeCatalogo,
 ): Promise<void> {
   await db
     .updateTable('catalog_images')
-    .set({ status: 'ready', public_key: chavePublica })
+    .set({
+      status: 'ready',
+      public_key: chaves.card,
+      thumb_key: chaves.thumb ?? null,
+      banner_key: chaves.banner ?? null,
+    })
     .where('id', '=', imagemId)
     .where('status', '=', 'processing')
     .execute();
@@ -217,7 +231,7 @@ export async function marcarImagemDeCatalogoRecusada(
 export function criarImagensDeCatalogoDoWorker(db: DbExecutor): ImagensDeCatalogoDoWorker {
   return {
     paraProcessar: (id) => imagemDeCatalogoParaProcessar(db, id),
-    marcarPronta: (id, chave) => marcarImagemDeCatalogoPronta(db, id, chave),
+    marcarPronta: (id, chaves) => marcarImagemDeCatalogoPronta(db, id, chaves),
     marcarRecusada: (id, motivo) => marcarImagemDeCatalogoRecusada(db, id, motivo),
   };
 }

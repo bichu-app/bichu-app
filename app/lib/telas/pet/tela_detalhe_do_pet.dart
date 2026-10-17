@@ -298,6 +298,25 @@ class _Conteudo extends StatelessWidget {
 
         // 2. Foto grande e nome.
         Center(child: _FotoGrande(pet: pet)),
+
+        // O MOTIVO DA RECUSA, quando nao sobrou foto para mostrar.
+        //
+        // Antes disto a moldura ficava vazia e a tela nao dizia nada: a foto
+        // tinha sido recusada, o motivo estava gravado no banco desde a
+        // BICHUS-87 e nao saia no contrato. A pessoa via um espaco vazio e nao
+        // tinha como saber se o problema era o formato, o tamanho, a dimensao
+        // minima ou um arquivo que chegou pela metade.
+        //
+        // `informativo` e nao `erro`: a foto e opcional (decisao do cliente de
+        // 21/09), entao nao ha acao obrigatoria -- ha uma informacao que
+        // permite enviar outra que funcione.
+        if (pet.motivoDaFotoRecusada != null) ...<Widget>[
+          const SizedBox(height: BichuEspaco.e4),
+          FaixaDeAviso(
+            texto: pet.motivoDaFotoRecusada!,
+            peso: PesoDaFaixa.informativo,
+          ),
+        ],
         const SizedBox(height: BichuEspaco.e4),
         Semantics(
           header: true,
@@ -347,6 +366,18 @@ class _FotoGrande extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final capa = pet.fotoDeCapa;
+    // A DERIVADA `card`, e nao a `thumb`.
+    //
+    // Esta moldura desenha 160 x 176 dp, que a 3x sao 480 x 528 px; a `thumb`
+    // tem 176 px de largura. Ela e a derivada certa para o cartao de 56 dp da
+    // lista e seria esticada quase tres vezes aqui.
+    //
+    // E, antes desta linha, **nenhuma imagem era montada nesta tela**: a
+    // moldura ficava no estado de repouso com nada dentro, e a derivada `card`
+    // de 1024 px era gerada, paga e nunca desenhada pelo app -- so o cartaz
+    // impresso e a pagina publica do caso a usavam.
+    final endereco = capa?.urlDeCartao;
     // A moldura larga do detalhe. O estado vazio nao e defeito nem pendencia:
     // a foto e **opcional** por decisao do cliente de 21/09, e a edicao e o
     // caminho de volta de quem cadastrou sem ela (criterio 10 da BICHUS-61).
@@ -356,9 +387,26 @@ class _FotoGrande extends StatelessWidget {
       // escrito a mao seria medida inventada no widget, que e o que o criterio
       // 13 da BICHUS-62 proibe.
       largura: BichuMoldura.larguraFotoLg,
-      estado: pet.fotoDeCapa == null
-          ? EstadoDaMoldura.vazio
+      estado: endereco == null
+          ? (pet.temFotoEmProcessamento
+              ? EstadoDaMoldura.carregando
+              : EstadoDaMoldura.vazio)
           : EstadoDaMoldura.repouso,
+      filho: endereco == null
+          ? null
+          : Image.network(
+              endereco,
+              fit: BoxFit.cover,
+              // O mesmo ponto focal do cartao da lista (paragrafo 5.4): o terco
+              // superior e onde esta a cabeca do animal na foto tipica de
+              // tutor. A derivada ja chega cortada em 1 : 1,1 pelo servidor, e
+              // este alinhamento cobre o residuo.
+              alignment: const Alignment(0, -1 / 3),
+              // Falha de rede cai na moldura vazia, e nao numa caixa de
+              // excecao: e o que o 11.4 manda.
+              errorBuilder: (context, erro, pilha) =>
+                  const Moldura(largura: BichuMoldura.larguraFotoLg),
+            ),
     );
   }
 }

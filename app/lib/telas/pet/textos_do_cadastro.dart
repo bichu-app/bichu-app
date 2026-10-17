@@ -8,6 +8,8 @@
 /// separadas no fim do arquivo de proposito.
 library;
 
+import '../../dispositivo/camera_e_galeria.dart';
+
 abstract final class TextosDoCadastro {
   // -- F1.3, identificacao --------------------------------------------------
 
@@ -98,6 +100,14 @@ abstract final class TextosDoCadastro {
   static const String corpoDaFoto =
       'A foto é o que faz alguém reconhecer seu pet na rua. Escolha uma em que '
       'o rosto apareça bem.';
+
+  /// A orientacao de tamanho, numa linha (cliente, 17/10/2026).
+  ///
+  /// Vem de `orientacaoDeTamanhoDaImagem` e nao e escrita aqui: o numero e o
+  /// mesmo teto que o contrato declara e que o balde impoe na politica
+  /// assinada, e uma copia literal nesta classe seria o quarto lugar a
+  /// divergir.
+  static const String orientacaoDaFoto = orientacaoDeTamanhoDaImagem;
 
   /// Figma `91:41`.
   static const String nenhumaFotoAinda = 'Nenhuma foto ainda';

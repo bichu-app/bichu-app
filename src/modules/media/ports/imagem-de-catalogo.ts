@@ -15,6 +15,7 @@
  * `store_item`, e a do encontro so aceitara `network_event`.
  */
 import type { CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
+import { TETO_DE_BYTES_DO_ENVIO } from '../domain/derivadas.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { Instant, ObjectKey } from '../../../shared/types/brands.js';
 import type { AutorizacaoDeEnvio } from './object-storage.js';
@@ -33,8 +34,14 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
  */
 export const TIPOS_DE_IMAGEM_DE_CATALOGO = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
-/** O teto do contrato (`byte_size.maximum`), que vai para a politica assinada. */
-export const TETO_DE_BYTES_DO_CATALOGO = 5 * 1024 * 1024;
+/**
+ * O teto do envio, reexportado do PONTO ÚNICO (`domain/derivadas.ts`).
+ *
+ * Era 5 MiB escrito aqui, 10 MiB na foto de pet e 2 MiB na do achado. O cliente
+ * unificou em 5 MB em 17/10/2026, **para usuário e administrador**, e o número
+ * passou a ter um dono só.
+ */
+export const TETO_DE_BYTES_DO_CATALOGO = TETO_DE_BYTES_DO_ENVIO;
 
 /**
  * A dimensao minima por proposito (`AdminCatalogImageIntentInput.byte_size`).
@@ -153,9 +160,24 @@ export interface ImagemParaProcessar {
 }
 
 /** O que o processamento da imagem de catalogo le e grava. Sem transacao de fora. */
+/**
+ * As chaves das derivadas de uma imagem de catalogo.
+ *
+ * `card` sempre; `thumb` e `banner` so no encontro da comunidade, porque e a
+ * UNICA imagem que a mesma tela desenha em tres tamanhos muito diferentes (144
+ * dp na galeria, ~328 dp no cartao da agenda, 360 a 430 dp de borda a borda no
+ * detalhe). A imagem de produto da Loja tem uma derivada so: nao medi aquela
+ * tela, e inventar duas proporcoes para ela seria supor.
+ */
+export interface ChavesDaImagemDeCatalogo {
+  readonly card: ObjectKey;
+  readonly thumb?: ObjectKey;
+  readonly banner?: ObjectKey;
+}
+
 export interface ImagensDeCatalogoDoWorker {
   paraProcessar(imagemId: string): Promise<ImagemParaProcessar | null>;
   /** So a partir de `processing`: estado final nao volta. */
-  marcarPronta(imagemId: string, chavePublica: ObjectKey): Promise<void>;
+  marcarPronta(imagemId: string, chaves: ChavesDaImagemDeCatalogo): Promise<void>;
   marcarRecusada(imagemId: string, motivo: string): Promise<void>;
 }

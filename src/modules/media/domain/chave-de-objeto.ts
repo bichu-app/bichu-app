@@ -35,6 +35,7 @@
  * `pet_id` a qualquer pessoa que clicasse com o botão direito na foto.
  */
 import type { ObjectKey } from '../../../shared/types/brands.js';
+import { TETO_DE_BYTES_DO_ENVIO } from './derivadas.js';
 
 /** Os únicos tipos aceitos. SVG não é aceito em nenhuma hipótese (ADR-0007). */
 export const TIPOS_ACEITOS = ['image/jpeg', 'image/png', 'image/heic', 'image/webp'] as const;
@@ -45,7 +46,16 @@ export function ehTipoAceito(tipo: string): tipo is TipoAceito {
   return (TIPOS_ACEITOS as readonly string[]).includes(tipo);
 }
 
-export const TETO_DE_BYTES = 10 * 1024 * 1024;
+/**
+ * O teto do envio, reexportado do PONTO ÚNICO (`derivadas.ts`).
+ *
+ * Eram 10 MiB aqui, 2 MiB na foto do achado e 5 MiB no catálogo: três números
+ * para a mesma regra, e o contrato herdava um quarto. O cliente unificou em
+ * 5 MB em 17/10/2026, para usuário e administrador, e o número agora tem um
+ * dono só. Fica reexportado daqui porque `chaves-de-objeto.ts` é a porta que
+ * os outros módulos atravessam.
+ */
+export const TETO_DE_BYTES = TETO_DE_BYTES_DO_ENVIO;
 
 /**
  * O que uma DERIVADA pode ser, e por que a lista não é a da entrada.
@@ -112,6 +122,25 @@ function ehCategoriaDeCatalogo(valor: string | undefined): valor is CategoriaDeC
 function ehCategoriaPublica(valor: string | undefined): valor is CategoriaPublica {
   return (CATEGORIAS_PUBLICAS as readonly (string | undefined)[]).includes(valor);
 }
+/**
+ * As VARIANTES da derivada pública, e por que são três e não duas.
+ *
+ * `thumb` e `card` existiam; `banner` entrou porque a capa do encontro é
+ * desenhada em dois tamanhos muito diferentes pela MESMA imagem — 328 dp no
+ * cartão da agenda e 360 a 430 dp de borda a borda no detalhe. Uma derivada só
+ * serve mal aos dois: no tamanho do cartão ela borra no detalhe, e no tamanho
+ * do detalhe ela engorda cada cartão da listagem.
+ *
+ * A lista é fechada e é ela que `comoObjectKey` confere, porque a variante é
+ * um SEGMENTO DO CAMINHO da chave: um valor livre ali é travessia.
+ */
+export const VARIANTES_DE_DERIVADA = ['thumb', 'card', 'banner'] as const;
+export type VarianteDeDerivada = (typeof VARIANTES_DE_DERIVADA)[number];
+
+export function ehVarianteDeDerivada(valor: string | undefined): valor is VarianteDeDerivada {
+  return (VARIANTES_DE_DERIVADA as readonly (string | undefined)[]).includes(valor);
+}
+
 function ehNomeDeDerivada(nome: string): boolean {
   const ponto = nome.lastIndexOf('.');
   return ponto > 0 && ponto < nome.length - 1;
@@ -240,13 +269,25 @@ export function comoObjectKey(valor: string): ObjectKey {
     return valor as ObjectKey;
   }
 
-  // A derivada publica por categoria: `{pets|products|events}/{thumb|card}/{nome}.{ext}`.
+  // A derivada publica por categoria: `{pets|products|events}/{thumb|card|banner}/{nome}.{ext}`.
   if (
     segmentos.length === 3 &&
     ehCategoriaPublica(segmentos[0]) &&
-    (segmentos[1] === 'thumb' || segmentos[1] === 'card') &&
+    ehVarianteDeDerivada(segmentos[1]) &&
     ehNomeDeDerivada(segmentos[2] ?? '')
   ) {
+    return valor as ObjectKey;
+  }
+
+  // A DERIVADA HIGIENIZADA da foto do achado, no bucket PRIVADO:
+  // `found-reports/{id|sem-conta}/sanitized/{128 bits}.{ext}`.
+  //
+  // Ela existe porque a foto do achador nunca ganha derivada PÚBLICA (ela é
+  // vista pelo tutor dentro da conversa mediada, e só) e ao mesmo tempo não
+  // pode ser servida como chegou: foto de celular carrega coordenada de GPS no
+  // EXIF, e num produto de pet perdido isso entrega onde a pessoa estava. O
+  // original continua guardado, inteiro; o que a conversa serve é esta.
+  if (segmentos.length === 4 && segmentos[0] === 'found-reports' && segmentos[2] === 'sanitized') {
     return valor as ObjectKey;
   }
 
@@ -309,7 +350,7 @@ export function chaveDoOriginal(petId: string, aleatorio: Uint8Array): ObjectKey
  * mudar debaixo de uma URL que alguém guardou.
  */
 export function chaveDaDerivada(
-  variante: 'thumb' | 'card',
+  variante: VarianteDeDerivada,
   aleatorio: Uint8Array,
   extensao: string,
   categoria: CategoriaPublica = 'pets',
@@ -388,4 +429,42 @@ export function chaveDaFotoDoAchadorSemConta(aleatorio: Uint8Array): ObjectKey {
   return comoObjectKey(
     `found-reports/sem-conta/original/${Buffer.from(aleatorio).toString('base64url')}`,
   );
+}
+
+/**
+ * A chave da DERIVADA HIGIENIZADA da foto do achado, no bucket **privado**.
+ *
+ * `found-reports/{id|sem-conta}/sanitized/{128 bits}.{extensão}` — o mesmo
+ * prefixo do original, com `original/` trocado por `sanitized/`. O prefixo
+ * compartilhado não é cosmético: é o que faz a política de bucket, o ciclo de
+ * vida e a varredura de expurgo tratarem o original e a derivada do achado
+ * como a mesma coisa, que é o que o ADR-0010 exige — a foto do achador some 30
+ * dias depois do encerramento, e as duas somem juntas.
+ *
+ * **Privada, e não pública.** O critério 9 da BICHUS-35 é literal: a foto do
+ * achador "é vista pelo tutor dentro da conversa mediada, e só". Uma derivada
+ * pública dela seria servida com cache de um ano e sem assinatura, que é o
+ * oposto do que o critério pede.
+ *
+ * `sem-conta` entra aqui como o identificador do aviso entra: quem chama passa
+ * o segmento que a chave do original já usava, e a forma é conferida pela mesma
+ * porta. Nenhum UUID interno sai para o achador — a chave não vai para ele.
+ */
+export function chaveDaFotoHigienizada(
+  dono: string,
+  aleatorio: Uint8Array,
+  extensao: string,
+): ObjectKey {
+  // Mesma recusa da derivada pública, e pelo mesmo motivo: a extensão é
+  // INTERPOLADA NO CAMINHO uma linha abaixo, e `webp/../../x` não é extensão
+  // mal formatada, é uma chave que sai do prefixo do aviso.
+  if (!ehExtensaoDeDerivada(extensao)) {
+    throw new Error(
+      `Extensão de derivada recusada: ${JSON.stringify(extensao)}. ` +
+        `As únicas aceitas são ${EXTENSOES_DE_DERIVADA.join(', ')}.`,
+    );
+  }
+  exigirAleatorioForte('da foto higienizada do achado', aleatorio);
+  const nome = Buffer.from(aleatorio).toString('base64url');
+  return comoObjectKey(`found-reports/${dono}/sanitized/${nome}.${extensao}`);
 }

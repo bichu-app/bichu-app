@@ -2448,6 +2448,16 @@ paths:
       description: |
         A foto do achador **nunca** aparece em rota publica: ela e vista pelo
         tutor dentro da conversa mediada, e so.
+
+        Teto de 5 MiB, herdado de `UploadIntentInput` -- o teto unico de toda a
+        aplicacao. O servidor impunha 2 MiB aqui enquanto o contrato prometia
+        10 MiB e o app conferia 10 MiB: tres numeros para a mesma regra, e o
+        envio de 3 MiB era aceito pelo app, prometido pelo contrato e recusado
+        pelo servidor.
+
+        O original fica guardado no balde privado; o que a conversa mediada
+        serve e uma derivada **sem metadado nenhum** (o EXIF de foto de celular
+        carrega coordenada de GPS).
       security:
         - bearerAuth: []
       x-rate-limit:
@@ -2530,11 +2540,23 @@ paths:
         A foto do achador **nunca** aparece em rota publica: ela e vista pelo
         tutor dentro da conversa mediada, e so.
 
-        Limites proprios, mais estreitos que os do tutor (SEC-009), porque quem
-        envia nao tem identidade nenhuma: **2 MB por foto e no maximo 3 fotos por
-        aviso**, e o **arquivo original e apagado assim que a derivada e gerada**.
-        O original do achador nao e retido e nao e servido a ninguem, nem por URL
-        assinada, nem ao tutor.
+        **No maximo 3 fotos por aviso, para sempre** (SEC-009), e 5 MiB por
+        foto -- o teto unico de toda a aplicacao (cliente, 17/10/2026). O teto
+        desta rota era 2 MB no SEC-009, e a unificacao o afrouxa: o que continua
+        contendo volume aqui e o teto de tres fotos por aviso, que nao reabre.
+
+        O **original e guardado, inteiro, no balde privado**, e nao e servido a
+        ninguem -- nem por URL assinada, nem ao tutor. O que o tutor ve dentro
+        da conversa mediada e uma derivada **higienizada**: reescrita a partir
+        dos pixels, em JPEG, **sem metadado nenhum**. Isso importa aqui mais que
+        em qualquer outro caminho: foto de celular carrega coordenada de GPS no
+        EXIF, e num produto de pet perdido isso entregaria onde quem achou o
+        animal estava.
+
+        A descricao anterior prometia que "o arquivo original e apagado assim
+        que a derivada e gerada". Isso descrevia um worker que nunca existiu, e
+        apagar o original e precisamente o que nao se faz: e dele que sai
+        qualquer derivada futura, e um corte errado nao tem volta.
       security:
         - finderToken: []
       x-rate-limit:
@@ -2547,11 +2569,10 @@ paths:
         content:
           application/json:
             schema:
-              allOf:
-                - $ref: '#/components/schemas/UploadIntentInput'
-                - type: object
-                  properties:
-                    byte_size: { type: integer, minimum: 1, maximum: 2097152 }
+              # Sem sobrescrever `byte_size`: o teto e o unico da aplicacao,
+              # 5 MiB, e esta rota o herda de `UploadIntentInput`. Era 2 MiB
+              # aqui, 2 MiB no servidor e 10 MiB no que o app conferia.
+              $ref: '#/components/schemas/UploadIntentInput'
       responses:
         '201':
           description: Credenciais de upload.
@@ -7786,26 +7807,81 @@ components:
           description: |
             `rejected` quando os bytes reais nao sao imagem aceita. O tipo
             declarado no upload nunca e a fonte da verdade.
+        rejection_reason:
+          type: string
+          nullable: true
+          description: |
+            O MOTIVO da recusa, em texto pronto para a tela, quando `status` e
+            `rejected`. Nulo em `processing` e em `ready`.
+
+            Ele e gravado desde a BICHUS-87 e **nao chegava a ninguem**: o
+            campo nao existia neste schema, entao a tela dizia "recusada" e a
+            pessoa nao tinha como saber se o problema era o formato, o tamanho,
+            a dimensao minima ou um arquivo truncado -- e portanto nao tinha
+            como consertar.
+
+            Nao e codigo de erro e nao e estavel: e texto para ler. Cliente que
+            precise ramificar por causa ramifica por `status`.
         is_primary: { type: boolean }
-        thumb_url: { type: string, format: uri, nullable: true }
+        thumb_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            Derivada de 176 x 194 px, cortada na proporcao da moldura (1 : 1,1),
+            para o cartao da lista, que desenha 56 x 61,6 dp. Pesa dezenas de
+            kB: o peso de uma TELA e a soma das derivadas que ela desenha, e a
+            lista desenha muitas.
         card_url:
           type: string
           format: uri
           nullable: true
           description: |
-            Derivada de ate 1024 px, sem EXIF, servida pelo dominio de midia.
-            **E a unica derivada que a rota publica mostra.** O arquivo
-            original nunca sai do armazenamento privado.
+            Derivada de 1024 x 1126 px, cortada na proporcao da moldura
+            (1 : 1,1), sem EXIF, em JPEG, servida pelo dominio de midia.
+
+            Ela e a imagem GRANDE do pet: o perfil do pet no app, a pagina
+            publica do caso e o cartaz impresso (`LostCasePoster.photo_url`)
+            usam esta mesma derivada. Teto de 500 KB, com alvo de 300 a 500 KB
+            (pedido do cliente de 17/10/2026), alcancado por escada de
+            qualidade -- a qualidade e escolhida medindo os bytes, e nao fixada.
+
+            **O arquivo original nunca sai do armazenamento privado**, e nenhuma
+            rota o serve: o leitor de midia publica aceita apenas chave com a
+            forma de derivada, e toda chave de original tem `original` no lugar
+            onde ela exige `thumb`, `card` ou `banner`.
         created_at: { type: string, format: date-time }
 
     UploadIntentInput:
       type: object
       required: [content_type, byte_size]
+      description: |
+        **O teto de 5 MiB vale para TODO envio de imagem da aplicacao** -- foto
+        de pet, foto de achado, capa de encontro e imagem de produto --, para
+        usuario e para administrador (decisao do cliente de 17/10/2026: "as
+        imagens devem conter no maximo 5mb ... em toda a aplicacao"). Antes
+        eram tres numeros: 10 MiB aqui, 2 MiB no servidor da foto de achado e
+        5 MiB no catalogo, com este schema emprestando o seu para a operacao do
+        achado por composicao.
+
+        O teto vai para a POLITICA ASSINADA, e e por isso que ele vale: o
+        backend nao recebe os bytes, e recusar depois seria recusar o que ja foi
+        gravado.
       properties:
         content_type:
           type: string
           enum: [image/jpeg, image/png, image/heic, image/webp]
-        byte_size: { type: integer, minimum: 1, maximum: 10485760 }
+          description: |
+            **A lista da ENTRADA, e ela nao e a do que guardamos.** O que
+            guardamos e servimos e sempre JPEG (`.jpeg`): o worker reescreve a
+            imagem a partir dos pixels. HEIC esta aqui porque e o que o iPhone
+            produz, e recusa-lo na entrada tiraria o produto da mao de metade
+            dos aparelhos.
+
+            O tipo declarado aqui e DIAGNOSTICO, nunca verdade: quem decide o
+            formato sao os bytes, por numero magico, no worker. SVG nunca entra
+            nesta lista -- e documento com script, nao imagem.
+        byte_size: { type: integer, minimum: 1, maximum: 5242880 }
 
     UploadIntent:
       type: object
@@ -9098,10 +9174,29 @@ components:
       additionalProperties: false
       description: |
         Uma imagem da galeria do encontro. A primeira da lista e a capa.
-        `url` e composta na leitura a partir da chave publica da imagem: o banco
-        nao guarda URL (`docs/07-devops.md` 3.6).
+        `url` e `thumb_url` sao compostas na leitura a partir das chaves da
+        imagem: o banco nao guarda URL (`docs/07-devops.md` 3.6).
       properties:
-        url: { type: string, format: uri }
+        url:
+          type: string
+          format: uri
+          description: |
+            A derivada de 1024 x 576 px (16:9), para o cartao da agenda, que
+            desenha ~328 dp de largura.
+        thumb_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A derivada de 480 x 360 px (4:3), para a GALERIA do detalhe, que
+            desenha 144 dp. **E ela que a galeria deve pedir**: com `url` a
+            galeria baixava 1024 px para pintar 432 px, cinco vezes o dado que
+            ela usa, e uma galeria de oito imagens pesava mais que o resto da
+            tela somado.
+
+            Nula na imagem gravada antes desta derivada existir, e na imagem de
+            produto da Loja (que tem uma derivada so). Quem recebe nulo cai em
+            `url`, que e o comportamento de antes.
         alt_text: { type: string, minLength: 2, maxLength: 150 }
 
     NetworkEventImages:
@@ -9140,8 +9235,25 @@ components:
           format: uri
           nullable: true
           description: |
-            A `url` da imagem de posicao 0, derivada na leitura e nunca gravada no
-            banco. Nula sem imagem; o cartao sabe se desenhar sem ela.
+            A `url` da imagem de posicao 0 (derivada de 1024 x 576), derivada na
+            leitura e nunca gravada no banco. **E a do CARTAO da agenda**, que
+            desenha ~328 dp. Nula sem imagem; o cartao sabe se desenhar sem ela.
+        cover_banner_url:
+          type: string
+          format: uri
+          nullable: true
+          description: |
+            A derivada de 1280 x 720 da imagem de posicao 0, para a capa de
+            borda a borda do DETALHE, que desenha 360 a 430 dp (1080 a 1290 px
+            a 3x) e borrava de leve com 1024.
+
+            Uma derivada separada e nao um `cover_image_url` maior: o cartao da
+            agenda usa a mesma imagem, e subir aquela derivada para 1280
+            engordaria **cada** cartao da listagem em metade do peso para ganhar
+            nitidez numa tela que desenha uma so.
+
+            Nula sem imagem e nula na imagem gravada antes desta derivada
+            existir; quem recebe nulo cai em `cover_image_url`.
         images: { $ref: '#/components/schemas/NetworkEventImages' }
         admission: { $ref: '#/components/schemas/NetworkEventAdmission' }
         accepted_sizes: { $ref: '#/components/schemas/NetworkEventAcceptedSizes' }
@@ -9288,6 +9400,9 @@ components:
         time_zone: { type: string }
         status: { $ref: '#/components/schemas/NetworkEventStatus' }
         cover_image_url: { type: string, format: uri, nullable: true }
+        # A derivada de 1280 px da capa, para o detalhe de borda a borda. Ver
+        # `NetworkEventPublic.cover_banner_url`.
+        cover_banner_url: { type: string, format: uri, nullable: true }
         images: { $ref: '#/components/schemas/NetworkEventImages' }
         admission: { $ref: '#/components/schemas/NetworkEventAdmission' }
         accepted_sizes: { $ref: '#/components/schemas/NetworkEventAcceptedSizes' }
@@ -9413,6 +9528,7 @@ components:
             fora porque a derivada de catalogo e processada pelo mesmo caminho
             do painel, que nao o aceita -- e por isso este enum NAO e o de
             `UploadIntentInput`, que e da foto de pet.
+        # 5 MiB: o teto unico de toda a aplicacao (cliente, 17/10/2026).
         byte_size: { type: integer, minimum: 1, maximum: 5242880 }
         width:
           type: integer
@@ -9804,7 +9920,8 @@ components:
           minimum: 1
           maximum: 5242880
           description: |
-            Ate 5 MiB, o numero que o painel mostra. Dimensao minima: 800 x 800
+            Ate 5 MiB, o **teto unico de toda a aplicacao** (cliente,
+            17/10/2026), e o numero que o painel mostra em tela. Dimensao minima: 800 x 800
             pixels para `store_item`, 600 x 600 para `network_event` (pedido do
             cliente de 01/10; antes, 1600 x 900). Duas conferencias: a
             DECLARADA, em `width`/`height` deste pedido, recusada aqui com
