@@ -44,4 +44,28 @@ class LojaApi {
     );
     return PaginaDaLoja.doJson(json);
   }
+
+  /// `GET /v1/store/items/{itemSlug}` (`getStoreItem`) — o detalhe do produto.
+  ///
+  /// **Publica, como [listar]**, e pela mesma razao: quem abre o detalhe veio
+  /// da vitrine, que e navegavel deslogado. O teto de requisicao e o mesmo da
+  /// lista no contrato, e por isso nao ha dimensao nova de limite aqui.
+  ///
+  /// ## Os quatro 404 sao um so, e isso e desenho
+  ///
+  /// Rascunho, retirado, inexistente e parceiro inativo respondem **404 nos
+  /// quatro casos, com o mesmo corpo** (ADR-0021). Nada aqui tenta distinguir:
+  /// distinguir "rascunho" de "nao existe" diria a quem estiver de fora que um
+  /// produto existe e nao foi publicado, e a tela nao tem o que fazer com a
+  /// diferenca de qualquer forma -- nos quatro casos o produto nao esta la.
+  ///
+  /// **Nao trata falha**, pela mesma razao de [listar]: quem chama precisa
+  /// distinguir "nao achei" de "nao consegui perguntar".
+  Future<DetalheDoProduto> detalhar(String slug) async {
+    final json = await _api.get(
+      '/store/items/${Uri.encodeComponent(slug)}',
+      exigeToken: false,
+    );
+    return DetalheDoProduto.doJson(json);
+  }
 }

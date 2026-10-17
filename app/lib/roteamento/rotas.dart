@@ -34,6 +34,7 @@ import '../telas/achado/tela_do_achado.dart';
 import '../telas/achado/tela_registrar_achado.dart';
 import '../intencao/achado_como_intencao.dart';
 import '../intencao/pedido_de_participacao_como_intencao.dart';
+import '../telas/loja/produto_da_loja.dart';
 import '../telas/rede/encontro_da_rede.dart';
 import '../telas/tela_de_abertura.dart';
 
@@ -68,6 +69,28 @@ abstract final class Rotas {
       '/rede/encontros/${Uri.encodeComponent(slug)}';
   static const String perto = '/perto';
   static const String loja = '/loja';
+
+  /// O produto da `Loja`, sob o ramo da secao: a barra de abas continua, e
+  /// voltar devolve a vitrine onde a pessoa estava, com a busca e o filtro
+  /// dela intactos.
+  ///
+  /// **Sob o ramo, e nao irmao da casca**, ao contrario do assistente de
+  /// cadastro: o detalhe de um produto e leitura, nao tarefa. Quem esta
+  /// comparando produtos quer continuar comparando, e esconder a barra de abas
+  /// para mostrar uma ficha de produto tiraria as outras quatro secoes de
+  /// quem so foi ver uma foto maior. E a mesma escolha de
+  /// [encontroDaRede], pelo mesmo motivo.
+  static const String produtoDaLoja = 'produtos/:slug';
+
+  static const String parametroDoProduto = 'slug';
+
+  /// O endereco do produto [slug].
+  ///
+  /// `Uri.encodeComponent` porque o `slug` vem da resposta do servidor, e nao
+  /// desta tela: montar caminho com interpolacao crua e como um slug com barra
+  /// vira uma rota que nao existe.
+  static String produtoDaLojaDe(String slug) =>
+      '/loja/produtos/${Uri.encodeComponent(slug)}';
   static const String perfil = '/perfil';
 
   /// `Pets` > `Adoções`: sub-destino com porta propria (UX 27.2.4).
@@ -604,6 +627,15 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
               GoRoute(
                 path: Rotas.loja,
                 builder: (context, estado) => const AbaLoja(),
+                routes: <RouteBase>[
+                  GoRoute(
+                    path: Rotas.produtoDaLoja,
+                    builder: (context, estado) => TelaDoProduto(
+                      slug:
+                          estado.pathParameters[Rotas.parametroDoProduto] ?? '',
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

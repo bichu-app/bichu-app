@@ -399,3 +399,104 @@ class RecorteDaLoja {
     );
   }
 }
+
+/// Uma imagem da galeria do produto: `#/components/schemas/StoreItemImage`.
+///
+/// **So `url` e `alt_text` existem no contrato.** Nao ha derivada de miniatura
+/// para a Loja: `NetworkEventImage` tem `thumb_url` (480 x 360, 4:3, para a
+/// galeria do detalhe do encontro) e `AdminPetPhoto` tem `thumb_url` e
+/// `card_url`, mas `StoreItemImage` tem um campo de imagem so. A galeria desta
+/// tela desenha miniatura de 144 dp a partir da MESMA `url` que o quadro
+/// grande usa -- o desperdicio que o encontro ja resolveu, e que aqui nao tem
+/// como resolver sem o campo. **Relatado, nao contornado**: o contrato manda
+/// nas quatro aplicacoes e nao se mexe nele por conveniencia de uma tela.
+class ImagemDoProduto {
+  const ImagemDoProduto({required this.url, required this.textoAlternativo});
+
+  /// A derivada publica, sempre pronta. Imagem em processamento ou recusada
+  /// nunca chega aqui.
+  final String url;
+
+  /// O `alt_text` do servidor, **cru**: nulo quando o painel gravou a imagem
+  /// sem descricao (opcional desde 17/10/2026).
+  ///
+  /// Quem desenha usa [nomeDaImagem], e nao este campo: a reserva e regra do
+  /// modelo, pelo mesmo motivo de [ItemDaLoja.nomeDaImagem].
+  final String? textoAlternativo;
+
+  static ImagemDoProduto doJson(Object? bruto) {
+    if (bruto is! Map<String, dynamic>) {
+      throw const FormatException('`images` com item que nao e objeto');
+    }
+    final url = bruto['url'];
+    if (url is! String) {
+      throw const FormatException('imagem da galeria sem `url`');
+    }
+    final texto = bruto['alt_text'];
+    return ImagemDoProduto(
+      url: url,
+      textoAlternativo: texto is String ? texto : null,
+    );
+  }
+
+  /// O nome acessivel desta imagem, que **nunca e vazio**.
+  ///
+  /// O texto do painel quando ha; `Foto de {titulo do produto}` quando nao ha.
+  /// Recebe o titulo de fora porque a imagem nao conhece o produto dela.
+  String nomeDaImagem(String tituloDoProduto) {
+    final escrito = textoAlternativo?.trim();
+    if (escrito != null && escrito.isNotEmpty) return escrito;
+    return 'Foto de $tituloDoProduto';
+  }
+}
+
+/// `#/components/schemas/StoreItemDetail`: o item da vitrine **mais todas as
+/// imagens prontas**, na ordem do painel.
+///
+/// A rota e `GET /v1/store/items/{itemSlug}` (`getStoreItem`), publica, e
+/// **ela existia sem nenhum chamador** desde que entrou no contrato: das oito
+/// imagens que o painel aceita, o app mostrava uma (a `image_url` da lista, no
+/// cartao). Esta classe e a tela de detalhe sao o chamador.
+///
+/// ## A ordem e a da LISTA, e nao ha campo de posicao
+///
+/// `StoreItemImage` nao tem `position`: a ordem do painel **e** a ordem do
+/// array, e a primeira e a capa (a mesma de `image_url`). Por isso
+/// [ImagemDoProduto] nao guarda indice e nada aqui reordena: ordenar por
+/// conta propria seria inventar uma regra que o contrato nao tem.
+///
+/// ## Lista vazia e estado NORMAL
+///
+/// "Vazia e estado normal", diz o contrato por extenso. Nao e falha, nao e
+/// item quebrado e nao e tela em branco: a hml de hoje tem zero produto, e um
+/// produto sem foto nenhuma e o primeiro caso que a tela vai encontrar quando
+/// tiver.
+class DetalheDoProduto {
+  const DetalheDoProduto({required this.item, required this.imagens});
+
+  /// O produto, no mesmo tipo que o cartao da vitrine ja desenha.
+  ///
+  /// Nao e heranca nem copia de campo: `StoreItemDetail` e `allOf` de
+  /// `StoreItemSummary` no contrato, e repetir os treze campos aqui criaria
+  /// dois lugares para o preco ser formatado.
+  final ItemDaLoja item;
+
+  /// Todas as imagens prontas, na ordem do painel. Pode ser vazia.
+  final List<ImagemDoProduto> imagens;
+
+  /// O produto nao tem imagem nenhuma. **Estado da tela, nao erro.**
+  bool get semImagem => imagens.isEmpty;
+
+  static DetalheDoProduto doJson(Map<String, dynamic> json) {
+    final imagens = json['images'];
+    if (imagens is! List) {
+      throw const FormatException('detalhe do produto sem `images`');
+    }
+    return DetalheDoProduto(
+      item: ItemDaLoja.doJson(json),
+      imagens: <ImagemDoProduto>[
+        for (final bruto in imagens) ImagemDoProduto.doJson(bruto),
+      ],
+    );
+  }
+}
