@@ -2882,7 +2882,14 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCase' }
+        # `caseId` fora da forma de UUID e `last_seen_at` malformada ou no futuro
+        # respondem 400 -- a borda valida o caminho e o corpo contra este
+        # documento desde a BICHUS-199. O 404 cobre tres coisas e e o mesmo da
+        # ADR-0021: o caso nao existe, nao e do chamador, ou nao esta aberto.
+        # Declarar o status que a rota de fato devolve nao e burocracia.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /lost-cases/{caseId}/alerts:
     parameters:
@@ -2907,7 +2914,12 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AlertDispatch' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        # Caso inexistente, de outro tutor, ou ja encerrado: a mesma resposta.
+        # Caso encerrado nao alerta ninguem -- o animal voltou, ou a busca
+        # acabou -- e distinguir confirmaria a existencia de um caso alheio.
+        '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /lost-cases/{caseId}/candidates:
@@ -2949,7 +2961,12 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/CandidatePage' }
+        # `caseId` malformado e `limit` fora da faixa respondem 400; caso que nao
+        # e do chamador responde 404 e nunca 403 (ADR-0021). Lista VAZIA continua
+        # sendo 200: ela e um estado legitimo, e nao a ausencia do caso.
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /lost-cases/{caseId}/candidates/{candidateId}/decision:
     parameters:
@@ -3194,7 +3211,11 @@ paths:
         - bearerAuth: []
       responses:
         '204': { description: Bloqueada. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        # Conversa de terceiro responde 404, nunca 403: um 403 confirmaria que
+        # aquele id existe (ADR-0021). Repetir o bloqueio continua 204.
+        '404': { $ref: '#/components/responses/NotFound' }
 
   /conversations/{conversationId}/report:
     parameters:
@@ -3232,7 +3253,9 @@ paths:
                 detail: { type: string, maxLength: 1000 }
       responses:
         '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
 
   # ----------------------------------------------------------------------
   # O diretorio de `Perto` -- a leitura

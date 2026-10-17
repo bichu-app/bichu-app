@@ -26,6 +26,7 @@ import type {
   ConversaDoChamador,
   ConversationRepository,
   MensagemGravada,
+  NovaDenuncia,
   NovaMensagem,
 } from '../ports/conversation-repository.js';
 import type {
@@ -72,6 +73,8 @@ function bancada(estado: Estado = {}) {
   const gravadas: NovaMensagem[] = [];
   const aberturas: unknown[] = [];
   const retencoes: { conversa: ConversationId; motivo: string }[] = [];
+  const bloqueios: { conversa: ConversationId; chamador: UserId; agora: Instant }[] = [];
+  const denuncias: NovaDenuncia[] = [];
   const eventos: AuditEvent[] = [];
 
   const conversa = estado.conversa === undefined ? undefined : conversaAberta(estado.conversa);
@@ -106,7 +109,17 @@ function bancada(estado: Estado = {}) {
     buscarPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
     mensagensPeloTokenDoAchador: () => Promise.reject(new Error('fora desta bancada')),
     bloquearPeloAchador: () => Promise.reject(new Error('fora desta bancada')),
-    registrarDenuncia: () => Promise.reject(new Error('fora desta bancada')),
+    // Estes DOIS são exercidos aqui: são as duas escritas do lado com conta que
+    // faltavam, e o dublê as registra para que a asserção possa afirmar que a
+    // chamada aconteceu com o chamador certo, em vez de apenas compilar.
+    bloquearPeloChamador: (alvo, quem, agora) => {
+      bloqueios.push({ conversa: alvo, chamador: quem, agora });
+      return Promise.resolve();
+    },
+    registrarDenuncia: (denuncia) => {
+      denuncias.push(denuncia);
+      return Promise.resolve();
+    },
   };
 
   let sequencia = 0;
@@ -132,6 +145,8 @@ function bancada(estado: Estado = {}) {
     gravadas,
     aberturas,
     retencoes,
+    bloqueios,
+    denuncias,
     eventos,
   };
 }
@@ -381,5 +396,172 @@ void describe('a conversa nasce de um aviso, e só dele', () => {
     });
     assert.deepEqual(aberturas, [], 'abriu a segunda conversa para um aviso agrupado');
     assert.equal(gravadas.length, 1, 'o aviso agrupado precisa virar mensagem na que existe');
+  });
+});
+
+// ===========================================================================
+// O bloqueio e a denúncia do lado COM CONTA (a assimetria que faltava)
+// ===========================================================================
+
+/** A recusa, capturada como `AppError`. Não recusar é falha do caso. */
+async function capturar(executar: () => Promise<unknown>): Promise<AppError> {
+  try {
+    await executar();
+  } catch (erro) {
+    assert.ok(erro instanceof AppError, `esperava AppError e veio ${String(erro)}`);
+    return erro;
+  }
+  throw new Error('a operação não recusou, e deveria ter recusado');
+}
+
+/**
+ * O que estas duas suítes cobram, e o que elas NÃO cobram.
+ *
+ * O achador sem conta já tinha `/finder/conversation/block` e `/report` no ar, e
+ * o lado autenticado não tinha nenhuma das duas: um tutor sendo extorquido no
+ * canal mediado não tinha saída. O que se prova aqui é a REGRA — quem denuncia é
+ * o lado lido da consulta vinculada, o alvo é o outro papel, e conversa de
+ * terceiro responde 404.
+ *
+ * O que **não** se prova aqui é que a escrita filtra pelo chamador: nesta
+ * bancada quem recusa é o dublê. Quem prova aquilo é
+ * `adapters/persistence/bloqueio-do-chamador-na-clausula-where.test.ts`, que lê
+ * o SQL compilado.
+ */
+void describe('blockConversation: o lado com conta também bloqueia', () => {
+  void it('o tutor bloqueia, e a escrita recebe a conversa e o chamador', async () => {
+    const { servico, bloqueios } = bancada({ conversa: {} });
+
+    await servico.bloquear(CONVERSA, chamador(TUTOR));
+
+    assert.deepEqual(bloqueios, [{ conversa: CONVERSA, chamador: TUTOR, agora: AGORA }]);
+  });
+
+  void it('a trilha grava o PAPEL lido da consulta, e não um argumento de quem chama', async () => {
+    // `blocked_by_role` é o campo que diz à outra pessoa quem fechou a porta.
+    // Vindo de fora, ele acusaria a vítima.
+    const { servico, eventos } = bancada({ conversa: { papelDoChamador: 'finder' } });
+
+    await servico.bloquear(CONVERSA, chamador(ACHADOR));
+
+    const evento = eventos.find((e) => e.action === 'conversation.blocked');
+    assert.ok(evento !== undefined, 'o bloqueio precisa aparecer na trilha');
+    assert.equal((evento.metadata as { by_role?: string }).by_role, 'finder');
+  });
+
+  void it('conversa de TERCEIRO responde 404, e nunca 403', async () => {
+    // `conversa: undefined` é o que a consulta vinculada devolve para quem não
+    // é parte: a mesma coisa que para uma conversa que nunca existiu. Um 403
+    // confirmaria que aquele id existe (ADR-0021).
+    const { servico, bloqueios } = bancada({});
+
+    const erro = await capturar(() => servico.bloquear(CONVERSA, chamador(TUTOR)));
+
+    assert.equal(erro.problemType, 'not-found');
+    assert.notEqual(erro.status, 403);
+    assert.deepEqual(bloqueios, [], 'nada pode ser escrito quando a conversa não é do chamador');
+  });
+
+  void it('repetir o bloqueio NÃO recusa: quem se protege não recebe erro', async () => {
+    // Bloquear é a ação que a pessoa executa com medo, e o contrato declara
+    // `accept_and_deduplicate`. A idempotência de verdade é do `WHERE` da
+    // escrita (`blocked_at IS NULL`); esta camada não pode inventar uma recusa.
+    const { servico, bloqueios } = bancada({ conversa: { bloqueadaEm: comoData(AGORA) } });
+
+    await servico.bloquear(CONVERSA, chamador(TUTOR));
+
+    assert.equal(bloqueios.length, 1);
+  });
+
+  void it('conversa ENCERRADA ainda pode ser bloqueada', async () => {
+    // É o que impede a conversa de voltar a aceitar mensagem se o caso for
+    // reaberto, e é o registro de que aquela pessoa não é bem-vinda.
+    const { servico, bloqueios } = bancada({ conversa: { encerradaEm: comoData(AGORA) } });
+
+    await servico.bloquear(CONVERSA, chamador(TUTOR));
+
+    assert.equal(bloqueios.length, 1);
+  });
+});
+
+void describe('reportConversation: a denúncia do lado com conta', () => {
+  void it('a denúncia entra na fila com o papel de QUEM denuncia', async () => {
+    const { servico, denuncias } = bancada({ conversa: { papelDoChamador: 'tutor' } });
+
+    await servico.denunciar(CONVERSA, 'extortion', 'Pediu PIX para devolver.', chamador(TUTOR));
+
+    assert.equal(denuncias.length, 1);
+    assert.equal(denuncias[0]?.papel, 'tutor');
+    assert.equal(denuncias[0]?.motivo, 'extortion');
+    assert.equal(denuncias[0]?.detalhe, 'Pediu PIX para devolver.');
+  });
+
+  void it('detalhe vazio ou só com espaço vira `null`, e não string vazia', async () => {
+    const { servico, denuncias } = bancada({ conversa: {} });
+
+    await servico.denunciar(CONVERSA, 'harassment', '   ', chamador(TUTOR));
+
+    assert.equal(denuncias[0]?.detalhe, null);
+  });
+
+  void it('a denúncia NÃO age sobre o alvo: não bloqueia, não encerra, não retém', async () => {
+    const { servico, bloqueios, retencoes, gravadas } = bancada({ conversa: {} });
+
+    await servico.denunciar(CONVERSA, 'extortion', undefined, chamador(TUTOR));
+
+    assert.deepEqual(bloqueios, []);
+    assert.deepEqual(retencoes, []);
+    // Nem mensagem de sistema: avisar o alvo é ajudar o golpe a se corrigir.
+    assert.deepEqual(gravadas, []);
+  });
+
+  void it('a trilha guarda o MOTIVO, e nunca o texto da denúncia', async () => {
+    // A trilha sobrevive à exclusão da conta. O detalhe é prova para quem
+    // modera, e o lugar dele é `conversation_reports`.
+    const { servico, eventos } = bancada({ conversa: {} });
+
+    await servico.denunciar(CONVERSA, 'extortion', 'Pediu PIX de 300 reais.', chamador(TUTOR));
+
+    const evento = eventos.find((e) => e.action === 'conversation.reported');
+    assert.ok(evento !== undefined, 'a denúncia precisa aparecer na trilha');
+    assert.equal((evento.metadata as { reason?: string }).reason, 'extortion');
+    assert.doesNotMatch(JSON.stringify(evento.metadata), /PIX|300/);
+  });
+
+  void it('conversa de TERCEIRO responde 404, e nada entra na fila', async () => {
+    const { servico, denuncias } = bancada({});
+
+    const erro = await capturar(() =>
+      servico.denunciar(CONVERSA, 'extortion', undefined, chamador(TUTOR)),
+    );
+
+    assert.equal(erro.problemType, 'not-found');
+    assert.notEqual(erro.status, 403);
+    assert.deepEqual(denuncias, []);
+  });
+
+  void it('o alvo do teto é o papel OPOSTO ao de quem denuncia', async () => {
+    // É esta dimensão que pega denúncia em laço — muitos denunciantes contra o
+    // mesmo alvo, que é o ataque do concorrente. Usar o papel de quem denuncia
+    // inverteria a contramedida: ela contaria quantas vezes a VÍTIMA denunciou.
+    const doTutor = bancada({ conversa: { papelDoChamador: 'tutor' } });
+    const doAchador = bancada({ conversa: { papelDoChamador: 'finder' } });
+
+    assert.equal(
+      await doTutor.servico.alvoDaDenuncia(CONVERSA, chamador(TUTOR)),
+      `${CONVERSA}:finder`,
+    );
+    assert.equal(
+      await doAchador.servico.alvoDaDenuncia(CONVERSA, chamador(ACHADOR)),
+      `${CONVERSA}:tutor`,
+    );
+  });
+
+  void it('conversa que não é do chamador não conta NINGUÉM no teto', async () => {
+    // `undefined` faz `resolverValores` pular a entrada inteira: a recusa dele é
+    // o 404 do handler, e não um 429 que esconderia o motivo verdadeiro.
+    const { servico } = bancada({});
+
+    assert.equal(await servico.alvoDaDenuncia(CONVERSA, chamador(TUTOR)), undefined);
   });
 });

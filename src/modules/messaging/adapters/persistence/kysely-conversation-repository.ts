@@ -285,6 +285,43 @@ export function construtorDosCasosDistintosDaConta(db: Db, conta: UserId, desde:
 }
 
 /**
+ * O bloqueio pelo chamador COM CONTA (`POST /v1/conversations/{id}/block`).
+ *
+ * Três decisões, e as três são o mesmo princípio deste arquivo.
+ *
+ * **O chamador está no `WHERE`**, com o mesmo `OR` das leituras. A escrita não
+ * confia em quem a chamou ter lido a conversa antes: um caminho novo que
+ * esquecesse a leitura bloquearia a conversa de outra pessoa.
+ *
+ * **O papel é derivado no SQL**, pelo lado em que o chamador está — o mesmo
+ * `CASE` de `papel_do_chamador` na leitura. Recebê-lo por argumento faria a
+ * escrita acreditar em quem chama, e `blocked_by_role` é exatamente o campo que
+ * diz à outra pessoa quem fechou a porta: trocado, ele acusaria a vítima.
+ *
+ * **`blocked_at IS NULL`** preserva o primeiro bloqueio, como no lado do
+ * achador. Repetir não reescreve quem bloqueou nem quando, e é isso que torna a
+ * operação idempotente sem um `SELECT` antes do `UPDATE`.
+ */
+export function construtorDoBloqueioDoChamador(
+  db: Db,
+  conversa: ConversationId,
+  chamador: UserId,
+  agora: Instant,
+) {
+  return db
+    .updateTable('conversations')
+    .set({
+      blocked_at: new Date(agora),
+      blocked_by_role: sql<'tutor' | 'finder'>`CASE WHEN "tutor_user_id" = ${chamador} THEN 'tutor' ELSE 'finder' END`,
+    })
+    .where('id', '=', conversa)
+    .where((eb) =>
+      eb.or([eb('tutor_user_id', '=', chamador), eb('finder_user_id', '=', chamador)]),
+    )
+    .where('blocked_at', 'is', null);
+}
+
+/**
  * Marca a conversa para revisão. **Só a primeira retenção conta.**
  *
  * `held_for_review_at IS NULL` no `WHERE` preserva o instante e o motivo da
@@ -533,6 +570,10 @@ export function criarConversationRepository(db: Db): ConversationRepository {
 
     async reterParaRevisao(conversa, motivo, agora): Promise<void> {
       await construtorDaRetencao(db, conversa, motivo, agora).execute();
+    },
+
+    async bloquearPeloChamador(conversa, chamador, agora): Promise<void> {
+      await construtorDoBloqueioDoChamador(db, conversa, chamador, agora).execute();
     },
 
     async buscarPeloTokenDoAchador(resumo): Promise<ConversaDoAchador | undefined> {

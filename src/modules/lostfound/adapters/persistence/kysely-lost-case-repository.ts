@@ -24,8 +24,10 @@ import { sql } from 'kysely';
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
 import { rotuloDaArea } from '../../domain/abertura-do-caso.js';
 import type {
+  AtualizacaoDoCaso,
   CanalDoReencontro,
   CandidatoDecidido,
+  CandidatoDoCaso,
   CasoGravado,
   DecisaoDoCandidato,
   DecisaoSobreCandidato,
@@ -34,6 +36,7 @@ import type {
   EstadoDoPetParaPrevia,
   LostCaseRepository,
   NovoCaso,
+  PaginaDeCandidatos,
   StatusDoCaso,
 } from '../../ports/lost-case-repository.js';
 import type { CaseId, FoundReportId, PetId, UserId } from '../../../../shared/types/brands.js';
@@ -238,6 +241,51 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
       return linha === undefined ? null : comoCaso(linha);
     },
 
+    /**
+     * `PATCH /v1/lost-cases/{caseId}` — onde e quando, corrigidos.
+     *
+     * **Os três predicados do `WHERE` são os mesmos de `encerrar`**, e pela
+     * mesma razão: `id`, `owner_user_id` e `status = 'open'`. Zero linhas é
+     * `null`, e o serviço o lê como 404 — caso inexistente, caso alheio e caso
+     * encerrado são a mesma resposta (ADR-0021; e aqui um 403 confirmaria que
+     * aquele pet está perdido).
+     *
+     * **O ponto é reescrito sempre, inclusive para `NULL`.** Quem corrige de um
+     * ponto no mapa para "só o bairro" está dizendo que o ponto estava errado, e
+     * `COALESCE` o manteria gravado — o alerta seguiria centrado onde o pet não
+     * estava, e `has_location` continuaria `true` numa tela que diz o contrário.
+     *
+     * `description` e `share_to_public_list` usam o valor antigo quando o corpo
+     * não os traz (ver `AtualizacaoDoCaso`). O contrato não detalha isto.
+     */
+    async atualizarOndeEQuando(entrada: AtualizacaoDoCaso): Promise<CasoGravado | null> {
+      const ponto =
+        entrada.lat === undefined || entrada.lon === undefined
+          ? sql`NULL`
+          : sql`ST_SetSRID(ST_MakePoint(${entrada.lon}, ${entrada.lat}), 4326)::geography`;
+
+      const r = await sql<LinhaDoCaso>`
+        UPDATE lost_cases
+           SET last_seen_at = ${new Date(Number(entrada.lastSeenAt))},
+               last_seen_point = ${ponto},
+               last_seen_city = ${entrada.city ?? null},
+               last_seen_neighborhood = ${entrada.neighborhood ?? null},
+               last_seen_state = ${entrada.state ?? null},
+               description = ${entrada.description === undefined ? sql`description` : sql`${entrada.description}`},
+               share_to_public_list = ${
+                 entrada.shareToPublicList === undefined
+                   ? sql`share_to_public_list`
+                   : sql`${entrada.shareToPublicList}`
+               }
+         WHERE id = ${entrada.caso}
+           AND owner_user_id = ${entrada.dono}
+           AND status = 'open'
+        RETURNING ${COLUNAS}
+      `.execute(db);
+      const linha = r.rows[0];
+      return linha === undefined ? null : comoCaso(linha);
+    },
+
     async encerrar(entrada): Promise<CasoGravado | null> {
       // `status = 'open'` no `WHERE` e não num `if` antes: encerrar duas vezes é
       // o que a fila offline produz, e o segundo encerramento sobrescreveria o
@@ -289,6 +337,11 @@ export function criarLostCaseRepository(db: Db): LostCaseRepository {
         dono,
       ).executeTakeFirst();
       return linha === undefined ? null : comoCandidato(linha);
+    },
+
+    async candidatosDoCaso(caso, dono, pagina): Promise<readonly CandidatoDoCaso[]> {
+      const linhas = await construtorDosCandidatosDoCaso(db, caso, dono, pagina).execute();
+      return (linhas as unknown as LinhaDoCandidato[]).map(comoCandidatoDoCaso);
     },
   };
 }
@@ -361,7 +414,15 @@ function atributosQuePontuaram(bruto: Record<string, number> | string): readonly
   return Object.keys(objeto).filter((chave) => (objeto[chave] ?? 0) > 0);
 }
 
-function comoCandidato(l: LinhaDoCandidato): CandidatoDecidido {
+/**
+ * A linha, com o estado como ele está no banco: os TRÊS valores.
+ *
+ * É o mapeador da listagem, e o da decisão (abaixo) o reusa estreitando só o
+ * estado. Dois mapeadores independentes divergiriam no dia em que uma coluna
+ * nova entrasse em um e não no outro — e o que sai daqui é a resposta que o
+ * tutor lê para dizer "é o meu pet".
+ */
+function comoCandidatoDoCaso(l: LinhaDoCandidato): CandidatoDoCaso {
   return {
     id: l.id,
     caseId: l.case_id as CaseId,
@@ -374,10 +435,10 @@ function comoCandidato(l: LinhaDoCandidato): CandidatoDecidido {
     distanciaEmMetros: l.distance_m === null ? null : Number(l.distance_m),
     linkOrigin: l.link_origin,
     versaoDaEstrategia: l.strategy_version,
-    // O `WHERE` da escrita já recusou tudo que não sai de `suggested`, então a
-    // linha devolvida nunca está em `suggested`. O estreitamento é asserção, e
-    // não conveniência: `DecisaoDoCandidato` não tem o terceiro valor.
-    status: l.status as DecisaoDoCandidato,
+    // Sem asserção: `LinhaDoCandidato.status` já é exatamente os três valores
+    // de `StatusDoCandidato`, e um `as` aqui esconderia o dia em que o banco
+    // ganhar um quarto estado — que é justamente quando se quer o erro.
+    status: l.status,
     criadoEm: l.created_at,
     achado: {
       id: l.achado_id as FoundReportId,
@@ -391,6 +452,16 @@ function comoCandidato(l: LinhaDoCandidato): CandidatoDecidido {
       observacao: l.achado_notes,
       criadoEm: l.achado_created_at,
     },
+  };
+}
+
+function comoCandidato(l: LinhaDoCandidato): CandidatoDecidido {
+  return {
+    ...comoCandidatoDoCaso(l),
+    // O `WHERE` da escrita já recusou tudo que não sai de `suggested`, então a
+    // linha devolvida nunca está em `suggested`. O estreitamento é asserção, e
+    // não conveniência: `DecisaoDoCandidato` não tem o terceiro valor.
+    status: l.status as DecisaoDoCandidato,
   };
 }
 
@@ -490,4 +561,75 @@ export function construtorDoCandidatoDecidido(
     .where('match_candidates.case_id', '=', caso)
     .where('match_candidates.status', '<>', 'suggested')
     .where('lost_cases.owner_user_id', '=', dono);
+}
+
+/**
+ * `GET /v1/lost-cases/{caseId}/candidates` — a leitura, como consulta ainda não
+ * executada.
+ *
+ * ## A autorização é `lost_cases.owner_user_id = :dono`, e ela está AQUI
+ *
+ * Mesma posição lógica da escrita da decisão, e pelo mesmo motivo:
+ * `match_candidates` não tem coluna de dono, e o dono do candidato é o dono do
+ * CASO. O predicado entra na junção, com a correlação
+ * `lost_cases.id = match_candidates.case_id`; sem a correlação o mesmo SQL, com
+ * o mesmo dono ligado, passaria a perguntar *"esta conta tem algum caso?"* — o
+ * produto cartesiano que publicaria os candidatos de todos os casos de todos os
+ * tutores a qualquer pessoa com cadastro.
+ *
+ * `match_candidates.case_id = :caso` é filtro **a mais**, nunca no lugar do
+ * dono.
+ *
+ * ## O que esta consulta NÃO filtra, e por quê
+ *
+ * Ela **não** filtra por `status`. Os três estados saem, e o contrato declara os
+ * três em `MatchCandidate.status`: esconder `rejected` faria a lista mudar de
+ * tamanho sem explicação depois de um toque irreversível, e esconder `confirmed`
+ * tiraria da tela justamente a correspondência que virou conversa.
+ *
+ * ## A ordem, e o cursor
+ *
+ * `score` decrescente é o que o contrato manda (*"Ordena a lista"*), com `id`
+ * decrescente como desempate estável. O `id` no critério e no cursor não é
+ * enfeite: o `score` repete — dois achados que bateram nos mesmos atributos
+ * pontuam igual —, e sem ele a página seguinte repetiria ou pularia linhas.
+ *
+ * A tupla `(score, id) < (:score, :id)` é a comparação lexicográfica que o
+ * Postgres resolve de uma vez; a versão escrita à mão com `OR` erra exatamente
+ * no empate de `score`, que é quando ela importa.
+ */
+export function construtorDosCandidatosDoCaso(
+  db: DbExecutor,
+  caso: CaseId,
+  dono: UserId,
+  pagina: PaginaDeCandidatos,
+) {
+  const base = db
+    .selectFrom('match_candidates')
+    .innerJoin('lost_cases', (join) =>
+      join.onRef('lost_cases.id', '=', 'match_candidates.case_id'),
+    )
+    .innerJoin('found_reports', (join) =>
+      join.onRef('found_reports.id', '=', 'match_candidates.found_report_id'),
+    )
+    .innerJoin('pets', (join) => join.onRef('pets.id', '=', 'lost_cases.pet_id'))
+    .select([
+      ...COLUNAS_DO_CANDIDATO,
+      'lost_cases.pet_id as pet_id',
+      'pets.name as pet_name',
+      'found_reports.reporter_user_id as relator_user_id',
+      ...COLUNAS_DO_ACHADO,
+    ])
+    .where('match_candidates.case_id', '=', caso)
+    .where('lost_cases.owner_user_id', '=', dono)
+    .where('pets.deleted_at', 'is', null)
+    .orderBy('match_candidates.score', 'desc')
+    .orderBy('match_candidates.id', 'desc')
+    .limit(pagina.limit);
+
+  const depois = pagina.depoisDe;
+  if (depois === undefined) return base;
+  return base.where(
+    sql<boolean>`(match_candidates.score, match_candidates.id) < (${depois.score}, ${depois.id})`,
+  );
 }

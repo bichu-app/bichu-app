@@ -64,6 +64,21 @@ export const DIMENSOES_CONHECIDAS = [
   'account',
   'code',
   'pet',
+  /**
+   * O CASO, que é a dimensão do reenvio do alerta (`resendLostCaseAlert`, um por
+   * caso a cada 24 h).
+   *
+   * Não é `account`, e a diferença é de produto: quem tem dois animais perdidos
+   * ao mesmo tempo precisa poder reenviar o aviso dos dois. Um teto por conta lhe
+   * daria um reenvio por dia no total, e o segundo animal ficaria sem o segundo
+   * aviso — exatamente o dia em que o produto existe para funcionar.
+   *
+   * UUID interno em claro no balde, pela mesma exceção declarada para `account`
+   * e `pet` neste arquivo: `rate_limit_counters.bucket_key` não sai em resposta
+   * nenhuma, e o resumo tornaria impossível responder qual caso bateu no teto
+   * numa investigação.
+   */
+  'case',
   'email',
   'token_family',
   'finder_identity',

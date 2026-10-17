@@ -32,6 +32,7 @@ import type {
   ConversaDoChamador,
   ConversationRepository,
   MensagemGravada,
+  MotivoDaDenuncia,
   Pagina,
 } from '../ports/conversation-repository.js';
 import {
@@ -227,6 +228,114 @@ export class ConversationService {
     return gravada;
   }
 
+  /**
+   * `POST /v1/conversations/{id}/block` — o lado COM CONTA bloqueia a outra parte.
+   *
+   * **A assimetria de segurança que isto fecha**: o achador sem conta já tinha
+   * `/finder/conversation/block` no ar, e o lado autenticado não tinha nada. Um
+   * tutor sendo extorquido pelo falso achador não tinha saída nenhuma dentro do
+   * canal que o produto desenhou para protegê-lo.
+   *
+   * **Espelha o lado do achador, e não inventa desenho novo.** Mesma coluna,
+   * mesma idempotência (`blocked_at IS NULL` no `WHERE`), mesma ação de trilha
+   * com o papel no metadado. O envio já recusa conversa bloqueada
+   * (`aceitaMensagem` sobre `estadoDaConversa`), então a conversa passa a modo
+   * leitura sem uma linha nova em `enviar`.
+   *
+   * **Repetir responde igual.** O contrato declara `accept_and_deduplicate`, e a
+   * razão é de produto: bloquear é a ação que a pessoa executa com medo, e
+   * responder com texto sobre limite de chamadas a quem está se protegendo é o
+   * pior erro possível desta tela. Dizer "já estava bloqueada" também não serve:
+   * contaria a quem bloqueia o que o outro lado fez.
+   *
+   * **A conversa encerrada não é recusada.** Bloquear depois do encerramento
+   * continua valendo: é o que impede a conversa de voltar a aceitar mensagem se
+   * o caso for reaberto, e é o registro de que aquela pessoa não é bem-vinda.
+   */
+  async bloquear(conversa: ConversationId, chamador: Chamador): Promise<void> {
+    const encontrada = await this.exigirDoChamador(conversa, chamador);
+    await this.deps.repositorio.bloquearPeloChamador(
+      conversa,
+      chamador.userId,
+      this.deps.clock.now(),
+    );
+    await this.deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: chamador.userId,
+      ...comoOrigem(chamador),
+      action: 'conversation.blocked',
+      resourceKind: 'conversation',
+      resourceId: conversa,
+      // O papel sai da LEITURA VINCULADA, e não de um argumento de quem chama:
+      // é o mesmo valor que o `CASE` do `UPDATE` grava em `blocked_by_role`.
+      metadata: { by_role: encontrada.papelDoChamador },
+    });
+  }
+
+  /**
+   * `POST /v1/conversations/{id}/report` — denúncia do lado COM CONTA.
+   *
+   * Vai para a fila de quem modera e **nunca age sobre o alvo**: não bloqueia,
+   * não encerra, não avisa a outra pessoa. O detalhe entra como foi escrito,
+   * porque é prova para quem modera, e não sai para lado nenhum da conversa.
+   *
+   * **A quarta denúncia do mesmo lado não abre item novo**: ela soma no que já
+   * está na fila, pelo índice parcial de denúncia aberta por lado — o
+   * `accept_and_deduplicate` do contrato, cumprido no banco. E **não recusa**:
+   * quem toca em Denunciar a cada mensagem está com medo, e responder com limite
+   * de chamadas a quem pede ajuda é o pior erro possível desta tela.
+   */
+  async denunciar(
+    conversa: ConversationId,
+    motivo: MotivoDaDenuncia,
+    detalhe: string | undefined,
+    chamador: Chamador,
+  ): Promise<void> {
+    const encontrada = await this.exigirDoChamador(conversa, chamador);
+    await this.deps.repositorio.registrarDenuncia({
+      id: this.deps.ids.uuidv7(),
+      conversationId: conversa,
+      // Quem denuncia é o lado em que o chamador está, lido da consulta
+      // vinculada. O alvo é o outro papel, e nada aqui age sobre ele.
+      papel: encontrada.papelDoChamador,
+      motivo,
+      detalhe: detalhe === undefined || detalhe.trim() === '' ? null : detalhe,
+      agora: this.deps.clock.now(),
+    });
+    await this.deps.trilha.record({
+      actorKind: 'user',
+      actorUserId: chamador.userId,
+      ...comoOrigem(chamador),
+      action: 'conversation.reported',
+      resourceKind: 'conversation',
+      resourceId: conversa,
+      // O MOTIVO, nunca o texto: a trilha sobrevive à exclusão da conta.
+      metadata: { reason: motivo, reporter_role: encontrada.papelDoChamador },
+    });
+  }
+
+  /**
+   * O alvo da denúncia, para a dimensão `report_target` do teto: o par
+   * (conversa, papel denunciado).
+   *
+   * **É o papel OPOSTO ao do chamador**, e é essa a dimensão que pega a denúncia
+   * em laço — muitos denunciantes contra o mesmo alvo, que é o ataque do
+   * concorrente. Usar o papel de quem denuncia inverteria a contramedida: ela
+   * passaria a contar quantas vezes a VÍTIMA denunciou.
+   *
+   * `undefined` quando a conversa não é do chamador, e aí o teto não conta
+   * ninguém: a recusa dele é o 404 do handler, e não um 429 que esconderia o
+   * motivo verdadeiro.
+   */
+  async alvoDaDenuncia(
+    conversa: ConversationId,
+    chamador: Chamador,
+  ): Promise<string | undefined> {
+    const encontrada = await this.deps.repositorio.buscarDoChamador(conversa, chamador.userId);
+    if (encontrada === undefined) return undefined;
+    return `${conversa}:${encontrada.papelDoChamador === 'tutor' ? 'finder' : 'tutor'}`;
+  }
+
   /** A conversa do chamador, ou 404. Nunca 403 (ADR-0021). */
   private async exigirDoChamador(
     conversa: ConversationId,
@@ -364,4 +473,12 @@ function proximoCursor(mensagens: readonly MensagemGravada[], limite: number): s
   const ultima = mensagens[mensagens.length - 1];
   if (ultima === undefined) return null;
   return codificarCursor({ criadaEm: ultima.createdAt, id: ultima.id });
+}
+
+/** Correlação e IP, quando existem. Nunca vão para resposta nenhuma. */
+function comoOrigem(chamador: Chamador): { correlationId?: string; actorIp?: string } {
+  return {
+    ...(chamador.correlationId === undefined ? {} : { correlationId: chamador.correlationId }),
+    ...(chamador.ip === undefined ? {} : { actorIp: chamador.ip }),
+  };
 }

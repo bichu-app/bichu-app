@@ -245,3 +245,104 @@ class CasoDePerdido {
     );
   }
 }
+
+/// `MatchCandidate`: uma possivel correspondencia entre o caso do tutor e um
+/// aviso de achado.
+///
+/// ## O `score` NAO esta aqui, e a ausencia e a regra
+///
+/// O contrato o declara obrigatorio em `MatchCandidate`, e o criterio 2 da
+/// BICHUS-86 proibe exibi-lo: *"o numero ordena a lista e nao vai para a tela,
+/// porque numero inventa precisao que o sistema nao tem"*. O servidor **ja
+/// ordena** por ele, e a lista chega na ordem certa — entao o app nao precisa
+/// do campo para nada, e um campo que existe no modelo acaba numa tela.
+///
+/// Quem pagina usa [proximoCursor] da pagina, que carrega a posicao opaca. O
+/// app nao recalcula ordem nenhuma.
+class CandidatoDeCorrespondencia {
+  const CandidatoDeCorrespondencia({
+    required this.id,
+    required this.status,
+    required this.avisoEm,
+    this.rotuloDaArea,
+    this.especie,
+    this.porte,
+    this.observacao,
+    this.distanciaEmMetros,
+    this.atributosQuePontuaram = const <String>[],
+  });
+
+  /// `MatchCandidate.id`. E o que a rota de decidir pede no caminho.
+  final String id;
+
+  /// `suggested`, `confirmed` ou `rejected`. Texto e nao enum fechado: valor
+  /// novo no contrato nao pode derrubar a lista do tutor em panico.
+  final String status;
+
+  /// `found_report.found_at`: quando o animal foi visto por quem avisou.
+  final DateTime avisoEm;
+
+  /// Bairro e cidade, em texto. **Nunca coordenada**: nao ha geocodificacao
+  /// (ADR-0006), e o servidor nao devolve ponto nenhum nesta resposta.
+  final String? rotuloDaArea;
+
+  final String? especie;
+  final String? porte;
+  final String? observacao;
+
+  /// Nulo quando o caso ou o achado nao tem coordenada.
+  final int? distanciaEmMetros;
+
+  /// O que bateu, e nao quanto cada coisa pesou. O peso e a metade do `score`.
+  final List<String> atributosQuePontuaram;
+
+  bool get aguardandoDecisao => status == 'suggested';
+
+  factory CandidatoDeCorrespondencia.doJson(Map<String, dynamic> json) {
+    final aviso = json['found_report'] as Map<String, dynamic>? ??
+        const <String, dynamic>{};
+    return CandidatoDeCorrespondencia(
+      // Sem `??`: candidato sem identidade nao da para decidir, e uma linha que
+      // aponta para nada e pior que um estouro aqui.
+      id: json['id'] as String,
+      status: json['status'] as String? ?? 'suggested',
+      avisoEm:
+          DateTime.tryParse(aviso['found_at'] as String? ?? '')?.toLocal() ??
+              DateTime.now(),
+      rotuloDaArea: aviso['area_label'] as String?,
+      especie: aviso['species'] as String?,
+      porte: aviso['size'] as String?,
+      observacao: aviso['notes'] as String?,
+      distanciaEmMetros: json['distance_m'] as int?,
+      atributosQuePontuaram:
+          (json['matched_attributes'] as List<dynamic>? ?? const <dynamic>[])
+              .whereType<String>()
+              .toList(growable: false),
+    );
+  }
+}
+
+/// `CandidatePage`.
+///
+/// **Lista vazia e um estado legitimo e frequente**, e nao erro: a maior parte
+/// dos casos nao tem correspondencia nenhuma no primeiro dia. A tela diz isso
+/// em uma linha, e nao com cara de falha.
+class PaginaDeCandidatos {
+  const PaginaDeCandidatos({required this.itens, this.proximoCursor});
+
+  final List<CandidatoDeCorrespondencia> itens;
+
+  /// Valor **opaco**: o app o devolve como veio e nao o interpreta. Nulo quando
+  /// nao ha proxima pagina.
+  final String? proximoCursor;
+
+  factory PaginaDeCandidatos.doJson(Map<String, dynamic> json) {
+    return PaginaDeCandidatos(
+      itens: (json['items'] as List<dynamic>? ?? const <dynamic>[])
+          .whereType<Map<String, dynamic>>()
+          .map(CandidatoDeCorrespondencia.doJson)
+          .toList(growable: false),
+      proximoCursor: json['next_cursor'] as String?,
+    );
+  }
+}

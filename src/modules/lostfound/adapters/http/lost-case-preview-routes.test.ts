@@ -123,8 +123,10 @@ function repositorio(cenario: Cenario): LostCaseRepository {
     buscarDoTutor: (_caso, dono): Promise<CasoGravado | null> =>
       Promise.resolve(dono === DONO ? (cenario.casoDoDono ?? null) : null),
     encerrar: (): Promise<CasoGravado | null> => Promise.resolve(null),
+    atualizarOndeEQuando: (): Promise<CasoGravado | null> => Promise.resolve(null),
     decidirCandidato: naoUsado,
     candidatoDecididoDoTutor: naoUsado,
+    candidatosDoCaso: () => Promise.resolve([]),
   };
 }
 
