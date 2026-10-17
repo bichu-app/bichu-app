@@ -495,11 +495,12 @@ class CartaoDaLoja extends StatelessWidget {
                 height: 160,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                // Nome acessivel em portugues (criterio 11). A imagem do
-                // produto nao acrescenta informacao ao titulo que ja esta
-                // logo abaixo, e repetir os dois faz o leitor de tela dizer
-                // a mesma coisa duas vezes.
-                semanticLabel: 'Foto de ${item.titulo}',
+                // Nome acessivel em portugues (criterio 11): o texto que o
+                // administrador escreveu, e `Foto de <titulo>` quando ele nao
+                // escreveu. A escolha e de `ItemDaLoja.nomeDaImagem`, e nao
+                // daqui: ate 17/10/2026 esta linha montava a frase generica e
+                // o texto do painel nunca chegava a ninguem.
+                semanticLabel: item.nomeDaImagem,
                 errorBuilder: (_, _, _) => const SizedBox.shrink(),
               ),
             ),

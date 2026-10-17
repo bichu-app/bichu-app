@@ -5855,9 +5855,13 @@ paths:
         `createAdminCatalogImageIntent` com `purpose: store_item`, na ordem em
         que o app as mostra; a primeira e a principal. Qualquer outro envio e
         recusado com `400` (T9). **URL de imagem externa nao e aceita**
-        (ADR-0027 item 6). `species` e obrigatoria (pelo menos uma); `tag_slugs`
-        so aceita tag que ja existe no vocabulario (`createAdminStoreTag`),
-        ate 5 (ADR-0027 item 16).
+        (ADR-0027 item 6).
+
+        **`species` deixou de ser obrigatoria AQUI em 17/10/2026** e continua
+        obrigatoria em `publishAdminStoreItem`, junto com `partner_slug`,
+        `summary`, `category` e `target_url`: ver `AdminStoreItemInput`.
+        `tag_slugs` so aceita tag que ja existe no vocabulario
+        (`createAdminStoreTag`), ate 5 (ADR-0027 item 16).
       security:
         - adminSession: []
           adminCsrf: []
@@ -5991,6 +5995,29 @@ paths:
         Rascunho ou retirado passa a publicado. Idempotente: item ja publicado
         responde 200 sem nova linha de trilha. `published_at` grava a primeira
         publicacao e nao e reescrito.
+
+        **ESTA E A REGUA COMPLETA.** O rascunho exige so `title`
+        (`AdminStoreItemInput`); aqui o conjunto inteiro e cobrado, e a recusa
+        e `400 validation-failed` com **um erro por campo que falta**, cada um
+        com `field` igual ao campo do contrato e `code: <campo>_required`:
+
+        | `field`        | `code`              |
+        | -------------- | ------------------- |
+        | `summary`      | `summary_required`  |
+        | `category`     | `category_required` |
+        | `species`      | `species_required`  |
+        | `partner_slug` | `partner_required`  |
+        | `target_url`   | `target_url_required` |
+
+        `species_required` ja existia (ADR-0027 A.2.1); os outros quatro
+        nasceram em 17/10/2026, quando a criacao parou de cobra-los. A mesma
+        lista sai em `AdminStoreItem.missing_to_publish` em toda leitura, e e a
+        MESMA funcao que a calcula nos dois lugares.
+
+        **Afrouxar o rascunho nao afrouxou a publicacao**: produto incompleto
+        nao entra na vitrine do app, e abaixo do caso de uso o `CHECK
+        store_items_publicado_esta_completo` recusa `active = true` com
+        qualquer dos quatro nulo.
       security:
         - adminSession: []
           adminCsrf: []
@@ -8802,7 +8829,12 @@ components:
         title: { type: string }
         summary:
           type: string
-          description: Uma linha. O teto de 180 caracteres e o que a mantem uma linha.
+          description: |
+            A descricao do produto, texto puro. **Pode ter quebra de linha**
+            desde 17/10/2026, quando o campo do painel virou area de texto
+            (pedido do cliente): o teto de 180 caracteres continua, e a quebra
+            conta como caractere. Quem desenha preserva a quebra; nada aqui
+            garante uma linha so.
         category: { $ref: '#/components/schemas/StoreCategory' }
         image_url:
           type: string
@@ -8815,7 +8847,11 @@ components:
         image_alt_text:
           type: string
           nullable: true
-          description: O texto alternativo da imagem principal. Opcional ate a implementacao (ADR-0027 item 16).
+          description: |
+            O texto alternativo da imagem principal, quando o painel o
+            escreveu. **Nulo e estado normal**: o texto virou opcional na
+            escrita em 17/10/2026, e quem desenha cai no `title` do item em vez
+            de deixar a imagem sem nome acessivel.
         target_url:
           type: string
           format: uri
@@ -9929,8 +9965,27 @@ components:
 
     AdminStoreItemInput:
       type: object
-      required: [partner_slug, title, summary, category, species, target_url]
+      required: [title]
       additionalProperties: false
+      description: |
+        **O item nasce RASCUNHO, e desde 17/10/2026 so `title` e obrigatorio**
+        (pedido do cliente: "se e rascunho, nao deveria ser obrigatorio...
+        justamente porque pode ser que eu esteja aguardando ou buscando por
+        alguma informacao adicional").
+
+        **Sao duas reguas, e nao uma.** A desta entrada e a do rascunho: o
+        titulo, porque sem ele nao ha registro para a pessoa reencontrar na
+        lista. O que falta para o produto aparecer no app e cobrado em
+        `publishAdminStoreItem`, que responde `400 validation-failed` com um
+        erro POR CAMPO (`code: <campo>_required`); toda leitura do item ja
+        traz a mesma lista em `missing_to_publish`, para o painel dizer o que
+        falta antes de alguem clicar em publicar.
+
+        O que a pessoa JA escreveu continua conferido pela forma (descricao de
+        um caractere e erro de digitacao, nao rascunho), e `target_url` sem
+        `partner_slug` e recusado (`400`, `code: partner_required`): o banco
+        guarda so o caminho do destino e compoe o endereco com o host do
+        parceiro.
       properties:
         slug:
           allOf:
@@ -9945,7 +10000,12 @@ components:
           type: string
           minLength: 2
           maxLength: 180
-          description: Uma linha. Texto puro, renderizado como texto no app (D47).
+          description: |
+            A "Descricao" do painel, que desde 17/10/2026 e uma area de texto
+            de varias linhas (pedido do cliente). Texto puro, renderizado como
+            texto no app (D47); **a quebra de linha e aceita e conta no teto de
+            180**. Nenhuma marcacao: o app desenha com `Text`, e `**` apareceria
+            literal.
         category: { $ref: '#/components/schemas/StoreCategory' }
         target_url:
           allOf:
@@ -9959,7 +10019,7 @@ components:
             - $ref: '#/components/schemas/AdminPriceInput'
         species: { $ref: '#/components/schemas/StoreItemSpeciesSet' }
         tag_slugs: { $ref: '#/components/schemas/StoreItemTagSlugs' }
-        images: { $ref: '#/components/schemas/CatalogImagesInput' }
+        images: { $ref: '#/components/schemas/StoreCatalogImagesInput' }
         sort_order: { type: integer, minimum: -32768, maximum: 32767, default: 0 }
 
     AdminStoreItemPatch:
@@ -9969,32 +10029,72 @@ components:
       description: |
         Nao muda o estado de publicacao (isso e `publication`). `price: null`
         tira o preco; `image_upload_id: null` tira a imagem.
+
+        **`null` LIMPA**, no mesmo idioma de `price`, em `partner_slug`,
+        `summary`, `category` e `target_url`: ausente nao mexe, `null` apaga,
+        valor troca. Limpar cabe porque o rascunho pode estar incompleto
+        (17/10/2026); o item publicado que perde um dos quatro **nao** e
+        aceito, porque a publicacao exige o conjunto. Tirar `partner_slug`
+        tira `target_url` junto: o destino e guardado como caminho e so tem
+        endereco com o host do parceiro.
       properties:
         slug: { $ref: '#/components/schemas/Slug' }
-        partner_slug: { $ref: '#/components/schemas/Slug' }
+        partner_slug:
+          oneOf:
+            - $ref: '#/components/schemas/Slug'
+            - type: 'null'
         title: { type: string, minLength: 2, maxLength: 120 }
-        summary: { type: string, minLength: 2, maxLength: 180 }
-        category: { $ref: '#/components/schemas/StoreCategory' }
-        target_url: { $ref: '#/components/schemas/HttpsUrl' }
+        summary: { type: [string, 'null'], minLength: 2, maxLength: 180 }
+        category:
+          oneOf:
+            - $ref: '#/components/schemas/StoreCategory'
+            - type: 'null'
+        target_url:
+          oneOf:
+            - $ref: '#/components/schemas/HttpsUrl'
+            - type: 'null'
         price:
           oneOf:
             - $ref: '#/components/schemas/AdminPriceInput'
             - type: 'null'
         species: { $ref: '#/components/schemas/StoreItemSpeciesSet' }
         tag_slugs: { $ref: '#/components/schemas/StoreItemTagSlugs' }
-        images: { $ref: '#/components/schemas/CatalogImagesInput' }
+        images: { $ref: '#/components/schemas/StoreCatalogImagesInput' }
         sort_order: { type: integer, minimum: -32768, maximum: 32767 }
 
     AdminStoreItem:
       type: object
-      required: [slug, partner, title, summary, category, species, tags, images, target_url, price_status, publication_state, sort_order, created_at, updated_at, version]
+      required: [slug, partner, title, summary, category, species, tags, images, target_url, missing_to_publish, price_status, publication_state, sort_order, created_at, updated_at, version]
+      description: |
+        **Os quatro campos que a publicacao exige sao anulaveis aqui, e so no
+        rascunho**: `partner`, `summary`, `category` e `target_url`. Eles
+        continuam presentes na resposta (com `null`), e `missing_to_publish`
+        diz quais faltam. Em `publication_state: published` nenhum dos quatro
+        e nulo -- quem garante isso e o `CHECK
+        store_items_publicado_esta_completo`, e nao a boa vontade do painel.
       properties:
         slug: { type: string }
-        partner: { $ref: '#/components/schemas/StorePartnerRef' }
+        partner:
+          oneOf:
+            - $ref: '#/components/schemas/StorePartnerRef'
+            - type: 'null'
         title: { type: string }
-        summary: { type: string }
-        category: { $ref: '#/components/schemas/StoreCategory' }
-        target_url: { type: string, format: uri }
+        summary: { type: [string, 'null'] }
+        category:
+          oneOf:
+            - $ref: '#/components/schemas/StoreCategory'
+            - type: 'null'
+        target_url: { type: [string, 'null'], format: uri }
+        missing_to_publish:
+          type: array
+          description: |
+            O que ainda falta para publicar, **na ordem dos campos da tela**.
+            Vazia quer dizer "da para publicar". E a MESMA conta que o `400` de
+            `publishAdminStoreItem` faz: o painel pode dizer o que falta sem
+            pedir, e nunca promete uma publicacao que o servidor recusa.
+          items:
+            type: string
+            enum: [summary, category, species, partner_slug, target_url]
         species:
           type: array
           items: { $ref: '#/components/schemas/Species' }
@@ -10372,6 +10472,34 @@ components:
         upload_id: { type: string, format: uuid }
         alt_text: { $ref: '#/components/schemas/ImageAltText' }
 
+    StoreCatalogImagesInput:
+      type: array
+      maxItems: 8
+      description: |
+        A galeria do produto: ate 8 imagens, **na ordem em que o app as
+        mostra**. A primeira e a capa (a imagem do cartao da vitrine). Cada uma
+        e um envio de `createAdminCatalogImageIntent` com `purpose:
+        store_item`. A lista substitui a anterior inteira: **reordenar e mandar
+        a ordem nova, escolher a capa e por a imagem em primeiro lugar**,
+        remover e omitir, `[]` tira todas. `upload_id` repetido e recusado com
+        `400` (ADR-0027 itens 16 e 17).
+
+        **`alt_text` e OPCIONAL aqui** (pedido do cliente de 17/10/2026), e e a
+        unica diferenca em relacao a `CatalogImagesInput`, que a `Rede`
+        continua usando com o texto obrigatorio. Quando vem, vale de 2 a 150
+        caracteres; quando nao vem, a imagem fica sem texto alternativo e o app
+        cai no nome do produto. **Campo presente e vazio e recusado**: o painel
+        OMITE o campo em vez de mandar `""`.
+      items: { $ref: '#/components/schemas/StoreCatalogImageInput' }
+
+    StoreCatalogImageInput:
+      type: object
+      required: [upload_id]
+      additionalProperties: false
+      properties:
+        upload_id: { type: string, format: uuid }
+        alt_text: { $ref: '#/components/schemas/ImageAltText' }
+
     ImageAltText:
       type: string
       minLength: 2
@@ -10395,7 +10523,13 @@ components:
                 NULL`), e o painel so a mantem reenviando a galeria sem ela ou
                 com uma imagem nova.
             position: { type: integer, minimum: 0, maximum: 7 }
-            alt_text: { type: string }
+            alt_text:
+              type: [string, 'null']
+              description: |
+                **Nulo** quando a imagem foi gravada sem texto alternativo, o
+                que a `Loja` passou a permitir em 17/10/2026
+                (`StoreCatalogImagesInput`). Na `Rede` o texto continua
+                obrigatorio na escrita, e por isso nunca e nulo ali.
 
     AdminStoreTagRef:
       type: object
@@ -10470,7 +10604,12 @@ components:
       type: object
       required: [url, alt_text]
       properties:
-        alt_text: { type: string, description: 'Texto alternativo. Item da massa com imagem externa traz o titulo do item.' }
+        alt_text:
+          type: [string, 'null']
+          description: |
+            Texto alternativo. Item da massa com imagem externa traz o titulo
+            do item. **Nulo** quando o painel gravou a imagem sem texto
+            (opcional desde 17/10/2026): o app cai no nome do produto.
         url:
           type: string
           format: uri

@@ -1764,6 +1764,48 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/media/network-event-cover-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto da capa do encontro
+         * @description O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, com o
+         *     prefixo `events/` que a superficie administrativa ja usa; a derivada
+         *     publica e criada pelo worker, e e ela que sai em `cover_image_url`.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+         *     contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+         *     tem.
+         *
+         *     **O envio e da CONTA**, e nao do painel: `createNetworkEvent` so
+         *     confirma `upload_id` cuja intencao e da propria conta que esta criando o
+         *     encontro (a conferencia esta na clausula `WHERE`), e `upload_id` de
+         *     outra pessoa, de outro proposito ou vencido e recusado com `400`
+         *     (`code: upload_not_usable`), sem dizer qual dos casos ocorreu.
+         *
+         *     Dimensao minima 600 x 600, a mesma do painel: `width`/`height` sao
+         *     opcionais e, quando vem abaixo dela, respondem `422 image-too-small`
+         *     **antes** de assinar. Quem decide de verdade e o worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada.** A intencao que ninguem confirma vence em
+         *     dez minutos e o varredor a recolhe; o encontro sem capa e estado normal
+         *     (`cover_image_url` nulo, e o app mostra o banner da marca).
+         */
+        post: operations["createNetworkEventCoverUploadIntent"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/network/events": {
         parameters: {
             query?: never;
@@ -1825,7 +1867,67 @@ export interface paths {
          */
         get: operations["listNetworkEvents"];
         put?: never;
-        post?: never;
+        /**
+         * Criar um encontro da Rede
+         * @description A comunidade cria encontro, e ele **ja aparece em publico** (decisao do
+         *     cliente de 17/10/2026, ADR-0025 emenda 3): nasce `published`, com
+         *     `origin: community`, e a resposta e o proprio encontro, na forma de
+         *     `getNetworkEvent`. **Nao ha fila de revisao e nao ha decisao de
+         *     painel.**
+         *
+         *     ## Quem pode criar, que e a unica regua
+         *
+         *     **Canal de contato verificado**, a MESMA regua de abrir caso de pet
+         *     perdido: sem ele, `409 contact-channel-unverified` com
+         *     `next_action: verify_email`. Na pratica isso e **e-mail confirmado**,
+         *     porque nao existe operacao que verifique telefone.
+         *
+         *     **Teto de 3 encontros ATIVOS por conta** (ainda nao encerrados):
+         *     `409 community-event-limit-reached`. Encontro que terminou sai da conta
+         *     sozinho. Sem revisao humana, este teto e o teto de chamada desta
+         *     operacao sao a unica contencao de volume, e por isso os dois existem.
+         *
+         *     ## O que esta operacao NAO aceita, e por que
+         *
+         *     Sem `visibility` (todo encontro da comunidade e publico: o privado tem
+         *     fila de pedidos, que e trabalho de moderacao do painel), sem
+         *     `admission` (o Bichu nao cobra, e valor escrito por terceiro vira
+         *     moderacao de dinheiro), sem `slug` (derivado do titulo, como no item da
+         *     `Loja`), sem `point` e sem `street_address` (ADR-0006: nao ha mapa nem
+         *     busca de endereco, e nao ha geocodificacao em nenhum ponto deste
+         *     caminho) e sem `ticket_url` nem `instagram_handle` (link em texto de
+         *     terceiro e o vetor que D59 fecha).
+         *
+         *     **A capa entra**, por `cover_image.upload_id`, e o envio dos bytes e
+         *     autorizado antes por `createNetworkEventCoverUploadIntent`. A imagem de
+         *     capa e **publica** (decisao do cliente de 17/10/2026): o
+         *     `cover_image_url` sai na agenda, sem conta, assim que o processamento
+         *     terminar -- antes dele, nulo.
+         *
+         *     ## O que o servidor confere no texto, porque ninguem mais confere
+         *
+         *     Sem revisao humana, estas conferencias sao a unica protecao, e por isso
+         *     elas sao mais duras aqui que na escrita do painel:
+         *
+         *     - **`place.place_name` recusa endereco embutido**, com
+         *       `code: address_in_place_name`: CEP, numero de porta depois de
+         *       separador (`, 200`, `- 200`, `nº 200`), `s/n`, marcador de
+         *       quilometro, sequencia de quatro digitos ou mais, palavra de
+         *       logradouro junto de numero que nao e parte do nome dela, e
+         *       complemento residencial (`bloco 2`, `apto 51`, `condominio`).
+         *       Palavra de logradouro sozinha ("Avenida Paulista") e numero que e
+         *       parte do nome ("Rua 25 de Marco", "Praca 14 de Janeiro", "Quadra 302
+         *       Norte") **passam**. O motivo e medido: `place_name` sai na agenda
+         *       publica, sem conta, e o endereco escrito dentro dele contorna a
+         *       protecao de `street_address`, que sai so em
+         *       `getNetworkEventLocation`.
+         *     - **`title`, `summary`, `notes` e `cover_image.alt_text` recusam
+         *       contato e pagamento** (D59), com `code: contact_or_payment_detected`:
+         *       telefone, e-mail, link, encurtador, perfil `@usuario`, chave PIX e
+         *       dados bancarios. E a mesma conferencia que as observacoes do painel
+         *       ja aplicam, aqui estendida a todo texto que a pessoa escreve.
+         */
+        post: operations["createNetworkEvent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1866,7 +1968,52 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Editar o proprio encontro
+         * @description **Quem criou o encontro administra aquele encontro** (decisao do cliente
+         *     de 17/10/2026, ADR-0025 emenda 3). Esta operacao edita **somente**
+         *     encontro de `origin: community` criado pela propria conta.
+         *
+         *     **Encontro de outra pessoa NAO EXISTE para quem pede** (ADR-0021): a
+         *     condicao de autoria mora na clausula `WHERE` da mesma leitura que
+         *     carrega o encontro, e a resposta e **404**, identica a de `slug` que
+         *     nunca existiu. Nunca 403, nunca corpo diferente. Encontro do painel
+         *     (`origin: admin`) tambem responde 404 aqui -- ele se edita pelo painel.
+         *
+         *     `If-Match` e obrigatorio, com a versao da ultima leitura: ausente, 428;
+         *     diferente da atual, 412, e nada e gravado. O leitor tolera o `W/` e o
+         *     sufixo de codificacao que a borda acrescenta (`"1-zstd"`).
+         *
+         *     ## O que o autor NAO muda, e por que
+         *
+         *     `visibility` e `admission` (encontro privado tem fila de pedidos e valor
+         *     e moderacao de dinheiro: as duas sao decisao de administracao, e seguem
+         *     so em `changeAdminNetworkEventAccess`), `slug` (ele ja circulou),
+         *     `street_address` e `point` (ADR-0006, e o endereco e campo do painel),
+         *     `ticket_url` e `instagram_handle` (link em texto de terceiro),
+         *     `publication_status` (cancelar tem operacao propria) e `origin`.
+         *
+         *     **Data, horario, fuso e lugar ENTRAM aqui**, e isso e a unica diferenca
+         *     deliberada em relacao ao `PATCH` do painel, que os manda para
+         *     `relocateAdminNetworkEvent`: aquela operacao existe pela cerimonia de
+         *     T11 (motivo e aviso a todos os administradores), que nao se aplica a
+         *     quem esta corrigindo o proprio encontro. Sem eles, consertar a hora
+         *     errada exigiria cancelar e criar de novo, gastando o teto de 3.
+         *
+         *     ## As conferencias de texto valem IGUAL aqui
+         *
+         *     `place_name` recusa endereco embutido e `title`, `summary`, `notes` e
+         *     `cover_image.alt_text` recusam contato e pagamento (D59), com os mesmos
+         *     codigos de `createNetworkEvent`. Sem isso a pessoa criaria limpo e
+         *     editaria metendo o endereco, e a protecao seria decorativa.
+         *
+         *     **Encontro que ja terminou nao se edita** (`400`, `code: event_ended`):
+         *     editar o passado reescreve o que aconteceu, e o encerrado nao volta a
+         *     aparecer na agenda. O encontro que **ja comecou** e que ainda nao
+         *     terminou continua editavel, porque e justamente ali que o aviso de
+         *     ultima hora importa.
+         */
+        patch: operations["updateNetworkEvent"];
         trace?: never;
     };
     "/network/events/nearby": {
@@ -2036,6 +2183,44 @@ export interface paths {
          *     pendente e lavaria a recusa. A resposta e a mesma nos dois casos.
          */
         delete: operations["withdrawNetworkEventJoinRequest"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/network/events/{eventSlug}/cancellation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancelar o proprio encontro
+         * @description **Cancelar nao e apagar**, e o desenho e o mesmo do cancelamento do
+         *     painel (`cancelAdminNetworkEvent`): `publication_status` vira
+         *     `cancelled`, o instante fica gravado, e **o encontro continua visivel no
+         *     app como cancelado ate o fim previsto** -- quem ia precisa descobrir que
+         *     nao vai mais acontecer, e um encontro que desaparece nao conta isso. A
+         *     `note` e o motivo, e ela fica **so na trilha**: o app nao mostra motivo
+         *     de cancelamento (nem o do painel), porque e texto livre.
+         *
+         *     Vale **somente** para encontro de `origin: community` da propria conta,
+         *     e encontro de outra pessoa ou do painel responde **404** (ADR-0021), o
+         *     mesmo 404 de `slug` inexistente.
+         *
+         *     So encontro `published` se cancela (`400`,
+         *     `code: event_not_published`), e so o que **ainda nao terminou**
+         *     (`400`, `code: event_ended`): cancelar o que ja aconteceu nao muda nada
+         *     para ninguem. Cancelar de novo cai no primeiro caso.
+         *
+         *     `If-Match` obrigatorio, como na edicao. O encontro cancelado **sai do
+         *     teto de 3 ativos** da conta.
+         */
+        post: operations["cancelNetworkEvent"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2856,9 +3041,13 @@ export interface paths {
          *     `createAdminCatalogImageIntent` com `purpose: store_item`, na ordem em
          *     que o app as mostra; a primeira e a principal. Qualquer outro envio e
          *     recusado com `400` (T9). **URL de imagem externa nao e aceita**
-         *     (ADR-0027 item 6). `species` e obrigatoria (pelo menos uma); `tag_slugs`
-         *     so aceita tag que ja existe no vocabulario (`createAdminStoreTag`),
-         *     ate 5 (ADR-0027 item 16).
+         *     (ADR-0027 item 6).
+         *
+         *     **`species` deixou de ser obrigatoria AQUI em 17/10/2026** e continua
+         *     obrigatoria em `publishAdminStoreItem`, junto com `partner_slug`,
+         *     `summary`, `category` e `target_url`: ver `AdminStoreItemInput`.
+         *     `tag_slugs` so aceita tag que ja existe no vocabulario
+         *     (`createAdminStoreTag`), ate 5 (ADR-0027 item 16).
          */
         post: operations["createAdminStoreItem"];
         delete?: never;
@@ -2916,6 +3105,29 @@ export interface paths {
          * @description Rascunho ou retirado passa a publicado. Idempotente: item ja publicado
          *     responde 200 sem nova linha de trilha. `published_at` grava a primeira
          *     publicacao e nao e reescrito.
+         *
+         *     **ESTA E A REGUA COMPLETA.** O rascunho exige so `title`
+         *     (`AdminStoreItemInput`); aqui o conjunto inteiro e cobrado, e a recusa
+         *     e `400 validation-failed` com **um erro por campo que falta**, cada um
+         *     com `field` igual ao campo do contrato e `code: <campo>_required`:
+         *
+         *     | `field`        | `code`              |
+         *     | -------------- | ------------------- |
+         *     | `summary`      | `summary_required`  |
+         *     | `category`     | `category_required` |
+         *     | `species`      | `species_required`  |
+         *     | `partner_slug` | `partner_required`  |
+         *     | `target_url`   | `target_url_required` |
+         *
+         *     `species_required` ja existia (ADR-0027 A.2.1); os outros quatro
+         *     nasceram em 17/10/2026, quando a criacao parou de cobra-los. A mesma
+         *     lista sai em `AdminStoreItem.missing_to_publish` em toda leitura, e e a
+         *     MESMA funcao que a calcula nos dois lugares.
+         *
+         *     **Afrouxar o rascunho nao afrouxou a publicacao**: produto incompleto
+         *     nao entra na vitrine do app, e abaixo do caso de uso o `CHECK
+         *     store_items_publicado_esta_completo` recusa `active = true` com
+         *     qualquer dos quatro nulo.
          */
         put: operations["publishAdminStoreItem"];
         post?: never;
@@ -4470,7 +4682,13 @@ export interface components {
             /** @description O endereco publico do item. Nao ha UUID nesta tabela. */
             slug: string;
             title: string;
-            /** @description Uma linha. O teto de 180 caracteres e o que a mantem uma linha. */
+            /**
+             * @description A descricao do produto, texto puro. **Pode ter quebra de linha**
+             *     desde 17/10/2026, quando o campo do painel virou area de texto
+             *     (pedido do cliente): o teto de 180 caracteres continua, e a quebra
+             *     conta como caractere. Quem desenha preserva a quebra; nada aqui
+             *     garante uma linha so.
+             */
             summary: string;
             category: components["schemas"]["StoreCategory"];
             /**
@@ -4480,7 +4698,12 @@ export interface components {
              *     desenhar sem imagem.
              */
             image_url?: string | null;
-            /** @description O texto alternativo da imagem principal. Opcional ate a implementacao (ADR-0027 item 16). */
+            /**
+             * @description O texto alternativo da imagem principal, quando o painel o
+             *     escreveu. **Nulo e estado normal**: o texto virou opcional na
+             *     escrita em 17/10/2026, e quem desenha cai no `title` do item em vez
+             *     de deixar a imagem sem nome acessivel.
+             */
             image_alt_text?: string | null;
             /**
              * Format: uri
@@ -4903,6 +5126,121 @@ export interface components {
             /** Format: date-time */
             requested_at: string;
         };
+        /**
+         * @description O lugar como a comunidade o descreve: **tres rotulos, e nada mais**.
+         *
+         *     **Sem `point` e sem `street_address`**, e nenhum dos dois e
+         *     esquecimento: o ADR-0006 nao tem mapa nem busca de endereco nesta
+         *     superficie, e nao ha geocodificacao em nenhum ponto deste caminho; o
+         *     endereco por extenso e campo do painel e sai so em
+         *     `getNetworkEventLocation`. **Logradouro publico, nunca residencia**
+         *     (ADR-0027 item 13).
+         */
+        CommunityNetworkEventPlaceInput: {
+            /**
+             * @description O NOME do lugar, como as pessoas o chamam. O servidor recusa
+             *     endereco embutido com `code: address_in_place_name` -- ver a
+             *     descricao de `createNetworkEvent`.
+             */
+            place_name: string;
+            neighborhood: string;
+            city: string;
+            state: string;
+        };
+        /**
+         * @description O encontro proposto pela comunidade. **E um subconjunto deliberado de
+         *     `AdminNetworkEventInput`**, e o que falta esta explicado na descricao de
+         *     `createNetworkEvent`: visibilidade, condicao de acesso, `slug`, ponto,
+         *     endereco, links e imagens nao entram.
+         */
+        CommunityNetworkEventInput: {
+            title: string;
+            summary: string;
+            place: components["schemas"]["CommunityNetworkEventPlaceInput"];
+            /** Format: date-time */
+            starts_at: string;
+            /** Format: date-time */
+            ends_at?: string;
+            /** @default America/Sao_Paulo */
+            time_zone: components["schemas"]["TimeZoneName"];
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            /** @default true */
+            vaccination_required: boolean;
+            /** @default false */
+            fenced_off_leash_area: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"];
+            cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"];
+        };
+        /**
+         * @description O pedido de autorizacao de envio da capa. **Sem `purpose`**, ao
+         *     contrario de `AdminCatalogImageIntentInput`: esta operacao existe para
+         *     um proposito so (`network_event`), e deixar o cliente escolhe-lo seria
+         *     deixa-lo pedir uma autorizacao de imagem de produto por uma rota do app.
+         */
+        NetworkEventCoverIntentInput: {
+            /**
+             * @description SVG nunca (D50), e por IGUALDADE, nunca por prefixo. HEIC fica de
+             *     fora porque a derivada de catalogo e processada pelo mesmo caminho
+             *     do painel, que nao o aceita -- e por isso este enum NAO e o de
+             *     `UploadIntentInput`, que e da foto de pet.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/webp";
+            byte_size: number;
+            /** @description Opcional, como o navegador a le. Abaixo de 600 responde 422 antes de assinar. */
+            width?: number;
+            height?: number;
+        };
+        /**
+         * @description A capa, pelo `upload_id` de `createNetworkEventCoverUploadIntent`. O
+         *     `alt_text` e **obrigatorio** em toda posicao, igual a galeria do painel:
+         *     a imagem sem texto alternativo e a imagem que nao existe para quem usa
+         *     leitor de tela.
+         */
+        CommunityNetworkEventCoverInput: {
+            /** Format: uuid */
+            upload_id: string;
+            alt_text: string;
+        };
+        /**
+         * @description O que o AUTOR muda no proprio encontro. Campo ausente nao muda; as
+         *     listas substituem o conjunto; `notes: null` tira as observacoes e
+         *     `cover_image: null` tira a capa.
+         *
+         *     **Nao tem** `visibility`, `admission`, `slug`, `street_address`,
+         *     `point`, `ticket_url`, `instagram_handle`, `publication_status` nem
+         *     `origin` -- ver a descricao de `updateNetworkEvent`.
+         */
+        CommunityNetworkEventPatch: {
+            title?: string;
+            summary?: string;
+            place?: components["schemas"]["CommunityNetworkEventPlaceInput"];
+            /** Format: date-time */
+            starts_at?: string;
+            /** @description `null` tira o fim previsto. */
+            ends_at?: string | null;
+            time_zone?: components["schemas"]["TimeZoneName"];
+            /** @description `null` tira a capa. */
+            cover_image?: components["schemas"]["CommunityNetworkEventCoverInput"] | null;
+            accepted_sizes?: components["schemas"]["NetworkEventAcceptedSizes"];
+            dog_age?: components["schemas"]["NetworkEventDogAge"];
+            vaccination_required?: boolean;
+            fenced_off_leash_area?: boolean;
+            amenities?: components["schemas"]["NetworkEventAmenities"];
+            bring_items?: components["schemas"]["NetworkEventBringItems"];
+            notes?: components["schemas"]["NetworkEventNotes"] | null;
+        };
+        CommunityNetworkEventCancellation: {
+            /**
+             * @description O motivo, **so para a trilha**. Nao sai no app, pela mesma regra do
+             *     cancelamento do painel: e texto livre, e o cliente nao decidiu
+             *     mostrar motivo de cancelamento.
+             */
+            note: string;
+        };
         MyNetworkEventJoinRequestPage: {
             items: components["schemas"]["MyNetworkEventJoinRequest"][];
             page: number;
@@ -5227,6 +5565,26 @@ export interface components {
          * @enum {string}
          */
         AdminStoreItemPublicationState: "draft" | "published" | "retired";
+        /**
+         * @description **O item nasce RASCUNHO, e desde 17/10/2026 so `title` e obrigatorio**
+         *     (pedido do cliente: "se e rascunho, nao deveria ser obrigatorio...
+         *     justamente porque pode ser que eu esteja aguardando ou buscando por
+         *     alguma informacao adicional").
+         *
+         *     **Sao duas reguas, e nao uma.** A desta entrada e a do rascunho: o
+         *     titulo, porque sem ele nao ha registro para a pessoa reencontrar na
+         *     lista. O que falta para o produto aparecer no app e cobrado em
+         *     `publishAdminStoreItem`, que responde `400 validation-failed` com um
+         *     erro POR CAMPO (`code: <campo>_required`); toda leitura do item ja
+         *     traz a mesma lista em `missing_to_publish`, para o painel dizer o que
+         *     falta antes de alguem clicar em publicar.
+         *
+         *     O que a pessoa JA escreveu continua conferido pela forma (descricao de
+         *     um caractere e erro de digitacao, nao rascunho), e `target_url` sem
+         *     `partner_slug` e recusado (`400`, `code: partner_required`): o banco
+         *     guarda so o caminho do destino e compoe o endereco com o host do
+         *     parceiro.
+         */
         AdminStoreItemInput: {
             /**
              * @description Opcional. Sem ele, o servidor deriva do titulo (sem acento,
@@ -5234,49 +5592,78 @@ export interface components {
              *     formulario do painel nao pede `slug` (matriz de rastreabilidade).
              */
             slug?: components["schemas"]["Slug"];
-            partner_slug: components["schemas"]["Slug"];
+            partner_slug?: components["schemas"]["Slug"];
             title: string;
-            /** @description Uma linha. Texto puro, renderizado como texto no app (D47). */
-            summary: string;
-            category: components["schemas"]["StoreCategory"];
+            /**
+             * @description A "Descricao" do painel, que desde 17/10/2026 e uma area de texto
+             *     de varias linhas (pedido do cliente). Texto puro, renderizado como
+             *     texto no app (D47); **a quebra de linha e aceita e conta no teto de
+             *     180**. Nenhuma marcacao: o app desenha com `Text`, e `**` apareceria
+             *     literal.
+             */
+            summary?: string;
+            category?: components["schemas"]["StoreCategory"];
             /**
              * @description Precisa estar no host EXATO do parceiro (`400`, `code: host_mismatch`),
              *     sem `?` nem `#` (`400`, `code: invalid_url`): o banco guarda so o caminho.
              *     Nenhum identificador de pessoa, em codificacao nenhuma.
              */
-            target_url: components["schemas"]["HttpsUrl"];
+            target_url?: components["schemas"]["HttpsUrl"];
             price?: components["schemas"]["AdminPriceInput"];
-            species: components["schemas"]["StoreItemSpeciesSet"];
+            species?: components["schemas"]["StoreItemSpeciesSet"];
             tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
-            images?: components["schemas"]["CatalogImagesInput"];
+            images?: components["schemas"]["StoreCatalogImagesInput"];
             /** @default 0 */
             sort_order: number;
         };
         /**
          * @description Nao muda o estado de publicacao (isso e `publication`). `price: null`
          *     tira o preco; `image_upload_id: null` tira a imagem.
+         *
+         *     **`null` LIMPA**, no mesmo idioma de `price`, em `partner_slug`,
+         *     `summary`, `category` e `target_url`: ausente nao mexe, `null` apaga,
+         *     valor troca. Limpar cabe porque o rascunho pode estar incompleto
+         *     (17/10/2026); o item publicado que perde um dos quatro **nao** e
+         *     aceito, porque a publicacao exige o conjunto. Tirar `partner_slug`
+         *     tira `target_url` junto: o destino e guardado como caminho e so tem
+         *     endereco com o host do parceiro.
          */
         AdminStoreItemPatch: {
             slug?: components["schemas"]["Slug"];
-            partner_slug?: components["schemas"]["Slug"];
+            partner_slug?: components["schemas"]["Slug"] | null;
             title?: string;
-            summary?: string;
-            category?: components["schemas"]["StoreCategory"];
-            target_url?: components["schemas"]["HttpsUrl"];
+            summary?: string | null;
+            category?: components["schemas"]["StoreCategory"] | null;
+            target_url?: components["schemas"]["HttpsUrl"] | null;
             price?: components["schemas"]["AdminPriceInput"] | null;
             species?: components["schemas"]["StoreItemSpeciesSet"];
             tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
-            images?: components["schemas"]["CatalogImagesInput"];
+            images?: components["schemas"]["StoreCatalogImagesInput"];
             sort_order?: number;
         };
+        /**
+         * @description **Os quatro campos que a publicacao exige sao anulaveis aqui, e so no
+         *     rascunho**: `partner`, `summary`, `category` e `target_url`. Eles
+         *     continuam presentes na resposta (com `null`), e `missing_to_publish`
+         *     diz quais faltam. Em `publication_state: published` nenhum dos quatro
+         *     e nulo -- quem garante isso e o `CHECK
+         *     store_items_publicado_esta_completo`, e nao a boa vontade do painel.
+         */
         AdminStoreItem: {
             slug: string;
-            partner: components["schemas"]["StorePartnerRef"];
+            partner: components["schemas"]["StorePartnerRef"] | null;
             title: string;
-            summary: string;
-            category: components["schemas"]["StoreCategory"];
+            summary: string | null;
+            category: components["schemas"]["StoreCategory"] | null;
             /** Format: uri */
-            target_url: string;
+            target_url: string | null;
+            /**
+             * @description O que ainda falta para publicar, **na ordem dos campos da tela**.
+             *     Vazia quer dizer "da para publicar". E a MESMA conta que o `400` de
+             *     `publishAdminStoreItem` faz: o painel pode dizer o que falta sem
+             *     pedir, e nunca promete uma publicacao que o servidor recusa.
+             */
+            missing_to_publish: ("summary" | "category" | "species" | "partner_slug" | "target_url")[];
             species: components["schemas"]["Species"][];
             tags: components["schemas"]["AdminStoreTagRef"][];
             /** @description Na ordem do app. `position` 0 e a principal. Vazia e estado normal. */
@@ -5438,10 +5825,16 @@ export interface components {
             note: string;
         };
         /**
-         * @description `published` desde a criacao (nao ha rascunho, ADR-0027 12.9);
-         *     `cancelled` continua visivel no app como cancelado; `removed` e
-         *     terminal. `pending_review` existe no banco para o encontro criado pela
-         *     comunidade, que nao existe na v1, e por isso nao aparece aqui.
+         * @description `published` desde a criacao, **tanto pelo painel quanto pela
+         *     comunidade** (nao ha rascunho, ADR-0027 12.9, e nao ha revisao,
+         *     ADR-0025 emenda 3); `cancelled` continua visivel no app como cancelado;
+         *     `removed` e terminal.
+         *
+         *     **`pending_review` nao existe mais**: ele era o estado da fila de
+         *     moderacao do encontro da comunidade, e a decisao do cliente de
+         *     17/10/2026 trocou a fila pela publicacao direta de quem tem canal de
+         *     contato verificado. A migracao `20261001000005` tirou o valor do
+         *     `CHECK` do banco, com o `CHECK` que o amarrava a origem.
          * @enum {string}
          */
         AdminNetworkEventPublicationStatus: "published" | "cancelled" | "removed";
@@ -5473,8 +5866,16 @@ export interface components {
             vaccination_required: boolean;
             fenced_off_leash_area: boolean;
             amenities: components["schemas"]["NetworkEventAmenity"][];
-            /** @enum {string} */
-            origin: "admin";
+            /**
+             * @description Quem criou: `admin` (o painel) ou `community` (proposto por uma
+             *     conta do app, ADR-0025 emenda 3). **Nao e o autor** --
+             *     `created_by_user_id` e `created_by_admin_id` nunca saem do
+             *     servidor, nem aqui (ADR-0027 apendice A.4). Isto e so a origem, e
+             *     e o que faz a fila de moderacao distinguir o que ela esta
+             *     revisando.
+             * @enum {string}
+             */
+            origin: "admin" | "community";
             visibility: components["schemas"]["NetworkEventVisibility"];
             admission: components["schemas"]["AdminNetworkEventAdmission"];
             bring_items: components["schemas"]["NetworkEventBringItem"][];
@@ -5552,6 +5953,28 @@ export interface components {
             upload_id: string;
             alt_text: components["schemas"]["ImageAltText"];
         };
+        /**
+         * @description A galeria do produto: ate 8 imagens, **na ordem em que o app as
+         *     mostra**. A primeira e a capa (a imagem do cartao da vitrine). Cada uma
+         *     e um envio de `createAdminCatalogImageIntent` com `purpose:
+         *     store_item`. A lista substitui a anterior inteira: **reordenar e mandar
+         *     a ordem nova, escolher a capa e por a imagem em primeiro lugar**,
+         *     remover e omitir, `[]` tira todas. `upload_id` repetido e recusado com
+         *     `400` (ADR-0027 itens 16 e 17).
+         *
+         *     **`alt_text` e OPCIONAL aqui** (pedido do cliente de 17/10/2026), e e a
+         *     unica diferenca em relacao a `CatalogImagesInput`, que a `Rede`
+         *     continua usando com o texto obrigatorio. Quando vem, vale de 2 a 150
+         *     caracteres; quando nao vem, a imagem fica sem texto alternativo e o app
+         *     cai no nome do produto. **Campo presente e vazio e recusado**: o painel
+         *     OMITE o campo em vez de mandar `""`.
+         */
+        StoreCatalogImagesInput: components["schemas"]["StoreCatalogImageInput"][];
+        StoreCatalogImageInput: {
+            /** Format: uuid */
+            upload_id: string;
+            alt_text?: components["schemas"]["ImageAltText"];
+        };
         /** @description O que a foto mostra, para quem usa leitor de tela. Texto puro. */
         ImageAltText: string;
         AdminCatalogGalleryImage: components["schemas"]["AdminCatalogImage"] & {
@@ -5566,7 +5989,13 @@ export interface components {
              */
             upload_id: string | null;
             position: number;
-            alt_text: string;
+            /**
+             * @description **Nulo** quando a imagem foi gravada sem texto alternativo, o
+             *     que a `Loja` passou a permitir em 17/10/2026
+             *     (`StoreCatalogImagesInput`). Na `Rede` o texto continua
+             *     obrigatorio na escrita, e por isso nunca e nulo ali.
+             */
+            alt_text: string | null;
         };
         AdminStoreTagRef: {
             slug: string;
@@ -5613,8 +6042,12 @@ export interface components {
             label: string;
         };
         StoreItemImage: {
-            /** @description Texto alternativo. Item da massa com imagem externa traz o titulo do item. */
-            alt_text: string;
+            /**
+             * @description Texto alternativo. Item da massa com imagem externa traz o titulo
+             *     do item. **Nulo** quando o painel gravou a imagem sem texto
+             *     (opcional desde 17/10/2026): o app cai no nome do produto.
+             */
+            alt_text: string | null;
             /**
              * Format: uri
              * @description A derivada publica, sempre pronta. Imagem em processamento ou recusada nunca aparece aqui.
@@ -8276,7 +8709,9 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     resendLostCaseAlert: {
@@ -8299,7 +8734,9 @@ export interface operations {
                     "application/json": components["schemas"]["AlertDispatch"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -8326,7 +8763,9 @@ export interface operations {
                     "application/json": components["schemas"]["CandidatePage"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     decideLostCaseCandidate: {
@@ -8557,7 +8996,9 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     reportConversation: {
@@ -8580,7 +9021,9 @@ export interface operations {
         };
         responses: {
             202: components["responses"]["Accepted"];
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
         };
     };
     listDirectoryEntries: {
@@ -8766,6 +9209,35 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    createNetworkEventCoverUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NetworkEventCoverIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     listNetworkEvents: {
         parameters: {
             query?: {
@@ -8834,6 +9306,49 @@ export interface operations {
             429: components["responses"]["TooManyRequests"];
         };
     };
+    createNetworkEvent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventInput"];
+            };
+        };
+        responses: {
+            /**
+             * @description O encontro criado, na mesma forma de `getNetworkEvent`.
+             *     `cover_image_url` sai nulo enquanto a derivada publica nao existe.
+             */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            /**
+             * @description Sem canal de contato verificado (`contact-channel-unverified`) ou
+             *     teto de encontros ativos atingido
+             *     (`community-event-limit-reached`).
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     getNetworkEvent: {
         parameters: {
             query?: never;
@@ -8857,6 +9372,48 @@ export interface operations {
             };
             400: components["responses"]["ValidationFailed"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventPatch"];
+            };
+        };
+        responses: {
+            /** @description O encontro depois da edicao, na forma de `getNetworkEvent`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
             429: components["responses"]["TooManyRequests"];
         };
     };
@@ -9049,6 +9606,48 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    cancelNetworkEvent: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico do encontro. */
+                eventSlug: components["parameters"]["NetworkEventSlugParam"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommunityNetworkEventCancellation"];
+            };
+        };
+        responses: {
+            /** @description O encontro cancelado, na forma de `getNetworkEvent`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NetworkEventPublic"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
             429: components["responses"]["TooManyRequests"];
         };
     };

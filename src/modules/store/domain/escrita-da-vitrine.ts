@@ -55,7 +55,12 @@ export interface ImagemDoItem {
   /** `catalog_images.id`, interno. So a trilha e a escrita o veem. */
   readonly imageId: string;
   readonly position: number;
-  readonly altText: string;
+  /**
+   * Nulo quando o painel gravou a imagem sem descricao: o texto alternativo
+   * virou OPCIONAL na `Loja` em 17/10/2026 (pedido do cliente). Quem desenha
+   * cai no titulo do item; na `Rede` ele continua obrigatorio.
+   */
+  readonly altText: string | null;
   readonly status: EstadoDaImagem;
   readonly publicKey: string | null;
   readonly rejectionReason: string | null;
@@ -98,11 +103,20 @@ export interface ParceiroAdministrativo {
 export interface ItemAdministrativo {
   readonly id: string;
   readonly slug: string;
-  readonly partner: { readonly slug: string; readonly name: string; readonly host: string };
+  /**
+   * **Nulo so no rascunho.** As quatro coisas que a publicacao exige --
+   * parceiro, descricao, categoria e destino -- passaram a ser anulaveis na
+   * `20261001000006` para o rascunho poder guardar trabalho incompleto (pedido
+   * do cliente de 17/10/2026). Quem decide se o conjunto esta completo e
+   * `faltaParaPublicar`, e o `CHECK store_items_publicado_esta_completo` e a
+   * rede embaixo dele.
+   */
+  readonly partner: { readonly slug: string; readonly name: string; readonly host: string } | null;
+  /** O minimo do rascunho: nunca nulo. */
   readonly title: string;
-  readonly summary: string;
-  readonly category: CategoriaDaVitrine;
-  readonly targetUrl: string;
+  readonly summary: string | null;
+  readonly category: CategoriaDaVitrine | null;
+  readonly targetUrl: string | null;
   /**
    * URL do parceiro, so em dado da massa. O painel nunca a escreve (ADR-0027
    * item 6); o que ele escreve e `imagens`.
@@ -122,6 +136,85 @@ export interface ItemAdministrativo {
   readonly createdAt: Date;
   readonly updatedAt: Date;
   readonly version: number;
+}
+
+// ---------------------------------------------------------------------------
+// As duas reguas: o rascunho e a publicacao
+// ---------------------------------------------------------------------------
+
+/**
+ * O que a publicacao exige e o rascunho nao (pedido do cliente de 17/10/2026).
+ *
+ * Os nomes sao os CAMPOS DO CONTRATO, e nao as colunas: e esta lista que o
+ * painel recebe em `missing_to_publish` e que o 400 da publicacao repete em
+ * `errors[].field`, para a tela poder apontar o campo certo sem traduzir nada.
+ */
+export type FaltaDaPublicacao = 'partner_slug' | 'summary' | 'category' | 'target_url' | 'species';
+
+/**
+ * A ordem em que a tela mostra os campos, que e a ordem do resumo de erros.
+ * Fixa, e nao a ordem em que a verificacao acontece: duas chamadas com as
+ * mesmas faltas devolvem a mesma lista.
+ */
+export const ORDEM_DA_FALTA: readonly FaltaDaPublicacao[] = [
+  'summary',
+  'category',
+  'species',
+  'partner_slug',
+  'target_url',
+];
+
+/**
+ * **A SEGUNDA REGUA.** O rascunho exige so `title` (o minimo para o registro
+ * existir e para a pessoa reencontra-lo na lista); a publicacao exige o
+ * conjunto inteiro, e esta funcao e quem diz o que falta, campo por campo.
+ *
+ * Por que uma funcao pura e nao uma validacao do caso de uso: a MESMA resposta
+ * precisa sair em dois lugares -- em `missing_to_publish` de toda leitura do
+ * item (para o painel dizer o que falta antes de a pessoa clicar) e no `400`
+ * de `publishAdminStoreItem`. Duas contas separadas divergiriam, e a tela
+ * passaria a prometer uma publicacao que o servidor recusa.
+ *
+ * `species` entra aqui porque sempre foi regra da publicacao (ADR-0027 A.2.1):
+ * o item da massa nasceu sem especie e nao volta ao app sem uma. O que mudou
+ * em 17/10/2026 e que as outras quatro passaram a acompanha-la.
+ */
+export function faltaParaPublicar(item: {
+  readonly partner: { readonly slug: string } | null;
+  readonly summary: string | null;
+  readonly category: CategoriaDaVitrine | null;
+  readonly targetUrl: string | null;
+  readonly species: readonly EspecieDoItem[];
+}): readonly FaltaDaPublicacao[] {
+  const falta = new Set<FaltaDaPublicacao>();
+  if (item.partner === null) falta.add('partner_slug');
+  if (item.summary === null) falta.add('summary');
+  if (item.category === null) falta.add('category');
+  if (item.targetUrl === null) falta.add('target_url');
+  if (item.species.length === 0) falta.add('species');
+  return ORDEM_DA_FALTA.filter((campo) => falta.has(campo));
+}
+
+/** A frase curta de cada falta, como o `400` da publicacao a escreve. */
+export const MENSAGEM_DA_FALTA: Record<FaltaDaPublicacao, string> = {
+  summary: 'Escreva a descrição antes de publicar.',
+  category: 'Escolha a categoria antes de publicar.',
+  species: 'Diga a que espécie o produto serve antes de publicar.',
+  partner_slug: 'Escolha o parceiro antes de publicar.',
+  target_url: 'Informe o link do produto no parceiro antes de publicar.',
+};
+
+/**
+ * As faltas na forma de erro de campo do contrato. O `code` segue o
+ * `species_required` que a publicacao ja usava desde a BICHUS-267: um
+ * `<campo>_required` por campo, e nao um codigo novo com a lista dentro.
+ */
+export function errosDaFalta(faltas: readonly FaltaDaPublicacao[]): ProblemFieldError[] {
+  return faltas.map((campo) => ({
+    field: campo,
+    code: campo === 'partner_slug' ? 'partner_required' : `${campo}_required`,
+    message: MENSAGEM_DA_FALTA[campo],
+  }));
 }
 
 /**
@@ -324,7 +417,8 @@ export function projetarParceiro(p: ParceiroAdministrativo): ParceiroProjetado {
 export interface ImagemProjetada {
   readonly upload_id: string | null;
   readonly position: number;
-  readonly alt_text: string;
+  /** Nulo quando o painel gravou a imagem sem descricao (opcional desde 17/10/2026). */
+  readonly alt_text: string | null;
   readonly source: 'uploaded';
   readonly status: EstadoDaImagem;
   readonly url: string | null;
@@ -340,11 +434,18 @@ export interface PrecoProjetado {
 
 export interface ItemAdministrativoProjetado {
   readonly slug: string;
-  readonly partner: { readonly slug: string; readonly name: string; readonly host: string };
+  /** Nulo so no rascunho (ver `ItemAdministrativo`). */
+  readonly partner: { readonly slug: string; readonly name: string; readonly host: string } | null;
   readonly title: string;
-  readonly summary: string;
-  readonly category: CategoriaDaVitrine;
-  readonly target_url: string;
+  readonly summary: string | null;
+  readonly category: CategoriaDaVitrine | null;
+  readonly target_url: string | null;
+  /**
+   * O que ainda falta para publicar, na ordem dos campos da tela. Vazio quer
+   * dizer "da para publicar". O painel o usa para dizer o que falta em vez de
+   * so desabilitar o botao.
+   */
+  readonly missing_to_publish: readonly FaltaDaPublicacao[];
   readonly species: readonly EspecieDoItem[];
   readonly tags: readonly TagDoItem[];
   readonly images: readonly ImagemProjetada[];
@@ -397,11 +498,15 @@ export function projetarItemAdministrativo(
 ): ItemAdministrativoProjetado {
   return {
     slug: item.slug,
-    partner: { slug: item.partner.slug, name: item.partner.name, host: item.partner.host },
+    partner:
+      item.partner === null
+        ? null
+        : { slug: item.partner.slug, name: item.partner.name, host: item.partner.host },
     title: item.title,
     summary: item.summary,
     category: item.category,
     target_url: item.targetUrl,
+    missing_to_publish: faltaParaPublicar(item),
     species: [...item.species],
     tags: item.tags.map((t) => ({ slug: t.slug, label: t.label, active: t.active })),
     images: projetarImagens(item, urlDeMidia),

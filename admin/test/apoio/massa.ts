@@ -36,6 +36,9 @@ export function item(extra: Partial<Esquemas['AdminStoreItem']> = {}): Esquemas[
     species: ['dog'],
     tags: [{ slug: 'adulto', label: 'adulto', active: true }],
     images: [],
+    // Vazio: a massa nasce publicavel. O rascunho incompleto e caso de teste,
+    // e os testes o montam com `item({ summary: null, missing_to_publish: [...] })`.
+    missing_to_publish: [],
     price: { amount: 18990, currency: 'BRL', checked_at: '2026-09-15', valid_until: '2026-10-15' },
     price_status: 'vigente',
     publication_state: 'published',

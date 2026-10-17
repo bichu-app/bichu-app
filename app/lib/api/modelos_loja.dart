@@ -103,6 +103,7 @@ class ItemDaLoja {
     required this.resumo,
     required this.categoria,
     required this.urlDaImagem,
+    required this.textoDaImagem,
     required this.urlDeDestino,
     required this.parceiro,
     required this.precoEmCentavos,
@@ -115,6 +116,15 @@ class ItemDaLoja {
   final String resumo;
   final CategoriaDaLoja? categoria;
   final String? urlDaImagem;
+
+  /// O `image_alt_text` do servidor, **cru**: nulo quando o painel nao escreveu
+  /// descricao para a imagem (ela e opcional desde 17/10/2026).
+  ///
+  /// Quem desenha nao usa este campo direto, usa [nomeDaImagem]: ler o cru na
+  /// tela e o caminho para alguem esquecer a reserva e deixar a imagem sem nome
+  /// acessivel.
+  final String? textoDaImagem;
+
   final String urlDeDestino;
   final ParceiroDaLoja parceiro;
 
@@ -125,6 +135,23 @@ class ItemDaLoja {
   final String? consultadoEm;
 
   final EstadoDoPreco estadoDoPreco;
+
+  /// O nome acessivel da imagem do item, que **nunca e vazio**.
+  ///
+  /// O texto que o administrador escreveu, quando ele escreveu; `Foto de
+  /// <titulo>` quando nao escreveu. Nunca nulo e nunca `''`: imagem com
+  /// `semanticLabel` vazio e imagem que o leitor de tela ANUNCIA SEM DIZER
+  /// NADA, que e pior que a reserva generica.
+  ///
+  /// Por que nao esta na tela: a reserva e regra do modelo, nao desenho. Ate
+  /// 17/10/2026 a tela montava `Foto de <titulo>` e IGNORAVA o texto do
+  /// painel -- o campo existia e nao chegava a ninguem. Com a reserva aqui, as
+  /// duas respostas saem do mesmo lugar e nenhuma tela pode esquecer uma delas.
+  String get nomeDaImagem {
+    final escrito = textoDaImagem?.trim();
+    if (escrito != null && escrito.isNotEmpty) return escrito;
+    return 'Foto de $titulo';
+  }
 
   /// O preco formatado em portugues do Brasil, ou nulo.
   ///
@@ -160,12 +187,17 @@ class ItemDaLoja {
     final preco = json['price_amount'];
     final data = json['price_checked_at'];
     final imagem = json['image_url'];
+    // `image_alt_text` e anulavel no contrato, e desde 17/10/2026 o nulo e
+    // estado NORMAL (o painel pode gravar a imagem sem descricao). A reserva
+    // mora em `nomeDaImagem`.
+    final texto = json['image_alt_text'];
     return ItemDaLoja(
       slug: slug,
       titulo: titulo,
       resumo: resumo,
       categoria: CategoriaDaLoja.porCodigo(json['category'] as String?),
       urlDaImagem: imagem is String ? imagem : null,
+      textoDaImagem: texto is String ? texto : null,
       urlDeDestino: destino,
       parceiro: ParceiroDaLoja.doJson(json['partner']),
       precoEmCentavos: preco is int ? preco : null,

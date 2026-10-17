@@ -35,6 +35,7 @@ Map<String, dynamic> itemDoContrato({
   String summary = 'Bola de borracha atóxica que flutua.',
   String category = 'toy',
   String? imageUrl,
+  String? imageAltText,
   String targetUrl = 'https://cobasi.com.br/bola-pop-borracha',
   String partnerSlug = 'cobasi',
   String partnerName = 'Cobasi',
@@ -49,6 +50,7 @@ Map<String, dynamic> itemDoContrato({
     'summary': summary,
     'category': category,
     'image_url': imageUrl,
+    'image_alt_text': imageAltText,
     'target_url': targetUrl,
     'partner': <String, dynamic>{
       'slug': partnerSlug,
@@ -758,6 +760,86 @@ void main() {
             'nao achou nada.',
       );
       expect(titulosNaTela(tester), hasLength(2));
+    });
+  });
+
+  _oTextoAlternativoEAQuebraDeLinha();
+}
+
+// ---------------------------------------------------------------------------
+// O TEXTO ALTERNATIVO DA IMAGEM (pedido do cliente de 17/10/2026)
+// ---------------------------------------------------------------------------
+
+void _oTextoAlternativoEAQuebraDeLinha() {
+  group('o nome acessível da imagem do produto', () {
+    // ISCA -- em `modelos_loja.dart`, em `ItemDaLoja.nomeDaImagem`, troque o
+    // corpo por `return 'Foto de \$titulo';` (o que a tela fazia até
+    // 17/10/2026). Este caso reprova: o texto do administrador deixa de
+    // chegar.
+    test('ISCA -- com texto escrito pelo painel, é ELE que vale', () {
+      final item = ItemDaLoja.doJson(
+        itemDoContrato(
+          title: 'Bola Pop',
+          imageUrl: 'https://midia.bichu.test/a.webp',
+          imageAltText: 'Cão caramelo mordendo a bola azul',
+        ),
+      );
+      expect(item.nomeDaImagem, 'Cão caramelo mordendo a bola azul');
+    });
+
+    test('sem texto (o campo é opcional), cai no nome do produto', () {
+      final item = ItemDaLoja.doJson(
+        itemDoContrato(title: 'Bola Pop', imageUrl: 'https://midia.bichu.test/a.webp'),
+      );
+      expect(item.nomeDaImagem, 'Foto de Bola Pop');
+    });
+
+    test('texto só com espaços vale como ausente: nome acessível nunca é vazio', () {
+      final item = ItemDaLoja.doJson(
+        itemDoContrato(title: 'Bola Pop', imageAltText: '   '),
+      );
+      expect(item.nomeDaImagem, 'Foto de Bola Pop');
+      expect(item.nomeDaImagem.trim(), isNotEmpty);
+    });
+
+    testWidgets('a imagem do cartão usa o texto do painel no semanticLabel', (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[
+            itemDoContrato(
+              imageUrl: 'https://midia.bichu.test/a.webp',
+              imageAltText: 'Cão caramelo mordendo a bola azul',
+            ),
+          ]),
+        ),
+      );
+      final imagem = tester.widget<Image>(find.byType(Image).first);
+      expect(imagem.semanticLabel, 'Cão caramelo mordendo a bola azul');
+    });
+  });
+
+  group('a descrição do produto na tela', () {
+    // O campo do painel virou área de texto em 17/10/2026, e a quebra de linha
+    // passou a chegar aqui. O cartão desenha com `Text` SEM `maxLines` e SEM
+    // `overflow`, então a quebra aparece e nada é truncado -- é isto que este
+    // caso fixa, porque um `maxLines: 2` acrescentado depois faria o
+    // administrador escrever em parágrafos e ver um bloco cortado.
+    testWidgets('a quebra de linha da descrição é preservada e nada é truncado', (tester) async {
+      await abrirLoja(
+        tester,
+        rede: redeDaVitrine(
+          paginaDoContrato(<Map<String, dynamic>>[
+            itemDoContrato(summary: 'Primeira linha.\nSegunda linha.'),
+          ]),
+        ),
+      );
+      final desenhado = tester.widgetList<Text>(find.byType(Text)).firstWhere(
+        (t) => (t.data ?? '').contains('Primeira linha.'),
+      );
+      expect(desenhado.data, 'Primeira linha.\nSegunda linha.');
+      expect(desenhado.maxLines, isNull, 'sem maxLines: parágrafo nenhum é cortado');
+      expect(desenhado.overflow, isNull);
     });
   });
 }

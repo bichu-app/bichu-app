@@ -171,7 +171,11 @@ export function formularioDoEncontro(e: Encontro): EstadoDoFormulario {
         ...(img.upload_id ? { uploadId: img.upload_id } : {}),
         previa: img.url ?? null,
         motivo: img.rejection_reason ?? null,
-        alt: img.alt_text,
+        // `alt_text` virou anulavel no schema de leitura quando a `Loja` passou
+        // a aceitar imagem sem descricao (17/10/2026). **Na `Rede` ele continua
+        // obrigatorio na escrita**, entao aqui o nulo nao acontece -- o `?? ''`
+        // e do tipo, nao do caso.
+        alt: img.alt_text ?? '',
       })),
     visibilidade: e.visibility,
     pago: e.admission.kind === 'paid',

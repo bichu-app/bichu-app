@@ -22,6 +22,8 @@ import {
   semEnvio,
   corpoDeCriacao,
   errosDoServidor,
+  faltaParaPublicar,
+  fraseDaFalta,
   ORDEM_DOS_CAMPOS,
   ROTULO_DO_CAMPO,
   validarProduto,
@@ -29,6 +31,7 @@ import {
   VALORES_VAZIOS,
   type CampoDoProduto,
   type ErrosDoProduto,
+  type ReguaDoProduto,
   type ValoresDoProduto,
 } from './formulario-do-produto.ts';
 
@@ -209,17 +212,37 @@ export default function FormularioDeProduto() {
   const parceiroEscolhido = useMemo(() => {
     const ativo = parceiros.find((p) => p.slug === valores.parceiro);
     if (ativo) return { host: ativo.host };
-    if (item && item.partner.slug === valores.parceiro) return { host: item.partner.host };
+    // `item.partner` e nulo no rascunho sem parceiro (17/10/2026).
+    if (item?.partner && item.partner.slug === valores.parceiro) return { host: item.partner.host };
     return undefined;
   }, [parceiros, item, valores.parceiro]);
 
   const sujo = fase === 'pronto' && comparavel(valores) !== comparavel(base);
   const publicado = item?.publication_state === 'published';
 
-  // Depois da primeira tentativa, a validacao acompanha a digitacao: o erro some quando o campo fica certo.
+  /**
+   * A regua de cada botao (pedido do cliente de 17/10/2026). `rascunho` cobra
+   * so o nome; `salvar` e `publicar` cobram o conjunto -- `salvar` porque so
+   * aparece em item publicado ou retirado, que ja passou pela regua inteira
+   * uma vez e nao pode voltar incompleto.
+   */
+  const reguaDa = (acao: Acao): ReguaDoProduto => (acao === 'rascunho' ? 'rascunho' : 'publicacao');
+
+  // Depois da primeira tentativa, a validacao acompanha a digitacao: o erro some
+  // quando o campo fica certo. Com a regua DA ACAO que a pessoa tentou: quem
+  // clicou em "Salvar rascunho" nao passa a ver cobranca de campo de publicacao.
   const erros: ErrosDoProduto = tentouSalvar
-    ? { ...errosDoServidorNaTela, ...validarProduto(valores, { hostDoParceiro: parceiroEscolhido?.host, hoje: hojeCivil() }) }
+    ? {
+        ...errosDoServidorNaTela,
+        ...validarProduto(valores, { hostDoParceiro: parceiroEscolhido?.host, hoje: hojeCivil() }, reguaDa(tentouSalvar)),
+      }
     : errosDoServidorNaTela;
+
+  // O que falta para publicar, pelo que esta na tela AGORA. E a mesma pergunta
+  // que `missing_to_publish` responde no servidor, e serve para o botao de
+  // publicar DIZER o que falta em vez de so recusar depois do clique.
+  const faltas = publicado ? [] : faltaParaPublicar(valores);
+  const avisoDaFalta = fase === 'pronto' ? fraseDaFalta(faltas) : null;
 
   function focarResumo() {
     requestAnimationFrame(() => resumo.current?.focus());
@@ -234,7 +257,11 @@ export default function FormularioDeProduto() {
     if (salvando) return;
     setTentouSalvar(acao);
     setFalha(undefined);
-    const locais = validarProduto(valores, { hostDoParceiro: parceiroEscolhido?.host, hoje: hojeCivil() });
+    const locais = validarProduto(
+      valores,
+      { hostDoParceiro: parceiroEscolhido?.host, hoje: hojeCivil() },
+      reguaDa(acao),
+    );
     if (Object.keys(locais).length > 0) {
       focarResumo();
       return;
@@ -355,9 +382,12 @@ export default function FormularioDeProduto() {
   // A tag desativada que ja estava no item continua aparecendo, marcada; desmarcada, nao volta (inactive_tag).
   const tagsDoItemInativas = (item?.tags ?? []).filter((t) => !t.active && !tagsAtivas.has(t.slug));
   const cheio = valores.tags.length >= MAXIMO_DE_TAGS;
+  const parceiroDoItem = item?.partner ?? null;
   const opcoesDeParceiro = [
     ...parceiros.map((p) => ({ slug: p.slug, nome: p.name })),
-    ...(item && !parceiros.some((p) => p.slug === item.partner.slug) ? [{ slug: item.partner.slug, nome: `${item.partner.name} (inativo)` }] : []),
+    ...(parceiroDoItem && !parceiros.some((p) => p.slug === parceiroDoItem.slug)
+      ? [{ slug: parceiroDoItem.slug, nome: `${parceiroDoItem.name} (inativo)` }]
+      : []),
   ];
 
   return (
@@ -396,10 +426,28 @@ export default function FormularioDeProduto() {
           {falha?.texto ?? falhaDaNavegacao}
         </Banner>
       )}
-      <p className="t-body-sm c-sec">Campos com * são obrigatórios.</p>
+      <p className="t-body-sm c-sec">
+        {publicado
+          ? 'Campos com * são obrigatórios.'
+          : 'Campos com * são obrigatórios para publicar. Para salvar um rascunho basta o nome: o resto pode ficar para depois.'}
+      </p>
 
       <CampoDeTexto dataCy="produto-nome" id="f-nome" rotulo="Nome *" valor={valores.titulo} aoMudar={(v) => mudar('titulo', v)} maximo={120} erro={erro('f-nome')} />
-      <CampoDeTexto dataCy="produto-descricao" id="f-desc" rotulo="Descrição *" valor={valores.resumo} aoMudar={(v) => mudar('resumo', v)} maximo={180} contador erro={erro('f-desc')} />
+      {/* AREA DE TEXTO, e nao campo de uma linha (pedido do cliente de
+          17/10/2026). A quebra de linha vai no valor e conta nos 180
+          caracteres; o app desenha com `Text`, que preserva a quebra. */}
+      <CampoDeTexto
+        dataCy="produto-descricao"
+        id="f-desc"
+        rotulo="Descrição *"
+        valor={valores.resumo}
+        aoMudar={(v) => mudar('resumo', v)}
+        maximo={180}
+        linhas={5}
+        contador
+        ajuda="Uma ou duas frases sobre o produto. Pode escrever em parágrafos: a quebra de linha aparece no app e conta nos 180 caracteres."
+        erro={erro('f-desc')}
+      />
 
       <div className="row2">
         <div className={erro('f-categoria') ? 'field err' : 'field'}>
@@ -525,6 +573,9 @@ export default function FormularioDeProduto() {
         proposito="store_item"
         mostrarErrosDeDescricao={!!tentouSalvar}
         erro={erro('imagens')}
+        // OPCIONAL desde 17/10/2026 (pedido do cliente). A `Rede` nao passa
+        // isto e continua com o padrao `true`.
+        descricaoObrigatoria={false}
         marca={(im) => (semEnvio(im) ? MARCA_SEM_ENVIO : undefined)}
       />
       {avisoDeImagensSemEnvio(valores) && <Banner tipo="alerta">{avisoDeImagensSemEnvio(valores)}</Banner>}
@@ -621,6 +672,14 @@ export default function FormularioDeProduto() {
           </>
         )}
       </div>
+      {/* O botao de publicar NAO fica morto: ele continua clicavel (e o clique
+          leva ao resumo de erros, com foco). Esta frase e para a pessoa saber o
+          que falta ANTES de clicar. */}
+      {avisoDaFalta && (
+        <p className="t-body-sm c-sec" data-cy="produto-falta-publicar">
+          {avisoDaFalta}
+        </p>
+      )}
     </form>
 
       <SairSemSalvar sujo={sujo && !salvando} liberado={liberado} />

@@ -162,7 +162,15 @@ describe('3 · Loja: formulario', () => {
   });
 });
 
-function GaleriaDeTeste({ inicial, enviar }: { inicial: ImagemDaGaleria[]; enviar: (f: File, p: (n: number) => void) => Promise<string> }) {
+function GaleriaDeTeste({
+  inicial,
+  enviar,
+  obrigatoria = true,
+}: {
+  inicial: ImagemDaGaleria[];
+  enviar: (f: File, p: (n: number) => void) => Promise<string>;
+  obrigatoria?: boolean;
+}) {
   const [imagens, setImagens] = useState(inicial);
   return (
     <Galeria
@@ -172,6 +180,7 @@ function GaleriaDeTeste({ inicial, enviar }: { inicial: ImagemDaGaleria[]; envia
       enviar={enviar}
       proposito="store_item"
       mostrarErrosDeDescricao
+      descricaoObrigatoria={obrigatoria}
     />
   );
 }
@@ -215,5 +224,185 @@ describe('galeria: ate 8 imagens', () => {
     expect(itens[0]).toHaveAccessibleName('Imagem 1 de 3, principal');
     expect(within(itens[0]!).getByLabelText('Descrição da imagem *')).toHaveValue('Foto 3');
     expect(screen.getByRole('button', { name: 'Mover para a esquerda a imagem 1 de 3' })).toBeDisabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Os quatro pedidos do cliente de 17/10/2026
+// ---------------------------------------------------------------------------
+
+describe('3 · Loja: capa, ordem, descrição e rascunho (17/10/2026)', () => {
+  const COM_TRES = item({
+    publication_state: 'draft',
+    published_at: null,
+    missing_to_publish: [],
+    images: [
+      { upload_id: '018f7c1e-0000-7000-8000-000000000001', position: 0, alt_text: 'Primeira', source: 'uploaded', status: 'ready', url: 'https://m.test/1.webp', rejection_reason: null },
+      { upload_id: '018f7c1e-0000-7000-8000-000000000002', position: 1, alt_text: 'Segunda', source: 'uploaded', status: 'ready', url: 'https://m.test/2.webp', rejection_reason: null },
+      { upload_id: '018f7c1e-0000-7000-8000-000000000003', position: 2, alt_text: 'Terceira', source: 'uploaded', status: 'ready', url: 'https://m.test/3.webp', rejection_reason: null },
+    ],
+  });
+
+  it('ESCOLHER A CAPA: "usar como principal" na terceira manda a galeria com ela em PRIMEIRO lugar', async () => {
+    const { servidor } = montar('/loja/racao-adulto-15kg', {
+      'GET /admin/store/items/{itemSlug}': json(200, COM_TRES, { ETag: '"4"' }),
+      'PATCH /admin/store/items/{itemSlug}': json(200, item({ version: 5 }), { ETag: '"5"' }),
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Usar como principal a imagem 3 de 3' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+
+    await waitFor(() => expect(servidor.requisicoes.some((r) => r.metodo === 'PATCH')).toBe(true));
+    const patch = servidor.requisicoes.find((r) => r.metodo === 'PATCH');
+    expect((patch?.corpo as { images: { upload_id: string }[] }).images.map((i) => i.upload_id)).toEqual([
+      '018f7c1e-0000-7000-8000-000000000003',
+      '018f7c1e-0000-7000-8000-000000000001',
+      '018f7c1e-0000-7000-8000-000000000002',
+    ]);
+    // Nenhum campo de posicao e nenhum sinalizador de capa: a ORDEM e o dado.
+    expect(JSON.stringify(patch?.corpo)).not.toContain('position');
+    expect(patch?.cabecalhos.get('If-Match')).toBe('"4"');
+  });
+
+  it('DEFINIR A ORDEM: mover para a direita troca duas imagens de lugar no corpo, sem dependência de arrastar', async () => {
+    const { servidor } = montar('/loja/racao-adulto-15kg', {
+      'GET /admin/store/items/{itemSlug}': json(200, COM_TRES, { ETag: '"4"' }),
+      'PATCH /admin/store/items/{itemSlug}': json(200, item({ version: 5 }), { ETag: '"5"' }),
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Mover para a direita a imagem 1 de 3' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+
+    await waitFor(() => expect(servidor.requisicoes.some((r) => r.metodo === 'PATCH')).toBe(true));
+    const patch = servidor.requisicoes.find((r) => r.metodo === 'PATCH');
+    expect((patch?.corpo as { images: { upload_id: string }[] }).images.map((i) => i.upload_id)).toEqual([
+      '018f7c1e-0000-7000-8000-000000000002',
+      '018f7c1e-0000-7000-8000-000000000001',
+      '018f7c1e-0000-7000-8000-000000000003',
+    ]);
+  });
+
+  it('TEXTO ALTERNATIVO OPCIONAL: o rótulo diz "(opcional)" e a descrição vazia OMITE alt_text do corpo', async () => {
+    const { servidor } = montar('/loja/racao-adulto-15kg', {
+      'GET /admin/store/items/{itemSlug}': json(200, COM_TRES, { ETag: '"4"' }),
+      'PATCH /admin/store/items/{itemSlug}': json(200, item({ version: 5 }), { ETag: '"5"' }),
+    });
+    const campos = await screen.findAllByLabelText('Descrição da imagem (opcional)');
+    expect(campos).toHaveLength(3);
+    fireEvent.change(campos[0]!, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+
+    await waitFor(() => expect(servidor.requisicoes.some((r) => r.metodo === 'PATCH')).toBe(true));
+    const imagens = (servidor.requisicoes.find((r) => r.metodo === 'PATCH')?.corpo as { images: unknown[] }).images;
+    // Omitido, e NAO `alt_text: ''`: o contrato recusa texto vazio (`minLength: 2`).
+    expect(imagens[0]).toEqual({ upload_id: '018f7c1e-0000-7000-8000-000000000001' });
+    expect(imagens[1]).toEqual({ upload_id: '018f7c1e-0000-7000-8000-000000000002', alt_text: 'Segunda' });
+  });
+
+  it('a imagem lida do servidor sem alt_text abre com o campo vazio, e não quebra a tela', async () => {
+    montar('/loja/racao-adulto-15kg', {
+      'GET /admin/store/items/{itemSlug}': json(
+        200,
+        item({
+          images: [
+            { upload_id: '018f7c1e-0000-7000-8000-000000000001', position: 0, alt_text: null, source: 'uploaded', status: 'ready', url: 'https://m.test/1.webp', rejection_reason: null },
+          ],
+        }),
+        { ETag: '"4"' },
+      ),
+    });
+    expect(await screen.findByLabelText('Descrição da imagem (opcional)')).toHaveValue('');
+  });
+
+  it('DESCRIÇÃO É ÁREA DE TEXTO: o campo é textarea, com várias linhas, e a quebra chega no corpo', async () => {
+    const { servidor, router } = montar('/loja/novo', {
+      'POST /admin/store/items': json(201, item({ publication_state: 'draft' }), { ETag: '"1"' }),
+    });
+    const descricao = await screen.findByLabelText('Descrição *');
+    expect(descricao.tagName).toBe('TEXTAREA');
+    expect(Number(descricao.getAttribute('rows'))).toBeGreaterThanOrEqual(4);
+    expect(descricao).toHaveAttribute('maxlength', '180');
+
+    fireEvent.change(screen.getByLabelText('Nome *'), { target: { value: 'Ração com parágrafos' } });
+    fireEvent.change(descricao, { target: { value: 'Primeira linha.\nSegunda linha.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/loja'));
+    const criacao = servidor.requisicoes.find((r) => r.metodo === 'POST');
+    expect((criacao?.corpo as { summary: string }).summary).toBe('Primeira linha.\nSegunda linha.');
+  });
+
+  it('RASCUNHO SÓ COM O NOME: salva, e o corpo OMITE os campos em branco', async () => {
+    const { servidor, router } = montar('/loja/novo', {
+      'POST /admin/store/items': json(201, item({ publication_state: 'draft' }), { ETag: '"1"' }),
+    });
+    fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Produto que ainda estou pesquisando' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/loja'));
+    const criacao = servidor.requisicoes.find((r) => r.metodo === 'POST' && r.caminho === '/admin/store/items');
+    expect(criacao?.corpo).toEqual({
+      title: 'Produto que ainda estou pesquisando',
+      tag_slugs: [],
+      images: [],
+      sort_order: 0,
+    });
+  });
+
+  it('ISCA: o rascunho afrouxou, a PUBLICAÇÃO não — publicar sem os campos continua barrado e nada vai ao servidor', async () => {
+    const { servidor } = montar('/loja/novo');
+    fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Só o nome' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Publicar' }));
+
+    const resumo = await screen.findByRole('alert');
+    expect(resumo).toHaveTextContent('Corrija 5 campos para publicar:');
+    expect(within(resumo).getAllByRole('link').map((a) => a.textContent)).toEqual([
+      'Descrição',
+      'Categoria',
+      'Para quais animais',
+      'Parceiro',
+      'Link do produto no parceiro',
+    ]);
+    expect(servidor.requisicoes.some((r) => r.metodo === 'POST')).toBe(false);
+  });
+
+  it('a tela DIZ o que falta para publicar, em vez de só deixar o botão sem explicação', async () => {
+    montar('/loja/novo');
+    fireEvent.change(await screen.findByLabelText('Nome *'), { target: { value: 'Só o nome' } });
+    const aviso = await screen.findByText(/Para publicar, falta preencher/);
+    expect(aviso).toHaveTextContent('descrição');
+    expect(aviso).toHaveTextContent('parceiro');
+    // E o botao continua clicavel: botao morto e o mesmo problema em outra forma.
+    expect(screen.getByRole('button', { name: 'Publicar' })).not.toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Descrição *'), { target: { value: 'Uma descrição.' } });
+    expect(screen.queryByText(/falta preencher: descrição/)).toBeNull();
+  });
+
+  it('esvaziar um campo do rascunho manda `null`, que é o que LIMPA no servidor', async () => {
+    const { servidor } = montar('/loja/racao-adulto-15kg', {
+      'GET /admin/store/items/{itemSlug}': json(200, item({ publication_state: 'draft', published_at: null }), { ETag: '"4"' }),
+      'PATCH /admin/store/items/{itemSlug}': json(200, item({ version: 5 }), { ETag: '"5"' }),
+    });
+    fireEvent.change(await screen.findByLabelText('Descrição *'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Salvar rascunho' }));
+
+    await waitFor(() => expect(servidor.requisicoes.some((r) => r.metodo === 'PATCH')).toBe(true));
+    const corpo = servidor.requisicoes.find((r) => r.metodo === 'PATCH')?.corpo as { summary: unknown };
+    expect(corpo.summary).toBeNull();
+  });
+});
+
+describe('galeria: a descrição é opcional só onde se pede', () => {
+  it('por padrão (a Rede) o rótulo continua obrigatório', () => {
+    render(<GaleriaDeTeste inicial={[pronta(1)]} enviar={vi.fn()} />);
+    expect(screen.getByLabelText('Descrição da imagem *')).toBeInTheDocument();
+  });
+
+  it('com `descricaoObrigatoria={false}` (a Loja) o campo vazio não vira erro, e uma letra vira', () => {
+    render(<GaleriaDeTeste inicial={[{ ...pronta(1), alt: '' }]} enviar={vi.fn()} obrigatoria={false} />);
+    expect(screen.getByLabelText('Descrição da imagem (opcional)')).toBeInTheDocument();
+    expect(screen.queryByText('Descreva a imagem.')).toBeNull();
+
+    render(<GaleriaDeTeste inicial={[{ ...pronta(2), alt: 'a' }]} enviar={vi.fn()} obrigatoria={false} />);
+    expect(screen.getAllByText('Escreva pelo menos duas letras, ou deixe o campo vazio.').length).toBeGreaterThan(0);
   });
 });

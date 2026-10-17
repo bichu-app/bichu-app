@@ -214,6 +214,7 @@ export function CampoDeTexto({
   autoFoco,
   referencia,
   dataCy,
+  linhas,
 }: {
   id: string;
   rotulo: string;
@@ -229,30 +230,51 @@ export function CampoDeTexto({
   autoComplete?: string;
   somenteLeitura?: boolean;
   autoFoco?: boolean;
+  /** So do campo de uma linha: nenhuma area de texto da tela precisa de `ref`. */
   referencia?: React.Ref<HTMLInputElement>;
+  /**
+   * Com `linhas`, o campo e uma AREA DE TEXTO dessa altura inicial, e nao um
+   * campo de uma linha: a pessoa escreve em paragrafos e a quebra de linha vai
+   * no valor (pedido do cliente de 17/10/2026, sobre a "Descricao" do
+   * produto).
+   *
+   * `tipo` e `modoDeEntrada` nao se aplicam a area de texto, e por isso nao
+   * sao passados adiante: `type` num `<textarea>` nao existe.
+   */
+  linhas?: number;
 }) {
   const idDaAjuda = `${id}-ajuda`;
   const idDoContador = `${id}-contador`;
   const descritores = [erro || ajuda ? idDaAjuda : undefined, contador ? idDoContador : undefined].filter(Boolean).join(' ');
+  const comuns = {
+    className: linhas === undefined ? 'input' : 'input area-de-texto',
+    id,
+    'data-cy': dataCy ?? id,
+    value: valor,
+    onChange: (e: { target: { value: string } }) => aoMudar(e.target.value),
+    readOnly: somenteLeitura,
+    'aria-invalid': erro ? true : undefined,
+    'aria-describedby': descritores || undefined,
+    ...(maximo ? { maxLength: maximo } : {}),
+    ...(autoComplete ? { autoComplete } : {}),
+    ...(autoFoco ? { 'data-foco-inicial': true } : {}),
+  };
   return (
     <div className={erro ? 'field err' : 'field'}>
       <label htmlFor={id}>{rotulo}</label>
-      <input
-        ref={referencia}
-        className="input"
-        id={id}
-        data-cy={dataCy ?? id}
-        type={tipo}
-        value={valor}
-        onChange={(e) => aoMudar(e.target.value)}
-        {...(maximo ? { maxLength: maximo } : {})}
-        {...(modoDeEntrada ? { inputMode: modoDeEntrada } : {})}
-        {...(autoComplete ? { autoComplete } : {})}
-        readOnly={somenteLeitura}
-        aria-invalid={erro ? true : undefined}
-        aria-describedby={descritores || undefined}
-        {...(autoFoco ? { 'data-foco-inicial': true } : {})}
-      />
+      {linhas === undefined ? (
+        <input
+          ref={referencia}
+          type={tipo}
+          {...(modoDeEntrada ? { inputMode: modoDeEntrada } : {})}
+          {...comuns}
+        />
+      ) : (
+        // `rows` e a altura INICIAL; a rolagem e do proprio `textarea` quando o
+        // texto passa dela. Sem altura fixa em CSS: travar a altura e o defeito
+        // que o pedido do cliente justamente descreve.
+        <textarea rows={linhas} {...comuns} />
+      )}
       {erro ? (
         <span className="help err" id={idDaAjuda}>
           <Icone nome="error" tamanho="s20" />

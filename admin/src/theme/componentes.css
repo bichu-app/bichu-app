@@ -246,6 +246,19 @@ legend.lab-row {
   font: inherit;
   width: 100%;
 }
+/*
+ * A area de texto (`CampoDeTexto` com `linhas`). Herda tudo de `.input` e troca
+ * so a altura: `.input` fixa `height`, e altura fixa num `textarea` e
+ * exatamente o defeito do pedido de 17/10/2026 ("deve ser textarea e nao
+ * input"). `min-height` vem das `rows`, e o resto cresce ou rola.
+ */
+.input.area-de-texto {
+  height: auto;
+  min-height: var(--bichu-space-12);
+  padding: var(--bichu-space-3) var(--bichu-space-4);
+  line-height: 1.5;
+  resize: vertical;
+}
 .input::placeholder {
   color: var(--bichu-cor-text-muted);
 }

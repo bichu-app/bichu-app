@@ -3041,9 +3041,13 @@ export interface paths {
          *     `createAdminCatalogImageIntent` com `purpose: store_item`, na ordem em
          *     que o app as mostra; a primeira e a principal. Qualquer outro envio e
          *     recusado com `400` (T9). **URL de imagem externa nao e aceita**
-         *     (ADR-0027 item 6). `species` e obrigatoria (pelo menos uma); `tag_slugs`
-         *     so aceita tag que ja existe no vocabulario (`createAdminStoreTag`),
-         *     ate 5 (ADR-0027 item 16).
+         *     (ADR-0027 item 6).
+         *
+         *     **`species` deixou de ser obrigatoria AQUI em 17/10/2026** e continua
+         *     obrigatoria em `publishAdminStoreItem`, junto com `partner_slug`,
+         *     `summary`, `category` e `target_url`: ver `AdminStoreItemInput`.
+         *     `tag_slugs` so aceita tag que ja existe no vocabulario
+         *     (`createAdminStoreTag`), ate 5 (ADR-0027 item 16).
          */
         post: operations["createAdminStoreItem"];
         delete?: never;
@@ -3101,6 +3105,29 @@ export interface paths {
          * @description Rascunho ou retirado passa a publicado. Idempotente: item ja publicado
          *     responde 200 sem nova linha de trilha. `published_at` grava a primeira
          *     publicacao e nao e reescrito.
+         *
+         *     **ESTA E A REGUA COMPLETA.** O rascunho exige so `title`
+         *     (`AdminStoreItemInput`); aqui o conjunto inteiro e cobrado, e a recusa
+         *     e `400 validation-failed` com **um erro por campo que falta**, cada um
+         *     com `field` igual ao campo do contrato e `code: <campo>_required`:
+         *
+         *     | `field`        | `code`              |
+         *     | -------------- | ------------------- |
+         *     | `summary`      | `summary_required`  |
+         *     | `category`     | `category_required` |
+         *     | `species`      | `species_required`  |
+         *     | `partner_slug` | `partner_required`  |
+         *     | `target_url`   | `target_url_required` |
+         *
+         *     `species_required` ja existia (ADR-0027 A.2.1); os outros quatro
+         *     nasceram em 17/10/2026, quando a criacao parou de cobra-los. A mesma
+         *     lista sai em `AdminStoreItem.missing_to_publish` em toda leitura, e e a
+         *     MESMA funcao que a calcula nos dois lugares.
+         *
+         *     **Afrouxar o rascunho nao afrouxou a publicacao**: produto incompleto
+         *     nao entra na vitrine do app, e abaixo do caso de uso o `CHECK
+         *     store_items_publicado_esta_completo` recusa `active = true` com
+         *     qualquer dos quatro nulo.
          */
         put: operations["publishAdminStoreItem"];
         post?: never;
@@ -4655,7 +4682,13 @@ export interface components {
             /** @description O endereco publico do item. Nao ha UUID nesta tabela. */
             slug: string;
             title: string;
-            /** @description Uma linha. O teto de 180 caracteres e o que a mantem uma linha. */
+            /**
+             * @description A descricao do produto, texto puro. **Pode ter quebra de linha**
+             *     desde 17/10/2026, quando o campo do painel virou area de texto
+             *     (pedido do cliente): o teto de 180 caracteres continua, e a quebra
+             *     conta como caractere. Quem desenha preserva a quebra; nada aqui
+             *     garante uma linha so.
+             */
             summary: string;
             category: components["schemas"]["StoreCategory"];
             /**
@@ -4665,7 +4698,12 @@ export interface components {
              *     desenhar sem imagem.
              */
             image_url?: string | null;
-            /** @description O texto alternativo da imagem principal. Opcional ate a implementacao (ADR-0027 item 16). */
+            /**
+             * @description O texto alternativo da imagem principal, quando o painel o
+             *     escreveu. **Nulo e estado normal**: o texto virou opcional na
+             *     escrita em 17/10/2026, e quem desenha cai no `title` do item em vez
+             *     de deixar a imagem sem nome acessivel.
+             */
             image_alt_text?: string | null;
             /**
              * Format: uri
@@ -5527,6 +5565,26 @@ export interface components {
          * @enum {string}
          */
         AdminStoreItemPublicationState: "draft" | "published" | "retired";
+        /**
+         * @description **O item nasce RASCUNHO, e desde 17/10/2026 so `title` e obrigatorio**
+         *     (pedido do cliente: "se e rascunho, nao deveria ser obrigatorio...
+         *     justamente porque pode ser que eu esteja aguardando ou buscando por
+         *     alguma informacao adicional").
+         *
+         *     **Sao duas reguas, e nao uma.** A desta entrada e a do rascunho: o
+         *     titulo, porque sem ele nao ha registro para a pessoa reencontrar na
+         *     lista. O que falta para o produto aparecer no app e cobrado em
+         *     `publishAdminStoreItem`, que responde `400 validation-failed` com um
+         *     erro POR CAMPO (`code: <campo>_required`); toda leitura do item ja
+         *     traz a mesma lista em `missing_to_publish`, para o painel dizer o que
+         *     falta antes de alguem clicar em publicar.
+         *
+         *     O que a pessoa JA escreveu continua conferido pela forma (descricao de
+         *     um caractere e erro de digitacao, nao rascunho), e `target_url` sem
+         *     `partner_slug` e recusado (`400`, `code: partner_required`): o banco
+         *     guarda so o caminho do destino e compoe o endereco com o host do
+         *     parceiro.
+         */
         AdminStoreItemInput: {
             /**
              * @description Opcional. Sem ele, o servidor deriva do titulo (sem acento,
@@ -5534,49 +5592,78 @@ export interface components {
              *     formulario do painel nao pede `slug` (matriz de rastreabilidade).
              */
             slug?: components["schemas"]["Slug"];
-            partner_slug: components["schemas"]["Slug"];
+            partner_slug?: components["schemas"]["Slug"];
             title: string;
-            /** @description Uma linha. Texto puro, renderizado como texto no app (D47). */
-            summary: string;
-            category: components["schemas"]["StoreCategory"];
+            /**
+             * @description A "Descricao" do painel, que desde 17/10/2026 e uma area de texto
+             *     de varias linhas (pedido do cliente). Texto puro, renderizado como
+             *     texto no app (D47); **a quebra de linha e aceita e conta no teto de
+             *     180**. Nenhuma marcacao: o app desenha com `Text`, e `**` apareceria
+             *     literal.
+             */
+            summary?: string;
+            category?: components["schemas"]["StoreCategory"];
             /**
              * @description Precisa estar no host EXATO do parceiro (`400`, `code: host_mismatch`),
              *     sem `?` nem `#` (`400`, `code: invalid_url`): o banco guarda so o caminho.
              *     Nenhum identificador de pessoa, em codificacao nenhuma.
              */
-            target_url: components["schemas"]["HttpsUrl"];
+            target_url?: components["schemas"]["HttpsUrl"];
             price?: components["schemas"]["AdminPriceInput"];
-            species: components["schemas"]["StoreItemSpeciesSet"];
+            species?: components["schemas"]["StoreItemSpeciesSet"];
             tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
-            images?: components["schemas"]["CatalogImagesInput"];
+            images?: components["schemas"]["StoreCatalogImagesInput"];
             /** @default 0 */
             sort_order: number;
         };
         /**
          * @description Nao muda o estado de publicacao (isso e `publication`). `price: null`
          *     tira o preco; `image_upload_id: null` tira a imagem.
+         *
+         *     **`null` LIMPA**, no mesmo idioma de `price`, em `partner_slug`,
+         *     `summary`, `category` e `target_url`: ausente nao mexe, `null` apaga,
+         *     valor troca. Limpar cabe porque o rascunho pode estar incompleto
+         *     (17/10/2026); o item publicado que perde um dos quatro **nao** e
+         *     aceito, porque a publicacao exige o conjunto. Tirar `partner_slug`
+         *     tira `target_url` junto: o destino e guardado como caminho e so tem
+         *     endereco com o host do parceiro.
          */
         AdminStoreItemPatch: {
             slug?: components["schemas"]["Slug"];
-            partner_slug?: components["schemas"]["Slug"];
+            partner_slug?: components["schemas"]["Slug"] | null;
             title?: string;
-            summary?: string;
-            category?: components["schemas"]["StoreCategory"];
-            target_url?: components["schemas"]["HttpsUrl"];
+            summary?: string | null;
+            category?: components["schemas"]["StoreCategory"] | null;
+            target_url?: components["schemas"]["HttpsUrl"] | null;
             price?: components["schemas"]["AdminPriceInput"] | null;
             species?: components["schemas"]["StoreItemSpeciesSet"];
             tag_slugs?: components["schemas"]["StoreItemTagSlugs"];
-            images?: components["schemas"]["CatalogImagesInput"];
+            images?: components["schemas"]["StoreCatalogImagesInput"];
             sort_order?: number;
         };
+        /**
+         * @description **Os quatro campos que a publicacao exige sao anulaveis aqui, e so no
+         *     rascunho**: `partner`, `summary`, `category` e `target_url`. Eles
+         *     continuam presentes na resposta (com `null`), e `missing_to_publish`
+         *     diz quais faltam. Em `publication_state: published` nenhum dos quatro
+         *     e nulo -- quem garante isso e o `CHECK
+         *     store_items_publicado_esta_completo`, e nao a boa vontade do painel.
+         */
         AdminStoreItem: {
             slug: string;
-            partner: components["schemas"]["StorePartnerRef"];
+            partner: components["schemas"]["StorePartnerRef"] | null;
             title: string;
-            summary: string;
-            category: components["schemas"]["StoreCategory"];
+            summary: string | null;
+            category: components["schemas"]["StoreCategory"] | null;
             /** Format: uri */
-            target_url: string;
+            target_url: string | null;
+            /**
+             * @description O que ainda falta para publicar, **na ordem dos campos da tela**.
+             *     Vazia quer dizer "da para publicar". E a MESMA conta que o `400` de
+             *     `publishAdminStoreItem` faz: o painel pode dizer o que falta sem
+             *     pedir, e nunca promete uma publicacao que o servidor recusa.
+             */
+            missing_to_publish: ("summary" | "category" | "species" | "partner_slug" | "target_url")[];
             species: components["schemas"]["Species"][];
             tags: components["schemas"]["AdminStoreTagRef"][];
             /** @description Na ordem do app. `position` 0 e a principal. Vazia e estado normal. */
@@ -5866,6 +5953,28 @@ export interface components {
             upload_id: string;
             alt_text: components["schemas"]["ImageAltText"];
         };
+        /**
+         * @description A galeria do produto: ate 8 imagens, **na ordem em que o app as
+         *     mostra**. A primeira e a capa (a imagem do cartao da vitrine). Cada uma
+         *     e um envio de `createAdminCatalogImageIntent` com `purpose:
+         *     store_item`. A lista substitui a anterior inteira: **reordenar e mandar
+         *     a ordem nova, escolher a capa e por a imagem em primeiro lugar**,
+         *     remover e omitir, `[]` tira todas. `upload_id` repetido e recusado com
+         *     `400` (ADR-0027 itens 16 e 17).
+         *
+         *     **`alt_text` e OPCIONAL aqui** (pedido do cliente de 17/10/2026), e e a
+         *     unica diferenca em relacao a `CatalogImagesInput`, que a `Rede`
+         *     continua usando com o texto obrigatorio. Quando vem, vale de 2 a 150
+         *     caracteres; quando nao vem, a imagem fica sem texto alternativo e o app
+         *     cai no nome do produto. **Campo presente e vazio e recusado**: o painel
+         *     OMITE o campo em vez de mandar `""`.
+         */
+        StoreCatalogImagesInput: components["schemas"]["StoreCatalogImageInput"][];
+        StoreCatalogImageInput: {
+            /** Format: uuid */
+            upload_id: string;
+            alt_text?: components["schemas"]["ImageAltText"];
+        };
         /** @description O que a foto mostra, para quem usa leitor de tela. Texto puro. */
         ImageAltText: string;
         AdminCatalogGalleryImage: components["schemas"]["AdminCatalogImage"] & {
@@ -5880,7 +5989,13 @@ export interface components {
              */
             upload_id: string | null;
             position: number;
-            alt_text: string;
+            /**
+             * @description **Nulo** quando a imagem foi gravada sem texto alternativo, o
+             *     que a `Loja` passou a permitir em 17/10/2026
+             *     (`StoreCatalogImagesInput`). Na `Rede` o texto continua
+             *     obrigatorio na escrita, e por isso nunca e nulo ali.
+             */
+            alt_text: string | null;
         };
         AdminStoreTagRef: {
             slug: string;
@@ -5927,8 +6042,12 @@ export interface components {
             label: string;
         };
         StoreItemImage: {
-            /** @description Texto alternativo. Item da massa com imagem externa traz o titulo do item. */
-            alt_text: string;
+            /**
+             * @description Texto alternativo. Item da massa com imagem externa traz o titulo
+             *     do item. **Nulo** quando o painel gravou a imagem sem texto
+             *     (opcional desde 17/10/2026): o app cai no nome do produto.
+             */
+            alt_text: string | null;
             /**
              * Format: uri
              * @description A derivada publica, sempre pronta. Imagem em processamento ou recusada nunca aparece aqui.
