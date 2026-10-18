@@ -100,6 +100,14 @@ function montar(nomeAtual: string | null): Bancada {
   const gravados: CamposDoPerfil[] = [];
 
   const base: IdentityRepository = {
+    // As duas da foto do perfil (migracao `20261018000008`). Elas entraram em
+    // `IdentityRepository` com a frente das imagens e estes dois dubles nao
+    // acompanharam: `origin/development` em 87979b6d NAO COMPILA por causa
+    // disso, e a suite unitaria nao chega a rodar. Conserto de UMA LINHA cada,
+    // no mesmo estilo do resto do duble -- recusar a chamada --, para que a
+    // intencao original (qualquer chamada reprova) continue valendo.
+    fotoDoPerfil: () => naoDeveriaTerChegado('fotoDoPerfil'),
+    trocarFotoDoPerfil: () => naoDeveriaTerChegado('trocarFotoDoPerfil'),
     criarContaLocal: () => naoDeveriaTerChegado('criarContaLocal'),
     criarTokenDeVerificacao: () => naoDeveriaTerChegado('criarTokenDeVerificacao'),
     gravarRefresh: () => naoDeveriaTerChegado('gravarRefresh'),

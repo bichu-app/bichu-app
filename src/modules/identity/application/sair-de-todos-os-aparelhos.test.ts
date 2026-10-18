@@ -261,6 +261,14 @@ class BancoDeMentira implements IdentityRepository {
   atualizarPerfil(): Promise<Conta | undefined> {
     throw new Error('atualizarPerfil: nenhum caso deste arquivo deveria chegar aqui');
   }
+  // A FOTO DO PERFIL (18/10/2026) nao e exercitada neste arquivo.
+  fotoDoPerfil(): Promise<null> {
+    throw new Error('fotoDoPerfil: nenhum caso deste arquivo deveria chegar aqui');
+  }
+
+  trocarFotoDoPerfil(): Promise<Conta | undefined> {
+    throw new Error('trocarFotoDoPerfil: nenhum caso deste arquivo deveria chegar aqui');
+  }
   criarTokenDeVerificacao(): Promise<void> {
     throw new Error('criarTokenDeVerificacao: nenhum caso deste arquivo deveria chegar aqui');
   }

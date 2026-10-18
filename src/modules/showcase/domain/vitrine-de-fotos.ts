@@ -60,7 +60,7 @@ import type { ProblemFieldError } from '../../../shared/http/problem.js';
  * `found/application/found-report-service.ts`, e não na esteira.
  *
  * O banco cobra o mesmo nove pelo `CHECK (position BETWEEN 0 AND 8)` somado à
- * unicidade por conta (`user_showcase_images`, migração `20261018000011`). Dois
+ * unicidade por conta (`user_showcase_images`, migração `20261018000040`). Dois
  * lugares conferindo o MESMO número é o desenho — o servidor para a resposta
  * ter campo e motivo, o banco para não existir caminho que o contorne. Dois
  * NÚMEROS diferentes é o defeito, e é por isso que este nome é exportado e o

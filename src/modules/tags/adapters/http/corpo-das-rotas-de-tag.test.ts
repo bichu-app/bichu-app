@@ -225,6 +225,9 @@ function montar(): Bancada {
     // conversa deixaria de nascer no dia em que alguém esquecesse a linha em
     // `bin/api.ts`, e o defeito só apareceria com um animal perdido na rua.
     conversaDoAviso: { aoRegistrarAviso: () => Promise.resolve() },
+    // A fila do aviso ao tutor. Esta bancada nao exercita o aviso; a isca
+    // que confere o enfileiramento e `escanear-enfileira-aviso-ao-tutor.test.ts`.
+    fila: { enqueue: () => Promise.resolve('trabalho-de-bancada') },
     // BICHUS-154: o resumo do codigo deixou de ser SHA-256 sem sal e passou a
     // ser com chave. Mesmo valor fixo de `tag-service.test.ts`.
     chaveDoIndiceDoCodigo: Buffer.alloc(32, 0x5e),

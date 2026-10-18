@@ -31,6 +31,12 @@ export type JobKind =
   | 'media.purge_expired'
   | 'email.send'
   | 'push.send'
+  /**
+   * O aviso ao TUTOR de que alguem escaneou a plaquinha do pet dele
+   * (`tags/ports/aviso-ao-tutor.ts`). A API enfileira na mesma passagem que
+   * grava o aviso do achador; o worker entrega por push e por e-mail.
+   */
+  | 'tag.scan_notify'
   | 'match.recompute'
   /** ADR-0027 item 17: o push de pedido aprovado para encontro privado, so com o titulo. */
   | 'network.join_request_approved';

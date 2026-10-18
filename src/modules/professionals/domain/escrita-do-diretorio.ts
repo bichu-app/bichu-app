@@ -129,6 +129,28 @@ export const MAXIMO_DO_COMPLEMENTO = 80;
  */
 export const FORMA_DO_CEP = /^[0-9]{8}$/;
 
+/**
+ * A LOGO ou a FOTO da entrada, como o repositorio a entrega e como o painel a ve.
+ *
+ * **Sem `id` de imagem e sem `upload_id`** (ADR-0010 item 6): o painel escreve
+ * por `logo_upload_id`/`photo_upload_id` e LE a URL da derivada. A forma e a de
+ * `AdminCatalogImage` do contrato, que a `Loja` e a `Rede` ja usam.
+ *
+ * `url` nula com `status: 'processing'` e o intervalo normal entre a confirmacao
+ * do envio e o fim do trabalho do worker -- a tela mostra o lugar da imagem, nao
+ * um erro.
+ */
+export interface ImagemDaEntrada {
+  readonly status: 'processing' | 'ready' | 'rejected';
+  /**
+   * A CHAVE da derivada publica, nunca a URL. A URL e montada na leitura a
+   * partir de `MEDIA_PUBLIC_BASE_URL` (ADR-0007 §11.1 proibicao 9): gravar ou
+   * carregar URL absoluta amarraria a entrada ao dominio do dia.
+   */
+  readonly publicKey: string | null;
+  readonly rejectionReason: string | null;
+}
+
 /** A entrada como o repositorio administrativo a entrega. Sem `id`, sem ponto, sem vinculo. */
 export interface EntradaAdministrativa {
   readonly slug: string;
@@ -148,6 +170,16 @@ export interface EntradaAdministrativa {
   readonly streetNumber: string | null;
   readonly complement: string | null;
   readonly phoneE164: string | null;
+  /**
+   * A LOGO e a FOTO (cliente, 18/10/2026). Nulas quando nao ha, e nulo e o
+   * estado normal: a entrada existe, publica e aparece em `Perto` sem nenhuma
+   * das duas -- `faltasParaPublicar` nao as cobra, de proposito.
+   *
+   * Duas e nao uma porque sao dois PROPOSITOS: a logo e a marca (quadrada,
+   * pequena, ao lado do nome) e a foto e o lugar (faixa 16:9, olhada grande).
+   */
+  readonly logo: ImagemDaEntrada | null;
+  readonly photo: ImagemDaEntrada | null;
   readonly status: StatusDaEntrada;
   readonly source: OrigemDaEntrada;
   readonly claimStatus: TitularidadeDaEntrada;
@@ -180,6 +212,10 @@ export interface CriacaoDaEntrada {
   readonly street_number?: string;
   readonly complement?: string;
   readonly phone_e164?: string;
+  /** O `upload_id` de um envio `directory_logo` desta sessao do painel. Opcional. */
+  readonly logo_upload_id?: string;
+  /** O `upload_id` de um envio `directory_photo`. Opcional. */
+  readonly photo_upload_id?: string;
 }
 
 /**
@@ -202,6 +238,9 @@ export interface EdicaoDaEntrada {
   readonly street_number?: string | null;
   readonly complement?: string | null;
   readonly phone_e164?: string | null;
+  /** `null` TIRA a imagem, ausente nao mexe, `upload_id` novo TROCA. */
+  readonly logo_upload_id?: string | null;
+  readonly photo_upload_id?: string | null;
   readonly status?: StatusDaEntrada;
 }
 
@@ -420,6 +459,30 @@ export interface VerificacaoProjetada {
   readonly evidence_kinds: readonly TipoDeEvidencia[];
 }
 
+/** `AdminCatalogImage` do contrato, como a entrada do diretorio o preenche. */
+export interface ImagemProjetada {
+  readonly source: 'uploaded';
+  readonly status: 'processing' | 'ready' | 'rejected';
+  readonly url: string | null;
+  readonly rejection_reason: string | null;
+}
+
+function projetarImagem(
+  imagem: ImagemDaEntrada | null,
+  urlDeMidia: (chave: string) => string,
+): ImagemProjetada | null {
+  if (imagem === null) return null;
+  return {
+    source: 'uploaded',
+    status: imagem.status,
+    // Sem chave ou fora de `ready`, a URL e NULA e nao uma URL que daria 404: o
+    // painel precisa distinguir "ainda processando" de "pronta", e uma URL que
+    // nao serve e a pior das duas respostas.
+    url: imagem.status === 'ready' && imagem.publicKey !== null ? urlDeMidia(imagem.publicKey) : null,
+    rejection_reason: imagem.status === 'rejected' ? imagem.rejectionReason : null,
+  };
+}
+
 /** `AdminDirectoryEntry` do contrato. */
 export interface EntradaProjetada {
   readonly slug: string;
@@ -434,6 +497,8 @@ export interface EntradaProjetada {
   readonly street_number: string | null;
   readonly complement: string | null;
   readonly phone_e164: string | null;
+  readonly logo: ImagemProjetada | null;
+  readonly photo: ImagemProjetada | null;
   readonly status: StatusDaEntrada;
   readonly verification: VerificacaoProjetada;
   readonly source: OrigemDaEntrada;
@@ -453,7 +518,10 @@ export interface EntradaProjetada {
  * de quem a reivindicou, e nada de `cnpj` nem `crmv_*`. O que nao chega ao tipo
  * `EntradaAdministrativa` nao tem como sair daqui.
  */
-export function projetarEntradaAdministrativa(entrada: EntradaAdministrativa): EntradaProjetada {
+export function projetarEntradaAdministrativa(
+  entrada: EntradaAdministrativa,
+  urlDeMidia: (chave: string) => string,
+): EntradaProjetada {
   return {
     slug: entrada.slug,
     kind: entrada.kind,
@@ -470,6 +538,12 @@ export function projetarEntradaAdministrativa(entrada: EntradaAdministrativa): E
     street_number: entrada.streetNumber,
     complement: entrada.complement,
     phone_e164: entrada.phoneE164,
+    // A logo e a foto saem NESTA projecao, que e a do painel. A projecao do
+    // aplicativo e outra funcao, em outro arquivo, e ela NAO as tem: imagem de
+    // estabelecimento em superficie publica depende de decisao do cliente
+    // (ADR-0010), e por enquanto a resposta de `Perto` continua como estava.
+    logo: projetarImagem(entrada.logo, urlDeMidia),
+    photo: projetarImagem(entrada.photo, urlDeMidia),
     status: entrada.status,
     verification: {
       level: nivelDerivado(entrada.verificacoes),
@@ -521,6 +595,12 @@ export function retratoDaEntrada(entrada: EntradaAdministrativa): Record<string,
     // mudou e nao mostra o antes/depois dos quatro campos de endereco. Para
     // os demais campos ela continua inteira.
     phone_e164: entrada.phoneE164,
+    // A trilha registra SE a entrada tem logo e foto, e nunca a URL nem o id da
+    // imagem. Chave de objeto na trilha append-only e um ponteiro permanente
+    // para um arquivo que pode ser trocado ou retirado, e o que interessa
+    // auditar e "alguem pos" / "alguem tirou".
+    logo: entrada.logo !== null,
+    photo: entrada.photo !== null,
     status: entrada.status,
   };
 }

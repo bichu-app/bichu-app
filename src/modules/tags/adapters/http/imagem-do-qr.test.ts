@@ -156,6 +156,9 @@ function montar(reimpressao: TagParaReimpressao | undefined): Bancada {
     // conversa deixaria de nascer no dia em que alguém esquecesse a linha em
     // `bin/api.ts`, e o defeito só apareceria com um animal perdido na rua.
     conversaDoAviso: { aoRegistrarAviso: () => Promise.resolve() },
+    // A fila do aviso ao tutor. Esta bancada nao exercita o aviso; a isca
+    // que confere o enfileiramento e `escanear-enfileira-aviso-ao-tutor.test.ts`.
+    fila: { enqueue: () => Promise.resolve('trabalho-de-bancada') },
     baseDaTag: BASE_DA_TAG,
     baseDaWeb: 'https://exemplo.invalido' as AbsoluteUrl,
     baseDeMidia: 'https://midia.exemplo.invalido' as AbsoluteUrl,

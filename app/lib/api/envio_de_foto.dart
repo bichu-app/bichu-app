@@ -12,13 +12,14 @@
 /// O servidor estava pronto desde 21/09 (BICHUS-87): o backend **nunca recebe
 /// os bytes**, ele assina a requisicao de upload para o armazenamento.
 ///
-/// ## Um mecanismo, dois consumidores
+/// ## Um mecanismo, tres consumidores
 ///
-/// A foto do pet e a foto do achado avulso sao a **mesma ideia**: pedir
-/// autorizacao ao servidor, mandar os bytes para onde ele disser, confirmar
-/// quando houver o que confirmar. O que muda entre as duas e so o primeiro
-/// passo (qual rota emite a autorizacao) e o terceiro (se existe confirmacao),
-/// e e por isso que esses dois passos sao [DestinoDaFoto] e o resto e daqui.
+/// A foto do pet, a do achado avulso e a do PROPRIO usuario (esta desde
+/// 18/10/2026) sao a **mesma ideia**: pedir autorizacao ao servidor, mandar os
+/// bytes para onde ele disser, confirmar quando houver o que confirmar. O que
+/// muda entre as tres e so o primeiro passo (qual rota emite a autorizacao) e
+/// o terceiro (se existe confirmacao, e qual), e e por isso que esses dois
+/// passos sao [DestinoDaFoto] e o resto e daqui.
 ///
 /// Escrever um envio para o pet e outro para o achado criaria a segunda copia
 /// do mesmo mecanismo -- e a copia e o que diverge. Ler `method` em um lugar e
@@ -121,12 +122,13 @@ class AutorizacaoDeEnvio {
   }
 }
 
-/// De quem e a foto: o que muda entre os dois consumidores, e so isso.
+/// De quem e a foto: o que muda entre os tres consumidores, e so isso.
 ///
-/// Duas implementacoes, e as duas existem porque o contrato tem duas rotas de
+/// Tres implementacoes, e as tres existem porque o contrato tem tres rotas de
 /// intencao com corpos diferentes ([FotoDePet] manda `pet_id`, [FotoDeAchado]
-/// manda `found_report_id`). O envio dos bytes nao sabe qual das duas esta em
-/// uso, e nao precisa saber.
+/// manda `found_report_id` e [FotoDoUsuario] nao manda dono nenhum -- o dono e
+/// o portador do token). O envio dos bytes nao sabe qual das tres esta em uso,
+/// e nao precisa saber.
 abstract class DestinoDaFoto {
   /// Pede as credenciais de upload ao servidor.
   Future<AutorizacaoDeEnvio> pedirAutorizacao({
@@ -220,6 +222,74 @@ class FotoDeAchado implements DestinoDaFoto {
   Future<void> confirmar(String uploadId) async {}
 }
 
+/// A foto do PROPRIO usuario: intencao sem corpo de dono, e confirmacao por
+/// `PATCH /v1/me` (cliente, 18/10/2026).
+///
+/// ## Por que a intencao nao manda de quem e a foto
+///
+/// `MyPhotoIntentInput` tem `content_type` e `byte_size`, e mais nada -- nem
+/// `user_id`, nem `purpose`. **O dono e o portador do token**: o servidor grava
+/// a intencao amarrada a conta que a pediu, e `updateMe` so aceita
+/// `upload_id` cuja intencao e da propria conta (a conferencia esta na
+/// clausula `WHERE`). Um campo de dono no corpo seria um campo que o cliente
+/// poderia mentir.
+///
+/// ## A confirmacao existe, e ela e um PATCH e nao uma rota de foto
+///
+/// Ao contrario de [FotoDePet] (que tem `confirmPetPhoto`) e de [FotoDeAchado]
+/// (que nao tem nada a confirmar), aqui o terceiro passo e
+/// `MeUpdate.photo_upload_id`. Pular esse passo deixa os bytes no
+/// armazenamento e a conta sem foto -- a intencao nao confirmada vence em dez
+/// minutos e o varredor a recolhe.
+///
+/// ## [corpoDoMe] existe para poupar uma leitura, e nao por comodidade
+///
+/// O PATCH de confirmacao **devolve o `/me` novo**, ja com
+/// `photo.status`/`photo.url`. Guardar esse corpo aqui e o que permite a tela
+/// desenhar a foto recem-enviada sem um `GET /v1/me` a mais logo depois do
+/// envio. Por isso esta classe nao e `const`: ela carrega o desfecho.
+class FotoDoUsuario implements DestinoDaFoto {
+  FotoDoUsuario({required this.api});
+
+  final IntencaoEGravacaoDaFotoDoUsuario api;
+
+  /// O corpo de `GET /v1/me` que o PATCH de confirmacao devolveu, ou nulo
+  /// quando [confirmar] ainda nao correu (ou falhou).
+  Map<String, dynamic>? corpoDoMe;
+
+  @override
+  Future<AutorizacaoDeEnvio> pedirAutorizacao({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  }) async {
+    return AutorizacaoDeEnvio.doJson(
+      await api.intencaoDeFotoDoUsuario(
+        tipoDeConteudo: tipoDeConteudo,
+        tamanhoEmBytes: tamanhoEmBytes,
+      ),
+    );
+  }
+
+  @override
+  Future<void> confirmar(String uploadId) async {
+    corpoDoMe = await api.gravarFotoDoUsuario(uploadId);
+  }
+}
+
+/// O que `MeApi` precisa expor para ser um destino. Interface estreita pelo
+/// mesmo motivo de [IntencaoEConfirmacaoDePet]: o mecanismo de envio nao deve
+/// alcancar `atualizar` -- um envio que pudesse chamar o PATCH completo
+/// poderia sobrescrever telefone e endereco de referencia ao gravar uma foto.
+abstract class IntencaoEGravacaoDaFotoDoUsuario {
+  Future<Map<String, dynamic>> intencaoDeFotoDoUsuario({
+    required String tipoDeConteudo,
+    required int tamanhoEmBytes,
+  });
+
+  /// `PATCH /v1/me` com so `photo_upload_id`. Devolve o corpo de `/me`.
+  Future<Map<String, dynamic>> gravarFotoDoUsuario(String uploadId);
+}
+
 /// O que `PetsApi` precisa expor para ser um destino. Interface estreita, e
 /// nao a classe: o mecanismo nao deve alcancar `cadastrarPet` nem `emitirTag`.
 abstract class IntencaoEConfirmacaoDePet {
@@ -267,7 +337,7 @@ enum DesfechoDoEnvio {
   recusada,
 }
 
-/// O mecanismo. Tres passos, dois consumidores, uma copia.
+/// O mecanismo. Tres passos, tres consumidores, uma copia.
 class EnvioDeFoto {
   EnvioDeFoto({
     required this.camera,

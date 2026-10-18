@@ -109,22 +109,31 @@ const LIMITE_DA_CHAVE = 1024;
  *
  * `site/` e `partners/` ficam reservados: o site empacota as imagens dele no
  * container, e parceiro nao tem imagem. Nenhum codigo escreve neles hoje.
+ *
+ * `directory/` entrou em 18/10/2026 com a logo e a foto do profissional
+ * recomendado, e e UM prefixo para os dois propositos: as duas imagens sao da
+ * MESMA entidade, e uma regra de bucket ("as imagens do diretorio") que
+ * precisasse ser escrita duas vezes seria duas regras que concordam por
+ * enquanto. O que as separa e `catalog_images.purpose`, que e onde a diferenca
+ * importa (geometria da derivada e dimensao minima).
+ *
+ * `people/` entrou junto, com a foto que a propria pessoa cadastra. Prefixo
+ * PROPRIO, e nao `directory/`: foto de pessoa e foto de estabelecimento tem
+ * regimes de privacidade diferentes (ADR-0010), e separar os prefixos e o que
+ * permite uma politica de bucket, um ciclo de vida e um expurgo valerem para a
+ * foto de pessoa e para nada mais -- sem isso, "apague as fotos de pessoa"
+ * viraria uma varredura que precisa consultar o banco linha por linha.
  */
 /**
- * `people/` e a categoria das imagens de PESSOA: a foto do perfil e as fotos da
- * vitrine. Prefixo proprio, e nao `pets/` nem `products/`, pelo motivo que a
- * Emenda 1 do ADR-0007 da: e o primeiro segmento que deixa uma politica de
- * bucket, um ciclo de vida e uma varredura de expurgo tratarem imagem de
- * pessoa de forma diferente de imagem de animal e de catalogo. A vitrine e a
- * foto unica compartilham o prefixo de propósito -- as duas somem juntas no
- * expurgo da conta.
- *
- * **O MESMO NOME que a frente `feat/imagem-do-profissional-e-foto-do-usuario`
- * usa**, e isso e deliberado: aquela frente acrescenta `directory` e `people`
- * na mesma linha e nao desceu ainda. Escrever `people` identico faz a mescla
- * ser trivial em vez de duas categorias para a mesma coisa.
+ * `people/` e a categoria das imagens de PESSOA: a foto do perfil
+ * (`users.photo_image_id`) e as fotos da VITRINE. Prefixo proprio, e nao
+ * `pets/` nem `products/`, pelo motivo que a Emenda 1 do ADR-0007 da: e o
+ * primeiro segmento que deixa uma politica de bucket, um ciclo de vida e uma
+ * varredura de expurgo tratarem imagem de pessoa de forma diferente de imagem
+ * de animal e de catalogo. A foto unica e a vitrine compartilham o prefixo de
+ * proposito, e e isso que faz as duas sumirem juntas no expurgo da conta.
  */
-export const CATEGORIAS_DE_CATALOGO = ['products', 'events', 'people'] as const;
+export const CATEGORIAS_DE_CATALOGO = ['products', 'events', 'directory', 'people'] as const;
 export type CategoriaDeCatalogo = (typeof CATEGORIAS_DE_CATALOGO)[number];
 /** As categorias que tem derivada PUBLICA. Achado nao tem: a foto dele nunca e publica. */
 export const CATEGORIAS_PUBLICAS = ['pets', ...CATEGORIAS_DE_CATALOGO] as const;

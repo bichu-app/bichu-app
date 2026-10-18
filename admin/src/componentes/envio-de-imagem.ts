@@ -12,12 +12,36 @@ export type TipoAceito = (typeof TIPOS_ACEITOS)[number];
 export const LIMITE_DE_BYTES = 5_242_880;
 export const MAXIMO_DE_IMAGENS = 8;
 
+/**
+ * O teto COMO A TELA O ESCREVE ("5 MB"), derivado do limite em bytes:
+ * 5_242_880 / 1_048_576 = 5. Ele estava escrito a mao em tres lugares -- a
+ * recusa local, a ajuda da galeria e a do encontro --, e mexer no teto deixaria
+ * dois deles mentindo sem ninguem perceber.
+ */
+export const LIMITE_EM_MB = (LIMITE_DE_BYTES / 1_048_576).toLocaleString('pt-BR', {
+  maximumFractionDigits: 1,
+});
+
+/**
+ * A orientacao de tamanho, para ficar SEMPRE em tela e nao so no erro (pedido
+ * do cliente de 18/10/2026: *"devemos sempre trazer essa informacao para o
+ * usuario na pagina como orientacao"*).
+ */
+export const ORIENTACAO_DE_TAMANHO = `Envie uma imagem de até ${LIMITE_EM_MB} MB.`;
+
 export type Proposito = Esquemas['AdminCatalogImageIntentInput']['purpose'];
 
-/** As minimas do contrato (`AdminCatalogImageIntentInput`): 800 x 800 na Loja, 600 x 600 no encontro (01/10). */
+/**
+ * As minimas do contrato (`AdminCatalogImageIntentInput`): 800 x 800 na Loja,
+ * 600 x 600 no encontro (01/10), e desde 18/10/2026 a logo e a foto do
+ * diretorio -- 256 x 256 na logo, que e quadrada e pequena, e 600 x 600 na
+ * foto da fachada ou do ambiente.
+ */
 export const DIMENSAO_MINIMA: Record<Proposito, { largura: number; altura: number }> = {
   store_item: { largura: 800, altura: 800 },
   network_event: { largura: 600, altura: 600 },
+  directory_logo: { largura: 256, altura: 256 },
+  directory_photo: { largura: 600, altura: 600 },
 };
 
 function textoDaMinima(proposito: Proposito, dimensao?: { width: number; height: number }): string {
@@ -46,7 +70,7 @@ function megabytes(bytes: number): string {
 /** O que da para conferir antes do envio (UX 29.4). A dimensao so e certa depois, no worker. */
 export function conferirArquivo(arquivo: { type: string; size: number }): string | undefined {
   if (!(TIPOS_ACEITOS as readonly string[]).includes(arquivo.type)) return 'Use JPG, PNG ou WebP.';
-  if (arquivo.size > LIMITE_DE_BYTES) return `Esta imagem tem ${megabytes(arquivo.size)} MB. O limite é 5 MB.`;
+  if (arquivo.size > LIMITE_DE_BYTES) return `Esta imagem tem ${megabytes(arquivo.size)} MB. O limite é ${LIMITE_EM_MB} MB.`;
   return undefined;
 }
 

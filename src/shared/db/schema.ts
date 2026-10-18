@@ -19,7 +19,26 @@ export interface UsersTable {
   /** UUIDv7 gerado pela aplicação. Sem `DEFAULT` no banco, de propósito. */
   id: string;
   email: string;
+  /**
+   * O instante da verificacao do e-mail. **E ELE o selo de validado** que o
+   * cliente pediu em 18/10/2026 ("um selo na foto dele, se ele estiver
+   * validado"): o conceito ja existe e ja sai como `Me.email_verified`. Nao ha
+   * nem pode haver uma segunda coluna dizendo a mesma coisa.
+   */
   email_verified_at: Date | null;
+  /**
+   * A foto que a PROPRIA pessoa cadastrou (migracao `20261018000008`,
+   * `catalog_images.purpose = 'user_photo'`).
+   *
+   * **Visivel so para o dono.** Ela sai em `GET /v1/me` e em nenhuma outra
+   * resposta -- nao ha coluna de visibilidade para terceiros, porque mostrar a
+   * outros contraria decisao registrada (ADR-0025 item 2 proibe avatar na
+   * `Rede`; o contrato proibe foto de perfil em `Conversation.participants`) e
+   * isso e decisao do cliente, nao de implementacao.
+   *
+   * O id **nunca sai em resposta**: o app recebe a URL da derivada.
+   */
+  photo_image_id: string | null;
   display_name: string | null;
   phone_e164: string | null;
   phone_verified_at: Date | null;
@@ -476,7 +495,19 @@ export type TipoDeEnvio = 'pet_photo' | 'found_report_photo' | 'finder_photo';
  * O proposito da imagem de catalogo (ADR-0027 item 10). Gravado em
  * `catalog_upload_intents`, e a escrita que confirma o envio exige o mesmo.
  */
-export type PropositoDaImagemDeCatalogo = 'store_item' | 'network_event' | 'user_showcase';
+export type PropositoDaImagemDeCatalogo =
+  | 'store_item'
+  | 'network_event'
+  // 18/10/2026: a logo e a foto do profissional recomendado (enviadas pelo
+  // administrador) e a foto do proprio usuario (enviada pela pessoa). Mesma
+  // esteira, propositos novos -- ver `migrations/20261018000008`.
+  | 'directory_logo'
+  | 'directory_photo'
+  | 'user_photo'
+  // A VITRINE de fotos do usuario -- ver `migrations/20261018000040`. Separado
+  // de `user_photo`: aquele e a foto UNICA do perfil, este sao as ate nove da
+  // vitrine, com geometria e tabela de ordem proprias.
+  | 'user_showcase';
 
 export interface UploadIntentsTable {
   id: string;
@@ -1034,6 +1065,24 @@ export interface ProfessionalsTable {
   street_number: string | null;
   complement: string | null;
   /**
+   * A LOGO e a FOTO da entidade, acrescentadas pela migracao `20261018000008`
+   * (pedido do cliente de 18/10/2026).
+   *
+   * Duas colunas porque sao DOIS PROPOSITOS: a logo e quadrada e pequena, e
+   * aparece ao lado do nome na lista do `Perto`; a foto e da fachada ou do
+   * ambiente, e e olhada grande no detalhe. As derivadas tem geometrias
+   * diferentes (`derivadas.ts`), e um campo so obrigaria uma tela a esticar a
+   * outra.
+   *
+   * **As duas sao ANULAVEIS, e nulo e o estado normal**: entrada sem logo e sem
+   * foto existe e publica como antes desta migracao.
+   *
+   * O valor e `catalog_images.id`, e ele **NUNCA sai em resposta** (ADR-0010
+   * item 6): quem le recebe a URL da derivada, montada na leitura.
+   */
+  logo_image_id: string | null;
+  photo_image_id: string | null;
+  /**
    * `geography(Point,4326)`. `never` nos tres sentidos, como
    * `user_reference_locations.reference_point` e `found_reports.found_point`: o
    * tipo impede a coluna de ser selecionada crua ou inserida pelo construtor
@@ -1367,7 +1416,7 @@ export interface StoreItemTagsTable {
 
 /** Ate 8 imagens por item; `position = 0` e a principal (ADR-0027 A.2.1). */
 /**
- * A VITRINE DE FOTOS DO USUARIO (migracao `20261018000011`), no molde de
+ * A VITRINE DE FOTOS DO USUARIO (migracao `20261018000040`), no molde de
  * `store_item_images` e `network_event_images`.
  *
  * **Visivel so ao dono.** Projetada em `GET /me/showcase` e em NENHUMA outra

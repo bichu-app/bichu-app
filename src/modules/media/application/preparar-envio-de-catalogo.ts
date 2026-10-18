@@ -23,8 +23,7 @@ import { chaveDoOriginalDeCatalogo } from '../domain/chave-de-objeto.js';
 import {
   CATEGORIA_DO_PROPOSITO,
   TETO_DE_BYTES_DO_CATALOGO,
-  TIPOS_DE_IMAGEM_DA_VITRINE,
-  TIPOS_DE_IMAGEM_DE_CATALOGO,
+  TIPOS_POR_PROPOSITO,
   VALIDADE_DA_INTENCAO_DE_CATALOGO_EM_SEGUNDOS,
   type PreparadorDeEnvioDeCatalogo,
 } from '../ports/imagem-de-catalogo.js';
@@ -36,17 +35,19 @@ export function criarPreparadorDeEnvioDeCatalogo(deps: {
 }): PreparadorDeEnvioDeCatalogo {
   return {
     async preparar(contentType, byteSize, proposito) {
-      // A LISTA DE TIPOS E POR PROPOSITO, e nao uma so, porque a ORIGEM e
-      // outra: a imagem de catalogo sai de um computador de mesa e a vitrine do
-      // usuario sai de um celular, onde foto de iPhone e HEIC. Uma lista unica
-      // obrigaria a escolher entre recusar HEIC (e tirar a vitrine de metade
-      // dos aparelhos) e aceitar HEIC no painel (onde ele nao existe e seria
-      // superficie a mais). SVG continua recusado nas duas, por IGUALDADE.
-      const aceitos: readonly string[] =
-        proposito === 'user_showcase' ? TIPOS_DE_IMAGEM_DA_VITRINE : TIPOS_DE_IMAGEM_DE_CATALOGO;
-      if (!aceitos.includes(contentType)) {
+      // A lista e POR PROPOSITO desde 18/10/2026: o administrador envia de um
+      // computador de mesa (JPEG, PNG, WebP) e a pessoa envia do celular, que
+      // pode ser HEIC -- vale para a foto unica do perfil e para a VITRINE. A
+      // comparacao continua por IGUALDADE, nunca por prefixo `image/`, que
+      // aceitaria `image/svg+xml`.
+      if (!TIPOS_POR_PROPOSITO[proposito].includes(contentType)) {
         throw problemas.tipoDeMidiaNaoAceito();
       }
+      // O TETO DE 5 MB VALE AQUI, NO SERVIDOR, e nao so na tela. Duas vezes: a
+      // recusa abaixo, antes de assinar qualquer coisa, e `maxBytes` dentro da
+      // propria politica assinada -- que e o que impede o envio direto ao
+      // armazenamento de passar por cima da recusa. Uma validacao so na tela
+      // seria uma regra que qualquer cliente que ninguem escreveu ignora.
       if (!Number.isInteger(byteSize) || byteSize <= 0 || byteSize > TETO_DE_BYTES_DO_CATALOGO) {
         throw problemas.validacao([{ field: 'byte_size', code: 'maximum' }]);
       }

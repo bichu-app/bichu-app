@@ -23,17 +23,15 @@
 --    coisa e o que faz reordenacao, teto e capa passarem a ter tres respostas.
 --
 -- **NAO cria coluna nenhuma em `users`.** A foto unica da pessoa e
--- `users.photo_image_id`, da frente `feat/imagem-do-profissional-e-foto-do-
--- usuario`, que NAO desceu em `development` no momento desta migracao. A
--- vitrine e o PASSO SEGUINTE daquela foto e nao a repete: duplicar a coluna
--- faria duas verdades sobre qual e a foto da pessoa.
+-- `users.photo_image_id`, da migracao `20261018000008`, que desceu em
+-- `development` em 18/10. A vitrine e o PASSO SEGUINTE daquela foto e nao a
+-- repete: duplicar a coluna faria duas verdades sobre qual e a foto da pessoa.
 --
--- **NAO cria proposito que ja exista.** `user_photo` e daquela frente; este e
--- `user_showcase`, e os dois nao se sobrepoem: um e a foto do perfil, o outro
--- sao as fotos da vitrine. Na mescla, os dois `CHECK` de `purpose` precisam ser
--- UNIDOS e nao escolhidos -- esta migracao escreve a lista de `development`
--- mais `user_showcase`, e quem mesclar precisa somar `directory_logo`,
--- `directory_photo` e `user_photo` a ela.
+-- **NAO cria proposito que ja exista.** `user_photo` e da `20261018000008`;
+-- este e `user_showcase`, e os dois nao se sobrepoem -- um e a foto UNICA do
+-- perfil, o outro sao as ate nove da vitrine, com geometria propria (a grade
+-- pede 320 px) e tabela de ordem propria. Os dois `CHECK` de `purpose` sao
+-- escritos aqui com as SEIS, pelo motivo que o bloco 1 explica.
 --
 -- O TETO E 9, E A CAPA E `position = 0`
 --
@@ -103,17 +101,36 @@
 -- 1. O proposito novo na esteira de imagem que JA EXISTE
 -- ---------------------------------------------------------------------------
 
+-- A LISTA E A UNIAO DAS SEIS, E NAO A DE ONTEM MAIS A MINHA.
+--
+-- **Este bloco quase entrou errado, e o defeito foi MEDIDO em BEGIN/ROLLBACK
+-- antes de comitar.** `DROP CONSTRAINT` + `ADD CONSTRAINT` **reescreve** a
+-- lista inteira: escrever aqui so `store_item`, `network_event` e
+-- `user_showcase` nao ACRESCENTA um proposito -- ela APAGA os tres que a
+-- migracao `20261018000008` acrescentou (`directory_logo`, `directory_photo`
+-- e `user_photo`), porque esta migracao roda DEPOIS dela. O efeito seria
+-- silencioso na subida e brutal depois: a foto do profissional e a foto do
+-- perfil passariam a ser recusadas pelo banco no proximo envio.
+--
+-- E por isso que a lista e escrita por extenso, com as SEIS, e nao derivada:
+-- `ADD CONSTRAINT` nao sabe o que havia antes, e quem escreve precisa saber.
+-- Quem acrescentar a setima repete esta conta -- e roda em BEGIN/ROLLBACK,
+-- porque foi so isso que pegou esta.
 ALTER TABLE catalog_upload_intents
   DROP CONSTRAINT catalog_upload_intents_proposito;
 ALTER TABLE catalog_upload_intents
   ADD CONSTRAINT catalog_upload_intents_proposito
-  CHECK (purpose IN ('store_item', 'network_event', 'user_showcase'));
+  CHECK (purpose IN ('store_item', 'network_event',
+                     'directory_logo', 'directory_photo', 'user_photo',
+                     'user_showcase'));
 
 ALTER TABLE catalog_images
   DROP CONSTRAINT catalog_images_proposito;
 ALTER TABLE catalog_images
   ADD CONSTRAINT catalog_images_proposito
-  CHECK (purpose IN ('store_item', 'network_event', 'user_showcase'));
+  CHECK (purpose IN ('store_item', 'network_event',
+                     'directory_logo', 'directory_photo', 'user_photo',
+                     'user_showcase'));
 
 COMMENT ON COLUMN catalog_upload_intents.purpose IS
   'O proposito, gravado no envio: a escrita que confirma exige o MESMO (T9). `user_showcase` e a vitrine do usuario, cujo autor e `user_id` e nunca `admin_account_id`.';
@@ -164,14 +181,19 @@ DROP TABLE IF EXISTS user_showcase_images;
 COMMENT ON COLUMN catalog_upload_intents.purpose IS
   'O proposito fica gravado no envio, e a escrita que confirma exige o mesmo (T9): a capa de um encontro nao vira imagem de produto.';
 
+-- O `down` devolve as CINCO da `20261018000008`, e nao as duas de antes dela:
+-- descer ESTA migracao nao pode desfazer aquela. Mesmo raciocinio do `up`, na
+-- direcao oposta, e o mesmo erro se escrito no automatico.
 ALTER TABLE catalog_images
   DROP CONSTRAINT catalog_images_proposito;
 ALTER TABLE catalog_images
   ADD CONSTRAINT catalog_images_proposito
-  CHECK (purpose IN ('store_item', 'network_event'));
+  CHECK (purpose IN ('store_item', 'network_event',
+                     'directory_logo', 'directory_photo', 'user_photo'));
 
 ALTER TABLE catalog_upload_intents
   DROP CONSTRAINT catalog_upload_intents_proposito;
 ALTER TABLE catalog_upload_intents
   ADD CONSTRAINT catalog_upload_intents_proposito
-  CHECK (purpose IN ('store_item', 'network_event'));
+  CHECK (purpose IN ('store_item', 'network_event',
+                     'directory_logo', 'directory_photo', 'user_photo'));

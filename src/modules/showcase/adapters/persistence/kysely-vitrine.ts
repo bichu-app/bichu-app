@@ -32,8 +32,9 @@
  * nova" sem colidir no meio da transação.
  */
 import type { Db, DbExecutor } from '../../../../shared/db/pool.js';
+import type { FotoDaVitrineParaGravar } from '../../domain/vitrine-de-fotos.js';
 import type { IdGenerator } from '../../../../shared/ports/index.js';
-import type { ObjectKey, UserId } from '../../../../shared/types/brands.js';
+import type { Instant, ObjectKey, UserId } from '../../../../shared/types/brands.js';
 // `comoObjectKey` vem da PORTA de `media`, e nao de `media/domain`: a fronteira
 // da arquitetura proibe importar dominio alheio, e copiar a conferencia da
 // chave seria a segunda definicao dela. Ver o comentario da reexportacao.
@@ -125,12 +126,32 @@ async function lerVitrine(db: DbExecutor, dono: UserId): Promise<readonly FotoDa
   }));
 }
 
-export function criarVitrineRepository(db: Db, ids: IdGenerator): VitrineRepository {
-  return {
-    listar: (dono) => lerVitrine(db, dono),
-
-    async substituir({ dono, fotos, agora }) {
-      return db.transaction().execute(async (trx) => {
+/**
+ * A escrita da vitrine, **sobre um executor recebido de fora**.
+ *
+ * Função separada de `substituir`, e a separação não é estilo: é o que torna a
+ * promessa "a confirmação do envio vai na MESMA transação da escrita"
+ * **mensurável por teste**. Com o corpo dentro do `db.transaction()`, a única
+ * prova possível seria ler o código e acreditar — e foi exatamente um
+ * comentário acreditado que deixou a varredura apagar foto de achado.
+ *
+ * Recebendo o executor, um teste passa um dublê que registra as operações e
+ * confere que o `UPDATE ... confirmed_at` e o `INSERT INTO
+ * user_showcase_images` chegaram no MESMO executor — isto é, na mesma
+ * transação. Ver `confirmacao-na-mesma-transacao.test.ts`.
+ */
+export async function gravarVitrineNaTransacao(
+  trx: DbExecutor,
+  entrada: {
+    readonly dono: UserId;
+    readonly fotos: readonly FotoDaVitrineParaGravar[];
+    readonly agora: Instant;
+    readonly ids: IdGenerator;
+  },
+): Promise<readonly FotoDaVitrine[]> {
+  const { dono, fotos, agora, ids } = entrada;
+  {
+    {
         // A ligação antiga sai primeiro. A unicidade `(user_id, position)` é
         // DIFERIDA, então a ordem nova pode reusar as mesmas posições dentro
         // desta transação sem colidir no meio.
@@ -213,7 +234,14 @@ export function criarVitrineRepository(db: Db, ids: IdGenerator): VitrineReposit
         }
 
         return lerVitrine(trx, dono);
-      });
-    },
+    }
+  }
+}
+
+export function criarVitrineRepository(db: Db, ids: IdGenerator): VitrineRepository {
+  return {
+    listar: (dono) => lerVitrine(db, dono),
+    substituir: ({ dono, fotos, agora }) =>
+      db.transaction().execute((trx) => gravarVitrineNaTransacao(trx, { dono, fotos, agora, ids })),
   };
 }

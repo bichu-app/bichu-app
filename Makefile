@@ -116,7 +116,7 @@ export BUILD_COMMIT
 FORMA_DE_COMMIT := ^[0-9a-f]{7,40}$$
 
 .DEFAULT_GOAL := ajuda
-.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste
+.PHONY: verificar-tipos verificar-lint verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-busca-do-veredito-autoteste verificar-suite-unitaria-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-quebras-de-contrato-autoteste verificar-destinos verificar-armazenamento-por-destino verificar-boot-do-alvo-prod verificar-numero-de-adr verificar-numero-de-adr-autoteste verificar-carimbo-de-migracao verificar-carimbo-de-migracao-autoteste ajuda setup commit-de-build up portas down reset migrar migrar-baixo seed logs test test-int e2e cobertura verificar verificar-commit-de-build verificar-commit-de-build-autoteste verificar-variaveis verificar-portas verificar-portas-autoteste verificar-escolha-de-portas verificar-portabilidade verificar-associacao verificar-limite verificar-contrato-publico verificar-borda verificar-borda-local verificar-cobertura verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-docs-fechada verificar-manifesto-do-aplicativo verificar-manifesto-do-aplicativo-autoteste apk verificar-apk-autoteste verificar-subida-da-api verificar-subida-da-api-autoteste verificar-app verificar-tokens-gerados verificar-tokens-gerados-autoteste fechar-integracao carimbar-fechamento verificar-recibo-de-fechamento-autoteste backup restore pin-digests livro repetir-integracao verificar-sorteio verificar-livro verificar-tokens-web verificar-site verificar-conformidade-do-app verificar-conformidade-do-app-autoteste
 
 ajuda: ## lista os alvos
 	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[1m%-22s\033[0m %s\n", $$1, $$2}'
@@ -525,7 +525,7 @@ verificar-apk-autoteste: ## as iscas da conferencia do APK precisam reprovar (na
 # maquina com `/usr/bin/time -p`, Node 22, Python 3:
 #
 #   npm run typecheck (tsc --noEmit)                            2,79 s
-#   npm run lint      (eslint .)                                8,34 s
+#   npm run lint      (eslint .)                   590 arquivos, ver abaixo
 #   verificar_passos_condicionais.py                            0,07 s
 #   verificar_consulta_externa.py                               0,05 s
 #   verificar_veredito_do_sonar.py --autoteste                  0,04 s
@@ -569,7 +569,7 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # 28/09: `npm run lint` vivia so no `ci.yml`, e `eslint.config.mjs` tem DUAS
 # regras proprias -- `arquitetura/fronteira-de-modulo` e
 # `arquitetura/marca-so-pela-porta` -- que ninguem exercitava desde que a esteira
-# parou. Medido: 371 arquivos lintados, zero mensagens. Lint que nao acha arquivo
+# parou. Medido: 590 arquivos lintados, zero mensagens. Lint que nao acha arquivo
 # aprova tudo calado, e por isso o numero de arquivos esta escrito aqui.
 #
 # ELE NAO REPROVA ARVORE SUJA LEGITIMA, e isso foi conferido: o `eslint` nao
@@ -577,7 +577,7 @@ verificar-tipos: ## `tsc --noEmit` sobre a arvore inteira (2,79 s)
 # rastreado) -- saida 0, e o arquivo nao rastreado foi lintado junto. E a
 # diferenca que custou uma iteracao no portao dos tipos gerados, onde a forma da
 # esteira (`git diff --exit-code`) reprovava quem tinha regerado e nao commitado.
-verificar-lint: ## ESLint, com as regras proprias de fronteira de modulo (8,34 s, 371 arquivos)
+verificar-lint: ## ESLint, com as regras proprias de fronteira de modulo (590 arquivos, `workspace/**` fora do escopo)
 	npm run lint
 
 verificar-passos-condicionais: ## nenhum passo de workflow e pulado por premissa do proprio job, iscas dentro (0,07 s)
@@ -600,6 +600,25 @@ verificar-busca-do-veredito-autoteste: ## as iscas da traducao HTTP->envelope do
 # iscas o executor podia parar de enxergar caso compilado e nada acusaria.
 verificar-suite-unitaria-autoteste: ## as iscas do executor da suite reprovam: suite que nao roda nada nao passa (0,13 s)
 	node infra/suite/executar-unitaria.mjs --autoteste
+
+# O IRMAO DO DE CIMA, e o que fecha o vao que ele deixa de proposito. A regra 1
+# de `executar-unitaria.mjs` varre da raiz, mas o `NAO_VARRER` dela exclui
+# `admin/`, `web/` e `app/`, porque sao subprojetos com executor proprio
+# (ADR-0027, ADR-0028) e ela nao conhece o alcance deles.
+#
+# Era exatamente nesse vao que `admin/src/diretorio/dominio.test.ts` e
+# `admin/src/formato/telefone.test.ts` viviam: 24 casos com `describe`, `it` e
+# assercoes de verdade, fora do `include` do vitest do painel
+# (`test/**/*.test.{ts,tsx}`), que nunca rodaram. Movidos para `admin/test/`,
+# passaram no primeiro tiro -- nao havia defeito escondido, havia COBERTURA
+# FALSA. Este portao conhece o alcance dos SETE executores e varre o
+# repositorio inteiro, inclusive a ponte de `test/a11y/` por tras do link
+# simbolico `app/test/a11y`, que o `flutter test` nao atravessa.
+verificar-teste-fora-do-alcance-autoteste: ## as iscas do portao de teste orfao reprovam (nao le o repositorio)
+	node infra/verificacao/verificar-teste-fora-do-alcance.mjs --autoteste
+
+verificar-teste-fora-do-alcance: ## arquivo com cara de teste que NENHUM executor coleta reprova, nomeando todos (0,06 s)
+	node infra/verificacao/verificar-teste-fora-do-alcance.mjs
 
 verificar-colunas-que-nao-saem: ## portao de saida: nenhuma coluna que nao sai escorre para resposta, iscas primeiro (0,37 s)
 	sh infra/verificacao/verificar-colunas-que-nao-saem.sh .
@@ -647,7 +666,7 @@ verificar-boot-do-alvo-prod: ## BICHUS-213: o alvo `prod` constroi e morre no ge
 # maquina; alem disso `verificar-apk-autoteste` sozinho aqui daria a impressao
 # errada de que o APK foi conferido quando so o conferidor foi. Quem quer a
 # resposta de verdade roda `make apk`; quem nao roda, a esteira roda por ele.
-verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-rastreabilidade verificar-destinos verificar-armazenamento-por-destino verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
+verificar: verificar-numero-de-adr-autoteste verificar-numero-de-adr verificar-carimbo-de-migracao-autoteste verificar-carimbo-de-migracao verificar-migracao-em-banco-com-dado-autoteste verificar-manifesto-do-aplicativo-autoteste verificar-manifesto-do-aplicativo verificar-recibo-de-fechamento-autoteste verificar-passos-condicionais verificar-consulta-externa verificar-veredito-do-sonar-autoteste verificar-quebras-de-contrato-autoteste verificar-suite-unitaria-autoteste verificar-teste-fora-do-alcance-autoteste verificar-teste-fora-do-alcance verificar-colunas-que-nao-saem verificar-dispensas verificar-marcador-de-migracao verificar-boot-do-alvo-prod-autoteste verificar-commit-de-build-autoteste verificar-commit-de-build verificar-variaveis verificar-portas-autoteste verificar-escolha-de-portas verificar-portas verificar-portabilidade verificar-sorteio verificar-livro verificar-borda verificar-tipos-gerados-autoteste verificar-tipos-gerados verificar-limite verificar-tipos verificar-lint verificar-contrato-publico verificar-rastreabilidade verificar-destinos verificar-armazenamento-por-destino verificar-backoffice-autoteste verificar-cobertura verificar-borda-local ## roda os portoes locais, na ordem da esteira
 
 verificar-subida-da-api: ## a API SOBE de verdade numa pilha efemera por worktree (15-27 s; so no fechamento)
 	node infra/verificacao/verificar-subida-da-api.mjs

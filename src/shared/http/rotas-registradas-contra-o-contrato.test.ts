@@ -60,6 +60,7 @@ import * as cep from '../../modules/addresses/adapters/http/postal-code-routes.j
 import * as sugestaoDoDiretorio from '../../modules/professionals/adapters/http/directory-suggestion-routes.js';
 import * as diretorioAdministrativo from '../../modules/professionals/adapters/http/admin-directory-routes.js';
 import * as indicacoesAdministrativas from '../../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
+import * as vitrineDeFotos from '../../modules/showcase/adapters/http/showcase-routes.js';
 import * as pedidoDePlaquinha from '../../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
 import * as plaquinhasAdministrativas from '../../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 
@@ -75,6 +76,10 @@ const MODULOS: readonly Record<string, unknown>[] = [
   // BICHUS-76 e BICHUS-45: as leituras publicas que o site consome.
   casoPublico,
   perfilPublico,
+  // A VITRINE DE FOTOS DO USUARIO (18/10/2026). Modulo novo entra AQUI, e o
+  // terceiro caso deste arquivo e quem cobra: sem esta linha ele reprova
+  // contando `defineRoute` no disco -- e foi o que ele fez.
+  vitrineDeFotos,
   // BICHUS-35. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
   achados,
