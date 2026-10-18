@@ -107,12 +107,47 @@ class TelaAchadoRegistrado extends StatelessWidget {
         ),
       ),
       bottomNavigationBar: BarraDeAcaoFixa(
-        acoes: <Widget>[
-          BotaoPrimario(
-            rotulo: TextosDoAchado.voltarParaOsPets,
-            aoTocar: () => context.go(Rotas.pets),
-          ),
-        ],
+        // **O desfecho tinha UMA acao e ela levava a um beco.** `Voltar`
+        // mandava para `Rotas.pets`, e `Rotas.pets` nao lista achado nenhum --
+        // ela pinta o `EstadoVazio` "A lista de pets perdidos esta em
+        // construcao" (`telas/abas.dart`). Nenhuma outra tela do app mostrava
+        // o registro: `GET /v1/found-reports` nao tinha chamador em `app/lib`
+        // e `Rotas.achadoDe` nao era chamada de lugar nenhum, o que deixava
+        // [TelaDoAchado] construida, roteada e inalcancavel. O registro ia
+        // para o banco certo, com `status = 'open'` e `reporter_user_id`
+        // preenchido, e nao tinha UM caminho de leitura no aparelho.
+        //
+        // **A acao principal passa a ser ver o achado, e `Voltar` desce para
+        // secundaria em texto** -- o mesmo arranjo de
+        // `tela_pet_cadastrado.dart`, pela mesma razao escrita la: quem acabou
+        // de registrar quer ver o que registrou.
+        //
+        // **So no estado REGISTRADO**, e a condicao e a regra: o achado que
+        // foi para a fila offline nao tem id (`ResultadoDoAchado.naFila` nasce
+        // com `achado: null`), e um botao que chamasse `Rotas.achadoDe` ali
+        // montaria `/achados/null`. No estado de fila a tela continua com a
+        // unica saida que ela sempre teve, que e a honesta: nao ha o que abrir.
+        acoes: achado == null
+            ? <Widget>[
+                BotaoPrimario(
+                  rotulo: TextosDoAchado.voltarParaOsPets,
+                  aoTocar: () => context.go(Rotas.pets),
+                ),
+              ]
+            : <Widget>[
+                BotaoPrimario(
+                  rotulo: TextosDoAchado.verOAchado,
+                  // `go` e nao `push`: a tela de desfecho nao e lugar para
+                  // voltar. Voltar para ca com o formulario ja enviado e o
+                  // caminho do segundo registro do mesmo animal -- a mesma
+                  // razao que fez a saida desta barra ser `fechar`.
+                  aoTocar: () => context.go(Rotas.achadoDe(achado.id)),
+                ),
+                TextButton(
+                  onPressed: () => context.go(Rotas.pets),
+                  child: const Text(TextosDoAchado.voltarParaOsPets),
+                ),
+              ],
       ),
     );
   }

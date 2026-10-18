@@ -168,6 +168,25 @@ abstract final class TextosDoAchado {
 
   static const String voltarParaOsPets = 'Voltar';
 
+  /// A acao que leva ao registro que a pessoa acabou de criar.
+  ///
+  /// **Ela existe porque o desfecho era um beco.** Ate 18/10 esta tela tinha
+  /// UMA acao -- `Voltar`, para `Rotas.pets` --, e `Rotas.pets` diz com todas
+  /// as letras que *a lista de pets perdidos esta em construcao*. O app nao
+  /// lista achado em lugar nenhum: `GET /v1/found-reports`
+  /// (`listMyFoundReports`) nao tem UM chamador em `app/lib`, e
+  /// `Rotas.achadoDe` nao era chamada de lugar nenhum -- [TelaDoAchado] estava
+  /// construida, registrada em `rotas.dart` e **orfa**. O resultado medido e a
+  /// queixa do cliente, palavra por palavra: *"cadastrei que encontrei um pet
+  /// e nao esta aparecendo na tela de pets"*. Ele estava certo sobre o sintoma
+  /// e a tela de pets era o lugar errado de procurar.
+  ///
+  /// Esta acao **nao substitui a lista** -- ela da ao registro um endereco
+  /// alcancavel enquanto a lista nao existe. Quem acabou de registrar um
+  /// achado quer ver o achado, e ele esta em `/achados/<id>`. E a mesma
+  /// escolha de `TextosDoCadastro.fazerATag`, pela mesma razao.
+  static const String verOAchado = 'Ver o achado';
+
   /// O que a tela do achado diz quando o servidor responde ausencia.
   ///
   /// **A mesma frase para "nao existe" e para "nao e seu"**, e a igualdade e
