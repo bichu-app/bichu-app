@@ -5,6 +5,7 @@ import NaoFuiEu from './naoFuiEu/NaoFuiEu.tsx';
 import { rotasDaLoja } from './loja/rotas.tsx';
 import { rotasDaRede } from './rede/rotas.tsx';
 import { rotasDoDiretorio } from './diretorio/rotas.tsx';
+import { rotasDasPlaquinhas } from './plaquinhas/rotas.tsx';
 import Carregando from './rotas/Carregando.tsx';
 import NaoEncontrada from './rotas/NaoEncontrada.tsx';
 import { ProvedorDeSessao, type PropsDoProvedor } from './sessao/ProvedorDeSessao.tsx';
@@ -37,6 +38,9 @@ export function criarRotas(opcoes: OpcoesDasRotas = {}): RouteObject[] {
         ...rotasDaRede,
         // BICHUS-189 (17/10/2026): o diretorio de `Perto`, o menu que faltava.
         ...rotasDoDiretorio,
+        // 18/10/2026: a fila da plaquinha da coleira e a entrega. O backend das
+        // tres operacoes existia desde 17/10 e nenhuma tela as chamava.
+        ...rotasDasPlaquinhas,
         { path: '*', element: <NaoEncontrada /> },
       ],
     },

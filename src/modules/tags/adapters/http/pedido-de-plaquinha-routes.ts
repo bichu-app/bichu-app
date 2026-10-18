@@ -188,11 +188,25 @@ function comoCollarTagRequest(pedido: PedidoDoTutor): Record<string, unknown> {
     status: pedido.status,
     requested_at: pedido.solicitadoEm.toISOString(),
     decided_at: pedido.decididoEm === null ? null : pedido.decididoEm.toISOString(),
-    // Sempre nulo hoje: nao ha coluna nem escrita. Sai EXPLICITAMENTE nulo e
-    // nao omitido, porque omitir faria o app distinguir "sem rastreio" de
-    // "campo que sumiu" -- a mesma decisao de `complement` na fila do painel.
-    tracking_code: pedido.codigoDeRastreio,
     notes: pedido.observacao,
+    // A ENTREGA, que e o que a pagina privada do aplicativo desenha. Sai aqui
+    // porque esta e uma leitura DO DONO -- quem chama acabou de se autenticar e
+    // o `WHERE` do repositorio ja exigiu `pets.owner_user_id = <chamador>`.
+    //
+    // **Nenhum destes quatro sai em superficie sem conta.** A resolucao publica
+    // da tag (`resolveTag`) nao os projeta, e nao passa por aqui.
+    //
+    // COSTURA DA MESCLA 18/10: `tracking_code` estava declarado DUAS vezes
+    // neste literal -- a frente do aplicativo o escrevia com o comentario
+    // "sempre nulo hoje: nao ha coluna nem escrita", e a do painel o escrevia
+    // de novo quatro linhas abaixo depois de criar a coluna. Chave repetida em
+    // literal e o ultimo valor que vence, entao o comportamento ja era o do
+    // painel; o que sobrava era um `no-dupe-keys` e um comentario que mentia.
+    // Ficou UMA, a do painel.
+    delivery_state: pedido.passoDaEntrega,
+    tracking_code: pedido.codigoDeRastreio,
+    shipped_at: pedido.despachadoEm === null ? null : pedido.despachadoEm.toISOString(),
+    delivered_at: pedido.entregueEm === null ? null : pedido.entregueEm.toISOString(),
   };
 }
 

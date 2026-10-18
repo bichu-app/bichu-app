@@ -4493,6 +4493,98 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/tag-requests/{requestRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Um pedido da plaquinha
+         * @description A leitura de UM pedido, para a tela de entrega do painel: quem atende
+         *     abre o pedido, confere o endereco, digita o rastreio e marca o passo.
+         *     Sem ela a tela teria de achar o pedido dentro da pagina da listagem, e
+         *     perderia a linha a cada recarga.
+         *
+         *     Mesma projecao da listagem (`AdminCollarTagRequest`), e as mesmas
+         *     regras: **devolve o ENDERECO DE ENTREGA** (dado pessoal, so nesta
+         *     superficie, nunca na trilha, nunca geocodificado -- ADR-0006); **nenhum
+         *     PERFIL do solicitante**; e **nao traz o codigo da plaquinha**, que e
+         *     credencial ao portador (ADR-0004).
+         *
+         *     **Pedido de conta desabilitada responde `404`**, e nao uma leitura
+         *     parcial: decisao do cliente de 17/10 -- conta desabilitada nao e mais
+         *     encontrada em nenhuma pagina nem funcionalidade. O filtro esta na
+         *     clausula `WHERE`, e nao num ramo de JavaScript. `404` tambem para `ref`
+         *     desconhecido e para pedido de pet ja excluido; nao ha `403` nesta
+         *     superficie (ADR-0021).
+         */
+        get: operations["getAdminCollarTagRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tag-requests/{requestRef}/delivery": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Atualiza a entrega da plaquinha
+         * @description O estado da entrega e o codigo de rastreio, numa escrita so -- que e
+         *     como o cliente pediu em 18/10: "mudar o status da entrega e inserir o
+         *     codigo de rastreio e atualizar a entrega".
+         *
+         *     As transicoes aceitas, o que acontece com cada uma e por que nao se
+         *     volta atras estao em `AdminCollarTagDeliveryUpdate`. Transicao fora da
+         *     tabela responde `400` com `code: invalid_delivery_transition`;
+         *     rastreio so com espaco responde `400` com `code: blank_tracking_code`.
+         *
+         *     **`POST` e nao `PATCH`**, e nao por indecisao: as outras duas escritas
+         *     desta fila sao `POST` em sub-recurso de acao
+         *     (`/fulfillment`, `/decline`), e esta e a terceira irma delas. Um `PATCH`
+         *     aqui obrigaria o painel a falar dois dialetos com a mesma fila.
+         *
+         *     **Sem `If-Match`**, ao contrario de `updateAdminDirectoryEntry`. La o
+         *     recurso tem `version` e a escrita e de formulario inteiro, onde duas
+         *     pessoas se sobrescrevem em silencio. Aqui a trava e a propria maquina de
+         *     estados, sob `FOR UPDATE`: quem chega com a tela velha tenta uma
+         *     transicao que o estado atual nao permite e leva `400` em voz alta. Um
+         *     `ETag` para esta fila seria uma segunda trava para a mesma propriedade,
+         *     e uma coluna `version` que so ela usaria.
+         *
+         *     **Nao apaga nada.** Nao existe exclusao de pedido nesta superficie, e o
+         *     que seria cancelar e `declined` -- estado, e por
+         *     `declineAdminCollarTagRequest`.
+         *
+         *     **Nao emite codigo** (ADR-0004) e **nao consulta transportadora
+         *     nenhuma**: o rastreio e texto digitado.
+         *
+         *     Pedido de conta desabilitada responde `404`, pela mesma clausula `WHERE`
+         *     da leitura.
+         */
+        post: operations["updateAdminCollarTagRequestDelivery"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tag-requests/{requestRef}/fulfillment": {
         parameters: {
             query?: never;
@@ -8605,12 +8697,51 @@ export interface components {
             state: string;
         };
         /**
-         * @description `pending` ate o painel decidir. `fulfilled` quer dizer que a plaquinha
-         *     FISICA saiu, e nao que o codigo foi emitido -- emitir e `issuePetTag`,
-         *     e o codigo e irreversivel (ADR-0004).
+         * @description A DECISAO do painel, e so ela: `pending` ate alguem decidir, `fulfilled`
+         *     quer dizer que o pedido foi ACEITO, `declined` que foi recusado.
+         *
+         *     **Nao diz onde a encomenda esta** -- isso e `delivery_state`, que e o
+         *     eixo da entrega e carrega os passos que o tutor acompanha.
+         *
+         *     `fulfilled` NAO quer dizer que o codigo foi emitido: emitir e
+         *     `issuePetTag`, e o codigo e irreversivel (ADR-0004).
          * @enum {string}
          */
         CollarTagRequestStatus: "pending" | "fulfilled" | "declined";
+        /**
+         * @description O EIXO DA ENTREGA, e os tres passos que o cliente nomeou em 18/10:
+         *
+         *     | valor | passo, nas palavras dele |
+         *     | --- | --- |
+         *     | `requested` | solicitado |
+         *     | `in_transit` | em transporte |
+         *     | `arrived` | chegou |
+         *
+         *     **Nunca nulo e nunca ausente**: a coluna e `NOT NULL DEFAULT
+         *     'requested'`, entao todo pedido tem um passo escrito -- inclusive os
+         *     criados antes de a entrega existir. A tela le UM campo e desenha UM
+         *     passo, e nao infere "solicitado" de uma ausencia.
+         *
+         *     ## Por que e um eixo separado de `status`, e nao mais um valor dele
+         *
+         *     O desenho de UM eixo so -- `delivered` acrescentado a
+         *     `CollarTagRequestStatus` -- foi escrito primeiro e **reprovado por
+         *     `oasdiff`**: acrescentar valor a `enum` de RESPOSTA e quebra de contrato
+         *     pela regra `response-property-enum-value-added`, e ela saiu em nivel
+         *     `error` quatro vezes, uma por operacao que projeta o estado. Campo
+         *     ACRESCENTADO nao quebra ninguem; valor acrescentado a `enum` existente
+         *     quebra. O eixo separado e o desenho que nao precisa de dispensa.
+         *
+         *     ## E as combinacoes impossiveis?
+         *
+         *     Os dois eixos **nao sao independentes**, e quem garante isso e o banco:
+         *     `collar_tag_requests_entrega_exige_atendimento` proibe sair de
+         *     `requested` sem o pedido estar `fulfilled`. Com isso
+         *     recusado-que-chegou e pendente-em-transporte deixam de existir, e nao ha
+         *     par a conferir na aplicacao.
+         * @enum {string}
+         */
+        CollarTagDeliveryState: "requested" | "in_transit" | "arrived";
         /**
          * @description O pedido da plaquinha como o APP o ve.
          *
@@ -8639,19 +8770,44 @@ export interface components {
              * @description Quando o painel decidiu, ou nulo enquanto `pending`.
              */
             decided_at?: string | null;
-            /**
-             * @description O codigo de rastreio da transportadora, quando existir.
-             *
-             *     **HOJE E SEMPRE NULO, e isso nao e defeito**: nao ha coluna que o
-             *     guarde nem rota que o escreva. A escrita e a migracao pertencem a
-             *     quem constroi a fila no backoffice; esta projecao ja o declara
-             *     para que acrescentar a coluna nao vire mudanca de contrato depois.
-             *     **O app so o desenha quando ele vem preenchido** -- campo de
-             *     rastreio vazio e pior que nenhum campo.
-             */
-            tracking_code?: string | null;
             /** @description A observacao que o tutor escreveu, ou nulo. */
             notes?: string | null;
+            delivery_state?: components["schemas"]["CollarTagDeliveryState"];
+            /**
+             * @description O codigo de rastreio da encomenda, ou nulo. **Sai para o DONO do
+             *     pedido**, que e quem acompanha a entrega, e nunca em superficie sem
+             *     conta.
+             *
+             *     Nulo e o caso comum e NAO e defeito: nem todo envio tem rastreio
+             *     (entrega em maos, correio simples), e nenhum pedido tem rastreio
+             *     antes de sair. A tela mostra o passo sem o codigo em vez de mostrar
+             *     um campo vazio.
+             *
+             *     **Sem validacao de formato de transportadora**: ver
+             *     `AdminCollarTagDeliveryUpdate.tracking_code`.
+             */
+            tracking_code?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha SAIU, o carimbo do passo "em transporte". Nulo
+             *     enquanto `delivery_state` e `requested`.
+             *
+             *     Coluna propria, e **nao `decided_at` reaproveitado**: `decided_at`
+             *     guarda tambem o instante da RECUSA, e chamar aquilo de "saiu" seria
+             *     mentir sobre uma plaquinha que nunca foi despachada. Nao volta a
+             *     nulo quando a encomenda chega -- `arrived` tambem ja saiu.
+             */
+            shipped_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha CHEGOU, o carimbo do passo "chegou". Nulo em tudo
+             *     que nao chegou.
+             *
+             *     Com `requested_at` e `shipped_at`, fecha os TRES carimbos dos tres
+             *     passos -- a pagina privada do aplicativo nao precisa derivar nenhuma
+             *     data de nenhum estado.
+             */
+            delivered_at?: string | null;
         };
         /**
          * @description Os pedidos da plaquinha de UM pet, do mais recente para o mais antigo.
@@ -8661,7 +8817,13 @@ export interface components {
         CollarTagRequestPage: {
             items: components["schemas"]["CollarTagRequest"][];
         };
-        /** @enum {string} */
+        /**
+         * @description Os mesmos tres valores de `CollarTagRequestStatus`, que e o eixo da
+         *     DECISAO. Como filtro de `listAdminCollarTagRequests`, e a aba que o
+         *     painel abre; para recortar por passo da ENTREGA o filtro e
+         *     `delivery_state`, e os dois podem ser combinados.
+         * @enum {string}
+         */
         AdminCollarTagRequestStatus: "pending" | "fulfilled" | "declined";
         /**
          * @description Um pedido da plaquinha na fila do painel. O pedido e de um PET, e a
@@ -8697,6 +8859,96 @@ export interface components {
             requested_at: string;
             /** Format: date-time */
             decided_at?: string | null;
+            delivery_state?: components["schemas"]["CollarTagDeliveryState"];
+            /**
+             * @description O codigo de rastreio que o administrador digitou, ou nulo. O mesmo
+             *     valor que o dono do pedido le em `CollarTagRequest.tracking_code`.
+             */
+            tracking_code?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha saiu. Nulo enquanto `delivery_state` e `requested`.
+             */
+            shipped_at?: string | null;
+            /**
+             * Format: date-time
+             * @description Quando a plaquinha chegou. Nulo em tudo que nao chegou.
+             */
+            delivered_at?: string | null;
+        };
+        /**
+         * @description A ATUALIZACAO DA ENTREGA: o passo e o codigo de rastreio, numa escrita
+         *     so. Palavras do cliente (18/10): "mudar o status da entrega e inserir o
+         *     codigo de rastreio e atualizar a entrega" -- uma operacao, e nao duas.
+         *
+         *     ## As transicoes que esta operacao aceita
+         *
+         *     | de | para | o que e |
+         *     | --- | --- | --- |
+         *     | `requested` | `in_transit` | a plaquinha saiu |
+         *     | `in_transit` | `arrived` | a plaquinha chegou |
+         *     | `in_transit` | `in_transit` | so o rastreio mudou |
+         *     | `arrived` | `arrived` | so o rastreio mudou |
+         *
+         *     Qualquer outra responde `400` com `code: invalid_delivery_transition`.
+         *
+         *     **O pedido precisa estar `fulfilled`.** Nao se despacha o que o painel
+         *     nao aceitou: pedido em `pending` responde `400` com
+         *     `code: request_not_fulfilled`, e o caminho e `fulfillAdminCollarTagRequest`
+         *     antes. Pedido `declined` responde o mesmo -- recusado nao anda. Isto nao
+         *     e uma conferencia escrita a mao em paralelo ao banco: e a mesma regra do
+         *     `CHECK` `collar_tag_requests_entrega_exige_atendimento`, traduzida para
+         *     uma resposta que diz qual e o proximo passo em vez de estourar.
+         *
+         *     **Nao se volta atras**: `arrived` nao vira `in_transit`, e nada volta a
+         *     `requested`. Desfazer uma chegada marcada por engano nao e uma
+         *     transicao: e um pedido novo, ou um ajuste por quem opera o banco.
+         *
+         *     **`requested` -> `arrived` nao e aceito**, apesar de ser "para frente".
+         *     O passo "em transporte" e o que carrega o rastreio e o carimbo de
+         *     despacho, e pular direto para a chegada deixaria a entrega sem registro
+         *     de que ela saiu. Sao dois cliques, e o painel os oferece em sequencia.
+         *
+         *     **Nada aqui APAGA pedido.** Nao existe exclusao nesta superficie; o que
+         *     o cliente chamaria de cancelar e `declined`, que e estado e e da outra
+         *     operacao.
+         */
+        AdminCollarTagDeliveryUpdate: {
+            /**
+             * @description O passo desejado. So os dois passos que se alcanca: `requested` e o
+             *     inicial e ninguem volta a ele.
+             *
+             *     Repetir o passo atual (`in_transit` sobre `in_transit`, `arrived`
+             *     sobre `arrived`) e aceito de proposito: e o caminho de corrigir so o
+             *     rastreio, e e por isso que o campo e obrigatorio em vez de opcional
+             *     -- um corpo sem passo faria a operacao adivinhar.
+             * @enum {string}
+             */
+            delivery_state: "in_transit" | "arrived";
+            /**
+             * @description O codigo de rastreio, TEXTO que o administrador digita.
+             *
+             *     Tres casos, e os tres sao diferentes:
+             *
+             *     - **ausente**: o rastreio nao muda. E o que acontece quando so se
+             *       marca a chegada de uma encomenda que ja tinha codigo;
+             *     - **texto**: passa a ser este. Espaco nas bordas e removido antes de
+             *       gravar;
+             *     - **`null`**: o rastreio e APAGADO. Existe para o engano -- codigo da
+             *       encomenda errada -- e nao para uso comum.
+             *
+             *     **Sem validacao de formato de transportadora**, de proposito:
+             *     Correios tem 13 simbolos, FedEx de 12 a 22, DHL 10, e transportadora
+             *     regional tem o que quiser e muda. Um formato cravado aqui recusaria,
+             *     em producao e sem aviso, o rastreio legitimo de amanha. Recusa-se so
+             *     o claramente invalido: de 3 a 64 simbolos, e texto que seja **so
+             *     espaco** responde `400` com `code: blank_tracking_code`.
+             *
+             *     **Nao ha integracao com transportadora.** Nada neste projeto consulta
+             *     Correios nem ninguem: seria custo recorrente, e a decisao e do
+             *     cliente.
+             */
+            tracking_code?: string | null;
         };
         AdminCollarTagRequestPage: {
             items: components["schemas"]["AdminCollarTagRequest"][];
@@ -14590,6 +14842,13 @@ export interface operations {
         parameters: {
             query?: {
                 status?: components["schemas"]["AdminCollarTagRequestStatus"];
+                /**
+                 * @description Recorta por PASSO DA ENTREGA, e combina com `status` em vez de
+                 *     substitui-lo: os dois sao eixos diferentes. `status=fulfilled` com
+                 *     `delivery_state=requested` e a fila de trabalho de quem despacha --
+                 *     pedidos aceitos que ainda nao sairam.
+                 */
+                delivery_state?: components["schemas"]["CollarTagDeliveryState"];
                 page?: components["parameters"]["AdminPage"];
                 /** @description Teto de 50 por pagina, como na outra fila que le pessoa (D56). */
                 limit?: number;
@@ -14612,6 +14871,66 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["AdminUnauthorized"];
             403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminCollarTagRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description O pedido. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    updateAdminCollarTagRequestDelivery: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
+                requestRef: components["parameters"]["CollarTagRequestRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCollarTagDeliveryUpdate"];
+            };
+        };
+        responses: {
+            /** @description Entrega atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminCollarTagRequest"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };

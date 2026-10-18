@@ -1037,7 +1037,7 @@ export async function main(): Promise<void> {
           registrarRotaDeBuscaDeCep(administrativo, { cep: criarBuscaDeCep() });
           // A fila dos pedidos da plaquinha. A TELA e da sessao Backoffice;
           // daqui sai so o que ela chama.
-          registrarRotasDaFilaDePlaquinhas(administrativo, { fila: filaDePlaquinhas });
+          registrarRotasDaFilaDePlaquinhas(administrativo, { fila: filaDePlaquinhas, contrato });
         },
       );
     } else {
