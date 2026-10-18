@@ -98,6 +98,48 @@ const ISCAS = [
     casoQueReprova: '1 — o byte sobe pelo caminho do produto e a derivada volta do balde público',
   },
   {
+    nome: 'janela-de-perda-da-foto-do-achado',
+    porque:
+      'INVERTE A ORDEM da higiene: apaga o original ANTES de gravar a chave da versao limpa. ' +
+      'As duas ordens terminam com a versao limpa no balde e a linha `pronta`, entao nenhum ' +
+      'teste de RESULTADO pega a diferenca -- so a ordem denuncia.\n' +
+      '  Invertida, a operacao PERDE a foto de quem achou um pet: com o original fora do balde ' +
+      'e a intencao ainda `pendente`, um processo que morra no meio faz a readiacao dar `head` ' +
+      'no original, achar nada, marcar `ausente` (estado FINAL, que nunca volta) e o aviso fica ' +
+      'sem foto nenhuma, para sempre e sem erro em lugar nenhum.\n' +
+      '  O cliente decidiu em 17/10/2026 que o original e apagado ("pode apagar o original e ' +
+      'guardar so o arquivo 2"), e a troca e segura por UMA razao e so por ela: a ordem.',
+    alvo: 'src/modules/media/application/higienizar-foto-do-achado.ts',
+    trecho: `  await deps.fotos.marcarHigienizada(foto.uploadIntentId, chave, agora);`,
+    substituto: `  // ISCA EM EXECUCAO: a ordem esta INVERTIDA -- o original e apagado ANTES de a
+  // chave da versao limpa ser gravada. Se voce esta lendo isto num arquivo do
+  // repositorio, a isca nao foi restaurada e existe uma janela em que a foto do
+  // achado nao tem nenhuma copia alcancavel.
+  await deps.armazenamento.delete('privado', foto.originalKey);
+  await deps.fotos.marcarHigienizada(foto.uploadIntentId, chave, agora);`,
+    casoQueReprova:
+      'a ordem é: sobe a limpa, GRAVA a chave, e SÓ ENTÃO apaga o original',
+  },
+  {
+    nome: 'expurgo-ignora-a-versao-limpa',
+    porque:
+      'faz `chavesDaConta` voltar a ler so `object_key`, sem `sanitized_key`, que era o estado ' +
+      'antes desta correcao. Com a decisao de 17/10/2026 a higiene APAGA o original assim que a ' +
+      'versao limpa esta gravada, entao `sanitized_key` e a UNICA copia que existe daquela foto ' +
+      '-- e o expurgo de conta estaria apagando a copia que a higiene ja apagou sozinha e ' +
+      'deixando no balde justamente a que sobrou.\n' +
+      '  O agravante e o NUMERO: `objects_deleted` vai para `privacy.account_purged`, e quem ' +
+      'audita o art. 18, VI le aquele numero como "arquivos que sairam". Ele sairia afirmando ' +
+      'mais do que aconteceu -- o mesmo defeito de leitura que o SEC-020 existe para corrigir.',
+    alvo: 'src/modules/media/adapters/persistence/kysely-media-repository.ts',
+    trecho: `        .select(['object_key', 'sanitized_key'])`,
+    substituto: `        // ISCA EM EXECUCAO: a coluna da versao limpa saiu da selecao. Se voce esta lendo isto
+        // num arquivo do repositorio, a isca nao foi restaurada e o expurgo de conta
+        // deixa no balde a unica copia que existe da foto do achado.
+        .select(['object_key'])`,
+    casoQueReprova: 'devolve a versão limpa JUNTO do original',
+  },
+  {
     nome: 'varredura-apaga-foto-de-achado',
     porque:
       'remove o filtro por especie da consulta de envios vencidos, que e o estado em que a ' +

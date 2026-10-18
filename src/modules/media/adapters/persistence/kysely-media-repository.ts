@@ -489,13 +489,34 @@ export function criarMediaRepository(db: Db): MediaRepository {
         },
       };
 
+      // AS DUAS CHAVES, e `sanitized_key` nao e detalhe: com a decisao do
+      // cliente de 17/10/2026 ("pode apagar o original e guardar so o arquivo
+      // 2"), a higiene APAGA o original da foto do achado assim que a versao
+      // sem metadado esta gravada. Logo `sanitized_key` passa a ser a UNICA
+      // copia que existe daquela foto.
+      //
+      // Ler so `object_key` era um furo antes e seria o furo PRINCIPAL agora:
+      // quem exerce o direito de apagamento (art. 18, VI) teria apagado a
+      // copia que a higiene ja apagou sozinha, e deixado no balde justamente a
+      // que sobrou -- com `privacy.account_purged` afirmando que os arquivos
+      // sairam.
+      //
+      // `sanitized_key` e nula enquanto a higiene nao terminou, e tambem em
+      // `'recusada'`/`'ausente'` (CHECK `upload_intents_higiene_coerente`), e
+      // nula na foto de pet, que nao passa por este caminho. O `continue`
+      // abaixo cobre os quatro casos sem perguntar qual deles e.
       const intencoes = await db
         .selectFrom('upload_intents')
-        .select('object_key')
+        .select(['object_key', 'sanitized_key'])
         .where('user_id', '=', dono)
         .execute();
       for (const linha of intencoes) {
         objetos.push({ classe: 'privado', chave: comoObjectKey(linha.object_key) });
+        // Mesmo balde do original, e de proposito: a chave da limpa e
+        // `found-reports/{dono}/sanitized/...`, o mesmo prefixo, no balde
+        // PRIVADO (criterio 9 da BICHUS-35).
+        if (linha.sanitized_key === null) continue;
+        objetos.push({ classe: 'privado', chave: comoObjectKey(linha.sanitized_key) });
       }
 
       const fotos = await db
