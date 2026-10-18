@@ -1679,6 +1679,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Pet' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '409':
           description: Slug ja usado ou reservado.
@@ -2088,6 +2089,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PetTag' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   /tags/{code}:
@@ -3162,6 +3164,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/LostCase' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
         '410':
           description: Passou dos 7 dias.
@@ -3187,6 +3190,7 @@ paths:
       description: Nao e desfecho e nao conta como caso encerrado.
       responses:
         '204': { description: Lembrete adiado. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '403': { $ref: '#/components/responses/Forbidden' }
 
   # ----------------------------------------------------------------------
@@ -3733,6 +3737,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/DirectoryEntryDetail' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
@@ -3973,6 +3978,7 @@ paths:
           note: "mesmo orcamento do PUT: apagar e regravar nao pode ser o caminho que contorna o teto de escrita"
       responses:
         '204': { description: Nao ha mais avaliacao minha neste local. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '401': { $ref: '#/components/responses/Unauthorized' }
         '404': { $ref: '#/components/responses/NotFound' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
@@ -5113,6 +5119,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/PublicLostPetPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
   /public/pets/{slug}:

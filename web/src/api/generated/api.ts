@@ -10018,6 +10018,7 @@ export interface operations {
                     "application/json": components["schemas"]["Pet"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Slug ja usado ou reservado. */
             409: {
@@ -10309,6 +10310,7 @@ export interface operations {
                     "application/json": components["schemas"]["PetTag"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -11205,6 +11207,7 @@ export interface operations {
                     "application/json": components["schemas"]["LostCase"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
             /** @description Passou dos 7 dias. */
             410: {
@@ -11235,6 +11238,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             403: components["responses"]["Forbidden"];
         };
     };
@@ -11535,6 +11539,7 @@ export interface operations {
                     "application/json": components["schemas"]["DirectoryEntryDetail"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
@@ -11665,6 +11670,7 @@ export interface operations {
                 };
                 content?: never;
             };
+            400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
@@ -12360,6 +12366,7 @@ export interface operations {
                     "application/json": components["schemas"]["PublicLostPetPage"];
                 };
             };
+            400: components["responses"]["ValidationFailed"];
             429: components["responses"]["TooManyRequests"];
         };
     };
