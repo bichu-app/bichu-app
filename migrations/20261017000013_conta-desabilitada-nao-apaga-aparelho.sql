@@ -161,6 +161,60 @@ $$;
 COMMENT ON FUNCTION marcar_pets_na_conta_desabilitada() IS
   'Decisao do cliente de 17/10: a conta e desabilitada e o usuario "nao e mais encontrado em nenhuma pagina ou funcionalidade". `pets` e a unica tabela possuida que tem `deleted_at`, e e por `pets.owner_user_id` que o perfil publico, os casos, as plaquinhas e as fotos chegam ao tutor -- entao a marca do dono propaga para os pets e as clausulas `pets.deleted_at IS NULL` que ja existem passam a esconder tudo isso sem consulta nova. NAO apaga: marca, e so pet sem marca propria, com o instante da conta, para a reversao ser exata.';
 
+-- ====================================================================
+-- O PONTO UNICO PARA AS TABELAS QUE NAO PASSAM POR `pets`
+-- ====================================================================
+--
+-- A propagacao de marca acima cobre tudo que chega ao tutor por
+-- `pets.owner_user_id`. Fora dela sobraram quatro superficies medidas, e as
+-- quatro fazem a MESMA pergunta: "a conta dona desta linha ainda esta
+-- habilitada?". Sao
+--
+--   * o candidato de perdido, pelo relator do achado (3 consultas);
+--   * a fila do painel da Rede, pelo solicitante (3 lugares: a listagem, a
+--     leitura do pedido e a CONTAGEM que vira o aviso do painel);
+--   * o diretorio de profissionais, pelo TITULAR da entrada;
+--   * e, de novo, o vinculo do achado ao caso pelo `share_token`.
+--
+-- Quatro clausulas escritas a mao divergem. Uma funcao, nao: ela e o unico
+-- lugar onde "habilitada" tem definicao, e no dia em que a definicao mudar
+-- (reativacao, suspensao temporaria, bloqueio por denuncia) muda aqui e vale
+-- nas sete chamadas.
+--
+-- `p_user IS NULL` devolve VERDADEIRO, e isso e a parte que erraria se fosse
+-- escrita a mao sete vezes. Linha sem conta nao e linha de conta desabilitada:
+--
+--   * `found_reports.reporter_user_id` e nulo no achado do achador SEM CONTA,
+--     que e o caminho normal da plaquinha (`origin = 'tag_scan'`);
+--   * `professionals.claimed_by_user_id` e nulo em `source = 'import'`, e o
+--     CHECK `professionals_aceite_antes_do_perfil` deixa isso valer.
+--
+-- Um `IS NOT NULL` esquecido ali apagaria do diretorio e da lista de candidatos
+-- justamente as linhas que nunca tiveram dono -- e o apagamento seria
+-- silencioso, que e o defeito que nao aparece em revisao.
+--
+-- `STABLE` pelo mesmo motivo de `encontro_com_autor_ativo`: dentro de uma
+-- instrucao o resultado nao muda, e e isso que permite ao planejador chamar a
+-- funcao uma vez por linha em vez de repetir o `EXISTS` por predicado.
+--
+-- POR QUE FUNCAO E NAO `innerJoin('users')` nos tres primeiros casos:
+-- `professionals.created_by_user_id` carrega a marca "NUNCA sai do servidor" na
+-- `20260921000002`, e o portao `portao-colunas-que-nao-saem.ts` reprova
+-- qualquer mencao ao nome dela em `src/` -- inclusive em comentario. Uma juncao
+-- a `users` dentro do diretorio convida a confundir as duas colunas de usuario
+-- daquela tabela, e e exatamente essa confusao que o portao existe para pegar.
+-- A funcao recebe `claimed_by_user_id`, que E legitima em `src/`, e devolve
+-- `boolean`: nenhuma autoria atravessa a borda.
+
+CREATE FUNCTION conta_habilitada(p_user uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+  SELECT p_user IS NULL
+      OR EXISTS (SELECT 1 FROM users u WHERE u.id = p_user AND u.deleted_at IS NULL)
+$$;
+
+COMMENT ON FUNCTION conta_habilitada(uuid) IS
+  'A conta dona desta linha ainda esta habilitada? Decisao do cliente de 17/10: conta desabilitada "nao e mais encontrada em nenhuma pagina ou funcionalidade". NULO devolve VERDADEIRO de proposito -- linha sem conta (achado de achador sem conta, entrada de diretorio nao reclamada) nao e linha de conta desabilitada, e trata-la como desabilitada apagaria da tela quem nunca teve dono. Ponto unico das superficies que NAO chegam ao tutor por `pets.owner_user_id`: candidatos de perdido, fila do painel da Rede, diretorio de profissionais e o vinculo do achado ao caso pelo share_token.';
+
 CREATE TRIGGER users_desabilitada_marca_pets
   AFTER UPDATE OF deleted_at ON users
   FOR EACH ROW
@@ -170,6 +224,7 @@ CREATE TRIGGER users_desabilitada_marca_pets
 -- Down Migration
 
 DROP FUNCTION IF EXISTS encontro_com_autor_ativo(uuid);
+DROP FUNCTION IF EXISTS conta_habilitada(uuid);
 DROP TRIGGER IF EXISTS users_desabilitada_marca_pets ON users;
 DROP FUNCTION IF EXISTS marcar_pets_na_conta_desabilitada();
 

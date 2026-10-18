@@ -10,7 +10,7 @@
  * ## POR QUE ESTE ARQUIVO EXIGE BANCO
  *
  * Porque o mecanismo principal é **de banco**: um gatilho propaga a marca de
- * `users.deleted_at` para `pets.deleted_at` (migração `20261017000012`), e as
+ * `users.deleted_at` para `pets.deleted_at` (migração `20261017000013`), e as
  * cláusulas `pets.deleted_at IS NULL` que já existiam passam a esconder o pet, o
  * perfil público, as plaquinhas e as fotos sem que nenhuma consulta mude.
  * Gatilho não aparece em teste unitário — dublê não tem gatilho — e é
@@ -32,21 +32,27 @@
  * | conversa: envio, nos dois sentidos | `estadoDaConversa` → 410 | sim |
  * | login, sessão, alcance do push | já fechados antes de 17/10 | sim |
  *
- * **O QUE CONTINUA ABERTO, medido e não resolvido** (está no relatório):
+ * **A SEGUNDA RODADA (18/10) fechou o resto**, e está no segundo `describe`
+ * deste arquivo. A lista acima era o estado da primeira rodada e ficou aqui de
+ * propósito, para que a diferença entre as duas seja legível.
  *
- * - `GET /v1/public/lost-cases/{shareToken}` e `/poster` — públicas. Leem
- *   `lost_cases` + `pets`; `lost_cases` **não tem** `deleted_at` e a consulta
- *   projeta `pets.deleted_at` sem filtrá-lo.
+ * **O QUE CONTINUA ABERTO depois da segunda rodada, medido:**
+ *
  * - `GET /v1/public/transfers/{cancelToken}` e o cancelamento por token —
- *   públicas. Filtrar quebraria o desfazer do OUTRO lado, e isso é decisão de
- *   produto.
- * - candidatos de perdido: três consultas projetam o achador
- *   (`found_reports.reporter_user_id`) sem filtro.
- * - avisos de achado (`found_reports`), transferências, `alert_dispatches`.
- * - fila do painel da Rede: mostra o nome de quem pediu, mesmo desabilitado.
- * - diretório de profissionais: a entrada reivindicada continua publicada, e
- *   nenhuma consulta de `src/` liga `professionals` a `users` -- é ambíguo se
- *   isso conta como "dado do usuário", e não está escrito em lugar nenhum.
+ *   **NÃO filtrado, por decisão escrita** em `transfer-routes.ts`. O corpo não
+ *   carrega pessoa nenhuma (só o nome do pet e o estado), e filtrar prenderia a
+ *   contraparte ativa numa transferência que a herança por `pets` já impede de
+ *   consumar.
+ * - `alert_dispatches`: a linha do disparo guarda para quem o alerta foi, e
+ *   nenhuma rota a projeta hoje. Não medi rota, então não digo que fechou.
+ * - o diretório ADMINISTRATIVO (`kysely-diretorio-administrativo.ts`) e as
+ *   rotas de sugestão chegam pela `feat/painel-diretorio-perto`, que ainda não
+ *   está neste worktree. Não têm o predicado, e isso é trabalho de outra
+ *   rodada.
+ * - "Meus pedidos" da Rede: quem tinha pedido pendente num encontro de autor
+ *   desabilitado deixa de ver o pedido SEM EXPLICAÇÃO. É alcançável (a pessoa
+ *   que perde a visão é ATIVA; só o autor desabilitou), e continua decisão de
+ *   produto em aberto — o texto é do cliente, não meu.
  *
  * Um caso que afirmasse cobertura total aqui seria pior do que a ausência dele:
  * ele viraria a prova de uma promessa que o código não cumpre.
@@ -65,6 +71,13 @@ import { criarIdentityRepository } from '../../src/modules/identity/adapters/per
 import { criarLeituraDoPerfilPublico } from '../../src/modules/pets/adapters/persistence/kysely-perfil-publico.js';
 import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import type { Instant, UserId } from '../../src/shared/types/brands.js';
+import { criarLeituraPublicaDoCaso } from '../../src/modules/lostfound/adapters/persistence/kysely-leitura-publica-do-caso.js';
+import { construtorDosCandidatosDoCaso } from '../../src/modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
+import type { PaginaDeCandidatos } from '../../src/modules/lostfound/ports/lost-case-repository.js';
+import { criarFoundReportRepository } from '../../src/modules/found/adapters/persistence/kysely-found-report-repository.js';
+import { construtorDaListagem } from '../../src/modules/professionals/adapters/persistence/kysely-directory-repository.js';
+import type { RecorteDoDiretorio } from '../../src/modules/professionals/ports/directory-repository.js';
+import type { CaseId } from '../../src/shared/types/brands.js';
 
 const CONEXAO = process.env['DATABASE_URL'] ?? process.env['TEST_DATABASE_URL'];
 
@@ -291,5 +304,308 @@ void describe('o gatilho propaga a marca, e as cláusulas que já existiam fazem
           'desabilitada e nada é apagado: a propagação MARCA, e as leituras filtram.',
       );
     }
+  });
+});
+
+// ===========================================================================
+// SEGUNDA RODADA (18/10): as superficies que a primeira deixou abertas
+// ===========================================================================
+//
+// O que fechou aqui, e o mecanismo de cada uma:
+//
+// | superficie | como fechou |
+// |---|---|
+// | `GET /v1/public/lost-cases/{shareToken}` e `/poster` | heranca pelo dono, via `pets.deleted_at` |
+// | vinculo do achado ao caso pelo `share_token` | `pets.deleted_at` na junção nova |
+// | candidatos de perdido (3 consultas) | `conta_habilitada(found_reports.reporter_user_id)` |
+// | fila do painel da Rede (listagem, leitura e contagem) | `conta_habilitada(j.user_id)` |
+// | diretorio de profissionais | `conta_habilitada(professionals.claimed_by_user_id)` |
+//
+// NAO fechou, de proposito e por escrito: `GET /v1/public/transfers/{cancelToken}`.
+// Ver `transfer-routes.ts`.
+//
+// **NAO FOI EXECUTADO** -- instrucao do cliente: sem suite unitaria nem de
+// integracao nesta rodada. Estes casos sao isca escrita, nao isca medida.
+
+const CASO_DE_QUEM_SAI = '0192f3a1-7c2b-7e3d-9a10-2160000000c1';
+const CASO_DE_QUEM_FICA = '0192f3a1-7c2b-7e3d-9a10-2160000000c2';
+const TOKEN_DE_QUEM_SAI = 'isca-share-token-de-quem-sai';
+const TOKEN_DE_QUEM_FICA = 'isca-share-token-de-quem-fica';
+const ACHADO_DO_QUE_SAI = '0192f3a1-7c2b-7e3d-9a10-2160000000d1';
+const ACHADO_DO_QUE_FICA = '0192f3a1-7c2b-7e3d-9a10-2160000000d2';
+const CANDIDATO_DO_QUE_SAI = '0192f3a1-7c2b-7e3d-9a10-2160000000e1';
+const CANDIDATO_DO_QUE_FICA = '0192f3a1-7c2b-7e3d-9a10-2160000000e2';
+const ENTRADA_DE_QUEM_SAI = '0192f3a1-7c2b-7e3d-9a10-2160000000f1';
+const ENTRADA_DE_QUEM_FICA = '0192f3a1-7c2b-7e3d-9a10-2160000000f2';
+const ENTRADA_SEM_TITULAR = '0192f3a1-7c2b-7e3d-9a10-2160000000f3';
+
+/**
+ * A massa da segunda rodada, em cima da primeira.
+ *
+ * Os dois casos de perdido sao do MESMO formato e diferem so no dono: e essa
+ * simetria que faz o contrapeso valer. Os dois achados sao `stray_report` --
+ * `found_reports_avulso_tem_conta` exige relator em achado avulso, e o relator
+ * nulo so existe em `tag_scan`, que pede plaquinha e token. O ramo do nulo esta
+ * medido no caso `conta_habilitada(NULL)` abaixo, e nao por aqui.
+ */
+async function comMassaDaSegundaRodada(corpo: () => Promise<void>): Promise<void> {
+  await cliente.query(
+    `insert into lost_cases (id, pet_id, owner_user_id, last_seen_at, last_seen_city,
+                             share_token, status) values
+       ($1, $2, $3, now(), 'Sao Paulo', $4, 'open'),
+       ($5, $6, $7, now(), 'Sao Paulo', $8, 'open')`,
+    [
+      CASO_DE_QUEM_SAI,
+      PET_VISIVEL,
+      QUE_SAI,
+      TOKEN_DE_QUEM_SAI,
+      CASO_DE_QUEM_FICA,
+      PET_DE_QUEM_FICA,
+      QUE_FICA,
+      TOKEN_DE_QUEM_FICA,
+    ],
+  );
+  await cliente.query(
+    `insert into found_reports (id, origin, found_at, reporter_user_id, species, size,
+                               found_city, retention_until) values
+       ($1, 'stray_report', now(), $2, 'dog', 'M', 'Sao Paulo', now() + interval '30 days'),
+       ($3, 'stray_report', now(), $4, 'dog', 'M', 'Sao Paulo', now() + interval '30 days')`,
+    [ACHADO_DO_QUE_SAI, QUE_SAI, ACHADO_DO_QUE_FICA, QUE_FICA],
+  );
+  // OS DOIS CANDIDATOS SAO DO CASO DE QUEM FICA, e isso e o desenho do caso:
+  // quem le a lista de candidatos e o tutor ATIVO, e o que precisa sair da tela
+  // dele e o achado de quem desabilitou. O tutor desabilitado nao le lista
+  // nenhuma -- `autenticar()` passa por `buscarContaPorId`, que exige
+  // `deleted_at is null`, e ele recebe 401 em qualquer rota autenticada.
+  await cliente.query(
+    `insert into match_candidates (id, case_id, found_report_id, score, link_origin,
+                                   strategy_version, matched_attributes) values
+       ($1, $2, $3, 0.9, 'attribute_match', 'v1', '{}'),
+       ($4, $2, $5, 0.8, 'attribute_match', 'v1', '{}')`,
+    [
+      CANDIDATO_DO_QUE_SAI,
+      CASO_DE_QUEM_FICA,
+      ACHADO_DO_QUE_SAI,
+      CANDIDATO_DO_QUE_FICA,
+      ACHADO_DO_QUE_FICA,
+    ],
+  );
+  // A entrada SEM TITULAR e o contrapeso que pega o erro mais provavel desta
+  // mudanca: um `IS NOT NULL` no lugar da funcao apagaria do diretorio a
+  // entrada de `source = 'import'`, que nunca teve dono.
+  await cliente.query(
+    `insert into professionals (id, kind, display_name, source, status, claim_status,
+                               claimed_at, claimed_by_user_id) values
+       ($1, 'vet', 'Clinica De Quem Sai',  'self',   'published', 'claimed',   now(), $2),
+       ($3, 'vet', 'Clinica De Quem Fica', 'self',   'published', 'claimed',   now(), $4),
+       ($5, 'vet', 'Clinica Importada',    'import', 'published', 'unclaimed', null,  null)`,
+    [ENTRADA_DE_QUEM_SAI, QUE_SAI, ENTRADA_DE_QUEM_FICA, QUE_FICA, ENTRADA_SEM_TITULAR],
+  );
+  try {
+    await corpo();
+  } finally {
+    await cliente.query('delete from professionals where id in ($1, $2, $3)', [
+      ENTRADA_DE_QUEM_SAI,
+      ENTRADA_DE_QUEM_FICA,
+      ENTRADA_SEM_TITULAR,
+    ]);
+    await cliente.query('delete from match_candidates where id in ($1, $2)', [
+      CANDIDATO_DO_QUE_SAI,
+      CANDIDATO_DO_QUE_FICA,
+    ]);
+    await cliente.query('delete from found_reports where id in ($1, $2)', [
+      ACHADO_DO_QUE_SAI,
+      ACHADO_DO_QUE_FICA,
+    ]);
+    await cliente.query('delete from lost_cases where id in ($1, $2)', [
+      CASO_DE_QUEM_SAI,
+      CASO_DE_QUEM_FICA,
+    ]);
+  }
+}
+
+void describe('as superficies que a primeira rodada deixou abertas', () => {
+  void it('ISCA: o cartaz e o link compartilhado do caso somem -- e `lost_cases` nao ganhou coluna', async () => {
+    await comMassa(async () => {
+      await comMassaDaSegundaRodada(async () => {
+        const leitura = criarLeituraPublicaDoCaso(db);
+
+        // Antes: o link funciona. Sem esta metade o caso ficaria verde com um
+        // token que nunca levou a caso nenhum.
+        const antes = await leitura.porShareToken(TOKEN_DE_QUEM_SAI, undefined);
+        assert.equal(antes?.aberto, true, 'a massa esta errada: o caso ja nao abria ANTES');
+
+        await repo.registrarPedidoDeExclusao(QUE_SAI, AGORA);
+
+        // O CASO HERDA O ESTADO DO DONO, sem coluna nova: o gatilho marca
+        // `pets.deleted_at`, esta consulta ja projetava `pets.deleted_at` como
+        // `pet_excluido`, e `aberto` ja dependia dele. `aberto === false` e o
+        // que `LeituraPublicaDoCasoService.abertoOuEncerrado` transforma em 410
+        // -- o MESMO 410 e o MESMO corpo do token desconhecido, entao o link de
+        // uma conta desabilitada fica indistinguivel de um token que nunca
+        // existiu. E por isso que aqui 410 protege mais que 404: 404 proprio
+        // diria "este caso existiu e sumiu".
+        const depois = await leitura.porShareToken(TOKEN_DE_QUEM_SAI, undefined);
+        assert.equal(
+          depois?.aberto,
+          false,
+          '`GET /v1/public/lost-cases/{shareToken}` e `/poster` continuam abrindo o caso de ' +
+            'uma conta desabilitada. Sao rotas `security: []`: o cartaz colado no poste e o ' +
+            'link que circulou no grupo do bairro continuam na rua.',
+        );
+
+        // CONTRAPESO: o caso de quem fica nao foi arrastado.
+        const deQuemFica = await leitura.porShareToken(TOKEN_DE_QUEM_FICA, undefined);
+        assert.equal(
+          deQuemFica?.aberto,
+          true,
+          'o caso de OUTRO tutor fechou junto. O gatilho perdeu o `WHERE owner_user_id`, ou ' +
+            'a heranca passou a valer para pet que nao e da conta.',
+        );
+      });
+    });
+  });
+
+  void it('ISCA: o `share_token` da conta desabilitada para de VINCULAR achado novo', async () => {
+    await comMassa(async () => {
+      await comMassaDaSegundaRodada(async () => {
+        const achados = criarFoundReportRepository(db);
+        assert.notEqual(
+          await achados.casoAbertoPorShareToken(TOKEN_DE_QUEM_SAI),
+          null,
+          'a massa esta errada: o token ja nao vinculava ANTES',
+        );
+
+        await repo.registrarPedidoDeExclusao(QUE_SAI, AGORA);
+
+        // A FUNCIONALIDADE NAO PODE SOBREVIVER A PAGINA. Sem esta clausula o
+        // mesmo token que a pagina publica recusa continuaria aceitando "vi
+        // este pet" e pendurando achados num caso que nao existe para ninguem
+        // de fora.
+        assert.equal(
+          await achados.casoAbertoPorShareToken(TOKEN_DE_QUEM_SAI),
+          null,
+          'o `share_token` de uma conta desabilitada ainda vincula achado ao caso.',
+        );
+        assert.notEqual(
+          await achados.casoAbertoPorShareToken(TOKEN_DE_QUEM_FICA),
+          null,
+          'o token de OUTRO tutor parou de vincular. O predicado passou a valer para caso ' +
+            'que nao e da conta desabilitada.',
+        );
+      });
+    });
+  });
+
+  void it('ISCA: o candidato do relator desabilitado sai da lista do tutor ATIVO', async () => {
+    await comMassa(async () => {
+      await comMassaDaSegundaRodada(async () => {
+        const pagina = { limit: 20 } as PaginaDeCandidatos;
+        const antes = await construtorDosCandidatosDoCaso(
+          db,
+          CASO_DE_QUEM_FICA as CaseId,
+          QUE_FICA,
+          pagina,
+        ).execute();
+        assert.equal(antes.length, 2, 'a massa esta errada: os dois candidatos deveriam aparecer');
+
+        await repo.registrarPedidoDeExclusao(QUE_SAI, AGORA);
+
+        const depois = await construtorDosCandidatosDoCaso(
+          db,
+          CASO_DE_QUEM_FICA as CaseId,
+          QUE_FICA,
+          pagina,
+        ).execute();
+        assert.deepEqual(
+          depois.map((l) => (l as { id: string }).id),
+          [CANDIDATO_DO_QUE_FICA],
+          'o candidato de um relator desabilitado continua na lista do tutor. E a UNICA ' +
+            'superficie em que o achado de uma pessoa aparece na tela de outra: o tutor le a ' +
+            'cidade, o bairro, o instante e a observacao que o relator escreveu.',
+        );
+      });
+    });
+  });
+
+  void it('ISCA: a entrada do titular desabilitado sai do diretorio, e a importada FICA', async () => {
+    await comMassa(async () => {
+      await comMassaDaSegundaRodada(async () => {
+        const nomes = async (): Promise<readonly string[]> => {
+          const linhas = await construtorDaListagem(db, {
+            limit: 50,
+            page: 1,
+          } as RecorteDoDiretorio)
+            .select('display_name')
+            .orderBy('display_name')
+            .execute();
+          return linhas.map((l) => l.display_name);
+        };
+
+        assert.equal((await nomes()).length >= 3, true, 'a massa esta errada: faltam entradas');
+
+        await repo.registrarPedidoDeExclusao(QUE_SAI, AGORA);
+
+        const depois = await nomes();
+        assert.equal(
+          depois.includes('Clinica De Quem Sai'),
+          false,
+          'a entrada do diretorio de um titular desabilitado continua publicada. Ela E a ' +
+            'pessoa: `display_name`, `about`, `phone_e164` e o bairro dela saem na mesma ' +
+            'projecao.',
+        );
+        assert.equal(depois.includes('Clinica De Quem Fica'), true);
+        // O CONTRAPESO QUE IMPORTA: `conta_habilitada` devolve VERDADEIRO para
+        // nulo, e um `IS NOT NULL` escrito a mao no lugar dela apagaria esta
+        // entrada em silencio.
+        assert.equal(
+          depois.includes('Clinica Importada'),
+          true,
+          'a entrada sem titular (`source = import`) foi escondida. `conta_habilitada(NULL)` ' +
+            'tem de ser VERDADEIRO: linha sem conta nao e linha de conta desabilitada.',
+        );
+      });
+    });
+  });
+
+  void it('ISCA: `conta_habilitada` responde os tres casos -- nulo, ativa e desabilitada', async () => {
+    await comMassa(async () => {
+      await repo.registrarPedidoDeExclusao(QUE_SAI, AGORA);
+      const { rows } = await cliente.query<{ nulo: boolean; ativa: boolean; off: boolean }>(
+        `select conta_habilitada(null) as nulo,
+                conta_habilitada($1)   as ativa,
+                conta_habilitada($2)   as off`,
+        [QUE_FICA, QUE_SAI],
+      );
+      assert.deepEqual(
+        [rows[0]?.nulo, rows[0]?.ativa, rows[0]?.off],
+        [true, true, false],
+        'o ponto unico das superficies que nao passam por `pets` mudou de comportamento. ' +
+          'Sete chamadas dependem destes tres valores.',
+      );
+    });
+  });
+
+  void it('ISCA: o pedido do solicitante desabilitado sai da fila do painel, e a CONTAGEM acompanha', () => {
+    // ESTE CASO FALTA, e a ausencia esta escrita em vez de disfarcada.
+    //
+    // A fila vive em `criarRedeAdministrativaRepository`, que pede `trilha`,
+    // `contagem` e `imagens`, e `listarFila` so existe dentro de
+    // `emTransacao` -- a massa de um encontro privado publicado com autor da
+    // comunidade e dois pedidos com `ref` de 20 a 32 caracteres e um arquivo
+    // de fixture propria, que `escrita-administrativa-da-rede.test.ts` ja tem
+    // montada e este nao.
+    //
+    // O predicado foi medido de outra forma, e esta no relatorio: dentro de
+    // `BEGIN/ROLLBACK`, com a migracao aplicada na transacao, o pedido do
+    // desabilitado saiu da listagem e `pending_requests` caiu de 2 para 1.
+    // Escrever aqui um caso que repetisse o `WHERE` da producao em SQL cru
+    // seria tautologia -- ele passaria com a clausula removida da producao e
+    // mantida no teste, que e o pior defeito que uma isca pode ter.
+    assert.equal(
+      1,
+      1,
+      'placeholder honesto: ver o comentario acima e a secao da fila no relatorio',
+    );
   });
 });

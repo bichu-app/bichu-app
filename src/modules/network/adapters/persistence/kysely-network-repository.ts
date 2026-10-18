@@ -219,7 +219,7 @@ type Consulta = ReturnType<typeof consultaBase>;
  * `WHERE`, e inclusive dentro de um COMENTARIO, porque ele compara texto puro.
  * (Medido: a primeira versao deste proprio comentario reprovou o portao, por
  * escrever o nome por extenso aqui.) A funcao de banco (migracao
- * `20261017000012`) devolve `boolean` e nao a autoria, entao o predicado existe
+ * `20261017000013`) devolve `boolean` e nao a autoria, entao o predicado existe
  * sem que o nome da coluna apareca aqui. Mesmo arranjo de
  * `network_events_do_autor`, da `20261001000005`.
  *
