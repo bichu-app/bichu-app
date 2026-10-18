@@ -148,6 +148,34 @@ function filtrosAplicados(query: QueryDeEntradas): Record<string, string> {
   return aplicados;
 }
 
+/**
+ * `DELETE /v1/admin/directory/reviews/{reviewRef}` -- a moderacao da avaliacao.
+ *
+ * **Entra na MESMA fatia que a avaliacao, e nao depois.** A publicacao e
+ * imediata (decisao do cliente de 18/10) e isto fala de negocio real com nome e
+ * endereco: publicacao imediata sem caminho de remocao e uma funcionalidade que
+ * nao se pode desligar.
+ *
+ * `DELETE` no metodo e EXCLUSAO LOGICA no banco, e as duas coisas nao se
+ * contradizem: o que o cliente da API apaga e a PUBLICACAO. A linha fica,
+ * porque o ADR-0011 manda a remocao ser registrada na trilha com o motivo.
+ *
+ * **O que o painel ainda NAO tem, e esta declarado para nao ser descoberto
+ * depois:** nao ha operacao de LISTAR as denuncias nem as avaliacoes. O
+ * administrador remove por `reviewRef`, que ele obtem pela leitura publica da
+ * pagina do local. A fila de moderacao navegavel e a continuacao natural e nao
+ * cabia aqui.
+ */
+export const rotaDeRemoverAvaliacao = defineRoute({
+  operationId: 'removeAdminDirectoryReview',
+  method: 'delete',
+  path: '/directory/reviews/:reviewRef',
+  effects: [],
+  adminRoles: ['admin'],
+  audit: { action: 'admin.directory_review.removed', resourceKind: 'professional_review' },
+  rateLimit: [{ dimension: ['account'], limit: 120, window: '10m', onExceed: 'deny_429' }],
+});
+
 export function registrarRotasDoDiretorioAdministrativo(
   app: RegistradorDeRotas,
   deps: DependenciasDasRotasDoDiretorioAdministrativo,
@@ -200,6 +228,21 @@ export function registrarRotasDoDiretorioAdministrativo(
         request.body as EdicaoDaEntrada,
       );
       return reply.header('ETag', alterada.etag).send(alterada.recurso);
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeRemoverAvaliacao,
+    { schema: { body: corpoDe(contrato, rotaDeRemoverAvaliacao.operationId) }, resolvedores },
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const corpo = (request.body ?? {}) as { reason?: unknown };
+      await diretorio.removerAvaliacao(
+        atorAdministrativoDe(request),
+        parametro(request, 'reviewRef'),
+        typeof corpo.reason === 'string' ? corpo.reason : '',
+      );
+      return reply.status(204).send();
     },
   );
 }

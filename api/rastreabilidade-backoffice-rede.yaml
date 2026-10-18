@@ -802,6 +802,27 @@ contrato_sem_tela:
   - operationId: updateAdminStoreTag
     resolucao: "tela: resolvido quando a tela existir"
     nota: "nao ha tela de vocabulario: renomear e desativar tag nao tem onde acontecer"
+  # A MODERACAO DAS AVALIACOES DO DIRETORIO (18/10/2026). O backend entra junto
+  # da funcionalidade, e a TELA do painel nao: a sessao Backoffice e dona dela.
+  #
+  # A operacao nasce AGORA, e nao no despacho da tela, porque a avaliacao
+  # PUBLICA NA HORA (decisao do cliente de 18/10, "como acontece na
+  # playstore") e isto fala de negocio real com nome e endereco. Publicacao
+  # imediata sem caminho de remocao e uma funcionalidade que nao se pode
+  # desligar -- entao a remocao entra na mesma fatia, mesmo sem tela.
+  #
+  # ENQUANTO A TELA NAO EXISTIR, o administrador remove por `reviewRef`, que ele
+  # obtem pela leitura publica da pagina do local. Funciona, e nao e uma tela.
+  #
+  # O QUE A TELA VAI PRECISAR, e nao existe no contrato ainda: LISTAR as
+  # denuncias (a fila, com `repeat_count` e o motivo) e LISTAR as avaliacoes de
+  # um local com o `reviewRef` a vista. As duas sao leitura de pessoa, entao
+  # entram com `x-audit` de leitura e teto por `rows_returned` (D55/D56), como
+  # `listAdminNetworkJoinRequests`. Sem elas o painel nao tem como DESCOBRIR o
+  # que moderar -- so como agir sobre o que alguem ja achou.
+  - operationId: removeAdminDirectoryReview
+    resolucao: "tela: resolvido quando a tela existir"
+    nota: "remove a avaliacao do ar com o motivo na trilha (exclusao logica: status='removed' + moderation_reason). A tela de moderacao do diretorio e da sessao Backoffice e ainda nao existe; faltam tambem as DUAS operacoes de leitura que ela exige (fila de denuncias e avaliacoes de um local com o reviewRef). Nao ha rota de restaurar: status aceita 'published' de volta, entao restaurar nao exige migracao, so a rota"
   - operationId: closeAllAdminSessions
     resolucao: "tela: resolvido quando a tela existir"
     nota: "sair de todas as sessoes administrativas nao tem botao"

@@ -363,4 +363,52 @@ export class DiretorioAdministrativo {
       return this.escrito(alterada);
     });
   }
+
+  /**
+   * Tira uma avaliacao do ar, com o motivo na trilha.
+   *
+   * **O motivo e obrigatorio, e e a diferenca entre moderacao e arbitrio.**
+   * Quem remove escreve por que, e isso fica legivel para quem auditar depois.
+   * O contrato ja o exige (`minLength: 3`); aqui ele e aparado e reconferido,
+   * porque 500 espacos passam por `minLength`.
+   *
+   * **`resourceKind` e `professional_review`, nao `directory_entry`**, e por
+   * isso este metodo nao usa `this.evento()`: o alvo e a avaliacao, e uma
+   * investigacao que procurasse pela entrada do diretorio nao acharia a
+   * remocao.
+   *
+   * O `before`/`after` carrega a NOTA e nao o texto. A nota explica o efeito na
+   * media -- que e o que muda na tela de todo mundo -- e o texto de uma
+   * avaliacao removida por ser ofensivo nao precisa ser recopiado para a
+   * trilha, onde ficaria sem o mesmo controle de acesso.
+   */
+  async removerAvaliacao(autor: Autor, ref: string, motivo: string): Promise<void> {
+    const aparado = motivo.trim();
+    if (aparado.length < 3 || aparado.length > 500) {
+      throw problemas.validacao([
+        { field: 'reason', code: 'required', message: 'Escreva o motivo da remoção.' },
+      ]);
+    }
+
+    return this.deps.repositorio.emTransacao(async (tx) => {
+      const removida = await tx.removerAvaliacao(ref, aparado, this.agora());
+      // 404 e nao 403, e tambem quando a avaliacao JA estava removida: o `ref`
+      // de algo que nao esta no ar nao tem alvo, e o motivo da primeira remocao
+      // e de quem auditar -- sobrescreve-lo apagaria a decisao que valeu.
+      if (removida === null) throw problemas.naoEncontrado();
+
+      await tx.registrarNaTrilha({
+        actorKind: 'admin',
+        actorAdminId: autor.adminAccountId,
+        actorIp: autor.ip,
+        correlationId: autor.correlationId,
+        action: 'admin.directory_review.removed',
+        resourceKind: 'professional_review',
+        resourceId: removida.id,
+        before: { status: 'published', rating: removida.notaAntes },
+        after: { status: 'removed', reason: aparado },
+        metadata: { surface: 'admin', session: autor.sessao },
+      });
+    });
+  }
 }

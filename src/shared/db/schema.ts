@@ -918,6 +918,89 @@ export type StatusDoPerfil = 'draft' | 'published' | 'hidden' | 'removed';
  */
 export type NivelDeVerificacao = 'none' | 'contact_verified' | 'document_verified';
 
+/**
+ * A avaliacao de um local do diretorio `Perto` (migracao `20261017000015`).
+ *
+ * Pedido do cliente de 18/10/2026: nota de 1 a 5 e recomendacao em texto,
+ * visiveis para os outros usuarios, "como acontece na playstore". O esquema e o
+ * do ADR-0011 secao 3, que o especificava desde 21/09 e cuja secao 5.4 o
+ * declarava fora daquela migracao por falta de autorizacao.
+ *
+ * **`author_user_id` ESTA AQUI, e a diferenca em relacao a coluna de quem
+ * convidou a entidade e o ponto.** Aquela carrega a marca `NUNCA sai do
+ * servidor` e `src/tools/portao-colunas-que-nao-saem.ts` reprova o nome dela em
+ * todo `.ts` de `src/` -- e por isso ela nao esta em `ProfessionalsTable`. Esta
+ * nao carrega a marca porque `src/` PRECISA dela na clausula `WHERE`: toda
+ * escrita de avaliacao e "a MINHA", resolvida por igualdade com quem chama
+ * (ADR-0021). O que nao acontece e ela ser PROJETADA: nenhuma leitura a
+ * seleciona para a resposta, e `DirectoryReview` nao tem campo de autor alem do
+ * nome de exibicao.
+ */
+export interface ProfessionalReviewsTable {
+  /** UUIDv7 gerado pela aplicacao, como em `pets` e em `professionals`. */
+  id: string;
+  /**
+   * O identificador publico e opaco (128 bits base64url), que e o que sai em
+   * resposta. Existe porque `id` e UUID interno e o ADR-0010 item 6 o proibe em
+   * saida publica. Sorteado por linha e nunca derivado do autor.
+   */
+  ref: string;
+  professional_id: string;
+  author_user_id: string;
+  /** Inteira de 1 a 5. O `CHECK` da migracao cobra a faixa no banco. */
+  rating: number;
+  /**
+   * A recomendacao em texto. **Nulo e o caso comum** (o cliente decidiu que o
+   * texto e opcional). Nunca string vazia: o `CHECK` recusa, para nao haver
+   * duas representacoes de "sem texto".
+   */
+  body: string | null;
+  /** Do ADR-0011. Nenhuma rota o preenche hoje e ele nao esta no contrato. */
+  service_kind: string | null;
+  created_at: Generated<Date>;
+  /** Quando o AUTOR editou. A moderacao mexe em `status` e nao toca aqui. */
+  edited_at: Date | null;
+  /**
+   * `published` e o DEFAULT, e o default E a decisao do cliente de 18/10: a
+   * avaliacao aparece na hora e **nao ha valor `pending`** porque nao ha fila.
+   *
+   * Nao confundir com a INDICACAO de local novo (`directory_suggestions` e
+   * `professionals.status`), que continua passando por revisao do
+   * administrador. Sao regras diferentes e uma nao afrouxa a outra.
+   */
+  status: Generated<'published' | 'hidden' | 'removed'>;
+  /** Escrito por quem moderou. **Nunca projetado em leitura publica.** */
+  moderation_reason: string | null;
+  moderated_at: Date | null;
+}
+
+/**
+ * A denuncia de uma avaliacao (migracao `20261017000015`).
+ *
+ * Contrapeso de a avaliacao publicar na hora. **Ela NAO esconde a avaliacao**:
+ * se escondesse, uma denuncia seria todo o custo de apagar a avaliacao de um
+ * concorrente. Enfileira para a moderacao, que decide e escreve o motivo em
+ * `professional_reviews.moderation_reason`.
+ *
+ * Tem coluna de usuario, ao contrario de `conversation_reports`, e a diferenca
+ * e que ali o achador pode nao ter conta: aqui a rota EXIGE conta, e sem a
+ * coluna nao haveria como deduplicar nem como recusar a denuncia da propria
+ * avaliacao.
+ */
+export interface ProfessionalReviewReportsTable {
+  id: string;
+  review_id: string;
+  reporter_user_id: string;
+  reason: 'spam' | 'offensive' | 'false_information' | 'not_about_this_place' | 'other';
+  detail: string | null;
+  /** A insistencia da MESMA pessoa, sem criar linha nova. */
+  repeat_count: Generated<number>;
+  created_at: Generated<Date>;
+  last_reported_at: Generated<Date>;
+  /** Escrito por quem modera. Nulo e "na fila". */
+  resolved_at: Date | null;
+}
+
 export interface ProfessionalsTable {
   /** UUIDv7 gerado pela aplicacao. Sem `DEFAULT` no banco, como em `pets`. */
   id: string;
@@ -1507,6 +1590,8 @@ export interface Database {
   conversation_reports: ConversationReportsTable;
   pet_transfers: PetTransfersTable;
   professionals: ProfessionalsTable;
+  professional_reviews: ProfessionalReviewsTable;
+  professional_review_reports: ProfessionalReviewReportsTable;
   entity_verifications: EntityVerificationsTable;
   directory_suggestions: DirectorySuggestionsTable;
   store_catalog_versions: StoreCatalogVersionsTable;

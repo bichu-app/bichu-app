@@ -3599,6 +3599,397 @@ paths:
         '401': { $ref: '#/components/responses/Unauthorized' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  # ----------------------------------------------------------------------
+  # A pagina de um local do diretorio, e a avaliacao dele
+  # ----------------------------------------------------------------------
+  #
+  # Pedido literal do cliente em 18/10/2026: "os locais indicados devem ser
+  # clicados, para visualizar mais informacoes e para que os usuarios possam
+  # dar pontuacao e fazer recomendacoes em texto, onde ficara disponivel para
+  # outros usuarios, como acontece na playstore".
+  #
+  # `getDirectoryEntry` ERA UMA DAS DUAS OPERACOES QUE O COMENTARIO ACIMA
+  # DECLAROU FORA. Ela entra agora porque o motivo de ter ficado fora -- "nao a
+  # vamos implementar hoje" -- deixou de valer: ela E a tela pedida, e entra
+  # COM implementacao. A outra (`getDirectoryReferenceData`) continua fora.
+  #
+  # O MODELO DE AVALIACAO NAO FOI INVENTADO AQUI. O ADR-0011 ja o especifica,
+  # tabela por tabela, na secao "O que acontece com as avaliacoes quando o
+  # profissional assume o perfil": `professional_reviews` com `rating 1..5`,
+  # `body`, `status`, `moderation_reason` e `UNIQUE (professional_id,
+  # author_user_id)`. A secao 5.4 daquele ADR dizia que a tabela "nao foi
+  # autorizada"; em 18/10/2026 ela foi, e e esta operacao. Nada aqui contraria
+  # o ADR; o que entra e a execucao da parte dele que estava esperando a
+  # decisao.
+  #
+  # O QUE DO ADR-0011 **NAO** ENTRA NESTA FATIA, e a ausencia e declarada:
+  # `professional_review_replies` -- o direito de resposta publica do
+  # profissional, uma por avaliacao. Ele depende de reivindicacao de perfil
+  # (`professional_claims`), que tambem nao existe: hoje nenhuma entrada do
+  # diretorio tem dono que possa responder. Enquanto nao houver, uma rota de
+  # resposta nao teria quem a chamasse.
+  #
+  # TRES REGRAS DE PUBLICACAO QUE SE CONFUNDEM COM FACILIDADE:
+  #
+  # 1. **A avaliacao de um local que JA EXISTE aparece na hora**, sem fila de
+  #    aprovacao (decisao do cliente, 18/10: "como acontece na playstore").
+  # 2. **A INDICACAO de um local NOVO continua passando por revisao do
+  #    administrador.** Sao coisas diferentes e a primeira nao afrouxa a
+  #    segunda. Nenhuma operacao desta secao cria entrada de diretorio.
+  # 3. **Avaliar exige e-mail confirmado**, a mesma regua de criar encontro
+  #    (`estadoParaCriarEncontro`). Ler nao exige nada alem de conta -- que a
+  #    rota de leitura ja exige pelo motivo de sempre (`phone_e164`).
+
+  /directory/entries/{slug}:
+    parameters:
+      - $ref: '#/components/parameters/DirectoryEntrySlug'
+    get:
+      operationId: getDirectoryEntry
+      tags: [directory]
+      x-effects: []
+      summary: A pagina de um profissional ou estabelecimento
+      description: |
+        A tela de detalhe que o cartao de `Perto` passou a abrir. Mesmos campos
+        do cartao, mais a pontuacao agregada.
+
+        **EXIGE CONTA, pelo mesmo motivo de `listDirectoryEntries`** e nao por
+        um motivo novo: ela devolve `phone_e164`, e
+        `src/tools/portao-contrato-publico.ts` reprova esse campo em qualquer
+        operacao alcancavel sem conta. Afrouxar o `security` daqui reprova
+        nominalmente, igual lá.
+
+        **So entrada publicada.** `slug` de rascunho, oculto ou removido
+        responde `404`, e nao `403`: a autorizacao mora na clausula `WHERE`
+        (ADR-0021) e um `403` confirmaria que aquele endereco existe. Quem
+        chega por link de um perfil que saiu do ar le "nao encontramos",
+        que e a verdade que ele tem direito de saber.
+
+        **Nenhum campo novo de cadastro apareceu aqui.** Site, e-mail,
+        WhatsApp, redes sociais, horario de funcionamento e foto **nao
+        existem** em `professionals` -- nao ha coluna e nao ha painel que as
+        preencha. Esta operacao devolve o que ha. Declarar campo que ninguem
+        pode preencher produziria uma tela com seis linhas vazias permanentes,
+        que e pior do que uma tela curta.
+
+        ## A distancia, e por que ela e NULA aqui com mais frequencia
+
+        Mesma regra de `listDirectoryEntries`: `distance_m` arredondada a 100 m
+        (ADR-0006), nula quando a entrada nao tem coordenada ou quando quem
+        chama nao tem localizacao de referencia valida. **A coordenada nao
+        entra pela requisicao** -- o servidor usa a que ja guarda (BICHUS-92).
+        Nao ha geocodificacao neste produto: `city`, `state` e `neighborhood`
+        sao rotulo e filtro, jamais fonte de ponto.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "leitura de uma linha, com teto por CONTA porque a rota exige conta. Mais generoso que a listagem (120/h) porque navegar entre locais e o uso normal da secao, e mais barato: uma linha, sem recorte geoespacial"
+      responses:
+        '200':
+          description: A entrada publicada, com a pontuacao agregada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectoryEntryDetail' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /directory/entries/{slug}/reviews:
+    parameters:
+      - $ref: '#/components/parameters/DirectoryEntrySlug'
+    get:
+      operationId: listDirectoryEntryReviews
+      tags: [directory]
+      x-effects: []
+      summary: As avaliacoes que outras pessoas escreveram
+      description: |
+        A lista que a pagina do local mostra, no formato que o cliente pediu:
+        quem escreveu, a nota, a data e o texto.
+
+        **A avaliacao de quem desabilitou a conta NAO E LISTADA, e nao vira
+        anonima.** O predicado e `conta_habilitada(uuid)` (migracao
+        `20261017000013`), que e o ponto unico da definicao e trata o NULO como
+        habilitado. A contagem e a media de `getDirectoryEntry` usam o MESMO
+        predicado, entao "128 avaliacoes" e a lista nunca discordam -- que e o
+        defeito que aparece quando a agregacao e o filtro da lista sao escritos
+        em dois lugares.
+
+        **`author_display_name` e nulavel**, e nulo nao e falha: conta sem nome
+        de exibicao e estado normal, e a tela escreve "Alguem da comunidade".
+        **Nenhuma outra coisa sobre o autor sai daqui** -- nem conta, nem
+        quantos pets tem, nem as outras avaliacoes dele. A BICHUS-174 proibe
+        expor vinculo entre duas pessoas, e uma lista de avaliacoes que
+        identificasse o autor de forma navegavel seria exatamente isso.
+
+        **A minha avaliacao tambem aparece nesta lista**, marcada com
+        `mine: true`, e nao em um bloco separado do servidor: a tela e que
+        decide tirá-la do fluxo e por o campo de edicao no lugar. Isso evita a
+        resposta em que a mesma avaliacao vem duas vezes.
+
+        **Texto vazio e normal.** Quem deu so a nota tem `body` nulo, e a lista
+        o inclui -- a nota e a avaliacao, e o texto e o opcional (decisao do
+        cliente, 18/10).
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 300
+          window: 1h
+          on_exceed: deny_429
+          note: "mesma folha da pagina do local, e paginada: quem rola a lista gasta mais de uma chamada por local"
+      parameters:
+        - name: sort
+          in: query
+          description: |
+            `recent` e o padrao, e e o padrao de proposito: numa pagina sem
+            historico a avaliacao de ontem informa mais do que a melhor de
+            2026. `rating_desc` e `rating_asc` existem porque o cliente pediu o
+            formato da Play Store, e la a ordenacao e um controle visivel.
+
+            **Nao ha ordenacao por "mais util"**: nao ha voto de utilidade
+            neste produto, e oferecer a ordem sem o voto ordenaria por nada.
+          schema: { type: string, enum: [recent, rating_desc, rating_asc], default: recent }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 20, default: 10 }
+      responses:
+        '200':
+          description: Uma pagina de avaliacoes publicadas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectoryReviewPage' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /directory/entries/{slug}/reviews/me:
+    parameters:
+      - $ref: '#/components/parameters/DirectoryEntrySlug'
+    put:
+      operationId: putMyDirectoryEntryReview
+      tags: [directory]
+      x-effects: []
+      summary: Grava a minha avaliacao deste local, ou atualiza a que ja escrevi
+      description: |
+        **`PUT` e nao `POST`, e a escolha e a regra de produto escrita no
+        metodo.** O cliente decidiu "uma avaliacao por pessoa por local, que
+        ela possa editar e apagar; enviar de novo ATUALIZA a dela, nao cria
+        segunda". Com `POST` o segundo envio seria `409` e a tela precisaria de
+        um segundo caminho ("ja existe, agora chame o outro verbo"); com `PUT`
+        o segundo envio e a propria edicao. O banco cobra o mesmo com
+        `UNIQUE (professional_id, author_user_id)`, entao a regra vale mesmo se
+        esta prosa for ignorada.
+
+        O corpo da resposta diz qual dos dois aconteceu em `created`, para a
+        tela escolher entre "Avaliacao publicada" e "Avaliacao atualizada".
+
+        ## Quem pode avaliar
+
+        **Conta com E-MAIL CONFIRMADO**, a mesma regua que o cliente definiu
+        para criar evento ("so usuarios com os dados validados conseguem criar
+        eventos"). Sem canal verificado: **`409`
+        `contact-channel-unverified`**, que e **o mesmo tipo de problema que
+        criar encontro devolve** -- reusado de proposito, e nao um codigo novo:
+        a regra e a mesma regra, e dois tipos para um conceito fariam o app
+        decidir por dois caminhos onde ha um. O que muda e o texto, e ele
+        precisa mudar ("confirme seu e-mail para propor um encontro" numa tela
+        de avaliar local manda a pessoa para o lugar errado).
+
+        **Este 409 e sobre QUEM CHAMA, nao sobre o recurso**, e por isso ele
+        nao contradiz o ADR-0021. A regra de `404` daquele ADR protege a
+        EXISTENCIA do recurso; aqui o recurso ja foi confirmado como existente
+        pela leitura, e o que falta e um atributo da propria conta de quem
+        pede. Responder `404` esconderia de alguem a razao pela qual o proprio
+        botao dele nao funciona.
+
+        **Na pratica isso e e-mail**, porque nada em `src/` grava
+        `phone_verified_at`: a coluna existe e so e zerada. O predicado e o
+        mesmo `OR` de `estadoParaCriarEncontro` (e-mail OU telefone
+        verificado), copiado dele e nao escolhido aqui.
+
+        **Visitante sem conta nao escreve e nao e surpreendido**: `401`, e a
+        tela nem oferece o campo (ela sabe se ha sessao antes de desenhar).
+
+        **A avaliacao APARECE NA HORA.** Nao ha fila de aprovacao, e a ausencia
+        e decisao do cliente de 18/10, pedida com estas palavras: "onde ficara
+        disponivel para outros usuarios, como acontece na playstore". **Nao
+        confundir com a INDICACAO de um local novo**, que continua passando por
+        revisao do administrador: aquela cria um negocio com nome e endereco,
+        esta opina sobre um que ja esta no ar.
+
+        O contrapeso de a publicacao ser imediata e a denuncia
+        (`reportDirectoryEntryReview`) e a remocao pelo administrador
+        (`removeAdminDirectoryReview`), que entram junto nesta mesma fatia
+        exatamente porque isto fala de negocio real com nome e endereco.
+
+        ## O TETO QUE NAO EXISTE, e a lacuna e declarada
+
+        O teto acima e por CONTA (20/h). Ele impede uma conta de escrever em
+        massa, e a unicidade `(local, autor)` ja limita a UMA avaliacao por
+        pessoa por local -- entao uma conta so nao consegue empilhar notas
+        contra um negocio.
+
+        **O que ele NAO cobre e o ataque por MUITAS contas contra UM local.**
+        Para isso o balde precisaria ser por ALVO, e nao por quem chama -- uma
+        entrada `[directory_entry]` em `x-rate-limit`. Ela nao entrou porque
+        `directory_entry` nao esta em `DIMENSOES_CONHECIDAS` de
+        `src/shared/http/aplicacao-de-teto.ts`, e aquele arquivo e explicito
+        sobre o que isso significa: **dimensao nova e decisao de politica, nao
+        detalhe de rota.** Foi a mesma razao que manteve `q` fora do contrato
+        ate 22/09.
+
+        Inventar a dimensao aqui decidiria sozinho uma politica de plataforma
+        -- e um teto por alvo tem um custo de produto real que precisa ser
+        aceito por quem decide: um local que vira assunto legitimo (uma boa
+        indicacao que circula num grupo) passa a recusar avaliacao de gente de
+        boa-fe. **Fica relatado e nao resolvido.** Enquanto nao houver, a
+        contencao desse caso e a denuncia e a remocao pelo administrador, que e
+        humana e posterior.
+
+        ## Avaliar perfil nao reivindicado e permitido
+
+        Regra do ADR-0011, e nao uma brecha: "Avaliacao de perfil nao
+        reivindicado e permitida e fica visivel: e o que da valor ao diretorio
+        antes de os profissionais chegarem". Como hoje NENHUMA entrada e
+        reivindicada, este e o unico caso que existe.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+          note: "VINTE por hora por conta, e o numero e baixo de proposito: isto escreve na reputacao publica de um negocio real, com nome e endereco. Uma pessoa honesta avalia um ou dois locais por sessao e reeditando o texto chega a cinco; quem quiser usar a rota como canal de spam contra um concorrente encosta no teto na primeira dezena. O balde e por CONTA e nao por IP porque a rota exige conta, e a conta exige e-mail confirmado -- o custo de conseguir um balde novo e um e-mail novo confirmado"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DirectoryReviewInput' }
+      responses:
+        '200':
+          description: |
+            A avaliacao gravada, ja publicada. `created` distingue a primeira
+            da edicao.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DirectoryReviewWritten' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: |
+            Sem canal de contato verificado
+            (`contact-channel-unverified`). **O mesmo tipo e o mesmo status de
+            `createNetworkEvent`**, porque e a mesma regra do cliente: so
+            quem tem os dados validados escreve. Declarado em linha e nao como
+            componente novo pelo mesmo motivo -- e assim que a operacao de
+            encontro o declara, e um componente aqui criaria a segunda forma de
+            dizer a mesma coisa.
+          content:
+            application/problem+json:
+              schema: { $ref: '#/components/schemas/Problem' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+    delete:
+      operationId: deleteMyDirectoryEntryReview
+      tags: [directory]
+      x-effects: []
+      summary: Apaga a minha avaliacao deste local
+      description: |
+        **So a minha**, e o dono e resolvido na clausula `WHERE` e nao num
+        ramo de permissao: a consulta apaga onde `author_user_id` e quem chama.
+        Nao ha caminho em que esta rota alcance a avaliacao de outra pessoa,
+        nem com o identificador dela na mao -- ela nao aceita identificador de
+        avaliacao nenhum.
+
+        **Apagar e do AUTOR, nunca do avaliado.** O ADR-0011 e explicito: o
+        profissional "ganha direito de resposta publica, uma por avaliacao, e
+        nunca o direito de apagar". Quem contesta denuncia, e quem remove e a
+        moderacao, com o motivo na trilha. Esta rota nao abre aquela porta: o
+        avaliado nao e o autor.
+
+        **Idempotente.** Nao ter avaliacao e chamar isto devolve `204`, e nao
+        `404`: o estado pedido ("eu nao tenho avaliacao aqui") e o estado
+        final, e um erro aqui faria a tela tratar como falha um toque duplo no
+        botao. O `404` fica reservado para o local que nao existe ou nao esta
+        publicado.
+
+        A media e a contagem do local caem junto, porque sao calculadas na
+        consulta e nao guardadas (ver `DirectoryRating`).
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 20
+          window: 1h
+          on_exceed: deny_429
+          note: "mesmo orcamento do PUT: apagar e regravar nao pode ser o caminho que contorna o teto de escrita"
+      responses:
+        '204': { description: Nao ha mais avaliacao minha neste local. }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
+  /directory/entries/{slug}/reviews/{reviewRef}/reports:
+    parameters:
+      - $ref: '#/components/parameters/DirectoryEntrySlug'
+      - $ref: '#/components/parameters/DirectoryReviewRef'
+    post:
+      operationId: reportDirectoryEntryReview
+      tags: [directory]
+      x-effects: []
+      summary: Denuncia uma avaliacao para a moderacao
+      description: |
+        O contrapeso de a avaliacao aparecer na hora. Sem ela, a unica resposta
+        a uma avaliacao caluniosa sobre um negocio com nome e endereco seria
+        esperar que alguem da equipe passasse por ali.
+
+        **A denuncia NAO esconde a avaliacao**, e isso e deliberado: se
+        esconder, uma denuncia e todo o custo de apagar a avaliacao de um
+        concorrente, e o primeiro uso que alguem daria a esta rota seria esse.
+        Ela enfileira para a moderacao, que decide e registra o motivo
+        (ADR-0011). Quem remove e `removeAdminDirectoryReview`.
+
+        **`202` e nao `200`**: o que esta rota promete e que o pedido foi
+        recebido, nao que alguem ja olhou. Prometer decisao seria mentir sobre
+        o que existe -- nao ha equipe de moderacao de plantao.
+
+        **Denunciar duas vezes a mesma avaliacao nao duplica a fila** e
+        tambem nao devolve erro: a segunda chamada responde `202` e incrementa
+        a contagem de repeticao, igual a `conversation_reports` (migracao
+        `20260928000009`). Erro aqui ensinaria a quem denuncia que ele ja
+        denunciou, o que nao e informacao dele e nao muda nada.
+
+        **A propria avaliacao nao pode ser denunciada por quem a escreveu**
+        (`400`, `code: own_review`): quem quer tirar a sua do ar usa o
+        `DELETE`, que e a porta certa e imediata.
+      security:
+        - bearerAuth: []
+      x-rate-limit:
+        - dimension: [account]
+          limit: 20
+          window: 24h
+          on_exceed: deny_429
+          note: "VINTE POR DIA por conta. Denuncia e um pedido de atencao humana, e um recurso escasso: vinte por dia e mais do que qualquer pessoa de boa-fe encontra, e pouco o bastante para que uma conta nao consiga encher a fila da moderacao sozinha. Janela de 24h e nao de 1h de proposito -- o abuso aqui e volume no dia, nao rajada no minuto"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DirectoryReviewReportInput' }
+      responses:
+        '202': { $ref: '#/components/responses/Accepted' }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /store/items:
     get:
       operationId: listStoreItems
@@ -6848,6 +7239,70 @@ paths:
         '409': { $ref: '#/components/responses/EventNotOpen' }
         '429': { $ref: '#/components/responses/TooManyRequests' }
 
+  # ----------------------------------------------------------------------
+  # A moderacao das avaliacoes do diretorio
+  # ----------------------------------------------------------------------
+  #
+  # Entra na MESMA fatia que a avaliacao, e nao depois, porque a publicacao e
+  # imediata (decisao do cliente de 18/10) e isto fala de negocio real com nome
+  # e endereco. Publicacao imediata sem remocao e uma funcionalidade que nao se
+  # pode desligar.
+  #
+  # O QUE O PAINEL AINDA NAO TEM, e esta declarado para nao ser descoberto
+  # depois: nao ha operacao de LISTAR as denuncias nem as avaliacoes. O
+  # administrador remove por `reviewRef`, que ele obtem hoje pela leitura
+  # publica da pagina do local. Uma fila de moderacao navegavel e a continuacao
+  # natural e nao cabia nesta fatia.
+
+  /admin/directory/reviews/{reviewRef}:
+    parameters:
+      - $ref: '#/components/parameters/DirectoryReviewRef'
+    delete:
+      operationId: removeAdminDirectoryReview
+      tags: [admin]
+      x-effects: []
+      summary: Remove uma avaliacao do ar, com o motivo na trilha
+      description: |
+        **Remocao e EXCLUSAO LOGICA**: `status` vai para `'removed'` e
+        `moderation_reason` guarda o motivo. A linha fica. O ADR-0011 manda a
+        remocao ser "decisao de moderacao nossa, registrada na trilha com o
+        motivo", e trilha que aponta para uma linha apagada nao e trilha.
+
+        A avaliacao sai imediatamente da lista, da media e da contagem --
+        porque as tres leem `status = 'published'` na mesma clausula.
+
+        **O motivo e OBRIGATORIO**, e e a diferenca entre moderacao e
+        arbitrio: quem remove escreve por que, e isso fica legivel para quem
+        auditar depois. Ele **nunca sai para o app**: nenhuma resposta de
+        leitura publica projeta `moderation_reason`.
+
+        **Nao ha rota de restaurar nesta fatia.** Ela e a continuacao obvia e
+        ficou de fora conscientemente; `status` aceita `'published'` de volta,
+        entao restaurar nao exige migracao nova.
+      security:
+        - adminSession: []
+          adminCsrf: []
+      x-admin-roles: [admin]
+      x-audit: { action: admin.directory_review.removed, resource_kind: professional_review }
+      x-rate-limit:
+        - dimension: [account]
+          limit: 120
+          window: 10m
+          on_exceed: deny_429
+          note: "balde compartilhado admin_write (D52)"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DirectoryReviewRemovalInput' }
+      responses:
+        '204': { description: A avaliacao saiu do ar e o motivo esta na trilha. }
+        '400': { $ref: '#/components/responses/ValidationFailed' }
+        '401': { $ref: '#/components/responses/AdminUnauthorized' }
+        '403': { $ref: '#/components/responses/AdminForbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooManyRequests' }
+
   /admin/network/join-requests/{requestRef}/decline:
     parameters:
       - $ref: '#/components/parameters/JoinRequestRef'
@@ -7673,6 +8128,27 @@ components:
       in: path
       required: true
       description: O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID.
+      schema: { type: string, minLength: 20, maxLength: 32, pattern: '^[A-Za-z0-9_-]+$' }
+    DirectoryEntrySlug:
+      name: slug
+      in: path
+      required: true
+      description: |
+        O endereco publico da entrada do diretorio, como
+        `listDirectoryEntries` o devolve. **Nao e UUID**, e nao pode ser:
+        `professionals.id` e identidade interna e o ADR-0010 item 6 a proibe em
+        saida publica.
+      schema: { $ref: '#/components/schemas/Slug' }
+    DirectoryReviewRef:
+      name: reviewRef
+      in: path
+      required: true
+      description: |
+        O identificador opaco da avaliacao (`DirectoryReview.ref`). **Nao e
+        UUID** e nao e derivado de quem escreveu: um identificador que
+        carregasse o autor permitiria cruzar as avaliacoes de uma pessoa entre
+        locais, que e o vinculo entre pessoas que a BICHUS-174 proibe. Mesmo
+        formato de `AdminJoinRequest.ref`.
       schema: { type: string, minLength: 20, maxLength: 32, pattern: '^[A-Za-z0-9_-]+$' }
     IfMatch:
       name: If-Match
@@ -9458,6 +9934,32 @@ components:
             **Este campo so pode existir porque a operacao exige conta.** Ele
             esta na lista de campos proibidos de
             `src/tools/portao-contrato-publico.ts`.
+        rating:
+          $ref: '#/components/schemas/DirectoryRating'
+          description: |
+            A pontuacao agregada, **para o cartao da lista mostrar a media e a
+            quantidade** -- o cliente pediu os dois "na lista e na pagina"
+            (18/10/2026).
+
+            **OPCIONAL, e a opcionalidade e deliberada e nao timidez.** O APK
+            publicado le esta resposta e nao conhece este campo; tornar o campo
+            obrigatorio seria mudanca de contrato para ele. Alem disso, uma
+            resposta que nao conseguiu agregar e melhor sem o campo do que com
+            media zero -- zero se le como "pessimo", e um local sem avaliacao
+            nao e pessimo. **O cartao sem `rating` nao desenha estrela
+            nenhuma**, e nao desenha "0,0".
+
+            **O custo da agregacao e por PAGINA e nao por entrada**, e isso
+            importa porque esta operacao ja carrega `x-effects:
+            [expensive_query]`: a contagem sai de um unico `GROUP BY` sobre
+            `professional_reviews (professional_id, status, created_at DESC)`
+            restrito aos no maximo 20 `professional_id` da pagina, e nao de 20
+            chamadas a `pontuacao_do_local`. Vinte chamadas a funcao seriam o
+            N+1 que uma lista paginada convida a escrever.
+
+            O recorte e o MESMO da pagina do local e da lista de avaliacoes
+            (`status = 'published'` e `conta_habilitada(author_user_id)`), para
+            a media do cartao e a da pagina nunca discordarem.
         verification: { $ref: '#/components/schemas/DirectoryVerification' }
         distance_m:
           type: integer
@@ -9801,6 +10303,333 @@ components:
             foi informado, porque "nada filtrado" e uma informacao e nao uma
             ausencia. Mesma forma de `DirectoryEntryPage.applied_filters`.
           additionalProperties: { type: string }
+    DirectoryRating:
+      type: object
+      description: |
+        A pontuacao agregada de um local, no formato que a Play Store tornou
+        legivel: a media, quantas pessoas avaliaram e como as notas se
+        distribuem.
+
+        **CALCULADA NA CONSULTA, nao materializada.** Nao ha coluna
+        `rating_average` em `professionals` e nao ha gatilho que a mantenha. O
+        motivo e consistencia e nao preguica: media guardada tem quatro
+        caminhos de invalidacao (criar, editar, apagar, remover pela moderacao)
+        mais um quinto invisivel -- o autor desabilitar a conta, que muda a
+        media de todo local que ele avaliou sem tocar em nenhuma avaliacao. Um
+        gatilho em `professional_reviews` nao enxerga esse quinto caminho, e a
+        media ficaria errada em silencio, que e o pior defeito desta classe.
+        Com `AVG` sobre o indice de `(professional_id, status)` a conta sai da
+        mesma consulta da pagina, e a pagina le UM local.
+
+        **O recorte da conta e identico ao da lista** (`status = 'published'` e
+        `conta_habilitada(author_user_id)`), e isso e o que impede "128
+        avaliacoes" sobre uma lista que mostra 126.
+
+        **`average` e nulo quando `count` e zero**, e nao zero: zero e uma nota
+        possivel de se ler como "pessimo", e um local sem avaliacao nao e
+        pessimo. A tela escreve "Ainda sem avaliacoes" e nao desenha estrela
+        nenhuma.
+      required: [count, histogram]
+      properties:
+        average:
+          type: number
+          format: double
+          nullable: true
+          minimum: 1
+          maximum: 5
+          description: |
+            A media das notas publicadas, **com uma casa decimal** (o servidor
+            arredonda; a tela nao decide). Nula quando `count` e zero.
+        count:
+          type: integer
+          minimum: 0
+          description: Quantas avaliacoes publicadas o local tem.
+        histogram:
+          type: object
+          description: |
+            Quantas avaliacoes em cada nota. **As cinco chaves vem sempre**,
+            inclusive com zero: a barra de uma nota que ninguem deu precisa
+            existir vazia, senao o grafico muda de forma e deixa de ser
+            comparavel entre locais.
+          required: ['1', '2', '3', '4', '5']
+          properties:
+            '1': { type: integer, minimum: 0 }
+            '2': { type: integer, minimum: 0 }
+            '3': { type: integer, minimum: 0 }
+            '4': { type: integer, minimum: 0 }
+            '5': { type: integer, minimum: 0 }
+          additionalProperties: false
+
+    DirectoryEntryDetail:
+      type: object
+      description: |
+        A pagina do local. **Os mesmos campos de `DirectoryEntrySummary`**,
+        mais `rating` e `my_review_ref`.
+
+        Ela repete os campos em vez de usar `allOf` com o resumo porque o
+        gerador de tipos de `src/`, `admin/` e `web/` produz uniao de
+        interseccao para `allOf`, e um campo nulavel atravessa isso perdendo a
+        nulabilidade. Os tres geradores leem este arquivo.
+
+        **Nao ganhou nenhum campo de cadastro que nao exista no banco.** Site,
+        e-mail, WhatsApp, redes sociais, horario e foto nao sao colunas de
+        `professionals`; nao ha de onde preenche-los e eles nao estao aqui.
+
+        **Nao tem `id`, nao tem coordenada, nao tem quem convidou e nao tem
+        quem e o titular** -- exatamente como o resumo, e pelos mesmos motivos
+        (ADR-0010 item 6 e BICHUS-174).
+      required: [slug, kind, display_name, verification, rating]
+      properties:
+        slug: { $ref: '#/components/schemas/Slug' }
+        kind: { $ref: '#/components/schemas/ProfessionalKind' }
+        display_name: { type: string, maxLength: 120 }
+        city: { type: string, nullable: true }
+        state: { type: string, nullable: true, minLength: 2, maxLength: 2 }
+        neighborhood: { type: string, nullable: true }
+        about: { type: string, nullable: true, maxLength: 2000 }
+        phone_e164:
+          type: string
+          nullable: true
+          description: |
+            Telefone **comercial** (ADR-0011 secao 4), e a unica acao de
+            contato que a pagina oferece. Mesmo aviso de
+            `DirectoryEntrySummary`: este campo so pode existir porque a
+            operacao exige conta -- ele esta na lista de proibidos de
+            `src/tools/portao-contrato-publico.ts`.
+        verification: { $ref: '#/components/schemas/DirectoryVerification' }
+        distance_m:
+          type: integer
+          nullable: true
+          description: |
+            Arredondada a 100 m, que e a grade do ADR-0006. Nula quando a
+            entrada nao tem coordenada ou quando quem chama nao tem localizacao
+            de referencia valida. **Nunca sai o ponto.**
+        rating: { $ref: '#/components/schemas/DirectoryRating' }
+        my_review_ref:
+          type: string
+          nullable: true
+          minLength: 20
+          maxLength: 32
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: |
+            O `ref` da MINHA avaliacao deste local, ou nulo se eu nao avaliei.
+
+            Existe para a tela saber, **antes de montar**, se desenha o campo
+            vazio ou a minha avaliacao com `Editar` e `Apagar`. Sem ele a tela
+            teria de varrer a paginacao inteira das avaliacoes procurando
+            `mine: true`, e a minha pode estar na pagina 7.
+        can_review:
+          type: boolean
+          description: |
+            **Se EU posso avaliar agora**, e nao se a funcionalidade existe. E
+            falso para conta sem e-mail confirmado -- a mesma regua de criar
+            encontro.
+
+            Ele existe para a tela nao oferecer um campo que vai levar `403`.
+            **Nao substitui a checagem do servidor**: `putMyDirectoryEntryReview`
+            reavalia a condicao, porque um campo de resposta e uma dica de
+            interface e nunca a autorizacao.
+        review_blocked_reason:
+          type: string
+          nullable: true
+          enum: [unverified_channel]
+          description: |
+            Por que `can_review` e falso, para a tela escrever a frase certa e
+            oferecer a acao certa (confirmar o e-mail) em vez de um "nao e
+            possivel" sem saida. Nulo quando `can_review` e verdadeiro.
+
+            Enum de um valor so hoje, e aberto de proposito: quando houver
+            bloqueio por moderacao ele entra aqui e nao em um segundo booleano.
+
+    DirectoryReview:
+      type: object
+      description: |
+        Uma avaliacao, como a lista e a pagina a mostram.
+
+        **Nao ha identificador do autor, de nenhuma forma.** Nem conta, nem
+        `slug`, nem ref opaco estavel entre locais. `ref` identifica a
+        AVALIACAO e e sorteado por linha: duas avaliacoes da mesma pessoa em
+        locais diferentes nao tem nada em comum na resposta. A BICHUS-174
+        proibe expor vinculo entre duas pessoas "inclusive como contagem e como
+        existencia", e um ref de autor permitiria montar o historico de
+        qualquer um.
+      required: [ref, rating, created_at, mine]
+      properties:
+        ref:
+          type: string
+          minLength: 20
+          maxLength: 32
+          pattern: '^[A-Za-z0-9_-]+$'
+          description: |
+            O identificador opaco da avaliacao, usado por
+            `reportDirectoryEntryReview` e pela remocao do painel. **Nao e
+            UUID** (ADR-0010 item 6) e nao e derivado do autor.
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: |
+            A nota, inteira de 1 a 5. Nunca nula: a nota E a avaliacao.
+        body:
+          type: string
+          nullable: true
+          maxLength: 1500
+          description: |
+            A recomendacao em texto. **Nula e estado normal e frequente**: o
+            cliente decidiu que o texto e opcional, e dar so a nota tem de
+            funcionar. A tela mostra o item com as estrelas e sem paragrafo.
+
+            **Texto puro, sem HTML e sem marcacao.** O servidor recusa `<` e
+            `>` no corpo (`400`) em vez de escapar na saida: escapar depende de
+            toda tela futura lembrar de escapar, e recusar na entrada vale uma
+            vez. Quem escrever "nota 10 <3" leva `400` -- custo aceito e
+            preferivel ao inverso.
+        author_display_name:
+          type: string
+          nullable: true
+          maxLength: 60
+          description: |
+            O nome de exibicao de quem escreveu, **ou nulo**. Nulo e estado
+            normal (conta sem nome), e a tela escreve "Alguem da comunidade" em
+            vez de deixar a linha muda.
+        created_at:
+          type: string
+          format: date-time
+          description: Quando a avaliacao foi publicada pela primeira vez.
+        edited_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: |
+            Quando o autor a editou pela ultima vez, ou nulo se nunca editou.
+            **A tela diz "editada"**: uma avaliacao reescrita depois de quem
+            respondeu a ela ter lido a primeira versao e um formato conhecido
+            de ma-fe, e marcar a edicao e o que o torna visivel.
+        mine:
+          type: boolean
+          description: |
+            Verdadeiro na avaliacao de quem chama. A tela a tira do fluxo e a
+            mostra no bloco de edicao, com `Editar` e `Apagar`.
+
+    DirectoryReviewPage:
+      type: object
+      required: [items, page, limit, total]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/DirectoryReview' }
+        page: { type: integer }
+        limit: { type: integer }
+        total:
+          type: integer
+          description: |
+            O total de avaliacoes publicadas do local, **o mesmo numero de
+            `DirectoryRating.count`**, porque as duas consultas usam o mesmo
+            recorte. Dois numeros diferentes na mesma tela e o defeito que a
+            duplicacao de recorte produz.
+
+    DirectoryReviewInput:
+      type: object
+      description: O corpo de `putMyDirectoryEntryReview`.
+      required: [rating]
+      properties:
+        rating:
+          type: integer
+          minimum: 1
+          maximum: 5
+          description: |
+            **Inteira de 1 a 5**, e obrigatoria. Nota fora da faixa e `400`, e
+            o `CHECK` da tabela cobra o mesmo no banco -- duas recusas, porque
+            uma delas e a que sobra se a outra for contornada.
+
+            Nao ha meia estrela: o cliente pediu nota de 1 a 5 e meia estrela
+            mudaria o tipo da coluna depois de haver dado gravado.
+        body:
+          type: string
+          nullable: true
+          maxLength: 1500
+          description: |
+            **Opcional.** Enviar so a nota funciona, e e o caso comum.
+
+            O limite de 1500 e o limite da coluna, nao um numero de tela: o
+            `CHECK` em `professional_reviews.body` recusa 1501. Texto maior e
+            `400`.
+
+            **Sem HTML**: `<` e `>` sao recusados (`400`,
+            `code: html_not_allowed`). String vazia ou so com espaco e tratada
+            como ausente e grava nulo -- gravar `''` criaria duas
+            representacoes de "sem texto" e toda tela teria de conhecer as
+            duas.
+      additionalProperties: false
+
+    DirectoryReviewWritten:
+      type: object
+      description: A resposta de `putMyDirectoryEntryReview`.
+      required: [review, created, rating]
+      properties:
+        review: { $ref: '#/components/schemas/DirectoryReview' }
+        created:
+          type: boolean
+          description: |
+            Verdadeiro quando esta foi a PRIMEIRA avaliacao desta pessoa neste
+            local; falso quando o envio atualizou a que ja existia.
+
+            A tela escolhe entre "Avaliacao publicada" e "Avaliacao
+            atualizada" com este campo. Sem ele ela teria de adivinhar pelo
+            estado que tinha antes, que e exatamente o estado que pode estar
+            velho.
+        rating:
+          $ref: '#/components/schemas/DirectoryRating'
+          description: |
+            A pontuacao do local **ja com esta avaliacao dentro**. Vem na mesma
+            resposta para a tela nao precisar de uma segunda chamada so para
+            atualizar a media que o proprio toque acabou de mudar -- e porque
+            uma segunda chamada deixaria a media velha na tela se ela falhasse.
+
+    DirectoryReviewReportInput:
+      type: object
+      description: |
+        O corpo de `reportDirectoryEntryReview`.
+
+        **Motivo de lista fechada e nao texto livre**, pelo mesmo desenho de
+        `conversation_reports` (migracao `20260928000009`): a fila de moderacao
+        precisa ser triada, e campo livre nao tria. O `detail` existe para o
+        caso que a lista nao cobre, e e opcional.
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          enum: [spam, offensive, false_information, not_about_this_place, other]
+          description: |
+            `not_about_this_place` existe porque e o caso mais comum e mais
+            facil de verificar num diretorio: a pessoa avaliou o lugar errado.
+            `false_information` e o caso que motiva a rota existir -- negocio
+            real com nome e endereco, e uma afirmacao falsa sobre ele tem
+            consequencia fora do app.
+        detail:
+          type: string
+          nullable: true
+          maxLength: 1000
+          description: |
+            Opcional, e o mesmo limite de `conversation_reports.detail`. Sem
+            HTML, como o corpo da avaliacao.
+      additionalProperties: false
+
+    DirectoryReviewRemovalInput:
+      type: object
+      description: O corpo de `removeAdminDirectoryReview`.
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 3
+          maxLength: 500
+          description: |
+            **Obrigatorio**: e a diferenca entre moderacao e arbitrio. Vai para
+            `professional_reviews.moderation_reason` e para a trilha, e **nunca
+            sai para o app** -- nenhuma leitura publica projeta esta coluna.
+      additionalProperties: false
+
     StoreCategory:
       type: string
       pattern: '^[a-z][a-z0-9_]{1,29}$'

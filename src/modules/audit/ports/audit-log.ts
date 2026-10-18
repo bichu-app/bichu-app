@@ -274,6 +274,14 @@ export const ACOES_ADMINISTRATIVAS = [
   // todo valor desta lista precisa estar no contrato.
   'admin.directory_entry.created',
   'admin.directory_entry.updated',
+  // 18/10/2026: a moderacao das AVALIACOES do diretorio. `resource_kind` e
+  // `professional_review` e nao `directory_entry`: o alvo e a avaliacao, e uma
+  // investigacao que procurasse pela entrada nao acharia a remocao.
+  //
+  // Nao ha `.restored` ainda, e a ausencia e declarada: `status` aceita
+  // `'published'` de volta, entao restaurar nao exige migracao -- so a rota,
+  // que nao cabia nesta fatia.
+  'admin.directory_review.removed',
   // A fila do pedido da plaquinha da coleira. SOLICITAR nao e EMITIR: emitir e
   // `issuePetTag` (irreversivel, ADR-0004) e sai na trilha do app; o que entra
   // aqui e a decisao do painel sobre o OBJETO FISICO. Nao ha `.listed`: a fila

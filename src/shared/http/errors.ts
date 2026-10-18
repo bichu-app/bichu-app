@@ -417,6 +417,29 @@ export const problemas = {
     }),
 
   /**
+   * 409. Avaliar um local do diretório exige canal de contato verificado.
+   *
+   * **Mesmo `type` de `canalDeContatoNaoVerificadoParaEncontro`, e isso é o
+   * desenho e não descuido**: a regra é literalmente a mesma regra do cliente
+   * — "só usuários com os dados validados" —, e dois `type` para um conceito
+   * fariam o app decidir por dois caminhos onde há um.
+   *
+   * O que muda é o **texto**, e ele precisa mudar: "confirme seu e-mail para
+   * propor um encontro" numa tela de avaliar um veterinário manda a pessoa
+   * para o lugar errado. É a mesma razão pela qual o irmão de cima existe
+   * separado de `canalDeContatoNaoVerificado`.
+   *
+   * **Na prática isso é e-mail**, porque nada em `src/` grava
+   * `phone_verified_at`. O `next_action` é o mesmo por isso.
+   */
+  canalDeContatoNaoVerificadoParaAvaliar: (): AppError =>
+    new AppError('contact-channel-unverified', 'Confirme seu e-mail para avaliar', {
+      detail:
+        'A avaliação aparece com o seu nome na página de um negócio real. Confirme seu e-mail e tente de novo.',
+      nextAction: 'verify_email',
+    }),
+
+  /**
    * 409. A conta já tem três encontros ativos (ADR-0025 emenda 3).
    *
    * Separado de `open-case-limit-reached` porque a **saída é diferente**: lá a

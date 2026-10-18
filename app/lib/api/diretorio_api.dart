@@ -105,4 +105,142 @@ class DiretorioApi {
     );
     return ReciboDaSugestao.doJson(json);
   }
+
+  // -------------------------------------------------------------------------
+  // A PAGINA DO LOCAL E AS AVALIACOES (18/10/2026)
+  // -------------------------------------------------------------------------
+  // As cinco operacoes que o pedido do cliente trouxe. **Nenhuma delas trata
+  // falha**, pela mesma razao escrita em [listar]: quem chama precisa
+  // distinguir "este local nao tem avaliacao" de "nao consegui perguntar", e
+  // um `catch` que devolvesse pagina vazia produziria o estado zero "Ainda sem
+  // avaliacoes" sobre um local com 128 -- o estado vazio que parece sucesso.
+  //
+  // O `slug` passa por `Uri.encodeComponent` em todas: ele vem da RESPOSTA do
+  // servidor e nao da tela, e montar caminho com interpolacao crua e como um
+  // slug inesperado vira uma rota que nao existe.
+
+  /// `GET /v1/directory/entries/{slug}` (`getDirectoryEntry`) — a pagina do
+  /// local.
+  ///
+  /// **Exige conta, e pelo mesmo motivo de [listar]** e nao por um motivo
+  /// novo: ela devolve `phone_e164`, e `src/tools/portao-contrato-publico.ts`
+  /// reprova esse campo em qualquer operacao alcancavel sem conta. Por isso
+  /// nao ha `exigeToken: false` aqui, e nem poderia haver.
+  ///
+  /// **`slug` de rascunho, oculto ou removido responde 404 e nao 403**
+  /// (ADR-0021): a autorizacao mora na clausula `WHERE`, e um 403
+  /// confirmaria que aquele endereco existe. A tela trata o 404 como "nao
+  /// encontramos", que e a verdade que quem chegou por link tem direito de
+  /// saber.
+  Future<DetalheDoLocal> detalhar(String slug) async {
+    final json = await _api.get('/directory/entries/${Uri.encodeComponent(slug)}');
+    return DetalheDoLocal.doJson(json);
+  }
+
+  /// `GET /v1/directory/entries/{slug}/reviews`
+  /// (`listDirectoryEntryReviews`) — as avaliacoes que outras pessoas
+  /// escreveram.
+  ///
+  /// **A minha tambem vem nesta lista**, marcada com `mine: true`, e nao num
+  /// bloco separado do servidor: quem tira a minha do fluxo e poe o campo de
+  /// edicao no lugar e a TELA. Isso evita a resposta em que a mesma avaliacao
+  /// chega duas vezes.
+  ///
+  /// `limite` tem teto 20 no contrato e **padrao 10**, que e o padrao do
+  /// contrato e nao um numero desta classe.
+  Future<PaginaDeAvaliacoes> avaliacoes(
+    String slug, {
+    OrdemDasAvaliacoes ordem = OrdemDasAvaliacoes.recentes,
+    int pagina = 1,
+    int limite = 10,
+  }) async {
+    final json = await _api.get(
+      '/directory/entries/${Uri.encodeComponent(slug)}/reviews',
+      query: <String, String>{
+        'sort': ordem.codigo,
+        'page': '$pagina',
+        'limit': '$limite',
+      },
+    );
+    return PaginaDeAvaliacoes.doJson(json);
+  }
+
+  /// `PUT /v1/directory/entries/{slug}/reviews/me`
+  /// (`putMyDirectoryEntryReview`) — grava a minha avaliacao, **ou atualiza a
+  /// que eu ja escrevi**.
+  ///
+  /// **`PUT` e nao `POST`, e a escolha e a regra de produto escrita no
+  /// metodo**: uma avaliacao por pessoa por local, que ela possa editar. Com
+  /// `POST` o segundo envio seria 409 e a tela precisaria de um segundo
+  /// caminho; com `PUT` o segundo envio **e** a edicao. Quem distingue os dois
+  /// na resposta e `created`, e e dele que sai a frase da tela.
+  ///
+  /// **Nao trata recusa.** O 403 de `unverified_channel` e o 400 de
+  /// `html_not_allowed` sobem como `FalhaDaApi` e a tela os nomeia: engoli-los
+  /// aqui faria o texto da pessoa desaparecer sem explicacao.
+  ///
+  /// Sem `Idempotency-Key`, pela razao escrita em `ApiClient.put`.
+  Future<AvaliacaoGravada> gravarMinhaAvaliacao(
+    String slug, {
+    required int nota,
+    String? texto,
+  }) async {
+    final json = await _api.put(
+      '/directory/entries/${Uri.encodeComponent(slug)}/reviews/me',
+      corpo: corpoDaAvaliacao(nota: nota, texto: texto),
+    );
+    return AvaliacaoGravada.doJson(json);
+  }
+
+  /// `DELETE /v1/directory/entries/{slug}/reviews/me`
+  /// (`deleteMyDirectoryEntryReview`) — apaga a minha avaliacao deste local.
+  ///
+  /// **So a minha, e o dono e resolvido na clausula `WHERE`**: esta rota nao
+  /// aceita identificador de avaliacao nenhum, e nao existe caminho em que ela
+  /// alcance a de outra pessoa. Apagar e do AUTOR, nunca do avaliado
+  /// (ADR-0011): quem contesta denuncia, e quem remove e a moderacao.
+  ///
+  /// **Idempotente**: nao ter avaliacao e chamar isto devolve 204, nao 404. O
+  /// 404 fica reservado para o local que nao existe ou nao esta publicado, e e
+  /// por isso que um toque duplo no botao nao vira falha na tela.
+  ///
+  /// Devolve `void`: 204 nao tem corpo, e inventar um retorno aqui daria a
+  /// tela um valor que ela teria de ignorar.
+  Future<void> apagarMinhaAvaliacao(String slug) async {
+    await _api.delete(
+      '/directory/entries/${Uri.encodeComponent(slug)}/reviews/me',
+    );
+  }
+
+  /// `POST /v1/directory/entries/{slug}/reviews/{reviewRef}/reports`
+  /// (`reportDirectoryEntryReview`) — denuncia uma avaliacao para a moderacao.
+  ///
+  /// **A denuncia NAO esconde a avaliacao**, e isso e deliberado: se
+  /// escondesse, uma denuncia seria todo o custo de apagar a avaliacao de um
+  /// concorrente. Ela enfileira, e quem remove e o painel.
+  ///
+  /// **202 e nao 200**: o que a rota promete e que o pedido foi recebido, nao
+  /// que alguem ja olhou. A tela nao pode escrever "analisamos" -- nao ha
+  /// equipe de moderacao de plantao.
+  ///
+  /// **Denunciar duas vezes a mesma avaliacao nao duplica a fila e nao da
+  /// erro**: a segunda chamada responde 202 e incrementa a contagem de
+  /// repeticao. Erro aqui ensinaria a quem denuncia que ele ja denunciou, o
+  /// que nao e informacao dele.
+  ///
+  /// `Idempotency-Key` fica de fora porque o servidor ja desduplica por
+  /// (quem, avaliacao): uma chave aqui seria uma segunda desduplicacao, com
+  /// janela diferente, sobre algo que nao cria recurso novo.
+  Future<void> denunciarAvaliacao(
+    String slug,
+    String referenciaDaAvaliacao, {
+    required MotivoDaDenuncia motivo,
+    String? detalhe,
+  }) async {
+    await _api.post(
+      '/directory/entries/${Uri.encodeComponent(slug)}'
+      '/reviews/${Uri.encodeComponent(referenciaDaAvaliacao)}/reports',
+      corpo: corpoDaDenuncia(motivo: motivo, detalhe: detalhe),
+    );
+  }
 }

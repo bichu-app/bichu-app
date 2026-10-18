@@ -84,6 +84,7 @@ import { createDb, type Db, type DbHandle } from '../../src/shared/db/pool.js';
 import { semear } from '../../src/bin/seed.js';
 import { MASSA_DO_DIRETORIO, PUBLICADAS } from '../../src/bin/massa-do-diretorio.js';
 import { criarDirectoryRepository } from '../../src/modules/professionals/adapters/persistence/kysely-directory-repository.js';
+import { criarIdGenerator } from '../../src/shared/id/uuidv7.js';
 import { projetarEntrada } from '../../src/modules/professionals/domain/entrada-do-diretorio.js';
 import type { DirectoryRepository } from '../../src/modules/professionals/ports/directory-repository.js';
 import type { Instant, UserId } from '../../src/shared/types/brands.js';
@@ -260,7 +261,7 @@ void describe('o diretorio de `Perto`, contra Postgres', { skip: CONEXAO === und
     db = banco.db;
     cliente = new pg.Client({ connectionString: CONEXAO });
     await cliente.connect();
-    repo = criarDirectoryRepository(db);
+    repo = criarDirectoryRepository(db, criarIdGenerator(() => Date.now()));
   });
 
   after(async () => {

@@ -840,7 +840,7 @@ export async function main(): Promise<void> {
     registrarRotasDeIdentidade(escopo, dependenciasDasRotas);
     registrarRotasDeReferencia(escopo, criarReferenceDataRepository(db));
     registrarRotasDoDiretorio(escopo, {
-      diretorio: criarDirectoryRepository(db),
+      diretorio: criarDirectoryRepository(db, ids),
       autenticador: {
         autenticar: async (token: string) => ({ userId: (await auth.autenticar(token)).conta.id }),
       },
