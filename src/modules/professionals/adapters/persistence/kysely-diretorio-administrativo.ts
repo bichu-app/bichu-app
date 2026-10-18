@@ -206,6 +206,25 @@ function comRecorte<T extends { where: unknown }>(consulta: T, recorte: RecorteD
   return c as unknown as T;
 }
 
+/**
+ * A transacao do diretorio, a partir de uma transacao do Kysely ja aberta.
+ *
+ * **Exportada de proposito, e nao por organizacao de arquivo**: a aprovacao da
+ * fila de indicacoes (`kysely-fila-de-indicacoes.ts`) precisa gravar a entrada
+ * do diretorio na MESMA transacao em que marca a indicacao aprovada, e ela faz
+ * isso chamando `inserirEntrada` daqui. Uma segunda escrita de entrada seria a
+ * segunda definicao de como uma entrada nasce -- `status`, `source`,
+ * `claim_status`, `version` e os dois carimbos --, e e isso que o ADR-0023
+ * secao 2 proibe. Quem compoe as duas transacoes e o adaptador da fila; este
+ * arquivo continua sem saber que a fila existe.
+ */
+export function criarTransacaoDoDiretorio(
+  trx: DbTransaction,
+  deps: DependenciasDoDiretorioAdministrativo,
+): TransacaoDoDiretorio {
+  return transacao(trx, deps);
+}
+
 function transacao(trx: DbTransaction, deps: DependenciasDoDiretorioAdministrativo): TransacaoDoDiretorio {
   return {
     async entradaPorSlug(slug: string) {

@@ -111,6 +111,10 @@ import { registrarRotasDoDiretorioAdministrativo } from '../modules/professional
 import { criarDiretorioAdministrativoRepository } from '../modules/professionals/adapters/persistence/kysely-diretorio-administrativo.js';
 import { DiretorioAdministrativo } from '../modules/professionals/application/diretorio-administrativo.js';
 import { registrarRotaDeSugestaoDoDiretorio } from '../modules/professionals/adapters/http/directory-suggestion-routes.js';
+// 18/10/2026. A FILA DE REVISAO das indicacoes: o menu que faltava no painel.
+import { registrarRotasDaFilaDeIndicacoes } from '../modules/professionals/adapters/http/admin-directory-suggestion-routes.js';
+import { criarFilaDeIndicacoesRepository } from '../modules/professionals/adapters/persistence/kysely-fila-de-indicacoes.js';
+import { FilaDeIndicacoes } from '../modules/professionals/application/fila-de-indicacoes.js';
 import { SugestaoDoDiretorio } from '../modules/professionals/application/sugestao-do-diretorio.js';
 // As duas conferencias de texto que `professionals` NAO reimplementa. A
 // composicao mora aqui, fora de `src/modules/`, porque
@@ -392,6 +396,28 @@ export async function main(): Promise<void> {
     }),
     ids,
     clock: systemClock,
+  });
+
+  // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`: a queixa do
+  // cliente era que "no backoffice nao tem um menu para aprovar os
+  // profissionais que as pessoas estao indicando". A indicacao grava em
+  // `directory_suggestions` desde 17/10 e nunca houve quem lesse essa fila.
+  //
+  // A trilha e OUTRA instancia da mesma fabrica, e nao a de
+  // `diretorioAdministrativo`: `criarTrilhaTransacional` nao guarda estado
+  // entre chamadas, e compartilhar a instancia amarraria dois repositorios por
+  // um objeto que nenhum dos dois precisa dividir.
+  //
+  // `conferencias` e o MESMO par que a sugestao do aplicativo usa: o motivo da
+  // recusa passa pelo detector de D59 que ja existe, e nao por um segundo.
+  const filaDeIndicacoes = new FilaDeIndicacoes({
+    repositorio: criarFilaDeIndicacoesRepository({
+      db,
+      trilha: criarTrilhaTransacional({ ids, clock: systemClock, ipHmacKey: config.ipHmacKey }),
+    }),
+    ids,
+    clock: systemClock,
+    conferencias: { errosDeTextoDeUsuario, handleDoInstagram },
   });
 
   // A sessao do backoffice. Ela e tambem a porta que a guarda do prefixo
@@ -971,6 +997,13 @@ export async function main(): Promise<void> {
           // de qualquer destino vinham de `src/bin/seed.ts`.
           registrarRotasDoDiretorioAdministrativo(administrativo, {
             diretorio: diretorioAdministrativo,
+            contrato,
+          });
+          // 18/10/2026. A FILA DE REVISAO das indicacoes do `Perto`. Fica ao
+          // lado da escrita do diretorio de proposito: aprovar uma indicacao
+          // GRAVA uma entrada, pela mesma transacao e pela mesma funcao.
+          registrarRotasDaFilaDeIndicacoes(administrativo, {
+            fila: filaDeIndicacoes,
             contrato,
           });
           // A fila dos pedidos da plaquinha. A TELA e da sessao Backoffice;

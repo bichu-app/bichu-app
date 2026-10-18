@@ -3730,6 +3730,219 @@ export interface paths {
         patch: operations["updateAdminDirectoryEntry"];
         trace?: never;
     };
+    "/admin/directory/suggestions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * A fila de indicacoes que a comunidade mandou para o Perto
+         * @description So existe no painel: nenhuma operacao do aplicativo lista indicacao de
+         *     ninguem, nem como contagem. Sem filtro, vem a fila de `pending`, da
+         *     indicacao mais antiga para a mais nova -- a unica ordem justa numa fila
+         *     de trabalho humano, e e a ordem do indice parcial
+         *     `directory_suggestions_fila_de_revisao`.
+         *
+         *     **A indicacao decidida nao sai da fila nem do banco**: com
+         *     `review_status=approved` ou `review_status=declined` ela continua
+         *     legivel, com o motivo da recusa e o endereco da entrada que a aprovacao
+         *     produziu. Recusar nao apaga.
+         *
+         *     **`pending_total` e a contagem do aviso do menu**, e ela ignora o filtro
+         *     de proposito: o numero que o item da navegacao mostra responde "quanto
+         *     trabalho esta esperando", nao "quantas linhas esta pagina trouxe". Ele
+         *     passa pelo MESMO filtro de conta desabilitada da listagem -- um numero
+         *     que contasse o que a lista nao mostra faria o painel apontar para uma
+         *     fila vazia.
+         *
+         *     **Nada de quem indicou.** Nem nome, nem contagem por entidade, nem a
+         *     existencia de uma conta por tras: a coluna da autoria nunca sai do
+         *     servidor (ADR-0011 secao 4). O que a fila mostra e a ENTIDADE indicada,
+         *     mais o recado que a pessoa escreveu para quem revisa.
+         */
+        get: operations["listAdminDirectorySuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma indicacao da fila
+         * @description A indicacao em qualquer estado da revisao, para a tela de decisao poder
+         *     mostrar o contato publico e o recado inteiros antes de alguem decidir.
+         *
+         *     **Nao ha `ETag` aqui**, e a ausencia e a mesma das outras duas filas: a
+         *     decisao nao e uma edicao campo a campo, e decidir o que ja foi decidido
+         *     responde `400` com `code: suggestion_not_pending`.
+         *
+         *     Indicacao que nao existe e indicacao de **conta desabilitada** respondem
+         *     o mesmo `404`, e o predicado esta no `WHERE` e nao num `if` depois da
+         *     leitura (ADR-0021): para esta rota ela nao existe, e nunca `403`.
+         */
+        get: operations["getAdminDirectorySuggestion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}/approval": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aprova a indicacao, e a entrada do diretorio passa a existir
+         * @description **Aprovar e o ponto da fila inteira: aprovado quer dizer que aparece no
+         *     `Perto`.** A operacao faz tres coisas numa transacao, e a trilha e a
+         *     quarta: marca a indicacao `approved`, grava a entrada do diretorio e
+         *     liga uma na outra.
+         *
+         *     **A entrada e escrita pelo MESMO caminho de `createAdminDirectoryEntry`**
+         *     -- a mesma transacao, o mesmo `inserirEntrada`, o mesmo
+         *     `source: import` e `claim_status: unclaimed`. Nao ha segunda escrita de
+         *     entrada neste produto: duas escritas seriam duas definicoes de como uma
+         *     entrada nasce, e e isso que o ADR-0023 secao 2 proibe.
+         *
+         *     `source` continua `import` e **nunca `community`**: a emenda 1 do
+         *     ADR-0011 tirou esse valor do `CHECK` de `professionals.source`, e quem
+         *     grava aqui e o painel decidindo -- exatamente a mesma situacao de um
+         *     operador que digita a clinica na mao, que e o que `import` descreve.
+         *     A indicacao da comunidade e o que trouxe o nome ate a mesa; ela nao e o
+         *     aceite, e nenhum aceite e gravado por aqui.
+         *
+         *     ## O LOCAL JA EXISTE: `slug` e o que resolve a duplicata
+         *
+         *     `slug` e obrigatorio e e o endereco publico da entrada. **Se ja existir
+         *     entrada com esse `slug`, nada e criado e nada na entrada existente e
+         *     alterado**: a indicacao e marcada `approved` e ligada aquela entrada, e
+         *     a resposta volta com `entry_created: false`. E assim, e nao com `409`,
+         *     porque duplicata e o caso COMUM desta fila -- duas pessoas indicam a
+         *     mesma clinica, ou indicam uma que o painel ja cadastrou -- e um conflito
+         *     deixaria a indicacao presa em `pending` para sempre, sem caminho nenhum
+         *     de sair. O operador procura o nome em `Perto`, acha
+         *     `clinica-sao-jorge`, aprova com esse `slug` e a fila anda.
+         *
+         *     Com `slug` novo, a entrada e criada e a resposta volta com
+         *     `entry_created: true`. **Ela vai ao ar (`published`) quando estiver
+         *     completa** pela mesma regua de `missing_to_publish` -- endereco, cidade,
+         *     UF e um canal de contato --, e fica em `draft` quando nao estiver. Quem
+         *     fica em `draft` e, na pratica, a indicacao cujo contato publico e
+         *     `website` ou `instagram`: `professionals` so tem `phone_e164` como canal,
+         *     e inventar coluna para carregar os outros dois nao e trabalho desta
+         *     fila. Para esses casos o corpo aceita `phone_e164`, que e o telefone
+         *     COMERCIAL da entidade: informado, a entrada nasce no ar; omitido, ela
+         *     nasce rascunho e `entry.missing_to_publish` diz o que falta.
+         *
+         *     **Indicacao ja decidida responde `400`** (`code: suggestion_not_pending`):
+         *     aprovar duas vezes criaria uma segunda entrada do mesmo lugar, que e a
+         *     duplicata que esta operacao existe para evitar. Indicacao inexistente, ou
+         *     de conta desabilitada, responde `404` (ADR-0021).
+         *
+         *     **Sem geocodificacao** (ADR-0006): `city`, `state` e `neighborhood` da
+         *     indicacao sao copiados como ROTULO DE TEXTO, e nao viram ponto. A
+         *     entrada publicada sem coordenada simplesmente nao participa da ordem por
+         *     distancia, e `distance_available: false` ja sabe dizer isso.
+         *
+         *     **O recado de quem indicou (`note`) NAO e copiado para a entrada.** Ele
+         *     e para quem revisa, e publica-lo faria o diretorio carregar avaliacao da
+         *     comunidade -- outro modelo, que nao existe (ADR-0011 secao 5.4).
+         */
+        post: operations["approveAdminDirectorySuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/suggestions/{suggestionRef}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Recusa a indicacao, com o motivo escrito
+         * @description **O motivo e obrigatorio**, ao contrario das outras duas filas do painel
+         *     -- e a diferenca e de proposito. La o motivo seria mensagem para o tutor,
+         *     e mensagem e v2. Aqui o motivo e para o PROXIMO REVISOR: a mesma clinica
+         *     vai ser indicada outra vez, e sem o motivo escrito quem olhar depois
+         *     refaz a checagem que alguem ja fez -- "nao atende pet", "fechou",
+         *     "telefone de pessoa fisica". O motivo nao e publicado em lugar nenhum e
+         *     nao chega a quem indicou.
+         *
+         *     **A indicacao NAO e apagada.** Ela fica com `review_status: declined`,
+         *     `decided_at` preenchido e `decline_reason` gravado, e continua legivel
+         *     em `listAdminDirectorySuggestions` com
+         *     `review_status=declined`. A `20261017000004` ja recusa a propria descida
+         *     quando ha indicacao gravada, pelo mesmo motivo: o que a comunidade
+         *     escreveu, e a memoria de quem revisou, nao se descarta em silencio.
+         *
+         *     **Indicacao ja decidida responde `400`**
+         *     (`code: suggestion_not_pending`), e nao `409`: recusar o que foi aprovado
+         *     apagaria uma entrada que ja pode estar no ar. Reverter decisao nao e
+         *     operacao desta fila -- a entrada se retira por
+         *     `updateAdminDirectoryEntry` com `status: hidden`, que e onde essa decisao
+         *     mora.
+         *
+         *     Indicacao inexistente, ou de conta desabilitada, responde `404`
+         *     (ADR-0021).
+         */
+        post: operations["declineAdminDirectorySuggestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/tag-requests": {
         parameters: {
             query?: never;
@@ -5174,6 +5387,133 @@ export interface components {
             state: components["schemas"]["DirectorySuggestionState"];
             /** Format: date-time */
             created_at: string;
+        };
+        /**
+         * @description Uma indicacao da comunidade, como a FILA DO PAINEL a ve.
+         *
+         *     **Nada de quem indicou**, em campo nenhum: nem nome, nem contagem por
+         *     entidade, nem a existencia de uma conta por tras. A coluna da autoria
+         *     leva a marca `NUNCA sai do servidor` no `COMMENT ON COLUMN` da migracao
+         *     `20261017000004` (ADR-0011 secao 4, BICHUS-174), e o que nao chega ao
+         *     tipo do servidor nao tem como sair daqui. **Nada de `id`** (ADR-0010
+         *     item 6): o enderecamento e por `reference`.
+         *
+         *     **O estado da revisao e `review_status`, e nao `state`** -- `state` aqui
+         *     e a UF, na mesma projecao, exatamente como na tabela.
+         *     `DirectorySuggestionReceipt` pode chamar o seu de `state` porque o
+         *     recibo do aplicativo nao devolve a UF.
+         */
+        AdminDirectorySuggestion: {
+            /** @description O identificador opaco, 128 bits em base64url. O mesmo que o aplicativo recebeu no recibo. */
+            reference: string;
+            display_name: string;
+            kind: components["schemas"]["ProfessionalKind"];
+            /** @description Rotulo de texto, nunca endereco e nunca origem de ponto (ADR-0006). */
+            city: string;
+            /** @description A UF. **Nao e o estado da revisao**: esse e `review_status`. */
+            state: string;
+            neighborhood?: string | null;
+            public_contact: components["schemas"]["DirectorySuggestionContact"];
+            /**
+             * @description O recado PARA QUEM REVISA. Sai aqui porque esta fila e justamente
+             *     quem revisa; ele **nao** e copiado para a entrada do diretorio na
+             *     aprovacao, e nao e publicado em lugar nenhum (ADR-0011 secao 5.4).
+             */
+            note?: string | null;
+            review_status: components["schemas"]["DirectorySuggestionState"];
+            /** Format: date-time */
+            created_at: string;
+            /**
+             * Format: date-time
+             * @description Nulo enquanto `pending`. Anda junto de `review_status` por `CHECK`, e nao por combinado.
+             */
+            decided_at?: string | null;
+            /**
+             * @description O motivo da recusa, escrito pelo administrador para o PROXIMO
+             *     revisor. Nulo em tudo que nao foi recusado. Nao e publicado e nao
+             *     chega a quem indicou.
+             */
+            decline_reason?: string | null;
+            /**
+             * @description O endereco publico da entrada do diretorio que a aprovacao produziu
+             *     -- ou da entrada que **ja existia** e a que a indicacao foi ligada.
+             *     Nulo em tudo que nao foi aprovado. E por ele que o painel pula da
+             *     fila para a entrada.
+             */
+            entry_slug?: string | null;
+        };
+        AdminDirectorySuggestionPage: {
+            items: components["schemas"]["AdminDirectorySuggestion"][];
+            page: number;
+            limit: number;
+            /** @description Quantas linhas o recorte desta chamada tem, com o filtro aplicado. */
+            total: number;
+            /**
+             * @description **A contagem do aviso do menu**, e ela IGNORA o filtro de proposito:
+             *     o numero que o item da navegacao mostra responde "quanto trabalho
+             *     esta esperando". Passa pelo mesmo filtro de conta desabilitada da
+             *     listagem e da leitura -- os tres lugares, porque filtrar em um so
+             *     faz o painel dizer "1 pendente" sobre fila vazia, que e o defeito
+             *     que a fila da Rede ja produziu.
+             */
+            pending_total: number;
+        };
+        /**
+         * @description O corpo da aprovacao. **`slug` e o endereco publico da entrada**, e e
+         *     ele que resolve a duplicata: se ja existir entrada com esse `slug`, nada
+         *     e criado, nada na entrada existente e alterado, e a indicacao e ligada
+         *     aquela entrada (`entry_created: false`).
+         *
+         *     **Nao ha `city`, `state`, `kind` nem `display_name` aqui**: esses vem da
+         *     indicacao, e deixar o operador reescreve-los faria a aprovacao ser um
+         *     formulario de cadastro com outro nome -- para isso existe
+         *     `createAdminDirectoryEntry`. Corrigir a entrada depois de aprovada e
+         *     `updateAdminDirectoryEntry`.
+         *
+         *     **Nao ha `status`.** Publicar nao e parametro: a entrada vai ao ar
+         *     quando estiver completa pela regua de `missing_to_publish`, e fica em
+         *     `draft` quando nao estiver.
+         */
+        AdminDirectorySuggestionApproval: {
+            slug: components["schemas"]["Slug"];
+            /**
+             * @description O telefone COMERCIAL da entidade (ADR-0011 secao 4), opcional, e so
+             *     usado quando a entrada e criada agora. Existe porque
+             *     `professionals` so tem `phone_e164` como canal de contato: a
+             *     indicacao cujo contato publico e `website` ou `instagram` nao tem o
+             *     que copiar, e sem telefone a entrada nasce `draft` e nao aparece no
+             *     `Perto`. Informado, a entrada nasce no ar. Ignorado quando a
+             *     indicacao e ligada a uma entrada que ja existe -- alterar a entrada
+             *     existente e `updateAdminDirectoryEntry`, que tem `If-Match`.
+             */
+            phone_e164?: string;
+        };
+        /** @description A indicacao aprovada, a entrada do diretorio, e qual dos dois caminhos aconteceu. */
+        AdminDirectorySuggestionApproved: {
+            suggestion: components["schemas"]["AdminDirectorySuggestion"];
+            entry: components["schemas"]["AdminDirectoryEntry"];
+            /**
+             * @description `true` quando a entrada nasceu desta aprovacao; `false` quando a
+             *     indicacao foi ligada a uma entrada que ja existia, que e a
+             *     duplicata. A tela diz as duas coisas com palavras diferentes:
+             *     "entrada criada" e "ligada a entrada que ja estava no Perto".
+             */
+            entry_created: boolean;
+        };
+        /**
+         * @description O corpo da recusa. **O motivo e obrigatorio**, ao contrario das outras
+         *     duas filas do painel: ele e para o PROXIMO revisor, porque a mesma
+         *     entidade vai ser indicada outra vez. Nao e publicado e nao chega a quem
+         *     indicou.
+         */
+        AdminDirectorySuggestionDecline: {
+            /**
+             * @description Por que a indicacao foi recusada. Texto puro, com o mesmo teto do
+             *     recado da indicacao: contato e pagamento sao recusados (D59) e
+             *     controle bidirecional tambem, como todo texto que uma pessoa
+             *     escreve neste produto.
+             */
+            reason: string;
         };
         /**
          * @description A situacao da entrada. Espelha `professionals.status` e a entrada
@@ -7774,6 +8114,14 @@ export interface components {
         JoinRequestRef: string;
         /** @description O identificador opaco do pedido da plaquinha (`AdminCollarTagRequest.ref`). Nao e UUID. */
         CollarTagRequestRef: string;
+        /**
+         * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+         *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+         *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+         *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+         *     aprovacao.
+         */
+        DirectorySuggestionRef: string;
         /**
          * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
          *     existente do backoffice: dois administradores editando o mesmo recurso
@@ -12650,6 +12998,149 @@ export interface operations {
             409: components["responses"]["SlugTaken"];
             412: components["responses"]["PreconditionFailed"];
             428: components["responses"]["PreconditionRequired"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminDirectorySuggestions: {
+        parameters: {
+            query?: {
+                /** @description Sem o parametro, vem a fila de `pending`. `state` nao serve de nome aqui: `state` e a UF da indicacao. */
+                review_status?: components["schemas"]["DirectorySuggestionState"];
+                page?: components["parameters"]["AdminPage"];
+                /** @description Teto de 50 por pagina, como nas outras duas filas do painel. */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina da fila. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestionPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A indicacao. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestion"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    approveAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectorySuggestionApproval"];
+            };
+        };
+        responses: {
+            /**
+             * @description A indicacao aprovada e a entrada do diretorio. `entry_created` diz
+             *     se a entrada nasceu agora ou se a indicacao foi ligada a uma que ja
+             *     existia.
+             */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestionApproved"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    declineAdminDirectorySuggestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description O identificador opaco da indicacao (`AdminDirectorySuggestion.reference`,
+                 *     o mesmo `DirectorySuggestionReceipt.reference` que o aplicativo
+                 *     devolveu). **Nao e UUID** (ADR-0010 item 6), e nao ha `slug` aqui: o
+                 *     `slug` e da ENTRADA do diretorio, e a entrada so passa a existir na
+                 *     aprovacao.
+                 */
+                suggestionRef: components["parameters"]["DirectorySuggestionRef"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectorySuggestionDecline"];
+            };
+        };
+        responses: {
+            /** @description A indicacao recusada, com o motivo gravado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectorySuggestion"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
             429: components["responses"]["TooManyRequests"];
         };
     };
