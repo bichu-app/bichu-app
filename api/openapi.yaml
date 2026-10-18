@@ -17348,6 +17348,19 @@ components:
 
     AdminBroadcastDraft:
       type: object
+      # `additionalProperties: false` ESTAVA FALTANDO, e a falta derrubava a
+      # SUBIDA (18/10/2026, achado ao botar hml de pe nesta uniao).
+      #
+      # `dispatchAdminBroadcast` instala o guarda de corpo fechado, e
+      # `registrarRota` recusa instalar o guarda sobre schema aberto -- com a
+      # mensagem "o guarda aceitaria qualquer campo e ficaria calado, que e o
+      # defeito que ele existe para consertar". O processo da API morria no
+      # boot, em laco, e nenhum caso da suite pegava: suite nao sobe servidor.
+      #
+      # Fechar o corpo e o que as IRMAS fazem -- `AdminDirectoryEntryInput`,
+      # `AdminNetworkEventInput` e as tres de denuncia todas declaram
+      # `false`. Este schema era o unico corpo administrativo aberto.
+      additionalProperties: false
       required: [title, body]
       properties:
         title: { type: string, minLength: 2, maxLength: 80 }
