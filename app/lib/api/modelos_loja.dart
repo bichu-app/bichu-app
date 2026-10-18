@@ -339,7 +339,7 @@ class ItemDaLoja {
     // **Sem `isAbsolute`, e isso nao e descuido.** Em Dart, `Uri.isAbsolute` e
     // FALSO quando a URI tem fragmento -- e a definicao da linguagem, nao um
     // detalhe: "an absolute URI has a scheme and no fragment". Com a
-    // conferencia aqui, `https://cobasi.com.br/bola-pop#descricao` era
+    // conferencia aqui, `https://loja.exemplo.invalid/bola-pop#descricao` era
     // recusado, e produto com `#` no `target_url` perdia o destino: o cartao
     // nao fica tocavel e o `Compre agora` nao e desenhado. Ou seja, o link que
     // o painel gravou nao abria, e nada falhava em lugar nenhum.
