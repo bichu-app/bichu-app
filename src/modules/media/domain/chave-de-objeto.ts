@@ -124,6 +124,15 @@ const LIMITE_DA_CHAVE = 1024;
  * foto de pessoa e para nada mais -- sem isso, "apague as fotos de pessoa"
  * viraria uma varredura que precisa consultar o banco linha por linha.
  */
+/**
+ * `people/` e a categoria das imagens de PESSOA: a foto do perfil
+ * (`users.photo_image_id`) e as fotos da VITRINE. Prefixo proprio, e nao
+ * `pets/` nem `products/`, pelo motivo que a Emenda 1 do ADR-0007 da: e o
+ * primeiro segmento que deixa uma politica de bucket, um ciclo de vida e uma
+ * varredura de expurgo tratarem imagem de pessoa de forma diferente de imagem
+ * de animal e de catalogo. A foto unica e a vitrine compartilham o prefixo de
+ * proposito, e e isso que faz as duas sumirem juntas no expurgo da conta.
+ */
 export const CATEGORIAS_DE_CATALOGO = ['products', 'events', 'directory', 'people'] as const;
 export type CategoriaDeCatalogo = (typeof CATEGORIAS_DE_CATALOGO)[number];
 /** As categorias que tem derivada PUBLICA. Achado nao tem: a foto dele nunca e publica. */

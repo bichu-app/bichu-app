@@ -74,6 +74,10 @@ import type { PetId } from '../shared/types/brands.js';
 import { criarObjectStorage } from '../modules/media/adapters/external/s3-object-storage.js';
 import { MediaService } from '../modules/media/application/media-service.js';
 import { registrarRotasDeMidia } from '../modules/media/adapters/http/media-routes.js';
+// A VITRINE DE FOTOS DO USUARIO (cliente, 18/10/2026), visivel so ao dono.
+import { registrarRotasDaVitrineDeFotos } from '../modules/showcase/adapters/http/showcase-routes.js';
+import { VitrineDeFotos } from '../modules/showcase/application/vitrine-de-fotos-service.js';
+import { criarVitrineRepository } from '../modules/showcase/adapters/persistence/kysely-vitrine.js';
 import { criarLostCaseRepository } from '../modules/lostfound/adapters/persistence/kysely-lost-case-repository.js';
 import { LostCaseService } from '../modules/lostfound/application/lost-case-service.js';
 import { registrarRotasDeCasos } from '../modules/lostfound/adapters/http/lost-case-routes.js';
@@ -718,6 +722,27 @@ export async function main(): Promise<void> {
     escrita: escritaAuditada,
   });
 
+  // A VITRINE DE FOTOS DO USUARIO. Reusa a ESTEIRA DE IMAGEM que ja existe: o
+  // mesmo preparador de envio do painel e da capa do encontro, com
+  // `purpose = user_showcase`, o prefixo `people/` e o autor em `users`. Nenhuma
+  // segunda esteira -- intencao, confirmacao, derivadas, higiene de EXIF e
+  // varredura de vencidos continuam tendo uma versao so (ADR-0007).
+  const dependenciasDasRotasDaVitrineDeFotos = {
+    vitrine: new VitrineDeFotos({
+      envios: criarPreparadorDeEnvioDeCatalogo({
+        armazenamento: criarObjectStorage(config.objectStorage),
+        ids,
+      }),
+      vitrine: criarVitrineRepository(db, ids),
+      registrarIntencao: registrarIntencaoDeCapaDaComunidade,
+      db,
+      clock: systemClock,
+    }),
+    autenticador: dependenciasDasRotasDePet.autenticador,
+    contrato,
+    baseDeMidia: config.mediaPublicBaseUrl,
+  };
+
   const dependenciasDasRotasDeMidia = {
     // ADR-0025 emenda 3: a capa do encontro da comunidade. O MESMO preparador
     // do painel (prefixo `events/`, `purpose = network_event`), com o autor em
@@ -1048,6 +1073,7 @@ export async function main(): Promise<void> {
     registrarRotasDeAparelho(escopo, dependenciasDasRotasDeAparelho);
     registrarRotasDaCaixaDeNotificacoes(escopo, dependenciasDasRotasDaCaixa);
     registrarRotasDeMidia(escopo, dependenciasDasRotasDeMidia);
+    registrarRotasDaVitrineDeFotos(escopo, dependenciasDasRotasDaVitrineDeFotos);
     registrarRotasDeCasos(escopo, dependenciasDasRotasDeCaso);
     // BICHUS-76. A pagina do caso e o cartaz, pelo `share_token`. O token e a
     // credencial; a conta, quando vem, so decide `can_report_sighting`. As

@@ -280,6 +280,46 @@ export const DERIVADAS_DA_FOTO_DE_USUARIO: readonly EspecificacaoDaDerivada[] = 
 ];
 
 /**
+ * ## As derivadas da VITRINE DE FOTOS DO USUÁRIO — e por que 320 px existe
+ *
+ * **O achado que obrigou um tamanho novo, e ele é medido e não suposto.** A
+ * foto única da pessoa tem `card` 512 × 512 e `thumb` 176 × 176 —
+ * `DERIVADAS_DA_FOTO_DE_USUARIO`, logo acima neste arquivo. **Nenhuma das duas
+ * serve à grade da vitrine**, e a conta é esta: a célula da grade tem 104 dp, e
+ * a 3x isso são **312 px reais**. A `thumb` de 176 px seria **AMPLIADA 1,8×** —
+ * e ampliar não acrescenta informação nenhuma, só borra; a `card` de 512 px é
+ * **1,6× mais dado do que a célula pinta**, e a grade desenha NOVE delas de uma
+ * vez, então esse desperdício é multiplicado por nove.
+ *
+ * Então: `thumb` **320 × 320**, que é o primeiro número redondo acima de 312.
+ *
+ * **Isto é um PARÂMETRO, e não uma segunda esteira.** A geometria da derivada é
+ * por propósito desde este arquivo, e `thumb` já vale 176 × 194 no pet e
+ * 480 × 360 no encontro: a variante é o nome do segmento da chave, e a medida é
+ * da TELA. Acrescentar um tamanho aqui é exatamente o que este arquivo existe
+ * para que seja possível sem tocar em worker, em chave, nem em contrato.
+ *
+ * - `thumb` 320 × 320 (1:1), `enxuta` — **a derivada da GRADE**. `enxuta` de
+ *   propósito e o motivo é o peso da TELA, não o do arquivo: o perfil desenha
+ *   até nove de uma vez, e o que importa é a soma. Medido: nove destas somam
+ *   centenas de kilobytes; nove `card` de 512 px passariam de 4 MB, que é o
+ *   defeito dos 9,8 MB da Loja outra vez.
+ * - `card` 1024 × 1024 (1:1), `grande` — a foto ABERTA, que é a única que a
+ *   pessoa olha grande, e portanto a única que mira a faixa de 300–500 KB.
+ *   `card` é obrigatória: `processar-imagem-de-catalogo.ts` falha ruidosamente
+ *   sem ela, e com razão — é ela que sai quando não há `thumb`.
+ *
+ * Quadrada nas duas, e o corte é deliberado (`altura` presente = `fit: cover`):
+ * a grade da vitrine é 1:1 e um retrato sem corte deixaria faixa vazia em cada
+ * célula. O ORIGINAL continua inteiro no bucket privado, e é dele que sai
+ * qualquer proporção futura.
+ */
+export const DERIVADAS_DA_VITRINE_DO_USUARIO: readonly EspecificacaoDaDerivada[] = [
+  { variante: 'card', largura: 1024, altura: 1024, porte: 'grande' },
+  { variante: 'thumb', largura: 320, altura: 320, porte: 'enxuta' },
+];
+
+/**
  * A dimensão mínima da foto de pet, que não existia.
  *
  * 600 × 600, e o número tem dois motivos. O primeiro: é o mesmo mínimo que o

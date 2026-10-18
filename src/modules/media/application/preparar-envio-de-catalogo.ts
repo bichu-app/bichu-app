@@ -37,8 +37,9 @@ export function criarPreparadorDeEnvioDeCatalogo(deps: {
     async preparar(contentType, byteSize, proposito) {
       // A lista e POR PROPOSITO desde 18/10/2026: o administrador envia de um
       // computador de mesa (JPEG, PNG, WebP) e a pessoa envia do celular, que
-      // pode ser HEIC. A comparacao continua por IGUALDADE, nunca por prefixo
-      // `image/`, que aceitaria `image/svg+xml`.
+      // pode ser HEIC -- vale para a foto unica do perfil e para a VITRINE. A
+      // comparacao continua por IGUALDADE, nunca por prefixo `image/`, que
+      // aceitaria `image/svg+xml`.
       if (!TIPOS_POR_PROPOSITO[proposito].includes(contentType)) {
         throw problemas.tipoDeMidiaNaoAceito();
       }

@@ -67,6 +67,24 @@ export const MODULES = [
   // cabecalho da migracao: mover dado exigiria reescrever os dois caminhos de
   // escrita, em modulos diferentes, no mesmo commit.
   'moderation',
+  // 18/10/2026, pedido do cliente: *"criar o conceito de conexao entre pessoas
+  // e pagina do perfil do usuario com vitrine de fotos, parecido com
+  // instagram"*. A VITRINE e modulo proprio e nao um canto de `identity` por
+  // duas razoes, e a segunda e de privacidade:
+  //
+  // 1. `identity` e autenticacao, sessao, senha e dados da conta. Uma galeria
+  //    ordenada de nove fotos com teto, capa e reordenacao e outro dominio, e
+  //    dentro de `identity` ela viraria um segundo dominio sem fronteira --
+  //    exatamente o motivo que `transfers` registra.
+  // 2. `user_showcase_images` e tabela que diz o que uma PESSOA mostra de si, e
+  //    a vitrine e **visivel so ao dono**. Manter a fronteira e o que garante
+  //    que nenhum outro modulo consiga le-la a nao ser por `ports/` -- e hoje
+  //    nenhum outro modulo tem motivo nenhum para pedi-la. E o mesmo argumento
+  //    que `network` faz por `network_event_checkins`.
+  //
+  // Ele conversa com `media` SO por `media/ports/imagem-de-catalogo.ts`: a
+  // esteira de imagem e uma so (ADR-0007), e a vitrine e um proposito dela.
+  'showcase',
 ];
 
 /**

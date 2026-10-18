@@ -523,6 +523,59 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/showcase": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Minha vitrine de fotos
+         * @description As fotos da vitrine da **propria conta**, em ordem; a de `position: 0` e
+         *     a CAPA. Lista vazia e estado normal e completo, e nao ausencia de
+         *     recurso: a vitrine e opcional.
+         *
+         *     **Esta e a unica operacao que devolve a vitrine.** Nenhuma outra resposta
+         *     deste contrato carrega foto de vitrine de ninguem.
+         */
+        get: operations["getMyShowcase"];
+        /**
+         * Substitui a vitrine inteira, na ordem
+         * @description O corpo manda a vitrine INTEIRA, na ordem, e e a **unica escrita**: ela
+         *     trata acrescentar, reordenar, **trocar a capa** e remover de uma vez.
+         *     `photos: []` tira todas. E o mesmo desenho de `CatalogImagesInput`, e
+         *     quatro rotas separadas seriam quatro lugares para o teto de nove
+         *     divergir.
+         *
+         *     A **posicao e o indice no vetor**, e nunca um numero que o cliente
+         *     manda: assim nao ha buraco nem empate a resolver, e a capa e sempre a
+         *     primeira do vetor que chegou.
+         *
+         *     **O TETO DE NOVE E COBRADO AQUI, NO SERVIDOR** (`400`, `field: photos`,
+         *     `code: maximum`), e nao so na tela. O banco o cobra de novo pelo `CHECK
+         *     (position BETWEEN 0 AND 8)` somado a unicidade por conta: dois lugares
+         *     conferindo o mesmo numero e o desenho. `upload_id` repetido e recusado
+         *     com `400` (`code: duplicate`), e nao resolvido escolhendo um deles.
+         *
+         *     `upload_id` de outra conta, de outro proposito ou inexistente responde
+         *     `404`, e nunca `403`: distinguir os dois revelaria que o envio existe
+         *     (ADR-0021).
+         *
+         *     **`200` e nao `202`**: a resposta e o estado que passou a valer. As fotos
+         *     novas voltam com `status: processing` e `grid_url: null`, porque antes de
+         *     o worker reescrever a derivada elas carregam o EXIF do celular -- o
+         *     contrato diz isso no status, em vez de deixar o app descobrir pela
+         *     ausencia da URL.
+         */
+        put: operations["replaceMyShowcase"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/notifications/count": {
         parameters: {
             query?: never;
@@ -631,6 +684,55 @@ export interface paths {
          *     `ref` existe.
          */
         post: operations["markNotificationRead"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/showcase/photo-intents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pede as credenciais de upload direto de uma foto da vitrine
+         * @description O backend assina a autorizacao de envio direto e **nunca recebe os
+         *     bytes** (ADR-0007). O objeto nasce no armazenamento PRIVADO, no prefixo
+         *     `people/`; a derivada publica e criada pelo worker.
+         *
+         *     `method` diz a forma: `POST` com `fields` ou `PUT` com `headers`
+         *     assinados. O cliente **le o campo** em vez de presumir -- e o mesmo
+         *     contrato de `createPetPhotoUploadIntent`, e o app reusa o envio que ja
+         *     tem.
+         *
+         *     **O teto de 5 MB esta na POLITICA ASSINADA**, e nao numa conferencia
+         *     posterior: o backend nao recebe os bytes, e recusar depois seria recusar
+         *     o que ja foi gravado e pago. `byte_size` acima do teto e recusado aqui,
+         *     **antes** de assinar, para a tela dizer o motivo.
+         *
+         *     **HEIC entra**, ao contrario de `NetworkEventCoverIntentInput`: a vitrine
+         *     sai de um CELULAR, e foto de iPhone e HEIC. A derivada sai sempre em
+         *     JPEG -- HEIC entra e nunca sai, e a conversao e nossa, no servidor.
+         *     SVG nunca, e por IGUALDADE e nunca por prefixo.
+         *
+         *     Dimensao minima 600 x 600, a mesma da capa do encontro e da foto de pet:
+         *     `width`/`height` sao opcionais e, quando vem abaixo dela, respondem
+         *     `422 image-too-small` **antes** de assinar. Quem decide de verdade e o
+         *     worker, nos bytes.
+         *
+         *     **Autorizar nao reserva nada**, e tambem nao acrescenta foto a vitrine: a
+         *     foto entra por `replaceMyShowcase`. A intencao que ninguem confirma vence
+         *     em dez minutos e o varredor a recolhe. Com nove fotos na vitrine esta
+         *     operacao responde `400` em vez de assinar -- assinar a decima seria
+         *     entregar autorizacao de escrita que a vitrine nunca vai aceitar, e o
+         *     objeto ficaria no balde ate o varredor passar.
+         */
+        post: operations["createShowcasePhotoUploadIntent"];
         delete?: never;
         options?: never;
         head?: never;
@@ -8399,6 +8501,130 @@ export interface components {
          */
         NetworkEventNotes: string;
         /**
+         * @description Uma foto da vitrine do DONO. `grid_url` e `open_url` sao compostas na
+         *     leitura a partir das chaves da imagem: o banco nao guarda URL
+         *     (`docs/07-devops.md` 3.6).
+         *
+         *     **Nao ha `id`.** A identidade interna da imagem (`catalog_images.id`)
+         *     nunca sai em resposta; o identificador que sai e o `upload_id`, como nas
+         *     duas galerias da casa.
+         *
+         *     **Nao ha legenda, curtida, contador nem pessoa marcada**, e nenhuma das
+         *     quatro e omissao a ser preenchida depois. `alt_text` nao e legenda: e o
+         *     rotulo que o leitor de tela anuncia, e nunca e desenhado como texto.
+         */
+        ShowcasePhoto: {
+            /**
+             * Format: uuid
+             * @description O envio que originou a foto, e e por ele que `replaceMyShowcase`
+             *     diz "esta foto, nesta posicao". **Nulo** depois que o varredor
+             *     apagou a intencao de envio: a foto continua na vitrine e deixa de
+             *     poder ser reordenada por ela. Estado raro e previsto, nao erro.
+             */
+            upload_id: string | null;
+            /** @description `0` e a CAPA. Reordenar troca a capa, e por isso nao existe campo `is_cover` para divergir da ordem. */
+            position: number;
+            /**
+             * @description `processing` -> `ready` ou `rejected`, e NUNCA volta. Em
+             *     `processing` as duas URLs sao nulas: antes de o worker reescrever a
+             *     derivada a foto carrega o EXIF do celular, e servi-la seria entregar
+             *     a coordenada de onde ela foi tirada.
+             * @enum {string}
+             */
+            status: "processing" | "ready" | "rejected";
+            /**
+             * Format: uri
+             * @description A derivada de **320 x 320 px (1:1)**, para a GRADE do perfil, que
+             *     desenha celulas de 104 dp -- 312 px reais a 3x. **E ela que a grade
+             *     deve pedir, e nunca `open_url`**: a derivada de 1024 px e 1,6x mais
+             *     dado do que a celula pinta, e a grade desenha ate NOVE de uma vez,
+             *     entao o desperdicio e multiplicado por nove. O original nunca sai:
+             *     ele nao tem derivada publica.
+             *
+             *     Nula enquanto `status` e `processing`: antes de o worker reescrever a
+             *     derivada a foto carrega o EXIF do celular.
+             */
+            grid_url: string | null;
+            /**
+             * Format: uri
+             * @description A derivada de **1024 x 1024 px (1:1)**, para a foto ABERTA -- a
+             *     unica que a pessoa olha grande, e portanto a unica que mira a faixa
+             *     de 300 a 500 KB. Nula enquanto `status` e `processing`.
+             */
+            open_url: string | null;
+            /**
+             * @description O motivo, em texto, quando `status` e `rejected`. Sem ele a tela
+             *     diria "recusada" e a pessoa nao teria como saber o que consertar.
+             *     Nulo em `processing` e em `ready`.
+             */
+            rejection_reason: string | null;
+            /**
+             * @description **Opcional**, e e a unica diferenca em relacao as duas galerias da
+             *     casa, onde ele e obrigatorio. Lá quem escreve e um administrador
+             *     descrevendo conteudo que terceiros vao ver; aqui NAO HA TERCEIRO --
+             *     a vitrine e visivel so ao dono, e o unico leitor possivel do texto e
+             *     quem tirou a foto. Nulo faz o leitor de tela cair no rotulo da grade.
+             */
+            alt_text: string | null;
+        };
+        /**
+         * @description A vitrine da PROPRIA conta. `photos: []` e estado normal e completo: a
+         *     vitrine e opcional, e **pedir uma foto nunca e cobrar as nove**.
+         */
+        MyShowcase: {
+            /** @description Ate 9, em ordem de `position`; a primeira e a capa. Vazia e estado normal. */
+            photos: components["schemas"]["ShowcasePhoto"][];
+            /**
+             * @description O teto, na resposta, para a tela nao guardar uma segunda copia do
+             *     numero. Ele e cobrado no SERVIDOR e no `CHECK` do banco; este campo e
+             *     so o que a tela mostra.
+             * @enum {integer}
+             */
+            max_photos: 9;
+        };
+        ShowcasePhotoInput: {
+            /**
+             * Format: uuid
+             * @description O `upload_id` de `createShowcasePhotoUploadIntent`, ou o de uma foto
+             *     que ja esta na vitrine (para mante-la). Repetido no mesmo corpo e
+             *     recusado com `400` (`code: duplicate`).
+             */
+            upload_id: string;
+            /** @description Opcional. Rotulo para leitor de tela, e nao legenda. */
+            alt_text?: string | null;
+        };
+        /**
+         * @description A vitrine INTEIRA, na ordem: a posicao e o indice no vetor, e `photos:
+         *     []` tira todas. Mais de 9 e recusado com `400` (`field: photos`, `code:
+         *     maximum`) **no servidor**, e nao so na tela.
+         */
+        ShowcaseInput: {
+            photos: components["schemas"]["ShowcasePhotoInput"][];
+        };
+        /**
+         * @description O pedido de autorizacao de envio de uma foto da vitrine. **Sem
+         *     `purpose`**, ao contrario de `AdminCatalogImageIntentInput`: esta
+         *     operacao existe para um proposito so (`user_showcase`), e deixar o
+         *     cliente escolhe-lo seria deixa-lo pedir autorizacao de imagem de produto
+         *     por uma rota do app.
+         */
+        ShowcasePhotoIntentInput: {
+            /**
+             * @description **HEIC entra**, porque a vitrine sai de um CELULAR e foto de iPhone e
+             *     HEIC -- recusa-lo na entrada tiraria a vitrine da mao de metade dos
+             *     aparelhos. A derivada sai sempre em JPEG: HEIC entra e nunca sai.
+             *     SVG nunca (D50), e por IGUALDADE, nunca por prefixo -- `image/`
+             *     aceitaria `image/svg+xml`, que e documento com script.
+             * @enum {string}
+             */
+            content_type: "image/jpeg" | "image/png" | "image/heic" | "image/webp";
+            byte_size: number;
+            /** @description Opcional. Abaixo de 600 responde `422` antes de assinar. */
+            width?: number;
+            /** @description Opcional. Abaixo de 600 responde `422` antes de assinar. */
+            height?: number;
+        };
+        /**
          * @description Uma imagem da galeria do encontro. A primeira da lista e a capa.
          *     `url` e `thumb_url` sao compostas na leitura a partir das chaves da
          *     imagem: o banco nao guarda URL (`docs/07-devops.md` 3.6).
@@ -11688,6 +11914,55 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
         };
     };
+    getMyShowcase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A vitrine do dono. `photos: []` quando nao ha nenhuma. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyShowcase"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    replaceMyShowcase: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShowcaseInput"];
+            };
+        };
+        responses: {
+            /** @description A vitrine como passou a valer. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyShowcase"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
     getNotificationCount: {
         parameters: {
             query?: never;
@@ -11775,6 +12050,35 @@ export interface operations {
             400: components["responses"]["ValidationFailed"];
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    createShowcasePhotoUploadIntent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ShowcasePhotoIntentInput"];
+            };
+        };
+        responses: {
+            /** @description Credenciais de upload, validas por 10 minutos. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadIntent"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            415: components["responses"]["UnsupportedMedia"];
+            422: components["responses"]["ImageTooSmall"];
             429: components["responses"]["TooManyRequests"];
         };
     };

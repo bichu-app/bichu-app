@@ -14,7 +14,22 @@
  * `purpose` e o que amarra o envio ao destino (T9): a escrita do item so aceita
  * `store_item`, e a do encontro so aceitara `network_event`.
  */
-import { TIPOS_ACEITOS, type CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
+import { TIPOS_ACEITOS, comoObjectKey, type CategoriaDeCatalogo } from '../domain/chave-de-objeto.js';
+
+/**
+ * A ÚNICA porta pela qual outro módulo obtém a marca `ObjectKey`.
+ *
+ * A marca é emitida por `comoObjectKey`, que mora em `media/domain` — e a
+ * fronteira da arquitetura proíbe um módulo de importar `domain/` alheio. Sem
+ * esta reexportação, quem precisasse da marca teria duas saídas, e as duas são
+ * piores: copiar a conferência (duas regras que concordam por enquanto) ou usar
+ * `as ObjectKey` sobre texto vindo de `SELECT` — que é exatamente o defeito da
+ * BICHUS-134, porque o `pathname` de uma URL RESOLVE `..` e uma chave como
+ * `card/../../x` sai do prefixo e do balde.
+ *
+ * Reexportar, e não reimplementar: a conferência continua tendo um dono só.
+ */
+export { comoObjectKey };
 import { TETO_DE_BYTES_DO_ENVIO } from '../domain/derivadas.js';
 import type { DbExecutor } from '../../../shared/db/pool.js';
 import type { Instant, ObjectKey } from '../../../shared/types/brands.js';
@@ -40,7 +55,13 @@ export type PropositoDaImagem =
   | 'network_event'
   | 'directory_logo'
   | 'directory_photo'
-  | 'user_photo';
+  | 'user_photo'
+  // A VITRINE de fotos do usuario (18/10/2026). Proposito SEPARADO de
+  // `user_photo`, e nao o mesmo: aquele e a foto UNICA do perfil, este sao as
+  // ate nove fotos da vitrine, com geometria propria (a grade pede 320 px) e
+  // tabela de ordem propria (`user_showcase_images`). Um proposito so para os
+  // dois obrigaria a derivada a adivinhar qual tela vai desenhar a imagem.
+  | 'user_showcase';
 
 /** O prefixo do armazenamento de cada proposito (ADR-0007 Emenda 1). */
 export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, CategoriaDeCatalogo>> = {
@@ -51,6 +72,10 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
   directory_photo: 'directory',
   // Prefixo PROPRIO para foto de pessoa: regime de privacidade diferente.
   user_photo: 'people',
+  // A vitrine divide `people/` com a foto unica, e de proposito: as duas sao
+  // imagem da MESMA pessoa e somem juntas no expurgo da conta. Prefixo
+  // separado faria o expurgo ter duas listas para varrer.
+  user_showcase: 'people',
 };
 
 /**
@@ -59,6 +84,7 @@ export const CATEGORIA_DO_PROPOSITO: Readonly<Record<PropositoDaImagem, Categori
  */
 export const TIPOS_DE_IMAGEM_DE_CATALOGO = ['image/jpeg', 'image/png', 'image/webp'] as const;
 
+/**
 /**
  * A lista de ENTRADA de cada proposito, e por que ela nao e uma so.
  *
@@ -83,6 +109,10 @@ export const TIPOS_POR_PROPOSITO: Readonly<Record<PropositoDaImagem, readonly st
   directory_logo: TIPOS_DE_IMAGEM_DE_CATALOGO,
   directory_photo: TIPOS_DE_IMAGEM_DE_CATALOGO,
   user_photo: TIPOS_ACEITOS,
+  // A VITRINE sai do mesmo celular que a foto unica, entao a MESMA lista --
+  // `TIPOS_ACEITOS`, com HEIC. Reusar e nao repetir: duas listas dos mesmos
+  // quatro tipos e o defeito esperando o quinto.
+  user_showcase: TIPOS_ACEITOS,
 };
 
 /**
@@ -122,6 +152,14 @@ export const DIMENSAO_MINIMA: Readonly<Record<PropositoDaImagem, { largura: numb
   // disso; recusar a 500 px entregaria "sua foto nao serve" a quem tem a unica
   // foto que tem. Abaixo de 300 o rosto aparece borrado na propria moldura.
   user_photo: { largura: 300, altura: 300 },
+  // 600 x 600 na VITRINE, e nao os 300 da foto unica. O numero nao e outro por
+  // capricho: a maior derivada da foto unica e 512, e a da vitrine e **1024**
+  // (a foto aberta). `sharp` nao amplia (`withoutEnlargement`), entao abaixo de
+  // 600 a `card` de 1024 sai sem se preencher. E o mesmo raciocinio de
+  // `DIMENSAO_MINIMA_DA_FOTO_DE_PET`, que tem a mesma derivada de 1024 e o
+  // mesmo 600 -- numeros diferentes para a mesma geometria e o que ninguem
+  // consegue explicar depois.
+  user_showcase: { largura: 600, altura: 600 },
 };
 
 /**

@@ -27,6 +27,7 @@ import type { ImageProcessor, MotivoDeRecusa } from '../ports/image-processor.js
 import {
   CATEGORIA_DO_PROPOSITO,
   DIMENSAO_MINIMA,
+  TIPOS_POR_PROPOSITO,
   type ChavesDaImagemDeCatalogo,
   type ImagensDeCatalogoDoWorker,
 } from '../ports/imagem-de-catalogo.js';
@@ -34,6 +35,7 @@ import {
   DERIVADAS_DA_FOTO_DE_USUARIO,
   DERIVADAS_DA_FOTO_DO_LOCAL,
   DERIVADAS_DA_LOGO,
+  DERIVADAS_DA_VITRINE_DO_USUARIO,
   DERIVADAS_DO_ENCONTRO,
   DERIVADAS_DO_PRODUTO,
   TETO_DE_BYTES_DA_DERIVADA,
@@ -58,6 +60,11 @@ const DERIVADAS_POR_PROPOSITO: Readonly<Record<string, readonly EspecificacaoDaD
   directory_logo: DERIVADAS_DA_LOGO,
   directory_photo: DERIVADAS_DA_FOTO_DO_LOCAL,
   user_photo: DERIVADAS_DA_FOTO_DE_USUARIO,
+  // A VITRINE: `thumb` 320 x 320 para a GRADE (celula de 104 dp, 312 px reais a
+  // 3x) e `card` 1024 x 1024 para a foto aberta. Nem a `thumb` de 176 nem a
+  // `card` de 512 de `user_photo` servem a grade -- a primeira seria AMPLIADA
+  // 1,8x, a segunda e 1,6x dado demais, e a grade desenha NOVE de uma vez.
+  user_showcase: DERIVADAS_DA_VITRINE_DO_USUARIO,
 };
 
 /** O texto que o painel mostra, por motivo. Nao e codigo de erro. */
@@ -108,9 +115,23 @@ export async function processarImagemDeCatalogo(
 
   const original = await deps.armazenamento.get('privado', imagem.originalKey);
   const inspecao = await deps.processador.inspecionar(original);
-  // HEIC passa na inspecao da foto do pet, que sai de celular; aqui a origem e
-  // um computador de mesa e o contrato aceita so JPEG, PNG e WebP.
-  if (typeof inspecao === 'string' || inspecao.formato === 'heic') {
+  // QUEM ACEITA HEIC E A MESMA LISTA QUE ASSINOU O ENVIO, e nao um `if` com os
+  // propositos escritos de novo aqui.
+  //
+  // Antes desta linha havia DUAS respostas para a mesma pergunta: `preparar`
+  // consultava `TIPOS_POR_PROPOSITO`, que aceita HEIC em `user_photo`, e este
+  // arquivo recusava HEIC em TODO proposito de catalogo. O resultado e um
+  // envio que o backend assina e o worker recusa depois -- a pessoa de iPhone
+  // via "enviado" e, minutos depois, a foto `rejected` dizendo que o arquivo
+  // nao e imagem aceita. Nao e defeito desta frente, e sim a lista de entrada
+  // de `user_photo` tendo sido ampliada em 18/10 sem o worker acompanhar; o
+  // conserto e uma linha aqui, e a alternativa era deixar duas listas que
+  // discordam e acrescentar uma terceira para a vitrine.
+  //
+  // HEIC entra e NUNCA sai: a derivada e reescrita em JPEG
+  // (`FORMATO_DAS_DERIVADAS`), e a conversao e nossa, no servidor.
+  const heicAceito = TIPOS_POR_PROPOSITO[imagem.purpose].includes('image/heic');
+  if (typeof inspecao === 'string' || (inspecao.formato === 'heic' && !heicAceito)) {
     const motivo: MotivoDeRecusa = typeof inspecao === 'string' ? inspecao : 'formato_nao_aceito';
     await deps.imagens.marcarRecusada(imagem.id, TEXTO_DA_RECUSA[motivo]);
     return { tipo: 'recusada', imagemId: imagem.id, motivo };
