@@ -335,12 +335,20 @@ void main() {
         findsNothing,
         reason: 'REPROVA: o rabo da linha do preco voltou a tela.',
       );
+      // **A DATA VOLTOU A TELA NA TARDE DE 18/10/2026**, e este `expect` virou
+      // de lado junto. Pedido literal: *"devolve a data onde esta o novo texto
+      // de preço de referência"*. Ela nao volta ao rabo -- os dois `expect`
+      // acima continuam cobrando isso -- e sim a linha de apoio, acima do nome
+      // do produto. Quem mede aquela linha e
+      // `test/telas/loja_preco_de_referencia_test.dart`; aqui basta provar que
+      // a data existe no cartao e NAO esta junto do valor.
       expect(
-        find.textContaining('14/03'),
-        findsNothing,
-        reason: 'REPROVA: a data de consulta ainda aparece em algum lugar do '
-            'cartao. Ela saiu da TELA em 18/10/2026; `dataCurta` continua '
-            'existindo e coberta por teste proprio, mas nada a desenha.',
+        find.textContaining('consultado em 14/03'),
+        findsOneWidget,
+        reason: 'REPROVA: a data de consulta nao esta no cartao. Ela voltou em '
+            '18/10/2026, e e ela que torna verdadeira a clausula de '
+            '`web/src/conteudo/juridico/termos.md` ("Essa data aparece junto '
+            'do preco, na tela").',
       );
     });
 

@@ -497,12 +497,24 @@ class _Miniatura extends StatelessWidget {
 /// ganhou `semanticsLabel`.
 ///
 /// **E aqui a semantica importa MAIS que no cartao.** O cartao da vitrine tem
-/// a linha visivel "Preço de referência" acima do nome do produto; esta
-/// pagina **nao tem** -- aquela linha e do cartao. Sem o `semanticsLabel`, o
-/// rabo teria levado a afirmacao embora desta pagina para TODO mundo, e nao
-/// so para quem usa leitor de tela. Com ele, quem nao ve continua ouvindo
-/// "preço de referência" junto do valor. Quem enxerga passa a ler so o
-/// numero, e essa metade e a decisao do cliente.
+/// a linha visivel acima do nome do produto; esta pagina **nao tem** -- aquela
+/// linha e do cartao. Sem o `semanticsLabel`, o rabo teria levado a afirmacao
+/// embora desta pagina para TODO mundo, e nao so para quem usa leitor de tela.
+/// Com ele, quem nao ve continua ouvindo "preço de referência" junto do
+/// valor. Quem enxerga passa a ler so o numero, e essa metade e a decisao do
+/// cliente.
+///
+/// **A DATA TAMBEM CHEGA AQUI, pela mesma porta** (18/10/2026, tarde). Quando
+/// o cliente mandou devolver a data ao rotulo visivel do CARTAO,
+/// `CartaoDaLoja.rotuloAcessivelDoPreco` passou a montar afirmacao, valor e
+/// data; esta pagina chama a mesma funcao e por isso quem usa leitor de tela
+/// ouve a data aqui tambem, sem a pagina ser redesenhada.
+///
+/// **O que NAO acontece aqui e a metade visivel.** Esta pagina nao tem a linha
+/// de apoio -- ela e do cartao -- e o rabo nao volta a linha do preco. Entao a
+/// data existe nesta tela para quem ouve e nao para quem enxerga, e isso e
+/// consequencia de a pagina estar PARADA por decisao do cliente, nao desenho
+/// escolhido aqui. Esta anotado no relato da tarefa.
 class _Cabecalho extends StatelessWidget {
   const _Cabecalho({required this.item});
 
@@ -545,7 +557,7 @@ class _Cabecalho extends StatelessWidget {
           Text(
             linhaDoPreco,
             style: textos.bodyMedium?.copyWith(color: cores.textPrimary),
-            semanticsLabel: CartaoDaLoja.rotuloAcessivelDoPreco(linhaDoPreco),
+            semanticsLabel: CartaoDaLoja.rotuloAcessivelDoPreco(item),
           ),
         ] else if (item.estadoDoPreco == EstadoDoPreco.vencido) ...<Widget>[
           const SizedBox(height: BichuEspaco.e3),

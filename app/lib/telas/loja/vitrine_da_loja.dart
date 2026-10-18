@@ -595,16 +595,60 @@ class CartaoDaLoja extends StatelessWidget {
   /// botao" repetido em doze cartoes nao diz de qual produto e.
   static const String rotuloDeSaida = 'Compre agora';
 
-  /// A mensagem de apoio que fica **acima do nome do produto**.
+  /// A afirmacao da mensagem de apoio que fica **acima do nome do produto**.
   ///
   /// Literal do cliente (18/10/2026): *"vamos colocar a mensagem preco de
   /// referencia, em cima do nome do produto"*.
   ///
   /// **Texto fixo do binario, e nao campo do servidor.** Nada foi acrescentado
-  /// ao contrato por causa desta linha: `openapi.yaml` esta intocado. A mesma
-  /// afirmacao ja viaja DENTRO de [ItemDaLoja.linhaDoPreco], montada no
-  /// modelo -- aqui ela so ganha forma visivel antes do titulo.
+  /// ao contrato por causa desta linha: `openapi.yaml` esta intocado.
+  ///
+  /// Sozinha ela e o rotulo de um item SEM data. Com data, o que a tela
+  /// desenha e [rotuloDePrecoComData].
   static const String rotuloDePrecoDeReferencia = 'Preço de referência';
+
+  /// `consultado em 14/03`, ou **nulo** quando o item nao tem data.
+  ///
+  /// **A redacao e a MESMA do rabo que saiu da linha do preco**, palavra por
+  /// palavra, e a data sai da MESMA [dataCurta]. Nada aqui e formato novo: o
+  /// rabo dizia `preço de referência, consultado em 14/03` depois do valor, e
+  /// isto e aquilo sem o valor.
+  ///
+  /// **Dia e mes, sem ano, porque e o que o produto ja escrevia.** O motivo
+  /// esta em [dataCurta]: um preco que vence em trinta dias nao cruza o ano de
+  /// forma que o ano acrescente informacao. (Um dos dois argumentos de la --
+  /// "tres numeros disputando a mesma leitura" -- valia para a linha que TINHA
+  /// o valor; esta nao tem. O outro continua de pe, e trocar o formato seria
+  /// inventar um, que e justamente o que esta tarefa proibiu.)
+  ///
+  /// **Nulo e o estado que impede "consultado em" com data vazia.** Ele existe
+  /// de verdade: `linhaDoPreco` ja exigia data, mas este rotulo e montado a
+  /// partir do item e nao da linha, e um item com valor e sem data nao pode
+  /// produzir uma frase pela metade.
+  static String? sufixoDaConsulta(ItemDaLoja item) {
+    final data = item.consultadoEm;
+    if (data == null) return null;
+    return 'consultado em ${dataCurta(data)}';
+  }
+
+  /// O rotulo VISIVEL acima do nome do produto: a afirmacao e a data.
+  ///
+  /// **A data voltou aqui em 18/10/2026**, por pedido literal do cliente:
+  /// *"devolve a data onde esta o novo texto de preço de referência"*. Ela
+  /// tinha saido de manha junto com o resto do rabo da linha do preco, e volta
+  /// NESTA linha -- nao naquela, que continua sendo so o valor.
+  ///
+  /// **E isto que torna a clausula dos termos verdadeira de novo.**
+  /// `web/src/conteudo/juridico/termos.md` diz, por escrito, que a data da
+  /// consulta aparece junto do preco na tela. Entre a remocao do rabo e esta
+  /// linha, a afirmacao do juridico estava sem lastro no cartao.
+  ///
+  /// Sem data, so a afirmacao -- e nunca "consultado em" sem o dia.
+  static String rotuloDePrecoComData(ItemDaLoja item) {
+    final sufixo = sufixoDaConsulta(item);
+    if (sufixo == null) return rotuloDePrecoDeReferencia;
+    return '$rotuloDePrecoDeReferencia, $sufixo';
+  }
 
   /// O nome acessivel do no do preco: **a afirmacao junto do valor**.
   ///
@@ -624,8 +668,35 @@ class CartaoDaLoja extends StatelessWidget {
   /// o leitor dizer "Preço de referência" solto antes do nome do produto e de
   /// novo junto do valor -- que e exatamente o rotulo orfao que aquele
   /// `ExcludeSemantics` existe para evitar.
-  static String rotuloAcessivelDoPreco(String linhaDoPreco) =>
-      '$rotuloDePrecoDeReferencia, $linhaDoPreco';
+  ///
+  /// ## A data entra AQUI, e nao no rotulo visivel (18/10/2026, tarde)
+  ///
+  /// Quando a data voltou ao rotulo visivel, abriram-se dois caminhos para a
+  /// semantica, e eles nao sao equivalentes:
+  ///
+  /// - **anunciar o rotulo visivel** (tirar o `ExcludeSemantics`) e deixar o
+  ///   no do valor so com o numero: o leitor diria "Preço de referência,
+  ///   consultado em 14/03" ANTES do nome do produto, solto, e depois
+  ///   "R\$ 89,90" sem dizer de que preco fala. Dois nos, nenhum completo --
+  ///   e o rotulo orfao de volta;
+  /// - **manter o visivel excluido e juntar tudo aqui**: um no so, com a
+  ///   afirmacao, o valor e a data, **uma vez cada**, na ordem em que fazem
+  ///   sentido lidos em voz alta.
+  ///
+  /// O segundo e o escolhido. O preco e UMA informacao composta de tres
+  /// partes, e quem nao ve recebe as tres juntas, como quem ve recebe o bloco
+  /// inteiro de uma olhada. **Nada e anunciado duas vezes**, e ha isca que
+  /// reprova se a data aparecer em dois nos.
+  static String rotuloAcessivelDoPreco(ItemDaLoja item) {
+    final valor = item.linhaDoPreco;
+    final sufixo = sufixoDaConsulta(item);
+    final partes = <String>[
+      rotuloDePrecoDeReferencia,
+      ?valor,
+      ?sufixo,
+    ];
+    return partes.join(', ');
+  }
 
   /// O nome acessivel do botao de saida: diz o produto e para onde leva.
   static String rotuloAcessivelDeSaida(ItemDaLoja item) =>
@@ -700,17 +771,31 @@ class CartaoDaLoja extends StatelessWidget {
               // aparicoes sao visivelmente a mesma coisa. Nenhum tamanho e
               // nenhuma cor literal entram aqui: so token.
               //
-              // **`ExcludeSemantics` e acessibilidade, nao economia.** O
-              // `ListView` da casca roda com `addSemanticIndexes: false`
-              // (ver `casca_com_abas.dart`), entao cada filho deste `Column` e
-              // um no de semantica PROPRIO. Um `Text` cru aqui seria anunciado
-              // solto, "Preço de referência", antes do nome e sem dizer de que
-              // preco fala -- quem nao ve ouviria o rotulo sem o valor. E nao
-              // precisa ser anunciado de novo: o no do preco, duas linhas
-              // abaixo, carrega "preço de referência" no proprio
+              // **`ExcludeSemantics` e acessibilidade, nao economia -- e o
+              // efeito dele esta MEDIDO, nao suposto.**
+              //
+              // O `InkWell` deste cartao MESCLA os filhos num no de semantica
+              // so. Medido com um `Text` cru no lugar deste `ExcludeSemantics`
+              // (ver a isca `a data e anunciada UMA vez, e nao duas` em
+              // `test/telas/loja_preco_de_referencia_test.dart`), o rotulo
+              // daquele no unico fica:
+              //
+              //   "Preço de referência, consultado em 14/03
+              //    Bola Pop
+              //    Preço de referência, R$ 89,90, consultado em 14/03"
+              //
+              // Ou seja: a afirmacao e a data DUAS vezes na mesma leitura, a
+              // primeira antes do nome do produto e sem dizer de que preco
+              // fala. Nao e "um rotulo orfao num no proprio", como este
+              // comentario dizia antes de alguem medir -- e pior, porque vem
+              // grudado no resto do cartao.
+              //
+              // E nao precisa ser anunciado: o no do preco, duas linhas
+              // abaixo, carrega "preço de referência" E a data no proprio
               // `semanticsLabel` (`rotuloAcessivelDoPreco`), que e onde o
-              // leitor de tela precisa dele e onde ele nunca se separa do
-              // valor (criterio 15 da BICHUS-185).
+              // leitor de tela precisa deles e onde eles nunca se separam do
+              // valor (criterio 15 da BICHUS-185). Esta linha e a MESMA
+              // informacao em forma visivel.
               //
               // **Ate 18/10/2026 a afirmacao vinha de outro lugar**: ela
               // viajava literalmente DENTRO do texto do numero
@@ -721,8 +806,40 @@ class CartaoDaLoja extends StatelessWidget {
               // reforco VISUAL do que ja esta dito junto do preco.
               if (linhaDoPreco != null) ...<Widget>[
                 ExcludeSemantics(
+                  // **A DATA MORA AQUI DESDE 18/10/2026 (tarde).** Pedido
+                  // literal: *"devolve a data onde esta o novo texto de
+                  // preço de referência"*. O token nao mudou -- `bodySmall`
+                  // em `textSecondary`, o mesmo de quando a linha era so a
+                  // afirmacao, e o mesmo em que o rabo aparecia --, entao a
+                  // linha nao ganhou peso nenhum contra o valor em
+                  // `titleLarge` w700.
+                  //
+                  // **ELA QUEBRA EM DUAS LINHAS NA TELA DE 320 dp, e isso
+                  // esta medido e aceito.** Com a Inter real, em `bodySmall`
+                  // (13/18) e nos 256 dp uteis do cartao (tela de 320 menos
+                  // 16+16 do `ListView` e 16+16 do cartao):
+                  //
+                  //   "Preço de referência"                    120,71 dp  1 linha
+                  //   + ", consultado em 22/09"                259,36 dp  2 linhas
+                  //
+                  // Ela passa por **3,36 dp**. Em 360 dp (296 uteis) cabe em
+                  // uma linha, com 36,64 dp de folga; em 412 dp, com 88,64.
+                  //
+                  // **E e aqui que o formato da data deixa de ser gosto.** Com
+                  // ano -- `22/09/2026` -- a frase pede 296,16 dp e estoura
+                  // tambem os 296 dp da tela de 360, por 0,16 dp: ela passaria
+                  // a quebrar na largura mais comum do produto, e nao so na
+                  // mais estreita. `dataCurta` ja escrevia dia e mes, e e o
+                  // que fica.
+                  //
+                  // **SEM `maxLines` e SEM reticencia.** Quebrar custa 18 dp de
+                  // altura no cartao de 320 dp; cortar a data com reticencia
+                  // apagaria justamente o que o cliente mandou devolver, e
+                  // significado que some com reticencia nao foi transferido
+                  // para lugar nenhum. Em 2x a frase vai a tres linhas, pelo
+                  // mesmo motivo e com a mesma resposta.
                   child: Text(
-                    rotuloDePrecoDeReferencia,
+                    rotuloDePrecoComData(item),
                     style: textos.bodySmall?.copyWith(
                       color: cores.textSecondary,
                     ),
@@ -764,7 +881,7 @@ class CartaoDaLoja extends StatelessWidget {
                     color: cores.textPrimary,
                     fontWeight: FontWeight.w700,
                   ),
-                  semanticsLabel: rotuloAcessivelDoPreco(linhaDoPreco),
+                  semanticsLabel: rotuloAcessivelDoPreco(item),
                 ),
               ] else if (item.estadoDoPreco == EstadoDoPreco.vencido) ...<Widget>[
                 const SizedBox(height: BichuEspaco.e2),
