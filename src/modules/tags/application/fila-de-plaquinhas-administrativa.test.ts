@@ -127,6 +127,7 @@ function bancada(estado: PedidoNaFilaDePlaquinhas['status'] | 'ausente'): Bancad
 
   const repositorio: PedidoDePlaquinhaRepository = {
     criarOuDevolverPendente: () => naoUsado('criarOuDevolverPendente'),
+    listarDoPet: () => naoUsado('listarDoPet'),
     listarFila: () => naoUsado('listarFila'),
     pedidoPorRef: (_trx, ref) =>
       Promise.resolve(ref === REF ? atual : undefined),

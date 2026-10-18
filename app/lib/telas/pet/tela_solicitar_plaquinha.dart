@@ -13,6 +13,7 @@ import '../../escopo.dart';
 import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_tokens.g.dart';
+import '../../widgets/acompanhamento_do_pedido.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
 import '../../widgets/bichu_field.dart';
 import '../../widgets/botao_primario.dart';
@@ -106,6 +107,12 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   bool _carregando = true;
   bool _enviando = false;
   bool _enviado = false;
+
+  /// O pedido **como o servidor o devolveu**, e nao um objeto montado aqui.
+  ///
+  /// E dele que sai o numero que a tela mostra: um identificador gerado no app
+  /// nao serviria para nada, porque ninguem do outro lado saberia procura-lo.
+  PedidoDePlaquinha? _pedido;
   MensagemDeErro? _faixa;
 
   /// Ver o mesmo sinalizador em F1.4, F1.6 e na edicao do pet: `Escopo` e
@@ -293,7 +300,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     });
 
     try {
-      await Escopo.of(context).pets.solicitarPlaquinha(
+      final pedido = await Escopo.of(context).pets.solicitarPlaquinha(
         petId: pet,
         endereco: EnderecoDeEntrega(
           destinatario: _destinatario.text.trim(),
@@ -316,7 +323,10 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       // um destino de sucesso alcancavel por link direto afirmaria um desfecho
       // que ninguem produziu, que e o defeito que o criterio 2 da BICHUS-31
       // proibe.
-      setState(() => _enviado = true);
+      setState(() {
+        _enviado = true;
+        _pedido = pedido;
+      });
     } on FalhaDeChamada catch (falha) {
       if (!mounted) return;
       setState(() => _faixa = _mensagem(falha));
@@ -456,20 +466,29 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
         titulo: _TextosDaPlaquinha.titulo,
         saida: TipoDeSaida.voltar,
       ),
+      // **DEPOIS DE ENVIADO, `Pedir a plaquinha` NAO EXISTE MAIS NA TELA**
+      // (cliente, 18/10: "tem um botao em baixo que nao faz sentido 'pedir
+      // plaquinha', ja foi pedido").
+      //
+      // Ele ficava ali DESABILITADO, e desabilitado nao bastava: o criterio 2
+      // da BICHUS-62 proibe renderizar acao sem destino **nem habilitada nem
+      // desabilitada**, e depois do pedido feito esta acao nao tem destino
+      // nenhum. Some, e sobra uma saida so.
       bottomNavigationBar: BarraDeAcaoFixa(
         acoes: <Widget>[
-          BotaoPrimario(
-            rotulo: _TextosDaPlaquinha.pedir,
-            critico: true,
-            carregando: _enviando,
-            // Desabilitado so quando nao ha o que pedir: sem pet cadastrado, e
-            // depois de o pedido ter sido feito. Nunca por estado de rede.
-            aoTocar: _enviado || semPets ? null : _pedir,
-          ),
           if (_enviado)
-            TextButton(
-              onPressed: () => context.go(Rotas.perfil),
-              child: const Text(_TextosDaPlaquinha.fechar),
+            BotaoPrimario(
+              rotulo: _TextosDaPlaquinha.fechar,
+              aoTocar: () => context.go(Rotas.perfil),
+            )
+          else
+            BotaoPrimario(
+              rotulo: _TextosDaPlaquinha.pedir,
+              critico: true,
+              carregando: _enviando,
+              // Desabilitado so quando nao ha o que pedir: sem pet cadastrado.
+              // Nunca por estado de rede.
+              aoTocar: semPets ? null : _pedir,
             ),
         ],
       ),
@@ -481,11 +500,17 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: <Widget>[
-                    if (_enviado)
-                      const FaixaDeAviso(
-                        peso: PesoDaFaixa.informativo,
-                        texto: _TextosDaPlaquinha.pedidoEnviado,
-                      )
+                    // O DESFECHO: o acompanhamento do pedido, e nao uma
+                    // faixa dizendo "pedido enviado".
+                    //
+                    // **Continua NESTA tela, e nao num destino proprio**: um
+                    // `go` para uma tela de sucesso alcancavel por link direto
+                    // afirmaria um desfecho que ninguem produziu (criterio 2
+                    // da BICHUS-31). O MESMO widget desenha a pagina de
+                    // acompanhamento alcancavel pela pagina do pet, que ai sim
+                    // tem rota propria porque LE o pedido do servidor.
+                    if (_enviado && _pedido != null)
+                      AcompanhamentoDoPedido(pedido: _pedido!)
                     else if (semPets)
                       Text(_TextosDaPlaquinha.semPets, style: textos.bodyLarge)
                     else ...<Widget>[
@@ -696,7 +721,12 @@ abstract final class _TextosDaPlaquinha {
   static const String telefone = 'Telefone de quem recebe';
   static const String exemploDoTelefone = '(11) 98765-4321';
   static const String observacao = 'Observação';
-  static const String exemploDaObservacao = 'nome gravado, cor da plaquinha';
+  /// **A COR SAIU DAQUI** (cliente, 18/10): a plaquinha tera **cor unica**,
+  /// entao oferecer a cor como exemplo de observacao convidava a pessoa a
+  /// pedir uma coisa que nao existe -- e quem atendesse o pedido teria de
+  /// recusar depois. Nao havia CAMPO de cor em lugar nenhum desta tela: a cor
+  /// so aparecia nesta linha de exemplo, e e so ela que sai.
+  static const String exemploDaObservacao = 'nome gravado';
 
   /// O mesmo 500 do contrato (`CollarTagRequestInput.notes`).
   static const int limiteDaObservacao = 500;
@@ -721,7 +751,6 @@ abstract final class _TextosDaPlaquinha {
   static const String buscaIndisponivel = 'Não deu para buscar. Preencha abaixo.';
   static const String confiraOsCampos = 'Confira os campos marcados.';
   static const String confiraEsteCampo = 'Confira este campo.';
-  static const String pedidoEnviado = 'Pedido enviado.';
   static const String semPets = 'Cadastre um pet para pedir a plaquinha.';
   static const String petNaoEncontrado = 'Este pet não está na sua conta.';
   static const String tetoAtingido = 'Você já fez três pedidos hoje. Tente amanhã.';

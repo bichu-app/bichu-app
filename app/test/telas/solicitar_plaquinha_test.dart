@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/pet/tela_solicitar_plaquinha.dart';
+import 'package:bichu/widgets/acompanhamento_do_pedido.dart';
 import 'package:bichu/widgets/bichu_field.dart';
 import 'package:bichu/widgets/seletor_de_lista.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -81,6 +82,10 @@ import 'meus_pets_test.dart' show abrirOPerfil;
 //
 // 7. **O TETO DE 3 POR DIA tem texto proprio.** 429 generico diria "servidor
 //    fora", que manda a pessoa tentar de novo contra um teto de 24 h.
+
+/// O `ref` que o SERVIDOR devolve. A tela tem de mostrar este valor, e nao um
+/// gerado no app -- ver a isca 8b.
+const String _refDoServidor = 'Kysr9QvB_0123456789abcd';
 
 const String _idDoPet = '3f1d7a9e-0000-7000-8000-000000000001';
 
@@ -229,8 +234,11 @@ Future<http.Response> Function(http.Request) _rede(
         return problema(problemaDoPedido, statusDoPedido);
       }
       return json200(<String, dynamic>{
+        'ref': _refDoServidor,
         'status': 'pending',
         'requested_at': '2026-10-17T12:00:00.000Z',
+        'decided_at': null,
+        'tracking_code': null,
         'notes': null,
       });
     }
@@ -291,6 +299,59 @@ void main() {
     });
   });
 
+  group('ISCA — o desfecho nao oferece de novo o que ja foi feito', () {
+    testWidgets('8. depois de enviado, `Pedir a plaquinha` SOME da tela',
+        (tester) async {
+      // O defeito que o cliente apontou em 18/10: "tem um botao em baixo que
+      // nao faz sentido 'pedir plaquinha', ja foi pedido". Ele ficava ali
+      // DESABILITADO, e desabilitado nao basta -- o criterio 2 da BICHUS-62
+      // proibe acao sem destino **nem habilitada nem desabilitada**.
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
+
+      // CONTRAPESO: antes de enviar o botao ESTA la. Sem esta linha, uma tela
+      // que nunca desenhasse o botao passaria na afirmacao de baixo.
+      expect(find.text('Pedir a plaquinha'), findsOneWidget);
+
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      // Nao e "esta desabilitado": e NAO ESTA NA ARVORE.
+      expect(find.text('Pedir a plaquinha'), findsNothing);
+      // E sobra uma saida, para a tela nao virar um beco.
+      expect(find.text('Fechar'), findsOneWidget);
+    });
+
+    testWidgets('8b. o numero do pedido na tela e o que o SERVIDOR devolveu',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      expect(find.text(_refDoServidor), findsOneWidget);
+    });
+  });
+
+  group('ISCA — a cor saiu: a plaquinha e de COR UNICA', () {
+    testWidgets('9. a observacao nao sugere mais escolher a cor',
+        (tester) async {
+      // Cliente, 18/10: "remova o texto da observacao cor da plaquinha, a cor
+      // sera unica". O exemplo do campo dizia `nome gravado, cor da
+      // plaquinha` e convidava a pedir uma coisa que nao existe.
+      //
+      // **Nunca houve CAMPO de cor nesta tela** -- so esta linha de exemplo --
+      // e por isso nenhum campo foi apagado aqui.
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+
+      final campo = tester.widget<BichuField>(_campoDoRotulo('Observação'));
+      expect(campo.exemplo, isNot(contains('cor')));
+      // CONTRAPESO: o exemplo nao sumiu inteiro, so a cor saiu dele.
+      expect(campo.exemplo, 'nome gravado');
+    });
+  });
+
   group('ISCA — o pedido sai com o pet escolhido', () {
     testWidgets('3. o `extra` pre-seleciona, e o POST vai no caminho do pet',
         (tester) async {
@@ -301,7 +362,7 @@ void main() {
       await tocar(tester, find.text('Pedir a plaquinha'));
 
       expect(registro.caminhos, <String>['/v1/pets/$_idDoPet/tag-requests']);
-      expect(find.text('Pedido enviado.'), findsOneWidget);
+      expect(find.byType(AcompanhamentoDoPedido), findsOneWidget);
     });
 
     testWidgets('3b. sem pet escolhido NAO chama a rede, e cobra a escolha',
@@ -402,7 +463,7 @@ void main() {
       await tocar(tester, find.text('Pedir a plaquinha'));
 
       expect(registro.caminhos, hasLength(1));
-      expect(find.text('Pedido enviado.'), findsOneWidget);
+      expect(find.byType(AcompanhamentoDoPedido), findsOneWidget);
     });
 
     testWidgets('5b. o CEP preenche rua, bairro, cidade e estado', (tester) async {
@@ -456,7 +517,7 @@ void main() {
       // **A assercao que o cliente comprou.** O servico de terceiro caiu, e o
       // pedido foi assim mesmo.
       expect(registro.caminhos, hasLength(1));
-      expect(find.text('Pedido enviado.'), findsOneWidget);
+      expect(find.byType(AcompanhamentoDoPedido), findsOneWidget);
     });
 
     testWidgets('5b4. CEP inexistente tambem nao impede: diz e segue',
@@ -473,7 +534,7 @@ void main() {
       await tocar(tester, find.text('Pedir a plaquinha'));
 
       expect(registro.caminhos, hasLength(1));
-      expect(find.text('Pedido enviado.'), findsOneWidget);
+      expect(find.byType(AcompanhamentoDoPedido), findsOneWidget);
     });
 
     testWidgets('5f. a busca manda SO o CEP, e sem o token da sessao',
@@ -557,7 +618,7 @@ void main() {
       await tocar(tester, find.text('Pedir a plaquinha'));
 
       expect(find.text('Este pet não está na sua conta.'), findsOneWidget);
-      expect(find.text('Pedido enviado.'), findsNothing);
+      expect(find.byType(AcompanhamentoDoPedido), findsNothing);
     });
 
     testWidgets('7. 429 fala do teto do dia, e nao "servidor fora"',

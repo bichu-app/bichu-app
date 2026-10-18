@@ -50,6 +50,13 @@ abstract final class TextosDoDetalhe {
   /// saindo de lugar nenhum.
   static const String marcarComoPerdido = TelaDeQuemEOCaso.titulo;
 
+  /// O link para a pagina de acompanhamento do pedido da plaquinha.
+  ///
+  /// **So aparece quando ha pedido** -- ver `TelaDetalheDoPet`. Texto curto,
+  /// sem frase de apoio: o cliente mandou tirar os paragrafos explicativos do
+  /// app em 18/10.
+  static const String acompanharPlaquinha = 'Acompanhar o pedido da plaquinha';
+
   /// O titulo da tela de edicao. O nome nao entra: ele e o primeiro campo, e
   /// repeti-lo na barra gasta a largura que o 11.23.4 reserva para o titulo
   /// longo em fonte ampliada.

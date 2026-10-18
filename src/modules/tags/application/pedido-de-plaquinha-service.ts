@@ -72,6 +72,23 @@ export class PedidoDePlaquinhaService {
     if (pedido === undefined) throw problemas.naoEncontrado();
     return pedido;
   }
+
+  /**
+   * Os pedidos de um pet do chamador, para a pagina de acompanhamento.
+   *
+   * **404 e nao 403 para pet de outra pessoa**, e pelo mesmo motivo de
+   * [pedir]: a decisao esta na clausula `WHERE` do repositorio, e aqui so se
+   * traduz "nao encontrei" para a resposta.
+   *
+   * **Lista vazia NAO e 404.** Pet que e seu e ainda nao tem pedido responde
+   * `200` com zero itens: e um estado legitimo, e confundi-lo com "nao existe"
+   * faria a pagina do pet recem-cadastrado mentir sobre o proprio pet.
+   */
+  async listarDoPet(petId: PetId, solicitante: UserId): Promise<readonly PedidoDoTutor[]> {
+    const pedidos = await this.deps.repositorio.listarDoPet(petId, solicitante);
+    if (pedidos === undefined) throw problemas.naoEncontrado();
+    return pedidos;
+  }
 }
 
 /** A fila do painel: listar e decidir. A TELA e da sessao Backoffice. */

@@ -804,15 +804,41 @@ class EnderecoDeEntrega {
 /// contrato nao o projeta para o app (ADR-0010 item 6).
 class PedidoDePlaquinha {
   const PedidoDePlaquinha({
+    required this.ref,
     required this.status,
     required this.solicitadoEm,
+    this.decididoEm,
+    this.codigoDeRastreio,
     this.observacao,
   });
 
+  /// O identificador OPACO do pedido, como o servidor o devolveu.
+  ///
+  /// **Nunca gerado aqui.** Ele e o mesmo `ref` de 128 bits que a fila do
+  /// painel usa, e e o numero que a pessoa tem para falar sobre o pedido
+  /// dela. Um identificador inventado no app nao serviria para nada: ninguem
+  /// do outro lado saberia procura-lo.
+  final String ref;
+
   /// `pending`, `fulfilled` ou `declined`, como o contrato os escreve.
+  ///
+  /// **Texto e nao enum**, de proposito: a fila do painel pode ganhar estados
+  /// de entrega, e um enum fechado faria uma versao antiga do app quebrar ao
+  /// receber um valor que ainda nao conhece. Quem traduz para passo de tela e
+  /// `AcompanhamentoDoPedido`, com um ramo explicito para o desconhecido.
   final String status;
 
   final DateTime? solicitadoEm;
+
+  /// Quando o painel decidiu, ou nulo enquanto ninguem decidiu.
+  final DateTime? decididoEm;
+
+  /// O codigo de rastreio da transportadora, quando existir.
+  ///
+  /// **Hoje o servidor sempre o manda nulo**: nao ha coluna que o guarde nem
+  /// rota que o escreva. A tela so o desenha quando ele vem preenchido --
+  /// campo de rastreio vazio e pior que nenhum campo.
+  final String? codigoDeRastreio;
 
   final String? observacao;
 
@@ -821,9 +847,17 @@ class PedidoDePlaquinha {
 
   factory PedidoDePlaquinha.doJson(Map<String, dynamic> json) {
     final quando = json['requested_at'];
+    final decidido = json['decided_at'];
+    // `tracking_code` vazio conta como ausente: um codigo em branco nao e um
+    // codigo, e deixa-lo passar faria a tela desenhar um campo vazio.
+    final rastreio = json['tracking_code'] as String?;
     return PedidoDePlaquinha(
+      ref: json['ref'] as String? ?? '',
       status: json['status'] as String? ?? 'pending',
       solicitadoEm: quando is String ? DateTime.tryParse(quando) : null,
+      decididoEm: decidido is String ? DateTime.tryParse(decidido) : null,
+      codigoDeRastreio:
+          rastreio == null || rastreio.trim().isEmpty ? null : rastreio.trim(),
       observacao: json['notes'] as String?,
     );
   }
