@@ -45,7 +45,6 @@ import type {
 import type {
   ConsequenciasDaExclusao,
   Conta,
-  IdentityRepository,
   MotivoDeRevogacao,
   NovoTokenDeVerificacao,
   PropositoDoToken,
@@ -56,6 +55,7 @@ import type { TokenSigner } from '../ports/token-signer.js';
 import type { Autenticado } from './auth-service.js';
 import { criarAuthService, PRAZO_DE_EXPURGO_EM_MS } from './auth-service.js';
 import type { ContextoDaRequisicao } from './dependencies.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 
 const TUTORA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const EMAIL = 'tutora@exemplo.test';
@@ -114,6 +114,14 @@ interface LinhaDeToken {
 }
 
 /**
+ * A recusa deste arquivo, pelo nome da porta. Mesma mensagem que cada stub
+ * carregava antes de o dublê compartilhado assumir as portas não exercitadas.
+ */
+function naoUsado(nome: string): never {
+  throw new Error(`${nome}: nenhum caso deste arquivo deveria chegar aqui`);
+}
+
+/**
  * Um pedaço do banco que se comporta como o banco.
  *
  * Só o que estes casos observam: as linhas de refresh com o motivo gravado, a
@@ -122,7 +130,20 @@ interface LinhaDeToken {
  * sem querer estoura nomeando, em vez de devolver `undefined` e fazer a
  * afirmação seguinte passar por acidente.
  */
-class BancoDeMentira implements IdentityRepository {
+class BancoDeMentira extends RepositorioQueRecusaTudo {
+  protected recusar(nome: string): never {
+    return naoUsado(nome);
+  }
+
+  /**
+   * Recusa com mensagem PRÓPRIA, e não a genérica: a varredura de expurgo é do
+   * worker, e um caso deste arquivo que chegasse aqui estaria exercitando outra
+   * coisa. A distinção existia antes do dublê compartilhado e segue valendo.
+   */
+  override contasAExpurgar(): never {
+    throw new Error('contasAExpurgar: é do worker, não do serviço');
+  }
+
   public conta: Conta = contaViva();
   public readonly refresh: LinhaDeRefresh[] = [
     { familyId: 'fam-celular', revokedAt: null, revokedReason: null },
@@ -138,11 +159,11 @@ class BancoDeMentira implements IdentityRepository {
     if (this.quebrar === onde) throw new BancoCaiu(onde);
   }
 
-  buscarContaPorId(id: UserId): Promise<Conta | undefined> {
+  override buscarContaPorId(id: UserId): Promise<Conta | undefined> {
     return Promise.resolve(id === TUTORA ? this.conta : undefined);
   }
 
-  revogarTodasAsFamilias(
+  override revogarTodasAsFamilias(
     userId: UserId,
     motivo: MotivoDeRevogacao,
     agora: Instant,
@@ -161,7 +182,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve(caidas);
   }
 
-  invalidarSessoes(userId: UserId, barreira: Instant): Promise<void> {
+  override invalidarSessoes(userId: UserId, barreira: Instant): Promise<void> {
     this.conferirInterruptor('invalidarSessoes');
     if (userId !== TUTORA) return Promise.resolve();
     // `GREATEST`: a coluna só anda para a frente.
@@ -172,7 +193,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve();
   }
 
-  registrarPedidoDeExclusao(
+  override registrarPedidoDeExclusao(
     userId: UserId,
     agora: Instant,
   ): Promise<ConsequenciasDaExclusao | undefined> {
@@ -183,7 +204,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve({ tagsRevogadas: 3 });
   }
 
-  criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
+  override criarTokenDeVerificacao(novo: NovoTokenDeVerificacao): Promise<void> {
     this.tokens.push({
       hash: novo.tokenHash,
       proposito: novo.proposito,
@@ -194,7 +215,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve();
   }
 
-  conferirTokenDeVerificacao(
+  override conferirTokenDeVerificacao(
     hash: TokenHash,
     proposito: PropositoDoToken,
     agora: Instant,
@@ -211,7 +232,7 @@ class BancoDeMentira implements IdentityRepository {
     );
   }
 
-  consumirTokenDeVerificacao(
+  override consumirTokenDeVerificacao(
     hash: TokenHash,
     proposito: PropositoDoToken,
     agora: Instant,
@@ -228,7 +249,7 @@ class BancoDeMentira implements IdentityRepository {
     return Promise.resolve({ userId: TUTORA, enviadoPara: linha.enviadoPara });
   }
 
-  invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
+  override invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
     this.tokensInvalidados += 1;
     let n = 0;
     if (userId === TUTORA) {
@@ -241,82 +262,11 @@ class BancoDeMentira implements IdentityRepository {
     }
     return Promise.resolve(n);
   }
-
-  // O resto da porta. Recusa alto: um caso que chegue aqui está exercitando
-  // outra coisa, e devolver `undefined` faria a afirmação seguinte passar por
-  // acidente — que é a forma de um portão aprovar por ausência.
-  criarContaLocal(): never {
-    throw new Error('criarContaLocal: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  atualizarPerfil(): never {
-    throw new Error('atualizarPerfil: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  // A FOTO DO PERFIL (18/10/2026) nao e exercitada neste arquivo.
-  fotoDoPerfil(): never {
-    throw new Error('fotoDoPerfil: nenhum caso deste arquivo deveria chegar aqui');
-  }
-
-  trocarFotoDoPerfil(): never {
-    throw new Error('trocarFotoDoPerfil: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  buscarContaPorEmail(): never {
-    throw new Error('buscarContaPorEmail: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  buscarCredencialLocalPorEmail(): never {
-    throw new Error('buscarCredencialLocalPorEmail: nenhum caso deste arquivo deveria chegar aqui');
-  }
   buscarCredencialLocalPorUsuario(): never {
     throw new Error('buscarCredencialLocalPorUsuario: nenhum caso deste arquivo deveria chegar');
   }
-  regravarCredencial(): never {
-    throw new Error('regravarCredencial: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  gravarRefresh(): never {
-    throw new Error('gravarRefresh: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  buscarRefreshPorHash(): never {
-    throw new Error('buscarRefreshPorHash: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  rotacionar(): never {
-    throw new Error('rotacionar: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  registrarLogin(): never {
-    throw new Error('registrarLogin: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  revogarFamilia(): never {
-    throw new Error('revogarFamilia: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  marcarEmailVerificado(): never {
-    throw new Error('marcarEmailVerificado: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  contasAExpurgar(): never {
-    throw new Error('contasAExpurgar: é do worker, não do serviço');
-  }
   expurgarConta(): never {
     throw new Error('expurgarConta: é do worker, não do serviço');
-  }
-  criarJanelaDeReautenticacao(): never {
-    throw new Error(
-      'criarJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui',
-    );
-  }
-  consumirJanelaDeReautenticacao(): never {
-    throw new Error(
-      'consumirJanelaDeReautenticacao: nenhum caso deste arquivo deveria chegar aqui',
-    );
-  }
-  registrarPedidoDeTrocaDeEmail(): never {
-    throw new Error(
-      'registrarPedidoDeTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui',
-    );
-  }
-  concluirTrocaDeEmail(): never {
-    throw new Error('concluirTrocaDeEmail: nenhum caso deste arquivo deveria chegar aqui');
-  }
-  cancelarTrocaDeEmailPendente(): never {
-    throw new Error(
-      'cancelarTrocaDeEmailPendente: nenhum caso deste arquivo deveria chegar aqui',
-    );
   }
 }
 

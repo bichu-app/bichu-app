@@ -31,7 +31,6 @@ import { gerarHashDeSenha } from '../domain/password.js';
 import type {
   Conta,
   CredencialLocal,
-  IdentityRepository,
   MotivoDeRevogacao,
   NovoRefresh,
   PropositoDoToken,
@@ -42,6 +41,7 @@ import type { Mailer, Mensagem } from '../ports/mailer.js';
 import type { ResultadoDaVerificacao, TokenSigner } from '../ports/token-signer.js';
 import type { AvisoAoTitular, ContextoDaRequisicao } from './dependencies.js';
 import { criarAuthService } from './auth-service.js';
+import { RepositorioQueRecusaTudo } from '../adapters/persistence/repositorio-que-recusa-tudo-de-teste.js';
 
 const VITIMA = '0192f3a1-7c2b-7e3d-9a10-6b4c8d2e5f01' as UserId;
 const FAMILIA = 'fam-da-vitima';
@@ -92,7 +92,11 @@ interface RedefinicaoPendente {
   readonly credencial: CredencialLocal | undefined;
 }
 
-class RepositorioFalso implements IdentityRepository {
+class RepositorioFalso extends RepositorioQueRecusaTudo {
+  protected recusar(nome: string): never {
+    return naoUsado(nome);
+  }
+
   public readonly revogacoes: { familyId: string; motivo: MotivoDeRevogacao; agora: Instant }[] = [];
   public readonly rotacoes: NovoRefresh[] = [];
 
@@ -134,6 +138,8 @@ class RepositorioFalso implements IdentityRepository {
     private readonly redefinicao: RedefinicaoPendente | undefined = undefined,
     private readonly login: CredencialLocal | undefined = undefined,
   ) {
+    super();
+
     this.conta = conta;
   }
 
@@ -145,7 +151,7 @@ class RepositorioFalso implements IdentityRepository {
    * da que o produto acabou de escrever, e o `issuedAt` comparado com a barreira
    * seria o do teste e não o do código.
    */
-  buscarRefreshPorHash(): Promise<RefreshArmazenado | undefined> {
+  override buscarRefreshPorHash(): Promise<RefreshArmazenado | undefined> {
     const gravado = this.familiasAbertas.at(-1);
     if (gravado === undefined) return Promise.resolve(this.refresh);
     return Promise.resolve({
@@ -161,38 +167,20 @@ class RepositorioFalso implements IdentityRepository {
     });
   }
 
-  revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number> {
+  override revogarFamilia(familyId: string, motivo: MotivoDeRevogacao, agora: Instant): Promise<number> {
     this.revogacoes.push({ familyId, motivo, agora });
     return Promise.resolve(2);
   }
 
-  buscarContaPorId(): Promise<Conta | undefined> {
+  override buscarContaPorId(): Promise<Conta | undefined> {
     return Promise.resolve(this.conta);
   }
 
-  rotacionar(_atual: string, sucessor: NovoRefresh): Promise<boolean> {
+  override rotacionar(_atual: string, sucessor: NovoRefresh): Promise<boolean> {
     this.rotacoes.push(sucessor);
     return Promise.resolve(true);
   }
-
-  criarContaLocal(): Promise<Conta | undefined> {
-    return naoUsado('criarContaLocal');
-  }
-  atualizarPerfil(): Promise<Conta | undefined> {
-    return naoUsado('atualizarPerfil');
-  }
-  // A FOTO DO PERFIL (18/10/2026) nao e exercitada neste arquivo.
-  fotoDoPerfil(): Promise<null> {
-    return naoUsado('fotoDoPerfil');
-  }
-
-  trocarFotoDoPerfil(): Promise<Conta | undefined> {
-    return naoUsado('trocarFotoDoPerfil');
-  }
-  buscarContaPorEmail(): Promise<Conta | undefined> {
-    return naoUsado('buscarContaPorEmail');
-  }
-  buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined> {
+  override buscarCredencialLocalPorEmail(email: string): Promise<CredencialLocal | undefined> {
     if (this.redefinicao !== undefined) {
       const dono = this.redefinicao.consumido?.enviadoPara;
       return Promise.resolve(email === dono ? this.redefinicao.credencial : undefined);
@@ -200,17 +188,17 @@ class RepositorioFalso implements IdentityRepository {
     if (this.login === undefined) return naoUsado('buscarCredencialLocalPorEmail');
     return Promise.resolve(this.login);
   }
-  regravarCredencial(identityId: string, _phc: string, agora: Instant): Promise<void> {
+  override regravarCredencial(identityId: string, _phc: string, agora: Instant): Promise<void> {
     if (this.redefinicao === undefined) return naoUsado('regravarCredencial');
     this.credenciaisRegravadas.push({ identityId, agora });
     return Promise.resolve();
   }
-  registrarLogin(identityId: string, agora: Instant): Promise<void> {
+  override registrarLogin(identityId: string, agora: Instant): Promise<void> {
     if (this.login === undefined) return naoUsado('registrarLogin');
     this.loginsRegistrados.push({ identityId, agora });
     return Promise.resolve();
   }
-  gravarRefresh(novo: NovoRefresh): Promise<void> {
+  override gravarRefresh(novo: NovoRefresh): Promise<void> {
     if (this.login === undefined) return naoUsado('gravarRefresh');
     this.familiasAbertas.push(novo);
     return Promise.resolve();
@@ -223,7 +211,7 @@ class RepositorioFalso implements IdentityRepository {
    * com a marca antiga e o cálculo daria certo por acidente. `greatest` é o do
    * `UPDATE` real, e está aqui pela mesma razão.
    */
-  invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void> {
+  override invalidarSessoes(userId: UserId, barreira: Instant, agora: Instant): Promise<void> {
     this.invalidacoesDeSessao.push({ userId, barreira, agora });
     if (this.conta !== undefined) {
       this.conta = {
@@ -239,7 +227,7 @@ class RepositorioFalso implements IdentityRepository {
    * alguém **deixar** de revogar as famílias, e um dublê que só falha quando é
    * chamado fica verde exatamente nesse caso.
    */
-  revogarTodasAsFamilias(
+  override revogarTodasAsFamilias(
     userId: UserId,
     motivo: MotivoDeRevogacao,
     agora: Instant,
@@ -247,10 +235,7 @@ class RepositorioFalso implements IdentityRepository {
     this.revogacoesEmMassa.push({ userId, motivo, agora });
     return Promise.resolve(this.familiasVivas);
   }
-  criarTokenDeVerificacao(): Promise<void> {
-    return naoUsado('criarTokenDeVerificacao');
-  }
-  consumirTokenDeVerificacao(
+  override consumirTokenDeVerificacao(
     _hash: TokenHash,
     _proposito: PropositoDoToken,
     agora: Instant,
@@ -259,48 +244,21 @@ class RepositorioFalso implements IdentityRepository {
     this.consumosDeToken.push(agora);
     return Promise.resolve(this.redefinicao.consumido);
   }
-  conferirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
+  override conferirTokenDeVerificacao(): Promise<TokenConsumido | undefined> {
     if (this.redefinicao === undefined) return naoUsado('conferirTokenDeVerificacao');
     return Promise.resolve(this.redefinicao.pendente);
   }
-  invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
+  override invalidarTokensPendentes(userId: UserId, agora: Instant): Promise<number> {
     if (this.redefinicao === undefined) return naoUsado('invalidarTokensPendentes');
     this.invalidacoesDeTokens.push({ userId, agora });
     return Promise.resolve(1);
-  }
-  criarJanelaDeReautenticacao(): Promise<void> {
-    return naoUsado('criarJanelaDeReautenticacao');
-  }
-
-  consumirJanelaDeReautenticacao(): never {
-    throw new Error('consumirJanelaDeReautenticacao: nenhum caso deste arquivo chega aqui');
-  }
-
-  marcarEmailVerificado(): Promise<void> {
-    return naoUsado('marcarEmailVerificado');
-  }
-
-  registrarPedidoDeExclusao(): Promise<undefined> {
-    return naoUsado('registrarPedidoDeExclusao');
-  }
-
-  contasAExpurgar(): Promise<readonly UserId[]> {
-    return naoUsado('contasAExpurgar');
   }
 
   expurgarConta(): Promise<boolean> {
     return naoUsado('expurgarConta');
   }
 
-  registrarPedidoDeTrocaDeEmail(): Promise<void> {
-    return naoUsado('registrarPedidoDeTrocaDeEmail');
-  }
-
-  concluirTrocaDeEmail(): Promise<Conta | undefined> {
-    return naoUsado('concluirTrocaDeEmail');
-  }
-
-  cancelarTrocaDeEmailPendente(): Promise<void> {
+  override cancelarTrocaDeEmailPendente(): Promise<void> {
     return Promise.resolve();
   }
 }
