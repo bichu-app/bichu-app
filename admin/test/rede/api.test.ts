@@ -81,10 +81,10 @@ describe('mensagens de falha (UX 30, B16 e B19)', async () => {
   const { mensagemDaFalha } = await import('../../src/rede/api/mensagens.ts');
   it('removido e título repetido', () => {
     expect(mensagemDaFalha({ tipo: 'validacao', erros: [{ field: 'slug', code: 'event_removed' }] }, 'salvar')).toBe(
-      'Este encontro foi removido. Ele não aparece no app e não pode mais ser alterado.',
+      'Este evento foi removido. Ele não aparece no app e não pode mais ser alterado.',
     );
-    expect(mensagemDaFalha({ tipo: 'encontro-fechado' }, 'aprovar')).toBe('Este encontro não está mais aberto a pedidos. Eles não podem mais ser aprovados nem recusados.');
-    expect(mensagemDaFalha({ tipo: 'endereco-ocupado' }, 'salvar')).toBe('Já existe um encontro com um título parecido. Mude o título e tente de novo.');
+    expect(mensagemDaFalha({ tipo: 'encontro-fechado' }, 'aprovar')).toBe('Este evento não está mais aberto a pedidos. Eles não podem mais ser aprovados nem recusados.');
+    expect(mensagemDaFalha({ tipo: 'endereco-ocupado' }, 'salvar')).toBe('Já existe um evento com um título parecido. Mude o título e tente de novo.');
   });
 });
 
@@ -100,7 +100,7 @@ describe('428 precondition-required (If-Match faltando)', () => {
     const { mensagemDaFalha } = await import('../../src/rede/api/mensagens.ts');
     if (r.ok) throw new Error('deveria falhar');
     expect(precisaReler(r.falha)).toBe(true);
-    expect(mensagemDaFalha(r.falha, 'remover')).toMatch(/^Não conseguimos confirmar qual versão deste encontro você está vendo, e nada foi gravado\./);
+    expect(mensagemDaFalha(r.falha, 'remover')).toMatch(/^Não conseguimos confirmar qual versão deste evento você está vendo, e nada foi gravado\./);
     expect(mensagemDaFalha(r.falha, 'remover')).not.toMatch(/Alguém alterou/);
   });
 

@@ -469,8 +469,8 @@ export class RedeAdministrativa {
       return completo;
     });
 
-    await this.avisarAdministradores(autor, `Encontro criado: ${criado.title}`, [
-      `Um encontro foi criado e publicado no painel da Rede.`,
+    await this.avisarAdministradores(autor, `Evento criado: ${criado.title}`, [
+      `Um evento foi criado e publicado no painel da Rede.`,
       `Título: ${criado.title}`,
       `Visibilidade: ${criado.visibilidade === 'private' ? 'privado' : 'público'}`,
       `Lugar: ${descreverLugar(criado.lugar)}${criado.lugar.ponto === null ? '' : ' (com ponto no mapa)'}`,
@@ -584,8 +584,8 @@ export class RedeAdministrativa {
     // golpe nao passa calada.
     if (antes.linkDeIngresso !== depois.linkDeIngresso || antes.instagram !== depois.instagram) {
       await this.avisarAdministradores(autor, `Links alterados: ${depois.title}`, [
-        'O link de ingresso ou o Instagram de um encontro da Rede foi alterado.',
-        `Encontro: ${depois.title}`,
+        'O link de ingresso ou o Instagram de um evento da Rede foi alterado.',
+        `Evento: ${depois.title}`,
         `Link de ingresso antes: ${antes.linkDeIngresso ?? '(sem link)'}`,
         `Link de ingresso depois: ${depois.linkDeIngresso ?? '(sem link)'}`,
         `Instagram antes: ${antes.instagram === null ? '(sem Instagram)' : `@${antes.instagram}`}`,
@@ -595,8 +595,8 @@ export class RedeAdministrativa {
     }
     if (antes.observacoes !== depois.observacoes) {
       await this.avisarAdministradores(autor, `Observações alteradas: ${depois.title}`, [
-        'As observações de um encontro da Rede foram alteradas (D60).',
-        `Encontro: ${depois.title}`,
+        'As observações de um evento da Rede foram alteradas (D60).',
+        `Evento: ${depois.title}`,
         `Antes: ${antes.observacoes ?? '(sem observações)'}`,
         `Depois: ${depois.observacoes ?? '(sem observações)'}`,
         'Se você não reconhece esta mudança, avise o responsável pelo painel.',
@@ -670,9 +670,9 @@ export class RedeAdministrativa {
       return { antes: atual, depois: completo };
     });
 
-    await this.avisarAdministradores(autor, `Encontro movido: ${depois.title}`, [
-      'Um encontro publicado mudou de lugar ou de horário (T11).',
-      `Encontro: ${depois.title}`,
+    await this.avisarAdministradores(autor, `Evento movido: ${depois.title}`, [
+      'Um evento publicado mudou de lugar ou de horário (T11).',
+      `Evento: ${depois.title}`,
       `Motivo informado: ${corpo.reason.trim()}`,
       `Lugar antes: ${descreverLugar(antes.lugar)}`,
       `Lugar depois: ${descreverLugar(depois.lugar)}`,
@@ -744,8 +744,8 @@ export class RedeAdministrativa {
     if (resultado.mudou) {
       const { antes, depois } = resultado;
       await this.avisarAdministradores(autor, `Condição de acesso alterada: ${depois.title}`, [
-        'A visibilidade ou a condição de acesso de um encontro publicado mudou.',
-        `Encontro: ${depois.title}`,
+        'A visibilidade ou a condição de acesso de um evento publicado mudou.',
+        `Evento: ${depois.title}`,
         `Motivo informado: ${corpo.reason.trim()}`,
         `Visibilidade: ${antes.visibilidade} -> ${depois.visibilidade}`,
         `Acesso: ${descreverEntrada(antes.entrada)} -> ${descreverEntrada(depois.entrada)}`,
@@ -792,9 +792,9 @@ export class RedeAdministrativa {
       return completo;
     });
 
-    await this.avisarAdministradores(autor, `Encontro cancelado: ${cancelado.title}`, [
-      'Um encontro publicado foi cancelado. Ele continua no app como cancelado até o fim previsto.',
-      `Encontro: ${cancelado.title}`,
+    await this.avisarAdministradores(autor, `Evento cancelado: ${cancelado.title}`, [
+      'Um evento publicado foi cancelado. Ele continua no app como cancelado até o fim previsto.',
+      `Evento: ${cancelado.title}`,
       `Motivo registrado: ${cancelado.cancellationNote ?? ''}`,
       'Se você não reconhece este cancelamento, avise o responsável pelo painel.',
     ]);

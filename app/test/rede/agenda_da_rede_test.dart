@@ -96,7 +96,7 @@ void main() {
         'past',
       );
       expect(find.text('Tarde dos filhotes'), findsOneWidget);
-      expect(find.text('1 encontro · Mais recente primeiro'), findsOneWidget);
+      expect(find.text('1 evento · Mais recente primeiro'), findsOneWidget);
       expect(find.byIcon(Icons.swap_vert), findsNothing);
     });
   });
@@ -458,9 +458,9 @@ void main() {
         rede: redeComAgenda(proximos: <Map<String, dynamic>>[]),
         logado: false,
       );
-      expect(find.text('A Rede ainda não tem encontros'), findsOneWidget);
+      expect(find.text('A Rede ainda não tem eventos'), findsOneWidget);
       expect(
-        find.text('Aparecem aqui assim que forem marcados.'),
+        find.text('Aparecem aqui assim que forem criados.'),
         findsOneWidget,
       );
       expect(find.byIcon(Icons.tune), findsNothing);
@@ -483,12 +483,12 @@ void main() {
       await tester.tap(find.byTooltip('Buscar'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Nenhum encontro com “agility”'), findsOneWidget);
+      expect(find.text('Nenhum evento com “agility”'), findsOneWidget);
       expect(
         find.text('Tente outra palavra, outro período ou menos filtros.'),
         findsOneWidget,
       );
-      expect(find.text('0 encontros · Data mais próxima'), findsOneWidget);
+      expect(find.text('0 eventos · Data mais próxima'), findsOneWidget);
       await tester.tap(find.text('Limpar busca'));
       await tester.pumpAndSettle();
       expect(find.text('Passeio matinal na Benedito Calixto'), findsOneWidget);
@@ -500,7 +500,7 @@ void main() {
       });
       await abrirRede(tester, rede: rede, logado: false);
       expect(
-        find.text('Não conseguimos carregar os encontros agora.'),
+        find.text('Não conseguimos carregar os eventos agora.'),
         findsOneWidget,
       );
       expect(find.text('Atualizar'), findsOneWidget);
@@ -550,15 +550,15 @@ void main() {
       expect(find.text('Mostrando 1 a 20 de 25'), findsOneWidget);
       expect(rede.chamadasA('GET /v1/network/events/nearby'), hasLength(1));
 
-      await tester.ensureVisible(find.text('Carregar mais encontros'));
+      await tester.ensureVisible(find.text('Carregar mais eventos'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Carregar mais encontros'));
+      await tester.tap(find.text('Carregar mais eventos'));
       await tester.pumpAndSettle();
 
       final lista = rede.chamadasA('GET /v1/network/events');
       expect(lista.last.url.queryParameters['page'], '2');
       expect(find.text('Mostrando 1 a 25 de 25'), findsOneWidget);
-      expect(find.text('Carregar mais encontros'), findsNothing);
+      expect(find.text('Carregar mais eventos'), findsNothing);
       // Os cinco novos nao tinham medida: a proxima pagina de distancias sai.
       final perto = rede.chamadasA('GET /v1/network/events/nearby');
       expect(perto, hasLength(2));
@@ -568,11 +568,11 @@ void main() {
     testWidgets('falha na página seguinte: os cartões ficam e Tentar de novo',
         (tester) async {
       await abrirRede(tester, rede: redePaginada(segundaFalha: true), logado: false);
-      await tester.ensureVisible(find.text('Carregar mais encontros'));
+      await tester.ensureVisible(find.text('Carregar mais eventos'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('Carregar mais encontros'));
+      await tester.tap(find.text('Carregar mais eventos'));
       await tester.pumpAndSettle();
-      expect(find.text('Não conseguimos carregar mais encontros agora.'), findsOneWidget);
+      expect(find.text('Não conseguimos carregar mais eventos agora.'), findsOneWidget);
       expect(find.text('Tentar de novo'), findsOneWidget);
       expect(find.text('Mostrando 1 a 20 de 25'), findsOneWidget);
     });
@@ -640,9 +640,9 @@ void main() {
       // (opcional), coloque o texto no placeholder do campo buscar"*.
       await abrirRede(tester, rede: redeComAgenda(), logado: false);
 
-      expect(find.text('Buscar encontro (opcional)'), findsNothing);
+      expect(find.text('Buscar evento (opcional)'), findsNothing);
       final campo = tester.widget<TextField>(find.byType(TextField).first);
-      expect(campo.decoration?.hintText, 'Buscar encontro');
+      expect(campo.decoration?.hintText, 'Buscar evento');
     });
 
     testWidgets('sem rotulo visivel o campo CONTINUA tendo nome acessivel',
@@ -657,7 +657,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.bySemanticsLabel(RegExp('Buscar encontro')),
+        find.bySemanticsLabel(RegExp('Buscar evento')),
         findsWidgets,
         reason: 'REPROVA: o campo de busca com texto digitado nao tem nome '
             'acessivel. A dica sumiu junto com o rotulo visivel.',
@@ -673,7 +673,7 @@ void main() {
 
       final campo = tester.getTopLeft(find.byType(TextField).first);
       final reforco = tester.getTopLeft(
-        find.text('Os eventos e encontros de quem tem pet aqui perto de você.'),
+        find.text('Os eventos de quem tem pet aqui perto de você.'),
       );
       final abas = tester.getTopLeft(find.byType(TabBar));
 
@@ -801,7 +801,7 @@ void main() {
           ],
         ),
       );
-      expect(find.text('Não conseguimos carregar os encontros agora.'), findsOneWidget);
+      expect(find.text('Não conseguimos carregar os eventos agora.'), findsOneWidget);
     });
   });
 }

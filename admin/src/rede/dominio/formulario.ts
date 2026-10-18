@@ -85,9 +85,9 @@ export function avisoDeFotosSemEnvio(f: Pick<EstadoDoFormulario, 'fotos'>): stri
   const posicoes = f.fotos.flatMap((x, i) => (semEnvio(x) ? [i + 1] : []));
   if (posicoes.length === 0) return null;
   if (posicoes.length === 1) {
-    return `A foto ${posicoes[0]} veio de uma conta que não existe mais. Ela fica no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do encontro.`;
+    return `A foto ${posicoes[0]} veio de uma conta que não existe mais. Ela fica no evento enquanto você não mexer na galeria; qualquer mudança nas fotos a tira do evento.`;
   }
-  return `${posicoes.length} fotos vieram de uma conta que não existe mais. Elas ficam no encontro enquanto você não mexer na galeria; qualquer mudança nas fotos as tira do encontro.`;
+  return `${posicoes.length} fotos vieram de uma conta que não existe mais. Elas ficam no evento enquanto você não mexer na galeria; qualquer mudança nas fotos as tira do evento.`;
 }
 
 export interface EstadoDoFormulario {
@@ -253,7 +253,7 @@ export function validar(f: EstadoDoFormulario, modo: Modo, agora: Date = new Dat
   const erros: ErroDeCampo[] = [];
   const e = (campo: Campo, rotulo: string, mensagem: string) => erros.push({ campo, rotulo, mensagem });
 
-  if (!entre(f.titulo, 2, 120)) e('titulo', 'Título', 'Informe o título do encontro.');
+  if (!entre(f.titulo, 2, 120)) e('titulo', 'Título', 'Informe o título do evento.');
   if (!entre(f.resumo, 2, LIMITE_DO_RESUMO)) e('resumo', 'Descrição', 'Escreva uma descrição.');
 
   if (f.fotos.some((x) => x.estado === 'enviando')) {
@@ -521,13 +521,13 @@ export function corpoDaMudanca(original: Encontro, f: EstadoDoFormulario, plano:
       else doEncontro.push(adm.kind === 'paid' ? 'agora é pago' : 'agora é gratuito');
     }
     if (doEncontro.length && novoValor) {
-      frases.push(`O encontro ${listaEmPortugues(doEncontro)}, e o valor muda para ${novoValor}. O app mostra isso na hora.`);
+      frases.push(`O evento ${listaEmPortugues(doEncontro)}, e o valor muda para ${novoValor}. O app mostra isso na hora.`);
     } else if (novoValor) {
-      frases.push(`O valor do encontro muda para ${novoValor}, e o app mostra isso na hora.`);
+      frases.push(`O valor do evento muda para ${novoValor}, e o app mostra isso na hora.`);
     } else {
-      frases.push(`O encontro ${listaEmPortugues(doEncontro)}, e o app mostra isso na hora.`);
+      frases.push(`O evento ${listaEmPortugues(doEncontro)}, e o app mostra isso na hora.`);
     }
-    if (plano.acesso.visibility === 'private') frases.push('O link antigo do encontro para de funcionar.');
+    if (plano.acesso.visibility === 'private') frases.push('O link antigo do evento para de funcionar.');
   }
   // UX 30, B3 e B11: o aviso aos administradores e uma frase so, no fim, e nao uma por mudanca.
   if (plano.mudanca || plano.acesso) frases.push('Todos os administradores recebem um e-mail com o antes e o depois.');

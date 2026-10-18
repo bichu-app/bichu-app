@@ -67,41 +67,49 @@ class AgendaDaRede extends StatefulWidget {
   /// inventa texto de secao.
   final String? reforcoDaSecao;
 
-  static const String tituloDoVazio = 'A Rede ainda não tem encontros';
+  static const String tituloDoVazio = 'A Rede ainda não tem eventos';
   static const String explicacaoDoVazio =
-      'Aparecem aqui assim que forem marcados.';
+      'Aparecem aqui assim que forem criados.';
   static const String tituloDoVazioDePedidos = 'Nenhum pedido ainda';
   static const String explicacaoDoVazioDePedidos =
       'Seus pedidos aparecem aqui.';
-  static const String tituloDoVazioDeEncerrados = 'Nenhum encontro encerrado';
+  static const String tituloDoVazioDeEncerrados = 'Nenhum evento encerrado';
   static const String explicacaoDoVazioDeEncerrados =
-      'Os encontros que já aconteceram ficam aqui.';
+      'Os eventos que já aconteceram ficam aqui.';
   static const String tituloDoVazioFiltrado =
-      'Nenhum encontro com esses filtros';
+      'Nenhum evento com esses filtros';
   static const String explicacaoDoVazioFiltrado =
       'Tente outra palavra, outro período ou menos filtros.';
   static const String textoDaFalha =
-      'Não conseguimos carregar os encontros agora.';
+      'Não conseguimos carregar os eventos agora.';
   static const String rotuloDeAtualizar = 'Atualizar';
   static const String exemploDaBusca = 'passeio, praça, Pinheiros';
 
   /// O rotulo da porta de criar. **Diz o verbo da pessoa**, e nao o nome do
-  /// recurso: quem abre a `Rede` quer marcar um encontro, nao "criar um
-  /// NetworkEvent".
-  static const String rotuloDeMarcar = 'Marcar um encontro';
+  /// recurso: quem abre a `Rede` quer criar um evento, nao "criar um
+  /// NetworkEvent". A redacao foi pedida pelo cliente em 18/10; o dominio
+  /// continua chamando a coisa de `encontro` no codigo inteiro.
+  ///
+  /// **Esta constante e a UNICA fonte do rotulo da porta de criar.** Ate
+  /// 18/10 havia duas: esta (`Marcar um encontro`, definida e SEM USO depois
+  /// que a porta saiu do corpo) e o literal `'Criar evento'` da barra, em
+  /// `abas.dart`. A mescla do lote juntou as duas frentes e fechou a
+  /// pendencia que o ramo do icone deixou escrita: o valor e o do
+  /// vocabulario novo, e quem desenha a porta le DAQUI.
+  static const String rotuloDeMarcar = 'Criar evento';
   static const String ordemTrocadaPeloServidor =
       'A ordem escolhida não está disponível agora. A lista usa a ordem '
       'marcada acima.';
 
   /// "Carregar mais" (ATENCAO: a especificacao nao desenhou a paginacao da
   /// agenda; texto no padrao de 28.2, `Tentar de novo` refaz uma coisa so).
-  static const String rotuloDeCarregarMais = 'Carregar mais encontros';
+  static const String rotuloDeCarregarMais = 'Carregar mais eventos';
   static const String falhaAoCarregarMais =
-      'Não conseguimos carregar mais encontros agora.';
+      'Não conseguimos carregar mais eventos agora.';
   static const String rotuloDeTentar = 'Tentar de novo';
 
   static String tituloDoVazioComBusca(String termo) =>
-      'Nenhum encontro com “$termo”';
+      'Nenhum evento com “$termo”';
 
   @override
   State<AgendaDaRede> createState() => _AgendaDaRedeState();
@@ -509,8 +517,8 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
                         plural: 'pedidos',
                       )
                     : const SubstantivoDaListagem(
-                        singular: 'encontro',
-                        plural: 'encontros',
+                        singular: 'evento',
+                        plural: 'eventos',
                       ),
                 // O campo ja foi desenhado acima; a barra recebe o controle
                 // para saber do TERMO APLICADO, e nao para desenhar de novo.
@@ -529,10 +537,10 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
 
   /// A busca. **Aplicada no toque, e nunca na tecla.**
   ///
-  /// O rotulo `Buscar encontro` virou a dica DENTRO do campo, e o
+  /// O rotulo `Buscar evento` virou a dica DENTRO do campo, e o
   /// `(opcional)` saiu: pedido do cliente de 17/10/2026, *"Tire o texto do
   /// app buscar encontro (opcional), coloque o texto no placeholder do campo
-  /// buscar"*. O nome acessivel continua sendo `Buscar encontro` --
+  /// buscar"*. O nome acessivel continua sendo `Buscar evento` --
   /// `BichuField.rotuloVisivel` explica como, e por que campo com dica e sem
   /// rotulo e campo mudo.
   ///
@@ -542,7 +550,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     return ControleDeBusca(
       controlador: _buscaControlador,
       alcance: AlcanceDaBusca.servidor,
-      rotulo: 'Buscar encontro',
+      rotulo: 'Buscar evento',
       termoAplicado: _recorte.termoLimpo,
       // `minLength: 2` no contrato: um caractere so produziria 400, e agora
       // ele e estado da lupa em vez de um `setState` que engolia a tecla.
@@ -775,7 +783,7 @@ class _AgendaDaRedeState extends State<AgendaDaRede>
     if (_fase == _Fase.carregando) {
       return <Widget>[
         Semantics(
-          label: 'Carregando encontros',
+          label: 'Carregando eventos',
           liveRegion: true,
           child: const Column(
             children: <Widget>[

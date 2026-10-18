@@ -205,15 +205,15 @@ class AbaPets extends StatelessWidget {
   }
 }
 
-/// Secao 2 — `Rede`. Eventos e encontros da comunidade.
+/// Secao 2 — `Rede`. Eventos da comunidade.
 ///
 /// **A casca honesta saiu: a secao tem dado.** O `EstadoVazio` "Rede esta em
 /// construcao" era o certo enquanto nao havia tabela nem rota;
 /// `GET /network/events` existe, e a agenda e [AgendaDaRede]. O estado vazio
 /// nao sumiu, mudou de dono: quem o mostra agora e a propria lista, e so
-/// quando o servidor responde que nao ha encontro -- que e afirmacao medida, e
+/// quando o servidor responde que nao ha evento -- que e afirmacao medida, e
 /// nao afirmacao sobre dado que a tela nao carrega. E ele virou **dois**, como
-/// na `Loja`: "a Rede ainda nao tem encontro" e "nada com esse recorte" dizem
+/// na `Loja`: "a Rede ainda nao tem evento" e "nada com esse recorte" dizem
 /// coisas opostas.
 ///
 /// **O slot unico de acao da barra de topo continua LIVRE.** Os tres controles
@@ -259,11 +259,12 @@ class AbaRede extends StatelessWidget {
         //
         // **"Criar evento", e nao "Marcar um encontro".** O vocabulario do app
         // trocou "encontro" por "evento" em 18/10 e os rotulos novos dizem
-        // `Criar evento`. `AgendaDaRede.rotuloDeMarcar` continua definida e
-        // nao foi tocada aqui: a troca de vocabulario dela e de outra frente,
-        // e mexer na constante no mesmo dia produziria conflito de mescla sem
-        // necessidade. **Quando as duas frentes se juntarem, esta string e a
-        // constante tem de virar uma coisa so** -- hoje sao duas.
+        // `Criar evento`. **A pendencia que este ramo deixou escrita esta
+        // FECHADA na mescla do lote de 18/10:** o literal saiu daqui e o
+        // rotulo vem de `AgendaDaRede.rotuloDeMarcar`, que o ramo do
+        // vocabulario passou a valer `Criar evento`. Era uma string aqui mais
+        // uma constante definida e sem uso la; agora e uma coisa so, e quem
+        // mudar a redacao muda num lugar.
         //
         // **O GLIFO: `Icons.more_time` -- o relogio com o sinal de mais.** Ele
         // nao foi escolhido por gosto, e sim por eliminacao dentro da familia
@@ -291,7 +292,7 @@ class AbaRede extends StatelessWidget {
         acaoDeCriar: podeCriarNaComunidade(sessao)
             ? AcaoDeCriarNaBarra(
                 icone: Icons.more_time,
-                rotulo: 'Criar evento',
+                rotulo: AgendaDaRede.rotuloDeMarcar,
                 aoTocar: () => context.push(Rotas.criarEncontroDaRede),
               )
             : null,
