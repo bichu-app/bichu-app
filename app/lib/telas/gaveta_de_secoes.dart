@@ -330,6 +330,31 @@ abstract final class RegistroDeSubDestinos {
         estado: EstadoDoSubDestino.planejada,
       ),
     ],
+    // -- A secao de mensagens (19/10) --------------------------------------
+    //
+    // **A linha existe e esta vazia de propósito.** Toda secao do registro
+    // precisa de linha aqui -- `itensDe` estoura com `ArgumentError` quando
+    // falta, e e assim que este registro impede que uma secao nova entre na
+    // barra sem ninguem decidir qual e o submenu dela.
+    //
+    // Os sub-destinos de mensagens (a lista de conversas, a conversa, o
+    // envio) sao de OUTRO agente e nao existem nesta arvore. Quando a area
+    // dela descer, as linhas entram aqui; enquanto nao descem, a gaveta desta
+    // secao mostra os destinos GLOBAIS, como `Rede` e `Loja` mostram.
+    Rotas.mensagens: <SubDestino>[
+      SubDestino(
+        rotulo: 'Lista de conversas',
+        forma: FormaDoSubDestino.conteudoDaSecao,
+        estado: EstadoDoSubDestino.planejada,
+      ),
+      SubDestino(
+        rotulo: 'Conversa',
+        // Detalhe de um item da lista: o endereco carrega o id da conversa, e
+        // so se chega la pela lista. Item de gaveta teria de inventar qual.
+        forma: FormaDoSubDestino.detalhe,
+        estado: EstadoDoSubDestino.planejada,
+      ),
+    ],
     // -- 27.5.5 `Perfil` --------------------------------------------------
     Rotas.perfil: <SubDestino>[
       SubDestino(
@@ -439,6 +464,66 @@ abstract final class RegistroDeSubDestinos {
     return linhas.where((s) => s.viraItem).toList(growable: false);
   }
 
+  /// OS DESTINOS GLOBAIS, que toda secao mostra no fim da gaveta.
+  ///
+  /// **Eles existem por causa de 19/10**, quando o cliente mandou a gaveta ser
+  /// fixa em toda tela: *"padronize todas as telas, tornando o menu esquerdo
+  /// fixo para manter o padrao, por mais que nao exista um sub-menu ainda, mas
+  /// irei evoluir e acrescentar alguns itens"*.
+  ///
+  /// Isso criou um problema que a regra antiga resolvia escondendo a gaveta:
+  /// `Rede` e `Loja` nao tem **nenhum** sub-destino construido, e gaveta aberta
+  /// e vazia e pior que gaveta ausente -- uma cortina que escurece a tela para
+  /// nao oferecer nada.
+  ///
+  /// A saida nao foi uma frase dizendo que ainda nao ha submenu: frase em menu
+  /// foi exatamente o que ele reprovou em 23/09 (*"parece mais uma pagina do
+  /// que menu, com tanto texto, tanta explicacao"*). A saida foi CONTEUDO --
+  /// os destinos que valem em qualquer secao. Com eles, **nenhuma gaveta deste
+  /// app abre vazia**, e as secoes sem submenu proprio abrem com este grupo e
+  /// nada mais.
+  ///
+  /// **Todos tem rota de verdade**, pela mesma regra de [SubDestino.viraItem]:
+  /// item sem endereco nasce morto. Por isso `Sair da conta` **nao** esta
+  /// aqui -- ele e folha de confirmacao (`acaoNaTela`), nao tem endereco, e
+  /// continua na tela da conta, a um toque de `Minha conta`. E `Meus pets`
+  /// tambem nao: e bloco dentro da tela da conta, sem endereco proprio, e
+  /// `Minha conta` e a porta dele.
+  /// **A secao de mensagens NAO esta aqui, e a ausencia e a regra.**
+  ///
+  /// Ela e um slot da BARRA, e a gaveta nao repete o que a barra oferece: foi
+  /// exatamente isso que o cliente reprovou em 23/09 -- a gaveta "replicava o
+  /// menu principal em vez de abrir o submenu dele". A barra troca de secao; a
+  /// gaveta entra nos caminhos de dentro. Por o `AuAu` aqui seria desfazer a
+  /// divisao entre os dois menus no mesmo dia em que a gaveta virou fixa.
+  ///
+  /// `Minha conta` pode estar: ela **nao** e slot da barra desde 19/10.
+  /// **`Minha conta` NAO esta aqui, e a ausencia tem duas razoes.**
+  ///
+  /// A primeira e de desenho: a porta da conta e a FOTO, e ela mora na mesma
+  /// barra de topo que o hamburguer que abre esta gaveta. Uma linha de gaveta
+  /// para o mesmo destino seria a duplicacao que o cliente vem apontando --
+  /// dois controles lado a lado para a mesma viagem.
+  ///
+  /// A segunda e de mecanismo, e foi medida: a tela da conta e um RAMO da
+  /// casca, e [ItemDaGaveta] navega com `push`, que e o certo para os
+  /// atalhos vivos (todos rotas irmas). Empurrar a rota de um ramo coloca uma
+  /// copia da tela por cima da propria casca em vez de trocar de ramo.
+  static const List<SubDestino> globais = <SubDestino>[
+    SubDestino(
+      rotulo: 'Meus dados',
+      forma: FormaDoSubDestino.destino,
+      estado: EstadoDoSubDestino.existe,
+      rota: Rotas.dadosPessoais,
+    ),
+    SubDestino(
+      rotulo: 'Escanear uma tag',
+      forma: FormaDoSubDestino.destino,
+      estado: EstadoDoSubDestino.existe,
+      rota: Rotas.escanear,
+    ),
+  ];
+
   /// Os destinos de menu de [rotaDaSecao] que ainda **nao** existem.
   static List<SubDestino> pendentesDe(String rotaDaSecao) {
     final linhas = porSecao[rotaDaSecao];
@@ -497,12 +582,26 @@ abstract final class TextosDaGaveta {
 /// duplicacao que o cliente apontou. Quem abre o submenu acabou de tocar no
 /// botao daquela secao: ele nao precisa ser informado de onde esta.
 ///
-/// ## Secao sem sub-destino nao tem gaveta
+/// ## A gaveta e FIXA, e o caso vazio foi resolvido com conteudo (19/10)
 ///
-/// `Rede` e `Loja` nao tem nenhum sub-destino construido. Uma gaveta vazia e
-/// um controle que abre o nada, que e o criterio 2 da BICHUS-62 pelo caminho
-/// mais silencioso. Elas nao montam a gaveta e nao desenham o gatilho -- ver
-/// `ControleDaGaveta.temSubDestinos`, que e onde isso e decidido.
+/// A regra anterior era o contrario: `Rede` e `Loja` nao montavam gaveta nem
+/// desenhavam o gatilho, porque nao tem nenhum sub-destino construido, e
+/// gaveta vazia e um controle que abre o nada. **O cliente reverteu isso de
+/// propria vontade**, com o argumento na mesa: *"padronize todas as telas,
+/// tornando o menu esquerdo fixo para manter o padrao, por mais que nao exista
+/// um sub-menu ainda, mas irei evoluir e acrescentar alguns itens"*.
+///
+/// A objecao continuava valida -- gaveta aberta e vazia e pior que ausente --,
+/// e por isso a padronizacao nao veio sozinha: veio com
+/// [RegistroDeSubDestinos.globais], o grupo de destinos que vale em qualquer
+/// secao. `Rede` e `Loja` abrem com esse grupo e nada mais; as outras abrem
+/// com o submenu proprio, um filete e o grupo. **Nenhuma gaveta deste app abre
+/// vazia**, e a regra que a antiga protegia continua protegida -- por conteudo,
+/// e nao por ausencia.
+///
+/// **O que NAO foi feito**: uma linha dizendo "esta secao ainda nao tem
+/// submenu". Seria texto explicando a navegacao dentro da navegacao, que e o
+/// defeito que ele apontou em 23/09.
 class GavetaDeSecoes extends StatelessWidget {
   const GavetaDeSecoes({required this.rotaDaSecao, super.key});
 
@@ -512,6 +611,21 @@ class GavetaDeSecoes extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final itens = RegistroDeSubDestinos.itensDe(rotaDaSecao);
+    // OS GLOBAIS, MENOS O QUE A SECAO JA OFERECE.
+    //
+    // Sem este recorte a gaveta de `Pets` mostraria `Escanear uma tag` DUAS
+    // vezes: uma pelo submenu da propria secao (a porta de 27.5.1) e outra
+    // pelo grupo global. Duas linhas com o mesmo rotulo e o mesmo destino na
+    // mesma gaveta e a duplicacao que o cliente vem apontando desde 23/09 --
+    // e, no Flutter, sao tambem duas `ValueKey` iguais na mesma lista.
+    //
+    // O recorte e por ROTA e nao por rotulo: dois rotulos diferentes para o
+    // mesmo endereco continuariam sendo a mesma viagem oferecida duas vezes.
+    final jaOferecidas = itens.map((i) => i.rota).toSet();
+    final globais = RegistroDeSubDestinos.globais
+        .where((g) => !jaOferecidas.contains(g.rota))
+        .toList(growable: false);
+    final cores = BichuColors.of(context).cores;
 
     return Drawer(
       child: SafeArea(
@@ -526,6 +640,22 @@ class GavetaDeSecoes extends StatelessWidget {
           ),
           children: <Widget>[
             for (final item in itens)
+              ItemDaGaveta(item: item, rotaDaSecao: rotaDaSecao),
+            // O FILETE entre o submenu da secao e os destinos globais.
+            //
+            // **So aparece quando ha as duas metades.** Em `Rede` e `Loja`,
+            // que nao tem submenu proprio, um filete no topo seria uma divisa
+            // entre o nada e o grupo global. E ele e um filete, nao um
+            // cabecalho escrito: o grupo global nao ganha titulo, porque
+            // titulo de grupo em menu de quatro linhas e a "pagina" que o
+            // cliente reprovou.
+            if (itens.isNotEmpty)
+              Divider(
+                height: BichuEspaco.e6,
+                thickness: BichuBorda.hairline,
+                color: cores.outline,
+              ),
+            for (final item in globais)
               ItemDaGaveta(item: item, rotaDaSecao: rotaDaSecao),
           ],
         ),

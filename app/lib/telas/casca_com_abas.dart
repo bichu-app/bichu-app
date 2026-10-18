@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../escopo.dart';
 import '../roteamento/rotas.dart';
+import '../sessao/controlador_de_sessao.dart';
 import '../widgets/aviso_que_chegou.dart';
 import '../theme/bichu_colors.dart';
 import '../theme/bichu_tokens.g.dart';
@@ -26,7 +28,12 @@ enum EstadoDaSecao { existe, casca, planejada }
 /// Declarar o campo no registro, e nao so trocar o glifo, e o que faz o portao
 /// pegar **a proxima** colisao: quem acrescentar uma secao e escolher o icone
 /// pela estetica reprova antes de chegar ao aparelho.
-enum CampoSemantico { animal, comunidade, lugar, compra, conta }
+/// `conversa` entrou em 19/10 com a secao de mensagens, e ela **nao** divide
+/// campo com `comunidade`: `groups` desenha CABECAS e `chat` desenha um BALAO.
+/// A distincao importa mais aqui que nas outras quatro, porque o rotulo desta
+/// secao e `AuAu` -- palavra de marca, que nao diz a funcao -- e o glifo passou
+/// a ser o unico sinal visivel que diz "mensagem". Ver a entrada do registro.
+enum CampoSemantico { animal, comunidade, lugar, compra, conta, conversa }
 
 /// Qual build esta sendo montado (UX 25.7.3).
 ///
@@ -61,7 +68,53 @@ class DestinoDeNavegacao {
     required this.rota,
     required this.estado,
     required this.campoSemantico,
+    this.naBarra = true,
+    this.ehRamo = true,
+    this.destinoProvisorio,
   });
+
+  /// Se este destino e um ramo do `IndexedStack` de `rotas.dart`.
+  ///
+  /// **A ordem dos ramos e a ordem dos destinos com `ehRamo`**, e e esse
+  /// recorte que deixou `rotas.dart` intacto quando a secao de mensagens
+  /// entrou: ela nao e ramo, porque a tela dela e de outro agente e nao existe
+  /// nesta arvore. Um ramo sem tela estoura no primeiro toque; um ramo com
+  /// tela de mentira seria construir a secao de outra pessoa.
+  ///
+  /// Quem nao e ramo **empurra** a rota no navegador raiz, que e o mesmo que
+  /// os atalhos vivos da gaveta fazem, e por isso nunca aparece selecionado na
+  /// barra: nao ha ramo para ficar ativo.
+  final bool ehRamo;
+
+  /// Onde o slot vai **enquanto** [rota] nao existir no roteador.
+  ///
+  /// Fiacao parada, e nomeada para ser achada: o slot esta completo -- posicao,
+  /// glifo, rotulo medido, nome acessivel -- e so o destino e provisorio.
+  /// Apagar este campo da entrada e registrar [rota] em `rotas.dart` e a
+  /// ligacao inteira.
+  final String? destinoProvisorio;
+
+  /// Para onde o toque leva hoje.
+  String get destinoDeHoje => destinoProvisorio ?? rota;
+
+  /// Se este destino ocupa um slot da barra de baixo.
+  ///
+  /// **Existe por causa de 19/10**, quando o cliente tirou `Perfil` da barra e
+  /// pos a secao de mensagens no slot dela: *"inclua um menu de mensagens ... e
+  /// retire o menu perfil, acrescente uma foto pequena do usuario na barra
+  /// superior de todas as paginas, e ao clicar o usuario abre o menu atual da
+  /// tela de perfil"*.
+  ///
+  /// `Perfil` continua no REGISTRO e continua sendo um ramo do `IndexedStack`:
+  /// ele so deixou de ser pintado na barra. As duas coisas sao diferentes, e
+  /// confundi-las custaria a secao inteira -- a tela da conta guarda os
+  /// cartoes de pet, que sao o unico caminho do app ate `Rotas.detalheDoPet`,
+  /// onde moram o QR e `Marcar como perdido`. Tirar o ramo fecharia esse
+  /// caminho; tirar o slot so troca a porta, que e o que foi pedido.
+  ///
+  /// Quem abre a porta agora e [AvatarDaConta], na barra de topo de toda tela
+  /// de secao.
+  final bool naBarra;
 
   /// O texto que aparece na barra. Curto por decisao: com cinco destinos o
   /// slot em 320 dp e de 64,0 dp (UX 27.2.1), e rotulo que nao cabe se resolve
@@ -262,6 +315,82 @@ class CascaComAbas extends StatefulWidget {
       estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.compra,
     ),
+    // -- A SECAO DE MENSAGENS, no slot que era do `Perfil` (19/10) ---------
+    //
+    // O ROTULO E `AuAu`, E ELE FOI MEDIDO. O cliente ofereceu tres palavras:
+    // *"coloca um icone de balao de mensagem e coloque uma palavra que
+    // exemplique, como mensagem, conversa, AuAu"*. O slot e de 64,0 dp em tela
+    // de 320 dp (UX 27.2.1) e o `NavigationBar` limita a escala de texto em
+    // 1,3x; medido com a `Inter` real, nessa escala:
+    //
+    //   `Mensagens` 86,66 dp -> excede 22,66    (2 linhas, 5,00 dp fora)
+    //   `Mensagem`  82,73 dp -> excede 18,73    (2 linhas, 5,00 dp fora)
+    //   `Conversa`  71,13 dp -> excede  7,13    (2 linhas, 5,00 dp fora)
+    //   `AuAu`      40,89 dp -> CABE, com 23,11 dp de folga
+    //
+    // As tres primeiras reprovam nas CINCO larguras suportadas, nao so em 320.
+    // `AuAu` passa nas cinco. Das palavras que ele deu, e a unica viavel -- e
+    // o jeito de nao perder a palavra clara e o que o registro ja separava:
+    // `rotulo` e o texto PINTADO, `reforcoAcessivel` e a metade de tras do
+    // nome que o leitor de tela anuncia. Quem ve le `AuAu` com o balao ao
+    // lado; quem usa VoiceOver ou TalkBack ouve `AuAu, mensagens`.
+    //
+    // **O GLIFO NAO E DECORACAO NESTA LINHA, e isto e a ressalva.** Nas outras
+    // quatro secoes o rotulo diz a funcao e o icone reforca. Aqui o rotulo e
+    // palavra de MARCA: `AuAu` nao diz "mensagem" para quem abre o app pela
+    // primeira vez, e quem descobre descobre pelo balao ou tocando. O balao
+    // passou a carregar o sentido, e por isso `conversa` e campo semantico
+    // proprio no registro -- se alguem puser um segundo balao na barra, o
+    // portao reprova antes do aparelho.
+    //
+    // `chat`, e **nao** `chat_bubble` nem `forum`. `chat_bubble` e o balao
+    // vazio de comentario solto; `forum` sao dois baloes sobrepostos, que em
+    // 24 dp se fundem num borrao -- e justamente aqui o glifo nao pode ficar
+    // ambiguo, porque e ele que carrega o significado. `forum` ainda le como
+    // quadro de discussao, vizinho do campo `comunidade` da `Rede`. `chat` e
+    // um balao so, com as linhas de texto dentro: um balao de MENSAGEM.
+    DestinoDeNavegacao(
+      rotulo: 'AuAu',
+      reforcoAcessivel: 'mensagens',
+      reforcoDaPagina: 'Suas mensagens e as respostas de quem falou com você.',
+      icone: Icons.chat_outlined,
+      iconeSelecionado: Icons.chat,
+      // **A AREA DE MENSAGENS E DE OUTRO AGENTE, e ela nao existe nesta
+      // arvore.** O cliente de conversa, a lista e o envio estao sendo
+      // construidos como destino independente, com rota propria. Nao ha tela
+      // de mensagens aqui, e inventar uma seria construir a secao de outra
+      // pessoa.
+      //
+      // Enquanto a rota dela nao desce, o slot aponta para um lugar que
+      // EXISTE: `Rotas.perfil`, a tela da conta. Isto e fiacao parada, e esta
+      // dito assim de proposito -- o slot esta completo (posicao, glifo,
+      // rotulo medido, nome acessivel) e so o destino e provisorio.
+      //
+      // **O QUE FALTA LIGAR, numa linha:** apagar `destinoProvisorio` desta
+      // entrada e registrar `Rotas.mensagens` em `rotas.dart` apontando para a
+      // tela do outro agente. Nada mais nesta casca muda.
+      rota: Rotas.mensagens,
+      destinoProvisorio: Rotas.perfil,
+      estado: EstadoDaSecao.existe,
+      campoSemantico: CampoSemantico.conversa,
+      // **NAO E RAMO, e e por isso que `rotas.dart` nao mudou uma linha.**
+      //
+      // Um ramo do `IndexedStack` precisa de uma tela, e a tela de mensagens
+      // nao existe nesta arvore. Um ramo com tela de mentira seria construir a
+      // secao de outro agente; um ramo sem tela estoura no primeiro toque. O
+      // slot entao EMPURRA uma rota em vez de trocar de ramo -- que e o mesmo
+      // que os seis atalhos vivos da gaveta ja fazem -- e a lista de ramos de
+      // `rotas.dart` continua sendo exatamente a de antes: `Pets`, `Rede`,
+      // `Perto`, `Loja`, `Perfil`.
+      ehRamo: false,
+    ),
+    // -- `Perfil`: FORA DA BARRA desde 19/10, e ainda no registro -----------
+    //
+    // Ele perdeu o slot e **nao** perdeu nada mais: continua ramo do
+    // `IndexedStack`, continua com rota, continua com o submenu dele na gaveta
+    // e continua sendo a tela que os cartoes de pet moram. A porta mudou de
+    // lugar -- virou a foto na barra de topo ([AvatarDaConta]) --, e o
+    // conteudo nao mudou uma linha.
     DestinoDeNavegacao(
       rotulo: 'Perfil',
       reforcoAcessivel: 'seus pets e sua conta',
@@ -271,8 +400,36 @@ class CascaComAbas extends StatefulWidget {
       rota: Rotas.perfil,
       estado: EstadoDaSecao.existe,
       campoSemantico: CampoSemantico.conta,
+      naBarra: false,
+      // **CONTINUA RAMO, e isto foi MEDIDO em vez de suposto.**
+      //
+      // A primeira tentativa tirou a tela da conta do `IndexedStack` e a fez
+      // rota irma da casca -- ela cobria a barra e ganhava `Voltar`. Parecia
+      // mais simples e custou 107 casos da suite: `Entrar` e `Criar conta`
+      // sao alcancadas DAQUI, e a saida delas devolve a ABA de onde a pessoa
+      // veio. Com a conta empilhada, voltar de `Entrar` caia numa tela que
+      // cobre a casca e **nao havia barra de baixo nenhuma** na arvore. O
+      // fluxo de entrada inteiro, deslogado, ficava sem a barra.
+      //
+      // Como ramo, a barra fica visivel dentro da tela da conta -- que e
+      // tambem o arranjo do Instagram, a referencia que o cliente deu.
+      //
+      // O preco e `selectedIndex`, que e `int` e nao `int?`: o componente nao
+      // sabe dizer "nenhum aceso". Quem resolve isso e
+      // `_BarraSemSelecao`, logo abaixo, apagando o indicador quando a
+      // pessoa esta na tela da conta -- e nao um fallback que acenderia
+      // `Pets`, a barra afirmando uma secao em que ela nao esta.
+      ehRamo: true,
     ),
   ];
+
+  /// O destino da conta: o que a foto da barra de topo abre.
+  ///
+  /// **Um ponto so, e nao `destinos.last`.** A posicao dele na lista e contrato
+  /// com a ordem dos ramos de `rotas.dart`, e quem acrescentar uma secao depois
+  /// dele faria `last` apontar para outra coisa em silencio.
+  static DestinoDeNavegacao get daConta =>
+      destinos.firstWhere((d) => !d.naBarra);
 
   /// A configuracao deste build, vinda de `--dart-define`.
   ///
@@ -332,12 +489,25 @@ class CascaComAbas extends StatefulWidget {
     ConfiguracaoDeBuild qual, {
     List<DestinoDeNavegacao>? entre,
   }) {
-    final lista = entre ?? destinos;
-    if (qual == ConfiguracaoDeBuild.referencia) return lista;
+    // `naBarra` entra ANTES do filtro de build: `Perfil` saiu da barra por
+    // decisao de produto (19/10), e nao por configuracao de compilacao. Ele
+    // nao volta no build de referencia.
+    final lista = (entre ?? destinos).where((d) => d.naBarra);
+    if (qual == ConfiguracaoDeBuild.referencia) {
+      return lista.toList(growable: false);
+    }
     return lista
         .where((d) => d.estado != EstadoDaSecao.planejada)
         .toList(growable: false);
   }
+
+  /// Os destinos que sao ramo do `IndexedStack`, na ordem dos ramos.
+  ///
+  /// **E esta lista que `rotas.dart` tem de espelhar**, e nao [destinos]: a
+  /// secao de mensagens esta no registro e nao e ramo. O portao `a ordem dos
+  /// ramos e a ordem do registro` compara contra ela.
+  static List<DestinoDeNavegacao> get ramosDoRegistro =>
+      destinos.where((d) => d.ehRamo).toList(growable: false);
 
   @override
   State<CascaComAbas> createState() => _CascaComAbasState();
@@ -359,13 +529,25 @@ class _CascaComAbasState extends State<CascaComAbas> {
     final navegacao = widget.navegacao;
     final cores = BichuColors.of(context).cores;
     final visiveis = CascaComAbas.visiveisEm(CascaComAbas.configuracao);
-    final destinos = CascaComAbas.destinos;
-    // O indice do ramo e a posicao em `destinos`, nao em `visiveis`: no build
-    // de entrega a barra esconde destinos e as duas listas deixam de casar.
-    // Sem esta traducao, tocar em `Perfil` abriria `Rede`.
+    // O indice do RAMO de cada slot da barra, ou -1 para o slot que nao e
+    // ramo (a secao de mensagens, que empurra uma rota).
+    //
+    // A traducao e contra a lista de RAMOS, e nao contra `destinos`: duas
+    // entradas do registro deixaram de ser ramo (mensagens e a conta), e no
+    // build de entrega a barra ainda esconde o que e `planejada`. Sem ela,
+    // tocar num slot abriria a secao de outro.
+    final ramosDoRegistro = CascaComAbas.ramosDoRegistro;
     final ramos = <int>[
-      for (final destino in visiveis) destinos.indexOf(destino),
+      for (final destino in visiveis)
+        destino.ehRamo ? ramosDoRegistro.indexOf(destino) : -1,
     ];
+    // **NENHUM slot fica aceso quando a pessoa esta na tela da conta.**
+    //
+    // `Perfil` saiu da barra e continua sendo ramo: `currentIndex` aponta para
+    // ele e nao ha slot que o represente. `ramos.indexOf` devolve -1, e o
+    // fallback antigo (`selecionado < 0 ? 0 : selecionado`) acenderia `Pets` --
+    // a barra afirmando uma secao em que a pessoa nao esta, que e pior que
+    // nenhuma acesa. Quem mostra onde ela esta e o avatar da barra de topo.
     final selecionado = ramos.indexOf(navegacao.currentIndex);
     // A SECAO ATUAL, e o que ela tem de submenu.
     //
@@ -374,8 +556,26 @@ class _CascaComAbasState extends State<CascaComAbas> {
     // entrega esconde uma secao. A gaveta mostra o submenu DESTA secao, e a
     // barra de topo dela so desenha o gatilho quando ha submenu: e a mesma
     // conta nos dois lugares, feita uma vez aqui.
-    final rotaAtual = destinos[navegacao.currentIndex].rota;
-    final temSubDestinos = RegistroDeSubDestinos.itensDe(rotaAtual).isNotEmpty;
+    // A rota da secao atual sai da lista de RAMOS, nao de `destinos`:
+    // `currentIndex` e indice de ramo, e o registro passou a ter uma entrada
+    // que nao e ramo. Sem esta troca, estar no `Perfil` (ramo 4) leria a
+    // entrada de mensagens e a gaveta mostraria o submenu da secao errada.
+    final rotaAtual = ramosDoRegistro[navegacao.currentIndex].rota;
+    // **A GAVETA EXISTE EM TODA SECAO, inclusive nas que nao tem submenu.**
+    //
+    // Pedido do cliente, literal (19/10): *"padronize todas as telas, tornando
+    // o menu esquerdo fixo para manter o padrao, por mais que nao exista um
+    // sub-menu ainda, mas irei evoluir e acrescentar alguns itens"*. Isto
+    // REVERTE a regra que `temSubDestinos` impunha: `Rede` e `Loja` nao tinham
+    // gaveta nem hamburguer porque nao tem nenhum sub-destino construido.
+    //
+    // O caso vazio nao foi resolvido com uma frase dizendo que nao ha submenu
+    // -- isso seria a "pagina com tanto texto, tanta explicacao" que ele
+    // reprovou em 23/09. Foi resolvido com CONTEUDO: a gaveta mostra os
+    // sub-destinos da secao, quando ha, mais o grupo de destinos GLOBAIS, que
+    // toda secao tem. `Rede` e `Loja` abrem com o grupo global e nada mais, e
+    // nenhuma gaveta deste app abre vazia. Ver `GavetaDeSecoes`.
+    const temSubDestinos = true;
 
     return Scaffold(
       key: _casca,
@@ -394,7 +594,7 @@ class _CascaComAbasState extends State<CascaComAbas> {
       // **A gaveta e a da secao ATUAL, e ela nao existe quando a secao nao tem
       // sub-destino construido** (`Rede` e `Loja`, hoje). Gaveta montada e
       // vazia seria uma cortina que escurece a tela para nao oferecer nada.
-      drawer: temSubDestinos ? GavetaDeSecoes(rotaDaSecao: rotaAtual) : null,
+      drawer: GavetaDeSecoes(rotaDaSecao: rotaAtual),
       // **O GESTO DE VOLTAR.** O padrao do Flutter e `true`, e com ele a
       // borda esquerda passaria a abrir a gaveta. No iOS a borda esquerda ja
       // E o voltar deste app; no Android o voltar por gesto sai de QUALQUER
@@ -432,12 +632,35 @@ class _CascaComAbasState extends State<CascaComAbas> {
             top: BorderSide(color: cores.outline, width: BichuBorda.hairline),
           ),
         ),
-        child: NavigationBar(
+        child: _BarraSemSelecao(
+          apagar: selecionado < 0,
+          // A tinta do PROPRIO fundo da barra, e nao `Colors.transparent`:
+          // cor escrita a mao reprova no portao de tokens, e `surface` e o
+          // papel do sistema que a barra ja usa. Indicador na cor do fundo e
+          // indicador invisivel, pelo papel e nao por um literal.
+          corDoFundo: cores.surface,
+          child: NavigationBar(
+          // `selectedIndex` e `int` e nao `int?`: o componente nao sabe
+          // dizer "nenhum aceso". Na tela da conta nao HA slot
+          // correspondente, e acender `Pets` seria a barra afirmando uma
+          // secao em que a pessoa nao esta -- pior que nenhuma acesa.
+          //
+          // Entao o indice vai 0 e quem apaga o indicador e
+          // `_BarraSemSelecao`, acima: visualmente nenhum slot fica aceso.
           selectedIndex: selecionado < 0 ? 0 : selecionado,
-          onDestinationSelected: (indice) => navegacao.goBranch(
-            ramos[indice],
-            initialLocation: ramos[indice] == navegacao.currentIndex,
-          ),
+          onDestinationSelected: (indice) {
+            final ramo = ramos[indice];
+            // O slot que NAO e ramo empurra a rota, como a gaveta faz com os
+            // atalhos vivos: a tela cobre a casca e tem volta.
+            if (ramo < 0) {
+              GoRouter.of(context).push(visiveis[indice].destinoDeHoje);
+              return;
+            }
+            navegacao.goBranch(
+              ramo,
+              initialLocation: ramo == navegacao.currentIndex,
+            );
+          },
           destinations: <Widget>[
             for (final destino in visiveis)
               // O nome acessivel entra num `Semantics` que embrulha o destino,
@@ -465,9 +688,73 @@ class _CascaComAbasState extends State<CascaComAbas> {
                   tooltip: destino.rotulo,
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// Apaga a SELECAO da barra quando nenhum slot corresponde a tela aberta.
+///
+/// **Existe porque `NavigationBar.selectedIndex` e `int`, e nao `int?`.** O
+/// componente sempre acende um slot, e na tela da conta -- que saiu da barra
+/// em 19/10 e continua sendo ramo -- nao ha slot que a represente. Acender
+/// `Pets` ali seria a barra afirmando uma secao em que a pessoa nao esta, que
+/// e pior que nenhuma acesa: ela mente para quem ve e, pelo `selected` da
+/// semantica, tambem para quem usa leitor de tela.
+///
+/// O que ele faz e tirar os tres sinais de selecao de uma vez -- o indicador,
+/// a tinta do icone e a do rotulo -- deixando os papeis de "nao selecionado"
+/// nos dois estados. Nenhuma cor e escrita a mao: todas saem do proprio
+/// `navigationBarTheme` do tema, e por isso claro e escuro continuam vindo de
+/// `BichuCores`.
+///
+/// Quem mostra onde a pessoa esta, nesse caso, e a foto da barra de topo.
+class _BarraSemSelecao extends StatelessWidget {
+  const _BarraSemSelecao({
+    required this.apagar,
+    required this.corDoFundo,
+    required this.child,
+  });
+
+  final bool apagar;
+
+  /// A tinta do fundo da barra. O indicador assume ela para desaparecer sem
+  /// nenhuma cor escrita a mao.
+  final Color corDoFundo;
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!apagar) return child;
+
+    final tema = Theme.of(context);
+    final barra = tema.navigationBarTheme;
+    // O par de estados que o componente resolve por `WidgetStateProperty`: o
+    // valor de "selecionado" passa a ser o de "nao selecionado".
+    final iconeNaoSelecionado = barra.iconTheme?.resolve(
+      const <WidgetState>{},
+    );
+    final rotuloNaoSelecionado = barra.labelTextStyle?.resolve(
+      const <WidgetState>{},
+    );
+
+    return NavigationBarTheme(
+      data: barra.copyWith(
+        // O indicador e o sinal principal, e ele sai inteiro -- assumindo a
+        // tinta do fundo da barra, que e o papel `surface` do sistema.
+        indicatorColor: corDoFundo,
+        iconTheme: iconeNaoSelecionado == null
+            ? null
+            : WidgetStateProperty.all(iconeNaoSelecionado),
+        labelTextStyle: rotuloNaoSelecionado == null
+            ? null
+            : WidgetStateProperty.all(rotuloNaoSelecionado),
+      ),
+      child: child,
     );
   }
 }
@@ -651,6 +938,29 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
                 : Text(titulo),
             // 64 dp, e nao os 56 do padrao do M3 (design system 23.2).
             toolbarHeight: BichuAlvoDeToque.critico,
+            // **OS 16 dp QUE A FOTO CUSTOU, DEVOLVIDOS AO TITULO.**
+            //
+            // A foto entrou no lado direito em 19/10 e levou 48 dp. Medido em
+            // 320 dp a 200% de escala, com o arranjo cheio (hamburguer 64 +
+            // criar/`Filtros` 64 + foto 48): sobravam **128,00 dp** de titulo
+            // e `Pets` e `Loja` pedem **138,32 dp** -- faltavam 10,32 dp, e o
+            // titulo saia com reticencia. `Rede` e `Perto` saiam cortados
+            // tambem.
+            //
+            // `titleSpacing: 0` devolve exatamente os 16 dp do vao padrao
+            // entre o `leading` e o titulo, e o orcamento vai a **144,00 dp**
+            // -- 5,68 dp de folga sobre o pior titulo. O vao nao era
+            // necessario: o hamburguer e um alvo de 64 dp com o glifo de 24
+            // centrado, entao ha 20 dp de ar dentro do proprio alvo e o texto
+            // nao encosta nele.
+            //
+            // **Isto nao reverte nenhuma decisao dele.** `Filtros` continua
+            // na barra (17/10), a porta de criar continua na barra (18/10) e
+            // a foto continua em todas as telas (19/10). O que mudou foi um
+            // vao do componente, e e a unica folga que havia sem tirar algo
+            // que ele pediu. Ver o relatorio: nao ha espaco para um QUARTO
+            // controle neste lado, medido em 0,00 dp de titulo.
+            titleSpacing: 0,
             // O HAMBURGUER vai no slot da ESQUERDA, e nada saiu do lugar.
             leading: comGaveta ? const BotaoDaGaveta() : null,
             leadingWidth: comGaveta ? BichuAlvoDeToque.critico : null,
@@ -664,18 +974,191 @@ class _EstadoDaTelaDeAba extends State<TelaDeAba> {
             // A ordem e criar-depois-filtrar: a acao da SECAO fica mais longe
             // da borda, o controle da LISTA mais perto. Quem decide se existe
             // cada uma e a tela; a casca so desenha.
-            actions: (widget.acaoDeCriar == null && acao == null)
-                ? null
-                : <Widget>[
-                    if (widget.acaoDeCriar != null) widget.acaoDeCriar!,
-                    if (acao != null) BotaoDeAcaoDaListagem(acao: acao),
-                  ],
+            // A FOTO DA PESSOA FECHA O LADO DIREITO, em toda tela de secao.
+            //
+            // Ela e a ULTIMA, e a ordem tem razao: ela e o controle mais
+            // estavel da barra -- esta em todas as telas, sempre no mesmo
+            // lugar --, e os dois que variam por tela (`criar` da secao,
+            // `Filtros` da lista) ficam antes dela. Controle que muda de tela
+            // para tela nao deve empurrar o que nao muda.
+            //
+            // `actions` **nunca e mais nulo**: o avatar esta sempre presente,
+            // e era o `null` que fazia o portao da gaveta afirmar que `Perfil`
+            // e `Pets` nao tinham acao nenhuma a direita.
+            actions: <Widget>[
+              if (widget.acaoDeCriar != null) widget.acaoDeCriar!,
+              if (acao != null) BotaoDeAcaoDaListagem(acao: acao),
+              AvatarDaConta(
+                inicial: _inicialDaSessao(context),
+                // `go`, e nao `push`: a tela da conta continua sendo RAMO da
+                // casca -- ela so perdeu o slot da barra. Trocar de ramo e o
+                // que mantem a barra de baixo visivel dentro dela (o arranjo
+                // do Instagram, que o cliente deu como referencia) e o que
+                // mantem `Entrar` e `Criar conta` devolvendo a ABA de onde a
+                // pessoa veio.
+                //
+                // Medido: com `push` numa rota irma, voltar de `Entrar` caia
+                // numa tela que cobre a casca e a barra de baixo nao existia
+                // na arvore -- 107 casos da suite reprovaram por isso.
+                aoTocar: () => GoRouter.of(context).go(Rotas.perfil),
+              ),
+            ],
           ),
           body: corpo,
         ),
       ),
     );
   }
+}
+
+/// A inicial do nome de quem esta logado, ou nulo.
+///
+/// Nulo cobre dois estados diferentes de proposito -- deslogado e logado sem
+/// nome --, porque o desenho do avatar e o mesmo nos dois: o glifo de pessoa.
+/// Deslogado o avatar continua existindo e continua levando a tela da conta,
+/// que e onde moram `Entrar` e `Criar conta`: deslogado e estado de navegacao,
+/// nao muro (UX 5.2).
+String? _inicialDaSessao(BuildContext context) {
+  final sessao = Escopo.of(context).sessao;
+  if (sessao.estado != EstadoDaSessao.logado) return null;
+  final nome = sessao.usuario?.nome?.trim();
+  if (nome == null || nome.isEmpty) return null;
+  return nome.characters.first.toUpperCase();
+}
+
+/// A FOTO DA PESSOA NA BARRA DE TOPO, e a porta da tela da conta.
+///
+/// Pedido do cliente, literal (19/10): *"acrescente uma foto pequena do
+/// usuario na barra superior de todas as paginas, e ao clicar o usuario abre o
+/// menu atual da tela de perfil"*. Ela e a porta que substituiu o slot de
+/// `Perfil` na barra de baixo.
+///
+/// ## A foto ainda nao existe, e o espaco ja existe
+///
+/// `users.photo_image_id` **nao esta nesta arvore**: ela vive na branch
+/// `feat/imagem-do-profissional-e-foto-do-usuario`, ainda nao mesclada. O que
+/// esta construido aqui e o ESPACO, o alvo de toque, o nome acessivel e a
+/// marca neutra -- a inicial do nome, ou o glifo de pessoa quando nao ha nome.
+///
+/// **O QUE FALTA LIGAR, numa linha:** quando aquela branch descer, trocar o
+/// conteudo de [_MarcaNeutra] por um `CircleAvatar` com a imagem de
+/// `photo_image_id` e manter a inicial como fallback de carregamento e de
+/// conta sem foto. A fiacao -- sessao, usuario, toque, rotulo -- nao muda.
+/// Mostrar a PROPRIA foto para si mesmo e o caso permitido: a imagem e visivel
+/// so ao dono, e o dono e exatamente quem esta olhando esta barra.
+///
+/// ## O alvo e 48 dp, e nao os 64 dos outros controles da barra
+///
+/// O 11.23.1 pede 64 x 64 nos controles de canto, e aqui ha uma conta a
+/// respeitar: em `Perto` o lado direito ja carrega `criar` e `Filtros`. Com os
+/// tres a 64 dp mais o hamburguer de 64 a esquerda, sobrariam 64,0 dp de
+/// titulo em 320 dp. Com o avatar a 48 sobram 80,0 dp, e o maior titulo que
+/// chega a esse arranjo e `Perto` (39,95 dp em 1,3x). 48 dp continua acima do
+/// piso do M3 e do SC 2.5.8, e e o piso que o briefing desta mudanca fixou.
+class AvatarDaConta extends StatelessWidget {
+  const AvatarDaConta({required this.aoTocar, super.key, this.inicial});
+
+  /// O que o toque faz. Quem decide e a casca; este widget so desenha.
+  final VoidCallback aoTocar;
+
+  /// A primeira letra do nome de exibicao, quando ha nome.
+  final String? inicial;
+
+  /// O nome acessivel.
+  ///
+  /// **Avatar sem rotulo e um circulo mudo para quem nao ve.** O texto diz o
+  /// que o controle ABRE, e nao o que ele mostra: a imagem nao e a informacao,
+  /// o destino e.
+  static const String rotuloAcessivel = 'Sua conta';
+
+  /// O alvo de toque, em dp.
+  static const double alvo = 48;
+
+  @override
+  Widget build(BuildContext context) {
+    return IconButton(
+      // `tooltip` vira o nome acessivel (11.23.3), como no gatilho da gaveta.
+      tooltip: rotuloAcessivel,
+      constraints: const BoxConstraints(minWidth: alvo, minHeight: alvo),
+      onPressed: aoTocar,
+      icon: _MarcaNeutra(inicial: inicial),
+    );
+  }
+}
+
+/// A marca neutra do avatar: a inicial, ou o glifo de pessoa.
+///
+/// **Decorativa, e por isso `ExcludeSemantics`.** O nome acessivel do controle
+/// ja esta no `tooltip` do [AvatarDaConta]; uma letra anunciada ao lado dele
+/// seria ruido. E pelo mesmo motivo a inicial nao e "conteudo": ela nao diz
+/// nada que `Sua conta` nao diga.
+class _MarcaNeutra extends StatelessWidget {
+  const _MarcaNeutra({this.inicial});
+
+  final String? inicial;
+
+  @override
+  Widget build(BuildContext context) {
+    final cores = BichuColors.of(context).cores;
+    final textos = Theme.of(context).textTheme;
+    final letra = inicial;
+
+    return ExcludeSemantics(
+      child: Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: cores.surfaceSunken,
+          shape: BoxShape.circle,
+          // O filete pelo mesmo motivo da barra de baixo: `surfaceSunken`
+          // esta perto do fundo da barra e sem a borda o circulo nao existe
+          // visualmente.
+          border: Border.all(color: cores.outline, width: BichuBorda.hairline),
+        ),
+        alignment: Alignment.center,
+        child: letra == null
+            ? Icon(Icons.person_outline, size: 20, color: cores.textSecondary)
+            : Text(
+                letra,
+                style: textos.labelLarge?.copyWith(color: cores.textSecondary),
+              ),
+      ),
+    );
+  }
+}
+
+/// O TITULO DA TELA DA CONTA, num ponto so.
+///
+/// Pedido do cliente (19/10): *"a tela do usuario, deve ter como titulo da
+/// pagina na barra principal o slug do usuario"*.
+///
+/// **Slug de usuario nao existe, e nao e esquecimento.** A unica operacao que
+/// define slug e de PET (`updatePetPublicProfile`), e nao esta implementada; e
+/// a ADR-0025, item 2, **proibe expor slug de pessoa**. Apelido de usuario e
+/// fatia propria: coluna, unicidade, palavras reservadas, regra de troca e o
+/// problema de imitar outra pessoa. Ela esta sendo desenhada em paralelo.
+///
+/// O que existe e e dela: o **nome de exibicao** (`display_name`). E o titulo
+/// de hoje.
+///
+/// **ESTE E O PONTO DE TROCA, e ele e um so.** Quando a fatia do apelido
+/// descer, esta funcao passa a devolver o apelido e nenhuma tela muda. Nao ha
+/// segunda copia: `AbaPerfil` chama daqui.
+String tituloDaTelaDaConta(String? nomeDeExibicao) {
+  final nome = nomeDeExibicao?.trim();
+  if (nome == null || nome.isEmpty) {
+    // **Conta sem nome existe hoje**: medido, 2 das 7 contas de hml nao tem
+    // `display_name`. O estado tende a desaparecer -- o nome esta virando
+    // obrigatorio no cadastro e nao apagavel depois --, mas ele existe agora e
+    // um titulo vazio deixaria a barra sem nome nenhum.
+    //
+    // **`Minha conta`, e nao `Tutor`.** `Tutor` e rotulo da conversa de
+    // achado, onde ele distingue dois papeis numa conversa; como titulo da
+    // propria tela ele soaria como um papel atribuido a pessoa, e nao como o
+    // lugar em que ela esta.
+    return 'Minha conta';
+  }
+  return nome;
 }
 
 /// O estado vazio do sistema: o M3 nao define um, e este e composicao.

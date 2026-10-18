@@ -85,13 +85,7 @@ void main() {
     //
     // Dentro da `AppBar` de proposito: `Icons.qr_code_2` tambem aparece na
     // pagina do pet, e um `find.byIcon` solto ficaria verde com a barra vazia.
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
     leitor.ler(qrDaPlaquinha);
     // `pumpAndSettle` nao serve com `Image.network` na arvore: o carregamento
     // da imagem nunca assenta num teste de widget. O que o caso mede e o que a

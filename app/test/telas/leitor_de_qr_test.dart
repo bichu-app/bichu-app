@@ -67,11 +67,7 @@ void main() {
       camera: camera ?? CameraDeTeste(permissao),
       leitorDeQr: leitor ?? LeitorDeQrDeTeste(),
     );
-    await tester.tap(find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ));
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
   }
 
   testWidgets('o leitor nao leva barra de topo NEM barra de abas, e ainda '

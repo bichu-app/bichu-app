@@ -132,8 +132,7 @@ Future<void> _abrirOPerfil(
     rede: _servidor,
     deposito: depositoLogado(emailVerificado: emailVerificado),
   );
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-  await tester.pumpAndSettle();
+  await irParaAConta(tester);
 }
 
 /// Tudo desce de `AbaPerfil`: ver a nota de escopo no cabecalho.
@@ -300,8 +299,7 @@ void main() {
         },
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
 
       expect(
         _naAba(find.text(MeusPets.tituloDoVazio)),

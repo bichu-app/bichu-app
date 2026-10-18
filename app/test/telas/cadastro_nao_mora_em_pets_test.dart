@@ -186,21 +186,28 @@ void main() {
       // nome por nome o que nao se discute.
       await abrirOApp(tester, rede: _semServidor);
 
-      // A PORTA CONTINUA EM `Pets`, e mudou de FORMA em 18/10/2026: ela virou
-      // o icone de QR da barra de topo, por pedido do cliente ("o botao
-      // escanear uma tag, pode ser um icone de qr-code igual do whatsapp").
-      // O que este caso cobra nao mudou -- que a porta primaria do leitor NAO
-      // saiu de `Pets` --, so o lugar onde se olha. `find.text` nao serve
-      // mais: o texto saiu da tela, e o nome acessivel vive no `tooltip`.
+      // **A PORTA DO LEITOR SAIU DE `Pets` EM 19/10, e este caso trocou de
+      // lado junto.**
+      //
+      // Ele cobrava que a porta primaria do leitor NAO saisse de `Pets` --
+      // primeiro como texto, depois (18/10) como o icone de QR na barra de
+      // topo. O cliente reverteu: *"leve o icone de qr-code de escanear para
+      // a pagina do perfil que tem relacao com as acoes do usuario."*
+      //
+      // O caso nao foi apagado: ele passou a assever a AUSENCIA. Sem isto,
+      // repor o icone em `Pets` devolveria ao produto duas portas para o
+      // mesmo leitor -- a tela da conta JA tinha `Escanear uma tag` -- e
+      // nenhum caso acusaria. Quem prova que a porta nova funciona, logada e
+      // deslogada, e `casca_de_cinco_secoes_test.dart`.
       expect(
         find.descendant(
           of: find.byType(AppBar),
           matching: find.byIcon(Icons.qr_code_2),
         ),
-        findsOneWidget,
-        reason: 'REPROVA: a porta primaria do leitor (UX 27.5.6) saiu de '
-            '`Pets`. Ela nao e desta mudanca, e ela continua visivel '
-            'DESLOGADO de proposito: ler uma plaquinha nao exige conta.',
+        findsNothing,
+        reason: 'REPROVA: o icone de QR voltou a barra de topo de `Pets`. Ele '
+            'foi para a tela da conta em 19/10, e ela ja tinha a porta: '
+            'repor aqui recria a segunda porta para o mesmo leitor.',
       );
       expect(find.text('Adoções'), findsOneWidget,
           reason: 'REPROVA: a porta de `Adoções` saiu de `Pets` (UX 27.2.4).');
@@ -260,8 +267,7 @@ void main() {
         rede: redeDePets(const <Map<String, dynamic>>[]),
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
 
       exigirAcaoDeCadastrarViva(tester, pets: 0);
 
@@ -290,8 +296,7 @@ void main() {
         ]),
         deposito: depositoLogado(),
       );
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
 
       // O estado precisa ser mesmo o da lista cheia: e ele que estava
       // quebrado, e um caso que medisse o vazio duas vezes nao acusaria nada.

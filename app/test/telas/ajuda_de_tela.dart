@@ -25,6 +25,7 @@ import 'package:bichu/api/modelos_pet.dart';
 import 'package:bichu/app.dart';
 import 'package:bichu/config/app_config.dart';
 import 'package:bichu/escopo.dart';
+import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:bichu/dispositivo/avisos.dart';
 import 'package:bichu/dispositivo/avisos_recebidos.dart';
 import 'package:bichu/dispositivo/camera_e_galeria.dart';
@@ -786,4 +787,69 @@ List<String> atenderAAreaDeTransferencia(WidgetTester tester) {
         .setMockMethodCallHandler(SystemChannels.platform, null);
   });
   return copiado;
+}
+
+/// Abre a tela da conta pela PORTA DE HOJE: a foto da barra de topo.
+///
+/// Era `tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'))`, e
+/// o slot `Perfil` deixou de existir em 19/10: o cliente tirou a secao da
+/// barra de baixo e pos a porta dela na foto da barra de topo.
+///
+/// **Esta funcao e o que fez a migracao ser uma troca e nao uma reescrita.**
+/// Dezesseis arquivos de teste chegavam a tela da conta por aquele toque; os
+/// dezesseis continuam chegando, por aqui. Nenhum caso foi apagado, e nenhum
+/// deles passou a provar menos: eles provam a mesma coisa pela porta nova.
+///
+/// Se a porta mudar de novo, muda aqui -- e nao em dezesseis lugares.
+Future<void> irParaAConta(WidgetTester tester) async {
+  final foto = find.byType(AvatarDaConta);
+  expect(
+    foto,
+    findsOneWidget,
+    reason: 'REPROVA: nao achei a foto da conta na barra de topo. Ela e a '
+        'UNICA porta da tela da conta desde que `Perfil` saiu da barra de '
+        'baixo (19/10) -- sem ela, `Meus pets`, `Cadastrar meu pet`, '
+        '`Meus dados`, `Escanear uma tag` e `Sair da conta` ficam '
+        'inalcancaveis, e com eles o caminho ate a pagina do pet, onde moram '
+        'o QR da plaquinha e `Marcar como perdido`.',
+  );
+  await tester.tap(foto);
+  await tester.pumpAndSettle();
+}
+
+/// Abre o LEITOR DE QR pela porta de hoje: a tela da conta.
+///
+/// **A porta mudou de lugar em 19/10, por decisao do cliente:** *"leve o icone
+/// de qr-code de escanear para a pagina do perfil que tem relacao com as acoes
+/// do usuario."* Antes era `Icons.qr_code_2` na barra de topo de `Pets`; agora
+/// e `Escanear uma tag` na tela da conta, que e a UNICA porta -- a tela ja
+/// tinha o item, entao a mudanca unificou em vez de acrescentar.
+///
+/// **Ela serve logado E deslogado, e isso nao e conveniencia.** A autenticacao
+/// da rota do leitor e OPCIONAL de proposito: quem acha um animal na rua pode
+/// nao ter conta nenhuma. No ramo logado o controle e um `ItemDeMenu`; no ramo
+/// deslogado e um botao secundario. Os dois dizem `Escanear uma tag` e levam a
+/// mesma tela, e por isso esta funcao acha pelo TEXTO e nao pelo tipo do
+/// widget -- um helper preso ao tipo aprovaria a refatoracao em vez do
+/// comportamento.
+///
+/// Catorze arquivos de teste chegavam ao leitor pelo icone da barra de `Pets`.
+/// Os catorze chegam por aqui agora, e se a porta mudar de novo muda **neste
+/// ponto** -- e nao em catorze lugares.
+Future<void> irAoLeitorDeQr(WidgetTester tester) async {
+  await irParaAConta(tester);
+
+  final porta = find.text('Escanear uma tag');
+  expect(
+    porta,
+    findsWidgets,
+    reason: 'REPROVA: nao achei `Escanear uma tag` na tela da conta. Desde '
+        '19/10 ela e a UNICA porta do leitor de QR, e o leitor e o caminho de '
+        'quem acha um cachorro na rua -- o mais critico do produto. Se a '
+        'porta sumiu, ele ficou inalcancavel.',
+  );
+  await tester.ensureVisible(porta.first);
+  await tester.pumpAndSettle();
+  await tester.tap(porta.first);
+  await tester.pumpAndSettle();
 }

@@ -99,11 +99,7 @@ void main() {
     required Future<http.Response> Function(http.Request) rede,
   }) async {
     await abrirOApp(tester, rede: rede);
-    await tester.tap(find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ));
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
     await tester.tap(
       find.widgetWithText(BotaoPrimario, TextosDoCadastro.digitarOCodigo),
     );

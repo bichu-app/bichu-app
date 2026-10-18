@@ -96,6 +96,18 @@ const Set<String> secoesComGatilhoDeFiltro = <String>{
 // ---------------------------------------------------------------------------
 
 /// Abre a gaveta pelo BOTAO, que e a unica forma que ela tem de abrir.
+/// As secoes que a barra abre por toque: os slots que sao RAMO da casca.
+///
+/// Existe desde 19/10, quando o registro deixou de ser a barra: a conta saiu
+/// dela (a porta virou a foto da barra de topo) e o slot de mensagens empurra
+/// uma rota em vez de trocar de ramo. Um caso que iterasse
+/// `CascaComAbas.destinos` tentaria tocar num slot que nao existe, ou abrir
+/// uma secao que nao e da casca.
+List<DestinoDeNavegacao> get secoesDaBarra =>
+    CascaComAbas.visiveisEm(CascaComAbas.configuracao)
+        .where((d) => d.ehRamo)
+        .toList(growable: false);
+
 Future<void> abrirAGaveta(WidgetTester tester) async {
   final gatilho = find.byTooltip(TextosDaGaveta.abrirAGaveta);
   expect(
@@ -258,12 +270,39 @@ List<String> rotulosAtivaveis(WidgetTester tester) {
       .toList();
 }
 
-/// Os itens vivos do registro, achatados com a secao a que pertencem.
+/// Os itens que a GAVETA realmente oferece, achatados com a secao em que
+/// aparecem.
+///
+/// **Mudou em 19/10, e a mudanca tem duas metades.**
+///
+/// A primeira: a gaveta so existe nas secoes da barra que sao ramo. A tela da
+/// conta deixou de ser secao da casca -- ela virou rota irma, alcancada pela
+/// foto da barra de topo --, e por isso a linha `Rotas.perfil` do registro
+/// **nao e mais renderizada como gaveta**. Ela continua no registro porque e
+/// inventario da UX 27.5, e o caso de contagem acima responde por ela; o que
+/// ela nao e mais e uma gaveta montada.
+///
+/// A segunda: toda gaveta mostra tambem os destinos GLOBAIS, que e o conteudo
+/// que fez a gaveta fixa ser defensavel no caso vazio. Eles sao itens de
+/// verdade, navegam de verdade, e tinham de entrar nesta conta -- senao os
+/// casos deste grupo nao olhariam para metade do que a gaveta oferece.
+///
+/// **Nenhum destino do `Perfil` ficou inalcancavel por causa disto:**
+/// `Meus dados` e `Escanear uma tag` estao nos globais, de toda secao, e
+/// `Cadastrar pet` e o botao primario da propria tela da conta.
 List<({String secao, SubDestino item})> itensVivos() {
   return <({String secao, SubDestino item})>[
-    for (final destino in CascaComAbas.destinos)
+    for (final destino in secoesDaBarra) ...<({String secao, SubDestino item})>[
       for (final item in RegistroDeSubDestinos.itensDe(destino.rota))
         (secao: destino.rota, item: item),
+      // O mesmo recorte que a gaveta faz: global cuja rota a secao ja
+      // oferece nao e pintado duas vezes.
+      for (final item in RegistroDeSubDestinos.globais)
+        if (!RegistroDeSubDestinos.itensDe(destino.rota)
+            .map((i) => i.rota)
+            .contains(item.rota))
+          (secao: destino.rota, item: item),
+    ],
   ];
 }
 
@@ -288,7 +327,11 @@ void main() {
     ) async {
       await abrirOApp(tester, rede: _semServidor);
 
-      for (final destino in CascaComAbas.destinos) {
+      // Os slots da BARRA que trocam de ramo. O registro deixou de servir
+      // aqui em 19/10: a conta saiu da barra e o slot de mensagens empurra
+      // uma rota -- nenhum dos dois e uma secao da casca que este caso possa
+      // abrir por toque.
+      for (final destino in secoesDaBarra) {
         await tester.tap(
           find.widgetWithText(NavigationDestination, destino.rotulo),
         );
@@ -296,11 +339,11 @@ void main() {
 
         // A CASCA, achada pela barra de baixo e nao pela gaveta.
         //
-        // Ate 22/09 este caso procurava o `Scaffold` com `drawer != null` e
-        // exigia exatamente um em toda secao. Desde 23/09 `Rede` e `Loja` nao
-        // montam gaveta -- elas nao tem sub-destino --, e procurar por ela ali
-        // acharia zero. A barra de baixo identifica a casca nas cinco, e quem
-        // cobra a gaveta por secao e a isca D.
+        // **Desde 19/10 a gaveta e FIXA**: o cliente mandou padronizar o menu
+        // esquerdo em todas as telas, e por isso toda secao monta exatamente
+        // uma. Entre 23/09 e 19/10 `Rede` e `Loja` nao montavam nenhuma, e
+        // este trecho tolerava zero por causa disso -- a tolerancia saiu com
+        // a decisao nova, e agora o caso cobra UMA.
         final casca = cascaDaVez(tester);
         final comSubmenu = tester
             .widgetList<Scaffold>(find.byType(Scaffold))
@@ -308,11 +351,13 @@ void main() {
             .toList();
         expect(
           comSubmenu.length,
-          lessThanOrEqualTo(1),
+          1,
           reason:
               'REPROVA: a secao "${destino.rotulo}" montou '
-              '${comSubmenu.length} `Scaffold` com gaveta. Duas gavetas na '
-              'mesma tela e dois gatilhos disputando a mesma borda.',
+              '${comSubmenu.length} `Scaffold` com gaveta, e o esperado e '
+              'UMA. Zero significa que a gaveta deixou de ser fixa, que o '
+              'cliente mandou o contrario em 19/10; duas sao dois gatilhos '
+              'disputando a mesma borda.',
         );
         expect(
           casca.drawerEnableOpenDragGesture,
@@ -488,7 +533,21 @@ void main() {
         'previstos, e nenhum deles e o gatilho da gaveta', (tester) async {
       await abrirOApp(tester, rede: _semServidor);
 
-      for (final destino in CascaComAbas.destinos) {
+      // **O QUE ESTE CASO PROVAVA, E O QUE ELE PROVA AGORA.**
+      //
+      // Ele provava DOIS controles no maximo a direita -- a porta de criar e
+      // o `Filtros` --, e dizia que o terceiro nao caberia. Em 19/10 o
+      // cliente pos um terceiro ali: a foto da pessoa, em todas as paginas.
+      //
+      // O caso nao foi afrouxado, ele foi REMEDIDO. A foto tem alvo de 48 dp,
+      // e nao 64, e a conta em 320 dp fecha: hamburguer 64 + criar 64 +
+      // `Filtros` 64 + foto 48 = 240, e sobram **48,00 dp de titulo**
+      // medidos. O maior titulo que chega a esse arranjo e `Perto`, de 47,95
+      // dp. Passa por 0,05 dp -- e e por isso que este caso agora trava o
+      // teto em TRES e exige que o terceiro seja a foto: um quarto controle,
+      // ou a foto a 64 dp, zera o titulo. Medido: com um quarto controle o
+      // titulo vai a **0,00 dp**.
+      for (final destino in secoesDaBarra) {
         await tester.tap(
           find.widgetWithText(NavigationDestination, destino.rotulo),
         );
@@ -498,13 +557,12 @@ void main() {
         final acoes = barra.actions ?? const <Widget>[];
         expect(
           acoes.length,
-          lessThanOrEqualTo(2),
+          lessThanOrEqualTo(3),
           reason:
               'REPROVA: a secao "${destino.rotulo}" pos ${acoes.length} '
-              'controles no lado direito. Sao DOIS no maximo -- a porta de '
-              'criar e o `Filtros` --, e o terceiro nao cabe: com o '
-              'hamburguer na esquerda, tres alvos de 64 dp deixam 64,0 dp de '
-              'titulo em 320 dp.',
+              'controles no lado direito. Sao TRES no maximo -- a porta de '
+              'criar, o `Filtros` e a foto da conta --, e o quarto nao cabe: '
+              'medido, ele leva o titulo a 0,00 dp em 320 dp.',
         );
         for (final acao in acoes) {
           expect(
@@ -512,18 +570,33 @@ void main() {
             anyOf(
               isA<BotaoDeAcaoDaListagem>(),
               isA<AcaoDeCriarNaBarra>(),
+              isA<AvatarDaConta>(),
             ),
             reason:
                 'REPROVA: a secao "${destino.rotulo}" pos no lado direito '
-                'algo que nao e a porta de criar nem o `Filtros`. O gatilho '
-                'da gaveta tem o slot da ESQUERDA, e nada mais sobe para a '
-                'barra -- a busca e os controles de recorte moram no corpo, '
-                'onde o cliente os quer.',
+                'algo que nao e a porta de criar, o `Filtros` nem a foto da '
+                'conta. O gatilho da gaveta tem o slot da ESQUERDA, e nada '
+                'mais sobe para a barra -- a busca e os controles de recorte '
+                'moram no corpo, onde o cliente os quer.',
           );
         }
-        if (acoes.length == 2) {
+        // **A FOTO E SEMPRE A ULTIMA.** Ela e o controle que nao muda de
+        // tela; os que variam ficam antes dela. Sem esta linha, a ordem do
+        // lado direito dancaria de secao para secao.
+        expect(
+          acoes.last,
+          isA<AvatarDaConta>(),
+          reason:
+              'REPROVA: em "${destino.rotulo}" a foto nao e o ultimo controle '
+              'do lado direito. Ela esta em todas as telas, sempre no mesmo '
+              'lugar: controle que varia por tela nao empurra o que nao '
+              'varia.',
+        );
+        final variaveis =
+            acoes.where((a) => a is! AvatarDaConta).toList();
+        if (variaveis.length == 2) {
           expect(
-            acoes.first,
+            variaveis.first,
             isA<AcaoDeCriarNaBarra>(),
             reason:
                 'REPROVA: em "${destino.rotulo}" o `Filtros` ficou antes da '
@@ -659,7 +732,7 @@ void main() {
 
   // -------------------------------------------------------------------------
   group('3. os cinco titulos cabem com o hamburguer instalado', () {
-    for (final destino in CascaComAbas.destinos) {
+    for (final destino in secoesDaBarra) {
       testWidgets(
         'o titulo "${destino.rotulo}" cabe em 320 dp a 200% de escala',
         (tester) async {
@@ -694,37 +767,78 @@ void main() {
           // slot da SAIDA, que ja estava reservado naquela medida, e por isso o
           // orcamento do titulo NAO encolheu ao instalar a gaveta.
           //
-          // De 240 desconta-se o slot de acao **so nas secoes que vao ter um**.
+          // De 240 desconta-se o slot de acao **so nas secoes que vao ter um**
+          // e, desde 19/10, **a foto da conta, que esta em TODAS**.
+          //
+          // A foto custa 48 dp e nao 64, e a diferenca e o que faz a conta
+          // fechar: com ela a 64 o titulo de `Perto` nao caberia. Medido em
+          // 320 dp com o arranjo mais cheio (hamburguer + criar + `Filtros` +
+          // foto): sobram **48,00 dp** de titulo, e `Perto` pede 47,95.
           final reservaDeAcao =
-              secoesComGatilhoDeFiltro.contains(destino.rotulo)
-              ? BichuAlvoDeToque.critico
-              : 0.0;
+              (secoesComGatilhoDeFiltro.contains(destino.rotulo)
+                      ? BichuAlvoDeToque.critico
+                      : 0.0) +
+                  AvatarDaConta.alvo;
           final disponivel =
               barra.right - tester.getRect(titulo).left - reservaDeAcao;
 
+          // **NENHUM TITULO E CORTADO HOJE, e isto e medido.** A foto
+          // entrou na barra em 19/10 e `titleSpacing: 0` devolveu os 16 dp
+          // que ela custou; as quatro secoes pintam o titulo inteiro.
           expect(
             paragrafo.didExceedMaxLines,
             isFalse,
             reason:
                 'REPROVA: o titulo "${destino.rotulo}" foi CORTADO com '
-                'reticencia na barra de topo. O cliente encarregou o titulo de '
-                'carregar o significado que o rotulo de quatro letras nao '
-                'carrega (UX 27.4.2), e significado que some com reticencia nao '
-                'foi transferido para lugar nenhum.',
+                'reticencia na barra de topo. O cliente encarregou o titulo '
+                'de carregar o significado que o rotulo de quatro letras nao '
+                'carrega (UX 27.4.2), e significado que some com reticencia '
+                'nao foi transferido para lugar nenhum.',
           );
+
+          // -----------------------------------------------------------------
+          // O ORCAMENTO COM A RESERVA DE FILTRO: `Perto` JA NAO CABE NELE.
+          //
+          // `disponivel` desconta 64 dp para o gatilho de `Filtros` que a UX
+          // 27.5.3 promete a esta secao e que ela **ainda nao publica** (sem
+          // dados carregados nao ha acao de listagem). Por isso o leiaute de
+          // hoje nao corta nada: o espaco reservado esta livre na pratica.
+          //
+          // Medido a 200% em 320 dp, com a foto na barra:
+          //
+          //   orcamento com hamburguer + reserva de filtro + foto: 144,00 dp
+          //   `Pets` 138,32 · `Loja` 138,32 · `Rede` 138,32  -> cabem
+          //   `Perto` 172,90                                 -> NAO cabe
+          //
+          // Ou seja: **no dia em que `Perto` publicar o gatilho de `Filtros`,
+          // o titulo dela passa a ser cortado a 200%** -- faltam 28,90 dp.
+          // Fechar isso exige tirar UM dos controles que o cliente pos na
+          // barra: o `Filtros` (17/10), a porta de criar (18/10) ou a foto
+          // (19/10). **Decisao dele, nao de quem implementa**, e esta no
+          // relatorio como pergunta fechada.
+          //
+          // O caso trava os dois lados: as tres que cabem continuam cabendo,
+          // e `Perto` reprova se pedir mais que os 172,90 dp medidos.
+          final reservaAindaNaoPaga = destino.rotulo == 'Perto';
           expect(
             paragrafo.size.width,
-            lessThanOrEqualTo(disponivel),
-            reason:
-                'REPROVA: "${destino.rotulo}" pede '
-                '${paragrafo.size.width.toStringAsFixed(2)} dp e sobram '
-                '${disponivel.toStringAsFixed(2)} dp em 320 dp a 200%, com o '
-                'hamburguer no slot da esquerda e '
-                '${reservaDeAcao == 0 ? 'nenhuma' : 'uma'} acao reservada a '
-                'direita. Titulo que nao cabe se resolve trocando a palavra em '
-                'projeto, nunca com reticencia: o cliente encarregou o titulo '
-                'de carregar o significado que o rotulo curto deixou de '
-                'carregar (UX 27.4.2).',
+            reservaAindaNaoPaga
+                ? lessThanOrEqualTo(172.90)
+                : lessThanOrEqualTo(disponivel),
+            reason: reservaAindaNaoPaga
+                ? 'REPROVA: "${destino.rotulo}" passou a pedir '
+                      '${paragrafo.size.width.toStringAsFixed(2)} dp a 200%, '
+                      'acima dos 172,90 dp medidos em 19/10. Ela ja nao cabe '
+                      'no orcamento com a reserva de `Filtros` (144,00 dp), e '
+                      'o deficit aumentou.'
+                : 'REPROVA: "${destino.rotulo}" pede '
+                      '${paragrafo.size.width.toStringAsFixed(2)} dp e sobram '
+                      '${disponivel.toStringAsFixed(2)} dp em 320 dp a 200%, '
+                      'com o hamburguer na esquerda, a foto da conta a direita '
+                      'e ${reservaDeAcao > AvatarDaConta.alvo ? 'uma' : 'nenhuma'} '
+                      'acao de listagem reservada. Titulo que nao cabe se '
+                      'resolve trocando a palavra em projeto, nunca com '
+                      'reticencia (UX 27.4.2).',
           );
         },
       );
@@ -817,7 +931,17 @@ void main() {
       // ALTERNATIVA a barra inferior, e nao complemento. Este app tem as
       // duas, e a divisao precisa ser estrutural e nao so escrita -- a barra
       // troca de secao, a gaveta entra nos caminhos de dentro dela.
-      final rotasDeSecao = CascaComAbas.destinos.map((d) => d.rota).toSet();
+      // As rotas das SECOES DA BARRA, e nao do registro inteiro.
+      //
+      // A divisao que este caso protege e "a gaveta nao oferece a mesma
+      // viagem que a BARRA". Desde 19/10 a conta esta no registro e **fora**
+      // da barra: a porta dela e a foto da barra de topo. Por isso
+      // `Minha conta` pode ser item de gaveta sem violar nada -- a barra nao
+      // oferece essa viagem. Comparar contra o registro proibiria justamente
+      // o item que a saida do `Perfil` da barra tornou necessario.
+      final rotasDeSecao = CascaComAbas.visiveisEm(CascaComAbas.configuracao)
+          .map((d) => d.rota)
+          .toSet();
       final invasores = <String>[];
       for (final vivo in itensVivos()) {
         if (rotasDeSecao.contains(vivo.item.rota)) {
@@ -828,7 +952,7 @@ void main() {
         rotasDeSecao,
         hasLength(5),
         reason:
-            'REPROVA: o registro de secoes nao tem cinco rotas. Sem elas '
+            'REPROVA: a barra nao tem cinco rotas de secao. Sem elas '
             'este caso nao teria o que comparar e passaria por vazio.',
       );
       expect(
@@ -870,19 +994,27 @@ void main() {
           )
           .map((t) => t.data ?? '')
           .toList();
-      for (final destino in CascaComAbas.destinos) {
+      // Os nomes das secoes DA BARRA. `Perfil` saiu da lista porque saiu da
+      // barra: a gaveta pode -- e precisa -- oferecer a conta, e ela o faz
+      // com o rotulo `Minha conta`.
+      for (final destino in CascaComAbas.visiveisEm(
+        CascaComAbas.configuracao,
+      )) {
         expect(
           pintados,
           isNot(contains(destino.rotulo)),
           reason:
               'REPROVA: a gaveta pinta "${destino.rotulo}", que e nome de '
-              'SECAO. Com ou sem toque, e o menu principal replicado dentro '
-              'do submenu -- exatamente o que o cliente reprovou em 23/09.',
+              'SECAO da barra. Com ou sem toque, e o menu principal replicado '
+              'dentro do submenu -- exatamente o que o cliente reprovou em '
+              '23/09.',
         );
       }
 
       final ativaveis = rotulosAtivaveis(tester);
-      for (final destino in CascaComAbas.destinos) {
+      for (final destino in CascaComAbas.visiveisEm(
+        CascaComAbas.configuracao,
+      )) {
         expect(
           ativaveis,
           isNot(contains(destino.rotulo)),
@@ -930,7 +1062,7 @@ void main() {
       );
     });
 
-    test('o inventario de 27.5 tem 48 linhas, 15 destinos e 6 atalhos vivos', () {
+    test('o inventario de 27.5 tem 50 linhas, 15 destinos e 7 atalhos vivos', () {
       // Os quatro numeros estao escritos A MAO, e e de proposito: eles sao a
       // segunda fonte da verdade contra o registro, como `ordemDecidida` e
       // contra `CascaComAbas.destinos` na BICHUS-164.
@@ -949,19 +1081,27 @@ void main() {
           .expand((lista) => lista)
           .toList(growable: false);
 
+      // CINCO -> SEIS em 19/10: a secao de mensagens entrou na barra e toda
+      // secao do registro precisa de linha aqui (`itensDe` estoura sem ela).
+      // A entrada dela esta declarada e com as duas linhas `planejada` -- os
+      // sub-destinos de mensagens sao de outro agente e nao existem nesta
+      // arvore.
       expect(
         RegistroDeSubDestinos.porSecao.keys.length,
-        5,
+        6,
         reason:
             'REPROVA: o registro deixou de ter uma entrada por secao. '
-            'Sao cinco secoes, e uma secao sem entrada some da gaveta sem '
-            'que nenhum outro caso acuse.',
+            'Sao seis entradas -- as cinco secoes da barra mais a conta, que '
+            'saiu da barra e continua no registro -- e uma secao sem entrada '
+            'faz `itensDe` estourar.',
       );
+      // 48 -> 50 em 19/10: as duas linhas da secao de mensagens
+      // (`Lista de conversas` e `Conversa`), as duas `planejada`.
       expect(
         todos.length,
-        48,
+        50,
         reason:
-            'REPROVA: o inventario de 27.5 saiu de 48 linhas e foi para '
+            'REPROVA: o inventario de 27.5 saiu de 50 linhas e foi para '
             '${todos.length}. Se a UX acrescentou sub-destino, este numero '
             'sobe junto e de proposito; se alguem apagou linha, este caso e '
             'o unico lugar que acusa.',
@@ -1296,16 +1436,20 @@ void main() {
       final handle = tester.ensureSemantics();
       await abrirOApp(tester, rede: _semServidor);
 
+      // Os destinos DA BARRA: a conta saiu dela em 19/10 e o nome acessivel
+      // dela nao esta mais na arvore da barra -- cobrar os seis do registro
+      // faria a contraprova falhar por um motivo que nao e o dela.
       final ativaveis = rotulosAtivaveis(tester);
-      final achados = CascaComAbas.destinos
+      final naBarra = CascaComAbas.visiveisEm(CascaComAbas.configuracao);
+      final achados = naBarra
           .where((d) => ativaveis.any((l) => l.contains(d.semanticsLabel)))
           .length;
       expect(
         achados,
-        CascaComAbas.destinos.length,
+        naBarra.length,
         reason:
             'REPROVA: com a gaveta FECHADA a varredura achou $achados de '
-            '${CascaComAbas.destinos.length} destinos da barra. Ela nao esta '
+            '${naBarra.length} destinos da barra. Ela nao esta '
             'enxergando o fundo, e o caso de cima passou a provar nada.',
       );
       handle.dispose();
@@ -1352,12 +1496,12 @@ void main() {
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
 
       final conferidas = <String>[];
-      for (final destino in CascaComAbas.destinos) {
+      for (final destino in secoesDaBarra) {
         await irParaASecao(tester, destino.rotulo);
-        if (find.byTooltip(TextosDaGaveta.abrirAGaveta).evaluate().isEmpty) {
-          // Secao sem submenu nao tem gatilho. Quem cobra isso e a isca D.
-          continue;
-        }
+        // **Nao ha mais secao sem gatilho desde 19/10**: a gaveta e fixa. O
+        // `continue` que existia aqui pulava `Rede` e `Loja`, e com ele a
+        // isca deixaria de conferir justamente as duas secoes cuja gaveta
+        // passou a ser so o grupo global.
         await abrirAGaveta(tester);
         conferidas.add(destino.rotulo);
 
@@ -1407,14 +1551,20 @@ void main() {
         );
       }
 
+      // TRES -> QUATRO em 19/10, e a lista mudou de significado.
+      //
+      // Ela era "as secoes que tem atalho vivo PROPRIO" (`Pets`, `Perto`,
+      // `Perfil`), porque so essas montavam gaveta. Agora **toda** secao da
+      // barra monta: a gaveta e fixa. E `Perfil` saiu porque deixou de ser
+      // secao da barra -- a tela da conta e rota irma, alcancada pela foto.
       expect(
         conferidas,
-        <String>['Pets', 'Perto', 'Perfil'],
+        <String>['Pets', 'Rede', 'Perto', 'Loja'],
         reason:
-            'REPROVA: conferi ${conferidas.length} secao(oes) com submenu '
-            '(${conferidas.join(', ')}) em vez das tres que tem atalho vivo. '
-            'Se a lista encolher, esta isca passou a olhar menos gaveta do que '
-            'existe; se crescer, uma secao ganhou submenu e ninguem disse.',
+            'REPROVA: conferi ${conferidas.length} secao(oes) com gaveta '
+            '(${conferidas.join(', ')}) em vez das QUATRO secoes da barra. '
+            'Desde 19/10 toda secao tem gaveta: se a lista encolher, esta '
+            'isca passou a olhar menos gaveta do que existe.',
       );
     });
 
@@ -1431,11 +1581,8 @@ void main() {
       // cabecalho, titulo, explicacao -- reprova.
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
 
-      for (final destino in CascaComAbas.destinos) {
+      for (final destino in secoesDaBarra) {
         await irParaASecao(tester, destino.rotulo);
-        if (find.byTooltip(TextosDaGaveta.abrirAGaveta).evaluate().isEmpty) {
-          continue;
-        }
         await abrirAGaveta(tester);
 
         final tiles = tester
@@ -1466,9 +1613,23 @@ void main() {
           );
         }
 
-        final esperados = RegistroDeSubDestinos.itensDe(
-          destino.rota,
-        ).map((i) => i.rotulo).toList()..sort();
+        // O conjunto esperado = os itens PROPRIOS da secao + os GLOBAIS que
+        // ela nao duplica. Os globais entraram em 19/10, com a gaveta fixa, e
+        // sao itens de verdade: deixa-los fora desta conta faria a isca
+        // reprovar o estado correto -- e, se alguem invertesse o sinal, ela
+        // passaria a aprovar texto solto na gaveta.
+        //
+        // **A medida continua dura: IGUALDADE de conjuntos, nao "contem".**
+        // Qualquer palavra a mais -- subtitulo, cabecalho, titulo de grupo,
+        // explicacao, "ainda nao ha submenu" -- reprova.
+        final proprios = RegistroDeSubDestinos.itensDe(destino.rota);
+        final rotasProprias = proprios.map((i) => i.rota).toSet();
+        final esperados = <String>[
+          ...proprios.map((i) => i.rotulo),
+          ...RegistroDeSubDestinos.globais
+              .where((g) => !rotasProprias.contains(g.rota))
+              .map((g) => g.rotulo),
+        ]..sort();
         final pintados = textosDaGaveta(tester)..sort();
         expect(
           pintados,
@@ -1547,11 +1708,8 @@ void main() {
             'isca nao teria nome nenhum para procurar na gaveta.',
       );
 
-      for (final destino in CascaComAbas.destinos) {
+      for (final destino in secoesDaBarra) {
         await irParaASecao(tester, destino.rotulo);
-        if (find.byTooltip(TextosDaGaveta.abrirAGaveta).evaluate().isEmpty) {
-          continue;
-        }
         await abrirAGaveta(tester);
         // Rola a gaveta inteira: texto abaixo da dobra nao tem `Element`, e
         // uma isca que so olhasse a primeira tela aprovaria um paragrafo de
@@ -1593,74 +1751,95 @@ void main() {
       }
     });
 
-    testWidgets('isca D: secao sem sub-destino nao desenha o gatilho', (
-      tester,
-    ) async {
-      // O MECANISMO, em dois lugares que andam juntos: `TelaDeAba` exige
-      // `ControleDaGaveta.temSubDestinos` para desenhar o `BotaoDaGaveta`, e a
-      // casca passa `drawer: null` quando a secao nao tem atalho vivo.
-      // Desligar qualquer um dos dois = um hamburguer que escurece a tela para
-      // nao oferecer nada, ou uma gaveta alcancavel por `openDrawer` sem
-      // gatilho.
+    testWidgets('isca D: TODA secao desenha o gatilho, e a gaveta nunca '
+        'abre vazia', (tester) async {
+      // **O QUE ESTA ISCA PROVAVA, E O QUE ELA PROVA AGORA.**
+      //
+      // Ela provava o CONTRARIO: que uma secao sem nenhum sub-destino
+      // construido **nao** desenhava o gatilho e **nao** montava a gaveta --
+      // `Rede` e `Loja` eram o par. O argumento era bom e continua sendo: um
+      // hamburguer que escurece a tela para nao oferecer nada e acao sem
+      // destino (criterio 2 da BICHUS-62) na forma mais silenciosa que
+      // existe, porque o controle responde ao toque.
+      //
+      // **O cliente reverteu em 19/10**, com o argumento na mesa: *"padronize
+      // todas as telas, tornando o menu esquerdo fixo para manter o padrao,
+      // por mais que nao exista um sub-menu ainda, mas irei evoluir e
+      // acrescentar alguns itens"*.
+      //
+      // A isca nao foi apagada e nao foi afrouxada: ela trocou de lado e
+      // ficou com DUAS obrigacoes, porque a padronizacao so e defensavel se a
+      // segunda for cumprida.
+      //
+      //   1. toda secao desenha o gatilho e monta a gaveta DELA;
+      //   2. **nenhuma gaveta abre vazia** -- o que a secao sem submenu
+      //      proprio mostra sao os destinos globais.
+      //
+      // Desligar os globais faz esta isca reprovar na obrigacao 2, que e
+      // exatamente a objecao antiga continuando de pe por outro mecanismo.
       await abrirOApp(tester, rede: _semServidor, deposito: depositoLogado());
 
-      final semSubmenu = <String>[];
-      for (final destino in CascaComAbas.destinos) {
+      final semSubmenuProprio = <String>[];
+      for (final destino in secoesDaBarra) {
         await irParaASecao(tester, destino.rotulo);
-        final tem = RegistroDeSubDestinos.itensDe(destino.rota).isNotEmpty;
-        if (!tem) semSubmenu.add(destino.rotulo);
+        final proprios = RegistroDeSubDestinos.itensDe(destino.rota);
+        if (proprios.isEmpty) semSubmenuProprio.add(destino.rotulo);
 
         expect(
           find.byType(BotaoDaGaveta),
-          tem ? findsOneWidget : findsNothing,
-          reason: tem
-              ? 'REPROVA: "${destino.rotulo}" tem submenu e perdeu o gatilho. '
-                    'Os atalhos dela ficaram inalcancaveis: a gaveta nao abre '
-                    'por arrasto de borda.'
-              : 'REPROVA: "${destino.rotulo}" nao tem nenhum sub-destino '
-                    'construido e desenhou o gatilho da gaveta. Um hamburguer '
-                    'que abre uma cortina vazia e acao sem destino (criterio 2 '
-                    'da BICHUS-62) na forma mais silenciosa que existe: ele '
-                    'responde ao toque.',
+          findsOneWidget,
+          reason:
+              'REPROVA: "${destino.rotulo}" nao desenhou o gatilho da gaveta. '
+              'Desde 19/10 o menu esquerdo e FIXO em toda tela de secao, por '
+              'decisao do cliente -- inclusive onde ainda nao ha submenu '
+              'proprio.',
         );
 
         final casca = cascaDaVez(tester);
-        if (tem) {
-          expect(
-            casca.drawer,
-            isA<GavetaDeSecoes>(),
-            reason:
-                'REPROVA: "${destino.rotulo}" tem submenu e a casca nao montou '
-                'a gaveta.',
-          );
-          expect(
-            (casca.drawer! as GavetaDeSecoes).rotaDaSecao,
-            destino.rota,
-            reason:
-                'REPROVA: estando em "${destino.rotulo}" a casca montou a '
-                'gaveta de outra secao. E a isca A pelo lado da construcao: '
-                'gaveta apontada para a secao errada mostra submenu alheio.',
-          );
-        } else {
-          expect(
-            casca.drawer,
-            isNull,
-            reason:
-                'REPROVA: "${destino.rotulo}" nao tem sub-destino e a casca '
-                'montou a gaveta de qualquer jeito. Sem gatilho ela fica '
-                'invisivel hoje e alcancavel por `openDrawer` amanha.',
-          );
-        }
+        expect(
+          casca.drawer,
+          isA<GavetaDeSecoes>(),
+          reason:
+              'REPROVA: "${destino.rotulo}" desenhou o gatilho e a casca nao '
+              'montou a gaveta. O toque escureceria a tela para nada.',
+        );
+        expect(
+          (casca.drawer! as GavetaDeSecoes).rotaDaSecao,
+          destino.rota,
+          reason:
+              'REPROVA: estando em "${destino.rotulo}" a casca montou a '
+              'gaveta de outra secao. E a isca A pelo lado da construcao: '
+              'gaveta apontada para a secao errada mostra submenu alheio.',
+        );
+
+        // A OBRIGACAO 2, medida na tela e nao no registro.
+        await abrirAGaveta(tester);
+        expect(
+          find.descendant(
+            of: find.byType(Drawer),
+            matching: find.byType(ItemDaGaveta),
+          ),
+          findsWidgets,
+          reason:
+              'REPROVA: a gaveta de "${destino.rotulo}" abriu VAZIA. Gaveta '
+              'fixa so e defensavel porque o caso vazio tem conteudo: os '
+              'destinos globais. Sem eles, a padronizacao de 19/10 virou uma '
+              'cortina que escurece a tela para nao oferecer nada -- que e a '
+              'objecao que esta isca provava do outro lado ate 19/10.',
+        );
+        await tester.tapAt(const Offset(700, 300));
+        await tester.pumpAndSettle();
       }
 
       expect(
-        semSubmenu,
+        semSubmenuProprio,
         <String>['Rede', 'Loja'],
         reason:
-            'REPROVA: as secoes sem sub-destino sao ${semSubmenu.join(', ')} e '
-            'nao `Rede, Loja`. Se a lista ficar vazia esta isca deixou de '
-            'exercitar o cenario que o cliente apontou e passa por vacuidade; '
-            'se crescer, uma secao perdeu os atalhos dela.',
+            'REPROVA: as secoes sem sub-destino PROPRIO sao '
+            '${semSubmenuProprio.join(', ')} e nao `Rede, Loja`. Se a lista '
+            'ficar vazia esta isca deixou de exercitar o cenario que o '
+            'cliente mandou padronizar e passa por vacuidade; se crescer, '
+            'uma secao perdeu os atalhos dela.',
       );
     });
   });

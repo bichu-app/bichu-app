@@ -11,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 /// C.2 — Entrar decide pelo `type`, e nunca pelo status.
 ///
 /// **Por que este arquivo existe.** O contrato declara QUATRO tipos com status
@@ -137,8 +139,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
       await tester.pumpAndSettle();
     }
@@ -207,8 +208,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
       await tester.pumpAndSettle();
 
@@ -238,8 +238,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-      await tester.pumpAndSettle();
+      await irParaAConta(tester);
       await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
       await tester.pumpAndSettle();
 

@@ -5,6 +5,8 @@ import 'package:bichu/telas/casca_com_abas.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'telas/ajuda_de_tela.dart';
+
 void main() {
   setUp(AppConfig.limparParaTeste);
 
@@ -20,8 +22,7 @@ void main() {
 
   /// Vai para `Perfil`, que e onde moram as portas de conta (BICHUS-232).
   Future<void> irParaPerfil(WidgetTester tester) async {
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
   }
 
   testWidgets('abre deslogado em Pets, com as cinco secoes visiveis',
@@ -31,7 +32,13 @@ void main() {
     // Deslogado e um estado de navegacao, nao um muro: nenhuma aba some,
     // nenhuma fica desabilitada. A lista vem do registro, e nao escrita a
     // mao: escrita a mao ela continuaria dizendo `Perdidos` para sempre.
-    for (final destino in CascaComAbas.destinos) {
+    //
+    // `visiveisEm`, e nao `destinos`: desde 19/10 o registro tem uma entrada
+    // que a barra NAO pinta -- a conta, cuja porta virou a foto da barra de
+    // topo. Cobrar um slot para ela aqui mediria uma barra que nao existe.
+    for (final destino in CascaComAbas.visiveisEm(
+      CascaComAbas.configuracao,
+    )) {
       expect(
         find.widgetWithText(NavigationDestination, destino.rotulo),
         findsOne,
@@ -74,7 +81,14 @@ void main() {
     //
     // Agora sao as CINCO, e nao tres: `Escanear` deixou de ser aba e virou
     // rota irma da casca, entao nao ha mais a excecao sem barra de topo aqui.
-    for (final destino in CascaComAbas.destinos) {
+    //
+    // **So os slots que SAO ramo**, e a distincao e de 19/10: o slot de
+    // mensagens EMPURRA uma rota em vez de trocar de ramo, porque a tela dela
+    // e de outro agente e nao existe nesta arvore -- tocar nele nao abre uma
+    // secao da casca com titulo proprio. A conta nao tem slot nenhum.
+    for (final destino in CascaComAbas.visiveisEm(
+      CascaComAbas.configuracao,
+    ).where((d) => d.ehRamo)) {
       await tester.tap(
         find.widgetWithText(NavigationDestination, destino.rotulo),
       );
@@ -134,8 +148,7 @@ void main() {
   testWidgets('a tela de entrar oferece a saida para a recuperacao de senha',
       (tester) async {
     await abrirOApp(tester);
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
     await tester.pumpAndSettle();
 
@@ -145,8 +158,7 @@ void main() {
   testWidgets('a confirmacao de recuperacao e opaca sobre a conta existir',
       (tester) async {
     await abrirOApp(tester);
-    await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-    await tester.pumpAndSettle();
+    await irParaAConta(tester);
     await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Esqueci minha senha'));

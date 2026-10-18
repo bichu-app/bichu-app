@@ -89,38 +89,30 @@ class AbaPets extends StatelessWidget {
           // AQUI. Ver a pergunta aberta na entrega desta integracao.
           raizDeSecao: true,
           titulo: destino.rotulo,
-          // A PORTA PRIMARIA DO LEITOR DE QR, AGORA NA BARRA DE TOPO
-          // (pedido do cliente em 18/10/2026: "ate o escanear poderia ser
-          // icones na barra superior ... e nao fique esse botao grande na
-          // pagina ocupando muito espaco"). O botao de contorno de largura
-          // total que morava no corpo saiu: 48 dp dele mais 24 dp de folga,
-          // 72 dp devolvidos ao corpo.
+          // **O LEITOR DE QR SAIU DESTA BARRA em 19/10**, e a decisao e
+          // dele: *"leve o icone de qr-code de escanear para a pagina do
+          // perfil que tem relacao com as acoes do usuario."*
           //
-          // **O GLIFO E O DE QR CODE, e ele foi escolhido por ele**: "o botao
-          // escanear uma tag, pode ser um icone de qr-code igual do
-          // whatsapp". `Icons.qr_code_2` e o quadrado com os tres marcadores
-          // de canto, da familia fechada do design system 10.1 (Material
-          // Symbols, embutida no Flutter) -- nenhum vetor novo, nada baixado,
-          // nada gerado. Ele nao colide com glifo nenhum em uso: `qr_code*`
-          // nao aparecia em `app/lib` antes desta mudanca.
+          // Ele morava aqui como `acaoDeCriar`, com `Icons.qr_code_2`, desde
+          // 18/10. O destino nao mudou e a porta nao foi duplicada: a tela da
+          // conta **ja tinha** `Escanear uma tag`, nos dois estados de sessao
+          // -- item de menu logado, botao secundario deslogado. Entao isto e
+          // UNIFICACAO e nao acrescimo: **ficou uma porta so**, na pagina que
+          // ele chama de "as acoes do usuario", alcancada pela foto da barra
+          // de topo.
           //
-          // **ELE CONTINUA VISIVEL DESLOGADO, e isso foi MEDIDO e nao
-          // suposto.** `tela_leitor_de_qr.dart` diz que a autenticacao da
-          // rota do leitor e **opcional**, e o token entra quando ha. Quem
-          // acha um cachorro na rua e exatamente quem pode nao ter conta
-          // nenhuma: esconder o leitor dessa pessoa e o oposto da cunha do
-          // produto. As outras duas acoes desta tarefa -- criar evento e
-          // indicar -- exigem sessao e por isso desaparecem deslogadas; esta
-          // nao.
+          // **E ela continua alcancavel SEM CONTA, que era o risco.** A
+          // autenticacao da rota do leitor e opcional e quem acha um animal
+          // na rua pode nao ter conta; se a tela da conta so existisse
+          // logada, esta mudanca teria escondido o leitor de quem mais
+          // precisa dele. Medido: o ramo DESLOGADO de `AbaPerfil` desenha
+          // `Escanear uma tag`, e a foto da barra de topo aparece deslogada.
           //
-          // `push` e nao `go`: o leitor cobre a casca inteira (o design
-          // system 11.11 manda a barra sumir no leitor de camera), e tela que
-          // cobre a casca precisa ter volta.
-          acaoDeCriar: AcaoDeCriarNaBarra(
-            icone: Icons.qr_code_2,
-            rotulo: 'Escanear uma tag',
-            aoTocar: () => context.push(Rotas.escanear),
-          ),
+          // **O custo esta no relatorio:** o leitor saiu de 1 toque (icone
+          // nesta barra) para 2 (foto -> `Escanear uma tag`).
+          //
+          // `Pets` fica sem acao de secao na barra, e o slot volta a ser nulo
+          // -- nao entra outro icone no lugar.
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
             // A POSICAO 1 DO AVISO PERSISTENTE (BICHUS-75, criterio 1): faixa
@@ -517,7 +509,16 @@ class AbaPerfil extends StatelessWidget {
 
         return TelaDeAba(
           raizDeSecao: true,
-          titulo: destino.rotulo,
+          // O TITULO E O NOME DA PESSOA (19/10), e nao a palavra `Perfil`.
+          //
+          // Pedido do cliente: *"a tela do usuario, deve ter como titulo da
+          // pagina na barra principal o slug do usuario"*. Slug de usuario nao
+          // existe e esta PROIBIDO de existir por ora (ADR-0025, item 2:
+          // nao expor slug de pessoa); o que existe e e dela e o nome de
+          // exibicao. `tituloDaTelaDaConta` e o PONTO DE TROCA unico: quando a
+          // fatia do apelido descer, ela passa a devolver o apelido e nenhuma
+          // tela muda.
+          titulo: tituloDaTelaDaConta(sessao.usuario?.nome),
           reforco: destino.reforcoDaPagina,
           filhos: <Widget>[
             // -----------------------------------------------------------------

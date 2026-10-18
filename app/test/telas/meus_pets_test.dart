@@ -59,8 +59,7 @@ Future<void> abrirOPerfil(
     deposito: depositoLogado(),
     cacheDeMeusPets: cache,
   );
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-  await tester.pumpAndSettle();
+  await irParaAConta(tester);
 }
 
 /// O no de semantica do cartao, e quantos nos ele guarda dentro de si.

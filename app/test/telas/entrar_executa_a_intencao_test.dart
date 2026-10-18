@@ -34,6 +34,8 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import 'ajuda_de_tela.dart';
+
 const String urlBase = 'http://localhost:3000';
 
 http.Response _json(Map<String, dynamic> corpo, {int status = 200}) {
@@ -109,8 +111,7 @@ Future<void> abrirEntrarCom(
     ),
   );
   await tester.pumpAndSettle();
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-  await tester.pumpAndSettle();
+  await irParaAConta(tester);
   await tester.tap(find.widgetWithText(FilledButton, 'Entrar'));
   await tester.pumpAndSettle();
 }

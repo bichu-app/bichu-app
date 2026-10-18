@@ -79,13 +79,7 @@ void main() {
     // Dentro da `AppBar` de proposito: `Icons.qr_code_2` tambem aparece na
     // pagina do pet, e um `find.byIcon` solto ficaria verde com a barra vazia
     // -- o mesmo cuidado que `criar_e_icone_na_barra_test.dart` escreve.
-    await tester.tap(
-      find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ),
-    );
-    await tester.pumpAndSettle();
+    await irAoLeitorDeQr(tester);
     await tester.tap(find.text(TextosDoCadastro.digitarOCodigo).last);
     await tester.pumpAndSettle();
   }

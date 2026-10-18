@@ -128,12 +128,7 @@ void main() {
           rede: _semServidor,
           camera: CameraDeTeste(EstadoDaPermissao.negada),
         );
-        await tester
-            .tap(find.descendant(
-        of: find.byType(AppBar),
-        matching: find.byIcon(Icons.qr_code_2),
-      ));
-        await tester.pumpAndSettle();
+        await irAoLeitorDeQr(tester);
         if (digitando) {
           await tester.tap(
             find.widgetWithText(BotaoPrimario, TextosDoCadastro.digitarOCodigo),

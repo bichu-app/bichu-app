@@ -50,7 +50,6 @@ import 'package:bichu/telas/perfil/meus_pets.dart';
 import 'package:bichu/telas/pet/textos_do_detalhe.dart';
 import 'package:bichu/widgets/botao_primario.dart';
 import 'package:bichu/widgets/cartao_de_pet.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -164,8 +163,7 @@ Future<void> abrirOPerfil(
     depositoDaFila: fila,
     avisos: avisos,
   );
-  await tester.tap(find.widgetWithText(NavigationDestination, 'Perfil'));
-  await tester.pumpAndSettle();
+  await irParaAConta(tester);
 }
 
 // ---------------------------------------------------------------------------
