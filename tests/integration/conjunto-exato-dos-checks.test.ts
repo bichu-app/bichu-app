@@ -633,6 +633,10 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // confere com bairro e cidade.
   'public.collar_tag_requests.collar_tag_requests_cep_formato':
     "CHECK ((postal_code ~ '^[0-9]{8}$'::text))",
+  // O telefone de quem recebe, E.164 do Brasil. A MESMA forma do contrato e
+  // do `phone_e164` do perfil -- uma segunda redacao divergiria da primeira.
+  'public.collar_tag_requests.collar_tag_requests_telefone_formato':
+    "CHECK ((recipient_phone ~ '^\\+55[0-9]{10,11}$'::text))",
   // So o encontro da comunidade espera revisao (ADR-0027 13.5): e esta linha
   // que torna "o ponto de evento da comunidade so aparece depois de revisao
   // humana" um estado do banco, porque `pending_review` nunca e visivel.

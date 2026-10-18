@@ -1379,6 +1379,8 @@ export interface CollarTagRequestsTable {
    * ha `lat`, nao ha `lon` e nenhum servico externo resolve o CEP.
    */
   recipient_name: string;
+  /** E.164 do Brasil (`+55` e 10 ou 11 digitos). Dado pessoal. */
+  recipient_phone: string;
   /** Oito digitos, sem mascara. Normalizado pela aplicacao antes de gravar. */
   postal_code: string;
   street: string;

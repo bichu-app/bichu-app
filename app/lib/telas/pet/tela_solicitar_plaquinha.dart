@@ -2,12 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../api/busca_de_cep.dart';
 import '../../api/estados_brasileiros.dart';
 import '../../api/falhas.dart';
 import '../../api/mensagens_de_erro.dart';
 import '../../api/modelos_pet.dart';
 import '../../api/problem.dart';
 import '../../escopo.dart';
+import '../../formato/telefone.dart';
 import '../../roteamento/rotas.dart';
 import '../../theme/bichu_tokens.g.dart';
 import '../../widgets/barra_de_acao_fixa.dart';
@@ -46,9 +48,16 @@ import '../../widgets/seletor_de_lista.dart';
 /// O cliente decidiu em 17/10 que **o endereco entra e e obrigatorio**: sem
 /// ele a administracao nao cumpre o pedido.
 ///
-/// - **Tudo e digitado.** Nao ha busca de endereco, nao ha mapa e **o CEP nao
-///   e consultado em servico nenhum** (ADR-0006). Digitar o CEP nao preenche
-///   bairro nem cidade, e isso nao e um recurso faltando: e a decisao.
+/// - **O CEP preenche rua, bairro, cidade e estado** (decisao do cliente,
+///   17/10), pelo ViaCEP com BrasilAPI de reserva. **Isso nao e
+///   geocodificacao**: vem TEXTO, nunca coordenada, e a ADR-0006 proibe a
+///   coordenada e nao o texto -- o raciocinio inteiro esta em
+///   `api/busca_de_cep.dart`, do lado da chamada.
+/// - **Tudo continua editavel, e a busca nunca trava o pedido.** Base de CEP
+///   erra, CEP de rua longa nao traz numero, e servico de terceiro cai: em
+///   qualquer um desses a pessoa preenche a mao e o pedido vai. O botao nunca
+///   e desabilitado por causa da busca.
+/// - **Sai so o CEP.** Nem nome, nem conta, nem pet, nem token.
 /// - **A lista dos 27 estados vem de [estadosBrasileiros]**, que mostra o nome
 ///   e envia a sigla. Esta tela nao escreve a segunda lista.
 /// - **`Complemento` e o unico opcional.** Os demais sao exigidos, e a recusa
@@ -74,7 +83,16 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
   final TextEditingController _complemento = TextEditingController();
   final TextEditingController _bairro = TextEditingController();
   final TextEditingController _cidade = TextEditingController();
+  final TextEditingController _telefone = TextEditingController();
   final TextEditingController _observacao = TextEditingController();
+
+  /// O que a ultima busca de CEP devolveu. **Nunca desabilita nada**: serve
+  /// so para a tela dizer o que aconteceu.
+  ResultadoDaBusca? _buscaDoCep;
+  bool _buscandoOCep = false;
+
+  /// O CEP que a ultima busca usou, para nao repetir a chamada a cada tecla.
+  String _cepJaBuscado = '';
 
   List<Pet>? _pets;
   String? _petEscolhido;
@@ -106,6 +124,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
       _complemento,
       _bairro,
       _cidade,
+      _telefone,
       _observacao,
     ]) {
       c.dispose();
@@ -144,6 +163,56 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     }
   }
 
+  /// Busca o endereco do CEP e preenche o que estiver VAZIO.
+  ///
+  /// Tres decisoes, e as tres sao do pedido do cliente:
+  ///
+  /// 1. **so preenche campo vazio.** O que a pessoa ja escreveu vence o que a
+  ///    base devolve -- ela esta olhando o endereco dela, e a base erra;
+  /// 2. **tudo continua editavel.** Nao ha campo bloqueado depois da busca:
+  ///    CEP de rua longa nao traz numero, e CEP generico de cidade nao traz
+  ///    rua;
+  /// 3. **nada aqui pode impedir o pedido.** Nenhum caminho desta funcao
+  ///    desabilita o botao, marca erro de campo ou lanca. O pior desfecho e
+  ///    uma linha dizendo que nao deu, com os campos abertos para digitar.
+  Future<void> _buscarOCep() async {
+    final cep = _soDigitos(_cep.text);
+    if (cep.length != 8 || cep == _cepJaBuscado) return;
+    _cepJaBuscado = cep;
+
+    setState(() {
+      _buscandoOCep = true;
+      _buscaDoCep = null;
+    });
+
+    final resposta = await Escopo.of(context).buscaDeCep.buscar(cep);
+    if (!mounted) return;
+
+    setState(() {
+      _buscandoOCep = false;
+      _buscaDoCep = resposta.resultado;
+      final endereco = resposta.endereco;
+      if (endereco == null) return;
+
+      // Campo vazio recebe; campo escrito fica. E os erros dos campos que
+      // acabaram de ser preenchidos saem junto -- deixar "Digite a rua."
+      // embaixo de uma rua preenchida seria a tela discutindo consigo mesma.
+      _preencherSeVazio(_logradouro, endereco.logradouro, _CamposDoPedido.logradouro);
+      _preencherSeVazio(_bairro, endereco.bairro, _CamposDoPedido.bairro);
+      _preencherSeVazio(_cidade, endereco.cidade, _CamposDoPedido.cidade);
+      if (_uf == null && endereco.uf.length == 2) {
+        _uf = endereco.uf;
+        _erros.remove(_CamposDoPedido.uf);
+      }
+    });
+  }
+
+  void _preencherSeVazio(TextEditingController campo, String valor, String chave) {
+    if (valor.isEmpty || campo.text.trim().isNotEmpty) return;
+    campo.text = valor;
+    _erros.remove(chave);
+  }
+
   /// Valida **campo por campo**, e devolve os erros todos de uma vez.
   ///
   /// De uma vez, e nao o primeiro: recusar um campo por vez faz a pessoa
@@ -176,6 +245,12 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     }
     if (_uf == null) {
       erros[_CamposDoPedido.uf] = _TextosDaPlaquinha.escolhaOEstado;
+    }
+    // OBRIGATORIO: transportadora costuma exigir telefone para entregar, e foi
+    // por isso que ele entrou. `telefoneEmE164` e quem decide, e ela recusa
+    // devolvendo nulo em vez de adivinhar.
+    if (telefoneEmE164(_telefone.text) == null) {
+      erros[_CamposDoPedido.telefone] = _TextosDaPlaquinha.telefoneIncompleto;
     }
     return erros;
   }
@@ -216,6 +291,9 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
           bairro: _bairro.text.trim(),
           cidade: _cidade.text.trim(),
           uf: _uf!,
+          // **E.164**, nunca o que esta na tela: a mascara e do olho, e
+          // `telefoneEmE164` e a unica que produz valor de contrato.
+          telefone: telefoneEmE164(_telefone.text)!,
         ),
         observacao: _observacao.text.trim(),
       );
@@ -302,6 +380,7 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
     TextInputType? tipoDeTeclado,
     TextCapitalization capitalizacao = TextCapitalization.none,
     List<TextInputFormatter>? formatadores,
+    ValueChanged<String>? aoMudarTambem,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: BichuEspaco.e4),
@@ -318,11 +397,35 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
         formatadores: formatadores,
         // Digitar e a correcao: o erro sai do campo no primeiro toque, e nao
         // so quando a pessoa tenta enviar de novo.
-        aoMudar: _erros.containsKey(chave)
-            ? (_) => setState(() => _erros.remove(chave))
-            : null,
+        aoMudar: (valor) {
+          if (_erros.containsKey(chave)) {
+            setState(() => _erros.remove(chave));
+          }
+          aoMudarTambem?.call(valor);
+        },
       ),
     );
+  }
+
+  /// A linha que conta o que a busca de CEP fez. Texto curto, sem paragrafo.
+  ///
+  /// **Nenhum destes estados e um erro de formulario.** Nao marcam campo, nao
+  /// desabilitam o botao e nao impedem o envio: o pior deles quer dizer
+  /// "digite voce mesmo", e os campos estao abertos para isso.
+  Widget _linhaDaBusca(TextTheme textos) {
+    if (_buscandoOCep) {
+      return Text(
+        _TextosDaPlaquinha.buscandoOCep,
+        style: textos.bodySmall,
+      );
+    }
+    final texto = switch (_buscaDoCep) {
+      ResultadoDaBusca.naoEncontrado => _TextosDaPlaquinha.cepNaoEncontrado,
+      ResultadoDaBusca.indisponivel => _TextosDaPlaquinha.buscaIndisponivel,
+      _ => null,
+    };
+    if (texto == null) return const SizedBox.shrink();
+    return Text(texto, style: textos.bodySmall);
   }
 
   List<ItemDeLista> get _itensDosPets => (_pets ?? <Pet>[])
@@ -405,12 +508,21 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                         controlador: _cep,
                         limite: 8,
                         tipoDeTeclado: TextInputType.number,
-                        // So digito. **Digitar o CEP nao preenche nada**: nao
-                        // ha consulta a servico de CEP (ADR-0006).
                         formatadores: <TextInputFormatter>[
                           FilteringTextInputFormatter.digitsOnly,
                         ],
+                        // No oitavo digito a busca sai sozinha. Sem botao
+                        // `Buscar`: um botao a mais e um passo a mais para
+                        // quem so quer o endereco preenchido, e nao buscar e
+                        // um desfecho valido -- o formulario segue digitavel.
+                        aoMudarTambem: (_) => _buscarOCep(),
                       ),
+                      // O que a busca disse, e **so isso**: ela nao marca
+                      // erro de campo e nao desabilita nada.
+                      if (_buscandoOCep || _buscaDoCep != null) ...<Widget>[
+                        _linhaDaBusca(textos),
+                        const SizedBox(height: BichuEspaco.e4),
+                      ],
                       _campo(
                         chave: _CamposDoPedido.logradouro,
                         rotulo: _TextosDaPlaquinha.logradouro,
@@ -460,7 +572,20 @@ class _TelaSolicitarPlaquinhaState extends State<TelaSolicitarPlaquinha> {
                           _erros.remove(_CamposDoPedido.uf);
                         }),
                       ),
-                      const SizedBox(height: BichuEspaco.e6),
+                      const SizedBox(height: BichuEspaco.e4),
+                      _campo(
+                        chave: _CamposDoPedido.telefone,
+                        rotulo: _TextosDaPlaquinha.telefone,
+                        controlador: _telefone,
+                        limite: limiteDoTelefone,
+                        tipoDeTeclado: TextInputType.phone,
+                        exemplo: _TextosDaPlaquinha.exemploDoTelefone,
+                        // Mostra formatado; `telefoneEmE164` e quem envia.
+                        formatadores: const <TextInputFormatter>[
+                          MascaraDeTelefone(),
+                        ],
+                      ),
+                      const SizedBox(height: BichuEspaco.e2),
                       BichuField(
                         rotulo: _TextosDaPlaquinha.observacao,
                         controlador: _observacao,
@@ -505,6 +630,7 @@ abstract final class _CamposDoPedido {
   static const String bairro = 'neighborhood';
   static const String cidade = 'city';
   static const String uf = 'state';
+  static const String telefone = 'recipient_phone';
 
   static const List<String> todos = <String>[
     destinatario,
@@ -515,6 +641,7 @@ abstract final class _CamposDoPedido {
     bairro,
     cidade,
     uf,
+    telefone,
   ];
 
   /// O campo do formulario que corresponde ao que o servidor nomeou, ou nulo.
@@ -545,6 +672,8 @@ abstract final class _TextosDaPlaquinha {
   static const String bairro = 'Bairro';
   static const String cidade = 'Cidade';
   static const String estado = 'Estado';
+  static const String telefone = 'Telefone de quem recebe';
+  static const String exemploDoTelefone = '(11) 98765-4321';
   static const String observacao = 'Observação';
   static const String exemploDaObservacao = 'nome gravado, cor da plaquinha';
 
@@ -562,6 +691,13 @@ abstract final class _TextosDaPlaquinha {
   static const String digiteOBairro = 'Digite o bairro.';
   static const String digiteACidade = 'Digite a cidade.';
   static const String escolhaOEstado = 'Escolha o estado.';
+  static const String telefoneIncompleto = 'Digite DDD e número.';
+
+  /// Os tres desfechos da busca de CEP. **Nenhum e um erro**: os tres querem
+  /// dizer a mesma coisa para quem preenche -- os campos estao abertos.
+  static const String buscandoOCep = 'Buscando o endereço…';
+  static const String cepNaoEncontrado = 'CEP não encontrado. Preencha abaixo.';
+  static const String buscaIndisponivel = 'Não deu para buscar. Preencha abaixo.';
   static const String confiraOsCampos = 'Confira os campos marcados.';
   static const String confiraEsteCampo = 'Confira este campo.';
   static const String pedidoEnviado = 'Pedido enviado.';

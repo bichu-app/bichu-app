@@ -110,6 +110,7 @@ async function contaDoTeto(
 interface CorpoDoPedido {
   readonly delivery_address: {
     readonly recipient_name: string;
+    readonly recipient_phone: string;
     readonly postal_code: string;
     readonly street: string;
     readonly street_number: string;
@@ -135,6 +136,9 @@ function comoEnderecoDeEntrega(corpo: CorpoDoPedido): EnderecoDeEntrega {
   const endereco = corpo.delivery_address;
   return {
     destinatario: endereco.recipient_name.trim(),
+    // Ja em E.164 quando chega: o schema do contrato cobra
+    // `^\+55\d{10,11}$`, e o app converte antes de enviar.
+    telefone: endereco.recipient_phone.trim(),
     cep: endereco.postal_code.replace(/\D/gu, ''),
     logradouro: endereco.street.trim(),
     numero: endereco.street_number.trim(),

@@ -39,14 +39,19 @@
 -- ISTO E DADO PESSOAL, E A TABELA TRATA COMO TAL
 -- ====================================================================
 --
--- 1. **So o necessario para entregar.** Sete campos de endereco e o nome de
---    quem recebe, que e o que vai na etiqueta. Sem documento, sem data de
---    nascimento, sem telefone, sem nada alem disso.
+-- 1. **So o necessario para entregar.** Os campos do endereco, o nome de quem
+--    recebe e o TELEFONE dele -- os tres sao o que vai na etiqueta e o que a
+--    transportadora pede. Sem documento, sem data de nascimento, sem nada
+--    alem disso.
 -- 2. **Nada aqui e geocodificado.** Nao ha `lat`, nao ha `lon`, nao ha
---    `geography` e nao ha indice espacial: a ADR-0006 proibe, e o cliente
---    reafirmou nesta semana que nao ha mapa nem busca de endereco. O CEP e
---    DIGITADO e guardado como digitado (so sem mascara); nenhuma consulta a
---    servico externo o completa.
+--    `geography` e nao ha indice espacial -- a ADR-0006 proibe transformar
+--    endereco em COORDENADA, e nada nesta tabela guarda uma.
+--
+--    O CEP passou a PREENCHER rua, bairro, cidade e estado no app (decisao do
+--    cliente, 17/10), pelo ViaCEP com BrasilAPI de reserva. Isso e texto, e a
+--    distincao e a que autoriza o recurso. **O servidor nao participa**: ele
+--    recebe os campos ja digitados ou ja corrigidos, e nao sabe nem se a
+--    busca aconteceu.
 -- 3. **O endereco nao sai em superficie publica.** Quem o le e o proprio
 --    solicitante e a administracao, e a autorizacao mora na clausula `WHERE`
 --    (404 e nunca 403, ADR-0021).
@@ -103,6 +108,13 @@ CREATE TABLE collar_tag_requests (
   recipient_name    text        NOT NULL
                                 CONSTRAINT collar_tag_requests_recipient_tamanho
                                 CHECK (char_length(recipient_name) BETWEEN 2 AND 120),
+
+  -- E.164 do Brasil, a MESMA forma do contrato (`^\+55\d{10,11}$`) e do
+  -- `phone_e164` do perfil. Obrigatorio: transportadora costuma exigir um
+  -- telefone para entregar, e um pedido sem ele volta para a fila.
+  recipient_phone   text        NOT NULL
+                                CONSTRAINT collar_tag_requests_telefone_formato
+                                CHECK (recipient_phone ~ '^\+55[0-9]{10,11}$'),
 
   -- OITO DIGITOS, sem mascara e sem hifen. Guardar "01311-000" e "01311000"
   -- na mesma coluna daria dois enderecos iguais com dois valores diferentes, e
@@ -186,7 +198,10 @@ COMMENT ON TABLE collar_tag_requests IS
   'Pedidos do OBJETO FISICO da plaquinha da coleira. Nao emite codigo: o codigo e de `pet_tags` e e irreversivel (ADR-0004). CONTEM DADO PESSOAL (endereco de entrega): nao sai em superficie publica, nao entra na trilha de auditoria e nao e geocodificado (ADR-0006). Sem valor e sem cobranca, que seguem fora de escopo por decisao do cliente.';
 
 COMMENT ON COLUMN collar_tag_requests.postal_code IS
-  'CEP com oito digitos, sem mascara. DIGITADO pelo tutor: nenhum servico externo o resolve (ADR-0006), e o banco nao tem como conferir se ele confere com as demais colunas.';
+  'CEP com oito digitos, sem mascara. O app o usa para buscar rua/bairro/cidade/UF (ViaCEP, BrasilAPI de reserva) e preencher campos editaveis; o servidor nao participa da busca. Nada e geocodificado (ADR-0006), e o banco nao tem como conferir se o CEP bate com as demais colunas.';
+
+COMMENT ON COLUMN collar_tag_requests.recipient_phone IS
+  'Telefone de quem recebe, em E.164 (`+55` e 10 ou 11 digitos). DADO PESSOAL: nao sai em superficie publica e nao entra na trilha de auditoria.';
 
 COMMENT ON COLUMN collar_tag_requests.state IS
   'UF em dois caracteres. O CONJUNTO das 27 siglas vive no app (`app/lib/api/estados_brasileiros.dart`), e nao aqui: um CHECK com as siglas seria a segunda fonte para divergir.';

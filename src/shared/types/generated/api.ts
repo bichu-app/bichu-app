@@ -6717,8 +6717,9 @@ export interface components {
          *       e nao ha mapa nem busca de endereco neste produto. Todo campo e
          *       DIGITADO, e nenhum servico externo completa nenhum outro: o servidor
          *       nao tem como saber se o bairro confere com o CEP;
-         *     - **so o necessario para entregar**. Sem documento, sem data de
-         *       nascimento, sem telefone.
+         *     - **so o necessario para entregar**. Sem documento e sem data de
+         *       nascimento. `recipient_phone` entrou em 17/10 por decisao do
+         *       cliente: transportadora costuma exigir um telefone para entregar.
          *
          *     `state` e a sigla de dois caracteres, no mesmo formato de `Area.state`
          *     -- **sem `enum`**, porque o conjunto das 27 siglas nao existe no
@@ -6728,7 +6729,21 @@ export interface components {
         DeliveryAddress: {
             /** @description Quem recebe, como vai na etiqueta. */
             recipient_name: string;
-            /** @description CEP com oito digitos, **sem mascara e sem hifen**. Digitado, nunca resolvido. */
+            /**
+             * @description E.164, **o mesmo padrao de `MeUpdate.phone_e164`** e nao uma
+             *     segunda forma dele. O app mostra mascarado e envia assim.
+             * @example +5511987654321
+             */
+            recipient_phone: string;
+            /**
+             * @description CEP com oito digitos, **sem mascara e sem hifen**.
+             *
+             *     O app o usa para BUSCAR rua, bairro, cidade e estado em servico
+             *     publico (ViaCEP, com BrasilAPI de reserva) e preencher os campos,
+             *     **que seguem editaveis** -- decisao do cliente de 17/10. Isso e
+             *     texto e nao coordenada: nada aqui e geocodificado (ADR-0006), e o
+             *     servidor nao participa da busca nem a repete.
+             */
             postal_code: string;
             street: string;
             /** @description Texto, e nao inteiro - `s/n`, `120A` e `KM 32` sao numeros de porta. */

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:bichu/roteamento/rotas.dart';
 import 'package:bichu/telas/pet/tela_solicitar_plaquinha.dart';
@@ -52,12 +53,21 @@ import 'meus_pets_test.dart' show abrirOPerfil;
 //    "nao enviou": ele afirma que a mensagem de cada campo que falta aparece
 //    na tela, uma por uma.
 //
-// 5b. **O CEP NAO PREENCHE NADA.** Nao ha consulta a servico de CEP
-//    (ADR-0006). A isca digita um CEP e afirma que bairro e cidade seguem
-//    VAZIOS -- uma consulta que alguem acrescente amanha reprova aqui.
+// 5b. **O CEP PREENCHE, E A FALHA DA BUSCA NAO TRAVA O PEDIDO.** A isca
+//    antiga afirmava o contrario -- que nada era preenchido -- e foi
+//    REMOVIDA: ela nasceu quando a decisao era nao ter busca, e o cliente
+//    decidiu em 17/10 que tem. No lugar dela entram tres casos, e o terceiro
+//    e o que protege o pedido dele:
+//      - o CEP preenche rua, bairro, cidade e estado (ViaCEP);
+//      - o que vier preenchido continua EDITAVEL, e o que a pessoa ja
+//        escreveu nao e sobrescrito;
+//      - **servico fora do ar, lento ou CEP inexistente nao impede o envio.**
+//        A isca derruba a rede de CEP e afirma que o pedido vai assim mesmo.
 //
 // 5c. **NAO HA PAGAMENTO**, e isso segue afirmado: cobranca continua fora de
 //    escopo por decisao do cliente.
+//
+// 5e. **O TELEFONE e obrigatorio, mascarado na tela e E.164 no envio.**
 //
 // 5d. **A UF viaja como SIGLA, e a lista mostra o NOME.** A isca afirma os
 //    dois lados, porque mandar "São Paulo" em `state` quebraria o contrato
@@ -76,11 +86,14 @@ const String _idDoPet = '3f1d7a9e-0000-7000-8000-000000000001';
 class _Registro {
   final List<String> caminhos = <String>[];
   final List<String> corpos = <String>[];
+  final List<String> chamadasDeCep = <String>[];
+  final List<Map<String, String>> cabecalhosDeCep = <Map<String, String>>[];
 }
 
 /// Um endereco valido, nos rotulos da tela.
 const Map<String, String> _endereco = <String, String>{
   'Quem recebe': 'Mariana Destinataria',
+  'Telefone de quem recebe': '11987654321',
   'CEP': '01311000',
   'Rua': 'Avenida Paulista Ficticia',
   'Número': '1578B',
@@ -88,16 +101,35 @@ const Map<String, String> _endereco = <String, String>{
   'Cidade': 'Sao Paulo dos Testes',
 };
 
-/// Preenche os seis campos de texto do endereco e escolhe o estado.
+/// Escreve num campo pelo rotulo.
+Future<void> _digitar(WidgetTester tester, String rotulo, String valor) async {
+  final campo = find.ancestor(
+    of: find.text(rotulo),
+    matching: find.byType(BichuField),
+  );
+  await tester.ensureVisible(campo);
+  await tester.enterText(campo, valor);
+  await tester.pumpAndSettle();
+}
+
+/// O que esta escrito num campo, pelo rotulo.
+String _textoDoCampo(WidgetTester tester, String rotulo) {
+  return tester
+      .widget<BichuField>(
+        find.ancestor(
+          of: find.text(rotulo),
+          matching: find.byType(BichuField),
+        ),
+      )
+      .controlador
+      .text
+      .trim();
+}
+
+/// Preenche os campos de texto do endereco e escolhe o estado.
 Future<void> _preencherOEndereco(WidgetTester tester) async {
   for (final par in _endereco.entries) {
-    final campo = find.ancestor(
-      of: find.text(par.key),
-      matching: find.byType(BichuField),
-    );
-    await tester.ensureVisible(campo);
-    await tester.enterText(campo, par.value);
-    await tester.pumpAndSettle();
+    await _digitar(tester, par.key, par.value);
   }
   await _escolherOEstado(tester, 'São Paulo');
 }
@@ -112,15 +144,37 @@ Future<void> _escolherOEstado(WidgetTester tester, String nome) async {
   await tocar(tester, find.text(nome).last);
 }
 
-/// Uma rede com um pet do tutor e a rota do pedido da plaquinha.
+/// Uma rede com um pet do tutor, a rota do pedido e o ViaCEP.
+///
+/// `cepFora` derruba **so** a busca de CEP, e e assim que a isca separa "a
+/// busca falhou" de "o pedido falhou": o `POST` continua de pe.
 Future<http.Response> Function(http.Request) _rede(
   _Registro registro, {
   int statusDoPedido = 200,
   String problemaDoPedido = '',
+  bool cepFora = false,
+  bool cepInexistente = false,
 }) {
   final pet = petDoContrato(id: _idDoPet);
   return (req) async {
     final caminho = req.url.path;
+
+    // Os dois servicos de CEP. **Nenhum deles e a nossa API**, e nenhum
+    // recebe `Authorization` -- a isca 5f confere isso.
+    if (req.url.host == 'viacep.com.br' || req.url.host == 'brasilapi.com.br') {
+      registro.chamadasDeCep.add(req.url.toString());
+      registro.cabecalhosDeCep.add(Map<String, String>.from(req.headers));
+      if (cepFora) throw const SocketException('servico de CEP fora do ar');
+      if (cepInexistente) return json200(<String, dynamic>{'erro': 'true'});
+      return json200(<String, dynamic>{
+        'cep': '01311-000',
+        'logradouro': 'Avenida Paulista',
+        'complemento': 'até 609 - lado ímpar',
+        'bairro': 'Bela Vista',
+        'localidade': 'São Paulo',
+        'uf': 'SP',
+      });
+    }
 
     if (caminho == '/v1/pets' && req.method == 'GET') {
       return json200(<String, dynamic>{
@@ -152,6 +206,8 @@ Future<void> _abrirOFormulario(
   required _Registro registro,
   int statusDoPedido = 200,
   String problemaDoPedido = '',
+  bool cepFora = false,
+  bool cepInexistente = false,
   Object? extra,
 }) async {
   await abrirOPerfil(
@@ -160,6 +216,8 @@ Future<void> _abrirOFormulario(
       registro,
       statusDoPedido: statusDoPedido,
       problemaDoPedido: problemaDoPedido,
+      cepFora: cepFora,
+      cepInexistente: cepInexistente,
     ),
   );
   await irPara(tester, Rotas.solicitarPlaquinha, extra: extra);
@@ -299,30 +357,124 @@ void main() {
       expect(find.text('Pedido enviado.'), findsOneWidget);
     });
 
-    testWidgets('5b. digitar o CEP NAO preenche bairro nem cidade',
+    testWidgets('5b. o CEP preenche rua, bairro, cidade e estado', (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+
+      await _digitar(tester, 'CEP', '01311000');
+      await tester.pumpAndSettle();
+
+      expect(registro.chamadasDeCep, hasLength(1));
+      expect(registro.chamadasDeCep.single, contains('viacep.com.br'));
+      expect(_textoDoCampo(tester, 'Rua'), 'Avenida Paulista');
+      expect(_textoDoCampo(tester, 'Bairro'), 'Bela Vista');
+      expect(_textoDoCampo(tester, 'Cidade'), 'São Paulo');
+      // `complemento` do ViaCEP e "até 609 - lado ímpar", a FAIXA da rua, e
+      // nao o apartamento de ninguem. Ele nao pode entrar no campo.
+      expect(_textoDoCampo(tester, 'Complemento'), isEmpty);
+    });
+
+    testWidgets('5b2. o que veio continua EDITAVEL, e o digitado nao e trocado',
         (tester) async {
       final registro = _Registro();
       await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
 
-      final cep = find.ancestor(
-        of: find.text('CEP'),
-        matching: find.byType(BichuField),
-      );
-      await tester.ensureVisible(cep);
-      await tester.enterText(cep, '01311000');
+      // A pessoa escreveu a rua ANTES de digitar o CEP.
+      await _digitar(tester, 'Rua', 'Rua que eu sei de cor');
+      await _digitar(tester, 'CEP', '01311000');
       await tester.pumpAndSettle();
 
-      // Nao ha consulta a servico de CEP (ADR-0006). Se alguem acrescentar
-      // uma, estes dois campos deixam de estar vazios e a isca reprova.
-      for (final rotulo in <String>['Bairro', 'Cidade']) {
-        final campo = tester.widget<BichuField>(
-          find.ancestor(
-            of: find.text(rotulo),
-            matching: find.byType(BichuField),
-          ),
-        );
-        expect(campo.controlador.text, isEmpty, reason: '$rotulo foi preenchido sozinho');
+      // O que ela escreveu vence o que a base devolveu.
+      expect(_textoDoCampo(tester, 'Rua'), 'Rua que eu sei de cor');
+
+      // E o que a busca preencheu pode ser corrigido.
+      await _digitar(tester, 'Bairro', 'Outro bairro');
+      expect(_textoDoCampo(tester, 'Bairro'), 'Outro bairro');
+    });
+
+    testWidgets('5b3. ISCA — a busca de CEP fora do ar NAO impede o pedido',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(
+        tester,
+        registro: registro,
+        extra: _idDoPet,
+        cepFora: true,
+      );
+
+      await _preencherOEndereco(tester);
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      // **A assercao que o cliente comprou.** O servico de terceiro caiu, e o
+      // pedido foi assim mesmo.
+      expect(registro.caminhos, hasLength(1));
+      expect(find.text('Pedido enviado.'), findsOneWidget);
+    });
+
+    testWidgets('5b4. CEP inexistente tambem nao impede: diz e segue',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(
+        tester,
+        registro: registro,
+        extra: _idDoPet,
+        cepInexistente: true,
+      );
+
+      await _preencherOEndereco(tester);
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      expect(registro.caminhos, hasLength(1));
+      expect(find.text('Pedido enviado.'), findsOneWidget);
+    });
+
+    testWidgets('5f. a busca manda SO o CEP, e sem o token da sessao',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+
+      await _digitar(tester, 'Quem recebe', 'Mariana Destinataria');
+      await _digitar(tester, 'CEP', '01311000');
+      await tester.pumpAndSettle();
+
+      final url = registro.chamadasDeCep.single;
+      expect(url, contains('01311000'));
+      // Nem nome, nem conta, nem pet.
+      expect(url, isNot(contains('Mariana')));
+      expect(url, isNot(contains(_idDoPet)));
+      for (final cabecalhos in registro.cabecalhosDeCep) {
+        final chaves = cabecalhos.keys.map((k) => k.toLowerCase());
+        expect(chaves, isNot(contains('authorization')));
       }
+    });
+
+    testWidgets('5e. o telefone e obrigatorio, e vai em E.164', (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
+
+      // Mascarado na tela...
+      expect(_textoDoCampo(tester, 'Telefone de quem recebe'), '(11) 98765-4321');
+
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      // ...e E.164 no envio.
+      final corpo = json.decode(registro.corpos.single) as Map<String, dynamic>;
+      final endereco = corpo['delivery_address'] as Map<String, dynamic>;
+      expect(endereco['recipient_phone'], '+5511987654321');
+    });
+
+    testWidgets('5e2. telefone incompleto recusa, e DIZ o que falta',
+        (tester) async {
+      final registro = _Registro();
+      await _abrirOFormulario(tester, registro: registro, extra: _idDoPet);
+      await _preencherOEndereco(tester);
+      await _digitar(tester, 'Telefone de quem recebe', '1198');
+
+      await tocar(tester, find.text('Pedir a plaquinha'));
+
+      await rolarAte(tester, find.text('Digite DDD e número.'));
+      expect(find.text('Digite DDD e número.'), findsOneWidget);
       expect(registro.caminhos, isEmpty);
     });
 

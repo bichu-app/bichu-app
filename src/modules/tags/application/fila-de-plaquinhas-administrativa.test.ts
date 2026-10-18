@@ -22,10 +22,11 @@
  *    campo novo que amanha carregue dado do solicitante reprova aqui sem
  *    ninguem lembrar de incluir o nome dele.
  *
- * 2b. **O ENDERECO DE ENTREGA NAO ENTRA NA TRILHA.** Esta e a isca que o
+ * 2b. **O ENDERECO E O TELEFONE NAO ENTRAM NA TRILHA.** Esta e a isca que o
  *    cliente comprou junto do endereco: `audit.events` pode registrar que
  *    houve pedido e qual foi a decisao, **nunca o endereco**. A varredura
- *    procura cada um dos oito campos no evento serializado, com valores que
+ *    procura cada um dos NOVE campos no evento serializado -- o telefone de
+ *    quem recebe entre eles --, com valores que
  *    nao aparecem em mais lugar nenhum do arquivo -- um `before`/`after` que
  *    passasse a copiar a linha inteira reprova aqui, e e esse o jeito mais
  *    provavel de o endereco vazar para la sem ninguem notar.
@@ -74,6 +75,7 @@ const NOME_DE_QUEM_PEDIU = 'Mariana Solicitante';
  */
 const ENDERECO = {
   destinatario: 'Mariana Destinataria',
+  telefone: '+5511987654321',
   cep: '01311000',
   logradouro: 'Avenida Paulista Ficticia',
   numero: '1578B',
@@ -194,17 +196,17 @@ void describe('a decisao do painel sobre o pedido da plaquinha', () => {
     assert.doesNotMatch(JSON.stringify(evento), new RegExp(NOME_DE_QUEM_PEDIU, 'i'));
   });
 
-  void it('2b. o ENDERECO DE ENTREGA nao entra na trilha, campo por campo', async () => {
+  void it('2b. endereco e telefone nao entram na trilha, campo por campo', async () => {
     const b = bancada('pending');
     await b.fila.atender(rotaDeAtenderPedidoDePlaquinha.audit, ATOR, REF);
     const serializado = JSON.stringify(b.eventos[0]);
 
-    // Os oito campos, um a um. Afirmar so "nao contem o CEP" deixaria passar
-    // um evento que copiasse logradouro e numero.
+    // Os nove campos, um a um -- telefone inclusive. Afirmar so "nao contem o
+    // CEP" deixaria passar um evento que copiasse logradouro e telefone.
     for (const valor of Object.values(ENDERECO)) {
       assert.ok(
         !serializado.includes(valor),
-        `o evento de trilha carrega um campo do endereco de entrega: ${valor}`,
+        `o evento de trilha carrega um campo do endereco ou o telefone: ${valor}`,
       );
     }
     // E o que ele PRECISA carregar continua la, para a isca nao ficar verde

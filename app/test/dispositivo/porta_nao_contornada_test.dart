@@ -949,10 +949,33 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// As outras duas telas do lote anterior nao mudaram nesta rodada. Anterior:
 /// `a0f1b4a`.
 ///
+/// DESTRAVADO PELA TERCEIRA VEZ EM 17/10, mesma historia. O cliente pediu duas
+/// coisas: **busca de endereco pelo CEP** e **telefone do destinatario**.
+///
+/// UM arquivo muda, de novo: `pet/tela_solicitar_plaquinha.dart`.
+///
+///   - o CEP passa a preencher rua, bairro, cidade e estado, pelo ViaCEP com
+///     BrasilAPI de reserva. **Quem fala com a rede e `api/busca_de_cep.dart`,
+///     e nao a tela** -- a tela chama uma porta e nao sabe de onde vem a
+///     resposta, que e o mesmo arranjo do envio de fotos;
+///   - **isso nao e geocodificacao**: vem texto (rua, bairro, cidade, UF) e
+///     nunca coordenada. A ADR-0006 proibe a coordenada, e o motivo esta
+///     escrito do lado da chamada para ninguem "consertar" de volta;
+///   - **nada disso pode travar o pedido**: servico fora, lento ou CEP
+///     inexistente deixa os campos abertos e o botao vivo, e ha isca que
+///     derruba a rede de CEP e afirma que o pedido vai assim mesmo;
+///   - o campo de telefone entra, com a mascara de `formato/telefone.dart`
+///     (arquivo novo, fora de `telas/`), mostrando `(11) 98765-4321` e
+///     enviando `+5511987654321`.
+///
+/// Nenhum componente novo -- `BichuField` e `SeletorDeLista` de sempre --,
+/// nenhum importe de plugin de aparelho e nenhum `dart:io` na tela: quem fala
+/// HTTP e a porta, em `app/lib/api/`. Anterior: `6224791`.
+///
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
-const String _arvoreDasTelas = '6224791e2336713e0358986f40f3ecaa7be1ef20'; // BICHUS-278, 17/10 (2a rodada): o cliente decidiu que o ENDERECO DE ENTREGA entra, e `pet/tela_solicitar_plaquinha.dart` ganha os sete campos do endereco mais a UF, que vem da lista dos 27 de `api/estados_brasileiros.dart` (mostra o nome, envia a sigla) -- nenhuma segunda lista. A recusa passa a dizer QUAL campo falta, campo por campo. Nenhum componente novo (`BichuField` e `SeletorDeLista`), nenhuma porta de aparelho encostada, nenhuma consulta de CEP (ADR-0006). As outras duas telas do lote anterior nao mudaram nesta rodada (antes: a0f1b4a)
+const String _arvoreDasTelas = '9cf57f370d3d669835997d10d9401be0ce9627d1'; // BICHUS-278, 17/10 (3a rodada): o cliente pediu busca de CEP e telefone do destinatario. `pet/tela_solicitar_plaquinha.dart` passa a preencher rua/bairro/cidade/UF pelo CEP (ViaCEP, via `api/busca_de_cep.dart` -- TEXTO, nunca coordenada) com tudo editavel, e ganha o campo de telefone com a mascara de `formato/telefone.dart`. A busca NUNCA trava o envio. Nenhum componente novo, nenhuma porta de aparelho encostada (antes: 6224791)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

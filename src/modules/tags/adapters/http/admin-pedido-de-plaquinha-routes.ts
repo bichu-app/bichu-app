@@ -131,6 +131,7 @@ function comoAdminCollarTagRequest(pedido: PedidoNaFilaDePlaquinhas): Record<str
     // omitir faria o painel distinguir "sem complemento" de "campo que sumiu".
     delivery_address: {
       recipient_name: pedido.endereco.destinatario,
+      recipient_phone: pedido.endereco.telefone,
       postal_code: pedido.endereco.cep,
       street: pedido.endereco.logradouro,
       street_number: pedido.endereco.numero,

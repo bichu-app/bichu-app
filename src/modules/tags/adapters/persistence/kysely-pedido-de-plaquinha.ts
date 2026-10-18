@@ -61,6 +61,7 @@ interface LinhaDaFila {
   readonly pet_name: string;
   readonly pet_species: string;
   readonly recipient_name: string;
+  readonly recipient_phone: string;
   readonly postal_code: string;
   readonly street: string;
   readonly street_number: string;
@@ -81,6 +82,7 @@ function comoPedidoDoTutor(linha: LinhaDoTutor): PedidoDoTutor {
 function comoEndereco(linha: LinhaDaFila): EnderecoDeEntrega {
   return {
     destinatario: linha.recipient_name,
+    telefone: linha.recipient_phone,
     cep: linha.postal_code,
     logradouro: linha.street,
     numero: linha.street_number,
@@ -121,11 +123,12 @@ export function criarPedidoDePlaquinhaRepository(deps: {
       await sql`
         INSERT INTO collar_tag_requests (
                  id, ref, pet_id, requested_by,
-                 recipient_name, postal_code, street, street_number,
+                 recipient_name, recipient_phone, postal_code, street, street_number,
                  complement, neighborhood, city, state,
                  notes)
         SELECT ${id}::uuid, ${ref}, p.id, ${solicitante}::uuid,
-               ${endereco.destinatario}, ${endereco.cep}, ${endereco.logradouro},
+               ${endereco.destinatario}, ${endereco.telefone}, ${endereco.cep},
+               ${endereco.logradouro},
                ${endereco.numero}, ${endereco.complemento}, ${endereco.bairro},
                ${endereco.cidade}, ${endereco.uf},
                ${observacao}
@@ -161,7 +164,7 @@ export function criarPedidoDePlaquinhaRepository(deps: {
 
       const pagina = await sql<LinhaDaFila>`
         SELECT r.id, r.ref, p.name AS pet_name, p.species_code AS pet_species,
-               r.recipient_name, r.postal_code, r.street, r.street_number,
+               r.recipient_name, r.recipient_phone, r.postal_code, r.street, r.street_number,
                r.complement, r.neighborhood, r.city, r.state,
                r.notes, r.status, r.requested_at, r.decided_at
           FROM collar_tag_requests r
@@ -193,7 +196,7 @@ export function criarPedidoDePlaquinhaRepository(deps: {
       // bloquear o tutor editando o animal.
       const lida = await sql<LinhaDaFila>`
         SELECT r.id, r.ref, p.name AS pet_name, p.species_code AS pet_species,
-               r.recipient_name, r.postal_code, r.street, r.street_number,
+               r.recipient_name, r.recipient_phone, r.postal_code, r.street, r.street_number,
                r.complement, r.neighborhood, r.city, r.state,
                r.notes, r.status, r.requested_at, r.decided_at
           FROM collar_tag_requests r
@@ -221,7 +224,7 @@ export function criarPedidoDePlaquinhaRepository(deps: {
         RETURNING r.id, r.ref,
                   (SELECT p.name FROM pets p WHERE p.id = r.pet_id) AS pet_name,
                   (SELECT p.species_code FROM pets p WHERE p.id = r.pet_id) AS pet_species,
-                  r.recipient_name, r.postal_code, r.street, r.street_number,
+                  r.recipient_name, r.recipient_phone, r.postal_code, r.street, r.street_number,
                   r.complement, r.neighborhood, r.city, r.state,
                   r.notes, r.status, r.requested_at, r.decided_at
       `.execute(trx);

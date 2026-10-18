@@ -21,16 +21,20 @@
  *
  * Ele e DADO PESSOAL, e as quatro regras andam com o tipo:
  *
- * 1. **so o necessario para entregar** -- sete campos de endereco e o nome de
- *    quem recebe. Sem documento, sem data de nascimento, sem telefone;
+ * 1. **so o necessario para entregar** -- os campos do endereco, o nome de
+ *    quem recebe e o telefone dele, que e o que a transportadora pede. Sem
+ *    documento e sem data de nascimento;
  * 2. **nao sai em superficie publica**. [PedidoDoTutor], que e o que o app ve,
  *    **nao tem endereco**: quem o enviou acabou de digita-lo, e devolve-lo
  *    seria uma copia a mais. Quem o le e a administracao, por
  *    [PedidoNaFilaDePlaquinhas];
  * 3. **nao entra na trilha**. Nenhum campo de [EnderecoDeEntrega] e copiado
  *    para `audit.events`, nem em `before`/`after`, nem em `metadata`;
- * 4. **nao e geocodificado**. Nao ha `lat`, nao ha `lon` e nao ha resolucao de
- *    CEP por servico externo (ADR-0006): todo campo e digitado.
+ * 4. **nao e geocodificado**. Nao ha `lat` e nao ha `lon`: a ADR-0006 proibe
+ *    endereco virar COORDENADA. O app passou a preencher rua, bairro, cidade
+ *    e UF a partir do CEP (ViaCEP, decisao do cliente de 17/10), e isso e
+ *    TEXTO -- **o servidor nao participa da busca**: ele recebe campos ja
+ *    digitados ou ja corrigidos e nao sabe se ela aconteceu.
  *
  * O valor continua fora: nao ha preco, nao ha pagamento e nao ha cobranca.
  */
@@ -54,6 +58,8 @@ export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
 export interface EnderecoDeEntrega {
   /** Quem recebe, como vai na etiqueta. */
   readonly destinatario: string;
+  /** E.164 do Brasil. Obrigatorio: a transportadora costuma exigir. */
+  readonly telefone: string;
   /** Oito digitos, sem mascara. Ja normalizado quando chega aqui. */
   readonly cep: string;
   readonly logradouro: string;

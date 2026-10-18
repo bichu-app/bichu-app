@@ -49,9 +49,9 @@
  *    um por um, para os sete obrigatorios. Um 400 generico passa na primeira
  *    assercao e reprova nesta.
  *
- * 5b. **O ENDERECO NAO VOLTA NA RESPOSTA.** Dado pessoal nao e ecoado: quem o
- *    enviou acabou de digita-lo. A varredura procura cada valor enviado no
- *    corpo da resposta.
+ * 5b. **O ENDERECO E O TELEFONE NAO VOLTAM NA RESPOSTA.** Dado pessoal nao e
+ *    ecoado: quem o enviou acabou de digita-lo. A varredura procura cada
+ *    valor enviado no corpo da resposta, telefone inclusive.
  *
  * 5c. **O CEP e normalizado, e nada mais e tocado.** `01311-000` e `01311000`
  *    sao o mesmo lugar e precisam virar a mesma linha. O caso tambem afirma o
@@ -120,6 +120,7 @@ const LIMITE_DA_OBSERVACAO = 500;
  */
 const ENDERECO_VALIDO = {
   recipient_name: 'Mariana Destinataria',
+  recipient_phone: '+5511987654321',
   postal_code: '01311000',
   street: 'Avenida Paulista Ficticia',
   street_number: '1578B',
@@ -132,6 +133,7 @@ const ENDERECO_VALIDO = {
 /** Os sete obrigatorios. `complement` nao esta aqui, e e a unica excecao. */
 const CAMPOS_OBRIGATORIOS = [
   'recipient_name',
+  'recipient_phone',
   'postal_code',
   'street',
   'street_number',
@@ -315,14 +317,14 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     assert.equal(b.criados[0]?.endereco.complemento, null);
   });
 
-  void it('5b. o endereco NAO volta na resposta, campo por campo', async () => {
+  void it('5b. endereco e telefone NAO voltam na resposta, campo por campo', async () => {
     const b = bancada();
     const resposta = await pedir(b, MEU_PET);
     assert.equal(resposta.statusCode, 200);
     for (const valor of Object.values(ENDERECO_VALIDO)) {
       assert.ok(
         !resposta.body.includes(valor),
-        `a resposta ecoa um campo do endereco: ${valor}`,
+        `a resposta ecoa um campo do endereco ou o telefone: ${valor}`,
       );
     }
   });
@@ -341,6 +343,23 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     assert.equal(gravado?.bairro, ENDERECO_VALIDO.neighborhood);
     assert.equal(gravado?.cidade, ENDERECO_VALIDO.city);
     assert.equal(gravado?.logradouro, ENDERECO_VALIDO.street);
+  });
+
+  void it('5c2. telefone fora de E.164 e recusado, e NOMEADO', async () => {
+    for (const ruim of ['11987654321', '(11) 98765-4321', '+1555123456789']) {
+      const b = bancada();
+      const resposta = await pedir(
+        b,
+        MEU_PET,
+        corpoValido({ delivery_address: { ...ENDERECO_VALIDO, recipient_phone: ruim } }),
+      );
+      assert.equal(resposta.statusCode, 400, `${ruim} deveria recusar`);
+      assert.ok(
+        camposRecusados(resposta.body).some((f) => f.includes('recipient_phone')),
+        `o 400 de '${ruim}' nao nomeia o telefone: ${resposta.body}`,
+      );
+      assert.equal(b.criados.length, 0);
+    }
   });
 
   void it('5d. pedir sem `notes` continua valendo: a observacao e opcional', async () => {

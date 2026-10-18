@@ -677,13 +677,15 @@ class AvisoDoAchadorCriado {
 
 /// O endereco para onde a plaquinha e enviada (`DeliveryAddress`).
 ///
-/// **Dado pessoal, e o minimo para entregar.** Sem documento, sem data de
-/// nascimento e sem telefone.
+/// **Dado pessoal, e o minimo para entregar.** Sem documento e sem data de
+/// nascimento. O telefone entrou em 17/10 por decisao do cliente: a
+/// transportadora costuma exigir um para entregar.
 ///
-/// **Nada aqui e resolvido por ninguem** (ADR-0006): o CEP nao completa o
-/// bairro, a UF nao deduz a cidade, e nao ha latitude nem longitude. Todo
-/// campo e digitado. Nao ha, e nao deve haver, chamada a servico externo de
-/// CEP -- e decisao do cliente, por custo e por dependencia.
+/// **Nenhum campo vira coordenada** (ADR-0006): nao ha latitude, nao ha
+/// longitude e nada aqui e geocodificado. O CEP **preenche** rua, bairro,
+/// cidade e estado desde 17/10, por decisao do cliente, e isso e TEXTO --
+/// quem busca e `api/busca_de_cep.dart`, e o que vem de la a pessoa pode
+/// corrigir inteiro.
 ///
 /// O `uf` e a sigla de dois caracteres. A lista dos 27 nomes vive em
 /// `estados_brasileiros.dart`, e e ela que o formulario mostra; o que viaja e
@@ -697,6 +699,7 @@ class EnderecoDeEntrega {
     required this.bairro,
     required this.cidade,
     required this.uf,
+    required this.telefone,
     this.complemento,
   });
 
@@ -720,6 +723,10 @@ class EnderecoDeEntrega {
   /// A sigla de dois caracteres.
   final String uf;
 
+  /// **E.164**, `+55` e 10 ou 11 digitos, como o contrato exige. Obrigatorio:
+  /// transportadora costuma precisar dele para entregar.
+  final String telefone;
+
   Map<String, dynamic> paraJson() {
     return <String, dynamic>{
       'recipient_name': destinatario,
@@ -731,6 +738,7 @@ class EnderecoDeEntrega {
       'neighborhood': bairro,
       'city': cidade,
       'state': uf,
+      'recipient_phone': telefone,
     };
   }
 }
