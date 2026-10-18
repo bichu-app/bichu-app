@@ -565,3 +565,45 @@ dispensas:
     motivo: "display_name ganha minLength 1 em MeUpdate por decisao do cliente de 18/10/2026 (verbatim: \"nao permitir atualizar o cadastro, se nao tiver algum nome cadastrado\"). Fecha a assimetria que sobrava: o cadastro passou a exigir o nome e a atualizacao continuava deixando APAGA-LO com display_name: \"\", e a tela de Meus dados oferecia isso em texto. Quebra INTENCIONAL. NAO E BECO: a conta sem nome continua podendo PREENCHER o nome e salvar -- o servidor recusa o PATCH que omite o nome de quem nao tem nenhum, e aceita o que o preenche. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao"
     responsavel: cliente
     vence_em: 2026-10-25
+
+  # ---------------------------------------------------------------------
+  # VERSAO DE LISTA DO ACHADO COM TETO DECLARADO, 18/10/2026.
+  #
+  # O QUE ESTAVA MEDIDO: `StrayFoundReportInput.ref_data_version` nao tinha
+  # `maxLength` NENHUM no contrato, contra
+  # `found_reports.ref_data_version` com `CHECK ... BETWEEN 1 AND 40`
+  # (`found_reports_ref_data_version_tamanho`, migracao 20260922000010). 41
+  # caracteres em `POST /v1/found-reports` passavam pela validacao do schema e
+  # morriam no `CHECK` -- erro de servidor, nao recusa explicada. E havia
+  # ASSIMETRIA: o caminho equivalente do cadastro de pet devolvia 400, porque
+  # `pet-service.ts` confere a versao contra `ref_data_versions` antes de
+  # gravar; o do achado nao conferia nada.
+  #
+  # POR QUE A QUEBRA ESTA AQUI EM VEZ DE REESCRITA: por o teto onde nao havia
+  # teto e quebra por definicao (`request-property-max-length-set`) -- o
+  # contrato antigo prometia aceitar 41, e nao ha forma compativel de deixar
+  # de prometer isso. O que o contrato prometia, porem, o banco NUNCA cumpriu:
+  # quem mandava 41 recebia 500, e nao 201. A mudanca alinha o contrato a
+  # realidade e troca o erro de servidor por `validation-failed` com o limite
+  # na mensagem, que e o unico desfecho que o cliente consegue tratar.
+  #
+  # E UMA ENTRADA SO, e foi conferido e nao suposto: o juizo
+  # (`infra/verificacao/verificar_quebras_de_contrato.py`) casa uma entrada com
+  # exatamente um par `id da regra` + `operationId`. Medido com
+  # tufin/oasdiff:v1.32.1 contra `3f9a57c2` (origin/development): "1 changes:
+  # 1 error, 0 warning, 0 info", e o unico par e
+  # `request-property-max-length-set createStrayFoundReport`.
+  #
+  # O PISO (`minLength: 1`, que a coluna tambem cobra) NAO entrou: `""` tem o
+  # mesmo defeito de 500 e nao foi medido nesta rodada. Fica dito aqui para
+  # nao passar por resolvido.
+  #
+  # VENCE EM 25/10/2026, pelo mesmo motivo das vizinhas: depois do merge em
+  # `development` a base da comparacao carrega o contrato novo e o portao fica
+  # quieto sozinho. Se esta entrada ainda estiver aqui depois disso, ela esta
+  # escondendo outra coisa e precisa SAIR, nao ser redatada.
+  - portao: oasdiff-versao-de-lista-do-achado-no-teto-do-banco
+    mudanca: "request-property-max-length-set createStrayFoundReport"
+    motivo: "StrayFoundReportInput.ref_data_version ganha maxLength 40 para igualar found_reports.ref_data_version, que sempre recusou acima de 40 (CHECK found_reports_ref_data_version_tamanho, de 1 a 40, migracao 20260922000010). O contrato nao declarava limite nenhum e o banco recusava: 41 caracteres em POST /v1/found-reports viravam erro de servidor, enquanto o caminho equivalente de PetInput ja devolvia 400. A mudanca ALINHA O CONTRATO A REALIDADE e remove um erro de servidor -- quem mandava 41 nunca recebeu 201, recebia 500. CAI QUANDO o merge em development levar o contrato novo para a base da comparacao, momento em que o portao fica verde sozinho e esta entrada sai por redundancia"
+    responsavel: cliente
+    vence_em: 2026-10-25

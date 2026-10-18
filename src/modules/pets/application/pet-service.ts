@@ -6,7 +6,9 @@
  * 1. **`care_notes` é redigido ANTES de gravar.** Telefone, e-mail, endereço e
  *    link saem aqui. Redigir na leitura deixaria o dado em claro em todo backup,
  *    toda réplica e todo log de replicação — e bastaria uma consulta nova,
- *    escrita por quem não conhece a regra, para publicá-lo.
+ *    escrita por quem não conhece a regra, para publicá-lo. **E o tamanho é
+ *    conferido depois dela**, porque a marca de remoção é mais longa que o
+ *    trecho removido: ver `TETO_DE_CARE_NOTES`.
  * 2. **Pet de outro tutor responde 404, nunca 403.** A porta devolve `null` para
  *    "não existe" e para "não é seu" porque são a mesma resposta: um 403
  *    confirmaria a existência do registro a quem não deveria saber que ele
@@ -34,6 +36,19 @@ import type { PetId, UserId } from '../../../shared/types/brands.js';
  * servir. O que contém abuso de verdade é o teto de chamadas por janela.
  */
 export const TETO_DE_PETS_POR_CONTA = 20;
+
+/**
+ * Teto de `care_notes` **depois da redação**, igual ao `CHECK`
+ * `pets_care_notes_tamanho` da migração `20260917000006_pets.sql`
+ * (`char_length(care_notes) <= 280`). O contrato declara o mesmo 280 em
+ * `PetInput.care_notes`, e a igualdade dos dois é justamente o problema: a
+ * redação roda DEPOIS da validação do schema e **cresce** o texto.
+ *
+ * O número vive aqui, e não é lido do contrato de propósito: quem sabota o
+ * `maxLength` do contrato não deve conseguir afrouxar a conferência que
+ * protege a coluna.
+ */
+export const TETO_DE_CARE_NOTES = 280;
 
 export interface DependenciasDePets {
   readonly repositorio: PetRepository;
@@ -182,6 +197,31 @@ export class PetService {
     }
     if (!conhecidos.versaoExiste) {
       invalidos.push({ field: 'ref_data_version', code: 'unknown', message: 'Versão de lista desconhecida.' });
+    }
+    // O teto é conferido DEPOIS da redação, e não antes, porque a redação
+    // CRESCE o texto: `[telefone removido]` tem 19 caracteres e substitui os 11
+    // dígitos de um celular (+8), `[e-mail removido]` tem 17 e substitui
+    // `a@b.co` (+11). MEDIDO: nota de 280 caracteres com um celular dentro sai
+    // da redação com 288, e era o `CHECK` `pets_care_notes_tamanho` que a
+    // recusava — como erro de servidor, que é o desfecho que não diz nada a
+    // quem escreveu. O `maxLength: 280` do contrato não cobre isto: ele mede o
+    // texto que ENTRA, e quem vai para a coluna é o que SAI da redação.
+    //
+    // A recusa é 400 com o limite na mensagem, e NÃO um corte: cortar aqui
+    // deformaria o texto da pessoa sem ela saber, e `care_notes` é exatamente
+    // a frase que alguém vai ler com o animal na mão.
+    // `[...texto].length` e nao `texto.length`: o `char_length` do Postgres
+    // conta CARACTERES, e `.length` conta unidades UTF-16 — um emoji sozinho
+    // responde 2 e faria esta conferencia recusar nota que a coluna aceita.
+    if (dados.careNotes !== null && [...dados.careNotes].length > TETO_DE_CARE_NOTES) {
+      invalidos.push({
+        field: 'care_notes',
+        code: 'too_long',
+        // Nunca o que foi retirado, pela mesma regra de `hint` em
+        // `shared/redaction/redigir.ts`: esta mensagem vai para a tela, para o
+        // log e para a trilha.
+        message: `A nota passou de ${String(TETO_DE_CARE_NOTES)} caracteres depois de retirarmos os dados de contato. Encurte a nota.`,
+      });
     }
     if (invalidos.length > 0) throw problemas.validacao(invalidos);
 

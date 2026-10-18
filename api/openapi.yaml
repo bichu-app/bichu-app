@@ -10100,7 +10100,17 @@ components:
           description: |
             A raca como o achador escreveu. Descreve, nao cruza. So com
             `breed_code` em `outro_*`, pela mesma razao de `PetInput`.
-        ref_data_version: { type: string, nullable: true }
+        ref_data_version:
+          type: string
+          maxLength: 40
+          nullable: true
+          description: |
+            40, o mesmo teto de `found_reports.ref_data_version` no banco
+            (`found_reports_ref_data_version_tamanho`, de 1 a 40). O contrato
+            nao declarava teto nenhum: 41 caracteres passavam pela validacao e
+            morriam no `CHECK` como erro de servidor, enquanto o caminho
+            equivalente de `PetInput` ja devolvia 400 (`pet-service.ts`
+            confere a versao contra `ref_data_versions` antes de gravar).
         size: { $ref: '#/components/schemas/PetSize' }
         primary_color_code: { type: string, maxLength: 30 }
         sex: { $ref: '#/components/schemas/Sex' }
