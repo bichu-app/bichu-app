@@ -871,8 +871,21 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
     "CHECK (((breed_free_text IS NULL) OR ((breed_code IS NOT NULL) AND (breed_code = ANY (ARRAY['outro_dog'::text, 'outro_cat'::text, 'outro_other'::text])))))",
   'public.professionals.professionals_aceite_antes_do_perfil':
     "CHECK (((source = 'import'::text) OR (claim_status <> 'unclaimed'::text)))",
+  // O ENDERECO DE RUA da entrada do diretorio (migracao `20261018000001`,
+  // decisao 9.2 respondida pelo cliente em 18/10/2026). Os quatro `CHECK` sao
+  // `IS NULL OR ...` porque as quatro colunas sao OPCIONAIS: profissional
+  // autonomo nao tem endereco comercial, e exigir o dele significaria exigir a
+  // casa dele. Nenhum dos quatro entra em `missing_to_publish`.
+  'public.professionals.professionals_cep_oito_digitos':
+    "CHECK (((postal_code IS NULL) OR (postal_code ~ '^[0-9]{8}$'::text)))",
   'public.professionals.professionals_cnpj_tamanho':
     "CHECK (((cnpj IS NULL) OR (cnpj ~ '^[0-9]{14}$'::text)))",
+  'public.professionals.professionals_complemento_tamanho':
+    "CHECK (((complement IS NULL) OR ((char_length(complement) >= 1) AND (char_length(complement) <= 80))))",
+  'public.professionals.professionals_logradouro_tamanho':
+    "CHECK (((street IS NULL) OR ((char_length(street) >= 2) AND (char_length(street) <= 120))))",
+  'public.professionals.professionals_numero_tamanho':
+    "CHECK (((street_number IS NULL) OR ((char_length(street_number) >= 1) AND (char_length(street_number) <= 20))))",
   // O endereco publico da entrada do diretorio. Formato COPIADO de
   // `pets_slug_formato`: os dois sao endereco publico do mesmo produto, e dois
   // formatos diferentes para a mesma coisa e o defeito que a duplicacao produz.
