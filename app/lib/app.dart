@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
+import 'api/busca_de_cep.dart';
 import 'api/achados_api.dart';
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
@@ -230,6 +231,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
   late final DiretorioApi _diretorio;
   late final LojaApi _loja;
   late final EnvioDeFoto _envioDeFoto;
+  late final BuscaDeCep _buscaDeCep;
   late final FotosPendentes _fotosPendentes;
   late final RetomadaDeFotos _retomadaDeFotos;
   late final FilaOffline _fila;
@@ -297,6 +299,11 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
     // `http.Client` PROPRIO -- `widget.clienteHttp` e nulo la. A separacao
     // importa: este cliente nao conhece o token da sessao, e o endereco para
     // onde os bytes vao e outro host, escolhido pelo servidor.
+    // A busca de CEP, pelo MESMO padrao do envio de fotos acima: cliente
+    // injetado em teste, proprio em producao, e **sem o token da sessao**.
+    // Ela fala com servico publico de terceiro (BrasilAPI, ViaCEP) e o unico
+    // dado que sai e o CEP -- ver `api/busca_de_cep.dart`.
+    _buscaDeCep = BuscaDeCep(cliente: widget.clienteHttp);
     _envioDeFoto = EnvioDeFoto(
       camera: _camera,
       cliente: widget.clienteHttp,
@@ -572,6 +579,7 @@ class _BichuAppState extends State<BichuApp> with WidgetsBindingObserver {
       loja: _loja,
       achados: _achados,
       envioDeFoto: _envioDeFoto,
+      buscaDeCep: _buscaDeCep,
       retomadaDeFotos: _retomadaDeFotos,
       fila: _fila,
       tags: _tags,

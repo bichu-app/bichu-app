@@ -375,9 +375,17 @@ class _TelaPetCadastradoState extends State<TelaPetCadastrado> {
           BotaoPrimario(
             rotulo: TextosDoCadastro.fazerATag,
             critico: true,
-            // F1.7 e de outra historia. Enquanto ela nao existe, o botao nao
-            // finge que funciona -- e o padrao que o Inicio ja usa.
-            aoTocar: null,
+            // **O DESTINO PASSOU A EXISTIR.** Ate aqui era `aoTocar: null`, e
+            // o motivo nao era defeito: `F1.7` nao existia, nao havia rota no
+            // contrato e nao havia tabela, e o criterio 2 da BICHUS-62 proibe
+            // acao sem destino. Agora ha [TelaSolicitarPlaquinha] e
+            // `POST /v1/pets/{petId}/tag-requests`, entao a acao tem para onde
+            // ir e o botao deixa de ser o que o criterio manda esconder.
+            //
+            // O `petId` vai em `extra` para pre-selecionar o pet que acabou de
+            // ser cadastrado. A tela escolhe entre os pets do tutor de todo
+            // jeito, entao perder o `extra` nao a quebra.
+            aoTocar: () => context.push(Rotas.solicitarPlaquinha, extra: _pet.id),
           ),
           // Secundaria **em texto, e nao em botao**, como a especificacao pede.
           //

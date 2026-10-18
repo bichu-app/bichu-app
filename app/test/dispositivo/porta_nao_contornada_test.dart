@@ -898,6 +898,80 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// `a2ee078f99dbc688f22d69472aaef2f91a48c6b8`
 /// (`feat/loja-detalhe-do-produto`).
 ///
+/// DESTRAVADO EM 17/10 (BICHUS-278, o pedido da plaquinha da coleira). O
+/// motivo, em uma frase: **o botao `Fazer a tag da coleira` nao estava
+/// quebrado, ele nao tinha destino**, e o cliente pediu o destino.
+///
+/// O que muda em `app/lib/telas/`:
+///
+///   - `pet/tela_solicitar_plaquinha.dart`: nasce, o formulario do pedido. Ela
+///     monta `SeletorDeLista`, `BichuField` e `BotaoPrimario` dentro de
+///     `BarraDeAcaoFixa` -- **tres componentes que ja existiam, nenhum widget
+///     novo**, que e a condicao para a tela nascer em codigo em vez de esperar
+///     o desenho;
+///   - `pet/tela_pet_cadastrado.dart`: o botao sai de `aoTocar: null` e passa a
+///     empurrar `Rotas.solicitarPlaquinha`. O `null` era o criterio 2 da
+///     BICHUS-62 sendo cumprido (acao sem destino nao se renderiza), e agora o
+///     destino existe: `POST /v1/pets/{petId}/tag-requests` e a tela acima;
+///   - `pet/tela_detalhe_do_pet.dart`: **so comentario de doc**. A linha que
+///     dizia que as tres acoes da barra fixa "apontam para tela que nao
+///     existe" ficou falsa para uma das tres, e deixa-la seria documentacao
+///     mentindo. A tela continua sem barra de acao fixa, e o codigo dela nao
+///     mudou.
+///
+/// Nenhuma das tres encosta na porta `CameraEGaleria` e nenhuma ganhou importe
+/// de plugin de aparelho nem `dart:io` -- quem cobra isso e o portao
+/// ESTRUTURAL abaixo, que continua valendo e continua verde. Medido pelo
+/// indice temporario que este portao usa (`GIT_INDEX_FILE` + `read-tree HEAD`
+/// + `add -A -- app/lib/telas` + `write-tree` +
+/// `rev-parse <arvore>:app/lib/telas`), sobre a arvore de trabalho desta
+/// branch, a partir de `1cce9f2` (`origin/development`).
+///
+/// **Nota honesta:** nesta branch nenhuma suite rodou, por decisao de quem
+/// pediu a entrega. Este portao foi o UNICO caso executado isoladamente
+/// (`flutter test test/dispositivo/porta_nao_contornada_test.dart`), que e o
+/// que o procedimento de destravamento cobra. Anterior: `65dcb5c`.
+///
+/// DESTRAVADO DE NOVO EM 17/10, mesma historia, segunda rodada. O cliente
+/// respondeu a pergunta que estava aberta: **o endereco de entrega entra, e e
+/// obrigatorio** -- sem ele a administracao nao cumpre o pedido.
+///
+/// UM arquivo muda: `pet/tela_solicitar_plaquinha.dart`. Ele ganha os sete
+/// campos do endereco (`Quem recebe`, CEP, rua, numero, complemento, bairro,
+/// cidade) e o seletor de UF, que le a lista dos 27 de
+/// `app/lib/api/estados_brasileiros.dart` -- **a tela nao escreve a segunda
+/// lista**, e e por isso que ela pode cobrar a UF sem criar a fonte que
+/// divergiria. A recusa passa a dizer QUAL campo falta, no proprio campo.
+///
+/// Continua sem componente novo (`BichuField` e `SeletorDeLista`, os dois ja
+/// existiam), sem importe de plugin de aparelho e **sem consulta de CEP**: a
+/// ADR-0006 proibe geocodificacao, e digitar o CEP nao preenche campo nenhum.
+/// As outras duas telas do lote anterior nao mudaram nesta rodada. Anterior:
+/// `a0f1b4a`.
+///
+/// DESTRAVADO PELA TERCEIRA VEZ EM 17/10, mesma historia. O cliente pediu duas
+/// coisas: **busca de endereco pelo CEP** e **telefone do destinatario**.
+///
+/// UM arquivo muda, de novo: `pet/tela_solicitar_plaquinha.dart`.
+///
+///   - o CEP passa a preencher rua, bairro, cidade e estado, pelo ViaCEP com
+///     BrasilAPI de reserva. **Quem fala com a rede e `api/busca_de_cep.dart`,
+///     e nao a tela** -- a tela chama uma porta e nao sabe de onde vem a
+///     resposta, que e o mesmo arranjo do envio de fotos;
+///   - **isso nao e geocodificacao**: vem texto (rua, bairro, cidade, UF) e
+///     nunca coordenada. A ADR-0006 proibe a coordenada, e o motivo esta
+///     escrito do lado da chamada para ninguem "consertar" de volta;
+///   - **nada disso pode travar o pedido**: servico fora, lento ou CEP
+///     inexistente deixa os campos abertos e o botao vivo, e ha isca que
+///     derruba a rede de CEP e afirma que o pedido vai assim mesmo;
+///   - o campo de telefone entra, com a mascara de `formato/telefone.dart`
+///     (arquivo novo, fora de `telas/`), mostrando `(11) 98765-4321` e
+///     enviando `+5511987654321`.
+///
+/// Nenhum componente novo -- `BichuField` e `SeletorDeLista` de sempre --,
+/// nenhum importe de plugin de aparelho e nenhum `dart:io` na tela: quem fala
+/// HTTP e a porta, em `app/lib/api/`. Anterior: `6224791`.
+///
 /// `rede/local_do_encontro.dart` e `rede/encontro_da_rede.dart` nao mudaram
 /// neste lote: a trava de 01/10 abaixo continua sendo a razao de eles estarem
 /// como estao.
@@ -928,7 +1002,7 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// O unico recurso de aparelho que entra e `showTimePicker`, do proprio
 /// Flutter, pela mesma via de `showDatePicker` que duas telas ja usam.
 /// Anterior: `65dcb5cd25c486a5e7d537aeaec19566828420d5`.
-const String _arvoreDasTelas = '7b7508c2e8d045cc765d7060519cc5b6ee56b00e'; // BICHUS-278, 17/10 (mescla do lote de QUATRO ramos -- valor final): recalculado sobre a ARVORE MESCLADA dos quatro, porque a trava foi destravada em ramos independentes e nenhum valor isolado sobrevive a uniao. Os quatro lados estao preservados em `app/lib/telas` e cada bloco abaixo responde pelo que trouxe. Nenhuma porta de aparelho encostada: o portao estrutural de diretivas acima continua respondendo por isso e passa. [LOTE ANTERIOR -- tronco] BICHUS-278, 17/10 (mescla do lote de TRES ramos -- valor final): recalculado sobre a ARVORE MESCLADA dos tres, porque a trava foi destravada em tres ramos independentes e nenhum dos tres valores isolados sobrevive a uniao (marca 70c03e2, filtros c54de75, achado 0b00866 -- todos mortos pela mescla). Os tres lados estao preservados em `app/lib/telas` e cada bloco abaixo responde pelo que trouxe. Nenhuma porta de aparelho encostada: o portao estrutural de diretivas acima continua respondendo por isso e passa. [LADO A+B -- marca e filtros] BICHUS-278, 17/10 (mescla do lote de tres ramos): recalculado sobre a ARVORE MESCLADA, porque nenhum valor de ramo isolado sobrevive a uniao -- a marca nas duas telas e os filtros com botao aplicar mudam `app/lib/telas` ao mesmo tempo. Os dois lados estao preservados e cada um responde pelo que trouxe. [LADO A -- marca] BICHUS-278, 17/10: a identidade visual entra em DUAS telas a pedido do cliente -- `abas.dart` ganha o `MarcaLockup` no topo do `Perfil` deslogado e `escanear/tela_leitor_de_qr.dart` ganha a plaquinha (`Moldura` + `MarcaSimbolo`) acima do campo do estado `digitando`, escondida com o teclado aberto. Sao dois widgets de marca que ja existiam e nenhum asset novo; nenhuma porta de aparelho encostada -- as duas telas nao importam camera, galeria, permissao, localizacao nem `dart:io` (antes: 65dcb5c) [LADO B -- filtros] BICHUS-278, 17/10 (TERCEIRO destrave do dia): o PRECO em destaque no cartao da vitrine passou a ser so o VALOR, e nao a linha inteira -- um `Text.rich` de dois trechos, porque `ItemDaLoja.linhaDoPreco` e uma string so de proposito (criterio 15 da BICHUS-185: o numero nunca aparece sem o rotulo e a data). Medido no emulador: com a linha inteira em `title-lg`, "R$ 239,90 - preco de referencia, consultado em 17/10" ocupava tres linhas de corpo grande. Anterior: ad26aaf // BICHUS-278, 17/10 (SEGUNDO destrave do dia, quatro pedidos do cliente em sequencia): a ordenacao entra na MESMA folha do filtro e o acesso a folha SOBE PARA A BARRA DE TITULO -- isto REVERTE a regra de 22/09 de manter busca, filtro e ordem no corpo, e a reversao e decisao dele, nao descuido; `casca_com_abas.dart` vira `Stateful` e publica o slot unico de acao; `loja/vitrine_da_loja.dart` perde o dialogo de saida, o aviso do parceiro, a classificacao, o resumo com `Ler mais` e o toque que levava ao detalhe (o cartao inteiro sai para o parceiro, e `Abrir na <parceiro>` virou `Compre agora`); `loja/produto_da_loja.dart` perde o aviso e fica SEM ENTRADA, parada por decisao do cliente e nao apagada; `abas.dart` deixa de desenhar o reforco da `Loja` e da `Rede`. Nenhuma porta de aparelho encostada. Anterior deste dia: e35fe3c // BICHUS-278, 17/10: NADA SE APLICA SOZINHO (pedido do cliente) -- `loja/vitrine_da_loja.dart`, `perto/lista_do_diretorio.dart` e `rede/agenda_da_rede.dart` trocam o callback por grupo do filtro por um `aoAplicar` com o mapa inteiro e perdem a espera por tecla da busca; `rede/agenda_da_rede.dart` recebe o reforco da secao e sobe o campo de busca para cima dele e das abas; `abas.dart` passa o reforco a agenda em vez de a casca. Nenhuma porta de aparelho encostada: nao ha plugin, canal nem permissao em nenhuma das quatro (o portao de diretivas acima continua respondendo por isso). Anterior: 65dcb5c // BICHUS-278, 17/10: a mescla da categoria em DOIS NIVEIS -- `loja/vitrine_da_loja.dart` ganha a linha de classificacao ("Racoes · Racao seca") acima do titulo e o filtro de segundo nivel, mantendo capa, `Ler mais`, o toque que leva ao detalhe e a saida por `SaidaDoApp` do lote anterior. Nenhuma porta de aparelho encostada: recalculado sobre a arvore mesclada (antes: ee89095) [LADO C -- achado/localizacao/foto] BICHUS-278, 17/10: o nome do pet sai de baixo da foto no detalhe do tutor e fica so na barra, e a foto ganha rotulo acessivel no lugar (a `Moldura` exclui a semantica do conteudo, entao sem o rotulo o bloco ficaria mudo). Nenhuma porta de aparelho encostada (antes: b92f57ea3041d3c01a860b73d385e5882a85ef35) [RAMO: as duas escritas da comunidade] BICHUS-278, 17/10: as duas escritas da comunidade -- `rede/criar_encontro.dart` e `perto/sugerir_profissional.dart` nascem, e a agenda e a lista do diretorio ganham a porta para elas no corpo. Nenhuma porta de aparelho encostada: zero importe de plugin, zero canal de plataforma e nenhuma coordenada nas duas telas (antes: 65dcb5c)
+const String _arvoreDasTelas = '82e453d6d554a4c0dc7c536c69589b4ba5e3b221'; // BICHUS-278, 17/10 (mescla do lote de QUATRO ramos -- valor final): recalculado sobre a ARVORE MESCLADA dos quatro, porque a trava foi destravada em ramos independentes e nenhum valor isolado sobrevive a uniao. Os quatro lados estao preservados em `app/lib/telas` e cada bloco abaixo responde pelo que trouxe. Nenhuma porta de aparelho encostada: o portao estrutural de diretivas acima continua respondendo por isso e passa. [LOTE ANTERIOR -- tronco] BICHUS-278, 17/10 (mescla do lote de TRES ramos -- valor final): recalculado sobre a ARVORE MESCLADA dos tres, porque a trava foi destravada em tres ramos independentes e nenhum dos tres valores isolados sobrevive a uniao (marca 70c03e2, filtros c54de75, achado 0b00866 -- todos mortos pela mescla). Os tres lados estao preservados em `app/lib/telas` e cada bloco abaixo responde pelo que trouxe. Nenhuma porta de aparelho encostada: o portao estrutural de diretivas acima continua respondendo por isso e passa. [LADO A+B -- marca e filtros] BICHUS-278, 17/10 (mescla do lote de tres ramos): recalculado sobre a ARVORE MESCLADA, porque nenhum valor de ramo isolado sobrevive a uniao -- a marca nas duas telas e os filtros com botao aplicar mudam `app/lib/telas` ao mesmo tempo. Os dois lados estao preservados e cada um responde pelo que trouxe. [LADO A -- marca] BICHUS-278, 17/10: a identidade visual entra em DUAS telas a pedido do cliente -- `abas.dart` ganha o `MarcaLockup` no topo do `Perfil` deslogado e `escanear/tela_leitor_de_qr.dart` ganha a plaquinha (`Moldura` + `MarcaSimbolo`) acima do campo do estado `digitando`, escondida com o teclado aberto. Sao dois widgets de marca que ja existiam e nenhum asset novo; nenhuma porta de aparelho encostada -- as duas telas nao importam camera, galeria, permissao, localizacao nem `dart:io` (antes: 65dcb5c) [LADO B -- filtros] BICHUS-278, 17/10 (TERCEIRO destrave do dia): o PRECO em destaque no cartao da vitrine passou a ser so o VALOR, e nao a linha inteira -- um `Text.rich` de dois trechos, porque `ItemDaLoja.linhaDoPreco` e uma string so de proposito (criterio 15 da BICHUS-185: o numero nunca aparece sem o rotulo e a data). Medido no emulador: com a linha inteira em `title-lg`, "R$ 239,90 - preco de referencia, consultado em 17/10" ocupava tres linhas de corpo grande. Anterior: ad26aaf // BICHUS-278, 17/10 (SEGUNDO destrave do dia, quatro pedidos do cliente em sequencia): a ordenacao entra na MESMA folha do filtro e o acesso a folha SOBE PARA A BARRA DE TITULO -- isto REVERTE a regra de 22/09 de manter busca, filtro e ordem no corpo, e a reversao e decisao dele, nao descuido; `casca_com_abas.dart` vira `Stateful` e publica o slot unico de acao; `loja/vitrine_da_loja.dart` perde o dialogo de saida, o aviso do parceiro, a classificacao, o resumo com `Ler mais` e o toque que levava ao detalhe (o cartao inteiro sai para o parceiro, e `Abrir na <parceiro>` virou `Compre agora`); `loja/produto_da_loja.dart` perde o aviso e fica SEM ENTRADA, parada por decisao do cliente e nao apagada; `abas.dart` deixa de desenhar o reforco da `Loja` e da `Rede`. Nenhuma porta de aparelho encostada. Anterior deste dia: e35fe3c // BICHUS-278, 17/10: NADA SE APLICA SOZINHO (pedido do cliente) -- `loja/vitrine_da_loja.dart`, `perto/lista_do_diretorio.dart` e `rede/agenda_da_rede.dart` trocam o callback por grupo do filtro por um `aoAplicar` com o mapa inteiro e perdem a espera por tecla da busca; `rede/agenda_da_rede.dart` recebe o reforco da secao e sobe o campo de busca para cima dele e das abas; `abas.dart` passa o reforco a agenda em vez de a casca. Nenhuma porta de aparelho encostada: nao ha plugin, canal nem permissao em nenhuma das quatro (o portao de diretivas acima continua respondendo por isso). Anterior: 65dcb5c // BICHUS-278, 17/10: a mescla da categoria em DOIS NIVEIS -- `loja/vitrine_da_loja.dart` ganha a linha de classificacao ("Racoes · Racao seca") acima do titulo e o filtro de segundo nivel, mantendo capa, `Ler mais`, o toque que leva ao detalhe e a saida por `SaidaDoApp` do lote anterior. Nenhuma porta de aparelho encostada: recalculado sobre a arvore mesclada (antes: ee89095) [LADO C -- achado/localizacao/foto] BICHUS-278, 17/10: o nome do pet sai de baixo da foto no detalhe do tutor e fica so na barra, e a foto ganha rotulo acessivel no lugar (a `Moldura` exclui a semantica do conteudo, entao sem o rotulo o bloco ficaria mudo). Nenhuma porta de aparelho encostada (antes: b92f57ea3041d3c01a860b73d385e5882a85ef35) [RAMO: as duas escritas da comunidade] BICHUS-278, 17/10: as duas escritas da comunidade -- `rede/criar_encontro.dart` e `perto/sugerir_profissional.dart` nascem, e a agenda e a lista do diretorio ganham a porta para elas no corpo. Nenhuma porta de aparelho encostada: zero importe de plugin, zero canal de plataforma e nenhuma coordenada nas duas telas (antes: 65dcb5c) [RAMO: o pedido da plaquinha com endereco de entrega] BICHUS-278, 17/10 (3a rodada): o cliente pediu busca de CEP e telefone do destinatario. `pet/tela_solicitar_plaquinha.dart` passa a preencher rua/bairro/cidade/UF pelo CEP (ViaCEP, via `api/busca_de_cep.dart` -- TEXTO, nunca coordenada) com tudo editavel, e ganha o campo de telefone com a mascara de `formato/telefone.dart`. A busca NUNCA trava o envio. Nenhum componente novo, nenhuma porta de aparelho encostada (antes: 6224791)
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

@@ -83,6 +83,13 @@ import { criarRasterizadorDeQr } from '../modules/tags/adapters/external/sharp-r
 import { criarTagRepository } from '../modules/tags/adapters/persistence/kysely-tag-repository.js';
 import { criarTagService } from '../modules/tags/application/tag-service.js';
 import { registrarRotasDeTags } from '../modules/tags/adapters/http/tag-routes.js';
+import { criarPedidoDePlaquinhaRepository } from '../modules/tags/adapters/persistence/kysely-pedido-de-plaquinha.js';
+import {
+  FilaDePlaquinhasAdministrativa,
+  PedidoDePlaquinhaService,
+} from '../modules/tags/application/pedido-de-plaquinha-service.js';
+import { registrarRotaDePedidoDePlaquinha } from '../modules/tags/adapters/http/pedido-de-plaquinha-routes.js';
+import { registrarRotasDaFilaDePlaquinhas } from '../modules/tags/adapters/http/admin-pedido-de-plaquinha-routes.js';
 import { criarConversationRepository } from '../modules/messaging/adapters/persistence/kysely-conversation-repository.js';
 import { ConversationService } from '../modules/messaging/application/conversation-service.js';
 import { registrarRotasDeConversas } from '../modules/messaging/adapters/http/conversation-routes.js';
@@ -778,6 +785,23 @@ export async function main(): Promise<void> {
     chaveDoIndiceDoCodigo: config.tagCodeIndexKey,
   };
 
+  // O pedido do OBJETO FISICO da plaquinha (o destino que o botao `Fazer a tag
+  // da coleira` nunca teve). **Nao emite codigo**: emitir e `issuePetTag`, e o
+  // codigo e irreversivel (ADR-0004). O repositorio e um so para os dois lados,
+  // porque e a mesma tabela; o que difere e o caso de uso.
+  const repositorioDePedidosDePlaquinha = criarPedidoDePlaquinhaRepository({ db });
+  const pedidosDePlaquinha = new PedidoDePlaquinhaService({
+    repositorio: repositorioDePedidosDePlaquinha,
+    ids,
+  });
+  // A fila do painel usa a MESMA unidade de trabalho auditada das outras
+  // escritas administrativas (D49): decisao e trilha na mesma transacao.
+  const filaDePlaquinhas = new FilaDePlaquinhasAdministrativa({
+    repositorio: repositorioDePedidosDePlaquinha,
+    escrita: escritaAuditada,
+    clock: systemClock,
+  });
+
   // Precisa vir ANTES do registro das rotas: o gancho `onRoute` só enxerga o
   // que for registrado depois dele. A conferência em si roda no fim, quando
   // todas as rotas já existem.
@@ -896,6 +920,11 @@ export async function main(): Promise<void> {
     });
     registrarRotasDeAchado(escopo, dependenciasDasRotasDeAchado);
     registrarRotasDeTags(escopo, dependenciasDasRotasDeTag);
+    registrarRotaDePedidoDePlaquinha(escopo, {
+      pedidos: pedidosDePlaquinha,
+      autenticador: dependenciasDasRotasDeTag.autenticador,
+      contrato,
+    });
     registrarRotasDeTransferencia(escopo, {
       transferencias,
       autenticador: {
@@ -944,6 +973,9 @@ export async function main(): Promise<void> {
             diretorio: diretorioAdministrativo,
             contrato,
           });
+          // A fila dos pedidos da plaquinha. A TELA e da sessao Backoffice;
+          // daqui sai so o que ela chama.
+          registrarRotasDaFilaDePlaquinhas(administrativo, { fila: filaDePlaquinhas });
         },
       );
     } else {

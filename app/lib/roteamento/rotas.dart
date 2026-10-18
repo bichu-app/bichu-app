@@ -23,6 +23,7 @@ import '../telas/pet/tela_cadastrar_sinais.dart';
 import '../telas/pet/tela_detalhe_do_pet.dart';
 import '../telas/pet/tela_editar_pet.dart';
 import '../telas/pet/tela_pet_cadastrado.dart';
+import '../telas/pet/tela_solicitar_plaquinha.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
 import '../telas/perdido/tela_alcance_do_alerta.dart';
 import '../telas/perdido/tela_de_quem_e_o_caso.dart';
@@ -185,6 +186,21 @@ abstract final class Rotas {
   static const String cadastrarPetFoto = '/pets/novo/foto';
   static const String cadastrarPetSinais = '/pets/novo/sinais';
   static const String petCadastrado = '/pets/cadastrado';
+
+  /// O pedido da plaquinha da coleira: o destino que o botao `Fazer a tag da
+  /// coleira` nunca teve.
+  ///
+  /// **Declarado aqui, no bloco de `/pets/...` literais, e nao depois de
+  /// `/pets/:petId`**: `go_router` casa na ordem de registro e um parametro
+  /// casa com qualquer segmento. Abaixo do detalhe, este endereco abriria o
+  /// detalhe de um pet chamado "plaquinha".
+  ///
+  /// O pet **nao** esta no endereco, e isso e deliberado: o formulario escolhe
+  /// o pet entre os do tutor, e um pet no caminho brigaria com a escolha. Quem
+  /// chega do `Pet cadastrado` manda o `petId` em `extra`, que serve so para
+  /// pre-selecionar; alcancada por link direto, a tela abre com a lista e
+  /// nenhum pet escolhido, que e um estado valido e nao um erro.
+  static const String solicitarPlaquinha = '/pets/plaquinha';
 
   /// O fluxo de marcar como perdido: F3.0, F3.1, F3.2 e F3.3.
   ///
@@ -564,6 +580,23 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
           final resultado = estado.extra as ResultadoDoCadastro?;
           if (resultado == null) return const TelaCadastrarIdentificacao();
           return TelaPetCadastrado(resultado: resultado);
+        },
+      ),
+      // O pedido da plaquinha. **Antes de `/pets/:petId`**, como as outras
+      // rotas literais de `/pets/...`: abaixo do detalhe, `go_router` casaria
+      // `plaquinha` como `petId`.
+      //
+      // Sem `extra` a tela NAO cai em outro destino, e aqui a diferenca com o
+      // assistente e real: ela nao depende de um passo anterior, ela carrega os
+      // pets do tutor sozinha. O `extra` so pre-seleciona, e um link direto
+      // abre o formulario com a lista inteira -- estado valido, e nao erro.
+      GoRoute(
+        path: Rotas.solicitarPlaquinha,
+        builder: (context, estado) {
+          final petId = estado.extra;
+          return TelaSolicitarPlaquinha(
+            petIdInicial: petId is String ? petId : null,
+          );
         },
       ),
       // T.1, a edicao e a exclusao (BICHUS-60 e BICHUS-61).

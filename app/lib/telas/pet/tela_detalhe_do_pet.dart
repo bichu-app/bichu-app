@@ -37,13 +37,17 @@ import 'textos_do_detalhe.dart';
 /// - **`Transferir`**: virou historia propria, dita no "Fora desta historia"
 ///   da BICHUS-61;
 /// - **A acao principal da barra fixa.** A 7.6.3 manda uma, e ela depende do
-///   estado: `Marcar como perdida` (BICHUS-21), `Fazer a tag da coleira`
-///   (nao ha rota de vinculo para pet ja cadastrado, ver
-///   [CartaoDePet.convitePlaquinha]) e `Ver o caso` (F3.3). **As tres apontam
-///   para tela que nao existe**, e o criterio 2 da BICHUS-62 proibe renderizar
-///   acao sem destino, nem habilitada nem desabilitada. Entao esta tela **nao
-///   tem barra de acao fixa**, e isso e o criterio sendo cumprido, nao
-///   esquecido.
+///   estado: `Marcar como perdida` (BICHUS-21), `Fazer a tag da coleira` e
+///   `Ver o caso` (F3.3). O criterio 2 da BICHUS-62 proibe renderizar acao sem
+///   destino, nem habilitada nem desabilitada. Entao esta tela **nao tem barra
+///   de acao fixa**, e isso e o criterio sendo cumprido, nao esquecido.
+///
+///   **`Fazer a tag da coleira` ganhou destino** (`TelaSolicitarPlaquinha`,
+///   alcancada de `Pet cadastrado`), e as outras duas continuam sem. Trazer a
+///   barra para ca por causa de uma das tres e historia propria: a 7.6.3 pede
+///   UMA acao escolhida pelo estado, e escolher entre uma que existe e duas que
+///   nao existem e desenho, nao conserto. O convite de
+///   [CartaoDePet.convitePlaquinha] tambem continua sendo so texto.
 /// - **`Desativar a tag`** (criterio 1 da BICHUS-60), pelo mesmo teste e por
 ///   um motivo a mais: `revokePetTag` declara `reauth: []` com
 ///   `x-reauth-scope: tag_revocation`, e **o app nao tem reautenticacao**.

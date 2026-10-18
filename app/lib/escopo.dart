@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 
+import 'api/busca_de_cep.dart';
 import 'api/api_client.dart';
 import 'api/auth_api.dart';
 import 'api/achados_api.dart';
@@ -40,6 +41,7 @@ class Escopo extends InheritedWidget {
     required this.loja,
     required this.achados,
     required this.envioDeFoto,
+    this.buscaDeCep = const BuscaDeCep(),
     required this.retomadaDeFotos,
     required this.fila,
     required this.tags,
@@ -92,6 +94,12 @@ class Escopo extends InheritedWidget {
   /// Um so no app inteiro, e dois consumidores: a foto do pet (F1.6) e a foto
   /// do achado avulso, quando F3.5 existir.
   final EnvioDeFoto envioDeFoto;
+
+  /// A busca de endereco por CEP, para poupar digitacao no pedido da
+  /// plaquinha. **Nao e geocodificacao**: devolve texto, nunca coordenada
+  /// (ver `api/busca_de_cep.dart`). Servico de terceiro fora do ar nao
+  /// impede nenhum pedido.
+  final BuscaDeCep buscaDeCep;
 
   /// O envio da foto **mais o registro do que ficou pendente** (BICHUS-87,
   /// criterios 6 e 7).
@@ -223,6 +231,7 @@ class Escopo extends InheritedWidget {
       casos != anterior.casos ||
       achados != anterior.achados ||
       envioDeFoto != anterior.envioDeFoto ||
+      buscaDeCep != anterior.buscaDeCep ||
       retomadaDeFotos != anterior.retomadaDeFotos ||
       fila != anterior.fila ||
       tags != anterior.tags ||

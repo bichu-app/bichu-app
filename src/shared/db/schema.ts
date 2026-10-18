@@ -1412,6 +1412,48 @@ export interface NetworkEventJoinRequestsTable {
   withdrawn_at: Date | null;
 }
 
+/** O `CHECK` `collar_tag_requests_decisao_conhecida`. */
+export type DecisaoDoPedidoDePlaquinha = 'pending' | 'fulfilled' | 'declined';
+
+/**
+ * O pedido do OBJETO FISICO da plaquinha da coleira.
+ *
+ * **Nao guarda codigo**: o codigo e de `pet_tags` e e irreversivel (ADR-0004).
+ * Nao guarda endereco nem valor, e as duas ausencias sao decisao de produto do
+ * cliente ainda em aberto, e nao esquecimento.
+ *
+ * `decided_by_admin_id` fica fora do tipo pelo mesmo motivo do pedido de
+ * encontro: a decisao o escreve por SQL cru e nenhuma leitura o projeta.
+ */
+export interface CollarTagRequestsTable {
+  id: string;
+  ref: string;
+  pet_id: string;
+  requested_by: string;
+  notes: string | null;
+  /**
+   * O endereco de entrega. **Dado pessoal**: nao sai em superficie publica,
+   * nao entra na trilha de auditoria e nao e geocodificado (ADR-0006) -- nao
+   * ha `lat`, nao ha `lon` e nenhum servico externo resolve o CEP.
+   */
+  recipient_name: string;
+  /** E.164 do Brasil (`+55` e 10 ou 11 digitos). Dado pessoal. */
+  recipient_phone: string;
+  /** Oito digitos, sem mascara. Normalizado pela aplicacao antes de gravar. */
+  postal_code: string;
+  street: string;
+  /** Texto, e nao inteiro: `s/n`, `120A` e `KM 32` sao numeros de porta. */
+  street_number: string;
+  complement: string | null;
+  neighborhood: string;
+  city: string;
+  /** UF em dois caracteres. O conjunto das 27 siglas vive no app. */
+  state: string;
+  status: Generated<DecisaoDoPedidoDePlaquinha>;
+  requested_at: Generated<Date>;
+  decided_at: Date | null;
+}
+
 /** O `CHECK` `network_events_origem_conhecida`. */
 export type OrigemDoEncontro = 'admin' | 'community';
 
@@ -1484,6 +1526,7 @@ export interface Database {
   network_event_amenities: NetworkEventAmenitiesTable;
   network_event_images: NetworkEventImagesTable;
   network_event_join_requests: NetworkEventJoinRequestsTable;
+  collar_tag_requests: CollarTagRequestsTable;
   'audit.events': AuditEventsTable;
 }
 
