@@ -658,12 +658,47 @@ const CHECKS_QUE_NAO_SAO_LISTA_FECHADA: Readonly<Record<string, string>> = {
   // Caminho, e nao URL: o banco nao guarda endereco (docs/07-devops.md secao
   // 3.6), e o absoluto e composto na leitura com o host do parceiro. O
   // esquema `https` deixou de ser assunto do banco porque deixou de ser
-  // dado -- ele e constante da composicao. Sem `?` e sem `#`: parametro em
-  // link de saida e onde dado pessoal vaza (consequencia 3 da BICHUS-185).
+  // dado -- ele e constante da composicao.
+  //
+  // As duas formas abaixo DEIXARAM DE SER IGUAIS em 17/10/2026, e a diferenca
+  // e deliberada. `target_path` aceita `?` e `#` desde a `20261017000001`; o
+  // caminho da imagem, logo depois dela, continua sem os dois.
+  //
+  // A proibicao que estava aqui citava a consequencia 3 da BICHUS-185
+  // (parametro em link de saida e onde dado pessoal vaza) e acertava o risco,
+  // errava o INSTRUMENTO: proibir `?` na coluna nao impede dado pessoal de
+  // viajar, impede QUALQUER parametro -- e loja de verdade identifica o SKU
+  // exatamente assim (`/p?idsku=1197673`, no catalogo da Cobasi, foi o link
+  // legitimo que ficou bloqueado). A consequencia 3 continua valendo e
+  // continua tendo dono: ela e sobre o que o APLICATIVO acrescenta na saida, e
+  // isso e garantido na tela (`app/test/telas/loja_abre_no_navegador_test.dart`
+  // reprova se algum parametro aparecer), nao nesta coluna. O cabecalho da
+  // `20261017000001` tem o raciocinio por extenso.
+  //
+  // O que sobrou no `CHECK` nao e sobre privacidade: comeca em `/` e nao tem
+  // espaco em branco (`[[:space:]]` cobre espaco, tabulacao e quebra de
+  // linha), porque a coluna guarda um caminho e nao uma frase.
   'public.store_items.store_items_destino_e_caminho':
-    "CHECK ((target_path ~ '^/[^[:space:]?#]*$'::text))",
+    "CHECK ((target_path ~ '^/[^[:space:]]*$'::text))",
+  // `image_path` CONTINUA sem `?` e sem `#`, e por isso ganhou comentario
+  // proprio: a `20261017000001` abriu o caminho do DESTINO, e so ele. Caminho
+  // de imagem de catalogo nao carrega identificador de produto, entao aqui a
+  // proibicao larga nao bloqueia nada legitimo e a consequencia 3 da
+  // BICHUS-185 segue sendo a razao dela.
   'public.store_items.store_items_imagem_e_caminho':
     "CHECK (((image_path IS NULL) OR (image_path ~ '^/[^[:space:]?#]*$'::text)))",
+  // O host do destino quando ele e um SUBDOMINIO do parceiro
+  // (`20261017000001`): `www.cobasi.com.br` para o parceiro `cobasi.com.br`.
+  // NULO no caso comum, que e o host ser o do proprio parceiro. A forma e a
+  // MESMA de `store_partners.host`, logo abaixo, porque e o mesmo dado.
+  //
+  // O `CHECK` confere so a FORMA. O vinculo "e subdominio do parceiro" e da
+  // aplicacao (`errosDoDestino`), porque depende de OUTRA tabela e um `CHECK`
+  // nao enxerga `store_partners` -- e a comparacao de la e por sufixo COM
+  // FRONTEIRA DE ROTULO, senao `malcobasi.com.br` passaria por subdominio de
+  // `cobasi.com.br`.
+  'public.store_items.store_items_destino_e_so_host':
+    "CHECK (((target_host IS NULL) OR (target_host ~ '^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$'::text)))",
   // So o HOST, sem esquema, caminho nem consulta. Guardar a URL inteira
   // convidaria um parametro a viajar junto, e parametro em link de saida e
   // onde dado pessoal vaza (consequencia 3 da BICHUS-185).
