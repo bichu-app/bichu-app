@@ -3491,6 +3491,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/directory/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Entradas do diretorio de Perto, em qualquer situacao
+         * @description A lista do painel. Diferente de `listDirectoryEntries`, que serve o
+         *     aplicativo, esta traz **rascunho, oculta e removida** junto com a
+         *     publicada: quem administra precisa achar o que ainda nao esta no ar.
+         *
+         *     **Nao ha ordem por distancia aqui.** Distancia depende da localizacao
+         *     de referencia de quem chama (ADR-0006), e o painel e operado de uma
+         *     mesa que nao tem relacao nenhuma com onde a entrada atende. A ordem e
+         *     por nome ou por ultima alteracao.
+         */
+        get: operations["listAdminDirectoryEntries"];
+        put?: never;
+        /**
+         * Cadastra uma entrada do diretorio
+         * @description **A entrada nasce RASCUNHO** (`professionals.status` tem
+         *     `DEFAULT 'draft'`), e so aparece em `Perto` depois de um `PATCH` com
+         *     `status: published`. Nao e zelo: o cadastro de um estabelecimento tem
+         *     campos que o operador costuma buscar em duas sessoes, e publicar na
+         *     criacao faria o diretorio mostrar meia clinica.
+         *
+         *     **`source` e `import`, e `claim_status` e `unclaimed`.** Nao e atalho:
+         *     sao os unicos valores que o `CHECK professionals_aceite_antes_do_perfil`
+         *     admite para uma entrada sem titular, e e exatamente o que esta
+         *     acontecendo -- o painel cadastrou a entidade, e ninguem do outro lado
+         *     reivindicou o perfil ainda. `self` e `invited` sao os caminhos que
+         *     passam por aceite de quem o perfil descreve, e dizer um deles aqui
+         *     seria gravar um aceite que nao houve.
+         *
+         *     **Nenhum documento e pedido.** `cnpj`, `crmv_number` e `crmv_uf`
+         *     existem na tabela e **nao estao neste corpo**: um profissional pode ser
+         *     pessoa fisica, e o painel nao precisa de documento dele para publicar
+         *     uma entrada de diretorio. Quem prova o que, e com qual evidencia, e
+         *     `entity_verifications`, que tem fluxo proprio e nao passa por aqui.
+         *
+         *     **`verification_level` tambem nao esta aqui**, e o corpo e fechado
+         *     (`additionalProperties: false`), entao manda-lo e `400` e nao campo
+         *     ignorado em silencio: o nivel deriva da verificacao aprovada mais forte
+         *     da entidade, e um perfil que declarasse o proprio nivel tornaria a
+         *     verificacao decorativa.
+         *
+         *     **`geo` nao esta aqui** (decisao 9.4 pendente): nao ha geocodificacao
+         *     neste produto (ADR-0006), entao cidade e bairro digitados nunca viram
+         *     ponto. A entrada e publicavel sem coordenada e simplesmente nao
+         *     participa da ordenacao por distancia, que `distance_available: false`
+         *     ja sabe dizer.
+         */
+        post: operations["createAdminDirectoryEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/directory/entries/{entrySlug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico da entrada do diretorio. Nenhum UUID no caminho. */
+                entrySlug: components["parameters"]["EntrySlug"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Uma entrada do diretorio
+         * @description A entrada em qualquer situacao, com o `ETag` para a proxima escrita.
+         */
+        get: operations["getAdminDirectoryEntry"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Altera, publica ou retira uma entrada do diretorio
+         * @description `If-Match` obrigatorio: dois administradores editando a mesma entrada
+         *     nao se sobrescrevem em silencio.
+         *
+         *     **Editar NAO despublica.** Uma entrada publicada continua publicada
+         *     depois de uma edicao de campo. Se editar derrubasse para rascunho, o
+         *     operador corrigiria um telefone e a clinica sumiria de `Perto` sem
+         *     ninguem ser avisado -- o modo de falhar mais caro que um diretorio tem,
+         *     porque e silencioso e do lado de quem nao consegue ver.
+         *
+         *     **O que a edicao nao pode fazer e QUEBRAR a publicacao.** Se o corpo
+         *     deixaria uma entrada publicada sem `city`, sem `state` ou sem nenhum
+         *     canal de contato, a escrita e recusada com `400` nomeando os campos, e
+         *     nao aceita e despublicada em silencio. A mesma regua vale para a
+         *     transicao `draft -> published` (ADR-0023 secao 2, camada 2): duas
+         *     definicoes de "completo" e exatamente o que aquela secao proibe. Toda
+         *     leitura da entrada ja traz a lista em `missing_to_publish`, para a tela
+         *     dizer o que falta antes de alguem clicar em publicar.
+         *
+         *     **Despublicar e ato explicito**, com `status: hidden` ou `removed`, e
+         *     nunca efeito colateral de outra coisa.
+         *
+         *     `phone_e164` passa a ser **escrito** por aqui. Ele continua sendo o
+         *     telefone COMERCIAL de quem aceitou aparecer para ser contratado
+         *     (ADR-0011 secao 4), e o formato e E.164 (`+` e 8 a 15 digitos): o painel
+         *     recebe o numero com mascara brasileira e manda E.164.
+         */
+        patch: operations["updateAdminDirectoryEntry"];
+        trace?: never;
+    };
     "/admin/media/catalog-image-intents": {
         parameters: {
             query?: never;
@@ -4755,6 +4867,171 @@ export interface components {
              * @description O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
              *     foi informado, porque "nada filtrado" e uma informacao e nao uma
              *     ausencia.
+             */
+            applied_filters?: {
+                [key: string]: string;
+            };
+        };
+        /**
+         * @description A situacao da entrada. Espelha `professionals.status` e a entrada
+         *     `public.professionals.professionals_status_check` do teste de conjunto
+         *     exato. So `published` aparece em `Perto`.
+         *
+         *     `hidden` e retirada temporaria (moderacao, estabelecimento fechado para
+         *     reforma) e `removed` e retirada definitiva **sem apagar a linha**: a
+         *     entrada sai do diretorio e continua existindo para a trilha.
+         * @enum {string}
+         */
+        DirectoryEntryStatus: "draft" | "published" | "hidden" | "removed";
+        /**
+         * @description Como a linha nasceu. Espelha `professionals.source`. **Somente
+         *     leitura**: nao ha campo para enviar `source`, e o painel grava sempre
+         *     `import`, que e o unico valor que o `CHECK
+         *     professionals_aceite_antes_do_perfil` admite para uma entrada sem
+         *     titular. `self` e `invited` sao os caminhos que passam pelo aceite de
+         *     quem o perfil descreve, e o painel nao tem como produzir esse aceite.
+         * @enum {string}
+         */
+        DirectoryEntryOrigin: "self" | "invited" | "import";
+        /**
+         * @description Quem responde pelo perfil. Espelha `professionals.claim_status`.
+         *     **Somente leitura.** A entrada cadastrada pelo painel nasce
+         *     `unclaimed`: a entidade existe no diretorio e ninguem do outro lado
+         *     reivindicou o perfil. **Isto nao e um vinculo entre pessoas** -- quem
+         *     reivindicou nunca sai do servidor, e esta resposta nao o carrega.
+         * @enum {string}
+         */
+        DirectoryEntryClaimStatus: "unclaimed" | "claim_pending" | "claimed" | "disputed";
+        /**
+         * @description Um campo que falta para a entrada poder ir ao ar. `slug` esta na lista
+         *     porque `DirectoryEntrySummary.slug` e `required` na listagem do
+         *     aplicativo: uma entrada publicada sem endereco publico nao teria como
+         *     ser serializada, e o defeito apareceria como erro de serializacao em
+         *     producao, longe de quem o causou.
+         *
+         *     `phone_e164` e hoje o **unico** canal de contato que a tabela tem: nao
+         *     existe coluna para site, e-mail, WhatsApp nem rede social. Quando
+         *     existirem, "ao menos um canal" passa a ser uma disjuncao.
+         * @enum {string}
+         */
+        AdminDirectoryEntryMissingField: "slug" | "city" | "state" | "phone_e164";
+        /**
+         * @description O cadastro de uma entrada, **em rascunho**. Ver
+         *     `createAdminDirectoryEntry` para o que deliberadamente nao esta aqui:
+         *     documento (`cnpj`, `crmv_*`), nivel de verificacao, coordenada, e
+         *     qualquer coisa de ONG.
+         */
+        AdminDirectoryEntryInput: {
+            /**
+             * @description O endereco publico da entrada, e tambem como o painel a endereca.
+             *     **Obrigatorio ja no rascunho**, e nao so na publicacao: a
+             *     unicidade e global sobre nao-nulo desde a `20260922000021`, e
+             *     exigir o endereco no cadastro move a recusa de conflito de nome
+             *     para quem esta cadastrando, com o formulario na tela, em vez de
+             *     para o momento de publicar.
+             */
+            slug: components["schemas"]["Slug"];
+            kind: components["schemas"]["ProfessionalKind"];
+            /** @description O nome do estabelecimento ou de quem atende, como aparece em `Perto`. */
+            display_name: string;
+            /** @description Texto puro, renderizado como texto no app (D47). Nenhuma marcacao. */
+            about?: string;
+            city?: string;
+            /** @description A UF, duas letras. */
+            state?: string;
+            neighborhood?: string;
+            /**
+             * @description Telefone **comercial** em E.164, publicado de proposito pela
+             *     entidade que aceitou aparecer para ser contratada (ADR-0011 secao
+             *     4). Deliberadamente diferente do telefone de conta de usuario, que
+             *     aceita so Brasil. O painel recebe o numero com mascara brasileira e
+             *     manda E.164.
+             */
+            phone_e164?: string;
+        };
+        /**
+         * @description A edicao. `null` **apaga** o campo e ausente **nao mexe** -- a
+         *     distincao e o que separa "limpar o bairro" de "editar so o telefone".
+         *     `slug`, `kind` e `display_name` nao aceitam `null`: a entrada nao
+         *     existe sem eles.
+         */
+        AdminDirectoryEntryPatch: {
+            /** @description Trocar o endereco publico e permitido, e todo link ja compartilhado para o antigo deixa de resolver. */
+            slug?: components["schemas"]["Slug"];
+            kind?: components["schemas"]["ProfessionalKind"];
+            display_name?: string;
+            about?: string | null;
+            city?: string | null;
+            state?: string | null;
+            neighborhood?: string | null;
+            /** @description Ver `AdminDirectoryEntryInput.phone_e164`. `null` apaga o telefone, e uma entrada publicada sem nenhum canal de contato e recusada. */
+            phone_e164?: string | null;
+            /**
+             * @description **Sem este campo o estado nao muda.** E assim que "editar nao
+             *     despublica" deixa de ser uma frase: nao existe caminho que mexa em
+             *     `status` sem o corpo ter pedido.
+             */
+            status?: components["schemas"]["DirectoryEntryStatus"];
+        };
+        /**
+         * @description A entrada como o painel a ve. **Nao tem `id`** (ADR-0010 item 6, e o
+         *     painel endereca por `slug` como em `Loja` e `Rede`), nao tem coordenada,
+         *     nao tem quem convidou a entidade e nao tem quem a reivindicou: as duas
+         *     ultimas ligam a entrada a uma conta de pessoa, e a BICHUS-174 proibe
+         *     expor vinculo entre duas pessoas inclusive como contagem e como
+         *     existencia.
+         *
+         *     **`cnpj`, `crmv_number` e `crmv_uf` tambem nao saem aqui.** Eles existem
+         *     na tabela, o painel nao os escreve, e devolve-los faria uma tela de
+         *     cadastro mostrar documento de terceiro sem nenhuma necessidade.
+         */
+        AdminDirectoryEntry: {
+            slug: components["schemas"]["Slug"];
+            kind: components["schemas"]["ProfessionalKind"];
+            display_name: string;
+            about?: string | null;
+            city?: string | null;
+            state?: string | null;
+            neighborhood?: string | null;
+            phone_e164?: string | null;
+            status: components["schemas"]["DirectoryEntryStatus"];
+            /**
+             * @description **Somente leitura**, derivada de `entity_verifications`. Esta aqui
+             *     para a tela poder dizer O QUE foi verificado, e nao para ser
+             *     escrita: nao ha campo de verificacao em nenhum corpo desta secao.
+             */
+            verification: components["schemas"]["DirectoryVerification"];
+            source: components["schemas"]["DirectoryEntryOrigin"];
+            claim_status: components["schemas"]["DirectoryEntryClaimStatus"];
+            /**
+             * @description O que falta para a entrada ir ao ar, **vazio quando nada falta**. A
+             *     tela mostra isso antes de alguem clicar em publicar; a mesma regua
+             *     recusa a publicacao com `400` se tentarem de outro jeito.
+             */
+            missing_to_publish: components["schemas"]["AdminDirectoryEntryMissingField"][];
+            /**
+             * Format: date-time
+             * @description Desde quando a entrada esta no ar. Nulo enquanto ela nunca foi
+             *     publicada. **Nao e `created_at`**: a entrada nasce rascunho e pode
+             *     ser publicada meses depois, e uma correcao de telefone numa entrada
+             *     ja publicada nao muda esta resposta.
+             */
+            published_at?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            version: number;
+        };
+        AdminDirectoryEntryPage: {
+            items: components["schemas"]["AdminDirectoryEntry"][];
+            page: number;
+            limit: number;
+            total: number;
+            /**
+             * @description O recorte que de fato valeu. Traz `scope: all` quando nenhum filtro
+             *     foi informado, porque "nada filtrado" e uma informacao e nao uma
+             *     ausencia. Mesma forma de `DirectoryEntryPage.applied_filters`.
              */
             applied_filters?: {
                 [key: string]: string;
@@ -7015,6 +7292,8 @@ export interface components {
         PartnerSlug: components["schemas"]["Slug"];
         /** @description O endereco publico do item. */
         ItemSlug: components["schemas"]["Slug"];
+        /** @description O endereco publico da entrada do diretorio. Nenhum UUID no caminho. */
+        EntrySlug: components["schemas"]["Slug"];
         /** @description O endereco publico do encontro. */
         EventSlug: components["schemas"]["Slug"];
         /** @description O identificador opaco do pedido (`AdminJoinRequest.ref`). Nao e UUID. */
@@ -11695,6 +11974,146 @@ export interface operations {
             403: components["responses"]["AdminForbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["EventNotOpen"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    listAdminDirectoryEntries: {
+        parameters: {
+            query?: {
+                /** @description Busca por nome, no servidor. Sem acento e sem caixa, pelo indice trigrama de `professionals`. */
+                q?: string;
+                /** @description Filtra pela atividade. Sem o parametro, vem todas. */
+                kind?: components["schemas"]["ProfessionalKind"];
+                /** @description Filtra pela situacao. Sem o parametro, vem todas, inclusive as removidas. */
+                status?: components["schemas"]["DirectoryEntryStatus"];
+                /** @description Filtra pela cidade, igualdade exata. */
+                city?: string;
+                /** @description Filtra pela UF, duas letras. */
+                state?: string;
+                /** @description `name` e a ordem alfabetica; `updated` poe a ultima alteracao em cima. */
+                sort?: "name" | "updated";
+                page?: components["parameters"]["AdminPage"];
+                limit?: components["parameters"]["AdminLimit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pagina de entradas. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectoryEntryPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+        };
+    };
+    createAdminDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectoryEntryInput"];
+            };
+        };
+        responses: {
+            /** @description Entrada criada, em rascunho. */
+            201: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectoryEntry"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            409: components["responses"]["SlugTaken"];
+            429: components["responses"]["TooManyRequests"];
+        };
+    };
+    getAdminDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description O endereco publico da entrada do diretorio. Nenhum UUID no caminho. */
+                entrySlug: components["parameters"]["EntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A entrada. O `ETag` e o que o `PATCH` apresenta em `If-Match`. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectoryEntry"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateAdminDirectoryEntry: {
+        parameters: {
+            query?: never;
+            header: {
+                /**
+                 * @description O `ETag` da ultima leitura. Obrigatorio em toda escrita sobre recurso
+                 *     existente do backoffice: dois administradores editando o mesmo recurso
+                 *     nao se sobrescrevem em silencio. Ausente: 428. Diferente da versao
+                 *     atual: 412, e o painel mostra o que mudou antes de deixar salvar.
+                 */
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                /** @description O endereco publico da entrada do diretorio. Nenhum UUID no caminho. */
+                entrySlug: components["parameters"]["EntrySlug"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDirectoryEntryPatch"];
+            };
+        };
+        responses: {
+            /** @description A entrada depois da edicao. */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDirectoryEntry"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["AdminUnauthorized"];
+            403: components["responses"]["AdminForbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["SlugTaken"];
+            412: components["responses"]["PreconditionFailed"];
+            428: components["responses"]["PreconditionRequired"];
             429: components["responses"]["TooManyRequests"];
         };
     };

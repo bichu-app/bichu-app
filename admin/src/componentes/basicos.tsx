@@ -228,8 +228,10 @@ export function CampoDeTexto({
   dataCy?: string;
   contador?: boolean;
   maximo?: number;
-  tipo?: 'text' | 'email' | 'url' | 'date' | 'number';
-  modoDeEntrada?: 'decimal' | 'numeric' | 'url' | 'text' | 'email';
+  /** `tel` entrou em 17/10/2026 com o primeiro campo de telefone do painel (diretorio de `Perto`). */
+  tipo?: 'text' | 'email' | 'url' | 'date' | 'number' | 'tel';
+  /** `tel` oferece o teclado de discagem no celular, com o `+` que o numero de fora do Brasil precisa. */
+  modoDeEntrada?: 'decimal' | 'numeric' | 'url' | 'text' | 'email' | 'tel';
   autoComplete?: string;
   somenteLeitura?: boolean;
   autoFoco?: boolean;

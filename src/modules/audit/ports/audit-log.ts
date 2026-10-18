@@ -249,6 +249,12 @@ export const ACOES_ADMINISTRATIVAS = [
   'admin.network_join_request.listed',
   'admin.network_join_request.approved',
   'admin.network_join_request.declined',
+  // BICHUS-189 (17/10/2026): a escrita administrativa do diretorio de `Perto`.
+  // Entram aqui porque `acoes-administrativas.test.ts` confere nos dois
+  // sentidos: todo `x-audit.action` do contrato precisa estar nesta lista, e
+  // todo valor desta lista precisa estar no contrato.
+  'admin.directory_entry.created',
+  'admin.directory_entry.updated',
   'admin.catalog_image.intent_created',
   /** D62: alguem com a caixa de entrada do administrador respondeu "nao fui eu". */
   'admin.session.disavowed',

@@ -4,6 +4,7 @@ import { Casca } from './casca/Casca.tsx';
 import NaoFuiEu from './naoFuiEu/NaoFuiEu.tsx';
 import { rotasDaLoja } from './loja/rotas.tsx';
 import { rotasDaRede } from './rede/rotas.tsx';
+import { rotasDoDiretorio } from './diretorio/rotas.tsx';
 import Carregando from './rotas/Carregando.tsx';
 import NaoEncontrada from './rotas/NaoEncontrada.tsx';
 import { ProvedorDeSessao, type PropsDoProvedor } from './sessao/ProvedorDeSessao.tsx';
@@ -34,6 +35,8 @@ export function criarRotas(opcoes: OpcoesDasRotas = {}): RouteObject[] {
         { index: true, element: <Navigate to="/loja" replace /> },
         ...rotasDaLoja,
         ...rotasDaRede,
+        // BICHUS-189 (17/10/2026): o diretorio de `Perto`, o menu que faltava.
+        ...rotasDoDiretorio,
         { path: '*', element: <NaoEncontrada /> },
       ],
     },
