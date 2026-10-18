@@ -765,7 +765,26 @@ export interface paths {
             };
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Os pedidos da plaquinha deste pet
+         * @description A leitura que sustenta a PAGINA DE ACOMPANHAMENTO do app (decisao do
+         *     cliente, 18/10): privada, exige sessao, e a pessoa ve **so as
+         *     plaquinhas dela**.
+         *
+         *     **A autorizacao esta na clausula `WHERE`, e por isso a resposta de pet
+         *     de outra conta e `404` e nunca `403`** (ADR-0021): o `SELECT` carrega
+         *     `pets.owner_user_id = <chamador>` e simplesmente nao encontra linha.
+         *     Um `403` confirmaria que o pet existe.
+         *
+         *     **Nenhum endereco de entrega sai aqui.** Ele e dado pessoal, ja foi
+         *     digitado por quem pede, e a unica superficie que o projeta segue sendo
+         *     a fila do painel (`AdminCollarTagRequest`).
+         *
+         *     Ordenado do pedido mais recente para o mais antigo. Um pet costuma ter
+         *     um pedido; a lista existe porque a segunda plaquinha e um pedido
+         *     legitimo depois do primeiro ser atendido.
+         */
+        get: operations["listCollarTagRequests"];
         put?: never;
         /**
          * Pedir a plaquinha da coleira de um pet
@@ -779,9 +798,10 @@ export interface paths {
          *     coisa. Depois de atendido, um pedido novo e aceito -- a segunda
          *     plaquinha e um pedido legitimo.
          *
-         *     **Nenhum identificador interno sai aqui** (ADR-0010 item 6): o `ref`
-         *     que o painel usa no caminho nao e projetado para o app, que nao tem o
-         *     que fazer com ele.
+         *     **O `ref` do pedido SAI aqui desde 18/10**, para que a pessoa saia
+         *     desta tela com o numero que identifica o pedido dela. Ele e o mesmo
+         *     `ref` opaco da fila do painel, e **nenhum UUID interno sai**
+         *     (ADR-0010 item 6).
          *
          *     **O endereco e obrigatorio e nao volta na resposta.** Ele e dado
          *     pessoal, quem o enviou acabou de digita-lo, e devolve-lo seria uma
@@ -8410,17 +8430,54 @@ export interface components {
          */
         CollarTagRequestStatus: "pending" | "fulfilled" | "declined";
         /**
-         * @description O pedido da plaquinha como o APP o ve. **Sem `ref`**: o identificador
-         *     opaco serve ao caminho do painel, e projeta-lo aqui daria ao app um
-         *     valor que ele nao tem o que fazer com. Sem UUID interno nenhum
-         *     (ADR-0010 item 6) -- o pet e o do caminho.
+         * @description O pedido da plaquinha como o APP o ve.
+         *
+         *     **`ref` PASSOU A SAIR AQUI, em 18/10.** Ate entao esta projecao nao o
+         *     trazia, e o motivo escrito era que o app "nao tem o que fazer com
+         *     ele". O cliente deu o que fazer: a pessoa acompanha o pedido e precisa
+         *     de um numero para pedir ajuda sobre ele. Continua sendo o MESMO `ref`
+         *     opaco de 128 bits da fila do painel -- **nao ha identificador novo, e
+         *     nenhum UUID interno sai** (ADR-0010 item 6). O pet e o do caminho.
+         *
+         *     **Sem endereco de entrega**: dado pessoal, ja digitado por quem pede, e
+         *     a unica superficie que o projeta e `AdminCollarTagRequest`.
          */
         CollarTagRequest: {
+            /**
+             * @description O identificador opaco do pedido, 128 bits em base64url. O MESMO
+             *     valor de `AdminCollarTagRequest.ref`, e nao um segundo
+             *     identificador. Nao e UUID.
+             */
+            ref: string;
             status: components["schemas"]["CollarTagRequestStatus"];
             /** Format: date-time */
             requested_at: string;
+            /**
+             * Format: date-time
+             * @description Quando o painel decidiu, ou nulo enquanto `pending`.
+             */
+            decided_at?: string | null;
+            /**
+             * @description O codigo de rastreio da transportadora, quando existir.
+             *
+             *     **HOJE E SEMPRE NULO, e isso nao e defeito**: nao ha coluna que o
+             *     guarde nem rota que o escreva. A escrita e a migracao pertencem a
+             *     quem constroi a fila no backoffice; esta projecao ja o declara
+             *     para que acrescentar a coluna nao vire mudanca de contrato depois.
+             *     **O app so o desenha quando ele vem preenchido** -- campo de
+             *     rastreio vazio e pior que nenhum campo.
+             */
+            tracking_code?: string | null;
             /** @description A observacao que o tutor escreveu, ou nulo. */
             notes?: string | null;
+        };
+        /**
+         * @description Os pedidos da plaquinha de UM pet, do mais recente para o mais antigo.
+         *     Sem paginacao: o teto de 3 pedidos por conta por dia e o indice parcial
+         *     de um pendente por pet mantem a lista curta por construcao.
+         */
+        CollarTagRequestPage: {
+            items: components["schemas"]["CollarTagRequest"][];
         };
         /** @enum {string} */
         AdminCollarTagRequestStatus: "pending" | "fulfilled" | "declined";
@@ -10217,6 +10274,31 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+        };
+    };
+    listCollarTagRequests: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                petId: components["parameters"]["PetId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Os pedidos deste pet, do mais recente para o mais antigo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CollarTagRequestPage"];
+                };
+            };
+            400: components["responses"]["ValidationFailed"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
         };
     };
     requestCollarTag: {

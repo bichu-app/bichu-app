@@ -73,12 +73,30 @@ export interface EnderecoDeEntrega {
 }
 
 /**
- * O pedido como o APP o ve. Sem `ref` e sem UUID nenhum (ADR-0010 item 6), e
- * **sem endereco**: ver a regra 2 no cabecalho deste arquivo.
+ * O pedido como o APP o ve. **Sem endereco**: ver a regra 2 no cabecalho
+ * deste arquivo.
+ *
+ * **`ref` entrou em 18/10**, quando o cliente pediu a pagina de
+ * acompanhamento: a pessoa precisa de um numero para falar sobre o pedido
+ * dela. E o MESMO `ref` opaco da fila do painel -- nao ha identificador novo
+ * --, e nenhum UUID interno sai (ADR-0010 item 6).
  */
 export interface PedidoDoTutor {
+  /** O identificador opaco, 128 bits em base64url. Nao e o UUID. */
+  readonly ref: string;
   readonly status: DecisaoDoPedidoDePlaquinha;
   readonly solicitadoEm: Date;
+  readonly decididoEm: Date | null;
+  /**
+   * O codigo de rastreio da transportadora.
+   *
+   * **Hoje sempre nulo, e deliberadamente**: nao existe coluna que o guarde
+   * nem rota que o escreva, e inventar um valor aqui seria a tela fingindo
+   * rastreio. O campo existe para que acrescentar a coluna nao vire mudanca
+   * de contrato depois; quem a acrescenta e quem constroi a escrita no
+   * backoffice.
+   */
+  readonly codigoDeRastreio: string | null;
   readonly observacao: string | null;
 }
 
@@ -135,6 +153,25 @@ export interface PedidoDePlaquinhaRepository {
     readonly endereco: EnderecoDeEntrega;
     readonly observacao: string | null;
   }): Promise<PedidoDoTutor | undefined>;
+
+  /**
+   * Os pedidos de UM pet do chamador, do mais recente para o mais antigo.
+   *
+   * **A autorizacao esta na clausula `WHERE`**, como na criacao: o `SELECT`
+   * exige `pets.owner_user_id = <chamador>`, entao pet de outra pessoa nao
+   * devolve linha nenhuma e a rota responde 404 -- nunca 403, que confirmaria
+   * a existencia do pet (ADR-0021).
+   *
+   * Devolve `undefined` quando o PET nao e do chamador (ou nao existe), e uma
+   * lista vazia quando o pet e dele e ainda nao tem pedido. **Os dois casos
+   * sao diferentes e a rota os responde diferente**: 404 no primeiro, 200 com
+   * lista vazia no segundo. Colapsa-los faria a pagina do pet sem pedido
+   * dizer "este pet nao existe".
+   */
+  listarDoPet(
+    petId: PetId,
+    solicitante: UserId,
+  ): Promise<readonly PedidoDoTutor[] | undefined>;
 
   /** A fila do painel. Pedido de pet excluido nao aparece: a linha cai com o pet. */
   listarFila(recorte: RecorteDaFilaDePlaquinhas): Promise<PaginaDaFilaDePlaquinhas>;

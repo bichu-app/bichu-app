@@ -54,6 +54,25 @@ export const rotaDePedidoDePlaquinha = defineRoute({
   rateLimit: [{ dimension: ['account'], limit: 3, window: '24h', onExceed: 'deny_429' }],
 });
 
+/**
+ * `GET /v1/pets/{petId}/tag-requests`: a leitura da pagina de acompanhamento.
+ *
+ * **Sem teto proprio.** E leitura da PROPRIA conta, barata (duas consultas
+ * por indice, lista curta por construcao) e sem dado de terceiro -- o teto de
+ * `requestCollarTag` existe porque cada pedido vira trabalho fisico de
+ * alguem, e ler o proprio pedido nao vira trabalho de ninguem. O balde da
+ * borda continua valendo.
+ *
+ * **Sem `x-audit`**: nao e leitura de pessoa (D55/D56). Quem le e o dono do
+ * pet, sobre o proprio pet.
+ */
+export const rotaDeLerPedidosDePlaquinhaDoPet = defineRoute({
+  operationId: 'listCollarTagRequests',
+  method: 'get',
+  path: '/pets/:petId/tag-requests',
+  effects: [],
+});
+
 export interface DependenciasDoPedidoDePlaquinha {
   readonly pedidos: PedidoDePlaquinhaService;
   readonly autenticador: Autenticador;
@@ -154,16 +173,25 @@ function comoEnderecoDeEntrega(corpo: CorpoDoPedido): EnderecoDeEntrega {
 }
 
 /**
- * `CollarTagRequest` como o contrato o declara. **Sem `ref` e sem UUID**: o
- * identificador opaco serve ao caminho do painel, e o pet e o do caminho da
- * requisicao (ADR-0010 item 6).
+ * `CollarTagRequest` como o contrato o declara.
+ *
+ * **`ref` SAI, e nenhum UUID sai** (ADR-0010 item 6). Ele entrou em 18/10 com
+ * a pagina de acompanhamento: e o numero que a pessoa tem para falar sobre o
+ * pedido dela, e e o MESMO `ref` da fila do painel -- nao ha identificador
+ * novo. O pet continua sendo o do caminho da requisicao.
  */
 function comoCollarTagRequest(pedido: PedidoDoTutor): Record<string, unknown> {
   // **Sem endereco.** Ele e dado pessoal, quem o enviou acabou de digita-lo, e
   // devolve-lo seria uma copia a mais numa resposta que nao precisa dela.
   return {
+    ref: pedido.ref,
     status: pedido.status,
     requested_at: pedido.solicitadoEm.toISOString(),
+    decided_at: pedido.decididoEm === null ? null : pedido.decididoEm.toISOString(),
+    // Sempre nulo hoje: nao ha coluna nem escrita. Sai EXPLICITAMENTE nulo e
+    // nao omitido, porque omitir faria o app distinguir "sem rastreio" de
+    // "campo que sumiu" -- a mesma decisao de `complement` na fila do painel.
+    tracking_code: pedido.codigoDeRastreio,
     notes: pedido.observacao,
   };
 }
@@ -200,6 +228,17 @@ export function registrarRotaDePedidoDePlaquinha(
         corpo.notes ?? null,
       );
       return reply.status(200).send(comoCollarTagRequest(pedido));
+    },
+  );
+
+  registrarRota(
+    app,
+    rotaDeLerPedidosDePlaquinhaDoPet,
+    {},
+    async (request: FastifyRequest, reply: FastifyReply) => {
+      const conta = await contaDoChamador(request, deps);
+      const pedidos = await deps.pedidos.listarDoPet(petIdDoCaminho(request), conta);
+      return reply.send({ items: pedidos.map(comoCollarTagRequest) });
     },
   );
 }

@@ -23,6 +23,7 @@ import '../telas/pet/tela_cadastrar_sinais.dart';
 import '../telas/pet/tela_detalhe_do_pet.dart';
 import '../telas/pet/tela_editar_pet.dart';
 import '../telas/pet/tela_pet_cadastrado.dart';
+import '../telas/pet/tela_acompanhar_plaquinha.dart';
 import '../telas/pet/tela_solicitar_plaquinha.dart';
 import '../telas/perfil/tela_dados_pessoais.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
@@ -246,6 +247,26 @@ abstract final class Rotas {
   /// pre-selecionar; alcancada por link direto, a tela abre com a lista e
   /// nenhum pet escolhido, que e um estado valido e nao um erro.
   static const String solicitarPlaquinha = '/pets/plaquinha';
+
+  /// A PAGINA DE ACOMPANHAMENTO do pedido da plaquinha (cliente, 18/10).
+  ///
+  /// **Literal antes do parametro**, pelo mesmo motivo de
+  /// [solicitarPlaquinha]: abaixo de `/pets/:petId`, `go_router` casaria
+  /// `plaquinha` como `petId`.
+  ///
+  /// Aqui o pet **esta** no endereco, e a diferenca com o formulario e real: o
+  /// formulario ESCOLHE um pet entre os do tutor, e esta pagina LE o pedido de
+  /// um pet ja escolhido -- quem chega vem da pagina daquele pet. Sem o pet no
+  /// caminho a pagina nao teria o que ler.
+  ///
+  /// **O endereco nao autoriza nada.** Quem o alcanca com o pet de outra
+  /// pessoa recebe 404 do servidor (ADR-0021), e a tela diz o mesmo que diria
+  /// para um pet inexistente.
+  static const String acompanharPlaquinha = '/pets/plaquinha/:petId';
+
+  /// O endereco de [acompanharPlaquinha] para um pet.
+  static String acompanharPlaquinhaDe(String petId) =>
+      '/pets/plaquinha/${Uri.encodeComponent(petId)}';
 
   /// O fluxo de marcar como perdido: F3.0, F3.1, F3.2 e F3.3.
   ///
@@ -643,6 +664,19 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
             petIdInicial: petId is String ? petId : null,
           );
         },
+      ),
+      // O ACOMPANHAMENTO do pedido. Depois de `/pets/plaquinha` e antes de
+      // `/pets/:petId`: o literal mais especifico primeiro, o parametro
+      // depois. Trocar a ordem faria `/pets/plaquinha/<id>` abrir o detalhe.
+      //
+      // O pet vem do CAMINHO e nao de `extra`: esta pagina le o pedido do
+      // servidor, e um link direto para ela e legitimo -- ela pergunta antes
+      // de afirmar qualquer coisa.
+      GoRoute(
+        path: Rotas.acompanharPlaquinha,
+        builder: (context, estado) => TelaAcompanharPlaquinha(
+          petId: estado.pathParameters['petId'] ?? '',
+        ),
       ),
       // T.1, a edicao e a exclusao (BICHUS-60 e BICHUS-61).
       //

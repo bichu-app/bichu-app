@@ -99,6 +99,14 @@ const PET_DE_OUTRO = '018f3a2b-0000-7000-8000-0000000000c9' as PetId;
 const TOKEN_DE_ACESSO = 'acesso-do-tutor';
 const SOLICITADO_EM = new Date('2026-10-17T12:00:00.000Z');
 
+/**
+ * O `ref` que o servidor produz com o `random128` DESTA bancada, calculado
+ * aqui da mesma forma que `refDoPedido` o calcula -- e nao copiado de uma
+ * saida observada. Escrever o literal faria o caso continuar verde se o
+ * servidor passasse a devolver um valor fixo qualquer.
+ */
+const REF_GERADO = Buffer.from(new Uint8Array(16).fill(0x2b)).toString('base64url');
+
 /** Da DECLARACAO, nunca escrito a mao. */
 const PEDIDO = rotaDePedidoDePlaquinha.path;
 
@@ -160,7 +168,11 @@ interface Bancada {
   }[];
 }
 
-function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.now())): Bancada {
+function bancada(
+  contador: RateLimitStore = criarContadorEmMemoria(() => Date.now()),
+  /** O que `listarDoPet` devolve para o pet do chamador. Vazio = pet sem pedido. */
+  pedidosDoPet: readonly PedidoDoTutor[] = [],
+): Bancada {
   const criados: { petId: PetId; endereco: EnderecoDeEntrega; observacao: string | null }[] = [];
 
   const repositorio: PedidoDePlaquinhaRepository = {
@@ -175,10 +187,21 @@ function bancada(contador: RateLimitStore = criarContadorEmMemoria(() => Date.no
       // `WHERE` nao encontra linha.
       if (entrada.petId !== MEU_PET) return Promise.resolve(undefined);
       return Promise.resolve({
+        ref: entrada.ref,
         status: 'pending',
         solicitadoEm: SOLICITADO_EM,
+        decididoEm: null,
+        codigoDeRastreio: null,
         observacao: entrada.observacao,
       });
+    },
+    // O MESMO contrato do adaptador real: `undefined` quando o pet nao e do
+    // chamador (a clausula `WHERE` nao acha linha) e LISTA quando e dele --
+    // vazia inclusive, que e o pet sem pedido. Os dois casos sao distintos de
+    // proposito: colapsa-los esconderia o 404 que o caso 8 mede.
+    listarDoPet: (petId): Promise<readonly PedidoDoTutor[] | undefined> => {
+      if (petId !== MEU_PET) return Promise.resolve(undefined);
+      return Promise.resolve(pedidosDoPet);
     },
     listarFila: () => naoUsado('listarFila'),
     pedidoPorRef: () => naoUsado('pedidoPorRef'),
@@ -260,12 +283,29 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     assert.equal(b.criados[0]?.petId, MEU_PET);
   });
 
-  void it('2. o corpo da resposta nao carrega `ref` nem UUID nenhum', async () => {
+  void it('2. o corpo carrega o `ref` do servidor e NENHUM UUID', async () => {
+    // **O `ref` passou a sair em 18/10** (cliente: a pessoa acompanha o
+    // pedido e precisa de um numero para falar sobre ele). O que NAO mudou, e
+    // e o que este caso protege, e que nenhum identificador INTERNO sai:
+    // `ref` e opaco, e o UUID da linha continua sem aparecer.
     const b = bancada();
     const resposta = await pedir(b, MEU_PET);
     const corpo = JSON.parse(resposta.body) as Record<string, unknown>;
-    assert.deepEqual(Object.keys(corpo).sort(), ['notes', 'requested_at', 'status']);
+    assert.deepEqual(Object.keys(corpo).sort(), [
+      'decided_at',
+      'notes',
+      'ref',
+      'requested_at',
+      'status',
+      'tracking_code',
+    ]);
     assert.equal(corpo['status'], 'pending');
+    // O `ref` e o que o SERVIDOR gerou, e nao um valor qualquer: a bancada
+    // conhece o que o gerador de ids produziu, e e ele que tem de aparecer.
+    assert.equal(corpo['ref'], REF_GERADO);
+    // Hoje nao ha coluna de rastreio, e o campo sai EXPLICITAMENTE nulo --
+    // nunca omitido e nunca inventado.
+    assert.equal(corpo['tracking_code'], null);
     // Nenhum valor da resposta tem forma de UUID. A varredura e sobre o corpo
     // inteiro, e nao sobre uma lista de campos: campo novo que vaze UUID
     // amanha reprova aqui sem ninguem lembrar de incluir o nome dele.
@@ -429,5 +469,84 @@ void describe('POST /v1/pets/{petId}/tag-requests', () => {
     const resposta = await pedir(b, MEU_PET, corpoValido({ notes: texto }));
     assert.equal(resposta.statusCode, 200);
     assert.equal(b.criados[0]?.observacao, texto);
+  });
+});
+
+/**
+ * A leitura que sustenta a PAGINA DE ACOMPANHAMENTO do app.
+ *
+ * Os dois casos que importam sao de AUTORIZACAO, e eles andam em par: sem o
+ * contrapeso do 200, um servidor que respondesse 404 para tudo passaria no
+ * caso do 404 e a pagina nunca abriria para ninguem.
+ */
+void describe('GET /v1/pets/{petId}/tag-requests', () => {
+  const UM_PEDIDO: readonly PedidoDoTutor[] = [
+    {
+      ref: 'Ref-De-Teste_0123456789a',
+      status: 'fulfilled',
+      solicitadoEm: SOLICITADO_EM,
+      decididoEm: new Date('2026-10-18T09:00:00.000Z'),
+      codigoDeRastreio: null,
+      observacao: null,
+    },
+  ];
+
+  function listar(b: Bancada, pet: PetId, token: string = TOKEN_DE_ACESSO) {
+    return b.app.inject({
+      method: 'GET',
+      url: `${PREFIXO_DA_API}/pets/${pet}/tag-requests`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+  }
+
+  void it('7. o pedido do PROPRIO pet responde 200 com o `ref` do servidor', async () => {
+    const b = bancada(undefined, UM_PEDIDO);
+    const resposta = await listar(b, MEU_PET);
+    assert.equal(resposta.statusCode, 200);
+    const corpo = JSON.parse(resposta.body) as { items: Record<string, unknown>[] };
+    assert.equal(corpo.items.length, 1);
+    // O identificador da resposta e o que o REPOSITORIO devolveu, e nao um
+    // valor que a rota tenha produzido por conta propria.
+    assert.equal(corpo.items[0]?.['ref'], UM_PEDIDO[0]?.ref);
+    assert.equal(corpo.items[0]?.['status'], 'fulfilled');
+  });
+
+  void it('8. pet de OUTRA conta responde 404, e nunca 403', async () => {
+    // O contrapeso do caso 7: este par e o que prova que a autorizacao existe.
+    // 403 confirmaria que o pet existe (ADR-0021).
+    const b = bancada(undefined, UM_PEDIDO);
+    const resposta = await listar(b, PET_DE_OUTRO);
+    assert.equal(resposta.statusCode, 404);
+    assert.notEqual(resposta.statusCode, 403);
+  });
+
+  void it('9. pet SEU e sem pedido responde 200 com lista vazia, e nao 404', async () => {
+    // Estado legitimo: o pet e da pessoa e ela nunca pediu a plaquinha.
+    // Responder 404 aqui faria a pagina do pet dizer que o pet nao existe.
+    const b = bancada(undefined, []);
+    const resposta = await listar(b, MEU_PET);
+    assert.equal(resposta.statusCode, 200);
+    const corpo = JSON.parse(resposta.body) as { items: unknown[] };
+    assert.deepEqual(corpo.items, []);
+  });
+
+  void it('10. sem credencial responde 401, e nao devolve pedido nenhum', async () => {
+    const b = bancada(undefined, UM_PEDIDO);
+    const resposta = await b.app.inject({
+      method: 'GET',
+      url: `${PREFIXO_DA_API}/pets/${MEU_PET}/tag-requests`,
+    });
+    assert.equal(resposta.statusCode, 401);
+    assert.doesNotMatch(resposta.body, /Ref-De-Teste/);
+  });
+
+  void it('11. nenhum endereco de entrega escorre para esta resposta', async () => {
+    // O endereco e dado pessoal e a UNICA superficie que o projeta e a fila do
+    // painel. A varredura e sobre o corpo inteiro, e nao sobre nomes de campo.
+    const b = bancada(undefined, UM_PEDIDO);
+    const resposta = await listar(b, MEU_PET);
+    for (const proibido of ['recipient_name', 'postal_code', 'street', 'recipient_phone']) {
+      assert.doesNotMatch(resposta.body, new RegExp(proibido));
+    }
   });
 });

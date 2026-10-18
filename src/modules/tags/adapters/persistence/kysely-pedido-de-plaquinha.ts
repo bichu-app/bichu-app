@@ -50,8 +50,10 @@ import type {
 } from '../../ports/pedido-de-plaquinha.js';
 
 interface LinhaDoTutor {
+  readonly ref: string;
   readonly status: DecisaoDoPedidoDePlaquinha;
   readonly requested_at: Date;
+  readonly decided_at: Date | null;
   readonly notes: string | null;
 }
 
@@ -76,7 +78,22 @@ interface LinhaDaFila {
 }
 
 function comoPedidoDoTutor(linha: LinhaDoTutor): PedidoDoTutor {
-  return { status: linha.status, solicitadoEm: linha.requested_at, observacao: linha.notes };
+  return {
+    ref: linha.ref,
+    status: linha.status,
+    solicitadoEm: linha.requested_at,
+    decididoEm: linha.decided_at,
+    // **NAO LIDO DO BANCO, e nao por esquecimento**: nao existe coluna de
+    // codigo de rastreio em `collar_tag_requests`. Selecionar uma coluna que
+    // nao existe quebraria toda leitura desta tabela; devolver aqui um valor
+    // inventado seria a tela fingindo rastreio, que e pior.
+    //
+    // Quando a coluna existir -- quem a cria e quem constroi a escrita do
+    // painel --, o conserto e UMA linha aqui e a coluna nos dois `SELECT`
+    // deste arquivo que montam `LinhaDoTutor`.
+    codigoDeRastreio: null,
+    observacao: linha.notes,
+  };
 }
 
 function comoEndereco(linha: LinhaDaFila): EnderecoDeEntrega {
@@ -143,7 +160,7 @@ export function criarPedidoDePlaquinhaRepository(deps: {
       // gerado: com `DO NOTHING` sobre pedido que ja existia, aquele `id` nao
       // foi gravado, e ler por ele devolveria vazio num caso legitimo.
       const lida = await sql<LinhaDoTutor>`
-        SELECT r.status, r.requested_at, r.notes
+        SELECT r.ref, r.status, r.requested_at, r.decided_at, r.notes
           FROM collar_tag_requests r
           JOIN pets p ON p.id = r.pet_id
          WHERE r.pet_id = ${petId}::uuid
@@ -156,6 +173,35 @@ export function criarPedidoDePlaquinhaRepository(deps: {
 
       const linha = lida.rows[0];
       return linha === undefined ? undefined : comoPedidoDoTutor(linha);
+    },
+
+    async listarDoPet(petId, solicitante): Promise<readonly PedidoDoTutor[] | undefined> {
+      // DUAS consultas, e nao uma, porque sao DUAS perguntas diferentes: "o
+      // pet e seu?" e "quais os pedidos dele?". Uma consulta so devolveria
+      // vazio nos dois casos, e a rota nao teria como distinguir 404 de uma
+      // lista legitimamente vazia -- a pagina do pet recem-cadastrado passaria
+      // a dizer que o pet nao existe.
+      //
+      // A autorizacao e a MESMA clausula `WHERE` da criacao, com a mesma
+      // forma: dono e `deleted_at IS NULL`. Nao ha comparacao de dono em
+      // JavaScript em lugar nenhum deste arquivo.
+      const dono = await sql<{ id: string }>`
+        SELECT p.id
+          FROM pets p
+         WHERE p.id = ${petId}::uuid
+           AND p.owner_user_id = ${solicitante}::uuid
+           AND p.deleted_at IS NULL
+      `.execute(deps.db);
+      if (dono.rows[0] === undefined) return undefined;
+
+      const lidos = await sql<LinhaDoTutor>`
+        SELECT r.ref, r.status, r.requested_at, r.decided_at, r.notes
+          FROM collar_tag_requests r
+         WHERE r.pet_id = ${petId}::uuid
+         ORDER BY r.requested_at DESC
+      `.execute(deps.db);
+
+      return lidos.rows.map(comoPedidoDoTutor);
     },
 
     async listarFila(recorte: RecorteDaFilaDePlaquinhas): Promise<PaginaDaFilaDePlaquinhas> {

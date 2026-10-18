@@ -212,6 +212,38 @@ flutter:
     # na faixa de 300-500 KB e nao mexe num byte da arte do cliente; o PNG de
     # 24 bits passa da faixa e o de paleta so cabe quantizando a marca.
     - assets/ilustracoes/tres-pessoas-no-parque.webp
+    # A PLAQUINHA, na pagina de ACOMPANHAMENTO DO PEDIDO. Mesma regra da
+    # ilustracao acima: embarcada, porque a pagina tem de ficar de pe antes de
+    # qualquer resposta de rede chegar.
+    #
+    # ORIGEM E COMO REFAZER. Arte do cliente, sem um byte alterado:
+    # `design/marca/referencia/04-tag-frente.png` (1297x1213, com alfa). E a
+    # plaquinha de verdade -- a que o pedido vai produzir --, e nao um desenho
+    # novo: nada aqui foi gerado por IA nem baixado da internet.
+    #
+    #   node -e "require('sharp')('design/marca/referencia/04-tag-frente.png')\
+    #     .trim({threshold:1}).resize({height:432}).webp({lossless:true,effort:6})\
+    #     .toFile('app/assets/ilustracoes/plaquinha-da-coleira.webp')"
+    #
+    # POR QUE 432 px DE ALTURA, e nao de largura: a tela pinta a ilustracao
+    # numa caixa de no maximo 144 dp de ALTURA (`AcompanhamentoDoPedido`), e
+    # 432 = 144 x 3, a densidade do aparelho mais denso que o produto mira. O
+    # recorte do alfa decide a largura (351 px), e nao o contrario -- dimensionar
+    # pela largura deixaria a altura maior do que o que e pintado.
+    #
+    # POR QUE WEBP SEM PERDA. Mesmo criterio ja medido para a outra ilustracao:
+    # isto nao e foto, e cor chapada COM CANAL ALFA (ela se apoia na superficie
+    # do tema, nos dois temas), e JPEG nao tem alfa e toca anel nas bordas
+    # duras do traco. Medido nos tres, no mesmo 351x432:
+    #
+    #   webp sem perda   116.218 B   erro 0,000   <- escolhido
+    #   png de paleta    100.797 B   quantiza a marca
+    #   webp q92          43.068 B   com perda na borda dura
+    #
+    # 113,5 KB fica ABAIXO da faixa de 300-500 KB do produto, e a faixa e alvo
+    # de peso e nao piso: nao ha motivo para gastar mais bytes do que a arte
+    # precisa.
+    - assets/ilustracoes/plaquinha-da-coleira.webp
 
 # ---------------------------------------------------------------------------
 # Icone do app (flutter_launcher_icons)

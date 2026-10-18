@@ -322,6 +322,28 @@ class PetsApi implements IntencaoEConfirmacaoDePet {
     return PedidoDePlaquinha.doJson(json);
   }
 
+  /// `GET /pets/{petId}/tag-requests`: os pedidos da plaquinha deste pet.
+  ///
+  /// A leitura da PAGINA DE ACOMPANHAMENTO (decisao do cliente, 18/10). E
+  /// privada e so devolve o que e da propria conta: **pet de outra pessoa
+  /// responde 404 e nunca 403** (ADR-0021), e para quem le os dois casos sao
+  /// a mesma coisa -- o pet nao existe.
+  ///
+  /// **Lista vazia nao e erro**: e o pet que e seu e ainda nao teve pedido.
+  /// Quem chama decide o que mostrar nesse caso, e a pagina do pet usa
+  /// exatamente isso para NAO oferecer um link que levaria ao vazio.
+  Future<List<PedidoDePlaquinha>> listarPedidosDePlaquinha(String petId) async {
+    final json = await _api.get(
+      '/pets/${Uri.encodeComponent(petId)}/tag-requests',
+    );
+    final itens = json['items'];
+    if (itens is! List) return const <PedidoDePlaquinha>[];
+    return itens
+        .whereType<Map<String, dynamic>>()
+        .map(PedidoDePlaquinha.doJson)
+        .toList(growable: false);
+  }
+
   /// `POST /media/pet-photo-intents`.
   ///
   /// Caminho novo (ADR-0016): o `pet_id` saiu do caminho e entrou no corpo. O
