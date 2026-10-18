@@ -345,6 +345,43 @@ class BarraDeListagem extends StatefulWidget {
   }
 }
 
+/// Abre a folha de filtro e ordem **sem a barra**.
+///
+/// ## Por que ela é pública, e quando usar
+///
+/// A barra só se desenha quando há lista (`BarraDeListagem.desenha` responde
+/// falso com `total: 0` e nenhum recorte aplicado), e essa regra está certa: o
+/// controle de recorte sobre o nada é controle sem desfecho.
+///
+/// Há um caso em que ela deixa de valer, e ele nasceu com a listagem pública de
+/// perdidos: quando a folha tem um [CampoDeTextoDoFiltro] **obrigatório**, ela
+/// não é o que recorta a lista — ela é o que FAZ a lista existir. O visitante
+/// sem conta não tem cidade, a rota não é chamada, `total` é zero, a barra não
+/// nasce, e sem esta função ele leria a linha única sem caminho nenhum para
+/// sair dela. Esse é o beco que o critério 2 da BICHUS-62 proíbe.
+///
+/// Quem chama desenha o próprio controle (um botão, no corpo) e passa os mesmos
+/// três objetos que daria à barra. **A folha é a mesma**, e isso é o ponto: uma
+/// segunda folha divergiria da primeira na primeira edição.
+Future<void> abrirFolhaDeFiltros(
+  BuildContext context, {
+  required void Function(EscolhaDaFolha escolha) aoAplicar,
+  ControleDeFiltro? filtro,
+  ControleDeOrdenacao? ordenacao,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    useSafeArea: true,
+    builder: (_) => _FolhaDeFiltros(
+      filtro: filtro,
+      ordenacao: ordenacao,
+      aoAplicar: aoAplicar,
+    ),
+  );
+}
+
 class _EstadoDaBarraDeListagem extends State<BarraDeListagem> {
   SlotDaBarraDeListagem? _slot;
 
@@ -606,6 +643,80 @@ class GrupoDeFiltro {
   final String? dependeDe;
 }
 
+/// Um recorte que a pessoa **digita**, e nao escolhe de uma lista.
+///
+/// ## Por que ele existe, e por que so agora
+///
+/// Toda a folha era de lista fechada, e isso cobria `Perto`, a `Loja` e a
+/// `Rede`: as opcoes delas sao codigos do contrato, e uma lista fechada e a
+/// forma certa de oferecer codigo. A listagem publica de perdidos trouxe o
+/// primeiro recorte que **nao tem lista**: `city` e obrigatoria no contrato e
+/// o aplicativo nao tem de onde tirar uma lista de cidades -- nao ha operacao
+/// que as devolva, nao ha geocodificacao (ADR-0006) e montar a lista a partir
+/// dos casos que voltaram ofereceria um recorte diferente a cada pagina.
+///
+/// Deslogado, este campo e a **unica** fonte de cidade: sem ele a rota nao e
+/// chamada, e a secao em que o aplicativo abre fica vazia para quem nao tem
+/// conta -- que e exatamente quem a vizinhanca precisa que veja a lista.
+///
+/// ## Ele obedece as mesmas duas regras da folha
+///
+/// 1. **Nada se aplica sozinho.** Digitar nao chama a rota; o `Aplicar` manda,
+///    junto com as pastilhas, numa chamada so. Por isso o valor digitado mora
+///    no estado da folha e nao num `TextEditingController` de quem chama.
+/// 2. **O botao habilitado E o aviso de pendencia.** Nao ha selo e nao ha
+///    faixa; com [obrigatorio] vazio o `Aplicar` nasce desabilitado e o texto
+///    de [textoDeValidacao] aparece sob o campo.
+///
+/// O valor volta em [EscolhaDaFolha.filtros], na mesma chave: para quem recebe
+/// a escolha, texto digitado e pastilha escolhida sao a mesma coisa.
+class CampoDeTextoDoFiltro {
+  const CampoDeTextoDoFiltro({
+    required this.chave,
+    required this.rotulo,
+    required this.valor,
+    this.obrigatorio = false,
+    this.textoDeValidacao,
+    this.limite,
+    this.minimoDeCaracteres = 2,
+    this.exemplo,
+  });
+
+  /// O identificador que volta em [EscolhaDaFolha.filtros].
+  final String chave;
+
+  /// O rotulo, que e tambem o **nome acessivel** do campo: `BichuField` o
+  /// publica com `rotuloVisivel`, e campo com dica e sem rotulo e campo mudo.
+  final String rotulo;
+
+  /// O valor **aplicado** na lista agora. Nulo quando nao ha.
+  final String? valor;
+
+  /// A lista nao existe sem este recorte. Vazio desabilita o `Aplicar`.
+  final bool obrigatorio;
+
+  /// A unica linha de texto que este campo mostra alem do rotulo, e so quando
+  /// o valor nao serve. **Nao e texto de apoio**: o cliente mandou remover os
+  /// de apoio em 18/10/2026, e mensagem de validacao nao e um deles.
+  final String? textoDeValidacao;
+
+  /// O teto de caracteres, que e o do contrato e nao uma escolha da tela.
+  final int? limite;
+
+  /// O piso que o valor precisa alcancar para o `Aplicar` habilitar.
+  final int minimoDeCaracteres;
+
+  /// A dica DENTRO do campo (`BichuField.exemplo`).
+  final String? exemplo;
+
+  /// O valor serve para ir a rota.
+  bool serve(String digitado) {
+    final limpo = digitado.trim();
+    if (limpo.isEmpty) return !obrigatorio;
+    return limpo.length >= minimoDeCaracteres;
+  }
+}
+
 /// Os grupos de filtro da folha.
 ///
 /// **Nao carrega callback.** Quem aplica e a folha inteira, por
@@ -613,14 +724,32 @@ class GrupoDeFiltro {
 /// com ele cada toque numa pastilha fechava a folha e recarregava a lista --
 /// que e exatamente a aplicacao automatica que o cliente recusou.
 class ControleDeFiltro {
-  const ControleDeFiltro({required this.grupos});
+  const ControleDeFiltro({
+    required this.grupos,
+    this.campos = const <CampoDeTextoDoFiltro>[],
+  });
 
   final List<GrupoDeFiltro> grupos;
 
-  int get ativos => grupos.where((g) => g.selecionado != null).length;
+  /// Os recortes que a pessoa DIGITA. Vazio nas tres telas que existiam antes
+  /// deles, e por isso o parametro tem padrao: nenhuma delas muda uma linha.
+  final List<CampoDeTextoDoFiltro> campos;
 
-  /// Ha pelo menos um grupo com opcao. Sem isto o icone nao nasce.
-  bool get temOpcao => grupos.any((g) => g.opcoes.isNotEmpty);
+  /// **O campo obrigatorio NAO conta como filtro ativo.** Ele e a pergunta que
+  /// a rota exige para responder qualquer coisa, e nao um recorte que a pessoa
+  /// escolheu: contado, o distintivo da barra nasceria com `1` numa lista que
+  /// ninguem filtrou.
+  int get ativos =>
+      grupos.where((g) => g.selecionado != null).length +
+      campos
+          .where((c) =>
+              !c.obrigatorio && (c.valor?.trim().isNotEmpty ?? false))
+          .length;
+
+  /// Ha pelo menos um grupo com opcao, ou um campo para digitar. Sem isto o
+  /// icone nao nasce.
+  bool get temOpcao =>
+      grupos.any((g) => g.opcoes.isNotEmpty) || campos.isNotEmpty;
 }
 
 /// A ordem da lista, e as ordens que a rota aceita.
@@ -964,6 +1093,10 @@ class _FolhaDeFiltros extends StatefulWidget {
   List<GrupoDeFiltro> get grupos =>
       filtro?.grupos ?? const <GrupoDeFiltro>[];
 
+  /// Os recortes digitados. Vazio nas telas que so tem lista fechada.
+  List<CampoDeTextoDoFiltro> get campos =>
+      filtro?.campos ?? const <CampoDeTextoDoFiltro>[];
+
   /// A folha ordena quando ha mais de uma ordem para escolher.
   bool get ordena => ordenacao?.temEscolha ?? false;
 
@@ -981,9 +1114,44 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
   /// folha nao pinta marcada uma ordem em que a lista nao esta.
   late String? _ordemPendente = widget.ordenacao?.efetiva;
 
-  /// O que esta aplicado na lista agora.
+  /// Um controlador por campo digitado, criado com o valor APLICADO.
+  ///
+  /// Os controladores sao da folha e nao de quem chama, pela mesma razao por
+  /// que `_pendente` e: digitar nao aplica, e um controlador de fora faria o
+  /// texto da folha e o recorte da lista serem a mesma variavel -- que e a
+  /// aplicacao automatica que o cliente recusou.
+  late final Map<String, TextEditingController> _digitado =
+      <String, TextEditingController>{
+    for (final c in widget.campos)
+      c.chave: TextEditingController(text: c.valor ?? ''),
+  };
+
+  @override
+  void dispose() {
+    for (final c in _digitado.values) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  /// O texto de cada campo, aparado. Vazio vira nulo: ausencia nao e texto
+  /// vazio, e `''` numa query string e um recorte que o servidor recusa.
+  Map<String, String?> get _textosPendentes => <String, String?>{
+        for (final c in widget.campos)
+          c.chave: _digitado[c.chave]?.text.trim().isEmpty ?? true
+              ? null
+              : _digitado[c.chave]!.text.trim(),
+      };
+
+  /// Todos os campos digitados servem para ir a rota.
+  bool get _camposServem => widget.campos
+      .every((c) => c.serve(_digitado[c.chave]?.text ?? ''));
+
+  /// O que esta aplicado na lista agora -- pastilhas e campos digitados.
   Map<String, String?> get _aplicado => <String, String?>{
         for (final g in widget.grupos) g.chave: g.selecionado,
+        for (final c in widget.campos)
+          c.chave: (c.valor?.trim().isEmpty ?? true) ? null : c.valor!.trim(),
       };
 
   /// Ha diferenca entre o que a folha mostra e o que a lista tem.
@@ -991,14 +1159,23 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
   /// **E este booleano que habilita o `Aplicar`**, e e so ele que avisa que ha
   /// mudanca pendente: o cliente pediu o botao habilitado e nenhum selo.
   bool get _mudou {
+    // **Campo obrigatorio vazio desabilita o `Aplicar` mesmo com mudanca.**
+    // Aplicar um recorte que a rota recusa gastaria uma chamada para voltar
+    // 400, e a pessoa leria uma falha de servidor onde falta um dado dela.
+    if (!_camposServem) return false;
     final aplicado = _aplicado;
+    final textos = _textosPendentes;
+    if (textos.keys.any((c) => textos[c] != aplicado[c])) return true;
     if (_pendente.keys.any((c) => _pendente[c] != aplicado[c])) return true;
     return _ordemPendente != widget.ordenacao?.efetiva;
   }
 
   /// Ha algum FILTRO pendente para o `Limpar` tirar. A ordem nao entra: uma
   /// lista sempre esta em alguma ordem.
-  bool get _temEscolha => _pendente.values.any((v) => v != null);
+  bool get _temEscolha =>
+      _pendente.values.any((v) => v != null) ||
+      widget.campos.any((c) =>
+          !c.obrigatorio && (_digitado[c.chave]?.text.trim().isNotEmpty ?? false));
 
   /// Os grupos desenhados: com opcao, e com o pai ainda no valor aplicado.
   List<GrupoDeFiltro> get _visiveis {
@@ -1027,7 +1204,12 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
 
   void _aplicar() {
     final escolha = EscolhaDaFolha(
-      filtros: Map<String, String?>.unmodifiable(_pendente),
+      // Pastilhas e textos no MESMO mapa: para quem recebe a escolha, recorte
+      // digitado e recorte escolhido sao a mesma coisa.
+      filtros: Map<String, String?>.unmodifiable(<String, String?>{
+        ..._pendente,
+        ..._textosPendentes,
+      }),
       ordem: widget.ordena ? _ordemPendente : null,
     );
     Navigator.of(context).pop();
@@ -1056,6 +1238,37 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: <Widget>[
+                    // OS CAMPOS DIGITADOS VEM PRIMEIRO, e nao e ordem
+                    // arbitraria: o campo obrigatorio e a pergunta sem a qual a
+                    // rota nao responde nada. Pastilhas abaixo de um campo
+                    // vazio ofereceriam recortar uma lista que ainda nao
+                    // existe.
+                    for (final campo in widget.campos) ...<Widget>[
+                      BichuField(
+                        // O rotulo e o nome acessivel, e ele fica VISIVEL:
+                        // campo com dica e sem rotulo e campo mudo.
+                        rotulo: campo.rotulo,
+                        controlador: _digitado[campo.chave]!,
+                        exemplo: campo.exemplo,
+                        limite: campo.limite,
+                        opcional: !campo.obrigatorio,
+                        capitalizacao: TextCapitalization.words,
+                        correcaoAutomatica: false,
+                        // A UNICA linha alem do rotulo, e so quando o valor
+                        // nao serve. Nao ha texto de apoio nesta folha.
+                        erro: campo.serve(_digitado[campo.chave]!.text)
+                            ? null
+                            : campo.textoDeValidacao,
+                        // Digitar nao aplica -- ele so repinta o `Aplicar` e a
+                        // mensagem de validacao. Quem aplica e o botao.
+                        aoMudar: (_) => setState(() {}),
+                        // A tecla de confirmacao do teclado NAO aplica: o
+                        // `Aplicar` manda o recorte inteiro, e aplicar pela
+                        // tecla mandaria o recorte pela metade.
+                        acaoDeTeclado: TextInputAction.done,
+                      ),
+                      const SizedBox(height: BichuEspaco.e6),
+                    ],
                     for (final grupo in visiveis) ...<Widget>[
                       Text(grupo.titulo, style: textos.titleMedium),
                       if (grupo.nota != null) ...<Widget>[
@@ -1136,9 +1349,16 @@ class _EstadoDaFolhaDeFiltros extends State<_FolhaDeFiltros> {
             // tocada.
             if (_temEscolha)
               TextButton(
-                onPressed: () => setState(
-                  () => _pendente.updateAll((_, _) => null),
-                ),
+                onPressed: () => setState(() {
+                  _pendente.updateAll((_, _) => null);
+                  // **O obrigatorio NAO e limpo.** Limpa-lo desabilitaria o
+                  // proprio `Aplicar` e deixaria a folha sem saida: a pessoa
+                  // tocaria em `Limpar` e descobriria que precisa redigitar a
+                  // cidade para voltar a ter lista.
+                  for (final c in widget.campos) {
+                    if (!c.obrigatorio) _digitado[c.chave]?.clear();
+                  }
+                }),
                 child: const Text(_FolhaDeFiltros.rotuloDeLimpar),
               ),
             const SizedBox(height: BichuEspaco.e2),

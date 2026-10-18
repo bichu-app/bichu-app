@@ -40,6 +40,7 @@ import * as referencia from '../../modules/pets/adapters/http/reference-data-rou
 import * as midia from '../../modules/media/adapters/http/media-routes.js';
 import * as casos from '../../modules/lostfound/adapters/http/lost-case-routes.js';
 import * as casoPublico from '../../modules/lostfound/adapters/http/leitura-publica-do-caso-routes.js';
+import * as perdidosPublicos from '../../modules/lostfound/adapters/http/listagem-publica-de-perdidos-routes.js';
 import * as perfilPublico from '../../modules/pets/adapters/http/perfil-publico-routes.js';
 import * as achados from '../../modules/found/adapters/http/found-report-routes.js';
 import * as tags from '../../modules/tags/adapters/http/tag-routes.js';
@@ -74,6 +75,9 @@ const MODULOS: readonly Record<string, unknown>[] = [
   casos,
   // BICHUS-76 e BICHUS-45: as leituras publicas que o site consome.
   casoPublico,
+  // A listagem publica de perdidos: a operacao saiu de
+  // `OPERACOES_AINDA_SEM_ROTA` no mesmo commit que trouxe esta linha.
+  perdidosPublicos,
   perfilPublico,
   // BICHUS-35. Modulo novo entra AQUI, e o terceiro caso deste arquivo e quem
   // cobra: sem esta linha ele reprova contando `defineRoute` no disco.
@@ -180,7 +184,10 @@ const OPERACOES_AINDA_SEM_ROTA: readonly string[] = [
   // commit, e e esta lista exata nos dois sentidos que cobra o contrario.
   'reopenLostCase',
   'snoozeLostCaseReminder',
-  'listPublicLostPets',
+  // `listPublicLostPets` SAIU desta lista: ela ganhou rota
+  // (`listagem-publica-de-perdidos-routes.ts`) no commit que encheu a aba
+  // `Pets`, que era a tela em que o aplicativo abre e que dizia "a lista de
+  // pets perdidos esta em construcao".
 ];
 
 function ehRota(valor: unknown): valor is RouteDefinition {

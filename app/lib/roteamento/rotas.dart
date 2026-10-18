@@ -25,6 +25,7 @@ import '../telas/pet/tela_editar_pet.dart';
 import '../telas/pet/tela_pet_cadastrado.dart';
 import '../telas/pet/tela_acompanhar_plaquinha.dart';
 import '../telas/pet/tela_solicitar_plaquinha.dart';
+import '../telas/perfil/meus_achados.dart';
 import '../telas/perfil/tela_dados_pessoais.dart';
 import '../telas/perdido/resultado_da_abertura.dart';
 import '../telas/perdido/tela_alcance_do_alerta.dart';
@@ -158,6 +159,18 @@ abstract final class Rotas {
   /// **Irma da casca, como as telas de conta**, e por isso ela tem saida
   /// propria: ela cobre a barra de baixo, e o `escape` dela e [perfil].
   static const String dadosPessoais = '/perfil/dados';
+
+  /// `Perfil` > `Meus achados`: a lista dos avisos de achado desta conta.
+  ///
+  /// **Endereco proprio, como `dadosPessoais`, e nao bloco dentro da aba.**
+  /// `Meus pets` e conteudo da secao porque e a lista principal dela; esta e
+  /// um sub-destino de menu, com barra de saida e volta -- a mesma forma de
+  /// `Meus dados`.
+  ///
+  /// `/perfil/achados` e nao `/achados`: `/achados/:achadoId` ja existe e
+  /// casaria `/achados` como id vazio, e `achados` sob `perfil` diz o que a
+  /// lista e -- a MINHA, e nao a da vizinhanca.
+  static const String meusAchados = '/perfil/achados';
 
   /// `Pets` > `Adoções`: sub-destino com porta propria (UX 27.2.4).
   ///
@@ -729,6 +742,12 @@ GoRouter criarRoteador(ControladorDeSessao sessao) {
       GoRoute(
         path: Rotas.dadosPessoais,
         builder: (context, estado) => const TelaDadosPessoais(),
+      ),
+      // `Perfil` > `Meus achados`. Irma da de cima e pelo mesmo motivo: ela
+      // cobre a barra de baixo e volta para `Perfil`.
+      GoRoute(
+        path: Rotas.meusAchados,
+        builder: (context, estado) => const MeusAchados(),
       ),
       StatefulShellRoute.indexedStack(
         builder: (context, estado, navegacao) =>

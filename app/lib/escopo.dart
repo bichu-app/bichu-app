@@ -18,6 +18,7 @@ import 'dispositivo/avisos.dart';
 import 'dispositivo/avisos_recebidos.dart';
 import 'dispositivo/camera_e_galeria.dart';
 import 'dispositivo/oportunidades_de_aviso.dart';
+import 'sessao/cidade_escolhida.dart';
 import 'sessao/registro_do_aviso_de_cadastro.dart';
 import 'dispositivo/vigia_de_aviso.dart';
 import 'dispositivo/leitor_de_qr.dart';
@@ -58,6 +59,7 @@ class Escopo extends InheritedWidget {
     required this.sessao,
     required this.guarda,
     required this.cacheDeMeusPets,
+    required this.cidadeEscolhida,
     required this.cofreDoQr,
     required this.avisoDeCadastro,
     required super.child,
@@ -201,6 +203,21 @@ class Escopo extends InheritedWidget {
   /// memoria e por dono; ver [CacheDeMeusPets].
   final CacheDeMeusPets cacheDeMeusPets;
 
+  /// A ultima cidade escolhida na listagem publica de perdidos, **neste
+  /// aparelho**.
+  ///
+  /// Fica no escopo, e nao dentro da tela, pelo mesmo motivo do
+  /// [cacheDeMeusPets] e por um a mais que e de TESTE: o deposito em arquivo
+  /// chama `getApplicationDocumentsDirectory()`, um canal de plataforma que
+  /// **trava o `pumpAndSettle` para sempre, sem mensagem**, em teste de widget.
+  /// E a mesma armadilha que `DepositoDeIntencaoEmArquivo` tem, e a saida e a
+  /// mesma: o objeto entra pela raiz, e o teste injeta um que responde.
+  ///
+  /// Uma tela que o construisse por conta travaria a suite inteira na secao em
+  /// que o aplicativo ABRE, e o sintoma -- `pumpAndSettle timed out` -- nao
+  /// aponta para a causa. Custou uma execucao travada para descobrir.
+  final CidadeEscolhida cidadeEscolhida;
+
   /// Onde a imagem do QR da tag fica depois de baixada (BICHUS-229).
   ///
   /// Fica no escopo pelo mesmo motivo do [cacheDeMeusPets], com um agravante:
@@ -258,6 +275,7 @@ class Escopo extends InheritedWidget {
       sessao != anterior.sessao ||
       guarda != anterior.guarda ||
       cacheDeMeusPets != anterior.cacheDeMeusPets ||
+      cidadeEscolhida != anterior.cidadeEscolhida ||
       cofreDoQr != anterior.cofreDoQr ||
       avisoDeCadastro != anterior.avisoDeCadastro;
 }

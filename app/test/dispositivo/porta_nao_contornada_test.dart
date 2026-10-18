@@ -1139,7 +1139,37 @@ const String _caminhoDasTelas = 'app/lib/telas';
 /// tocando `app/lib/telas` nesta rodada, e valor de ramo isolado nao sobrevive
 /// a uniao. (antes: dd6582d172)
 ///
-const String _arvoreDasTelas = 'aed2ac48d875a4f4c0bf755b8b78591b3faeabda'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
+///
+/// DESTRAVADO EM 18/10 (a LISTAGEM PUBLICA DE PERDIDOS na aba `Pets` e a
+/// lista dos MEUS ACHADOS no `Perfil`). A aba `Pets` -- a secao em que o
+/// aplicativo ABRE -- dizia "A lista de pets perdidos esta em construcao", e
+/// a frase era honesta: `listPublicLostPets` estava no contrato e **nao tinha
+/// rota**, era a ultima linha de `OPERACOES_AINDA_SEM_ROTA`. A rota foi
+/// registrada no mesmo commit. Quatro arquivos desta pasta mudam:
+/// `perdido/lista_de_perdidos.dart` (NOVO, a listagem com `BarraDeListagem`
+/// sem copia -- busca em largura total no corpo, filtro e ordem no slot unico
+/// da barra, e o campo de CIDADE DIGITADA que o cliente autorizou para o
+/// visitante sem conta), `perdido/cartao_do_perdido.dart` (NOVO, o cartao com
+/// foto, bairro e quando o pet foi visto), `perfil/meus_achados.dart` (NOVO, a
+/// lista de `listMyFoundReports`, que existia no servidor e nao tinha chamador
+/// no app) e `abas.dart` (DUAS EDICOES MINIMAS: o `EstadoVazio` do corpo de
+/// `AbaPets` virou `const ListaDePerdidos()`, e um `ItemDeMenu` de
+/// `Meus achados` entrou no menu de `AbaPerfil` entre `Escanear uma tag` e
+/// `Sair da conta`).
+///
+/// **Nenhuma porta de aparelho encostada**: nenhum importe de plugin, nenhum
+/// canal de plataforma, nenhuma permissao, nenhum `dart:io`. Quem desenha
+/// imagem de servidor continua sendo `widgets/imagem_da_rede.dart`, FORA de
+/// `lib/telas`; quem guarda a cidade escolhida no aparelho e
+/// `sessao/cidade_escolhida.dart`, tambem fora, e pelo mesmo motivo.
+///
+/// **A QUEM MESCLAR: recalcule sobre a arvore MESCLADA**, pelo procedimento
+/// escrito acima. Este valor JA e o da uniao com `origin/development` em
+/// 87979b6d (o lote de oito, as imagens do profissional e a foto do proprio
+/// usuario entre eles): a colisao com 50b766d431 foi resolvida recalculando, e
+/// nao escolhendo um dos dois lados. O CAMPO DE CIDADE DIGITADA entrou depois da mescla, no mesmo ramo, e por isso este valor e o SEGUNDO desta frente. (antes, por ramo isolado: 799b29b7b2; depois da mescla e antes da cidade: 0f927ff7ee;
+/// no lado de development: 50b766d431)
+const String _arvoreDasTelas = 'e6dd8cb55331d0b1f3d74ce68a97cf3686768415'; // UNIAO DAS QUATORZE (18/10/2026): valor RECALCULADO sobre a arvore MESCLADA pelo procedimento deste proprio portao (GIT_INDEX_FILE temporario, `read-tree HEAD`, `add -A -- app/lib/telas`, `write-tree`, `rev-parse <arvore>:app/lib/telas`), nao copiado de ramo nem de relato. As justificativas dos dois lados ficaram INTEIRAS. Valor de ramo isolado NAO sobrevive a uniao.
 
 /// Sobe de `Directory.current` ate achar a raiz do repositorio.
 ///

@@ -15,6 +15,7 @@
 
 import 'package:bichu/api/modelos.dart';
 import 'package:bichu/sessao/deposito_de_sessao.dart';
+import 'package:bichu/telas/perdido/lista_de_perdidos.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -228,12 +229,49 @@ void main() {
       );
       expect(find.text('Adoções'), findsOneWidget,
           reason: 'REPROVA: a porta de `Adoções` saiu de `Pets` (UX 27.2.4).');
+      // A CASCA HONESTA DOS PERDIDOS SAIU, E A PREMISSA DELA CADUCOU
+      // (18/10/2026).
+      //
+      // Esta linha cobrava o texto "A lista de pets perdidos esta em
+      // construcao", e o motivo escrito era: *"o app nao chama rota de
+      // listagem, entao ele nao sabe se ha zero ou trezentos"*. Era verdade --
+      // `listPublicLostPets` estava no contrato e **nao tinha rota**, e era a
+      // ultima linha de `OPERACOES_AINDA_SEM_ROTA`.
+      //
+      // A rota existe agora, e o app a chama. O estado vazio nao sumiu: ele
+      // mudou de dono, como o da `Rede`. Quem o mostra e a propria lista, e so
+      // quando o servidor responde que nao ha caso aberto -- afirmacao medida.
+      // O que este caso cobra continua sendo o mesmo: **que a listagem de
+      // perdidos nao saiu de `Pets`**.
+      expect(
+        find.byType(ListaDePerdidos),
+        findsOneWidget,
+        reason: 'REPROVA: a listagem de perdidos saiu de `Pets`, que e a secao '
+            'de aterrissagem e o coracao do produto.',
+      );
       expect(
         find.text('A lista de pets perdidos está em construção'),
+        findsNothing,
+        reason: 'REPROVA: a casca honesta voltou. Com a rota registrada, '
+            'dizer "em construcao" e afirmar sobre dado que a tela CARREGA.',
+      );
+      // Deslogado e sem cidade guardada no aparelho, a lista nao inventa
+      // cidade: `city` e `required` no contrato. UMA linha, e uma SAIDA -- o
+      // campo de cidade digitada, que o cliente autorizou em 18/10/2026.
+      expect(
+        find.text(
+          'Escolha uma cidade para ver os pets perdidos por perto.',
+        ),
         findsOneWidget,
-        reason: 'REPROVA: o estado vazio dos perdidos mudou. O texto nao pode '
-            'virar "nenhum pet perdido por aqui agora": o app nao chama rota '
-            'de listagem, entao ele nao sabe se ha zero ou trezentos.',
+        reason: 'REPROVA: sem conta a tela ou inventou cidade ou afirmou que '
+            'nao ha perdido. As duas sao afirmacao sem medida.',
+      );
+      expect(
+        find.text('Escolher cidade'),
+        findsOneWidget,
+        reason: 'REPROVA: a linha unica ficou sem saida. A barra nao nasce com '
+            '`total: 0`, entao sem este botao o visitante le o que falta e nao '
+            'tem caminho nenhum -- o beco que o criterio 2 proibe.',
       );
     });
   });
